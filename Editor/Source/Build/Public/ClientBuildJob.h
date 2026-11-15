@@ -1,10 +1,14 @@
-#pragma once
+﻿#pragma once
 
 #include <filesystem>
 #include <cstdint>
-#include <future>
+#include <functional>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace Editor
 {
@@ -40,6 +44,13 @@ namespace Editor
     {
     public:
         enum class Status { Idle, Running, Succeeded, Failed };
+        using OutputCallback = std::function<void(std::string_view)>;
+
+        ClientBuildJob() = default;
+        ~ClientBuildJob();
+
+        ClientBuildJob(const ClientBuildJob&) = delete;
+        ClientBuildJob& operator=(const ClientBuildJob&) = delete;
 
         void Start(const std::filesystem::path& projectRoot, std::optional<ClientPackageRequest> package = std::nullopt);
         void SetExportPreparationError(std::string output);
@@ -54,16 +65,25 @@ namespace Editor
         struct Result
         {
             bool Success = false;
-            std::string Output;
             std::filesystem::path ExportedDirectory;
+            std::string ErrorMessage;
         };
 
-        static Result Build(const std::filesystem::path& projectRoot, const std::optional<ClientPackageRequest>& package);
+        static Result Build(const std::filesystem::path& projectRoot,
+            const std::optional<ClientPackageRequest>& package, OutputCallback onOutput);
+        void AppendOutput(std::string_view text);
 
         Status m_Status = Status::Idle;
         bool m_IsExport = false;
         std::string m_Output;
         std::filesystem::path m_ExportedDirectory;
-        std::future<Result> m_Future;
+
+        std::thread m_WorkerThread;
+        std::atomic<bool> m_IsFinished{ false };
+        mutable std::mutex m_ResultMutex;
+        Result m_Result;
+
+        mutable std::mutex m_OutputMutex;
+        std::string m_LiveOutput;
     };
 }

@@ -1,11 +1,11 @@
-{
+﻿{
   "Settings": {
     "SchemaVersion": 1,
     "ProjectName": "BamEngine",
     "AssetDirectory": "Assets",
     "EngineResourceDirectory": "Engine/Resources",
     "StartupManifestPath": "Config/Startup/StartupManifest.json",
-    "StartupScenePath": "Scenes/RaytracingScene.bamscene.json",
+    "StartupScenePath": "Scenes/2DRegressionLabReady.bamscene.json",
     "RenderPipelineProfilePath": "Engine://RenderPipelines/Deferred.bamrenderpipeline.json"
   }
 }

@@ -13,9 +13,17 @@ find_package(LLVM CONFIG REQUIRED)
 find_package(Clang CONFIG REQUIRED)
 
 if(MSVC AND LLVM_ENABLE_DIA_SDK AND TARGET LLVMDebugInfoPDB)
+    set(_dia_sdk_hints
+        "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/lib/amd64"
+        "$ENV{VSINSTALLDIR}/DIA SDK/lib/amd64"
+        "$ENV{VCINSTALLDIR}/../DIA SDK/lib/amd64"
+        "C:/Program Files/Microsoft Visual Studio/18/Community/DIA SDK/lib/amd64"
+        "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/lib/amd64"
+    )
+
     find_library(REFLECTION_DIA_GUIDS_LIBRARY
         NAMES diaguids
-        HINTS "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/lib/amd64"
+        HINTS ${_dia_sdk_hints}
         REQUIRED
     )
 

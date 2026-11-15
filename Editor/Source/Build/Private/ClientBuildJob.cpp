@@ -3,7 +3,8 @@
 #include "Functions.h"
 
 #include <SDL3/SDL_process.h>
-#include <SDL3/SDL_thread.h>
+#include <SDL3/SDL_iostream.h>
+#include <SDL3/SDL_timer.h>
 #include <chrono>
 #include <exception>
 #include <memory>
@@ -47,18 +48,18 @@ namespace
         }
     }
 
-    bool RunCMake(const char** args, const std::string& workingDirectory, std::string& output)
+    bool RunCMake(const char** args, const std::string& workingDirectory,
+        const Editor::ClientBuildJob::OutputCallback& onOutput)
     {
         const auto properties = SDL_CreateProperties();
         if (!properties)
         {
-            output += SDL_GetError();
+            if (onOutput) onOutput(SDL_GetError());
             return false;
         }
 
         const bool configured = SDL_SetPointerProperty(properties, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, args)
-            && SDL_SetStringProperty(properties, SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING,
-                workingDirectory.c_str())
+            && SDL_SetStringProperty(properties, SDL_PROP_PROCESS_CREATE_WORKING_DIRECTORY_STRING, workingDirectory.c_str())
             && SDL_SetNumberProperty(properties, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_APP)
             && SDL_SetBooleanProperty(properties, SDL_PROP_PROCESS_CREATE_STDERR_TO_STDOUT_BOOLEAN, true);
         std::unique_ptr<SDL_Process, decltype(&SDL_DestroyProcess)> process(
@@ -67,37 +68,118 @@ namespace
 
         if (!process)
         {
-            output += SDL_GetError();
+            if (onOutput) onOutput(SDL_GetError());
             return false;
         }
 
-        std::size_t size = 0;
+        SDL_IOStream* stream = SDL_GetProcessOutput(process.get());
+        char buffer[4096];
         int exitCode = -1;
-        std::unique_ptr<void, decltype(&SDL_free)> data(SDL_ReadProcess(process.get(), &size, &exitCode), &SDL_free);
-        if (!data)
+        bool exited = false;
+        std::string rawResidual;
+
+        while (!exited)
         {
-            output += SDL_GetError();
-            return false;
+            if (stream)
+            {
+                while (true)
+                {
+                    const size_t bytesRead = SDL_ReadIO(stream, buffer, sizeof(buffer));
+                    if (bytesRead == 0)
+                        break;
+
+                    rawResidual.append(buffer, bytesRead);
+                    const auto lastNewline = rawResidual.rfind('\n');
+                    if (lastNewline != std::string::npos)
+                    {
+                        std::string decoded;
+                        AppendBuildOutput(std::string_view(rawResidual.data(), lastNewline + 1), decoded);
+                        if (!decoded.empty() && onOutput)
+                            onOutput(decoded);
+                        rawResidual.erase(0, lastNewline + 1);
+                    }
+                }
+            }
+
+            exited = SDL_WaitProcess(process.get(), false, &exitCode);
+            if (!exited)
+                SDL_Delay(10);
         }
 
-        AppendBuildOutput({ static_cast<const char*>(data.get()), size }, output);
+        if (stream)
+        {
+            while (true)
+            {
+                const size_t bytesRead = SDL_ReadIO(stream, buffer, sizeof(buffer));
+                if (bytesRead == 0)
+                    break;
+                rawResidual.append(buffer, bytesRead);
+            }
+        }
+
+        if (!rawResidual.empty())
+        {
+            std::string decoded;
+            AppendBuildOutput(rawResidual, decoded);
+            if (!decoded.empty() && onOutput)
+                onOutput(decoded);
+            rawResidual.clear();
+        }
+
         return exitCode == 0;
     }
 }
 
 namespace Editor
 {
+    ClientBuildJob::~ClientBuildJob()
+    {
+        if (m_WorkerThread.joinable())
+            m_WorkerThread.join();
+    }
+
+    void ClientBuildJob::AppendOutput(std::string_view text)
+    {
+        std::lock_guard lock(m_OutputMutex);
+        m_LiveOutput.append(text);
+    }
+
     void ClientBuildJob::Start(const std::filesystem::path& projectRoot, std::optional<ClientPackageRequest> package)
     {
         if (m_Status == Status::Running)
             return;
 
-        m_Output.clear();
+        if (m_WorkerThread.joinable())
+            m_WorkerThread.join();
+
+        {
+            std::lock_guard lock(m_OutputMutex);
+            m_LiveOutput.clear();
+            m_Output.clear();
+        }
         m_ExportedDirectory.clear();
         m_IsExport = package.has_value();
+        m_IsFinished.store(false, std::memory_order_relaxed);
+
         try
         {
-            m_Future = std::async(std::launch::async, &ClientBuildJob::Build, projectRoot, std::move(package));
+            m_WorkerThread = std::thread([this, projectRoot, package = std::move(package)]() mutable {
+                Result res;
+                try
+                {
+                    res = Build(projectRoot, package, [this](std::string_view text) { AppendOutput(text); });
+                }
+                catch (const std::exception& error)
+                {
+                    res.Success = false;
+                    res.ErrorMessage = error.what();
+                }
+                {
+                    std::lock_guard lock(m_ResultMutex);
+                    m_Result = std::move(res);
+                }
+                m_IsFinished.store(true, std::memory_order_release);
+                });
             m_Status = Status::Running;
         }
         catch (const std::exception& error)
@@ -119,27 +201,40 @@ namespace Editor
 
     void ClientBuildJob::Update()
     {
-        if (!m_Future.valid() || m_Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        {
+            std::lock_guard lock(m_OutputMutex);
+            if (m_Output.size() != m_LiveOutput.size())
+                m_Output = m_LiveOutput;
+        }
+
+        if (!m_IsFinished.load(std::memory_order_acquire))
             return;
 
-        try
+        if (m_WorkerThread.joinable())
+            m_WorkerThread.join();
+
+        Result res;
         {
-            auto result = m_Future.get();
-            m_Status = result.Success ? Status::Succeeded : Status::Failed;
-            m_Output = std::move(result.Output);
-            m_ExportedDirectory = std::move(result.ExportedDirectory);
+            std::lock_guard lock(m_ResultMutex);
+            res = std::move(m_Result);
         }
-        catch (const std::exception& error)
+
+        m_Status = res.Success ? Status::Succeeded : Status::Failed;
+        m_ExportedDirectory = std::move(res.ExportedDirectory);
+        if (!res.ErrorMessage.empty())
+            AppendOutput(std::string("\n[Build Error] ") + res.ErrorMessage);
+
         {
-            m_Status = Status::Failed;
-            m_Output = error.what();
+            std::lock_guard lock(m_OutputMutex);
+            m_Output = m_LiveOutput;
         }
+
+        m_IsFinished.store(false, std::memory_order_relaxed);
     }
 
     ClientBuildJob::Result ClientBuildJob::Build(const std::filesystem::path& projectRoot,
-        const std::optional<ClientPackageRequest>& package)
+        const std::optional<ClientPackageRequest>& package, OutputCallback onOutput)
     {
-        // SDL does not clean up TLS for the std::async worker.
         struct SdlTlsCleanup
         {
             ~SdlTlsCleanup() { SDL_CleanupTLS(); }
@@ -161,25 +256,25 @@ namespace Editor
                 if (destination.Directory != package->Destination.Directory ||
                     destination.ExistingPackage != package->Destination.ExistingPackage)
                 {
-                    result.Output = "Export destination changed after selection. Start the export again.";
+                    if (onOutput) onOutput("Export destination changed after selection. Start the export again.\n");
                     return result;
                 }
             }
             catch (const std::exception& error)
             {
-                result.Output = error.what();
+                if (onOutput) onOutput(std::string(error.what()) + "\n");
                 return result;
             }
         }
 
-        result.Output = "[CMake configure]\n";
-        if (!RunCMake(configureArgs, workingDirectory, result.Output))
+        if (onOutput) onOutput("[CMake configure]\n");
+        if (!RunCMake(configureArgs, workingDirectory, onOutput))
             return result;
 
         const char* buildArgs[] = { cmake.c_str(), "--build", buildDirectory, "--config", "Release",
-            "--target", "Client", "GameModule", nullptr };
-        result.Output += "\n[CMake build]\n";
-        if (!RunCMake(buildArgs, workingDirectory, result.Output))
+            "--target", "Client", "GameModule", "--parallel", nullptr };
+        if (onOutput) onOutput("\n[CMake build]\n");
+        if (!RunCMake(buildArgs, workingDirectory, onOutput))
             return result;
 
         const auto binDirectory = projectRoot / buildDirectory / "bin" / "Release";
@@ -189,25 +284,32 @@ namespace Editor
             std::error_code error;
             if (!std::filesystem::is_regular_file(filePath, error))
             {
-                result.Output += "\nExpected build output is unavailable: ";
-                result.Output += Engine::WStrToStr(filePath.wstring());
+                if (onOutput)
+                {
+                    onOutput("\nExpected build output is unavailable: ");
+                    onOutput(Engine::WStrToStr(filePath.wstring()) + "\n");
+                }
                 return result;
             }
         }
 
-        result.Output += "\nBuild output: ";
-        result.Output += Engine::WStrToStr(binDirectory.wstring());
+        if (onOutput)
+        {
+            onOutput("\nBuild output: ");
+            onOutput(Engine::WStrToStr(binDirectory.wstring()) + "\n");
+        }
+
         if (package)
         {
-            result.Output += "\n\n[Package export]\n";
+            if (onOutput) onOutput("\n[Package export]\n");
             try
             {
-                ExportClientPackage(projectRoot, binDirectory, *package, result.Output);
+                ExportClientPackage(projectRoot, binDirectory, *package, onOutput);
                 result.ExportedDirectory = package->Destination.Directory;
             }
             catch (const std::exception& error)
             {
-                result.Output += error.what();
+                if (onOutput) onOutput(std::string(error.what()) + "\n");
                 return result;
             }
         }

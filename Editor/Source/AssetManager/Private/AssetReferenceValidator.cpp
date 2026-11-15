@@ -63,9 +63,16 @@ namespace Editor
                         return field == fields.end() ? nullptr : field->second.get_if<std::string>();
                     };
 
-                const auto* reference = readString(*object, "AssetPath");
-                if (!reference || reference->empty())
-                    reference = readString(*object, "AssetKey");
+                const auto* assetKey = readString(*object, "AssetKey");
+                const auto* assetPath = readString(*object, "AssetPath");
+
+                const std::string* reference = nullptr;
+                if (assetKey && !assetKey->empty() && Engine::PlatformPath::IsVirtualUri(Engine::Utf8ToPath(*assetKey).wstring()))
+                    reference = assetKey;
+                else if (assetPath && !assetPath->empty())
+                    reference = assetPath;
+                else
+                    reference = assetKey;
 
                 if (reference && !reference->empty())
                     references.insert(*reference);
@@ -299,15 +306,30 @@ namespace Editor
 
                 const auto rawPath = Engine::Utf8ToPath(reference);
                 const auto wideReference = rawPath.wstring();
-                if (!Path::IsVirtualUri(wideReference) && rawPath.has_root_path())
+                const bool isController = controllers.contains(reference);
+                std::filesystem::path resolved;
+
+                if (Path::IsVirtualUri(wideReference))
                 {
-                    report(source, reference, Issue::ExternalAbsolutePath);
-                    continue;
+                    resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
+                        : Path::ResolveUri(wideReference);
+                }
+                else if (rawPath.has_root_path())
+                {
+                    const auto virtualUri = Path::ToVirtualUri(rawPath);
+                    if (!Path::IsProjectUri(virtualUri) && !Path::IsEngineUri(virtualUri))
+                    {
+                        report(source, reference, Issue::ExternalAbsolutePath);
+                        continue;
+                    }
+                    resolved = rawPath;
+                }
+                else
+                {
+                    resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
+                        : Path::ResolveUri(wideReference);
                 }
 
-                const bool isController = controllers.contains(reference);
-                auto resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
-                    : Path::ResolveUri(wideReference);
                 if (!isController && resolved.extension().wstring().starts_with(L".bam"))
                 {
                     auto jsonPath = resolved;

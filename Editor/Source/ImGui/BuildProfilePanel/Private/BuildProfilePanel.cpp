@@ -303,8 +303,11 @@ void BuildProfilePanel::DrawClientBuild()
     }
 
     const auto& output = m_ClientBuild.GetOutput();
-    if (m_BuildLogText.empty() && !output.empty())
+    if (m_BuildLogText.size() != output.size())
+    {
         m_BuildLogText = output;
+        m_ScrollBuildLogToEnd = true;
+    }
 
     ImGui::PushID("BuildLog");
     ImGui::BeginDisabled(m_BuildLogText.empty());
@@ -313,7 +316,7 @@ void BuildProfilePanel::DrawClientBuild()
     ImGui::EndDisabled();
     ImGui::PopID();
 
-    const ImVec2 logSize(std::max(1.0f, ImGui::GetContentRegionAvail().x), 180.0f);
+    const ImVec2 logSize(std::max(1.0f, ImGui::GetContentRegionAvail().x), 220.0f);
     if (m_BuildLogText.empty())
     {
         if (ImGui::BeginChild("##EmptyClientBuildOutput", logSize, ImGuiChildFlags_Borders))
@@ -322,17 +325,16 @@ void BuildProfilePanel::DrawClientBuild()
         return;
     }
 
-    if (m_ScrollBuildLogToEnd && ImGui::IsRectVisible(logSize))
+    if (ImGui::BeginChild("##ClientBuildOutputScroll", logSize, ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar))
     {
-        const auto lineCount = 1 + std::count(m_BuildLogText.begin(), m_BuildLogText.end(), '\n');
-        const float contentHeight = static_cast<float>(lineCount) * ImGui::GetTextLineHeight()
-            + 2.0f * ImGui::GetStyle().FramePadding.y;
-        ImGui::SetNextWindowContentSize(ImVec2(0.0f, contentHeight));
-        ImGui::SetNextWindowScroll(ImVec2(-1.0f, contentHeight));
-        m_ScrollBuildLogToEnd = false;
+        ImGui::TextUnformatted(m_BuildLogText.c_str());
+        if (m_ScrollBuildLogToEnd)
+        {
+            ImGui::SetScrollHereY(1.0f);
+            m_ScrollBuildLogToEnd = false;
+        }
     }
-
-    ImGui::InputTextMultiline("##ClientBuildOutput", &m_BuildLogText, logSize, ImGuiInputTextFlags_ReadOnly);
+    ImGui::EndChild();
 }
 
 void BuildProfilePanel::StartExport(ClientPackageRequest request)

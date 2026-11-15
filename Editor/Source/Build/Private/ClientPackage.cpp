@@ -1,4 +1,4 @@
-#include "ClientPackage.h"
+﻿#include "ClientPackage.h"
 
 #include "AssetReferenceValidator.h"
 #include "ClientBuildJob.h"
@@ -24,6 +24,9 @@
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
+#include <atomic>
+#include <thread>
+#include <unordered_set>
 
 namespace
 {
@@ -241,9 +244,20 @@ namespace
         std::vector<std::string> UnclassifiedExamples;
     };
 
+    struct FileCopyTask
+    {
+        fs::path Source;
+        fs::path Target;
+        fs::path Relative;
+        std::uintmax_t Size = 0;
+    };
     void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory)
     {
         fs::create_directories(targetRoot);
+        std::vector<FileCopyTask> tasks;
+        std::unordered_set<std::wstring> dirsToCreate;
+        dirsToCreate.insert(targetRoot.wstring());
+
         for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
         {
             const auto& source = entry->path();
@@ -262,10 +276,74 @@ namespace
             {
                 const auto relative = source.lexically_relative(sourceRoot);
                 const auto target = targetRoot / relative;
-                CopyPackageFile(source, target);
-                inventory.Record(relative, fs::file_size(target));
+                dirsToCreate.insert(target.parent_path().wstring());
+                tasks.push_back({ source, target, relative, entry->file_size() });
             }
         }
+
+        for (const auto& dir : dirsToCreate)
+            fs::create_directories(dir);
+
+        if (tasks.empty())
+            return;
+
+        std::atomic<DWORD> copyError = ERROR_SUCCESS;
+        fs::path failedSource;
+        fs::path failedTarget;
+        std::mutex errorMutex;
+
+        const unsigned int hardwareThreads = std::thread::hardware_concurrency();
+        const unsigned int threadCount = std::min(8u, std::max(1u, hardwareThreads));
+        const size_t totalTasks = tasks.size();
+        const size_t chunkSize = (totalTasks + threadCount - 1) / threadCount;
+
+        std::vector<std::thread> workers;
+        workers.reserve(threadCount);
+
+        for (unsigned int t = 0; t < threadCount; ++t)
+        {
+            const size_t start = t * chunkSize;
+            const size_t end = std::min(start + chunkSize, totalTasks);
+            if (start >= end)
+                break;
+
+            workers.emplace_back([&tasks, start, end, &copyError, &failedSource, &failedTarget, &errorMutex]() {
+                for (size_t i = start; i < end; ++i)
+                {
+                    if (copyError.load(std::memory_order_relaxed) != ERROR_SUCCESS)
+                        return;
+
+                    const auto& task = tasks[i];
+                    if (!CopyFileW(task.Source.c_str(), task.Target.c_str(), FALSE))
+                    {
+                        const DWORD err = GetLastError();
+                        DWORD expected = ERROR_SUCCESS;
+                        if (copyError.compare_exchange_strong(expected, err))
+                        {
+                            std::lock_guard lock(errorMutex);
+                            failedSource = task.Source;
+                            failedTarget = task.Target;
+                        }
+                        return;
+                    }
+                }
+                });
+        }
+
+        for (auto& worker : workers)
+        {
+            if (worker.joinable())
+                worker.join();
+        }
+
+        if (copyError.load() != ERROR_SUCCESS)
+        {
+            throw fs::filesystem_error("Could not copy package file", failedSource, failedTarget,
+                std::error_code(copyError.load(), std::system_category()));
+        }
+
+        for (const auto& task : tasks)
+            inventory.Record(task.Relative, task.Size);
     }
 
     struct PackageProfile
@@ -429,8 +507,13 @@ namespace Editor
     }
 
     void ExportClientPackage(const fs::path& projectRoot, const fs::path& binDirectory,
-        const ClientPackageRequest& request, std::string& output)
+        const ClientPackageRequest& request, const std::function<void(std::string_view)>& onOutput)
     {
+        const auto emit = [&](std::string_view text) {
+            if (onOutput) onOutput(text);
+            };
+        std::string output;
+
         const auto assetRoot = fs::canonical(Path::GetProjectAssetRoot());
         const auto engineRoot = fs::canonical(Path::GetEngineResourceRoot());
         const auto scene = fs::canonical(request.StartupScene);
@@ -450,6 +533,7 @@ namespace Editor
                     output += " -> " + issue.TargetReference;
                 output += '\n';
             }
+            emit(output);
             throw std::runtime_error("Scene reference validation failed.");
         }
 
@@ -496,7 +580,8 @@ namespace Editor
         if (!fs::create_directory(staging))
             throw std::runtime_error("Could not create a fresh staging folder: " + DisplayPath(staging));
 
-        output += "Staging: " + DisplayPath(staging) + '\n';
+        emit(fmt::format("Staging: {}\n", DisplayPath(staging)));
+        emit("Staging runtime binaries...\n");
         const auto executableName = Engine::Utf8ToPath(request.ProgramName + ".exe");
         PackageFileStats binaries;
         for (const auto* name : RuntimeBinaries)
@@ -509,7 +594,9 @@ namespace Editor
 
         const auto stagedAssets = staging / "Assets";
         const auto stagedEngine = staging / "Engine" / "Resources";
+        emit("Staging project assets (parallel)...\n");
         CopyRuntimeResources(assetRoot, stagedAssets, projectInventory);
+        emit("Staging engine resources (parallel)...\n");
         CopyRuntimeResources(engineRoot, stagedEngine, engineInventory);
 
         for (const auto& source : references)
@@ -540,6 +627,8 @@ namespace Editor
 
         output += "Startup manifest: " + std::string(startupPipeline.InEngine ? "Engine://" : "Project://") +
             DisplayPath(startupPipeline.RelativePath) + '\n';
+        emit(output);
+        output.clear();
 
         if (!packageProfile.RelativePath.empty())
         {
@@ -565,6 +654,8 @@ namespace Editor
             VerifyRenderProfileResources(profileResources, stagedEngine);
             output += "Render profile: " + std::string(packageProfile.InEngine ? "Engine://" : "Project://") +
                 DisplayPath(packageProfile.RelativePath) + '\n';
+            emit(output);
+            output.clear();
         }
 
         const auto configDirectory = staging / "Config";
@@ -595,13 +686,18 @@ namespace Editor
             const auto fileName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
             output += "    " + DisplayPath(fileName) + '\n';
         }
+        emit(output);
+        output.clear();
 
         const auto inspected = InspectClientPackageDestination(projectRoot, request);
         if (inspected.Directory != destination || inspected.ExistingPackage != request.Destination.ExistingPackage)
             throw std::runtime_error("Export destination changed during the build: " + DisplayPath(destination));
+        emit("Publishing package...\n");
         PublishPackage(request.Destination, staging, backup, output);
+        emit(output);
+        output.clear();
 
-        output += "Exported package: " + DisplayPath(destination) + '\n';
-        output += "Executable: " + DisplayPath(destination / executableName);
+        emit(fmt::format("Exported package: {}\n", DisplayPath(destination)));
+        emit(fmt::format("Executable: {}\n", DisplayPath(destination / executableName)));
     }
 }

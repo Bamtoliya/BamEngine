@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.24)
+﻿cmake_minimum_required(VERSION 3.24)
 project(ReflectionEnTT VERSION 0.1.0 LANGUAGES C CXX)
 
 option(REFLECTION_ENTT_BUILD_GENERATOR "Build the Clang-based generator" OFF)
@@ -27,9 +27,17 @@ endif()
 if(REFLECTION_ENTT_BUILD_GENERATOR)
     find_package(LLVM CONFIG REQUIRED)
     find_package(Clang CONFIG REQUIRED)
-    if(MSVC AND LLVM_ENABLE_DIA_SDK AND TARGET LLVMDebugInfoPDB)
+        if(MSVC AND LLVM_ENABLE_DIA_SDK AND TARGET LLVMDebugInfoPDB)
+        set(_dia_sdk_hints
+            "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/lib/amd64"
+            "$ENV{VSINSTALLDIR}/DIA SDK/lib/amd64"
+            "$ENV{VCINSTALLDIR}/../DIA SDK/lib/amd64"
+            "C:/Program Files/Microsoft Visual Studio/18/Community/DIA SDK/lib/amd64"
+            "C:/Program Files/Microsoft Visual Studio/2022/Community/DIA SDK/lib/amd64"
+        )
+
         find_library(REFLECTION_ENTT_DIA_GUIDS_LIBRARY NAMES diaguids
-            HINTS "${CMAKE_GENERATOR_INSTANCE}/DIA SDK/lib/amd64" REQUIRED)
+            HINTS ${_dia_sdk_hints} REQUIRED)
         get_target_property(_pdb_dependencies LLVMDebugInfoPDB INTERFACE_LINK_LIBRARIES)
         set(_fixed_pdb_dependencies)
         foreach(_dependency IN LISTS _pdb_dependencies)
