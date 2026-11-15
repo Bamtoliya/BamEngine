@@ -2,6 +2,49 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-15] 크래시 진단·작업 복원 시스템 실환경 검증 및 경로 일원화 (개발 vs 배포 아키텍처)
+
+- **배경 및 설계 고민**:
+  - 에디터 실환경에서 `Help -> Trigger Crash (Diagnostics Test)`를 통한 크래시 감지, 미니덤프/진단 리포트 생성, 세션 락 및 2단계 작업 복원(Two-Tier Recovery) 모달 동작을 검증하는 과정에서, `Logs/Editor.log` 및 `Logs/Crashes/`는 바이너리 빌드 폴더(`out/build/.../bin/Debug/`)에 생성되는 반면, `Temp/Recovery/` 및 `Temp/Session.lock`은 프로젝트 루트에 생성되어 상위 위치가 어긋나는 문제가 확인되었다.
+  - 이에 대해 **"나중에 에디터를 알파 빌드로 패키징하여 배포할 때, 테스터가 압축하여 리포트하기 쉽도록 실행 파일(바이너리) 폴더 옆에 모아야 하지 않는가?"**라는 관점과 **"개발 환경의 프로젝트 루트에 모아야 하는가?"**에 대한 아키텍처 비교 및 설계 판단을 진행했다.
+- **아키텍처 판단 기준**:
+  1. **바이너리 폴더(`exeDir`) 고정 시의 결함**:
+     - 개발 환경에서 `out/build/`는 CMake 캐시 삭제, Rebuild, Git Clean 시 수시로 완전히 지워지는 임시 디렉터리다. 만약 자동 저장 복원 파일(`Temp/Recovery/`)이 여기에 생성되면 빌드 정리 시 **사용자의 미저장 작업 복구본이 영구 유실**된다.
+     - Debug/Release 구성 간에 로그와 덤프가 분산되어 이전 크래시 추적이 어려워진다.
+     - 나중에 설치형(`C:\Program Files\...`)으로 배포 시 권한 거부(`Access Denied`)로 덤프 작성이 실패할 수 있다.
+  2. **프로젝트 루트(`PlatformPath::GetProjectRoot()`) 기준 일원화의 우위**:
+     - **개발 환경**: 소스 및 에셋이 위치한 프로젝트 저장소 루트(`ProjectRoot`) 아래의 `Logs/` 및 `Temp/`에 가지런히 모이므로 빌드 클린에도 작업 데이터와 진단 리포트가 안전하게 보존된다.
+     - **알파 배포 환경**: 독립 패키지(`BamEditor/`) 환경에서는 실행 파일 바로 옆에 `Config/` 및 패키지 마커가 배치되므로, `PlatformPath::GetProjectRoot()` 탐색 알고리즘에 의해 **자동으로 `ProjectRoot == ExecutableDirectory`**가 된다.
+     - 결과적으로 배포 환경에서도 테스터가 기대한 대로 **실행 파일 옆의 `BamEditor/Logs/` 및 `BamEditor/Temp/`로 자동 일원화**되어 폴더만 그대로 압축해 버그 리포트를 전송할 수 있는 상위 호환성이 보장된다.
+- **주요 변경 내용**:
+  - [Application.cpp](file:///i:/BamtoliyaGithub/BamEngine/Editor/Source/Application/Private/Application.cpp):
+    - `InitializeLogger()`에서 `Engine::PlatformPath::GetProjectRoot() / L"Logs" / L"Editor.log"`로 로그 파일 경로를 일원화.
+    - `Application::Initialize()`에서 `Engine::CrashHandler::Initialize(projectRoot / L"Logs" / L"Crashes")` 및 `SetCustomContext("Host", "Editor")`를 명시적으로 등록하여 덤프/리포트 위치 일원화 및 호스트 출처 명시.
+- **실환경 검증 완료 (2026-11-15 사용자 확인)**:
+  - `Help -> Trigger Crash` 실행 시 프로세스 증발 없이 `BamEngine Crash Diagnostics` 대화상자 정상 팝업 확인.
+  - `Logs/Crashes/`에 타임스탬프 기반 `.dmp` 미니덤프 및 `.crash.json` 진단 리포트 누락 없이 생성 확인.
+  - `Temp/Session.lock`이 `"Status": "Crashed"`로 갱신되고 `Temp/Recovery/`에 `Emergency_Snapshot.bamscene.json` 및 `RecoveryMetadata.json` 정상 생성 확인.
+  - 에디터 재기동 시 **"⚠️ 비정상 종료 감지 및 작업 복원 (Crash Recovery)"** 모달 창이 정상 팝업되고, `Escape` 키 입력 시에도 취소 인덱스(-1) 가드로 스냅샷이 안전하게 유지됨을 확인.
+  - `[복원하여 열기 (Restore)]` 선택 시 크래시 직전 수정했던 엔티티와 씬 상태가 뷰포트에 완벽히 복원되고 원본 씬 문서로 재채택됨을 실환경에서 검증 완료.
+- **미검증 항목**: Tier 1 5분 주기 하트비트 스냅샷 파일의 백그라운드 교체 주기(설정 변경 후 타이머 만료) 확인.
+
+---
+
+### [2026-11-15] 비동기 작업 및 스레드 수명 관리 지침 수립 (std::execution/std::async vs std::thread)
+
+- **배경 및 범위**: 클라이언트 빌드 및 패키징(`BuildProfilePanel`) 후 에디터 종료 시 CRT 메모리 누수(`_CRTDBG_LEAK_CHECK_DF`)가 보고되던 현상을 추적하여, `std::execution::par` 및 `std::async(std::launch::async)`가 의존하는 MSVC 시스템 스레드 풀(Win32 Threadpool / PPL)의 비종료 상주성과 CRT 누수 감지 시점의 역전 문제를 규명하고 엔진 표준 비동기 수명 지침을 수립했다.
+- **주요 변경 및 문서화 내용**:
+  - [EngineEditorClientGuidelines.md](file:///i:/BamtoliyaGithub/BamEngine/Docs/EngineEditorClientGuidelines.md): `## 20. 비동기 작업 및 스레드 수명 관리 지침` 신설.
+    1. Task 기반 병렬 추상화(`std::execution`, `std::async`)와 저수준 스레드 제어(`std::thread`)의 본래 설계 의도와 트레이드오프 명시.
+    2. MSVC 시스템 스레드 풀의 영구 상주로 인해 `main()` 종료 직후 CRT leak check 시점에 `_tiddata`, TLS, 작업 노드가 가짜 누수로 감지되는 원인 기술.
+    3. 에디터 백그라운드 작업(`ClientBuildJob`) 및 대용량 IO(`CopyRuntimeResources`)에서 명시적 `std::thread` 소유 및 `join()`을 통한 즉시 회수 원칙 의무화.
+    4. 향후 엔진 전용 JobSystem 도입 시 필수적인 `Initialize` / `Shutdown` 수명 통제 요건 정의.
+  - [BuildAndPackagingPlan.md](file:///i:/BamtoliyaGithub/BamEngine/Docs/BuildAndPackagingPlan.md): 3단계(Build)의 `ClientBuildJob` 및 4단계(Stage)의 `CopyRuntimeResources`에 스레드 풀 누수 방지 원칙 및 가이드라인 20절 참조 연결.
+- **검증 상태**: 가이드라인 문서 및 계획 문서 상호 참조 정합성 확인 완료.
+- **미검증 항목**: 엔진 전용 JobSystem(태스크 그래프) 구현 및 렌더 스레드 코어 고정.
+
+---
+
 ### [2026-11-15] Runtime 수명주기 역전 해소 및 PickingManager 지연 소멸·모듈 언로드 크래시 해결
 
 - **배경 및 범위**: 독립 클라이언트(`Client.exe`) 종료 시 `EXCEPTION_ACCESS_VIOLATION (0xC0000005)` 크래시가 발생하는 문제를 진단하고, 런타임 종료 단계(`Runtime::Free`)에서의 매니저 수명주기 역전 및 `PickingManager`에 의한 씬 참조 카운트 지연 소멸 문제를 완벽히 해결했다.

@@ -2,7 +2,7 @@
 (Crash Handling, Diagnostics & Work Recovery System Plan)
 
 - **작성일**: 2026-11-08
-- **상태**: Windows 핸들러, Editor 복원 경로 및 독립 Client 진입점·활성 씬·진단 문구 분기 반영(`B05` 해소). 실 크래시·복원 실행 검증 대기.
+- **상태**: Windows 핸들러, Editor 2단계 복원 경로, 독립 Client 진입점, 프로젝트 루트 기준 경로 일원화(`PlatformPath::GetProjectRoot()`) 및 실환경 크래시 진단·무손실 씬 복원 검증 완료 (2026-11-15).
 - **연계 문서**:
   - [엔진·에디터·클라이언트 개발 지침 (EngineEditorClientGuidelines.md)](EngineEditorClientGuidelines.md) 3절, 12절
   - [빌드 구성 및 전처리기 지침 (BuildConfigurationAndPreprocessing.md)](BuildConfigurationAndPreprocessing.md) 3.1절
@@ -197,6 +197,23 @@ sequenceDiagram
    +------------------------------------------------------------------------+
    ```
 
+### 4.4 저장 경로 일원화 원칙 및 아키텍처 판단 기준 (개발 환경 vs 배포 환경)
+
+1. **설계 고민 및 문제 정의**:
+   - 초기에 `Logs/Crashes/`와 `Editor.log`는 프로세스 상대 경로로 인해 빌드 바이너리 폴더(`out/build/.../bin/Debug/`)에 생성된 반면, `Temp/Recovery/` 및 `Temp/Session.lock`은 프로젝트 루트(`ProjectRoot`)에 생성되어 상위 위치가 파편화되는 문제가 확인되었다.
+   - 이에 대해 **"나중에 에디터를 알파 빌드로 패키징하여 외부 테스터나 아티스트에게 배포할 때, 실행 파일(바이너리) 폴더 바로 옆에 로그와 덤프가 생겨야 압축하여 리포트하기 편하지 않은가?"**라는 관점과 **"개발 환경의 프로젝트 루트에 모아야 하는가?"**에 대한 설계 판단이 진행되었다.
+2. **비교 분석 및 설계 판단**:
+   - **바이너리 폴더(`exeDir`) 고정 시의 결함**:
+     - 개발 환경에서 `out/build/`는 CMake 캐시 삭제(`rm -rf out`), Rebuild, Git Clean 시 수시로 완전히 삭제되는 임시 디렉터리다. 만약 자동 저장 복원 파일(`Temp/Recovery/`)이 여기에 생성되면 빌드 정리 시 **사용자의 미저장 작업 복원본이 영구 소실**된다.
+     - Debug/Release 빌드 간에 로그와 덤프가 분산되어 이전 크래시 추적이 어려워진다.
+     - 나중에 설치형(`C:\Program Files\...`)으로 배포 시 권한 거부(`Access Denied`)로 덤프 작성이 실패할 수 있다.
+   - **프로젝트 루트(`PlatformPath::GetProjectRoot()`) 기준 일원화의 우위**:
+     - **개발 환경**: 소스 및 에셋이 위치한 프로젝트 저장소 루트(`ProjectRoot`) 아래의 `Logs/` 및 `Temp/`에 가지런히 모이므로 빌드 클린에도 작업 데이터와 진단 리포트가 안전하게 영속된다.
+     - **알파 배포 환경**: 독립 패키지(`BamEditor/`) 환경에서는 실행 파일 바로 옆에 `Config/` 및 패키지 마커가 배치되므로, `PlatformPath::GetProjectRoot()` 탐색 알고리즘에 의해 **자동으로 `ProjectRoot == ExecutableDirectory`**가 된다.
+     - 결과적으로 배포 환경에서도 테스터가 기대한 대로 **실행 파일 옆의 `BamEditor/Logs/` 및 `BamEditor/Temp/`로 자동 일원화**되어 폴더만 그대로 압축해 버그 리포트를 전송할 수 있는 상위 호환성이 보장된다.
+3. **적용 결과**:
+   - `Editor/Source/Application/Private/Application.cpp`에서 `PlatformPath::GetProjectRoot()`를 사용하여 로거(`projectRoot / "Logs" / "Editor.log"`)와 크래시 덤프(`projectRoot / "Logs" / "Crashes"`)의 경로를 프로젝트 루트로 일원화하고, 크래시 컨텍스트에 `"Host": "Editor"`를 등록했다.
+
 ---
 
 ## 5. 클라이언트(Client)와 에디터(Editor)의 분기 처리
@@ -248,6 +265,11 @@ sequenceDiagram
 4. **빌드 안정성 (Client Strip)**:
    - 클라이언트 빌드(`BAM_EDITOR = 0`) 시 복원 관련 로직이 완전히 제외되며, No-Op 및 경량 크래시 덤프만 작동해야 한다.
 
-## 8. 현재 연결 범위 (2026-11-10)
+## 8. 실환경 검증 결과 및 연결 범위 (2026-11-15 갱신)
 
-정적 확인에서 Editor의 초기화·종료·갱신·복원 모달과 함께, 독립 Client 진입점([Client/Source/Main.cpp](../Client/Source/Main.cpp))의 `CrashHandler::Initialize(m_ProjectRoot / "Logs" / "Crashes")`·`SetCustomContext("Host", "Client")`·`Shutdown()`, 시작 씬 로드([ClientGameRuntime.cpp](../Client/Source/Execution/Private/ClientGameRuntime.cpp))의 `SetActiveScenePath()`, 그리고 `CrashHandler_Win32.cpp`의 `s_EmergencyCallback` 등록 여부에 따른 Editor/Client 안내 메시지박스 분기가 연결되어 있다(`B05` 해소). 독립 Client 실제 크래시 시 `.dmp`/`.crash.json` 생성, 로그 플러시, Editor 강제 종료 후 복원, 원본 씬 저장·폐기 동작은 사용자 확인 항목이다.
+- **검증 완료 (2026-11-15 실환경 확인)**:
+  1. **진단 및 리포트 파이프라인**: 에디터 `Help -> Trigger Crash (Diagnostics Test)` 실행 시 즉각 증발하지 않고 시스템 크래시 대화상자(`BamEngine Crash Diagnostics`)가 정상 팝업되며, `Logs/Crashes/`에 `.dmp` 미니덤프와 `.crash.json` 진단 리포트가 누락 없이 기록됨을 확인했다.
+  2. **비상 스냅샷 및 세션 잠금**: 크래시 순간 `Temp/Session.lock`이 `"Status": "Crashed"`로 마킹되고, `Temp/Recovery/Emergency_Snapshot.bamscene.json` 및 `RecoveryMetadata.json`에 미저장 활성 씬 스냅샷이 온전히 영속화됨을 확인했다.
+  3. **복원 마법사 모달(Recovery Wizard)**: 에디터 재기동 시 비정상 종료를 즉시 감지하여 중앙 모달 팝업이 뜨고, `Escape` 입력 시에도 취소 인덱스(-1) 가드로 스냅샷이 안전하게 유지됨을 확인했다.
+  4. **무손실 복원**: `[복원하여 열기 (Restore)]` 선택 시 크래시 직전 수정했던 엔티티와 씬 상태가 뷰포트에 완벽히 복원되고 원본 씬 문서로 재채택됨을 확인했다.
+  5. **경로 일원화**: `Application.cpp`에서 `PlatformPath::GetProjectRoot()`를 적용하여, `Logs/`(로그·크래시 덤프)와 `Temp/`(세션 락·복구 스냅샷)가 모두 프로젝트 루트 바로 아래에 단일 기준으로 깔끔하게 정돈됨을 확인했다. 독립 Client 역시 동일한 프로젝트 루트/패키지 루트 기준 경로를 공유한다.

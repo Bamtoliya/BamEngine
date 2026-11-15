@@ -616,3 +616,56 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 - **진단/경고 색상**: 성공(녹색 계열), 경고(황색 계열), 오류(적색 계열)의 시각적 하이라이트 규칙을 통일하여 패널마다 색상이 반대로 쓰이거나 임의로 변형되지 않도록 한다.
 
 에디터 UI/UX 기능의 계층별 검증(정적 감사, 헤드리스 ImGui CTest, 실환경 대화형·GPU 검증), 표준 테스트 환경 매트릭스(언어·배율·도킹 폭) 및 영역별 Pass/Fail 판정 기준은 [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md)를 따른다.
+
+## 20. 비동기 작업 및 스레드 수명 관리 지침 (Concurrency & Thread Lifecycle Guidelines)
+
+엔진과 에디터의 병렬 연산 및 백그라운드 작업(빌드, 패키징, 리소스 비동기 로딩, 대용량 파일 복사 등)을 설계할 때 동시성 모델의 선택과 스레드 수명 관리는 시스템 안정성과 디버그 환경의 무결성을 결정한다.
+
+### 20.1 Task 기반 실행 정책(`std::execution`, `std::async`)과 명시적 스레드(`std::thread`)의 역할 차이
+
+1. **설계 의도의 차이**:
+   - **`std::thread` (저수준 실행 주체 제어)**:
+     - OS 커널 스레드를 1:1로 직접 생성하고 소멸시키는 프리미티브이다.
+     - "누가(Worker) 언제 시작하고 언제 완전히 소멸하는가"를 개발자가 명시적으로 통제(`join` / `detach`)하는 데 목적이 있다.
+   - **`std::execution` / `std::async` (고수준 작업 추상화, Task-Based Parallelism)**:
+     - 개발자가 스레드 생성 비용, 코어 수 계산, 작업 분할(Chunking)을 수동 관리하지 않고 "무엇을 병렬로 실행할 것인가"에만 집중하도록 돕는 추상화이다.
+     - 런타임(OS/컴파일러)이 내부적으로 전역 스레드 풀(Thread Pool)을 유지하며 일감을 동적으로 분배한다.
+2. **비교 요약**:
+   - `std::execution::par`나 `std::async`는 반복 호출 시 스레드 생성/파괴 오버헤드가 없고 코드가 간결하다.
+   - 반면 `std::thread`는 스레드 풀 오버헤드 대신 수동 분할 및 스레드 관리 코드가 필요하지만, 스레드의 수명 주기(시작과 완전 종료)를 완벽하게 보장한다.
+
+### 20.2 런타임 스레드 풀 상주성과 CRT 메모리 누수 검출 시점 불일치
+
+엔진 디버그 빌드에서는 `Runtime::Initialize()`를 통해 CRT 디버그 힙 플래그(`_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF`)를 활성화하여 메모리 누수를 엄격히 감시한다. 이 환경에서 시스템 스레드 풀 기반 API는 다음과 같은 구조적 한계와 오탐지를 유발한다.
+
+1. **MSVC 시스템 스레드 풀의 영구 상주(Persistence)**:
+   - MSVC의 `std::execution::par`는 PPL(Concurrency Runtime), `std::async(std::launch::async)`는 Windows 시스템 스레드 풀(`CreateThreadpoolWork`)을 기반으로 동작한다.
+   - 이들 스레드 풀 워커 스레드는 작업이 끝나도 프로세스가 완전히 종료될 때까지 파괴되지 않고 유휴(Idle) 상태로 상주한다.
+2. **자원 해제와 CRT 누수 진단 시점의 역전**:
+   - 에디터 종료 시 `main()`이 반환되면 CRT `exit()` 루틴에서 `_CrtDumpMemoryLeaks()`가 호출된다.
+   - 이 시점은 OS 커널이 프로세스를 회수하기 전이므로, 살아있는 스레드 풀 워커 스레드의 CRT 스레드별 데이터(`_tiddata`), TLS(Thread Local Storage), 스레드 풀 내부 작업 노드가 힙에 남아있는 것으로 판정되어 가짜 메모리 누수(False Positive) 덤프가 발생한다.
+   - C++ 표준에는 프로세스 종료 전 표준 스레드 풀을 강제로 Shutdown하고 TLS를 즉시 정리하는 표준 API가 존재하지 않는다.
+
+### 20.3 에디터 백그라운드 작업 및 병렬 IO의 수명 관리 원칙
+
+에디터 종료 시점의 결함 없는 클린 셧다운과 메모리 진단 무결성을 유지하기 위해 다음 원칙을 의무 적용한다.
+
+1. **장기 백그라운드 작업의 `std::thread` 명시적 소유**:
+   - `ClientBuildJob`과 같이 프로세스를 실행하고 로그를 스트리밍하는 비동기 작업은 `std::async` 대신 수명과 소유권이 명확한 `std::thread`를 멤버로 소유한다.
+   - 작업 완료 시 `Update()` 경로에서 `worker.join()`을 호출하거나 소멸자(`~ClientBuildJob()`)에서 반드시 `join()`을 호출하여, 에디터 종료 시점에 워커 스레드가 OS 레벨에서 완전히 종료(`_endthreadex`)되고 모든 CRT/TLS 자원을 반환했음을 보장한다.
+2. **일회성 배치 IO의 명시적 워커 풀링과 즉시 회수**:
+   - 패키징 에셋 복사(`CopyRuntimeResources`)와 같은 대용량 IO 배치 작업은 `std::execution::par`에 의존하지 않고, 하드웨어 코어 수(`hardware_concurrency`)에 맞춘 명시적인 `std::vector<std::thread>` 워커 배치를 사용한다.
+   - 함수 반환 전에 모든 워커 스레드를 `join()`하여 함수 탈출 시점에 스레드 핸들과 내부 자원이 완전히 소멸되도록 한다.
+3. **서드파티 스레드 로컬 자원(TLS) 정리**:
+   - SDL3 등 스레드별 에러/타이머 TLS를 생성하는 외부 라이브러리를 워커 스레드에서 사용할 경우, 스레드가 종료되기 직전 스코프 가드(`SdlTlsCleanup` 등)를 통해 `SDL_CleanupTLS()`를 명시적으로 호출한다.
+
+### 20.4 향후 엔진 전용 JobSystem / TaskGraph 도입 요건
+
+추후 렌더링, 물리, 비동기 로딩을 위한 엔진 전용 태스크 시스템(JobSystem)을 도입할 경우에도 표준 `std::async`나 시스템 스레드 풀에 의존하지 않고 다음 요구사항을 충족하는 엔진 관리형 스레드 풀을 구축한다.
+
+1. **명시적 라이프사이클 통제 (`Initialize` / `Shutdown`)**:
+   - `Engine::Runtime` 초기화 시 워커 스레드 풀을 생성하고, `Runtime::Free()`의 초기 단계에서 모든 워커에 종료 신호를 전달한 뒤 `join()`하여 `_CrtDumpMemoryLeaks()` 호출 전 모든 스레드를 소멸시켜야 한다.
+2. **코어 고정(Affinity) 및 우선순위 제어**:
+   - 메인 스레드, 렌더 스레드, 비동기 로딩 워커의 CPU 코어 바인딩 및 우선순위를 엔진이 결정할 수 있어야 한다.
+3. **전역 락(Global Lock) 없는 Work-Stealing 큐**:
+   - 스레드 간 일감 분배는 무잠금(Lock-Free) 링 버퍼나 전용 작업 큐를 통해 오버헤드를 최소화한다.

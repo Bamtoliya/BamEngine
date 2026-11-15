@@ -84,6 +84,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 ### 3단계: Build와 Cook
 
 - `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
+- 백그라운드 빌드 실행기(`ClientBuildJob`)는 Windows 시스템 스레드 풀 상주로 인한 CRT 메모리 누수 오탐지를 방지하기 위해 `std::async` 대신 명시적인 `std::thread`와 `join()`을 사용하고, `OutputCallback`을 통해 빌드 진행 로그를 UI로 실시간 스트리밍한다. ([EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 20절 참고)
 - 시작 씬, 내보낼 상위 폴더, 패키지 폴더 이름과 프로그램 이름은 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
 - 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
 - `AnimatorComponent.controllerPath`와 컨트롤러 문서에 들어 있는 클립 참조를 같은 검사에서 따라간다. Runtime과 패키저는 동일한 컨트롤러 경로 해석을 사용한다.
@@ -99,6 +100,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 - 대상이 일반 폴더가 아니거나 프로젝트 루트 또는 에셋·엔진 리소스·빌드 입력과 겹치면 내보내기를 거부한다. 이 기능이 만든 패키지는 `.bam-client-package` 마커로, 이전 기본 패키지는 `Client.exe`, `Engine.dll`, `Config/Project.json` 조합으로 식별한다.
 - 첫 폴더 출력은 현재 Windows Client의 알려진 실행 바이너리, 검사로 확인한 파일 및 두 리소스 루트의 런타임 파일 형식을 보존한다. 배포본 `Config/Project.json`에 선택한 씬을 기록한다. 바이너리 참조 분석, 최소 에셋 수집과 실제 독립 실행은 후속 검증 항목이다.
 - 전용 출력 폴더에 실행 파일, Engine DLL, 필요한 런타임 DLL과 프로젝트 모듈을 수집한다.
+- 대용량 런타임 리소스 복사(`CopyRuntimeResources`)는 PPL 동시성 런타임 스레드 풀 상주로 인한 CRT 누수 오탐지를 방지하기 위해 `std::execution::par` 대신 명시적인 `std::thread` 워커 배치와 동기식 `join()`을 적용한다. ([EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 20절 참고)
 - [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)의 원칙에 따라, 런타임 필수 엔진 빌트인 리소스(`Engine/Resources/`)와 시작 씬이 참조하는 프로젝트 애셋(`Assets/`)을 분리 수집한다.
 - 프로젝트 설정, 시작 씬, 시작 매니페스트와 실행 리소스를 경로 규칙에 맞게 배치한다.
 - 현재 패키저는 시작 매니페스트의 설정·직접 리소스 파일을 검증하고, 전체 런타임 리소스 스캔에서 빠진 파일도 명시적으로 staging한다. 선택적 수집은 아직 적용하지 않았다.

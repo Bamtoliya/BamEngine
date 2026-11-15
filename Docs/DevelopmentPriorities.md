@@ -1,7 +1,7 @@
 # 통합 개발 우선순위와 완료 기준
 
 - 작성일: 2026-10-24 (최종 갱신: 2026-11-15)
-- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5 인스턴싱 배칭 및 Unlit 머티리얼), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징 실시간 스트리밍 및 DIA SDK 힌트 보강, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현, 독립 클라이언트 종료 시 수명주기 역전 및 PickingManager 지연 소멸 크래시 해결 반영. 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
+- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5 인스턴싱 배칭 및 Unlit 머티리얼), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징 실시간 스트리밍 및 DIA SDK 힌트 보강, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현, 독립 클라이언트 종료 수명주기 크래시 해결, 에디터 비정상 종료 진단·2단계 작업 복원(CrashHandler/Recovery) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 반영. 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
 - 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06 및 A06 본체 전량 코드 반영 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
@@ -584,11 +584,12 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 2 [완료]: 메쉬 이펙트(`VFXMeshTrack`) 런타임 렌더링 제출(`ForwardTransparentPass`), 스케일/회전 보간 및 UV 스크롤/컬러 페이드 연동(`SpriteDrawCommand` / `SpriteUBO`), 사운드 트랙(`VFXSoundTrack`) 1회성 정밀 타이밍 트리거 연결 완료.
   - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집, 테이퍼링 폭 축소 및 방향 정렬 쿼드 세그먼트 고속 렌더링 파이프라인 연계 완료.
   - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
-- **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 전 단계 구현 완료: 2026-11-09]**:
+- **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15]**:
   - Phase 1 [완료]: Windows SEH / CRT 예외 가로채기 핸들러(`CrashHandler`), `MiniDumpWriteDump` 기반 `.dmp` 미니덤프 생성, 크래시 순간 `Logger::Flush()` 강제 디스크 동기화 파이프라인 구축.
   - Phase 2 [완료]: `StackWalk64` / `SymFromAddr` 기반 심볼릭 콜스택 추출 및 타임스탬프 기반 구조화된 `.crash.json` 진단 리포트 자동 생성.
   - Phase 3 [완료]: Tier 1 하트비트 주기적 자동 저장(`RecoveryManager`), 씬 dirty 상태 감지 시 5분 주기 `.tmp` 임시 파일 안전 교체(원자적 쓰기) 스냅샷 생성.
-  - Phase 4 [완료]: `Temp/Session.lock` 세션 생명주기 관리, 에디터 시작 시 비정상 종료 감지 및 작업 복원 마법사 모달(`DrawRecoveryModal`) 연동, `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통한 즉각 검증 지원 완료.
+  - Phase 4 [실환경 검증 완료: 2026-11-15]: `Temp/Session.lock` 세션 라이프사이클 관리, 에디터 시작 시 비정상 종료 감지 및 작업 복원 마법사 모달(`DrawRecoveryModal`) 연동, `Help -> Trigger Crash (Diagnostics Test)` 메뉴를 통한 의도적 크래시 및 미니덤프/진단 리포트/비상 스냅샷 생성, `Escape` 방어 및 무손실 씬 복원 검증 완료.
+  - 저장 경로 일원화 [완료: 2026-11-15]: 개발 환경과 배포 패키지 환경을 모두 만족하도록 `PlatformPath::GetProjectRoot()` 기준으로 `Logs/`(로그·크래시 덤프)와 `Temp/`(세션 락·복구 스냅샷) 경로 일원화 및 `"Host": "Editor"` 컨텍스트 등록 완료.
 
 - **트랙 H — 에디터 공용 UI·3줄 리소스 편집기·콘텐츠 브라우저 통합 [정적 완료 / UI·GPU 미검증]**
   - `ResourceEditorInterface` 기반 3줄 공통 헤더(12개 리소스 편집기 전환), `EditorUI` 공통 검색 바·모달 버튼·반응형 툴바·테이블 확대, `ContentBrowser`의 `Assets/`/`Engine/Resources/` 분리 및 읽기 전용 보호·썸네일 재사용·다중 드롭 반영 완료.
@@ -605,6 +606,6 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 11.5 상태·검증 기록 규칙
 
-- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

@@ -48,14 +48,15 @@ IMPLEMENT_SINGLETON(Application)
 EResult Application::Initialize(void* arg)
 {
     if (!arg) return EResult::InvalidArgument;
-
     CAST_DESC;
-
-    if(!InitializeLogger())
-        return EResult::Fail; 
+    const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
+    if (!InitializeLogger())
+        return EResult::Fail;
 
     m_LoggerInitialized = true;
-    Engine::CrashHandler::Initialize();
+
+    Engine::CrashHandler::Initialize(projectRoot / L"Logs" / L"Crashes");
+    Engine::CrashHandler::SetCustomContext("Host", "Editor");
 
     const auto fail = [this](const char* stage, EResult result)
         {
@@ -505,11 +506,13 @@ EResult Application::InitializeImGui()
 }
 EResult Application::InitializeLogger()
 {
-	if (!Engine::Logger::Initialize(LOG_PATH))
-	{
-		fmt::print(stderr, "Logger Initialization Failed\n");
-		return EResult::Fail;
-	}
+    const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
+    const auto logPath = projectRoot / L"Logs" / L"Editor.log";
+    if (!Engine::Logger::Initialize(logPath))
+    {
+        fmt::print(stderr, "Logger Initialization Failed\n");
+        return EResult::Fail;
+    }
     BAM_LOG(Info, "Editor", "Application", "Logger initialization finished");
     return EResult::Success;
 }
