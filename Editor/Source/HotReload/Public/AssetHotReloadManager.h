@@ -41,9 +41,10 @@ private:
 	efsw::FileWatchListener* m_FileListener = nullptr;
 	efsw::WatchID m_WatchID = 0;
 	efsw::WatchID m_EngineWatchID = 0;
+	efsw::WatchID m_EditorWatchID = 0;
 	std::filesystem::path m_WatchDirectory;
 	std::filesystem::path m_EngineWatchDirectory;
-	// 메인 스레드에서만 접근합니다.
+	std::filesystem::path m_EditorWatchDirectory;
 	std::unordered_map<std::wstring, MeshFileState> m_MeshFileStates;
 };
 

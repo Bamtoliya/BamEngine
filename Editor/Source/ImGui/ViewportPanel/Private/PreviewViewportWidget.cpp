@@ -307,7 +307,7 @@ void PreviewViewportWidget::BeginFrame(Engine::f32 dt)
 	for (std::size_t i = 0; i < m_StudioLights.size(); ++i)
 	{
 		if (auto* light = reg.try_get<Engine::LightComponent>(m_StudioLights[i]))
-			light->Intensity = intensities[i];
+			light->Intensity = intensities[i] * m_StudioLightMultiplier;
 	}
 
 	Engine::LightSystem::UpdateLights(reg);
@@ -478,11 +478,15 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const auto& io = ImGui::GetIO();
 
 	const auto origin = ImGui::GetItemRectMin();
+	const auto mousePos = input.GetScreenMousePosition();
 	const auto isOver = [&](float x, float y, const ImVec2& size)
-	{
-		const ImVec2 min(origin.x + x, origin.y + y);
-		return ImGui::IsMouseHoveringRect(min, ImVec2(min.x + size.x, min.y + size.y));
-	};
+		{
+			const float minX = origin.x + x;
+			const float minY = origin.y + y;
+			const float maxX = minX + size.x;
+			const float maxY = minY + size.y;
+			return (mousePos.x >= minX && mousePos.x <= maxX && mousePos.y >= minY && mousePos.y <= maxY);
+		};
 	const bool overToolbar = isOver(channelX, margin, channelSize) ||
 		(showToolbar && isOver(margin, margin + toolbarOffset, toolbarSize));
 	m_IsHovered = ImGui::IsItemHovered() && !overToolbar;

@@ -578,12 +578,14 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 3 [완료]: `HotReloadManager` 4대 엔진 매니저(`ModuleHotReloadManager`, `ModuleBuildManager`, `ShaderHotReloadManager`, `AssetHotReloadManager`) 및 에디터 패널 플러그인 연동 (`Reload`, `Rebuild & Reload`, `Load / Unload`, `Auto-Reload`).
   - Phase 4 [완료]: 비동기 컴파일 콘솔 전문 스트리밍, 에러/경고 하이라이트 및 `[Retry Compile]` 에러 복구 파이프라인, 메뉴바(`Edit -> Plugins`, `Window -> Panels -> Diagnostics -> Plugin Manager`) 및 로캘 키 40여 종 연동 완료.
   - 공용 패널과 Builtin·Custom 수동 활성화 구현을 반영했다. [설치형 실행 확인](EditorPluginArchitecturePlan.md#사용자-실행-검증) 뒤 생성 템플릿과 설치형 배포를 진행한다. Client 작업은 빌드·패키징 단계에서 재개한다.
-- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 전 단계 구현 완료]**:
+- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15 / Phase 5 환경 고도화 계획 수립]**:
   - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드, 트레일, 데칼, 카메라 셰이크를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
   - Phase 1 [완료]: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 스프라이트 플립북·파티클·라이트 섬광 연동, `VFXEditorPanel` 저작 도구 구축 완료.
   - Phase 2 [완료]: 메쉬 이펙트(`VFXMeshTrack`) 런타임 렌더링 제출(`ForwardTransparentPass`), 스케일/회전 보간 및 UV 스크롤/컬러 페이드 연동(`SpriteDrawCommand` / `SpriteUBO`), 사운드 트랙(`VFXSoundTrack`) 1회성 정밀 타이밍 트리거 연결 완료.
   - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집, 테이퍼링 폭 축소 및 방향 정렬 쿼드 세그먼트 고속 렌더링 파이프라인 연계 완료.
   - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
+  - 후보 B 실환경 검증 & 안정화 [완료: 2026-11-15]: `acceptsSceneSubmissions` 가드를 통한 메인 씬 스카이박스 누출 차단, 타임라인 앞뒤 여백(-0.25s/+1.0s) 및 10배 줌아웃(0.1x)·패닝 확장, 트레일 검증용 프리뷰 모션(원형 궤도) 토글, D3D12 `MISMATCHINGCLEARVALUE` 예외 중단 해제 및 RTV null 가드 크래시 해결, 3단계 배경 프리셋(스튜디오 18% 회색/암실/주간) 및 스튜디오 조명 배율 연동, 차콜 PBR 바닥 슬래브(18% 반사율 매트 머티리얼 인스턴스) 적용으로 바닥 자체 블룸 제거 및 플래시 반사 극대화 완료.
+  - Phase 5 [신규 계획 수립: 2026-11-15]: 상용 엔진(Niagara/VFX Graph) 수준의 환경 상호작용(벽 코너/장애물/더미 마네킹 프리셋, 바람/외력 시뮬레이터), 소프트 파티클(Depth Fade 셰이더), 뷰포트 3D 기즈모(ImGuizmo), 2D 베지어 커브 에디터 로드맵 정의.
 - **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15]**:
   - Phase 1 [완료]: Windows SEH / CRT 예외 가로채기 핸들러(`CrashHandler`), `MiniDumpWriteDump` 기반 `.dmp` 미니덤프 생성, 크래시 순간 `Logger::Flush()` 강제 디스크 동기화 파이프라인 구축.
   - Phase 2 [완료]: `StackWalk64` / `SymFromAddr` 기반 심볼릭 콜스택 추출 및 타임스탬프 기반 구조화된 `.crash.json` 진단 리포트 자동 생성.
@@ -606,6 +608,6 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 11.5 상태·검증 기록 규칙
 
-- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인은 미검증).
+- 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료; 2026-11-15 복합 비주얼 이펙트(후보 B) 뷰포트 스카이박스 누출 차단, 타임라인 0.1x 줌아웃/패닝, 프리뷰 모션, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 실환경 검증 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인 및 Phase 5 환경 고도화는 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.

@@ -1,4 +1,4 @@
-#include "EditorActionRegistry.h"
+﻿#include "EditorActionRegistry.h"
 #include "ShortcutManager.h"
 #include "Application.h"
 #include "ToolBar.h"
@@ -26,6 +26,10 @@
 #include "ContentBrowserPanel.h"
 #include "PreviewViewportWidget.h"
 #include "UIViewportPanel.h"
+#include "ModelEditor.h"
+#include "MaterialEditor.h"
+#include "AnimationTimelinePanel.h"
+#include "TilePalettePanel.h"
 
 BEGIN(Editor)
 
@@ -192,16 +196,23 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
         .ExecuteHandler = []() { ToolBar::SaveScene(); },
-                .CanExecute = []() {
-            const auto* prefabPanel = dynamic_cast<PrefabEditorPanel*>(
-                ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
-            if (prefabPanel && prefabPanel->IsOpen() && prefabPanel->IsFocused())
-                return false;
-
-            for (const auto* panel : ImGuiManager::Get().GetPluginResourceEditors())
+                       .CanExecute = []() {
+            for (const auto* panel : ImGuiManager::Get().GetImGuiPanels())
             {
-                if (panel->HasSaveAction() && panel->IsOpen() && panel->IsFocused())
+                if (!panel || !panel->IsOpen() || !panel->IsFocused())
+                    continue;
+
+                if (dynamic_cast<const PrefabEditorPanel*>(panel))
                     return false;
+
+                if (dynamic_cast<const ResourceEditorInterface*>(panel))
+                    return false;
+
+                if (const auto* pluginEditor = dynamic_cast<const PluginResourceEditor*>(panel))
+                {
+                    if (pluginEditor->HasSaveAction())
+                        return false;
+                }
             }
 
             const auto* document = Application::Get().GetSceneDocument();
@@ -221,6 +232,120 @@ void EditorActionRegistry::RegisterAll()
             return PIEManager::Get().IsEditing() && document && document->CanSave();
         }
     });
+
+    // ── [Resource Editor Save Actions] ──
+    sm.RegisterAction({
+        .Id = "ModelEditor.Save",
+        .DisplayNameKey = "EditorCommon.Save",
+        .CategoryKey = "Shortcuts.CategoryEditor",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            auto* panel = dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
+            if (panel && panel->IsOpen() && panel->IsFocused()) panel->SaveResource();
+        },
+        .CanExecute = []() {
+            auto* panel = dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
+            return panel && panel->IsOpen() && panel->IsFocused() && PIEManager::Get().IsEditing();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.Save",
+        .DisplayNameKey = "EditorCommon.Save",
+        .CategoryKey = "Shortcuts.CategoryEditor",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            auto* panel = dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
+            if (panel && panel->IsOpen() && panel->IsFocused()) panel->SaveResource();
+        },
+        .CanExecute = []() {
+            auto* panel = dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
+            return panel && panel->IsOpen() && panel->IsFocused();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "AnimationTimeline.Save",
+        .DisplayNameKey = "EditorCommon.Save",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            auto* panel = dynamic_cast<AnimationTimelinePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Animation Timeline"));
+            if (panel && panel->IsOpen()) panel->SaveResource();
+        },
+        .CanExecute = []() {
+            auto* panel = dynamic_cast<AnimationTimelinePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Animation Timeline"));
+            return panel && panel->IsOpen();
+        }
+        });
+
+    // ── [Tile Palette Brush Actions] ──
+    sm.RegisterAction({
+        .Id = "TilePalette.Paint",
+        .DisplayNameKey = "TilePalette.PaintTool",
+        .CategoryKey = "Shortcuts.CategoryTilemap",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::B),
+        .ExecuteHandler = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            if (p) p->SetBrushMode(ETileBrushMode::Paint);
+        },
+        .CanExecute = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            return p && p->IsOpen();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "TilePalette.Erase",
+        .DisplayNameKey = "TilePalette.EraseTool",
+        .CategoryKey = "Shortcuts.CategoryTilemap",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::E),
+        .ExecuteHandler = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            if (p) p->SetBrushMode(ETileBrushMode::Erase);
+        },
+        .CanExecute = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            return p && p->IsOpen();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "TilePalette.BoxFill",
+        .DisplayNameKey = "TilePalette.BoxTool",
+        .CategoryKey = "Shortcuts.CategoryTilemap",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::U),
+        .ExecuteHandler = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            if (p) p->SetBrushMode(ETileBrushMode::BoxFill);
+        },
+        .CanExecute = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            return p && p->IsOpen();
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "TilePalette.Picker",
+        .DisplayNameKey = "TilePalette.PickerTool",
+        .CategoryKey = "Shortcuts.CategoryTilemap",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::I),
+        .ExecuteHandler = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            if (p) p->SetBrushMode(ETileBrushMode::Picker);
+        },
+        .CanExecute = []() {
+            auto* p = dynamic_cast<TilePalettePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Tile Palette"));
+            return p && p->IsOpen();
+        }
+        });
 
     sm.RegisterAction({
         .Id = "File.LoadScene",
@@ -929,47 +1054,64 @@ void EditorActionRegistry::RegisterAll()
     }
         });
 
-    const auto registerEffectTimeline = [&sm](const char* prefix, EShortcutContext context, auto findPanel)
-    {
-        using enum EditorUI::TimelineAction;
-        const auto add = [&](EditorUI::TimelineAction action, const char* name, const char* key, ShortcutChord chord,
-            bool repeat = false)
+    const auto registerEffectTimeline = [&sm](EShortcutContext context, auto findPanel)
         {
-            sm.RegisterAction({
-                .Id = std::string(prefix) + "." + name,
-                .DisplayNameKey = key,
-                .CategoryKey = "Shortcuts.CategoryTimeline",
-                .Context = context,
-                .DefaultChord = chord,
-                .ExecuteHandler = [findPanel, action] {
-                    if (auto* panel = findPanel()) panel->ExecuteTimelineAction(action);
-                },
-                .CanExecute = [findPanel, action] {
-                    const auto* panel = findPanel();
-                    return panel && panel->CanExecuteTimelineAction(action);
-                },
-                .AllowRepeat = repeat
-            });
+            using enum EditorUI::TimelineAction;
+            const auto add = [&](const char* fullId, EditorUI::TimelineAction action, const char* key, ShortcutChord chord,
+                bool repeat = false)
+                {
+                    sm.RegisterAction({
+                        .Id = fullId,
+                        .DisplayNameKey = key,
+                        .CategoryKey = "Shortcuts.CategoryTimeline",
+                        .Context = context,
+                        .DefaultChord = chord,
+                        .ExecuteHandler = [findPanel, action] {
+                            if (auto* panel = findPanel()) panel->ExecuteTimelineAction(action);
+                        },
+                        .CanExecute = [findPanel, action] {
+                            const auto* panel = findPanel();
+                            return panel && panel->CanExecuteTimelineAction(action);
+                        },
+                        .AllowRepeat = repeat
+                        });
+                };
+            using Engine::EKeyCode;
+            if (context == EShortcutContext::ParticleTimeline)
+            {
+                add("ParticleTimeline.PlayPause", PlayPause, "Action.Timeline.PlayPause", ShortcutChord(EKeyCode::Space));
+                add("ParticleTimeline.PrevFrame", Previous, "Action.Timeline.PrevFrame", ShortcutChord(EKeyCode::Left), true);
+                add("ParticleTimeline.NextFrame", Next, "Action.Timeline.NextFrame", ShortcutChord(EKeyCode::Right), true);
+                add("ParticleTimeline.FirstFrame", First, "Action.Timeline.FirstFrame", ShortcutChord(EKeyCode::Home));
+                add("ParticleTimeline.LastFrame", Last, "Action.Timeline.LastFrame", ShortcutChord(EKeyCode::End));
+                add("ParticleTimeline.ToggleLoop", Loop, "Action.Timeline.ToggleLoop", ShortcutChord(EKeyCode::L, EModifierKey::Ctrl));
+                add("ParticleTimeline.ZoomReset", Fit, "Action.Timeline.ZoomReset", ShortcutChord(EKeyCode::F));
+                add("ParticleTimeline.DeleteSelected", Delete, "Action.Timeline.DeleteSelected", ShortcutChord(EKeyCode::Delete));
+                add("ParticleTimeline.Undo", Undo, "EditorCommon.Undo", ShortcutChord(EKeyCode::Z, EModifierKey::Ctrl));
+                add("ParticleTimeline.Redo", Redo, "EditorCommon.Redo", ShortcutChord(EKeyCode::Y, EModifierKey::Ctrl));
+                add("ParticleTimeline.Save", Save, "EditorCommon.Save", ShortcutChord(EKeyCode::S, EModifierKey::Ctrl));
+            }
+            else if (context == EShortcutContext::CompositeTimeline)
+            {
+                add("CompositeTimeline.PlayPause", PlayPause, "Action.Timeline.PlayPause", ShortcutChord(EKeyCode::Space));
+                add("CompositeTimeline.PrevFrame", Previous, "Action.Timeline.PrevFrame", ShortcutChord(EKeyCode::Left), true);
+                add("CompositeTimeline.NextFrame", Next, "Action.Timeline.NextFrame", ShortcutChord(EKeyCode::Right), true);
+                add("CompositeTimeline.FirstFrame", First, "Action.Timeline.FirstFrame", ShortcutChord(EKeyCode::Home));
+                add("CompositeTimeline.LastFrame", Last, "Action.Timeline.LastFrame", ShortcutChord(EKeyCode::End));
+                add("CompositeTimeline.ToggleLoop", Loop, "Action.Timeline.ToggleLoop", ShortcutChord(EKeyCode::L, EModifierKey::Ctrl));
+                add("CompositeTimeline.ZoomReset", Fit, "Action.Timeline.ZoomReset", ShortcutChord(EKeyCode::F));
+                add("CompositeTimeline.DeleteSelected", Delete, "Action.Timeline.DeleteSelected", ShortcutChord(EKeyCode::Delete));
+                add("CompositeTimeline.Undo", Undo, "EditorCommon.Undo", ShortcutChord(EKeyCode::Z, EModifierKey::Ctrl));
+                add("CompositeTimeline.Redo", Redo, "EditorCommon.Redo", ShortcutChord(EKeyCode::Y, EModifierKey::Ctrl));
+                add("CompositeTimeline.Save", Save, "EditorCommon.Save", ShortcutChord(EKeyCode::S, EModifierKey::Ctrl));
+            }
         };
-        using Engine::EKeyCode;
-        add(PlayPause, "PlayPause", "Action.Timeline.PlayPause", ShortcutChord(EKeyCode::Space));
-        add(Previous, "PrevFrame", "Action.Timeline.PrevFrame", ShortcutChord(EKeyCode::Left), true);
-        add(Next, "NextFrame", "Action.Timeline.NextFrame", ShortcutChord(EKeyCode::Right), true);
-        add(First, "FirstFrame", "Action.Timeline.FirstFrame", ShortcutChord(EKeyCode::Home));
-        add(Last, "LastFrame", "Action.Timeline.LastFrame", ShortcutChord(EKeyCode::End));
-        add(Loop, "ToggleLoop", "Action.Timeline.ToggleLoop", ShortcutChord(EKeyCode::L, EModifierKey::Ctrl));
-        add(Fit, "ZoomReset", "Action.Timeline.ZoomReset", ShortcutChord(EKeyCode::F));
-        add(Delete, "DeleteSelected", "Action.Timeline.DeleteSelected", ShortcutChord(EKeyCode::Delete));
-        add(Undo, "Undo", "EditorCommon.Undo", ShortcutChord(EKeyCode::Z, EModifierKey::Ctrl));
-        add(Redo, "Redo", "EditorCommon.Redo", ShortcutChord(EKeyCode::Y, EModifierKey::Ctrl));
-        add(Save, "Save", "EditorCommon.Save", ShortcutChord(EKeyCode::S, EModifierKey::Ctrl));
-    };
-    registerEffectTimeline("ParticleTimeline", EShortcutContext::ParticleTimeline, [] {
+    registerEffectTimeline(EShortcutContext::ParticleTimeline, [] {
         return dynamic_cast<ParticleEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Particle Editor"));
-    });
-    registerEffectTimeline("CompositeTimeline", EShortcutContext::CompositeTimeline, [] {
+        });
+    registerEffectTimeline(EShortcutContext::CompositeTimeline, [] {
         return dynamic_cast<VFXEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Composite VFX Editor"));
-    });
+        });
 
     // ── [Edit / Editor Actions] ──
     sm.RegisterAction({

@@ -1,11 +1,13 @@
 # 계층형 통합 비주얼 이펙트 시스템 및 저작 도구 개발 계획 (Composite VFX & Track-based Orchestrator Plan)
 
-- **작성일:** 2026-11-08 (최종 갱신: 2026-11-09)
+- **작성일:** 2026-11-08 (최종 갱신: 2026-11-15)
 - **상태:**
   - **Phase 1 (복합 기반 구축):** 구현 및 검증 완료 (스프라이트 플립북, 파티클, 라이트 섬광 트랙 및 VFXEditorPanel)
   - **Phase 2 (메쉬 이펙트 런타임 & 사운드 연동):** 구현 및 검증 완료 (메쉬 트랙 스케일/회전 보간, UV 스크롤/컬러 페이드 렌더링 제출, 사운드 1회 트리거)
-  - **Phase 3 (트레일 / 리본 FX):** 구현 완료 (정점 히스토리 기반 동적 스트립 생성, 테이퍼링, 포워드 렌더링 및 에디터 연동)
-  - **Phase 4 (보조 연출 확장):** 구현 완료 (지면 투영 데칼 마크, 임팩트 카메라 셰이크 및 에디터 인스펙터 연동)
+  - **Phase 3 (트레일 / 리본 FX):** 구현 및 실환경 검증 완료 (정점 히스토리 기반 동적 스트립 생성, 테이퍼링, 포워드 렌더링 및 에디터 연동)
+  - **Phase 4 (보조 연출 확장):** 구현 및 실환경 검증 완료 (지면 투영 데칼 마크, 임팩트 카메라 셰이크 및 에디터 인스펙터 연동)
+  - **후보 B 실환경 검증 & 안정화 (2026-11-15):** 뷰포트 메쉬 격리, 타임라인 줌아웃(0.1x)·여백 확장, 프리뷰 모션 궤도, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 연동 완료
+  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 계획 수립 및 개발 대기 (소프트 파티클 Depth Fade, 환경 프리셋, 3D 기즈모, 베지어 커브 에디터)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
@@ -170,3 +172,62 @@ flowchart TD
 - 막대와 라벨은 트랙 종류/인덱스로 선택과 카메라 포커스를 처리한다. 구간 밖에서 트랙을 선택하면 해당 시작 근처로 탐색한다. 사운드의 시작 마커는 길이 핸들이 없다.
 - 막대의 양끝과 전체 길이 드래그는 놓는 순간 하나의 Undo 명령으로 반영한다. 전체 길이는 트랙 마지막 경계 아래로 줄일 수 없다. 탐색은 초기화 후 고정 스텝으로 재생하며 오디오를 억제한다. 툴바와 단축키는 동일한 명령을 호출한다.
 - 사용자 검증은 8종 트랙, 같은 이름의 트랙 선택, 스크럽 후 트레일·파티클 상태, 사운드 중복 발화 여부, 시작/종료·전체 길이 드래그, Undo/Redo·저장/재열기, ActionTimeline과 편집기 사이 포커스 및 키 문맥 전환을 포함한다. 빌드·실행은 미실시다.
+
+---
+
+## 7. 후보 B 실환경 검증 및 안정화 내역 (2026-11-15 완료)
+
+1. **메인 씬 스카이박스/지오메트리 간섭 원천 차단 (`acceptsSceneSubmissions`):**
+   - `PreviewViewportWidget`의 `ViewportDeferredPipeline`이 `acceptsSceneSubmissions = false`로 설정되어 있음에도, 메인 씬의 스카이박스 엔티티(`SkyMaterial`, `EBlendMode::Forward`)가 포워드 패스로 무조건 제출되던 문제를 `MeshRenderSystem::OnSubmit()`의 뷰포트 플래그 검사 가드로 차단 완료.
+2. **타임라인 앞뒤 여백 및 10배 줌아웃(0.1x) 확장:**
+   - 0초 이전 `-0.25초` 프리롤 여백 및 총 재생 시간 이후 `+1.0초` 포스트롤 여백을 제공하여 0초 직전에 시작하는 트랙과 잔여 파티클 감쇠 구간을 온전히 확인 가능.
+   - 최소 확대 배율을 `0.5x`에서 `0.1x`로 확장하여 수 초~수십 초 길이의 긴 연출도 한 화면에 조망 가능하며, `Shift + 마우스 휠` 및 우클릭 드래그 수평 패닝 지원.
+3. **트레일 및 이동 궤적 검증용 프리뷰 모션 (`PreviewMotion`) 연동:**
+   - 상단 툴바에 바람 아이콘(`ICON_FA_WIND`) 토글을 신설하여, 이펙트 엔티티를 3D 원형 궤도로 자동 비행시킴으로써 이동 궤적이 필수적인 `TrailTrack`(검기/연기 꼬리)을 독립 뷰포트에서 즉각 검증 가능.
+4. **D3D12 하드웨어 크래시 (`MISMATCHINGCLEARVALUE`) 해결:**
+   - 뷰포트 배경 클리어 색상 변경 시 D3D12 SDK Layers가 성능 경고를 Fatal Break로 에스컬레이션하던 `D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE` 예외 중단점을 비활성화(`FALSE`)하고, `DirectX12RHI::ClearRenderTarget`에 RTV null 안전 가드를 배치하여 하드웨어 크래시 근본 해결.
+5. **3단계 배경 프리셋 및 스튜디오 조명 배율 (`SetStudioLightMultiplier`) 연동:**
+   - `Studio Neutral Gray (18%)` (`(0.18, 0.18, 0.19)`, 조명 0.15배): 가산(Additive) 블룸 타버림과 알파 블렌딩(Alpha) 어두운 테두리 왜곡을 최소화하는 표준 제작 환경.
+   - `Dark (암실)` (`(0.02, 0.02, 0.03)`, 조명 0.0배 완전 소등): 칠흑 같은 어둠 속에서 오직 이펙트의 순수 발광(Emissive) 피크와 라이트 플래시가 주변을 밝히는 조명 강도 집중 검증.
+   - `Bright (주간)` (`(0.72, 0.72, 0.74)`, 조명 0.6배): 대낮 야외 환경에서 연기(Smoke), 먼지(Dust) 등 반투명 파티클의 실루엣 대비(Contrast) 검증.
+6. **차콜 PBR 바닥 슬래브 (`VFXPreviewGroundMatInst`) 구성:**
+   - 기존 순백색(`white1x1`, Albedo 1.0) 바닥으로 인해 발생하던 바닥 전체의 자체 블룸 포화 현상을 해결하기 위해, `GBufferMaterial` 기반의 18% 뉴트럴 차콜 그레이(`vec4(0.18, 0.18, 0.20, 1.0)`), `Roughness 0.85` 매트 머티리얼 인스턴스를 동적 생성하여 바닥 자체 블룸을 0%로 제거하고 폭발 라이트 플래시의 지면 반사를 극대화.
+
+---
+
+## 8. Phase 5: 환경 상호작용 및 상용 엔진 수준 저작 UX 고도화 (신규 로드맵)
+
+상용 엔진(Unreal Niagara, Unity VFX Graph)과 대등한 이펙트 저작 경험을 확보하기 위한 4대 고도화 사양:
+
+### 8.1 환경 상호작용 프리뷰 (Environment Interactors)
+1. **프리뷰 장애물 프리셋 드롭다운 (Toolbar):**
+   - `Floor Only`: 16m 평면 바닥 슬래브 (기본값).
+   - `Corner Wall`: 바닥 슬래브 + L자형 90도 수직 벽면 슬래브 (파티클이 벽에 부딪혀 튀거나 연기가 벽을 타고 오르는 현상 검증).
+   - `Obstacle Sphere & Box`: 지면 중앙에 배치된 반사/차폐 장애물 (검기 슬래시 메쉬가 장애물을 통과/교차하는 양상 확인).
+   - `Dummy Character`: 기본 인간형 마네킹 메시(CesiumMan/Knight) 배치 (피격 이펙트, 캐릭터 몸체 오라 방출 검증).
+2. **실시간 환경 외력 시뮬레이터:**
+   - 뷰포트 오버레이 툴바에 바람(Wind) 풍향/풍속 벡터 조절 슬라이더 제공.
+   - 중력 배율(Gravity Multiplier, 0.0x ~ 3.0x)을 실시간으로 변경하여 무중력 우주/수중 환경의 이펙트 역학 즉시 테스트.
+
+### 8.2 렌더링 환경 융합: 소프트 파티클 (Soft Particle / Depth Fade) & 지면 데칼
+1. **소프트 파티클 (Depth Fade):**
+   - 연기, 화염, 파티클 쿼드 및 충격파 링 메쉬가 바닥이나 벽면과 교차할 때 날카로운 폴리곤 잘림선(Hard Intersection Edge)을 방지.
+   - 카메라 씬 깊이($Z_{\text{scene}}$)와 파티클 픽셀 깊이($Z_{\text{particle}}$)의 차이를 계산하여 페이드 계수 $\text{saturate}((Z_{\text{scene}} - Z_{\text{particle}}) / \text{FadeDistance})$를 알파에 곱해주는 셰이더 기법 적용.
+2. **실시간 지면 투영 데칼 (Projected Decal):**
+   - `DecalTrack`이 폭발 순간 지면 슬래브 및 장애물의 표면 굴곡을 따라 자연스럽게 그을음/크레이터 마크를 투영하고 서서히 페이드아웃되도록 렌더링 큐 연동.
+
+### 8.3 뷰포트 3D 직접 조작 (Gizmo & Visual Helpers)
+1. **ImGuizmo 3D 인터랙티브 기즈모:**
+   - 타임라인 또는 좌측 트랙 리스트에서 라이트, 메쉬, 이미터 트랙 선택 시 뷰포트 내 해당 로컬 좌표에 이동(W)/회전(E)/스케일(R) 기즈모 표시.
+   - 마우스 드래그로 트랙의 `localPosition`, `localRotation`, `localScale`을 뷰포트에서 직관적으로 조작.
+2. **시각화 와이어프레임 헬퍼 (Visual Wireframes):**
+   - 포인트 라이트 선택 시 유효 조명 반경을 보여주는 구체(Wireframe Sphere) 표시.
+   - 파티클 이미터 선택 시 방출 각도와 범위를 보여주는 원뿔(Wireframe Cone) 표시.
+
+### 8.4 프로페셔널 타이밍 튜닝 (Curve Editor & Playback HUD)
+1. **2D 베지어 커브 에디터 (Curve over Life):**
+   - 단순 선형 보간(Linear Lerp)을 넘어 시간에 따른 스케일, 알파, 방출 속도를 베지어 탄젠트 핸들로 자유롭게 조작하는 커브 그래프 패널 제공.
+   - 펀치감 있는 급격한 팽창 후 완만한 감쇠(Ease-Out), 깜빡이는 불꽃 등 정교한 완급 조절 가능.
+2. **정밀 재생 제어 및 통계 HUD:**
+   - 1프레임 단위 스텝 전진/후진 (단축키 `[` / `]` 또는 `,` / `.`).
+   - 뷰포트 우상단에 활성 파티클 수(Active Particles), 총 드로우콜 수(Draw Calls), 프레임 렌더 타임 오버레이 표시.

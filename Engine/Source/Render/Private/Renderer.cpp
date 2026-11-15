@@ -1061,7 +1061,7 @@ vector<ViewportCameraInfo> Renderer::CollectGeometryViewportCameras() const
 	for (const auto& viewport : m_ViewportCameras)
 	{
 		auto* pass = viewport.renderPass;
-		if (!pass || !viewport.hasCamera || pass->GetPassType() != ERenderPassType::Geometry) continue;
+		if (!pass || !viewport.hasCamera || !viewport.acceptsSceneSubmissions || pass->GetPassType() != ERenderPassType::Geometry) continue;
 
 		if (std::ranges::find(targets, pass, &ViewportCameraInfo::renderPass) == targets.end())
 			targets.push_back(viewport);

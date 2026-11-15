@@ -27,6 +27,8 @@
 #include <algorithm>
 #include <cmath>
 #include <type_traits>
+#include "RenderComponents.h"
+#include "MaterialInstance.h"
 
 namespace Editor
 {
@@ -105,6 +107,9 @@ namespace Editor
 				effect->SetEnabled(true);
 			}
 		}
+
+		// 기본 배경 프리셋 (18% 스튜디오 뉴트럴 그레이) 적용
+		ApplyBackgroundPreset();
 	}
 
 	VFXEditorPanel::~VFXEditorPanel()
@@ -184,18 +189,89 @@ namespace Editor
 		m_TimelineHeight = workspace.GetSplitter("VFXEditor.TimelineHeight", m_TimelineHeight);
 		m_Timeline.HeaderWidth = workspace.GetSplitter("VFXEditor.TimelineHeaderWidth", m_Timeline.HeaderWidth);
 	}
+	void VFXEditorPanel::ApplyBackgroundPreset()
+	{
+		switch (m_BackgroundMode)
+		{
+		case EVFXBackgroundMode::StudioGray:
+			// 18% 뉴트럴 스튜디오 그레이: 바닥 자체 블룸을 방지하면서 플래시 명암 대비 극대화
+			m_PreviewWidget.SetBackgroundColor(Engine::vec4(0.18f, 0.18f, 0.19f, 1.0f));
+			m_PreviewWidget.SetStudioLightMultiplier(0.15f);
+			break;
+		case EVFXBackgroundMode::Dark:
+			// 암실/나이트 환경: 외부 조명 완전 소등 -> 오직 이펙트 플래시 라이트만 바닥을 밝힘
+			m_PreviewWidget.SetBackgroundColor(Engine::vec4(0.02f, 0.02f, 0.03f, 1.0f));
+			m_PreviewWidget.SetStudioLightMultiplier(0.0f);
+			break;
+		case EVFXBackgroundMode::Bright:
+			// 주간 야외 환경: 연기/먼지 실루엣 대비 검증
+			m_PreviewWidget.SetBackgroundColor(Engine::vec4(0.72f, 0.72f, 0.74f, 1.0f));
+			m_PreviewWidget.SetStudioLightMultiplier(0.6f);
+			break;
+		}
+	}
 
 	void VFXEditorPanel::SetupPreview()
 	{
 		auto* scene = m_PreviewWidget.GetScene();
 		if (!scene) return;
 
+		// 프리뷰 재구성 시 현재 설정된 배경 모드 즉시 반영
+		ApplyBackgroundPreset();
+
 		if (m_PreviewEntity)
 		{
 			(void)scene->DestroyEntity(*m_PreviewEntity);
 			m_PreviewEntity = nullptr;
 		}
+		if (m_PreviewGroundEntity)
+		{
+			(void)scene->DestroyEntity(*m_PreviewGroundEntity);
+			m_PreviewGroundEntity = nullptr;
+		}
 
+		// 1. 조명을 받아 반사할 수 있는 스튜디오 지면 평면 생성 (플래시 라이트 가시화)
+		m_PreviewGroundEntity = &m_PreviewWidget.CreateEntity(L"VFXPreviewGround");
+		(void)scene->AddComponent<Engine::FlagComponent>(*m_PreviewGroundEntity);
+		auto& groundTrans = scene->GetComponent<Engine::TransformComponent>(*m_PreviewGroundEntity);
+		const float groundScale = m_ShowGroundPlane ? 16.0f : 0.0f;
+		// 얇은 큐브 슬래브(두께 0.05m) 형태로 바닥 배치 (컬링 문제 원천 방지)
+		(void)groundTrans.SetLocalPosition(Engine::vec3(0.0f, -0.025f, 0.0f));
+		(void)groundTrans.SetLocalScale(Engine::vec3(groundScale, 0.05f, groundScale));
+		(void)groundTrans.SetLocalRotation(Engine::vec3(0.0f, 0.0f, 0.0f));
+
+		auto& rm = Engine::ResourceManager::Get();
+		auto& groundRenderer = scene->AddComponent<Engine::StaticMeshRendererComponent>(*m_PreviewGroundEntity);
+		groundRenderer.meshHandle = rm.GetResourceHandle<Engine::Mesh>(L"CubeMesh");
+
+		// 스튜디오 바닥 전용 차콜 그레이 PBR 머티리얼 인스턴스 생성 (자체 블룸 방지 및 플래시 반사 전용)
+		const wchar_t* defaultMatPath = L"Assets/Material/GBufferMaterial.bammat.json";
+		auto baseMat = rm.GetResourceHandle<Engine::Material>(defaultMatPath);
+		if (!baseMat.IsValid())
+		{
+			auto loaded = rm.LoadFile(defaultMatPath);
+			if (loaded.IsValid()) baseMat = Engine::ResourceHandle<Engine::Material>(loaded);
+		}
+
+		if (baseMat.IsValid())
+		{
+			auto groundMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst");
+			if (!groundMatHandle.IsValid())
+			{
+				auto* groundMatInst = Engine::MaterialInstance::Create(baseMat);
+				if (groundMatInst)
+				{
+					// 눈부심을 원천 차단하는 18% 뉴트럴 차콜 그레이 (#282a2e)
+					groundMatInst->AddColor4("BaseColor", Engine::vec4(0.18f, 0.18f, 0.20f, 1.0f));
+					groundMatInst->AddFloat("Roughness", 0.85f); // 매트한 난반사 표면
+					groundMatInst->AddFloat("Metallic", 0.0f);
+					groundMatHandle = rm.AddResource<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst", groundMatInst);
+				}
+			}
+			groundRenderer.materialHandle = groundMatHandle.IsValid() ? groundMatHandle : Engine::ResourceHandle<Engine::MaterialInterface>(baseMat);
+		}
+
+		// 2. 복합 이펙트 프리뷰 엔티티 생성
 		auto* effect = m_EffectHandle.Get();
 		if (!effect) return;
 
@@ -258,6 +334,21 @@ namespace Editor
 		if (m_PreviewEntity && scene && m_EffectHandle.IsValid())
 		{
 			auto& comp = scene->GetComponent<Engine::CompositeVFXComponent>(*m_PreviewEntity);
+
+			// 프리뷰 모션: 활성화 시 엔티티를 3D 원형 궤도로 비행시켜 트레일 스트립 생성 유도
+			if (m_PreviewMotion && (m_IsPlaying || m_TimelineSeek))
+			{
+				const float curT = m_TimelineSeek.value_or(m_CurrentTime);
+				const float angle = curT * 3.14159265f * 2.5f;
+				const float rad = 1.2f;
+				const Engine::vec3 motionPos = Engine::vec3(
+					std::cos(angle) * rad,
+					0.5f + std::sin(angle * 2.0f) * 0.35f,
+					std::sin(angle) * rad);
+				auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewEntity->GetEntityHandle());
+				if (trans) (void)trans->SetLocalPosition(motionPos);
+			}
+
 			if (m_TimelineSeek)
 			{
 				const float target = *m_TimelineSeek;
@@ -382,6 +473,58 @@ namespace Editor
 		EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
 		EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
 		EditorUI::DrawTimelineTransport(toolbar, "CompositeTimeline", m_IsPlaying, m_IsLooping);
+		// 프리뷰 모션 토글 (트레일 / 이동 궤적 확인용)
+		if (toolbar.Icon("PreviewMotion", ICON_FA_WIND, "VFXEditor.PreviewMotion", { .Active = m_PreviewMotion }))
+		{
+			m_PreviewMotion = !m_PreviewMotion;
+			if (!m_PreviewMotion && m_PreviewEntity)
+			{
+				if (auto* scene = m_PreviewWidget.GetScene())
+				{
+					auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewEntity->GetEntityHandle());
+					if (trans) (void)trans->SetLocalPosition(Engine::vec3(0.0f, 0.5f, 0.0f));
+				}
+			}
+		}
+
+		// [지면 평면 온/오프 토글] (체스판 아이콘)
+		if (toolbar.Icon("GroundPlane", ICON_FA_CHESS_BOARD, "VFXEditor.GroundPlane", { .Active = m_ShowGroundPlane }))
+		{
+			m_ShowGroundPlane = !m_ShowGroundPlane;
+			if (m_PreviewGroundEntity)
+			{
+				if (auto* scene = m_PreviewWidget.GetScene())
+				{
+					auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewGroundEntity->GetEntityHandle());
+					if (trans)
+					{
+						const float s = m_ShowGroundPlane ? 16.0f : 0.0f;
+						(void)trans->SetLocalScale(Engine::vec3(s, 0.05f, s));
+					}
+				}
+			}
+		}
+
+		// [3단계 배경 프리셋 순환 버튼] (Studio Gray -> Dark -> Bright)
+		const char* bgIcon = ICON_FA_CIRCLE_HALF_STROKE;
+		const char* bgTooltip = "VFXEditor.BackgroundStudio";
+		if (m_BackgroundMode == EVFXBackgroundMode::Dark)
+		{
+			bgIcon = ICON_FA_MOON;
+			bgTooltip = "VFXEditor.BackgroundDark";
+		}
+		else if (m_BackgroundMode == EVFXBackgroundMode::Bright)
+		{
+			bgIcon = ICON_FA_SUN;
+			bgTooltip = "VFXEditor.BackgroundBright";
+		}
+
+		if (toolbar.Icon("BackgroundMode", bgIcon, bgTooltip))
+		{
+			m_BackgroundMode = static_cast<EVFXBackgroundMode>((static_cast<uint8>(m_BackgroundMode) + 1) % 3);
+			ApplyBackgroundPreset();
+		}
+
 		ImGui::BeginDisabled(!hasResource);
 		toolbar.Text(LOCAL_CSTR("VFXEditor.Speed"));
 		toolbar.SetNextItemWidth(ImGui::GetFontSize() * 5.0f);
@@ -389,7 +532,6 @@ namespace Editor
 		{
 			m_PlayRate = std::clamp(m_PlayRate, 0.1f, 5.0f);
 		}
-
 		if (effect)
 		{
 			if (toolbar.Button("AutoDuration", ICON_FA_ARROWS_ROTATE, "VFXEditor.AutoDuration"))
@@ -403,7 +545,6 @@ namespace Editor
 			}
 			toolbar.Text(LOCAL_FMT("Timeline.TimeCounter", m_TimelineSeek.value_or(m_CurrentTime), GetTimelineDuration()).c_str());
 		}
-
 		ImGui::EndDisabled();
 	}
 
@@ -1019,11 +1160,20 @@ namespace Editor
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMesh"), [&]() {
 					if (Editor::DrawInspectorResourcePicker(track.meshHandle, true, true)) m_IsDirty = true;
-				});
+					if (!track.meshHandle.IsValid())
+					{
+						ImGui::SameLine();
+						ImGui::TextDisabled("(Quad Default)");
+					}
+					});
+
+				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTexture"), [&]() {
+					if (Editor::DrawInspectorResourcePicker(track.textureHandle, true, true)) m_IsDirty = true;
+					});
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMaterial"), [&]() {
 					if (Editor::DrawInspectorResourcePicker(track.materialHandle, true, true)) m_IsDirty = true;
-				});
+					});
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
 					if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;

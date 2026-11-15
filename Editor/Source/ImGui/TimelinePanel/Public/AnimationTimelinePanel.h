@@ -55,6 +55,7 @@ public:
 	// ── ResourceEditorInterface 구현 (콘텐츠 브라우저 더블클릭 연동) ──
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::GraphAnimation; }
 	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	virtual void SaveResource() override { SaveTimelineFile(); }
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override
 	{
 		const std::string ext = assetPath.extension().string();

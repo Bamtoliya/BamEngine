@@ -192,6 +192,9 @@ struct ENGINE_API VFXMeshTrack
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MATERIAL_HANDLE"))
 	ResourceHandle<MaterialInterface> materialHandle;
 
+	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TEXTURE_HANDLE"))
+	ResourceHandle<Texture> textureHandle;
+
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LOCAL_POSITION"))
 	vec3 localPosition = vec3(0.0f);
 

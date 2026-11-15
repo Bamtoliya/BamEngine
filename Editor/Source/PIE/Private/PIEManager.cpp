@@ -91,31 +91,29 @@ void PIEManager::Stop()
 EResult PIEManager::SnapshotScene()
 {
     if (!SceneManager::Get().GetCurrentScene()) return EResult::Fail;
-
-    std::filesystem::create_directories(std::filesystem::path(m_SnapshotPath).parent_path());
+    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(m_SnapshotPath);
+    std::error_code ec;
+    std::filesystem::create_directories(fullPath.parent_path(), ec);
     archive::JsonArchive ar;
-    const EResult result = SceneManager::Get().SaveScene(ar, m_SnapshotPath);
+    const EResult result = SceneManager::Get().SaveScene(ar, fullPath.wstring());
     if (result != EResult::Success)
         EDITOR_LOG_ERROR("[PIE] Scene snapshot failed: {}", ResultToString(result));
     return result;
 }
-
 EResult PIEManager::RestoreScene()
 {
-    if (!std::filesystem::exists(m_SnapshotPath)) return EResult::FileNotFound;
-
+    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(m_SnapshotPath);
+    if (!std::filesystem::exists(fullPath)) return EResult::FileNotFound;
     archive::JsonArchive ar;
-    const EResult result = SceneManager::Get().LoadScene(ar, m_SnapshotPath);
+    const EResult result = SceneManager::Get().LoadScene(ar, fullPath.wstring());
     if (result != EResult::Success)
         return result;
-
     std::error_code ec;
-    std::filesystem::remove(m_SnapshotPath, ec);
+    std::filesystem::remove(fullPath, ec);
     if (ec)
     {
         EDITOR_LOG_WARN("[PIE] Scene restored, but snapshot cleanup failed: {} ({})",
-            WStrToStr(m_SnapshotPath), ec.message());
+            fullPath.string(), ec.message());
     }
-
     return EResult::Success;
 }

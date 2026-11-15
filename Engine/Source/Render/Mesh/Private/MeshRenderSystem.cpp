@@ -1,4 +1,4 @@
-#include "MeshRenderSystem.h"
+﻿#include "MeshRenderSystem.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h" 
 #include "SplineComponent.h"
@@ -131,6 +131,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
+        if (!viewport.acceptsSceneSubmissions) continue;
         RenderPass* pass = viewport.renderPass;
         if (!pass) continue;
 

@@ -504,17 +504,18 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 				glm::scale(mat4(1.0f), currentScale);
 			mat4 finalWorld = transform.worldMatrix * localMat;
 
-			Texture* texture = nullptr;
-			const auto& texBindings = material->GetTextureBindings();
-			if (!texBindings.empty() && texBindings[0].texture.Get())
+			Texture* texture = track.textureHandle.Get();
+			if (!texture)
 			{
-				texture = texBindings[0].texture.Get();
+				const auto& texBindings = material->GetTextureBindings();
+				if (!texBindings.empty() && texBindings[0].texture.Get())
+					texture = texBindings[0].texture.Get();
 			}
 			if (!texture)
 			{
-				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
+				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/Particle_Ring.png").Get();
 				if (!texture)
-					texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png").Get();
+					texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
 			}
 
 			if (texture && texture->GetRHITexture() && mesh->GetIndexBuffer())

@@ -114,7 +114,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	if (forwardPass && forwardPass->IsEnabled())
 	{
 		forwardPass->SetPassConstantStruct(3, skyData);
-		renderer.RegisterViewportCamera(cameraBuffer, forwardPass);
+		renderer.RegisterViewportCamera(cameraBuffer, forwardPass, passes.AcceptSceneMeshes);
 	}
 
 	auto* forwardTransPass = rpm.GetRenderPassByID(passes.ForwardTransparent);

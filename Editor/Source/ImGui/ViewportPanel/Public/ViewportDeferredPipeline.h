@@ -51,6 +51,13 @@ public:
 	[[nodiscard]] uint32 GetHeight() const { return m_Height; }
 	[[nodiscard]] bool UsesScenePostProcess() const { return m_ProfilePasses.UsesScenePostProcess(); }
 
+	// 배경 클리어 색상 오버라이드 (VFX 에디터 배경 모드 전환용)
+	void SetClearColor(const Engine::vec4& color)
+	{
+		if (auto* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_LightingPassID))
+			pass->SetOverrideClearColor(color);
+	}
+
 private:
 	void CreateRenderTargets(uint32 width, uint32 height);
 	void RegisterRenderPasses();

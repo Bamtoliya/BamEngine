@@ -172,11 +172,11 @@ void MaterialEditor::SaveTarget()
 void MaterialEditor::DrawCustomToolbar()
 {
 	if (!m_Material) return;
-
+	auto& sm = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		ImGui::BeginDisabled(m_IsReadOnly);
-		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str()))
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("MaterialEditor.Save")))
 			SaveTarget();
 
 		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str()))
@@ -196,7 +196,7 @@ void MaterialEditor::DrawCustomToolbar()
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("MaterialEditor.ViewMenu").c_str()))
 	{
-		auto& sm = ShortcutManager::Get();
+		
 		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL("MaterialEditor.ResetCamera")).c_str(), sm.GetShortcutHint("Viewport.Focus")))
 		{
 			m_PreviewRenderer.GetWidget().FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);

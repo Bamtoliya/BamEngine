@@ -9,6 +9,7 @@ public:
 	virtual ~ResourceEditorInterface() = default;
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const = 0;
 	virtual bool HasUnsavedResourceChanges() const { return false; }
+    virtual void SaveResource() {}
     virtual void SetTargetResource(const std::filesystem::path& assetPath)
     {
         m_TargetResourcePath = assetPath;

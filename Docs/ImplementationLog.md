@@ -2,6 +2,40 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-15] 복합 비주얼 이펙트 시스템 및 저작 도구 실환경 검증 & D3D12/렌더링 안정화 (후보 B 완료)
+
+- **배경 및 범위**:
+  - `Docs/CompositeVisualEffectPlan.md` 기반의 복합 비주얼 이펙트 시스템(`CompositeEffect`, `VFXEditorPanel`)을 실제 씬 및 에디터 실환경에서 검증하는 과정에서 발생한 다수의 하드웨어/렌더링 결함과 저작 UX 한계를 진단하고 해결했다.
+  - 뷰포트 스카이박스 간섭 누출, 타임라인 줌/패닝 제약, D3D12 `MISMATCHINGCLEARVALUE` 예외 중단 크래시, 배경 모드 프리셋(스튜디오 18% 회색 / 암실 / 주간) 연동, 그리고 바닥 슬래브의 과도한 순백색 블룸 포화로 인한 플래시 라이트 마스킹 문제를 해결했다.
+- **주요 변경 및 기술적 해결 내용**:
+  1. **메인 씬 스카이박스의 오프스크린 뷰포트 유입 차단 (`MeshRenderSystem.cpp`, `DeferredSceneRenderer.cpp`)**:
+     - `MeshRenderSystem::OnSubmit()`이 모든 활성 뷰포트 카메라를 순회할 때 `acceptsSceneSubmissions` 검사가 누락되어, 메인 씬의 스카이박스 구체 엔티티가 독립 프리뷰 뷰포트(`PreviewViewportWidget`)의 포워드 패스로 무조건 제출되던 문제를 발견.
+     - `if (!viewport.acceptsSceneSubmissions) continue;` 가드를 추가하여 메인 씬의 스카이박스 유무가 VFX 에디터 프리뷰 뷰포트에 누출되는 현상을 완벽히 차단.
+  2. **타임라인 시간축 앞뒤 여백 및 10배 줌아웃(0.1x) 확장 (`EffectTimelineView.cpp`, `EffectTimelineView.h`)**:
+     - 시작 전 `-0.25초` 프리롤 및 종료 후 `+1.0초` 포스트롤 여백을 부여하여 0초 직전 생성 트랙과 잔여 파티클 감쇠 확인 지원.
+     - 최소 확대 배율을 `0.5x`에서 `0.1x`로 확장하여 수십 초 길이의 긴 연출도 한 화면에 조망 가능하도록 개선하고, `Shift + 휠` 및 우클릭 드래그 수평 패닝 지원.
+  3. **이동 궤적 검증용 프리뷰 모션 (`VFXEditorPanel.cpp`)**:
+     - 상단 툴바에 바람 아이콘(`ICON_FA_WIND`) 토글을 신설하고, 활성화 시 이펙트 엔티티를 3D 원형 궤도로 비행시켜 트레일/리본 트랙(`TrailTrack`)의 동적 스트립 생성을 즉각 검증할 수 있도록 지원.
+  4. **D3D12 ClearRenderTarget 크래시 근본 해결 (`DirectX12RHI.cpp`)**:
+     - `DirectX12RHI::Initialize()`에서 `infoQueue->SetBreakOnID(D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE, FALSE)`로 수정하여 텍스처 생성 시와 다른 클리어 색상 사용 시 D3D12 SDK Layers가 성능 경고를 Fatal Break로 에스컬레이션하던 동작 차단.
+     - `ClearRenderTarget`에 `if (rtvHandle.ptr == 0) return EResult::Fail;` 안전 가드를 배치하여 하드웨어 크래시 해소.
+  5. **3단계 배경 프리셋 및 스튜디오 조명 배율 연동 (`PreviewViewportWidget`, `VFXEditorPanel`)**:
+     - `Studio Neutral Gray (18%)` (`(0.18, 0.18, 0.19)`, 조명 0.15배): 가산 블룸 타버림과 알파 블렌딩 왜곡을 최소화하는 표준 제작 환경.
+     - `Dark (암실)` (`(0.02, 0.02, 0.03)`, 조명 0.0배 완전 소등): 칠흑 속에서 오직 이펙트의 발광 피크와 라이트 플래시만 바닥을 밝힘.
+     - `Bright (주간)` (`(0.72, 0.72, 0.74)`, 조명 0.6배): 대낮 야외 환경에서 연기/먼지 실루엣 대비 검증.
+     - `PreviewViewportWidget`에 `SetStudioLightMultiplier(float)`를 추가하여 배경 모드별로 스튜디오 3점 조명의 강도를 동적 조절.
+  6. **차콜 PBR 바닥 슬래브 머티리얼 인스턴스 (`VFXEditorPanel.cpp`)**:
+     - 바닥 평면이 순백색(`white1x1`, Albedo 1.0) 머티리얼과 강한 스튜디오 주광(3.0)으로 인해 자체 블룸으로 타들어가 플래시 라이트가 묻히던 현상 해결.
+     - `GBufferMaterial` 기반의 18% 뉴트럴 차콜 그레이(`vec4(0.18, 0.18, 0.20, 1.0)`), `Roughness 0.85` 매트 머티리얼 인스턴스(`VFXPreviewGroundMatInst`)를 동적 생성하여 바닥 자체 블룸을 0%로 제거하고 폭발 라이트 플래시의 지면 반사를 극대화.
+- **실환경 검증 완료 (2026-11-15 사용자 확인)**:
+  - `CMake --build ... --target Editor` 빌드 성공 확인.
+  - VFX 에디터 뷰포트에서 배경 모드 전환 시 하드웨어 크래시 없이 즉시 배경색 및 조명이 전환됨을 확인.
+  - 바닥 평면 가시화 및 불꽃 폭발 시 포인트 라이트 플래시의 지면 반사 가시성 확보.
+- **미검증 항목**:
+  - 소프트 파티클(Depth Fade) 셰이더 적용, 뷰포트 3D 인터랙티브 기즈모(ImGuizmo), 2D 베지어 커브 에디터.
+
+---
+
 ### [2026-11-15] 크래시 진단·작업 복원 시스템 실환경 검증 및 경로 일원화 (개발 vs 배포 아키텍처)
 
 - **배경 및 설계 고민**:

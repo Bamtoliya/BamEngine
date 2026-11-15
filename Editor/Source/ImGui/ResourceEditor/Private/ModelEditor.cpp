@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "EditorUI.h"
 #include "ModelEditor.h"
 #include "ShortcutManager.h"
@@ -122,7 +122,7 @@ void ModelEditor::DrawCustomToolbar()
 		const bool canEdit = PIEManager::Get().IsEditing() && m_ModelHandle.IsValid();
 		ImGui::BeginDisabled(!canEdit);
 		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("Animator.Save")))
+		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("ModelEditor.Save")))
 			SaveModel();
 		ImGui::EndDisabled();
 

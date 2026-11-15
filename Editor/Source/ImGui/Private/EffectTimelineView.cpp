@@ -1,4 +1,4 @@
-#include "Editor_Includes.h"
+﻿#include "Editor_Includes.h"
 #include "EffectTimelineView.h"
 #include "EditorUI.h"
 #include "IconsFontAwesome7.h"
@@ -16,21 +16,32 @@ namespace EditorUI
 
     TimelineScale MakeTimelineScale(float left, float width, float duration, float zoom, float start)
     {
-        const float span = std::max(duration, MinimumTimelineDuration) / std::clamp(zoom, 1.0f, 40.0f);
-        return { left, std::max(1.0f, width), std::clamp(start, 0.0f, std::max(0.0f, duration - span)), span };
+        constexpr float padBefore = 0.25f; // 0.00s 앞쪽 여백
+        constexpr float padAfter = 1.0f;   // 끝 지점 뒤쪽 여백 (1.00s로 넉넉하게 확장)
+        // 최소 줌 배율을 0.1f로 완화 (최대 10배 축소 허용)
+        const float span = std::max(duration, MinimumTimelineDuration) / std::clamp(zoom, 0.1f, 50.0f);
+        const float minStart = -std::max(padBefore, span * 0.15f);
+        const float maxStart = std::max(minStart, duration + padAfter - span * 0.85f);
+        return { left, std::max(1.0f, width), std::clamp(start, minStart, maxStart), span };
     }
 
     void NavigateTimeline(float mouseX, float wheel, float panPixels, const TimelineScale& scale,
         float duration, float& zoom, float& start)
     {
+        constexpr float padBefore = 0.25f;
+        constexpr float padAfter = 1.0f;
         if (wheel != 0.0f)
         {
             const float anchor = std::clamp((mouseX - scale.Left) / scale.Width, 0.0f, 1.0f);
-            zoom = std::clamp(zoom * std::pow(1.25f, wheel), 1.0f, 40.0f);
-            start = scale.Start + anchor * (scale.Span - duration / zoom);
+            // 휠 줌 범위를 0.1f ~ 50.0f 로 확대
+            zoom = std::clamp(zoom * std::pow(1.25f, wheel), 0.1f, 50.0f);
+            start = scale.Start + anchor * (scale.Span - (duration + padBefore + padAfter) / zoom);
         }
         start -= panPixels / scale.Width * (duration / zoom);
-        start = std::clamp(start, 0.0f, std::max(0.0f, duration - duration / zoom));
+        const float span = std::max(duration, MinimumTimelineDuration) / zoom;
+        const float minStart = -std::max(padBefore, span * 0.15f);
+        const float maxStart = std::max(minStart, duration + padAfter - span * 0.85f);
+        start = std::clamp(start, minStart, maxStart);
     }
 
     void DrawTimelineRuler(ImDrawList& draw, const TimelineScale& scale, float top, float bottom, float fps)
@@ -51,14 +62,16 @@ namespace EditorUI
         {
             const float x = scale.ToX(time);
             const float snapped = std::round(time / labelStep) * labelStep;
-            const bool major = std::abs(time - snapped) <= tick * 0.25f;
-            draw.AddLine(ImVec2(x, bottom - font * (major ? 0.6f : 0.3f)), ImVec2(x, bottom),
-                major ? IM_COL32(180, 190, 205, 255) : IM_COL32(90, 95, 105, 200));
-            if (major)
+            const bool isOrigin = std::abs(time) <= tick * 0.25f; // 0.00초 원점선
+            const bool major = isOrigin || (std::abs(time - snapped) <= tick * 0.25f);
+
+            draw.AddLine(ImVec2(x, bottom - font * (isOrigin ? 0.9f : (major ? 0.6f : 0.3f))), ImVec2(x, bottom),
+                isOrigin ? IM_COL32(255, 200, 80, 255) : (major ? IM_COL32(180, 190, 205, 255) : IM_COL32(90, 95, 105, 200)));
+            if (major && time >= -0.001f) // 음수 여백 구간은 지저분하지 않게 라벨 생략
             {
                 char label[40];
-                std::snprintf(label, sizeof(label), "%.0f  %.2fs", std::round(time * fps), time);
-                draw.AddText(ImVec2(x + 2.0f, top + font * 0.15f), ImGui::GetColorU32(ImGuiCol_TextDisabled), label);
+                std::snprintf(label, sizeof(label), "%.0f  %.2fs", std::round(time * fps), std::max(0.0f, time));
+                draw.AddText(ImVec2(x + 2.0f, top + font * 0.15f), isOrigin ? IM_COL32(255, 200, 80, 255) : ImGui::GetColorU32(ImGuiCol_TextDisabled), label);
             }
         }
         draw.PopClipRect();
@@ -108,14 +121,36 @@ namespace EditorUI
             const float wheel = input.GetMouseScrollDeltaY();
             if (mouse.x >= scale.Left)
             {
+                // 마우스 휠 (일반: 줌, Shift: 좌우 스크롤)
+                float panPixels = 0.0f;
+                float zoomWheel = 0.0f;
+
+                if (input.IsShiftPressed() && wheel != 0.0f)
+                {
+                    panPixels = wheel * 60.0f; // Shift + 휠로 가로 스크롤
+                }
+                else
+                {
+                    zoomWheel = wheel;
+                }
+
+                // 휠 클릭 드래그 또는 우클릭 단독 드래그로 손쉬운 좌우 패닝 지원
                 const bool panning = input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
+                    input.IsMouseButtonDragging(Engine::EMouseButton::Right) ||
                     (input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right));
-                NavigateTimeline(mouse.x, wheel, panning ? input.GetMouseDelta().x : 0.0f,
-                    scale, viewDuration, state.Zoom, state.Start);
+
+                if (panning)
+                {
+                    panPixels += input.GetMouseDelta().x;
+                }
+
+                NavigateTimeline(mouse.x, zoomWheel, panPixels, scale, viewDuration, state.Zoom, state.Start);
                 scale = MakeTimelineScale(scale.Left, scale.Width, viewDuration, state.Zoom, state.Start);
             }
             else if (wheel != 0.0f)
+            {
                 ImGui::SetScrollY(ImGui::GetScrollY() - wheel * rowHeight * 3.0f);
+            }
         }
 
         const float durationX = scale.ToX(duration);

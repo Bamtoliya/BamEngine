@@ -66,7 +66,9 @@ public:
 	void RefocusTarget();
 	void ToggleGrid() { m_ShowGrid = !m_ShowGrid; }
 	[[nodiscard]] bool IsGridVisible() const { return m_ShowGrid; }
-
+	void SetBackgroundColor(const Engine::vec4& color) { m_Pipeline.SetClearColor(color); }
+	void SetStudioLightMultiplier(float multiplier) { m_StudioLightMultiplier = std::max(multiplier, 0.0f); }
+	[[nodiscard]] float GetStudioLightMultiplier() const { return m_StudioLightMultiplier; }
 private:
 	bool TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const;
 	bool FrameModelBounds(const Engine::BoundingBox& bounds);
@@ -107,6 +109,7 @@ private:
 	// 빛
 	std::optional<std::array<float, 3>> m_PreviewLightDraft;
 	std::array<entt::entity, 3> m_StudioLights{ entt::null, entt::null, entt::null };
+	f32 m_StudioLightMultiplier = 1.0f;
 
 	// 채널 필터링
 	std::wstring m_SelectedRTName;

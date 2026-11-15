@@ -34,7 +34,7 @@ private:
 
 private:
     EPlayState m_State = EPlayState::Edit;
-    std::wstring m_SnapshotPath = L"Temp/__pie_snapshot__.json";
+    std::wstring m_SnapshotPath = L"Temp/__pie_snapshot__.bamscene.json";
 };
 
 END

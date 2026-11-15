@@ -1802,15 +1802,6 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 		DrawTilemapCellGrid(*tilemap, cameraBuffer->viewProjMatrix * worldMatrix,
 			m_ImageScreenPos, m_ImageSize);
 	}
-
-	if (imageHovered && !ImGui::GetIO().WantTextInput)
-	{
-		if (ImGui::IsKeyPressed(ImGuiKey_B, false)) palette->SetBrushMode(ETileBrushMode::Paint);
-		else if (ImGui::IsKeyPressed(ImGuiKey_E, false)) palette->SetBrushMode(ETileBrushMode::Erase);
-		else if (ImGui::IsKeyPressed(ImGuiKey_U, false)) palette->SetBrushMode(ETileBrushMode::BoxFill);
-		else if (ImGui::IsKeyPressed(ImGuiKey_I, false)) palette->SetBrushMode(ETileBrushMode::Picker);
-	}
-
 	Engine::Ray ray;
 	float maxDist = 2000.0f;
 	const auto screenMouse = InputManager::Get().GetScreenMousePosition();

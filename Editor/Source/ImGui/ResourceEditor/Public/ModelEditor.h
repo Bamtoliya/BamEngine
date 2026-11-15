@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "Model.h"
@@ -20,6 +20,7 @@ public:
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
 	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	void SaveResource() override { SaveModel(); }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override;
 	virtual void CaptureState(EditorWorkspace& workspace) const override;

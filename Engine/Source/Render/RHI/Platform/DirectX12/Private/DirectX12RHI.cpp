@@ -46,7 +46,7 @@ EResult DirectX12RHI::Initialize(void* arg)
     {
         infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
         infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
-        infoQueue->SetBreakOnID(D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE, TRUE);
+        infoQueue->SetBreakOnID(D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE, FALSE);
     }
 #endif
 
@@ -1380,11 +1380,16 @@ EResult DirectX12RHI::ClearRenderTarget(RHITexture* renderTarget, vec4 color)
 {
     if (!m_CommandList || !renderTarget) return EResult::Fail;
     DirectX12Texture* dxTex = static_cast<DirectX12Texture*>(renderTarget);
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxTex->GetRTVHandle();
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = dxTex->GetRTVHandle();
+    if (rtvHandle.ptr == 0)
+    {
+        ENGINE_LOG_ERROR("ClearRenderTarget: RTV descriptor handle is null.");
+        return EResult::Fail;
+    }
 
-	f32 clearColor[4] = { color.x, color.y, color.z, color.w };
-	m_CommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-	return EResult::Success;
+    f32 clearColor[4] = { color.x, color.y, color.z, color.w };
+    m_CommandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    return EResult::Success;
 }
 
 EResult DirectX12RHI::ClearDepthStencil(RHITexture* depthStencil, f32 depth, uint8 stencil)

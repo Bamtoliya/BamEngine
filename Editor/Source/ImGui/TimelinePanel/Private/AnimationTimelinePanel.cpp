@@ -1,4 +1,4 @@
-#include "AnimationTimelinePanel.h"
+﻿#include "AnimationTimelinePanel.h"
 #include "EditorUI.h"
 #include "EffectTimelineView.h"
 #include "LocalizationManager.h"
@@ -649,7 +649,7 @@ namespace Editor
 		if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 		{
 			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) OpenTimelineFile();
-			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str())) SaveTimelineFile();
+			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("AnimationTimeline.Save"))) SaveTimelineFile();
 			ImGui::EndMenu();
 		}
 	}

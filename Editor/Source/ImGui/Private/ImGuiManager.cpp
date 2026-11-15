@@ -1504,7 +1504,7 @@ void ImGuiManager::DrawNewSceneDialog()
 	{
 		m_SelectedSceneTemplate = ESceneTemplate::Basic;
 	}
-	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	if (ImGui::IsItemHovered() && Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 	{
 		m_SelectedSceneTemplate = ESceneTemplate::Basic;
 		ExecuteNewScene(m_SelectedSceneTemplate);
@@ -1524,7 +1524,7 @@ void ImGuiManager::DrawNewSceneDialog()
 	{
 		m_SelectedSceneTemplate = ESceneTemplate::Empty;
 	}
-	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+	if (ImGui::IsItemHovered() && Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 	{
 		m_SelectedSceneTemplate = ESceneTemplate::Empty;
 		ExecuteNewScene(m_SelectedSceneTemplate);

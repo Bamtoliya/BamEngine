@@ -89,6 +89,7 @@ private:
 	void InvalidateTimelinePreview();
 	void ScrubTime(f32 targetTime);
 
+	void ApplyBackgroundPreset();
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
 	bool m_IsDirty = false;
@@ -111,6 +112,13 @@ private:
 	// 3D 프리뷰 뷰포트 & 프리뷰 엔티티
 	PreviewViewportWidget m_PreviewWidget;
 	Engine::Entity* m_PreviewEntity = nullptr;
+	Engine::Entity* m_PreviewGroundEntity = nullptr;
+
+	// ── 프리뷰 제어 상태 ──
+	enum class EVFXBackgroundMode : uint8 { StudioGray = 0, Dark = 1, Bright = 2 };
+	EVFXBackgroundMode m_BackgroundMode = EVFXBackgroundMode::StudioGray;
+	bool m_PreviewMotion = false;
+	bool m_ShowGroundPlane = true;
 
 	// 레이아웃 분할
 	float m_LeftPaneWidth = 280.0f;

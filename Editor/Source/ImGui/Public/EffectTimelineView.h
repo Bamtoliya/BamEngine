@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <imgui.h>
 #include <cstdint>
@@ -59,7 +59,7 @@ namespace EditorUI
     struct EffectTimelineState
     {
         float Zoom = 1.0f;
-        float Start = 0.0f;
+        float Start = -0.25f;
         float HeaderWidth = 180.0f;
         std::optional<TimelineEdit> Drag;
         TimelineScale DragScale{};

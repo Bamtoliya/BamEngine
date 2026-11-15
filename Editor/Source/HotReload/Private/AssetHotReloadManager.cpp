@@ -1,4 +1,4 @@
-#include "AssetHotReloadManager.h"
+﻿#include "AssetHotReloadManager.h"
 #include "ShaderHotReloadManager.h"
 #include "LocalizationManager.h"
 #include "ResourceManager.h"
@@ -127,11 +127,10 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 {
 	m_WatchDirectory = ResolveTextureDirectory();
 	m_EngineWatchDirectory = Engine::PlatformPath::GetEngineResourceRoot();
+	m_EditorWatchDirectory = Engine::PlatformPath::GetEditorResourceRoot();
 	const auto watchPath = Engine::WStrToStr(m_WatchDirectory.wstring());
-
 	auto watcher = std::make_unique<efsw::FileWatcher>();
 	auto listener = std::make_unique<TextureFileListener>(this);
-
 	std::error_code ec;
 	if (std::filesystem::is_directory(m_WatchDirectory, ec))
 	{
@@ -149,25 +148,37 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 	{
 		EDITOR_LOG_WARN("[Asset Hot Reload] Watch directory unavailable: {}, code={}", watchPath, ec.value());
 	}
-
 	if (m_EngineWatchDirectory != m_WatchDirectory && std::filesystem::is_directory(m_EngineWatchDirectory, ec))
 	{
 		const auto engineWatchPath = Engine::WStrToStr(m_EngineWatchDirectory.wstring());
 		m_EngineWatchID = watcher->addWatch(engineWatchPath, listener.get(), true);
 		if (m_EngineWatchID <= 0)
 		{
-			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register engine watch: {}, code={}", engineWatchPath, m_EngineWatchID);
+			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register engine watch: {}, code={}",
+				engineWatchPath, m_EngineWatchID);
 		}
 		else
 		{
 			EDITOR_LOG_INFO("[Asset Hot Reload] Watching engine directory: {}", engineWatchPath);
 		}
 	}
-
+	if (m_EditorWatchDirectory != m_WatchDirectory && std::filesystem::is_directory(m_EditorWatchDirectory, ec))
+	{
+		const auto editorWatchPath = Engine::WStrToStr(m_EditorWatchDirectory.wstring());
+		m_EditorWatchID = watcher->addWatch(editorWatchPath, listener.get(), true);
+		if (m_EditorWatchID <= 0)
+		{
+			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register editor watch: {}, code={}",
+				editorWatchPath, m_EditorWatchID);
+		}
+		else
+		{
+			EDITOR_LOG_INFO("[Asset Hot Reload] Watching editor directory: {}", editorWatchPath);
+		}
+	}
 	watcher->watch();
 	m_FileListener = listener.release();
 	m_FileWatcher = watcher.release();
-
 	return EResult::Success;
 }
 
@@ -177,15 +188,13 @@ void AssetHotReloadManager::Free()
 	{
 		if (m_WatchID != 0) m_FileWatcher->removeWatch(m_WatchID);
 		if (m_EngineWatchID != 0) m_FileWatcher->removeWatch(m_EngineWatchID);
+		if (m_EditorWatchID != 0) m_FileWatcher->removeWatch(m_EditorWatchID);
 		delete m_FileWatcher;
 		m_FileWatcher = nullptr;
 	}
+
 	delete m_FileListener;
 	m_FileListener = nullptr;
-	m_WatchID = 0;
-	m_EngineWatchID = 0;
-	m_MeshFileStates.clear();
-	__super::Free();
 }
 
 AssetHotReloadManager* AssetHotReloadManager::Create(void* arg)
@@ -291,20 +300,24 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	if (LowerAscii(locPath.extension().wstring()) == L".csv")
 	{
 		std::error_code ec;
-		std::filesystem::path scriptPath = std::filesystem::current_path() / "Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py";
+		std::filesystem::path scriptPath = Engine::PlatformPath::ResolveProjectRelative(
+			"Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py");
 		if (std::filesystem::exists(scriptPath, ec))
 		{
 			const auto parentDir = locPath.parent_path();
-			std::wstring cmd = L"python \"" + scriptPath.wstring() + L"\" --input \"" + parentDir.wstring() + L"\" --output \"" + parentDir.wstring() + L"\"";
+			std::wstring cmd = L"python \"" + scriptPath.wstring() + L"\" --input \"" +
+				parentDir.wstring() + L"\" --output \"" + parentDir.wstring() + L"\"";
 			_wsystem(cmd.c_str());
 		}
 	}
 
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
-		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}", Engine::WStrToStr(locPath.filename().wstring()));
+		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}",
+			Engine::WStrToStr(locPath.filename().wstring()));
 		NotificationManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(locPath.filename().wstring())), ELogLevel::Info, 3.0f);
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(locPath.filename().wstring())),
+			ELogLevel::Info, 3.0f);
 	}
 }
 
