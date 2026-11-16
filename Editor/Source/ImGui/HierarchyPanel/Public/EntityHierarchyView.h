@@ -82,5 +82,7 @@ namespace Editor
         entt::entity m_RenamingEntity = entt::null;
         char m_RenameBuffer[128] = "";
         bool m_FocusRenameInput = false;
+        // 펼친 노드 집합(영속 ID 기준). 클리퍼로 그리지 않은 줄의 열림 상태도 유지하기 위해 뷰가 직접 소유한다.
+        std::unordered_set<std::uint64_t> m_Expanded;
     };
 }

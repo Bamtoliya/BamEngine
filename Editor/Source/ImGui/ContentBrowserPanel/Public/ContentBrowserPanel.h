@@ -176,6 +176,9 @@ private:
 private:
 	filesystem::path m_RevealedAssetPath;
 	bool m_RevealScrollPending = false;
+private:
+	// 폴더 트리 노드별 읽기 전용 여부 캐시 (경로 정규화 비용을 프레임마다 반복하지 않기 위함)
+	std::unordered_map<std::wstring, bool> m_ReadOnlyCache;
 #pragma endregion
 };
 END

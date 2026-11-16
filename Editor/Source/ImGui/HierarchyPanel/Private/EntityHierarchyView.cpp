@@ -1,4 +1,4 @@
-#include "EntityHierarchyView.h"
+﻿#include "EntityHierarchyView.h"
 #include "InputManager.h"
 #include "Scene.h"
 #include "WorldComponents.h"
@@ -139,6 +139,18 @@ namespace
 
         const auto result = std::to_chars(buffer.data() + 1, buffer.data() + buffer.size(), value);
         ImGui::PushID(buffer.data(), result.ptr);
+    }
+
+    struct HierarchyRow
+    {
+        entt::entity Entity = entt::null;
+        int Depth = 0;
+    };
+
+    std::uint64_t GetExpandKey(const entt::registry& world, entt::entity entity)
+    {
+        const auto* id = world.try_get<Engine::IDComponent>(entity);
+        return id && id->id != 0 ? id->id : (std::uint64_t{ 1 } << 63) | entt::to_integral(entity);
     }
 }
 
@@ -369,7 +381,6 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     std::span<const entt::entity> selected, entt::entity reveal, bool locked, std::string_view filter)
 {
     ReleaseFinishedDrag();
-    scene.UpdateHierarchyFlags();
     const auto& tree = GetEntityHierarchyTree(scene);
     auto& world = scene.GetRegistry();
     auto& textCache = world.ctx().emplace<HierarchyTextCache>();
@@ -398,6 +409,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     if (tree.Parents.contains(reveal))
         for (auto parent = tree.Parents.at(reveal); parent != entt::null; parent = tree.Parents.at(parent))
             ancestors.insert(parent);
+    for (const auto ancestor : ancestors)
+        m_Expanded.insert(GetExpandKey(world, ancestor));
     ImGui::PushID(&scene);
     const auto acceptMove = [&](entt::entity parent)
     {
@@ -436,15 +449,13 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             action.DropPrefabFile = *decoded;
             action.DropPrefabTarget = parent;
         };
-    int rowIndex = 0; // 줄무늬 배경 카운터
-    const auto draw = [&](auto&& self, entt::entity entity) -> void
+    const float indentStep = ImGui::GetStyle().IndentSpacing;
+    const auto drawRow = [&](const HierarchyRow& row, int rowIndex) -> void
         {
-            // 검색 필터 적용: 검색 중일 때 일치 노드나 그 조상이 아니면 표시하지 않음
-            if (isFiltering && !visibleInSearch.contains(entity)) return;
-            action.VisibleEntities.push_back(entity);
+            const entt::entity entity = row.Entity;
 
             // [방안 2] 교차 줄무늬 배경 (홀수 행마다 은은한 음영 추가)
-            if ((rowIndex++ % 2) == 1)
+            if ((rowIndex % 2) == 1)
             {
                 const ImVec2 rowMin = ImVec2(ImGui::GetWindowPos().x, ImGui::GetCursorScreenPos().y);
                 const ImVec2 rowMax = ImVec2(rowMin.x + ImGui::GetWindowWidth(), rowMin.y + ImGui::GetFrameHeight());
@@ -456,12 +467,21 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
             if (!isCanvas) flags |= ImGuiTreeNodeFlags_OpenOnDoubleClick;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
-            if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+            flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen; // 자식은 평탄화된 줄 목록에서 따로 그린다
             PushEntityId(world, entity);
+            if (row.Depth > 0) ImGui::Indent(indentStep * static_cast<float>(row.Depth));
 
             // 조상이거나, 검색 중 일치 자식을 가진 부모 노드는 자동으로 펼침
-            if (ancestors.contains(entity) || (isFiltering && visibleInSearch.contains(entity) && !matchingEntities.contains(entity)))
-                ImGui::SetNextItemOpen(true);
+            const std::uint64_t expandKey = GetExpandKey(world, entity);
+            const bool forceOpen = isFiltering && !matchingEntities.contains(entity);
+            if (!children.empty())
+                ImGui::SetNextItemOpen(forceOpen || m_Expanded.contains(expandKey));
+            const auto syncOpen = [&](bool isOpen)
+                {
+                    if (children.empty() || forceOpen || !ImGui::IsItemToggledOpen()) return;
+                    if (isOpen) m_Expanded.insert(expandKey);
+                    else m_Expanded.erase(expandKey);
+                };
 
             auto* flagComp = world.try_get<Engine::FlagComponent>(entity);
             const bool effectiveActive = flagComp ? flagComp->IsActiveInHierarchy() : true;
@@ -486,6 +506,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             {
                 // 리네임 중일 때는 아이콘만 노드로 그리고 바로 옆에 인라인 텍스트 입력창 배치
                 opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", visual.Icon);
+                syncOpen(opened);
                 ImGui::PopStyleColor();
                 ImGui::SameLine();
                 if (m_FocusRenameInput)
@@ -515,6 +536,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             else
             {
                 opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
+                syncOpen(opened);
                 ImGui::PopStyleColor();
             }
 
@@ -688,18 +710,44 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     ImGui::PopStyleColor(3);
                 }
             }
-            if (opened && !children.empty())
-            {
-                for (const auto child : children) self(self, child);
-                ImGui::TreePop();
-            }
+            if (row.Depth > 0) ImGui::Unindent(indentStep * static_cast<float>(row.Depth));
             ImGui::PopID();
         };
     if (!tree.Invalid.empty())
         ImGui::TextDisabled("%s",
             Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0.0f));
-    for (const auto root : tree.Roots) draw(draw, root);
+    // 1단계: 펼침·검색 상태를 반영한 보이는 줄 목록 생성 (ImGui 위젯 없음)
+    std::vector<HierarchyRow> rows;
+    rows.reserve(tree.Parents.size());
+    const auto collect = [&](auto&& self, entt::entity entity, int depth) -> void
+        {
+            if (isFiltering && !visibleInSearch.contains(entity)) return;
+            rows.push_back({ entity, depth });
+            const auto& children = tree.Children.at(entity);
+            const bool forceOpen = isFiltering && !matchingEntities.contains(entity);
+            if (!children.empty() && (forceOpen || m_Expanded.contains(GetExpandKey(world, entity))))
+                for (const auto child : children) self(self, child, depth + 1);
+        };
+    for (const auto root : tree.Roots) collect(collect, root, 0);
+
+    action.VisibleEntities.reserve(rows.size());
+    int revealIndex = -1, renameIndex = -1;
+    for (int i = 0; i < static_cast<int>(rows.size()); ++i)
+    {
+        action.VisibleEntities.push_back(rows[i].Entity);
+        if (rows[i].Entity == reveal) revealIndex = i;
+        if (rows[i].Entity == m_RenamingEntity) renameIndex = i;
+    }
+
+    // 2단계: 화면에 보이는 줄만 그린다. 스크롤 대상과 이름 변경 중인 줄은 화면 밖이어도 포함한다.
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(rows.size()), ImGui::GetFrameHeight());
+    if (revealIndex >= 0) clipper.IncludeItemByIndex(revealIndex);
+    if (renameIndex >= 0) clipper.IncludeItemByIndex(renameIndex);
+    while (clipper.Step())
+        for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
+            drawRow(rows[i], i);
     ImGui::PopStyleVar();
 
     if (isFiltering && matchingEntities.empty())

@@ -2,7 +2,31 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
-### [2026-11-16] 모델 임포트 모달 프리뷰 카메라 동결 해결 (`AssetPipelineAndRenderingOptimizationPlan.md` 조치 2)
+### [2026-11-16] 에디터 UI CPU 병목 개선: 계층 패널 가상 스크롤, 중복 계층 플래그 갱신 제거, 콘텐츠 브라우저 폴더 트리 캐시
+
+- **배경**: Sponza 씬에서 프레임이 24~32 FPS로 떨어졌다. 실측 결과 GPU는 1.5~5 ms, 드로우콜은 60~126개였고, `Editor UI` 패스 CPU가 23~27 ms로 프레임의 60~70%를 차지했다(`AssetPipelineAndRenderingOptimizationPlan.md` 2.4절 (3)). 임시 계측으로 `ImGuiManager::Draw`가 거의 전부(Begin·End는 1 ms 미만)이고 패널별로 계층·콘텐츠 브라우저·씬 뷰가 상위임을 확인했다.
+- **변경**:
+  - `EntityHierarchyView`: 재귀 트리 그리기를 "보이는 줄 목록 생성(위젯 없음) → `ImGuiListClipper`로 화면 안 줄만 그리기"로 바꿨다. 펼침 상태는 ImGui 저장소 대신 뷰가 영속 ID 기준 `m_Expanded`로 소유한다. 선택 대상(reveal)과 이름 변경 중인 줄은 `IncludeItemByIndex`로 항상 그린다. 범위 선택용 `VisibleEntities`는 전체 줄 목록을 쓴다.
+  - 중복 `Scene::UpdateHierarchyFlags()` 제거: `EntityHierarchyView::Draw`와 `SceneViewportPanel` Draw에서 매 프레임 호출하던 전체 재계산을 없앴다. `Runtime::LateUpdate`가 에디터·플레이 모드 모두 매 프레임 갱신하고, UI에서 플래그를 바꾸는 곳은 직후 직접 갱신한다.
+  - 콘텐츠 브라우저 폴더 트리: 노드마다 매 프레임 하던 `PlatformPath::IsReadOnlyTarget`(경로 정규화·상대 경로 계산 반복)을 `m_ReadOnlyCache`(디렉터리 캐시와 함께 무효화)로 캐시하고, 노드마다 하던 패널 이름 검색·`dynamic_cast`를 호출 측 매개변수(`isReadOnly`, `isEngineRoot`, `isEditorRoot`)로 대체했다. 트리 노드 ID는 넓은 문자열 해시로 바꿨다(적용 후 첫 실행에서 폴더 트리 펼침 상태 1회 초기화).
+  - `ImGui::ShowMetricsWindow()` 상시 호출 제거(닫을 수 없는 ImGui 디버그 창).
+- **검증 (사용자 실행, `x64-ninja-debug`, Sponza 씬, 120프레임 간격 임시 계측)**:
+
+  | 단계 | 계층 패널 | 콘텐츠 브라우저 | `Editor UI` CPU | 프레임 |
+  | :--- | :--- | :--- | :--- | :--- |
+  | 개선 전 (그림자 OFF) | 계층 패널을 닫으면 크게 감소 | 약 3 ms (패널 닫기 비교) | 23.05 ms | 32.4 ms |
+  | 계층 가상 스크롤 | 3.8~4.0 ms | 3.2~3.6 ms | 16.39 ms | 23.2 ms |
+  | + 중복 플래그 갱신 제거 | 2.7~2.9 ms | 2.9~3.1 ms | | |
+  | + 폴더 트리 캐시 | 2.9~3.3 ms | **0.74~0.84 ms** | 선택 없음·가벼운 폴더에서 사용자 관찰 약 4 ms | |
+
+  - 활성·가시 토글이 계층 패널과 자식 흐림 표시에 정상 반영됨을 사용자가 확인했다.
+  - 임시 계측 코드(`Application.cpp` 구간 계측, `ImGuiManager::Draw` 패널별 계측)는 커밋 전에 제거했다.
+- **미검증·남은 항목**:
+  - 변경 후 CTest(`HierarchyEditorCheck` 포함) 재실행 결과 미기록. 계층 패널의 검색 자동 펼침·Shift 범위 선택·F2 이름 변경·드래그 재부모화 수동 확인 미기록.
+  - 계층 패널에 남은 약 2.9 ms는 엔티티 수에 비례하는 매 프레임 처리(트리 캐시 변경 검사, 이름 캐시 정리)로 추정한다. 씬에 계층 변경 버전 번호를 두는 구조가 다음 후보다.
+  - 엔티티 선택으로 기즈모가 표시되면 씬 뷰 CPU가 3~4 ms 늘어난다(사용자 관찰). 원인 미조사.
+  - 모든 수치는 Debug 빌드 기준이며 Release 재측정 필요.
+ (`AssetPipelineAndRenderingOptimizationPlan.md` 조치 2)
 
 - **원인**: `PreviewViewportWidget::Draw`의 탐색 가드가 `IsPopupOpen(nullptr, AnyPopupId | AnyPopupLevel)`을 썼다. 이 조합은 열린 팝업이 하나라도 있으면 true라서, `BeginPopupModal` 안에서 그려지는 임포트 모달 프리뷰는 모달 자신 때문에 매 프레임 `canNavigate = false`가 되었다. 드래그 상태가 즉시 초기화되고 `HandleInput`이 호출되지 않았다.
 - **변경**: `ImGuiPopupFlags_AnyPopupId`만 사용해 `OpenPopupStack.Size > BeginPopupStack.Size`, 즉 현재 팝업 레벨보다 위에 열린 팝업이 있을 때만 차단한다(`PreviewViewportWidget.cpp`).

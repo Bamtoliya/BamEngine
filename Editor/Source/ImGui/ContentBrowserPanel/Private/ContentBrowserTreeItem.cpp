@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ContentBrowserTreeItem.h"
 #include "ContentBrowserPanel.h"
@@ -13,6 +13,9 @@ bool ContentBrowserTreeItem::DrawNode(
 	bool hasChildDirectory,
 	bool isSelected,
 	bool needToExpand,
+	bool isReadOnly,
+	bool isEngineRoot,
+	bool isEditorRoot,
 	std::filesystem::path& outRenamingPath,
 	char* renameBuffer,
 	size_t renameBufferSize,
@@ -40,11 +43,6 @@ bool ContentBrowserTreeItem::DrawNode(
 		baseFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 	}
 
-	const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
-	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
-	const bool isEngineRoot = (browser && path == browser->GetEngineRootPath());
-	const bool isEditorRoot = (browser && path == browser->GetEditorRootPath());
-
 	std::string filename = path.filename().string();
 	std::string icon = (isSelected && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
 	if (path == rootPath)
@@ -70,7 +68,7 @@ bool ContentBrowserTreeItem::DrawNode(
 	}
 
 	// 트리 노드 렌더링
-	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::string>{}(path.string()), baseFlags, "%s", label.c_str());
+	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::wstring>{}(path.native()), baseFlags, "%s", label.c_str());
 
 	// 인라인 이름 변경 UI
 	if (isRenaming)

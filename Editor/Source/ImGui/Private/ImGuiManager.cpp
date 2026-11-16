@@ -369,7 +369,7 @@ void ImGuiManager::Draw()
 	}
 	m_PendingRemovePanels.clear();
 	OpenPendingResourceEditor();
-	ImGui::ShowMetricsWindow();
+	// ImGui::ShowMetricsWindow(); // ImGui 내부 디버그 창: 상시 호출하지 않는다(필요 시 일시적으로 활성화)
 	SynchronizeSceneDocumentAccess();
 	if (!ImGui::IsAnyItemActive() && !ImGuizmo::IsUsing() &&
 		!InputManager::Get().IsMouseButtonPressed(EMouseButton::Left))

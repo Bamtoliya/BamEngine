@@ -176,6 +176,7 @@ void ContentBrowserPanel::SetShowEngineContent(bool show)
 		return;
 	m_ShowEngineContent = show;
 	m_CachedSubdirectories.clear();
+	m_ReadOnlyCache.clear();
 	if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(m_CurrentDirectory))
 	{
 		m_CurrentDirectory = m_RootPath;
@@ -379,17 +380,14 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path, const 
 	const vector<filesystem::path>& childDirectories = it->second;
 	const bool hasChildDirectory = !childDirectories.empty();
 	const bool isSelected = (m_CurrentDirectory == path);
-	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(
-		path,
-		rootPath,
-		hasChildDirectory,
-		isSelected,
-		m_NeedToExpandTree,
-		m_RenamingPath,
-		m_RenameBuffer,
-		sizeof(m_RenameBuffer),
-		m_CurrentDirectory
-	);
+	auto readOnlyIt = m_ReadOnlyCache.find(path.native());
+	if (readOnlyIt == m_ReadOnlyCache.end())
+		readOnlyIt = m_ReadOnlyCache.emplace(path.native(), Engine::PlatformPath::IsReadOnlyTarget(path)).first;
+	const bool isRoot = (path.native() == rootPath.native());
+	const bool isEngineRoot = isRoot && rootPath.native() == m_EngineRootPath.native();
+	const bool isEditorRoot = isRoot && rootPath.native() == m_EditorRootPath.native();
+	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(path, rootPath, hasChildDirectory, isSelected, m_NeedToExpandTree,
+		readOnlyIt->second, isEngineRoot, isEditorRoot, m_RenamingPath, m_RenameBuffer, sizeof(m_RenameBuffer), m_CurrentDirectory);
 	if (shouldDrawChildren)
 	{
 		for (const auto& childPath : childDirectories)
@@ -1122,6 +1120,7 @@ void ContentBrowserPanel::RefreshCacheIfNeeded()
 	if (fileSystemChanged)
 	{
 		m_CachedSubdirectories.clear();
+		m_ReadOnlyCache.clear();
 	}
 
 	if (!fileSystemChanged && !directoryChanged)
@@ -1155,6 +1154,7 @@ void ContentBrowserPanel::RefreshCacheIfNeeded()
 		m_CurrentDirectory = m_RootPath;
 		m_LastWatchedDirectory.clear();
 		m_CachedSubdirectories.clear();
+		m_ReadOnlyCache.clear();
 	}
 }
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)

@@ -2,7 +2,7 @@
 (Asset Pipeline & Rendering Optimization Plan)
 
 - **작성일**: 2026-11-16
-- **상태**: 조치 1(와인딩 CW 표준화)·조치 2(모달 프리뷰 카메라) 구현 및 실행 검증 완료 (2026-11-16) / 조치 3~4 구현 대기
+- **상태**: 조치 1(와인딩 CW 표준화)·조치 2(모달 프리뷰 카메라) 구현 및 실행 검증 완료 (2026-11-16) / 이슈 4는 실측 결과 에디터 UI CPU 병목으로 정정되어 1차 개선 완료, 조치 3~4는 재측정 후 판단
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 & 렌더링 성능)
 - **관련 문서**:
   - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md)
@@ -144,6 +144,18 @@ if (m_CameraController && canNavigate && (m_IsHovered || m_CameraDragButton))
 3. **Front-to-Back 정렬 부재로 인한 높은 깊이 복잡도(Depth Complexity) 오버드로**:
    - 복잡한 내부 구조를 가진 스폰자에서 카메라 시점 기준 전면 $\rightarrow$ 후면 정렬이 수행되지 않아, G-Buffer 패스에서 조기 깊이 판정(Early-Z)의 이점을 얻지 못하고 픽셀 셰이더가 중복 실행됩니다.
 
+#### (3) 2026-11-16 코드 대조 및 실측에 따른 정정
+- **위 1번 전제는 현재 코드와 다르다**: `Renderer::Render`는 패스마다 정적 메시 커맨드를 `(material, mesh)` 포인터 순으로 `std::sort`한다(`Renderer.cpp`, BackToFront 패스 제외). 또 Sponza는 LOD를 제외한 서로 다른 서브메시가 393개라 정렬해도 같은 `(material, mesh)` 조합이 거의 없어 인스턴싱으로 묶이지 않는다. 정렬 확장만으로 "드로우콜 90% 절감"은 성립하지 않는다.
+- **실측 (사용자 실행, `x64-ninja-debug`, Sponza 씬, Scene View 단독)**:
+
+  | 조건 | 프레임 | GPU 전체 | 드로우콜 | `Editor UI` CPU | 렌더 패스 CPU 합 |
+  | :--- | :--- | :--- | :--- | :--- | :--- |
+  | 그림자 ON | 44.9 ms | 4.94 ms | 126 | 27.17 ms | 약 4.6 ms |
+  | 그림자 OFF | 32.4 ms | 1.49 ms | 60 | 23.05 ms | 약 2.6 ms |
+
+- **결론**: 병목은 GPU·드로우콜이 아니라 **에디터 UI 패널의 CPU 시간**이었다. 계층 패널(엔티티 수백 개를 매 프레임 전부 그림)과 콘텐츠 브라우저 폴더 트리(노드마다 경로 정규화 반복)가 주원인이었고, 2026-11-16에 각각 개선했다(`ImplementationLog.md` "에디터 UI CPU 병목 개선" 항목).
+- **남은 항목**: 기즈모 표시 시 씬 뷰 CPU 3~4 ms 증가, `GeometryPass` CPU 약 4.6 ms(드로우 1회당 비용), 패스 바깥 미계측 CPU 약 5~12 ms, Release 빌드 기준 재측정. 조치 4(정렬 키 확장·메시 병합)는 이 측정들 이후에 필요성을 다시 판단한다.
+
 ---
 
 ## 3. 세부 조치 및 해결 계획
@@ -261,7 +273,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **Step 1** | 엔진 와인딩 CW 표준화 **(완료: 2026-11-16)**. 임포트 플래그는 정상 변환이므로 유지 | `BuiltInPrimitiveMeshes.cpp`, `MaterialInstance.*`, `RHIPipeline.h`, 머티리얼 JSON, `BuiltInMeshWindingCheck.cpp` | `BuiltInMeshWindingCheck` 및 전체 CTest 38/38 통과, 기본 도형·정적/스킨드 임포트 모델·프리뷰·썸네일·VFX 바닥·지형 실행 확인 (`SplineTestStrip` 미확인) |
 | **Step 2** | `PreviewViewportWidget` 모달 입력 네비게이션 가드 패치 **(완료: 2026-11-16)** | `PreviewViewportWidget.cpp` | `ModelImportModal`에서 Alt+LMB(Orbit), MMB(Pan), 휠줌 정상 작동 확인 (사용자 확인 완료) |
-| **Step 3** | `Renderer` 정적 메시 렌더 큐 정렬 및 인스턴싱 최적화 | `Renderer.cpp`, `MeshRenderSystem.cpp` | Sponza 씬 로드 시 드로우콜 수 측정 및 프레임 레이트 안정성 검증 |
+| **Step 3** | ~~`Renderer` 정적 메시 렌더 큐 정렬 및 인스턴싱 최적화~~ → **보류 (2026-11-16 실측으로 전제 정정, 2.4절 (3))**. 실제 병목인 에디터 UI CPU를 먼저 개선 | `EntityHierarchyView.cpp`, `ContentBrowserPanel.cpp`, `ContentBrowserTreeItem.cpp` | 패널별 CPU 계측: 계층 3.9 → 약 2.9 ms, 콘텐츠 브라우저 3.2 → 약 0.8 ms |
 | **Step 4** | 3D 썸네일 디스크 캐싱 및 메인 스레드 프레임 버짓 적용 | `AssetCache.cpp`, `ContentBrowserPanel.cpp` | 대량 에셋 폴더 진입 시 60 FPS 유지 및 스터터링 소멸 검증 |
 
 ---
@@ -271,3 +283,4 @@ flowchart TD
 - **2026-11-16**: 4대 핵심 결함(와인딩 반전, 프리뷰 카메라 동결, 콘텐츠 브라우저 스터터링, 스폰자 드로우콜 병목) 심층 분석 및 통합 조치 계획서 신규 작성.
 - **2026-11-16**: 조치 1 구현·검증 완료. 불변식 부호, 큐브·지형 와인딩 판정, Step 1의 `FlipWindingOrder` 제거 방향을 정정했다.
 - **2026-11-16**: 조치 2 구현·검증 완료. 팝업 판정을 "현재 팝업 레벨보다 위" 기준으로 바꾸고 3.2절 제안을 실제 적용안으로 갱신했다.
+- **2026-11-16**: Sponza 실측으로 2.4절 원인(정렬 부재)을 정정하고 Step 3을 보류했다. 실제 병목인 에디터 UI CPU(계층 패널, 콘텐츠 브라우저 폴더 트리)를 개선했다.

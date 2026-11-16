@@ -596,9 +596,6 @@ void SceneViewportPanel::DrawCustomViewport()
 			PlaceDroppedAssets(*single, false);
 		ImGui::EndDragDropTarget();
 	}
-
-	if (Scene* scene = SceneManager::Get().GetCurrentScene())
-		scene->UpdateHierarchyFlags();
 	DrawImViewGuizmo();
 	const bool splineOwnsInput = DrawSplinePointEditor(imageHovered);
 	const bool tilemapOwnsInput = HandleTilemapPainting(imageHovered);
