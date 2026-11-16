@@ -595,8 +595,19 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 
 ### 3. 인스펙터 및 속성 편집 행 (Property Rows & Inspector Uniformity)
 - **라벨-값 정렬**은 18절의 테이블 컬럼 기준을 따른다. 라벨은 글꼴과 여백으로 초기 폭을 정하고, 값 컬럼은 남은 폭을 채운다.
+- **2계층 속성 그리기 구조**: 속성 UI는 "행 레이아웃"과 "값 위젯"을 분리해 통일한다.
+  - **행 레이아웃(공통)**: 속성 표는 `EditorUI::BeginPropertyTable` / `EndPropertyTable`로 열고, 행은 `EditorUI::PropertyRow(labelKey)` 또는 이미 번역된 문구일 때 `EditorUI::PropertyLabel(text, detail, reservedRightWidth)` + `EditorUI::PropertyValue()`로 그린다. 라벨 잘림 감지와 호버 툴팁(18절 2항)은 `PropertyLabel`이 담당하므로 패널에서 `ImGui::BeginTable`·고정 라벨 폭·지역 행 람다를 새로 만들지 않는다.
+  - **인스펙터 계열 표 스타일**: 리플렉션 인스펙터와 리소스 편집기 속성 표는 `EditorUI::InspectorPropertyTableStyle()`(글꼴 기준 라벨 폭·셀 여백)을 사용한다. 설정 패널은 `PropertyTableStyle` 기본값을 유지한다.
+  - **값 위젯**: 편집 대상이 리플렉션 등록 타입(`STRUCT`/`PROPERTY`)이면 필드를 손으로 다시 그리지 않고 `ReflectionPropertyDrawer::DrawPropertyTable` / `DrawValue`에 맡긴다. 드래그 속도·범위·색상 표시는 `STEP`, `RANGE`, `COLOR_PROPERTY` 메타데이터로 표현한다. 리플렉션으로 표현할 수 없는 UI(예: 커브 프리셋 버튼, 타임라인 편집 경로를 거치는 값)만 같은 행 API로 직접 그린다.
+  - **전용 타입 위젯**: 일반 중첩 표로 읽기 어려운 타입은 `DrawValue`의 타입 분기에 전용 위젯을 둔다(예: `ColliderShape`, `FloatCurve` 그래프 편집기). 분기는 일반 중첩 구조체 분기보다 앞에 둔다.
 - **초기화(Reset to Default) 버튼**: 기본값에서 변경된 속성은 우측에 `↺` 리셋 아이콘 버튼(폭 `GetFrameHeight()`)을 일관되게 제공하여 손쉬운 복원을 지원한다.
-- **카테고리 구분**: 속성 그룹 구분 시 들쑥날쑥한 라벨 텍스트 대신 통일된 `ImGui::CollapsingHeader` 스타일과 일관된 들여쓰기(`Indent`) 폭을 적용한다.
+  - 현재 구현 상태(2026-11-17): 리플렉션 인스펙터는 `RESET_VALUE` 또는 `DEFAULT` 메타데이터가 있는 스칼라 숫자 속성에 우클릭 컨텍스트 메뉴(`Inspector.ResetToDefault`)를, 벡터 속성에 축별 초기화를 제공하며, 표준으로 정한 `↺` 버튼은 아직 구현되지 않았다. 버튼을 도입할 때는 `PropertyLabel`의 `reservedRightWidth`로 공간을 예약한다.
+- **카테고리 구분**: 속성 그룹 구분 시 들쑥날쑥한 라벨 텍스트 대신 통일된 접힘 노드와 일관된 들여쓰기 폭을 적용한다. 리플렉션 속성의 카테고리 규칙은 다음과 같다.
+  - `CATEGORY`가 없는 속성(이름·활성·음소거 등 식별용 속성)은 머리글 없이 맨 위에 펼쳐 그린다. "일반" 접힘 노드를 만들지 않는다.
+  - 그 밖의 편집 속성은 `CATEGORY`를 지정하고, 키는 `CATEGORY_` 접두사로 `Engine.csv`에 둔다(예: `CATEGORY_VFX_TIMING`). 명시적 카테고리만 접을 수 있는 노드로 그린다.
+  - 구조체 전체가 하나의 의미 단위면(예: `CurveKey`) `CATEGORY`를 붙이지 않는다.
+  - 기존 엔진 타입에는 `CATEGORY_` 접두사가 없는 키(`"Animation"`, `"Physics"` 등)가 남아 있으며, 정리는 별도 작업으로 남긴다.
+- **조건부 표시(`EDITCONDITION`)**: 인자는 매크로가 문자열로 변환하므로 따옴표 없이 쓴다(`EDITCONDITION(useScaleCurve)`, `EDITCONDITION(LightType == Spot)`). `EDITCONDITION("useScaleCurve")`처럼 따옴표를 넣으면 대상 속성을 찾지 못해 항상 표시되며, 드로어는 이 경우 타입·속성별로 한 번 `EDITOR_LOG_WARN` 경고를 남긴다.
 
 ### 4. 도구 모음 및 액션 버튼 (Toolbars & Action Buttons)
 - **아이콘 버튼 규격**: 일반 툴바는 `EditorUI::GetIconButtonSize()`로 프레임 높이와 실제 글리프·패딩을 함께 반영한다. 표/리스트 행은 `SmallIconButton`의 작은 규격을 사용하며 열의 예약 폭도 같은 크기로 구한다. 고정 높이 영역은 버튼 크기 변경과 함께 영역 높이를 갱신한다.

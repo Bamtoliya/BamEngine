@@ -2,6 +2,36 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 속성 그리기 2계층 통일: 공용 속성 행, 리플렉션 카테고리 평면화, FloatCurve 그래프 편집기, VFX 트랙 인스펙터 리플렉션 전환
+
+- **배경 및 목적**:
+  - 인스펙터·VFX 편집기·설정 패널의 속성 행이 `EditorUI::PropertyRow`, VFX 지역 람다 `DrawPropertyRow`, 리플렉션 드로어 자체 `BeginTable`의 세 갈래로 나뉘어 라벨 폭(105/110/120/180px)과 잘림 툴팁 유무가 패널마다 달랐다.
+  - `VFXSpriteTrack` 등 VFX 트랙이 이미 리플렉션 등록 타입인데도 필드를 손으로 다시 그려 `sortingOrder`, Particle `loop`, Mesh `initialRotation`·`colorStart`·`colorEnd` 등이 UI에서 누락되고, Billboard 콤보에 영어 문자열이 하드코딩되어 있었다.
+  - 행 레이아웃(공통 API)과 값 위젯(리플렉션 타입은 드로어에 위임)을 분리하는 2계층 구조로 정리했다. 기준은 `EngineEditorClientGuidelines.md` 19절 3항에 반영했다.
+- **변경 사항**:
+  - **공용 속성 행 (`EditorUI.h/.cpp`)**: `PropertyLabel(text, detail, reservedRightWidth)`(잘림 감지·호버 툴팁), `PropertyValue()`, `InspectorPropertyTableStyle()`(라벨 폭 `글꼴 크기 × 9`, 셀 여백 0.3/0.15 글꼴 단위) 추가. `PropertyRow`는 `PropertyLabel` 경로로 통합. 정의부를 `namespace EditorUI { }` 블록에서 `EditorUI::` 한정 이름 형식으로 바꿨다.
+  - **리플렉션 드로어 (`ReflectionPropertyDrawer.cpp`)**:
+    - 표 생성과 라벨을 `EditorUI::BeginPropertyTable`/`PropertyLabel`/`PropertyValue`로 교체하고 익명 함수 `DrawResponsivePropertyLabel` 삭제. 인스펙터에 행 줄무늬·세로 구분선이 생겼다.
+    - `CATEGORY`가 없는 속성은 "일반" 접힘 노드 없이 맨 위에 펼쳐 그리고, 명시적 카테고리만 접힘 노드로 그린다. 기존 일반 표의 ImGui ID 경로는 유지했다.
+    - `FloatCurve` 전용 분기(일반 중첩 구조체 분기보다 앞): 그래프에서 키 클릭 선택, 드래그 이동(이웃 키 사이로 시간 제한, 드래그 중 축 범위 고정), 빈 곳 더블클릭 추가, 키 우클릭 컨텍스트 메뉴 삭제, 선택 키 세부 표(시간·값·탄젠트·보간). 선택 상태와 드래그 중 축 범위는 `ImGuiStorage`에 위젯 ID별로 보관한다.
+    - `EvaluateEditCondition`이 대상 속성을 찾지 못하면 타입·속성별로 한 번 `EDITOR_LOG_WARN` 경고(표시 동작은 기존처럼 "보임" 유지).
+  - **FloatCurve 및 VFX 커브 (`FloatCurve.h/.cpp`, `CompositeVFXSystem.cpp`)**: `Core/Geometry`에 `FloatCurve`·`CurveKey`·`ECurveInterpMode`와 프리셋 팩토리 추가. Light 트랙 조도 커브, Mesh 트랙 스케일·알파 커브를 런타임에 평가한다.
+  - **VFX 트랙 메타데이터 (`CompositeEffect.h`)**: 손작성 UI의 드래그 속도·범위를 `RANGE`/`STEP`으로, 색상을 `COLOR_PROPERTY`로 옮겼다. 카테고리 `CATEGORY_VFX_TIMING`/`TRANSFORM`/`RENDER`/`CURVES`를 지정하고(이름·활성·음소거는 미지정), 커브 속성에 `EDITCONDITION(useXxxCurve)`를 지정했다. CameraShake 반경은 전용 키 `PROP_SHAKE_RADIUS`("0 = 전역" 안내)를 쓴다.
+  - **VFX 편집기 (`VFXEditorPanel.cpp`)**: Sprite·Particle·Light·Mesh·Trail·Decal·CameraShake 트랙의 손작성 행을 `ReflectionPropertyDrawer::DrawPropertyTable` 호출로 교체하고 지역 람다 `DrawPropertyRow`를 삭제했다. 커브 프리셋 버튼은 로캘화된 `DrawCurvePresetRow`(`SameLineIfFits` 줄바꿈)로 정리했다. Sound 트랙은 시작 시간이 타임라인 편집 경로(`ApplyTimelineEdit`)를 거치므로 손작성 행을 유지하고 표 스타일만 통일했다. Mesh 트랙은 빈 핸들일 때 사각 평면·링 텍스처 기본값 안내를 표시한다(런타임 대체 순서: 트랙 텍스처 → 머티리얼 첫 텍스처 → `Particle_Ring.png`).
+  - **로캘**: `Editor.csv`(커브 프리셋·안내 문구·`Inspector.CurveEditHint`), `Engine.csv`(카테고리, 커브 속성, `ECurveInterpMode`·`ESpriteBillboardMode` 열거자) 행 추가.
+- **커밋**: `7a77459d`(Engine/VFX), `163f5b08`(Editor/UI·드로어), `dc6998a2`(Editor/VFX 인스펙터).
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - 단계별 빌드 성공과 에디터 화면 확인 통과(사용자 보고): 인스펙터 라벨·자물쇠·잘림 툴팁, 설정 패널 행 유지, VFX 각 트랙 필드 표시·편집·저장, Billboard 열거자 번역, 카테고리 평면화와 VFX 카테고리 노드, 커브 그래프 키 편집.
+  - 커브 편집기가 항상 보이던 결함 수정 확인: 원인은 Mesh 커브의 `EDITCONDITION("useScaleCurve")` 따옴표(생성 코드에 따옴표 포함 문자열로 들어가 대상 속성 탐색 실패)와 Light `intensityCurve`의 조건 누락이었다. 수정 후 사용 체크박스에 따라 표시·숨김 정상 동작.
+- **미검증 및 알려진 제약**:
+  - `EditorUICheck` CTest 실행 결과는 별도로 보고받지 못했다.
+  - Mesh 트랙 링 텍스처 안내: `Fireball_Explosion_Composite.bamvfx.json`의 메쉬 트랙은 링 텍스처·Additive 머티리얼이 저장돼 있어 안내가 나오지 않는 것이 정상이다. 새 메쉬 트랙(핸들 3개 비움)에서의 표시는 확인 결과를 받지 못했다.
+  - 벡터 드로어는 `RangeMin`/`RangeMax`를 적용하지 않아 Decal `size`의 기존 최소값(0.05)이 사라졌다. Light `attackTime`/`decayTime`의 상한은 `duration` 연동에서 정적 30초로 바뀌었다.
+  - 값 뒤 단위 표기(`s`, `m`, `Hz`)와 색상 편집의 `ImGuiColorEditFlags_Float`가 사라졌다(1을 넘는 HDR 색상 편집 영향 미확인).
+  - 커브 편집기: 탄젠트 핸들 드래그 미지원, Delete 키 삭제는 `ShortcutManager` 등록이 필요해 보류. 선택 상태가 위젯 ID 기준이라 같은 종류의 다른 트랙으로 바꿔도 선택 인덱스가 유지된다(키 개수 초과 시 해제).
+  - 정리 대상: 사용하지 않게 된 로캘 키(`Inspector.CurveKeys`, `VFXEditor.PropUse*Curve`, 손작성 행에서만 쓰던 `VFXEditor.Prop*` 일부)와 엔진 전반의 `CATEGORY_` 접두사 없는 카테고리 키(`"Animation"`, `"Physics"` 등).
+  - 인스펙터의 `↺` 리셋 버튼(19절 3항 표준)은 아직 구현되지 않았다.
+
 ### [2026-11-16] 에셋 파생 데이터 캐시(DDC: Derived Data Cache) 인프라 구축 (Phase 3)
 
 - **배경 및 목적**:
