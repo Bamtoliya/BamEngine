@@ -52,6 +52,8 @@ public:
 	bool IsOrthographic() const;
 	void SetPerspective(bool perspective = true);
 	void SetOrthographic(bool orthographic = true);
+	void ApplyCameraPreferences(float speed, float fov);
+	[[nodiscard]] EditorCameraController* GetCameraController() const { return m_CameraController; }
 #pragma endregion
 
 #pragma region Dimension

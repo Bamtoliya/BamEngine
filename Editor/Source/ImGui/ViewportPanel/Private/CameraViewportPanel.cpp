@@ -6,7 +6,7 @@
 #include "EditorCameraController.h"
 #include "IconsFontAwesome7.h"
 #include "TransformComponent.h"
-#include "EditorSettings.h"
+#include "EditorSettingsService.h"
 
 #pragma region Constructor&Destructor
 EResult CameraViewportPanel::OnInitialize(void* arg)
@@ -16,12 +16,24 @@ EResult CameraViewportPanel::OnInitialize(void* arg)
 	if (result != EResult::Success)
 		return result;
 
+	float defaultFov = 60.0f;
+	float defaultSpeed = 100.0f;
+	if (EditorSettingsService::IsCreated())
+	{
+		const auto& prefs = EditorSettingsService::Get().GetPreferences();
+		defaultFov = prefs.CameraFOV;
+		defaultSpeed = prefs.CameraSpeed;
+	}
+
 	Engine::CameraComponent cameraSettings{};
 	cameraSettings.CameraType = desc->IsPerspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
+	cameraSettings.FOV = defaultFov;
 	cameraSettings.AspectRatio = static_cast<f32>(desc->RenderTargetWidth) / static_cast<f32>(desc->RenderTargetHeight);
 	cameraSettings.OrthographicSize = static_cast<f32>(desc->RenderTargetHeight);
 
 	m_CameraController = EditorCameraController::Create(m_Name + L"_Camera", cameraSettings);
+	if (m_CameraController)
+		m_CameraController->SetCameraSpeed(defaultSpeed);
 	m_OwnCamera = (m_CameraController != nullptr);
 	return EResult::Success;
 }
@@ -177,6 +189,18 @@ void CameraViewportPanel::SetOrthographic(bool orthographic)
 {
 	if (m_CameraController != nullptr)
 		m_CameraController->SetOrthographic(orthographic);
+}
+
+void CameraViewportPanel::ApplyCameraPreferences(float speed, float fov)
+{
+	if (!m_CameraController) return;
+	m_CameraController->SetCameraSpeed(speed);
+	if (auto* camera = m_CameraController->GetCameraComponent())
+	{
+		camera->FOV = fov;
+		if (camera->CameraType == Engine::ECameraType::Perspective)
+			m_CameraController->RefreshMatrices();
+	}
 }
 #pragma endregion
 

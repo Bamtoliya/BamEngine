@@ -65,10 +65,21 @@ void PreviewViewportWidget::Initialize(const std::wstring& widgetId, uint32 widt
 		m_Grid.Show();
 	}
 
+	s_ActiveWidgets.insert(this);
+
 	// 4. 에디터 카메라 컨트롤러 초기화 (에디터 표준 조작계)
+	float initialFov = Editor::PreviewCameraDefaults::FieldOfViewDegrees;
+	float initialSpeed = 10.0f;
+	if (EditorSettingsService::IsCreated())
+	{
+		const auto& prefs = EditorSettingsService::Get().GetPreferences();
+		initialFov = prefs.CameraFOV;
+		initialSpeed = prefs.CameraSpeed;
+	}
+
 	Engine::CameraComponent cameraSettings{};
 	cameraSettings.CameraType = Engine::ECameraType::Perspective;
-	cameraSettings.FOV = Editor::PreviewCameraDefaults::FieldOfViewDegrees;
+	cameraSettings.FOV = initialFov;
 	cameraSettings.NearPlane = 0.1f;
 	cameraSettings.FarPlane = 1000.0f;
 	cameraSettings.AspectRatio = static_cast<f32>(m_Width) / static_cast<f32>(m_Height);
@@ -76,7 +87,7 @@ void PreviewViewportWidget::Initialize(const std::wstring& widgetId, uint32 widt
 	m_CameraController = EditorCameraController::Create(m_Id + L"_Camera", cameraSettings);
 	if (m_CameraController)
 	{
-		m_CameraController->SetCameraSpeed(10.0f);
+		m_CameraController->SetCameraSpeed(initialSpeed);
 		FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
 	}
 
@@ -86,6 +97,7 @@ void PreviewViewportWidget::Initialize(const std::wstring& widgetId, uint32 widt
 
 void PreviewViewportWidget::Free()
 {
+	s_ActiveWidgets.erase(this);
 	if (s_ShortcutTarget == this)
 		s_ShortcutTarget = nullptr;
 
@@ -710,4 +722,19 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 
 	if (!ImGui::IsPopupOpen(popupId))
 		m_PreviewLightDraft.reset();
+}
+
+void PreviewViewportWidget::ApplyGlobalCameraPreferences(float speed, float fov)
+{
+	for (auto* widget : s_ActiveWidgets)
+	{
+		if (!widget || !widget->m_CameraController) continue;
+		widget->m_CameraController->SetCameraSpeed(speed);
+		if (auto* camera = widget->m_CameraController->GetCameraComponent())
+		{
+			camera->FOV = fov;
+			if (camera->CameraType == Engine::ECameraType::Perspective)
+				widget->m_CameraController->RefreshMatrices();
+		}
+	}
 }

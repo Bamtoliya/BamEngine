@@ -2011,6 +2011,8 @@
         "VFXEditor.PresetDummy": "Dummy Mannequin",
         "VFXEditor.EnvironmentForces": "Environment Force Simulator (Wind & Gravity)",
         "VFXEditor.GravityMultiplier": "Gravity Multiplier",
-        "VFXEditor.WindXZ": "Wind (X: Right / Z: Forward)"
+        "VFXEditor.WindXZ": "Wind (X: Right / Z: Forward)",
+        "Action.Viewport.CameraSpeedIncrease": "Increase Camera Speed",
+        "Action.Viewport.CameraSpeedDecrease": "Decrease Camera Speed"
     }
 }

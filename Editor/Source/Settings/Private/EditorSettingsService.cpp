@@ -486,6 +486,7 @@ bool EditorSettingsService::ApplyPreferences(const EditorPreferences& preference
     m_ImGuiManager->SetUIScale(preferences.UIScale);
     m_ImGuiManager->ApplyTheme(preferences.Theme);
     m_TimeManager->SetTargetFPS(static_cast<uint32>(preferences.TargetFPS));
+    m_ImGuiManager->ApplyCameraPreferences(preferences.CameraSpeed, preferences.CameraFOV);
 
     m_EditorPreferences = preferences;
     return true;

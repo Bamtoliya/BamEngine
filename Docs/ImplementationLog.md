@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 에디터 카메라 속도·FOV 환경설정 적용 및 속도 조절 입력
+
+- **변경**:
+  - `EditorSettingsService::ApplyPreferences`가 `ImGuiManager::ApplyCameraPreferences`를 호출해, 열린 `CameraViewportPanel`과 활성 `PreviewViewportWidget` 전체에 카메라 속도·FOV 환경설정을 즉시 반영한다. 새로 여는 뷰포트·프리뷰도 환경설정 값으로 초기화한다.
+  - `PreviewViewportWidget`는 `Initialize`/`Free`에서 정적 집합 `s_ActiveWidgets`에 등록·해제한다.
+  - `EditorCameraController`: 속도 범위 1~500, 증감 단위 10. Shift를 누르면 이동·휠·팬 2.5배. 우클릭(Look) 중 휠은 줌 대신 속도를 조절한다.
+  - 단축키 `Viewport.CameraSpeedIncrease`(=), `Viewport.CameraSpeedDecrease`(-)를 `ShortcutManager`에 등록하고 변경된 속도를 알림으로 표시한다. 로캘은 `Editor.csv`에 추가하고 JSON을 재생성했다.
+- **검증**: 사용자 환경에서 빌드 후 에디터 실행 중 사용했다. 기능별 확인 기록은 없다.
+- **미검증·검토 사항**:
+  - 두 단축키의 문맥이 `Global`이라 텍스트 입력이 아닌 다른 패널(그래프 편집기 등)에서 `=`/`-`를 눌러도 카메라 속도가 바뀔 수 있다. `Viewport` 문맥 전환을 검토한다(지침 11절 단축키 문맥 기준).
+  - 환경설정 변경 시 뷰포트·프리뷰 즉시 반영, 우클릭+휠 속도 조절, Shift 가속, 단축키 재바인딩.
+
 ### [2026-11-16] 에디터 UI CPU 병목 개선: 계층 패널 가상 스크롤, 중복 계층 플래그 갱신 제거, 콘텐츠 브라우저 폴더 트리 캐시
 
 - **배경**: Sponza 씬에서 프레임이 24~32 FPS로 떨어졌다. 실측 결과 GPU는 1.5~5 ms, 드로우콜은 60~126개였고, `Editor UI` 패스 CPU가 23~27 ms로 프레임의 60~70%를 차지했다(`AssetPipelineAndRenderingOptimizationPlan.md` 2.4절 (3)). 임시 계측으로 `ImGuiManager::Draw`가 거의 전부(Begin·End는 1 ms 미만)이고 패널별로 계층·콘텐츠 브라우저·씬 뷰가 상위임을 확인했다.

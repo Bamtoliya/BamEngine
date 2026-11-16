@@ -258,8 +258,10 @@ void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool i
     const Engine::f32 mouseX = inputManager.GetMouseDelta().x;
     const Engine::f32 mouseY = inputManager.GetMouseDelta().y;
     const Engine::vec2 mouseScrollDelta = inputManager.GetMouseScrollDelta();
+    const bool isShift = inputManager.IsShiftPressed();
+    const Engine::f32 speedBoost = isShift ? 2.5f : 1.0f;
     const Engine::f32 rotationSpeed = 0.3f;
-    Engine::f32 movementSpeed = m_CameraSpeed * dt;
+    Engine::f32 movementSpeed = m_CameraSpeed * speedBoost * dt;
     Engine::vec3 moveDirection = Engine::vec3(0.0f);
     bool changed = false;
 
@@ -270,36 +272,45 @@ void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool i
     float dist = glm::length(toCamera);
     if (dist < 0.1f) dist = 0.1f;
 
-    // 1. 마우스 휠 줌 (뷰포트에 호버되어 있을 때만 허용)
+    // 1. 마우스 휠 조작 (뷰포트에 호버되어 있을 때만 허용)
     if (allowScroll && mouseScrollDelta.y != 0.0f)
     {
-        if (IsPerspective())
+        if (isRMB)
         {
-            if (m_IsFOVZoom)
+            if (mouseScrollDelta.y > 0.0f) IncreaseCameraSpeed();
+            else DecreaseCameraSpeed();
+        }
+        else
+        {
+            const Engine::f32 scrollDelta = mouseScrollDelta.y * speedBoost;
+            if (IsPerspective())
             {
-                const Engine::f32 newFOV = std::clamp(camera->FOV - (mouseScrollDelta.y * m_ZoomSpeed3D), 1.0f, 170.0f);
-                if (camera->FOV != newFOV)
+                if (m_IsFOVZoom)
                 {
-                    camera->FOV = newFOV;
-                    camera->InvalidateCache();
-                    changed = true;
+                    const Engine::f32 newFOV = std::clamp(camera->FOV - (scrollDelta * m_ZoomSpeed3D), 1.0f, 170.0f);
+                    if (camera->FOV != newFOV)
+                    {
+                        camera->FOV = newFOV;
+                        camera->InvalidateCache();
+                        changed = true;
+                    }
+                }
+                else
+                {
+                    const Engine::vec3 forward = transform->GetLocalForward();
+                    if (transform->SetLocalPosition(transform->position + forward * (scrollDelta * m_ZoomSpeed3D)))
+                        changed = true;
                 }
             }
             else
             {
-                const Engine::vec3 forward = transform->GetLocalForward();
-                if (transform->SetLocalPosition(transform->position + forward * (mouseScrollDelta.y * m_ZoomSpeed3D)))
+                const Engine::f32 newOrthoSize = std::max(camera->OrthographicSize - (scrollDelta * m_ZoomSpeed2D), 0.1f);
+                if (camera->OrthographicSize != newOrthoSize)
+                {
+                    camera->OrthographicSize = newOrthoSize;
+                    camera->InvalidateCache();
                     changed = true;
-            }
-        }
-        else
-        {
-            const Engine::f32 newOrthoSize = std::max(camera->OrthographicSize - (mouseScrollDelta.y * m_ZoomSpeed2D), 0.1f);
-            if (camera->OrthographicSize != newOrthoSize)
-            {
-                camera->OrthographicSize = newOrthoSize;
-                camera->InvalidateCache();
-                changed = true;
+                }
             }
         }
     }
@@ -327,7 +338,7 @@ void EditorCameraController::ApplyInput(Engine::f32 dt, bool allowScroll, bool i
         // 3. [Alt + MMB] 또는 [MMB 단독] 시점 평면 패닝 (Pan)
         else if (isMMB)
         {
-            const float panFactor = dist * 0.002f;
+            const float panFactor = dist * 0.002f * speedBoost;
             const Engine::vec3 right = transform->GetLocalRight();
             const Engine::vec3 up = transform->GetLocalUp();
             const Engine::vec3 panDelta = (-right * mouseX + up * mouseY) * panFactor;

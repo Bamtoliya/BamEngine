@@ -2012,3 +2012,5 @@ VFXEditor,PresetDummy,Dummy Mannequin,인간형 더미 (Dummy Mannequin)
 VFXEditor,EnvironmentForces,Environment Force Simulator (Wind & Gravity),환경 외력 시뮬레이터 (바람 및 중력)
 VFXEditor,GravityMultiplier,Gravity Multiplier,중력 배율
 VFXEditor,WindXZ,Wind (X: Right / Z: Forward),바람 (X: 우측 / Z: 전방)
+Action,Viewport.CameraSpeedIncrease,Increase Camera Speed,카메라 속도 증가
+Action,Viewport.CameraSpeedDecrease,Decrease Camera Speed,카메라 속도 감소

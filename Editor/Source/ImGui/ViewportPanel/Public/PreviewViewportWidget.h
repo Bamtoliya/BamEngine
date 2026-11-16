@@ -1,16 +1,16 @@
 ﻿#pragma once
-
 #include "Editor_Includes.h"
-#include "ViewportDeferredPipeline.h"
+#include "ChannelFilter.h"
 #include "PostProcess.h"
+#include "ViewportDeferredPipeline.h"
 #include "Grid.h"
 #include "CameraBuffer.h"
 #include <entt/entt.hpp>
 #include <memory>
 #include <string>
-#include "ChannelFilter.h"
 #include "InputMap.h"
 #include "ImGuiSplitter.h"
+#include <unordered_set>
 
 BEGIN(Engine)
 class Scene;
@@ -66,6 +66,7 @@ public:
 
 	static void BeginShortcutFrame() { s_ShortcutTarget = nullptr; }
 	static PreviewViewportWidget* GetShortcutTarget() { return s_ShortcutTarget; }
+	static void ApplyGlobalCameraPreferences(float speed, float fov);
 	bool CanFocusTarget() const;
 	void RefocusTarget();
 	void ToggleGrid() { m_ShowGrid = !m_ShowGrid; }
@@ -83,6 +84,8 @@ private:
 	void DrawPreviewLightingPopup();
 
 private:
+	inline static std::unordered_set<PreviewViewportWidget*> s_ActiveWidgets;
+
 	std::wstring m_Id;
 	uint32 m_Width = 512;
 	uint32 m_Height = 512;

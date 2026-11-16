@@ -1138,6 +1138,16 @@ void ImGuiManager::NotifySettingsChange(const EditorSettingsChangeResult& result
 
 	NotificationManager::Get().AddNotification(LOCAL("EditorSettings.Title"), LOCAL(key), level);
 }
+
+void ImGuiManager::ApplyCameraPreferences(float speed, float fov)
+{
+	for (auto* panel : m_ImGuiPanels)
+	{
+		if (auto* cameraPanel = dynamic_cast<CameraViewportPanel*>(panel))
+			cameraPanel->ApplyCameraPreferences(speed, fov);
+	}
+	PreviewViewportWidget::ApplyGlobalCameraPreferences(speed, fov);
+}
 #pragma endregion
 
 #pragma region Workspace

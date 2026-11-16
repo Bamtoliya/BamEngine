@@ -139,6 +139,7 @@ private:
 #pragma region Settings
 public:
 	void NotifySettingsChange(const EditorSettingsChangeResult& result);
+	void ApplyCameraPreferences(float speed, float fov);
 #pragma endregion
 
 

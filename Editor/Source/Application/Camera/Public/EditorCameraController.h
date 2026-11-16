@@ -46,9 +46,9 @@ public:
     void RefreshMatrices();
 
     Engine::f32 GetCameraSpeed() const { return m_CameraSpeed; }
-    void SetCameraSpeed(Engine::f32 speed) { m_CameraSpeed = std::max(speed, 1.0f); }
-    void IncreaseCameraSpeed() { m_CameraSpeed += 1.0f; }
-    void DecreaseCameraSpeed() { m_CameraSpeed = std::max(m_CameraSpeed - 1.0f, 1.0f); }
+    void SetCameraSpeed(Engine::f32 speed) { m_CameraSpeed = std::clamp(speed, 1.0f, 500.0f); }
+    void IncreaseCameraSpeed(Engine::f32 step = 10.0f) { SetCameraSpeed(m_CameraSpeed + step); }
+    void DecreaseCameraSpeed(Engine::f32 step = 10.0f) { SetCameraSpeed(m_CameraSpeed - step); }
     void SetZoomSpeed3D(Engine::f32 speed) { m_ZoomSpeed3D = speed; }
     void SetZoomSpeed2D(Engine::f32 speed) { m_ZoomSpeed2D = speed; }
     void SetFOVZoom(bool zoomType) { m_IsFOVZoom = zoomType; }

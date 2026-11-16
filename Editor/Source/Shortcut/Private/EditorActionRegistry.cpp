@@ -28,8 +28,10 @@
 #include "UIViewportPanel.h"
 #include "ModelEditor.h"
 #include "MaterialEditor.h"
-#include "AnimationTimelinePanel.h"
 #include "TilePalettePanel.h"
+#include "EditorCameraController.h"
+#include "NotificationManager.h"
+#include <fmt/core.h>
 
 BEGIN(Editor)
 
@@ -638,6 +640,48 @@ void EditorActionRegistry::RegisterAll()
                 vp->ToggleGrid();
         }
     });
+
+    sm.RegisterAction({
+    .Id = "Viewport.CameraSpeedIncrease",
+    .DisplayNameKey = "Action.Viewport.CameraSpeedIncrease",
+    .CategoryKey = "Shortcuts.CategoryViewport",
+    .Context = EShortcutContext::Global,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::Equals),
+    .ExecuteHandler = []() {
+        auto* controller = []() -> EditorCameraController* {
+            if (auto* preview = PreviewViewportWidget::GetShortcutTarget()) return preview->GetCameraController();
+            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport()) return vp->GetCameraController();
+            return nullptr;
+        }();
+        if (controller)
+        {
+            controller->IncreaseCameraSpeed();
+            NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
+                fmt::format("{}: {:.1f}", LOCAL("Viewport.CameraSpeed"), controller->GetCameraSpeed()), ELogLevel::Info);
+        }
+    }
+        });
+
+    sm.RegisterAction({
+        .Id = "Viewport.CameraSpeedDecrease",
+        .DisplayNameKey = "Action.Viewport.CameraSpeedDecrease",
+        .CategoryKey = "Shortcuts.CategoryViewport",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Minus),
+        .ExecuteHandler = []() {
+            auto* controller = []() -> EditorCameraController* {
+                if (auto* preview = PreviewViewportWidget::GetShortcutTarget()) return preview->GetCameraController();
+                if (auto* vp = SceneViewportPanel::GetActiveSceneViewport()) return vp->GetCameraController();
+                return nullptr;
+            }();
+            if (controller)
+            {
+                controller->DecreaseCameraSpeed();
+                NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
+                    fmt::format("{}: {:.1f}", LOCAL("Viewport.CameraSpeed"), controller->GetCameraSpeed()), ELogLevel::Info);
+            }
+        }
+        });
 
     // =========================================================================================
     // [Graph Editor Actions] (GraphEditor Context)
