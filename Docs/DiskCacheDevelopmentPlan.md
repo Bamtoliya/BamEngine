@@ -2,7 +2,7 @@
 (Unified Disk Cache & Thumbnail Persistence Plan)
 
 - **작성일**: 2026-11-16
-- **상태**: 계획 수립 (Investigation & Architecture Specification)
+- **상태**: Phase 1(썸네일 디스크 캐시 및 2D/3D 바이패스) 구현 및 검증 완료 (2026-11-16) / Phase 2~4 순차 진행 대기
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 및 런타임/에디터 성능 최적화)
 - **관련 문서**:
   - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) (조치 3: 썸네일 비동기화 및 디스크 캐시 연계)
@@ -307,15 +307,20 @@ flowchart LR
     Phase3 --> Phase4
 ```
 
-### Phase 1: 썸네일 디스크 캐시 구현 [최우선 과제 - P0]
+### Phase 1: 썸네일 디스크 캐시 구현 [최우선 과제 - P0] [완료: 2026-11-16]
 - **목표**: 에디터 재시작 후 대량 에셋 폴더 오픈 시 3D 재렌더링 및 2D 재디코딩을 완전히 제거하여 60 FPS 유지.
-- **주요 작업**:
-  1. 프로젝트 루트 기준 디스크 캐시 경로 확립 (`<ProjectRoot>/.bam/cache/thumbnails/`).
-  2. `AssetCache` 내 디스크 캐시 키 생성(`RelPath + mtime + size`) 및 유효성 검증 함수 추가.
-  3. Tier 2 디스크 캐시 비동기 로드 파이프라인 구축 (`DiskLoadWorker`, `stbi_load_from_memory`).
-  4. 3D 캡처 완료 시점(`ProcessPending3DThumbnail`) 및 2D 디코드 축소 시점에서 백그라운드 디스크 저장(`stbi_write_png`) 연동.
-  5. 무효화(`RequestInvalidate`, `ClearCache`) 시 디스크 캐시 파일 연동 삭제.
+- **주요 작업 (구현 및 검증 완료)**:
+  1. 프로젝트 루트 기준 디스크 캐시 경로 확립 (`<ProjectRoot>/.bam/cache/thumbnails/`, `.gitignore` 완료).
+  2. `AssetCache` 내 FNV-1a 해시 기반 디스크 캐시 키 생성(`RelPath + mtime + size + version`) 및 O(1) 유효성 검증 함수 추가.
+  3. Tier 2 디스크 캐시 비동기 로드 파이프라인 구축 (`LoadThumbnailFromDiskCache`, `stbi_load_from_memory`).
+  4. 2D 이미지 원본 디코드 후 128x128 RGBA 다운샘플 데이터의 백그라운드 원자적 디스크 저장(`SaveThumbnailToDiskCache`, `stbi_write_png` + `.tmp` rename).
+  5. D3D12 RHI 텍스처 리드백 API(`ReadTexturePixels`) 신설 및 3D 오프스크린 렌더링 완료 텍스처의 128x128 RGBA 픽셀 디스크 캐시 자동 저장 연동.
+  6. `GetThumbnail()`에서 디스크 캐시 적중 시 3D 렌더링 대기열(`m_Pending3DQueue`)을 100% 바이패스하고 비동기 디스크 로드 즉시 반환 (콜드 스타트 0ms).
+  7. 무효화(`RequestInvalidate`, `ClearCache`) 시 디스크 캐시 파일 연동 삭제 및 512MB 상한 LRU Pruning(`PruneDiskCache`) 구축.
 - **대상 파일**:
+  - `Engine/Source/Render/RHI/Public/RHI.h`
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Public/DirectX12RHI.h`
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp`
   - `Editor/Source/AssetManager/AssetCache/Public/AssetCache.h`
   - `Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp`
 
@@ -368,3 +373,4 @@ flowchart LR
 ## 7. 변경 이력
 
 - **2026-11-16**: 썸네일 디스크 캐시 및 엔진 전반 6대 디스크 캐시 소요처 전수 조사 완료, 통합 디스크 캐시 인프라 및 Phase 1~4 상세 개발 계획서 신규 작성.
+- **2026-11-16**: Phase 1(썸네일 디스크 캐시 인프라, 2D/3D 비동기 바이패스, D3D12 리드백 및 원자적 영속화, LRU 용량 관리) 구현 및 검증 완료.

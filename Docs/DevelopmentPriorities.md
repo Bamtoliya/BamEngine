@@ -564,7 +564,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **비정상 종료 진단(크래시 리포터) 및 에디터 작업 복원 시스템 (Crash Recovery)**: Windows SEH 및 미니덤프(`MiniDumpWriteDump`) 연동, 블랙박스 로그 플러시, 구조화된 크래시 리포트(`.crash.json`), 5분 주기 하트비트 자동 저장(Heartbeat Auto-Save) 및 차기 실행 시 복원 마법사 구축. (참조: [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md))
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
 - **기하 와인딩 CW 표준화 — [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) 조치 1 [완료: 2026-11-16]**: 내장 메시·머티리얼 JSON·`MaterialInstance` FrontFace 상속·RHI 기본값을 CW로 통일하고 `BuiltInMeshWindingCheck`를 신설했다(`x64-debug` CTest 38/38 및 렌더링 실행 확인). `SplineTestStrip` 확인, 기본 머티리얼(`DefaultMaterial`) 재설계, 조치 2~4는 잔여다.
-- **에셋 썸네일 및 통합 디스크 캐시 인프라 구축 — [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md) [계획 수립: 2026-11-16]**: 에디터 재시작 시 콘텐츠 브라우저 3D 렌더링 및 2D 4K 이미지 재디코딩으로 인한 스터터링(프레임 드랍)을 제거하기 위해 128x128 썸네일 디스크 캐시(`.bam/cache/thumbnails/`)를 최우선(P0) 구축하고, 셰이더 컴파일 바이너리/PSO 캐시(P1), 에셋 파생 데이터(DDC, P1), 지형/물리 쿠킹 데이터(P2)의 6대 영역 디스크 캐시 로드맵을 체계화했다.
+- **에셋 썸네일 및 통합 디스크 캐시 인프라 구축 — [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md) [Phase 1 구현 및 검증 완료: 2026-11-16]**: 에디터 재시작 시 콘텐츠 브라우저 3D 렌더링 및 2D 4K 이미지 재디코딩으로 인한 스터터링(프레임 드랍)을 제거하기 위해 128x128 썸네일 디스크 캐시(`.bam/cache/thumbnails/`)를 최우선(P0) 구축하고(D3D12 `ReadTexturePixels` 리드백, 2D/3D 디스크 로드 비동기 바이패스, 원자적 PNG 영속화, 512MB LRU 정리), 셰이더 컴파일 바이너리/PSO 캐시(P1), 에셋 파생 데이터(DDC, P1), 지형/물리 쿠킹 데이터(P2)의 6대 영역 디스크 캐시 로드맵을 체계화했다.
 
 ### 11.3 안정화 다음 기능 선택 (차기 5개 트랙)
 

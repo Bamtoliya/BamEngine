@@ -132,6 +132,11 @@ public:
     {
         return EResult::NotImplemented;
     }
+    // 텍스처 전체 픽셀을 CPU 버퍼로 읽어옵니다 (썸네일 디스크 캐시 및 스크린샷용)
+    virtual EResult ReadTexturePixels(RHITexture* texture, void* dstBuffer, uint32 dstBufferSize)
+    {
+        return EResult::NotImplemented;
+    }
 #pragma endregion
 
 #pragma region Compute

@@ -78,6 +78,13 @@ private:
 	void ProcessPending3DThumbnail();
 	void InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize = 0, Engine::Handle spriteHandle = {});
 	void EvictOldest();
+private:
+	static std::filesystem::path GetDiskCacheDirectory();
+	static std::filesystem::path CalculateDiskCachePath(const std::filesystem::path& assetPath);
+	static std::optional<ThumbnailUploadTask> LoadThumbnailFromDiskCache(const std::filesystem::path& cachePath, const std::string& key);
+	static bool SaveThumbnailToDiskCache(const std::filesystem::path& cachePath, int32 width, int32 height, const uint8_t* rgbaData);
+	static void InvalidateDiskCache(const std::filesystem::path& assetPath);
+	static void PruneDiskCache(size_t maxBytes = 512 * 1024 * 1024);
 
 	enum class ECaptureState : uint8
 	{

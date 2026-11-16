@@ -649,6 +649,80 @@ EResult DirectX12RHI::ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, 
 	return EResult::Success;
 }
 
+EResult DirectX12RHI::ReadTexturePixels(RHITexture* texture, void* dstBuffer, uint32 dstBufferSize)
+{
+    auto* sourceTexture = dynamic_cast<DirectX12Texture*>(texture);
+    if (!m_Device || !m_CommandQueue || m_FrameRecording || !sourceTexture || !texture->GetNativeHandle() || !dstBuffer)
+        return EResult::InvalidArgument;
+    const uint32 width = texture->GetWidth();
+    const uint32 height = texture->GetHeight();
+    const uint32 bytesPerPixel = 4;
+    const uint32 rowPitch = (width * bytesPerPixel + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1) & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+    const uint32 totalBufferBytes = rowPitch * height;
+    if (dstBufferSize < width * height * bytesPerPixel)
+        return EResult::InvalidArgument;
+    ComPtr<ID3D12Resource> readback;
+    const auto heap = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_READBACK);
+    const auto bufferDesc = CD3DX12_RESOURCE_DESC::Buffer(totalBufferBytes);
+    if (FAILED(m_Device->CreateCommittedResource(&heap, D3D12_HEAP_FLAG_NONE, &bufferDesc,
+        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback)))) return EResult::Fail;
+    ComPtr<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12GraphicsCommandList> list;
+    ComPtr<ID3D12Fence> fence;
+    if (FAILED(m_Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
+        FAILED(m_Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&list))) ||
+        FAILED(m_Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence)))) return EResult::Fail;
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = sourceTexture->GetCurrentState();
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    const bool transition = barrier.Transition.StateBefore != barrier.Transition.StateAfter;
+    if (transition) list->ResourceBarrier(1, &barrier);
+    D3D12_TEXTURE_COPY_LOCATION source{};
+    source.pResource = barrier.Transition.pResource;
+    source.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    source.SubresourceIndex = 0;
+    DXGI_FORMAT copyFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (texture->GetFormat() == ETextureFormat::B8G8R8A8_UNORM || texture->GetFormat() == ETextureFormat::B8G8R8A8_UNORM_SRGB)
+        copyFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
+    D3D12_TEXTURE_COPY_LOCATION destination{};
+    destination.pResource = readback.Get();
+    destination.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    destination.PlacedFootprint.Offset = 0;
+    destination.PlacedFootprint.Footprint.Format = copyFormat;
+    destination.PlacedFootprint.Footprint.Width = width;
+    destination.PlacedFootprint.Footprint.Height = height;
+    destination.PlacedFootprint.Footprint.Depth = 1;
+    destination.PlacedFootprint.Footprint.RowPitch = rowPitch;
+    const D3D12_BOX region{ 0, 0, 0, width, height, 1 };
+    list->CopyTextureRegion(&destination, 0, 0, 0, &source, &region);
+    if (transition)
+    {
+        std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+        list->ResourceBarrier(1, &barrier);
+    }
+    if (FAILED(list->Close())) return EResult::Fail;
+    ID3D12CommandList* lists[] = { list.Get() };
+    m_CommandQueue->ExecuteCommandLists(1, lists);
+    if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)) || FAILED(fence->SetEventOnCompletion(1, nullptr)))
+        return EResult::Fail;
+    void* mapped = nullptr;
+    const D3D12_RANGE readRange{ 0, totalBufferBytes };
+    if (FAILED(readback->Map(0, &readRange, &mapped))) return EResult::Fail;
+    auto* srcBytes = static_cast<const uint8_t*>(mapped);
+    auto* dstBytes = static_cast<uint8_t*>(dstBuffer);
+    const uint32 copyRowBytes = width * bytesPerPixel;
+    for (uint32 y = 0; y < height; ++y)
+    {
+        std::memcpy(dstBytes + (y * copyRowBytes), srcBytes + (y * rowPitch), copyRowBytes);
+    }
+    const D3D12_RANGE writeRange{ 0, 0 };
+    readback->Unmap(0, &writeRange);
+    return EResult::Success;
+}
+
 EResult DirectX12RHI::BlitTexture(RHITexture* src, RHITexture* dst)
 {
     if (!src || !dst || !m_Device || !m_CommandQueue)

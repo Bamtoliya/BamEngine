@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "AssetCache.h"
 #include <stb_image.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
 #include "Renderer.h"
 #include "RHI.h"
 #include <shlobj.h> // Windows Shell API
@@ -188,6 +190,7 @@ void AssetCache::Free()
 
     m_DecodeWorkers.clear();
     ClearAll();
+    PruneDiskCache();
 }
 #pragma endregion
 
@@ -298,9 +301,32 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
 
     if (isMaterial || isModelOrMesh || isTextureOrSprite)
     {
+        // [신규] 디스크 캐시가 이미 존재하면 3D 오프스크린 렌더링 큐를 100% 바이패스하고 비동기 디스크 로드
+        const auto diskCachePath = CalculateDiskCachePath(assetPath);
+        if (!diskCachePath.empty() && std::filesystem::exists(diskCachePath))
+        {
+            if (m_DecodeWorkers.size() >= MAX_DECODE_WORKERS)
+                return nullptr;
+            const Engine::uint64 requestId = ++m_NextRequestId;
+            m_LoadingPaths.emplace(key, requestId);
+            try
+            {
+                auto future = std::async(std::launch::async, [diskCachePath, key]()
+                    {
+                        return AssetCache::LoadThumbnailFromDiskCache(diskCachePath, key);
+                    });
+                m_DecodeWorkers.push_back(ThumbnailDecodeWorker{ key, requestId, std::move(future) });
+            }
+            catch (...)
+            {
+                m_LoadingPaths.erase(key);
+                InsertToCache(key, nullptr, 0);
+            }
+            return nullptr;
+        }
+        // 디스크 캐시가 없으면 최초 1회 3D 렌더링 대기열에 등록
         if (m_Pending3DQueue.size() >= MAX_PENDING_3D_REQUESTS)
             return nullptr;
-
         const Engine::uint64 requestId = ++m_NextRequestId;
         m_LoadingPaths.emplace(key, requestId);
         m_Pending3DQueue.push(Thumbnail3DRequest{ key, requestId });
@@ -351,19 +377,16 @@ void AssetCache::RequestInvalidate(const filesystem::path& assetPath)
 void AssetCache::ClearCache(const filesystem::path& assetPath)
 {
     const std::string key = ThumbnailCacheKey(assetPath);
-    if (key.empty())
-        return;
-
-    m_LoadingPaths.erase(key);
-
-    const auto cached = m_ThumbnailCache.find(key);
-    if (cached == m_ThumbnailCache.end())
-        return;
-
-    m_CurrentCacheBytes -= cached->second.ByteSize;
-    Safe_Release(cached->second.Texture);
-    m_LruList.erase(cached->second.LruIt);
-    m_ThumbnailCache.erase(cached);
+    if (key.empty()) return;
+    if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
+    {
+        m_CurrentCacheBytes -= it->second.ByteSize;
+        Safe_Release(it->second.Texture);
+        m_LruList.erase(it->second.LruIt);
+        m_ThumbnailCache.erase(it);
+    }
+    // 디스크 캐시 파일도 함께 삭제
+    InvalidateDiskCache(assetPath);
 }
 
 void AssetCache::ClearAll()
@@ -386,17 +409,179 @@ void AssetCache::ClearAll()
     }
 }
 
-std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)
+std::filesystem::path AssetCache::GetDiskCacheDirectory()
+{
+    const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
+    return projectRoot / ".bam" / "cache" / "thumbnails";
+}
+
+std::filesystem::path AssetCache::CalculateDiskCachePath(const std::filesystem::path& assetPath)
 {
     const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(assetPath);
-    std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+    std::error_code ec;
+    const auto lastWrite = std::filesystem::last_write_time(fullPath, ec);
+    if (ec) return {};
+
+    const auto fileSize = std::filesystem::file_size(fullPath, ec);
+    if (ec) return {};
+
+    const auto relPath = Engine::PlatformPath::ToProjectRelative(fullPath);
+    const auto timePoint = lastWrite.time_since_epoch().count();
+
+    // 고유 캐시 키 문자열: 상대경로 + 파일크기 + 수정시각 + 포맷버전
+    const std::string seed = Engine::WStrToStr(relPath.generic_wstring()) + "_" +
+        std::to_string(fileSize) + "_" + std::to_string(timePoint) + "_v1";
+
+    // 64비트 FNV-1a 해시 생성
+    uint64_t hash = 14695981039346656037ull;
+    for (char c : seed)
+    {
+        hash ^= static_cast<uint8_t>(c);
+        hash *= 1099511628211ull;
+    }
+
+    char filenameBuf[32];
+    std::snprintf(filenameBuf, sizeof(filenameBuf), "%016llx.png", static_cast<unsigned long long>(hash));
+
+    return GetDiskCacheDirectory() / filenameBuf;
+}
+
+std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadThumbnailFromDiskCache(const std::filesystem::path& cachePath, const std::string& key)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(cachePath, ec)) return std::nullopt;
+
+    std::ifstream file(cachePath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return std::nullopt;
 
     const std::streamsize size = file.tellg();
-    if (size <= 0) return std::nullopt;
+    if (size <= 0 || size > 2 * 1024 * 1024) return std::nullopt; // 캐시 PNG는 수십 KB 이내
 
+    file.seekg(0, std::ios::beg);
+    std::vector<uint8_t> encodedData(static_cast<size_t>(size));
+    if (!file.read(reinterpret_cast<char*>(encodedData.data()), size)) return std::nullopt;
+
+    int width = 0, height = 0, channels = 0;
+    std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+        stbi_load_from_memory(encodedData.data(), static_cast<int>(size), &width, &height, &channels, STBI_rgb_alpha),
+        stbi_image_free);
+
+    if (!pixels || width <= 0 || height <= 0 || width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
+    {
+        std::filesystem::remove(cachePath, ec); // 손상된 캐시 파일은 즉시 삭제
+        return std::nullopt;
+    }
+
+    ThumbnailUploadTask task;
+    task.AssetPath = key;
+    task.Width = width;
+    task.Height = height;
+    task.Data.assign(pixels.get(), pixels.get() + (static_cast<size_t>(width) * height * 4));
+    return task;
+}
+
+bool AssetCache::SaveThumbnailToDiskCache(const std::filesystem::path& cachePath, int32 width, int32 height, const uint8_t* rgbaData)
+{
+    if (cachePath.empty() || width <= 0 || height <= 0 || !rgbaData) return false;
+
+    const auto cacheDir = cachePath.parent_path();
+    std::error_code ec;
+    if (!std::filesystem::exists(cacheDir, ec))
+    {
+        if (!std::filesystem::create_directories(cacheDir, ec)) return false;
+    }
+
+    // 원자적 쓰기: 임시 파일로 먼저 기록 후 rename
+    const auto threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    const auto tmpPath = cachePath.string() + ".tmp_" + std::to_string(threadId);
+
+    const int stride = width * 4;
+    const int result = stbi_write_png(tmpPath.c_str(), width, height, 4, rgbaData, stride);
+    if (result == 0)
+    {
+        std::filesystem::remove(tmpPath, ec);
+        return false;
+    }
+
+    std::filesystem::rename(tmpPath, cachePath, ec);
+    if (ec)
+    {
+        std::filesystem::remove(tmpPath, ec);
+        return false;
+    }
+
+    return true;
+}
+
+void AssetCache::InvalidateDiskCache(const std::filesystem::path& assetPath)
+{
+    const auto cachePath = CalculateDiskCachePath(assetPath);
+    if (cachePath.empty()) return;
+
+    std::error_code ec;
+    std::filesystem::remove(cachePath, ec);
+}
+
+void AssetCache::PruneDiskCache(size_t maxBytes)
+{
+    const auto cacheDir = GetDiskCacheDirectory();
+    std::error_code ec;
+    if (!std::filesystem::exists(cacheDir, ec)) return;
+    struct CacheFileInfo
+    {
+        std::filesystem::path Path;
+        std::filesystem::file_time_type LastWriteTime;
+        uintmax_t Size = 0;
+    };
+    std::vector<CacheFileInfo> files;
+    uintmax_t totalBytes = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(cacheDir, ec))
+    {
+        if (entry.is_regular_file(ec) && entry.path().extension() == ".png")
+        {
+            const auto size = entry.file_size(ec);
+            const auto lwt = entry.last_write_time(ec);
+            if (!ec)
+            {
+                files.push_back({ entry.path(), lwt, size });
+                totalBytes += size;
+            }
+        }
+    }
+    if (totalBytes <= maxBytes) return;
+    // 가장 오래된 파일이 앞에 오도록 정렬
+    std::sort(files.begin(), files.end(), [](const CacheFileInfo& a, const CacheFileInfo& b)
+        {
+            return a.LastWriteTime < b.LastWriteTime;
+        });
+    const uintmax_t targetBytes = static_cast<uintmax_t>(maxBytes * 0.8f); // 80% 수준까지 정리
+    for (const auto& file : files)
+    {
+        if (totalBytes <= targetBytes) break;
+        if (std::filesystem::remove(file.Path, ec))
+        {
+            totalBytes -= file.Size;
+        }
+    }
+}
+
+std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(const filesystem::path& assetPath)
+{
+    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(assetPath);
     const auto key = ThumbnailCacheKey(fullPath);
-
+    // 1. 디스크 캐시 우선 확인 (캐시 적중 시 원본 수십 MB 로드/디코딩 100% 스킵!)
+    const auto diskCachePath = CalculateDiskCachePath(fullPath);
+    if (!diskCachePath.empty())
+    {
+        auto cachedTask = LoadThumbnailFromDiskCache(diskCachePath, key);
+        if (cachedTask.has_value())
+            return cachedTask;
+    }
+    // 2. 디스크 캐시 미적중 시: 원본 파일 로드 및 다운샘플링 (기존 로직)
+    std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) return std::nullopt;
+    const std::streamsize size = file.tellg();
+    if (size <= 0) return std::nullopt;
     if (size > static_cast<std::streamsize>(MAX_THUMBNAIL_SOURCE_BYTES) ||
         size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
     {
@@ -404,29 +589,22 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
             "Thumbnail source exceeds file size limit: path={}, bytes={}", key, size);
         return std::nullopt;
     }
-
     file.seekg(0, std::ios::beg);
-
     std::vector<stbi_uc> encodedData(static_cast<size_t>(size));
     if (!file.read(reinterpret_cast<char*>(encodedData.data()), size))
         return std::nullopt;
-
     const int encodedSize = static_cast<int>(size);
     int width = 0, height = 0, channels = 0;
-
     if (!stbi_info_from_memory(encodedData.data(), encodedSize, &width, &height, &channels))
         return std::nullopt;
-
     if (width <= 0 || height <= 0)
         return std::nullopt;
-
     if (width > MAX_THUMBNAIL_SOURCE_DIM || height > MAX_THUMBNAIL_SOURCE_DIM)
     {
         BAM_LOG(Warn, "Editor", "Asset",
             "Thumbnail source exceeds dimension limit: path={}, size={}x{}", key, width, height);
         return std::nullopt;
     }
-
     const Engine::uint64 rgbaBytes = static_cast<Engine::uint64>(width) * height * STBI_rgb_alpha;
     if (rgbaBytes > MAX_THUMBNAIL_RGBA_BYTES)
     {
@@ -434,30 +612,24 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
             "Thumbnail source exceeds RGBA size limit: path={}, bytes={}", key, rgbaBytes);
         return std::nullopt;
     }
-
     int decodedWidth = 0, decodedHeight = 0;
     std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
         stbi_load_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight,
             &channels, STBI_rgb_alpha),
         stbi_image_free);
-
     if (!pixels || decodedWidth != width || decodedHeight != height)
         return std::nullopt;
-
     ThumbnailUploadTask task;
     task.AssetPath = key;
-
     if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
     {
         const float aspect = static_cast<float>(width) / static_cast<float>(height);
         int32 targetW = MAX_THUMBNAIL_DIM;
         int32 targetH = MAX_THUMBNAIL_DIM;
-
         if (aspect >= 1.0f)
             targetH = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM / aspect));
         else
             targetW = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM * aspect));
-
         task.Width = targetW;
         task.Height = targetH;
         task.Data = DownsampleRGBA(pixels.get(), width, height, targetW, targetH);
@@ -468,7 +640,11 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
         task.Height = height;
         task.Data.assign(pixels.get(), pixels.get() + static_cast<size_t>(rgbaBytes));
     }
-
+    // 3. 축소 완료된 128x128 RGBA 데이터를 디스크 캐시 파일로 영속화
+    if (!diskCachePath.empty() && !task.Data.empty())
+    {
+        SaveThumbnailToDiskCache(diskCachePath, task.Width, task.Height, task.Data.data());
+    }
     return task;
 }
 
@@ -619,6 +795,7 @@ void AssetCache::EvictOldest()
 void AssetCache::ProcessPending3DThumbnail()
 {
     auto* thumbRenderer = ThumbnailRenderer::IsCreated() ? &ThumbnailRenderer::Get() : nullptr;
+    auto* rhi = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHI() : nullptr;
 
     // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
     if (m_CaptureState == ECaptureState::Rendering)
@@ -631,10 +808,21 @@ void AssetCache::ProcessPending3DThumbnail()
         {
             RHITexture* newTexture = thumbRenderer->CreateThumbnailTexture();
             m_LoadingPaths.erase(loading);
-
             const size_t byteSize = newTexture != nullptr ?
                 static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
-
+            // [신규] 3D 오프스크린 렌더링 결과물을 CPU로 리드백하여 디스크 캐시 PNG로 영속화
+            if (newTexture != nullptr && rhi != nullptr)
+            {
+                std::vector<uint8_t> pixels(MAX_THUMBNAIL_DIM * MAX_THUMBNAIL_DIM * 4);
+                if (Engine::IsSuccess(rhi->ReadTexturePixels(newTexture, pixels.data(), static_cast<uint32>(pixels.size()))))
+                {
+                    const auto diskCachePath = CalculateDiskCachePath(Engine::Utf8ToPath(m_CurrentCapturingKey));
+                    if (!diskCachePath.empty())
+                    {
+                        SaveThumbnailToDiskCache(diskCachePath, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, pixels.data());
+                    }
+                }
+            }
             InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
         }
         else

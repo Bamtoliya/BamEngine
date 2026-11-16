@@ -2,7 +2,7 @@
 (Asset Pipeline & Rendering Optimization Plan)
 
 - **작성일**: 2026-11-16
-- **상태**: 조치 1(와인딩 CW 표준화)·조치 2(모달 프리뷰 카메라) 구현 및 실행 검증 완료 (2026-11-16) / 이슈 4는 실측 결과 에디터 UI CPU 병목으로 정정되어 1차 개선 완료, 조치 3~4는 재측정 후 판단
+- **상태**: 조치 1(와인딩 CW 표준화)·조치 2(모달 프리뷰 카메라)·조치 3/Step 4(썸네일 디스크 캐싱) 구현 및 검증 완료 (2026-11-16) / 조치 4는 에디터 UI CPU 개선 후 재측정 대기
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 & 렌더링 성능)
 - **관련 문서**:
   - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md)
@@ -274,7 +274,7 @@ flowchart TD
 | **Step 1** | 엔진 와인딩 CW 표준화 **(완료: 2026-11-16)**. 임포트 플래그는 정상 변환이므로 유지 | `BuiltInPrimitiveMeshes.cpp`, `MaterialInstance.*`, `RHIPipeline.h`, 머티리얼 JSON, `BuiltInMeshWindingCheck.cpp` | `BuiltInMeshWindingCheck` 및 전체 CTest 38/38 통과, 기본 도형·정적/스킨드 임포트 모델·프리뷰·썸네일·VFX 바닥·지형 실행 확인 (`SplineTestStrip` 미확인) |
 | **Step 2** | `PreviewViewportWidget` 모달 입력 네비게이션 가드 패치 **(완료: 2026-11-16)** | `PreviewViewportWidget.cpp` | `ModelImportModal`에서 Alt+LMB(Orbit), MMB(Pan), 휠줌 정상 작동 확인 (사용자 확인 완료) |
 | **Step 3** | ~~`Renderer` 정적 메시 렌더 큐 정렬 및 인스턴싱 최적화~~ → **보류 (2026-11-16 실측으로 전제 정정, 2.4절 (3))**. 실제 병목인 에디터 UI CPU를 먼저 개선 | `EntityHierarchyView.cpp`, `ContentBrowserPanel.cpp`, `ContentBrowserTreeItem.cpp` | 패널별 CPU 계측: 계층 3.9 → 약 2.9 ms, 콘텐츠 브라우저 3.2 → 약 0.8 ms |
-| **Step 4** | 3D 썸네일 디스크 캐싱 및 메인 스레드 프레임 버짓 적용 | `AssetCache.cpp`, `ContentBrowserPanel.cpp` | 대량 에셋 폴더 진입 시 60 FPS 유지 및 스터터링 소멸 검증 |
+| **Step 4** | 3D 썸네일 디스크 캐싱 및 비동기 바이패스 **(완료: 2026-11-16)** | `AssetCache.*`, `RHI.*`, `DirectX12RHI.*` | `.bam/cache/thumbnails/`에 2D/3D PNG 영속 저장, 재시작 시 3D 파이프라인 100% 바이패스 및 60 FPS 유지 (사용자 확인 완료) |
 
 ---
 
@@ -284,3 +284,4 @@ flowchart TD
 - **2026-11-16**: 조치 1 구현·검증 완료. 불변식 부호, 큐브·지형 와인딩 판정, Step 1의 `FlipWindingOrder` 제거 방향을 정정했다.
 - **2026-11-16**: 조치 2 구현·검증 완료. 팝업 판정을 "현재 팝업 레벨보다 위" 기준으로 바꾸고 3.2절 제안을 실제 적용안으로 갱신했다.
 - **2026-11-16**: Sponza 실측으로 2.4절 원인(정렬 부재)을 정정하고 Step 3을 보류했다. 실제 병목인 에디터 UI CPU(계층 패널, 콘텐츠 브라우저 폴더 트리)를 개선했다.
+- **2026-11-16**: 조치 3 / Step 4(썸네일 디스크 캐시 및 2D/3D 바이패스, D3D12 리드백) 구현 및 실환경 검증 완료.

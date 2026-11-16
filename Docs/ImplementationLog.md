@@ -2,6 +2,35 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 썸네일 통합 디스크 캐시(AssetCache 2D/3D 영속화 & D3D12 Readback) 구현 및 에디터 잔여 성능·의존성 최적화
+
+- **배경 및 목적**:
+  - 에디터 재시작 시 콘텐츠 브라우저 메모리 캐시가 증발(콜드 스타트)하여 매번 3D 모델 수십 개와 고해상도 텍스처를 처음부터 다시 파싱/디코딩/오프스크린 렌더링하느라 수 초간 극심한 프레임 드랍(스터터링)이 반복되는 결함 해소 (`DiskCacheDevelopmentPlan.md` Phase 1 및 `AssetPipelineAndRenderingOptimizationPlan.md` 조치 3).
+  - 인스펙터 속성 창의 매 프레임 스냅샷 캡처 비용(약 1.5 ms), 계층 패널 리프 노드 화살표 노출, 프로젝트 에셋 `GBufferMaterial` 하드코딩 의존성 정리.
+- **변경 사항**:
+  - **D3D12 텍스처 리드백 API 신설 (`RHI::ReadTexturePixels`, `DirectX12RHI::ReadTexturePixels`)**:
+    - D3D12 Readback Buffer 할당, 텍스처 `COPY_SOURCE` 전이 배리어, `CopyTextureRegion` 및 Fence 동기화를 통해 GPU 렌더 타깃/텍스처의 128×128 RGBA 픽셀 데이터를 CPU 버퍼로 고속 회수하는 범용 API 구축 (가로 128픽셀 = 512바이트로 D3D12 256바이트 정렬 규격에 완벽히 일치하여 패딩 없이 단번에 복사).
+  - **썸네일 디스크 캐시 인프라 구축 (`AssetCache`)**:
+    - 격리 디렉터리: `<ProjectRoot>/.bam/cache/thumbnails/` (`.gitignore` 등록 완료).
+    - 단일 진실의 원천(SSOT) 캐시 키: `FNV-1a(RelPath + "_" + FileSize + "_" + LastWriteTime + "_v1") + ".png"`로 해시 생성. 소스 에셋이 외부/내부에서 변경되면 수정 시각·크기 변화로 즉시 O(1) 파일 무효화 보장.
+    - 원자적 쓰기(Atomic Write): 백그라운드 스레드에서 `stbi_write_png`로 `.tmp` 파일 생성 후 `std::filesystem::rename` 승격하여 불완전/손상 캐시 방지.
+    - 2D 이미지: `LoadImageThumbnail` 진입 시 디스크 캐시 우선 확인 및 적중 시 원본 수십 MB 로드/디코딩 100% 스킵(수 KB 캐시 PNG만 로드), 미적중 시 생성 후 캐시 저장.
+    - 3D 에셋(Model, Mesh, Material, Texture, Sprite): `GetThumbnail()`에서 디스크 캐시 적중 시 메인 스레드 3D 렌더링 대기열(`m_Pending3DQueue`)을 완전히 바이패스하고 백그라운드 워커에서 캐시 PNG를 읽어 즉시 반환 (콜드 스타트 3D 렌더링 0ms).
+    - 3D 렌더링 캡처 영속화: `ProcessPending3DThumbnail` 완료 시 `ReadTexturePixels`로 128×128 RGBA 픽셀을 읽어 디스크 캐시 파일로 자동 저장.
+    - LRU 용량 관리: `PruneDiskCache`로 총용량이 512MB 초과 시 가장 오래된 캐시부터 자동 삭제.
+    - 무효화 연동: `ClearCache`, `RequestInvalidate` 시 디스크 캐시 파일 연동 삭제.
+  - **에디터 잔여 성능 및 리소스 의존성 정리**:
+    - `InspectorPanel`: 엔티티/씬/리비전이 동일하면 매 프레임 `SceneEditSnapshot::Capture`를 스킵하도록 캐시 적용하여 불필요한 1.5 ms CPU 비용 제거.
+    - `EntityHierarchyView`: 자식이 없는 엔티티 노드에 `ImGuiTreeNodeFlags_Leaf`를 부여하여 빈 `>` 화살표 숨김.
+    - `SceneViewportPanel`: 기즈모 메뉴(`DrawGizmoMenu`)에 선택 모드(Q, `GizmoSelect`) 항목 추가.
+    - 프로젝트 에셋 의존 정리: `ModelImportModal`, `ModelEditor`, `VFXEditorPanel`, `SceneViewportPanel`, `ImGuiManager`(Ground Plane)의 `GBufferMaterial` 참조를 엔진 빌트인 `DefaultMaterial`(`Engine://Material/DefaultMaterial.bammat.json`)로 전면 교체.
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - 에디터 실행 후 `.bam/cache/thumbnails/`에 2D/3D 썸네일 PNG 파일이 정상 생성됨을 확인.
+  - 3D 오프스크린 렌더링 완료 후 리드백 및 캐시 저장 정상 동작 확인.
+  - 컴파일 오류 (`rhi` 미선언) 해결 후 빌드 및 CTest 정상 통과 확인.
+- **미검증**:
+  - 512MB 상한 도달 시 `PruneDiskCache` 대용량 파일 정리 실환경 스트레스 테스트.
+
 ### [2026-11-16] 에디터 기동 시 스타트업 스플래시 화면(EditorSplashScreen) 도입 및 초기 검은 화면 제거
 
 - **배경 및 원인**:
