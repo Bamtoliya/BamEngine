@@ -2,6 +2,38 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 디스크 캐시 통합 개발: 지형 그리드 메시 스트림 캐시, DDC 공통 인프라 분리 및 환경설정 통합 캐시 관리/일괄 비우기 UI (Phase 4)
+
+- **배경 및 목적**:
+  - `DiskCacheDevelopmentPlan.md` Phase 4 과제 수행 및 통합 디스크 캐시 라이프사이클 완성.
+  - 지형 그리드 메시 생성(`TerrainUtility::CreateGridMesh`) 시 128x128 등 고해상도 분할에 따른 대량 정점/인덱스/와인딩 CPU 계산 부하 제거.
+  - 빌드 출력 디렉터리(`.../bin`)에 임시 캐시 생성 시 `EditorSettingsService`가 빌드 폴더를 프로젝트 루트로 오인식하여 `StartupManifest.json`을 찾지 못하던 결함 해결.
+  - 모델/텍스처 DDC 변환기 간 중복 코드 제거 및 안전한 프로젝트 루트 탐색 공통 인프라(`Tools/Converters/Common/DdcCommon.h`) 구축.
+  - 에디터 환경 설정(`EditorEnvironmentSettingsWidget`)에 디스크 캐시(썸네일, 셰이더, DDC, 지형) 실시간 사용량 모니터링 및 전체 일괄 비우기 기능 추가.
+- **변경 사항**:
+  - **지형 그리드 메시 디스크 캐시 (`TerrainUtility.cpp`)**:
+    - 저장 위치: `<ProjectRoot>/.bam/cache/terrain/<hash>.bin`
+    - 캐시 키: `FNV-1a(width + length + segmentsX + segmentsZ + reverseWinding + "terrain_grid_v1")`
+    - 바이너리 파일 구조: 매직 넘버(`BTGC`, `0x43475442`) + 버전(1) + `TerrainGridMeshLayout` + 버텍스 위치/머티리얼 배열 + 인덱스 배열.
+    - `CreateGridMesh` 진입 시 캐시 조회: 적중 시 수만 개의 정점/인덱스 계산 및 와인딩 루프를 통째로 스킵하고 즉시 복원. 미적중 시 연산 후 원자적 쓰기(`.tmp` -> rename).
+  - **프로젝트 루트 오인식 방지 (`EditorSettingsService.cpp`)**:
+    - `cur / ".bam"` 마커만으로 프로젝트 루트를 판별하던 취약점 제거.
+    - `Config/Project.json` 확인 및 `Engine::PlatformPath::GetProjectRoot()`를 단일 진실의 원천(SSOT) fallback으로 지정하여 빌드 폴더 오염 시에도 에디터 기동 실패 원천 방어.
+  - **DDC 공통 인프라 (`Tools/Converters/Common/DdcCommon.h`)**:
+    - `Tools::Ddc::DdcHasher`: FNV-1a 64비트 스트림 해시 누적기, 파일 메타데이터(크기, 수정시각) 결합 및 경로 생성 헬퍼.
+    - `Tools::Ddc::FindDdcDirectory`: CWD부터 부모로 거슬러 올라가며 `Config/Project.json` 또는 `CMakeLists.txt`를 탐색하여 정확한 프로젝트 루트의 `.bam/cache/ddc/<subCategory>` 반환.
+    - `ModelConverter.cpp` 및 `DirectXTexCompressor.cpp`에 적용하여 코드 중복 제거 및 빌드 디렉터리 오염 방지.
+  - **통합 디스크 캐시 관리 UI (`EditorEnvironmentSettingsWidget.cpp`)**:
+    - [환경 설정(Preferences)] 내 "디스크 캐시 (Disk Cache)" 접힘 섹션 신설.
+    - `InspectCacheFolder` 및 `FormatBytes`: 썸네일, 셰이더, DDC, 지형 캐시 및 총합 용량/파일 수 실시간 집계 및 `EditorUI::PropertyRow` 표 렌더링.
+    - **[전체 디스크 캐시 비우기]** 버튼: `.bam/cache/` 내 하위 캐시 파일 일괄 삭제, `AssetCache` 메모리 캐시 동시 소거, 결과 알림(`NotificationManager`) 팝업 출력.
+  - **로캘 (`Editor.csv`, `English.json`, `Korean.json`)**:
+    - `Settings.DiskCache`, `Settings.DiskCacheThumbnails`, `Settings.DiskCacheShaders`, `Settings.DiskCacheDDC`, `Settings.DiskCacheTerrain`, `Settings.DiskCacheTotal`, `Settings.ClearAllDiskCaches`, `Settings.ClearDiskCacheSuccess` 다국어 키 추가.
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - `x64-ninja-debug` 빌드 성공 및 에디터 정상 기동 확인.
+  - 지형 그리드 메시 캐시 바이너리 생성 및 로드 정상 확인.
+  - 환경 설정 패널 내 디스크 캐시 용량/파일 수 정상 집계 및 [전체 디스크 캐시 비우기] 클릭 시 파일 삭제 및 알림 메시지 노출 정상 동작 확인.
+
 ### [2026-11-17] 속성 그리기 2계층 통일: 공용 속성 행, 리플렉션 카테고리 평면화, FloatCurve 그래프 편집기, VFX 트랙 인스펙터 리플렉션 전환
 
 - **배경 및 목적**:

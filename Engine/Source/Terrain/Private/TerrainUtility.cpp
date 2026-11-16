@@ -5,28 +5,27 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
+#include <filesystem>
+#include <fstream>
 
 namespace
 {
 	bool TryGetHeightmapSize(uint32 resolution, uint32& axisCount, std::size_t& sampleCount)
 	{
 		if (resolution == 0) return false;
-
 		const uint64 axis = static_cast<uint64>(resolution) + 1;
 		const uint64 maxSamples = (std::numeric_limits<uint32>::max)() / sizeof(f32);
 		if (axis > maxSamples / axis) return false;
-
 		axisCount = static_cast<uint32>(axis);
 		sampleCount = static_cast<std::size_t>(axis * axis);
 		return true;
 	}
-
 	bool TryGetHeightDataLayout(const Engine::TerrainComponent& terrain, uint32& axisCount, std::size_t& sampleCount)
 	{
 		return TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount) &&
 			terrain.HeightData.size() == sampleCount;
 	}
-
+	// ── 1. 레이아웃 구조체 먼저 선언 ──
 	struct TerrainGridMeshLayout
 	{
 		uint32 Columns = 0;
@@ -34,30 +33,105 @@ namespace
 		uint32 VertexCount = 0;
 		uint32 IndexCount = 0;
 	};
-
 	bool TryGetTerrainGridMeshLayout(uint32 segmentsX, uint32 segmentsZ, TerrainGridMeshLayout& layout)
 	{
 		if (segmentsX == 0 || segmentsZ == 0)
 			return false;
-
 		constexpr uint64 maxBytes = (std::numeric_limits<uint32>::max)();
 		constexpr uint64 maxVertices = maxBytes / std::max(sizeof(Engine::VertexPosition), sizeof(Engine::VertexMaterial));
 		constexpr uint64 maxQuads = maxBytes / (6 * sizeof(uint32));
-
 		const uint64 columns = static_cast<uint64>(segmentsX) + 1;
 		const uint64 rows = static_cast<uint64>(segmentsZ) + 1;
 		const uint64 quads = static_cast<uint64>(segmentsX) * segmentsZ;
-
 		if (columns > maxVertices / rows || quads > maxQuads)
 			return false;
-
 		layout.Columns = static_cast<uint32>(columns);
 		layout.Rows = static_cast<uint32>(rows);
 		layout.VertexCount = static_cast<uint32>(columns * rows);
 		layout.IndexCount = static_cast<uint32>(quads * 6);
 		return true;
 	}
-}
+	// ── 2. TerrainGridMeshLayout 이후에 DDC 캐시 헬퍼 선언 ──
+	constexpr uint32_t TERRAIN_GRID_MAGIC = 0x43475442; // "BTGC" (Bam Terrain Grid Cache)
+	constexpr uint32_t TERRAIN_GRID_VERSION = 1;
+	std::filesystem::path GetTerrainGridCachePath(float width, float length,
+		uint32 segmentsX, uint32 segmentsZ, bool reverseWinding)
+	{
+		std::error_code ec;
+		uint64_t hash = 14695981039346656037ULL;
+		auto hashCombine = [&hash](const void* data, size_t size)
+			{
+				const auto* bytes = static_cast<const uint8_t*>(data);
+				for (size_t i = 0; i < size; ++i)
+				{
+					hash ^= bytes[i];
+					hash *= 1099511628211ULL;
+				}
+			};
+
+		hashCombine(&width, sizeof(width));
+		hashCombine(&length, sizeof(length));
+		hashCombine(&segmentsX, sizeof(segmentsX));
+		hashCombine(&segmentsZ, sizeof(segmentsZ));
+		const uint8_t rw = reverseWinding ? 1 : 0;
+		hashCombine(&rw, sizeof(rw));
+		const char versionTag[] = "terrain_grid_v1";
+		hashCombine(versionTag, sizeof(versionTag) - 1);
+
+		char buf[32];
+		std::snprintf(buf, sizeof(buf), "%016llx.bin", static_cast<unsigned long long>(hash));
+
+		const auto cacheDir = Engine::PlatformPath::GetProjectRoot() / ".bam" / "cache" / "terrain";
+		std::filesystem::create_directories(cacheDir, ec);
+		return cacheDir / buf;
+	}
+	bool TryLoadTerrainGridFromCache(const std::filesystem::path& cachePath,
+		std::vector<Engine::VertexPosition>& positions,
+		std::vector<Engine::VertexMaterial>& materials,
+		std::vector<uint32>& indices,
+		const TerrainGridMeshLayout& layout)
+	{
+		std::error_code ec;
+		if (cachePath.empty() || !std::filesystem::exists(cachePath, ec)) return false;
+		std::ifstream file(cachePath, std::ios::binary);
+		if (!file.is_open()) return false;
+		uint32_t magic = 0, version = 0;
+		file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+		file.read(reinterpret_cast<char*>(&version), sizeof(version));
+		if (magic != TERRAIN_GRID_MAGIC || version != TERRAIN_GRID_VERSION) return false;
+		TerrainGridMeshLayout cachedLayout;
+		file.read(reinterpret_cast<char*>(&cachedLayout), sizeof(cachedLayout));
+		if (!file || cachedLayout.VertexCount != layout.VertexCount || cachedLayout.IndexCount != layout.IndexCount)
+			return false;
+		positions.resize(layout.VertexCount);
+		materials.resize(layout.VertexCount);
+		indices.resize(layout.IndexCount);
+		file.read(reinterpret_cast<char*>(positions.data()), layout.VertexCount * sizeof(Engine::VertexPosition));
+		file.read(reinterpret_cast<char*>(materials.data()), layout.VertexCount * sizeof(Engine::VertexMaterial));
+		file.read(reinterpret_cast<char*>(indices.data()), layout.IndexCount * sizeof(uint32));
+		return file.good();
+	}
+	void SaveTerrainGridToCache(const std::filesystem::path& cachePath,
+		const std::vector<Engine::VertexPosition>& positions,
+		const std::vector<Engine::VertexMaterial>& materials,
+		const std::vector<uint32>& indices,
+		const TerrainGridMeshLayout& layout)
+	{
+		if (cachePath.empty() || positions.empty() || indices.empty()) return;
+		std::error_code ec;
+		const auto tmpPath = cachePath.string() + ".tmp";
+		std::ofstream file(tmpPath, std::ios::binary | std::ios::trunc);
+		if (!file.is_open()) return;
+		file.write(reinterpret_cast<const char*>(&TERRAIN_GRID_MAGIC), sizeof(TERRAIN_GRID_MAGIC));
+		file.write(reinterpret_cast<const char*>(&TERRAIN_GRID_VERSION), sizeof(TERRAIN_GRID_VERSION));
+		file.write(reinterpret_cast<const char*>(&layout), sizeof(layout));
+		file.write(reinterpret_cast<const char*>(positions.data()), layout.VertexCount * sizeof(Engine::VertexPosition));
+		file.write(reinterpret_cast<const char*>(materials.data()), layout.VertexCount * sizeof(Engine::VertexMaterial));
+		file.write(reinterpret_cast<const char*>(indices.data()), layout.IndexCount * sizeof(uint32));
+		file.close();
+		std::filesystem::rename(tmpPath, cachePath, ec);
+	}
+} // namespace
 
 Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 resolution)
 {
@@ -71,65 +145,80 @@ Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 segmentsX
 		!TryGetTerrainGridMeshLayout(segmentsX, segmentsZ, layout))
 		return nullptr;
 
-	const float dx = width / static_cast<float>(segmentsX);
-	const float dz = length / static_cast<float>(segmentsZ);
 	const float startX = -width * 0.5f;
 	const float startZ = -length * 0.5f;
 
-	if (!std::isfinite(dx) || dx <= 0.0f || !std::isfinite(dz) || dz <= 0.0f ||
-		!std::isfinite(startX + static_cast<float>(segmentsX) * dx) ||
-		!std::isfinite(startZ + static_cast<float>(segmentsZ) * dz))
-		return nullptr;
+	std::vector<VertexPosition> positions;
+	std::vector<VertexMaterial> materials;
+	std::vector<uint32> indices;
 
-	std::vector<VertexPosition> positions(layout.VertexCount);
-	std::vector<VertexMaterial> materials(layout.VertexCount);
-	std::vector<uint32> indices(layout.IndexCount);
+	// ── 0. 지형 그리드 메시 디스크 캐시 확인 ──
+	const auto cachePath = GetTerrainGridCachePath(width, length, segmentsX, segmentsZ, reverseWinding);
+	const bool cacheHit = TryLoadTerrainGridFromCache(cachePath, positions, materials, indices, layout);
 
-	uint32 vertexIndex = 0;
-	for (uint32 z = 0; z < layout.Rows; ++z)
+	if (!cacheHit)
 	{
-		const float currentZ = startZ + static_cast<float>(z) * dz;
-		const float v = static_cast<float>(z) / static_cast<float>(segmentsZ);
+		const float dx = width / static_cast<float>(segmentsX);
+		const float dz = length / static_cast<float>(segmentsZ);
 
-		for (uint32 x = 0; x < layout.Columns; ++x)
+		if (!std::isfinite(dx) || dx <= 0.0f || !std::isfinite(dz) || dz <= 0.0f ||
+			!std::isfinite(startX + static_cast<float>(segmentsX) * dx) ||
+			!std::isfinite(startZ + static_cast<float>(segmentsZ) * dz))
+			return nullptr;
+
+		positions.resize(layout.VertexCount);
+		materials.resize(layout.VertexCount);
+		indices.resize(layout.IndexCount);
+
+		uint32 vertexIndex = 0;
+		for (uint32 z = 0; z < layout.Rows; ++z)
 		{
-			const float currentX = startX + static_cast<float>(x) * dx;
-			const float u = static_cast<float>(x) / static_cast<float>(segmentsX);
-			positions[vertexIndex].position = vec3(currentX, 0.0f, currentZ);
+			const float currentZ = startZ + static_cast<float>(z) * dz;
+			const float v = static_cast<float>(z) / static_cast<float>(segmentsZ);
 
-			auto& material = materials[vertexIndex];
-			material.texCoord = vec2(u, v);
-			material.normal = vec3(0.0f, 1.0f, 0.0f);
-			material.tangent = vec3(1.0f, 0.0f, 0.0f);
-			material.binormal = vec3(0.0f, 0.0f, 1.0f);
-			material.color = vec4(1.0f);
-			++vertexIndex;
+			for (uint32 x = 0; x < layout.Columns; ++x)
+			{
+				const float currentX = startX + static_cast<float>(x) * dx;
+				const float u = static_cast<float>(x) / static_cast<float>(segmentsX);
+				positions[vertexIndex].position = vec3(currentX, 0.0f, currentZ);
+
+				auto& material = materials[vertexIndex];
+				material.texCoord = vec2(u, v);
+				material.normal = vec3(0.0f, 1.0f, 0.0f);
+				material.tangent = vec3(1.0f, 0.0f, 0.0f);
+				material.binormal = vec3(0.0f, 0.0f, 1.0f);
+				material.color = vec4(1.0f);
+				++vertexIndex;
+			}
 		}
-	}
 
-	uint32 index = 0;
-	const auto appendTriangle = [&](uint32 a, uint32 b, uint32 c)
+		uint32 index = 0;
+		const auto appendTriangle = [&](uint32 a, uint32 b, uint32 c)
+			{
+				if (reverseWinding)
+					std::swap(b, c);
+
+				indices[index++] = a;
+				indices[index++] = b;
+				indices[index++] = c;
+			};
+
+		for (uint32 z = 0; z < segmentsZ; ++z)
 		{
-			if (reverseWinding)
-				std::swap(b, c);
+			for (uint32 x = 0; x < segmentsX; ++x)
+			{
+				const uint32 i0 = z * layout.Columns + x;
+				const uint32 i1 = i0 + 1;
+				const uint32 i2 = i0 + layout.Columns;
+				const uint32 i3 = i2 + 1;
 
-			indices[index++] = a;
-			indices[index++] = b;
-			indices[index++] = c;
-		};
-
-	for (uint32 z = 0; z < segmentsZ; ++z)
-	{
-		for (uint32 x = 0; x < segmentsX; ++x)
-		{
-			const uint32 i0 = z * layout.Columns + x;
-			const uint32 i1 = i0 + 1;
-			const uint32 i2 = i0 + layout.Columns;
-			const uint32 i3 = i2 + 1;
-
-			appendTriangle(i0, i2, i1);
-			appendTriangle(i1, i2, i3);
+				appendTriangle(i0, i2, i1);
+				appendTriangle(i1, i2, i3);
+			}
 		}
+
+		// ── 디스크 캐시에 원자적 저장 ──
+		SaveTerrainGridToCache(cachePath, positions, materials, indices, layout);
 	}
 
 	MeshCreateDesc desc{};

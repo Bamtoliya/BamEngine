@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include "../../Common/DdcCommon.h"
 
 namespace Tools::ModelConversion
 {
@@ -98,44 +99,24 @@ namespace Tools::ModelConversion
             std::error_code ec;
             if (!std::filesystem::exists(sourcePath, ec)) return {};
 
-            const auto fileSize = std::filesystem::file_size(sourcePath, ec);
-            const auto lastWrite = std::filesystem::last_write_time(sourcePath, ec).time_since_epoch().count();
-
-            uint64_t hash = 14695981039346656037ull;
-            auto hashCombine = [&hash](const void* data, size_t size)
-                {
-                    const auto* bytes = static_cast<const uint8_t*>(data);
-                    for (size_t i = 0; i < size; ++i)
-                    {
-                        hash ^= bytes[i];
-                        hash *= 1099511628211ull;
-                    }
-                };
-
+            Tools::Ddc::DdcHasher hasher;
             const std::string u8Path = sourcePath.string();
-            hashCombine(u8Path.data(), u8Path.size());
-            hashCombine(&fileSize, sizeof(fileSize));
-            hashCombine(&lastWrite, sizeof(lastWrite));
-            hashCombine(&options.FlipUVs, sizeof(options.FlipUVs));
-            hashCombine(&options.ConvertToLeftHanded, sizeof(options.ConvertToLeftHanded));
-            hashCombine(&options.UniformScale, sizeof(options.UniformScale));
-            hashCombine(options.RotationOffset.data(), sizeof(float) * 3);
-            hashCombine(&options.FlipWindingOrder, sizeof(options.FlipWindingOrder));
-            hashCombine(&options.FlipPitch, sizeof(options.FlipPitch));
-            hashCombine(&options.FlipHeading, sizeof(options.FlipHeading));
-            hashCombine(&options.GenerateLODs, sizeof(options.GenerateLODs));
-            hashCombine(&options.LODCount, sizeof(options.LODCount));
-            hashCombine(&options.TargetError, sizeof(options.TargetError));
-            for (float rate : options.LODReductionRates) hashCombine(&rate, sizeof(rate));
-            const char versionTag[] = "model_ddc_v1";
-            hashCombine(versionTag, sizeof(versionTag) - 1);
+            hasher.Combine(u8Path.data(), u8Path.size());
+            hasher.CombineFileMetadata(sourcePath);
+            hasher.CombinePod(options.FlipUVs);
+            hasher.CombinePod(options.ConvertToLeftHanded);
+            hasher.CombinePod(options.UniformScale);
+            hasher.Combine(options.RotationOffset.data(), sizeof(float) * 3);
+            hasher.CombinePod(options.FlipWindingOrder);
+            hasher.CombinePod(options.FlipPitch);
+            hasher.CombinePod(options.FlipHeading);
+            hasher.CombinePod(options.GenerateLODs);
+            hasher.CombinePod(options.LODCount);
+            hasher.CombinePod(options.TargetError);
+            for (float rate : options.LODReductionRates) hasher.CombinePod(rate);
+            hasher.CombineString("model_ddc_v1");
 
-            wchar_t buf[32];
-            std::swprintf(buf, sizeof(buf) / sizeof(wchar_t), L"%016llx.ddc", static_cast<unsigned long long>(hash));
-
-            const auto ddcDir = std::filesystem::current_path() / ".bam" / "cache" / "ddc" / "models";
-            std::filesystem::create_directories(ddcDir, ec);
-            return ddcDir / buf;
+            return hasher.ResolvePath(Tools::Ddc::FindDdcDirectory("models"));
         }
 
         bool TryLoadModelFromDdc(const std::filesystem::path& ddcPath, ModelData& model)

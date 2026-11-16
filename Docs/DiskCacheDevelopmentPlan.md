@@ -1,8 +1,8 @@
 # 썸네일 및 엔진 전반 디스크 캐시 통합 개발 계획서
 (Unified Disk Cache & Thumbnail Persistence Plan)
 
-- **작성일**: 2026-11-16
-- **상태**: Phase 1, 2, 3 (썸네일, 셰이더/PSO, 에셋 DDC 디스크 캐시) 구현 및 검증 완료 (2026-11-16) / Phase 4 순차 진행 대기
+- **작성일**: 2026-11-16 (최종 갱신: 2026-11-17)
+- **상태**: Phase 1, 2, 3, 4 (썸네일, 셰이더/PSO, 에셋 DDC, 지형 그리드 및 통합 디스크 캐시 관리 UI) 구현 및 검증 완료 (2026-11-17)
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 및 런타임/에디터 성능 최적화)
 - **관련 문서**:
   - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) (조치 3: 썸네일 비동기화 및 디스크 캐시 연계)
@@ -348,12 +348,22 @@ flowchart LR
   - `Tools/Converters/ModelConverter/Private/ModelConverter.cpp`
   - `Tools/Converters/TextureConverter/Private/DirectXTexCompressor.cpp`
 
-### Phase 4: 지형, 물리 및 런타임 캐시 시스템 확장 [P2/P3]
-- **목표**: 대형 지형 및 복잡한 물리 씬의 로딩 시간 단축.
-- **주요 작업**:
-  1. 지형 청크 버텍스/인덱스 스트림 디스크 캐싱.
-  2. 물리 메시 콜라이더 쿠킹 바이너리 디스크 영속화.
-  3. 비주얼 스크립팅 바이트코드 쿡 캐시 연동.
+### Phase 4: 지형 그리드 및 통합 디스크 캐시 관리 UI 구축 [P2/P3] [완료: 2026-11-17]
+- **목표**: 고해상도 지형 메시 런타임 계산 부하 제거 및 에디터 환경설정 통합 캐시 관리/일괄 비우기 인프라 완성.
+- **주요 작업 (구현 및 검증 완료)**:
+  1. `Engine/Source/Terrain/Private/TerrainUtility.cpp`: 고해상도(128x128 등) 지형 그리드 메시 정점(`VertexPosition`, `VertexMaterial`) 및 인덱스 스트림 디스크 캐시(`.bam/cache/terrain/<hash>.bin`, `BTGC`) 적용. 캐시 적중 시 CPU 정점 연산 및 와인딩 루프 100% 스킵.
+  2. `Editor/Source/Settings/Private/EditorSettingsService.cpp`: 빌드 출력 폴더(`bin`)를 프로젝트 루트로 오인식하던 결함(`cur / ".bam"` 단독 마커) 제거 및 `Config/Project.json` 및 `PlatformPath::GetProjectRoot()` 단일 진실의 원천(SSOT) 일원화.
+  3. `Tools/Converters/Common/DdcCommon.h`: 모델 및 텍스처 DDC 캐시 공통 유틸리티(`DdcHasher`, `FindDdcDirectory`) 신설을 통해 CWD 및 빌드 폴더 오염 방지.
+  4. `Editor/Source/ImGui/SettingsPanel/Private/EditorEnvironmentSettingsWidget.cpp`: [환경 설정(Preferences)] 내 썸네일, 셰이더/PSO, 에셋 DDC, 지형 캐시 용량/파일 수 실시간 모니터링 표 및 **[전체 디스크 캐시 비우기]** 버튼 연동. `AssetCache` 메모리 캐시 및 디스크 파일 동시 무효화.
+  5. `Editor/Resources/Data/Localization/Editor.csv`: 디스크 캐시 관리 섹션 다국어 로캘 키(`Settings.DiskCache*`) 추가.
+- **대상 파일**:
+  - `Engine/Source/Terrain/Private/TerrainUtility.cpp`
+  - `Editor/Source/Settings/Private/EditorSettingsService.cpp`
+  - `Tools/Converters/Common/DdcCommon.h`
+  - `Tools/Converters/ModelConverter/Private/ModelConverter.cpp`
+  - `Tools/Converters/TextureConverter/Private/DirectXTexCompressor.cpp`
+  - `Editor/Source/ImGui/SettingsPanel/Private/EditorEnvironmentSettingsWidget.cpp`
+  - `Editor/Resources/Data/Localization/Editor.csv`
 
 ---
 
@@ -382,3 +392,4 @@ flowchart LR
 - **2026-11-16**: Phase 1(썸네일 디스크 캐시 인프라, 2D/3D 비동기 바이패스, D3D12 리드백 및 원자적 영속화, LRU 용량 관리) 구현 및 검증 완료.
 - **2026-11-16**: Phase 2(셰이더 컴파일 타임스탬프 캐시, ID3D12PipelineLibrary 기반 PSO 디스크 캐시 영속화, 버퍼 수명 보존 및 정합성 검사) 구현 및 검증 완료 (커밋 `a61312c1`).
 - **2026-11-16**: Phase 3(에셋 파생 데이터 캐시 DDC 인프라 구축: 텍스처 DirectXTex 압축 스킵 캐시 및 모델 Assimp/LOD 바이너리 직렬화 캐시) 구현 및 검증 완료.
+- **2026-11-17**: Phase 4(지형 그리드 메시 디스크 캐시, DDC 공통 유틸리티 `DdcCommon.h`, 프로젝트 루트 오인식 자가치유 방지, 환경설정 통합 캐시 모니터링 및 전체 비우기 UI) 구현 및 검증 완료.

@@ -4,6 +4,7 @@
 #include <DirectXTex.h>
 #include <filesystem>
 #include <fstream>
+#include "../../Common/DdcCommon.h"
 
 using namespace Tools;
 
@@ -19,35 +20,15 @@ namespace
 		const auto path = std::filesystem::absolute(inputFilePath, ec).lexically_normal();
 		if (ec || !std::filesystem::exists(path, ec)) return {};
 
-		const auto fileSize = std::filesystem::file_size(path, ec);
-		const auto lastWrite = std::filesystem::last_write_time(path, ec).time_since_epoch().count();
-
-		uint64_t hash = 14695981039346656037ull;
-		auto hashCombine = [&hash](const void* data, size_t size)
-			{
-				const auto* bytes = static_cast<const uint8_t*>(data);
-				for (size_t i = 0; i < size; ++i)
-				{
-					hash ^= bytes[i];
-					hash *= 1099511628211ull;
-				}
-			};
-
+		Tools::Ddc::DdcHasher hasher;
 		const std::string u8Path = path.string();
-		hashCombine(u8Path.data(), u8Path.size());
-		hashCombine(&fileSize, sizeof(fileSize));
-		hashCombine(&lastWrite, sizeof(lastWrite));
-		hashCombine(&targetFormat, sizeof(targetFormat));
-		hashCombine(&flags, sizeof(flags));
-		const char versionTag[] = "tex_ddc_v1";
-		hashCombine(versionTag, sizeof(versionTag) - 1);
+		hasher.Combine(u8Path.data(), u8Path.size());
+		hasher.CombineFileMetadata(path);
+		hasher.CombinePod(targetFormat);
+		hasher.CombinePod(flags);
+		hasher.CombineString("tex_ddc_v1");
 
-		wchar_t buf[32];
-		std::swprintf(buf, sizeof(buf) / sizeof(wchar_t), L"%016llx.ddc", static_cast<unsigned long long>(hash));
-
-		const auto ddcDir = std::filesystem::current_path() / ".bam" / "cache" / "ddc" / "textures";
-		std::filesystem::create_directories(ddcDir, ec);
-		return ddcDir / buf;
+		return hasher.ResolvePath(Tools::Ddc::FindDdcDirectory("textures"));
 	}
 
 	bool TryLoadFromDdc(const std::filesystem::path& ddcPath,

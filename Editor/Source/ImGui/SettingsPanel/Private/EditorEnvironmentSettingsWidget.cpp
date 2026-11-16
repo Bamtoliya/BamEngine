@@ -3,6 +3,54 @@
 #include "Editor_Includes.h"
 #include "LocalizationManager.h"
 #include "SceneViewportPanel.h"
+#include "NotificationManager.h"
+#include "AssetCache.h"
+
+namespace
+{
+    struct CacheFolderInfo
+    {
+        uintmax_t TotalBytes = 0;
+        uint32_t FileCount = 0;
+    };
+    CacheFolderInfo InspectCacheFolder(const std::filesystem::path& folderPath)
+    {
+        CacheFolderInfo info{};
+        std::error_code ec;
+        if (!std::filesystem::exists(folderPath, ec)) return info;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(folderPath, ec))
+        {
+            if (entry.is_regular_file(ec))
+            {
+                info.TotalBytes += entry.file_size(ec);
+                ++info.FileCount;
+            }
+        }
+        return info;
+    }
+    std::string FormatBytes(uintmax_t bytes)
+    {
+        if (bytes < 1024) return fmt::format("{} B", bytes);
+        if (bytes < 1024 * 1024) return fmt::format("{:.1f} KB", static_cast<double>(bytes) / 1024.0);
+        if (bytes < 1024 * 1024 * 1024) return fmt::format("{:.2f} MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+        return fmt::format("{:.2f} GB", static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0));
+    }
+    uintmax_t ClearCacheSubdirectory(const std::filesystem::path& folderPath)
+    {
+        uintmax_t deletedBytes = 0;
+        std::error_code ec;
+        if (!std::filesystem::exists(folderPath, ec)) return 0;
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(folderPath, ec))
+        {
+            if (entry.is_regular_file(ec))
+            {
+                deletedBytes += entry.file_size(ec);
+                std::filesystem::remove(entry.path(), ec);
+            }
+        }
+        return deletedBytes;
+    }
+}
 
 void EditorEnvironmentSettingsWidget::ReloadDraft(const EditorPreferences& preferences)
 {
@@ -155,6 +203,50 @@ void EditorEnvironmentSettingsWidget::Draw()
             }
 
             EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
+    // 5. 디스크 캐시 관리 (Disk Cache)
+    if (ImGui::CollapsingHeader(LOCAL_CSTR("Settings.DiskCache"), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        const auto rootCache = PlatformPath::GetProjectRoot() / ".bam" / "cache";
+        const auto thumbInfo = InspectCacheFolder(rootCache / "thumbnails");
+        const auto shaderInfo = InspectCacheFolder(rootCache / "shaders");
+        const auto ddcInfo = InspectCacheFolder(rootCache / "ddc");
+        const auto terrainInfo = InspectCacheFolder(rootCache / "terrain");
+        const uintmax_t totalBytes = thumbInfo.TotalBytes + shaderInfo.TotalBytes + ddcInfo.TotalBytes + terrainInfo.TotalBytes;
+        const uint32_t totalFiles = thumbInfo.FileCount + shaderInfo.FileCount + ddcInfo.FileCount + terrainInfo.FileCount;
+        if (EditorUI::BeginPropertyTable("##DiskCacheTable"))
+        {
+            // 썸네일 캐시
+            EditorUI::PropertyRow("Settings.DiskCacheThumbnails");
+            ImGui::Text("%s (%u files)", FormatBytes(thumbInfo.TotalBytes).c_str(), thumbInfo.FileCount);
+            // 셰이더/PSO 캐시
+            EditorUI::PropertyRow("Settings.DiskCacheShaders");
+            ImGui::Text("%s (%u files)", FormatBytes(shaderInfo.TotalBytes).c_str(), shaderInfo.FileCount);
+            // 에셋 DDC 캐시
+            EditorUI::PropertyRow("Settings.DiskCacheDDC");
+            ImGui::Text("%s (%u files)", FormatBytes(ddcInfo.TotalBytes).c_str(), ddcInfo.FileCount);
+            // 지형 그리드 캐시
+            EditorUI::PropertyRow("Settings.DiskCacheTerrain");
+            ImGui::Text("%s (%u files)", FormatBytes(terrainInfo.TotalBytes).c_str(), terrainInfo.FileCount);
+            // 총합
+            EditorUI::PropertyRow("Settings.DiskCacheTotal");
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s (%u files)", FormatBytes(totalBytes).c_str(), totalFiles);
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+        if (ImGui::Button(LOCAL_CSTR("Settings.ClearAllDiskCaches"), ImVec2(-FLT_MIN, 28.0f)))
+        {
+            const uintmax_t cleared = ClearCacheSubdirectory(rootCache);
+            if (Editor::AssetCache::IsCreated())
+                Editor::AssetCache::Get().ClearAll();
+            NotificationManager::Get().AddNotification(
+                LOCAL("Settings.DiskCache"),
+                fmt::format("{} ({})", LOCAL("Settings.ClearDiskCacheSuccess"), FormatBytes(cleared)),
+                ELogLevel::Info
+            );
         }
         ImGui::Spacing();
     }

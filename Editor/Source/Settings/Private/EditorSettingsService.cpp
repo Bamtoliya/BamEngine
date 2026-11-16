@@ -120,8 +120,7 @@ bool EditorSettingsService::LoadForStartup(std::uint32_t defaultWidth, std::uint
     std::error_code ec;
     for (int i = 0; i < 7; ++i)
     {
-        if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
-            std::filesystem::exists(cur / ".bam", ec))
+        if (std::filesystem::exists(cur / "Config" / "Project.json", ec))
         {
             m_ProjectRoot = cur;
             break;
@@ -131,8 +130,12 @@ bool EditorSettingsService::LoadForStartup(std::uint32_t defaultWidth, std::uint
     }
     if (m_ProjectRoot.empty())
     {
-        m_ProjectRoot = std::filesystem::current_path(ec);
-        BAM_LOG(Warn, "Editor", "Config", "Project marker not found; falling back to current_path: {}", m_ProjectRoot.string());
+        m_ProjectRoot = Engine::PlatformPath::GetProjectRoot();
+        if (m_ProjectRoot.empty())
+        {
+            m_ProjectRoot = std::filesystem::current_path(ec);
+            BAM_LOG(Warn, "Editor", "Config", "Project marker not found; falling back to current_path: {}", m_ProjectRoot.string());
+        }
     }
 
     reflection::RegistrationResult registration;
