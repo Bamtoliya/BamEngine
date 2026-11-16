@@ -2,6 +2,24 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 씬 뷰 기즈모 매 프레임 비용 제거: 언두 스냅샷 지연 캡처, 월드 전체 계층 갱신 제거
+
+- **배경**: 엔티티를 선택해 기즈모(이동·회전·스케일)가 보이면 조작하지 않아도 `Editor UI` CPU가 3~4 ms 늘었다. 선택 모드(Q)로 바꾸면 약 2.5 ms가 줄어 `SceneViewportPanel::DrawImGuizmo` 내부 비용임을 확인했다(나머지 약 1.5 ms는 인스펙터, 패널을 닫아 확인).
+- **원인**:
+  - 조작 여부와 관계없이 매 프레임 `SceneEditSnapshot::Capture`(모든 컴포넌트 저장소 순회 + 리플렉션 복사 + 할당)를 실행하고, 실제로 바뀐 프레임이 아니면 버렸다.
+  - 선택 엔티티 하나의 월드 행렬을 얻기 위해 매 프레임 `TransformSystem::UpdateHierarchy(world)`로 월드 전체를 검사·갱신했다.
+- **변경** (`SceneViewportPanel.cpp`, `DrawImGuizmo`):
+  - `ImGuizmo::Manipulate`는 지역 `worldMatrix`만 바꾸고 월드는 `ApplyWorldMatrix`에서 처음 바뀌므로, `changed`인 프레임에서 적용 직전에만 스냅샷을 캡처한다. 드래그 연속 기록은 `Record(..., true)` 병합으로 첫 변경 전 상태를 유지한다.
+  - 월드 전체 갱신과 캐시 읽기를 `TransformSystem::TryGetWorldMatrix`(선택 엔티티→루트 조상 체인만 계산, 유효 캐시 재사용)로 바꿨다. 변경 적용은 `TryCommitTransform` 안에서 계층을 갱신하고, 부모 행렬도 `TryGetWorldMatrix`로 직접 계산하므로 캐시 의존이 없다.
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - 선택만 하고 조작하지 않을 때 기즈모로 인한 CPU 증가가 사라지고, 조작할 때만 늘어남을 확인했다.
+  - 이동·회전·스케일, 스냅, 잠긴 축 거부, 드래그 1회 = 언두 1회, 프리팹 모드 더티 표시를 확인했다(스냅샷 지연 캡처 단계).
+- **미검증**: 조상 체인 계산 전환 후 부모가 있는 자식 엔티티·일시정지 PIE에서의 기즈모 위치 확인 기록 없음. 변경 후 CTest 재실행 기록 없음.
+- **후속**:
+  - 인스펙터 단일 선택 경로(`InspectorPanel::DrawEntityProperties`)도 매 프레임 스냅샷을 캡처한다. 위젯이 그리는 즉시 컴포넌트를 바꾸므로 같은 방식으로 옮길 수 없고, 캐시와 무효화 조건 설계가 필요하다. 캡처 비용 비중 측정이 먼저다.
+  - 씬 뷰 기즈모 메뉴(`DrawGizmoMenu`)에 선택 도구(Q)가 없어 메뉴로는 기즈모를 끌 수 없다(UX 누락).
+  - 스플라인 점 기즈모(`SceneViewportPanel.cpp`의 두 번째 `Manipulate`)도 같은 패턴인지 확인 필요.
+
 ### [2026-11-16] 에디터 카메라 속도·FOV 환경설정 적용 및 속도 조절 입력
 
 - **변경**:

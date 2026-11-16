@@ -844,10 +844,13 @@ void SceneViewportPanel::DrawImGuizmo()
 	default: return;
 	}
 
-	// 일시정지 중에도 에디터에서 사용할 최신 계층 행렬을 계산합니다.
-	Engine::TransformSystem::UpdateHierarchy(world);
-
-	glm::mat4 worldMatrix = world.get<Engine::WorldTransformComponent>(entity).worldMatrix;
+	// 선택 엔티티와 조상 체인만으로 최신 월드 행렬을 계산한다(월드 전체 갱신 없이 계층 깊이만큼만 계산).
+	// 실제 변경 적용은 TryCommitTransform 내부에서 계층을 갱신한다.
+	glm::mat4 worldMatrix;
+	if (!Engine::TransformSystem::TryGetWorldMatrix(world, entity, worldMatrix))
+	{
+		return;
+	}
 	const double determinant = glm::determinant(glm::dmat4(worldMatrix));
 
 	if (!std::isfinite(determinant) || determinant == 0.0)
@@ -925,16 +928,17 @@ void SceneViewportPanel::DrawImGuizmo()
 
 	auto& history = Application::Get().GetEditHistory();
 	const std::array targets{ entity };
-	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
 	const bool operationLocked = TransformPropertyEditor::IsLocked(world, entity, editMode);
 	const bool changed = !operationLocked && ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projectionMatrix),
 		m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr,
 		useSnap ? glm::value_ptr(snapValues) : nullptr, showBounds ? bounds : nullptr,
 		showBounds && useSnap ? glm::value_ptr(snapValues) : nullptr);
 
-	if (changed && history.Enabled() && before)
+	// Manipulate는 지역 worldMatrix만 바꾸므로, 실제 변경이 있는 프레임에만 적용 직전 상태를 캡처한다.
+	if (changed && history.Enabled())
 	{
-		if (TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+		auto before = SceneEditSnapshot::Capture(*scene, targets);
+		if (before && TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
 		{
 			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.Transform", true);
 			if (PrefabModeManager::Get().IsInPrefabMode())
