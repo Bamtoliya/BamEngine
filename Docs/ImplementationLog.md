@@ -2,6 +2,11 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 카메라 속도 단축키 문맥을 Viewport로 제한
+
+- **변경**: `Viewport.CameraSpeedIncrease`(=)/`Viewport.CameraSpeedDecrease`(-)의 `Context`를 `Global`에서 `Viewport`로 바꿨다(`EditorActionRegistry.cpp`). 뷰포트가 아닌 패널에서 `=`/`-`를 눌러 카메라 속도가 바뀌던 가능성을 없앴다(이전 항목의 검토 사항 해소).
+- **미검증**: 씬 뷰·프리뷰에 포커스가 있을 때만 동작하는지, 다른 패널에서 무시되는지 수동 확인 기록 없음.
+
 ### [2026-11-16] 씬 뷰 기즈모 매 프레임 비용 제거: 언두 스냅샷 지연 캡처, 월드 전체 계층 갱신 제거
 
 - **배경**: 엔티티를 선택해 기즈모(이동·회전·스케일)가 보이면 조작하지 않아도 `Editor UI` CPU가 3~4 ms 늘었다. 선택 모드(Q)로 바꾸면 약 2.5 ms가 줄어 `SceneViewportPanel::DrawImGuizmo` 내부 비용임을 확인했다(나머지 약 1.5 ms는 인스펙터, 패널을 닫아 확인).

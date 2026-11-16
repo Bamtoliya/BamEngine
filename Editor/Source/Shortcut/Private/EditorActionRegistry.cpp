@@ -645,7 +645,7 @@ void EditorActionRegistry::RegisterAll()
     .Id = "Viewport.CameraSpeedIncrease",
     .DisplayNameKey = "Action.Viewport.CameraSpeedIncrease",
     .CategoryKey = "Shortcuts.CategoryViewport",
-    .Context = EShortcutContext::Global,
+    .Context = EShortcutContext::Viewport,
     .DefaultChord = ShortcutChord(Engine::EKeyCode::Equals),
     .ExecuteHandler = []() {
         auto* controller = []() -> EditorCameraController* {
@@ -666,7 +666,7 @@ void EditorActionRegistry::RegisterAll()
         .Id = "Viewport.CameraSpeedDecrease",
         .DisplayNameKey = "Action.Viewport.CameraSpeedDecrease",
         .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Global,
+        .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Minus),
         .ExecuteHandler = []() {
             auto* controller = []() -> EditorCameraController* {
