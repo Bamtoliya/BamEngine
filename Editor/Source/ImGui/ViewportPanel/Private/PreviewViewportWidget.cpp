@@ -481,30 +481,40 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const ImVec2 toolbarSize(std::min(toolbarWidth, grid.x + style.WindowPadding.x * 2.0f),
 		std::min(overlayHeight - toolbarOffset, grid.y + style.WindowPadding.y * 2.0f));
 
-	// 1. 뷰포트 마우스 입력 캐처 (우클릭/휠클릭 전담: 좌클릭은 ImGuizmo가 먼저 수신하도록 제외)
-	constexpr ImGuiButtonFlags catcherFlags = ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle;
-	ImGui::InvisibleButton("##ViewportInputCatcher", widgetSize, catcherFlags);
+	// 1. 뷰포트 렌더타깃 이미지 먼저 렌더링
+	ImGui::SetCursorPos(startCursor);
+	DrawViewportImage(image, widgetSize);
+	m_ViewportScreenPos = ImGui::GetItemRectMin();
+
 	using Engine::EMouseButton;
 	auto& input = Engine::InputManager::Get();
 	const auto& io = ImGui::GetIO();
-	const auto origin = ImGui::GetItemRectMin();
 	const auto mousePos = input.GetScreenMousePosition();
+
 	const auto isOver = [&](float x, float y, const ImVec2& size)
 		{
-			const float minX = origin.x + x;
-			const float minY = origin.y + y;
+			const float minX = m_ViewportScreenPos.x + x;
+			const float minY = m_ViewportScreenPos.y + y;
 			const float maxX = minX + size.x;
 			const float maxY = minY + size.y;
 			return (mousePos.x >= minX && mousePos.x <= maxX && mousePos.y >= minY && mousePos.y <= maxY);
 		};
 	const bool overToolbar = isOver(channelX, margin, channelSize) ||
 		(showToolbar && isOver(margin, margin + toolbarOffset, toolbarSize));
-	m_IsHovered = ImGui::IsItemHovered() && !overToolbar;
+
+	const bool mouseInViewport = (mousePos.x >= m_ViewportScreenPos.x && mousePos.x <= m_ViewportScreenPos.x + widgetSize.x &&
+		mousePos.y >= m_ViewportScreenPos.y && mousePos.y <= m_ViewportScreenPos.y + widgetSize.y);
+	m_IsHovered = mouseInViewport && !overToolbar;
 	m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+
 	const bool popupAbove = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
 	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost && !popupAbove;
-	if (!canNavigate || !m_IsFocused)
+
+	// 마우스 드래그 유지 및 해제 (드래그 중에는 마우스가 창 밖으로 살짝 나가도 버튼을 뗄 때까지 유지)
+	if (!canNavigate)
+	{
 		m_CameraDragButton.reset();
+	}
 	else if (m_CameraDragButton)
 	{
 		if (!input.IsMouseButtonPressed(*m_CameraDragButton))
@@ -512,28 +522,39 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	}
 	else if (m_IsHovered)
 	{
-		// 카메라 조작 표준: Alt+LMB(Orbit), MMB(Pan), RMB(Look/Fly)
-		// 순수 좌클릭(LMB 단독)은 기즈모 조작 및 오브젝트 선택 전용으로 100% 양보한다.
+		// 카메라 조작 판정: Alt+LMB(Orbit), MMB(Pan), RMB(Look/Fly)
+		const bool overGizmo = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
 		const bool isAlt = input.IsAltPressed();
+
 		if (isAlt && input.IsMouseButtonDown(EMouseButton::Left))
-			m_CameraDragButton = EMouseButton::Left;
-		else if (ImGui::IsItemActive())
 		{
-			if (input.IsMouseButtonDown(EMouseButton::Right))
-				m_CameraDragButton = EMouseButton::Right;
-			else if (input.IsMouseButtonDown(EMouseButton::Middle))
-				m_CameraDragButton = EMouseButton::Middle;
+			m_CameraDragButton = EMouseButton::Left;
+			ImGui::SetWindowFocus();
+			m_IsFocused = true;
+		}
+		else if (input.IsMouseButtonDown(EMouseButton::Right))
+		{
+			m_CameraDragButton = EMouseButton::Right;
+			ImGui::SetWindowFocus();
+			m_IsFocused = true;
+		}
+		else if (input.IsMouseButtonDown(EMouseButton::Middle))
+		{
+			m_CameraDragButton = EMouseButton::Middle;
+			ImGui::SetWindowFocus();
+			m_IsFocused = true;
+		}
+		else if (!overGizmo && input.IsMouseButtonDown(EMouseButton::Left))
+		{
+			ImGui::SetWindowFocus();
+			m_IsFocused = true;
 		}
 	}
+
 	if (canNavigate && (m_IsHovered || m_IsFocused))
 		s_ShortcutTarget = this;
-	if (m_CameraController && canNavigate && (m_IsHovered || m_CameraDragButton))
+	if (m_CameraController && canNavigate && (m_IsHovered || m_CameraDragButton.has_value()))
 		m_CameraController->HandleInput(io.DeltaTime, m_IsHovered, m_CameraDragButton);
-
-	// 2. 뷰포트 렌더타깃 이미지 렌더링
-	ImGui::SetCursorPos(startCursor);
-	DrawViewportImage(image, widgetSize);
-	m_ViewportScreenPos = ImGui::GetItemRectMin();
 
 	const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
 		ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
@@ -552,7 +573,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	ImGui::EndChild();
 
 	ImGui::SetCursorPos(startCursor);
-	ImGui::Dummy(widgetSize);
+	//ImGui::Dummy(widgetSize);
 }
 
 void PreviewViewportWidget::DrawOverlayToolbar()

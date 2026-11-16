@@ -41,6 +41,7 @@
 #include "BuiltInPrimitiveMeshes.h"
 #include "GameViewportPanel.h"
 #include "PlatformPath.h"
+#include "EditorSplashScreen.h"
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -49,17 +50,25 @@ EResult Application::Initialize(void* arg)
 {
     if (!arg) return EResult::InvalidArgument;
     CAST_DESC;
+
+    // 1. 최우선으로 가벼운 스플래시 창을 즉시 노출 (0.05초)
+    EditorSplashScreen::Show("BamEngine Editor", 520, 280);
+    EditorSplashScreen::UpdateProgress(0.05f, "로그 시스템 초기화 중...");
+
     const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
     if (!InitializeLogger())
+    {
+        EditorSplashScreen::Hide();
         return EResult::Fail;
+    }
 
     m_LoggerInitialized = true;
-
     Engine::CrashHandler::Initialize(projectRoot / L"Logs" / L"Crashes");
     Engine::CrashHandler::SetCustomContext("Host", "Editor");
 
     const auto fail = [this](const char* stage, EResult result)
         {
+            EditorSplashScreen::Hide(); // 실패 시 스플래시 창 닫기
             BAM_LOG(Error, "Editor", "Application", "{} failed: {}", stage, ResultToString(result));
             Free();
             return result;
@@ -68,37 +77,42 @@ EResult Application::Initialize(void* arg)
     if (!NotificationManager::Create())
         return fail("NotificationManager", EResult::Fail);
 
+    // 2. 메인 윈도우 생성 (숨김 상태로 생성됨)
+    EditorSplashScreen::UpdateProgress(0.15f, "메인 윈도우 생성 중...");
     if (!InitializeWindow(*desc))
         return fail("InitializeWindow", EResult::Fail);
 
+    // 3. 런타임 및 그래픽 RHI(DirectX 12) 초기화
+    EditorSplashScreen::UpdateProgress(0.30f, "DirectX 12 그래픽 디바이스 초기화 중...");
     if (!InitializeRuntime(*desc))
         return fail("InitializeRuntime", EResult::Fail);
 
     ShortcutManagerDesc shortcutDesc;
-
     EditorSettingsService& editorService = EditorSettingsService::Get();
-
-
     const auto& preferencesPath = editorService.GetPreferencesPath();
     if (!preferencesPath.empty())
         shortcutDesc.ConfigPath = preferencesPath.parent_path() / "EditorShortcuts.json";
-
     shortcutDesc.LegacyPath = Engine::PlatformPath::ResolveUri("Config/EditorShortcuts.json");
 
     if (!ShortcutManager::Create(&shortcutDesc))
         return fail("ShortcutManager", EResult::Fail);
-    if(!IntializeRenderer())
-		return fail("IntializeRenderer", EResult::Fail);
+
+    // 4. 렌더러 및 기본 파이프라인/리소스 로딩 (StartupResourceLoader)
+    EditorSplashScreen::UpdateProgress(0.50f, "셰이더 및 파이프라인 리소스 로딩 중...");
+    if (!IntializeRenderer())
+        return fail("IntializeRenderer", EResult::Fail);
     if (!InitializeResources())
         return fail("InitializeResources", EResult::Fail);
 
     if (!ThumbnailRenderer::Create())
         BAM_LOG(Warn, "Editor", "Asset", "Thumbnail renderer is unavailable; asset icons will be used.");
 
+    // 5. ImGui 및 시스템 서브시스템 구성
+    EditorSplashScreen::UpdateProgress(0.70f, "에디터 인터페이스 및 폰트 구성 중...");
     if (!InitializeImGui())
         return fail("InitializeImGui", EResult::Fail);
 
-    if(!InitializeLocalization())
+    if (!InitializeLocalization())
         return fail("InitializeLocalization", EResult::Fail);
 
     auto* rhi = Renderer::Get().GetRHI();
@@ -106,7 +120,6 @@ EResult Application::Initialize(void* arg)
         return fail("BindRuntime", EResult::Fail);
 
     EditorSettingsService::Get().BindRuntime(*m_ImGuiManager, TimeManager::Get(), LocalizationManager::Get(), *rhi);
-
     if (!EditorSettingsService::Get().RestoreEditorState())
         return fail("RestoreEditorState", EResult::Fail);
 
@@ -127,7 +140,7 @@ EResult Application::Initialize(void* arg)
             });
     }
 
-    // Editor.exe 실행 파일과 같은 디렉터리에 있는 GameModule.dll 로드
+    // 6. 게임 모듈 로드
     wchar_t exePathBuf[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
     const std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
@@ -142,17 +155,27 @@ EResult Application::Initialize(void* arg)
     }
     ShortcutManager::Get().LoadFromFile();
 
+    // 7. 마지막 작업 씬 복원
+    EditorSplashScreen::UpdateProgress(0.88f, "마지막 작업 씬 복원 중...");
     RestoreLastEditedScene();
     if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
         AdoptSceneDocument({});
 
-    RecoveryManagerDesc recoveryDesc{ EditorSettingsService::Get().GetProjectRoot()};
+    RecoveryManagerDesc recoveryDesc{ EditorSettingsService::Get().GetProjectRoot() };
     RecoveryManager::Create(&recoveryDesc);
+
+    // 8. 초기화 완료: 스플래시 창을 닫고 메인 에디터 창 표시
+    EditorSplashScreen::UpdateProgress(1.0f, "초기화 완료");
+    EditorSplashScreen::Hide();
+    SDL_ShowWindow(m_Window); // ★ 완성된 에디터가 화면에 즉각 표시됨
+
     m_InitializationCompleted = true;
     return EResult::Success;
 }
+
 void Application::Free()
 {
+    EditorSplashScreen::Hide();
     if (m_InitializationCompleted)
     {
         m_InitializationCompleted = false;
@@ -261,7 +284,7 @@ EResult Application::InitializeWindow(const ApplicationCreateInfo& createInfo)
 #pragma endregion
 
     SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_BORDERLESS |
-        SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN;
+        SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN;
 
     if (workspace.WindowFullscreen)
         windowFlags |= SDL_WINDOW_FULLSCREEN;

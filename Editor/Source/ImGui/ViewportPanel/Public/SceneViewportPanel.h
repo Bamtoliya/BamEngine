@@ -44,13 +44,6 @@ public:
 	bool IsRealtime() const { return m_IsRealtime; }
 	void SetRealtime(bool realtime) { m_IsRealtime = realtime; }
 	void ToggleRealtime() { m_IsRealtime = !m_IsRealtime; }
-	// IGizmoHost 인터페이스 구현
-	void SetGizmoOperation(ImGuizmo::OPERATION op) override { m_GizmoOperation = op; }
-	ImGuizmo::OPERATION GetGizmoOperation() const override { return m_GizmoOperation; }
-	void ToggleGizmoMode() override { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
-	ImGuizmo::MODE GetGizmoMode() const override { return m_GizmoMode; }
-	void ToggleGizmoSnap() override { m_GizmoUseSnap = !m_GizmoUseSnap; }
-	bool GetGizmoUseSnap() const override { return m_GizmoUseSnap; }
 	void ToggleSnap() { ToggleGizmoSnap(); } // 기존 호출부 하위 호환
 	void ToggleGrid() { m_Grid.Toggle(); }
 	void FocusSelectedEntity();
@@ -225,9 +218,6 @@ private:
 
 #pragma region Guizmo 
 private://3D
-	ImGuizmo::OPERATION m_GizmoOperation = { ImGuizmo::OPERATION::TRANSLATE };
-	ImGuizmo::MODE m_GizmoMode = { ImGuizmo::MODE::LOCAL };
-	bool m_GizmoUseSnap = { false };
 	bool m_GizmoShowBounds = { false };
 protected:
 	DebugRenderer m_DebugRenderer;

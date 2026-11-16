@@ -82,7 +82,8 @@ namespace EditorUI
 
     void DrawEffectEditorLayout(float& listWidth, float& inspectorWidth, float& timelineHeight,
         const std::function<void()>& list, const std::function<void()>& preview,
-        const std::function<void()>& inspector, const std::function<void()>& timeline);
+        const std::function<void()>& inspector, const std::function<void()>& timeline,
+        const std::function<void()>& transport = nullptr);
     void DrawTimelineAction(ToolbarLayout& toolbar, std::string_view prefix, const char* action,
         const char* icon, const char* label, bool active = false);
     void DrawTimelineTransport(ToolbarLayout& toolbar, std::string_view prefix, bool playing, bool looping);

@@ -87,6 +87,7 @@ EResult ImGuiManager::Initialize(void* arg)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigWindowsMoveFromTitleBarOnly = true;
 
 	// 1. 시스템 폰트 디렉터리 동적 취득
 	std::filesystem::path fontPath = Engine::PlatformPath::GetSystemFontDirectory() / "malgun.ttf";

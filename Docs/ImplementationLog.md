@@ -2,6 +2,52 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 에디터 기동 시 스타트업 스플래시 화면(EditorSplashScreen) 도입 및 초기 검은 화면 제거
+
+- **배경 및 원인**:
+  - 에디터 실행 시 `SDL_CreateWindow`로 메인 창이 즉시 노출되지만, 이후 D3D12 RHI 초기화, 셰이더 컴파일, `StartupResourceLoader` 리소스 프리로드, 폰트 아틀라스 빌드, 씬 복원(`RestoreLastEditedScene`)까지 단일 스레드로 동기 실행되어 첫 프레임 렌더링 전까지 수 초간 거대한 검은 화면(블랙 스크린)으로 멈춰 있는 문제 발생.
+- **변경 사항**:
+  - **경량 스타트업 스플래시 창 (`EditorSplashScreen`)**:
+    - `Editor/Source/Application/Public/EditorSplashScreen.h`, `EditorSplashScreen.cpp` 추가.
+    - SDL3의 `SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP` 플래그로 520×280 크기의 테두리 없는 창을 화면 중앙에 생성.
+    - Win32 GDI 더블 버퍼링(`CreateCompatibleDC`, `CreateCompatibleBitmap`, `BitBlt`)을 적용하여 GPU 디바이스 충돌 없이 0ms 지연으로 다크 테마 배경, 타이틀, 서브타이틀, 프로그레스 바(0~100%), 퍼센트 텍스트 렌더링.
+    - 엔진 공용 유틸리티인 `Engine::StrToWStr`(`Functions.h`)을 재사용하여 상태 문구(한글/영문)를 UTF-8에서 와이드 문자열로 변환 후 `DrawTextW`로 안티앨리어싱 렌더링.
+    - 각 진행 단계마다 `SDL_PumpEvents()`를 호출하여 OS 메시지 큐를 처리함으로써 윈도우 '응답 없음' 프리징 방지.
+  - **메인 윈도우 숨김 및 부팅 전환 연동 (`Application.cpp`)**:
+    - `InitializeWindow`: `SDL_WINDOW_HIDDEN` 플래그를 추가하여 초기화 중 메인 창 노출을 차단.
+    - `Initialize`: 진입 직후 0.05초 만에 스플래시 창을 띄우고, 각 서브시스템(로거 → 윈도우 → RHI → 리소스 → ImGui → 모듈 → 씬 복원) 완료 시마다 진행률(0.05 ~ 1.0f) 갱신.
+    - 초기화 완료 시 `EditorSplashScreen::Hide()`로 스플래시 창을 닫고, `SDL_ShowWindow(m_Window)`로 완성된 에디터를 화면에 즉각 표시. 예외 실패(`fail`) 및 `Free()` 시에도 `Hide()` 호출 보장.
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - 에디터 기동 시 검은 화면이 전혀 노출되지 않고 중앙 스플래시 창이 즉각 표시됨을 확인.
+  - 진행률 바 및 단계별 한글 상태 문구("DirectX 12 그래픽 디바이스 초기화 중...", "마지막 작업 씬 복원 중..." 등)가 매끄럽게 갱신되고, 100% 완료 후 메인 에디터 창으로 정상 전환됨을 확인.
+
+### [2026-11-16] 기즈모 피벗/센터 모드, 드래그 이동 툴바, 플로팅 창 기즈모/카메라 조작 안정화 및 VFX 에디터 개선
+
+- **배경**:
+  - DCC 원점에 피벗이 고정된 임포트 메시의 기즈모 조작 불편 해소(바운딩 박스 중심 기반 센터 모드 요구).
+  - 복합 에디터 패널(`VFXEditorPanel`)을 플로팅 창으로 분리 시 기즈모 드래그 중 창 전체가 움직이던 현상 및 카메라 조작 차단 현상 해결.
+- **변경**:
+  - **기즈모 피벗/센터 모드 (`GizmoPivotMode::Pivot / Center`)**:
+    - `GizmoHelper.h`/`cpp`: `GizmoPivotMode` 추가 및 `IGizmoHost` 공통 인터페이스/상태 멤버(Operation, Mode, PivotMode, Snap, ToolbarOffset) 통합.
+    - `SceneViewportPanel`: 메시 AABB 로컬 중심 오프셋을 적용한 기즈모 행렬 변환 및 역변환 반영 ($M_{gizmo} = M_{world} \times T(c_{local})$, $M_{world}' = M_{gizmo}' \times T(-c_{local})$).
+    - 단축키 `Viewport.TogglePivot`(Z) 등록 (`EditorActionRegistry.cpp`) 및 로캘 키 추가 (`Editor.csv`).
+  - **플로팅 기즈모 툴바 드래그 & 이동 기능**:
+    - `GizmoHelper.cpp`: `InputManager` 기반 그립 핸들 드래그 이동 및 더블클릭 시 기본 위치 리셋 기능 추가.
+  - **플로팅 창 윈도우 이동 버그 수정**:
+    - `ImGuiManager.cpp`: `io.ConfigWindowsMoveFromTitleBarOnly = true;` 설정으로 플로팅 창 내부 빈 공간 클릭-드래그 시 윈도우 이동 방지(타이틀 바 전용 이동 통일).
+    - `VFXEditorPanel.h`: `GetResourceWindowFlags()`에 기즈모 조작 중 `ImGuiWindowFlags_NoMove` 안전장치 추가.
+  - **프리뷰 뷰포트 카메라 조작 정상화**:
+    - `PreviewViewportWidget.cpp`: `DrawViewportImage` 선행 렌더링, 스크린 AABB 좌표 기반 호버 판정 및 `ImGui::IsItemActive()` 제거로 우클릭(Look/Fly), 휠클릭(Pan), Alt+좌클릭(Orbit), 휠 줌 완벽 복원. 클릭 시 자식 창 포커스 명시적 갱신.
+  - **VFX 에디터 패널 통합 및 빌드 보완**:
+    - `EffectTimelineView.cpp`/`VFXEditorPanel.cpp`: 재생/배속/타임 카운터/자동 길이 계산 트랜스포트 바를 타임라인 자식 창 내부로 이전 통합.
+    - `VFXEditorPanel.cpp`: `EditorSettings.h` 인클루드 추가 (`EditorWorkspace` 스플리터 상태 보존).
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - 플로팅 및 도킹 상태에서 기즈모 조작 시 창이 고정된 채 정상 변형됨을 확인.
+  - 뷰포트 카메라 조작(우클릭 회전, 휠클릭 팬, Alt+좌클릭 궤도 회전, 마우스 휠 줌) 정상 동작 확인.
+  - VFX 에디터 트랜스포트 컨트롤 바 정상 작동 및 빌드 성공 확인.
+- **미검증**:
+  - 다중 뷰포트 동시 활성화 상태에서의 기즈모 호스트 우선순위 전환 스트레스 테스트.
+
 ### [2026-11-16] 카메라 속도 단축키 문맥을 Viewport로 제한
 
 - **변경**: `Viewport.CameraSpeedIncrease`(=)/`Viewport.CameraSpeedDecrease`(-)의 `Context`를 `Global`에서 `Viewport`로 바꿨다(`EditorActionRegistry.cpp`). 뷰포트가 아닌 패널에서 `=`/`-`를 눌러 카메라 속도가 바뀌던 가능성을 없앴다(이전 항목의 검토 사항 해소).

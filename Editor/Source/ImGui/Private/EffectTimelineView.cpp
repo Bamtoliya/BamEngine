@@ -379,7 +379,7 @@ namespace EditorUI
 
     void DrawEffectEditorLayout(float& listWidth, float& inspectorWidth, float& timelineHeight,
         const std::function<void()>& list, const std::function<void()>& preview,
-        const std::function<void()>& inspector, const std::function<void()>& timeline)
+        const std::function<void()>& inspector, const std::function<void()>& timeline, const std::function<void()>& transport)
     {
         const auto avail = ImGui::GetContentRegionAvail();
         if (avail.x < 2.0f || avail.y < 4.0f) return;
@@ -436,13 +436,22 @@ namespace EditorUI
                 ImGui::EndTabBar();
             }
             ImGui::EndChild();
-        }
+        }        
 
         if (split("##EffectTimelineSplitter", ImVec2(avail.x, splitter), ImGuiMouseCursor_ResizeNS))
             timelineHeight = std::clamp(timelineSize - input.GetMouseDelta().y, minTimeline, maxTimeline);
         if (ImGui::BeginChild("##EffectTimeline", ImVec2(0.0f, timelineSize), ImGuiChildFlags_Borders,
             ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+        {
+            // --- 상단 분할과 Splitter 사이의 재생 컨트롤 바 (Transport Bar) ---
+            if (transport)
+            {
+                ImGui::Spacing();
+                transport();
+                ImGui::Spacing();
+            }
             timeline();
+        }
         ImGui::EndChild();
     }
 

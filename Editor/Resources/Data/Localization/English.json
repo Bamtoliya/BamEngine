@@ -2013,6 +2013,9 @@
         "VFXEditor.GravityMultiplier": "Gravity Multiplier",
         "VFXEditor.WindXZ": "Wind (X: Right / Z: Forward)",
         "Action.Viewport.CameraSpeedIncrease": "Increase Camera Speed",
-        "Action.Viewport.CameraSpeedDecrease": "Decrease Camera Speed"
+        "Action.Viewport.CameraSpeedDecrease": "Decrease Camera Speed",
+        "Action.Viewport.TogglePivot": "Toggle Pivot / Center",
+        "Viewport.Pivot": "Pivot",
+        "Viewport.Center": "Center"
     }
 }

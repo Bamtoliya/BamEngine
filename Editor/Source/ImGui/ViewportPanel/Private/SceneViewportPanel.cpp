@@ -711,10 +711,18 @@ void SceneViewportPanel::DrawGizmoMenu()
 		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoScale").c_str(), sm.GetShortcutHint("Viewport.GizmoScale"), m_GizmoOperation == ImGuizmo::SCALE))
 			m_GizmoOperation = ImGuizmo::SCALE;
 		ImGui::Separator();
+		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Local").c_str(), nullptr, m_GizmoMode == ImGuizmo::LOCAL))
 			m_GizmoMode = ImGuizmo::LOCAL;
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.World").c_str(), nullptr, m_GizmoMode == ImGuizmo::WORLD))
 			m_GizmoMode = ImGuizmo::WORLD;
+
+		ImGui::Separator();
+		const char* pivotShortcutHint = sm.GetShortcutHint("Viewport.TogglePivot");
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Pivot").c_str(), pivotShortcutHint, m_GizmoPivotMode == GizmoPivotMode::Pivot))
+			m_GizmoPivotMode = GizmoPivotMode::Pivot;
+		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Center").c_str(), pivotShortcutHint, m_GizmoPivotMode == GizmoPivotMode::Center))
+			m_GizmoPivotMode = GizmoPivotMode::Center;
 
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_LABEL("Viewport.SnapToGrid").c_str(), nullptr, m_GizmoUseSnap))
@@ -897,6 +905,8 @@ void SceneViewportPanel::DrawImGuizmo()
 	}
 
 	float bounds[6]{ -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f };
+	glm::vec3 meshCenterLocal(0.0f);
+	bool hasMeshBounds = false;
 
 	if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
 	{
@@ -904,15 +914,27 @@ void SceneViewportPanel::DrawImGuizmo()
 		{
 			const glm::vec3 minimum = mesh->GetMin();
 			const glm::vec3 maximum = mesh->GetMax();
-
-			bounds[0] = minimum.x;
-			bounds[1] = minimum.y;
-			bounds[2] = minimum.z;
-			bounds[3] = maximum.x;
-			bounds[4] = maximum.y;
-			bounds[5] = maximum.z;
+			bounds[0] = minimum.x; bounds[1] = minimum.y; bounds[2] = minimum.z;
+			bounds[3] = maximum.x; bounds[4] = maximum.y; bounds[5] = maximum.z;
+			meshCenterLocal = (minimum + maximum) * 0.5f;
+			hasMeshBounds = true;
 		}
 	}
+	else if (const auto* renderer = world.try_get<SkinnedMeshRendererComponent>(entity))
+	{
+		if (const auto* mesh = renderer->meshHandle.Get())
+		{
+			const glm::vec3 minimum = mesh->GetMin();
+			const glm::vec3 maximum = mesh->GetMax();
+			bounds[0] = minimum.x; bounds[1] = minimum.y; bounds[2] = minimum.z;
+			bounds[3] = maximum.x; bounds[4] = maximum.y; bounds[5] = maximum.z;
+			meshCenterLocal = (minimum + maximum) * 0.5f;
+			hasMeshBounds = true;
+		}
+	}
+
+	const bool useCenterMode = (m_GizmoPivotMode == GizmoPivotMode::Center) && hasMeshBounds;
+	glm::mat4 gizmoMatrix = useCenterMode ? (worldMatrix * glm::translate(glm::mat4(1.0f), meshCenterLocal)) : worldMatrix;
 
 	const bool showBounds = m_GizmoShowBounds && editMode == TransformEditMode::Scale;
 	const std::string entityId = std::to_string(entt::to_integral(entity));
@@ -930,21 +952,24 @@ void SceneViewportPanel::DrawImGuizmo()
 	const std::array targets{ entity };
 	const bool operationLocked = TransformPropertyEditor::IsLocked(world, entity, editMode);
 	const bool changed = !operationLocked && ImGuizmo::Manipulate(glm::value_ptr(viewMatrix), glm::value_ptr(projectionMatrix),
-		m_GizmoOperation, m_GizmoMode, glm::value_ptr(worldMatrix), nullptr,
+		m_GizmoOperation, m_GizmoMode, glm::value_ptr(gizmoMatrix), nullptr,
 		useSnap ? glm::value_ptr(snapValues) : nullptr, showBounds ? bounds : nullptr,
 		showBounds && useSnap ? glm::value_ptr(snapValues) : nullptr);
 
-	// Manipulate는 지역 worldMatrix만 바꾸므로, 실제 변경이 있는 프레임에만 적용 직전 상태를 캡처한다.
-	if (changed && history.Enabled())
+	if (changed)
 	{
-		auto before = SceneEditSnapshot::Capture(*scene, targets);
-		if (before && TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+		worldMatrix = useCenterMode ? (gizmoMatrix * glm::translate(glm::mat4(1.0f), -meshCenterLocal)) : gizmoMatrix;
+		if (history.Enabled())
 		{
-			history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.Transform", true);
-			if (PrefabModeManager::Get().IsInPrefabMode())
-				PrefabModeManager::Get().MarkDirty();
+			auto before = SceneEditSnapshot::Capture(*scene, targets);
+			if (before && TransformPropertyEditor::ApplyWorldMatrix(world, entity, worldMatrix, editMode))
+			{
+				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.Transform", true);
+				if (PrefabModeManager::Get().IsInPrefabMode())
+					PrefabModeManager::Get().MarkDirty();
+			}
+			else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.TransformRejected"));
 		}
-		else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.TransformRejected"));
 	}
 
 	ImGui::PopID();

@@ -78,16 +78,28 @@ namespace Editor
 		if (!host || size.x <= 0.0f || size.y <= 0.0f) return;
 
 		const auto& sm = ShortcutManager::Get();
-		const ImVec2 toolbarPos = vertical ?
-			ImVec2(screenOrigin.x + 10.0f, screenOrigin.y + 46.0f) :
-			ImVec2(screenOrigin.x + 180.0f, screenOrigin.y + 10.0f);
-
 		const auto btnSize = EditorUI::GetIconButtonSize(ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT);
 		constexpr float pad = 4.0f;
 		constexpr float spacing = 4.0f;
-		const float toolbarWidth = vertical ? (btnSize.x + pad * 2.0f) : ((btnSize.x + spacing) * 6.0f + 16.0f + pad * 2.0f);
-		const float toolbarHeight = vertical ? ((btnSize.y + spacing) * 6.0f + 14.0f + pad * 2.0f) : (btnSize.y + pad * 2.0f);
+		constexpr float border = 1.0f;
+		constexpr float separatorHeight = 6.0f;
+		constexpr float gripHeight = 10.0f; // 최상단 드래그 핸들 높이
 
+		const float toolbarWidth = vertical ?
+			(btnSize.x + (pad + border) * 2.0f) :
+			((btnSize.x + spacing) * 7.0f + separatorHeight + (pad + border) * 2.0f);
+
+		const float toolbarHeight = vertical ?
+			(gripHeight + spacing + btnSize.y * 7.0f + spacing * 6.0f + separatorHeight + (pad + border) * 2.0f) :
+			(btnSize.y + (pad + border) * 2.0f);
+
+		// 뷰포트 영역 밖으로 벗어나지 않도록 클램핑
+		ImVec2 offset = host->GetGizmoToolbarOffset();
+		offset.x = std::clamp(offset.x, 4.0f, std::max(4.0f, size.x - toolbarWidth - 4.0f));
+		offset.y = std::clamp(offset.y, 4.0f, std::max(4.0f, size.y - toolbarHeight - 4.0f));
+		host->SetGizmoToolbarOffset(offset);
+
+		const ImVec2 toolbarPos = ImVec2(screenOrigin.x + offset.x, screenOrigin.y + offset.y);
 		const ImGuiWindowFlags childFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav;
 
 		ImGui::SetCursorScreenPos(toolbarPos);
@@ -101,17 +113,51 @@ namespace Editor
 			if (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) || ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 				SetActiveHost(host);
 
+			// --- 드래그 핸들 (Grip) ---
+			if (vertical)
+			{
+				ImGui::InvisibleButton("##ToolbarDragGrip", ImVec2(btnSize.x, gripHeight));
+				auto& input = Engine::InputManager::Get();
+
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+					if (input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
+						host->SetGizmoToolbarOffset(ImVec2(10.0f, 54.0f)); // 더블클릭 시 기본 위치로 복귀
+				}
+
+				if (ImGui::IsItemActive() && input.IsMouseButtonPressed(Engine::EMouseButton::Left))
+				{
+					const auto delta = input.GetMouseDelta();
+					host->SetGizmoToolbarOffset(ImVec2(offset.x + delta.x, offset.y + delta.y));
+				}
+
+				// 그립 라인 시각화 (중앙 2줄 선)
+				const ImVec2 pMin = ImGui::GetItemRectMin();
+				const ImVec2 pMax = ImGui::GetItemRectMax();
+				auto* drawList = ImGui::GetWindowDrawList();
+				const ImU32 gripColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+				const float midY = (pMin.y + pMax.y) * 0.5f;
+				const float midX = (pMin.x + pMax.x) * 0.5f;
+				constexpr float halfW = 8.0f;
+				drawList->AddLine(ImVec2(midX - halfW, midY - 2.0f), ImVec2(midX + halfW, midY - 2.0f), gripColor, 1.5f);
+				drawList->AddLine(ImVec2(midX - halfW, midY + 2.0f), ImVec2(midX + halfW, midY + 2.0f), gripColor, 1.5f);
+			}
+
 			auto drawToolBtn = [&](const char* id, const char* icon, const char* tooltipKey, const char* shortcutId, bool active) -> bool
 				{
 					EditorUI::IconButtonOptions opt;
 					opt.SameLine = !vertical;
 					opt.Active = active;
+					opt.NoWrap = true;
+					opt.Size = btnSize;
 					opt.ShortcutHint = sm.GetShortcutHint(shortcutId);
 					return EditorUI::IconButton(id, icon, tooltipKey, opt);
 				};
 
 			const auto curOp = host->GetGizmoOperation();
 			const bool isLocal = (host->GetGizmoMode() == ImGuizmo::LOCAL);
+			const bool isPivot = (host->GetGizmoPivotMode() == GizmoPivotMode::Pivot);
 			const bool useSnap = host->GetGizmoUseSnap();
 
 			// 1. [선택 Q]
@@ -138,7 +184,11 @@ namespace Editor
 			if (drawToolBtn("ToolCoord", isLocal ? ICON_FA_CUBE : ICON_FA_GLOBE, isLocal ? "Viewport.Local" : "Viewport.World", "Viewport.ToggleCoord", false))
 				host->ToggleGizmoMode();
 
-			// 6. [스냅: Magnet (Shift+S)]
+			// 6. [피벗 기준: Pivot/Center (Z)]
+			if (drawToolBtn("ToolPivot", isPivot ? ICON_FA_LOCATION_CROSSHAIRS : ICON_FA_CIRCLE_DOT, isPivot ? "Viewport.Pivot" : "Viewport.Center", "Viewport.TogglePivot", false))
+				host->ToggleGizmoPivot();
+
+			// 7. [스냅: Magnet (Shift+S)]
 			if (drawToolBtn("ToolSnap", ICON_FA_MAGNET, "Settings.GizmoSnapping", "Viewport.ToggleSnap", useSnap))
 				host->ToggleGizmoSnap();
 		}

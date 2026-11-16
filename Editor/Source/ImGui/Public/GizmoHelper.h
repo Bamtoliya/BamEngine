@@ -12,17 +12,39 @@
 
 namespace Editor
 {
+	enum class GizmoPivotMode
+	{
+		Pivot,
+		Center
+	};
+
 	// 기즈모를 호스팅하는 뷰포트들이 구현하는 인터페이스
 	class IGizmoHost
 	{
 	public:
 		virtual ~IGizmoHost() = default;
-		virtual void SetGizmoOperation(ImGuizmo::OPERATION op) = 0;
-		virtual ImGuizmo::OPERATION GetGizmoOperation() const = 0;
-		virtual void ToggleGizmoMode() = 0;
-		virtual ImGuizmo::MODE GetGizmoMode() const = 0;
-		virtual void ToggleGizmoSnap() = 0;
-		virtual bool GetGizmoUseSnap() const = 0;
+
+		virtual void SetGizmoOperation(ImGuizmo::OPERATION op) { m_GizmoOperation = op; }
+		virtual ImGuizmo::OPERATION GetGizmoOperation() const { return m_GizmoOperation; }
+
+		virtual void ToggleGizmoMode() { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
+		virtual ImGuizmo::MODE GetGizmoMode() const { return m_GizmoMode; }
+
+		virtual void ToggleGizmoPivot() { m_GizmoPivotMode = (m_GizmoPivotMode == GizmoPivotMode::Pivot) ? GizmoPivotMode::Center : GizmoPivotMode::Pivot; }
+		virtual GizmoPivotMode GetGizmoPivotMode() const { return m_GizmoPivotMode; }
+
+		virtual void ToggleGizmoSnap() { m_GizmoUseSnap = !m_GizmoUseSnap; }
+		virtual bool GetGizmoUseSnap() const { return m_GizmoUseSnap; }
+
+		virtual ImVec2 GetGizmoToolbarOffset() const { return m_GizmoToolbarOffset; }
+		virtual void SetGizmoToolbarOffset(const ImVec2& offset) { m_GizmoToolbarOffset = offset; }
+
+	protected:
+		ImGuizmo::OPERATION m_GizmoOperation{ ImGuizmo::TRANSLATE };
+		ImGuizmo::MODE m_GizmoMode{ ImGuizmo::LOCAL };
+		GizmoPivotMode m_GizmoPivotMode{ GizmoPivotMode::Pivot };
+		bool m_GizmoUseSnap{ false };
+		ImVec2 m_GizmoToolbarOffset{ 10.0f, 54.0f };
 	};
 
 	struct GizmoResult

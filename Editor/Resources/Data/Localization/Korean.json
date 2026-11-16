@@ -2013,6 +2013,9 @@
         "VFXEditor.GravityMultiplier": "중력 배율",
         "VFXEditor.WindXZ": "바람 (X: 우측 / Z: 전방)",
         "Action.Viewport.CameraSpeedIncrease": "카메라 속도 증가",
-        "Action.Viewport.CameraSpeedDecrease": "카메라 속도 감소"
+        "Action.Viewport.CameraSpeedDecrease": "카메라 속도 감소",
+        "Action.Viewport.TogglePivot": "피벗 / 중심점 모드 전환",
+        "Viewport.Pivot": "피벗",
+        "Viewport.Center": "중심점"
     }
 }

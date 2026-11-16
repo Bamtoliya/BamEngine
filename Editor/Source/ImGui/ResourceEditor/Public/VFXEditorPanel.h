@@ -46,7 +46,12 @@ public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
 	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
-	EShortcutContext GetShortcutContext() const override { return EShortcutContext::CompositeTimeline; }
+	EShortcutContext GetShortcutContext() const override
+	{
+		if (m_PreviewWidget.IsHovered() || m_PreviewWidget.IsFocused() || m_IsGizmoUsing)
+			return EShortcutContext::Viewport;
+		return EShortcutContext::CompositeTimeline;
+	}
 	bool CanExecuteTimelineAction(EditorUI::TimelineAction action) const;
 	void ExecuteTimelineAction(EditorUI::TimelineAction action);
 	virtual void Update(f32 dt) override;
@@ -59,7 +64,13 @@ private:
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1280.0f, 760.0f); }
 	void DrawCustomToolbar() override;
-	ImGuiWindowFlags GetResourceWindowFlags() const override { return ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse; }
+	ImGuiWindowFlags GetResourceWindowFlags() const override
+	{
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+		if (m_IsGizmoUsing || ImGuizmo::IsUsing())
+			flags |= ImGuiWindowFlags_NoMove;
+		return flags;
+	}
 	void OnResourceWindowVisibility(bool visible) override
 	{
 		if (!visible)
@@ -75,6 +86,7 @@ private:
 	void DrawTrackList();
 	void DrawViewport();
 	void DrawInspector();
+	void DrawTransportBar();
 	void DrawTimeline();
 	void SelectTrack(SelectedVFXTrack selection);
 	void DeleteSelectedTrack();
@@ -94,13 +106,6 @@ private:
 
 	void DrawGizmo();
 	void DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize);
-	// IGizmoHost 구현
-	void SetGizmoOperation(ImGuizmo::OPERATION op) override { m_GizmoOperation = op; }
-	ImGuizmo::OPERATION GetGizmoOperation() const override { return m_GizmoOperation; }
-	void ToggleGizmoMode() override { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
-	ImGuizmo::MODE GetGizmoMode() const override { return m_GizmoMode; }
-	void ToggleGizmoSnap() override { m_GizmoUseSnap = !m_GizmoUseSnap; }
-	bool GetGizmoUseSnap() const override { return m_GizmoUseSnap; }
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
 	bool m_IsDirty = false;
@@ -159,9 +164,6 @@ private:
 		Engine::vec3 trailOffsetB{ 0.0f };
 		bool valid = false;
 	};
-	ImGuizmo::OPERATION m_GizmoOperation = ImGuizmo::TRANSLATE;
-	ImGuizmo::MODE m_GizmoMode = ImGuizmo::LOCAL;
-	bool m_GizmoUseSnap = false;
 	VFXGizmoSnapshot m_GizmoSnapshot;
 	bool m_IsGizmoUsing = false;
 };

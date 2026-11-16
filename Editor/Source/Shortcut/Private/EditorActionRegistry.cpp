@@ -533,6 +533,18 @@ void EditorActionRegistry::RegisterAll()
         });
 
     sm.RegisterAction({
+    .Id = "Viewport.TogglePivot",
+    .DisplayNameKey = "Action.Viewport.TogglePivot",
+    .CategoryKey = "Shortcuts.CategoryViewport",
+    .Context = EShortcutContext::Viewport,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::Z),
+    .ExecuteHandler = []() {
+        if (auto* host = GizmoHelper::GetActiveHost())
+            host->ToggleGizmoPivot();
+    }
+        });
+
+    sm.RegisterAction({
         .Id = "Viewport.ToggleSnap",
         .DisplayNameKey = "Action.Viewport.ToggleSnap",
         .CategoryKey = "Shortcuts.CategoryViewport",

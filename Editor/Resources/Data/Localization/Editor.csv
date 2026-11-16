@@ -2014,3 +2014,6 @@ VFXEditor,GravityMultiplier,Gravity Multiplier,중력 배율
 VFXEditor,WindXZ,Wind (X: Right / Z: Forward),바람 (X: 우측 / Z: 전방)
 Action,Viewport.CameraSpeedIncrease,Increase Camera Speed,카메라 속도 증가
 Action,Viewport.CameraSpeedDecrease,Decrease Camera Speed,카메라 속도 감소
+Action,Viewport.TogglePivot,Toggle Pivot / Center,피벗 / 중심점 모드 전환
+Viewport,Pivot,Pivot,피벗
+Viewport,Center,Center,중심점
