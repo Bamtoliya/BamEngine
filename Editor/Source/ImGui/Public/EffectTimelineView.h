@@ -7,6 +7,8 @@
 #include <span>
 #include <string_view>
 
+namespace Engine { struct FloatCurve; }
+
 namespace EditorUI
 {
     class ToolbarLayout;
@@ -44,6 +46,8 @@ namespace EditorUI
         float End;
         bool Selected;
         TimelineRowKind Kind = TimelineRowKind::Interval;
+        const Engine::FloatCurve* Curve = nullptr;
+        const char* CurveLabel = nullptr;
     };
 
     enum class TimelineDragMode { Seek, Header, Move, Start, End, Duration };

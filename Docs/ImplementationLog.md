@@ -2,6 +2,36 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 복합 VFX 저작 UX 고도화: FloatCurve 런타임 샘플링, 타임라인 인라인 커브 미니어처 렌더링 및 차기 연동 로드맵 수립
+
+- **배경 및 목적**:
+  - `CompositeVisualEffectPlan.md` Phase 5 (Step 2) 과제 수행.
+  - 기존 메쉬 트랙 스케일/알파 및 라이트 섬광이 단순 선형 보간(`glm::mix`) 또는 단순 삼각파(Attack/Decay)로만 동작하여 폭발 팽창의 펀치감(Ease-Out)이나 섬광의 깜빡임 등을 연출할 수 없던 한계 해소.
+  - 타임라인 트랙 바를 보았을 때 어느 구간에서 어떤 곡선으로 완급 조절이 이루어지는지 한눈에 파악하기 어려운 가시성 결함 해결.
+- **변경 사항**:
+  - **`FloatCurve` 엔진 코어 (`Engine/Source/Core/Geometry/Public/FloatCurve.h`, `Private/FloatCurve.cpp`)**:
+    - `CurveKey`: time(정규화 0~1), value, inTangent, outTangent, `ECurveInterpMode`(Constant, Linear, CubicBezier).
+    - 3차 에르미트/베지어 스플라인 기저 함수 기반 `Evaluate(time)` 평가기 구현.
+    - 리플렉션/아카이브 등록 및 5종 프리셋(`CreateConstant`, `CreateLinear`, `CreateEaseIn`, `CreateEaseOut`, `CreateEaseInOut`, `CreateSpike`) 팩토리 지원.
+  - **복합 VFX 런타임 커브 샘플링 연동 (`CompositeEffect.h`, `CompositeVFXSystem.cpp`)**:
+    - `VFXMeshTrack`: `useScaleCurve`/`scaleCurve` 및 `useAlphaCurve`/`alphaCurve` 속성 신설 및 런타임 가중치 보간.
+    - `VFXLightTrack`: `useIntensityCurve`/`intensityCurve` 속성 신설 및 조도 팩터 평가 연동.
+    - 기존 에셋과의 100% 하위 호환성 유지(플래그 false 시 기존 선형 보간 경로 유지).
+  - **타임라인 인라인 커브 미니어처 렌더링 (`EffectTimelineView.h/.cpp`, `VFXEditorPanel.cpp`)**:
+    - `TimelineRow`에 `const Engine::FloatCurve* Curve` 및 `const char* CurveLabel` 필드 확장.
+    - 트랙 사각형 바 내부 공간에 24~32개 세그먼트로 실시간 베지어 곡선 실루엣(사다리꼴 반투명 음영 `IM_COL32(255, 255, 255, 30)` + 선명한 외곽선 `IM_COL32(255, 255, 255, 220)`) 인라인 렌더링.
+    - 트랙 바 좌상단에 커브 식별 뱃지(`Scale`, `Alpha`, `Light`) 오버레이.
+    - 타임라인에서 트랙 바의 시작점/끝점 이동 및 리사이즈 시 커브 미니어처가 시간축에 맞춰 완벽히 실시간 스케일링/이동되도록 연동.
+  - **차기 개발 로드맵 수립 (`CompositeVisualEffectPlan.md`)**:
+    - [선택지 1] 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 무기/손 본 소켓 스폰 및 공격 애니메이션 노티파이 바인딩).
+    - [선택지 2] 발광성 Additive 가산 머티리얼 표준화 및 뷰포트 암실 공중(Air Mode) 프리뷰 모드.
+    - [선택지 3] 2D 커브 팝업 에디터 모달 (키프레임 직접 조작).
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - `x64-ninja-debug` 빌드 성공 및 에디터 정상 기동 확인.
+  - 메쉬 트랙의 스케일 커브 활성화 후 `EaseOut` 적용 시 초반 급팽창 후 수렴하는 펀치감 런타임 정상 동작 확인.
+  - 타임라인 트랙 바 내부에 실시간 베지어 곡선 실루엣 및 라벨 뱃지 노출 확인, 트랙 리사이즈 시 동기화 확인 완료.
+
+
 ### [2026-11-17] 디스크 캐시 통합 개발: 지형 그리드 메시 스트림 캐시, DDC 공통 인프라 분리 및 환경설정 통합 캐시 관리/일괄 비우기 UI (Phase 4)
 
 - **배경 및 목적**:
@@ -33,6 +63,7 @@ This document tracks implementation details, architectural decisions, and techni
   - `x64-ninja-debug` 빌드 성공 및 에디터 정상 기동 확인.
   - 지형 그리드 메시 캐시 바이너리 생성 및 로드 정상 확인.
   - 환경 설정 패널 내 디스크 캐시 용량/파일 수 정상 집계 및 [전체 디스크 캐시 비우기] 클릭 시 파일 삭제 및 알림 메시지 노출 정상 동작 확인.
+- **커밋**: `4b815f7`
 
 ### [2026-11-17] 속성 그리기 2계층 통일: 공용 속성 행, 리플렉션 카테고리 평면화, FloatCurve 그래프 편집기, VFX 트랙 인스펙터 리플렉션 전환
 

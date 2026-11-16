@@ -11,7 +11,16 @@
     - 바닥 지면 `PlaneMesh`(48m 수평 평면) 전환 (단면 잘림·조명 소실 해결). 바닥이 뒤집혀 보인 근본 원인(와인딩 기준 공존)은 엔진 전체 CW 표준화(`4abab951`)로 해소했다.
     - `forwardParticlePS` Depth Fade 정규화(15cm) 및 프레넬(Fresnel) 림 페이드 적용 (배경 경계 이원화 해소)
     - 반투명 알파 블렌딩과 디퍼드 배경 버퍼 암흑 결합에 의한 흙갈색 탁화 원인 규명 및 Additive 가산 블렌드 연동 로드맵 수립
-  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 베지어 커브 에디터, Additive 이펙트 머티리얼)
+  - **Phase 5 Step 2 완급 조절 커브 & 타임라인 인라인 프리뷰 (2026-11-17):** 구현 및 검증 완료
+    - `FloatCurve` 엔진 코어 (`Engine/Source/Core/Geometry/Public/FloatCurve.h`, `FloatCurve.cpp`) 구축 (3차 에르미트/베지어 스플라인, 직렬화, EaseOut/EaseIn/Spike 프리셋).
+    - `VFXMeshTrack`(스케일/알파 커브), `VFXLightTrack`(조도 커브) 런타임 샘플링 및 폭발 팽창 펀치감 실현.
+    - 트랙 인스펙터 리플렉션 속성 행 및 원클릭 프리셋 지원.
+    - `EffectTimelineView` 트랙 바 내부 실시간 베지어 곡선 실루엣 및 뱃지(`[Scale]`, `[Alpha]`, `[Light]`) 인라인 렌더링.
+  - **Phase 5 Step 3 차기 선택지 로드맵 (2026-11-17 수립):**
+    - 선택지 1 (추천): 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 무기/손 본 소켓 스폰 및 공격 애니메이션 노티파이 바인딩).
+    - 선택지 2: 발광성 Additive 가산 머티리얼 표준화 및 뷰포트 암실 공중(Air Mode) 프리뷰 모드.
+    - 선택지 3: 2D 커브 키프레임 직접 조작 팝업 모달 에디터.
+  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 타임라인 인라인 프리뷰 완비)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
@@ -291,5 +300,29 @@ flowchart TD
   - `ParticleSystem`은 로컬 공간 입자에 트랙 로컬 변환(위치·회전·스케일)을 적용한다. 기존 에셋 중 트랙 변환이 0이 아닌 이펙트는 위치가 달라질 수 있다.
   - `VFXLightTrack::localPosition`의 기본값이 `(0, 0.8, 0)`으로 바뀌었다(플래시가 바닥에 묻히지 않도록 띄움). 저장된 에셋은 저장값을 유지하고, 새로 만드는 라이트 트랙에만 적용된다.
 - **검증 상태**: 이 변경이 작업 트리에 포함된 상태에서 `x64-debug` 빌드와 CTest 38/38 통과를 확인했다. 기즈모 드래그·언두, 환경 프리셋, 외력 시뮬레이터, Depth Fade/프레넬의 실행 확인 기록은 아직 없다.
+
+### 9.6 Phase 5 Step 2 구현 반영 내역 (2026-11-17 커밋 기준)
+1. **`FloatCurve` (2D 베지어 커브) 코어 구축:**
+   - `Engine/Source/Core/Geometry/Public/FloatCurve.h`, `Private/FloatCurve.cpp` 신설.
+   - 키프레임(`CurveKey`: time, value, inTangent, outTangent, interpMode) 및 3차 에르미트 보간 평가기(`Evaluate`) 구축.
+   - 리플렉션/아카이브 연동 및 5종 프리셋(`CreateConstant`, `CreateLinear`, `CreateEaseIn`, `CreateEaseOut`, `CreateEaseInOut`, `CreateSpike`) 지원.
+2. **복합 VFX 런타임 커브 샘플링 연동:**
+   - `VFXMeshTrack`: `useScaleCurve`/`scaleCurve` 및 `useAlphaCurve`/`alphaCurve` 지원. 충격파/링 메쉬의 폭발적 급팽창(Ease-Out) 펀치감 및 정밀 알파 감쇠 구현.
+   - `VFXLightTrack`: `useIntensityCurve`/`intensityCurve` 지원. 단순 삼각파를 넘어선 섬광 피크/깜빡임 곡선 구현.
+3. **타임라인 인라인 커브 미니어처 렌더링 (`EffectTimelineView`):**
+   - `TimelineRow`에 `const Engine::FloatCurve* Curve`, `const char* CurveLabel` 필드 추가.
+   - 트랙 사각 바 내부 공간에 24~32개 세그먼트로 실시간 베지어 곡선 실루엣(사다리꼴 반투명 음영 + 선명한 화이트 라인) 및 라벨(`Scale`, `Light`, `Alpha`) 인라인 렌더링.
+   - 트랙의 시작/종료 시각 이동 및 리사이즈 시 커브 미니어처가 완벽하게 실시간 스케일링 동기화됨을 검증.
+
+### 9.7 Phase 5 Step 3 차기 선택지 로드맵
+- **[선택지 1] 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 소켓 스폰) ⭐**:
+  - `ActionTimelineComponent` / `AnimNotify`에 `SpawnCompositeVFX` 노티파이 지원.
+  - 캐릭터 스켈레톤의 무기/손 본 소켓(`Hand_R`, `Weapon_Socket`) 트랜스폼 추적 및 이펙트 동기화 스폰.
+  - 캐릭터 공격 애니메이션 타이밍에 맞춰 검기/충격파/섬광이 터지는 실전 전투 연출 완성.
+- **[선택지 2] 발광성 Additive 가산 머티리얼 표준화 & 공중(Air) 프리뷰 모드**:
+  - 돔 메쉬 및 충격파 링 전용 Additive 머티리얼 셰이더 표준화 (디퍼드 배경 암흑과의 결합으로 인한 흙갈색 탁화 원천 해소).
+  - 지면 슬래브를 끄고 완전한 18% 암실에서 발광체 본연의 화사한 룩앤필을 검증하는 '공중(Air) 프리뷰 모드' 토글 추가.
+- **[선택지 3] 2D 커브 팝업 에디터 모달 (키프레임 직접 조작)**:
+  - 프리셋 버튼을 넘어 그래프 상에서 마우스 더블클릭/드래그로 키프레임을 추가/이동하고 탄젠트를 조작하는 팝업 모달 위젯.
 
 ---

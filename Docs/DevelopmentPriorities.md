@@ -590,7 +590,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집, 테이퍼링 폭 축소 및 방향 정렬 쿼드 세그먼트 고속 렌더링 파이프라인 연계 완료.
   - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
   - 후보 B 실환경 검증 & 안정화 [완료: 2026-11-15]: `acceptsSceneSubmissions` 가드를 통한 메인 씬 스카이박스 누출 차단, 타임라인 앞뒤 여백(-0.25s/+1.0s) 및 10배 줌아웃(0.1x)·패닝 확장, 트레일 검증용 프리뷰 모션(원형 궤도) 토글, D3D12 `MISMATCHINGCLEARVALUE` 예외 중단 해제 및 RTV null 가드 크래시 해결, 3단계 배경 프리셋(스튜디오 18% 회색/암실/주간) 및 스튜디오 조명 배율 연동, 차콜 PBR 바닥 슬래브(18% 반사율 매트 머티리얼 인스턴스) 적용으로 바닥 자체 블룸 제거 및 플래시 반사 극대화 완료.
-  - Phase 5 [신규 계획 수립: 2026-11-15]: 상용 엔진(Niagara/VFX Graph) 수준의 환경 상호작용(벽 코너/장애물/더미 마네킹 프리셋, 바람/외력 시뮬레이터), 소프트 파티클(Depth Fade 셰이더), 뷰포트 3D 기즈모(ImGuizmo), 2D 베지어 커브 에디터 로드맵 정의.
+  - Phase 5 [진행 중 / Step 1~2 완료: 2026-11-17]: 상용 엔진(Niagara/VFX Graph) 수준의 환경 상호작용(벽 코너/장애물/더미 마네킹 프리셋, 바람/외력 시뮬레이터), 48m 지면 평면화, 15cm Depth Fade 및 프레넬 림(Step 1 완료). `FloatCurve` (2D 3차 베지어 에르미트 스플라인) 엔진 코어 신설, 메쉬 스케일/알파 및 조도 커브 런타임 샘플링(Ease-Out 폭발 팽창 펀치감 실현), 인스펙터 리플렉션 속성 행 및 프리셋 지원, `EffectTimelineView` 트랙 바 내부 실시간 베지어 곡선 실루엣 및 라벨 뱃지 인라인 렌더링 검증 완료(Step 2 완료). 차기 액션 타임라인 소켓 연동(Step 3) 계획 수립.
 - **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15]**:
   - Phase 1 [완료]: Windows SEH / CRT 예외 가로채기 핸들러(`CrashHandler`), `MiniDumpWriteDump` 기반 `.dmp` 미니덤프 생성, 크래시 순간 `Logger::Flush()` 강제 디스크 동기화 파이프라인 구축.
   - Phase 2 [완료]: `StackWalk64` / `SymFromAddr` 기반 심볼릭 콜스택 추출 및 타임스탬프 기반 구조화된 `.crash.json` 진단 리포트 자동 생성.

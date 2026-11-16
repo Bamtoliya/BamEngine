@@ -1386,9 +1386,43 @@ void VFXEditorPanel::DrawTimeline()
 			if (!std::isfinite(track.startTime) || !std::isfinite(end)) continue;
 			const bool marker = type == ESelectedVFXTrackType::Sound;
 			minimumDuration = std::max(minimumDuration, end + (marker ? EditorUI::MinimumTimelineDuration : 0.0f));
-			rows.push_back({ VFXRowId(type, i), track.trackName, style.Icon, style.Color, track.startTime, end,
-				m_SelectedTrack.type == type && m_SelectedTrack.index == static_cast<int>(i),
-				marker ? EditorUI::TimelineRowKind::Marker : EditorUI::TimelineRowKind::Interval });
+
+			const Engine::FloatCurve* activeCurve = nullptr;
+			const char* curveLabel = nullptr;
+			if constexpr (std::is_same_v<std::decay_t<decltype(track)>, Engine::VFXMeshTrack>)
+			{
+				if (track.useScaleCurve && !track.scaleCurve.IsEmpty())
+				{
+					activeCurve = &track.scaleCurve;
+					curveLabel = "Scale";
+				}
+				else if (track.useAlphaCurve && !track.alphaCurve.IsEmpty())
+				{
+					activeCurve = &track.alphaCurve;
+					curveLabel = "Alpha";
+				}
+			}
+			else if constexpr (std::is_same_v<std::decay_t<decltype(track)>, Engine::VFXLightTrack>)
+			{
+				if (track.useIntensityCurve && !track.intensityCurve.IsEmpty())
+				{
+					activeCurve = &track.intensityCurve;
+					curveLabel = "Light";
+				}
+			}
+
+			rows.push_back({
+				.Id = VFXRowId(type, i),
+				.Label = track.trackName,
+				.Icon = style.Icon,
+				.Color = style.Color,
+				.Start = track.startTime,
+				.End = end,
+				.Selected = m_SelectedTrack.type == type && m_SelectedTrack.index == static_cast<int>(i),
+				.Kind = marker ? EditorUI::TimelineRowKind::Marker : EditorUI::TimelineRowKind::Interval,
+				.Curve = activeCurve,
+				.CurveLabel = curveLabel
+				});
 		}
 	});
 	const auto result = EditorUI::DrawEffectTimeline(m_Timeline, rows, GetTimelineDuration(),

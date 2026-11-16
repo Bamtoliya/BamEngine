@@ -4,6 +4,7 @@
 #include "IconsFontAwesome7.h"
 #include "InputManager.h"
 #include "ShortcutManager.h"
+#include "FloatCurve.h"
 
 #include <algorithm>
 #include <cmath>
@@ -320,6 +321,40 @@ namespace EditorUI
                     const ImVec2 min(x0, y + edge * 0.5f);
                     const ImVec2 max(std::max(x0 + 1.0f, x1), y + rowHeight - edge * 0.5f);
                     rowsDraw->AddRectFilled(min, max, row.Color, 2.0f);
+
+                    // ── [인라인 커브 미니어처 렌더링] ──
+                    if (row.Curve && !row.Curve->IsEmpty() && (max.x - min.x) > 12.0f)
+                    {
+                        const float w = max.x - min.x;
+                        constexpr float padY = 2.0f;
+                        const float h = std::max(4.0f, (max.y - min.y) - padY * 2.0f);
+                        const float baseY = max.y - padY;
+                        float minV = 0.0f, maxV = 1.0f;
+                        for (const auto& k : row.Curve->keys) { minV = std::min(minV, k.value); maxV = std::max(maxV, k.value); }
+                        const float valRange = std::max(maxV - minV, 0.001f);
+                        const int numSteps = std::clamp(static_cast<int>(w / 4.0f), 12, 32);
+                        ImVec2 points[34];
+                        for (int step = 0; step <= numSteps; ++step)
+                        {
+                            const float u = static_cast<float>(step) / static_cast<float>(numSteps);
+                            const float px = min.x + u * w;
+                            const float val = row.Curve->Evaluate(u, 0.0f);
+                            const float norm = std::clamp((val - minV) / valRange, 0.0f, 1.0f);
+                            points[step] = ImVec2(px, baseY - norm * h);
+                        }
+                        // 1. 곡선 아래 반투명 실루엣 면적 채우기
+                        for (int step = 0; step < numSteps; ++step)
+                        {
+                            rowsDraw->AddQuadFilled(ImVec2(points[step].x, baseY), points[step],
+                                points[step + 1], ImVec2(points[step + 1].x, baseY), IM_COL32(255, 255, 255, 30));
+                        }
+                        // 2. 곡선 외곽선 라인 (선명한 화이트)
+                        rowsDraw->AddPolyline(points, numSteps + 1, IM_COL32(255, 255, 255, 220), 0, 1.5f);
+                        // 3. 커브 라벨 뱃지 (바 너비가 충분할 때)
+                        if (row.CurveLabel && w > 48.0f)
+                            rowsDraw->AddText(ImVec2(min.x + 4.0f, min.y + 1.0f), IM_COL32(255, 255, 255, 180), row.CurveLabel);
+                    }
+
                     if (row.Selected) rowsDraw->AddRect(min, max, IM_COL32(255, 255, 255, 230), 2.0f);
                     if (row.Selected || edit)
                     {
