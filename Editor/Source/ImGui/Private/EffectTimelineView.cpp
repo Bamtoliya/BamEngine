@@ -416,7 +416,8 @@ namespace EditorUI
             if (split("##EffectLeftSplitter", ImVec2(splitter, topSize), ImGuiMouseCursor_ResizeEW))
                 listWidth = std::clamp(left + input.GetMouseDelta().x, minSide, maxSides - right);
             ImGui::SameLine();
-            if (ImGui::BeginChild("##EffectPreview", ImVec2(center, topSize), ImGuiChildFlags_Borders)) preview();
+            if (ImGui::BeginChild("##EffectPreview", ImVec2(center, topSize), ImGuiChildFlags_Borders,
+                ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) preview();
             ImGui::EndChild();
             ImGui::SameLine();
             if (split("##EffectRightSplitter", ImVec2(splitter, topSize), ImGuiMouseCursor_ResizeEW))

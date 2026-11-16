@@ -2,8 +2,95 @@
 
 #include "DirectXTexCompressor.h"
 #include <DirectXTex.h>
+#include <filesystem>
+#include <fstream>
 
 using namespace Tools;
+
+namespace
+{
+	constexpr uint32_t DDC_MAGIC = 0x43445442; // "BTDC" (Bam Texture Derived Cache)
+	constexpr uint32_t DDC_VERSION = 1;
+
+	std::filesystem::path GetDdcCachePath(const std::wstring& inputFilePath,
+		Engine::ETextureFormat targetFormat, ECompressFlags flags)
+	{
+		std::error_code ec;
+		const auto path = std::filesystem::absolute(inputFilePath, ec).lexically_normal();
+		if (ec || !std::filesystem::exists(path, ec)) return {};
+
+		const auto fileSize = std::filesystem::file_size(path, ec);
+		const auto lastWrite = std::filesystem::last_write_time(path, ec).time_since_epoch().count();
+
+		uint64_t hash = 14695981039346656037ull;
+		auto hashCombine = [&hash](const void* data, size_t size)
+			{
+				const auto* bytes = static_cast<const uint8_t*>(data);
+				for (size_t i = 0; i < size; ++i)
+				{
+					hash ^= bytes[i];
+					hash *= 1099511628211ull;
+				}
+			};
+
+		const std::string u8Path = path.string();
+		hashCombine(u8Path.data(), u8Path.size());
+		hashCombine(&fileSize, sizeof(fileSize));
+		hashCombine(&lastWrite, sizeof(lastWrite));
+		hashCombine(&targetFormat, sizeof(targetFormat));
+		hashCombine(&flags, sizeof(flags));
+		const char versionTag[] = "tex_ddc_v1";
+		hashCombine(versionTag, sizeof(versionTag) - 1);
+
+		wchar_t buf[32];
+		std::swprintf(buf, sizeof(buf) / sizeof(wchar_t), L"%016llx.ddc", static_cast<unsigned long long>(hash));
+
+		const auto ddcDir = std::filesystem::current_path() / ".bam" / "cache" / "ddc" / "textures";
+		std::filesystem::create_directories(ddcDir, ec);
+		return ddcDir / buf;
+	}
+
+	bool TryLoadFromDdc(const std::filesystem::path& ddcPath,
+		std::vector<uint8>& outData, Engine::TextureBinaryHeader& outHeader)
+	{
+		std::error_code ec;
+		if (ddcPath.empty() || !std::filesystem::exists(ddcPath, ec)) return false;
+
+		std::ifstream file(ddcPath, std::ios::binary);
+		if (!file.is_open()) return false;
+
+		uint32_t magic = 0, version = 0;
+		file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+		file.read(reinterpret_cast<char*>(&version), sizeof(version));
+		if (magic != DDC_MAGIC || version != DDC_VERSION) return false;
+
+		file.read(reinterpret_cast<char*>(&outHeader), sizeof(outHeader));
+		if (!file || outHeader.dataSize == 0 || outHeader.dataSize > 256 * 1024 * 1024) return false;
+
+		outData.resize(outHeader.dataSize);
+		file.read(reinterpret_cast<char*>(outData.data()), outHeader.dataSize);
+		return file.good();
+	}
+
+	void SaveToDdc(const std::filesystem::path& ddcPath,
+		const std::vector<uint8>& data, const Engine::TextureBinaryHeader& header)
+	{
+		if (ddcPath.empty() || data.empty()) return;
+
+		std::error_code ec;
+		const auto tmpPath = ddcPath.string() + ".tmp";
+		std::ofstream file(tmpPath, std::ios::binary | std::ios::trunc);
+		if (!file.is_open()) return;
+
+		file.write(reinterpret_cast<const char*>(&DDC_MAGIC), sizeof(DDC_MAGIC));
+		file.write(reinterpret_cast<const char*>(&DDC_VERSION), sizeof(DDC_VERSION));
+		file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+		file.write(reinterpret_cast<const char*>(data.data()), data.size());
+		file.close();
+
+		std::filesystem::rename(tmpPath, ddcPath, ec);
+	}
+}
 
 static DXGI_FORMAT GetDXGIFormat(Engine::ETextureFormat format) {
 	switch (format)
@@ -67,8 +154,13 @@ bool DirectXTexCompressor::CompressTexture(const std::wstring& inputFilePath, co
 	return SUCCEEDED(hr);
 }
 
-bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, TextureBinaryHeader& outHeader, Engine::ETextureFormat targetFormat, ECompressFlags flags)
+bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePath, std::vector<uint8>& outData, Engine::TextureBinaryHeader& outHeader, Engine::ETextureFormat targetFormat, ECompressFlags flags)
 {
+	// ── 0. DDC 디스크 캐시 조회 (적중 시 0.1ms 즉시 반환) ──
+	const auto ddcPath = GetDdcCachePath(inputFilePath, targetFormat, flags);
+	if (TryLoadFromDdc(ddcPath, outData, outHeader))
+		return true;
+
 	HRESULT hr;
 	DirectX::ScratchImage image;
 
@@ -115,7 +207,6 @@ bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePat
 	outHeader.arraySize = static_cast<uint32>(meta.arraySize);
 	outHeader.format = targetFormat;
 
-	// Dimension 판단 (1D, 2D, 3D, Cube)
 	switch (meta.dimension)
 	{
 	case DirectX::TEX_DIMENSION_TEXTURE1D:
@@ -136,6 +227,9 @@ bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePat
 	// 5. Raw 픽셀 데이터를 outData 벡터에 복사
 	const uint8_t* pPixels = currentImage->GetPixels();
 	outData.assign(pPixels, pPixels + outHeader.dataSize);
+
+	// ── 6. DDC 디스크 캐시에 원자적 저장 ──
+	SaveToDdc(ddcPath, outData, outHeader);
 
 	return true;
 }

@@ -158,19 +158,19 @@ void GizmoHelper::DrawGizmoToolbar(IGizmoHost* host, const ImVec2& screenOrigin,
 		const bool isPivot = (host->GetGizmoPivotMode() == GizmoPivotMode::Pivot);
 		const bool useSnap = host->GetGizmoUseSnap();
 
-		// 1. [선택 Q / Ctrl+1]
+		// 1. [선택 Ctrl+1]
 		if (drawToolBtn("ToolSelect", ICON_FA_ARROW_POINTER, "Action.Viewport.GizmoSelect", "Viewport.GizmoSelect", curOp == static_cast<ImGuizmo::OPERATION>(0)))
 			host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
 
-		// 2. [이동 W / Ctrl+2]
+		// 2. [이동 Ctrl+2]
 		if (drawToolBtn("ToolTranslate", ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Action.Viewport.GizmoTranslate", "Viewport.GizmoTranslate", curOp == ImGuizmo::TRANSLATE))
 			host->SetGizmoOperation(ImGuizmo::TRANSLATE);
 
-		// 3. [회전 E / Ctrl+3]
+		// 3. [회전 Ctrl+3]
 		if (drawToolBtn("ToolRotate", ICON_FA_ARROWS_ROTATE, "Action.Viewport.GizmoRotate", "Viewport.GizmoRotate", curOp == ImGuizmo::ROTATE))
 			host->SetGizmoOperation(ImGuizmo::ROTATE);
 
-		// 4. [스케일 R / Ctrl+4]
+		// 4. [스케일 Ctrl+4]
 		if (drawToolBtn("ToolScale", ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Action.Viewport.GizmoScale", "Viewport.GizmoScale", curOp == ImGuizmo::SCALE))
 			host->SetGizmoOperation(ImGuizmo::SCALE);
 

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -18,6 +19,306 @@ namespace Tools::ModelConversion
 {
     namespace
     {
+        constexpr uint32_t MODEL_DDC_MAGIC = 0x43444D42; // "BMDC"
+        constexpr uint32_t MODEL_DDC_VERSION = 1;
+
+        void WriteString(std::ostream& os, const std::string& str)
+        {
+            const uint32_t len = static_cast<uint32_t>(str.size());
+            os.write(reinterpret_cast<const char*>(&len), sizeof(len));
+            if (len > 0) os.write(str.data(), len);
+        }
+
+        bool ReadString(std::istream& is, std::string& str)
+        {
+            uint32_t len = 0;
+            is.read(reinterpret_cast<char*>(&len), sizeof(len));
+            if (!is || len > 64 * 1024) return false;
+            str.resize(len);
+            if (len > 0) is.read(str.data(), len);
+            return is.good();
+        }
+
+        template<typename T>
+        void WritePodVector(std::ostream& os, const std::vector<T>& vec)
+        {
+            const uint32_t count = static_cast<uint32_t>(vec.size());
+            os.write(reinterpret_cast<const char*>(&count), sizeof(count));
+            if (count > 0) os.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * count);
+        }
+
+        template<typename T>
+        bool ReadPodVector(std::istream& is, std::vector<T>& vec)
+        {
+            uint32_t count = 0;
+            is.read(reinterpret_cast<char*>(&count), sizeof(count));
+            if (!is || count > 50'000'000) return false;
+            vec.resize(count);
+            if (count > 0) is.read(reinterpret_cast<char*>(vec.data()), sizeof(T) * count);
+            return is.good();
+        }
+
+        void WriteMesh(std::ostream& os, const MeshData& mesh)
+        {
+            WriteString(os, mesh.Name);
+            os.write(reinterpret_cast<const char*>(&mesh.MaterialIndex), sizeof(mesh.MaterialIndex));
+            os.write(reinterpret_cast<const char*>(&mesh.HasSkinning), sizeof(mesh.HasSkinning));
+            os.write(reinterpret_cast<const char*>(mesh.BoundsMin.data()), sizeof(float) * 3);
+            os.write(reinterpret_cast<const char*>(mesh.BoundsMax.data()), sizeof(float) * 3);
+            WritePodVector(os, mesh.Vertices);
+            WritePodVector(os, mesh.Indices);
+
+            const uint32_t lodCount = static_cast<uint32_t>(mesh.LODs.size());
+            os.write(reinterpret_cast<const char*>(&lodCount), sizeof(lodCount));
+            for (const auto& lod : mesh.LODs) WriteMesh(os, lod);
+        }
+
+        bool ReadMesh(std::istream& is, MeshData& mesh)
+        {
+            if (!ReadString(is, mesh.Name)) return false;
+            is.read(reinterpret_cast<char*>(&mesh.MaterialIndex), sizeof(mesh.MaterialIndex));
+            is.read(reinterpret_cast<char*>(&mesh.HasSkinning), sizeof(mesh.HasSkinning));
+            is.read(reinterpret_cast<char*>(mesh.BoundsMin.data()), sizeof(float) * 3);
+            is.read(reinterpret_cast<char*>(mesh.BoundsMax.data()), sizeof(float) * 3);
+            if (!ReadPodVector(is, mesh.Vertices) || !ReadPodVector(is, mesh.Indices)) return false;
+
+            uint32_t lodCount = 0;
+            is.read(reinterpret_cast<char*>(&lodCount), sizeof(lodCount));
+            if (!is || lodCount > 16) return false;
+            mesh.LODs.resize(lodCount);
+            for (uint32_t i = 0; i < lodCount; ++i)
+            {
+                if (!ReadMesh(is, mesh.LODs[i])) return false;
+            }
+            return is.good();
+        }
+
+        std::filesystem::path GetModelDdcPath(const std::filesystem::path& sourcePath, const Options& options)
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(sourcePath, ec)) return {};
+
+            const auto fileSize = std::filesystem::file_size(sourcePath, ec);
+            const auto lastWrite = std::filesystem::last_write_time(sourcePath, ec).time_since_epoch().count();
+
+            uint64_t hash = 14695981039346656037ull;
+            auto hashCombine = [&hash](const void* data, size_t size)
+                {
+                    const auto* bytes = static_cast<const uint8_t*>(data);
+                    for (size_t i = 0; i < size; ++i)
+                    {
+                        hash ^= bytes[i];
+                        hash *= 1099511628211ull;
+                    }
+                };
+
+            const std::string u8Path = sourcePath.string();
+            hashCombine(u8Path.data(), u8Path.size());
+            hashCombine(&fileSize, sizeof(fileSize));
+            hashCombine(&lastWrite, sizeof(lastWrite));
+            hashCombine(&options.FlipUVs, sizeof(options.FlipUVs));
+            hashCombine(&options.ConvertToLeftHanded, sizeof(options.ConvertToLeftHanded));
+            hashCombine(&options.UniformScale, sizeof(options.UniformScale));
+            hashCombine(options.RotationOffset.data(), sizeof(float) * 3);
+            hashCombine(&options.FlipWindingOrder, sizeof(options.FlipWindingOrder));
+            hashCombine(&options.FlipPitch, sizeof(options.FlipPitch));
+            hashCombine(&options.FlipHeading, sizeof(options.FlipHeading));
+            hashCombine(&options.GenerateLODs, sizeof(options.GenerateLODs));
+            hashCombine(&options.LODCount, sizeof(options.LODCount));
+            hashCombine(&options.TargetError, sizeof(options.TargetError));
+            for (float rate : options.LODReductionRates) hashCombine(&rate, sizeof(rate));
+            const char versionTag[] = "model_ddc_v1";
+            hashCombine(versionTag, sizeof(versionTag) - 1);
+
+            wchar_t buf[32];
+            std::swprintf(buf, sizeof(buf) / sizeof(wchar_t), L"%016llx.ddc", static_cast<unsigned long long>(hash));
+
+            const auto ddcDir = std::filesystem::current_path() / ".bam" / "cache" / "ddc" / "models";
+            std::filesystem::create_directories(ddcDir, ec);
+            return ddcDir / buf;
+        }
+
+        bool TryLoadModelFromDdc(const std::filesystem::path& ddcPath, ModelData& model)
+        {
+            std::error_code ec;
+            if (ddcPath.empty() || !std::filesystem::exists(ddcPath, ec)) return false;
+
+            std::ifstream file(ddcPath, std::ios::binary);
+            if (!file.is_open()) return false;
+
+            uint32_t magic = 0, version = 0;
+            file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
+            file.read(reinterpret_cast<char*>(&version), sizeof(version));
+            if (magic != MODEL_DDC_MAGIC || version != MODEL_DDC_VERSION) return false;
+
+            std::string sourcePathStr;
+            if (!ReadString(file, sourcePathStr)) return false;
+            model.SourcePath = sourcePathStr;
+            file.read(reinterpret_cast<char*>(&model.MaterialCount), sizeof(model.MaterialCount));
+
+            // 1. Materials
+            uint32_t matCount = 0;
+            file.read(reinterpret_cast<char*>(&matCount), sizeof(matCount));
+            model.Materials.resize(matCount);
+            for (auto& mat : model.Materials)
+            {
+                if (!ReadString(file, mat.Name)) return false;
+                file.read(reinterpret_cast<char*>(mat.BaseColorFactor.data()), sizeof(float) * 4);
+                file.read(reinterpret_cast<char*>(&mat.MetallicFactor), sizeof(float));
+                file.read(reinterpret_cast<char*>(&mat.RoughnessFactor), sizeof(float));
+                auto readTexInfo = [&file](TextureBindingInfo& info) -> bool
+                    {
+                        if (!ReadString(file, info.Path)) return false;
+                        file.read(reinterpret_cast<char*>(&info.IsEmbedded), sizeof(bool));
+                        return ReadPodVector(file, info.EmbeddedData);
+                    };
+                if (!readTexInfo(mat.BaseColorTexture) || !readTexInfo(mat.NormalTexture) ||
+                    !readTexInfo(mat.MetallicRoughnessTexture) || !readTexInfo(mat.EmissiveTexture))
+                    return false;
+            }
+
+            // 2. Meshes
+            uint32_t meshCount = 0;
+            file.read(reinterpret_cast<char*>(&meshCount), sizeof(meshCount));
+            model.Meshes.resize(meshCount);
+            for (auto& mesh : model.Meshes)
+            {
+                if (!ReadMesh(file, mesh)) return false;
+            }
+
+            // 3. Nodes
+            uint32_t nodeCount = 0;
+            file.read(reinterpret_cast<char*>(&nodeCount), sizeof(nodeCount));
+            model.Nodes.resize(nodeCount);
+            for (auto& node : model.Nodes)
+            {
+                if (!ReadString(file, node.Name)) return false;
+                file.read(reinterpret_cast<char*>(&node.ParentIndex), sizeof(node.ParentIndex));
+                file.read(reinterpret_cast<char*>(node.LocalTransform.data()), sizeof(float) * 16);
+                if (!ReadPodVector(file, node.MeshIndices)) return false;
+            }
+
+            // 4. Bones
+            uint32_t boneCount = 0;
+            file.read(reinterpret_cast<char*>(&boneCount), sizeof(boneCount));
+            model.Bones.resize(boneCount);
+            for (auto& bone : model.Bones)
+            {
+                if (!ReadString(file, bone.Name)) return false;
+                file.read(reinterpret_cast<char*>(&bone.ParentIndex), sizeof(bone.ParentIndex));
+                file.read(reinterpret_cast<char*>(bone.OffsetMatrix.data()), sizeof(float) * 16);
+                file.read(reinterpret_cast<char*>(bone.LocalTransform.data()), sizeof(float) * 16);
+            }
+
+            // 5. Animations
+            uint32_t animCount = 0;
+            file.read(reinterpret_cast<char*>(&animCount), sizeof(animCount));
+            model.Animations.resize(animCount);
+            for (auto& anim : model.Animations)
+            {
+                if (!ReadString(file, anim.Name)) return false;
+                file.read(reinterpret_cast<char*>(&anim.Duration), sizeof(anim.Duration));
+                file.read(reinterpret_cast<char*>(&anim.TicksPerSecond), sizeof(anim.TicksPerSecond));
+                uint32_t trackCount = 0;
+                file.read(reinterpret_cast<char*>(&trackCount), sizeof(trackCount));
+                anim.Tracks.resize(trackCount);
+                for (auto& track : anim.Tracks)
+                {
+                    if (!ReadString(file, track.BoneName)) return false;
+                    if (!ReadPodVector(file, track.PositionKeys) || !ReadPodVector(file, track.RotationKeys) ||
+                        !ReadPodVector(file, track.ScaleKeys))
+                        return false;
+                }
+            }
+
+            return file.good();
+        }
+
+        void SaveModelToDdc(const std::filesystem::path& ddcPath, const ModelData& model)
+        {
+            if (ddcPath.empty()) return;
+
+            std::error_code ec;
+            const auto tmpPath = ddcPath.string() + ".tmp";
+            std::ofstream file(tmpPath, std::ios::binary | std::ios::trunc);
+            if (!file.is_open()) return;
+
+            file.write(reinterpret_cast<const char*>(&MODEL_DDC_MAGIC), sizeof(MODEL_DDC_MAGIC));
+            file.write(reinterpret_cast<const char*>(&MODEL_DDC_VERSION), sizeof(MODEL_DDC_VERSION));
+            WriteString(file, model.SourcePath.string());
+            file.write(reinterpret_cast<const char*>(&model.MaterialCount), sizeof(model.MaterialCount));
+
+            // 1. Materials
+            const uint32_t matCount = static_cast<uint32_t>(model.Materials.size());
+            file.write(reinterpret_cast<const char*>(&matCount), sizeof(matCount));
+            for (const auto& mat : model.Materials)
+            {
+                WriteString(file, mat.Name);
+                file.write(reinterpret_cast<const char*>(mat.BaseColorFactor.data()), sizeof(float) * 4);
+                file.write(reinterpret_cast<const char*>(&mat.MetallicFactor), sizeof(float));
+                file.write(reinterpret_cast<const char*>(&mat.RoughnessFactor), sizeof(float));
+                auto writeTexInfo = [&file](const TextureBindingInfo& info)
+                    {
+                        WriteString(file, info.Path);
+                        file.write(reinterpret_cast<const char*>(&info.IsEmbedded), sizeof(bool));
+                        WritePodVector(file, info.EmbeddedData);
+                    };
+                writeTexInfo(mat.BaseColorTexture);
+                writeTexInfo(mat.NormalTexture);
+                writeTexInfo(mat.MetallicRoughnessTexture);
+                writeTexInfo(mat.EmissiveTexture);
+            }
+
+            // 2. Meshes
+            const uint32_t meshCount = static_cast<uint32_t>(model.Meshes.size());
+            file.write(reinterpret_cast<const char*>(&meshCount), sizeof(meshCount));
+            for (const auto& mesh : model.Meshes) WriteMesh(file, mesh);
+
+            // 3. Nodes
+            const uint32_t nodeCount = static_cast<uint32_t>(model.Nodes.size());
+            file.write(reinterpret_cast<const char*>(&nodeCount), sizeof(nodeCount));
+            for (const auto& node : model.Nodes)
+            {
+                WriteString(file, node.Name);
+                file.write(reinterpret_cast<const char*>(&node.ParentIndex), sizeof(node.ParentIndex));
+                file.write(reinterpret_cast<const char*>(node.LocalTransform.data()), sizeof(float) * 16);
+                WritePodVector(file, node.MeshIndices);
+            }
+
+            // 4. Bones
+            const uint32_t boneCount = static_cast<uint32_t>(model.Bones.size());
+            file.write(reinterpret_cast<const char*>(&boneCount), sizeof(boneCount));
+            for (const auto& bone : model.Bones)
+            {
+                WriteString(file, bone.Name);
+                file.write(reinterpret_cast<const char*>(&bone.ParentIndex), sizeof(bone.ParentIndex));
+                file.write(reinterpret_cast<const char*>(bone.OffsetMatrix.data()), sizeof(float) * 16);
+                file.write(reinterpret_cast<const char*>(bone.LocalTransform.data()), sizeof(float) * 16);
+            }
+
+            // 5. Animations
+            const uint32_t animCount = static_cast<uint32_t>(model.Animations.size());
+            file.write(reinterpret_cast<const char*>(&animCount), sizeof(animCount));
+            for (const auto& anim : model.Animations)
+            {
+                WriteString(file, anim.Name);
+                file.write(reinterpret_cast<const char*>(&anim.Duration), sizeof(anim.Duration));
+                file.write(reinterpret_cast<const char*>(&anim.TicksPerSecond), sizeof(anim.TicksPerSecond));
+                const uint32_t trackCount = static_cast<uint32_t>(anim.Tracks.size());
+                file.write(reinterpret_cast<const char*>(&trackCount), sizeof(trackCount));
+                for (const auto& track : anim.Tracks)
+                {
+                    WriteString(file, track.BoneName);
+                    WritePodVector(file, track.PositionKeys);
+                    WritePodVector(file, track.RotationKeys);
+                    WritePodVector(file, track.ScaleKeys);
+                }
+            }
+
+            file.close();
+            std::filesystem::rename(tmpPath, ddcPath, ec);
+        }
+
         Result Fail(Error code, std::string message)
         {
             return { code, std::move(message), std::nullopt };
@@ -49,9 +350,9 @@ namespace Tools::ModelConversion
         {
             return std::all_of(values.begin(), values.end(), [](float value) { return std::isfinite(value); });
         }
-    }
+    } // namespace
 
-        void GenerateMeshLODs(MeshData& mesh, const Options& options)
+    void GenerateMeshLODs(MeshData& mesh, const Options& options)
         {
             if (!options.GenerateLODs || options.LODCount <= 1 || mesh.Indices.empty() || mesh.Vertices.empty())
                 return;
@@ -177,13 +478,18 @@ namespace Tools::ModelConversion
     {
         if (!std::isfinite(options.UniformScale) || options.UniformScale <= 0.0f)
             return Fail(Error::InvalidData, "Import scale must be finite and positive.");
-
         std::error_code ec;
         const auto sourcePath = std::filesystem::absolute(path, ec).lexically_normal();
-
         if (ec || path.empty() || !std::filesystem::is_regular_file(sourcePath, ec))
             return Fail(Error::InvalidPath, "Model file is missing or is not a regular file.");
-
+        // ── 0. 모델 DDC 캐시 조회 (적중 시 Assimp 및 LOD 계산 100% 스킵) ──
+        const auto ddcPath = GetModelDdcPath(sourcePath, options);
+        if (!ddcPath.empty())
+        {
+            ModelData cachedModel;
+            if (TryLoadModelFromDdc(ddcPath, cachedModel))
+                return { Error::None, {}, std::move(cachedModel) };
+        }
         unsigned int flags = aiProcess_Triangulate | aiProcess_GenSmoothNormals |
             aiProcess_CalcTangentSpace | aiProcess_LimitBoneWeights;
 
@@ -637,6 +943,11 @@ namespace Tools::ModelConversion
             model.Animations.push_back(std::move(anim));
         }
 
+        // ── DDC 캐시 저장 (원자적 쓰기) ──
+        if (!ddcPath.empty())
+        {
+            SaveModelToDdc(ddcPath, model);
+        }
         return { Error::None, {}, std::move(model) };
     }
 }

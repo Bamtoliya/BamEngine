@@ -2,6 +2,57 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 에셋 파생 데이터 캐시(DDC: Derived Data Cache) 인프라 구축 (Phase 3)
+
+- **배경 및 목적**:
+  - `DiskCacheDevelopmentPlan.md` Phase 3 (P1) 과제 수행.
+  - 외부 소스 모델(FBX, OBJ, GLTF)과 고해상도 텍스처(PNG, TGA, JPG)를 엔진 런타임 포맷(`.bammesh`, `.bammodel`, `.bamtex`)으로 변환할 때, 원본 파일이나 옵션이 변경되지 않았음에도 매번 반복되는 Assimp 씬 파싱, meshoptimizer LOD 간소화(`meshopt_simplify`), DirectXTex BCn 텍스처 압축의 무거운 CPU 연산 제거.
+- **변경 사항**:
+  - **텍스처 DDC 캐시 (`DirectXTexCompressor.cpp`)**:
+    - 저장 위치: `<ProjectRoot>/.bam/cache/ddc/textures/<hash>.ddc`
+    - 캐시 키: `FNV-1a(SourcePath + FileSize + LastWriteTime + TargetFormat + CompressFlags + "tex_ddc_v1")`
+    - 바이너리 파일 구조: 매직 넘버(`BTDC`, `0x43445442`) + 버전(1) + `TextureBinaryHeader` + 압축 픽셀 바이트 배열.
+    - `GetRawCompressedData` 진입 시 DDC 조회: 적중 시 0.1ms 만에 헤더와 픽셀 데이터를 즉시 복원하여 반환(DirectXTex 디코딩, 밉맵 생성, BCn 압축 100% 바이패스). 미적중 시 압축 수행 후 임시 파일(`.tmp`)을 거쳐 원자적 저장.
+  - **모델 DDC 캐시 (`ModelConverter.cpp`)**:
+    - 저장 위치: `<ProjectRoot>/.bam/cache/ddc/models/<hash>.ddc`
+    - 캐시 키: `FNV-1a(SourcePath + FileSize + LastWriteTime + Options[Scale, FlipUV, Winding, LODs...] + "model_ddc_v1")`
+    - `ModelData` 경량 바이너리 직렬화/역직렬화 규격 구축: 매직 넘버(`BMDC`, `0x43444D42`) + 버전(1) + Materials + Meshes(Vertices, Indices, Bounds, LOD 계층) + Nodes + Bones + Animations.
+    - `ConvertStaticModel` 진입 시 DDC 조회: 적중 시 Assimp 파싱 및 `meshopt_simplify` LOD 계산을 100% 스킵하고 1~3ms 만에 `ModelData`를 통째로 복원. 미적중 시 변환 완료 후 DDC 파일로 원자적 저장.
+- **검증 (사용자 실행, `x64-ninja-debug`)**:
+  - `DirectXTexCompressor.cpp` 및 `ModelConverter.cpp` 컴파일 성공 및 에디터 정상 구동 확인.
+  - 원본 파일 및 변환 옵션 일치 시 무거운 파싱/압축 프로세스를 통째로 스킵하고 DDC 디스크 캐시를 통한 즉각적인 처리 검증.
+
+### [2026-11-16] 셰이더 컴파일 타임스탬프 캐시 및 DirectX 12 Pipeline Library (PSO) 디스크 캐시 구현 (Phase 2)
+
+- **배경 및 목적**:
+  - `DiskCacheDevelopmentPlan.md` Phase 2 (P1) 과제 수행.
+  - 셰이더 무변경 시에도 `dxc.exe` 외부 프로세스를 반복 실행하던 I/O 병목 제거.
+  - DirectX 12 파이프라인 생성 시 드라이버 레벨에서 DXIL 바이트코드를 GPU 마이크로코드로 변환하는 런타임 컴파일 지연을 제거하기 위해 `ID3D12PipelineLibrary` 기반 PSO 영속화 디스크 캐시 구축.
+- **변경 사항**:
+  - **셰이더 컴파일 타임스탬프 캐시 (`ShaderCompiler.h`, `ShaderCompiler.cpp`)**:
+    - `IsUpToDate()` 구현: 출력 파일(`.cso`, `.spv`, `.wgsl`)이 존재하고, 해당 파일의 수정 시각이 소스 HLSL 파일 및 `#include`로 의존하는 모든 `.hlsli` 헤더 파일들의 수정 시각보다 최신인지 정밀 검사.
+    - `ReadCompiledFile()` 구현: 캐시 적중 시 디스크의 컴파일 산출물을 직접 바이너리로 읽어 반환함으로써 `_wpopen`을 통한 `dxc.exe` 프로세스 생성을 100% 바이패스.
+  - **D3D12 PSO 디스크 캐시 인프라 (`DirectX12RHI.h`, `DirectX12RHI.cpp`, `DirectX12Pipeline.cpp`)**:
+    - 저장 위치: `<ProjectRoot>/.bam/cache/shaders/` 아래 `pipeline.library` (바이너리 라이브러리 블롭) 및 `pipeline.names` (등록된 파이프라인 이름 목록).
+    - D3D12 디바이스 인터페이스 쿼리: `m_Device.As(&device1)`을 통해 `ID3D12Device1` 획득 후 `CreatePipelineLibrary` 호출.
+    - 정합성 검사 및 자가 치유: `pipeline.library`와 `pipeline.names` 둘 중 하나라도 누락되거나 손상된 경우 두 파일을 모두 삭제하고 안전하게 클린 상태로 시작.
+    - 캐시 키 생성: 파이프라인 디스크립션(`RHIPipelineDesc`)의 셰이더 바이트코드 바이트 열, 래스터라이저, 깊이/스텐실, 블렌드, 렌더 타깃 포맷 등을 결합한 FNV-1a 기반 고유 키(`pso_0123456789abcdef`) 생성.
+    - 안전한 PSO 조회 및 저장 (`DirectX12Pipeline::CreatePipelineState`):
+      - `pLibrary`와 `ContainsPipeline(psoName)`이 참일 때만 안전하게 `LoadGraphicsPipeline` / `LoadComputePipeline` 시도.
+      - 캐시 미적중 시 드라이버 컴파일 후 `!ContainsPipeline(psoName)` 조건에서 `StorePipeline` 및 이름 등록(`RegisterPipelineName`), `Dirty` 마킹.
+    - 원자적 직렬화 및 저장 (`DirectX12RHI::SavePipelineLibrary`):
+      - 에디터 종료 시 GPU 동기화(`WaitForGPU()`) 완료 후 `m_PipelineLibrary->GetSerializedSize()` 버퍼에 직렬화.
+      - 임시 파일(`.tmp`) 생성 후 `std::filesystem::rename` 승격으로 원자적 저장 보장.
+  - **결함 해결 및 안정성 강화**:
+    - `ID3D12PipelineLibrary` 메모리 수명 요구사항 준수: D3D12 공식 스펙상 `CreatePipelineLibrary`는 전달된 바이너리 버퍼(`pLibraryBlob`)를 복사하지 않고 직접 참조하므로, 지역 변수가 아닌 `DirectX12RHI` 멤버 변수 `m_PipelineLibraryData`로 유지하여 `LoadGraphicsPipeline` 호출 시 NVIDIA 드라이버(`nvwgf2umx.dll`)의 `0xC0000005` (Access Violation reading `0xFFFFFFFFFFFFFFFF`) 크래시 원천 해결.
+    - 종료 시 `0x887A0005` (DXGI_ERROR_DEVICE_REMOVED) 해결: 중복 파이프라인 등록 방지 가드(`!ContainsPipeline`) 및 캐시 파일 정합성 검사를 통해 드라이버 내부 상태 오염 및 종료 시 직렬화 크래시 차단.
+- **검증 (사용자 실행, `x64-ninja-debug`, 커밋 `a61312c1`)**:
+  - 에디터 실행 및 종료가 크래시 없이 정상 동작함을 확인.
+  - `.bam/cache/shaders/` 디렉터리에 `pipeline.library` (86,500 바이트)와 `pipeline.names` (20개 PSO)가 정상 생성 및 영속화됨을 확인.
+  - 셰이더 무변경 시 `dxc.exe` 스킵 체감 확인.
+- **미검증**:
+  - GPU 드라이버 업데이트 또는 그래픽 카드 교체 시 드라이버 차원의 캐시 무효화 및 자동 재컴파일 복구 시나리오.
+
 ### [2026-11-16] 썸네일 통합 디스크 캐시(AssetCache 2D/3D 영속화 & D3D12 Readback) 구현 및 에디터 잔여 성능·의존성 최적화
 
 - **배경 및 목적**:

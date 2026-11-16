@@ -608,6 +608,9 @@ void SceneViewportPanel::DrawCustomViewport()
 		DrawCameraOverlay();
 	}
 	DrawSelectionLocked();
+
+	GizmoHelper::DrawGizmoToolbar(this, m_ImageScreenPos, m_ImageSize, true);
+
 	if (!splineOwnsInput && !tilemapOwnsInput)
 	{
 		CapturePickingRequest(imageHovered);

@@ -787,78 +787,81 @@ void VFXEditorPanel::DrawViewport()
 
 void VFXEditorPanel::DrawViewportHUD(const ImVec2& viewportPos, const ImVec2& viewportSize)
 {
-	if (viewportSize.x < 240.0f || viewportSize.y < 160.0f) return;
+	if (viewportSize.x < 180.0f || viewportSize.y < 100.0f) return;
 
 	auto* effect = m_EffectHandle.Get();
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	if (!drawList) return;
 
 	constexpr float margin = 10.0f;
-	constexpr float hudWidth = 230.0f;
+	constexpr float padX = 10.0f;
+	constexpr float padY = 7.0f;
+	constexpr float hudWidth = 165.0f;
 	const bool hasForces = effect && (glm::length(m_SimWind) > 0.01f || std::abs(m_SimGravityMultiplier - 1.0f) > 0.01f);
-	const float hudHeight = hasForces ? 104.0f : 80.0f;
+	const float lineHeight = ImGui::GetFontSize() + 3.0f;
+	const float hudHeight = padY * 2.0f + lineHeight * (hasForces ? 4.0f : 3.0f);
 
-	// [수정] 우상단(Top-Right) -> 우하단(Bottom-Right)으로 이동하여 RGBA 채널 버튼과 겹침 완벽 방지
-	const ImVec2 hudPos(viewportPos.x + viewportSize.x - hudWidth - margin,
-		viewportPos.y + viewportSize.y - hudHeight - margin);
+	// 뷰포트 우측 하단에 배치 및 클램핑
+	const float minX = viewportPos.x + margin;
+	const float maxX = std::max(minX, viewportPos.x + viewportSize.x - hudWidth - margin);
+	const float minY = viewportPos.y + margin;
+	const float maxY = std::max(minY, viewportPos.y + viewportSize.y - hudHeight - margin);
 
-	ImGui::SetCursorScreenPos(hudPos);
-	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08f, 0.08f, 0.10f, 0.75f));
-	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.30f, 0.35f, 0.60f));
-	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
-	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 3.0f));
+	const ImVec2 hudMin(maxX, maxY);
+	const ImVec2 hudMax(maxX + hudWidth, maxY + hudHeight);
 
-	const ImGuiWindowFlags hudFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
-		ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+	// 1. 반투명 다크 배경 및 테두리 (ImDrawList 직접 렌더링으로 스크롤바 유발 방지)
+	drawList->AddRectFilled(hudMin, hudMax, IM_COL32(18, 18, 22, 220), 6.0f);
+	drawList->AddRect(hudMin, hudMax, IM_COL32(70, 75, 88, 180), 6.0f, 0, 1.0f);
 
-	if (ImGui::BeginChild("##VFXViewportHUDChild", ImVec2(hudWidth, hudHeight), ImGuiChildFlags_Borders, hudFlags))
+	float textY = hudMin.y + padY;
+	const float textX = hudMin.x + padX;
+
+	const float curTime = m_TimelineSeek.value_or(m_CurrentTime);
+	const float maxTime = effect ? GetTimelineDuration() : 0.0f;
+	const int curFrame = static_cast<int>(std::round(curTime * EditorUI::EffectTimelineFPS));
+	const int totalFrames = static_cast<int>(std::round(maxTime * EditorUI::EffectTimelineFPS));
+
+	// 1행: 시간 (청록색)
+	char timeBuf[64];
+	std::snprintf(timeBuf, sizeof(timeBuf), ICON_FA_CLOCK "  %.2fs / %.2fs", curTime, maxTime);
+	drawList->AddText(ImVec2(textX, textY), IM_COL32(80, 230, 210, 255), timeBuf);
+	textY += lineHeight;
+
+	// 2행: (프레임) (연회색)
+	char frameBuf[64];
+	std::snprintf(frameBuf, sizeof(frameBuf), "  (%s %d / %d)", LOCAL_CSTR("VFXEditor.HUDFrame"), curFrame, totalFrames);
+	drawList->AddText(ImVec2(textX, textY), IM_COL32(170, 175, 185, 220), frameBuf);
+	textY += lineHeight;
+
+	// 3행: 재생 상태 (연두색 / 황색)
+	if (!effect)
 	{
-		const float curTime = m_TimelineSeek.value_or(m_CurrentTime);
-		const float maxTime = effect ? GetTimelineDuration() : 0.0f;
-		const int curFrame = static_cast<int>(std::round(curTime * EditorUI::EffectTimelineFPS));
-		const int totalFrames = static_cast<int>(std::round(maxTime * EditorUI::EffectTimelineFPS));
-
-		// 1. 타임코드 및 프레임 (로캘 포맷 반영)
-		ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.8f, 1.0f), ICON_FA_CLOCK "  %.2fs / %.2fs", curTime, maxTime);
-		ImGui::SameLine(0.0f, 6.0f);
-		ImGui::TextDisabled("(%s %d / %d)", LOCAL_CSTR("VFXEditor.HUDFrame"), curFrame, totalFrames);
-
-		// 2. 재생 상태 (로캘 문자열 반영)
-		if (!effect)
-		{
-			ImGui::TextDisabled(ICON_FA_CIRCLE_INFO " %s", LOCAL_CSTR("VFXEditor.NoEffectLoaded"));
-		}
-		else if (m_IsPlaying)
-		{
-			ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), ICON_FA_PLAY " %s (%.1fx)", LOCAL_CSTR("VFXEditor.HUDPlaying"), m_PlayRate);
-		}
-		else
-		{
-			ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f), ICON_FA_PAUSE " %s", LOCAL_CSTR("VFXEditor.HUDPaused"));
-		}
-
-		// 3. 환경 외력 시뮬레이션 상태 요약
-		if (hasForces)
-		{
-			ImGui::Separator();
-			if (glm::length(m_SimWind) > 0.01f)
-				ImGui::TextDisabled("%s: (%.1f, %.1f, %.1f)", LOCAL_CSTR("VFXEditor.HUDWind"), m_SimWind.x, m_SimWind.y, m_SimWind.z);
-			if (std::abs(m_SimGravityMultiplier - 1.0f) > 0.01f)
-				ImGui::TextDisabled("%s: %.1fx", LOCAL_CSTR("VFXEditor.HUDGravity"), m_SimGravityMultiplier);
-		}
-
-		// 4. 단축키 동적 힌트 (ShortcutManager 일원화 조회)
-		auto& sm = ShortcutManager::Get();
-		const char* stepPrevHint = sm.GetShortcutHint("CompositeTimeline.StepPrev");
-		const char* stepNextHint = sm.GetShortcutHint("CompositeTimeline.StepNext");
-		if ((stepPrevHint && stepPrevHint[0] != '\0') || (stepNextHint && stepNextHint[0] != '\0'))
-		{
-			ImGui::TextDisabled("%s: %s / %s", LOCAL_CSTR("VFXEditor.HUDStepHint"),
-				stepPrevHint ? stepPrevHint : "[", stepNextHint ? stepNextHint : "]");
-		}
+		std::string s = std::string(ICON_FA_CIRCLE_INFO " ") + LOCAL_CSTR("VFXEditor.NoEffectLoaded");
+		drawList->AddText(ImVec2(textX, textY), IM_COL32(170, 170, 170, 200), s.c_str());
 	}
-	ImGui::EndChild();
-	ImGui::PopStyleVar(3);
-	ImGui::PopStyleColor(2);
+	else if (m_IsPlaying)
+	{
+		char playBuf[64];
+		std::snprintf(playBuf, sizeof(playBuf), ICON_FA_PLAY " %s (%.1fx)", LOCAL_CSTR("VFXEditor.HUDPlaying"), m_PlayRate);
+		drawList->AddText(ImVec2(textX, textY), IM_COL32(100, 230, 100, 255), playBuf);
+	}
+	else
+	{
+		std::string pauseStr = std::string(ICON_FA_PAUSE " ") + LOCAL_CSTR("VFXEditor.HUDPaused");
+		drawList->AddText(ImVec2(textX, textY), IM_COL32(240, 190, 50, 255), pauseStr.c_str());
+	}
+	textY += lineHeight;
+
+	// 4행: 환경 외력 (바람 또는 중력이 설정되어 있을 때만 컴팩트 노출)
+	if (hasForces)
+	{
+		char forceBuf[80];
+		std::snprintf(forceBuf, sizeof(forceBuf), "%s:(%.1f,%.1f) %s:%.1fx",
+			LOCAL_CSTR("VFXEditor.HUDWind"), m_SimWind.x, m_SimWind.z,
+			LOCAL_CSTR("VFXEditor.HUDGravity"), m_SimGravityMultiplier);
+		drawList->AddText(ImVec2(textX, textY), IM_COL32(150, 160, 175, 220), forceBuf);
+	}
 }
 
 void VFXEditorPanel::DrawGizmo()

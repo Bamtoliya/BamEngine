@@ -2,7 +2,7 @@
 (Unified Disk Cache & Thumbnail Persistence Plan)
 
 - **작성일**: 2026-11-16
-- **상태**: Phase 1(썸네일 디스크 캐시 및 2D/3D 바이패스) 구현 및 검증 완료 (2026-11-16) / Phase 2~4 순차 진행 대기
+- **상태**: Phase 1, 2, 3 (썸네일, 셰이더/PSO, 에셋 DDC 디스크 캐시) 구현 및 검증 완료 (2026-11-16) / Phase 4 순차 진행 대기
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 및 런타임/에디터 성능 최적화)
 - **관련 문서**:
   - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) (조치 3: 썸네일 비동기화 및 디스크 캐시 연계)
@@ -324,23 +324,29 @@ flowchart LR
   - `Editor/Source/AssetManager/AssetCache/Public/AssetCache.h`
   - `Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp`
 
-### Phase 2: 셰이더 컴파일 및 PSO 디스크 캐시 [P1]
+### Phase 2: 셰이더 컴파일 및 PSO 디스크 캐시 [P1] [완료: 2026-11-16]
 - **목표**: 셰이더 무변경 시 `dxc.exe` 구동을 100% 스킵하고, D3D12 드라이버 셰이더 컴파일 시간 단축.
-- **주요 작업**:
-  1. `ShaderCompiler::Compile()` 진입부에서 HLSL 소스 및 인클루드 파일의 `last_write_time`과 출력 파일(`.cso`, `.spv`) 비교 캐시 적중 로직 구현.
-  2. DirectX 12 렌더러에 `ID3D12PipelineLibrary`를 이용한 PSO 디스크 캐시 직렬화/역직렬화 구현.
+- **주요 작업 (구현 및 검증 완료)**:
+  1. `ShaderCompiler::Compile()` 진입부에서 HLSL 소스 및 모든 인클루드(`.hlsli`) 파일의 `last_write_time`과 출력 파일(`.cso`, `.spv`, `.wgsl`) 비교 타임스탬프 캐시 적중 로직 구현 (`IsUpToDate()`, `ReadCompiledFile()`). 적중 시 `_wpopen` 실행 100% 바이패스.
+  2. DirectX 12 렌더러에 `ID3D12PipelineLibrary`를 이용한 PSO 디스크 캐시 직렬화/역직렬화 인프라 구축 (`.bam/cache/shaders/pipeline.library`, `pipeline.names`).
+  3. D3D12 스펙 준수: `CreatePipelineLibrary` 입력 메모리 버퍼(`m_PipelineLibraryData`)의 수명을 `ID3D12PipelineLibrary` 객체와 일치시켜 NVIDIA 드라이버 크래시(`0xC0000005`) 원천 차단.
+  4. 파이프라인 중복 등록 방지 가드(`!ContainsPipeline`) 및 캐시 파일 정합성 자가 치유 로직으로 종료 시 `0x887A0005`(Device Removed) 예외 해결.
 - **대상 파일**:
+  - `Engine/Source/Render/Shader/Public/ShaderCompiler.h`
   - `Engine/Source/Render/Shader/Private/ShaderCompiler.cpp`
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Public/DirectX12RHI.h`
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp`
   - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12Pipeline.cpp`
 
-### Phase 3: 에셋 파생 데이터 캐시 (DDC) 기반 구축 [P1]
+### Phase 3: 에셋 파생 데이터 캐시 (DDC) 기반 구축 [P1] [완료: 2026-11-16]
 - **목표**: 모델/텍스처 변환기에서 소스 에셋이 변경되지 않았을 때 재변환을 건너뛰는 공용 DDC 인프라 수립.
-- **주요 작업**:
-  1. `Tools/Converters/ModelConverter/` 및 `TextureConverter/`에 소스 해시 기반 캐시 조회 계층 연동.
-  2. 에셋 변환 결과물을 `.bam/cache/ddc/`에 스테이징 및 재사용.
+- **주요 작업 (구현 및 검증 완료)**:
+  1. `Tools/Converters/TextureConverter/Private/DirectXTexCompressor.cpp`: 텍스처 DDC 캐시(`.bam/cache/ddc/textures/<hash>.ddc`) 구축. FNV-1a 기반 소스 파일 해시 및 타깃 포맷/압축 플래그 대조를 통해 DirectXTex WIC 로드, 밉맵 생성, BCn 압축을 100% 스킵하고 0.1ms 만에 복원.
+  2. `Tools/Converters/ModelConverter/Private/ModelConverter.cpp`: 모델 DDC 캐시(`.bam/cache/ddc/models/<hash>.ddc`) 구축. `ModelData` 경량 바이너리 직렬화/역직렬화 구현을 통해 Assimp 씬 파싱 및 `meshopt_simplify` LOD 생성을 100% 스킵하고 1~3ms 만에 모델 데이터 복원.
+  3. 모든 DDC 저장은 `.tmp` 파일을 거쳐 `rename`하는 원자적 쓰기(Atomic Write)를 준수하여 불완전 캐시 파일 생성 방지.
 - **대상 파일**:
   - `Tools/Converters/ModelConverter/Private/ModelConverter.cpp`
-  - `Tools/Converters/TextureConverter/Private/TextureConverter.cpp`
+  - `Tools/Converters/TextureConverter/Private/DirectXTexCompressor.cpp`
 
 ### Phase 4: 지형, 물리 및 런타임 캐시 시스템 확장 [P2/P3]
 - **목표**: 대형 지형 및 복잡한 물리 씬의 로딩 시간 단축.
@@ -374,3 +380,5 @@ flowchart LR
 
 - **2026-11-16**: 썸네일 디스크 캐시 및 엔진 전반 6대 디스크 캐시 소요처 전수 조사 완료, 통합 디스크 캐시 인프라 및 Phase 1~4 상세 개발 계획서 신규 작성.
 - **2026-11-16**: Phase 1(썸네일 디스크 캐시 인프라, 2D/3D 비동기 바이패스, D3D12 리드백 및 원자적 영속화, LRU 용량 관리) 구현 및 검증 완료.
+- **2026-11-16**: Phase 2(셰이더 컴파일 타임스탬프 캐시, ID3D12PipelineLibrary 기반 PSO 디스크 캐시 영속화, 버퍼 수명 보존 및 정합성 검사) 구현 및 검증 완료 (커밋 `a61312c1`).
+- **2026-11-16**: Phase 3(에셋 파생 데이터 캐시 DDC 인프라 구축: 텍스처 DirectXTex 압축 스킵 캐시 및 모델 Assimp/LOD 바이너리 직렬화 캐시) 구현 및 검증 완료.
