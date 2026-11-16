@@ -1,4 +1,4 @@
-# BamEngine 기본 리소스 및 셰이더 명세서 (Built-in Resources & Shaders Specification)
+﻿# BamEngine 기본 리소스 및 셰이더 명세서 (Built-in Resources & Shaders Specification)
 
 - **최종 갱신일**: 2026-11-16
 - **상태**: 공식 명세 확립 (Living Document)
@@ -218,19 +218,26 @@ flowchart TD
 ## 5. 기본 프리미티브 메시 (Built-in Primitive Meshes)
 
 엔진 시작 시 `RegisterBuiltInPrimitiveMeshes(ResourceManager&)`(`BuiltInPrimitiveMeshes.cpp`)를 통해 메모리 상에 프로그래밍 방식으로 자동 등록되는 표준 기하 형상입니다.
+모든 내장 메시는 **시계 방향 앞면(Clockwise = Front Face)** 및 **백페이스 컬링(CullMode = Back)** 표준을 준수합니다.
 
-| 메시 식별자 (Resource Key) | 정점 스트림 구성 | 형상 규격 및 특징 |
-| :--- | :--- | :--- |
-| `QuadMesh` | Position, Material | 2m x 2m 2D 쿼드 (XY 평면, $Z=-1$) |
-| `CubeMesh` | Position, Material | 1m x 1m x 1m 정육면체 (6개 면, 면당 4정점 = 총 24정점 독립 노멀) |
-| `SphereMesh` | Position, Material | 32 슬라이스 x 16 스택 UV 스피어 (반경 0.5m, 극점 왜곡 완화) |
-| `PlaneMesh` | Position, Material | 10m x 10m 바닥 평면 (윗면 $+Y$ 노멀, 타일링 UV) |
-| `CylinderMesh` | Position, Material | 32 분할 원기둥 (원통 측면 스무딩 노멀 + 윗면/아랫면 평면 캡) |
-| `CapsuleMesh` | Position, Material | 반경 0.5m, 총 높이 2m 캡슐 (양 끝 반구 + 중간 원통) |
+| 메시 식별자 (Resource Key) | 정점 스트림 구성 | 와인딩 규격 | 형상 규격 및 특징 |
+| :--- | :--- | :--- | :--- |
+| `QuadMesh` | Position, Material | Clockwise (CW) | 2m x 2m 2D 쿼드 (XY 평면, $Z=-1$, 노멀 $-Z$) |
+| `CubeMesh` | Position, Material | Clockwise (CW) | 1m x 1m x 1m 정육면체 (6개 면, 면당 4정점 = 총 24정점 독립 노멀, 전면 CW 통일) |
+| `SphereMesh` | Position, Material | Clockwise (CW) | 24 슬라이스 x 16 스택 UV 스피어 (반경 0.5m, 외곽 법선 기준 CW) |
+| `PlaneMesh` | Position, Material | Clockwise (CW) | 1m x 1m 바닥 평면 (윗면 $+Y$ 노멀, 타일링 UV, CW) |
+| `CylinderMesh` | Position, Material | Clockwise (CW) | 24 분할 원기둥 (반경 0.5m, 높이 1m, 측면 및 상/하단 캡 전면 CW 통일) |
+| `CapsuleMesh` | Position, Material | Clockwise (CW) | 반경 0.25m, 몸통 높이 0.5m, 총 높이 1m 캡슐 (양 끝 반구 + 중간 원통 CW 통일) |
 
+### 5.1 프리미티브 정점 및 인덱스 생성 불변식 (Invariants)
 - **버텍스 스트림 레이아웃**:
   - `EMeshStream::Position`: `vec3 position`
   - `EMeshStream::Material`: `vec3 normal`, `vec2 texCoord`, `vec3 tangent`, `vec3 binormal`, `vec4 color`
+- **정점 와인딩 수학 불변식**:
+- 표면 외곽 법선 $\mathbf{N}$과 마주보는 관찰자 시점($-\mathbf{N}$)에서 정점 $v_0 \to v_1 \to v_2$가 시계 방향으로 배치되어야 하므로, 모든 삼각형 페이스에 대해 다음 부호가 성립해야 한다:
+     $$\text{dot}(\text{cross}(v_1 - v_0, v_2 - v_0), \mathbf{N}) > 0 \quad (\iff \text{dot}(\text{cross}(v_2 - v_0, v_1 - v_0), \mathbf{N}) < 0)$$
+- **파이프라인 및 머티리얼 정합성**:
+  - 내장 메시는 기본 불투명 머티리얼(`DefaultMaterial`, `GBufferMaterial`)과 바인딩되며, 머티리얼의 `m_FrontFace: 1` (`Clockwise`) 및 `m_CullMode: 2` (`Back`) 상태에서 배면이 정상 은면 소거(Back-face Culled)되어야 한다.
 
 ---
 

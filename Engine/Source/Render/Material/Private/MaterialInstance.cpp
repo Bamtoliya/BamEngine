@@ -204,6 +204,13 @@ ECompareOp MaterialInstance::GetDepthCompareOp() const
 	return baseMat ? baseMat->GetDepthCompareOp() : ECompareOp::Less;
 }
 
+EFrontFace MaterialInstance::GetFrontFace() const
+{
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::FrontFace)) return m_FrontFace;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetFrontFace() : EFrontFace::Clockwise;
+}
+
 void MaterialInstance::SetBlendMode(EBlendMode mode)
 {
 	m_BlendMode = mode;
@@ -232,6 +239,12 @@ void MaterialInstance::SetDepthCompareOp(ECompareOp op)
 {
 	m_DepthCompareOp = op;
 	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp);
+}
+
+void MaterialInstance::SetFrontFace(EFrontFace mode)
+{
+	m_FrontFace = mode;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::FrontFace);
 }
 
 #pragma endregion

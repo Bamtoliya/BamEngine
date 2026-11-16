@@ -1,4 +1,4 @@
-add_executable(SceneReflectionCheck examples/SceneReflectionCheck.cpp)
+﻿add_executable(SceneReflectionCheck examples/SceneReflectionCheck.cpp)
 target_link_libraries(SceneReflectionCheck PRIVATE BamEngine::Engine)
 set_target_properties(SceneReflectionCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
@@ -41,6 +41,7 @@ foreach(check_target IN ITEMS
     Physics2DCheck
     CollisionGeometryCheck
     SplineCurveCheck
+    BuiltInMeshWindingCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)

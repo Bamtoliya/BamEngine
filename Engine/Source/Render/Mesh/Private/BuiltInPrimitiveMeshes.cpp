@@ -98,8 +98,8 @@ namespace Engine
             for (uint32 i = 0; i < 6; ++i)
             {
                 uint32 s = i * 4;
-                indices.push_back(s + 0); indices.push_back(s + 1); indices.push_back(s + 2);
-                indices.push_back(s + 0); indices.push_back(s + 2); indices.push_back(s + 3);
+                indices.push_back(s + 0); indices.push_back(s + 2); indices.push_back(s + 1);
+                indices.push_back(s + 0); indices.push_back(s + 3); indices.push_back(s + 2);
             }
 
             // 4. 새로운 Streams 배열 기반 Desc 구성
@@ -162,12 +162,12 @@ namespace Engine
                     uint32 second = first + slices + 1;
 
                     indices.push_back(first);
-                    indices.push_back(second);
                     indices.push_back(first + 1);
+                    indices.push_back(second);
 
                     indices.push_back(second);
-                    indices.push_back(second + 1);
                     indices.push_back(first + 1);
+                    indices.push_back(second + 1);
                 }
             }
 
@@ -275,8 +275,8 @@ namespace Engine
             for (uint32 i = 0; i < slices; ++i)
             {
                 indices.push_back(topCenterIdx);
-                indices.push_back(topCenterIdx + 1 + i);
                 indices.push_back(topCenterIdx + 2 + i);
+                indices.push_back(topCenterIdx + 1 + i);
             }
 
             // Bottom cap
@@ -296,8 +296,8 @@ namespace Engine
             for (uint32 i = 0; i < slices; ++i)
             {
                 indices.push_back(btmCenterIdx);
-                indices.push_back(btmCenterIdx + 2 + i);
                 indices.push_back(btmCenterIdx + 1 + i);
+                indices.push_back(btmCenterIdx + 2 + i);
             }
 
             MeshCreateDesc cylDesc = {};
@@ -383,12 +383,12 @@ namespace Engine
                     uint32 second = first + ringStride;
 
                     indices.push_back(first);
-                    indices.push_back(second);
                     indices.push_back(first + 1);
+                    indices.push_back(second);
 
                     indices.push_back(second);
-                    indices.push_back(second + 1);
                     indices.push_back(first + 1);
+                    indices.push_back(second + 1);
                 }
             }
 

@@ -1,4 +1,4 @@
-# 엔진·에디터·클라이언트 개발 목표와 작성 지침
+﻿# 엔진·에디터·클라이언트 개발 목표와 작성 지침
 
 ## 1. 문서의 목적
 
@@ -669,3 +669,43 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
    - 메인 스레드, 렌더 스레드, 비동기 로딩 워커의 CPU 코어 바인딩 및 우선순위를 엔진이 결정할 수 있어야 한다.
 3. **전역 락(Global Lock) 없는 Work-Stealing 큐**:
    - 스레드 간 일감 분배는 무잠금(Lock-Free) 링 버퍼나 전용 작업 큐를 통해 오버헤드를 최소화한다.
+
+## 21. 기하 좌표계, 앞면 와인딩 및 컬링 불변 원칙 (Coordinate System, Face Winding & Culling Invariants)
+
+BamEngine은 렌더링 파이프라인, 절차적 기하 생성(Procedural Mesh), 외부 DCC 툴 에셋 임포트(ModelImporter), 머티리얼 직렬화 전반에 걸쳐 일관된 단일 진실의 원천(SSOT)을 유지하기 위해 다음 불변 원칙을 강제한다.
+
+### 21.1 기본 기하 좌표계 (Coordinate System SSOT)
+
+- **왼손 좌표계 (Left-Handed System)**:
+  - `+X`: 우측 (Right)
+  - `+Y`: 상단 (Up)
+  - `+Z`: 전방 깊이 (Forward, 화면 안쪽)
+  - 프로젝션 행렬: `glm::perspectiveLH_ZO` (DirectX/Vulkan 표준 0.0 ~ 1.0 Depth)
+
+### 21.2 앞면 와인딩 표준 (Front-Face Winding Standard)
+
+- **시계 방향 (Clockwise = 1) 원칙**:
+  - 표면의 외곽 법선(Surface Normal, $\mathbf{N}$)과 마주보며 관찰할 때, 정점이 **시계 방향(Clockwise)**으로 회전하는 면을 앞면(Front Face)으로 정의한다.
+  - DirectX 12, Unreal Engine, Unity의 네이티브 왼손 좌표계 래스터라이저 표준과 일치한다.
+  - 외부 모델 임포트 시 `aiProcess_ConvertToLeftHanded` 세트 플래그를 통해 생성되는 Clockwise 와인딩 출력과 직접 호환된다.
+
+### 21.3 절차적 메시 및 인덱스 생성 수학 규칙
+
+1. **평면/쿼드 정점 인덱싱**:
+   - 4개 정점을 좌상($v_0$), 우상($v_1$), 우하($v_2$), 좌하($v_3$) 순으로 배치했을 때 인덱스는 반드시 `0 -> 1 -> 2`, `0 -> 2 -> 3` 순서로 결합한다.
+2. **구체/원기둥/지형 격자 인덱싱**:
+   - 상단 링 인덱스 $i$, 하단 링 인덱스 $i + \text{stride}$에 대해 삼각형은 `(top, top+1, btm)` 및 `(top+1, btm+1, btm)` 순서(CW)로 생성한다.
+3. **법선-와인딩 수학 불변식**:
+    - 표준 벡터 외적 $\mathbf{a} \times \mathbf{b}$($\mathbf{a} = v_1 - v_0$, $\mathbf{b} = v_2 - v_0$)에 대해, 화면 앞면(CW) 판정 시 관찰자 시선($-\mathbf{N}$) 방향으로 벡터가 형성되므로 다음 기하 부호가 엄격히 성립해야 한다:
+      $$\text{dot}(\text{cross}(v_1 - v_0, v_2 - v_0), \mathbf{N}) > 0 \quad (\iff \text{dot}(\text{cross}(v_2 - v_0, v_1 - v_0), \mathbf{N}) < 0)$$
+
+### 21.4 머티리얼 및 파이프라인 래스터라이저 불변식
+
+1. **파이프라인 기본값 동기화**:
+   - `RHIPipelineDesc::frontFace`: 기본값 `EFrontFace::Clockwise` (1).
+   - `RHIPipelineDesc::cullMode`: 기본값 `ECullMode::Back` (2).
+2. **머티리얼 인스턴스 상속 무결성**:
+   - `MaterialInstance`는 부모 `Material`의 `FrontFace` 속성을 기본 상속해야 하며, 독립적인 오버라이드 비트(`EPipelineOverrideFlag::FrontFace`)를 지원해야 한다.
+3. **불투명/디퍼드 머티리얼의 `CullMode = None (0)` 남용 금지**:
+   - 와인딩 불일치로 면이 잘리는 문제를 해결하기 위해 `CullMode`를 임의로 `None(0)`으로 변경하는 행위를 금지한다.
+   - 반투명(AlphaBlend), 잎사귀 등 명시적 양면 렌더링이 필요한 특수 재질을 제외한 모든 표준 머티리얼은 반드시 `CullMode = Back (2)`를 유지한다.

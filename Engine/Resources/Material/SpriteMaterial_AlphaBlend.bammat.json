@@ -9,7 +9,7 @@
   "m_DepthCompareOp": 1,
   "m_DepthMode": 1,
   "m_FillMode": 1,
-  "m_FrontFace": 0,
+  "m_FrontFace": 1,
   "m_Key": "Resources/Material/SpriteMaterial_AlphaBlend.bammat.json",
   "m_Parameters": [],
   "m_PassShaders": [],

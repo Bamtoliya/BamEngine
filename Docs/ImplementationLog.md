@@ -2,6 +2,71 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 기하 와인딩 CW 표준화 구현 및 검증 (`AssetPipelineAndRenderingOptimizationPlan.md` 조치 1)
+
+- **배경**:
+  - 엔진 내장 메시(CCW 중심)·기본 머티리얼 JSON(CCW)과 임포트 메시(CW)·코드 생성 `MaterialInstance`(C++ 기본값 CW, 부모 미상속)의 두 기준이 공존했다. 짝이 어긋난 조합(예: 머티리얼 인스턴스를 쓴 `CubeMesh` 바닥)에서 바깥 면이 컬링되고 안쪽 면이 보였다.
+  - 큐브 윗/아랫면만 뒤집던 임시 수정은 기본 머티리얼(CCW) 큐브의 윗/아랫면을 소실시키므로 되돌리고 엔진 전체를 CW로 통일했다.
+- **변경**:
+  - `Engine/Source/Render/Mesh/Private/BuiltInPrimitiveMeshes.cpp`: Cube·Sphere·Capsule과 Cylinder 캡의 삼각형 2·3번째 인덱스를 교환해 CW로 통일했다(정점 데이터 불변). Quad·Plane·Cylinder 측면·지형 그리드는 기존 CW를 유지한다.
+  - `MaterialInstance`: `EPipelineOverrideFlag::FrontFace`와 `GetFrontFace`/`SetFrontFace`/`ClearFrontFaceOverride`를 추가했다. 오버라이드가 없으면 부모 머티리얼 값을 상속한다. 기존 인스턴스 파일은 플래그가 없으므로 부모 값을 따른다.
+  - `RHIPipelineDesc::frontFace` 기본값을 `Clockwise`로 바꿨다. 머티리얼 없이 생성하는 파이프라인(Grid, DebugRenderer, Bloom, ChannelFilter, GraphShaderPreview, LightManager Compute)은 모두 `CullMode::None` 또는 Compute라 동작 변화가 없다.
+  - 머티리얼 JSON: `Engine/Resources/Material` 기본 머티리얼 11종과 `Assets/Material` 3종을 `m_FrontFace: 1`로 바꿨다. `SkinningMaterial`·`TerrainMaterial`의 임시 `m_CullMode: 0`을 `2`(Back)로 정상화했다.
+  - 검사 신설: `Engine/examples/BuiltInMeshWindingCheck.cpp`(RHI 없이 CPU 원본 데이터로 $\text{dot}(\text{cross}(v_1 - v_0, v_2 - v_0), \mathbf{N}) > 0$ 검사, 면적 0 삼각형 별도 집계), `Engine/CMake/Checks.cmake` 등록.
+  - 문서 정정: 지침 21절·`BuiltInResourcesAndShaders.md`의 불변식 부호, 조치 계획서의 큐브·지형 와인딩 판정과 `FlipWindingOrder` 제거 방향(임포트 플래그는 Assimp `ConvertToLeftHanded`와 같은 정상 변환이라 유지).
+- **검증 (사용자 실행, `x64-debug`)**:
+  - 적용 중 `BuiltInMeshWindingCheck`가 인덱스 수정이 누락된 Capsule(CW 0 / CCW 640)을 실패로 검출했고, 수정 후 통과했다.
+  - CTest 전체 38/38 통과.
+  - 실행 확인 통과: 계층 패널 기본 도형, 정적·스킨드 임포트 모델, 머티리얼 프리뷰, 콘텐츠 브라우저 썸네일, VFX 프리뷰 바닥, 지형.
+- **미검증·한계**:
+  - `SplineTestStrip`(`reverseWinding=true`, CCW) 실행 확인 미수행.
+  - x64-release 빌드 미확인.
+  - 실행 확인은 작업 트리의 GBuffer 기반 `DefaultMaterial`로 수행했다. 커밋에는 기존 `DefaultMaterial` 내용에 `m_FrontFace: 1`만 반영했고, 기본 머티리얼 재설계(GBuffer 전환·키 교정)는 별도 작업으로 남겼다. 커밋 스냅샷의 기존 `DefaultMaterial` + CW 조합은 실행 미확인이다.
+  - `Assets/`는 `.gitignore` 대상이라 `Assets/Material` 3종 변경은 버전 관리에 포함되지 않는다.
+  - 에디터 인스펙터는 `m_OverrideFlags`를 자동으로 켜지 않아 인스턴스의 `m_FrontFace`/`m_CullMode`를 직접 편집해도 반영되지 않는다(기존 CullMode와 같은 한계).
+
+### [2026-11-16] 기하 좌표계, 앞면 와인딩 및 컬링 불변 원칙 공식화 (`Docs/EngineEditorClientGuidelines.md` 21절 신설 등)
+
+- **배경 및 목적**:
+  - 임포트된 모델이나 절차적으로 생성된 프리미티브 메시에서 앞뒷면이 뒤집히거나, 머티리얼 바인딩 시 백페이스 컬링에 의해 면이 소실되던 고질적 문제의 원인을 엔진 전수 감사함.
+  - 파이프라인 기본값(`CounterClockwise`), 머티리얼 JSON 14종(`CCW`), `MaterialInterface` C++ 기본값(`CW`), `MaterialInstance`의 `FrontFace` 상속 단절, 내장 메시 6종 및 지형 메시의 와인딩 혼종(CW/CCW)이 얽힌 구조적 불일치를 규명하고 공식 불변 원칙을 문서화함.
+- **확립된 단일 진실의 원천 (SSOT)**:
+  1. **왼손 좌표계 (Left-Handed)**: `+X` 우측, `+Y` 상단, `+Z` 전방 깊이(화면 안쪽), `glm::perspectiveLH_ZO`.
+  2. **앞면 와인딩 (Front-Face Winding)**: 표면 외곽 법선 $\mathbf{N}$과 마주보는 시점에서 **시계 방향 (Clockwise = 1)**을 앞면으로 정의.
+  3. **백페이스 컬링 (Back-Face Culling)**: 불투명/디퍼드 머티리얼은 반드시 `CullMode = Back (2)`를 유지하며 임의의 `None(0)` 땜질 금지.
+  4. **수학 불변식**: 모든 삼각형 정점 $v_0, v_1, v_2$에 대해 $\text{dot}(\text{cross}(v_1 - v_0, v_2 - v_0), \mathbf{N}) > 0$ 성립(최초 기재의 부호 오류를 같은 날 정정).
+- **반영된 문서**:
+  - `Docs/EngineEditorClientGuidelines.md`: 21절 "기하 좌표계, 앞면 와인딩 및 컬링 불변 원칙" 신설.
+  - `Docs/BuiltInResourcesAndShaders.md`: 5절 프리미티브 메시 명세 및 와인딩/법선 불변식 갱신.
+  - `Docs/AssetPipelineAndRenderingOptimizationPlan.md`: 2.1절 심층 원인 규명 및 3.1절 6대 정리 작업 계획 갱신.
+- **후속 구현 작업 (Checklist)**:
+  1. `RHIPipelineDesc::frontFace = EFrontFace::Clockwise;` 변경
+  2. `MaterialInstance`에 `EPipelineOverrideFlag::FrontFace` 및 상속 위임 구현
+  3. 14종 머티리얼 JSON `"m_FrontFace": 1` 및 컬링 정상화(`Skinning`, `Terrain` `m_CullMode: 2`)
+  4. 내장 프리미티브(`Cube`, `Sphere`, `Capsule`, `Cylinder` 캡) CW 인덱싱 교정(지형 그리드는 이미 CW로 확인되어 변경 없음)
+  5. 기하 와인딩 무결성 자동 검증 CTest(`BuiltInMeshWindingCheck.cpp`) 신설
+
+### [2026-11-16] 4대 핵심 결함·병목 심층 원인 규명 및 조치 계획서 작성 (`Docs/AssetPipelineAndRenderingOptimizationPlan.md`)
+
+- **배경 및 목적**:
+  - 모델 임포트 시 CW/CCW 와인딩 반전, ModelImporter 모달 내 프리뷰 카메라 조작 동결, 대용량 에셋 폴더 오픈 시 프레임 드랍, Sponza 씬 배치 시 드로우콜 폭증 및 프레임 급락 등 4가지 치명적 결함/성능 저하의 코드 레벨 원인을 규명하고 통합 조치 계획을 수립함.
+- **규명된 핵심 원인 및 조치 방향**:
+  1. **[이슈 1] 와인딩 반전 (CW/CCW Flip)**:
+     - 원인(정정): 임포트 플래그(`MakeLeftHanded`+`FlipWindingOrder`+`FlipUVs`)는 Assimp `ConvertToLeftHanded`와 같은 정상 변환이며 모델은 CW로 베이킹된다. 최초 기재한 "이중 반전"은 잘못된 판단이다. 실제 원인은 엔진 내장 메시·기본 머티리얼(CCW)과 임포트 메시·코드 생성 `MaterialInstance`(CW)의 두 기준 공존이었다.
+     - 조치: `FlipWindingOrder`는 유지하고 엔진 전체를 CW로 통일했다(위 "기하 와인딩 CW 표준화 구현 및 검증" 항목).
+  2. **[이슈 2] 프리뷰 카메라 조작 동결**:
+     - 원인: `PreviewViewportWidget.cpp`의 네비게이션 가드 `canNavigate`에 `!ImGui::IsPopupOpen(...)`이 포함되어, `ModelImportModal` 같은 모달 팝업 내부에서 실행될 때 항상 `false`로 평가되어 입력 처리가 원천 차단됨.
+     - 조치: 자신이 속한 모달 창이 포커스/호버되어 있는 경우 네비게이션을 허용하도록 조건식 교정.
+  3. **[이슈 3] 콘텐츠 브라우저 대용량 폴더 스터터링**:
+     - 원인: `AssetCache::Update3DCapture`가 3D 썸네일 생성을 위해 메인 스레드에서 `ResourceManager::LoadFile`을 동기 호출하여 수십 MB 단위의 정점 파싱과 GPU 할당이 렌더 루프를 동기 블로킹함.
+     - 조치: 에셋 임포트 시 디스크 썸네일(`.thumb.png`) 사전 생성/캐싱, 프레임당 최대 2.0ms 타임 버짓 적용 및 뷰포트 가시 렉트 기반 요청 컬링.
+  4. **[이슈 4] Sponza 드로우콜 폭증 및 프레임 저하**:
+     - 원인: `MeshRenderSystem`이 수집한 `commands`를 머티리얼/메시 기준으로 정렬하지 않고 씬 그래프 순서대로 제출하여, `Renderer::RenderMeshes`에서 매 드로우마다 `flushBatch()`가 실행되어 1개짜리 드로우콜 수백 개와 심각한 파이프라인/디스크립터 테이블 교체 오버헤드 발생.
+     - 조치: `(Pipeline -> Material -> Mesh -> Depth)` 64비트 정렬 키 기반 Render Queue 도입을 통한 `DrawIndexedInstanced` 대규모 배칭 극대화, Early-Z 활성화를 위한 Front-to-Back 정렬, 섀도우 패스 경량 뎁스 파이프라인 분리.
+- **관련 문서**:
+  - 신규 생성: `Docs/AssetPipelineAndRenderingOptimizationPlan.md`
+  - 연결 갱신: `Docs/DevelopmentPriorities.md`, `Docs/ImplementationLog.md`
+
 ### [2026-11-16] 엔진 기본 리소스 및 셰이더 전수 명세서 작성 (`Docs/BuiltInResourcesAndShaders.md`)
 
 - **배경 및 목적**:

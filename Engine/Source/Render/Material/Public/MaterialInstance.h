@@ -19,6 +19,7 @@ enum class EPipelineOverrideFlag : uint8
 	FillMode = 1 << 2,
 	DepthMode = 1 << 3,
 	DepthCompareOp = 1 << 4,
+	FrontFace = 1 << 5,
 	Count
 };
 
@@ -62,18 +63,21 @@ public:
 	virtual EFillMode GetFillMode() const override;
 	virtual EDepthMode GetDepthMode() const override;
 	virtual ECompareOp GetDepthCompareOp() const override;
+	virtual EFrontFace GetFrontFace() const override;
 public:
 	virtual void SetBlendMode(EBlendMode mode) override;
 	virtual void SetCullMode(ECullMode mode) override;
 	virtual void SetFillMode(EFillMode mode) override;
 	virtual void SetDepthMode(EDepthMode mode) override;
 	virtual void SetDepthCompareOp(ECompareOp op) override;
+	virtual void SetFrontFace(EFrontFace mode) override;
 public:
 	void ClearBlendModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode); }
 	void ClearCullModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode); }
 	void ClearFillModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode); }
 	void ClearDepthModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode); }
 	void ClearDepthCompareOpOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthCompareOp); }
+	void ClearFrontFaceOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FrontFace); }
 public:
 	EPipelineOverrideFlag GetPipelineOverrideFlags() const { return m_OverrideFlags; }
 	void SetPipelineOverrideFlags(EPipelineOverrideFlag flags) { m_OverrideFlags = flags; }

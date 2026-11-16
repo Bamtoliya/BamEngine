@@ -40,6 +40,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [RenderPipelineProfilePlan.md](RenderPipelineProfilePlan.md): Game View와 Client의 공용 Deferred 렌더 파이프라인 프로필 검증 및 실행 계획.
 - [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md): 에디터 사용성(UX) 테스트 3계층, 환경 매트릭스, 6대 영역별 Pass/Fail 기준 및 미검증 UI 회귀 체크리스트.
 - [ShaderToolchainEvaluation.md](ShaderToolchainEvaluation.md): 셰이더 다중 백엔드(WebGPU/Vulkan/D3D12/Metal) 컴파일 툴체인 비교 및 Slang 도입 타당성 검토.
+- [OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md): 독립 워커 프로세스 기반 대용량 에셋 임포트 파이프라인, Job Object 수명주기 및 60FPS 무간섭 격리 계획.
+- [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md): 에셋 파이프라인 및 렌더링 최적화 조치 계획서 (와인딩 반전, 프리뷰 카메라 동결, 콘텐츠 브라우저 스터터링, 스폰자 드로우콜 병목).
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -560,6 +562,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **클라이언트 빌드 시 에디터·디버그 코드 스트립 및 안전 실행 보장 (No-Op 스텁화 / ABI 보호)**: 엔진 내 에디터 및 디버깅 전용 함수를 식별하고, 클라이언트 DLL/바이너리 빌드 시 전처리기로 완전히 제거(Strip)하되 링크 오류 및 널 크래시를 방지하기 위해 No-Op 인라인 스텁 및 안전 매크로를 적용한다. 코어 데이터 구조의 ABI 불변성과 호출부 널 안전성을 보장한다. (참조: [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 3.1절)
 - **비정상 종료 진단(크래시 리포터) 및 에디터 작업 복원 시스템 (Crash Recovery)**: Windows SEH 및 미니덤프(`MiniDumpWriteDump`) 연동, 블랙박스 로그 플러시, 구조화된 크래시 리포트(`.crash.json`), 5분 주기 하트비트 자동 저장(Heartbeat Auto-Save) 및 차기 실행 시 복원 마법사 구축. (참조: [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md))
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.
+- **기하 와인딩 CW 표준화 — [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) 조치 1 [완료: 2026-11-16]**: 내장 메시·머티리얼 JSON·`MaterialInstance` FrontFace 상속·RHI 기본값을 CW로 통일하고 `BuiltInMeshWindingCheck`를 신설했다(`x64-debug` CTest 38/38 및 렌더링 실행 확인). `SplineTestStrip` 확인, 기본 머티리얼(`DefaultMaterial`) 재설계, 조치 2~4는 잔여다.
 
 ### 11.3 안정화 다음 기능 선택 (차기 5개 트랙)
 

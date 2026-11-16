@@ -5,11 +5,11 @@
         "Version": 0
     },
     "m_BlendMode": 1,
-    "m_CullMode": 0,
+    "m_CullMode": 2,
     "m_DepthCompareOp": 1,
     "m_DepthMode": 2,
     "m_FillMode": 1,
-    "m_FrontFace": 0,
+    "m_FrontFace": 1,
     "m_Key": "Resources/Material/SkinningMaterial.bammat.json",
     "m_Parameters": [],
     "m_PassShaders": [
