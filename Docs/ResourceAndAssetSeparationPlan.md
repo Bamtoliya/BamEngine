@@ -2,7 +2,7 @@
 
 - 작성일: 2026-11-05
 - 상태: 계획 수립 (차기 개발 목표)
-- 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md)
+- 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md), [BuiltInResourcesAndShaders.md](BuiltInResourcesAndShaders.md)
 - 우선순위: [DevelopmentPriorities.md](DevelopmentPriorities.md) P3 / 에셋 아키텍처
 
 ---

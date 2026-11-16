@@ -1,6 +1,7 @@
 ﻿# Shader Resource Binding Layout
 
 - 최종 갱신: 2026-10-30 (`DirectX12RHI::CreateRootSignature` 및 현행 HLSL 셰이더 바인딩 반영)
+- 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
 GLSL/Vulkan shaders.

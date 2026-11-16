@@ -2,6 +2,58 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 엔진 기본 리소스 및 셰이더 전수 명세서 작성 (`Docs/BuiltInResourcesAndShaders.md`)
+
+- **배경 및 목적**:
+  - 엔진 코어와 사용자 프로젝트의 자원 분리(Phase 3-B) 이후, 엔진이 기본으로 제공하는 빌트인 셰이더, 머티리얼, 시스템 텍스처, 프리미티브 메시, 폰트, 로컬라이제이션 등의 전수 현황과 렌더링 파이프라인별 역할이 종합적으로 정리된 공식 문서가 부재하여 이를 체계화함.
+- **문서화 범위 및 주요 내용**:
+  1. **가상 URI 스키마(`Engine://`, `Editor://`, `Project://`) 및 마운트 체계**:
+     - `PlatformPath`의 경로 해석 알고리즘, `IsBuiltInRelativeResourcePath`를 통한 레거시 상대경로 폴백 우선순위 명세.
+  2. **빌트인 셰이더 (53개 HLSL / 33개 GLSL / 48개 CSO/SPV 바이너리)**:
+     - 지오메트리 패스(GBuffer, 스키닝, 스프라이트, 지형), 섀도우 패스, 라이팅 및 타일드 조명 컬링 컴퓨트, 스카이/대기 산란, 포워드 및 UI, 포스트프로세스 체인, 에디터 디버그 셰이더 분류 및 명세.
+     - `BINDING_LAYOUT.md`와 일치하는 D3D12/Vulkan 루트 시그니처 바인딩(`space0`~`space3`) 연계.
+  3. **빌트인 머티리얼 12종 (`Engine/Resources/Material/*.bammat.json`)**:
+     - `DefaultMaterial`, `SkinningMaterial`, `SkyMaterial`, `PostProcessDefaultMaterial`, `ParticleMaterial_Additive/AlphaBlend`, `SpriteMaterial`, `MissingMaterial` 등 셰이더 및 블렌드 모드 전수 매핑.
+  4. **빌트인 텍스처 14종 (`Engine/Resources/Texture/`)**:
+     - 단색 텍스처(`white1x1`, `black1x1`, `magenta1x1` 등), PBR 기본(`DefaultNormal`, `DefaultPBR`), 체커, 에러 폴백, 파티클 텍스처 4종 명세.
+  5. **빌트인 프리미티브 메시 6종 (`BuiltInPrimitiveMeshes.cpp`)**:
+     - `QuadMesh`, `CubeMesh`, `SphereMesh`, `PlaneMesh`, `CylinderMesh`, `CapsuleMesh` 정점 스트림(Position, Material) 레이아웃 및 규격.
+  6. **기타 시스템 리소스 및 C++ 참조 가이드**:
+     - Font Awesome 7 아이콘 폰트, 로컬라이제이션 CSV 원본 수정 원칙, 렌더 파이프라인 DAG(`Deferred.bamrenderpipeline.json`), C++ 핸들 조회 API(`PlatformPath::ResolveUri`, `ResourceManager::GetResourceHandle`).
+- **관련 파일**:
+  - 신규 생성: `Docs/BuiltInResourcesAndShaders.md`
+  - 링크 갱신: `Docs/Shader/BINDING_LAYOUT.md`, `Docs/ResourceAndAssetSeparationPlan.md`
+
+### [2026-11-16] 공통 기즈모 헬퍼(GizmoHelper) 도입 및 VFX 에디터 기즈모 인터랙션·오버레이 툴바 소멸 결함 분석
+
+- **배경 및 목적**:
+  - `SceneViewportPanel`, `VFXEditorPanel`, 모델/본, 스플라인 등 에디터 전역에서 중복 정의되던 `ImGuizmo` 호출 로직을 일원화하기 위해 공통 기즈모 래퍼/헬퍼(`GizmoHelper`) 및 `IGizmoHost` 인터페이스를 신설했다.
+  - 전역 단축키(`Viewport.GizmoSelect` [Q], `Translate` [W], `Rotate` [E], `Scale` [R], `ToggleCoord` [`], `ToggleSnap` [Shift+S])를 `GizmoHelper::GetActiveHost()`로 통합하고, 블렌더 스타일의 세로 플로팅 오버레이 도구 모음(`DrawGizmoToolbar`)을 공통 헬퍼에서 제공하도록 설계했다.
+- **실환경 검증 중 발생한 결함 현상**:
+  1. **오버레이 툴바(`##GizmoOverlayToolbarWindow`) 즉시 소멸 현상**:
+     - 툴바 윈도우 크기를 명시적(`SetNextWindowSize`)으로 지정한 후 버튼 박스가 화면에 잠시 렌더링되지만, 마우스를 올리거나 클릭하려고 하면 즉시 화면에서 사라짐.
+  2. **기즈모 축 마우스 클릭/드래그 무반응 (상호작용 불능)**:
+     - 트랙 선택 및 단축키(`W`, `E`, `R`) 입력 시 뷰포트에 3D 기즈모 축이 표시되나, 마우스 좌클릭으로 축이나 평면 핸들을 잡고 드래그해도 위치·회전·스케일 변환이 전혀 적용되지 않음.
+- **심층 원인 규명**:
+  1. **ImGui 윈도우 스택 규칙 위반 (`BeginChild` 컨텍스트 내 `Begin` 호출)**:
+     - `VFXEditorPanel::DrawViewport()`는 `EditorUI::DrawEffectEditorLayout()` 내부의 `ImGui::BeginChild("##EffectPreview", ...)` 컨텍스트 안에서 실행된다.
+     - 그런데 `GizmoHelper::DrawGizmoToolbar()`는 독립된 최상위 윈도우를 여는 `ImGui::Begin("##GizmoOverlayToolbarWindow", ...)`을 호출하고 있었다.
+     - ImGui는 Child Window 블록 내부에서 독립된 Begin Window를 여는 중첩 스택을 지원하지 않으며, 마우스 호버/클릭 시 포커스가 이동하면서 Z-Order가 역전되어 부모 Child 창 뒤로 숨겨지거나 렌더링 조건이 즉시 무효화된다.
+  2. **포커스 및 호버 컨텍스트 이탈**:
+     - 마우스가 외부 윈도우인 `##GizmoOverlayToolbarWindow` 위로 이동하는 순간 `m_PreviewWidget.IsHovered()`가 `false`로 전이된다.
+     - 사용자가 버튼을 클릭하면 뷰포트 창이 포커스를 잃고(`m_IsFocused = false`), `GizmoHelper::SetActiveHost(this)` 및 단축키 타겟팅이 해제되어 깜빡이며 사라지는 현상이 발생한다.
+  3. **`PreviewViewportWidget`의 입력 캐처 구조와 호출 순서 불일치**:
+     - `PreviewViewportWidget.Draw()`가 `DrawGizmo()`보다 먼저 실행되며, 뷰포트 전면을 덮는 `InvisibleButton`과 카메라 입력 감지 로직이 뷰포트 내 마우스 상태를 먼저 평가한 뒤 기즈모가 실행된다.
+     - 기즈모가 정상 동작하는 `SceneViewportPanel`은 전면에 `InvisibleButton`을 일절 두지 않고 `ImGui::Image` 직후 마우스 입력(`Engine::InputManager`)을 직접 수신하며, 우클릭만 카메라 회전에 바인딩하고 좌클릭은 100% ImGuizmo에 양보하는 아키텍처를 취하고 있다.
+- **해결 대안 및 조치 계획**:
+  1. **오버레이 툴바의 뷰포트 내부 일체형 위젯 전환**:
+     - `ImGui::Begin`을 사용하는 별도 플로팅 윈도우 방식을 폐기하고, `PreviewViewportWidget`의 기존 상단 툴바(그리드, 채널 버튼)처럼 뷰포트 내부 좌표 기반의 `BeginChild` 또는 캔버스 오버레이 방식으로 변경하여 포커스 이탈 및 창 소멸을 원천 차단.
+  2. **뷰포트 마우스 조작 규칙 일원화 (`SceneViewportPanel` 표준 준수)**:
+     - 뷰포트 내 좌클릭은 `ImGuizmo` 조작 및 오브젝트 선택 전용으로 할당하고, 카메라 회전은 우클릭 드래그(Look/Orbit) 및 휠 드래그(Pan)로 표준화하여 마우스 이벤트 경합을 제거.
+- **미검증 항목**:
+  - `BeginChild` 기반 기즈모 오버레이 툴바 상호작용 검증.
+  - 마우스 좌클릭 드래그를 통한 VFX 트랙 위치/회전/스케일 변환 및 언두/리두 히스토리 기록 검증.
+
 ### [2026-11-16] 신규 엔진 컴포넌트 6종 ReflectionArchive 직렬화 라운드트립 검증 (후보 2번 완료)
 
 - **배경 및 목적**:
@@ -48,9 +100,13 @@ This document tracks implementation details, architectural decisions, and techni
      - 감쇠 거리를 15cm로 축소하여 접촉 경계선만 부드럽게 지우고, 15cm 위 돔 본체는 배경 유/무와 상관없이 동일한 알파를 유지하도록 개선.
      - 시선 각도 $\mathbf{N} \cdot \mathbf{V}$ 기반 프레넬 림 페이드를 적용하여 둔탁한 찰흙 덩어리를 세련된 반투명 에너지 돔으로 전환.
   4. **발광성 이펙트의 `Additive` 가산 블렌드 표준화 로드맵 수립**: 폭발 충격파 및 발광체는 배경을 어둡게 가리지 않고 빛을 더하는 `Additive` 머티리얼을 사용하도록 파이프라인 정립.
+- **실환경 검증 및 잔여 이슈 (2026-11-16 2차 확인)**:
+  - `PlaneMesh`(48m) 및 프레넬 림 발광 적용으로 바닥 단면 잘림은 해소되었으나, **수평선(지면 끝 모서리)을 기준으로 상단(허공 배경)과 하단(지면 배경) 사이의 명암/채도 불연속이 여전히 관측됨.**
+  - 원인: 카메라 시야에서 수평선 아래는 밝은 PBR 지면($\text{DestColor} \approx 0.6$)이고 위는 스카이/허공($\text{DestColor} \approx 0.18$)이므로, Additive/AlphaBlend 공히 배경 본연의 밝기 단차가 투과되어 드러남.
+  - 대책: 향후 무한 평면(Infinite Horizon) 지면 셰이더 도입 또는 프리뷰 공중(Air)/지면(Ground) 모드 분리 계획으로 등록하고, 현재 단계에서는 이슈로 기록 보존 후 다음 저작 UX 작업으로 전환.
 - **미검증 항목**:
-  - `Fireball_Explosion_Composite` 내 충격파 링 메쉬 트랙의 `Additive` 블렌드 머티리얼 적용 실환경 검증.
   - VFXMeshTrack 인스펙터 UI에서의 Soft Particle 거리 및 Fresnel 슬라이더 파라미터 노출.
+  - ImGuizmo 기반 뷰포트 3D 트랙 기즈모 조작.
 
 
 ### [2026-11-15] 복합 비주얼 이펙트 시스템 및 저작 도구 실환경 검증 & D3D12/렌더링 안정화 (후보 B 완료)
