@@ -2,6 +2,15 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 모델 임포트 모달 프리뷰 카메라 동결 해결 (`AssetPipelineAndRenderingOptimizationPlan.md` 조치 2)
+
+- **원인**: `PreviewViewportWidget::Draw`의 탐색 가드가 `IsPopupOpen(nullptr, AnyPopupId | AnyPopupLevel)`을 썼다. 이 조합은 열린 팝업이 하나라도 있으면 true라서, `BeginPopupModal` 안에서 그려지는 임포트 모달 프리뷰는 모달 자신 때문에 매 프레임 `canNavigate = false`가 되었다. 드래그 상태가 즉시 초기화되고 `HandleInput`이 호출되지 않았다.
+- **변경**: `ImGuiPopupFlags_AnyPopupId`만 사용해 `OpenPopupStack.Size > BeginPopupStack.Size`, 즉 현재 팝업 레벨보다 위에 열린 팝업이 있을 때만 차단한다(`PreviewViewportWidget.cpp`).
+- **검증 (사용자 실행, `x64-debug`)**: 임포트 모달에서 카메라 조작이 정상 동작함을 확인했다.
+- **미검증**:
+  - Alt+LMB 드래그 시 모달 창이 함께 이동하는지(입력 캐처가 좌클릭을 받지 않음). 발생하면 Alt 중에만 캐처가 좌클릭을 받도록 보완한다.
+  - 모달 안 콤보가 열린 동안의 차단, 머티리얼·모델·VFX 프리뷰와 VFX 기즈모 회귀.
+
 ### [2026-11-16] 복합 VFX Phase 5 Step 1 구현: 공통 기즈모, 환경 프리셋·외력, 반투명 메쉬 Depth Fade
 
 - **변경**:

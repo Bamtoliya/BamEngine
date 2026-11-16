@@ -489,8 +489,8 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 		(showToolbar && isOver(margin, margin + toolbarOffset, toolbarSize));
 	m_IsHovered = ImGui::IsItemHovered() && !overToolbar;
 	m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost &&
-		!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+	const bool popupAbove = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost && !popupAbove;
 	if (!canNavigate || !m_IsFocused)
 		m_CameraDragButton.reset();
 	else if (m_CameraDragButton)

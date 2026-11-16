@@ -2,7 +2,7 @@
 (Asset Pipeline & Rendering Optimization Plan)
 
 - **작성일**: 2026-11-16
-- **상태**: 조치 1(와인딩 CW 표준화) 구현 및 실행 검증 완료 (2026-11-16) / 조치 2~4 구현 대기
+- **상태**: 조치 1(와인딩 CW 표준화)·조치 2(모달 프리뷰 카메라) 구현 및 실행 검증 완료 (2026-11-16) / 조치 3~4 구현 대기
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 & 렌더링 성능)
 - **관련 문서**:
   - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md)
@@ -199,12 +199,17 @@ flowchart TD
    const bool canNavigate = !io.WantTextInput && !io.AppFocusLost &&
        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
-   // 개선: 현재 윈도우가 포커스/호버되어 있다면 상위 모달 팝업 내부라도 네비게이션 허용
-   const bool isCurrentWindowOrChildFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-   const bool canNavigate = !io.WantTextInput && !io.AppFocusLost && isCurrentWindowOrChildFocused;
+   // 적용(2026-11-16): 현재 BeginPopup 레벨보다 위에 열린 팝업이 있을 때만 차단
+   const bool popupAbove = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+   const bool canNavigate = !io.WantTextInput && !io.AppFocusLost && !popupAbove;
    ```
-2. **모달 뷰포트 단축키 및 마우스 드래그 활성화**:
-   - `ModelImportModal` 내부의 뷰포트에서도 `EditorCameraController`의 Alt+LMB(Orbit), MMB(Pan), RMB(Fly), 마우스 휠 줌이 일반 뷰포트와 100% 동일하게 작동하도록 보장.
+   - 근거: ImGui `IsPopupOpen`은 `AnyPopupLevel`이 있으면 `OpenPopupStack.Size > 0`(모달 자신 포함), 없으면 `OpenPopupStack.Size > BeginPopupStack.Size`(현재 팝업보다 위)로 판정한다(vcpkg imgui docking `imgui.cpp` `IsPopupOpen(ImGuiID, ImGuiPopupFlags)`).
+   - 최초 제안(팝업 검사 제거 후 `IsWindowFocused`만 사용)은 이미 있는 `m_IsFocused` 검사와 겹치고 "위에 열린 팝업이면 차단"이라는 의도를 잃으므로 채택하지 않았다.
+   - 상황별 결과: 일반 패널 위 컨텍스트 메뉴는 차단 유지, 임포트 모달 안 단독은 허용, 모달 안에서 콤보·우클릭 메뉴가 열리면 차단.
+2. **모달 뷰포트 카메라 조작**:
+   - `ModelImportModal` 내부 뷰포트에서 `EditorCameraController`의 Alt+LMB(Orbit), MMB(Pan), RMB(Look), 휠 줌이 동작한다(2026-11-16 사용자 확인).
+3. **보류(조건부)**: 입력 캐처가 좌클릭을 받지 않아 Alt+LMB 드래그 시 부모 창(모달·플로팅 창)이 함께 이동할 가능성이 있다. 발생이 확인되면 Alt가 눌린 동안만 캐처가 좌클릭을 받도록 바꾼다. 현재 발생 여부는 기록되지 않았다.
+4. **범위 밖**: `ImGuiManager.cpp`와 `Application.cpp`의 단축키 차단도 `AnyPopupLevel` 기준이라 모달 안에서는 에디터 단축키가 막힐 수 있다.
 
 ### 3.3 [조치 3] 콘텐츠 브라우저 3D 썸네일 비동기화 및 디스크 캐싱 (상세 계획: [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md))
 ```mermaid
@@ -255,7 +260,7 @@ flowchart TD
 | 단계 | 작업 내용 | 대상 파일 | 검증 기준 |
 | :--- | :--- | :--- | :--- |
 | **Step 1** | 엔진 와인딩 CW 표준화 **(완료: 2026-11-16)**. 임포트 플래그는 정상 변환이므로 유지 | `BuiltInPrimitiveMeshes.cpp`, `MaterialInstance.*`, `RHIPipeline.h`, 머티리얼 JSON, `BuiltInMeshWindingCheck.cpp` | `BuiltInMeshWindingCheck` 및 전체 CTest 38/38 통과, 기본 도형·정적/스킨드 임포트 모델·프리뷰·썸네일·VFX 바닥·지형 실행 확인 (`SplineTestStrip` 미확인) |
-| **Step 2** | `PreviewViewportWidget` 모달 입력 네비게이션 가드 패치 | `PreviewViewportWidget.cpp` | `ModelImportModal`에서 Alt+LMB(Orbit), MMB(Pan), 휠줌 정상 작동 확인 |
+| **Step 2** | `PreviewViewportWidget` 모달 입력 네비게이션 가드 패치 **(완료: 2026-11-16)** | `PreviewViewportWidget.cpp` | `ModelImportModal`에서 Alt+LMB(Orbit), MMB(Pan), 휠줌 정상 작동 확인 (사용자 확인 완료) |
 | **Step 3** | `Renderer` 정적 메시 렌더 큐 정렬 및 인스턴싱 최적화 | `Renderer.cpp`, `MeshRenderSystem.cpp` | Sponza 씬 로드 시 드로우콜 수 측정 및 프레임 레이트 안정성 검증 |
 | **Step 4** | 3D 썸네일 디스크 캐싱 및 메인 스레드 프레임 버짓 적용 | `AssetCache.cpp`, `ContentBrowserPanel.cpp` | 대량 에셋 폴더 진입 시 60 FPS 유지 및 스터터링 소멸 검증 |
 
@@ -265,3 +270,4 @@ flowchart TD
 
 - **2026-11-16**: 4대 핵심 결함(와인딩 반전, 프리뷰 카메라 동결, 콘텐츠 브라우저 스터터링, 스폰자 드로우콜 병목) 심층 분석 및 통합 조치 계획서 신규 작성.
 - **2026-11-16**: 조치 1 구현·검증 완료. 불변식 부호, 큐브·지형 와인딩 판정, Step 1의 `FlipWindingOrder` 제거 방향을 정정했다.
+- **2026-11-16**: 조치 2 구현·검증 완료. 팝업 판정을 "현재 팝업 레벨보다 위" 기준으로 바꾸고 3.2절 제안을 실제 적용안으로 갱신했다.
