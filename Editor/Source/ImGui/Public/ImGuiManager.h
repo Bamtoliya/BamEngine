@@ -173,6 +173,9 @@ private:
 	};
 
 	bool RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path = {});
+	bool ContinueQuitRequest();
+	vector<ResourceEditorInterface*> CollectUnsavedResourceEditors() const;
+	void DrawResourceQuitConfirmation();
 	void DrawDocumentConfirmation();
 	void DrawNewSceneDialog();
 	void SynchronizeSceneDocumentAccess();
@@ -207,6 +210,7 @@ private:
 	vector<IImGui*> m_PendingRemovePanels;
 	std::filesystem::path m_PendingResourceEditorPath;
 	bool m_ShowNewSceneDialog = false;
+	bool m_ResourceQuitConfirmPending = false;
 	ESceneTemplate m_SelectedSceneTemplate = ESceneTemplate::Basic;
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;

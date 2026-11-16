@@ -1113,6 +1113,10 @@ ResourceEditor,NoResource,No resource loaded.,로드된 리소스가 없습니�
 ResourceEditor,SaveSuccess,Saved effect successfully.,이펙트를 저장했습니다.
 ResourceEditor,SaveFailed,Failed to save effect.,이펙트 저장에 실패했습니다.
 ResourceEditor,OpenBlocked,Save changes to {} before opening another asset.,다른 에셋을 열기 전에 {}의 변경 사항을 저장하세요.
+ResourceEditor,QuitConfirmTitle,Unsaved Resource Changes,저장되지 않은 리소스 변경 사항
+ResourceEditor,QuitUnsavedMessage,The following editors have unsaved changes. Quitting now will discard them.,다음 편집기에 저장되지 않은 변경 사항이 있습니다. 지금 종료하면 변경 사항이 사라집니다.
+ResourceEditor,QuitShowEditor,Show,이동
+ResourceEditor,QuitDiscard,Quit Without Saving,저장하지 않고 종료
 ResourceEditor,PrefabTitle,Prefab Editor,프리팹 에디터
 ResourceEditor,ShaderTitle,Shader Editor,셰이더 편집기
 ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애니메이션 에디터

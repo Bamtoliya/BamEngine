@@ -340,6 +340,7 @@ void ImGuiManager::Draw()
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 	SynchronizeSceneDocumentAccess();
 	history.BeginFrame();
+	DrawResourceQuitConfirmation();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
 	if (RecoveryManager::IsCreated())
@@ -1406,6 +1407,21 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 
 bool ImGuiManager::RequestQuit()
 {
+	if (m_DocumentController->IsBusy() || m_ResourceQuitConfirmPending)
+		return false;
+
+	// 리소스 편집기는 EditorDocumentManager에 등록되지 않으므로 씬 문서 확인보다 먼저 따로 확인한다.
+	if (!CollectUnsavedResourceEditors().empty())
+	{
+		m_ResourceQuitConfirmPending = true;
+		return true;
+	}
+
+	return ContinueQuitRequest();
+}
+
+bool ImGuiManager::ContinueQuitRequest()
+{
 	if (m_DocumentController->IsBusy())
 		return false;
 
@@ -1429,6 +1445,102 @@ bool ImGuiManager::RequestQuit()
 			return EResult::Success;
 		});
 }
+
+vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() const
+{
+	// 닫힌 편집기도 편집 상태를 유지하므로 열림 여부와 관계없이 모은다.
+	vector<ResourceEditorInterface*> editors;
+	for (auto* panel : m_ImGuiPanels)
+	{
+		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
+		if (editor && editor->HasUnsavedResourceChanges())
+			editors.push_back(editor);
+	}
+	return editors;
+}
+
+void ImGuiManager::DrawResourceQuitConfirmation()
+{
+	const auto title = LOCAL("ResourceEditor.QuitConfirmTitle") + "###ResourceQuitConfirm";
+
+	if (m_ResourceQuitConfirmPending && !ImGui::IsPopupOpen(title.c_str()))
+		ImGui::OpenPopup(title.c_str());
+
+	if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	const auto editors = CollectUnsavedResourceEditors();
+	if (!m_ResourceQuitConfirmPending || editors.empty())
+	{
+		// 확인 도중 미저장 편집기가 사라졌다면 남은 종료 절차(씬 문서 확인)를 이어간다.
+		const bool continueQuit = std::exchange(m_ResourceQuitConfirmPending, false);
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		if (continueQuit)
+			ContinueQuitRequest();
+		return;
+	}
+
+	ImGui::TextUnformatted(LOCAL_CSTR("ResourceEditor.QuitUnsavedMessage"));
+	ImGui::Spacing();
+
+	ResourceEditorInterface* showTarget = nullptr;
+	constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV;
+	if (ImGui::BeginTable("UnsavedResourceEditors", 3, tableFlags))
+	{
+		for (auto* editor : editors)
+		{
+			const auto& target = editor->GetTargetResource();
+			const auto targetName = target.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(target.filename().wstring());
+
+			ImGui::PushID(editor);
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::AlignTextToFramePadding();
+			ImGui::TextUnformatted(editor->GetDisplayName().c_str());
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(targetName.c_str());
+			if (!target.empty() && ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", WStrToStr(target.wstring()).c_str());
+			ImGui::TableNextColumn();
+			if (ImGui::SmallButton(LOCAL_CSTR("ResourceEditor.QuitShowEditor")))
+				showTarget = editor;
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+
+	ImGui::Spacing();
+	const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "ResourceEditor.QuitDiscard", true, true } };
+	const int action = EditorUI::DialogButtonBar("ResourceQuitActions", actions, IM_ARRAYSIZE(actions));
+
+	bool continueQuit = false;
+	if (showTarget || action == 0)
+	{
+		m_ResourceQuitConfirmPending = false;
+		ImGui::CloseCurrentPopup();
+	}
+	else if (action == 1)
+	{
+		// 미저장 리소스 편집 내용은 버리기로 확인했으므로 씬 문서 확인 단계로 넘어간다.
+		// 씬 단계에서 취소하면 종료되지 않으며 리소스 편집 상태도 그대로 남는다.
+		m_ResourceQuitConfirmPending = false;
+		continueQuit = true;
+		ImGui::CloseCurrentPopup();
+	}
+	ImGui::EndPopup();
+
+	if (showTarget)
+	{
+		showTarget->Focus();
+		if (auto* window = ImGui::FindWindowByID(showTarget->m_PanelWindowId))
+			ImGui::FocusWindow(window, ImGuiFocusRequestFlags_UnlessBelowModal);
+	}
+
+	if (continueQuit)
+		ContinueQuitRequest();
+}
+
 bool ImGuiManager::PreparePendingSceneSave()
 {
 	return false;

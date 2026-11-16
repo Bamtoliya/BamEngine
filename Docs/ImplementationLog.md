@@ -2,6 +2,22 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 에디터 종료 시 리소스 편집기 미저장 변경 보호 (P1-A)
+
+- **배경**: 종료 요청(`ImGuiManager::RequestQuit`)은 `EditorDocumentManager`에 등록된 문서만 확인했고, 등록된 `IEditorDocument` 구현은 `SceneDocument` 하나뿐이었다. Material·Model·Sprite·Particle·VFX·Animator·Prefab·AnimationTimeline·플러그인 편집기의 `HasUnsavedResourceChanges()`는 다른 에셋 열기 차단과 창 제목 `*` 표시에만 쓰여, 미저장 리소스 편집 내용이 확인 없이 종료와 함께 사라졌다. `RecoveryManager`도 씬만 스냅샷한다.
+- **변경 사항**:
+  - `ImGuiManager::RequestQuit`: 씬 문서 확인 전에 `CollectUnsavedResourceEditors()`로 `m_ImGuiPanels`의 모든 `ResourceEditorInterface` 중 미저장 편집기(닫힌 패널 포함)를 모은다. 하나라도 있으면 `m_ResourceQuitConfirmPending`을 세우고 확인 모달로 넘긴다. 확인 중 반복되는 종료 이벤트는 무시한다.
+  - 기존 PIE 정지와 씬 문서 확인 흐름은 `ContinueQuitRequest()`로 분리했다. 동작은 바뀌지 않았다.
+  - `DrawResourceQuitConfirmation()`: 편집기 이름·대상 파일(툴팁에 전체 경로)·`이동` 버튼 표와 `[취소] [저장하지 않고 종료](Danger)` 버튼(`EditorUI::DialogButtonBar`, Escape=취소)을 표시한다. `이동`은 확인을 취소하고 해당 편집기 창을 앞으로 가져온다. `저장하지 않고 종료`는 씬 문서 확인 단계로 이어지며, 그 단계에서 취소하면 종료되지 않고 리소스 편집 상태도 유지된다.
+  - "모두 저장"은 넣지 않았다. `SaveResource()`를 구현한 편집기가 Material·Model·AnimationTimeline뿐이고 반환값이 없어 저장 성공을 확인할 수 없기 때문이다.
+  - 로캘: `Editor.csv`에 `ResourceEditor.QuitConfirmTitle`, `QuitUnsavedMessage`, `QuitShowEditor`, `QuitDiscard` 추가(JSON은 `GenerateLocalization`이 생성).
+- **잔여**:
+  - `GraphPanel`은 dirty 추적이 없어 `HasUnsavedResourceChanges()`가 항상 `false`다. 그래프 편집 내용은 이번 가드로 보호되지 않는다.
+  - 리소스 편집기 패널의 닫기(X)는 Animator를 제외하면 확인 없이 숨김 처리된다(편집 상태는 유지되어 종료 시 이번 가드에 걸린다).
+- **검증 (사용자 실행, 2026-11-17)**: Editor 빌드 후 다음 시나리오가 의도대로 동작함을 확인했다.
+  - 리소스 편집기 수정 후 창 닫기/Alt+F4/툴바 종료 → 모달 표시, `취소`·Escape → 계속 실행, `이동` → 해당 편집기 포커스, `저장하지 않고 종료` + 씬 미저장 → 씬 확인 모달 → 취소 시 계속 실행·리소스 `*` 유지, 미저장 편집기 없음 → 기존 흐름 그대로, 편집기 패널을 닫은 뒤 종료 → 모달에 표시됨.
+  - CTest 실행 개수와 결과는 별도로 기록되지 않았다.
+
 ### [2026-11-17] 복합 VFX 저작 UX 고도화: FloatCurve 런타임 샘플링, 타임라인 인라인 커브 미니어처 렌더링 및 차기 연동 로드맵 수립
 
 - **배경 및 목적**:

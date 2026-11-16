@@ -139,6 +139,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - `Editor/Source/Document/`(`IEditorDocument`, `SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`)와 `SceneEditHistory`(`HasUnsavedChanges`, `MarkSaved`, `CanFinalizeEditsFor`)가 구현되어 `ToolBar`의 New/Load/Save/Close 및 앱 종료 흐름에 연결되었다.
   - Undo/Redo 명령 스택 및 저장 기준점 시각화 창(`HistoryPanel`)이 구현되어 이력 표시와 Undo/Redo가 연결되었다.
 - **2026-11-02 최우선 잔여**: 씬에 있는 보호를 AnimatorGraphPanel의 저장/로드·New/Open/종료에도 연결한다(F01). 같은 패널을 수정할 때 로캘·InputManager 기준(F11)을 함께 적용한다.
+- **2026-11-17 반영 (빌드·실행 시나리오 사용자 확인 완료)**: AnimatorGraphPanel 내부 New/Open/Close 확인은 이미 있다. 앱 종료 경로는 씬 문서만 확인하고 있었으므로, `ImGuiManager::RequestQuit`에 모든 리소스 편집기의 미저장 변경 확인 모달을 씬 확인보다 먼저 추가했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). `GraphPanel`의 dirty 추적 부재는 잔여다.
 - 완료 기준: 취소가 씬 교체를 막고, 저장 실패 후 초안·기존 파일·변경 표시가 보존되며, `HistoryPanel`에서 현재 Undo/Redo 위치와 저장 기준점을 확인할 수 있다.
 
 ### P1-B. 설정 적용 경로와 기존 저장/복원 연결
