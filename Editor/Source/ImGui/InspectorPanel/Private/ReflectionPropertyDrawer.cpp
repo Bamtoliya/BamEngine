@@ -1,4 +1,4 @@
-#include "ReflectionPropertyDrawer.h"
+﻿#include "ReflectionPropertyDrawer.h"
 #include "EditorUI.h"
 #include "InputManager.h"
 #include "Functions.h"
@@ -22,6 +22,7 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "WorldComponents.h"
+#include "FloatCurve.h"
 #pragma push_macro("new")
 #undef new
 #include <imgui_internal.h>
@@ -30,30 +31,6 @@
 
 namespace
 {
-	void DrawResponsivePropertyLabel(const std::string& displayName, const std::string& typeName,
-		float reservedRightWidth = 0.0f)
-	{
-		const float availWidth = ImGui::GetContentRegionAvail().x - reservedRightWidth;
-		const ImVec2 textSize = ImGui::CalcTextSize(displayName.c_str());
-		const bool isClipped = textSize.x > availWidth;
-		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(displayName.c_str());
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::BeginTooltip();
-			if (isClipped)
-			{
-				ImGui::TextUnformatted(displayName.c_str());
-				if (!typeName.empty()) ImGui::Separator();
-			}
-			if (!typeName.empty())
-			{
-				ImGui::TextDisabled("%s", typeName.c_str());
-			}
-			ImGui::EndTooltip();
-		}
-	}
-
     bool DrawInspectorText(std::string& value)
     {
         return ImGui::InputText("##Value", &value);
@@ -160,6 +137,215 @@ namespace
             else SelectInspectorVariant<Variant, Index + 1>(value, index);
         }
     }
+
+	bool DrawCurveInterpCombo(Engine::ECurveInterpMode& mode)
+	{
+		constexpr std::pair<Engine::ECurveInterpMode, const char*> modes[] = { { Engine::ECurveInterpMode::Constant, "Constant" }, { Engine::ECurveInterpMode::Linear, "Linear" }, { Engine::ECurveInterpMode::CubicBezier, "CubicBezier" } };
+		const auto modeText = [](const char* name)
+			{
+				const std::string key = std::string("Engine::ECurveInterpMode.") + name;
+				const auto localized = Editor::LocalizeInspectorText(key);
+				return localized == key ? std::string(name) : localized;
+			};
+
+		const char* currentName = "?";
+		for (const auto& [value, name] : modes) if (value == mode) currentName = name;
+
+		bool changed = false;
+		if (ImGui::BeginCombo("##Mode", modeText(currentName).c_str()))
+		{
+			for (const auto& [value, name] : modes)
+			{
+				if (ImGui::Selectable(modeText(name).c_str(), value == mode) && value != mode) { mode = value; changed = true; }
+			}
+			ImGui::EndCombo();
+		}
+		return changed;
+	}
+
+	// 커브 그래프의 축 범위. 최소 0~1이며 키와 곡선이 벗어나면 넓힌다.
+	struct CurveAxisRange
+	{
+		float TimeMin = 0.0f, TimeMax = 1.0f, ValueMin = 0.0f, ValueMax = 1.0f;
+	};
+
+	CurveAxisRange ComputeCurveAxisRange(const Engine::FloatCurve& curve)
+	{
+		CurveAxisRange range;
+		for (const auto& key : curve.keys)
+		{
+			range.TimeMin = std::min(range.TimeMin, key.time); range.TimeMax = std::max(range.TimeMax, key.time);
+			range.ValueMin = std::min(range.ValueMin, key.value); range.ValueMax = std::max(range.ValueMax, key.value);
+		}
+		constexpr int probeCount = 32;
+		for (int i = 0; i < probeCount; ++i)
+		{
+			const float value = curve.Evaluate(range.TimeMin + (range.TimeMax - range.TimeMin) * static_cast<float>(i) / (probeCount - 1), 0.0f);
+			range.ValueMin = std::min(range.ValueMin, value); range.ValueMax = std::max(range.ValueMax, value);
+		}
+		return range;
+	}
+
+	// 그래프에서 키를 선택·드래그·추가·삭제한다. selected는 선택 키 인덱스(-1 = 없음). 바뀌면 true.
+	bool DrawFloatCurveGraph(Engine::FloatCurve& curve, int& selected)
+	{
+		const float pad = ImGui::GetFontSize() * 0.5f;
+		const float width = std::max(ImGui::GetContentRegionAvail().x, pad * 2.0f + 1.0f);
+		const float height = ImGui::GetFrameHeight() * 5.0f;
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		const ImVec2 corner(origin.x + width, origin.y + height);
+
+		// 드래그 중에는 시작 시점의 축 범위를 유지한다.
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID graphId = ImGui::GetID("##CurveGraph");
+		const ImGuiID rangeIds[4] = { ImGui::GetID("##RangeT0"), ImGui::GetID("##RangeT1"), ImGui::GetID("##RangeV0"), ImGui::GetID("##RangeV1") };
+		CurveAxisRange range = ComputeCurveAxisRange(curve);
+		if (ImGui::GetActiveID() == graphId)
+			range = { storage->GetFloat(rangeIds[0], range.TimeMin), storage->GetFloat(rangeIds[1], range.TimeMax), storage->GetFloat(rangeIds[2], range.ValueMin), storage->GetFloat(rangeIds[3], range.ValueMax) };
+
+		const float innerW = width - pad * 2.0f, innerH = height - pad * 2.0f;
+		const auto toScreen = [&](float t, float v)
+			{ return ImVec2(origin.x + pad + (t - range.TimeMin) / (range.TimeMax - range.TimeMin) * innerW, corner.y - pad - (v - range.ValueMin) / (range.ValueMax - range.ValueMin) * innerH); };
+		const auto toTime = [&](float x) { return range.TimeMin + std::clamp((x - origin.x - pad) / innerW, 0.0f, 1.0f) * (range.TimeMax - range.TimeMin); };
+		const auto toValue = [&](float y) { return range.ValueMin + std::clamp((corner.y - pad - y) / innerH, 0.0f, 1.0f) * (range.ValueMax - range.ValueMin); };
+
+		ImGui::InvisibleButton("##CurveGraph", ImVec2(width, height), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+		const bool hovered = ImGui::IsItemHovered();
+		const bool dragging = ImGui::IsItemActive();
+		if (!dragging)
+		{
+			storage->SetFloat(rangeIds[0], range.TimeMin); storage->SetFloat(rangeIds[1], range.TimeMax);
+			storage->SetFloat(rangeIds[2], range.ValueMin); storage->SetFloat(rangeIds[3], range.ValueMax);
+		}
+
+		// 커서 아래 키 찾기
+		const ImVec2 mouse = ImGui::GetIO().MousePos;
+		const float hitRadius = ImGui::GetFontSize() * 0.5f;
+		int hoveredKey = -1;
+		for (int i = 0; hovered&& i < static_cast<int>(curve.keys.size()); ++i)
+		{
+			const ImVec2 p = toScreen(curve.keys[i].time, curve.keys[i].value);
+			if ((p.x - mouse.x) * (p.x - mouse.x) + (p.y - mouse.y) * (p.y - mouse.y) <= hitRadius * hitRadius) { hoveredKey = i; break; }
+		}
+
+		bool changed = false;
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) selected = hoveredKey;
+
+		// 드래그: 시간은 이웃 키 사이로 제한해 키 순서를 유지한다.
+		if (dragging && selected >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f))
+		{
+			auto& key = curve.keys[selected];
+			const float minTime = selected > 0 ? curve.keys[selected - 1].time + 0.001f : range.TimeMin;
+			const float maxTime = selected + 1 < static_cast<int>(curve.keys.size()) ? curve.keys[selected + 1].time - 0.001f : range.TimeMax;
+			const float newTime = std::clamp(toTime(mouse.x), minTime, std::max(minTime, maxTime));
+			const float newValue = toValue(mouse.y);
+			if (newTime != key.time || newValue != key.value) { key.time = newTime; key.value = newValue; changed = true; }
+		}
+
+		// 빈 곳 더블클릭: 키 추가
+		if (hovered && hoveredKey < 0 && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+		{
+			selected = curve.AddKey(toTime(mouse.x), toValue(mouse.y));
+			changed = true;
+		}
+
+		// 키 우클릭: 컨텍스트 메뉴
+		if (hoveredKey >= 0 && ImGui::IsItemClicked(ImGuiMouseButton_Right))
+		{
+			selected = hoveredKey;
+			ImGui::OpenPopup("##CurveKeyMenu");
+		}
+		if (ImGui::BeginPopup("##CurveKeyMenu"))
+		{
+			if (ImGui::MenuItem(LOCAL_CSTR("EditorCommon.Delete")) && selected >= 0 && curve.RemoveKey(static_cast<std::size_t>(selected)))
+			{
+				selected = -1;
+				changed = true;
+			}
+			ImGui::EndPopup();
+		}
+
+		if (hoveredKey >= 0 && !dragging)
+			ImGui::SetTooltip("%.3f, %.3f", curve.keys[hoveredKey].time, curve.keys[hoveredKey].value);
+
+		// 그리기
+		auto* drawList = ImGui::GetWindowDrawList();
+		drawList->AddRectFilled(origin, corner, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
+		drawList->PushClipRect(origin, corner, true);
+		for (const float guide : { 0.0f, 1.0f })
+		{
+			const float y = toScreen(range.TimeMin, guide).y;
+			drawList->AddLine(ImVec2(origin.x, y), ImVec2(corner.x, y), ImGui::GetColorU32(ImGuiCol_Border));
+		}
+		constexpr int sampleCount = 64;
+		std::array<ImVec2, sampleCount> points{};
+		for (int i = 0; i < sampleCount; ++i)
+		{
+			const float t = range.TimeMin + (range.TimeMax - range.TimeMin) * static_cast<float>(i) / (sampleCount - 1);
+			points[i] = toScreen(t, curve.Evaluate(t, 0.0f));
+		}
+		drawList->AddPolyline(points.data(), sampleCount, ImGui::GetColorU32(ImGuiCol_PlotLines), ImDrawFlags_None, 1.5f);
+		for (int i = 0; i < static_cast<int>(curve.keys.size()); ++i)
+		{
+			const bool emphasized = (i == selected || i == hoveredKey);
+			drawList->AddCircleFilled(toScreen(curve.keys[i].time, curve.keys[i].value), emphasized ? 5.0f : 3.5f,
+				ImGui::GetColorU32(emphasized ? ImGuiCol_PlotLinesHovered : ImGuiCol_Text));
+		}
+		drawList->PopClipRect();
+		return changed;
+	}
+
+	// 선택한 키의 세부 값. 시간은 이웃 키 사이로 제한한다.
+	bool DrawSelectedCurveKey(Engine::FloatCurve& curve, int& selected)
+	{
+		if (selected < 0)
+		{
+			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.CurveEditHint"));
+			return false;
+		}
+
+		auto& key = curve.keys[selected];
+		const float minTime = selected > 0 ? curve.keys[selected - 1].time + 0.001f : std::numeric_limits<float>::lowest();
+		const float maxTime = selected + 1 < static_cast<int>(curve.keys.size()) ? curve.keys[selected + 1].time - 0.001f : (std::numeric_limits<float>::max)();
+		const auto row = [](const char* labelKey)
+			{
+				EditorUI::PropertyLabel(Editor::LocalizeInspectorText(labelKey).c_str());
+				EditorUI::PropertyValue();
+				ImGui::SetNextItemWidth(-FLT_MIN);
+			};
+
+		bool changed = false;
+		if (EditorUI::BeginPropertyTable("##CurveKeyDetail", EditorUI::InspectorPropertyTableStyle()))
+		{
+			row("PROP_TIME"); changed |= ImGui::DragFloat("##Time", &key.time, 0.01f, minTime, std::max(minTime, maxTime), "%.3f", ImGuiSliderFlags_AlwaysClamp);
+			row("PROP_VALUE"); changed |= ImGui::DragFloat("##Value", &key.value, 0.01f, 0.0f, 0.0f, "%.3f");
+			row("PROP_IN_TANGENT"); changed |= ImGui::DragFloat("##In", &key.inTangent, 0.05f, 0.0f, 0.0f, "%.2f");
+			row("PROP_OUT_TANGENT"); changed |= ImGui::DragFloat("##Out", &key.outTangent, 0.05f, 0.0f, 0.0f, "%.2f");
+			row("PROP_INTERP_MODE"); changed |= DrawCurveInterpCombo(key.interpMode);
+			EditorUI::EndPropertyTable();
+		}
+
+		if (EditorUI::SmallIconButton("RemoveKey", ICON_FA_TRASH, "EditorCommon.Delete") && curve.RemoveKey(static_cast<std::size_t>(selected)))
+		{
+			selected = -1;
+			changed = true;
+		}
+		return changed;
+	}
+
+	// FloatCurve 전용 편집기. 선택 상태는 위젯 ID별 ImGuiStorage에 보관한다.
+	bool DrawFloatCurveField(Engine::FloatCurve& curve)
+	{
+		ImGuiStorage* storage = ImGui::GetStateStorage();
+		const ImGuiID selectionId = ImGui::GetID("##CurveSelection");
+		int selected = storage->GetInt(selectionId, -1);
+		if (selected >= static_cast<int>(curve.keys.size())) selected = -1;
+
+		bool changed = DrawFloatCurveGraph(curve, selected);
+		changed |= DrawSelectedCurveKey(curve, selected);
+		storage->SetInt(selectionId, selected);
+		return changed;
+	}
 
     template<typename Variant>
     bool DrawColliderShape(Variant& value, const reflection::Registry* registry)
@@ -1067,52 +1253,33 @@ namespace Editor
 
 		ImGui::PushID(type.QualifiedName.c_str());
 
-		const auto flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;
-
 		bool changed = false;
+		constexpr std::string_view generalCategory = "EditorCommon.General";
 
-		std::vector<std::string> categories;
-		for (const auto& property : type.Properties)
-		{
-			if (editSettings && editSettings->HiddenProperties.contains(property.Name)) continue;
-			if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
-			if (!EvaluateEditCondition(property, type, object, registry)) continue; // 추가: 조건 거짓이면 카테고리 집계 제외
-			const auto category = InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General");
-			if (std::ranges::find(categories, category) == categories.end()) categories.push_back(category);
-		}
-		for (const auto& category : categories)
-		{
-			ImGui::PushID(category.c_str());
-			const auto categoryLabel = LocalizeInspectorText(category) + "###PropertyCategory";
-			const auto categoryFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
-			if (!ImGui::TreeNodeEx(categoryLabel.c_str(), categoryFlags))
+		const auto isPropertyShown = [&](const reflection::PropertyInfo& property)
 			{
-				ImGui::PopID();
-				continue;
-			}
-			if (ImGui::BeginTable("Properties", 2, flags))
+				if (editSettings && editSettings->HiddenProperties.contains(property.Name)) return false;
+				if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) return false;
+				return EvaluateEditCondition(property, type, object, registry);
+			};
+		const auto categoryOf = [](const reflection::PropertyInfo& property) { return InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General"); };
+
+		// 한 카테고리의 속성 행을 표 하나로 그린다.
+		const auto drawCategoryRows = [&](const std::string& category)
 			{
-				// [반응형 컬럼 정책]: 라벨은 기본 120px를 확보하고, 값 컨트롤이 나머지 공간을 모두 차지
-				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
+				if (!EditorUI::BeginPropertyTable("Properties", EditorUI::InspectorPropertyTableStyle())) return;
 				for (const auto& property : type.Properties)
 				{
-					if (editSettings && editSettings->HiddenProperties.contains(property.Name)) continue;
-					if (InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General") != category) continue;
-					if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) continue;
-					if (!EvaluateEditCondition(property, type, object, registry)) continue;
+					if (!isPropertyShown(property) || categoryOf(property) != category) continue;
 					const std::string displayName = GetReflectionDrawerDisplayName(property.Metadata, property.Name);
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					// 1. 자물쇠 버튼 유무 확인 및 우측 예약 공간 계산
-					const bool hasLock = (editSettings != nullptr &&
-						(editSettings->Vectors.contains(property.Name) || type.QualifiedName == "Engine::TransformComponent"));
+
+					const bool hasLock = (editSettings != nullptr && (editSettings->Vectors.contains(property.Name) || type.QualifiedName == "Engine::TransformComponent"));
 					const float btnWidth = ImGui::GetFrameHeight() * 0.85f;
 					const float rightPadding = 4.0f;
 					const float reservedRightWidth = hasLock ? (btnWidth + rightPadding + ImGui::GetStyle().ItemSpacing.x) : 0.0f;
-					// 2. 스마트 반응형 라벨 출력 (잘림 감지 및 통합 툴팁)
-					DrawResponsivePropertyLabel(displayName, property.TypeName, reservedRightWidth);
-					// 3. Transform 벡터 속성 자물쇠 아이콘 배치
+
+					EditorUI::PropertyLabel(displayName.c_str(), property.TypeName.c_str(), reservedRightWidth);
+
 					if (hasLock)
 					{
 						auto& vectorSettings = editSettings->Vectors[property.Name];
@@ -1135,13 +1302,42 @@ namespace Editor
 							ImGui::SetTooltip("%s", vectorSettings.Locked ? LOCAL_CSTR("Inspector.UnlockProperty") : LOCAL_CSTR("Inspector.LockProperty"));
 						ImGui::PopID();
 					}
-					ImGui::TableSetColumnIndex(1);
+
+					EditorUI::PropertyValue();
 					changed |= DrawValue(property, object, registry, editSettings);
 				}
+				EditorUI::EndPropertyTable();
+			};
 
-				ImGui::EndTable();
+		bool hasGeneral = false;
+		std::vector<std::string> categories;
+		for (const auto& property : type.Properties)
+		{
+			if (!isPropertyShown(property)) continue;
+			auto category = categoryOf(property);
+			if (category == generalCategory) { hasGeneral = true; continue; }
+			if (std::ranges::find(categories, category) == categories.end()) categories.push_back(std::move(category));
+		}
+
+		// 1. 카테고리가 없는 속성은 머리글 없이 맨 위에 펼쳐 그린다.
+		//    ID 경로(타입/General/Properties)를 기존과 같게 유지해 저장된 열 너비를 보존한다.
+		if (hasGeneral)
+		{
+			ImGui::PushID(generalCategory.data());
+			drawCategoryRows(std::string(generalCategory));
+			ImGui::PopID();
+		}
+
+		// 2. 명시적 카테고리만 접을 수 있는 노드로 묶는다.
+		for (const auto& category : categories)
+		{
+			ImGui::PushID(category.c_str());
+			const auto categoryLabel = LocalizeInspectorText(category) + "###PropertyCategory";
+			if (ImGui::TreeNodeEx(categoryLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+			{
+				drawCategoryRows(category);
+				ImGui::TreePop();
 			}
-			ImGui::TreePop();
 			ImGui::PopID();
 		}
 
@@ -1347,6 +1543,14 @@ namespace Editor
 			}
 			if (canEdit && removed) changed |= property.TryEraseSetElement(object,
 				reflection::ValueView::From(*removed)) == reflection::PropertyAccessError::None;
+			ImGui::EndDisabled();
+		}
+		else if (const auto* curveValue = read.Value.Get<Engine::FloatCurve>())
+		{
+			ImGui::BeginDisabled(!canEdit);
+			auto candidate = *curveValue;
+			if (DrawFloatCurveField(candidate) && canEdit)
+				changed = property.TryWriteValue(object, reflection::ValueView::From(candidate)) == reflection::PropertyAccessError::None;
 			ImGui::EndDisabled();
 		}
 		else if (const auto* nested = registry ? registry->FindType(read.Value) : nullptr)

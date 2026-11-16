@@ -2025,3 +2025,5 @@ VFXEditor,HUDFrame,Frame,프레임
 VFXEditor,HUDWind,Wind,바람
 VFXEditor,HUDGravity,Gravity,중력
 VFXEditor,HUDStepHint,Step,프레임 스텝
+Inspector,CurveKeys,Keys ({}),키 {}개
+Inspector,CurveEditHint,Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.,키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.

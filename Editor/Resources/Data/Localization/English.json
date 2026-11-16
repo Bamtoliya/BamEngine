@@ -2024,6 +2024,8 @@
         "VFXEditor.HUDFrame": "Frame",
         "VFXEditor.HUDWind": "Wind",
         "VFXEditor.HUDGravity": "Gravity",
-        "VFXEditor.HUDStepHint": "Step"
+        "VFXEditor.HUDStepHint": "Step",
+        "Inspector.CurveKeys": "Keys ({})",
+        "Inspector.CurveEditHint": "Click a key to select and drag to move. Double-click adds a key. Right-click deletes it."
     }
 }

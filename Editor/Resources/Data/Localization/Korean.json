@@ -2024,6 +2024,8 @@
         "VFXEditor.HUDFrame": "프레임",
         "VFXEditor.HUDWind": "바람",
         "VFXEditor.HUDGravity": "중력",
-        "VFXEditor.HUDStepHint": "프레임 스텝"
+        "VFXEditor.HUDStepHint": "프레임 스텝",
+        "Inspector.CurveKeys": "키 {}개",
+        "Inspector.CurveEditHint": "키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다."
     }
 }
