@@ -54,6 +54,7 @@ private:
 
 	// 리사이저블 분할 너비
 	float m_LeftPaneWidth = 420.0f;
+	char m_MaterialSlotSearch[64] = {};
 };
 
 END

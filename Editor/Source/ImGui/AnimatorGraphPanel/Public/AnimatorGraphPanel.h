@@ -88,6 +88,7 @@ private:
 	std::shared_ptr<Engine::AnimatorStateMachine> m_StateMachine;
 	std::string m_CurrentFilePath;
 	bool m_IsDirty = false;
+	char m_ParameterSearch[64] = {};
 
 	// 3D 프리뷰 뷰포트 & 모델
 	PreviewViewportWidget m_PreviewWidget;

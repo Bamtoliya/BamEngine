@@ -585,29 +585,37 @@ void ToolBar::DrawFooterControls()
 	auto& buildManager = HotReloadManager::Get().GetModuleBuilder();
 	auto& moduleReloader = HotReloadManager::Get().GetModuleReloader();
 	auto& shaderReloader = HotReloadManager::Get().GetShaderReloader();
-	// ── 1. 좌측: 백그라운드 비동기 작업 진행률 표시 (화면 중앙 대신 하단 푸터에 얌전하게 표시) ──
-	size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
-	if (activeTasks > 0)
-	{
-		ImGui::SetCursorPosX(ImGui::GetStyle().WindowPadding.x);
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s",
-			(ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks)).c_str());
-		if (ImGui::IsItemHovered())
-		{
-			ImGui::SetTooltip("%s", LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks).c_str());
-		}
-	}
-	// ── 2. 우측 컨트롤 (알림 벨 버튼 + 빌드/핫리로드 제어 버튼들) ──
+	const float padX = ImGui::GetStyle().WindowPadding.x;
+	const float padY = ImGui::GetStyle().WindowPadding.y;
+	// ── 1. 우측 컨트롤 (알림 벨 + 컴파일/핫리로드 6개) 크기 및 시작 X 좌표 먼저 계산 ──
 	const float btnHeight = ImGui::GetFontSize() + 2.0f;
 	const float btnWidth = btnHeight * 1.25f;
 	const ImVec2 btnSize(btnWidth, btnHeight);
 	const float pairGap = 3.0f;
 	const float groupGap = 10.0f;
-	// 버튼 6개 (알림 벨 + 컴파일 2개 + 핫리로드 3개)의 전체 너비 계산
 	const float totalWidth = btnWidth * 6.0f + pairGap * 2.0f + groupGap * 3.0f;
-	const float startX = std::max(ImGui::GetStyle().WindowPadding.x, ImGui::GetWindowWidth() - totalWidth - ImGui::GetStyle().WindowPadding.x);
-	ImGui::SetCursorPosX(startX);
-	// [신규] 0. 지나간 알림 히스토리 토글 벨 버튼
+	const float startX = std::max(padX, ImGui::GetWindowWidth() - totalWidth - padX);
+	// ── 2. 좌측: 백그라운드 비동기 작업 진행률 표시 (텍스트 영역을 startX 앞까지 엄격히 제한) ──
+	size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
+	if (activeTasks > 0)
+	{
+		ImGui::SetCursorPos(ImVec2(padX, padY));
+		const float maxTextWidth = std::max(10.0f, startX - padX - 8.0f);
+		// 우측 버튼 영역 침범 방지 클리핑
+		const ImVec2 clipMin = ImGui::GetCursorScreenPos();
+		const ImVec2 clipMax(clipMin.x + maxTextWidth, clipMin.y + ImGui::GetFrameHeight());
+		ImGui::PushClipRect(clipMin, clipMax, true);
+		const std::string text = ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks);
+		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", text.c_str());
+		ImGui::PopClipRect();
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("%s", text.c_str());
+		}
+	}
+	// ── 3. 우측 컨트롤 렌더링: Y 좌표를 padY로 강제 고정하여 세로 클리핑 완벽 차단! ──
+	ImGui::SetCursorPos(ImVec2(startX, padY));
+	// 0. 지나간 알림 히스토리 토글 벨 버튼 (이하 기존 코드 동일)
 	auto& notifMgr = NotificationManager::Get();
 	const bool historyOpen = notifMgr.IsHistoryPopupOpen();
 	const size_t notifCount = notifMgr.GetHistoryCount();

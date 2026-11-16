@@ -1,4 +1,4 @@
-#include "Editor_Includes.h"
+﻿#include "Editor_Includes.h"
 #include "EditorUI.h"
 #include "InputManager.h"
 #include <imgui.h>
@@ -178,10 +178,10 @@ namespace EditorUI
         const ImVec2 size(std::max(minimum.x, options.Size.x), std::max(minimum.y, options.Size.y));
         if (options.SameLine)
             SameLineIfFits(size.x);
-        if (ImGui::GetContentRegionAvail().x < size.x)
+        if (!options.NoWrap && ImGui::GetContentRegionAvail().x < size.x)
             ImGui::NewLine();
         // 버튼 하나의 최소 크기도 확보할 수 없으면 잘린 버튼이나 가로 스크롤 영역을 만들지 않는다.
-        if (ImGui::GetContentRegionAvail().x < size.x)
+        if (!options.NoWrap && ImGui::GetContentRegionAvail().x < size.x)
             return false;
 
         const std::string label = std::string(icon) + "###" + id;
@@ -286,14 +286,18 @@ namespace EditorUI
         const std::string previousText(buffer);
         const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
         const float width = options.Width > 0.0f ? std::min(options.Width, availableWidth) : availableWidth;
-        const float buttonSize = GetIconButtonSize(ICON_FA_XMARK).x;
+
+        const float frameHeight = ImGui::GetFrameHeight();
+        const float buttonSize = frameHeight;
         const float spacing = ImGui::GetStyle().ItemSpacing.x;
         const float iconWidth = ImGui::CalcTextSize(ICON_FA_MAGNIFYING_GLASS).x;
         const bool showIcon = width >= buttonSize * 3.0f + iconWidth + spacing * 2.0f;
         const bool showClear = width >= buttonSize + spacing + ImGui::GetFontSize();
-        const float inputWidth = width - (showClear ? buttonSize + spacing : 0.0f) -
-            (showIcon ? iconWidth + spacing : 0.0f);
 
+        // 4.0px 안전 마진을 두어 DPI 스케일링/픽셀 스냅 오차 발생 시에도 버튼 폭이 보장되도록 설정
+        const float reservedForClear = showClear ? (buttonSize + spacing + 4.0f) : 0.0f;
+        const float reservedForIcon = showIcon ? (iconWidth + spacing) : 0.0f;
+        const float inputWidth = std::max(1.0f, width - reservedForClear - reservedForIcon);
         ImGui::PushID(id);
         ImGui::BeginGroup();
         if (showIcon)
@@ -302,18 +306,15 @@ namespace EditorUI
             ImGui::TextUnformatted(ICON_FA_MAGNIFYING_GLASS);
             ImGui::SameLine();
         }
-
         const ImGuiID inputId = ImGui::GetID("##SearchInput");
         const bool clearOnEscape = ImGui::GetActiveID() == inputId &&
             ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
             Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape);
-
         if (options.FocusOnDraw)
             ImGui::SetKeyboardFocusHere();
-        ImGui::SetNextItemWidth(std::max(1.0f, inputWidth));
+        ImGui::SetNextItemWidth(inputWidth);
         result.Submitted = ImGui::InputTextWithHint("##SearchInput", LOCAL_CSTR(hintKey), buffer, bufferSize,
             ImGuiInputTextFlags_EscapeClearsAll | ImGuiInputTextFlags_EnterReturnsTrue);
-
         if (clearOnEscape)
         {
             buffer[0] = '\0';
@@ -322,18 +323,24 @@ namespace EditorUI
             if (ImGui::GetActiveID() == inputId)
                 ImGui::ClearActiveID();
         }
-
-        IconButtonOptions clearOptions;
-        clearOptions.Enabled = buffer[0] != '\0';
-        clearOptions.SameLine = true;
-        if (showClear && IconButton("ClearSearch", ICON_FA_XMARK, "EditorCommon.Clear", clearOptions))
+        if (showClear)
         {
-            buffer[0] = '\0';
-            result.Cleared = true;
+            ImGui::SameLine(0.0f, spacing);
+            IconButtonOptions clearOptions;
+            clearOptions.Enabled = (buffer[0] != '\0');
+            clearOptions.SameLine = false; // 수동으로 SameLine을 불렀으므로 내부 SameLineIfFits 비활성화
+            clearOptions.NoWrap = true;   // [핵심] 검색바 내 인라인 요소이므로 강제 개행 원천 차단
+            clearOptions.Compact = true;
+            clearOptions.Size = ImVec2(buttonSize, buttonSize);
+            if (IconButton("ClearSearch", ICON_FA_XMARK, "EditorCommon.Clear", clearOptions))
+            {
+                buffer[0] = '\0';
+                result.Cleared = true;
+            }
         }
         ImGui::EndGroup();
         ImGui::PopID();
-        result.Changed = previousText != buffer;
+        result.Changed = (previousText != buffer);
         return result;
     }
 
@@ -368,8 +375,8 @@ namespace EditorUI
         if (!BeginSettingsTable(id, 2, flags, style))
             return false;
 
-        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, style.LabelWidth);
-        ImGui::TableSetupColumn("Widget", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, style.LabelWidth);
+        ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
         return true;
     }
 

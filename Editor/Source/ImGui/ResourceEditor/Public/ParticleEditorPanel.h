@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "EffectTimelineView.h"
@@ -66,6 +66,7 @@ private:
 	bool m_IsDirty = false;
 	string m_StatusMessage;
 	int m_SelectedEmitterIndex = 0;
+	char m_EmitterSearch[64] = {};
 
 	// 재생 제어 상태
 	bool m_IsPlaying = true;

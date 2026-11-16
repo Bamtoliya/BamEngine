@@ -28,6 +28,7 @@ namespace EditorUI
         bool Active = false;
         bool SameLine = false;
         bool Compact = false; // 표/리스트 행의 작은 버튼.
+        bool NoWrap = false;  // 가용 폭 부족 시 자동 개행(NewLine)을 강제 비활성화
         ImVec2 Size = ImVec2(0.0f, 0.0f); // 고정 영역에서 사용할 최소 크기. 아이콘/패딩보다 작아지지 않는다.
         const char* ShortcutHint = nullptr;
     };

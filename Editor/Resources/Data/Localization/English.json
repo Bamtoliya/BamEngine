@@ -1994,6 +1994,23 @@
         "PluginManager.ComponentWithCategory": "- {} (Category: {})",
         "PluginManager.SkyAtmosphereComponentDesc": "- SkyAtmosphereComponent (Atmosphere Scattering & Sun Direction)",
         "PluginManager.SkyAtmosphereComponent": "- SkyAtmosphereComponent",
-        "VFXEditor.DeleteTrack": "Delete Track"
+        "VFXEditor.DeleteTrack": "Delete Track",
+        "MaterialEditor.SearchParameters": "Search parameters...",
+        "ModelEditor.SearchSlots": "Search material slots...",
+        "SpriteEditor.SearchSlices": "Search slices...",
+        "VFXEditor.SearchTracks": "Search tracks...",
+        "ParticleEditor.SearchEmitters": "Search emitters...",
+        "AnimatorGraph.SearchParameters": "Search parameters...",
+        "PrefabEditor.SearchEntities": "Search entities...",
+        "ShaderEditor.RecompileShader": "Recompile Shader",
+        "TextureEditor.Dimensions": "Dimensions",
+        "VFXEditor.ObstaclePreset": "Obstacle Preset (Floor / Wall / Obstacles / Dummy)",
+        "VFXEditor.PresetFloorOnly": "Floor Only",
+        "VFXEditor.PresetCornerWall": "Corner Wall",
+        "VFXEditor.PresetObstacles": "Center Obstacles (Sphere & Box)",
+        "VFXEditor.PresetDummy": "Dummy Mannequin",
+        "VFXEditor.EnvironmentForces": "Environment Force Simulator (Wind & Gravity)",
+        "VFXEditor.GravityMultiplier": "Gravity Multiplier",
+        "VFXEditor.WindXZ": "Wind (X: Right / Z: Forward)"
     }
 }

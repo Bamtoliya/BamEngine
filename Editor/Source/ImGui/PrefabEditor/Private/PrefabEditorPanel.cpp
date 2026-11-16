@@ -177,6 +177,10 @@ void PrefabEditorPanel::DrawPrefabHierarchy()
     ImGui::TextUnformatted(LOCAL_CSTR("PrefabEditor.Hierarchy"));
     ImGui::Separator();
 
+    // 표준 검색 바 (EditorUI::DrawSearchBar) 도입 - m_SearchFilter 연동
+    EditorUI::DrawSearchBar("PrefabEntitySearch", m_SearchFilter, sizeof(m_SearchFilter), "PrefabEditor.SearchEntities");
+    ImGui::Spacing();
+
     std::vector<entt::entity> selected;
     if (m_SelectedEntity != entt::null) selected.push_back(m_SelectedEntity);
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceEditorInterface.h"
 #include "ResourceHandle.h"
@@ -73,6 +73,7 @@ private:
 	bool m_ShowCreateAnimModal = false;
 	SpriteSliceParameters m_SliceParams;
 	SpriteAutoAnimParameters m_AnimParams;
+	char m_SliceSearch[64] = {};
 };
 
 END

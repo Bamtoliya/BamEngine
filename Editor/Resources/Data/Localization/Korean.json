@@ -1994,6 +1994,23 @@
         "PluginManager.ComponentWithCategory": "- {} (분류: {})",
         "PluginManager.SkyAtmosphereComponentDesc": "- SkyAtmosphereComponent (대기 산란 및 태양 방향)",
         "PluginManager.SkyAtmosphereComponent": "- SkyAtmosphereComponent",
-        "VFXEditor.DeleteTrack": "트랙 삭제"
+        "VFXEditor.DeleteTrack": "트랙 삭제",
+        "MaterialEditor.SearchParameters": "파라미터 검색...",
+        "ModelEditor.SearchSlots": "머티리얼 슬롯 검색...",
+        "SpriteEditor.SearchSlices": "슬라이스 검색...",
+        "VFXEditor.SearchTracks": "트랙 검색...",
+        "ParticleEditor.SearchEmitters": "이미터 검색...",
+        "AnimatorGraph.SearchParameters": "파라미터 검색...",
+        "PrefabEditor.SearchEntities": "엔티티 검색...",
+        "ShaderEditor.RecompileShader": "셰이더 재컴파일",
+        "TextureEditor.Dimensions": "해상도",
+        "VFXEditor.ObstaclePreset": "장애물 프리셋 (Floor / Wall / Obstacles / Dummy)",
+        "VFXEditor.PresetFloorOnly": "바닥만 (Floor Only)",
+        "VFXEditor.PresetCornerWall": "코너 벽면 (Corner Wall)",
+        "VFXEditor.PresetObstacles": "중앙 장애물 (Sphere & Box)",
+        "VFXEditor.PresetDummy": "인간형 더미 (Dummy Mannequin)",
+        "VFXEditor.EnvironmentForces": "환경 외력 시뮬레이터 (바람 및 중력)",
+        "VFXEditor.GravityMultiplier": "중력 배율",
+        "VFXEditor.WindXZ": "바람 (X: 우측 / Z: 전방)"
     }
 }

@@ -405,7 +405,7 @@ void PluginManagerPanel::DrawMasterList()
 		// 부제목: 버전
 		ImGui::SetCursorScreenPos(ImVec2(iconPos.x + iconSize + 6.0f, startPos.y + 22.0f));
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-		ImGui::Text("v%s", item.Version.c_str());
+		ImGui::TextUnformatted(LOCAL_FMT("PluginManager.VersionFormat", item.Version).c_str());
 		ImGui::PopStyleColor();
 
 		// 우측 상태 뱃지
@@ -462,9 +462,9 @@ void PluginManagerPanel::DrawDetailView()
 		ImGui::SameLine();
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.55f, 0.55f, 0.55f, 1.0f));
 		if (item.Author.empty())
-			ImGui::Text("v%s", item.Version.c_str());
+			ImGui::TextUnformatted(LOCAL_FMT("PluginManager.VersionFormat", item.Version).c_str());
 		else
-			ImGui::Text("v%s  by %s", item.Version.c_str(), item.Author.c_str());
+			ImGui::TextUnformatted(LOCAL_FMT("PluginManager.VersionByAuthor", item.Version, item.Author).c_str());
 		ImGui::PopStyleColor();
 	}
 
@@ -829,7 +829,7 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 	{
 		ImGui::BulletText("%s", LOCAL_CSTR("PluginManager.FeatureSystems"));
 		ImGui::Indent();
-		ImGui::TextUnformatted("- SkyAtmosphereSystem (Environment Atmosphere Rendering)");
+		ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.SkyAtmosphereSystemDesc"));
 		ImGui::Unindent();
 
 		ImGui::Spacing();
@@ -843,18 +843,18 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 			{
 				if (entry.Category == "Gameplay" || entry.Category == "GameModule" || entry.Category == "Custom")
 				{
-					ImGui::Text("- %s (Category: %s)", entry.Name.c_str(), entry.Category.c_str());
+					ImGui::TextUnformatted(LOCAL_FMT("PluginManager.ComponentWithCategory", entry.Name, entry.Category).c_str());
 					gameCompCount++;
 				}
 			}
 			if (gameCompCount == 0)
 			{
-				ImGui::TextUnformatted("- SkyAtmosphereComponent (Atmosphere Scattering & Sun Direction)");
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.SkyAtmosphereComponentDesc"));
 			}
 		}
 		else
 		{
-			ImGui::TextUnformatted("- SkyAtmosphereComponent");
+			ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.SkyAtmosphereComponent"));
 		}
 		ImGui::Unindent();
 	}

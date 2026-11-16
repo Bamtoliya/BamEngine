@@ -335,12 +335,17 @@ void AnimatorGraphPanel::DrawParametersTab()
 	}
 
 	ImGui::Separator();
-
+	// 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+	EditorUI::DrawSearchBar("AnimParamSearch", m_ParameterSearch, sizeof(m_ParameterSearch), "AnimatorGraph.SearchParameters");
+	ImGui::Spacing();
+	const std::string filterLower = Engine::ToLowerStr(m_ParameterSearch);
 	std::optional<std::string> toRename;
 	std::string toDelete;
-
 	for (auto& [paramName, paramData] : parameters)
 	{
+		// 파라미터 이름 검색 필터링
+		if (!filterLower.empty() && Engine::ToLowerStr(paramName).find(filterLower) == std::string::npos)
+			continue;
 		ImGui::PushID(paramName.c_str());
 
 		if (EditorUI::SmallIconButton("RenameParameter", ICON_FA_PEN, "EditorCommon.Rename"))

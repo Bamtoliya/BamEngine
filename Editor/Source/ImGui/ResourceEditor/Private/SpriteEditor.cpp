@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "SpriteEditor.h"
 #include "EditorUI.h"
 #include "Functions.h"
@@ -617,6 +617,12 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 		}
 		else
 		{
+			// 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+			EditorUI::DrawSearchBar("SpriteSliceSearch", m_SliceSearch, sizeof(m_SliceSearch), "SpriteEditor.SearchSlices");
+			ImGui::Spacing();
+
+			const std::string filterLower = Engine::ToLowerStr(m_SliceSearch);
+
 			if (ImGui::BeginTable("##SlicesTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 260.0f)))
 			{
 				ImGui::TableSetupColumn(LOCAL_CSTR("SpriteEditor.IndexHeader"), ImGuiTableColumnFlags_WidthFixed, 28.0f);
@@ -627,6 +633,15 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 				for (int i = 0; i < static_cast<int>(m_Slices.size()); ++i)
 				{
 					const auto& slice = m_Slices[i];
+
+					// 슬라이스 이름 및 인덱스 검색 필터링
+					if (!filterLower.empty())
+					{
+						const bool matchName = Engine::ToLowerStr(slice.name).find(filterLower) != std::string::npos;
+						const bool matchIdx = std::to_string(i).find(filterLower) != std::string::npos;
+						if (!matchName && !matchIdx) continue;
+					}
+
 					ImGui::TableNextRow();
 
 					ImGui::TableSetColumnIndex(0);
@@ -697,7 +712,7 @@ void SpriteEditor::DrawSliceModal()
 		ImGui::DragInt2(LOCAL_CSTR("SpriteEditor.Padding"), &m_SliceParams.paddingX, 1, 0, 256);
 
 		ImGui::SliderFloat2(LOCAL_CSTR("SpriteEditor.DefaultPivot"), &m_SliceParams.defaultPivot.x, 0.0f, 1.0f, "%.2f");
-		ImGui::DragFloat("Pixels Per Unit", &m_SliceParams.pixelPerUnit, 1.0f, 1.0f, 1000.0f, "%.0f");
+		ImGui::DragFloat(LOCAL_LABEL("SpriteEditor.PixelsPerUnit").c_str(), &m_SliceParams.pixelPerUnit, 1.0f, 1.0f, 1000.0f, "%.0f");
 
 		ImGui::Separator();
 		ImGui::Spacing();

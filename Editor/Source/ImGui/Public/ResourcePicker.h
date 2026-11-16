@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ReflectionInspectorSupport.h"
 #include "EditorUI.h"
@@ -342,56 +342,92 @@ namespace Editor
 
 		if (ImGui::BeginPopup("ResourceChoices"))
 		{
-			struct DiskAssetEntry
+			struct CachedAssetEntry
 			{
 				std::string Filename;
+				std::string SubPath;
+				std::string LowerFilename;
+				std::string LowerSubPath;
 				std::filesystem::path FullPath;
 				std::wstring Key;
+				std::string UniqueId;
 				bool IsEngineAsset = false;
+				Engine::Handle Handle;
+				Engine::RHITexture* DirectTexture = nullptr;
 			};
-			static std::vector<DiskAssetEntry> s_CachedDiskFiles;
+			static std::vector<CachedAssetEntry> s_CachedLoadedEntries;
+			static std::vector<CachedAssetEntry> s_CachedDiskFiles;
+			static std::vector<size_t> s_FilteredLoadedIndices;
+			static std::vector<size_t> s_FilteredDiskIndices;
+			static std::string s_LastSearchQuery;
+			static int s_LastCategoryScope = -1;
 			static char s_SearchBuffer[128] = "";
-			static float s_ThumbnailSize = 64.0f; // 기본 64px (기존 36px 대비 1.8배 확대)
+			static float s_ThumbnailSize = 64.0f;
 			static int s_CategoryScope = 0; // 0: All, 1: Project, 2: Engine Built-in
 
 			auto isLoadedEntryEngineBuiltIn = [](const std::wstring& key, const std::wstring& path) -> bool
 				{
 					const auto& target = path.empty() ? key : path;
-					if (Engine::PlatformPath::IsReadOnlyTarget(target))
-						return true;
+					if (Engine::PlatformPath::IsReadOnlyTarget(target)) return true;
 					std::error_code ec;
 					const auto resolved = Engine::PlatformPath::ResolveUri(target);
-					if (resolved.empty() || !std::filesystem::exists(resolved, ec))
-						return true; // CubeMesh, SphereMesh, White1x1 등 절차적 내장 리소스
+					if (resolved.empty() || !std::filesystem::exists(resolved, ec)) return true;
 					return false;
 				};
 
 			const bool isAppearing = ImGui::IsWindowAppearing();
 
-			// ── 1. 팝업 진입 시 1회만 디스크 스캔 및 캐싱 ──
+			// ── 1. 팝업 진입 시 1회만 메타데이터 스캔 및 캐싱 (Zero Allocation per Frame) ──
 			if (isAppearing)
 			{
 				s_SearchBuffer[0] = '\0';
+				s_LastSearchQuery.clear();
+				s_LastCategoryScope = -1;
+				s_CachedLoadedEntries.clear();
 				s_CachedDiskFiles.clear();
+				s_FilteredLoadedIndices.clear();
+				s_FilteredDiskIndices.clear();
 
 				std::unordered_set<std::wstring> loadedNormalizedKeys;
 				for (const auto& entry : manager.GetDebugSnapshot())
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
-					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr)
-						continue;
+					auto* resource = manager.GetResource(handle);
+					if (dynamic_cast<T*>(resource) == nullptr) continue;
 
 					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
 					const auto absolutePath = Engine::PlatformPath::ResolveUri(resourcePath);
 					const auto relativePath = Engine::PlatformPath::ToProjectRelative(absolutePath);
-					loadedNormalizedKeys.insert(Detail::NormalizeResourceKey(relativePath.wstring()));
+					const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
+					loadedNormalizedKeys.insert(normKey);
+
+					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
+					const std::filesystem::path p(normKey);
+					const std::string filename = Engine::WStrToStr(p.filename().wstring());
+					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
+					const std::string displaySubPath = isEngine ? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath)) : parentPath;
+
+					std::string lowerName = filename;
+					for (char& c : lowerName) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+					std::string lowerSub = displaySubPath;
+					for (char& c : lowerSub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+					Engine::RHITexture* directTex = nullptr;
+					if constexpr (std::is_same_v<T, Engine::Texture>)
+					{
+						if (auto* tex = dynamic_cast<Engine::Texture*>(resource)) directTex = tex->GetRHITexture();
+					}
+
+					s_CachedLoadedEntries.push_back({
+						filename, displaySubPath, std::move(lowerName), std::move(lowerSub),
+						absolutePath, normKey, "Mem_" + Engine::WStrToStr(normKey), isEngine, handle, directTex
+						});
 				}
 
 				auto scanDirectoryRoot = [&](const std::filesystem::path& rootDir)
 					{
 						std::error_code ec;
-						if (rootDir.empty() || !std::filesystem::exists(rootDir, ec))
-							return;
+						if (rootDir.empty() || !std::filesystem::exists(rootDir, ec)) return;
 
 						for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(
 							rootDir, std::filesystem::directory_options::skip_permission_denied, ec))
@@ -407,11 +443,18 @@ namespace Editor
 							if (loadedNormalizedKeys.contains(normKey)) continue;
 							loadedNormalizedKeys.insert(normKey);
 
+							const bool isEngine = Engine::PlatformPath::IsReadOnlyTarget(assetPath);
+							const std::string parentPath = Engine::WStrToStr(assetPath.parent_path().generic_wstring());
+							const std::string displaySubPath = isEngine ? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath)) : parentPath;
+
+							std::string lowerName = filename;
+							for (char& c : lowerName) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+							std::string lowerSub = displaySubPath;
+							for (char& c : lowerSub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
 							s_CachedDiskFiles.push_back({
-								filename,
-								assetPath,
-								normKey,
-								Engine::PlatformPath::IsReadOnlyTarget(assetPath)
+								filename, displaySubPath, std::move(lowerName), std::move(lowerSub),
+								assetPath, normKey, "Disk_" + Engine::WStrToStr(assetPath.wstring()), isEngine, {}, nullptr
 								});
 						}
 					};
@@ -419,8 +462,7 @@ namespace Editor
 				const auto projectAssetRoot = Engine::PlatformPath::GetProjectAssetRoot();
 				const auto engineResourceRoot = Engine::PlatformPath::GetEngineResourceRoot();
 				scanDirectoryRoot(projectAssetRoot);
-				if (engineResourceRoot != projectAssetRoot)
-					scanDirectoryRoot(engineResourceRoot);
+				if (engineResourceRoot != projectAssetRoot) scanDirectoryRoot(engineResourceRoot);
 			}
 
 			// 검색 바 오른쪽에 썸네일 크기 조절 공간을 예약한다.
@@ -428,15 +470,13 @@ namespace Editor
 			EditorUI::SearchBarOptions searchOptions;
 			searchOptions.Width = std::max(1.0f, ImGui::GetContentRegionAvail().x - sliderWidth - ImGui::GetStyle().ItemSpacing.x);
 			searchOptions.FocusOnDraw = isAppearing;
-			EditorUI::DrawSearchBar("ResourcePickerSearch", s_SearchBuffer, sizeof(s_SearchBuffer),
-				"ResourcePicker.SearchHint", searchOptions);
+			EditorUI::DrawSearchBar("ResourcePickerSearch", s_SearchBuffer, sizeof(s_SearchBuffer), "ResourcePicker.SearchHint", searchOptions);
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(sliderWidth);
 			ImGui::SliderFloat("##ThumbSizeSlider", &s_ThumbnailSize, 40.0f, 120.0f, "%.0f px");
 			if (ImGui::IsItemHovered())
 			{
-				const std::string thumbnailHint = fmt::format(
-					fmt::runtime(LocalizeInspectorText("ResourcePicker.ThumbnailSizeHint")), 40, 120);
+				const std::string thumbnailHint = fmt::format(fmt::runtime(LocalizeInspectorText("ResourcePicker.ThumbnailSizeHint")), 40, 120);
 				ImGui::SetTooltip("%s", thumbnailHint.c_str());
 			}
 
@@ -449,12 +489,9 @@ namespace Editor
 				auto drawScopeTab = [&](const std::string& btnLabel, int scopeIndex)
 					{
 						const bool active = (s_CategoryScope == scopeIndex);
-						if (active)
-							ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-						if (ImGui::SmallButton(btnLabel.c_str()))
-							s_CategoryScope = scopeIndex;
-						if (active)
-							ImGui::PopStyleColor();
+						if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+						if (ImGui::SmallButton(btnLabel.c_str())) s_CategoryScope = scopeIndex;
+						if (active) ImGui::PopStyleColor();
 					};
 
 				drawScopeTab(scopeAllLabel, 0);
@@ -464,55 +501,62 @@ namespace Editor
 				drawScopeTab(scopeEngLabel, 2);
 			}
 
+			// ── 2-C. 더티 플래그 기반 필터링 인덱스 갱신 ──
 			const std::string searchStr = s_SearchBuffer;
-			auto matchesFilter = [&](std::string_view name, std::string_view path, bool isEngineAsset) -> bool
+			if (searchStr != s_LastSearchQuery || s_CategoryScope != s_LastCategoryScope)
+			{
+				s_LastSearchQuery = searchStr;
+				s_LastCategoryScope = s_CategoryScope;
+				s_FilteredLoadedIndices.clear();
+				s_FilteredDiskIndices.clear();
+
+				std::string sLower = searchStr;
+				for (char& c : sLower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+				auto passesFilter = [&](const CachedAssetEntry& item) -> bool
+					{
+						if (s_CategoryScope == 1 && item.IsEngineAsset) return false;
+						if (s_CategoryScope == 2 && !item.IsEngineAsset) return false;
+						if (sLower.empty()) return true;
+						return item.LowerFilename.find(sLower) != std::string::npos || item.LowerSubPath.find(sLower) != std::string::npos;
+					};
+
+				for (size_t i = 0; i < s_CachedLoadedEntries.size(); ++i)
 				{
-					if (s_CategoryScope == 1 && isEngineAsset) return false;
-					if (s_CategoryScope == 2 && !isEngineAsset) return false;
-					if (searchStr.empty()) return true;
-					auto toLower = [](std::string_view s) {
-						std::string res;
-						res.reserve(s.size());
-						for (char c : s) res.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-						return res;
-						};
-					const std::string sLower = toLower(searchStr);
-					return toLower(name).find(sLower) != std::string::npos || toLower(path).find(sLower) != std::string::npos;
-				};
+					if (passesFilter(s_CachedLoadedEntries[i])) s_FilteredLoadedIndices.push_back(i);
+				}
+				for (size_t i = 0; i < s_CachedDiskFiles.size(); ++i)
+				{
+					if (passesFilter(s_CachedDiskFiles[i])) s_FilteredDiskIndices.push_back(i);
+				}
+			}
 
 			ImGui::Separator();
 
-			// ── 3. 대형 썸네일 + 3단 텍스트 항목 렌더링 람다 ──
+			// ── 3. 대형 썸네일 + 3단 텍스트 항목 렌더링 규격 및 람다 ──
+			const auto& style = ImGui::GetStyle();
+			const float thumbSize = std::clamp(s_ThumbnailSize, 40.0f, 120.0f);
+			const float minTextHeight = ImGui::GetTextLineHeight() * 2.0f + 10.0f;
+			const float itemHeight = std::max(thumbSize + 8.0f, minTextHeight);
+			const float itemStride = itemHeight + style.ItemSpacing.y;
+
 			bool openEditorRequested = false;
-			auto drawResourceItem = [&](const std::string& uniqueId, const std::string& displayName,
-				const std::string& subPath, const std::filesystem::path& assetPath, bool isSelected, auto onSelect)
+			auto drawResourceItem = [&](const CachedAssetEntry& entry, bool isSelected, auto onSelect)
 				{
-					const float thumbSize = std::clamp(s_ThumbnailSize, 40.0f, 120.0f);
-					const float itemHeight = thumbSize + 8.0f;
 					const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 					const float availWidth = ImGui::GetContentRegionAvail().x;
 
-					ImGui::PushID(uniqueId.c_str());
-					const bool clicked = ImGui::Selectable("##ItemSelectable", isSelected,
-						ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
+					ImGui::PushID(entry.UniqueId.c_str());
+					const bool clicked = ImGui::Selectable("##ItemSelectable", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
 					const bool isHovered = ImGui::IsItemHovered();
 
-					if (!ImGui::IsItemVisible())
-					{
-						if (clicked)
-							onSelect();
-
-						ImGui::PopID();
-						return;
-					}
-
-					if (Detail::DrawResourceContextMenu(assetPath))
-						openEditorRequested = true;
+					if (Detail::DrawResourceContextMenu(entry.FullPath)) openEditorRequested = true;
 
 					ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-					// 1) 좌측 대형 썸네일 박스
-					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + 4.0f);
+					// 1) 좌측 대형 썸네일 박스 (itemHeight 세로 중앙 정렬)
+					const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
+					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
 					const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
 					drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.12f, 0.95f)), 6.0f);
 
@@ -523,17 +567,21 @@ namespace Editor
 					ImVec2 imgMax = thumbMax;
 					ImVec2 tooltipImgSize(128.0f, 128.0f);
 
-					if (!assetPath.empty())
+					if (entry.DirectTexture != nullptr)
 					{
-						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(assetPath))
+						texID = Detail::GetResourcePickerTextureID(entry.DirectTexture);
+					}
+					else if (!entry.FullPath.empty())
+					{
+						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(entry.FullPath))
 							texID = Detail::GetResourcePickerTextureID(rhiTex);
 
 						if constexpr (std::is_same_v<T, Engine::Sprite>)
 						{
-							Engine::Handle spHandle = manager.FindHandleByFilePath(assetPath);
+							Engine::Handle spHandle = entry.Handle.IsValid() ? entry.Handle : manager.FindHandleByFilePath(entry.FullPath);
 							if (!spHandle.IsValid())
 							{
-								const std::wstring rel = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+								const std::wstring rel = Engine::PlatformPath::ToProjectRelative(entry.FullPath).wstring();
 								spHandle = manager.FindHandleByKey(rel);
 								if (!spHandle.IsValid() && rel.size() > 5 && rel.ends_with(L".json"))
 									spHandle = manager.FindHandleByKey(rel.substr(0, rel.size() - 5));
@@ -570,21 +618,19 @@ namespace Editor
 					}
 					else
 					{
-						const auto visual = Detail::GetResourceVisual<T>(displayName);
+						const auto visual = Detail::GetResourceVisual<T>(entry.Filename);
 						ImFont* font = ImGui::GetFont();
 						const float iconFontSize = thumbSize * 0.45f;
 						const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, visual.Icon);
-						const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f,
-							thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
+						const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
 						drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(visual.Color), visual.Icon);
 					}
 					drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.15f)), 6.0f);
 
-					// 2) 우측 정보 레이아웃 (우측 배지 정렬로 세로 겹침 원천 차단)
+					// 2) 우측 정보 레이아웃
 					const float textStartX = thumbMax.x + 12.0f;
-					const auto visual = Detail::GetResourceVisual<T>(displayName);
+					const auto visual = Detail::GetResourceVisual<T>(entry.Filename);
 					const float lineHeight = ImGui::GetTextLineHeight();
-					// 우측 타입 배지 크기 및 위치 동적 정밀 계산 (상하/좌우 여백 확대 및 아이콘 넘침 방지)
 					const float iconWidth = ImGui::CalcTextSize(visual.Icon).x;
 					const float iconHeight = ImGui::CalcTextSize(visual.Icon).y;
 					const float badgeTextWidth = ImGui::CalcTextSize(visual.Badge).x;
@@ -600,48 +646,39 @@ namespace Editor
 					const float badgeStartX = cursorPos.x + availWidth - totalBadgeWidth - rightReserved;
 					const float badgeStartY = cursorPos.y + (itemHeight - badgeHeight) * 0.5f;
 
-					// 타입 배지 렌더링 (썸네일 크기 48px 이상일 때 우측에 넉넉한 캡슐 박스로 렌더링)
 					if (thumbSize >= 48.0f)
 					{
 						const ImVec2 badgeBoxMin = ImVec2(badgeStartX, badgeStartY);
 						const ImVec2 badgeBoxMax = ImVec2(badgeBoxMin.x + totalBadgeWidth, badgeBoxMin.y + badgeHeight);
 
-						drawList->AddRectFilled(badgeBoxMin, badgeBoxMax,
-							ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.18f)), 6.0f);
-						drawList->AddRect(badgeBoxMin, badgeBoxMax,
-							ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.45f)), 6.0f, 0, 1.2f);
+						drawList->AddRectFilled(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.18f)), 6.0f);
+						drawList->AddRect(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.45f)), 6.0f, 0, 1.2f);
 
-						// 아이콘과 텍스트를 배지 세로 정중앙에 정확히 배치하여 테두리 밖 넘침 원천 차단
 						const ImVec2 iconPos = ImVec2(badgeBoxMin.x + badgePadX, badgeBoxMin.y + (badgeHeight - iconHeight) * 0.5f);
 						const ImVec2 textPos = ImVec2(iconPos.x + iconWidth + badgeSpacing, badgeBoxMin.y + (badgeHeight - badgeTextHeight) * 0.5f);
 
 						drawList->AddText(iconPos, ImGui::GetColorU32(visual.Color), visual.Icon);
-						drawList->AddText(textPos,
-							ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.95f)), visual.Badge);
+						drawList->AddText(textPos, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.95f)), visual.Badge);
 					}
-					// 중앙 텍스트 (썸네일 높이 중앙을 기준으로 2행 완벽 정렬)
+
 					const float textCenterY = cursorPos.y + (itemHeight * 0.5f);
 					const float spacingY = 3.0f;
-					const float nameY = subPath.empty() ? (textCenterY - lineHeight * 0.5f) : (textCenterY - lineHeight - spacingY * 0.5f);
+					const float nameY = entry.SubPath.empty() ? (textCenterY - lineHeight * 0.5f) : (textCenterY - lineHeight - spacingY * 0.5f);
 					const float pathY = textCenterY + spacingY * 0.5f;
-					// 1행: 파일명
-					drawList->AddText(ImVec2(textStartX, nameY),
-						ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)),
-						displayName.c_str());
-					// 2행: 상대 경로
-					if (!subPath.empty())
+
+					drawList->AddText(ImVec2(textStartX, nameY), ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)), entry.Filename.c_str());
+
+					if (!entry.SubPath.empty())
 					{
-						drawList->AddText(ImVec2(textStartX, pathY),
-							ImGui::GetColorU32(ImGuiCol_TextDisabled), subPath.c_str());
+						drawList->AddText(ImVec2(textStartX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), entry.SubPath.c_str());
 					}
-					// 3) 선택 상태 체크마크 (최우측)
+
 					if (isSelected)
 					{
 						const ImVec2 checkPos = ImVec2(cursorPos.x + availWidth - 24.0f, cursorPos.y + (itemHeight - 16.0f) * 0.5f);
 						drawList->AddText(checkPos, ImGui::GetColorU32(ImVec4(0.35f, 0.95f, 0.45f, 1.0f)), ICON_FA_CHECK);
 					}
 
-					// 4) 마우스 호버 시 128x128 대형 프리뷰 툴팁 제공
 					if (isHovered && !openEditorRequested)
 					{
 						ImGui::BeginTooltip();
@@ -650,25 +687,22 @@ namespace Editor
 							ImGui::Image(texID, tooltipImgSize, uv0, uv1);
 							ImGui::Separator();
 						}
-						ImGui::Text("%s", displayName.c_str());
-						ImGui::TextDisabled("%s", subPath.c_str());
+						ImGui::Text("%s", entry.Filename.c_str());
+						ImGui::TextDisabled("%s", entry.SubPath.c_str());
 						ImGui::EndTooltip();
 					}
 
-					if (clicked)
-						onSelect();
+					if (clicked) onSelect();
 
 					ImGui::PopID();
 				};
 
-			// ── 4. 리스트 스크롤 영역 ──
+			// ── 4. 리스트 스크롤 영역 (ImGuiListClipper 기반 가상 스크롤) ──
 			if (ImGui::BeginChild("##ResourceListRegion", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 			{
 				// 최상단: 리소스 할당 해제 (None / Clear)
 				{
 					const bool isNoneSelected = (current == nullptr);
-					const float thumbSize = std::clamp(s_ThumbnailSize, 40.0f, 120.0f);
-					const float itemHeight = thumbSize + 8.0f;
 					const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 					const float availWidth = ImGui::GetContentRegionAvail().x;
 
@@ -681,11 +715,11 @@ namespace Editor
 						s_SearchBuffer[0] = '\0';
 						ImGui::CloseCurrentPopup();
 					}
-					if (ImGui::IsItemHovered())
-						ImGui::SetTooltip("%s", LocalizeInspectorText("ResourcePicker.Clear").c_str());
+					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LocalizeInspectorText("ResourcePicker.Clear").c_str());
 
 					ImDrawList* drawList = ImGui::GetWindowDrawList();
-					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + 4.0f);
+					const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
+					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
 					const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
 					drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.35f, 0.15f, 0.15f, 0.85f)), 6.0f);
 					drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.85f, 0.35f, 0.35f, 0.6f)), 6.0f);
@@ -693,16 +727,12 @@ namespace Editor
 					ImFont* font = ImGui::GetFont();
 					const float iconFontSize = thumbSize * 0.45f;
 					const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, ICON_FA_BAN);
-					const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f,
-						thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
+					const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
 					drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(ImVec4(0.95f, 0.40f, 0.40f, 1.0f)), ICON_FA_BAN);
 
 					const float textStartX = thumbMax.x + 12.0f;
-					drawList->AddText(ImVec2(textStartX, cursorPos.y + 6.0f),
-						ImGui::GetColorU32(isNoneSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)),
-						LocalizeInspectorText("ResourcePicker.Clear").c_str());
-					drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f),
-						ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
+					drawList->AddText(ImVec2(textStartX, cursorPos.y + 6.0f), ImGui::GetColorU32(isNoneSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)), LocalizeInspectorText("ResourcePicker.Clear").c_str());
+					drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f), ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
 
 					if (isNoneSelected)
 					{
@@ -711,101 +741,73 @@ namespace Editor
 					}
 					ImGui::PopID();
 				}
+
+				ImGui::Spacing();
 				ImGui::Separator();
+				ImGui::Spacing();
 
-				// ── 5. 메모리에 로드된 리소스 섹션 ──
+				// ── 5. 메모리에 로드된 리소스 섹션 (가상 스크롤) ──
 				ImGui::PushID("LoadedInMemory_Section");
-
-				size_t loadedMatchCount = 0;
-				for (const auto& entry : manager.GetDebugSnapshot())
-				{
-					const auto handle = manager.FindHandleByKey(entry.Key);
-					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
-					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
-					const std::filesystem::path p(Detail::NormalizeResourceKey(entry.Key));
-					if (matchesFilter(Engine::WStrToStr(p.filename().wstring()),
-						Engine::WStrToStr(p.parent_path().generic_wstring()), isEngine))
-						++loadedMatchCount;
-				}
-
-				const std::string loadedHeader = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.LoadedInMemory"), loadedMatchCount);
+				const std::string loadedHeader = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.LoadedInMemory"), s_FilteredLoadedIndices.size());
 				ImGui::TextDisabled("%s", loadedHeader.c_str());
 
-				for (const auto& entry : manager.GetDebugSnapshot())
+				if (!s_FilteredLoadedIndices.empty())
 				{
-					const auto handle = manager.FindHandleByKey(entry.Key);
-					if (dynamic_cast<T*>(manager.GetResource(handle)) == nullptr) continue;
-
-					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
-					const auto normKey = Detail::NormalizeResourceKey(entry.Key);
-					const auto normStr = Engine::WStrToStr(normKey);
-					const std::filesystem::path p(normKey);
-					const std::string filename = Engine::WStrToStr(p.filename().wstring());
-					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
-
-					if (!matchesFilter(filename, parentPath, isEngine)) continue;
-
-					const bool isSelected = (handle == value.GetRawHandle());
-					const std::string uniqueId = "Mem_" + normStr;
-					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
-					const std::string displaySubPath = isEngine
-						? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath))
-						: parentPath;
-					drawResourceItem(uniqueId, filename, displaySubPath,
-						Engine::PlatformPath::ResolveUri(resourcePath), isSelected, [&]()
+					ImGuiListClipper memClipper;
+					memClipper.Begin(static_cast<int>(s_FilteredLoadedIndices.size()), itemStride);
+					while (memClipper.Step())
+					{
+						for (int i = memClipper.DisplayStart; i < memClipper.DisplayEnd; ++i)
 						{
-							changed = TryAssignInspectorResource(value, handle);
-							failed = !changed;
-							s_SearchBuffer[0] = '\0';
-							ImGui::CloseCurrentPopup();
-						});
+							const auto& entry = s_CachedLoadedEntries[s_FilteredLoadedIndices[i]];
+							const bool isSelected = (entry.Handle == value.GetRawHandle());
+							drawResourceItem(entry, isSelected, [&]()
+								{
+									changed = TryAssignInspectorResource(value, entry.Handle);
+									failed = !changed;
+									s_SearchBuffer[0] = '\0';
+									ImGui::CloseCurrentPopup();
+								});
+						}
+					}
 				}
-
 				ImGui::PopID(); // LoadedInMemory_Section
 
+				ImGui::Spacing();
 				ImGui::Separator();
+				ImGui::Spacing();
 
-				// ── 6. 디스크 상의 프로젝트 파일 섹션 ──
+				// ── 6. 디스크 상의 프로젝트 파일 섹션 (가상 스크롤) ──
 				ImGui::PushID("DiskFiles_Section");
-
-				size_t diskMatchCount = 0;
-				for (const auto& file : s_CachedDiskFiles)
-				{
-					const std::filesystem::path p(file.Key);
-					if (matchesFilter(file.Filename, Engine::WStrToStr(p.parent_path().generic_wstring()), file.IsEngineAsset))
-						++diskMatchCount;
-				}
-
-				const std::string diskHeader = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.ProjectFiles"), diskMatchCount);
+				const std::string diskHeader = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.ProjectFiles"), s_FilteredDiskIndices.size());
 				ImGui::TextDisabled("%s", diskHeader.c_str());
 
-				for (const auto& file : s_CachedDiskFiles)
+				if (!s_FilteredDiskIndices.empty())
 				{
-					const std::filesystem::path p(file.Key);
-					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
-					if (!matchesFilter(file.Filename, parentPath, file.IsEngineAsset)) continue;
-
-					const bool isSelected = false;
-					const std::string uniqueId = "Disk_" + Engine::WStrToStr(file.FullPath.wstring());
-					const std::string displaySubPath = file.IsEngineAsset
-						? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath))
-						: parentPath;
-					drawResourceItem(uniqueId, file.Filename, displaySubPath, file.FullPath, isSelected, [&]()
+					ImGuiListClipper diskClipper;
+					diskClipper.Begin(static_cast<int>(s_FilteredDiskIndices.size()), itemStride);
+					while (diskClipper.Step())
+					{
+						for (int i = diskClipper.DisplayStart; i < diskClipper.DisplayEnd; ++i)
 						{
-							const auto handle = manager.LoadFile(file.Key);
-							changed = TryAssignInspectorResource(value, handle);
-							failed = !changed;
-							s_SearchBuffer[0] = '\0';
-							ImGui::CloseCurrentPopup();
-						});
+							const auto& file = s_CachedDiskFiles[s_FilteredDiskIndices[i]];
+							const bool isSelected = false;
+							drawResourceItem(file, isSelected, [&]()
+								{
+									const auto handle = manager.LoadFile(file.Key);
+									changed = TryAssignInspectorResource(value, handle);
+									failed = !changed;
+									s_SearchBuffer[0] = '\0';
+									ImGui::CloseCurrentPopup();
+								});
+						}
+					}
 				}
-
 				ImGui::PopID(); // DiskFiles_Section
 			}
 			ImGui::EndChild();
 
-			if (openEditorRequested)
-				ImGui::CloseCurrentPopup();
+			if (openEditorRequested) ImGui::CloseCurrentPopup();
 			ImGui::EndPopup();
 		}
 

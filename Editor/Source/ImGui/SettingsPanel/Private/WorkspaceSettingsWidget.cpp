@@ -1,4 +1,4 @@
-#include "WorkspaceSettingsWidget.h"
+﻿#include "WorkspaceSettingsWidget.h"
 #include "BaseViewportPanel.h"
 #include "EditorSettingsService.h"
 #include "Functions.h"
@@ -161,7 +161,7 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
                     ImGui::SetNextItemWidth(dimensionWidth);
                     bool customChanged = ImGui::InputInt("###CustomWidth", &draft.CustomWidth, 50, 100);
                     ImGui::SameLine();
-                    ImGui::TextUnformatted("x");
+                    ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.DimensionSeparator"));
                     ImGui::SameLine();
                     ImGui::SetNextItemWidth(dimensionWidth);
                     customChanged |= ImGui::InputInt("###CustomHeight", &draft.CustomHeight, 50, 100);

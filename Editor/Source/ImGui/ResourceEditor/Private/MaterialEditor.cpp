@@ -708,30 +708,36 @@ void MaterialEditor::DrawTextureBindings()
 
 void MaterialEditor::DrawParameters()
 {
+	// CollapsingHeader를 복원하여 타 섹션과의 접기/펼치기 일관성 유지
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("MaterialEditor.Parameters"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
-
+	if (!m_Material) return;
 	ImGui::BeginDisabled(m_IsReadOnly);
 
 	const auto& params = m_Material->GetParameters();
-	std::string paramToRemove = "";
-
-	if (ImGui::BeginTable("ParametersTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+	// 1. 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+	EditorUI::DrawSearchBar("MaterialParamSearch", m_ParameterSearch, sizeof(m_ParameterSearch), "MaterialEditor.SearchParameters");
+	ImGui::Spacing();
+	const std::string filterLower = Engine::ToLowerStr(m_ParameterSearch);
+	std::string paramToRemove;
+	if (ImGui::BeginTable("ParamsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 	{
-		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthFixed, 140.0f);
-		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Value"), ImGuiTableColumnFlags_WidthStretch);
-		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
+		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthStretch, 0.4f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Value"), ImGuiTableColumnFlags_WidthStretch, 0.5f);
+		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, 32.0f);
 		ImGui::TableHeadersRow();
-
 		for (const auto& [name, param] : params)
 		{
+			// 검색어 필터링
+			if (!filterLower.empty() && Engine::ToLowerStr(name).find(filterLower) == std::string::npos)
+				continue;
 			ImGui::PushID(name.c_str());
 			ImGui::TableNextRow();
-
 			ImGui::TableSetColumnIndex(0);
+			ImGui::AlignTextToFramePadding();
 			ImGui::TextUnformatted(name.c_str());
-
 			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-FLT_MIN);
 			switch (param.type)
 			{
 			case Engine::EMaterialParameterType::Float:
@@ -798,53 +804,53 @@ void MaterialEditor::DrawParameters()
 				ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.UnsupportedType"));
 				break;
 			}
-
 			ImGui::TableSetColumnIndex(2);
 			if (EditorUI::SmallIconButton("DelParam", ICON_FA_TRASH, "EditorCommon.Delete"))
 				paramToRemove = name;
-
 			ImGui::PopID();
 		}
 		ImGui::EndTable();
 	}
-
 	if (!paramToRemove.empty())
 	{
 		m_Material->RemoveParameter(paramToRemove);
 		m_IsDirty = true;
 	}
-
-	// 새 파라미터 추가
+	// 2. 새 파라미터 추가 바 반응형 배치 (도킹 폭 260px 잘림 방지)
 	ImGui::Spacing();
 	ImGui::PushID("NewParamControl");
-	ImGui::SetNextItemWidth(140.0f);
+	const float availWidth = ImGui::GetContentRegionAvail().x;
+	const float nameWidth = (availWidth > 320.0f) ? 140.0f : (availWidth * 0.45f);
+	const float typeWidth = (availWidth > 320.0f) ? 140.0f : (availWidth * 0.45f);
+	ImGui::SetNextItemWidth(nameWidth);
 	ImGui::InputTextWithHint("##ParamName", LOCAL_CSTR("MaterialEditor.ParamNameHint"), m_NewParamName, sizeof(m_NewParamName));
-	ImGui::SameLine();
+	if (availWidth > 320.0f)
+		ImGui::SameLine();
 	const string colorFloat3 = LOCAL_FMT("MaterialEditor.ColorType", "Float3");
 	const string colorFloat4 = LOCAL_FMT("MaterialEditor.ColorType", "Float4");
 	const char* typeNames[] = { "Float", "Float2", colorFloat3.c_str(), colorFloat4.c_str(), "Int", "Bool" };
-	ImGui::SetNextItemWidth(155.0f);
+	ImGui::SetNextItemWidth(typeWidth);
 	ImGui::Combo("##ParamType", &m_NewParamTypeIndex, typeNames, IM_ARRAYSIZE(typeNames));
-	ImGui::SameLine();
+	if (availWidth > 400.0f)
+		ImGui::SameLine();
+	const bool canAdd = (m_NewParamName[0] != '\0' && !m_Material->HasParameter(m_NewParamName));
+	ImGui::BeginDisabled(!canAdd);
 	if (ImGui::Button((ICON_FA_PLUS " " + LOCAL("MaterialEditor.AddParam")).c_str()))
 	{
-		if (m_NewParamName[0] != '\0' && !m_Material->HasParameter(m_NewParamName))
+		switch (m_NewParamTypeIndex)
 		{
-			switch (m_NewParamTypeIndex)
-			{
-			case 0: m_Material->SetFloat(m_NewParamName, 0.0f); break;
-			case 1: m_Material->SetFloat2(m_NewParamName, vec2(0.0f, 0.0f)); break;
-			case 2: m_Material->SetFloat3(m_NewParamName, vec3(1.0f, 1.0f, 1.0f)); break;
-			case 3: m_Material->SetFloat4(m_NewParamName, vec4(1.0f, 1.0f, 1.0f, 1.0f)); break;
-			case 4: m_Material->SetInt(m_NewParamName, 0); break;
-			case 5: m_Material->SetBool(m_NewParamName, false); break;
-			}
-			m_IsDirty = true;
-			m_NewParamName[0] = '\0';
+		case 0: m_Material->SetFloat(m_NewParamName, 0.0f); break;
+		case 1: m_Material->SetFloat2(m_NewParamName, vec2(0.0f, 0.0f)); break;
+		case 2: m_Material->SetFloat3(m_NewParamName, vec3(1.0f, 1.0f, 1.0f)); break;
+		case 3: m_Material->SetFloat4(m_NewParamName, vec4(1.0f, 1.0f, 1.0f, 1.0f)); break;
+		case 4: m_Material->SetInt(m_NewParamName, 0); break;
+		case 5: m_Material->SetBool(m_NewParamName, false); break;
 		}
+		m_IsDirty = true;
+		m_NewParamName[0] = '\0';
 	}
+	ImGui::EndDisabled();
 	ImGui::PopID();
-
 	ImGui::EndDisabled();
 }
 

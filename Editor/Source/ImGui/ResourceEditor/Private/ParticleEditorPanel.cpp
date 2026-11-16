@@ -482,21 +482,25 @@ void ParticleEditorPanel::DrawEmitterList()
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipAddEmitter"));
 
 	ImGui::Separator();
-
+	// 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+	EditorUI::DrawSearchBar("ParticleEmitterSearch", m_EmitterSearch, sizeof(m_EmitterSearch), "ParticleEditor.SearchEmitters");
+	ImGui::Spacing();
+	const std::string filterLower = Engine::ToLowerStr(m_EmitterSearch);
 	// ── 이미터 목록: 3열 테이블 (체크박스 | 이름 | 삭제) ──
 	auto& emitters = effect->GetEmitters();
 	int deleteIndex = -1;
-
 	ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
 	if (ImGui::BeginTable("##EmitterListTable", 3, tableFlags))
 	{
 		ImGui::TableSetupColumn("##Enabled", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
 		ImGui::TableSetupColumn("##Name", ImGuiTableColumnFlags_WidthStretch);
 		ImGui::TableSetupColumn("##Action", ImGuiTableColumnFlags_WidthFixed, EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x);
-
 		for (int i = 0; i < static_cast<int>(emitters.size()); ++i)
 		{
 			auto& em = emitters[i];
+			// 이미터 이름 검색 필터링
+			if (!filterLower.empty() && Engine::ToLowerStr(em.name).find(filterLower) == std::string::npos)
+				continue;
 			ImGui::PushID(i);
 			ImGui::TableNextRow();
 

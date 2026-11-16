@@ -59,5 +59,7 @@ private:
 
 	// 3D 뷰포트 분할 너비
 	float m_ViewportWidth = 480.0f;
+
+	char m_ParameterSearch[64] = {};
 };
 END

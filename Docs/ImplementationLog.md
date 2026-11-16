@@ -2,6 +2,22 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 에디터 공용 UI 패턴 통일: 리소스 편집기 검색 바, 리소스 피커 가상 스크롤, 하드코딩 문구 로캘화
+
+- **변경**:
+  - 표준 검색 바(`EditorUI::DrawSearchBar`) 적용: Material(파라미터), Model(머티리얼 슬롯), Sprite(슬라이스), Particle(이미터), AnimatorGraph(파라미터), Prefab(엔티티) 편집기.
+  - `EditorUI`: 검색 바 클리어 버튼 폭 계산 보정(DPI 오차용 4px 여유), `IconButtonOptions::NoWrap` 추가(검색 바 안의 클리어 버튼이 폭 부족으로 다음 줄로 밀리지 않게 함).
+  - `ResourcePicker.h`: 팝업 진입 시 1회 스캔·캐싱, 더티 플래그 기반 필터 인덱스, 메모리/디스크 섹션의 `ImGuiListClipper` 가상 스크롤, 대형 썸네일 항목 레이아웃.
+  - `ShaderEditor`·`TextureEditor`: 공용 헤더 빠른 접근 영역(`DrawCustomQuickAccess`)에 셰이더 재컴파일 버튼, 텍스처 해상도 표시 추가.
+  - 하드코딩 문구 로캘화: `PluginManagerPanel`의 버전·작성자·컴포넌트 문구, `WorkspaceSettingsWidget`의 해상도 구분자(`EditorCommon.DimensionSeparator`).
+  - `ToolBar`: 하단 진행률 문구가 우측 버튼 영역을 침범하지 않도록 시작 위치 선계산과 클리핑 적용.
+  - 로캘: `Editor.csv`에 검색 힌트·셰이더/텍스처 문구를 추가하고 `English.json`/`Korean.json`을 재생성했다. 이 커밋에는 다음 VFX 커밋에서 쓰는 `VFXEditor.*` 프리셋·외력 키도 함께 들어 있다(CSV 단일 원본을 나누지 않기 위함).
+- **검증**:
+  - 이 변경이 작업 트리에 포함된 상태에서 사용자가 `x64-debug` 빌드와 CTest 38/38 통과를 확인했다. `EditorUICheck`(공용 위젯 불변 계약 헤드리스 검사)가 여기에 포함된다.
+- **미검증**:
+  - 각 편집기 검색 바의 필터링·클리어·Escape 동작과 빈 결과 안내([EditorUXTestGuidelines.md](EditorUXTestGuidelines.md) 기준).
+  - 리소스 피커의 대량 항목 스크롤 성능과 선택 동작, DPI 변경 시 검색 바 폭.
+
 ### [2026-11-16] 기본 머티리얼 GBuffer Lit 전환 및 에셋 썸네일 렌더링 통일
 
 - **배경**:

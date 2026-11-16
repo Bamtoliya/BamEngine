@@ -785,27 +785,42 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 		return;
 
 	const auto materials = model.GetMaterials();
-
 	if (materials.empty())
 	{
 		ImGui::TextWrapped("%s", LOCAL("ModelEditor.NoSlots").c_str());
 		return;
 	}
 
+	// 1. 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+	EditorUI::DrawSearchBar("ModelSlotSearch", m_MaterialSlotSearch, sizeof(m_MaterialSlotSearch), "ModelEditor.SearchSlots");
+	ImGui::Spacing();
+
+	const std::string filterLower = Engine::ToLowerStr(m_MaterialSlotSearch);
+
 	for (size_t i = 0; i < materials.size(); ++i)
 	{
+		const std::string slotName = LOCAL_FMT("ModelEditor.MaterialSlot", i);
+		const std::string matName = materials[i].IsValid() && materials[i].Get()
+			? WStrToStr(materials[i].Get()->GetKey()) : "";
+
+		// 슬롯 번호 또는 할당된 머티리얼 이름으로 필터링
+		if (!filterLower.empty())
+		{
+			const bool matchSlot = Engine::ToLowerStr(slotName).find(filterLower) != std::string::npos;
+			const bool matchMat = !matName.empty() && Engine::ToLowerStr(matName).find(filterLower) != std::string::npos;
+			if (!matchSlot && !matchMat) continue;
+		}
+
 		const auto slotId = std::to_string(i);
 		ImGui::PushID(slotId.c_str());
-		ImGui::Text("%s", LOCAL_FMT("ModelEditor.MaterialSlot", i).c_str());
+		ImGui::TextUnformatted(slotName.c_str());
 
 		auto candidate = materials[i];
 		if (DrawInspectorResourcePicker(candidate, canEdit) && candidate != materials[i])
 		{
 			const EResult result = model.SetMaterial(static_cast<uint32>(i), candidate);
-			m_StatusKey = result == EResult::Success ?
-				"ModelEditor.PendingSave" : "ResourcePicker.Rejected";
+			m_StatusKey = (result == EResult::Success) ? "ModelEditor.PendingSave" : "ResourcePicker.Rejected";
 
-			// 슬롯 머티리얼 변경 시 3D 프리뷰 모델 실시간 재인스턴스화
 			if (result == EResult::Success)
 			{
 				m_IsDirty = true;

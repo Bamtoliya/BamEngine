@@ -1,6 +1,11 @@
 ﻿#pragma once
 #include "ShaderEditor.h"
 #include "Functions.h"
+#include "EditorUI.h"
+#include "IconsFontAwesome7.h"
+#include "HotReloadManager.h"
+#include "ShaderHotReloadManager.h"
+#include "LocalizationManager.h"
 
 bool ShaderEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
@@ -9,7 +14,47 @@ bool ShaderEditor::IsSupported(const std::filesystem::path& assetPath) const
         Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamshader.json");
 }
 
+void ShaderEditor::DrawCustomQuickAccess()
+{
+    EditorUI::ToolbarLayout toolbar;
+    DrawCopyResourcePath();
+
+    if (toolbar.Icon("RecompileShader", ICON_FA_ROTATE, "ShaderEditor.RecompileShader"))
+    {
+        if (HotReloadManager::IsCreated() && !m_TargetResourcePath.empty())
+        {
+            HotReloadManager::Get().GetShaderReloader().RecompileFile(m_TargetResourcePath);
+        }
+    }
+
+    if (!m_TargetResourcePath.empty())
+    {
+        toolbar.Text(m_TargetResourcePath.filename().string().c_str());
+    }
+}
+
 void ShaderEditor::DrawCustomContent()
 {
-    ImGui::Text("%s", LOCAL_FMT("ResourceEditor.Target", Engine::WStrToStr(m_TargetResourcePath.wstring())).c_str());
+    if (m_TargetResourcePath.empty())
+    {
+        EditorUI::EmptyState("ResourceEditor.NoResource");
+        return;
+    }
+
+    ImGui::Spacing();
+    if (ImGui::BeginTable("ShaderMetaTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+    {
+        ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.File"));
+        ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(m_TargetResourcePath.filename().string().c_str());
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.Path"));
+        ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(m_TargetResourcePath.string().c_str());
+
+        ImGui::EndTable();
+    }
 }
