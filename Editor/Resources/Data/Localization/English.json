@@ -1240,6 +1240,8 @@
         "Shortcuts.ResetAll": "Reset All to Default",
         "Shortcuts.Search": "Search Shortcuts...",
         "Shortcuts.Title": "Keyboard Shortcuts",
+        "Shortcuts.CategoryEditor": "Resource Editor",
+        "Shortcuts.CategoryTilemap": "Tilemap Editor",
         "Spline.InvalidData": "Spline requires 1-64 finite points; closed curves require at least 3.",
         "Spline.PointHint": "Control point {}: select, then use the translation or roll rotation gizmo.",
         "Spline.PointMoveRejected": "The point could not be converted to valid local coordinates.",
@@ -1982,6 +1984,16 @@
         "VFXEditor.GroundPlane": "Toggle Ground Plane",
         "VFXEditor.BackgroundStudio": "Background: Studio Neutral Gray (18%)",
         "VFXEditor.BackgroundDark": "Background: Dark (Bloom / Emissive Check)",
-        "VFXEditor.BackgroundBright": "Background: Bright (Smoke Silhouette Check)"
+        "VFXEditor.BackgroundBright": "Background: Bright (Smoke Silhouette Check)",
+        "EditorCommon.DimensionSeparator": "x",
+        "SpriteEditor.PixelsPerUnit": "Pixels Per Unit",
+        "VFXEditor.QuadDefault": "(Quad Default)",
+        "PluginManager.VersionFormat": "v{}",
+        "PluginManager.VersionByAuthor": "v{} by {}",
+        "PluginManager.SkyAtmosphereSystemDesc": "- SkyAtmosphereSystem (Environment Atmosphere Rendering)",
+        "PluginManager.ComponentWithCategory": "- {} (Category: {})",
+        "PluginManager.SkyAtmosphereComponentDesc": "- SkyAtmosphereComponent (Atmosphere Scattering & Sun Direction)",
+        "PluginManager.SkyAtmosphereComponent": "- SkyAtmosphereComponent",
+        "VFXEditor.DeleteTrack": "Delete Track"
     }
 }

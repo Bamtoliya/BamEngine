@@ -1,4 +1,4 @@
-add_executable(TransformEditorCheck
+﻿add_executable(TransformEditorCheck
     examples/TransformEditorCheck.cpp Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
 )
 
@@ -186,4 +186,31 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME SpriteSlicingCheck COMMAND SpriteSlicingCheck)
     set_tests_properties(SpriteSlicingCheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()
+
+# ------------------------------------------------------------------------------
+# EditorUICheck: 공용 위젯(EditorUI) 4대 불변 계약 검증
+# ------------------------------------------------------------------------------
+add_executable(EditorUICheck
+    examples/EditorUICheck.cpp
+    Source/ImGui/Private/EditorUI.cpp
+)
+target_include_directories(EditorUICheck PRIVATE
+    ${EDITOR_PUBLIC_INCLUDE_DIRS}
+    "${EDITOR_SOURCE_DIR}"
+    "${CMAKE_SOURCE_DIR}/ThirdParty"
+)
+target_link_libraries(EditorUICheck PRIVATE BamEngine::Engine imgui::imgui)
+add_dependencies(EditorUICheck GenerateLocalization)
+target_precompile_headers(EditorUICheck PRIVATE
+    "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h"
+)
+set_target_properties(EditorUICheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+if(MSVC)
+    target_compile_options(EditorUICheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME EditorUICheck COMMAND EditorUICheck)
+    set_tests_properties(EditorUICheck PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()

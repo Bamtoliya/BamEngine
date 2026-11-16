@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 audit_localization.py
@@ -29,7 +29,7 @@ RE_CPP_TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|//[^\n]*|/\*[
 RE_IMGUI = re.compile(r'\bImGui::(Text\w*|BulletText|Button|SmallButton|Checkbox|MenuItem|BeginMenu|'
     r'Begin|BeginPopupModal|BeginCombo|Combo|ListBox|TreeNode(?:Ex)?|CollapsingHeader|Selectable|RadioButton|TableSetupColumn|'
     r'Slider\w*|Drag(?:Float|Int|Scalar)\w*|Input\w*|ColorEdit\w*|PlotLines|PlotHistogram|Set(?:Item)?Tooltip)\s*\(')
-RE_PRINTF = re.compile(r'%(?:[-+ #0]*\d*(?:\.\d+)?(?:hh|ll|[hlzjtL])?[a-zA-Z]|%)')
+RE_PRINTF = re.compile(r'%(?:[-+ #0]*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|ll|[hlzjtL])?[a-zA-Z]|%)')
 RE_NOTIFICATION = re.compile(r'\b(AddNotification)\s*\(')
 RE_DRAW_TEXT = re.compile(r'->(AddText)\s*\(')
 
@@ -205,7 +205,7 @@ def find_unregistered_actions(sources):
     """Check literal action references against all action registrations, including menu helpers."""
     sources = {path: strip_comments(source) for path, source in sources.items()}
     registered = {match[1] for source in sources.values()
-        for match in re.finditer(r'\.Id\s*=\s*"([^"\n]+)"', source)}
+        for match in re.finditer(r'(?:\.Id\s*=\s*|\badd\s*\(\s*)"([^"\n]+)"', source)}
     calls = re.compile(r'\b(GetShortcutHint|ExecuteAction|CanExecuteAction|FindAction|GetActiveChord|'
         r'ACTION_MENU_ITEM|DrawActionTooltip)\s*\(')
     for path, source in sources.items():

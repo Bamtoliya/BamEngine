@@ -98,81 +98,110 @@ namespace EditorUI
 
         const auto origin = ImGui::GetCursorScreenPos();
         const auto avail = ImGui::GetContentRegionAvail();
-        if (avail.x < 2.0f) return result;
+        if (avail.x < 2.0f || avail.y < 2.0f) return result;
+
+        const float scrollbarWidth = ImGui::GetStyle().ScrollbarSize;
+        const float contentWidth = std::max(2.0f, avail.x - scrollbarWidth);
         const float rowHeight = ImGui::GetFrameHeightWithSpacing();
-        const float rulerHeight = rowHeight * 1.25f;
-        const float headerMax = avail.x * 0.55f;
+        const float rulerHeight = std::min(avail.y, rowHeight * 1.25f);
+        const float headerMax = contentWidth * 0.55f;
         const float headerMin = std::min(ImGui::GetFontSize() * 5.0f, headerMax);
         const float header = std::clamp(state.HeaderWidth, headerMin, headerMax);
-        const float height = std::max(avail.y, rulerHeight + rowHeight * rows.size());
-        const float right = origin.x + avail.x;
-        const float endY = origin.y + height;
+        const float right = origin.x + contentWidth;
         const float rulerY = origin.y + rulerHeight;
         const float edge = ImGui::GetFontSize() * 0.4f;
-        auto scale = MakeTimelineScale(origin.x + header, avail.x - header, viewDuration, state.Zoom, state.Start);
+        auto scale = MakeTimelineScale(origin.x + header, contentWidth - header, viewDuration, state.Zoom, state.Start);
         auto& input = Engine::InputManager::Get();
         const auto mouse = input.GetScreenMousePosition();
         const bool held = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
 
-        ImGui::InvisibleButton("##EffectTimelineCanvas", ImVec2(avail.x, height));
-        const bool hovered = ImGui::IsItemHovered();
+        // 1. 상단 고정(Sticky) 헤더 및 시간 눈금자 입력 영역
+        ImGui::InvisibleButton("##EffectTimelineHeaderCanvas", ImVec2(contentWidth, rulerHeight));
+        const bool headerHovered = ImGui::IsItemHovered();
+        const bool headerActivated = ImGui::IsItemActivated();
+        const bool headerActive = ImGui::IsItemActive();
+        const bool headerDeactivated = ImGui::IsItemDeactivated();
+
+        // 2. 하단 트랙 행(Row) 전용 세로 스크롤 영역
+        const float rowsViewHeight = std::max(1.0f, avail.y - rulerHeight);
+        const float rowsContentHeight = std::max(rowsViewHeight, rowHeight * static_cast<float>(rows.size()));
+        ImGui::SetCursorScreenPos(ImVec2(origin.x, rulerY));
+        ImGui::SetNextWindowContentSize(ImVec2(contentWidth, rowsContentHeight));
+
+        bool rowsHovered = false;
+        bool rowsActivated = false;
+        bool rowsActive = false;
+        bool rowsDeactivated = false;
+        ImVec2 rowsOrigin(origin.x, rulerY);
+        ImDrawList* rowsDraw = nullptr;
+
+        if (ImGui::BeginChild("##EffectTimelineRows", ImVec2(avail.x, rowsViewHeight), ImGuiChildFlags_None,
+            ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+        {
+            rowsOrigin = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton("##EffectTimelineRowsCanvas", ImVec2(contentWidth, rowsContentHeight));
+            rowsHovered = ImGui::IsItemHovered();
+            rowsActivated = ImGui::IsItemActivated();
+            rowsActive = ImGui::IsItemActive();
+            rowsDeactivated = ImGui::IsItemDeactivated();
+            rowsDraw = ImGui::GetWindowDrawList();
+
+            if (rowsHovered && !state.Drag)
+            {
+                const float wheel = input.GetMouseScrollDeltaY();
+                if (wheel != 0.0f && (mouse.x < scale.Left || input.IsAltPressed()))
+                    ImGui::SetScrollY(ImGui::GetScrollY() - wheel * rowHeight * 3.0f);
+            }
+        }
+        ImGui::EndChild();
+
+        const bool hovered = headerHovered || rowsHovered;
+        const bool itemActivated = headerActivated || rowsActivated;
+        const bool itemActive = headerActive || rowsActive;
+        const bool itemDeactivated = headerDeactivated || rowsDeactivated;
+
         if (hovered && !state.Drag)
         {
             const float wheel = input.GetMouseScrollDeltaY();
-            if (mouse.x >= scale.Left)
+            if (mouse.x >= scale.Left && !input.IsAltPressed())
             {
-                // 마우스 휠 (일반: 줌, Shift: 좌우 스크롤)
                 float panPixels = 0.0f;
                 float zoomWheel = 0.0f;
-
                 if (input.IsShiftPressed() && wheel != 0.0f)
-                {
-                    panPixels = wheel * 60.0f; // Shift + 휠로 가로 스크롤
-                }
+                    panPixels = wheel * 60.0f;
                 else
-                {
                     zoomWheel = wheel;
-                }
 
-                // 휠 클릭 드래그 또는 우클릭 단독 드래그로 손쉬운 좌우 패닝 지원
                 const bool panning = input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
-                    input.IsMouseButtonDragging(Engine::EMouseButton::Right) ||
-                    (input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right));
-
+                    input.IsMouseButtonDragging(Engine::EMouseButton::Right);
                 if (panning)
-                {
                     panPixels += input.GetMouseDelta().x;
-                }
 
                 NavigateTimeline(mouse.x, zoomWheel, panPixels, scale, viewDuration, state.Zoom, state.Start);
                 scale = MakeTimelineScale(scale.Left, scale.Width, viewDuration, state.Zoom, state.Start);
-            }
-            else if (wheel != 0.0f)
-            {
-                ImGui::SetScrollY(ImGui::GetScrollY() - wheel * rowHeight * 3.0f);
             }
         }
 
         const float durationX = scale.ToX(duration);
         const float lastHandleX = std::max(scale.Left, right - 1.0f);
         const float durationHandleX = std::clamp(durationX, scale.Left, lastHandleX);
-        const bool overDuration = mouse.y < rulerY && mouse.x >= scale.Left &&
+        const bool overDuration = headerHovered && mouse.x >= scale.Left &&
             durationX >= scale.Left && durationX <= right + 1.0f && std::abs(mouse.x - durationHandleX) <= edge;
-        const bool overHeader = std::abs(mouse.x - scale.Left) <= edge * 0.5f;
+        const bool overHeader = hovered && std::abs(mouse.x - scale.Left) <= edge * 0.5f;
         if (hovered && (overDuration || overHeader)) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
-        if (ImGui::IsItemActivated())
+        if (itemActivated)
         {
             state.Drag.reset();
             if (overDuration)
                 state.Drag = TimelineEdit{ TimelineDragMode::Duration, 0, 0.0f, duration };
             else if (overHeader)
                 state.Drag = TimelineEdit{ TimelineDragMode::Header, 0, header, 0.0f };
-            else if (mouse.y < rulerY && mouse.x >= scale.Left)
+            else if (headerActivated && mouse.x >= scale.Left)
                 state.Drag = TimelineEdit{ TimelineDragMode::Seek, 0, 0.0f, 0.0f };
-            else if (mouse.y >= rulerY)
+            else if (rowsActivated && mouse.y >= rulerY)
             {
-                const auto index = static_cast<std::size_t>((mouse.y - rulerY) / rowHeight);
+                const auto index = static_cast<std::size_t>(std::max(0.0f, mouse.y - rowsOrigin.y) / rowHeight);
                 if (index < rows.size())
                 {
                     const auto& row = rows[index];
@@ -204,8 +233,7 @@ namespace EditorUI
             }
         }
 
-        if (state.Drag && (input.IsKeyButtonDown(Engine::EKeyCode::Escape) ||
-            (!ImGui::IsItemActive() && !ImGui::IsItemDeactivated())))
+        if (state.Drag && (input.IsKeyButtonDown(Engine::EKeyCode::Escape) || (!itemActive && !itemDeactivated)))
             state.Drag.reset();
         if (state.Drag)
         {
@@ -219,7 +247,7 @@ namespace EditorUI
                 if (held) state.HeaderWidth = std::clamp(state.OriginalStart + mouse.x - state.GrabX, headerMin, headerMax);
                 break;
             case TimelineDragMode::Seek:
-                if (held || ImGui::IsItemActivated()) result.Seek = std::clamp(scale.ToTime(mouse.x), 0.0f, duration);
+                if (held || itemActivated) result.Seek = std::clamp(scale.ToTime(mouse.x), 0.0f, duration);
                 break;
             case TimelineDragMode::Duration:
                 edit.End = std::clamp(state.OriginalEnd + delta, minimumDuration, std::max(minimumDuration, limit));
@@ -247,79 +275,96 @@ namespace EditorUI
             }
         }
 
+        // 3. 하단 스크롤 영역(Rows) 렌더링: 그리드, 트랙 행, 플레이헤드 수직선
+        const float playheadX = scale.ToX(result.Seek.value_or(playhead));
+        const float rowsBottomY = rulerY + rowsViewHeight;
+        if (rowsDraw)
+        {
+            rowsDraw->PushClipRect(ImVec2(scale.Left, rulerY), ImVec2(right, rowsBottomY), true);
+            const float gridStep = std::max(1.0f / EffectTimelineFPS, scale.Span * ImGui::GetFontSize() * 4.0f / scale.Width);
+            for (int i = 0; i < 256; ++i)
+            {
+                const float x = scale.ToX((std::ceil(scale.Start / gridStep) + i) * gridStep);
+                if (x > right) break;
+                rowsDraw->AddLine(ImVec2(x, rulerY), ImVec2(x, rowsBottomY), IM_COL32(70, 78, 92, 160));
+            }
+            rowsDraw->PopClipRect();
+
+            for (std::size_t i = 0; i < rows.size(); ++i)
+            {
+                const auto& row = rows[i];
+                const float y = rowsOrigin.y + i * rowHeight;
+                if (y + rowHeight < rulerY || y > rowsBottomY) continue;
+
+                const auto textColor = ImGui::GetColorU32(row.Selected ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+                if (row.Selected) rowsDraw->AddRectFilled(ImVec2(origin.x, y), ImVec2(right, y + rowHeight),
+                    ImGui::GetColorU32(ImGuiCol_Header));
+                rowsDraw->PushClipRect(ImVec2(origin.x, std::max(y, rulerY)), ImVec2(scale.Left, std::min(y + rowHeight, rowsBottomY)), true);
+                rowsDraw->AddText(ImVec2(origin.x + edge, y + edge * 0.5f), row.Color, row.Icon);
+                rowsDraw->AddText(ImVec2(origin.x + edge * 2.0f + ImGui::CalcTextSize(row.Icon).x, y + edge * 0.5f),
+                    textColor, row.Label.data(), row.Label.data() + row.Label.size());
+                rowsDraw->PopClipRect();
+
+                const auto* edit = state.Drag && state.Drag->Row == row.Id &&
+                    state.Drag->Mode != TimelineDragMode::Duration && state.Drag->Mode != TimelineDragMode::Seek &&
+                    state.Drag->Mode != TimelineDragMode::Header ? &*state.Drag : nullptr;
+                const float x0 = scale.ToX(edit ? edit->Start : row.Start);
+                const float x1 = scale.ToX(edit ? edit->End : row.End);
+                const float mid = y + rowHeight * 0.5f;
+                rowsDraw->PushClipRect(ImVec2(scale.Left, std::max(y, rulerY)), ImVec2(right, std::min(y + rowHeight, rowsBottomY)), true);
+                if (row.Kind == TimelineRowKind::Marker)
+                    rowsDraw->AddQuadFilled(ImVec2(x0 - edge, mid), ImVec2(x0, mid - edge), ImVec2(x0 + edge, mid),
+                        ImVec2(x0, mid + edge), row.Color);
+                else
+                {
+                    const ImVec2 min(x0, y + edge * 0.5f);
+                    const ImVec2 max(std::max(x0 + 1.0f, x1), y + rowHeight - edge * 0.5f);
+                    rowsDraw->AddRectFilled(min, max, row.Color, 2.0f);
+                    if (row.Selected) rowsDraw->AddRect(min, max, IM_COL32(255, 255, 255, 230), 2.0f);
+                    if (row.Selected || edit)
+                    {
+                        rowsDraw->AddLine(ImVec2(x0 + 2.0f, min.y), ImVec2(x0 + 2.0f, max.y), IM_COL32_WHITE, 2.0f);
+                        rowsDraw->AddLine(ImVec2(x1 - 2.0f, min.y), ImVec2(x1 - 2.0f, max.y), IM_COL32_WHITE, 2.0f);
+                    }
+                }
+                rowsDraw->PopClipRect();
+                if (rowsHovered && mouse.y >= std::max(y, rulerY) && mouse.y < std::min(y + rowHeight, rowsBottomY))
+                {
+                    if (mouse.x < scale.Left)
+                    {
+                        if (row.Kind == TimelineRowKind::OpenEnd)
+                            ImGui::SetTooltip("%.*s\n%s", static_cast<int>(row.Label.size()), row.Label.data(),
+                                LOCAL_CSTR("EffectTimeline.OpenEmission"));
+                        else ImGui::SetTooltip("%.*s", static_cast<int>(row.Label.size()), row.Label.data());
+                    }
+                    else if (row.Kind != TimelineRowKind::Marker &&
+                        (std::abs(mouse.x - x0) <= edge || std::abs(mouse.x - x1) <= edge))
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                }
+            }
+
+            rowsDraw->AddLine(ImVec2(scale.Left, rulerY), ImVec2(scale.Left, rowsBottomY), IM_COL32(70, 78, 92, 255));
+            if (playheadX >= scale.Left && playheadX <= right)
+            {
+                rowsDraw->PushClipRect(ImVec2(scale.Left, rulerY), ImVec2(right, rowsBottomY), true);
+                rowsDraw->AddLine(ImVec2(playheadX, rulerY), ImVec2(playheadX, rowsBottomY), TimelinePlayheadColor, 2.0f);
+                rowsDraw->PopClipRect();
+            }
+        }
+
+        // 4. 상단 고정(Sticky) 헤더 및 시간 눈금자 렌더링
         auto* draw = ImGui::GetWindowDrawList();
-        draw->AddRectFilled(origin, ImVec2(right, rulerY), TimelineRulerBackground);
+        draw->AddRectFilled(origin, ImVec2(origin.x + avail.x, rulerY), TimelineRulerBackground);
         const std::string title = std::string(ICON_FA_LAYER_GROUP " ") + LOCAL("Timeline.Tracks");
         draw->PushClipRect(origin, ImVec2(scale.Left, rulerY), true);
         draw->AddText(ImVec2(origin.x + edge, origin.y + edge), ImGui::GetColorU32(ImGuiCol_Text), title.c_str());
         draw->PopClipRect();
 
         DrawTimelineRuler(*draw, scale, origin.y, rulerY, EffectTimelineFPS);
-        draw->PushClipRect(ImVec2(scale.Left, rulerY), ImVec2(right, endY), true);
-        const float gridStep = std::max(1.0f / EffectTimelineFPS, scale.Span * ImGui::GetFontSize() * 4.0f / scale.Width);
-        for (int i = 0; i < 256; ++i)
-        {
-            const float x = scale.ToX((std::ceil(scale.Start / gridStep) + i) * gridStep);
-            if (x > right) break;
-            draw->AddLine(ImVec2(x, rulerY), ImVec2(x, endY), IM_COL32(70, 78, 92, 160));
-        }
+        draw->AddLine(ImVec2(origin.x, rulerY), ImVec2(origin.x + avail.x, rulerY), IM_COL32(55, 60, 70, 255));
+        draw->AddLine(ImVec2(scale.Left, origin.y), ImVec2(scale.Left, rulerY), IM_COL32(70, 78, 92, 255));
+        DrawTimelinePlayhead(*draw, ImVec2(scale.Left, origin.y), ImVec2(right, rulerY), playheadX);
 
-        draw->PopClipRect();
-
-        for (std::size_t i = 0; i < rows.size(); ++i)
-        {
-            const auto& row = rows[i];
-            const float y = rulerY + i * rowHeight;
-            const auto textColor = ImGui::GetColorU32(row.Selected ? ImGuiCol_Text : ImGuiCol_TextDisabled);
-            if (row.Selected) draw->AddRectFilled(ImVec2(origin.x, y), ImVec2(right, y + rowHeight),
-                ImGui::GetColorU32(ImGuiCol_Header));
-            draw->PushClipRect(ImVec2(origin.x, y), ImVec2(scale.Left, y + rowHeight), true);
-            draw->AddText(ImVec2(origin.x + edge, y + edge * 0.5f), row.Color, row.Icon);
-            draw->AddText(ImVec2(origin.x + edge * 2.0f + ImGui::CalcTextSize(row.Icon).x, y + edge * 0.5f),
-                textColor, row.Label.data(), row.Label.data() + row.Label.size());
-            draw->PopClipRect();
-
-            const auto* edit = state.Drag && state.Drag->Row == row.Id &&
-                state.Drag->Mode != TimelineDragMode::Duration && state.Drag->Mode != TimelineDragMode::Seek &&
-                state.Drag->Mode != TimelineDragMode::Header ? &*state.Drag : nullptr;
-            const float x0 = scale.ToX(edit ? edit->Start : row.Start);
-            const float x1 = scale.ToX(edit ? edit->End : row.End);
-            const float mid = y + rowHeight * 0.5f;
-            draw->PushClipRect(ImVec2(scale.Left, y), ImVec2(right, y + rowHeight), true);
-            if (row.Kind == TimelineRowKind::Marker)
-                draw->AddQuadFilled(ImVec2(x0 - edge, mid), ImVec2(x0, mid - edge), ImVec2(x0 + edge, mid),
-                    ImVec2(x0, mid + edge), row.Color);
-            else
-            {
-                const ImVec2 min(x0, y + edge * 0.5f);
-                const ImVec2 max(std::max(x0 + 1.0f, x1), y + rowHeight - edge * 0.5f);
-                draw->AddRectFilled(min, max, row.Color, 2.0f);
-                if (row.Selected) draw->AddRect(min, max, IM_COL32(255, 255, 255, 230), 2.0f);
-                if (row.Selected || edit)
-                {
-                    draw->AddLine(ImVec2(x0 + 2.0f, min.y), ImVec2(x0 + 2.0f, max.y), IM_COL32_WHITE, 2.0f);
-                    draw->AddLine(ImVec2(x1 - 2.0f, min.y), ImVec2(x1 - 2.0f, max.y), IM_COL32_WHITE, 2.0f);
-                }
-            }
-            draw->PopClipRect();
-            if (hovered && mouse.y >= y && mouse.y < y + rowHeight)
-            {
-                if (mouse.x < scale.Left)
-                {
-                    if (row.Kind == TimelineRowKind::OpenEnd)
-                        ImGui::SetTooltip("%.*s\n%s", static_cast<int>(row.Label.size()), row.Label.data(),
-                            LOCAL_CSTR("EffectTimeline.OpenEmission"));
-                    else ImGui::SetTooltip("%.*s", static_cast<int>(row.Label.size()), row.Label.data());
-                }
-                else if (row.Kind != TimelineRowKind::Marker &&
-                    (std::abs(mouse.x - x0) <= edge || std::abs(mouse.x - x1) <= edge))
-                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-            }
-        }
-
-        draw->AddLine(ImVec2(scale.Left, origin.y), ImVec2(scale.Left, endY), IM_COL32(70, 78, 92, 255));
-        DrawTimelinePlayhead(*draw, ImVec2(scale.Left, origin.y), ImVec2(right, endY),
-            scale.ToX(result.Seek.value_or(playhead)));
         const bool resizingDuration = state.Drag && state.Drag->Mode == TimelineDragMode::Duration;
         if (durationX >= scale.Left && durationX <= right + 1.0f)
         {
@@ -396,7 +441,7 @@ namespace EditorUI
         if (split("##EffectTimelineSplitter", ImVec2(avail.x, splitter), ImGuiMouseCursor_ResizeNS))
             timelineHeight = std::clamp(timelineSize - input.GetMouseDelta().y, minTimeline, maxTimeline);
         if (ImGui::BeginChild("##EffectTimeline", ImVec2(0.0f, timelineSize), ImGuiChildFlags_Borders,
-            ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             timeline();
         ImGui::EndChild();
     }

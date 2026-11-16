@@ -1240,6 +1240,8 @@
         "Shortcuts.ResetAll": "모두 기본값으로 복원",
         "Shortcuts.Search": "단축키 검색...",
         "Shortcuts.Title": "단축키 설정",
+        "Shortcuts.CategoryEditor": "리소스 에디터",
+        "Shortcuts.CategoryTilemap": "타일맵 에디터",
         "Spline.InvalidData": "스플라인에는 유한한 좌표의 제어점 1~64개가 필요합니다. 닫힌 곡선에는 최소 3개가 필요합니다.",
         "Spline.PointHint": "제어점 {}: 선택한 뒤 이동 또는 롤 회전 기즈모로 조작합니다.",
         "Spline.PointMoveRejected": "제어점을 유효한 로컬 좌표로 변환할 수 없습니다.",
@@ -1982,6 +1984,16 @@
         "VFXEditor.GroundPlane": "지면 평면 표시 토글",
         "VFXEditor.BackgroundStudio": "배경: 스튜디오 뉴트럴 그레이 (18%)",
         "VFXEditor.BackgroundDark": "배경: 암실 (블룸 / 발광 피크 검증)",
-        "VFXEditor.BackgroundBright": "배경: 밝은 낮 (연기 실루엣 검증)"
+        "VFXEditor.BackgroundBright": "배경: 밝은 낮 (연기 실루엣 검증)",
+        "EditorCommon.DimensionSeparator": "×",
+        "SpriteEditor.PixelsPerUnit": "단위당 픽셀 (PPU)",
+        "VFXEditor.QuadDefault": "(사각 평면 기본값)",
+        "PluginManager.VersionFormat": "v{}",
+        "PluginManager.VersionByAuthor": "v{} (제작: {})",
+        "PluginManager.SkyAtmosphereSystemDesc": "- SkyAtmosphereSystem (대기 환경 렌더링 시스템)",
+        "PluginManager.ComponentWithCategory": "- {} (분류: {})",
+        "PluginManager.SkyAtmosphereComponentDesc": "- SkyAtmosphereComponent (대기 산란 및 태양 방향)",
+        "PluginManager.SkyAtmosphereComponent": "- SkyAtmosphereComponent",
+        "VFXEditor.DeleteTrack": "트랙 삭제"
     }
 }
