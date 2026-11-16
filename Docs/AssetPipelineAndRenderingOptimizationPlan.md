@@ -5,6 +5,7 @@
 - **상태**: 조치 1(와인딩 CW 표준화) 구현 및 실행 검증 완료 (2026-11-16) / 조치 2~4 구현 대기
 - **우선순위**: [DevelopmentPriorities.md](DevelopmentPriorities.md) P1 (에셋 파이프라인 & 렌더링 성능)
 - **관련 문서**:
+  - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md)
   - [ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md)
   - [InteractiveModelImportPreviewPlan.md](InteractiveModelImportPreviewPlan.md)
   - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
@@ -205,7 +206,7 @@ flowchart TD
 2. **모달 뷰포트 단축키 및 마우스 드래그 활성화**:
    - `ModelImportModal` 내부의 뷰포트에서도 `EditorCameraController`의 Alt+LMB(Orbit), MMB(Pan), RMB(Fly), 마우스 휠 줌이 일반 뷰포트와 100% 동일하게 작동하도록 보장.
 
-### 3.3 [조치 3] 콘텐츠 브라우저 3D 썸네일 비동기화 및 디스크 캐싱
+### 3.3 [조치 3] 콘텐츠 브라우저 3D 썸네일 비동기화 및 디스크 캐싱 (상세 계획: [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md))
 ```mermaid
 flowchart TD
     ReqThumbnail["GetThumbnail(assetPath)"] --> CheckMem{"메모리 LRU 캐시 적중?"}

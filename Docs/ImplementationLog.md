@@ -4906,3 +4906,9 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 빌드 패널에서 프로그램 이름과 패키지 폴더 이름을 입력하고 최종 실행 파일 경로를 확인한다. 이름은 Workspace에 저장하며 프로그램 이름은 내보낸 EXE와 Client 창 제목에 반영한다.
 - 기존 패키지는 확인 모달에서 승인한 폴더만 교체한다. 스테이징 검증 후 이전 패키지를 형제 폴더에 백업한다. 게시 실패 시 원래 경로로 복원하고, 원래 위치를 다시 사용할 수 없으면 백업 경로를 로그에 기록한다.
 - 가장 최근에 확인한 배포 로그의 Animator 오류는 컨트롤러 누락이 아니라 이전 Engine이 `Project://`를 디스크 경로로 처리해 발생한 `FileOpenFailed`다. 새 실패 로그에는 원본 참조와 해석된 경로를 함께 기록한다. 파일과 소스를 대조했으며 Editor 빌드, 모달, 재게시 및 Client 실행은 사용자 검증 대상이다. [Windows 수동 검증](RenderPipelineProfilePlan.md#3단계-수동-검증)
+
+- **2026-11-16 썸네일 및 엔진 전반 디스크 캐시 소요처 전수 조사 및 통합 개발 계획 수립**:
+  - `Editor/Source/AssetManager/AssetCache/`, `Editor/Source/Rendering/Thumbnail/`, `Engine/Source/Render/Shader/`, `Tools/Converters/` 등 엔진·에디터·도구 전반을 조사하여 디스크 캐시 부재로 인한 콜드 스타트 병목 현상 및 성능 병목 요인을 규명.
+  - 최우선 과제인 에셋 썸네일(P0)을 비롯하여 셰이더 컴파일/PSO(P1), 에셋 파생 데이터(DDC, P1), 지형/물리 쿠킹(P2), 비주얼 스크립팅 바이트코드(P2), 오디오 파형/폰트 아틀라스(P3)의 6대 영역 디스크 캐시 소요처를 체계적으로 분류.
+  - 프로젝트 루트 기준 `<ProjectRoot>/.bam/cache/` 표준 레이아웃, 단일 진실의 원천(SSOT) 캐시 키 생성 규칙, 원자적 쓰기(`.tmp` -> `rename`), LRU 용량 제한 관리자, 3계층(VRAM LRU -> 디스크 128x128 PNG -> 온디맨드 렌더/디코드) 썸네일 파이프라인 설계를 포함하는 [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md) 신규 수립.
+  - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) 및 [DevelopmentPriorities.md](DevelopmentPriorities.md)에 신규 계획 교차 참조 연결 반영.
