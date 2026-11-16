@@ -119,7 +119,11 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 
 	auto* forwardTransPass = rpm.GetRenderPassByID(passes.ForwardTransparent);
 	if (forwardTransPass && forwardTransPass->IsEnabled())
+	{
+		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 1, passes.LightingInputs[1]);
+		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, passes.LightingInputs[4]);
 		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass, passes.AcceptSceneMeshes);
+	}
 
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
 	auto* lightingPass = rpm.GetRenderPassByID(passes.Lighting);

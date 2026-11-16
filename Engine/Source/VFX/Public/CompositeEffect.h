@@ -144,7 +144,7 @@ struct ENGINE_API VFXLightTrack
 	f32 duration = 0.5f;
 
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LOCAL_POSITION"))
-	vec3 localPosition = vec3(0.0f);
+	vec3 localPosition = vec3(0.0f, 0.8f, 0.0f);
 
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LIGHT_COLOR"))
 	vec3 lightColor = vec3(1.0f, 0.6f, 0.2f);

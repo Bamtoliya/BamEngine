@@ -146,9 +146,28 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 		tempComp.instances = std::move(rt.emitterInstances);
 		tempComp.isInitialized = rt.isInitialized;
 		tempComp.previewSeed = vfxComp.previewSeed;
-
+		// 환경 외력(바람 및 중력 배율)이 설정되어 있을 경우 각 이미터 인스턴스에 실시간 합성
+		if (vfxComp.gravityMultiplier != 1.0f || glm::length2(vfxComp.externalWind) > 0.0001f)
+		{
+			for (size_t eIdx = 0; eIdx < emitters.size() && eIdx < tempComp.instances.size(); ++eIdx)
+			{
+				auto& inst = tempComp.instances[eIdx];
+				const auto& emitterData = emitters[eIdx];
+				const vec3 baseGravity = emitterData.gravity * vfxComp.gravityMultiplier;
+				const vec3 totalGravity = baseGravity + vec3(0.0f, emitterData.buoyancy, 0.0f);
+				const vec3 totalWind = emitterData.wind + vfxComp.externalWind;
+				const bool isWorld = (emitterData.simulationSpace == EParticleSimulationSpace::World);
+				const mat4 invWorldMat = isWorld ? mat4(1.0f) : glm::inverse(trackTransform.worldMatrix);
+				const vec3 localWind = isWorld ? totalWind : vec3(invWorldMat * vec4(totalWind, 0.0f));
+				for (auto& p : inst.particles)
+				{
+					p.velocity += (totalGravity - emitterData.gravity) * dt;
+					if (emitterData.drag > 0.0f)
+						p.velocity += (localWind - emitterData.wind) * (emitterData.drag * dt);
+				}
+			}
+		}
 		ParticleSystem::UpdateEffectComponent(scene, tempComp, trackTransform, dt);
-
 		rt.emitterInstances = std::move(tempComp.instances);
 		rt.isInitialized = tempComp.isInitialized;
 	}
@@ -335,22 +354,65 @@ Engine::uint32 CompositeVFXSystem::CollectFlashLights(const Scene& scene, std::s
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
 		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
-		if (!vfxComp.hasActiveLight || !vfxComp.effectHandle.IsValid()) continue;
+		const auto* effect = vfxComp.effectHandle.Get();
+		if (!effect || vfxComp.isFinished) continue;
 
-		const vec3 position(transform.worldMatrix * vec4(vfxComp.activeLightOffset, 1.0f));
-		const vec3 color = vfxComp.activeLightColor;
-		if (glm::any(glm::isnan(position)) || glm::any(glm::isinf(position))) continue;
-		if (glm::any(glm::isnan(color)) || glm::any(glm::isinf(color))) continue;
+		bool emittedFromTracks = false;
+		for (const auto& track : effect->GetLightTracks())
+		{
+			if (!track.enabled || track.isMuted || !std::isfinite(track.radius) || track.radius <= 0.0f)
+				continue;
 
-		GPULight light{};
-		light.Position = position;
-		light.Intensity = vfxComp.activeLightIntensity;
-		light.Range = vfxComp.activeLightRadius;
-		light.Color = glm::max(color, vec3(0.0f));
-		light.PackedFlags = packedFlags;
-		light.AttenuationCoeff = flashAttenuationCoefficients;
-		output[count++] = light;
-		if (count == output.size()) break;
+			const f32 time = vfxComp.currentTime - track.startTime;
+			if (time < 0.0f || time > track.duration) continue;
+
+			const f32 attack = std::max(track.attackTime, 0.001f);
+			const f32 decay = std::max(track.decayTime, 0.001f);
+			const f32 factor = time < attack ? time / attack : std::max(0.0f, 1.0f - (time - attack) / decay);
+			const f32 intensity = track.peakIntensity * factor;
+			if (!std::isfinite(intensity) || intensity <= 0.0f) continue;
+
+			vec3 position(transform.worldMatrix * vec4(track.localPosition, 1.0f));
+			// 지면(y = 0)과 동일한 높이에 놓여 N dot L = 0 으로 조명이 소실되는 현상 방지
+			if (position.y >= -0.05f && position.y < 0.35f)
+				position.y = 0.35f;
+
+			const vec3 color = track.lightColor;
+			if (glm::any(glm::isnan(position)) || glm::any(glm::isinf(position))) continue;
+			if (glm::any(glm::isnan(color)) || glm::any(glm::isinf(color))) continue;
+
+			GPULight light{};
+			light.Position = position;
+			light.Intensity = intensity;
+			light.Range = track.radius;
+			light.Color = glm::max(color, vec3(0.0f));
+			light.PackedFlags = packedFlags;
+			light.AttenuationCoeff = flashAttenuationCoefficients;
+			output[count++] = light;
+			emittedFromTracks = true;
+			if (count == output.size()) return count;
+		}
+
+		if (!emittedFromTracks && vfxComp.hasActiveLight)
+		{
+			vec3 position(transform.worldMatrix * vec4(vfxComp.activeLightOffset, 1.0f));
+			if (position.y >= -0.05f && position.y < 0.35f)
+				position.y = 0.35f;
+			const vec3 color = vfxComp.activeLightColor;
+			if (!glm::any(glm::isnan(position)) && !glm::any(glm::isinf(position)) &&
+				!glm::any(glm::isnan(color)) && !glm::any(glm::isinf(color)))
+			{
+				GPULight light{};
+				light.Position = position;
+				light.Intensity = vfxComp.activeLightIntensity;
+				light.Range = vfxComp.activeLightRadius;
+				light.Color = glm::max(color, vec3(0.0f));
+				light.PackedFlags = packedFlags;
+				light.AttenuationCoeff = flashAttenuationCoefficients;
+				output[count++] = light;
+				if (count == output.size()) return count;
+			}
+		}
 	}
 	return count;
 }
@@ -385,6 +447,11 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 	MaterialInterface* defaultMaterial = resourceManager.GetResourceHandle<MaterialInterface>(L"Engine://Material/SpriteMaterial.bammat.json").Get();
 	if (!defaultMaterial)
 		defaultMaterial = resourceManager.GetResourceHandle<MaterialInterface>(L"Resources/Material/SpriteMaterial.bammat.json").Get();
+	MaterialInterface* defaultAlphaBlendMaterial = resourceManager.GetResourceHandle<MaterialInterface>(L"Engine://Material/ParticleMaterial_AlphaBlend.bammat.json").Get();
+	if (!defaultAlphaBlendMaterial)
+		defaultAlphaBlendMaterial = resourceManager.GetResourceHandle<MaterialInterface>(L"Resources/Material/ParticleMaterial_AlphaBlend.bammat.json").Get();
+	if (!defaultAlphaBlendMaterial)
+		defaultAlphaBlendMaterial = defaultMaterial;
 
 	const vec3 camRight = glm::normalize(vec3(cameraBuffer.invViewMatrix[0]));
 	const vec3 camUp = glm::normalize(vec3(cameraBuffer.invViewMatrix[1]));
@@ -482,7 +549,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (!track.loop && trackLocalTime >= track.duration) continue;
 
 			Mesh* mesh = track.meshHandle.Get() ? track.meshHandle.Get() : defaultQuadMesh;
-			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultMaterial;
+			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
 			if (!mesh || !material) continue;
 
 			// 렌더 패스가 특정 블렌드 모드를 명시적으로 제한하고 있는 경우 검사
@@ -551,7 +618,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (trackLocalTime < 0.0f || trackLocalTime >= track.duration) continue;
 
 			Mesh* mesh = defaultQuadMesh;
-			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultMaterial;
+			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
 			if (!mesh || !material) continue;
 
 			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&
@@ -584,7 +651,9 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			}
 			if (!texture)
 			{
-				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
+				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/Particle_SoftCircle.png").Get();
+				if (!texture)
+					texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
 				if (!texture)
 					texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png").Get();
 			}
@@ -615,7 +684,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (rt.points.size() < 2) continue;
 
 			Mesh* mesh = defaultQuadMesh;
-			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultMaterial;
+			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
 			if (!mesh || !material) continue;
 
 			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&

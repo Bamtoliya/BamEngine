@@ -469,14 +469,12 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const ImVec2 toolbarSize(std::min(toolbarWidth, grid.x + style.WindowPadding.x * 2.0f),
 		std::min(overlayHeight - toolbarOffset, grid.y + style.WindowPadding.y * 2.0f));
 
-	// 1. 뷰포트 마우스 입력 캐처 (Alt+LMB 시 ImGui 창 자체가 이동하는 것 방지)
-	ImGui::InvisibleButton("##ViewportInputCatcher", widgetSize,
-		ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-
+	// 1. 뷰포트 마우스 입력 캐처 (우클릭/휠클릭 전담: 좌클릭은 ImGuizmo가 먼저 수신하도록 제외)
+	constexpr ImGuiButtonFlags catcherFlags = ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle;
+	ImGui::InvisibleButton("##ViewportInputCatcher", widgetSize, catcherFlags);
 	using Engine::EMouseButton;
 	auto& input = Engine::InputManager::Get();
 	const auto& io = ImGui::GetIO();
-
 	const auto origin = ImGui::GetItemRectMin();
 	const auto mousePos = input.GetScreenMousePosition();
 	const auto isOver = [&](float x, float y, const ImVec2& size)
@@ -493,33 +491,37 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	m_IsFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	const bool canNavigate = !io.WantTextInput && !io.AppFocusLost &&
 		!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-
-	if (!canNavigate || !m_IsFocused || !ImGui::IsItemActive())
+	if (!canNavigate || !m_IsFocused)
 		m_CameraDragButton.reset();
-	else if (ImGui::IsItemActivated() && m_IsHovered)
+	else if (m_CameraDragButton)
 	{
-		for (const auto button : { EMouseButton::Left, EMouseButton::Right, EMouseButton::Middle })
+		if (!input.IsMouseButtonPressed(*m_CameraDragButton))
+			m_CameraDragButton.reset();
+	}
+	else if (m_IsHovered)
+	{
+		// 카메라 조작 표준: Alt+LMB(Orbit), MMB(Pan), RMB(Look/Fly)
+		// 순수 좌클릭(LMB 단독)은 기즈모 조작 및 오브젝트 선택 전용으로 100% 양보한다.
+		const bool isAlt = input.IsAltPressed();
+		if (isAlt && input.IsMouseButtonDown(EMouseButton::Left))
+			m_CameraDragButton = EMouseButton::Left;
+		else if (ImGui::IsItemActive())
 		{
-			if (!input.IsMouseButtonDown(button) || !input.IsMouseButtonPressed(button))
-				continue;
-
-			m_CameraDragButton = button;
-			break;
+			if (input.IsMouseButtonDown(EMouseButton::Right))
+				m_CameraDragButton = EMouseButton::Right;
+			else if (input.IsMouseButtonDown(EMouseButton::Middle))
+				m_CameraDragButton = EMouseButton::Middle;
 		}
 	}
-
-	if (m_CameraDragButton && !input.IsMouseButtonPressed(*m_CameraDragButton))
-		m_CameraDragButton.reset();
-
 	if (canNavigate && (m_IsHovered || m_IsFocused))
 		s_ShortcutTarget = this;
-
 	if (m_CameraController && canNavigate && (m_IsHovered || m_CameraDragButton))
 		m_CameraController->HandleInput(io.DeltaTime, m_IsHovered, m_CameraDragButton);
 
 	// 2. 뷰포트 렌더타깃 이미지 렌더링
 	ImGui::SetCursorPos(startCursor);
 	DrawViewportImage(image, widgetSize);
+	m_ViewportScreenPos = ImGui::GetItemRectMin();
 
 	const ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
 		ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |

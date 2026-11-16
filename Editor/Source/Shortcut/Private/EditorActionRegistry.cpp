@@ -471,16 +471,16 @@ void EditorActionRegistry::RegisterAll()
     // [Viewport Actions] (Viewport Context)
     // =========================================================================================
     sm.RegisterAction({
-        .Id = "Viewport.GizmoSelect",
-        .DisplayNameKey = "Action.Viewport.GizmoSelect",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::Q),
-        .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
-        }
-    });
+    .Id = "Viewport.GizmoSelect",
+    .DisplayNameKey = "Action.Viewport.GizmoSelect",
+    .CategoryKey = "Shortcuts.CategoryViewport",
+    .Context = EShortcutContext::Viewport,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::Q),
+    .ExecuteHandler = []() {
+        if (auto* host = GizmoHelper::GetActiveHost())
+            host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
+    }
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.GizmoTranslate",
@@ -489,10 +489,10 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::W),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->SetGizmoOperation(ImGuizmo::TRANSLATE);
+            if (auto* host = GizmoHelper::GetActiveHost())
+                host->SetGizmoOperation(ImGuizmo::TRANSLATE);
         }
-    });
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.GizmoRotate",
@@ -501,10 +501,10 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::E),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->SetGizmoOperation(ImGuizmo::ROTATE);
+            if (auto* host = GizmoHelper::GetActiveHost())
+                host->SetGizmoOperation(ImGuizmo::ROTATE);
         }
-    });
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.GizmoScale",
@@ -513,10 +513,10 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::R),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->SetGizmoOperation(ImGuizmo::SCALE);
+            if (auto* host = GizmoHelper::GetActiveHost())
+                host->SetGizmoOperation(ImGuizmo::SCALE);
         }
-    });
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.ToggleCoord",
@@ -525,10 +525,10 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::GraveAccent),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->ToggleGizmoMode();
+            if (auto* host = GizmoHelper::GetActiveHost())
+                host->ToggleGizmoMode();
         }
-    });
+        });
 
     sm.RegisterAction({
         .Id = "Viewport.ToggleSnap",
@@ -537,10 +537,10 @@ void EditorActionRegistry::RegisterAll()
         .Context = EShortcutContext::Viewport,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Shift),
         .ExecuteHandler = []() {
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
-                vp->ToggleSnap();
+            if (auto* host = GizmoHelper::GetActiveHost())
+                host->ToggleGizmoSnap();
         }
-    });
+        });
 
     sm.RegisterAction({
     .Id = "Viewport.Focus",

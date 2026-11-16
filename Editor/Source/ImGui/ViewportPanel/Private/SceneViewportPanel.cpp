@@ -262,6 +262,8 @@ void SceneViewportPanel::Free()
 	ResetSplinePointSelection();
 	if (s_ActiveSceneViewport == this)
 		s_ActiveSceneViewport = nullptr;
+	if (GizmoHelper::GetActiveHost() == this)
+		GizmoHelper::SetActiveHost(nullptr);
 	__super::Free();
 	m_Grid.Free();
 	m_DebugRenderer.Free();
@@ -571,7 +573,14 @@ void SceneViewportPanel::DrawCustomViewport()
 	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 	if (m_Focused || !s_ActiveSceneViewport)
+	{
 		s_ActiveSceneViewport = this;
+		GizmoHelper::SetActiveHost(this);
+	}
+	else if (m_Hovered && !GizmoHelper::GetActiveHost())
+	{
+		GizmoHelper::SetActiveHost(this);
+	}
 	Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
 	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();

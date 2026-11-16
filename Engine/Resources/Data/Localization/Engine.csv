@@ -357,6 +357,7 @@
 ,PROP_ENABLE_CURL_NOISE,Enable Turbulence,와류(컬 노이즈) 활성화
 ,PROP_ENABLE_TIME_CYCLE,Enable Time Cycle,시간 주기 활성화
 ,PROP_EULER_ROTATION,EulerRotation,회전(각도)
+,PROP_EXTERNAL_WIND,,
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
 ,PROP_FADE_OUT_DURATION,Fade Out Duration,페이드 아웃 시간
 ,PROP_FADE_START_TIME,Fade Start Time,페이드 시작 시간
@@ -390,6 +391,7 @@
 ,PROP_GRAVITY_2D,2D Gravity,2D 중력
 ,PROP_GRAVITY_3D,3D Gravity,3D 중력
 ,PROP_GRAVITY_MODIFIER,Gravity,중력
+,PROP_GRAVITY_MULTIPLIER,,
 ,PROP_GRAVITY_SCALE,Gravity Scale,중력 배율
 ,PROP_GROUND_COLOR,Ground Color,지면 색상
 ,PROP_HEIGHT,Height,높이

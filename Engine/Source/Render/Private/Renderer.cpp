@@ -406,6 +406,19 @@ EResult Renderer::Render(f32 dt)
 						return result;
 					}
 				}
+
+				if (!pass->GetAllPassTextures().empty())
+				{
+					RHISampler* defaultSampler = SamplerManager::Get().GetDefaultSampler();
+					for (const auto& [slot, rtName] : pass->GetAllPassTextures())
+					{
+						if (rtName.empty()) continue;
+						RenderTarget* sourceRT = RenderTargetManager::Get().GetRenderTarget(rtName);
+						if (sourceRT && sourceRT->GetTexture())
+							m_RHI->BindTextureSampler(sourceRT->GetTexture(), defaultSampler, slot);
+					}
+				}
+
 				const EResult viewportResult = m_RHI->SetViewport(0, 0, rtWidth, rtHeight);
 				if (IsFailure(viewportResult))
 				{

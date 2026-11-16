@@ -83,10 +83,20 @@ public:
 	const unordered_map<uint32, vector<uint8>>& GetAllPassConstants() const { return m_PassConstants; }
 #pragma endregion
 
+#pragma region Pass Textures
+public:
+	void SetPassTexture(uint32 slot, const wstring& renderTargetName) { m_PassTextures[slot] = renderTargetName; }
+	void ClearPassTexture(uint32 slot) { m_PassTextures.erase(slot); }
+	void ClearAllPassTextures() { m_PassTextures.clear(); }
+	const unordered_map<uint32, wstring>& GetAllPassTextures() const { return m_PassTextures; }
+#pragma endregion
+
+
 #pragma region Variable
 private:
 	DESC m_Desc;
 	unordered_map<uint32, vector<uint8>> m_PassConstants;
+	unordered_map<uint32, wstring> m_PassTextures;
 	bool m_PointSpriteSampling = false;
 #pragma endregion
 };

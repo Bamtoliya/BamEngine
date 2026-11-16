@@ -963,6 +963,11 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 			if (!subEffect) continue;
 
 			const auto& emitters = subEffect->GetEmitters();
+			const mat4 trackLocalMat = glm::translate(mat4(1.0f), track.localPosition) *
+				glm::mat4_cast(glm::quat(glm::radians(track.localRotation))) *
+				glm::scale(mat4(1.0f), track.localScale);
+			const mat4 trackWorldMat = transform.worldMatrix * trackLocalMat;
+
 			for (size_t eIdx = 0; eIdx < emitters.size() && eIdx < rt.emitterInstances.size(); ++eIdx)
 			{
 				const auto& emitterData = emitters[eIdx];
@@ -981,7 +986,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 
 				for (const auto& p : inst.particles)
 				{
-					const vec3 worldPos = isWorldSpace ? p.position : vec3(transform.worldMatrix * vec4(p.position, 1.0f));
+					const vec3 worldPos = isWorldSpace ? p.position : vec3(trackWorldMat * vec4(p.position, 1.0f));
 
 					mat4 worldMatrix(1.0f);
 					if (emitterData.alignToSurfaceDisk)

@@ -6,6 +6,7 @@
 #include "CompositeVFXComponent.h"
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
+#include "GizmoHelper.h"
 
 BEGIN(Engine)
 class Entity;
@@ -35,7 +36,7 @@ struct SelectedVFXTrack
 	void Clear() { type = ESelectedVFXTrackType::None; index = -1; }
 };
 
-class VFXEditorPanel final : public ResourceEditorInterface
+class VFXEditorPanel final : public ResourceEditorInterface, public IGizmoHost
 {
 public:
 	VFXEditorPanel();
@@ -90,10 +91,21 @@ private:
 	void ScrubTime(f32 targetTime);
 
 	void ApplyBackgroundPreset();
+
+	void DrawGizmo();
+	void DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize);
+	// IGizmoHost 구현
+	void SetGizmoOperation(ImGuizmo::OPERATION op) override { m_GizmoOperation = op; }
+	ImGuizmo::OPERATION GetGizmoOperation() const override { return m_GizmoOperation; }
+	void ToggleGizmoMode() override { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
+	ImGuizmo::MODE GetGizmoMode() const override { return m_GizmoMode; }
+	void ToggleGizmoSnap() override { m_GizmoUseSnap = !m_GizmoUseSnap; }
+	bool GetGizmoUseSnap() const override { return m_GizmoUseSnap; }
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
 	bool m_IsDirty = false;
 	std::string m_StatusMessage;
+	char m_TrackSearch[64] = {};
 
 	// 선택된 트랙
 	SelectedVFXTrack m_SelectedTrack;
@@ -120,12 +132,38 @@ private:
 	bool m_PreviewMotion = false;
 	bool m_ShowGroundPlane = true;
 
+	// ── Phase 5 환경 장애물 프리셋 ──
+	enum class EVFXObstaclePreset : uint8 { FloorOnly = 0, CornerWall = 1, Obstacles = 2, DummyCharacter = 3 };
+	EVFXObstaclePreset m_ObstaclePreset = EVFXObstaclePreset::FloorOnly;
+	std::vector<Engine::Entity*> m_ObstacleEntities;
+	// ── Phase 5 환경 외력 시뮬레이터 ──
+	Engine::vec3 m_SimWind{ 0.0f };
+	float m_SimGravityMultiplier = 1.0f;
+
 	// 레이아웃 분할
 	float m_LeftPaneWidth = 280.0f;
 	float m_RightPaneWidth = 360.0f;
 	float m_TimelineHeight = 180.0f;
 
 	CommandHistory m_TimelineHistory;
+
+	// ── 3D 기즈모 상태 ──
+	struct VFXGizmoSnapshot
+	{
+		SelectedVFXTrack track;
+		Engine::vec3 position{ 0.0f };
+		Engine::vec3 rotation{ 0.0f };
+		Engine::vec3 scale{ 1.0f };
+		Engine::vec2 decalSize{ 1.0f };
+		Engine::vec3 trailOffsetA{ 0.0f };
+		Engine::vec3 trailOffsetB{ 0.0f };
+		bool valid = false;
+	};
+	ImGuizmo::OPERATION m_GizmoOperation = ImGuizmo::TRANSLATE;
+	ImGuizmo::MODE m_GizmoMode = ImGuizmo::LOCAL;
+	bool m_GizmoUseSnap = false;
+	VFXGizmoSnapshot m_GizmoSnapshot;
+	bool m_IsGizmoUsing = false;
 };
 
 END

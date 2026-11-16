@@ -93,6 +93,13 @@ namespace Engine
 		PROPERTY(READONLY, NOSERIALIZE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_CURRENT_TIME"))
 		f32 currentTime = 0.0f;
 
+		// ── 환경 외력 시뮬레이션 오버라이드 (바람 및 중력 배율) ──
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_EXTERNAL_WIND"))
+		vec3 externalWind = vec3(0.0f);
+
+		PROPERTY(EDITABLE, CATEGORY("CATEGORY_RENDER"), DISPLAY_NAME("PROP_GRAVITY_MULTIPLIER"))
+		f32 gravityMultiplier = 1.0f;
+
 		f32 prevTime = 0.0f;
 		bool isFinished = false;
 		bool previewSeeking = false;

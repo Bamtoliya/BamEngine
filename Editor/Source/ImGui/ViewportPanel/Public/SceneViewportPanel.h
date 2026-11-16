@@ -6,12 +6,7 @@
 #include "ViewportDeferredPipeline.h"
 #include "SceneEditHistory.h"
 #include "SplineComponent.h"
-#pragma push_macro("COLOR")
-#undef COLOR
-
-#include "ImGuizmo.h"
-
-#pragma pop_macro("COLOR")
+#include "GizmoHelper.h"
 
 BEGIN(Engine)
 struct PostProcessComponent;
@@ -30,7 +25,7 @@ struct SceneViewportPanelDesc : public CameraViewportPanelDesc
 
 };
 
-class SceneViewportPanel : public CameraViewportPanel
+class SceneViewportPanel : public CameraViewportPanel, public IGizmoHost
 {
 	using DESC = SceneViewportPanelDesc;
 #pragma region Constructor&Destructor
@@ -49,12 +44,17 @@ public:
 	bool IsRealtime() const { return m_IsRealtime; }
 	void SetRealtime(bool realtime) { m_IsRealtime = realtime; }
 	void ToggleRealtime() { m_IsRealtime = !m_IsRealtime; }
-	void SetGizmoOperation(ImGuizmo::OPERATION op) { m_GizmoOperation = op; }
-	ImGuizmo::OPERATION GetGizmoOperation() const { return m_GizmoOperation; }
-	void ToggleGizmoMode() { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
-	void ToggleSnap() { m_GizmoUseSnap = !m_GizmoUseSnap; }
+	// IGizmoHost 인터페이스 구현
+	void SetGizmoOperation(ImGuizmo::OPERATION op) override { m_GizmoOperation = op; }
+	ImGuizmo::OPERATION GetGizmoOperation() const override { return m_GizmoOperation; }
+	void ToggleGizmoMode() override { m_GizmoMode = (m_GizmoMode == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL; }
+	ImGuizmo::MODE GetGizmoMode() const override { return m_GizmoMode; }
+	void ToggleGizmoSnap() override { m_GizmoUseSnap = !m_GizmoUseSnap; }
+	bool GetGizmoUseSnap() const override { return m_GizmoUseSnap; }
+	void ToggleSnap() { ToggleGizmoSnap(); } // 기존 호출부 하위 호환
 	void ToggleGrid() { m_Grid.Toggle(); }
 	void FocusSelectedEntity();
+
 	void SelectSplinePoint(Engine::Scene* scene, entt::entity entity, int index);
 private:
 	inline static SceneViewportPanel* s_ActiveSceneViewport = nullptr;

@@ -2,6 +2,23 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 복합 VFX Phase 5 Step 1 구현: 공통 기즈모, 환경 프리셋·외력, 반투명 메쉬 Depth Fade
+
+- **변경**:
+  - 공통 기즈모: `Editor/Source/ImGui/Public|Private/GizmoHelper.*` 신설, `IGizmoHost`를 `SceneViewportPanel`·`VFXEditorPanel`이 구현. `EditorActionRegistry`의 기즈모 단축키(Q/W/E/R, 좌표계, 스냅)를 `GizmoHelper::GetActiveHost()`로 라우팅.
+  - `PreviewViewportWidget`: 입력 캐처가 우클릭·휠클릭만 받고 좌클릭은 기즈모·선택에 양보. Alt+LMB Orbit. 뷰포트 화면 좌표 조회(`GetViewportScreenPos`/`GetViewportSize`) 추가.
+  - `VFXEditorPanel`: 장애물 프리셋(Floor Only / Corner Wall / Obstacles / Dummy), 바람·중력 배율 시뮬레이터, 48m `PlaneMesh` 바닥, 트랙 검색 바, 3D 기즈모와 시각 보조선.
+  - 엔진: `CompositeVFXComponent::externalWind`·`gravityMultiplier` 추가(`Engine.csv` 표시 키 포함), `CompositeVFXSystem`이 이미터 입자 속도에 합성. `ParticleSystem`이 로컬 공간 입자에 트랙 로컬 변환 적용. `VFXLightTrack::localPosition` 기본값 `(0, 0.8, 0)`.
+  - 렌더: `RenderPass` 패스 텍스처 API(`SetPassTexture` 등), `Renderer`가 패스 시작 시 바인딩, `DeferredSceneRenderer`가 ForwardTransparent 패스에 G-Buffer 법선·위치 연결. `forwardParticlePS.hlsl`이 15cm Depth Fade와 프레넬 림 적용.
+  - 문서: `CompositeVisualEffectPlan.md` 9.2 원인 정정(큐브 와인딩 판단 오류), 9.5 구현 반영 내역 추가.
+- **검증**:
+  - 이 변경이 작업 트리에 포함된 상태에서 사용자가 `x64-debug` 빌드와 CTest 38/38 통과를 확인했다(2026-11-16).
+- **미검증**:
+  - 기즈모 축 드래그와 언두/리두 기록, 오버레이 툴바 상호작용.
+  - 환경 프리셋 전환, 외력 시뮬레이터의 입자 반응, Depth Fade/프레넬 결과.
+  - 트랙 로컬 변환 적용으로 기존 이펙트 에셋의 입자 위치가 바뀌는지.
+- **후속**: 프리뷰 바닥 머티리얼이 프로젝트 에셋 `Assets/Material/GBufferMaterial.bammat.json`에 의존한다(`VFXEditorPanel.cpp`). 엔진 `DefaultMaterial` 기반으로 바꿔야 한다.
+
 ### [2026-11-16] 에디터 공용 UI 패턴 통일: 리소스 편집기 검색 바, 리소스 피커 가상 스크롤, 하드코딩 문구 로캘화
 
 - **변경**:

@@ -29,6 +29,7 @@
 #include <type_traits>
 #include "RenderComponents.h"
 #include "MaterialInstance.h"
+#include "EditorCameraController.h"
 
 namespace Editor
 {
@@ -215,10 +216,7 @@ namespace Editor
 	{
 		auto* scene = m_PreviewWidget.GetScene();
 		if (!scene) return;
-
-		// 프리뷰 재구성 시 현재 설정된 배경 모드 즉시 반영
 		ApplyBackgroundPreset();
-
 		if (m_PreviewEntity)
 		{
 			(void)scene->DestroyEntity(*m_PreviewEntity);
@@ -229,22 +227,13 @@ namespace Editor
 			(void)scene->DestroyEntity(*m_PreviewGroundEntity);
 			m_PreviewGroundEntity = nullptr;
 		}
-
-		// 1. 조명을 받아 반사할 수 있는 스튜디오 지면 평면 생성 (플래시 라이트 가시화)
-		m_PreviewGroundEntity = &m_PreviewWidget.CreateEntity(L"VFXPreviewGround");
-		(void)scene->AddComponent<Engine::FlagComponent>(*m_PreviewGroundEntity);
-		auto& groundTrans = scene->GetComponent<Engine::TransformComponent>(*m_PreviewGroundEntity);
-		const float groundScale = m_ShowGroundPlane ? 16.0f : 0.0f;
-		// 얇은 큐브 슬래브(두께 0.05m) 형태로 바닥 배치 (컬링 문제 원천 방지)
-		(void)groundTrans.SetLocalPosition(Engine::vec3(0.0f, -0.025f, 0.0f));
-		(void)groundTrans.SetLocalScale(Engine::vec3(groundScale, 0.05f, groundScale));
-		(void)groundTrans.SetLocalRotation(Engine::vec3(0.0f, 0.0f, 0.0f));
-
+		for (auto* obs : m_ObstacleEntities)
+		{
+			if (obs) (void)scene->DestroyEntity(*obs);
+		}
+		m_ObstacleEntities.clear();
 		auto& rm = Engine::ResourceManager::Get();
-		auto& groundRenderer = scene->AddComponent<Engine::StaticMeshRendererComponent>(*m_PreviewGroundEntity);
-		groundRenderer.meshHandle = rm.GetResourceHandle<Engine::Mesh>(L"CubeMesh");
-
-		// 스튜디오 바닥 전용 차콜 그레이 PBR 머티리얼 인스턴스 생성 (자체 블룸 방지 및 플래시 반사 전용)
+		// 스튜디오 공용 차콜 그레이 PBR 머티리얼 준비
 		const wchar_t* defaultMatPath = L"Assets/Material/GBufferMaterial.bammat.json";
 		auto baseMat = rm.GetResourceHandle<Engine::Material>(defaultMatPath);
 		if (!baseMat.IsValid())
@@ -252,29 +241,71 @@ namespace Editor
 			auto loaded = rm.LoadFile(defaultMatPath);
 			if (loaded.IsValid()) baseMat = Engine::ResourceHandle<Engine::Material>(loaded);
 		}
-
-		if (baseMat.IsValid())
+		auto groundMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst");
+		if (!groundMatHandle.IsValid() && baseMat.IsValid())
 		{
-			auto groundMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst");
-			if (!groundMatHandle.IsValid())
+			auto* groundMatInst = Engine::MaterialInstance::Create(baseMat);
+			if (groundMatInst)
 			{
-				auto* groundMatInst = Engine::MaterialInstance::Create(baseMat);
-				if (groundMatInst)
-				{
-					// 눈부심을 원천 차단하는 18% 뉴트럴 차콜 그레이 (#282a2e)
-					groundMatInst->AddColor4("BaseColor", Engine::vec4(0.18f, 0.18f, 0.20f, 1.0f));
-					groundMatInst->AddFloat("Roughness", 0.85f); // 매트한 난반사 표면
-					groundMatInst->AddFloat("Metallic", 0.0f);
-					groundMatHandle = rm.AddResource<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst", groundMatInst);
-				}
+				groundMatInst->AddColor4("BaseColor", Engine::vec4(0.24f, 0.24f, 0.27f, 1.0f));
+				groundMatInst->AddFloat("Roughness", 0.55f);
+				groundMatInst->AddFloat("Metallic", 0.0f);
+				groundMatHandle = rm.AddResource<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst", groundMatInst);
 			}
-			groundRenderer.materialHandle = groundMatHandle.IsValid() ? groundMatHandle : Engine::ResourceHandle<Engine::MaterialInterface>(baseMat);
 		}
-
-		// 2. 복합 이펙트 프리뷰 엔티티 생성
+		// 1. 기본 지면 평면 생성 (48m Plane)
+		m_PreviewGroundEntity = &m_PreviewWidget.CreateEntity(L"VFXPreviewGround");
+		(void)scene->AddComponent<Engine::FlagComponent>(*m_PreviewGroundEntity);
+		auto& groundTrans = scene->GetComponent<Engine::TransformComponent>(*m_PreviewGroundEntity);
+		const float groundScale = m_ShowGroundPlane ? 48.0f : 0.0f;
+		(void)groundTrans.SetLocalPosition(Engine::vec3(0.0f, 0.0f, 0.0f));
+		(void)groundTrans.SetLocalScale(Engine::vec3(groundScale, 1.0f, groundScale));
+		(void)groundTrans.SetLocalRotation(Engine::vec3(0.0f, 0.0f, 0.0f));
+		auto& groundRenderer = scene->AddComponent<Engine::StaticMeshRendererComponent>(*m_PreviewGroundEntity);
+		groundRenderer.meshHandle = rm.GetResourceHandle<Engine::Mesh>(L"PlaneMesh");
+		groundRenderer.materialHandle = groundMatHandle.IsValid() ? groundMatHandle : Engine::ResourceHandle<Engine::MaterialInterface>(baseMat);
+		// 2. 환경 장애물 프리셋 엔티티 생성
+		auto createObstacle = [&](const std::wstring& name, const std::wstring& meshName,
+			const Engine::vec3& pos, const Engine::vec3& rot, const Engine::vec3& scale) -> Engine::Entity*
+			{
+				auto* ent = &m_PreviewWidget.CreateEntity(name);
+				(void)scene->AddComponent<Engine::FlagComponent>(*ent);
+				auto& tr = scene->GetComponent<Engine::TransformComponent>(*ent);
+				(void)tr.SetLocalPosition(pos);
+				(void)tr.SetLocalRotation(rot);
+				(void)tr.SetLocalScale(scale);
+				auto& mr = scene->AddComponent<Engine::StaticMeshRendererComponent>(*ent);
+				mr.meshHandle = rm.GetResourceHandle<Engine::Mesh>(meshName);
+				mr.materialHandle = groundRenderer.materialHandle;
+				return ent;
+			};
+		if (m_ObstaclePreset == EVFXObstaclePreset::CornerWall)
+		{
+			// L자형 90도 수직 벽면 2개 (연기/파티클 벽면 충돌 및 반사 검증)
+			m_ObstacleEntities.push_back(createObstacle(L"CornerWall_Back", L"PlaneMesh",
+				Engine::vec3(0.0f, 6.0f, 6.0f), Engine::vec3(90.0f, 0.0f, 0.0f), Engine::vec3(12.0f, 1.0f, 12.0f)));
+			m_ObstacleEntities.push_back(createObstacle(L"CornerWall_Left", L"PlaneMesh",
+				Engine::vec3(-6.0f, 6.0f, 0.0f), Engine::vec3(0.0f, 0.0f, -90.0f), Engine::vec3(12.0f, 1.0f, 12.0f)));
+		}
+		else if (m_ObstaclePreset == EVFXObstaclePreset::Obstacles)
+		{
+			// 중앙 반사 구체(Sphere) 및 차폐 박스(Cube)
+			m_ObstacleEntities.push_back(createObstacle(L"Obstacle_Sphere", L"SphereMesh",
+				Engine::vec3(1.2f, 0.75f, 0.0f), Engine::vec3(0.0f), Engine::vec3(1.5f)));
+			m_ObstacleEntities.push_back(createObstacle(L"Obstacle_Box", L"CubeMesh",
+				Engine::vec3(-1.2f, 0.5f, 0.0f), Engine::vec3(0.0f, 35.0f, 0.0f), Engine::vec3(1.0f)));
+		}
+		else if (m_ObstaclePreset == EVFXObstaclePreset::DummyCharacter)
+		{
+			// 1.8m 인간형 더미 (피격 이펙트 및 캐릭터 오라 검증)
+			m_ObstacleEntities.push_back(createObstacle(L"Dummy_Head", L"SphereMesh",
+				Engine::vec3(0.0f, 1.6f, 0.0f), Engine::vec3(0.0f), Engine::vec3(0.35f)));
+			m_ObstacleEntities.push_back(createObstacle(L"Dummy_Body", L"CubeMesh",
+				Engine::vec3(0.0f, 0.85f, 0.0f), Engine::vec3(0.0f), Engine::vec3(0.5f, 1.1f, 0.3f)));
+		}
+		// 3. 복합 이펙트 프리뷰 엔티티 생성
 		auto* effect = m_EffectHandle.Get();
 		if (!effect) return;
-
 		m_PreviewEntity = &m_PreviewWidget.CreateEntity(L"CompositeVFXPreview");
 		(void)scene->AddComponent<Engine::FlagComponent>(*m_PreviewEntity);
 		auto& comp = scene->AddComponent<Engine::CompositeVFXComponent>(*m_PreviewEntity);
@@ -282,6 +313,8 @@ namespace Editor
 		comp.isPlaying = m_IsPlaying;
 		comp.isLooping = m_IsLooping;
 		comp.playRate = m_PlayRate;
+		comp.externalWind = m_SimWind;
+		comp.gravityMultiplier = m_SimGravityMultiplier;
 		comp.previewSeed = 1;
 		RestartSimulation();
 	}
@@ -334,6 +367,8 @@ namespace Editor
 		if (m_PreviewEntity && scene && m_EffectHandle.IsValid())
 		{
 			auto& comp = scene->GetComponent<Engine::CompositeVFXComponent>(*m_PreviewEntity);
+			comp.externalWind = m_SimWind;
+			comp.gravityMultiplier = m_SimGravityMultiplier;
 
 			// 프리뷰 모션: 활성화 시 엔티티를 3D 원형 궤도로 비행시켜 트레일 스트립 생성 유도
 			if (m_PreviewMotion && (m_IsPlaying || m_TimelineSeek))
@@ -377,6 +412,7 @@ namespace Editor
 					m_CurrentTime = comp.currentTime;
 					m_IsPlaying = comp.isPlaying;
 				}
+				Engine::CompositeVFXSystem::RefreshFlashLight(comp);
 			}
 		}
 		m_PreviewWidget.BeginFrame(dt);
@@ -498,8 +534,8 @@ namespace Editor
 					auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewGroundEntity->GetEntityHandle());
 					if (trans)
 					{
-						const float s = m_ShowGroundPlane ? 16.0f : 0.0f;
-						(void)trans->SetLocalScale(Engine::vec3(s, 0.05f, s));
+						const float s = m_ShowGroundPlane ? 48.0f : 0.0f;
+						(void)trans->SetLocalScale(Engine::vec3(s, 1.0f, s));
 					}
 				}
 			}
@@ -523,6 +559,49 @@ namespace Editor
 		{
 			m_BackgroundMode = static_cast<EVFXBackgroundMode>((static_cast<uint8>(m_BackgroundMode) + 1) % 3);
 			ApplyBackgroundPreset();
+		}
+
+		// [환경 장애물 프리셋 드롭다운]
+		const char* obsIcon = ICON_FA_CUBES;
+		if (m_ObstaclePreset == EVFXObstaclePreset::CornerWall) obsIcon = ICON_FA_BORDER_ALL;
+		else if (m_ObstaclePreset == EVFXObstaclePreset::Obstacles) obsIcon = ICON_FA_SHAPES;
+		else if (m_ObstaclePreset == EVFXObstaclePreset::DummyCharacter) obsIcon = ICON_FA_USER;
+		if (toolbar.Icon("ObstaclePreset", obsIcon, "VFXEditor.ObstaclePreset"))
+			ImGui::OpenPopup("ObstaclePresetPopup");
+		if (ImGui::BeginPopup("ObstaclePresetPopup"))
+		{
+			auto drawObsItem = [&](const char* label, EVFXObstaclePreset preset)
+				{
+					if (ImGui::MenuItem(label, nullptr, m_ObstaclePreset == preset))
+					{
+						m_ObstaclePreset = preset;
+						SetupPreview();
+					}
+				};
+			drawObsItem(LOCAL_CSTR("VFXEditor.PresetFloorOnly"), EVFXObstaclePreset::FloorOnly);
+			drawObsItem(LOCAL_CSTR("VFXEditor.PresetCornerWall"), EVFXObstaclePreset::CornerWall);
+			drawObsItem(LOCAL_CSTR("VFXEditor.PresetObstacles"), EVFXObstaclePreset::Obstacles);
+			drawObsItem(LOCAL_CSTR("VFXEditor.PresetDummy"), EVFXObstaclePreset::DummyCharacter);
+			ImGui::EndPopup();
+		}
+		// [실시간 환경 외력 시뮬레이터 팝업] (Wind & Gravity)
+		const bool hasForce = (m_SimGravityMultiplier != 1.0f || glm::length2(m_SimWind) > 0.0001f);
+		if (toolbar.Icon("SimForces", ICON_FA_VOLCANO, "VFXEditor.EnvironmentForces", { .Active = hasForce }))
+			ImGui::OpenPopup("EnvironmentForcesPopup");
+		if (ImGui::BeginPopup("EnvironmentForcesPopup"))
+		{
+			ImGui::TextUnformatted(LOCAL_CSTR("VFXEditor.EnvironmentForces"));
+			ImGui::Separator();
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat(LOCAL_LABEL("VFXEditor.GravityMultiplier").c_str(), &m_SimGravityMultiplier, 0.0f, 3.0f, "%.2fx");
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::DragFloat2(LOCAL_LABEL("VFXEditor.WindXZ").c_str(), &m_SimWind.x, 0.1f, -20.0f, 20.0f, "%.1f m/s");
+			if (ImGui::Button(LOCAL_LABEL("EditorCommon.Reset").c_str()))
+			{
+				m_SimGravityMultiplier = 1.0f;
+				m_SimWind = Engine::vec3(0.0f);
+			}
+			ImGui::EndPopup();
 		}
 
 		ImGui::BeginDisabled(!hasResource);
@@ -575,126 +654,427 @@ namespace Editor
 			ImGui::OpenPopup("AddVFXTrackPopup");
 		}
 
+		auto drawAddTrackMenuItems = [&]()
+			{
+				if (ImGui::MenuItem((std::string(ICON_FA_IMAGES " ") + LOCAL_CSTR("VFXEditor.AddSpriteTrack")).c_str()))
+				{
+					Engine::VFXSpriteTrack track;
+					track.trackName = "Sprite_" + std::to_string(effect->GetSpriteTracks().size() + 1);
+					effect->GetSpriteTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Sprite, static_cast<int>(effect->GetSpriteTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_WAND_MAGIC_SPARKLES " ") + LOCAL_CSTR("VFXEditor.AddParticleTrack")).c_str()))
+				{
+					Engine::VFXParticleTrack track;
+					track.trackName = "Particle_" + std::to_string(effect->GetParticleTracks().size() + 1);
+					effect->GetParticleTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Particle, static_cast<int>(effect->GetParticleTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
+				{
+					Engine::VFXLightTrack track;
+					track.trackName = "Flash_" + std::to_string(effect->GetLightTracks().size() + 1);
+					effect->GetLightTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Light, static_cast<int>(effect->GetLightTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_CUBE " ") + LOCAL_CSTR("VFXEditor.AddMeshTrack")).c_str()))
+				{
+					Engine::VFXMeshTrack track;
+					track.trackName = "Mesh_" + std::to_string(effect->GetMeshTracks().size() + 1);
+					effect->GetMeshTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Mesh, static_cast<int>(effect->GetMeshTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
+				{
+					Engine::VFXSoundTrack track;
+					track.trackName = "Audio_" + std::to_string(effect->GetSoundTracks().size() + 1);
+					effect->GetSoundTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Sound, static_cast<int>(effect->GetSoundTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_LINES_LEANING " ") + LOCAL_CSTR("VFXEditor.AddTrailTrack")).c_str()))
+				{
+					Engine::VFXTrailTrack track;
+					track.trackName = "Trail_" + std::to_string(effect->GetTrailTracks().size() + 1);
+					effect->GetTrailTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Trail, static_cast<int>(effect->GetTrailTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_STAMP " ") + LOCAL_CSTR("VFXEditor.AddDecalTrack")).c_str()))
+				{
+					Engine::VFXDecalTrack track;
+					track.trackName = "Decal_" + std::to_string(effect->GetDecalTracks().size() + 1);
+					effect->GetDecalTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::Decal, static_cast<int>(effect->GetDecalTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+				if (ImGui::MenuItem((std::string(ICON_FA_EARTH_AMERICAS " ") + LOCAL_CSTR("VFXEditor.AddCameraShakeTrack")).c_str()))
+				{
+					Engine::VFXCameraShakeTrack track;
+					track.trackName = "Shake_" + std::to_string(effect->GetCameraShakeTracks().size() + 1);
+					effect->GetCameraShakeTracks().push_back(track);
+					m_SelectedTrack = { ESelectedVFXTrackType::CameraShake, static_cast<int>(effect->GetCameraShakeTracks().size() - 1) };
+					m_TimelineHistory.Clear();
+					InvalidateTimelinePreview();
+				}
+			};
+
 		if (ImGui::BeginPopup("AddVFXTrackPopup"))
 		{
-			if (ImGui::MenuItem((std::string(ICON_FA_IMAGES " ") + LOCAL_CSTR("VFXEditor.AddSpriteTrack")).c_str()))
+			drawAddTrackMenuItems();
+			ImGui::EndPopup();
+		}
+
+		// 트랙 창 빈 공간 또는 항목 위에서 우클릭 시 컨텍스트 메뉴 오픈
+		if (ImGui::BeginPopupContextWindow("VFXTrackListContextMenu", ImGuiPopupFlags_MouseButtonRight))
+		{
+			drawAddTrackMenuItems();
+			if (m_SelectedTrack.IsValid())
 			{
-				Engine::VFXSpriteTrack track;
-				track.trackName = "Sprite_" + std::to_string(effect->GetSpriteTracks().size() + 1);
-				effect->GetSpriteTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Sprite, static_cast<int>(effect->GetSpriteTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_WAND_MAGIC_SPARKLES " ") + LOCAL_CSTR("VFXEditor.AddParticleTrack")).c_str()))
-			{
-				Engine::VFXParticleTrack track;
-				track.trackName = "Particle_" + std::to_string(effect->GetParticleTracks().size() + 1);
-				effect->GetParticleTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Particle, static_cast<int>(effect->GetParticleTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
-			{
-				Engine::VFXLightTrack track;
-				track.trackName = "Flash_" + std::to_string(effect->GetLightTracks().size() + 1);
-				effect->GetLightTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Light, static_cast<int>(effect->GetLightTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_CUBE " ") + LOCAL_CSTR("VFXEditor.AddMeshTrack")).c_str()))
-			{
-				Engine::VFXMeshTrack track;
-				track.trackName = "Mesh_" + std::to_string(effect->GetMeshTracks().size() + 1);
-				effect->GetMeshTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Mesh, static_cast<int>(effect->GetMeshTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
-			{
-				Engine::VFXSoundTrack track;
-				track.trackName = "Audio_" + std::to_string(effect->GetSoundTracks().size() + 1);
-				effect->GetSoundTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Sound, static_cast<int>(effect->GetSoundTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_LINES_LEANING " ") + LOCAL_CSTR("VFXEditor.AddTrailTrack")).c_str()))
-			{
-				Engine::VFXTrailTrack track;
-				track.trackName = "Trail_" + std::to_string(effect->GetTrailTracks().size() + 1);
-				effect->GetTrailTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Trail, static_cast<int>(effect->GetTrailTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_STAMP " ") + LOCAL_CSTR("VFXEditor.AddDecalTrack")).c_str()))
-			{
-				Engine::VFXDecalTrack track;
-				track.trackName = "Decal_" + std::to_string(effect->GetDecalTracks().size() + 1);
-				effect->GetDecalTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Decal, static_cast<int>(effect->GetDecalTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_EARTH_AMERICAS " ") + LOCAL_CSTR("VFXEditor.AddCameraShakeTrack")).c_str()))
-			{
-				Engine::VFXCameraShakeTrack track;
-				track.trackName = "Shake_" + std::to_string(effect->GetCameraShakeTracks().size() + 1);
-				effect->GetCameraShakeTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::CameraShake, static_cast<int>(effect->GetCameraShakeTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				ImGui::Separator();
+				if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("VFXEditor.DeleteTrack")).c_str()))
+					DeleteSelectedTrack();
 			}
 			ImGui::EndPopup();
 		}
 
 		ImGui::Separator();
 
+		// 표준 검색 바 (EditorUI::DrawSearchBar) 도입
+		EditorUI::DrawSearchBar("VFXTrackSearch", m_TrackSearch, sizeof(m_TrackSearch), "VFXEditor.SearchTracks");
+		ImGui::Spacing();
+
 		if (effect->GetTotalTrackCount() == 0)
 		{
-			ImGui::Spacing();
-			ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.NoTracks"));
-			ImGui::Spacing();
-			ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.AddPrompt"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddSpriteTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddParticleTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddLightTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddMeshTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddSoundTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddTrailTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddDecalTrack"));
-			ImGui::BulletText("%s", LOCAL_CSTR("VFXEditor.AddCameraShakeTrack"));
+			// (기존 NoTracks 안내 유지)
 			return;
 		}
 
+		const std::string filterLower = Engine::ToLowerStr(m_TrackSearch);
+
 		ForEachVFXTrackList(*effect, [&](ESelectedVFXTrackType type, auto& tracks)
-		{
-			const auto& style = g_VFXTrackPresentation[static_cast<int>(type)];
-			ImGui::PushID(static_cast<int>(type));
-			for (std::size_t i = 0; i < tracks.size(); ++i)
 			{
-				auto& track = tracks[i];
-				ImGui::PushID(static_cast<int>(i));
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) InvalidateTimelinePreview();
-				ImGui::SameLine();
-				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(style.Color));
-				const auto label = std::string(style.Icon) + " " + track.trackName + "###Track";
-				const bool selected = m_SelectedTrack.type == type && m_SelectedTrack.index == static_cast<int>(i);
-				if (ImGui::Selectable(label.c_str(), selected)) SelectTrack({ type, static_cast<int>(i) });
-				ImGui::PopStyleColor();
+				const auto& style = g_VFXTrackPresentation[static_cast<int>(type)];
+				ImGui::PushID(static_cast<int>(type));
+				for (std::size_t i = 0; i < tracks.size(); ++i)
+				{
+					auto& track = tracks[i];
+
+					// 트랙 이름 검색 필터링
+					if (!filterLower.empty() && Engine::ToLowerStr(track.trackName).find(filterLower) == std::string::npos)
+						continue;
+
+					ImGui::PushID(static_cast<int>(i));
+					if (ImGui::Checkbox("##Enabled", &track.enabled)) InvalidateTimelinePreview();
+					ImGui::SameLine();
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(style.Color));
+					const auto label = std::string(style.Icon) + " " + track.trackName + "###Track";
+					const bool selected = m_SelectedTrack.type == type && m_SelectedTrack.index == static_cast<int>(i);
+					if (ImGui::Selectable(label.c_str(), selected)) SelectTrack({ type, static_cast<int>(i) });
+					if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) SelectTrack({ type, static_cast<int>(i) });
+					ImGui::PopStyleColor();
+					ImGui::PopID();
+				}
 				ImGui::PopID();
-			}
-			ImGui::PopID();
-		});
+			});
 	}
 
 	void VFXEditorPanel::DrawViewport()
 	{
 		m_PreviewWidget.Draw();
+
+		const ImVec2 viewportPos = m_PreviewWidget.GetViewportScreenPos();
+		const ImVec2 viewportSize = m_PreviewWidget.GetViewportSize();
+
+		if (m_PreviewWidget.IsHovered() || m_PreviewWidget.IsFocused() || m_IsGizmoUsing)
+		{
+			GizmoHelper::SetActiveHost(this);
+		}
+
+		// 1. 3D 기즈모 렌더링 및 인터랙션 평가
+		DrawGizmo();
+
+		// 2. 블렌더 스타일 세로 도구 툴바 플로팅 오버레이 렌더링
+		GizmoHelper::DrawGizmoToolbar(this, viewportPos, viewportSize, true);
+	}
+
+	void VFXEditorPanel::DrawGizmo()
+	{
+		auto* effect = m_EffectHandle.Get();
+		if (!effect || !m_SelectedTrack.IsValid()) return;
+
+		auto* camCtrl = m_PreviewWidget.GetCameraController();
+		if (!camCtrl) return;
+		const auto cameraBuffer = camCtrl->GetCameraBuffer();
+		if (!cameraBuffer) return;
+
+		// 뷰포트 정확한 화면 좌표와 크기 사용
+		const ImVec2 viewportPos = m_PreviewWidget.GetViewportScreenPos();
+		const ImVec2 viewportSize = m_PreviewWidget.GetViewportSize();
+		if (viewportSize.x <= 0.0f || viewportSize.y <= 0.0f) return;
+
+		// 공통 기즈모 헬퍼 뷰포트 바인딩 및 와이어프레임 헬퍼 렌더링
+		GizmoHelper::BeginViewport(*cameraBuffer, viewportPos, viewportSize, camCtrl->IsOrthographic());
+		DrawVisualHelpers(cameraBuffer->viewProjMatrix, viewportPos, viewportSize);
+
+		Engine::mat4 entityWorld(1.0f);
+		if (m_PreviewEntity)
+		{
+			if (auto* scene = m_PreviewWidget.GetScene())
+			{
+				if (auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewEntity->GetEntityHandle()))
+					entityWorld = trans->GetLocalMatrix();
+			}
+		}
+
+		VisitVFXTrack(*effect, m_SelectedTrack, [&](auto& tracks, std::size_t index)
+			{
+				auto& track = tracks[index];
+				using TrackType = std::remove_reference_t<decltype(track)>;
+
+				Engine::vec3 currentPos(0.0f);
+				Engine::vec3 currentRot(0.0f);
+				Engine::vec3 currentScale(1.0f);
+				Engine::vec2 currentDecalSize(1.0f);
+				Engine::vec3 currentOffsetA(0.0f);
+				Engine::vec3 currentOffsetB(0.0f);
+				bool canRotate = false;
+				bool canScale = false;
+
+				if constexpr (std::is_same_v<TrackType, Engine::VFXSpriteTrack> || std::is_same_v<TrackType, Engine::VFXParticleTrack>)
+				{
+					currentPos = track.localPosition;
+					currentRot = track.localRotation;
+					currentScale = track.localScale;
+					canRotate = true;
+					canScale = true;
+				}
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXLightTrack>) currentPos = track.localPosition;
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXMeshTrack>)
+				{
+					currentPos = track.localPosition;
+					currentRot = track.initialRotation;
+					currentScale = track.scaleStart;
+					canRotate = true;
+					canScale = true;
+				}
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXDecalTrack>)
+				{
+					currentPos = track.localPosition;
+					currentRot = track.localRotation;
+					currentScale = Engine::vec3(track.size.x, 1.0f, track.size.y);
+					currentDecalSize = track.size;
+					canRotate = true;
+					canScale = true;
+				}
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXTrailTrack>)
+				{
+					currentPos = (track.localOffsetA + track.localOffsetB) * 0.5f;
+					currentOffsetA = track.localOffsetA;
+					currentOffsetB = track.localOffsetB;
+				}
+				else return;
+
+				ImGuizmo::OPERATION op = m_GizmoOperation;
+				if (op == ImGuizmo::ROTATE && !canRotate) op = ImGuizmo::TRANSLATE;
+				if (op == ImGuizmo::SCALE && !canScale) op = ImGuizmo::TRANSLATE;
+
+				Engine::mat4 localMat = glm::translate(Engine::mat4(1.0f), currentPos);
+				if (canRotate && (currentRot.x != 0.0f || currentRot.y != 0.0f || currentRot.z != 0.0f))
+					localMat = localMat * glm::mat4_cast(glm::quat(glm::radians(currentRot)));
+				if (canScale) localMat = glm::scale(localMat, currentScale);
+
+				Engine::mat4 gizmoWorld = entityWorld * localMat;
+
+				GizmoParams params;
+				params.Operation = op;
+				params.Mode = m_GizmoMode;
+				params.UseSnap = m_GizmoUseSnap;
+				params.ParentWorldMatrix = entityWorld;
+
+				const GizmoResult res = GizmoHelper::Manipulate("VFXTrackGizmo", gizmoWorld, params, m_IsGizmoUsing);
+
+				if (res.DragStarted)
+				{
+					m_GizmoSnapshot.track = m_SelectedTrack;
+					m_GizmoSnapshot.position = currentPos;
+					m_GizmoSnapshot.rotation = currentRot;
+					m_GizmoSnapshot.scale = currentScale;
+					m_GizmoSnapshot.decalSize = currentDecalSize;
+					m_GizmoSnapshot.trailOffsetA = currentOffsetA;
+					m_GizmoSnapshot.trailOffsetB = currentOffsetB;
+					m_GizmoSnapshot.valid = true;
+				}
+
+				if (res.Changed)
+				{
+					if constexpr (std::is_same_v<TrackType, Engine::VFXSpriteTrack> || std::is_same_v<TrackType, Engine::VFXParticleTrack>)
+					{
+						track.localPosition = res.Position;
+						track.localRotation = res.Rotation;
+						track.localScale = res.Scale;
+					}
+					else if constexpr (std::is_same_v<TrackType, Engine::VFXLightTrack>) track.localPosition = res.Position;
+					else if constexpr (std::is_same_v<TrackType, Engine::VFXMeshTrack>)
+					{
+						track.localPosition = res.Position;
+						track.initialRotation = res.Rotation;
+						if (currentScale.x > 0.0001f && currentScale.y > 0.0001f && currentScale.z > 0.0001f)
+							track.scaleEnd *= (res.Scale / currentScale);
+						track.scaleStart = res.Scale;
+					}
+					else if constexpr (std::is_same_v<TrackType, Engine::VFXDecalTrack>)
+					{
+						track.localPosition = res.Position;
+						track.localRotation = res.Rotation;
+						track.size = Engine::vec2(std::max(res.Scale.x, 0.05f), std::max(res.Scale.z, 0.05f));
+					}
+					else if constexpr (std::is_same_v<TrackType, Engine::VFXTrailTrack>)
+					{
+						const Engine::vec3 delta = res.Position - currentPos;
+						track.localOffsetA += delta;
+						track.localOffsetB += delta;
+					}
+					m_IsDirty = true;
+					InvalidateTimelinePreview();
+				}
+
+				if (res.DragEnded && m_GizmoSnapshot.valid &&
+					m_GizmoSnapshot.track.type == m_SelectedTrack.type &&
+					m_GizmoSnapshot.track.index == m_SelectedTrack.index)
+				{
+					const auto snapshot = m_GizmoSnapshot;
+					VFXGizmoSnapshot finalState;
+					finalState.track = m_SelectedTrack;
+					finalState.position = currentPos;
+					finalState.rotation = currentRot;
+					finalState.scale = currentScale;
+					finalState.decalSize = currentDecalSize;
+					finalState.trailOffsetA = currentOffsetA;
+					finalState.trailOffsetB = currentOffsetB;
+
+					const bool wasModified = (snapshot.position != finalState.position) ||
+						(snapshot.rotation != finalState.rotation) ||
+						(snapshot.scale != finalState.scale) ||
+						(snapshot.decalSize != finalState.decalSize) ||
+						(snapshot.trailOffsetA != finalState.trailOffsetA) ||
+						(snapshot.trailOffsetB != finalState.trailOffsetB);
+
+					if (wasModified)
+					{
+						const auto handle = m_EffectHandle;
+						const auto selected = m_SelectedTrack;
+						auto applyState = [this, handle, selected](const VFXGizmoSnapshot& state) -> bool
+							{
+								auto* target = handle.Get();
+								if (!target) return false;
+								return VisitVFXTrack(*target, selected, [&](auto& list, std::size_t i)
+									{
+										auto& item = list[i];
+										using T = std::remove_reference_t<decltype(item)>;
+										if constexpr (std::is_same_v<T, Engine::VFXSpriteTrack> || std::is_same_v<T, Engine::VFXParticleTrack>)
+										{
+											item.localPosition = state.position;
+											item.localRotation = state.rotation;
+											item.localScale = state.scale;
+										}
+										else if constexpr (std::is_same_v<T, Engine::VFXLightTrack>) item.localPosition = state.position;
+										else if constexpr (std::is_same_v<T, Engine::VFXMeshTrack>)
+										{
+											item.localPosition = state.position;
+											item.initialRotation = state.rotation;
+											item.scaleStart = state.scale;
+										}
+										else if constexpr (std::is_same_v<T, Engine::VFXDecalTrack>)
+										{
+											item.localPosition = state.position;
+											item.localRotation = state.rotation;
+											item.size = state.decalSize;
+										}
+										else if constexpr (std::is_same_v<T, Engine::VFXTrailTrack>)
+										{
+											item.localOffsetA = state.trailOffsetA;
+											item.localOffsetB = state.trailOffsetB;
+										}
+										m_IsDirty = true;
+										InvalidateTimelinePreview();
+									});
+							};
+
+						m_TimelineHistory.Record(std::make_unique<CallbackEditorCommand>(
+							LOCAL("Action.Viewport.GizmoTranslate"),
+							[applyState, finalState] { return applyState(finalState); },
+							[applyState, snapshot] { return applyState(snapshot); }));
+					}
+					m_GizmoSnapshot.valid = false;
+				}
+			});
+	}
+
+	void VFXEditorPanel::DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize)
+	{
+		auto* effect = m_EffectHandle.Get();
+		if (!effect || !m_SelectedTrack.IsValid()) return;
+
+		ImDrawList* drawList = ImGui::GetWindowDrawList();
+		if (!drawList) return;
+
+		Engine::mat4 entityWorld(1.0f);
+		if (m_PreviewEntity)
+		{
+			if (auto* scene = m_PreviewWidget.GetScene())
+			{
+				if (auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewEntity->GetEntityHandle()))
+					entityWorld = trans->GetLocalMatrix();
+			}
+		}
+
+		VisitVFXTrack(*effect, m_SelectedTrack, [&](const auto& tracks, std::size_t index)
+			{
+				const auto& track = tracks[index];
+				using TrackType = std::remove_reference_t<decltype(track)>;
+
+				if constexpr (std::is_same_v<TrackType, Engine::VFXLightTrack>)
+				{
+					const Engine::vec3 worldPos = Engine::vec3(entityWorld * Engine::vec4(track.localPosition, 1.0f));
+					const ImU32 color = IM_COL32(
+						static_cast<int>(std::clamp(track.lightColor.r, 0.0f, 1.0f) * 255.0f),
+						static_cast<int>(std::clamp(track.lightColor.g, 0.0f, 1.0f) * 255.0f),
+						static_cast<int>(std::clamp(track.lightColor.b, 0.0f, 1.0f) * 255.0f), 160);
+
+					GizmoHelper::DrawWireSphere(drawList, worldPos, track.radius, viewProj, imageScreenPos, imageSize, color);
+				}
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXTrailTrack>)
+				{
+					const Engine::vec3 worldA = Engine::vec3(entityWorld * Engine::vec4(track.localOffsetA, 1.0f));
+					const Engine::vec3 worldB = Engine::vec3(entityWorld * Engine::vec4(track.localOffsetB, 1.0f));
+					ImVec2 screenA{}, screenB{};
+					if (GizmoHelper::WorldToScreen(worldA, viewProj, imageScreenPos, imageSize, screenA) &&
+						GizmoHelper::WorldToScreen(worldB, viewProj, imageScreenPos, imageSize, screenB))
+					{
+						drawList->AddLine(screenA, screenB, IM_COL32(50, 220, 190, 255), 2.5f);
+						drawList->AddCircleFilled(screenA, 4.0f, IM_COL32(255, 100, 100, 255));
+						drawList->AddCircleFilled(screenB, 4.0f, IM_COL32(100, 100, 255, 255));
+					}
+				}
+				else if constexpr (std::is_same_v<TrackType, Engine::VFXDecalTrack>)
+				{
+					const Engine::vec3 c = Engine::vec3(entityWorld * Engine::vec4(track.localPosition, 1.0f));
+					const Engine::vec3 halfExtent(track.size.x * 0.5f, 0.02f, track.size.y * 0.5f);
+					GizmoHelper::DrawWireBox(drawList, c, halfExtent, Engine::mat4(1.0f), viewProj, imageScreenPos, imageSize, IM_COL32(170, 90, 190, 200));
+				}
+			});
 	}
 
 	void VFXEditorPanel::SelectTrack(SelectedVFXTrack selection)
@@ -922,8 +1302,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("SpriteTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1007,8 +1387,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("ParticleTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1070,8 +1450,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("LightTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1137,8 +1517,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("MeshTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1163,7 +1543,7 @@ namespace Editor
 					if (!track.meshHandle.IsValid())
 					{
 						ImGui::SameLine();
-						ImGui::TextDisabled("(Quad Default)");
+						ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.QuadDefault"));
 					}
 					});
 
@@ -1310,8 +1690,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("TrailTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1393,8 +1773,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("DecalTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];
@@ -1460,8 +1840,8 @@ namespace Editor
 
 			if (EditorUI::BeginSettingsTable("CameraShakeInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
 			{
-				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+				ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
 
 				DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
 					char nameBuf[128];

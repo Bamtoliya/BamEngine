@@ -54,6 +54,10 @@ public:
 	[[nodiscard]] uint32 GetWidth() const { return m_Width; }
 	[[nodiscard]] uint32 GetHeight() const { return m_Height; }
 
+	// ── 뷰포트 화면 영역 조회 ──
+	[[nodiscard]] ImVec2 GetViewportScreenPos() const { return m_ViewportScreenPos; }
+	[[nodiscard]] ImVec2 GetViewportSize() const { return ImVec2(static_cast<float>(m_Width), static_cast<float>(m_Height)); }
+
 	// ── 텍스처 조회 ──
 	[[nodiscard]] const std::wstring& GetDisplayRTName() const { return m_DisplayRTName; }
 	[[nodiscard]] Engine::RHITexture* GetPreviewRHITexture() const;
@@ -82,6 +86,7 @@ private:
 	std::wstring m_Id;
 	uint32 m_Width = 512;
 	uint32 m_Height = 512;
+	ImVec2 m_ViewportScreenPos{ 0.0f, 0.0f };
 
 	// 렌더링 파이프라인 & 후처리
 	ViewportDeferredPipeline m_Pipeline;
