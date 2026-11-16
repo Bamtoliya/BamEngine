@@ -2,6 +2,57 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 신규 엔진 컴포넌트 6종 ReflectionArchive 직렬화 라운드트립 검증 (후보 2번 완료)
+
+- **배경 및 목적**:
+  - 최근 확장된 2D/3D 연출 및 환경 컴포넌트 6종에 대해 `SceneArchive`를 통한 씬 파일(JSON 및 BEVE 포맷) 저장 및 로드 시 데이터 손실이나 타입 불일치가 없는지 라운드트립 검증을 수행했다.
+- **검증 대상 컴포넌트 (6종)**:
+  1. `ActionTimelineComponent`: 트랙 수, 지속 시간(`duration`), 재생 속도(`playRate`), 루프(`isLooping`)
+  2. `CompositeVFXComponent`: 이펙트 에셋 핸들(`effectAsset`), 재생 상태(`playState`), 재생 속도(`playRate`)
+  3. `ParticleEffectComponent`: 파티클 에셋 핸들(`effectAsset`), 재생 상태(`playState`), 속도(`playRate`)
+  4. `SpriteAnimationComponent`: 클립 핸들(`clipAsset`), 재생 속도(`playbackSpeed`), 자동 재생(`autoPlay`), 루프(`loop`)
+  5. `FogComponent`: 안개 활성화 여부(`bEnabled`), 색상(`fogColor`), 시작/종료 거리(`fogStartDistance`, `fogEndDistance`), 밀도(`fogDensity`), 높이 감쇠(`fogHeightFalloff`)
+  6. `VolumetricCloudComponent`: 레이마칭 스텝 수, 알베도, 소광 계수, 기본 미터 크기(`WeatherMapSize`, `ShapeNoiseSize`, `DetailNoiseSize`), 바람 속도(`WindSpeed`)
+- **검증 결과 및 확인 사항**:
+  - JSON(`round-trip-modern.json`)과 BEVE(`round-trip-modern.beve`) 파일 포맷 모두에서 모든 영속 프로퍼티가 비트 단위로 완벽하게 보존됨을 확인.
+  - `NOSERIALIZE` 플래그가 지정된 런타임 휘발성 필드(`currentTime`, `elapsedTime`, `currentFrameIndex`)는 파일에 기록되지 않고 역직렬화 시 기본값(0)으로 올바르게 복원됨을 검증.
+  - `ctest -R SceneArchiveCheck` 단위 테스트 100% 통과 확인.
+
+
+### [2026-11-16] 복합 비주얼 이펙트(Phase 5) 반투명 메쉬 렌더링 및 디퍼드 라이팅 결함 해결 분석
+
+- **배경 및 발생 현상**:
+  - 복합 비주얼 이펙트 에디터(`VFXEditorPanel`) 실환경에서 3D 메쉬 이펙트(`MeshTrack`)와 라이트 플래시 트랙을 검증하던 중, 4가지 복합적인 렌더링 결함이 발생했다:
+    1. 바닥 표면에 플래시 라이트 연산이 맺히지 않고 조명 연산 좌표가 음수($y=-0.05$)로 내려가며, 바닥 엔티티를 강제로 위로 올려야만 빛이 계산되던 현상.
+    2. 지면 바닥 그리드가 있는 곳은 돔 메쉬 내부가 뚫려 투명해지고, 바닥이 없는 허공 영역은 100% 불투명한 짙은 고동색 덩어리로 잘려 이펙트가 두 동강 나던 현상.
+    3. 바닥 슬래브의 0.05m 앞쪽 수직 단면에 메쉬가 교차하면서, 단면 아래로 메쉬 일부가 어색하게 잘려 삐져나오던 현상.
+    4. 허공 영역에서 반투명 메쉬가 칙칙하고 어두운 흙갈색/검은색으로 썩어버려 밝은 바닥 위의 화사한 빛과 극단적인 대비를 보이던 현상.
+- **근본 원인 규명**:
+  1. **내장 `CubeMesh`의 윗면/아랫면 정점 와인딩 반전 (`BuiltInPrimitiveMeshes.cpp`)**:
+     - 앞/뒤/좌/우 면은 시계 방향(CW)인 반면, 윗면(8~11)과 아랫면(12~15)이 반시계 방향(CCW)으로 잘못 정의되어 있었다.
+     - 래스터라이저의 Back-Face Culling(CW 기준)으로 인해 윗면($y=0$, Normal $+Y$)이 폐기되고, 큐브 내부의 아랫면($y=-0.05$, Normal $-Y$)이 렌더링되어 G-Buffer에 기록되었다.
+     - 표면 법선이 아래($-Y$)를 향해 위에서 비추는 조명에 대해 $\mathbf{N} \cdot \mathbf{L} \le 0$으로 소실되고 위치가 음수로 기록된 것이 밝혀졌다.
+  2. **두께 슬래브(`CubeMesh`)와 16m 유한 지면의 단면 간섭**:
+     - 0.05m 두께의 큐브 바닥 앞쪽 수직 면에 메쉬가 비스듬히 교차할 때 단면 형태대로 메쉬가 잘려 삐져나오는 기하학적 아티팩트 유발.
+  3. **과도한 Depth Fade 거리(65cm) 및 허공 분기 수식 (`forwardParticlePS.hlsl`)**:
+     - `softFadeDistance = 0.65f` 및 제곱 감쇠로 인해 바닥 위 65cm 내의 돔 본체 전체가 증발.
+     - 배경에 지오메트리가 없는 허공은 G-Buffer 법선이 없어 Depth Fade가 아예 건너뛰어지며 100% 불투명 출력되어 지면 경계선에서 메쉬가 두 동강 남.
+  4. **디퍼드 렌더링 배경 암흑 버퍼와 알파 블렌딩의 결합 결함**:
+     - `LightingPass`에서 허공 픽셀이 `discard`되어 `LightingColor` 버퍼의 배경이 완전한 암흑 `(0, 0, 0, 0)`으로 남음.
+     - 표준 알파 블렌딩 공식 $\text{Final} = \text{Src} \times \alpha + \text{Dest} \times (1 - \alpha)$에 의해, 허공 영역의 메쉬가 $(0, 0, 0)$과 강제로 섞여 밝기가 반 토막 난 어두운 흙갈색으로 렌더링됨.
+     - 반면 바닥이 있는 곳은 빛을 받은 밝은 지면 색상($\text{Dest} \approx 0.6$)과 섞여 화사하게 출력됨.
+- **적용 및 해결 조치**:
+  1. **`CubeMesh` 정점 와인딩 오더 정상화 (`BuiltInPrimitiveMeshes.cpp`)**: 윗면과 아랫면을 시계 방향(CW)으로 교정하여 엔진 전체 큐브 메쉬의 컬링 결함 해소.
+  2. **프리뷰 지면의 `PlaneMesh`(48m) 전면 전환 (`VFXEditorPanel.cpp`)**: 두께 큐브 슬래브를 걷어내고 $y=0$에 놓이는 48m 수평 평면으로 교체하여 단면 잘림 및 삐져나옴 원천 제거.
+  3. **Depth Fade 15cm 국소 페더링 및 프레넬(Fresnel) 내장 (`forwardParticlePS.hlsl`)**:
+     - 감쇠 거리를 15cm로 축소하여 접촉 경계선만 부드럽게 지우고, 15cm 위 돔 본체는 배경 유/무와 상관없이 동일한 알파를 유지하도록 개선.
+     - 시선 각도 $\mathbf{N} \cdot \mathbf{V}$ 기반 프레넬 림 페이드를 적용하여 둔탁한 찰흙 덩어리를 세련된 반투명 에너지 돔으로 전환.
+  4. **발광성 이펙트의 `Additive` 가산 블렌드 표준화 로드맵 수립**: 폭발 충격파 및 발광체는 배경을 어둡게 가리지 않고 빛을 더하는 `Additive` 머티리얼을 사용하도록 파이프라인 정립.
+- **미검증 항목**:
+  - `Fireball_Explosion_Composite` 내 충격파 링 메쉬 트랙의 `Additive` 블렌드 머티리얼 적용 실환경 검증.
+  - VFXMeshTrack 인스펙터 UI에서의 Soft Particle 거리 및 Fresnel 슬라이더 파라미터 노출.
+
+
 ### [2026-11-15] 복합 비주얼 이펙트 시스템 및 저작 도구 실환경 검증 & D3D12/렌더링 안정화 (후보 B 완료)
 
 - **배경 및 범위**:

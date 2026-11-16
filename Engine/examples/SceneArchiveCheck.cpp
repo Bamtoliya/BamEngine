@@ -24,6 +24,12 @@
 #include "SplineMeshComponent.h"
 #include "Vertex.h"
 #include "PlatformPath.h"
+#include "ActionTimelineComponent.h"
+#include "CompositeVFXComponent.h"
+#include "ParticleEffectComponent.h"
+#include "SpriteAnimationComponent.h"
+#include "FogComponent.h"
+#include "VolumetricCloudComponent.h"
 
 namespace
 {
@@ -206,6 +212,139 @@ namespace
         if (Engine::Scene::CreateFromArchive(reader, occupied).Code != archive::ArchiveErrorCode::InvalidOperation ||
             occupied != original.get())
             return Fail("Occupied output pointer was overwritten.");
+        return true;
+    }
+
+    template<typename Archive>
+    bool CheckModernComponentsRoundTrip(const wchar_t* path)
+    {
+        ScenePtr original(Engine::Scene::Create());
+        original->SetName(L"ModernComponentsScene");
+        auto& sourceWorld = original->GetRegistry();
+
+        // 1. 엔티티 A: 타임라인, 복합 VFX, 파티클 이펙트
+        const auto entityA = AddSpatialEntity(*original, 1001ULL, L"EntityVFXTimeline", { 1.0f, 2.0f, 3.0f });
+        auto& timeline = sourceWorld.emplace<Engine::ActionTimelineComponent>(entityA);
+        timeline.timelinePath = "Assets/Timelines/BossIntro.bamtimeline";
+        timeline.playRate = 1.75f;
+        timeline.isLooping = true;
+        timeline.isPlaying = true;
+        timeline.currentTime = 12.34f; // NOSERIALIZE 필드
+
+        auto& vfx = sourceWorld.emplace<Engine::CompositeVFXComponent>(entityA);
+        vfx.isPlaying = true;
+        vfx.isLooping = true;
+        vfx.playRate = 0.85f;
+        vfx.currentTime = 5.67f; // NOSERIALIZE 필드
+
+        auto& particle = sourceWorld.emplace<Engine::ParticleEffectComponent>(entityA);
+        particle.playState = Engine::EParticlePlayState::Playing;
+        particle.playRate = 1.25f;
+
+        // 2. 엔티티 B: 스프라이트 애니메이션, 지수 안개, 볼류메트릭 클라우드
+        const auto entityB = AddSpatialEntity(*original, 1002ULL, L"EntityAtmosphereSprite", { -4.0f, 0.0f, 8.0f });
+        auto& spriteAnim = sourceWorld.emplace<Engine::SpriteAnimationComponent>(entityB);
+        spriteAnim.framesPerSecond = 24.0f;
+        spriteAnim.playRate = 1.5f;
+        spriteAnim.playMode = Engine::ESpriteAnimationPlayMode::Loop;
+        spriteAnim.autoDeactivateOnFinish = true;
+        spriteAnim.autoDestroyOnFinish = false;
+        spriteAnim.isPlaying = true;
+        spriteAnim.currentFrameIndex = 7; // NOSERIALIZE 필드
+        spriteAnim.elapsedTime = 2.1f;    // NOSERIALIZE 필드
+
+        auto& fog = sourceWorld.emplace<Engine::FogComponent>(entityB);
+        fog.IsEnabled = true;
+        fog.FogType = Engine::EFogType::ExponentialHeight;
+        fog.FogColor = glm::vec3(0.45f, 0.55f, 0.65f);
+        fog.FogDensity = 0.035f;
+        fog.FogHeightFalloff = 0.22f;
+        fog.FogHeight = 45.0f;
+        fog.FogStartDistance = 12.0f;
+        fog.FogEndDistance = 280.0f;
+        fog.FogMaxOpacity = 0.92f;
+
+        auto& cloud = sourceWorld.emplace<Engine::VolumetricCloudComponent>(entityB);
+        cloud.IsEnabled = true;
+        cloud.LayerBottomAltitude = 2200.0f;
+        cloud.LayerHeight = 3400.0f;
+        cloud.TracingMaxDistance = 42000.0f;
+        cloud.CloudCoverage = 0.62f;
+        cloud.CloudDensity = 1.35f;
+        cloud.WeatherMapSize = 28000.0f;
+        cloud.ShapeNoiseSize = 1800.0f;
+        cloud.DetailNoiseSize = 180.0f;
+        cloud.WindDirection = glm::vec3(0.7f, 0.0f, 0.7f);
+        cloud.WindSpeed = 14.5f;
+        cloud.CloudAlbedo = glm::vec3(0.92f, 0.92f, 0.96f);
+        cloud.ExtinctionFactor = 0.88f;
+        cloud.MorphSpeed = 0.065f;
+        cloud.PowderExtinction = 0.58f;
+
+        // 3. 파일 저장 (JSON 또는 BEVE)
+        Archive writer;
+        if (!original->WriteArchive(writer) || !writer.SaveToFile(path))
+            return Fail("Modern components scene file write failed.");
+
+        // 4. 파일 로드
+        Archive reader;
+        if (!reader.LoadFromFile(path))
+            return Fail("Modern components scene file read failed.");
+
+        Engine::Scene* output = nullptr;
+        const auto result = Engine::Scene::CreateFromArchive(reader, output);
+        ScenePtr restored(output);
+        if (!result || restored == nullptr)
+            return Fail("Modern components scene restoration failed.");
+
+        auto& restoredWorld = restored->GetRegistry();
+        const auto restoredA = restored->FindEntityById(1001ULL)->GetEntityHandle();
+        const auto restoredB = restored->FindEntityById(1002ULL)->GetEntityHandle();
+
+        // 5. 엔티티 A 프로퍼티 및 런타임 필드 단언 검증
+        const auto* resTimeline = restoredWorld.try_get<Engine::ActionTimelineComponent>(restoredA);
+        if (!resTimeline || resTimeline->timelinePath != "Assets/Timelines/BossIntro.bamtimeline" ||
+            resTimeline->playRate != 1.75f || !resTimeline->isLooping || !resTimeline->isPlaying ||
+            resTimeline->currentTime != 0.0f) // NOSERIALIZE 필드는 기본값(0)으로 복원되어야 함
+            return Fail("ActionTimelineComponent settings or transient state mismatch after loading.");
+
+        const auto* resVFX = restoredWorld.try_get<Engine::CompositeVFXComponent>(restoredA);
+        if (!resVFX || !resVFX->isPlaying || !resVFX->isLooping || resVFX->playRate != 0.85f ||
+            resVFX->currentTime != 0.0f) // NOSERIALIZE 필드는 기본값(0)으로 복원되어야 함
+            return Fail("CompositeVFXComponent settings or transient state mismatch after loading.");
+
+        const auto* resParticle = restoredWorld.try_get<Engine::ParticleEffectComponent>(restoredA);
+        if (!resParticle || resParticle->playState != Engine::EParticlePlayState::Playing ||
+            resParticle->playRate != 1.25f)
+            return Fail("ParticleEffectComponent settings mismatch after loading.");
+
+        // 6. 엔티티 B 프로퍼티 및 런타임 필드 단언 검증
+        const auto* resSprite = restoredWorld.try_get<Engine::SpriteAnimationComponent>(restoredB);
+        if (!resSprite || resSprite->framesPerSecond != 24.0f || resSprite->playRate != 1.5f ||
+            resSprite->playMode != Engine::ESpriteAnimationPlayMode::Loop || !resSprite->autoDeactivateOnFinish ||
+            resSprite->autoDestroyOnFinish || !resSprite->isPlaying ||
+            resSprite->currentFrameIndex != 0 || resSprite->elapsedTime != 0.0f) // NOSERIALIZE 필드는 기본값(0)
+            return Fail("SpriteAnimationComponent settings or transient state mismatch after loading.");
+
+        const auto* resFog = restoredWorld.try_get<Engine::FogComponent>(restoredB);
+        if (!resFog || !resFog->IsEnabled || resFog->FogType != Engine::EFogType::ExponentialHeight ||
+            glm::distance(resFog->FogColor, glm::vec3(0.45f, 0.55f, 0.65f)) > 1.0e-4f ||
+            std::abs(resFog->FogDensity - 0.035f) > 1.0e-4f || std::abs(resFog->FogHeightFalloff - 0.22f) > 1.0e-4f ||
+            resFog->FogHeight != 45.0f || resFog->FogStartDistance != 12.0f || resFog->FogEndDistance != 280.0f ||
+            std::abs(resFog->FogMaxOpacity - 0.92f) > 1.0e-4f)
+            return Fail("FogComponent parameters mismatch after loading.");
+
+        const auto* resCloud = restoredWorld.try_get<Engine::VolumetricCloudComponent>(restoredB);
+        if (!resCloud || !resCloud->IsEnabled || resCloud->LayerBottomAltitude != 2200.0f ||
+            resCloud->LayerHeight != 3400.0f || resCloud->TracingMaxDistance != 42000.0f ||
+            std::abs(resCloud->CloudCoverage - 0.62f) > 1.0e-4f || std::abs(resCloud->CloudDensity - 1.35f) > 1.0e-4f ||
+            std::abs(resCloud->WeatherMapSize - 28000.0f) > 1.0e-4f ||
+            std::abs(resCloud->ShapeNoiseSize - 1800.0f) > 1.0e-4f ||
+            std::abs(resCloud->DetailNoiseSize - 180.0f) > 1.0e-4f ||
+            std::abs(resCloud->WindSpeed - 14.5f) > 1.0e-4f ||
+            glm::distance(resCloud->CloudAlbedo, glm::vec3(0.92f, 0.92f, 0.96f)) > 1.0e-4f)
+            return Fail("VolumetricCloudComponent parameters mismatch after loading.");
+
         return true;
     }
 
@@ -1987,6 +2126,8 @@ int main()
     }
     if (!CheckFileRoundTrip<archive::JsonArchive>(L"round-trip.json") ||
         !CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve") ||
+        !CheckModernComponentsRoundTrip<archive::JsonArchive>(L"round-trip-modern.json") ||
+        !CheckModernComponentsRoundTrip<archive::BeveArchive>(L"round-trip-modern.beve") ||
         !CheckManagerAndWriteFailure() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
         !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
