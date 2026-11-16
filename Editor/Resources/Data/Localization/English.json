@@ -2025,7 +2025,18 @@
         "VFXEditor.HUDWind": "Wind",
         "VFXEditor.HUDGravity": "Gravity",
         "VFXEditor.HUDStepHint": "Step",
+        "VFXEditor.PropUseScaleCurve": "Scale Curve",
+        "VFXEditor.PropUseAlphaCurve": "Alpha Curve",
+        "VFXEditor.PropUseIntensityCurve": "Intensity Curve",
+        "VFXEditor.IntensityCurvePreset": "Intensity Curve Preset",
+        "VFXEditor.ScaleCurvePreset": "Scale Curve Preset",
+        "VFXEditor.AlphaCurvePreset": "Alpha Curve Preset",
+        "VFXEditor.CurvePresetSpike": "Spike",
+        "VFXEditor.CurvePresetEaseIn": "Ease In",
+        "VFXEditor.CurvePresetEaseOut": "Ease Out",
+        "VFXEditor.CurvePresetLinear": "Linear",
         "Inspector.CurveKeys": "Keys ({})",
+        "VFXEditor.RingTextureDefault": "(Ring texture default)",
         "Inspector.CurveEditHint": "Click a key to select and drag to move. Double-click adds a key. Right-click deletes it."
     }
 }

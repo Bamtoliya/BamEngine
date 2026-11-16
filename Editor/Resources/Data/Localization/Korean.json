@@ -2025,7 +2025,18 @@
         "VFXEditor.HUDWind": "바람",
         "VFXEditor.HUDGravity": "중력",
         "VFXEditor.HUDStepHint": "프레임 스텝",
+        "VFXEditor.PropUseScaleCurve": "스케일 커브",
+        "VFXEditor.PropUseAlphaCurve": "알파 커브",
+        "VFXEditor.PropUseIntensityCurve": "조도 커브",
+        "VFXEditor.IntensityCurvePreset": "조도 커브 프리셋",
+        "VFXEditor.ScaleCurvePreset": "스케일 커브 프리셋",
+        "VFXEditor.AlphaCurvePreset": "알파 커브 프리셋",
+        "VFXEditor.CurvePresetSpike": "스파이크",
+        "VFXEditor.CurvePresetEaseIn": "천천히 시작",
+        "VFXEditor.CurvePresetEaseOut": "천천히 끝",
+        "VFXEditor.CurvePresetLinear": "선형",
         "Inspector.CurveKeys": "키 {}개",
+        "VFXEditor.RingTextureDefault": "(링 텍스처 기본값)",
         "Inspector.CurveEditHint": "키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다."
     }
 }

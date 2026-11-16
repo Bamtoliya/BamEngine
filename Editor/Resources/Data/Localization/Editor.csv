@@ -2025,5 +2025,16 @@ VFXEditor,HUDFrame,Frame,프레임
 VFXEditor,HUDWind,Wind,바람
 VFXEditor,HUDGravity,Gravity,중력
 VFXEditor,HUDStepHint,Step,프레임 스텝
+VFXEditor,PropUseScaleCurve,Scale Curve,스케일 커브
+VFXEditor,PropUseAlphaCurve,Alpha Curve,알파 커브
+VFXEditor,PropUseIntensityCurve,Intensity Curve,조도 커브
+VFXEditor,IntensityCurvePreset,Intensity Curve Preset,조도 커브 프리셋
+VFXEditor,ScaleCurvePreset,Scale Curve Preset,스케일 커브 프리셋
+VFXEditor,AlphaCurvePreset,Alpha Curve Preset,알파 커브 프리셋
+VFXEditor,CurvePresetSpike,Spike,스파이크
+VFXEditor,CurvePresetEaseIn,Ease In,천천히 시작
+VFXEditor,CurvePresetEaseOut,Ease Out,천천히 끝
+VFXEditor,CurvePresetLinear,Linear,선형
 Inspector,CurveKeys,Keys ({}),키 {}개
+VFXEditor,RingTextureDefault,(Ring texture default),(링 텍스처 기본값)
 Inspector,CurveEditHint,Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.,키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.

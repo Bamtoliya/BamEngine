@@ -34,6 +34,46 @@
 
 namespace
 {
+	struct CurvePreset
+	{
+		const char* LabelKey;
+		Engine::FloatCurve(*Create)();
+	};
+
+	constexpr CurvePreset IntensityCurvePresets[] = {
+		{ "VFXEditor.CurvePresetSpike", [] { return Engine::FloatCurve::CreateSpike(1.0f, 0.1f); } },
+		{ "VFXEditor.CurvePresetEaseOut", [] { return Engine::FloatCurve::CreateEaseOut(1.0f, 0.0f); } },
+		{ "VFXEditor.CurvePresetLinear", [] { return Engine::FloatCurve::CreateLinear(1.0f, 0.0f); } },
+	};
+
+	constexpr CurvePreset ScaleCurvePresets[] = {
+		{ "VFXEditor.CurvePresetEaseOut", [] { return Engine::FloatCurve::CreateEaseOut(0.0f, 1.0f); } },
+		{ "VFXEditor.CurvePresetEaseIn", [] { return Engine::FloatCurve::CreateEaseIn(0.0f, 1.0f); } },
+		{ "VFXEditor.CurvePresetLinear", [] { return Engine::FloatCurve::CreateLinear(0.0f, 1.0f); } },
+	};
+
+	constexpr CurvePreset AlphaCurvePresets[] = {
+		{ "VFXEditor.CurvePresetEaseOut", [] { return Engine::FloatCurve::CreateEaseOut(1.0f, 0.0f); } },
+		{ "VFXEditor.CurvePresetLinear", [] { return Engine::FloatCurve::CreateLinear(1.0f, 0.0f); } },
+		{ "VFXEditor.CurvePresetSpike", [] { return Engine::FloatCurve::CreateSpike(1.0f, 0.2f); } },
+	};
+
+	// 커브 프리셋 버튼 행. 폭이 부족하면 다음 줄로 넘긴다. 프리셋을 적용하면 true.
+	bool DrawCurvePresetRow(const char* labelKey, Engine::FloatCurve& curve, std::span<const CurvePreset> presets)
+	{
+		EditorUI::PropertyRow(labelKey);
+		ImGui::PushID(labelKey);
+		bool changed = false;
+		for (std::size_t i = 0; i < presets.size(); ++i)
+		{
+			const std::string label = LOCAL_LABEL(presets[i].LabelKey);
+			if (i > 0) EditorUI::SameLineIfFits(ImGui::CalcTextSize(label.c_str(), nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f);
+			if (ImGui::SmallButton(label.c_str())) { curve = presets[i].Create(); changed = true; }
+		}
+		ImGui::PopID();
+		return changed;
+	}
+
 	struct VFXTrackPresentation { const char* Icon; ImU32 Color; };
 	constexpr VFXTrackPresentation g_VFXTrackPresentation[] = {
 		{ ICON_FA_IMAGES, IM_COL32(40, 180, 160, 220) },
@@ -1417,16 +1457,14 @@ void VFXEditorPanel::DrawInspector()
 	ImGui::Text(ICON_FA_SLIDERS " %s", LOCAL_CSTR("VFXEditor.TrackInspector"));
 	ImGui::Separator();
 
-	auto DrawPropertyRow = [](const char* label, auto drawWidget)
-	{
-		ImGui::TableNextRow();
-		ImGui::TableNextColumn();
-		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(label);
-		ImGui::TableNextColumn();
-		ImGui::SetNextItemWidth(-FLT_MIN);
-		drawWidget();
-	};
+	// 리플렉션에 등록된 트랙 구조체를 공용 속성 표로 그린다. 하나라도 바뀌면 true.
+	const auto drawReflectedTrack = [](auto& track)
+		{
+			const auto object = reflection::ObjectView::From(track);
+			const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+			const auto* type = registry.FindType(object);
+			return type != nullptr && ReflectionPropertyDrawer::DrawPropertyTable(*type, object, &registry);
+		};
 
 	// 1. Sprite Track Inspector
 	if (m_SelectedTrack.type == ESelectedVFXTrackType::Sprite)
@@ -1435,77 +1473,7 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("SpriteTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMuted"), [&]() {
-				if (ImGui::Checkbox("##Muted", &track.isMuted)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPlaySpeed"), [&]() {
-				if (ImGui::DragFloat("##Speed", &track.playbackSpeed, 0.05f, 0.1f, 5.0f, "%.1fx")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropLoop"), [&]() {
-				if (ImGui::Checkbox("##Loop", &track.loop)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropAnimation"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.animationHandle, true, true)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMaterial"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.materialHandle, true, true)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropBillboard"), [&]() {
-				const char* billboardModes[] = { "None", "CameraFacing", "AxialY" };
-				int currentMode = static_cast<int>(track.billboardMode);
-				if (ImGui::Combo("##Billboard", &currentMode, billboardModes, IM_ARRAYSIZE(billboardModes)))
-				{
-					track.billboardMode = static_cast<Engine::ESpriteBillboardMode>(currentMode);
-					m_IsDirty = true;
-				}
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropColorTint"), [&]() {
-				if (ImGui::ColorEdit4("##ColorTint", &track.colorTint.x)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
-				if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropRotation"), [&]() {
-				if (ImGui::DragFloat3("##Rotation", &track.localRotation.x, 1.0f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropScale"), [&]() {
-				if (ImGui::DragFloat3("##Scale", &track.localScale.x, 0.05f)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
-		}
+		if (drawReflectedTrack(track)) m_IsDirty = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1520,55 +1488,7 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("ParticleTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMuted"), [&]() {
-				if (ImGui::Checkbox("##Muted", &track.isMuted)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPlaySpeed"), [&]() {
-				if (ImGui::DragFloat("##Speed", &track.playbackSpeed, 0.05f, 0.1f, 5.0f, "%.1fx")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEffect"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.effectHandle, true, true)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
-				if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropRotation"), [&]() {
-				if (ImGui::DragFloat3("##Rotation", &track.localRotation.x, 1.0f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropScale"), [&]() {
-				if (ImGui::DragFloat3("##Scale", &track.localScale.x, 0.05f)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
-		}
+		if (drawReflectedTrack(track)) m_IsDirty = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1583,58 +1503,11 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("LightTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
+		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (track.useIntensityCurve && EditorUI::BeginPropertyTable("LightCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMuted"), [&]() {
-				if (ImGui::Checkbox("##Muted", &track.isMuted)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropLightColor"), [&]() {
-				if (ImGui::ColorEdit3("##LightColor", &track.lightColor.x)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPeakIntensity"), [&]() {
-				if (ImGui::DragFloat("##PeakIntensity", &track.peakIntensity, 0.2f, 0.0f, 50.0f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropRadius"), [&]() {
-				if (ImGui::DragFloat("##Radius", &track.radius, 0.2f, 0.5f, 50.0f, "%.1fm")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropAttackTime"), [&]() {
-				if (ImGui::DragFloat("##AttackTime", &track.attackTime, 0.01f, 0.001f, track.duration, "%.3fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDecayTime"), [&]() {
-				if (ImGui::DragFloat("##DecayTime", &track.decayTime, 0.01f, 0.001f, track.duration, "%.3fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
-				if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
+			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets)) m_IsDirty = true;
+			EditorUI::EndPropertyTable();
 		}
 
 		ImGui::Spacing();
@@ -1650,67 +1523,16 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("MeshTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
+		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (!track.meshHandle.IsValid()) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.QuadDefault"));
+		const auto* meshMaterial = track.materialHandle.Get();
+		const bool usesRingTexture = !track.textureHandle.IsValid() && (!meshMaterial || meshMaterial->GetTextureBindings().empty() || !meshMaterial->GetTextureBindings()[0].texture.Get());
+		if (usesRingTexture) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.RingTextureDefault"));
+		if ((track.useScaleCurve || track.useAlphaCurve) && EditorUI::BeginPropertyTable("MeshCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 105.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMesh"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.meshHandle, true, true)) m_IsDirty = true;
-				if (!track.meshHandle.IsValid())
-				{
-					ImGui::SameLine();
-					ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.QuadDefault"));
-				}
-				});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTexture"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.textureHandle, true, true)) m_IsDirty = true;
-				});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMaterial"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.materialHandle, true, true)) m_IsDirty = true;
-				});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
-				if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropScaleStart"), [&]() {
-				if (ImGui::DragFloat3("##ScaleStart", &track.scaleStart.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropScaleEnd"), [&]() {
-				if (ImGui::DragFloat3("##ScaleEnd", &track.scaleEnd.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropRotation"), [&]() {
-				if (ImGui::DragFloat3("##RotationRate", &track.rotationRate.x, 1.0f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropUVScroll"), [&]() {
-				if (ImGui::DragFloat2("##UVScroll", &track.uvScrollSpeed.x, 0.05f)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
+			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets)) m_IsDirty = true;
+			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets)) m_IsDirty = true;
+			EditorUI::EndPropertyTable();
 		}
 
 		ImGui::Spacing();
@@ -1742,8 +1564,7 @@ void VFXEditorPanel::DrawInspector()
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			return fallback();
 		};
-		EditorUI::PropertyTableStyle style;
-		style.LabelWidth = ImGui::GetFontSize() * 7.0f;
+		const auto style = EditorUI::InspectorPropertyTableStyle();
 		if (EditorUI::BeginPropertyTable("SoundTrackInspectorTable", style))
 		{
 			if (drawRegistered("VFXEditor.PropTrackName", "trackName", [&] {
@@ -1823,75 +1644,7 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("TrailTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropLoop"), [&]() {
-				if (ImGui::Checkbox("##Loop", &track.loop)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrailWidth"), [&]() {
-				if (ImGui::DragFloat("##TrailWidth", &track.trailWidth, 0.02f, 0.01f, 10.0f, "%.2f")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropLifetime"), [&]() {
-				if (ImGui::DragFloat("##Lifetime", &track.lifetime, 0.02f, 0.02f, 5.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMinVertexDistance"), [&]() {
-				if (ImGui::DragFloat("##MinDist", &track.minVertexDistance, 0.01f, 0.005f, 2.0f, "%.3f")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTaperRatio"), [&]() {
-				if (ImGui::DragFloat("##Taper", &track.taperRatio, 0.02f, 0.0f, 1.0f, "%.2f")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropOffsetA"), [&]() {
-				if (ImGui::DragFloat3("##OffsetA", &track.localOffsetA.x, 0.02f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropOffsetB"), [&]() {
-				if (ImGui::DragFloat3("##OffsetB", &track.localOffsetB.x, 0.02f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropColorStart"), [&]() {
-				if (ImGui::ColorEdit4("##ColorStart", &track.colorStart.x, ImGuiColorEditFlags_Float)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropColorEnd"), [&]() {
-				if (ImGui::ColorEdit4("##ColorEnd", &track.colorEnd.x, ImGuiColorEditFlags_Float)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTexture"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.textureHandle, true, true)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMaterial"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.materialHandle, true, true)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
-		}
+		if (drawReflectedTrack(track)) m_IsDirty = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1906,59 +1659,7 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("DecalTrackInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropFadeStartTime"), [&]() {
-				if (ImGui::DragFloat("##FadeStart", &track.fadeStartTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropPosition"), [&]() {
-				if (ImGui::DragFloat3("##Position", &track.localPosition.x, 0.05f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropRotation"), [&]() {
-				if (ImGui::DragFloat3("##Rotation", &track.localRotation.x, 1.0f)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropSize"), [&]() {
-				if (ImGui::DragFloat2("##Size", &track.size.x, 0.05f, 0.05f, 50.0f, "%.2f")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropColorTint"), [&]() {
-				if (ImGui::ColorEdit4("##ColorTint", &track.colorTint.x, ImGuiColorEditFlags_Float)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTexture"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.textureHandle, true, true)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropMaterial"), [&]() {
-				if (Editor::DrawInspectorResourcePicker(track.materialHandle, true, true)) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
-		}
+		if (drawReflectedTrack(track)) m_IsDirty = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1973,43 +1674,7 @@ void VFXEditorPanel::DrawInspector()
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (EditorUI::BeginSettingsTable("CameraShakeInspectorTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-		{
-			ImGui::TableSetupColumn("##Property", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-			ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropTrackName"), [&]() {
-				char nameBuf[128];
-				strncpy_s(nameBuf, track.trackName.c_str(), sizeof(nameBuf) - 1);
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) { track.trackName = nameBuf; m_IsDirty = true; }
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropEnabled"), [&]() {
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropStartTime"), [&]() {
-				if (ImGui::DragFloat("##StartTime", &track.startTime, 0.02f, 0.0f, 30.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropDuration"), [&]() {
-				if (ImGui::DragFloat("##Duration", &track.duration, 0.02f, 0.05f, 10.0f, "%.2fs")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropAmplitude"), [&]() {
-				if (ImGui::DragFloat("##Amplitude", &track.amplitude, 0.02f, 0.01f, 5.0f, "%.2f")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropFrequency"), [&]() {
-				if (ImGui::DragFloat("##Frequency", &track.frequency, 0.5f, 1.0f, 100.0f, "%.1f Hz")) m_IsDirty = true;
-			});
-
-			DrawPropertyRow(LOCAL_CSTR("VFXEditor.PropShakeRadius"), [&]() {
-				if (ImGui::DragFloat("##Radius", &track.radius, 0.5f, 0.0f, 100.0f, "%.1fm (0=Global)")) m_IsDirty = true;
-			});
-
-			EditorUI::EndSettingsTable();
-		}
+		if (drawReflectedTrack(track)) m_IsDirty = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
