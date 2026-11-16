@@ -325,10 +325,18 @@ void CompositeVFXSystem::RefreshFlashLight(CompositeVFXComponent& vfxComp)
 
 		const f32 time = vfxComp.currentTime - track.startTime;
 		if (time < 0.0f || time > track.duration) continue;
-
-		const f32 attack = std::max(track.attackTime, 0.001f);
-		const f32 decay = std::max(track.decayTime, 0.001f);
-		const f32 factor = time < attack ? time / attack : std::max(0.0f, 1.0f - (time - attack) / decay);
+		const f32 duration = std::max(track.duration, 0.001f);
+		f32 factor = 0.0f;
+		if (track.useIntensityCurve && !track.intensityCurve.IsEmpty())
+		{
+			factor = track.intensityCurve.Evaluate(std::clamp(time / duration, 0.0f, 1.0f), 0.0f);
+		}
+		else
+		{
+			const f32 attack = std::max(track.attackTime, 0.001f);
+			const f32 decay = std::max(track.decayTime, 0.001f);
+			factor = time < attack ? time / attack : std::max(0.0f, 1.0f - (time - attack) / decay);
+		}
 		const f32 intensity = track.peakIntensity * factor;
 		if (!std::isfinite(intensity) || intensity <= vfxComp.activeLightIntensity) continue;
 
@@ -365,10 +373,18 @@ Engine::uint32 CompositeVFXSystem::CollectFlashLights(const Scene& scene, std::s
 
 			const f32 time = vfxComp.currentTime - track.startTime;
 			if (time < 0.0f || time > track.duration) continue;
-
-			const f32 attack = std::max(track.attackTime, 0.001f);
-			const f32 decay = std::max(track.decayTime, 0.001f);
-			const f32 factor = time < attack ? time / attack : std::max(0.0f, 1.0f - (time - attack) / decay);
+			const f32 duration = std::max(track.duration, 0.001f);
+			f32 factor = 0.0f;
+			if (track.useIntensityCurve && !track.intensityCurve.IsEmpty())
+			{
+				factor = track.intensityCurve.Evaluate(std::clamp(time / duration, 0.0f, 1.0f), 0.0f);
+			}
+			else
+			{
+				const f32 attack = std::max(track.attackTime, 0.001f);
+				const f32 decay = std::max(track.decayTime, 0.001f);
+				factor = time < attack ? time / attack : std::max(0.0f, 1.0f - (time - attack) / decay);
+			}
 			const f32 intensity = track.peakIntensity * factor;
 			if (!std::isfinite(intensity) || intensity <= 0.0f) continue;
 
@@ -560,10 +576,27 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			const f32 duration = std::max(track.duration, 0.001f);
 			const f32 progress = track.loop ? std::fmod(trackLocalTime, duration) / duration : std::clamp(trackLocalTime / duration, 0.0f, 1.0f);
 
-			// 스케일, 회전, 컬러 보간
-			const vec3 currentScale = glm::mix(track.scaleStart, track.scaleEnd, progress);
+			// 스케일 보간 (커브 활성화 시 3차 베지어 곡선 가중치 적용)
+			vec3 currentScale;
+			if (track.useScaleCurve && !track.scaleCurve.IsEmpty())
+			{
+				const f32 scaleProgress = track.scaleCurve.Evaluate(progress, progress);
+				currentScale = glm::mix(track.scaleStart, track.scaleEnd, scaleProgress);
+			}
+			else
+			{
+				currentScale = glm::mix(track.scaleStart, track.scaleEnd, progress);
+			}
+
 			const vec3 currentRotEuler = track.initialRotation + track.rotationRate * trackLocalTime;
-			const vec4 currentColor = glm::mix(track.colorStart, track.colorEnd, progress);
+
+			// 컬러 및 알파 보간 (알파 커브 활성화 시 3차 베지어 곡선 직접 평가 적용)
+			vec4 currentColor = glm::mix(track.colorStart, track.colorEnd, progress);
+			if (track.useAlphaCurve && !track.alphaCurve.IsEmpty())
+			{
+				currentColor.a = track.alphaCurve.Evaluate(progress, currentColor.a);
+			}
+
 			const vec2 currentUVOffset = track.uvScrollSpeed * trackLocalTime;
 
 			mat4 localMat = glm::translate(mat4(1.0f), track.localPosition) *

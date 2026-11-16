@@ -61,6 +61,10 @@
 ,CATEGORY_TEXTURE,Texture,텍스처
 ,CATEGORY_TIME_OF_DAY,Time of Day,하루 시간
 ,CATEGORY_UI,UI,UI
+,CATEGORY_VFX_CURVES,Curves,커브
+,CATEGORY_VFX_RENDER,Appearance,표현
+,CATEGORY_VFX_TIMING,Timing,타이밍
+,CATEGORY_VFX_TRANSFORM,Transform,변환
 ,CATEGORY_WIND_EVOLUTION,Wind & Evolution,바람 및 대류
 ,CHROMATIC_ABERRATION_FALLOFF,Falloff,감쇠 지수
 ,CHROMATIC_ABERRATION_INTENSITY,Intensity,강도
@@ -97,11 +101,15 @@
 ,Duplicate node ID.,Duplicate node ID.,노드 ID가 중복되었습니다.
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,ENUM_CAMERA_TYPE,Camera Type,카메라 타입
+,ENUM_CURVE_INTERP_MODE,Curve Interpolation Mode,커브 보간 모드
 ,ENUM_ENTITY_FLAG,Entity Flags,엔티티 플래그
 ,ENUM_FOG_TYPE,Fog Type,안개 타입
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
 ,ENUM_LIGHT_TYPE,Light Type,조명 타입
 ,ENUM_TRANSFORM_ABSOLUTE,Absolute Transform Channels,월드 기준 Transform 채널
+,Engine::ECurveInterpMode.Constant,Constant,상수
+,Engine::ECurveInterpMode.CubicBezier,Cubic Bezier,3차 베지어
+,Engine::ECurveInterpMode.Linear,Linear,선형
 ,Engine::ESplineMeshBuildStatus.DeformationFailed,Mesh deformation failed,메시 변형 실패
 ,Engine::ESplineMeshBuildStatus.FoldedSection,The deformed section folds or collapses,굽이 안쪽에서 변형 단면이 접히거나 붕괴함
 ,Engine::ESplineMeshBuildStatus.InvalidPath,Invalid spline path,유효하지 않은 스플라인 경로
@@ -114,6 +122,9 @@
 ,Engine::ESplineMeshBuildStatus.SourceLimitExceeded,Source mesh exceeds vertex or index limit,원본 메시의 정점 또는 인덱스 한도 초과
 ,Engine::ESplineMeshBuildStatus.StartDistanceAtOrPastEnd,Start distance must be before path end,시작 거리는 경로 끝보다 앞이어야 함
 ,Engine::ESplineMeshBuildStatus.ZeroSourceZLength,Source mesh has no length along local Z,원본 메시의 로컬 Z 길이가 0임
+,Engine::ESpriteBillboardMode.AxialY,Axial Y,Y축 고정
+,Engine::ESpriteBillboardMode.CameraFacing,Camera Facing,카메라 정면
+,Engine::ESpriteBillboardMode.None,None,없음
 ,Engine::ETransformAbsolute.All,Independent Transform,Transform 전체 독립
 ,Engine::ETransformAbsolute.None,Inherit All,전체 상속
 ,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
@@ -263,6 +274,7 @@
 ,PROP_ALBEDO,Albedo,알베도 (반사색)
 ,PROP_ALIGN_TO_SURFACE_DISK,Align To Surface Disk,표면 밀착 디스크 렌더링
 ,PROP_ALIGN_TO_SURFACE_NORMAL,Align To Surface Normal,표면 법선 방향 정렬
+,PROP_ALPHA_CURVE,Alpha Curve,알파 커브
 ,PROP_AMPLITUDE,Amplitude,진폭
 ,PROP_ANCHOR_MAX,Anchor Max,앵커 최대
 ,PROP_ANCHOR_MIN,Anchor Min,앵커 최소
@@ -408,11 +420,14 @@
 ,PROP_INITIAL_ROTATION,Initial Rotation,초기 회전
 ,PROP_INPUT_ENABLED,Input Enabled,입력 활성화
 ,PROP_INTENSITY,Intensity,강도
+,PROP_INTENSITY_CURVE,Intensity Curve,조도 커브
 ,PROP_INTERACTABLE,Interactable,상호작용
 ,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 속도
+,PROP_INTERP_MODE,Interpolation Mode,보간 모드
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성
 ,PROP_INVERSE_INERTIA_LOCAL,Local Inverse Inertia,로컬 역관성
 ,PROP_INVERT_PITCH,Invert Pitch,상하 회전 반전
+,PROP_IN_TANGENT,In Tangent,진입 탄젠트
 ,PROP_IRRADIANCE_MAP,Irradiance Map,확산광 맵
 ,PROP_IS_3D,3D Audio,3D 오디오
 ,PROP_IS_ACTIVE,Is Active,활성 상태
@@ -439,6 +454,7 @@
 ,PROP_KCC_STEP_OFFSET,Step Offset,계단 높이 제한
 ,PROP_KCC_VELOCITY,Velocity,속도
 ,PROP_KCC_WALK_SPEED,Walk Speed,걷기 속도
+,PROP_KEYS,Keys,키프레임 목록
 ,PROP_LANGUAGE,Language,언어
 ,PROP_LAYER_BOTTOM,Layer Bottom Altitude,구름 시작 고도
 ,PROP_LAYER_HEIGHT,Layer Height,구름층 두께
@@ -499,6 +515,7 @@
 ,PROP_ORIENT_ROTATION_TO_MOVEMENT,Orient Rotation to Movement,이동 방향으로 회전 정렬
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
+,PROP_OUT_TANGENT,Out Tangent,진출 탄젠트
 ,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PARENT_EMITTER_INDEX,Parent Emitter Index,부모 이미터 인덱스
@@ -545,6 +562,7 @@
 ,PROP_ROTATION_SPEED_MIN,Rotation Speed Min,최소 회전 속도
 ,PROP_ROT_THRESHOLD,Rotation Threshold,회전 동기화 오차 한계
 ,PROP_SCALE,Scale,크기
+,PROP_SCALE_CURVE,Scale Curve,스케일 커브
 ,PROP_SCALE_END,End Scale,종료 크기
 ,PROP_SCALE_PLAY_RATE_WITH_SPEED,Scale Play Rate With Speed,이동 속도 연동 재생 배속
 ,PROP_SCALE_START,Start Scale,시작 크기
@@ -556,6 +574,7 @@
 ,PROP_SHADOW_RANGE,Shadow Range,그림자 범위
 ,PROP_SHADOW_SLOPE_BIAS,Shadow Slope Bias,그림자 경사 바이어스
 ,PROP_SHADOW_STRENGTH,Shadow Strength,그림자 강도
+,PROP_SHAKE_RADIUS,Shake Radius (0 = Global),셰이크 반경 (0 = 전역)
 ,PROP_SHAPE,Shape,형상
 ,PROP_SHAPE_SIZE,Shape Noise Size,뭉게구름 덩어리 크기
 ,PROP_SIM_SPACE,Simulation Space,시뮬레이션 공간
@@ -615,6 +634,7 @@
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
 ,PROP_TILING,Tiling,반복
+,PROP_TIME,Time,시간
 ,PROP_TIMELINE_ASSET,Timeline Asset,타임라인 에셋
 ,PROP_TIMELINE_PATH,Timeline Path,타임라인 경로
 ,PROP_TIME_OF_DAY,Time of Day,하루 시간
@@ -628,8 +648,12 @@
 ,PROP_TRIGGER_MODE,Trigger Mode,발화 조건(트리거)
 ,PROP_UNBOUND,Unbound,전역 적용
 ,PROP_UPSCALE_RT,Upscale RT,업스케일 RT
+,PROP_USE_ALPHA_CURVE,Use Alpha Curve,알파 커브 사용
 ,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
+,PROP_USE_INTENSITY_CURVE,Use Intensity Curve,조도 커브 사용
+,PROP_USE_SCALE_CURVE,Use Scale Curve,스케일 커브 사용
 ,PROP_UV_SCROLL_SPEED,UV Scroll Speed,UV 스크롤 속도
+,PROP_VALUE,Value,값
 ,PROP_VELOCITY_ITERATIONS,Velocity Iterations,속도 반복 횟수
 ,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
 ,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
@@ -704,7 +728,9 @@
 ,STRUCT_COLLIDER_2D,Collider 2D,2D 충돌체
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정
 ,STRUCT_COMPOSITE_VFX,Composite VFX,복합 비주얼 이펙트
+,STRUCT_CURVE_KEY,Curve Key,커브 키
 ,STRUCT_FLAG,Flag,플래그
+,STRUCT_FLOAT_CURVE,Float Curve,실수 커브
 ,STRUCT_FOG,Fog,안개
 ,STRUCT_GRAPH_BINDING,Graph Binding,그래프 연결
 ,STRUCT_HIERARCHY,Hierarchy,계층

@@ -11,3 +11,4 @@
 #include "Capsule.h"
 #include "PixelRect.h"
 #include "Circle.h"
+#include "FloatCurve.h"
