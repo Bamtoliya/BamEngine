@@ -97,6 +97,26 @@ private:
 	void CollectDeferredReleases();
 #pragma endregion
 
+#pragma region Pipeline Library
+public:
+	ID3D12PipelineLibrary* GetPipelineLibrary() const { return m_PipelineLibrary.Get(); }
+	void MarkPipelineLibraryDirty() { m_PipelineLibraryDirty = true; }
+
+	bool ContainsPipeline(const std::wstring& name) const
+	{
+		return m_PipelineNames.contains(name);
+	}
+	void RegisterPipelineName(const std::wstring& name)
+	{
+		m_PipelineNames.insert(name);
+		m_PipelineLibraryDirty = true;
+	}
+private:
+	void InitializePipelineLibrary();
+	void SavePipelineLibrary();
+#pragma endregion
+
+
 #pragma region Draw
 private:
 	EResult ApplyShaderResources();
@@ -194,6 +214,11 @@ private:
 	DirectX12DescriptorAllocator* m_SamplerAllocator = nullptr; // 샘플러용 주차장
 
 	ComPtr<ID3D12RootSignature> m_GlobalRootSignature = nullptr;
+
+	ComPtr<ID3D12PipelineLibrary> m_PipelineLibrary;
+	std::vector<uint8_t> m_PipelineLibraryData;
+	std::unordered_set<std::wstring> m_PipelineNames;
+	bool m_PipelineLibraryDirty = false;
 
 	struct DeferredReleaseEntry
 	{

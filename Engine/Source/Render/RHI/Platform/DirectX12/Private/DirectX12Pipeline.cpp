@@ -4,6 +4,59 @@
 #include "Logger.h"
 #include <directx/d3d12sdklayers.h>
 
+namespace
+{
+	std::wstring GeneratePipelineKey(const RHIPipelineDesc& desc)
+	{
+		uint64_t hash = 14695981039346656037ull;
+		auto hashCombine = [&hash](const void* data, size_t size)
+			{
+				const auto* bytes = static_cast<const uint8_t*>(data);
+				for (size_t i = 0; i < size; ++i)
+				{
+					hash ^= bytes[i];
+					hash *= 1099511628211ull;
+				}
+			};
+
+		if (desc.pipelineType == EPipelineType::Compute)
+		{
+			if (desc.computeShader)
+			{
+				const auto& code = static_cast<DirectX12Shader*>(desc.computeShader)->GetBytecode();
+				hashCombine(code.pShaderBytecode, code.BytecodeLength);
+			}
+		}
+		else
+		{
+			if (desc.vertexShader)
+			{
+				const auto& code = static_cast<DirectX12Shader*>(desc.vertexShader)->GetBytecode();
+				hashCombine(code.pShaderBytecode, code.BytecodeLength);
+			}
+			if (desc.pixelShader)
+			{
+				const auto& code = static_cast<DirectX12Shader*>(desc.pixelShader)->GetBytecode();
+				hashCombine(code.pShaderBytecode, code.BytecodeLength);
+			}
+			hashCombine(&desc.fillMode, sizeof(desc.fillMode));
+			hashCombine(&desc.cullMode, sizeof(desc.cullMode));
+			hashCombine(&desc.frontFace, sizeof(desc.frontFace));
+			hashCombine(&desc.depthStencilState, sizeof(desc.depthStencilState));
+			hashCombine(&desc.blendState, sizeof(desc.blendState));
+			hashCombine(&desc.topology, sizeof(desc.topology));
+			hashCombine(&desc.colorAttachmentCount, sizeof(desc.colorAttachmentCount));
+			for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
+				hashCombine(&desc.colorAttachmentFormats[i], sizeof(desc.colorAttachmentFormats[i]));
+			hashCombine(&desc.depthStencilAttachmentFormat, sizeof(desc.depthStencilAttachmentFormat));
+		}
+
+		wchar_t buf[32];
+		std::swprintf(buf, sizeof(buf) / sizeof(wchar_t), L"pso_%016llx", static_cast<unsigned long long>(hash));
+		return buf;
+	}
+}
+
 #pragma region Constructor & Destructor
 EResult DirectX12Pipeline::Initialize(const DESC& desc)
 {
@@ -61,6 +114,9 @@ EResult DirectX12Pipeline::CreatePipelineState()
 	DirectX12RHI* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
 	ID3D12Device* dxDevice = static_cast<ID3D12Device*>(dxRHI->GetNativeRHI());
 
+	ID3D12PipelineLibrary* pLibrary = dxRHI->GetPipelineLibrary();
+	const std::wstring psoName = GeneratePipelineKey(m_Desc);
+
 	// ── Compute Pipeline 생성 ──
 	if (m_Desc.pipelineType == EPipelineType::Compute)
 	{
@@ -74,11 +130,25 @@ EResult DirectX12Pipeline::CreatePipelineState()
 		computePsoDesc.pRootSignature = static_cast<ID3D12RootSignature*>(dxRHI->GetGlobalRootSignature());
 		computePsoDesc.CS = { cs->GetBytecode().pShaderBytecode, cs->GetBytecode().BytecodeLength };
 		ComPtr<ID3D12PipelineState> newPipeline;
-		const HRESULT hr = dxDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&newPipeline));
+		HRESULT hr = E_FAIL;
+		// 1. 라이브러리에 저장된 적이 있는 이름일 때만 안전하게 Load 시도 (크래시 원천 방지)
+		if (pLibrary && dxRHI->ContainsPipeline(psoName))
+			hr = pLibrary->LoadComputePipeline(psoName.c_str(), &computePsoDesc, IID_PPV_ARGS(&newPipeline));
+		// 2. 캐시 미적중 시 드라이버 컴파일 및 라이브러리 저장
 		if (FAILED(hr))
 		{
-			ENGINE_LOG_ERROR("CreateComputePipelineState failed: HRESULT=0x{:08X}", static_cast<uint32>(hr));
-			return EResult::Fail;
+			hr = dxDevice->CreateComputePipelineState(&computePsoDesc, IID_PPV_ARGS(&newPipeline));
+			if (FAILED(hr))
+			{
+				ENGINE_LOG_ERROR("CreateComputePipelineState failed: HRESULT=0x{:08X}", static_cast<uint32>(hr));
+				return EResult::Fail;
+			}
+			if (pLibrary && !dxRHI->ContainsPipeline(psoName))
+			{
+				const HRESULT storeHr = pLibrary->StorePipeline(psoName.c_str(), newPipeline.Get());
+				if (SUCCEEDED(storeHr)) dxRHI->RegisterPipelineName(psoName);
+				else ENGINE_LOG_WARN("StorePipeline failed for Compute PSO: HRESULT=0x{:08X}", static_cast<uint32>(storeHr));
+			}
 		}
 		dxRHI->DeferRelease(m_Pipeline.Get());
 		m_Pipeline.Swap(newPipeline);
@@ -168,28 +238,41 @@ EResult DirectX12Pipeline::CreatePipelineState()
 	dxDevice->QueryInterface(IID_PPV_ARGS(&infoQueue));
 	const UINT64 firstMessage = infoQueue ? infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter() : 0;
 	ComPtr<ID3D12PipelineState> newPipeline;
-	const HRESULT hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&newPipeline));
+	HRESULT hr = E_FAIL;
+	// 1. 라이브러리에 저장된 적이 있는 이름일 때만 안전하게 Load 시도 (드라이버 제거 방지)
+	if (pLibrary && dxRHI->ContainsPipeline(psoName))
+		hr = pLibrary->LoadGraphicsPipeline(psoName.c_str(), &psoDesc, IID_PPV_ARGS(&newPipeline));
+	// 2. 캐시 미적중 시 드라이버 컴파일 및 라이브러리 등록
 	if (FAILED(hr))
 	{
-		ENGINE_LOG_ERROR("CreateGraphicsPipelineState failed: HRESULT=0x{:08X}, VS bytes={}, PS bytes={}, RTs={}",
-			static_cast<uint32>(hr), psoDesc.VS.BytecodeLength, psoDesc.PS.BytecodeLength, psoDesc.NumRenderTargets);
-		if (infoQueue)
+		hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&newPipeline));
+		if (FAILED(hr))
 		{
-			const UINT64 count = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
-			for (UINT64 index = firstMessage; index < count; ++index)
+			ENGINE_LOG_ERROR("CreateGraphicsPipelineState failed: HRESULT=0x{:08X}, VS bytes={}, PS bytes={}, RTs={}",
+				static_cast<uint32>(hr), psoDesc.VS.BytecodeLength, psoDesc.PS.BytecodeLength, psoDesc.NumRenderTargets);
+			if (infoQueue)
 			{
-				SIZE_T bytes = 0;
-				if (FAILED(infoQueue->GetMessage(index, nullptr, &bytes)) || bytes < sizeof(D3D12_MESSAGE)) continue;
-				std::vector<std::max_align_t> storage((bytes + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
-				auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
-				if (SUCCEEDED(infoQueue->GetMessage(index, message, &bytes)))
-					ENGINE_LOG_ERROR("D3D12 PSO validation (id={}): {}", static_cast<uint32>(message->ID),
-						message->pDescription ? message->pDescription : "");
+				const UINT64 count = infoQueue->GetNumStoredMessagesAllowedByRetrievalFilter();
+				for (UINT64 index = firstMessage; index < count; ++index)
+				{
+					SIZE_T bytes = 0;
+					if (FAILED(infoQueue->GetMessage(index, nullptr, &bytes)) || bytes < sizeof(D3D12_MESSAGE)) continue;
+					std::vector<std::max_align_t> storage((bytes + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t));
+					auto* message = reinterpret_cast<D3D12_MESSAGE*>(storage.data());
+					if (SUCCEEDED(infoQueue->GetMessage(index, message, &bytes)))
+						ENGINE_LOG_ERROR("D3D12 PSO validation (id={}): {}", static_cast<uint32>(message->ID),
+							message->pDescription ? message->pDescription : "");
+				}
 			}
+			return EResult::Fail;
 		}
-		return EResult::Fail;
+		if (pLibrary && !dxRHI->ContainsPipeline(psoName))
+		{
+			const HRESULT storeHr = pLibrary->StorePipeline(psoName.c_str(), newPipeline.Get());
+			if (SUCCEEDED(storeHr)) dxRHI->RegisterPipelineName(psoName);
+			else ENGINE_LOG_WARN("StorePipeline failed for Graphics PSO: HRESULT=0x{:08X}", static_cast<uint32>(storeHr));
+		}
 	}
-
 	dxRHI->DeferRelease(m_Pipeline.Get());
 	m_Pipeline.Swap(newPipeline);
 	dxRHI->InvalidatePipelineBinding(this);

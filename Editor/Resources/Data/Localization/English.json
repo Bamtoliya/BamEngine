@@ -2016,6 +2016,14 @@
         "Action.Viewport.CameraSpeedDecrease": "Decrease Camera Speed",
         "Action.Viewport.TogglePivot": "Toggle Pivot / Center",
         "Viewport.Pivot": "Pivot",
-        "Viewport.Center": "Center"
+        "Viewport.Center": "Center",
+        "Action.Timeline.StepPrev": "Step Previous Frame",
+        "Action.Timeline.StepNext": "Step Next Frame",
+        "VFXEditor.HUDPlaying": "Playing",
+        "VFXEditor.HUDPaused": "Paused",
+        "VFXEditor.HUDFrame": "Frame",
+        "VFXEditor.HUDWind": "Wind",
+        "VFXEditor.HUDGravity": "Gravity",
+        "VFXEditor.HUDStepHint": "Step"
     }
 }

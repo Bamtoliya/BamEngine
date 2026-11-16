@@ -472,89 +472,141 @@ void EditorActionRegistry::RegisterAll()
     // =========================================================================================
     // [Viewport Actions] (Viewport Context)
     // =========================================================================================
-    sm.RegisterAction({
-    .Id = "Viewport.GizmoSelect",
-    .DisplayNameKey = "Action.Viewport.GizmoSelect",
-    .CategoryKey = "Shortcuts.CategoryViewport",
-    .Context = EShortcutContext::Viewport,
-    .DefaultChord = ShortcutChord(Engine::EKeyCode::Q),
-    .ExecuteHandler = []() {
-        if (auto* host = GizmoHelper::GetActiveHost())
-            host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
-    }
-        });
-
-    sm.RegisterAction({
-        .Id = "Viewport.GizmoTranslate",
-        .DisplayNameKey = "Action.Viewport.GizmoTranslate",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::W),
-        .ExecuteHandler = []() {
-            if (auto* host = GizmoHelper::GetActiveHost())
-                host->SetGizmoOperation(ImGuizmo::TRANSLATE);
-        }
-        });
-
-    sm.RegisterAction({
-        .Id = "Viewport.GizmoRotate",
-        .DisplayNameKey = "Action.Viewport.GizmoRotate",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::E),
-        .ExecuteHandler = []() {
-            if (auto* host = GizmoHelper::GetActiveHost())
-                host->SetGizmoOperation(ImGuizmo::ROTATE);
-        }
-        });
-
-    sm.RegisterAction({
-        .Id = "Viewport.GizmoScale",
-        .DisplayNameKey = "Action.Viewport.GizmoScale",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::R),
-        .ExecuteHandler = []() {
-            if (auto* host = GizmoHelper::GetActiveHost())
-                host->SetGizmoOperation(ImGuizmo::SCALE);
-        }
-        });
-
-    sm.RegisterAction({
-        .Id = "Viewport.ToggleCoord",
-        .DisplayNameKey = "Action.Viewport.ToggleCoord",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::GraveAccent),
-        .ExecuteHandler = []() {
-            if (auto* host = GizmoHelper::GetActiveHost())
-                host->ToggleGizmoMode();
-        }
-        });
-
-    sm.RegisterAction({
-    .Id = "Viewport.TogglePivot",
-    .DisplayNameKey = "Action.Viewport.TogglePivot",
-    .CategoryKey = "Shortcuts.CategoryViewport",
-    .Context = EShortcutContext::Viewport,
-    .DefaultChord = ShortcutChord(Engine::EKeyCode::Z),
-    .ExecuteHandler = []() {
-        if (auto* host = GizmoHelper::GetActiveHost())
-            host->ToggleGizmoPivot();
-    }
-        });
-
-    sm.RegisterAction({
-        .Id = "Viewport.ToggleSnap",
-        .DisplayNameKey = "Action.Viewport.ToggleSnap",
-        .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Shift),
-        .ExecuteHandler = []() {
-            if (auto* host = GizmoHelper::GetActiveHost())
-                host->ToggleGizmoSnap();
-        }
-        });
+    auto registerGizmoActions = [&](EShortcutContext ctx, const std::string& prefix)
+        {
+            // 1. [기즈모 선택: Q 및 Ctrl+1]
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoSelect",
+                .DisplayNameKey = "Action.Viewport.GizmoSelect",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Q),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
+                }
+                });
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoSelectAlt",
+                .DisplayNameKey = "Action.Viewport.GizmoSelect",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Num1, EModifierKey::Ctrl),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
+                }
+                });
+            // 2. [기즈모 이동: W 및 Ctrl+2]
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoTranslate",
+                .DisplayNameKey = "Action.Viewport.GizmoTranslate",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::W),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::TRANSLATE);
+                }
+                });
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoTranslateAlt",
+                .DisplayNameKey = "Action.Viewport.GizmoTranslate",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Num2, EModifierKey::Ctrl),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::TRANSLATE);
+                }
+                });
+            // 3. [기즈모 회전: E 및 Ctrl+3]
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoRotate",
+                .DisplayNameKey = "Action.Viewport.GizmoRotate",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::E),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::ROTATE);
+                }
+                });
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoRotateAlt",
+                .DisplayNameKey = "Action.Viewport.GizmoRotate",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Num3, EModifierKey::Ctrl),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::ROTATE);
+                }
+                });
+            // 4. [기즈모 스케일: R 및 Ctrl+4]
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoScale",
+                .DisplayNameKey = "Action.Viewport.GizmoScale",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::R),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::SCALE);
+                }
+                });
+            sm.RegisterAction({
+                .Id = prefix + ".GizmoScaleAlt",
+                .DisplayNameKey = "Action.Viewport.GizmoScale",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Num4, EModifierKey::Ctrl),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->SetGizmoOperation(ImGuizmo::SCALE);
+                }
+                });
+            // 5. [좌표계 토글: `]
+            sm.RegisterAction({
+                .Id = prefix + ".ToggleCoord",
+                .DisplayNameKey = "Action.Viewport.ToggleCoord",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::GraveAccent),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->ToggleGizmoMode();
+                }
+                });
+            // 6. [피벗 모드 토글: Z]
+            sm.RegisterAction({
+                .Id = prefix + ".TogglePivot",
+                .DisplayNameKey = "Action.Viewport.TogglePivot",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::Z),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->ToggleGizmoPivot();
+                }
+                });
+            // 7. [스냅 토글: Shift+S]
+            sm.RegisterAction({
+                .Id = prefix + ".ToggleSnap",
+                .DisplayNameKey = "Action.Viewport.ToggleSnap",
+                .CategoryKey = "Shortcuts.CategoryViewport",
+                .Context = ctx,
+                .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Shift),
+                .ExecuteHandler = []() {
+                    if (auto* host = GizmoHelper::GetActiveHost())
+                        host->ToggleGizmoSnap();
+                }
+                });
+        };
+    registerGizmoActions(EShortcutContext::Viewport, "Viewport");
+    registerGizmoActions(EShortcutContext::CompositeTimeline, "CompositeTimeline");
+    registerGizmoActions(EShortcutContext::ParticleTimeline, "ParticleTimeline");
+    registerGizmoActions(EShortcutContext::PrefabEditor, "PrefabEditor");
 
     sm.RegisterAction({
     .Id = "Viewport.Focus",
@@ -1152,6 +1204,8 @@ void EditorActionRegistry::RegisterAll()
                 add("CompositeTimeline.PlayPause", PlayPause, "Action.Timeline.PlayPause", ShortcutChord(EKeyCode::Space));
                 add("CompositeTimeline.PrevFrame", Previous, "Action.Timeline.PrevFrame", ShortcutChord(EKeyCode::Left), true);
                 add("CompositeTimeline.NextFrame", Next, "Action.Timeline.NextFrame", ShortcutChord(EKeyCode::Right), true);
+                add("CompositeTimeline.StepPrev", Previous, "Action.Timeline.StepPrev", ShortcutChord(EKeyCode::LeftBracket), true);
+                add("CompositeTimeline.StepNext", Next, "Action.Timeline.StepNext", ShortcutChord(EKeyCode::RightBracket), true);
                 add("CompositeTimeline.FirstFrame", First, "Action.Timeline.FirstFrame", ShortcutChord(EKeyCode::Home));
                 add("CompositeTimeline.LastFrame", Last, "Action.Timeline.LastFrame", ShortcutChord(EKeyCode::End));
                 add("CompositeTimeline.ToggleLoop", Loop, "Action.Timeline.ToggleLoop", ShortcutChord(EKeyCode::L, EModifierKey::Ctrl));

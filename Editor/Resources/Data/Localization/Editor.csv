@@ -2017,3 +2017,11 @@ Action,Viewport.CameraSpeedDecrease,Decrease Camera Speed,카메라 속도 감�
 Action,Viewport.TogglePivot,Toggle Pivot / Center,피벗 / 중심점 모드 전환
 Viewport,Pivot,Pivot,피벗
 Viewport,Center,Center,중심점
+Action,Timeline.StepPrev,Step Previous Frame,1프레임 이전
+Action,Timeline.StepNext,Step Next Frame,1프레임 다음
+VFXEditor,HUDPlaying,Playing,재생 중
+VFXEditor,HUDPaused,Paused,일시정지
+VFXEditor,HUDFrame,Frame,프레임
+VFXEditor,HUDWind,Wind,바람
+VFXEditor,HUDGravity,Gravity,중력
+VFXEditor,HUDStepHint,Step,프레임 스텝

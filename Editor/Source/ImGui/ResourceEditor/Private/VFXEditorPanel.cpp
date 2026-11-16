@@ -775,16 +775,90 @@ void VFXEditorPanel::DrawViewport()
 	const ImVec2 viewportPos = m_PreviewWidget.GetViewportScreenPos();
 	const ImVec2 viewportSize = m_PreviewWidget.GetViewportSize();
 
-	if (m_PreviewWidget.IsHovered() || m_PreviewWidget.IsFocused() || m_IsGizmoUsing)
-	{
-		GizmoHelper::SetActiveHost(this);
-	}
-
 	// 1. 3D 기즈모 렌더링 및 인터랙션 평가
 	DrawGizmo();
 
 	// 2. 블렌더 스타일 세로 도구 툴바 플로팅 오버레이 렌더링
 	GizmoHelper::DrawGizmoToolbar(this, viewportPos, viewportSize, true);
+
+	// 3. 뷰포트 우상단 정보 & 통계 HUD 오버레이
+	DrawViewportHUD(viewportPos, viewportSize);
+}
+
+void VFXEditorPanel::DrawViewportHUD(const ImVec2& viewportPos, const ImVec2& viewportSize)
+{
+	if (viewportSize.x < 240.0f || viewportSize.y < 160.0f) return;
+
+	auto* effect = m_EffectHandle.Get();
+
+	constexpr float margin = 10.0f;
+	constexpr float hudWidth = 230.0f;
+	const bool hasForces = effect && (glm::length(m_SimWind) > 0.01f || std::abs(m_SimGravityMultiplier - 1.0f) > 0.01f);
+	const float hudHeight = hasForces ? 104.0f : 80.0f;
+
+	// [수정] 우상단(Top-Right) -> 우하단(Bottom-Right)으로 이동하여 RGBA 채널 버튼과 겹침 완벽 방지
+	const ImVec2 hudPos(viewportPos.x + viewportSize.x - hudWidth - margin,
+		viewportPos.y + viewportSize.y - hudHeight - margin);
+
+	ImGui::SetCursorScreenPos(hudPos);
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08f, 0.08f, 0.10f, 0.75f));
+	ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.30f, 0.30f, 0.35f, 0.60f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 6.0f));
+	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 3.0f));
+
+	const ImGuiWindowFlags hudFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings |
+		ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+
+	if (ImGui::BeginChild("##VFXViewportHUDChild", ImVec2(hudWidth, hudHeight), ImGuiChildFlags_Borders, hudFlags))
+	{
+		const float curTime = m_TimelineSeek.value_or(m_CurrentTime);
+		const float maxTime = effect ? GetTimelineDuration() : 0.0f;
+		const int curFrame = static_cast<int>(std::round(curTime * EditorUI::EffectTimelineFPS));
+		const int totalFrames = static_cast<int>(std::round(maxTime * EditorUI::EffectTimelineFPS));
+
+		// 1. 타임코드 및 프레임 (로캘 포맷 반영)
+		ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.8f, 1.0f), ICON_FA_CLOCK "  %.2fs / %.2fs", curTime, maxTime);
+		ImGui::SameLine(0.0f, 6.0f);
+		ImGui::TextDisabled("(%s %d / %d)", LOCAL_CSTR("VFXEditor.HUDFrame"), curFrame, totalFrames);
+
+		// 2. 재생 상태 (로캘 문자열 반영)
+		if (!effect)
+		{
+			ImGui::TextDisabled(ICON_FA_CIRCLE_INFO " %s", LOCAL_CSTR("VFXEditor.NoEffectLoaded"));
+		}
+		else if (m_IsPlaying)
+		{
+			ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), ICON_FA_PLAY " %s (%.1fx)", LOCAL_CSTR("VFXEditor.HUDPlaying"), m_PlayRate);
+		}
+		else
+		{
+			ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.2f, 1.0f), ICON_FA_PAUSE " %s", LOCAL_CSTR("VFXEditor.HUDPaused"));
+		}
+
+		// 3. 환경 외력 시뮬레이션 상태 요약
+		if (hasForces)
+		{
+			ImGui::Separator();
+			if (glm::length(m_SimWind) > 0.01f)
+				ImGui::TextDisabled("%s: (%.1f, %.1f, %.1f)", LOCAL_CSTR("VFXEditor.HUDWind"), m_SimWind.x, m_SimWind.y, m_SimWind.z);
+			if (std::abs(m_SimGravityMultiplier - 1.0f) > 0.01f)
+				ImGui::TextDisabled("%s: %.1fx", LOCAL_CSTR("VFXEditor.HUDGravity"), m_SimGravityMultiplier);
+		}
+
+		// 4. 단축키 동적 힌트 (ShortcutManager 일원화 조회)
+		auto& sm = ShortcutManager::Get();
+		const char* stepPrevHint = sm.GetShortcutHint("CompositeTimeline.StepPrev");
+		const char* stepNextHint = sm.GetShortcutHint("CompositeTimeline.StepNext");
+		if ((stepPrevHint && stepPrevHint[0] != '\0') || (stepNextHint && stepNextHint[0] != '\0'))
+		{
+			ImGui::TextDisabled("%s: %s / %s", LOCAL_CSTR("VFXEditor.HUDStepHint"),
+				stepPrevHint ? stepPrevHint : "[", stepNextHint ? stepNextHint : "]");
+		}
+	}
+	ImGui::EndChild();
+	ImGui::PopStyleVar(3);
+	ImGui::PopStyleColor(2);
 }
 
 void VFXEditorPanel::DrawGizmo()
@@ -1008,6 +1082,8 @@ void VFXEditorPanel::DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
 	if (!drawList) return;
 
+	drawList->PushClipRect(imageScreenPos, ImVec2(imageScreenPos.x + imageSize.x, imageScreenPos.y + imageSize.y), true);
+
 	Engine::mat4 entityWorld(1.0f);
 	if (m_PreviewEntity)
 	{
@@ -1021,7 +1097,7 @@ void VFXEditorPanel::DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec
 	VisitVFXTrack(*effect, m_SelectedTrack, [&](const auto& tracks, std::size_t index)
 		{
 			const auto& track = tracks[index];
-			using TrackType = std::remove_reference_t<decltype(track)>;
+			using TrackType = std::decay_t<decltype(track)>;
 
 			if constexpr (std::is_same_v<TrackType, Engine::VFXLightTrack>)
 			{
@@ -1052,7 +1128,42 @@ void VFXEditorPanel::DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec
 				const Engine::vec3 halfExtent(track.size.x * 0.5f, 0.02f, track.size.y * 0.5f);
 				GizmoHelper::DrawWireBox(drawList, c, halfExtent, Engine::mat4(1.0f), viewProj, imageScreenPos, imageSize, IM_COL32(170, 90, 190, 200));
 			}
+			else if constexpr (std::is_same_v<TrackType, Engine::VFXParticleTrack>)
+			{
+				const Engine::vec3 worldPos = Engine::vec3(entityWorld * Engine::vec4(track.localPosition, 1.0f));
+				Engine::vec3 dir(0.0f, 1.0f, 0.0f);
+				float spreadAngle = 30.0f;
+				float speed = 2.0f;
+
+				if (auto effectHandle = track.effectHandle; effectHandle.IsValid() && effectHandle.Get())
+				{
+					const auto& emitters = effectHandle.Get()->GetEmitters();
+					if (!emitters.empty())
+					{
+						dir = emitters[0].direction;
+						spreadAngle = emitters[0].spreadAngleDegrees;
+						speed = emitters[0].speedMax;
+					}
+				}
+
+				const Engine::mat4 rotMat = glm::mat4_cast(glm::quat(glm::radians(track.localRotation)));
+				const Engine::vec3 worldDir = Engine::vec3(entityWorld * rotMat * Engine::vec4(dir, 0.0f));
+				const float length = std::max(0.6f, speed * 0.35f);
+
+				GizmoHelper::DrawWireCone(drawList, worldPos, worldDir, length, spreadAngle,
+					viewProj, imageScreenPos, imageSize, IM_COL32(255, 175, 40, 200));
+			}
 		});
+
+	drawList->PopClipRect();
+}
+
+void VFXEditorPanel::StepFrame(int step)
+{
+	m_IsPlaying = false;
+	const float dt = 1.0f / EditorUI::EffectTimelineFPS;
+	const float time = m_TimelineSeek.value_or(m_CurrentTime);
+	ScrubTime(std::clamp(time + static_cast<float>(step) * dt, 0.0f, GetTimelineDuration()));
 }
 
 void VFXEditorPanel::SelectTrack(SelectedVFXTrack selection)

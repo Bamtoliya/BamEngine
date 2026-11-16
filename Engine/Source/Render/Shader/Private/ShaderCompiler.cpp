@@ -133,16 +133,13 @@ ShaderCompileResult ShaderCompiler::Compile(
 {
     ShaderCompileResult result;
     std::error_code ec;
-
     if (!std::filesystem::exists(hlslPath, ec))
     {
         result.ErrorMessage = "HLSL source file not found: " + hlslPath.string();
         return result;
     }
-
     const std::filesystem::path dxcPath = FindDxcPath();
     const std::string stem = hlslPath.stem().string();
-
     // 셰이더 타겟 프로파일 결정
     std::string profile;
     switch (shaderType)
@@ -154,88 +151,54 @@ ShaderCompileResult ShaderCompiler::Compile(
         result.ErrorMessage = "Unsupported shader type for: " + hlslPath.string();
         return result;
     }
-
     // 출력 디렉터리 및 확장자 결정
     const bool isDx12 = (rhiType == ERHIType::DirectX12);
     const std::filesystem::path outDir = isDx12
         ? hlslPath.parent_path().parent_path() / "bin" / "dxil"
         : hlslPath.parent_path().parent_path() / "bin" / "spirv";
     std::filesystem::create_directories(outDir, ec);
-
     const std::filesystem::path outPath = outDir / (stem + (isDx12 ? ".cso" : ".spv"));
-
-    // dxc.exe 명령행 인자 구성
+    const std::filesystem::path finalTargetOutPath = (rhiType == ERHIType::WebGPU)
+        ? (hlslPath.parent_path().parent_path() / "bin" / "wgsl" / (stem + ".wgsl"))
+        : outPath;
+    // ── [신규] 타임스탬프 디스크 캐시 적중 검사 (Up-to-Date 시 dxc.exe 실행 100% 바이패스) ──
+    if (IsUpToDate(hlslPath, finalTargetOutPath))
+    {
+        if (ReadCompiledFile(finalTargetOutPath, result.Bytecode, result.ErrorMessage))
+        {
+            result.Success = true;
+            result.OutputPath = finalTargetOutPath;
+            return result;
+        }
+    }
+    // ── 캐시 미적중 시: dxc.exe 명령행 인자 구성 및 프로세스 실행 ──
     std::wstring cmd = L"\"" + dxcPath.wstring() + L"\" ";
     if (isDx12)
         cmd += L"-D _DX12_=1 ";
     else
         cmd += L"-spirv ";
-
-    // .hlsli 인클루드 경로 지정
     cmd += L"-I \"" + hlslPath.parent_path().wstring() + L"\" ";
     cmd += L"-T " + std::wstring(profile.begin(), profile.end()) + L" ";
     cmd += L"-E " + std::wstring(entryPoint.begin(), entryPoint.end()) + L" ";
     cmd += L"-Fo \"" + outPath.wstring() + L"\" ";
     cmd += L"\"" + hlslPath.wstring() + L"\" 2>&1";
-
-    // Windows cmd.exe /c 따옴표 탈락 방지를 위해 전체 명령을 한 번 더 큰따옴표로 감쌈
     const std::wstring fullCmd = L"\"" + cmd + L"\"";
-
-    // 컴파일 프로세스 실행 및 에러 메시지 스트리밍 수집
     FILE* pipe = _wpopen(fullCmd.c_str(), L"rt");
     if (!pipe)
     {
         result.ErrorMessage = "Failed to launch DXC compiler process.";
         return result;
     }
-
     char buffer[512];
     while (fgets(buffer, sizeof(buffer), pipe) != nullptr)
         result.ErrorMessage += buffer;
-
     const int exitCode = _pclose(pipe);
     if (exitCode != 0)
     {
         result.Success = false;
         return result;
     }
-
-    // 생성된 컴파일 바이너리 파일 읽기
-    std::ifstream outFile(outPath, std::ios::binary | std::ios::ate);
-    if (!outFile.is_open())
-    {
-        result.ErrorMessage = "Compiled output file could not be opened: " + outPath.string();
-        return result;
-    }
-
-    const auto length = static_cast<std::streamoff>(outFile.tellg());
-    if (length <= 0)
-    {
-        result.ErrorMessage = "Compiled output file is empty or unreadable: " + WStrToStr(outPath.wstring());
-        return result;
-    }
-
-    const auto fileSize = static_cast<std::uintmax_t>(length);
-    if (fileSize > result.Bytecode.max_size() ||
-        fileSize > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
-    {
-        result.ErrorMessage = "Compiled output file is too large: " + WStrToStr(outPath.wstring());
-        return result;
-    }
-
-    result.Bytecode.resize(static_cast<std::size_t>(fileSize));
-    outFile.seekg(0, std::ios::beg);
-    outFile.read(reinterpret_cast<char*>(result.Bytecode.data()), static_cast<std::streamsize>(fileSize));
-
-    if (!outFile || outFile.gcount() != static_cast<std::streamsize>(fileSize))
-    {
-        result.Bytecode.clear();
-        result.ErrorMessage = "Compiled output file could not be read completely: " + WStrToStr(outPath.wstring());
-        return result;
-    }
-
-    outFile.close();
-
+    // WebGPU WGSL 트랜스레이션 처리
     if (rhiType == ERHIType::WebGPU)
     {
         const std::filesystem::path wgslOutDir = hlslPath.parent_path().parent_path() / "bin" / "wgsl";
@@ -245,41 +208,72 @@ ShaderCompileResult ShaderCompiler::Compile(
             result.Bytecode.clear();
             return result;
         }
-
-        std::ifstream wgslFile(wgslOutPath, std::ios::binary | std::ios::ate);
-        if (!wgslFile.is_open())
-        {
-            result.Bytecode.clear();
-            result.ErrorMessage += "WGSL output file could not be opened: " + wgslOutPath.string();
+        if (!ReadCompiledFile(wgslOutPath, result.Bytecode, result.ErrorMessage))
             return result;
-        }
-
-        const auto wgslLength = static_cast<std::streamoff>(wgslFile.tellg());
-        if (wgslLength <= 0 ||
-            static_cast<std::uintmax_t>(wgslLength) > result.Bytecode.max_size() ||
-            static_cast<std::uintmax_t>(wgslLength) >
-                static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
-        {
-            result.Bytecode.clear();
-            result.ErrorMessage += "WGSL output file is empty, unreadable, or too large: " + wgslOutPath.string();
-            return result;
-        }
-
-        result.Bytecode.resize(static_cast<std::size_t>(wgslLength));
-        wgslFile.seekg(0, std::ios::beg);
-        wgslFile.read(reinterpret_cast<char*>(result.Bytecode.data()), static_cast<std::streamsize>(wgslLength));
-        if (!wgslFile || wgslFile.gcount() != static_cast<std::streamsize>(wgslLength))
-        {
-            result.Bytecode.clear();
-            result.ErrorMessage += "WGSL output file could not be read completely: " + wgslOutPath.string();
-            return result;
-        }
-
         result.OutputPath = wgslOutPath;
     }
-
-    result.Success = true;
-    if (rhiType != ERHIType::WebGPU)
+    else
+    {
+        if (!ReadCompiledFile(outPath, result.Bytecode, result.ErrorMessage))
+            return result;
         result.OutputPath = outPath;
+    }
+    result.Success = true;
     return result;
+}
+
+bool ShaderCompiler::IsUpToDate(const std::filesystem::path& hlslPath, const std::filesystem::path& outPath)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(outPath, ec)) return false;
+    const auto outSize = std::filesystem::file_size(outPath, ec);
+    if (ec || outSize == 0) return false;
+    const auto outTime = std::filesystem::last_write_time(outPath, ec);
+    if (ec) return false;
+    const auto hlslTime = std::filesystem::last_write_time(hlslPath, ec);
+    if (ec || outTime < hlslTime) return false;
+    // 같은 폴더 내의 모든 .hlsli 인클루드 헤더 파일의 수정 시각 대조
+    const auto dir = hlslPath.parent_path();
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+    {
+        if (entry.is_regular_file(ec) && entry.path().extension() == ".hlsli")
+        {
+            const auto headerTime = entry.last_write_time(ec);
+            if (!ec && outTime < headerTime)
+                return false;
+        }
+    }
+    return true;
+}
+bool ShaderCompiler::ReadCompiledFile(const std::filesystem::path& path, std::vector<uint8>& outBytecode, std::string& outErrorMessage)
+{
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+    {
+        outErrorMessage = "Compiled output file could not be opened: " + path.string();
+        return false;
+    }
+    const auto length = static_cast<std::streamoff>(file.tellg());
+    if (length <= 0)
+    {
+        outErrorMessage = "Compiled output file is empty or unreadable: " + path.string();
+        return false;
+    }
+    const auto fileSize = static_cast<std::uintmax_t>(length);
+    if (fileSize > outBytecode.max_size() ||
+        fileSize > static_cast<std::uintmax_t>(std::numeric_limits<std::streamsize>::max()))
+    {
+        outErrorMessage = "Compiled output file is too large: " + path.string();
+        return false;
+    }
+    outBytecode.resize(static_cast<std::size_t>(fileSize));
+    file.seekg(0, std::ios::beg);
+    file.read(reinterpret_cast<char*>(outBytecode.data()), static_cast<std::streamsize>(fileSize));
+    if (!file || file.gcount() != static_cast<std::streamsize>(fileSize))
+    {
+        outBytecode.clear();
+        outErrorMessage = "Compiled output file could not be read completely: " + path.string();
+        return false;
+    }
+    return true;
 }

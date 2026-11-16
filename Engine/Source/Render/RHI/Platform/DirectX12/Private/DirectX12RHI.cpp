@@ -248,6 +248,7 @@ EResult DirectX12RHI::Initialize(void* arg)
 
     InitializeCapabilities();
     InitializeTimestampQueries();
+    InitializePipelineLibrary();
     return EResult::Success;
 }
 
@@ -270,7 +271,10 @@ void DirectX12RHI::Free()
     {
         ENGINE_LOG_ERROR("GPU synchronization failed during DirectX12RHI shutdown. Proceeding with resource cleanup.");
     }
-
+    SavePipelineLibrary();
+    m_PipelineLibrary.Reset();
+    m_PipelineLibraryData.clear();
+    m_PipelineLibraryData.shrink_to_fit();
     for (auto& buffers : m_TextureUploadBuffers)
         buffers.clear();
 
@@ -1590,6 +1594,131 @@ void DirectX12RHI::CollectDeferredReleases()
         });
 }
 #pragma endregion
+
+#pragma region Pipeline Library
+void DirectX12RHI::InitializePipelineLibrary()
+{
+    if (!m_Device) return;
+    ComPtr<ID3D12Device1> device1;
+    if (FAILED(m_Device.As(&device1)) || !device1)
+    {
+        ENGINE_LOG_WARN("ID3D12Device1 not supported. Pipeline Library disabled.");
+        return;
+    }
+    const auto cacheDir = PlatformPath::GetProjectRoot() / ".bam" / "cache" / "shaders";
+    const auto cachePath = cacheDir / "pipeline.library";
+    const auto namesPath = cacheDir / "pipeline.names";
+    std::error_code ec;
+    const bool hasLibrary = std::filesystem::exists(cachePath, ec);
+    const bool hasNames = std::filesystem::exists(namesPath, ec);
+    // 둘 중 하나만 존재하면 정합성이 깨진 것이므로 모두 삭제하고 새로 시작합니다.
+    if (hasLibrary != hasNames)
+    {
+        std::filesystem::remove(cachePath, ec);
+        std::filesystem::remove(namesPath, ec);
+    }
+    m_PipelineLibraryData.clear();
+    m_PipelineNames.clear();
+    if (hasLibrary && hasNames)
+    {
+        std::wifstream namesFile(namesPath);
+        std::wstring line;
+        while (std::getline(namesFile, line))
+        {
+            if (!line.empty()) m_PipelineNames.insert(line);
+        }
+        std::ifstream file(cachePath, std::ios::binary | std::ios::ate);
+        if (file.is_open())
+        {
+            const auto size = file.tellg();
+            if (size > 0 && size < 128 * 1024 * 1024)
+            {
+                m_PipelineLibraryData.resize(static_cast<size_t>(size));
+                file.seekg(0, std::ios::beg);
+                file.read(reinterpret_cast<char*>(m_PipelineLibraryData.data()), size);
+            }
+        }
+    }
+    HRESULT hr = E_FAIL;
+    if (!m_PipelineLibraryData.empty())
+    {
+        hr = device1->CreatePipelineLibrary(m_PipelineLibraryData.data(), m_PipelineLibraryData.size(), IID_PPV_ARGS(&m_PipelineLibrary));
+        if (SUCCEEDED(hr))
+        {
+            ENGINE_LOG_INFO("Loaded D3D12 Pipeline Library ({} bytes, {} PSOs)", m_PipelineLibraryData.size(), m_PipelineNames.size());
+            return;
+        }
+        ENGINE_LOG_WARN("Failed to load cached Pipeline Library: HRESULT=0x{:08X}. Resetting.", static_cast<uint32>(hr));
+        std::filesystem::remove(cachePath, ec);
+        std::filesystem::remove(namesPath, ec);
+        m_PipelineLibraryData.clear();
+        m_PipelineNames.clear();
+    }
+    hr = device1->CreatePipelineLibrary(nullptr, 0, IID_PPV_ARGS(&m_PipelineLibrary));
+    if (FAILED(hr))
+    {
+        ENGINE_LOG_WARN("CreatePipelineLibrary not supported: HRESULT=0x{:08X}", static_cast<uint32>(hr));
+        m_PipelineLibrary.Reset();
+    }
+}
+
+void DirectX12RHI::SavePipelineLibrary()
+{
+    if (!m_PipelineLibrary || !m_PipelineLibraryDirty) return;
+
+    if (m_Device && FAILED(m_Device->GetDeviceRemovedReason()))
+    {
+        ENGINE_LOG_WARN("Cannot serialize Pipeline Library: Device is removed (Reason=0x{:08X})",
+            static_cast<uint32>(m_Device->GetDeviceRemovedReason()));
+        return;
+    }
+
+    const size_t librarySize = m_PipelineLibrary->GetSerializedSize();
+    if (librarySize == 0) return;
+
+    std::vector<uint8_t> buffer(librarySize);
+    const HRESULT hr = m_PipelineLibrary->Serialize(buffer.data(), librarySize);
+    if (FAILED(hr))
+    {
+        const HRESULT reason = m_Device ? m_Device->GetDeviceRemovedReason() : E_FAIL;
+        ENGINE_LOG_WARN("Failed to serialize Pipeline Library: HRESULT=0x{:08X}, DeviceRemovedReason=0x{:08X}",
+            static_cast<uint32>(hr), static_cast<uint32>(reason));
+        return;
+    }
+
+    const auto cacheDir = PlatformPath::GetProjectRoot() / ".bam" / "cache" / "shaders";
+    std::error_code ec;
+    std::filesystem::create_directories(cacheDir, ec);
+
+    const auto cachePath = cacheDir / "pipeline.library";
+    const auto tmpPath = cacheDir / "pipeline.library.tmp";
+    const auto namesPath = cacheDir / "pipeline.names";
+    const auto tmpNamesPath = cacheDir / "pipeline.names.tmp";
+
+    // 바이너리 라이브러리 저장
+    std::ofstream outFile(tmpPath, std::ios::binary | std::ios::trunc);
+    if (outFile.is_open())
+    {
+        outFile.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+        outFile.close();
+        std::filesystem::rename(tmpPath, cachePath, ec);
+    }
+
+    // 파이프라인 이름 목록 저장 (임시 파일 거쳐 rename)
+    std::wofstream namesFile(tmpNamesPath, std::ios::trunc);
+    if (namesFile.is_open())
+    {
+        for (const auto& name : m_PipelineNames)
+            namesFile << name << L"\n";
+        namesFile.close();
+        std::filesystem::rename(tmpNamesPath, namesPath, ec);
+    }
+
+    ENGINE_LOG_INFO("Saved D3D12 Pipeline Library ({} bytes, {} PSOs)", buffer.size(), m_PipelineNames.size());
+    m_PipelineLibraryDirty = false;
+}
+#pragma endregion
+
 
 #pragma region Draw
 EResult DirectX12RHI::ApplyShaderResources()

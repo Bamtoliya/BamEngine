@@ -48,8 +48,6 @@ public:
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	EShortcutContext GetShortcutContext() const override
 	{
-		if (m_PreviewWidget.IsHovered() || m_PreviewWidget.IsFocused() || m_IsGizmoUsing)
-			return EShortcutContext::Viewport;
 		return EShortcutContext::CompositeTimeline;
 	}
 	bool CanExecuteTimelineAction(EditorUI::TimelineAction action) const;
@@ -106,6 +104,8 @@ private:
 
 	void DrawGizmo();
 	void DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize);
+	void DrawViewportHUD(const ImVec2& viewportPos, const ImVec2& viewportSize);
+	void StepFrame(int step);
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
 	bool m_IsDirty = false;

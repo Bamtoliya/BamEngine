@@ -35,6 +35,12 @@ public:
 
     // 파일명 접미사(VS, PS 등)를 통해 셰이더 스테이지 자동 추론
     static EShaderType DeduceShaderTypeFromPath(const std::filesystem::path& hlslPath);
+
+private:
+    // 산출물이 소스(.hlsl) 및 인클루드 헤더(.hlsli)보다 최신인지 검사합니다.
+    static bool IsUpToDate(const std::filesystem::path& hlslPath, const std::filesystem::path& outPath);
+    // 컴파일된 바이너리 파일을 읽어 바이트코드 버퍼를 채웁니다.
+    static bool ReadCompiledFile(const std::filesystem::path& path, std::vector<uint8>& outBytecode, std::string& outErrorMessage);
 };
 
 END

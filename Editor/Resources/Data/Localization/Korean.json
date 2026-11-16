@@ -2016,6 +2016,14 @@
         "Action.Viewport.CameraSpeedDecrease": "카메라 속도 감소",
         "Action.Viewport.TogglePivot": "피벗 / 중심점 모드 전환",
         "Viewport.Pivot": "피벗",
-        "Viewport.Center": "중심점"
+        "Viewport.Center": "중심점",
+        "Action.Timeline.StepPrev": "1프레임 이전",
+        "Action.Timeline.StepNext": "1프레임 다음",
+        "VFXEditor.HUDPlaying": "재생 중",
+        "VFXEditor.HUDPaused": "일시정지",
+        "VFXEditor.HUDFrame": "프레임",
+        "VFXEditor.HUDWind": "바람",
+        "VFXEditor.HUDGravity": "중력",
+        "VFXEditor.HUDStepHint": "프레임 스텝"
     }
 }
