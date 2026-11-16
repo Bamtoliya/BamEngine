@@ -2,6 +2,32 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-16] 기본 머티리얼 GBuffer Lit 전환 및 에셋 썸네일 렌더링 통일
+
+- **배경**:
+  - 기존 `DefaultMaterial`은 `defaultPS`(단일 타깃에 흰색만 출력)와 `DepthMode` None 구성이라 디퍼드 경로에서 법선·깊이·그림자가 없는 짙은 회색으로 보였고, 파라미터를 바꿔도 셰이더가 읽지 않았다.
+  - 메쉬 썸네일은 프로젝트 에셋 `PBRMaterial`(PBR 슬롯 `green1x1` → Metallic 1, Roughness 0.04)을 써서 어두운 금속처럼 보였고, 썸네일 출력은 선형 HDR 버퍼를 톤매핑·감마 없이 복사해 씬 뷰보다 어두웠다.
+- **변경**:
+  - `Engine/Resources/Material/DefaultMaterial.bammat.json`: `GBufferVS`/`GBufferPS`, ShadowDepth 패스 셰이더, `DepthMode` ReadWrite, CW/Back, `m_Key`/`m_Path` 자기 경로, 파라미터 `BaseColor` (0.5, 0.5, 0.5, 1) 선형·`Roughness` 0.5·`Metallic` 0, Diffuse 슬롯 `white1x1.png`.
+  - `ThumbnailRenderer`:
+    - 기본 미리보기 머티리얼을 `DefaultMaterial`을 상속한 런타임 인스턴스(`Editor.ThumbnailPreviewMaterial`, `Metallic` 0.2만 덮어씀)로 교체. 프로젝트 에셋 의존 제거.
+    - 썸네일 전용 `Engine::PostProcessPipeline`(기본 구성: ACES 톤매핑 + 감마 2.2) 추가. `SubmitFrame`이 디퍼드 제출 후 후처리를 실행하고, `GetFinalTexture`가 후처리 출력(`R8G8B8A8_UNORM`)을 반환. 썸네일 캐시의 픽셀당 4바이트 용량 계산과도 일치하게 됨.
+  - `PreviewCameraDefaults::ThumbnailFramingMargin` 1.08 → 0.95 (경계 구 기준 프레이밍에서 물체가 화면을 더 채우도록).
+  - `EntityFactory::CreatePrimitiveEntity`: 머티리얼을 `MaterialInterface`로 조회하고, 가상 URI 변환 조회와 디스크 로드 폴백을 추가. 실패 로그에 누락 항목을 구분해 기록.
+  - `HierarchyPanel`: 기본 도형 생성 시 `Engine://Material/DefaultMaterial.bammat.json` 사용.
+  - 문서: `BuiltInResourcesAndShaders.md` 3절 `DefaultMaterial` 명세 갱신, `MissingMaterial`의 같은 결함 기록.
+- **검증 (사용자 실행, `x64-debug`)**:
+  - 썸네일 밝기가 씬 뷰·머티리얼 프리뷰와 비슷해지고, 모델·메쉬가 프레임을 더 채우는 것을 에디터에서 확인했다.
+  - 파라미터 반영 전 GBuffer 버전 `DefaultMaterial`로 기본 도형 렌더링을 확인했다.
+- **미검증**:
+  - 최종 파라미터 버전 적용 후 CTest 재실행, 계층 패널 기본 도형의 그림자·하이라이트 직접 확인.
+  - 기존 임포트 모델 인스턴스(`Roughness` 미지정)가 부모 값 0.2 → 0.5를 상속하며 달라진 외형.
+  - 썸네일 프레이밍 0.95에서 긴 모델의 모서리 잘림.
+- **후속**:
+  - `ModelImportModal.cpp`가 프리뷰 부모 머티리얼로 프로젝트 에셋 `GBufferMaterial`을 불러온다. `DefaultMaterial`로 교체 예정.
+  - 톤매핑 `Exposure`/`Gamma`는 공유 리소스 `ToneMappingMaterial`의 값을 모든 파이프라인이 읽으므로, 노출을 바꾼 상태에서 만든 썸네일은 그 값으로 캐시된다.
+  - `MissingMaterial`도 GBuffer 기반으로 전환 필요.
+
 ### [2026-11-16] 기하 와인딩 CW 표준화 구현 및 검증 (`AssetPipelineAndRenderingOptimizationPlan.md` 조치 1)
 
 - **배경**:
@@ -145,7 +171,7 @@ This document tracks implementation details, architectural decisions, and techni
     3. 바닥 슬래브의 0.05m 앞쪽 수직 단면에 메쉬가 교차하면서, 단면 아래로 메쉬 일부가 어색하게 잘려 삐져나오던 현상.
     4. 허공 영역에서 반투명 메쉬가 칙칙하고 어두운 흙갈색/검은색으로 썩어버려 밝은 바닥 위의 화사한 빛과 극단적인 대비를 보이던 현상.
 - **근본 원인 규명**:
-  1. **내장 `CubeMesh`의 윗면/아랫면 정점 와인딩 반전 (`BuiltInPrimitiveMeshes.cpp`)**:
+  1. **내장 `CubeMesh`의 윗면/아랫면 정점 와인딩 반전 (`BuiltInPrimitiveMeshes.cpp`)** — *2026-11-16 정정: 이 판단은 부호가 반대인 불변식에 따른 오류다. 실제 큐브는 6면 모두 CCW였고, 바닥 `MaterialInstance`가 C++ 기본값 CW를 써서 전체가 뒤집혔다. 아래 1번 조치(윗/아랫면만 반전)는 되돌렸고 "기하 와인딩 CW 표준화" 항목으로 대체했다.*
      - 앞/뒤/좌/우 면은 시계 방향(CW)인 반면, 윗면(8~11)과 아랫면(12~15)이 반시계 방향(CCW)으로 잘못 정의되어 있었다.
      - 래스터라이저의 Back-Face Culling(CW 기준)으로 인해 윗면($y=0$, Normal $+Y$)이 폐기되고, 큐브 내부의 아랫면($y=-0.05$, Normal $-Y$)이 렌더링되어 G-Buffer에 기록되었다.
      - 표면 법선이 아래($-Y$)를 향해 위에서 비추는 조명에 대해 $\mathbf{N} \cdot \mathbf{L} \le 0$으로 소실되고 위치가 음수로 기록된 것이 밝혀졌다.

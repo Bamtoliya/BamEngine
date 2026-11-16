@@ -178,7 +178,7 @@ flowchart TD
 
 | 머티리얼 식별자 | 셰이더 바인딩 | 블렌드 모드 | 용도 및 기본 동작 |
 | :--- | :--- | :--- | :--- |
-| `DefaultMaterial` | `DefaultVS` / `DefaultPS` | Opaque (1) | 기본 불투명 머티리얼 (초기 텍스처: `magenta1x1.png`) |
+| `DefaultMaterial` | `GBufferVS` / `GBufferPS`<br>Pass: `ShadowDepthVS` / `ShadowDepthPS` | Opaque (1) | 기본 불투명 Lit 머티리얼 (2026-11-16 GBuffer 전환). `BaseColor` (0.5, 0.5, 0.5, 1) 선형, `Roughness` 0.5, `Metallic` 0, Diffuse 슬롯 `white1x1.png`, DepthMode ReadWrite, CW/Back. 계층 패널 기본 도형과 임포트 모델 머티리얼 인스턴스의 부모 |
 | `SkinningMaterial` | `GBufferVS` / `GBufferPS`<br>Pass: `ShadowDepthSkinningVS` | Opaque (1) | 스켈레탈 애니메이션 캐릭터 전용 머티리얼 (그림자 패스 포함) |
 | `SkyMaterial` | `SkyVS` / `atmosphereSkyPS` | Sky (32) | 대기 산란 스카이박스 (깊이 읽기 전용, 깊이 쓰기 비활성화) |
 | `PostProcessDefaultMaterial` | `FullscreenQuadVS` / `PostProcess_ToneMappingPS` | Opaque (1) | 기본 톤매핑 포스트 프로세스 머티리얼 |
@@ -189,7 +189,7 @@ flowchart TD
 | `SpriteMaterialInstance` | `SpriteMaterial` 기반 | - | 기본 스프라이트 머티리얼 인스턴스 (`.bammatinst.json`) |
 | `TransparentMaterial` | 포워드 투명 셰이더 | AlphaBlend | 포워드 렌더링 큐 반투명 오브젝트 머티리얼 |
 | `UIMaterial` | `UIVS` / `UIPS` | AlphaBlend | 캔버스 UI 렌더링 머티리얼 |
-| `MissingMaterial` | 오류 폴백 셰이더 | Opaque (1) | 누락된 에셋이나 머티리얼 로드 실패 시 적용되는 마젠타 폴백 |
+| `MissingMaterial` | `DefaultVS` / `DefaultPS` | Opaque (1) | 누락 표시용 머티리얼 (`MissingTexture.png`). **알려진 결함**: `defaultPS`는 단일 타깃에 흰색만 쓰고 `DepthMode`가 None이라 디퍼드 경로에서 정상 표시되지 않는다. 코드에서 폴백으로 연결된 경로도 아직 없다 |
 
 ---
 
@@ -237,7 +237,7 @@ flowchart TD
 - 표면 외곽 법선 $\mathbf{N}$과 마주보는 관찰자 시점($-\mathbf{N}$)에서 정점 $v_0 \to v_1 \to v_2$가 시계 방향으로 배치되어야 하므로, 모든 삼각형 페이스에 대해 다음 부호가 성립해야 한다:
      $$\text{dot}(\text{cross}(v_1 - v_0, v_2 - v_0), \mathbf{N}) > 0 \quad (\iff \text{dot}(\text{cross}(v_2 - v_0, v_1 - v_0), \mathbf{N}) < 0)$$
 - **파이프라인 및 머티리얼 정합성**:
-  - 내장 메시는 기본 불투명 머티리얼(`DefaultMaterial`, `GBufferMaterial`)과 바인딩되며, 머티리얼의 `m_FrontFace: 1` (`Clockwise`) 및 `m_CullMode: 2` (`Back`) 상태에서 배면이 정상 은면 소거(Back-face Culled)되어야 한다.
+  - 내장 메시는 기본 불투명 머티리얼(`DefaultMaterial`)과 바인딩되며, 머티리얼의 `m_FrontFace: 1` (`Clockwise`) 및 `m_CullMode: 2` (`Back`) 상태에서 배면이 정상 은면 소거(Back-face Culled)되어야 한다.
 
 ---
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "BoundingBox.h"
 #include <algorithm>
@@ -13,7 +13,7 @@ namespace Editor::PreviewCameraDefaults
 	inline constexpr float YawDegrees = 160.0f;
 	inline constexpr float FieldOfViewDegrees = 45.0f;
 	inline constexpr double DefaultFramingMargin = 1.35;
-	inline constexpr double ThumbnailFramingMargin = 1.08;
+	inline constexpr double ThumbnailFramingMargin = 1.00;
 
 	struct Framing
 	{

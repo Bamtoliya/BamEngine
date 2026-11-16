@@ -1,4 +1,4 @@
-#include "ThumbnailRenderer.h"
+﻿#include "ThumbnailRenderer.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
@@ -17,6 +17,14 @@
 #include "EditorSettingsService.h"
 #include "PreviewCameraDefaults.h"
 #include "AnimationEvaluator.h"
+#include "MaterialInstance.h"
+
+namespace
+{
+	constexpr const wchar_t* DefaultMaterialKey = L"Resources/Material/DefaultMaterial.bammat.json";
+	constexpr const wchar_t* ThumbnailMaterialKey = L"Editor.ThumbnailPreviewMaterial";
+	constexpr float ThumbnailMetallic = 0.2f;
+}
 
 IMPLEMENT_SINGLETON(ThumbnailRenderer)
 
@@ -36,6 +44,28 @@ EResult ThumbnailRenderer::Initialize(void* arg)
 	if (!m_SphereMesh.Get())
 		return EResult::FileNotFound;
 
+	auto baseMaterial = manager.GetResourceHandle<Engine::Material>(DefaultMaterialKey);
+	if (!baseMaterial.IsValid())
+	{
+		auto loaded = manager.LoadFile(DefaultMaterialKey);
+		if (loaded.IsValid()) baseMaterial = Engine::ResourceHandle<Engine::Material>(loaded);
+	}
+	if (!baseMaterial.Get())
+		return EResult::FileNotFound;
+
+	m_PreviewMaterial = manager.GetResourceHandle<Engine::MaterialInterface>(ThumbnailMaterialKey);
+	if (!m_PreviewMaterial.IsValid())
+	{
+		auto* instance = Engine::MaterialInstance::Create(baseMaterial);
+		if (!instance)
+			return EResult::Fail;
+
+		instance->AddFloat("Metallic", ThumbnailMetallic);
+		m_PreviewMaterial = manager.AddResource<Engine::MaterialInterface>(ThumbnailMaterialKey, instance);
+		if (!m_PreviewMaterial.Get())
+			return EResult::Fail;
+	}
+
 	SetupStudioScene();
 	if (m_Scene == nullptr || m_MeshEntity == entt::null)
 	{
@@ -49,11 +79,17 @@ EResult ThumbnailRenderer::Initialize(void* arg)
 		return EResult::Fail;
 	}
 
+	m_PostProcess.Initialize(L"ThumbPreview");
+	m_PostProcess.PrepareResources(m_Size, m_Size);
+
 	return EResult::Success;
 }
 
 void ThumbnailRenderer::Free()
 {
+	m_PostProcess.Free();
+	m_OutputRTName.clear();
+
 	if (!m_Pipeline.GetOwnedRTNames().empty())
 		m_Pipeline.Free();
 
@@ -62,6 +98,7 @@ void ThumbnailRenderer::Free()
 
 	m_MeshEntity = entt::null;
 	m_SphereMesh = {};
+	m_PreviewMaterial = {};
 }
 
 void ThumbnailRenderer::SetupStudioScene()
@@ -163,7 +200,7 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 	if (transComp == nullptr)
 		return false;
 
-	m_Pipeline.Submit(*camera, m_Scene);
+		SubmitFrame(*camera);
 
 	Engine::StaticDrawCommand cmd{};
 	cmd.mesh = mesh;
@@ -177,16 +214,7 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 
 Engine::MaterialInterface* ThumbnailRenderer::GetDefaultPreviewMaterial() const
 {
-	auto& rm = Engine::ResourceManager::Get();
-	auto handle = rm.GetResourceHandle<Engine::MaterialInterface>(L"Resources/Material/PBRMaterial.bammat.json");
-	if (!handle.IsValid() || !handle.Get())
-		handle = rm.GetResourceHandle<Engine::MaterialInterface>(L"Resources/Material/GBufferMaterial.bammat.json");
-	if (!handle.IsValid() || !handle.Get())
-	{
-		auto loaded = rm.LoadFile(L"Resources/Material/PBRMaterial.bammat.json");
-		if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
-	}
-	return handle.Get();
+	return m_PreviewMaterial.Get();
 }
 
 std::optional<CameraBuffer> ThumbnailRenderer::CalculateAutoFramingCamera(const Engine::BoundingBox& bounds) const
@@ -201,6 +229,11 @@ std::optional<CameraBuffer> ThumbnailRenderer::CalculateAutoFramingCamera(const 
 	const mat4 view = glm::lookAtLH(eye, framing->Center, vec3(0.0f, 1.0f, 0.0f));
 	const mat4 proj = glm::perspectiveLH_ZO(glm::radians(fieldOfView), 1.0f, framing->NearPlane, framing->FarPlane);
 	return CameraBuffer::FromMatrices(view, proj, eye, 0.0f);
+}
+void ThumbnailRenderer::SubmitFrame(const CameraBuffer& camera)
+{
+	m_Pipeline.Submit(camera, m_Scene);
+	m_OutputRTName = m_PostProcess.Execute(0.0f, m_Pipeline.GetFinalColorRTName());
 }
 bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material)
 {
@@ -257,7 +290,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	const auto camera = CalculateAutoFramingCamera(renderBounds);
 	if (!camera)
 		return false;
-	m_Pipeline.Submit(*camera, m_Scene);
+		SubmitFrame(*camera);
 	if (mesh->IsSkinned())
 	{
 		Engine::SkinnedDrawCommand cmd{};
@@ -362,7 +395,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 				continue;
 
 			if (!submitted)
-				m_Pipeline.Submit(*camera, m_Scene);
+				SubmitFrame(*camera);
 
 			if (mesh->IsSkinned())
 			{
@@ -394,7 +427,8 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 
 Engine::RHITexture* ThumbnailRenderer::GetFinalTexture() const
 {
-	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(m_Pipeline.GetFinalColorRTName());
+	const auto& name = m_OutputRTName.empty() ? m_Pipeline.GetFinalColorRTName() : m_OutputRTName;
+	auto* rt = Engine::RenderTargetManager::Get().GetRenderTarget(name);
 	return rt ? rt->GetTexture() : nullptr;
 }
 

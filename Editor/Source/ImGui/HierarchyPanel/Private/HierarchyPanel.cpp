@@ -337,13 +337,13 @@ void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
 	if (ImGui::BeginMenu((ICON_FA_CUBES " " + LOCAL_LABEL("Hierarchy.3DObjects")).c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cube").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+			EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Sphere").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Sphere", L"SphereMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+			EntityFactory::CreatePrimitiveEntity(scene, L"Sphere", L"SphereMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cylinder").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Cylinder", L"CylinderMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+			EntityFactory::CreatePrimitiveEntity(scene, L"Cylinder", L"CylinderMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Quad").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Resources/Material/DefaultMaterial.bammat.json");
+			EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		ImGui::EndMenu();
 	}
 

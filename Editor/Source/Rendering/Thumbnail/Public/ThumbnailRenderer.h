@@ -6,6 +6,7 @@
 #include "MaterialInterface.h"
 #include "ViewportDeferredPipeline.h"
 #include <optional>
+#include "PostProcessPipeline.h"
 
 BEGIN(Engine)
 class Scene;
@@ -46,11 +47,16 @@ private:
 	void RefreshStudioLights();
 	[[nodiscard]] std::optional<CameraBuffer> CalculateAutoFramingCamera(const Engine::BoundingBox& bounds) const;
 	[[nodiscard]] Engine::MaterialInterface* GetDefaultPreviewMaterial() const;
+	void SubmitFrame(const CameraBuffer& camera);
 private:
 	uint32 m_Size = 128;
 
 	// 128x128 오프스크린 디퍼드 렌더링 파이프라인
 	ViewportDeferredPipeline m_Pipeline;
+
+	// 썸네일 전용 후처리 (기본 구성: ACES 톤매핑 + 감마만 활성)
+	Engine::PostProcessPipeline m_PostProcess;
+	std::wstring m_OutputRTName;
 
 	// 프리뷰 전용 독립 씬 및 엔티티
 	Engine::Scene* m_Scene = nullptr;
@@ -64,6 +70,9 @@ private:
 
 	// 스킨드 썸네일 제출 시 비동기 렌더링 수명을 보장하기 위한 바인드 포즈 행렬 버퍼
 	std::vector<mat4> m_BindPoseMatrices;
+
+	// 메쉬·모델 썸네일 기본 머티리얼 (DefaultMaterial 상속 인스턴스, ResourceManager 소유)
+	Engine::ResourceHandle<Engine::MaterialInterface> m_PreviewMaterial;
 };
 
 END

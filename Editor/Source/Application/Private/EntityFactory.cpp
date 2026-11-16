@@ -97,14 +97,33 @@ Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, 
 	Entity& entity = CreateEmptyEntity(scene, name);
 	ResourceManager& resourceManager = ResourceManager::Get();
 	ResourceHandle<Mesh> meshHandle = resourceManager.GetResourceHandle<Mesh>(meshKey);
-	ResourceHandle<Material> materialHandle = resourceManager.GetResourceHandle<Material>(materialKey);
-	if(!meshHandle || !materialHandle)
+
+	// 1. 직접 키 조회
+	ResourceHandle<MaterialInterface> materialHandle = resourceManager.GetResourceHandle<MaterialInterface>(materialKey);
+
+	// 2. 가상 URI 변환 조회 Fallback (Resources/... -> Engine://... 등)
+	if (!materialHandle && !materialKey.empty())
 	{
-		EDITOR_LOG_INFO("Failed to create primitive entity: Mesh or Material not found. MeshKey: {}, MaterialKey: {}", WStrToStr(meshKey), WStrToStr(materialKey));
+		const wstring virtualUri = PlatformPath::ToVirtualUri(materialKey);
+		if (!virtualUri.empty() && virtualUri != materialKey)
+			materialHandle = resourceManager.GetResourceHandle<MaterialInterface>(virtualUri);
+	}
+
+	// 3. 디스크 로드 시도 Fallback
+	if (!materialHandle && !materialKey.empty())
+	{
+		materialHandle = ResourceHandle<MaterialInterface>(resourceManager.LoadFile(materialKey));
+	}
+
+	if (!meshHandle || !materialHandle)
+	{
+		EDITOR_LOG_ERROR("Failed to create primitive entity: Missing resources. Mesh: {} ('{}'), Material: {} ('{}')",
+			meshHandle ? "OK" : "Missing", WStrToStr(meshKey),
+			materialHandle ? "OK" : "Missing", WStrToStr(materialKey));
 		return entity;
 	}
-	scene->AddComponent<StaticMeshRendererComponent>(entity, meshHandle, materialHandle);
 
+	scene->AddComponent<StaticMeshRendererComponent>(entity, meshHandle, materialHandle);
 	return entity;
 }
 
