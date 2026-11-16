@@ -234,7 +234,7 @@ void VFXEditorPanel::SetupPreview()
 	m_ObstacleEntities.clear();
 	auto& rm = Engine::ResourceManager::Get();
 	// 스튜디오 공용 차콜 그레이 PBR 머티리얼 준비
-	const wchar_t* defaultMatPath = L"Assets/Material/GBufferMaterial.bammat.json";
+	const wchar_t* defaultMatPath = L"Resources/Material/DefaultMaterial.bammat.json";
 	auto baseMat = rm.GetResourceHandle<Engine::Material>(defaultMatPath);
 	if (!baseMat.IsValid())
 	{

@@ -1226,7 +1226,7 @@ namespace
 		ppComp.PipelineSettings = "{\n    \"Effects\": [\n        {\n            \"Enabled\": true,\n            \"Name\": \"Bloom\",\n            \"Parameters\": {\n                \"Intensity\": 1,\n                \"Scatter\": 0.699999988079071,\n                \"SoftKnee\": 0.5,\n                \"Threshold\": 0.800000011920929\n            }\n        },\n        {\n            \"Enabled\": true,\n            \"Name\": \"Tone Mapping (ACES)\",\n            \"Parameters\": {\n                \"Exposure\": 1,\n                \"Gamma\": 2.200000047683716\n            }\n        }\n    ]\n}";
 
 		// 4. Ground Plane
-		Entity& planeEntity = EntityFactory::CreatePrimitiveEntity(scene, L"Ground Plane", L"PlaneMesh", L"Project://Material/GBufferMaterial.bammat.json");
+		Entity& planeEntity = EntityFactory::CreatePrimitiveEntity(scene, L"Ground Plane", L"PlaneMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		auto& planeTrans = scene->GetComponent<TransformComponent>(planeEntity);
 		planeTrans.position = vec3(0.0f, 0.0f, 0.0f);
 		planeTrans.scale = vec3(10.0f, 1.0f, 10.0f);

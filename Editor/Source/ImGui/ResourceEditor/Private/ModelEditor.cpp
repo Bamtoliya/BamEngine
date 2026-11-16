@@ -85,7 +85,7 @@ void ModelEditor::SetupPreviewModel()
 	{
 		const wchar_t* defaultMatPath = model->GetSkeleton().IsValid()
 			? L"Resources/Material/SkinningMaterial.bammat.json"
-			: L"Resources/Material/GBufferMaterial.bammat.json";
+			: L"Resources/Material/DefaultMaterial.bammat.json";
 		matHandle = Engine::ResourceHandle<Engine::MaterialInterface>(rm.LoadFile(defaultMatPath));
 	}
 
@@ -732,7 +732,7 @@ void ModelEditor::InstantiateModel()
 	auto model = m_ModelHandle;
 	const wchar_t* defaultMatPath = (model.IsValid() && model->GetSkeleton().IsValid())
 		? L"Resources/Material/SkinningMaterial.bammat.json"
-		: L"Resources/Material/GBufferMaterial.bammat.json";
+		: L"Resources/Material/DefaultMaterial.bammat.json";
 	ResourceHandle<Material> material(manager.LoadFile(defaultMatPath));
 	if (!model.IsValid() || !material.IsValid())
 	{

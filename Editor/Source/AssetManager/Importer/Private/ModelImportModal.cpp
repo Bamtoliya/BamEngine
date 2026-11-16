@@ -301,7 +301,7 @@ namespace Editor
 		}
 
 		auto& manager = Engine::ResourceManager::Get();
-		const auto materialRaw = manager.LoadFile(L"Resources/Material/GBufferMaterial.bammat.json");
+		const auto materialRaw = manager.LoadFile(L"Resources/Material/DefaultMaterial.bammat.json");
 
 		if (!dynamic_cast<Engine::Material*>(manager.GetResource(materialRaw)))
 		{

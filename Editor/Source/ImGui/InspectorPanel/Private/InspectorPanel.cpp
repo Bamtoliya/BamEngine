@@ -906,7 +906,26 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	bool anyChanged = false;
 	const std::array targets{ handle };
 	auto& history = Application::Get().GetEditHistory();
-	auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene, targets) : SceneEditSnapshot{};
+
+	const bool cacheValid = m_CachedSnapshot && m_CachedEntity == handle &&
+		m_CachedScene == scene && m_CachedRevision == history.Revision();
+
+	if (!cacheValid && history.Enabled())
+	{
+		m_CachedSnapshot = SceneEditSnapshot::Capture(*scene, targets);
+		m_CachedEntity = handle;
+		m_CachedScene = scene;
+		m_CachedRevision = history.Revision();
+	}
+	else if (!history.Enabled())
+	{
+		m_CachedSnapshot = {};
+		m_CachedEntity = entt::null;
+		m_CachedScene = nullptr;
+		m_CachedRevision = 0;
+	}
+
+	SceneEditSnapshot before = m_CachedSnapshot;
 	ImGui::BeginDisabled(!history.Enabled() || !before);
 
 	struct ReflectedItem
@@ -1589,7 +1608,11 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	}
 	if (anyChanged)
 	{
-		history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.EditProperties", true);
+		auto after = SceneEditSnapshot::Capture(*scene, targets);
+		history.Record(std::move(before), after, "History.Command.EditProperties", true);
+
+		m_CachedSnapshot = std::move(after);
+		m_CachedRevision = history.Revision();
 
 		auto& prefabMode = PrefabModeManager::Get();
 		if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)

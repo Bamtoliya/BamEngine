@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include "ReflectionEditState.h"
+#include "SceneEditHistory.h"
 #include <entt/entity/entity.hpp>
 
 BEGIN(Engine)
@@ -43,5 +44,9 @@ private:
     uint64 m_CurrentDisplayId = 0;
     float m_LastScrollY = 0.0f;
     std::unordered_map<uint64, float> m_EntityScrollMap;
+    entt::entity m_CachedEntity = entt::null;
+    Engine::Scene* m_CachedScene = nullptr;
+    uint64 m_CachedRevision = 0;
+    SceneEditSnapshot m_CachedSnapshot;
 };
 END

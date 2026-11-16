@@ -484,7 +484,7 @@ static Engine::Entity* InstantiateDroppedModel(Engine::Scene& scene, const std::
 
 	const wchar_t* materialPath = model->GetSkeleton().IsValid()
 		? L"Resources/Material/SkinningMaterial.bammat.json"
-		: L"Resources/Material/GBufferMaterial.bammat.json";
+		: L"Resources/Material/DefaultMaterial.bammat.json";
 	const Engine::ResourceHandle<Engine::MaterialInterface> material(resources.LoadFile(materialPath));
 	Engine::Entity* root = nullptr;
 	if (material.IsValid() && scene.InstantiateLinkedModel(model, material, root) == Engine::EResult::Success)
@@ -704,6 +704,8 @@ void SceneViewportPanel::DrawGizmoMenu()
 	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.GizmoMenu")))
 	{
 		auto& sm = ShortcutManager::Get();
+		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoSelect").c_str(), sm.GetShortcutHint("Viewport.GizmoSelect"), m_GizmoOperation == static_cast<ImGuizmo::OPERATION>(0)))
+			m_GizmoOperation = static_cast<ImGuizmo::OPERATION>(0);
 		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoTranslate").c_str(), sm.GetShortcutHint("Viewport.GizmoTranslate"), m_GizmoOperation == ImGuizmo::TRANSLATE))
 			m_GizmoOperation = ImGuizmo::TRANSLATE;
 		if (ImGui::MenuItem(LOCAL_LABEL("Action.Viewport.GizmoRotate").c_str(), sm.GetShortcutHint("Viewport.GizmoRotate"), m_GizmoOperation == ImGuizmo::ROTATE))

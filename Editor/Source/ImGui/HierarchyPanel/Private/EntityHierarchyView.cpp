@@ -465,6 +465,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             const auto& children = tree.Children.at(entity);
             const bool isCanvas = world.all_of<Engine::CanvasComponent>(entity);
             auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
+            if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf; // 자식이 없으면 리프 노드로 처리하여 > 화살표 숨김
             if (!isCanvas) flags |= ImGuiTreeNodeFlags_OpenOnDoubleClick;
             if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
             flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen; // 자식은 평탄화된 줄 목록에서 따로 그린다
