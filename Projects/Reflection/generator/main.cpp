@@ -28,6 +28,7 @@
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/JSON.h>
+#include <llvm/Support/MemoryBuffer.h>
 #pragma endregion
 
 #pragma region std includes
@@ -108,6 +109,9 @@ namespace
 
     bool SaveGeneratedFile(llvm::StringRef path, llvm::StringRef contents)
     {
+        if (auto existing = llvm::MemoryBuffer::getFile(path, /*IsText=*/false, /*RequiresNullTerminator=*/false); existing && (*existing)->getBuffer() == contents)
+            return true;
+
         llvm::SmallString<256> directory(path);
         llvm::sys::path::remove_filename(directory);
 

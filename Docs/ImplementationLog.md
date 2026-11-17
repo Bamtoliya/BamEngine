@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 빌드 설정 정리: Qt AUTOMOC 비활성화, 리플렉션 생성기 동일 내용 쓰기 생략
+
+- **Qt AUTOMOC 비활성화** (`Editor/CMake/QtBuild.cmake`): Editor·플러그인 소스에 `Q_OBJECT`·`Q_GADGET`·`Q_PROPERTY`·`Q_SIGNALS`·`Q_SLOTS`·`Q_EMIT`이 없고 Qt 사용처는 `QtManager`뿐이며 `QT_NO_KEYWORDS`가 켜져 있어 moc 대상이 없다. 빌드마다 Editor 소스 전체를 훑는 autogen 단계를 없앴다. Qt 시그널·슬롯 클래스(`Q_OBJECT`)를 추가하면 다시 켜야 한다.
+- **리플렉션 생성기 쓰기 생략** (`Projects/Reflection/generator/main.cpp` `SaveGeneratedFile`): 기존 파일과 내용이 같으면 쓰지 않는다. CMake Ninja 생성기는 리플렉션 생성 단계에 `restat = 1`을 붙이므로, 변하지 않은 `.gen.h`를 include하는 소스를 다시 컴파일하지 않는다(예: `GraphFoundationCheck.gen.cpp`는 갱신되고 `.gen.h`는 이전 시각 유지).
+- **검증 (2026-11-17, `x64-ninja-debug`)**: 두 변경이 들어간 상태로 하루 동안 Editor 빌드·실행과 CTest를 수행했다. 무변경 빌드에서 리플렉션 생성 단계가 다시 실행되지 않음을 빌드 출력으로 확인했다.
+- **잔여 (추정, 미확인)**: Visual Studio 생성기(`x64-debug`)의 사용자 지정 빌드 단계에는 `restat`이 없어, 출력이 입력보다 오래된 상태로 남으면 빌드마다 생성기가 다시 실행될 수 있다(정확성 영향 없음, 빌드 시간만 증가). 근본 해결은 `ReflectionGenerate.cmake`에서 생성 파일을 `BYPRODUCTS`로 두고 별도 스탬프를 `OUTPUT`으로 갱신하는 방식이다.
+- **문서**: `DiskCacheDevelopmentPlan.md` Phase 4 기록에 커밋 해시(`4b815f7`)를 기입했다.
+
 ### [2026-11-17] 그래프 노드 위치·주석 저장, 주석 노드 결함, 핀 표시와 캔버스 조작
 
 - **배경**: 그래프 저장 범위가 `Engine::Graph`뿐이라 노드 위치와 주석 제목이 사라졌다. 조사 중 다음 결함을 함께 확인했다.

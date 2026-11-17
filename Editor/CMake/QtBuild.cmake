@@ -2,7 +2,7 @@
 
 target_link_libraries(Editor PRIVATE Qt6::Widgets)
 target_compile_definitions(Editor PRIVATE QT_NO_KEYWORDS)
-set_target_properties(Editor PROPERTIES AUTOMOC ON)
+set_target_properties(Editor PROPERTIES AUTOMOC OFF)
 
 set_source_files_properties(
     "${CMAKE_CURRENT_LIST_DIR}/../Source/Application/Private/Main.cpp"
