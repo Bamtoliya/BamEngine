@@ -44,7 +44,7 @@ public:
 
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
-	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	bool HasUnsavedResourceChanges() const override { return m_UntrackedDirty || m_TimelineHistory.GetCurrentStateId() != m_SavedStateId; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	EShortcutContext GetShortcutContext() const override
 	{
@@ -101,6 +101,7 @@ private:
 	void SaveEffectAs();
 	void RestartSimulation();
 	void InvalidateTimelinePreview();
+	void MarkSaved(); // 현재 문서 상태를 저장 기준점으로 기록한다 (저장 성공·로드 시)
 	void ScrubTime(f32 targetTime);
 
 	void ApplyBackgroundPreset();
@@ -111,7 +112,8 @@ private:
 	void StepFrame(int step);
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
-	bool m_IsDirty = false;
+	bool m_UntrackedDirty = false; // 이력에 남지 않는 변경: 반복 토글, 트랙 목록 활성 체크, 새 이펙트
+	uint64 m_SavedStateId = 0;     // 저장·로드 시점의 m_TimelineHistory 상태 ID
 	std::string m_StatusMessage;
 	char m_TrackSearch[64] = {};
 

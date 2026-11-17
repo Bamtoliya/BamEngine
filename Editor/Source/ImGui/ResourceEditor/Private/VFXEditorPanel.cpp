@@ -167,9 +167,9 @@ bool VFXEditorPanel::IsSupported(const std::filesystem::path& assetPath) const
 void VFXEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
 	ResourceEditorInterface::SetTargetResource(assetPath);
-	m_IsDirty = false;
 	m_SelectedTrack.Clear();
 	m_TimelineHistory.Clear();
+	MarkSaved();
 	m_Timeline.Drag.reset();
 	m_Timeline.Fit();
 
@@ -393,11 +393,16 @@ void VFXEditorPanel::ScrubTime(f32 targetTime)
 	m_TimelineSeek = targetTime;
 }
 
+void VFXEditorPanel::MarkSaved()
+{
+	m_UntrackedDirty = false;
+	m_SavedStateId = m_TimelineHistory.GetCurrentStateId();
+}
+
 void VFXEditorPanel::InvalidateTimelinePreview()
 {
 	m_FixedPreview = false;
 	ScrubTime(m_TimelineSeek.value_or(m_CurrentTime));
-	m_IsDirty = true;
 }
 
 void VFXEditorPanel::Update(f32 dt)
@@ -475,7 +480,7 @@ void VFXEditorPanel::NewEffect()
 	m_Timeline.Fit();
 	m_IsLooping = false;
 	m_SelectedTrack.Clear();
-	m_IsDirty = true;
+	m_UntrackedDirty = true;
 	SetupPreview();
 }
 
@@ -490,6 +495,8 @@ void VFXEditorPanel::OpenEffect()
 
 void VFXEditorPanel::SaveEffect()
 {
+	if (m_InspectorEdit) CommitInspectorEdit(); // 저장 직전 편집을 이력에 먼저 확정해야 저장 기준점이 맞는다
+
 	if (m_TargetResourcePath.empty())
 	{
 		SaveEffectAs();
@@ -499,7 +506,7 @@ void VFXEditorPanel::SaveEffect()
 	auto* effect = m_EffectHandle.Get();
 	if (effect && effect->SaveToFile(m_TargetResourcePath.wstring()))
 	{
-		m_IsDirty = false;
+		MarkSaved();
 		m_StatusMessage = "Effect saved successfully.";
 	}
 }
@@ -533,7 +540,18 @@ void VFXEditorPanel::DrawCustomToolbar()
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("CompositeTimeline.Save"), false, hasResource)) SaveEffect();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str(), nullptr, false, hasResource)) SaveEffectAs();
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str(), nullptr)) m_Open = false;
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str(), nullptr)) OnResourceCloseRequested();
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
+	{
+		using enum EditorUI::TimelineAction;
+		auto& shortcuts = ShortcutManager::Get();
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Undo").c_str(), shortcuts.GetShortcutHint("CompositeTimeline.Undo"), false, CanExecuteTimelineAction(Undo)))
+			ExecuteTimelineAction(Undo);
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Redo").c_str(), shortcuts.GetShortcutHint("CompositeTimeline.Redo"), false, CanExecuteTimelineAction(Redo)))
+			ExecuteTimelineAction(Redo);
 		ImGui::EndMenu();
 	}
 }
@@ -672,79 +690,88 @@ void VFXEditorPanel::DrawTrackList()
 		ImGui::OpenPopup("AddVFXTrackPopup");
 	}
 
+	// 트랙 추가를 Undo 가능한 명령으로 실행한다. 실행=목록 끝에 추가, 취소=끝에서 제거 (이력은 선형이라 취소 시점의 마지막 항목이 이 트랙이다)
+	const auto addTrack = [this](ESelectedVFXTrackType type, auto track)
+		{
+			if (m_InspectorEdit) CommitInspectorEdit();
+			using Track = decltype(track);
+			const auto handle = m_EffectHandle;
+			const auto apply = [this, handle, type, track](bool undo)
+				{
+					auto* target = handle.Get();
+					if (!target) return false;
+					bool changed = false;
+					ForEachVFXTrackList(*target, [&](ESelectedVFXTrackType listType, auto& list)
+						{
+							if constexpr (std::is_same_v<typename std::remove_reference_t<decltype(list)>::value_type, Track>)
+							{
+								if (listType != type || (undo && list.empty())) return;
+								if (undo) list.pop_back();
+								else list.push_back(track);
+								m_SelectedTrack = undo ? SelectedVFXTrack{} : SelectedVFXTrack{ type, static_cast<int>(list.size() - 1) };
+								changed = true;
+							}
+						});
+					if (changed)
+					{
+						m_Timeline.Drag.reset();
+						InvalidateTimelinePreview();
+					}
+					return changed;
+				};
+			m_TimelineHistory.Execute(std::make_unique<CallbackEditorCommand>(LOCAL("VFXEditor.AddTrack"),
+				[apply] { return apply(false); }, [apply] { return apply(true); }));
+		};
+
 	auto drawAddTrackMenuItems = [&]()
 		{
 			if (ImGui::MenuItem((std::string(ICON_FA_IMAGES " ") + LOCAL_CSTR("VFXEditor.AddSpriteTrack")).c_str()))
 			{
 				Engine::VFXSpriteTrack track;
 				track.trackName = "Sprite_" + std::to_string(effect->GetSpriteTracks().size() + 1);
-				effect->GetSpriteTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Sprite, static_cast<int>(effect->GetSpriteTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Sprite, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_WAND_MAGIC_SPARKLES " ") + LOCAL_CSTR("VFXEditor.AddParticleTrack")).c_str()))
 			{
 				Engine::VFXParticleTrack track;
 				track.trackName = "Particle_" + std::to_string(effect->GetParticleTracks().size() + 1);
-				effect->GetParticleTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Particle, static_cast<int>(effect->GetParticleTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Particle, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
 			{
 				Engine::VFXLightTrack track;
 				track.trackName = "Light_" + std::to_string(effect->GetLightTracks().size() + 1);
-				effect->GetLightTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Light, static_cast<int>(effect->GetLightTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Light, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_CUBE " ") + LOCAL_CSTR("VFXEditor.AddMeshTrack")).c_str()))
 			{
 				Engine::VFXMeshTrack track;
 				track.trackName = "Mesh_" + std::to_string(effect->GetMeshTracks().size() + 1);
-				effect->GetMeshTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Mesh, static_cast<int>(effect->GetMeshTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Mesh, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
 			{
 				Engine::VFXSoundTrack track;
 				track.trackName = "Sound_" + std::to_string(effect->GetSoundTracks().size() + 1);
-				effect->GetSoundTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Sound, static_cast<int>(effect->GetSoundTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Sound, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_LINES_LEANING " ") + LOCAL_CSTR("VFXEditor.AddTrailTrack")).c_str()))
 			{
 				Engine::VFXTrailTrack track;
 				track.trackName = "Trail_" + std::to_string(effect->GetTrailTracks().size() + 1);
-				effect->GetTrailTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Trail, static_cast<int>(effect->GetTrailTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Trail, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_STAMP " ") + LOCAL_CSTR("VFXEditor.AddDecalTrack")).c_str()))
 			{
 				Engine::VFXDecalTrack track;
 				track.trackName = "Decal_" + std::to_string(effect->GetDecalTracks().size() + 1);
-				effect->GetDecalTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::Decal, static_cast<int>(effect->GetDecalTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::Decal, std::move(track));
 			}
 			if (ImGui::MenuItem((std::string(ICON_FA_EARTH_AMERICAS " ") + LOCAL_CSTR("VFXEditor.AddCameraShakeTrack")).c_str()))
 			{
 				Engine::VFXCameraShakeTrack track;
 				track.trackName = "Shake_" + std::to_string(effect->GetCameraShakeTracks().size() + 1);
-				effect->GetCameraShakeTracks().push_back(track);
-				m_SelectedTrack = { ESelectedVFXTrackType::CameraShake, static_cast<int>(effect->GetCameraShakeTracks().size() - 1) };
-				m_TimelineHistory.Clear();
-				InvalidateTimelinePreview();
+				addTrack(ESelectedVFXTrackType::CameraShake, std::move(track));
 			}
 		};
 
@@ -794,7 +821,7 @@ void VFXEditorPanel::DrawTrackList()
 					continue;
 
 				ImGui::PushID(static_cast<int>(i));
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) InvalidateTimelinePreview();
+				if (ImGui::Checkbox("##Enabled", &track.enabled)) { m_UntrackedDirty = true; InvalidateTimelinePreview(); }
 				ImGui::SameLine();
 				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(style.Color));
 				const auto label = std::string(style.Icon) + " " + track.trackName + "###Track";
@@ -1041,7 +1068,6 @@ void VFXEditorPanel::DrawGizmo()
 					track.localOffsetA += delta;
 					track.localOffsetB += delta;
 				}
-				m_IsDirty = true;
 				InvalidateTimelinePreview();
 			}
 
@@ -1102,7 +1128,6 @@ void VFXEditorPanel::DrawGizmo()
 										item.localOffsetA = state.trailOffsetA;
 										item.localOffsetB = state.trailOffsetB;
 									}
-									m_IsDirty = true;
 									InvalidateTimelinePreview();
 								});
 						};
@@ -1264,7 +1289,7 @@ void VFXEditorPanel::CommitInspectorEdit()
 					using T = std::remove_cvref_t<decltype(tracks[index])>;
 					if (const T* value = std::any_cast<T>(&state)) { tracks[index] = *value; applied = true; }
 				});
-			if (applied) InvalidateTimelinePreview(); // 프리뷰 재구성 + Dirty
+			if (applied) InvalidateTimelinePreview(); // 프리뷰 재구성 (미저장 여부는 이력 상태 ID로 판단)
 			return applied;
 		};
 
@@ -1504,7 +1529,7 @@ void VFXEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
 	case Loop:
 		m_IsLooping = !m_IsLooping;
 		m_EffectHandle.Get()->SetLooping(m_IsLooping);
-		m_IsDirty = true;
+		m_UntrackedDirty = true;
 		break;
 	case Fit: m_Timeline.Fit(); break;
 	case Delete: DeleteSelectedTrack(); break;
@@ -1541,7 +1566,6 @@ void VFXEditorPanel::DrawInspector()
 	VisitVFXTrack(*effect, selection, [&](auto& tracks, std::size_t index) { before = tracks[index]; });
 
 	if (!DrawSelectedTrackInspector(effect)) return;
-	m_IsDirty = true;
 
 	// 삭제 버튼 등으로 선택이 바뀐 프레임에는 세션을 열지 않는다.
 	const bool sameTrack = m_SelectedTrack.type == selection.type && m_SelectedTrack.index == selection.index;

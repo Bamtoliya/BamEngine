@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] VFX 편집기 이력 정합성 (트랙 추가 Undo, 편집 메뉴, 저장 기준점)
+
+- **배경**: 리소스 편집기 기본 기능 기준(EngineEditorClientGuidelines 19절 7항)의 Undo 조건과 대조한 결과, VFX 편집기는 트랙 추가 메뉴 8곳이 `m_TimelineHistory.Clear()`로 이전 Undo 이력을 모두 지우고 추가 자체도 되돌릴 수 없었다. 편집 메뉴에는 Undo/Redo가 없었다. `InvalidateTimelinePreview()`가 매번 `m_IsDirty = true`를 설정해 Undo로 저장 상태에 돌아가도 `*`가 꺼지지 않았다.
+- **변경 사항** (`VFXEditorPanel.h/.cpp`):
+  - **트랙 추가 명령**: `DrawTrackList`의 `addTrack` 람다가 삭제 명령의 역동작으로 `CallbackEditorCommand`를 실행한다(실행=목록 끝에 추가 후 선택, 취소=끝에서 제거 후 선택 해제). 이력이 선형이라 취소 시점의 마지막 항목이 그 트랙이다. 처음 만든 트랙 값을 캡처해 Redo도 같은 이름·값으로 복원한다. 실행 전에 인스펙터 편집 세션을 확정해 이력 순서를 맞춘다. 명령 이름은 기존 `VFXEditor.AddTrack`을 재사용한다. 새로 만들기·열기의 `Clear()`는 유지한다.
+  - **편집 메뉴**: `실행 취소`/`다시 실행`을 추가하고 퀵액세스·단축키와 같은 `CanExecuteTimelineAction`/`ExecuteTimelineAction`을 호출한다. 파일 메뉴 `닫기`는 `OnResourceCloseRequested()`를 호출한다.
+  - **저장 기준점**: `HasUnsavedResourceChanges() = m_UntrackedDirty || m_TimelineHistory.GetCurrentStateId() != m_SavedStateId`. `MarkSaved()`가 저장 성공·로드 시 상태 ID를 기록한다. `InvalidateTimelinePreview()`는 프리뷰 재구성만 담당한다. 이력 밖 변경(반복 토글, 트랙 목록 활성 체크, 새 이펙트)만 `m_UntrackedDirty`를 세운다. 저장 직전에 인스펙터 세션을 확정해 저장 후 `*`가 잘못 켜지지 않게 했다.
+  - 동작 변화: 기즈모·인스펙터 드래그 중에는 `*`가 켜지지 않고 놓는 순간(명령 기록 시점) 켜진다.
+- **검증 (사용자 실행, 2026-11-17)**: 1단계(추가 후 이력 보존, 추가 Undo/Redo, 여러 종류 역순 취소, 편집 메뉴)와 2단계(UX-4.3 편집→Undo, 저장 후 Undo/Redo, 분기 편집, 드래그, 이력 밖 변경, 새 이펙트, 열기, 저장 직전 입력)를 의도대로 동작한다고 확인했다. CTest 실행 결과는 따로 받지 못했다.
+- **잔여**:
+  - 반복 토글과 트랙 목록 활성 체크는 명령이 아니어서 Undo되지 않고 `m_UntrackedDirty`로만 표시된다.
+  - VFX 열기·다른 이름으로 저장 대화상자의 필터 문구가 하드코딩돼 있다.
+
 ### [2026-11-17] 리소스 편집기 공통 교체 확인 (1~2단계)
 
 - **배경**: 리소스 편집기 12종 정적 점검에서 VFX·파티클·스프라이트·애니메이션 타임라인의 자체 새로 만들기·열기가 미저장 문서를 확인 없이 교체하는 것을 확인했다(`SetTargetResource`가 `m_IsDirty = false`로 덮어씀). 콘텐츠 브라우저 경로는 `ImGuiManager`의 공통 차단이 막지만 편집기 내부 메뉴·버튼·드롭은 이를 거치지 않았다. 애니메이터·그래프는 각자 확인 모달을 따로 구현하고 있었다.
