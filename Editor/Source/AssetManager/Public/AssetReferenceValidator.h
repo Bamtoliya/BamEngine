@@ -38,6 +38,12 @@ namespace Editor
         std::vector<AssetReferenceLink> References;
     };
 
+    struct AssetDeletionImpact
+    {
+        std::vector<AssetReferenceLink> References;
+        bool IsComplete = true;
+    };
+
     class AssetReferenceValidator
     {
     public:
@@ -50,6 +56,7 @@ namespace Editor
         // 프로젝트 에셋 루트에서 저장된 JSON 문서의 직접 참조와 문제를 수집한다.
         static AssetReferenceScan ScanProject();
         static std::vector<AssetReferenceIssue> ValidateAllResources();
+        static AssetDeletionImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
 
         // 손상/누락 경로에 대한 안전한 대체 복구 경로 탐색
         static bool TryResolveFallbackPath(const std::string& brokenPath, std::filesystem::path& outResolvedPath);

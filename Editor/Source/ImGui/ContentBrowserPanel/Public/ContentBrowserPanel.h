@@ -8,6 +8,7 @@
 #include "ModelImporter.h"
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
+#include "AssetReferenceValidator.h"
 
 BEGIN(Editor)
 
@@ -96,6 +97,7 @@ private:
 	bool CanUseFileCommands() const;
 	bool CanDeleteFiles(const vector<filesystem::path>& paths) const;
 	void DrawFileDeletionConfirmation();
+	void DrawFileDeletionImpact() const;
 	void QueueFileDeletion(const vector<filesystem::path>& paths);
 	void DeleteFiles(vector<FileMove> moves);
 	filesystem::path FileHistoryRoot() const;
@@ -107,6 +109,7 @@ private:
 	CommandHistory m_FileHistory;
 	bool m_FileHistoryInvalid = false;
 	vector<FileMove> m_PendingFileDeletion;
+	AssetDeletionImpact m_DeletionImpact;
 	vector<filesystem::path> m_BackFolders;
 	vector<filesystem::path> m_ForwardFolders;
 	vector<filesystem::path> m_FileClipboardPaths;

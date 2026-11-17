@@ -41,9 +41,11 @@ int main()
     const Fixture fixture{ root };
 
     const auto assets = root / "Assets";
+    const auto materials = assets / "Materials";
     const auto engine = root / "EngineResources";
     const auto legacy = root / "Resources";
     fs::create_directory(assets);
+    fs::create_directory(materials);
     fs::create_directory(engine);
     fs::create_directory(legacy);
     Engine::PlatformPath::SetProjectRoot(root);
@@ -52,12 +54,12 @@ int main()
     Engine::PlatformPath::SetEditorResourceRoot(root / "EditorResources");
 
     const auto scene = assets / "Sample.bamscene.json";
-    const auto material = assets / "Brick.bammat.json";
-    const auto texture = assets / L"벽.png";
+    const auto material = materials / "Brick.bammat.json";
+    const auto texture = materials / L"벽.png";
     const auto invalid = assets / "Invalid.bamprefab.json";
-    if (!WriteFixture(scene, R"({"Scene":{"Material":{"AssetPath":"Resources/Brick.bammat.json"}}})") ||
-        !WriteFixture(material, R"({"Texture":{"AssetKey":"Project://벽.png","AssetPath":"old.png"},
-            "AnotherUse":{"AssetPath":"Asset://벽.png"},"Unset":{"Null":true,"AssetPath":"unused.png"},
+    if (!WriteFixture(scene, R"({"Scene":{"Material":{"AssetPath":"Resources/Materials/Brick.bammat.json"}}})") ||
+        !WriteFixture(material, R"({"Texture":{"AssetKey":"Project://Materials/벽.png","AssetPath":"old.png"},
+            "AnotherUse":{"AssetPath":"Asset://Materials/벽.png"},"Unset":{"Null":true,"AssetPath":"unused.png"},
             "Metadata":{"Path":"not-a-reference.png"}})") ||
         !WriteFixture(texture, "") ||
         !WriteFixture(engine / "builtIn.png", "") ||
@@ -102,5 +104,39 @@ int main()
     {
         std::cerr << "The package scan must still traverse scene -> material -> texture.\n";
         return 5;
+    }
+
+    const auto folderImpact = Editor::AssetReferenceValidator::AnalyzeDeletion({ materials });
+    if (folderImpact.IsComplete || folderImpact.References.size() != 1 ||
+        folderImpact.References.front().Source != fs::canonical(scene) ||
+        folderImpact.References.front().Target != fs::canonical(material))
+    {
+        std::cerr << "Folder deletion must keep only external usage and report the unreadable document.\n";
+        return 6;
+    }
+
+    if (!fs::remove(invalid))
+        return 7;
+    const auto textureImpact = Editor::AssetReferenceValidator::AnalyzeDeletion({ texture });
+    if (!textureImpact.IsComplete || textureImpact.References.size() != 1 ||
+        textureImpact.References.front().Source != fs::canonical(material) ||
+        textureImpact.References.front().Target != fs::canonical(texture))
+    {
+        std::cerr << "A complete scan must report the material that uses the selected texture.\n";
+        return 8;
+    }
+
+    const auto groupImpact = Editor::AssetReferenceValidator::AnalyzeDeletion({ scene, materials });
+    if (!groupImpact.IsComplete || !groupImpact.References.empty())
+    {
+        std::cerr << "References between files being deleted together do not affect surviving assets.\n";
+        return 9;
+    }
+
+    const auto missingTarget = Editor::AssetReferenceValidator::AnalyzeDeletion({ assets / "missing.png" });
+    if (missingTarget.IsComplete)
+    {
+        std::cerr << "A deleted selection target must not produce a complete empty result.\n";
+        return 10;
     }
 }

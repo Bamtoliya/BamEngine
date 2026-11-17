@@ -1288,6 +1288,12 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 			CheckContentBrowserPath(source, m_RootPath.lexically_normal());
 			moves.push_back({ source, {}, ReadBrowserFileIdentity(source) });
 		}
+
+		vector<filesystem::path> targets;
+		targets.reserve(moves.size());
+		for (const auto& move : moves)
+			targets.push_back(move.Before);
+		m_DeletionImpact = AssetReferenceValidator::AnalyzeDeletion(targets);
 		m_PendingFileDeletion = std::move(moves);
 	}
 	catch (const filesystem::filesystem_error& error)
@@ -1331,6 +1337,7 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 		return;
 
 	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteFilesConfirm", m_PendingFileDeletion.size()).c_str());
+	DrawFileDeletionImpact();
 	const EditorUI::DialogAction actions[] = {
 		{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", CanUseFileCommands(), true }
 	};
@@ -1338,11 +1345,59 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 	if (action >= 0)
 	{
 		auto moves = std::exchange(m_PendingFileDeletion, vector<FileMove>{});
+		m_DeletionImpact = {};
 		ImGui::CloseCurrentPopup();
 		if (action == 1)
 			DeleteFiles(std::move(moves));
 	}
 	ImGui::EndPopup();
+}
+
+void ContentBrowserPanel::DrawFileDeletionImpact() const
+{
+	if (!m_DeletionImpact.IsComplete)
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.DeleteImpactIncomplete"));
+
+	const auto& references = m_DeletionImpact.References;
+	if (references.empty())
+	{
+		if (m_DeletionImpact.IsComplete)
+			ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.DeleteImpactNone"));
+		return;
+	}
+
+	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteImpactCount", references.size()).c_str());
+	const float width = std::min(ImGui::GetFontSize() * 42.0f, ImGui::GetMainViewport()->WorkSize.x * 0.85f);
+	const float height = static_cast<float>(std::min<size_t>(references.size(), 6) + 1) * ImGui::GetFrameHeightWithSpacing();
+	const auto flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame;
+	if (!ImGui::BeginTable("DeletionImpactReferences", 2, flags, ImVec2(width, height)))
+		return;
+
+	ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.SourceAsset").c_str());
+	ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.TargetReference").c_str());
+	ImGui::TableHeadersRow();
+
+	const auto drawPath = [](const filesystem::path& path)
+	{
+		const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+		ImGui::TextUnformatted(display.c_str());
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("%s", display.c_str());
+	};
+	ImGuiListClipper clipper;
+	clipper.Begin(static_cast<int>(references.size()));
+	while (clipper.Step())
+	{
+		for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			drawPath(references[index].Source);
+			ImGui::TableSetColumnIndex(1);
+			drawPath(references[index].Target);
+		}
+	}
+	ImGui::EndTable();
 }
 
 void ContentBrowserPanel::DrawFileClipboardMenu(const vector<filesystem::path>& paths,

@@ -2,6 +2,7 @@
 #include "PlatformPath.h"
 #include "AnimatorStateMachine.h"
 #include "Logger.h"
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <sstream>
@@ -12,6 +13,7 @@
 #include <glaze/glaze.hpp>
 #include <set>
 #include <string_view>
+#include <tuple>
 
 namespace Editor
 {
@@ -168,22 +170,27 @@ namespace Editor
             return IsInAssetTree(Path::Normalize(file), Path::Normalize(root));
         }
 
+        void ReportUnreadableDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
+        {
+            AssetReferenceIssue issue;
+            issue.SourceFile = Engine::PlatformPath::ToProjectRelative(source);
+            issue.IssueType = EAssetReferenceIssueType::UnreadableDocument;
+            scan.Issues.push_back(std::move(issue));
+        }
+
         void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
         {
             using Path = Engine::PlatformPath;
             using Issue = EAssetReferenceIssueType;
 
             glz::generic_u64 document;
-            const auto relativeSource = Path::ToProjectRelative(source);
             if (!ReadReferenceDocument(source, document))
             {
-                AssetReferenceIssue issue;
-                issue.SourceFile = relativeSource;
-                issue.IssueType = Issue::UnreadableDocument;
-                scan.Issues.push_back(std::move(issue));
+                ReportUnreadableDocument(source, scan);
                 return;
             }
 
+            const auto relativeSource = Path::ToProjectRelative(source);
             std::set<std::filesystem::path> targets;
             for (const auto& [reference, property] : ReadReferenceFields(document))
             {
@@ -427,49 +434,93 @@ namespace Editor
         const auto root = fs::canonical(Path::GetProjectAssetRoot(), error);
         if (error || !fs::is_directory(root, error))
         {
-            AssetReferenceIssue issue;
-            issue.SourceFile = Path::ToProjectRelative(Path::GetProjectAssetRoot());
-            issue.IssueType = EAssetReferenceIssueType::UnreadableDocument;
-            scan.Issues.push_back(std::move(issue));
+            ReportUnreadableDocument(Path::GetProjectAssetRoot(), scan);
             return scan;
         }
 
-        std::set<fs::path> scannedDirectories{ root };
-        for (auto entry = fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied, error);
-            !error && entry != fs::recursive_directory_iterator{}; entry.increment(error))
+        // Keep scanning other directories if one subtree cannot be listed.
+        std::set<fs::path> visited{ root };
+        std::vector<fs::path> pending{ root };
+        while (!pending.empty())
         {
-            std::error_code entryError;
-            if (entry->is_symlink(entryError) || entryError)
+            auto directory = std::move(pending.back());
+            pending.pop_back();
+            for (auto entry = fs::directory_iterator(directory, error);
+                !error && entry != fs::directory_iterator{}; entry.increment(error))
             {
-                entry.disable_recursion_pending();
-                continue;
-            }
-            if (entry->is_directory(entryError))
-            {
-                const auto directory = fs::canonical(entry->path(), entryError);
-                if (entryError || !IsInAssetTree(directory, root) || !scannedDirectories.insert(directory).second)
-                    entry.disable_recursion_pending();
-                continue;
-            }
-            if (entryError || !entry->is_regular_file(entryError) || entryError)
-                continue;
+                std::error_code entryError;
+                const auto status = entry->symlink_status(entryError);
+                if (entryError)
+                {
+                    ReportUnreadableDocument(entry->path(), scan);
+                    continue;
+                }
+                if (fs::is_symlink(status))
+                    continue;
 
-            const auto extension = Engine::ToLowerStr(Engine::WStrToStr(entry->path().extension().wstring()));
-            if (extension != ".json" && extension != ".animator" && extension != ".bamanimator")
-                continue;
+                const bool isDirectory = fs::is_directory(status);
+                const auto extension = Engine::ToLowerStr(Engine::WStrToStr(entry->path().extension().wstring()));
+                const bool isDocument = fs::is_regular_file(status) &&
+                    (extension == ".json" || extension == ".animator" || extension == ".bamanimator");
+                if (!isDirectory && !isDocument)
+                    continue;
 
-            const auto source = fs::canonical(entry->path(), entryError);
-            if (!entryError && IsInAssetTree(source, root))
-                InspectProjectDocument(source, scan);
-        }
-        if (error)
-        {
-            AssetReferenceIssue issue;
-            issue.SourceFile = Path::ToProjectRelative(root);
-            issue.IssueType = EAssetReferenceIssueType::UnreadableDocument;
-            scan.Issues.push_back(std::move(issue));
+                const auto source = fs::canonical(entry->path(), entryError);
+                if (entryError)
+                {
+                    ReportUnreadableDocument(entry->path(), scan);
+                    continue;
+                }
+                if (!IsInAssetTree(source, root))
+                    continue;
+                if (isDirectory && visited.insert(source).second)
+                    pending.push_back(source);
+                if (isDocument)
+                    InspectProjectDocument(source, scan);
+            }
+            if (error)
+                ReportUnreadableDocument(directory, scan);
         }
         return scan;
+    }
+
+    AssetDeletionImpact AssetReferenceValidator::AnalyzeDeletion(const std::vector<std::filesystem::path>& targets)
+    {
+        AssetDeletionImpact impact;
+        std::vector<std::filesystem::path> deleted;
+        deleted.reserve(targets.size());
+        for (const auto& target : targets)
+        {
+            std::error_code error;
+            auto resolved = std::filesystem::canonical(target, error);
+            if (error)
+                impact.IsComplete = false;
+            else
+                deleted.push_back(std::move(resolved));
+        }
+        if (deleted.empty())
+            return impact;
+
+        auto scan = ScanProject();
+        impact.IsComplete = impact.IsComplete && std::ranges::none_of(scan.Issues, [](const auto& issue)
+        {
+            return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument;
+        });
+
+        const auto isDeleted = [&deleted](const auto& path)
+        {
+            return std::ranges::any_of(deleted, [&path](const auto& root) { return IsInAssetTree(path, root); });
+        };
+        for (auto& link : scan.References)
+        {
+            if (isDeleted(link.Target) && !isDeleted(link.Source))
+                impact.References.push_back(std::move(link));
+        }
+        std::ranges::sort(impact.References, [](const auto& lhs, const auto& rhs)
+        {
+            return std::tie(lhs.Source, lhs.Target) < std::tie(rhs.Source, rhs.Target);
+        });
+        return impact;
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateAllResources()
