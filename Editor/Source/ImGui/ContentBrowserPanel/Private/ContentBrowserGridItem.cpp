@@ -144,6 +144,27 @@ namespace
 			// Shader Binary & Metadata
 			{ ".bamshader.json",     ICON_FA_CODE,                ImVec4(0.70f, 0.30f, 0.90f, 0.40f), ImVec4(0.82f, 0.48f, 1.00f, 1.0f), "SHADER" },
 			{ ".bamshader",          ICON_FA_CODE,                ImVec4(0.70f, 0.30f, 0.90f, 0.40f), ImVec4(0.82f, 0.48f, 1.00f, 1.0f), "SHADER" },
+			// [신규] Composite Visual Effect (복합 VFX)
+			{ ".bamvfx.json",        ICON_FA_BURST,               ImVec4(0.75f, 0.30f, 0.95f, 0.38f), ImVec4(0.88f, 0.45f, 1.00f, 1.0f), "VFX" },
+			{ ".vfx.json",           ICON_FA_BURST,               ImVec4(0.75f, 0.30f, 0.95f, 0.38f), ImVec4(0.88f, 0.45f, 1.00f, 1.0f), "VFX" },
+			{ ".bamvfx",             ICON_FA_BURST,               ImVec4(0.75f, 0.30f, 0.95f, 0.38f), ImVec4(0.88f, 0.45f, 1.00f, 1.0f), "VFX" },
+			{ ".vfx",                ICON_FA_BURST,               ImVec4(0.75f, 0.30f, 0.95f, 0.38f), ImVec4(0.88f, 0.45f, 1.00f, 1.0f), "VFX" },
+			// [신규] Particle Effect (파티클 이펙트)
+			{ ".bameffect.json",     ICON_FA_FIRE,                ImVec4(0.95f, 0.45f, 0.15f, 0.38f), ImVec4(1.00f, 0.60f, 0.20f, 1.0f), "PARTICLE" },
+			{ ".effect.json",        ICON_FA_FIRE,                ImVec4(0.95f, 0.45f, 0.15f, 0.38f), ImVec4(1.00f, 0.60f, 0.20f, 1.0f), "PARTICLE" },
+			{ ".bameffect",          ICON_FA_FIRE,                ImVec4(0.95f, 0.45f, 0.15f, 0.38f), ImVec4(1.00f, 0.60f, 0.20f, 1.0f), "PARTICLE" },
+			{ ".effect",             ICON_FA_FIRE,                ImVec4(0.95f, 0.45f, 0.15f, 0.38f), ImVec4(1.00f, 0.60f, 0.20f, 1.0f), "PARTICLE" },
+			// [신규] Action Timeline (액션/애니메이션 타임라인)
+			{ ".bamtimeline.json",    ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			{ ".actiontimeline.json", ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			{ ".timeline.json",       ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			{ ".bamtimeline",         ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			{ ".actiontimeline",      ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			// [신규] Save Data (세이브 게임)
+			{ ".bamsave.json",       ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
+			{ ".save.json",          ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
+			{ ".bamsave",            ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
+			{ ".save",               ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
 		};
 		for (const auto& rule : kRules)
 		{
@@ -207,6 +228,35 @@ namespace
 			desc.Icon = ICON_FA_VOLUME_HIGH;
 			desc.BgColor = ImVec4(0.95f, 0.75f, 0.20f, 0.38f);
 			desc.AccentColor = ImVec4(1.00f, 0.85f, 0.35f, 1.0f);
+		}
+		// [신규] 바이너리 에셋 단일 확장자 매핑
+		else if (ext == ".bamvfx" || ext == ".vfx")
+		{
+			desc.Icon = ICON_FA_BURST;
+			desc.BgColor = ImVec4(0.75f, 0.30f, 0.95f, 0.38f);
+			desc.AccentColor = ImVec4(0.88f, 0.45f, 1.00f, 1.0f);
+			desc.BadgeText = "VFX";
+		}
+		else if (ext == ".bameffect" || ext == ".effect")
+		{
+			desc.Icon = ICON_FA_FIRE;
+			desc.BgColor = ImVec4(0.95f, 0.45f, 0.15f, 0.38f);
+			desc.AccentColor = ImVec4(1.00f, 0.60f, 0.20f, 1.0f);
+			desc.BadgeText = "PARTICLE";
+		}
+		else if (ext == ".bamtimeline" || ext == ".actiontimeline")
+		{
+			desc.Icon = ICON_FA_STOPWATCH;
+			desc.BgColor = ImVec4(0.92f, 0.72f, 0.15f, 0.38f);
+			desc.AccentColor = ImVec4(1.00f, 0.82f, 0.25f, 1.0f);
+			desc.BadgeText = "TIMELINE";
+		}
+		else if (ext == ".bamsave" || ext == ".save")
+		{
+			desc.Icon = ICON_FA_FLOPPY_DISK;
+			desc.BgColor = ImVec4(0.20f, 0.80f, 0.65f, 0.38f);
+			desc.AccentColor = ImVec4(0.35f, 0.95f, 0.78f, 1.0f);
+			desc.BadgeText = "SAVE";
 		}
 		else if (ext == ".json")
 		{

@@ -1394,18 +1394,50 @@ void VFXEditorPanel::DrawTransportBar()
 
 	EditorUI::ToolbarLayout toolbar;
 
-	// 1. 재생 컨트롤 버튼들 (First, Prev, Play/Pause, Next, Last, Loop, ZoomReset)
-	EditorUI::DrawTimelineTransport(toolbar, "CompositeTimeline", m_IsPlaying, m_IsLooping);
+	// 1. 재생 컨트롤 버튼들 (|<<, <, Play/Pause, >, >>|, Loop)
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "FirstFrame", ICON_FA_BACKWARD_FAST, "Action.Timeline.FirstFrame");
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "PrevFrame", ICON_FA_BACKWARD_STEP, "Action.Timeline.PrevFrame");
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "PlayPause", m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY, "Action.Timeline.PlayPause");
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "NextFrame", ICON_FA_FORWARD_STEP, "Action.Timeline.NextFrame");
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "LastFrame", ICON_FA_FORWARD_FAST, "Action.Timeline.LastFrame");
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "ToggleLoop", ICON_FA_REPEAT, "Action.Timeline.ToggleLoop", m_IsLooping);
 
-	// 2. 현재 시간 / 총 시간 카운터 텍스트 (예: 0.50s / 3.00s)
+	// 2. 현재 시간 및 프레임 카운터 (초록색 시간 + 프레임)
 	if (effect)
 	{
+		constexpr float fps = 30.0f;
 		const float curTime = m_TimelineSeek.value_or(m_CurrentTime);
 		const float maxTime = GetTimelineDuration();
-		toolbar.Text(LOCAL_FMT("Timeline.TimeCounter", curTime, maxTime).c_str());
+		const int curFrame = static_cast<int>(curTime * fps);
+		const int totalFrames = static_cast<int>(maxTime * fps);
+
+		const std::string timeLabel = LOCAL_FMT("Timeline.TimeCounter", curTime, maxTime);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
+		toolbar.Text(timeLabel.c_str(), false);
+		ImGui::PopStyleColor();
+
+		const std::string frameLabel = LOCAL_FMT("Timeline.FrameCounter", curFrame, totalFrames);
+		toolbar.Text(frameLabel.c_str(), false);
 	}
 
-	// 3. 트랙 기반 길이 자동 계산 버튼 (AutoDuration)
+	// 3. 재생 속도 슬라이더
+	ImGui::BeginDisabled(!hasResource);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 4.5f);
+	if (ImGui::DragFloat("##TransportPlayRate", &m_PlayRate, 0.05f, 0.1f, 5.0f, "%.1fx"))
+		m_PlayRate = std::clamp(m_PlayRate, 0.1f, 5.0f);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		ImGui::SetTooltip("%s", LOCAL_CSTR("VFXEditor.PropPlaySpeed"));
+	ImGui::EndDisabled();
+
+	// 4. 줌 배율 표시 및 줌 리셋
+	const std::string zoomLabel = LOCAL_FMT("Timeline.ZoomFactor", m_Timeline.Zoom);
+	ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.8f, 0.8f, 0.4f, 1.0f));
+	toolbar.Text(zoomLabel.c_str(), false);
+	ImGui::PopStyleColor();
+
+	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "ZoomReset", ICON_FA_MAXIMIZE, "Action.Timeline.ZoomReset");
+
+	// 5. 트랙 기반 길이 자동 계산 버튼 (우측 정렬 배치)
 	if (effect)
 	{
 		if (toolbar.Button("AutoDuration", ICON_FA_ARROWS_ROTATE, "VFXEditor.AutoDuration"))
@@ -1418,16 +1450,6 @@ void VFXEditorPanel::DrawTransportBar()
 				ApplyTimelineEdit({ EditorUI::TimelineDragMode::Duration, 0, 0.0f, next });
 		}
 	}
-
-	// 4. 재생 속도 (Speed 라벨 + 슬라이더)
-	ImGui::BeginDisabled(!hasResource);
-	toolbar.Text(LOCAL_CSTR("VFXEditor.Speed"));
-	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 5.0f);
-	if (ImGui::DragFloat("##TransportPlayRate", &m_PlayRate, 0.05f, 0.1f, 5.0f, "%.1fx"))
-		m_PlayRate = std::clamp(m_PlayRate, 0.1f, 5.0f);
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-		ImGui::SetTooltip("%s", LOCAL_CSTR("VFXEditor.PropPlaySpeed"));
-	ImGui::EndDisabled();
 }
 
 void VFXEditorPanel::DrawTimeline()

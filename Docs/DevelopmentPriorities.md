@@ -1,6 +1,6 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-15)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-17)
 - 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5 인스턴싱 배칭 및 Unlit 머티리얼), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징 실시간 스트리밍 및 DIA SDK 힌트 보강, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현, 독립 클라이언트 종료 수명주기 크래시 해결, 에디터 비정상 종료 진단·2단계 작업 복원(CrashHandler/Recovery) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 반영. 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
 - 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06 및 A06 본체 전량 코드 반영 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
@@ -275,6 +275,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     1. 타일당 최대 광원 용량 초과(Overflow) 시 대체 동작 및 다중 광원/이동 카메라 경계 조건의 추가 검증 기록.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
+- [Render S6 1단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[계획]** — Windows 렌더링 기준 화면을 확보한 뒤, 겹치는 반투명 판 두 장으로 카메라별 합성 순서와 불투명 깊이 가림을 확인한다.
+
 ### P2-C. 강화학습의 첫 환경
 
 - **2026-11-01 현황**:
@@ -336,6 +338,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - Engine 14절 M 및 [NetworkFoundationPlan.md](NetworkFoundationPlan.md): 소켓 전송 계층(`INetworkTransport`)과 바이너리 패킷 프로토콜, 세션 라이프사이클(Connect/Disconnect/Ping) 기초를 구축하고, ECS 엔티티 리플리케이션(`NetworkIdentity`, `NetworkTransform`)과 RPC로 확장한다. 멀티플레이 전체를 강화학습이나 V-Tuber의 필수 선행 조건으로 묶지 않는다.
 - Render M1: Compute 기반과 S3 이후 GPU 가시 명령·간접 그리기→Hi-Z를 CPU 기준 경로와 비교한다.
 - Render M2: 바인딩 병목·명령 구성 제약이 측정될 때 Bindless를 추가한다.
+- [Render S6 2~4단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[계획]** — 기본 반투명 합성 확인 후 콘텐츠 요구에 따라 얇은 굴절 유리, 평평한 물, 메시가 움직이는 파도를 차례로 검증한다.
 - Render M3: 기능 지원·자원 계약·계측을 갖춘 뒤 DXR 그림자→반사를 독립 경로로 진행한다.
 - Render M4: IBL 합성 기준과 광선 조회 기반 이후 제한된 공간의 프로브 GI를 검증한다.
 - Engine 15절: 프로세스별 환경→영상 센서·평가·랜덤화·필요한 정책 추론. 같은 프로세스의 병렬화는 상태 격리 이후다.
@@ -369,7 +372,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - Engine 3·13절은 전 단계의 시간·수명·저장·검증 기준이다. 12절은 게임 기능 내부 순서, 18절은 결과물별 흐름이다.
 - Engine 4~11절은 P2/P3에서 필요한 실행 기능을 선택한다. 14절은 대상 게임의 요구에 따라 P2~P4로 나눈다.
 - Engine 15~17절은 P2의 첫 환경/재생/제작에서 P3/P4로 확장한다. 19절은 P1의 공통 설정 경로다.
-- Render S1/S2는 P1, S3/S4/S5는 P2, M1~M4는 조건부 P3, M5·L 계열은 P4다.
+- Render S1/S2는 P1, S3/S4/S5와 S6 1단계는 P2, S6 2~4단계와 M1~M4는 조건부 P3, M5·L 계열은 P4다.
 - ImGui 3~8절·11절 A·14절 기본 판정/예산은 P1, 10절 초기 배치와 검색/선택은 P2, 고급 제작은 P3/P4다.
 - BuildAndPackagingPlan은 P2-E의 구현 반영·잔여/보류 범위를 구분하고 후속 작업에서 1~4단계의 미충족 기준을 따른다.
 
@@ -613,6 +616,8 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 1. **작업 트리 정리 완료 (`B04`) 및 Windows 기준선 후속 검증**: 미커밋 변경분의 5개 논리 커밋 분리(`1a798d3d`, `5083be3c`, `e5cd4e4b`, `c426a4c2`, `13f1c821`) 및 `x64-debug` 멀티코어 빌드·CTest 36/36 통과(2026-11-14)는 완료했다. `x64-release` 빌드 및 `RenderPipelineProfilePlan` 2·3단계 수동 비교·FMOD 오디오 재생 확인이 남아 있다.
 2. **WebGPU/Emscripten 이식 선결 해소 (`B01` → `B02` → `B03` 코드 반영 완료 / 툴체인 검증 대기)**: `StartupResourceLoader`·`SceneArchiveCheck` WGSL 경로 연결 및 직렬화 검증(`B01`), `ShaderImporter`·`ShaderHotReloadManager` 경로 정규화(`B02`), `Systems.h`/`ClientGameRuntime`/`Engine/CMakeLists.txt`/`ClientRenderPipeline`의 Emscripten `NetworkSystem`/FMOD Wasm/RHI 셰이더 경계 정리(`B03`)를 반영하고 Windows `x64-debug` 빌드·CTest 36/36 통과를 확인했다. 다음 단계로 호스트 `ReflectionGenerator` + `Tint` 기반 `Tools/WebGPUProbe` 및 Emscripten 정적 빌드·실행을 검증한다.
 3. **안정성·후속 기능 마무리 (`B05`·`A06 본체`·`2D Phase 5` 반영 및 패키지·종료 수명주기 안정화 완료)**: `Client` `CrashHandler` 연결 및 `PackageClient.ps1` 현행화(`B05`), 타일 컬링 257개 초과 안전 전체 순회 폴백 및 `MAX_LIGHTS` 1024 확장(`A06 본체`), 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback 연결, 패키징 에셋 검증 픽스, `Runtime::Free` 종료 수명주기 역전 및 `PickingManager` 지연 소멸 크래시 해결을 완료했다(`x64-debug` CTest 36/36 및 독립 클라이언트 정상 종료 확인).
+
+렌더링 작업을 선택할 때는 1번의 Game View와 Windows 배포 Client 비교를 먼저 한다. 래스터 표현을 확장한다면 [Render S6](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면)의 반투명 합성부터 시작한다. 이 작업의 선행 조건은 기존 래스터 경로에서 충족하며 DXR(M3)과 패스 트레이싱(L4)은 각 계획의 도입 조건을 따른다.
 
 ### 11.5 상태·검증 기록 규칙
 

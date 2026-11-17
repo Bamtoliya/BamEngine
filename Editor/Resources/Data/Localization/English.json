@@ -2054,6 +2054,23 @@
         "ResourceEditor.DiscardTitle": "Unsaved Changes",
         "ResourceEditor.DiscardMessage": "{} has unsaved changes. Continue without saving?",
         "ResourceEditor.DiscardContinue": "Continue Without Saving",
-        "GraphPanel.LoadFailed": "Cannot open {} (stage {}: {})"
+        "Timeline.NotifyTypeSpawnCompositeVFX": "Composite VFX",
+        "Timeline.VFXFile": "Composite VFX File: {}",
+        "Timeline.SelectVFX": "Select VFX File",
+        "Timeline.OffsetRot": "Offset Rotation",
+        "Timeline.VFXScale": "VFX Scale",
+        "Timeline.AttachToSocket": "Attach to Socket",
+        "Timeline.VFXPlayRate": "VFX Play Rate",
+        "Timeline.AutoDestroy": "Auto Destroy on Finish",
+        "FileDialog.VFXFiles.Composite VFX Files (*.bamvfx)": "복합 VFX 파일 (*.bamvfx)",
+        "GraphPanel.LoadFailed": "Cannot open {} (stage {}: {})",
+        "Timeline.Title": "Animation Timeline",
+        "Timeline.BoneHierarchy": "Bone Hierarchy",
+        "Timeline.SearchBones": "Search bones...",
+        "Timeline.NoSkeletonAvailable": "No skeleton or model loaded",
+        "Timeline.SetAsSocket": "Set as Notify Socket",
+        "Timeline.FocusBone": "Focus Bone Camera",
+        "Timeline.NoEmbeddedAnimation": "No Embedded Animation (Bind Pose)",
+        "Timeline.DurationTooltip": "Adjust timeline duration for static models"
     }
 }

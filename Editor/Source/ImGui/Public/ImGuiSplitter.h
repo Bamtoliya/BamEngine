@@ -18,20 +18,24 @@ namespace Editor
      */
     inline bool SplitterV(const char* str_id, float* size1, float* size2,
         float min_size1, float min_size2, float height = 0.0f,
-        float thickness = 4.0f, float hover_extend = 4.0f)
+        float thickness = 2.0f, float hover_extend = 4.0f) // [수정] 기본 2.0f
     {
         ImGuiContext& g = *GImGui;
         ImGuiWindow* window = g.CurrentWindow;
         if (window->SkipItems) return false;
-
         const ImGuiID id = window->GetID(str_id);
         if (height <= 0.0f) height = ImGui::GetContentRegionAvail().y;
-
         const ImVec2 pos = window->DC.CursorPos;
         const ImRect bb(pos, ImVec2(pos.x + thickness, pos.y + height));
-
         ImGui::ItemSize(bb);
-        return ImGui::SplitterBehavior(bb, id, ImGuiAxis_X, size1, size2, min_size1, min_size2, hover_extend);
+        const bool active = ImGui::SplitterBehavior(bb, id, ImGuiAxis_X, size1, size2, min_size1, min_size2, hover_extend);
+        const bool hovered = ImGui::IsItemHovered();
+        // 얇은 세퍼레이터 라인 시각화
+        const ImU32 col = active ? ImGui::GetColorU32(ImGuiCol_SeparatorActive)
+            : (hovered ? ImGui::GetColorU32(ImGuiCol_SeparatorHovered)
+                : ImGui::GetColorU32(ImGuiCol_Separator));
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, col);
+        return active;
     }
 
     template<typename DrawSidebar, typename DrawContent>
@@ -86,19 +90,23 @@ namespace Editor
      */
     inline bool SplitterH(const char* str_id, float* size1, float* size2,
         float min_size1, float min_size2, float width = 0.0f,
-        float thickness = 4.0f, float hover_extend = 4.0f)
+        float thickness = 2.0f, float hover_extend = 4.0f) // [수정] 기본 2.0f
     {
         ImGuiContext& g = *GImGui;
         ImGuiWindow* window = g.CurrentWindow;
         if (window->SkipItems) return false;
-
         const ImGuiID id = window->GetID(str_id);
         if (width <= 0.0f) width = ImGui::GetContentRegionAvail().x;
-
         const ImVec2 pos = window->DC.CursorPos;
         const ImRect bb(pos, ImVec2(pos.x + width, pos.y + thickness));
-
         ImGui::ItemSize(bb);
-        return ImGui::SplitterBehavior(bb, id, ImGuiAxis_Y, size1, size2, min_size1, min_size2, hover_extend);
+        const bool active = ImGui::SplitterBehavior(bb, id, ImGuiAxis_Y, size1, size2, min_size1, min_size2, hover_extend);
+        const bool hovered = ImGui::IsItemHovered();
+        // 얇은 세퍼레이터 라인 시각화
+        const ImU32 col = active ? ImGui::GetColorU32(ImGuiCol_SeparatorActive)
+            : (hovered ? ImGui::GetColorU32(ImGuiCol_SeparatorHovered)
+                : ImGui::GetColorU32(ImGuiCol_Separator));
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, col);
+        return active;
     }
 }

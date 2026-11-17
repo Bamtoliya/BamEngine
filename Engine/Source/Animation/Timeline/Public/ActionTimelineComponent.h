@@ -61,4 +61,30 @@ namespace Engine
 		void Resume() { isPlaying = true; }
 		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; }
 	};
+
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SOCKET_ATTACHMENT"), CATEGORY("CATEGORY_CORE"))
+		struct SocketAttachmentComponent
+	{
+		REFLECT_BODY()
+			PROPERTY(EDITABLE)
+			entt::entity targetEntity = entt::null;
+		PROPERTY(EDITABLE)
+			std::string boneName = "";
+		PROPERTY(EDITABLE)
+			vec3 offsetPosition = vec3(0.0f);
+		PROPERTY(EDITABLE)
+			vec3 offsetRotation = vec3(0.0f);
+		PROPERTY(EDITABLE)
+			vec3 scale = vec3(1.0f);
+		PROPERTY(EDITABLE)
+			bool autoDestroyOnTargetDead = true;
+	};
+	// ── 액션 타임라인에서 스폰된 1회성 VFX의 자동 소멸 수명 주기 컴포넌트 ──
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ACTION_VFX_LIFECYCLE"), CATEGORY("CATEGORY_RENDER"))
+	struct ActionVFXLifecycleComponent
+	{
+		REFLECT_BODY()
+		PROPERTY(EDITABLE)
+		bool autoDestroy = true;
+	};
 }

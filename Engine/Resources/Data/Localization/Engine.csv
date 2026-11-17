@@ -711,6 +711,7 @@
 ,SHARPEN_SHARPNESS,Sharpness,선명도
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
 ,STRUCT_ACTION_TIMELINE,Action Timeline,액션 타임라인
+,STRUCT_ACTION_VFX_LIFECYCLE,,
 ,STRUCT_ANIMATOR,Animator,애니메이터
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
@@ -762,6 +763,7 @@
 ,STRUCT_RIGID_BODY_3D,Rigid Body,강체
 ,STRUCT_SKINNED_MESH_RENDERER,Skinned Mesh Renderer,스킨드 메시 렌더러
 ,STRUCT_SKY_ATMOSPHERE,Sky Atmosphere,하늘 대기
+,STRUCT_SOCKET_ATTACHMENT,,
 ,STRUCT_SPHERE_SHAPE,Sphere Shape,구 형상
 ,STRUCT_SPLINE,Spline,스플라인
 ,STRUCT_SPLINE_FOLLOWER,Spline Follower,스플라인 추종

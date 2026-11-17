@@ -2,6 +2,30 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 액션 타임라인 ↔ 복합 VFX 소켓 스폰 및 뷰포트/타임라인 UX 일원화
+
+- **배경**: 캐릭터 액션 타임라인(`AnimationTimelinePanel`)에서 복합 VFX(`.bamvfx`)를 캐릭터 무기/신체 본 소켓에 실시간 동기화하여 스폰하는 파이프라인이 부재했고, 독자적인 뷰포트 구현으로 인해 오버레이 툴바 부재 및 카메라 조작감(`Alt+LMB`, `Alt+MMB`, `F` 포커스) 불일치가 존재했다. 또한 스플리터 두께 및 재생 컨트롤 바(`TransportBar`) 배치가 `VFXEditorPanel`과 파편화되어 있었다.
+- **변경 사항**:
+  - **Engine (타임라인 소켓 스폰 및 수명 추적)**:
+    - `ActionTimelineAsset.h`: `EAnimNotifyType::SpawnCompositeVFX` 타입 및 소켓 부착 여부(`AttachToSocket`), 오프셋 위치/회전, 스케일, 재생 속도, 자동 파괴 필드 추가 및 Json 직렬화 연동.
+    - `ActionTimelineComponent.h`: `SocketAttachmentComponent`, `ActionVFXLifecycleComponent` 신설.
+    - `ActionTimelineSystem.cpp`: `ComputeSocketWorldTransform`을 통해 엔티티의 스키닝 본 변환과 결합된 실시간 소켓 월드 좌표/회전을 추적하고, 타임라인 재생 시 복합 VFX 엔티티 스폰 및 수명 자동 관리 구현.
+  - **Editor (AnimationTimelinePanel 전면 고도화)**:
+    - `PreviewViewportWidget`으로 전면 일원화: 독자적 렌더 파이프라인을 걷어내고 표준 뷰포트 위젯을 탑재하여 뷰 모드/통계 오버레이 툴바, 스튜디오 조명, 그리드, 표준 카메라 컨트롤러(`Alt+LMB` 궤도, `Alt+MMB` 팬, `F` 포커스) 통합.
+    - 모델 드래그 앤 드롭(`HandleModelDragDrop`): 콘텐츠 브라우저에서 `.bammodel` 파일을 뷰포트에 드롭 시 즉시 로드.
+    - 좌측 스켈레톤 본 계층 트리(`DrawBoneHierarchyTree`): 검색 필터, 더블클릭 시 해당 본 위치 카메라 포커스, 노티파이 선택 상태에서 클릭 시 즉시 `SocketBoneName` 지정 연동.
+    - 내장 애니메이션 없는 모델 지원: 애니메이션이 없는 경우 바인드 포즈(T-포즈)를 유지하며, 타임라인 지속시간(`Duration`)을 임의로 조절할 수 있는 자유 시퀀서 모드 탑재.
+    - 인스펙터 및 타임라인 마커: `SpawnCompositeVFX` 전용 프로퍼티 편집 UI 및 루비 핑크(`RGB: 255, 60, 140`) 다이아몬드 마커 시각화.
+  - **UI 통일성 및 스플리터 슬림화**:
+    - `ImGuiSplitter.h`: `SplitterV`/`SplitterH` 및 `DrawSidebarLayout`의 기본 두께를 2.0px로 슬림화하고 `ImGuiCol_Separator` 선 렌더링 추가.
+    - `AnimationTimelinePanel` 및 `VFXEditorPanel`: Transport 바 구성을 `[재생 6버튼]` → `[시간/프레임 카운터]` → `[배속 슬라이더]` → `[줌 배율/리셋]` → `[특화 컨트롤]`로 1:1 완벽 통일.
+    - `Editor.csv`: `Timeline.Duration` 중복 키 에러 해소, `Timeline.Title` 등 누락 로캘 키 8종 추가 및 JSON 자동 동기화.
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`, 커밋 `ba399684`)**:
+  - `Editor.exe` 구동을 통해 `PreviewViewportWidget`의 카메라 조작 및 오버레이 툴바 동작 확인.
+  - 모델 파일 드래그 앤 드롭 및 좌측 본 계층 트리 렌더링 확인.
+  - `Timeline.Title`, `Timeline.NoEmbeddedAnimation`, `Timeline.BoneHierarchy` 등 한글 로캘 정상 출력 확인.
+  - 2px 슬림 스플리터 및 일원화된 Transport 재생 바 동작 확인.
+
 ### [2026-11-17] 빌드 설정 정리: Qt AUTOMOC 비활성화, 리플렉션 생성기 동일 내용 쓰기 생략
 
 - **Qt AUTOMOC 비활성화** (`Editor/CMake/QtBuild.cmake`): Editor·플러그인 소스에 `Q_OBJECT`·`Q_GADGET`·`Q_PROPERTY`·`Q_SIGNALS`·`Q_SLOTS`·`Q_EMIT`이 없고 Qt 사용처는 `QtManager`뿐이며 `QT_NO_KEYWORDS`가 켜져 있어 moc 대상이 없다. 빌드마다 Editor 소스 전체를 훑는 autogen 단계를 없앴다. Qt 시그널·슬롯 클래스(`Q_OBJECT`)를 추가하면 다시 켜야 한다.
@@ -9,6 +33,11 @@ This document tracks implementation details, architectural decisions, and techni
 - **검증 (2026-11-17, `x64-ninja-debug`)**: 두 변경이 들어간 상태로 하루 동안 Editor 빌드·실행과 CTest를 수행했다. 무변경 빌드에서 리플렉션 생성 단계가 다시 실행되지 않음을 빌드 출력으로 확인했다.
 - **잔여 (추정, 미확인)**: Visual Studio 생성기(`x64-debug`)의 사용자 지정 빌드 단계에는 `restat`이 없어, 출력이 입력보다 오래된 상태로 남으면 빌드마다 생성기가 다시 실행될 수 있다(정확성 영향 없음, 빌드 시간만 증가). 근본 해결은 `ReflectionGenerate.cmake`에서 생성 파일을 `BYPRODUCTS`로 두고 별도 스탬프를 `OUTPUT`으로 갱신하는 방식이다.
 - **문서**: `DiskCacheDevelopmentPlan.md` Phase 4 기록에 커밋 해시(`4b815f7`)를 기입했다.
+
+### [2026-11-17] 렌더링 우선순위와 유리·수면·파도 계획 기록
+
+- Windows Game View·배포 Client 비교 후 반투명 판 두 장의 합성을 확인하는 작업을 P2로, 굴절 유리·평평한 수면·움직이는 수면 메시를 조건부 P3로 기록했다. DXR 그림자·반사는 P3의 독립 경로, 패스 트레이싱 기준 렌더러는 P4에 둔다. [상세 계획](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) · [통합 우선순위](DevelopmentPriorities.md#p2-b-기본-렌더-확장-s3s4s5-검증-및-완성)
+- 공용 Deferred 프로필의 투명 패스와 정적 메시 정렬 분기를 소스에서 대조했다. 이번 변경은 계획 문서에 한정했으며 단계별 GPU·화면 검증은 구현 후 진행한다.
 
 ### [2026-11-17] 그래프 노드 위치·주석 저장, 주석 노드 결함, 핀 표시와 캔버스 조작
 
@@ -31,7 +60,7 @@ This document tracks implementation details, architectural decisions, and techni
     - 데이터 핀 원을 노드 테두리 위에 반쯤 걸쳐 그린다. 행을 그릴 때 세로 중심을 모으고, 노드 그룹을 닫은 뒤 내용 영역+`NodePadding`으로 테두리 좌표를 구해 `PinRect`/`PinPivotRect`로 지연 선언한다(링크 직선 스타일 푸시를 다시 적용). 실행 핀은 안쪽 유지.
     - 노드 에디터 생성을 `CreateEditorContext()`로 통일(휠 클릭 이동, 테마, `SettingsName = nullptr`로 편집용 ID 기준의 `imgui.ini` 상태 저장 중단).
   - **테스트** (`GraphFoundationCheck`): 위치 저장·0.5px 미만 무시·존재하지 않는 노드·비유한 값 거부, 메모 반복 쓰기 시 수정 카운터 1회, 파일 왕복에서 위치·메모(한글) 보존.
-- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`)**: 주석 메타데이터 수정 후 CTest와 에디터에서 주석 제목·크기·위치 저장, 예전 파일 열기, 열자마자 `*`가 켜지지 않음, 휠 클릭 이동·우클릭 메뉴 분리, 데이터 핀 테두리 표시와 연결을 "잘 동작함"으로 확인했다. 단계별 CTest 개수는 따로 기록되지 않았다.
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`, 커밋 `ba399684`)**: 주석 메타데이터 수정 후 CTest와 에디터에서 주석 제목·크기·위치 저장, 예전 파일 열기, 열자마자 `*`가 켜지지 않음, 휠 클릭 이동·우클릭 메뉴 분리, 데이터 핀 테두리 표시와 연결을 "잘 동작함"으로 확인했다. 단계별 CTest 개수는 따로 기록되지 않았다.
 - **동작 변화·잔여**:
   - 예전에 노드 전체 크기로 저장된 주석 `Size`는 이제 그룹 영역 크기로 해석돼 처음 한 번 헤더·여백만큼 크게 보인다.
   - 캔버스 화면 이동·확대는 재실행 시 기억되지 않는다(`imgui.ini` 저장 중단).
@@ -74,7 +103,7 @@ This document tracks implementation details, architectural decisions, and techni
   - **열기 확인 통일**: 메뉴와 `Graph.Open` 단축키(`EditorActionRegistry.cpp`)가 `RequestOpenDocument()`를 거친다. 확인 조건을 "그래프가 비어 있지 않음"에서 "어느 도메인이든 미저장"으로 바꿨다(열 파일의 도메인에 따라 현재 화면이 아닌 문서가 교체될 수 있으므로). `OpenDocument()`는 private으로 옮겨 확인 우회 경로를 막았다.
   - **테스트**: `GraphFoundationCheck`에 연결 미리보기·거부된 편집·실패한 연결 해제·같은 값 쓰기·오버라이드 없는 초기화가 revision을 바꾸지 않고, 성공한 편집은 바꾸는지 검사를 추가했다.
   - **`ReflectionInspectorCheck` 갱신**: `163f5b08`(CATEGORY 없는 속성은 머리글 없이 맨 위에 표시)에서 깨진 카테고리 접힘 검사를 `RectTransformComponent`의 앵커 카테고리만 남겨(`HiddenProperties`) 검사하도록 바꿨다. 이번 Graph 변경과는 무관한 기존 실패다.
-- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`)**:
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`, 커밋 `ba399684`)**:
   - 전체 빌드 후 CTest 38/38 통과.
   - 에디터: 미저장 상태에서 메뉴 열기·Ctrl+O 모두 교체 확인 모달 표시, 콘텐츠 브라우저로 다른 그래프를 열면 공통 `ResourceEditor.OpenBlocked` 알림으로 차단.
   - 편집 종류별 `*` 표시, 저장 후 해제, 종료 모달 표시, 다른 도메인 확인은 별도로 보고받지 못했다.

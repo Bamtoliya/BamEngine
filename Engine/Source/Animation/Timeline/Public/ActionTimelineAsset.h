@@ -24,7 +24,8 @@ enum class EAnimNotifyType : uint8
 {
 	Particle,
 	Sound,
-	CustomEvent
+	CustomEvent,
+	SpawnCompositeVFX // [신설] 복합 VFX 스폰 노티파이
 };
 
 // 개별 노티파이 마커 데이터
@@ -32,28 +33,23 @@ STRUCT()
 struct ENGINE_API AnimNotifyData
 {
 	REFLECT_BODY()
-
 		PROPERTY(EDITABLE)
 		std::string Name = "New_Notify";
-
 	PROPERTY(EDITABLE)
 		float TriggerTime = 0.0f;
-
 	PROPERTY(EDITABLE)
 		EAnimNotifyType Type = EAnimNotifyType::Particle;
-
 	PROPERTY(EDITABLE)
 		std::string SocketBoneName = "";
-
 	PROPERTY(EDITABLE)
 		vec3 OffsetPosition = vec3(0.0f);
-
+	// [신설] 소켓 기준 오프셋 회전 (검기/충격파의 발사 각도 및 칼날 정렬용)
+	PROPERTY(EDITABLE)
+		vec3 OffsetRotation = vec3(0.0f);
 	PROPERTY(EDITABLE)
 		vec4 ParticleColor = vec4(1.0f, 0.65f, 0.15f, 1.0f);
-
 	PROPERTY(EDITABLE)
 		float ParticleSize = 0.12f;
-
 	PROPERTY(EDITABLE)
 		float ParticleSpeed = 1.6f;
 	PROPERTY(EDITABLE)
@@ -66,6 +62,17 @@ struct ENGINE_API AnimNotifyData
 		float SoundVolume = 1.0f;
 	PROPERTY(EDITABLE)
 		std::string EventTag = "OnAttackHit";
+	// ── [신설] 복합 VFX (Composite VFX) 스폰 속성 ──
+	PROPERTY(EDITABLE)
+		std::string VFXPath = ""; // 스폰할 .bamvfx 에셋 경로
+	PROPERTY(EDITABLE)
+		vec3 VFXScale = vec3(1.0f); // 스폰 크기 배율
+	PROPERTY(EDITABLE)
+		bool AttachToSocket = false; // 소켓에 지속 부착 여부 (true: 칼을 따라다님, false: 스폰 위치에 잔류)
+	PROPERTY(EDITABLE)
+		float VFXPlayRate = 1.0f; // 이펙트 재생 배속
+	PROPERTY(EDITABLE)
+		bool AutoDestroy = true; // 재생 완료 시 엔티티 자동 소멸
 	bool operator==(const AnimNotifyData& other) const = default;
 };
 
