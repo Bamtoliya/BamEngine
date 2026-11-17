@@ -52,11 +52,11 @@ void TextureEditor::DrawCustomContent()
         // 텍스처 메타데이터 정보 테이블
         if (ImGui::BeginTable("TextureMetaTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
         {
-            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(LOCAL_LABEL("EditorCommon.Property").c_str(), ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn(LOCAL_LABEL("EditorCommon.Value").c_str(), ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(LOCAL_CSTR("TextureEditor.Dimensions"));
-            ImGui::TableSetColumnIndex(1); ImGui::Text("%u x %u", texture->GetWidth(), texture->GetHeight());
+            ImGui::TableSetColumnIndex(1); ImGui::Text(LOCAL_CSTR("TextureEditor.DimensionValue"), texture->GetWidth(), texture->GetHeight());
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.Path"));
             ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(m_TargetResourcePath.string().c_str());
@@ -65,6 +65,6 @@ void TextureEditor::DrawCustomContent()
     }
     else
     {
-        EditorUI::EmptyState("ContentBrowser.NoPreviewAvailable");
+        EditorUI::EmptyState("TextureEditor.NoPreviewAvailable");
     }
 }
