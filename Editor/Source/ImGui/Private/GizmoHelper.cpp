@@ -142,14 +142,14 @@ void GizmoHelper::DrawGizmoToolbar(IGizmoHost* host, const ImVec2& screenOrigin,
 			drawList->AddLine(ImVec2(midX - halfW, midY + 2.0f), ImVec2(midX + halfW, midY + 2.0f), gripColor, 1.5f);
 		}
 
-		auto drawToolBtn = [&](const char* id, const char* icon, const char* tooltipKey, const char* shortcutId, bool active) -> bool
+		auto drawToolBtn = [&](const char* id, const char* icon, const char* tooltipKey, const char* shortcutHint, bool active) -> bool
 			{
 				EditorUI::IconButtonOptions opt;
 				opt.SameLine = !vertical;
 				opt.Active = active;
 				opt.NoWrap = true;
 				opt.Size = btnSize;
-				opt.ShortcutHint = sm.GetShortcutHint(shortcutId);
+				opt.ShortcutHint = shortcutHint;
 				return EditorUI::IconButton(id, icon, tooltipKey, opt);
 			};
 
@@ -159,19 +159,19 @@ void GizmoHelper::DrawGizmoToolbar(IGizmoHost* host, const ImVec2& screenOrigin,
 		const bool useSnap = host->GetGizmoUseSnap();
 
 		// 1. [선택 Ctrl+1]
-		if (drawToolBtn("ToolSelect", ICON_FA_ARROW_POINTER, "Action.Viewport.GizmoSelect", "Viewport.GizmoSelect", curOp == static_cast<ImGuizmo::OPERATION>(0)))
+		if (drawToolBtn("ToolSelect", ICON_FA_ARROW_POINTER, "Action.Viewport.GizmoSelect", sm.GetShortcutHint("Viewport.GizmoSelect"), curOp == static_cast<ImGuizmo::OPERATION>(0)))
 			host->SetGizmoOperation(static_cast<ImGuizmo::OPERATION>(0));
 
 		// 2. [이동 Ctrl+2]
-		if (drawToolBtn("ToolTranslate", ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Action.Viewport.GizmoTranslate", "Viewport.GizmoTranslate", curOp == ImGuizmo::TRANSLATE))
+		if (drawToolBtn("ToolTranslate", ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT, "Action.Viewport.GizmoTranslate", sm.GetShortcutHint("Viewport.GizmoTranslate"), curOp == ImGuizmo::TRANSLATE))
 			host->SetGizmoOperation(ImGuizmo::TRANSLATE);
 
 		// 3. [회전 Ctrl+3]
-		if (drawToolBtn("ToolRotate", ICON_FA_ARROWS_ROTATE, "Action.Viewport.GizmoRotate", "Viewport.GizmoRotate", curOp == ImGuizmo::ROTATE))
+		if (drawToolBtn("ToolRotate", ICON_FA_ARROWS_ROTATE, "Action.Viewport.GizmoRotate", sm.GetShortcutHint("Viewport.GizmoRotate"), curOp == ImGuizmo::ROTATE))
 			host->SetGizmoOperation(ImGuizmo::ROTATE);
 
 		// 4. [스케일 Ctrl+4]
-		if (drawToolBtn("ToolScale", ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Action.Viewport.GizmoScale", "Viewport.GizmoScale", curOp == ImGuizmo::SCALE))
+		if (drawToolBtn("ToolScale", ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER, "Action.Viewport.GizmoScale", sm.GetShortcutHint("Viewport.GizmoScale"), curOp == ImGuizmo::SCALE))
 			host->SetGizmoOperation(ImGuizmo::SCALE);
 
 		// 구분선
@@ -179,15 +179,15 @@ void GizmoHelper::DrawGizmoToolbar(IGizmoHost* host, const ImVec2& screenOrigin,
 		else { ImGui::SameLine(); ImGui::TextDisabled("|"); }
 
 		// 5. [좌표계: Local/World (`)]
-		if (drawToolBtn("ToolCoord", isLocal ? ICON_FA_CUBE : ICON_FA_GLOBE, isLocal ? "Viewport.Local" : "Viewport.World", "Viewport.ToggleCoord", false))
+		if (drawToolBtn("ToolCoord", isLocal ? ICON_FA_CUBE : ICON_FA_GLOBE, isLocal ? "Viewport.Local" : "Viewport.World", sm.GetShortcutHint("Viewport.ToggleCoord"), false))
 			host->ToggleGizmoMode();
 
 		// 6. [피벗 기준: Pivot/Center (Z)]
-		if (drawToolBtn("ToolPivot", isPivot ? ICON_FA_LOCATION_CROSSHAIRS : ICON_FA_CIRCLE_DOT, isPivot ? "Viewport.Pivot" : "Viewport.Center", "Viewport.TogglePivot", false))
+		if (drawToolBtn("ToolPivot", isPivot ? ICON_FA_LOCATION_CROSSHAIRS : ICON_FA_CIRCLE_DOT, isPivot ? "Viewport.Pivot" : "Viewport.Center", sm.GetShortcutHint("Viewport.TogglePivot"), false))
 			host->ToggleGizmoPivot();
 
 		// 7. [스냅: Magnet (Shift+S)]
-		if (drawToolBtn("ToolSnap", ICON_FA_MAGNET, "Settings.GizmoSnapping", "Viewport.ToggleSnap", useSnap))
+		if (drawToolBtn("ToolSnap", ICON_FA_MAGNET, "Settings.GizmoSnapping", sm.GetShortcutHint("Viewport.ToggleSnap"), useSnap))
 			host->ToggleGizmoSnap();
 	}
 	ImGui::EndChild();

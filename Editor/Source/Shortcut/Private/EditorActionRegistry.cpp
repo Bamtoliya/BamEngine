@@ -676,7 +676,7 @@ void EditorActionRegistry::RegisterAll()
         {
             controller->IncreaseCameraSpeed();
             NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
-                fmt::format("{}: {:.1f}", LOCAL("Viewport.CameraSpeed"), controller->GetCameraSpeed()), ELogLevel::Info);
+                LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
         }
     }
         });
@@ -697,7 +697,7 @@ void EditorActionRegistry::RegisterAll()
             {
                 controller->DecreaseCameraSpeed();
                 NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
-                    fmt::format("{}: {:.1f}", LOCAL("Viewport.CameraSpeed"), controller->GetCameraSpeed()), ELogLevel::Info);
+                    LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
             }
         }
         });

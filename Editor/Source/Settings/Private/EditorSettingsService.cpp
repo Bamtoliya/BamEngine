@@ -204,11 +204,13 @@ bool EditorSettingsService::LoadInputActionSettings(Engine::InputActionSettings&
     "Gameplay",
     {
         { "Jump", "Button" }, { "Sprint", "Button" },
+        { "OrbitCamera", "Button" },
         { "MoveForward", "Button" }, { "MoveBackward", "Button" },
         { "MoveLeft", "Button" }, { "MoveRight", "Button" }
     },
     {
         { "Jump", "Space" }, { "Sprint", "LShift" }, { "Sprint", "RShift" },
+        { "OrbitCamera", "Mouse:Right" },
         { "MoveForward", "W" }, { "MoveBackward", "S" },
         { "MoveLeft", "A" }, { "MoveRight", "D" }
     }

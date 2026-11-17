@@ -219,7 +219,8 @@ namespace
 		}
 
 		// 커서 아래 키 찾기
-		const ImVec2 mouse = ImGui::GetIO().MousePos;
+		auto& input = Engine::InputManager::Get();
+		const auto mouse = input.GetScreenMousePosition();
 		const float hitRadius = ImGui::GetFontSize() * 0.5f;
 		int hoveredKey = -1;
 		for (int i = 0; hovered&& i < static_cast<int>(curve.keys.size()); ++i)
@@ -232,7 +233,7 @@ namespace
 		if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) selected = hoveredKey;
 
 		// 드래그: 시간은 이웃 키 사이로 제한해 키 순서를 유지한다.
-		if (dragging && selected >= 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f))
+		if (dragging && selected >= 0 && input.IsMouseButtonDragging(Engine::EMouseButton::Left, 0.0f))
 		{
 			auto& key = curve.keys[selected];
 			const float minTime = selected > 0 ? curve.keys[selected - 1].time + 0.001f : range.TimeMin;
@@ -243,7 +244,7 @@ namespace
 		}
 
 		// 빈 곳 더블클릭: 키 추가
-		if (hovered && hoveredKey < 0 && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+		if (hovered && hoveredKey < 0 && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 		{
 			selected = curve.AddKey(toTime(mouse.x), toValue(mouse.y));
 			changed = true;

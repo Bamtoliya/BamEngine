@@ -221,19 +221,19 @@ void EditorEnvironmentSettingsWidget::Draw()
         {
             // 썸네일 캐시
             EditorUI::PropertyRow("Settings.DiskCacheThumbnails");
-            ImGui::Text("%s (%u files)", FormatBytes(thumbInfo.TotalBytes).c_str(), thumbInfo.FileCount);
+            ImGui::Text(LOCAL_CSTR("Settings.DiskCacheSizeAndFiles"), FormatBytes(thumbInfo.TotalBytes).c_str(), thumbInfo.FileCount);
             // 셰이더/PSO 캐시
             EditorUI::PropertyRow("Settings.DiskCacheShaders");
-            ImGui::Text("%s (%u files)", FormatBytes(shaderInfo.TotalBytes).c_str(), shaderInfo.FileCount);
+            ImGui::Text(LOCAL_CSTR("Settings.DiskCacheSizeAndFiles"), FormatBytes(shaderInfo.TotalBytes).c_str(), shaderInfo.FileCount);
             // 에셋 DDC 캐시
             EditorUI::PropertyRow("Settings.DiskCacheDDC");
-            ImGui::Text("%s (%u files)", FormatBytes(ddcInfo.TotalBytes).c_str(), ddcInfo.FileCount);
+            ImGui::Text(LOCAL_CSTR("Settings.DiskCacheSizeAndFiles"), FormatBytes(ddcInfo.TotalBytes).c_str(), ddcInfo.FileCount);
             // 지형 그리드 캐시
             EditorUI::PropertyRow("Settings.DiskCacheTerrain");
-            ImGui::Text("%s (%u files)", FormatBytes(terrainInfo.TotalBytes).c_str(), terrainInfo.FileCount);
+            ImGui::Text(LOCAL_CSTR("Settings.DiskCacheSizeAndFiles"), FormatBytes(terrainInfo.TotalBytes).c_str(), terrainInfo.FileCount);
             // 총합
             EditorUI::PropertyRow("Settings.DiskCacheTotal");
-            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s (%u files)", FormatBytes(totalBytes).c_str(), totalFiles);
+            ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), LOCAL_CSTR("Settings.DiskCacheSizeAndFiles"), FormatBytes(totalBytes).c_str(), totalFiles);
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();
