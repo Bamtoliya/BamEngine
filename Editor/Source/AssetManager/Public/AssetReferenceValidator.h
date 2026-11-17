@@ -26,6 +26,18 @@ namespace Editor
         std::string Description;                 // 상세 설명
     };
 
+    struct AssetReferenceLink
+    {
+        std::filesystem::path Source;
+        std::filesystem::path Target;
+    };
+
+    struct AssetReferenceScan
+    {
+        std::vector<AssetReferenceIssue> Issues;
+        std::vector<AssetReferenceLink> References;
+    };
+
     class AssetReferenceValidator
     {
     public:
@@ -35,7 +47,8 @@ namespace Editor
         static std::vector<AssetReferenceIssue> ValidateBuildScene(const std::filesystem::path& scenePath,
             std::vector<std::filesystem::path>* referencedFiles = nullptr);
 
-        // Resources 폴더 내 모든 에셋(씬, 프리팹, 머티리얼, 모델) 전수 검증
+        // 프로젝트 에셋 루트에서 저장된 JSON 문서의 직접 참조와 문제를 수집한다.
+        static AssetReferenceScan ScanProject();
         static std::vector<AssetReferenceIssue> ValidateAllResources();
 
         // 손상/누락 경로에 대한 안전한 대체 복구 경로 탐색

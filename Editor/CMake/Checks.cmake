@@ -1,4 +1,16 @@
-﻿add_executable(TransformEditorCheck
+﻿add_executable(AssetReferenceCheck examples/AssetReferenceCheck.cpp
+    Source/AssetManager/Private/AssetReferenceValidator.cpp)
+target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public")
+target_link_libraries(AssetReferenceCheck PRIVATE BamEngine::Engine)
+set_target_properties(AssetReferenceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+if(MSVC)
+    target_compile_options(AssetReferenceCheck PRIVATE /utf-8)
+endif()
+if(BUILD_TESTING)
+    add_test(NAME AssetReferenceCheck COMMAND AssetReferenceCheck)
+endif()
+
+add_executable(TransformEditorCheck
     examples/TransformEditorCheck.cpp Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
 )
 

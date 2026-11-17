@@ -2,8 +2,10 @@
 #include "PlatformPath.h"
 #include "AnimatorStateMachine.h"
 #include "Logger.h"
+#include <chrono>
 #include <fstream>
-#include <regex>
+#include <sstream>
+#include <utility>
 #include <unordered_set>
 #include <map>
 #include "Functions.h"
@@ -42,7 +44,19 @@ namespace Editor
             return true;
         }
 
-        void CollectBuildReferences(const glz::generic_u64& value, std::set<std::string>& references,
+        using ReferenceFields = std::map<std::string, const char*>;
+
+        bool ReadReferenceDocument(const std::filesystem::path& source, glz::generic_u64& document)
+        {
+            std::string text;
+            if (!ReadTextFile(source, text))
+                return false;
+            if (text.starts_with("\xEF\xBB\xBF"))
+                text.erase(0, 3);
+            return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
+        }
+
+        void CollectDocumentReferences(const glz::generic_u64& value, ReferenceFields& references,
             std::set<std::string>& controllers)
         {
             using Json = glz::generic_u64;
@@ -75,7 +89,7 @@ namespace Editor
                     reference = assetKey;
 
                 if (reference && !reference->empty())
-                    references.insert(*reference);
+                    references.try_emplace(*reference, reference == assetKey ? "AssetKey" : "AssetPath");
 
                 const auto* type = readString(*object, "Type");
                 const auto data = object->find("Data");
@@ -89,19 +103,144 @@ namespace Editor
                 }
 
                 for (const auto& field : *object)
-                    CollectBuildReferences(field.second, references, controllers);
+                    CollectDocumentReferences(field.second, references, controllers);
             }
             else if (const auto* elements = value.get_if<Json::array_t>())
             {
                 for (const auto& element : *elements)
-                    CollectBuildReferences(element, references, controllers);
+                    CollectDocumentReferences(element, references, controllers);
+            }
+        }
+
+        std::filesystem::path ResolveDocumentReference(const std::filesystem::path& rawPath, bool isController)
+        {
+            using Path = Engine::PlatformPath;
+            const auto wide = rawPath.wstring();
+            auto resolved = rawPath;
+            if (!rawPath.has_root_path() || Path::IsVirtualUri(wide))
+            {
+                resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
+                    : Path::ResolveUri(wide);
+            }
+
+            if (!isController && resolved.extension().wstring().starts_with(L".bam"))
+            {
+                auto jsonPath = resolved;
+                jsonPath += L".json";
+                auto bevePath = resolved;
+                bevePath += L".beve";
+                std::error_code error;
+                if (std::filesystem::is_regular_file(jsonPath, error))
+                    return jsonPath;
+                if (std::filesystem::is_regular_file(bevePath, error))
+                    return bevePath;
+            }
+            return resolved;
+        }
+
+        ReferenceFields ReadReferenceFields(const glz::generic_u64& document)
+        {
+            ReferenceFields references;
+            std::set<std::string> controllers;
+            CollectDocumentReferences(document, references, controllers);
+            for (const auto& controller : controllers)
+                references.insert_or_assign(controller, "controllerPath");
+            return references;
+        }
+
+        bool IsInAssetTree(const std::filesystem::path& file, const std::filesystem::path& root)
+        {
+            const auto relative = file.lexically_relative(root);
+            return !relative.empty() && !relative.has_root_path() && *relative.begin() != "..";
+        }
+
+        bool IsMountedReference(const std::filesystem::path& file)
+        {
+            using Path = Engine::PlatformPath;
+            const auto uri = Path::ToVirtualUri(file);
+            if (Path::IsVirtualUri(uri))
+                return true;
+
+            // 구형 프로젝트는 두 마운트가 같은 Resources 디렉터리를 사용할 수 있다.
+            const auto& root = Path::GetProjectAssetRoot();
+            if (root != Path::GetEngineResourceRoot() || root.empty())
+                return false;
+            return IsInAssetTree(Path::Normalize(file), Path::Normalize(root));
+        }
+
+        void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
+        {
+            using Path = Engine::PlatformPath;
+            using Issue = EAssetReferenceIssueType;
+
+            glz::generic_u64 document;
+            const auto relativeSource = Path::ToProjectRelative(source);
+            if (!ReadReferenceDocument(source, document))
+            {
+                AssetReferenceIssue issue;
+                issue.SourceFile = relativeSource;
+                issue.IssueType = Issue::UnreadableDocument;
+                scan.Issues.push_back(std::move(issue));
+                return;
+            }
+
+            std::set<std::filesystem::path> targets;
+            for (const auto& [reference, property] : ReadReferenceFields(document))
+            {
+                if (IsBuiltinResourceIdentifier(reference))
+                    continue;
+
+                AssetReferenceIssue issue;
+                issue.SourceFile = relativeSource;
+                issue.PropertyName = property;
+                issue.TargetReference = reference;
+
+                const auto rawPath = Engine::Utf8ToPath(reference);
+                const bool hasUri = Path::IsVirtualUri(rawPath.wstring());
+                const bool isController = std::string_view(property) == "controllerPath";
+                if (!hasUri && rawPath.has_root_path() && !IsMountedReference(rawPath))
+                {
+                    issue.IssueType = Issue::ExternalAbsolutePath;
+                }
+                else
+                {
+                    const auto resolved = ResolveDocumentReference(rawPath, isController);
+                    std::error_code error;
+                    const auto target = std::filesystem::canonical(resolved, error);
+                    if (!error && std::filesystem::is_regular_file(target, error))
+                    {
+                        if (IsMountedReference(target))
+                        {
+                            if (targets.insert(target).second)
+                                scan.References.push_back({ source, target });
+                            continue;
+                        }
+                        issue.IssueType = Issue::OutsideRuntimeRoots;
+                    }
+                    else
+                    {
+                        const auto ext = rawPath.extension();
+                        issue.IssueType = !isController && !hasUri && (!rawPath.has_extension() ||
+                            ext == ".bammat" || ext == ".bammatinst") ? Issue::InvalidExtension : Issue::MissingFile;
+                    }
+                }
+
+                // 기존 복구는 파일을 변경하므로 이전에 지원한 단순 레거시 참조에만 유지한다.
+                if (!hasUri && !isController && issue.IssueType != Issue::OutsideRuntimeRoots &&
+                    !Path::IsReadOnlyTarget(source) && reference.find_first_of("\\\"") == std::string::npos &&
+                    AssetReferenceValidator::TryResolveFallbackPath(reference, issue.SuggestedFix))
+                {
+                    issue.CanAutoFix = true;
+                }
+                scan.Issues.push_back(std::move(issue));
             }
         }
 
         bool WriteTextFileAtomic(const std::filesystem::path& targetPath, const std::string& content)
         {
             std::error_code ec;
-            const auto tempPath = targetPath.string() + ".tmp_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            auto tempPath = targetPath;
+            tempPath += L".tmp_" + std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count());
             {
                 std::ofstream file(tempPath, std::ios::binary | std::ios::trunc);
                 if (!file.is_open()) return false;
@@ -119,7 +258,7 @@ namespace Editor
     {
         if (brokenPath.empty()) return false;
 
-        std::filesystem::path target(brokenPath);
+        const auto target = Engine::Utf8ToPath(brokenPath);
         const auto root = Engine::PlatformPath::GetProjectRoot();
 
         // 1. 절대 경로인 경우 프로젝트 루트 하위면 상대 경로로 정규화
@@ -141,7 +280,8 @@ namespace Editor
             };
             for (const auto& ext : candidateExts)
             {
-                std::filesystem::path candidate = brokenPath + ext;
+                auto candidate = target;
+                candidate += ext;
                 if (std::filesystem::exists(root / candidate))
                 {
                     outResolvedPath = candidate;
@@ -154,7 +294,8 @@ namespace Editor
         const std::string ext = target.extension().string();
         if (ext == ".bammat" || ext == ".bammatinst" || ext == ".bammesh" || ext == ".bammodel")
         {
-            std::filesystem::path candidate = brokenPath + ".json";
+            auto candidate = target;
+            candidate += ".json";
             if (std::filesystem::exists(root / candidate))
             {
                 outResolvedPath = candidate;
@@ -167,68 +308,11 @@ namespace Editor
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateFile(const std::filesystem::path& filePath)
     {
-        std::vector<AssetReferenceIssue> issues;
-        std::string content;
-        if (!ReadTextFile(filePath, content)) return issues;
-
-        const auto root = Engine::PlatformPath::GetProjectRoot();
-        const auto relSource = Engine::PlatformPath::ToProjectRelative(filePath);
-
-        // "AssetPath": "...", "AssetKey": "...", "Path": "..." 패턴 정규식 매칭
-        static const std::regex pattern(R"(\"(AssetPath|AssetKey|Path)\"\s*:\s*\"([^\"]+)\")");
-        auto begin = std::sregex_iterator(content.begin(), content.end(), pattern);
-        auto end = std::sregex_iterator();
-
-        for (auto it = begin; it != end; ++it)
-        {
-            const std::string propName = (*it)[1].str();
-            const std::string refPathStr = (*it)[2].str();
-
-            if (refPathStr.empty() || IsBuiltinResourceIdentifier(refPathStr)) continue;
-
-            std::filesystem::path target(refPathStr);
-            AssetReferenceIssue issue{};
-            issue.SourceFile = relSource;
-            issue.PropertyName = propName;
-            issue.TargetReference = refPathStr;
-
-            if (target.is_absolute())
-            {
-                // 외부 절대 경로 하드코딩 검출
-                issue.IssueType = EAssetReferenceIssueType::ExternalAbsolutePath;
-                issue.Description = "Hardcoded absolute path detected";
-                if (TryResolveFallbackPath(refPathStr, issue.SuggestedFix))
-                {
-                    issue.CanAutoFix = true;
-                }
-                issues.push_back(std::move(issue));
-            }
-            else
-            {
-                const auto resolved = root / target;
-                if (!std::filesystem::exists(resolved))
-                {
-                    // 누락 또는 확장자 결함 검출
-                    if (!target.has_extension() || target.extension() == ".bammat" || target.extension() == ".bammatinst")
-                    {
-                        issue.IssueType = EAssetReferenceIssueType::InvalidExtension;
-                        issue.Description = "Missing or legacy binary extension";
-                    }
-                    else
-                    {
-                        issue.IssueType = EAssetReferenceIssueType::MissingFile;
-                        issue.Description = "Referenced file does not exist on disk";
-                    }
-
-                    if (TryResolveFallbackPath(refPathStr, issue.SuggestedFix))
-                    {
-                        issue.CanAutoFix = true;
-                    }
-                    issues.push_back(std::move(issue));
-                }
-            }
-        }
-        return issues;
+        AssetReferenceScan scan;
+        std::error_code error;
+        const auto source = std::filesystem::canonical(filePath, error);
+        InspectProjectDocument(error ? filePath : source, scan);
+        return std::move(scan.Issues);
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateBuildScene(const std::filesystem::path& scenePath,
@@ -278,12 +362,8 @@ namespace Editor
             if (!visited.insert(source).second)
                 continue;
 
-            std::string text;
             glz::generic_u64 document;
-            if (ReadTextFile(source, text) && text.starts_with("\xEF\xBB\xBF"))
-                text.erase(0, 3);
-
-            if (text.empty() || glz::validate_json(text) || glz::read_json(document, text) || !document.is_object())
+            if (!ReadReferenceDocument(source, document))
             {
                 report(source, {}, Issue::UnreadableDocument);
                 continue;
@@ -295,26 +375,13 @@ namespace Editor
                 continue;
             }
 
-            std::set<std::string> references;
-            std::set<std::string> controllers;
-            CollectBuildReferences(document, references, controllers);
-            references.insert(controllers.begin(), controllers.end());
-            for (const auto& reference : references)
+            for (const auto& [reference, property] : ReadReferenceFields(document))
             {
                 if (builtInMeshes.contains(reference))
                     continue;
 
                 const auto rawPath = Engine::Utf8ToPath(reference);
-                const auto wideReference = rawPath.wstring();
-                const bool isController = controllers.contains(reference);
-                std::filesystem::path resolved;
-
-                if (Path::IsVirtualUri(wideReference))
-                {
-                    resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
-                        : Path::ResolveUri(wideReference);
-                }
-                else if (rawPath.has_root_path())
+                if (!Path::IsVirtualUri(rawPath.wstring()) && rawPath.has_root_path())
                 {
                     const auto virtualUri = Path::ToVirtualUri(rawPath);
                     if (!Path::IsProjectUri(virtualUri) && !Path::IsEngineUri(virtualUri))
@@ -322,26 +389,10 @@ namespace Editor
                         report(source, reference, Issue::ExternalAbsolutePath);
                         continue;
                     }
-                    resolved = rawPath;
-                }
-                else
-                {
-                    resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
-                        : Path::ResolveUri(wideReference);
                 }
 
-                if (!isController && resolved.extension().wstring().starts_with(L".bam"))
-                {
-                    auto jsonPath = resolved;
-                    jsonPath += L".json";
-                    auto bevePath = resolved;
-                    bevePath += L".beve";
-                    if (fs::is_regular_file(jsonPath, ec))
-                        resolved = jsonPath;
-                    else if (fs::is_regular_file(bevePath, ec))
-                        resolved = bevePath;
-                }
-
+                const bool isController = std::string_view(property) == "controllerPath";
+                const auto resolved = ResolveDocumentReference(rawPath, isController);
                 const auto file = fs::canonical(resolved, ec);
                 if (ec || !fs::is_regular_file(file, ec))
                 {
@@ -367,29 +418,63 @@ namespace Editor
         return issues;
     }
 
+    AssetReferenceScan AssetReferenceValidator::ScanProject()
+    {
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        AssetReferenceScan scan;
+        std::error_code error;
+        const auto root = fs::canonical(Path::GetProjectAssetRoot(), error);
+        if (error || !fs::is_directory(root, error))
+        {
+            AssetReferenceIssue issue;
+            issue.SourceFile = Path::ToProjectRelative(Path::GetProjectAssetRoot());
+            issue.IssueType = EAssetReferenceIssueType::UnreadableDocument;
+            scan.Issues.push_back(std::move(issue));
+            return scan;
+        }
+
+        std::set<fs::path> scannedDirectories{ root };
+        for (auto entry = fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied, error);
+            !error && entry != fs::recursive_directory_iterator{}; entry.increment(error))
+        {
+            std::error_code entryError;
+            if (entry->is_symlink(entryError) || entryError)
+            {
+                entry.disable_recursion_pending();
+                continue;
+            }
+            if (entry->is_directory(entryError))
+            {
+                const auto directory = fs::canonical(entry->path(), entryError);
+                if (entryError || !IsInAssetTree(directory, root) || !scannedDirectories.insert(directory).second)
+                    entry.disable_recursion_pending();
+                continue;
+            }
+            if (entryError || !entry->is_regular_file(entryError) || entryError)
+                continue;
+
+            const auto extension = Engine::ToLowerStr(Engine::WStrToStr(entry->path().extension().wstring()));
+            if (extension != ".json" && extension != ".animator" && extension != ".bamanimator")
+                continue;
+
+            const auto source = fs::canonical(entry->path(), entryError);
+            if (!entryError && IsInAssetTree(source, root))
+                InspectProjectDocument(source, scan);
+        }
+        if (error)
+        {
+            AssetReferenceIssue issue;
+            issue.SourceFile = Path::ToProjectRelative(root);
+            issue.IssueType = EAssetReferenceIssueType::UnreadableDocument;
+            scan.Issues.push_back(std::move(issue));
+        }
+        return scan;
+    }
+
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateAllResources()
     {
-        std::vector<AssetReferenceIssue> allIssues;
-        const auto root = Engine::PlatformPath::GetProjectRoot();
-        const auto resDir = root / "Resources";
-
-        std::error_code ec;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(resDir, ec))
-        {
-            if (!entry.is_regular_file()) continue;
-
-            const auto ext = entry.path().extension().string();
-            const auto filename = entry.path().filename().string();
-
-            // 씬, 프리팹, 머티리얼, 모델 JSON 파일 대상
-            if (ext == ".json" || filename.ends_with(".bamscene.json") || filename.ends_with(".bamprefab.json") ||
-                filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json") || filename.ends_with(".bammodel.json"))
-            {
-                auto fileIssues = ValidateFile(entry.path());
-                allIssues.insert(allIssues.end(), fileIssues.begin(), fileIssues.end());
-            }
-        }
-        return allIssues;
+        return ScanProject().Issues;
     }
 
     bool AssetReferenceValidator::FixIssue(const AssetReferenceIssue& issue)
@@ -398,12 +483,14 @@ namespace Editor
 
         const auto root = Engine::PlatformPath::GetProjectRoot();
         const auto fullSource = root / issue.SourceFile;
+        if (Engine::PlatformPath::IsReadOnlyTarget(fullSource))
+            return false;
 
         std::string content;
         if (!ReadTextFile(fullSource, content)) return false;
 
         const std::string targetStr = "\"" + issue.TargetReference + "\"";
-        const std::string replacementStr = "\"" + issue.SuggestedFix.generic_string() + "\"";
+        const std::string replacementStr = "\"" + Engine::WStrToStr(issue.SuggestedFix.generic_wstring()) + "\"";
 
         size_t pos = 0;
         bool modified = false;
@@ -429,7 +516,8 @@ namespace Editor
         {
             if (issue.CanAutoFix && !issue.SuggestedFix.empty())
             {
-                fileReplacements[issue.SourceFile].emplace_back(issue.TargetReference, issue.SuggestedFix.generic_string());
+                fileReplacements[issue.SourceFile].emplace_back(issue.TargetReference,
+                    Engine::WStrToStr(issue.SuggestedFix.generic_wstring()));
             }
         }
 
@@ -439,6 +527,8 @@ namespace Editor
         for (const auto& [srcRel, repls] : fileReplacements)
         {
             const auto fullSource = root / srcRel;
+            if (Engine::PlatformPath::IsReadOnlyTarget(fullSource))
+                continue;
             std::string content;
             if (!ReadTextFile(fullSource, content)) continue;
 

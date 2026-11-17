@@ -124,6 +124,15 @@ AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
 AssetRef,IssueType,Issue Type,문제 유형
 AssetRef,Missing,Missing: %zu,누락: %zu
 AssetRef,MissingStatus,%s Missing,%s 누락
+AssetRef,ProblemsTab,Problems,참조 문제
+AssetRef,ReferencesTab,References,참조 관계
+AssetRef,ShowReferences,Show Asset References,에셋 참조 보기
+AssetRef,ReferenceTargetRequired,Open a file's context menu in the Content Browser and choose Show Asset References.,콘텐츠 브라우저에서 파일을 우클릭하고 에셋 참조 보기를 선택하세요.
+AssetRef,UsedBy,Used By,이 에셋을 사용하는 파일
+AssetRef,Uses,Uses,이 에셋이 참조하는 파일
+AssetRef,NoDirectReferences,No direct references found in the scanned project documents.,검사한 프로젝트 문서에서 직접 참조를 찾지 못했습니다.
+AssetRef,UnreadableDocument,Could not read document,문서를 읽을 수 없음
+AssetRef,OutsideMounts,Outside asset roots,에셋 루트 외부
 AssetRef,ScanAll,Scan Resources,에셋 참조 검사
 AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
 AssetRef,ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.

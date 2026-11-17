@@ -11,6 +11,7 @@
 #include "NotificationManager.h"
 #include "Application.h"
 #include "AssetManager.h"
+#include "AssetReferencePanel.h"
 #include "HotReloadManager.h"
 #include "ShaderHotReloadManager.h"
 #include "PIEManager.h"
@@ -650,6 +651,12 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
 			OpenAssetOrFolder(browser, path, isDir);
+		if (!isDir && ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("AssetRef.ShowReferences")).c_str()))
+		{
+			auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
+			if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+				references->ShowReferences(path);
+		}
 		// 2. 파일인 경우: [외부 프로그램으로 열기]
 		if (!isDir)
 		{

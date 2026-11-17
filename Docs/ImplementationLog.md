@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 프로젝트 에셋 참조의 직접 사용처 조회
+
+- 콘텐츠 브라우저 단일 파일 우클릭에 **에셋 참조 보기**를 추가했다. 기존 검사 패널에서 직접 사용처와 참조 대상을 탐색한다. 결과는 디스크 검사 시점의 상태이며 버튼으로 갱신한다.
+- 검사 루트를 `GetProjectAssetRoot()`로 바꾸고 패키징과 JSON 참조 수집·경로 해석을 공유했다. 가상 URI와 레거시 경로를 해석하고 중복 링크를 제거한다. 누락된 참조나 읽을 수 없는 문서는 문제 탭에 표시한다.
+- `AssetReferenceCheck` 회귀 검사를 추가했다. `audit_localization.py --strict`와 `git diff --check`로 정적 점검했다. C++ 빌드·CTest와 에디터 실환경 확인은 사용자 실행 전이다.
+- 바이너리·동적 로드·미저장 변경 분석과 이동·삭제 확인창의 사용처 연동은 후속이다. [에셋 참조 개발 계획](ImGuiDevelopmentPlan.md#b-assetreferencepanel과-에셋-검증--우선순위-높음)
+
 ### [2026-11-17] 리소스 리로드 시 키·경로 보존과 새 머티리얼 식별자 기록
 
 - `Resource::Reload`가 `ReadArchive` 후 파일에 저장된 `m_Key`/`m_Path`로 메모리의 런타임 식별자를 덮어쓰던 결함을 고쳤다. 리로드 전 값을 보존하고 역직렬화 직후 복원한다(`LoadResource`가 로드 후 `SetKey`/`SetPath`를 다시 지정하는 것과 같은 원칙). 증상은 콘텐츠 브라우저에서 새로 만든 머티리얼이 편집·저장(핫 리로드) 후 인스펙터 핸들에서 이름·경로·썸네일이 비고, 이후 저장마다 빈 키가 파일에 다시 기록되는 것이었다.
