@@ -2071,7 +2071,7 @@ Timeline,VFXScale,VFX Scale,VFX 크기
 Timeline,AttachToSocket,Attach to Socket,소켓에 지속 부착
 Timeline,VFXPlayRate,VFX Play Rate,VFX 재생 속도
 Timeline,AutoDestroy,Auto Destroy on Finish,완료 시 자동 소멸
-FileDialog.VFXFiles,Composite VFX Files (*.bamvfx),복합 VFX 파일 (*.bamvfx)
+FileDialog,VFXFiles,Composite VFX Files (*.bamvfx),복합 VFX 파일 (*.bamvfx)
 GraphPanel,LoadFailed,Cannot open {} (stage {}: {}),{}을(를) 열 수 없습니다 (단계 {}: {})
 Timeline,Title,Animation Timeline,애니메이션 타임라인
 Timeline,BoneHierarchy,Bone Hierarchy,본 계층
@@ -2082,9 +2082,16 @@ Timeline,FocusBone,Focus Bone Camera,본으로 카메라 이동
 Timeline,NoEmbeddedAnimation,No Embedded Animation (Bind Pose),내장 애니메이션 없음 (바인드 포즈)
 Timeline,DurationTooltip,Adjust timeline duration for static models,애니메이션이 없는 모델의 타임라인 지속시간을 조절합니다
 ModelImport,OverwriteMaterials,Overwrite Existing Materials,기존 머티리얼 덮어쓰기
+Timeline,AddTrack,Add Track,트랙 추가
 EditorCommon,Cut,Cut,잘라내기
 ContentBrowser,CopyFilesResult,Copied {}. Could not copy {}.,복사 {}개 완료. 실패 {}개.
 ContentBrowser,MoveFilesResult,Moved {}. Could not move {}. Check references to moved assets.,이동 {}개 완료. 실패 {}개. 이동한 에셋의 참조를 확인하세요.
+EditorCommon,File,File,파일
+EditorCommon,Path,Path,경로
+TextureEditor,NoPreviewAvailable,Preview unavailable,미리보기를 사용할 수 없습니다
+TextureEditor,DimensionValue,%u × %u,%u × %u
+Settings,DiskCacheSizeAndFiles,%s (%u files),%s (파일 %u개)
+Viewport,CameraSpeedValue,Move Speed: {:.1f},이동 속도: {:.1f}
 ContentBrowser,FileCopy,Copy Files,파일 복사
 ContentBrowser,FileMove,Move Files,파일 이동
 ContentBrowser,FileDelete,Delete Files,파일 삭제
