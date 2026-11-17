@@ -2,6 +2,25 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 에디터 UI·인스펙터·리소스 에디터 로캘 및 입력(InputManager) 표준화
+
+- **로컬라이제이션 키 확장 및 동기화 (`65479627`)**:
+  - 디스크 캐시 용량/파일 수 표시(`Settings.DiskCacheSizeAndFiles`), 텍스처 에디터 해상도 포맷(`TextureEditor.DimensionValue`) 및 미리보기 없음 안내(`TextureEditor.NoPreviewAvailable`), 뷰포트 카메라 속도 포맷(`Viewport.CameraSpeedValue`), 타임라인 VFX 파일 표기(`Timeline.VFXFile`) 등 신규 로캘 키 추가.
+  - 원본 CSV(`Editor.csv`, `Engine.csv`) 및 생성된 JSON(`English.json`, `Korean.json`) 동기화.
+- **리소스 에디터 메타데이터 테이블 로캘 적용 (`835b498e`)**:
+  - `ShaderEditor` 및 `TextureEditor`의 프로퍼티/값 메타데이터 테이블 헤더에 `EditorCommon.Property`, `EditorCommon.Value` 로캘 적용 및 텍스처 치수/미리보기 없음 상태 로캘 적용.
+- **인스펙터 커브 및 에디터 UI/설정 입력 표준화 (`75a57e47`)**:
+  - `ReflectionPropertyDrawer`: 커브 에디터에서 ImGui 마우스 직접 접근 대신 `Engine::InputManager` API(마우스 화면 좌표 `GetScreenMousePosition`, 드래그 `IsMouseButtonDragging`, 더블클릭 `IsMouseButtonDoubleClicked`)를 사용하여 일관된 입력 처리 준수.
+  - `GizmoHelper`: 기즈모 툴바 버튼 단축키 힌트 전달 방식 정리.
+  - `EditorEnvironmentSettingsWidget`: 디스크 캐시 항목별 및 총합 정보 표시에 `Settings.DiskCacheSizeAndFiles` 포맷 적용.
+  - `EditorSettingsService`: 기본 Gameplay 액션 바인딩 테이블에 `OrbitCamera`(`Mouse:Right`) 기본 매핑 추가.
+  - `EditorActionRegistry`: 카메라 속도 증감 시 알림 메시지에 `LOCAL_FMT` 적용.
+- **애니메이션 타임라인 패널 입력 및 로캘 표준화 (`fd1d0e41`)**:
+  - `AnimationTimelinePanel`: 본 계층 구조 트리에서 더블클릭 포커스 시 `Engine::InputManager::Get().IsMouseButtonDoubleClicked` 사용.
+  - 복합 VFX 스폰 노티파이 마커 툴팁에 `Timeline.VFXFile` 로캘 포맷 적용.
+- **검증**:
+  - 정적 코드 분석 및 Git 변경 검토 완료. C++ 컴파일 빌드 및 런타임 검증은 사용자 실행 대기.
+
 ### [2026-11-17] 콘텐츠 브라우저 일괄 삭제 전 참조 영향 표시
 
 - 삭제 요청에 기존 프로젝트 참조 검사를 연결했다. 확인창에는 삭제 후에도 남는 문서가 참조하는 삭제 대상만 표시한다. 폴더 하위 항목을 포함하고 같은 삭제 묶음 안의 참조는 제외한다. 일부 문서나 경로를 읽지 못하면 확인된 참조 목록과 누락 안내를 함께 표시한다.
