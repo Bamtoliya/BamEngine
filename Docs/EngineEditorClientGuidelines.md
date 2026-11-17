@@ -579,7 +579,7 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 
 ## 19. 에디터 UI 패턴 및 스타일 통일성 기준 (UI Uniformity & Style Consistency)
 
-에디터 전반에서 동일하거나 유사한 역할을 수행하는 UI 컴포넌트(검색창, 모달 대화상자, 인스펙터 속성, 툴바, 리스트/트리, 상태 표시 등)는 작성 시점이나 패널 종류에 상관없이 일관된 시각적 스타일과 조작 규칙을 유지해야 한다. 자의적인 레이아웃 파편화를 방지하기 위해 다음 6대 UI 표준 패턴을 준수한다.
+에디터 전반에서 동일하거나 유사한 역할을 수행하는 UI 컴포넌트(검색창, 모달 대화상자, 인스펙터 속성, 툴바, 리스트/트리, 상태 표시 등)는 작성 시점이나 패널 종류에 상관없이 일관된 시각적 스타일과 조작 규칙을 유지해야 한다. 자의적인 레이아웃 파편화를 방지하기 위해 다음 7대 UI 표준 패턴을 준수한다.
 
 ### 1. 검색 및 필터 바 표준 (Search & Filter Bar)
 - **표준 구성 요소**: [검색 아이콘/라벨] + [텍스트 입력 필드(플레이스홀더 힌트 포함)] + [우측 클리어(X) 버튼].
@@ -626,6 +626,24 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 ### 6. 빈 상태 및 진단 피드백 (Empty States & Diagnostics)
 - **빈 상태(Empty State) 표시**: 항목이 없거나 검색 결과가 0건일 때 빈 화면을 그대로 방치하지 않는다. 작업 영역 중앙에 통일된 비활성 회색 텍스트(예: "표시할 항목이 없습니다", "검색 결과가 없습니다") 또는 드롭 안내 문구를 표시한다.
 - **진단/경고 색상**: 성공(녹색 계열), 경고(황색 계열), 오류(적색 계열)의 시각적 하이라이트 규칙을 통일하여 패널마다 색상이 반대로 쓰이거나 임의로 변형되지 않도록 한다.
+
+### 7. 리소스 편집기 기본 기능 (Resource Editor Baseline)
+
+`ResourceEditorInterface`를 상속하는 편집기는 편집 대상의 성격과 무관하게 다음을 갖춘다. 편집기별 현황은 [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md) 24절에 기록한다.
+
+- **필수 (편집 가능한 리소스 편집기)**
+  1. **공통 3줄 구성**: 메뉴(`DrawCustomToolbar`) → 퀵액세스(`DrawCustomQuickAccess`) → 작업 영역(`DrawCustomContent`). 메뉴와 퀵액세스의 같은 기능은 같은 함수를 호출한다.
+  2. **파일 메뉴**: `저장`과 `닫기`를 둔다. `DrawCustomToolbar`를 재정의하면 기본 구현의 `닫기`가 사라지므로 `EditorCommon.Close` 항목에서 `OnResourceCloseRequested()`를 직접 호출한다. 새 파일을 만들 수 있는 편집기는 `다른 이름으로 저장`도 둔다.
+  3. **퀵액세스 저장 버튼**: 아이콘 버튼으로 두고, 툴팁에 `GetShortcutHint()`로 단축키를 함께 표시한다(4항).
+  4. **전용 단축키 문맥과 저장 단축키**: 편집기 전용 `EShortcutContext`를 두고 `<문맥>.Save`(기본 `Ctrl+S`)를 `EditorActionRegistry`에 로컬 액션으로 등록한다. 로컬 액션의 `CanExecute`가 false여도 씬 저장으로 넘어가지 않는다(14절).
+  5. **미저장 표시**: `HasUnsavedResourceChanges()`가 실제 편집에만 true가 된다. 열기·표시·언어 전환만으로 켜지지 않고(UX-4.1), 저장 성공 시 해제되며, 저장 실패 시 유지된다. 이 값이 창 제목 `*`, 앱 종료 확인, 다른 에셋 열기 차단에 그대로 쓰인다.
+  6. **문서 교체 확인**: 새로 만들기·열기·드롭·동기화처럼 현재 문서를 바꾸는 사용자 동작은 `RunWithDiscardConfirmation`을 거친다(2항).
+- **편집기 성격에 따라 선택**
+  - **Undo/Redo**: 편집 이력을 제공하는 편집기는 자체 `CommandHistory`를 사용한다. 연속 조작은 한 명령으로 묶고(UX-4.2), 메뉴(`편집`)·퀵액세스·로컬 단축키(`<문맥>.Undo/Redo`) 세 경로를 모두 제공한다. 편집기에 포커스가 있을 때 씬 이력(`Edit.Undo`)을 허용하지 않는다. 씬을 직접 편집하는 편집기(예: 프리팹 모드)는 예외로 하고, 그 이유를 기록한다.
+  - **읽기 전용 리소스(`Engine://`)**: 엔진 기본 리소스를 열면 저장을 비활성화하고 읽기 전용 배지(`ContentBrowser.EngineReadOnlyBadge`)를 표시한다.
+  - **보기 전용 편집기**(텍스처·셰이더 등): 저장·미저장·교체 확인을 두지 않으며, 경로 복사(`DrawCopyResourcePath`)를 제공한다.
+- **로캘**: 공용 동작은 `EditorCommon.*`(저장·닫기·실행 취소 등), 파일 대화상자 필터는 `FileDialog.*` 키를 쓴다. 다른 편집기 그룹의 키(예: `AnimatorGraph.Unsaved`)를 빌려 쓰지 않는다.
+- **플러그인 편집기**: `PluginResourceEditor`는 위 동작을 플러그인 API에 위임한다. 위임 범위는 [EditorPluginArchitecturePlan.md](EditorPluginArchitecturePlan.md)에서 정한다.
 
 에디터 UI/UX 기능의 계층별 검증(정적 감사, 헤드리스 ImGui CTest, 실환경 대화형·GPU 검증), 표준 테스트 환경 매트릭스(언어·배율·도킹 폭) 및 영역별 Pass/Fail 판정 기준은 [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md)를 따른다.
 
