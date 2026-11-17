@@ -130,6 +130,8 @@
 ,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
 ,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
 ,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
+,Engine::EVFXTrailAlignment.OffsetAxis,Offset Axis (A-B),오프셋 축 (A-B)
+,Engine::EVFXTrailAlignment.ViewFacing,Camera Facing,카메라 정면
 ,Entity,Entity,엔티티
 ,Execution budget exhausted.,Execution budget exhausted.,실행 예산을 모두 사용했습니다.
 ,Execution is not implemented for node type:,Execution is not implemented for node type:,실행이 구현되지 않은 노드 유형:
@@ -641,6 +643,7 @@
 ,PROP_TOP,Top,상단
 ,PROP_TOTAL_DURATION,Total Duration,총 지속 시간
 ,PROP_TRACK_NAME,Track Name,트랙 이름
+,PROP_TRAIL_ALIGNMENT,Trail Alignment,트레일 정렬
 ,PROP_TRAIL_TRACKS,Trail Tracks,트레일 트랙
 ,PROP_TRAIL_WIDTH,Trail Width,트레일 폭
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)

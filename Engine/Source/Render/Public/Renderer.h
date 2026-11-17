@@ -65,6 +65,7 @@ private: //Entity Render
 	EResult RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass, const Frustum* frustum = nullptr);
 	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
+	EResult RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>& commands, RenderPass* renderPass);
 	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass);
 	void ClearFrameQueues();
 #pragma endregion
@@ -79,6 +80,7 @@ public: //Entity Submit
 	void SubmitStatic(const StaticDrawCommand& command, RenderPassID passID);
 	void SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID passID);
 	void SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID);
+	void SubmitDynamicGeometry(DynamicGeometryDrawCommand command, RenderPassID passID);
 	void SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID);
 
 #pragma endregion
@@ -130,6 +132,7 @@ private: //ECS Based Render Queue
 	map<RenderPassID, vector<StaticDrawCommand>> m_StaticDrawCommands;
 	map<RenderPassID, vector<SkinnedDrawCommand>> m_SkinnedDrawCommands;
 	map<RenderPassID, vector<SpriteDrawCommand>> m_SpriteDrawCommands;
+	map<RenderPassID, vector<DynamicGeometryDrawCommand>> m_DynamicGeometryDrawCommands;
 	map<RenderPassID, vector<UIImageDrawCommand>> m_UIImageDrawCommands;
 private:
 	class RenderPassManager* m_RenderPassManager = { nullptr };

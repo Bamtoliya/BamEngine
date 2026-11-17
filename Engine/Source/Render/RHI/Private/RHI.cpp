@@ -71,6 +71,7 @@ EResult RHI::BindVertexBuffers(uint32 firstSlot, RHIBuffer** vertexBuffers, uint
 		Safe_Release(m_VertexBuffers[firstSlot + i]);
 		m_VertexBuffers[firstSlot + i] = vertexBuffers[i];
 		Safe_AddRef(m_VertexBuffers[firstSlot + i]);
+		m_DynamicVertexBindings[firstSlot + i] = {};
 	}
 	m_NumVertexBuffersBound = std::max(m_NumVertexBuffersBound, firstSlot + count);
 	return EResult::Success;
@@ -161,11 +162,10 @@ EResult RHI::BindInstanceBuffer(RHIBuffer* buffer, uint32 offset)
 {
 	return EResult::NotImplemented;
 }
-EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride)
+EResult RHI::CopyToDynamicRingBuffer(const void* data, uint32 size, RHIBuffer*& outBuffer, uint32& outOffset)
 {
-	if (!data || instanceCount == 0 || stride == 0) return EResult::InvalidArgument;
-	const uint32 bytesNeeded = instanceCount * stride;
-	const uint32 alignedSize = (bytesNeeded + (m_ConstantBufferAlignment - 1)) & ~(m_ConstantBufferAlignment - 1);
+	if (!data || size == 0) return EResult::InvalidArgument;
+	const uint32 alignedSize = (size + (m_ConstantBufferAlignment - 1)) & ~(m_ConstantBufferAlignment - 1);
 	if (m_DynamicInstanceBufferCursor + alignedSize > DYNAMIC_INSTANCE_BUFFER_SIZE)
 	{
 		ENGINE_LOG_ERROR("Dynamic instance buffer overflow. Needed: {}, Remaining: {}",
@@ -173,16 +173,36 @@ EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 s
 		return EResult::OutOfMemory;
 	}
 	RHIBuffer* ringBuffer = m_DynamicInstanceBuffers[m_CurrentBackBufferIndex];
-	if (!ringBuffer) return EResult::Fail;
-	void* mappedPtr = ringBuffer->GetMappedPointer();
+	void* mappedPtr = ringBuffer ? ringBuffer->GetMappedPointer() : nullptr;
 	if (!mappedPtr) return EResult::Fail;
-	memcpy(static_cast<uint8*>(mappedPtr) + m_DynamicInstanceBufferCursor, data, bytesNeeded);
-	const EResult result = BindInstanceBuffer(ringBuffer, m_DynamicInstanceBufferCursor);
-	if (IsSuccess(result))
+
+	memcpy(static_cast<uint8*>(mappedPtr) + m_DynamicInstanceBufferCursor, data, size);
+	outBuffer = ringBuffer;
+	outOffset = m_DynamicInstanceBufferCursor;
+	m_DynamicInstanceBufferCursor += alignedSize;
+	return EResult::Success;
+}
+
+EResult RHI::BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride)
+{
+	if (!data || instanceCount == 0 || stride == 0) return EResult::InvalidArgument;
+	RHIBuffer* ringBuffer = nullptr;
+	uint32 offset = 0;
+	if (const EResult result = CopyToDynamicRingBuffer(data, instanceCount * stride, ringBuffer, offset); IsFailure(result))
+		return result;
+	return BindInstanceBuffer(ringBuffer, offset);
+}
+
+void RHI::ResetDynamicVertexBindings()
+{
+	for (uint32 slot = 0; slot < MAX_BUFFER_SLOTS; ++slot)
 	{
-		m_DynamicInstanceBufferCursor += alignedSize;
+		if (!m_DynamicVertexBindings[slot].isActive) continue;
+		// Safe_Release는 참조 수가 0이 될 때만 nullptr로 만든다. 링 버퍼는 RHI가 계속 소유하므로 직접 비운다.
+		Safe_Release(m_VertexBuffers[slot]);
+		m_VertexBuffers[slot] = nullptr;
+		m_DynamicVertexBindings[slot] = {};
 	}
-	return result;
 }
 #pragma endregion
 

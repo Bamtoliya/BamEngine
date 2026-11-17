@@ -695,7 +695,7 @@ void VFXEditorPanel::DrawTrackList()
 			if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
 			{
 				Engine::VFXLightTrack track;
-				track.trackName = "Flash_" + std::to_string(effect->GetLightTracks().size() + 1);
+				track.trackName = "Light_" + std::to_string(effect->GetLightTracks().size() + 1);
 				effect->GetLightTracks().push_back(track);
 				m_SelectedTrack = { ESelectedVFXTrackType::Light, static_cast<int>(effect->GetLightTracks().size() - 1) };
 				m_TimelineHistory.Clear();
@@ -713,7 +713,7 @@ void VFXEditorPanel::DrawTrackList()
 			if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
 			{
 				Engine::VFXSoundTrack track;
-				track.trackName = "Audio_" + std::to_string(effect->GetSoundTracks().size() + 1);
+				track.trackName = "Sound_" + std::to_string(effect->GetSoundTracks().size() + 1);
 				effect->GetSoundTracks().push_back(track);
 				m_SelectedTrack = { ESelectedVFXTrackType::Sound, static_cast<int>(effect->GetSoundTracks().size() - 1) };
 				m_TimelineHistory.Clear();
@@ -1234,8 +1234,48 @@ void VFXEditorPanel::SelectTrack(SelectedVFXTrack selection)
 	});
 }
 
+void VFXEditorPanel::CommitInspectorEdit()
+{
+	if (!m_InspectorEdit) return;
+	VFXInspectorEdit edit = std::move(*m_InspectorEdit);
+	m_InspectorEdit.reset();
+
+	// 편집 중 다른 이펙트를 열었으면 기록하지 않는다.
+	auto* effect = m_EffectHandle.Get();
+	if (!effect || effect != edit.effect) return;
+
+	std::any after;
+	VisitVFXTrack(*effect, edit.track, [&](auto& tracks, std::size_t index)
+		{
+			using T = std::remove_cvref_t<decltype(tracks[index])>;
+			if (std::any_cast<T>(&edit.before)) after = tracks[index];
+		});
+	if (!after.has_value()) return;
+
+	const auto handle = m_EffectHandle;
+	const auto selection = edit.track;
+	auto applyState = [this, handle, selection](const std::any& state) -> bool
+		{
+			auto* target = handle.Get();
+			if (!target) return false;
+			bool applied = false;
+			VisitVFXTrack(*target, selection, [&](auto& tracks, std::size_t index)
+				{
+					using T = std::remove_cvref_t<decltype(tracks[index])>;
+					if (const T* value = std::any_cast<T>(&state)) { tracks[index] = *value; applied = true; }
+				});
+			if (applied) InvalidateTimelinePreview(); // 프리뷰 재구성 + Dirty
+			return applied;
+		};
+
+	m_TimelineHistory.Record(std::make_unique<CallbackEditorCommand>(LOCAL("VFXEditor.EditTrackProperties"),
+		[applyState, after] { return applyState(after); },
+		[applyState, before = std::move(edit.before)] { return applyState(before); }));
+}
+
 void VFXEditorPanel::DeleteSelectedTrack()
 {
+	if (m_InspectorEdit) CommitInspectorEdit();
 	auto* effect = m_EffectHandle.Get();
 	if (!effect) return;
 	const auto selected = m_SelectedTrack;
@@ -1438,7 +1478,7 @@ bool VFXEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction action) c
 	using enum EditorUI::TimelineAction;
 	auto* effect = m_EffectHandle.Get();
 	if (!m_Open || !effect || m_Timeline.Drag) return false;
-	if (action == Undo) return m_TimelineHistory.CanUndo();
+	if (action == Undo) return m_InspectorEdit.has_value() || m_TimelineHistory.CanUndo();
 	if (action == Redo) return m_TimelineHistory.CanRedo();
 	if (action == Delete) return VisitVFXTrack(*effect, m_SelectedTrack, [](auto&, std::size_t) {});
 	return true;
@@ -1448,6 +1488,7 @@ void VFXEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
 {
 	using enum EditorUI::TimelineAction;
 	if (!CanExecuteTimelineAction(action)) return;
+	if ((action == Undo || action == Redo) && m_InspectorEdit) CommitInspectorEdit();
 	const float time = m_TimelineSeek.value_or(m_CurrentTime);
 	switch (action)
 	{
@@ -1475,6 +1516,9 @@ void VFXEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
 
 void VFXEditorPanel::DrawInspector()
 {
+	// 앞 프레임에서 시작한 속성 편집이 끝났으면(활성 위젯 없음) Undo 한 단위로 확정한다.
+	if (m_InspectorEdit && !ImGui::IsAnyItemActive()) CommitInspectorEdit();
+
 	auto* effect = m_EffectHandle.Get();
 	if (!effect)
 	{
@@ -1491,6 +1535,24 @@ void VFXEditorPanel::DrawInspector()
 	ImGui::Text(ICON_FA_SLIDERS " %s", LOCAL_CSTR("VFXEditor.TrackInspector"));
 	ImGui::Separator();
 
+	// 그리기 전 값을 복사해 둔다. 이번 프레임에 처음 바뀌면 이 값이 편집 전 상태가 된다.
+	const SelectedVFXTrack selection = m_SelectedTrack;
+	std::any before;
+	VisitVFXTrack(*effect, selection, [&](auto& tracks, std::size_t index) { before = tracks[index]; });
+
+	if (!DrawSelectedTrackInspector(effect)) return;
+	m_IsDirty = true;
+
+	// 삭제 버튼 등으로 선택이 바뀐 프레임에는 세션을 열지 않는다.
+	const bool sameTrack = m_SelectedTrack.type == selection.type && m_SelectedTrack.index == selection.index;
+	if (sameTrack && !m_InspectorEdit && before.has_value())
+		m_InspectorEdit = VFXInspectorEdit{ effect, selection, std::move(before) };
+}
+
+bool VFXEditorPanel::DrawSelectedTrackInspector(Engine::CompositeEffect* effect)
+{
+	bool changed = false;
+
 	// 리플렉션에 등록된 트랙 구조체를 공용 속성 표로 그린다. 하나라도 바뀌면 true.
 	const auto drawReflectedTrack = [](auto& track)
 		{
@@ -1504,10 +1566,10 @@ void VFXEditorPanel::DrawInspector()
 	if (m_SelectedTrack.type == ESelectedVFXTrackType::Sprite)
 	{
 		auto& tracks = effect->GetSpriteTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1519,10 +1581,10 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Particle)
 	{
 		auto& tracks = effect->GetParticleTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1534,13 +1596,13 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Light)
 	{
 		auto& tracks = effect->GetLightTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 		if (track.useIntensityCurve && EditorUI::BeginPropertyTable("LightCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets)) m_IsDirty = true;
+			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets)) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 
@@ -1554,18 +1616,18 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Mesh)
 	{
 		auto& tracks = effect->GetMeshTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 		if (!track.meshHandle.IsValid()) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.QuadDefault"));
 		const auto* meshMaterial = track.materialHandle.Get();
 		const bool usesRingTexture = !track.textureHandle.IsValid() && (!meshMaterial || meshMaterial->GetTextureBindings().empty() || !meshMaterial->GetTextureBindings()[0].texture.Get());
 		if (usesRingTexture) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.RingTextureDefault"));
 		if ((track.useScaleCurve || track.useAlphaCurve) && EditorUI::BeginPropertyTable("MeshCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets)) m_IsDirty = true;
-			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets)) m_IsDirty = true;
+			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets)) changed = true;
+			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets)) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 
@@ -1579,7 +1641,7 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Sound)
 	{
 		auto& tracks = effect->GetSoundTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
 		const auto object = reflection::ObjectView::From(track);
@@ -1607,11 +1669,13 @@ void VFXEditorPanel::DrawInspector()
 				if (!ImGui::InputText("##Name", nameBuf, sizeof(nameBuf))) return false;
 				track.trackName = nameBuf;
 				return true;
-			})) m_IsDirty = true;
+			})) changed = true;
 
 			if (drawRegistered("VFXEditor.PropEnabled", "enabled",
 				[&] { return ImGui::Checkbox("##Enabled", &track.enabled); }))
-				InvalidateTimelinePreview();
+			{
+				changed = true; InvalidateTimelinePreview();
+			}
 
 			EditorUI::PropertyRow("VFXEditor.PropStartTime");
 			ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1642,25 +1706,31 @@ void VFXEditorPanel::DrawInspector()
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##SoundDuration", &track.playDuration, 0.02f, 0.0f, maxSoundTime, "%.2fs",
 				ImGuiSliderFlags_AlwaysClamp))
-				InvalidateTimelinePreview();
+			{
+				changed = true; InvalidateTimelinePreview();
+			}
 
 			EditorUI::PropertyRow("VFXEditor.PropFadeOutDuration");
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat("##FadeOutDuration", &track.fadeOutDuration, 0.01f, 0.0f, maxSoundTime, "%.2fs",
 				ImGuiSliderFlags_AlwaysClamp))
-				InvalidateTimelinePreview();
+			{
+				changed = true; InvalidateTimelinePreview();
+			}
 
 			if (drawRegistered("VFXEditor.PropAudioClip", "audioClip",
 				[&] { return Editor::DrawInspectorResourcePicker(track.audioClip, true, true); }))
-				InvalidateTimelinePreview();
+			{
+				changed = true; InvalidateTimelinePreview();
+			}
 
 			EditorUI::PropertyRow("VFXEditor.PropVolume");
 			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::DragFloat("##Volume", &track.volume, 0.02f, 0.0f, 2.0f, "%.2f")) m_IsDirty = true;
+			if (ImGui::DragFloat("##Volume", &track.volume, 0.02f, 0.0f, 2.0f, "%.2f")) changed = true;
 
 			EditorUI::PropertyRow("VFXEditor.PropPitch");
 			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::DragFloat("##Pitch", &track.pitch, 0.02f, 0.1f, 3.0f, "%.2f")) m_IsDirty = true;
+			if (ImGui::DragFloat("##Pitch", &track.pitch, 0.02f, 0.1f, 3.0f, "%.2f")) changed = true;
 
 			EditorUI::EndPropertyTable();
 		}
@@ -1675,10 +1745,10 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Trail)
 	{
 		auto& tracks = effect->GetTrailTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1690,10 +1760,10 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::Decal)
 	{
 		auto& tracks = effect->GetDecalTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1705,10 +1775,10 @@ void VFXEditorPanel::DrawInspector()
 	else if (m_SelectedTrack.type == ESelectedVFXTrackType::CameraShake)
 	{
 		auto& tracks = effect->GetCameraShakeTracks();
-		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return;
+		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) m_IsDirty = true;
+		if (drawReflectedTrack(track)) changed = true;
 
 		ImGui::Spacing();
 		if (ImGui::Button((std::string(ICON_FA_TRASH " ") + LOCAL_CSTR("EditorCommon.Delete")).c_str()))
@@ -1716,6 +1786,7 @@ void VFXEditorPanel::DrawInspector()
 			DeleteSelectedTrack();
 		}
 	}
+	return changed;
 }
 
 void VFXEditorPanel::StopPreviewSounds()

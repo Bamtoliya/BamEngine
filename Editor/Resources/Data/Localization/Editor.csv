@@ -1752,11 +1752,13 @@ VFXEditor,CreateNewEffect,Create New Effect,새 이펙트 생성
 VFXEditor,NoEffectLoaded,No Composite Effect loaded.,로드된 복합 이펙트가 없습니다.
 VFXEditor,NoTracks,No tracks in this effect.,이펙트에 등록된 트랙이 없습니다.
 VFXEditor,AddPrompt,Click '+ Add Track' above to add:,상단의 '+ 트랙 추가'를 눌러 트랙을 추가하세요:
-VFXEditor,AddSpriteTrack,2D Sprite Flipbook Track,2D 스프라이트 플립북 트랙
-VFXEditor,AddParticleTrack,Particle Emitter Track,파티클 이미터 트랙
-VFXEditor,AddLightTrack,Light Flash Track,라이트 섬광 트랙
-VFXEditor,AddMeshTrack,Shockwave Mesh Track,충격파 메쉬 트랙
-VFXEditor,AddSoundTrack,Audio Sound Track,오디오 사운드 트랙
+VFXEditor,AddSpriteTrack,Sprite Track,스프라이트 트랙
+VFXEditor,AddParticleTrack,Particle Track,파티클 트랙
+VFXEditor,AddLightTrack,Light Track,라이트 트랙
+VFXEditor,AddMeshTrack,Mesh Track,메쉬 트랙
+VFXEditor,AddSoundTrack,Sound Track,사운드 트랙
+VFXEditor,AddTrailTrack,Trail Track,트레일 트랙
+VFXEditor,AddDecalTrack,Decal Track,데칼 트랙
 VFXEditor,TrackInspector,Track Inspector,트랙 인스펙터
 VFXEditor,SelectTrackPrompt,Select a track to inspect.,편집할 트랙을 선택하세요.
 VFXEditor,PropTrackName,Track Name,트랙 이름
@@ -1797,8 +1799,6 @@ VFXEditor,DurationTotal,Duration,전체 재생 시간
 VFXEditor,AutoDuration,Auto Dur,길이 자동 계산
 VFXEditor,TimelineUnavailable,Timeline unavailable - No Effect loaded.,타임라인을 사용할 수 없음 - 로드된 이펙트가 없습니다.
 VFXEditor,SaveSuccess,Effect saved successfully.,이펙트를 저장했습니다.
-VFXEditor,AddTrailTrack,Trail / Ribbon Track,트레일 / 리본 트랙
-VFXEditor,AddDecalTrack,Decal Mark Track,지면 투영 데칼 트랙
 VFXEditor,AddCameraShakeTrack,Camera Shake Track,카메라 셰이크 트랙
 VFXEditor,PropTrailWidth,Trail Width,트레일 폭
 VFXEditor,PropLifetime,Lifetime,수명
@@ -2050,3 +2050,4 @@ VFXEditor,CurvePresetLinear,Linear,선형
 Inspector,CurveKeys,Keys ({}),키 {}개
 VFXEditor,RingTextureDefault,(Ring texture default),(링 텍스처 기본값)
 Inspector,CurveEditHint,Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.,키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.
+VFXEditor,EditTrackProperties,Edit Track Properties,트랙 속성 편집

@@ -37,11 +37,16 @@ namespace Engine
 		vec3 lastSpawnPosA = vec3(1e9f);
 		vec3 lastSpawnPosB = vec3(1e9f);
 		bool hasLastSpawn = false;
+		// 매 프레임 갱신되는 현재 머리 위치. 다음 샘플이 추가되기 전까지 마지막 점과 머리를 잇는다.
+		vec3 headA = vec3(0.0f);
+		vec3 headB = vec3(0.0f);
+		bool hasHead = false;
 
 		void Reset()
 		{
 			points.clear();
 			hasLastSpawn = false;
+			hasHead = false;
 			lastSpawnPosA = vec3(1e9f);
 			lastSpawnPosB = vec3(1e9f);
 		}

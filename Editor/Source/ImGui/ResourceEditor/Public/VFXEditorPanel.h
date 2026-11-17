@@ -75,6 +75,7 @@ private:
 		{
 			m_Timeline.Drag.reset();
 			m_SoundStartEdit.reset();
+			if (m_InspectorEdit) CommitInspectorEdit();
 		}
 
 		if (!m_Open)
@@ -84,6 +85,8 @@ private:
 	void DrawTrackList();
 	void DrawViewport();
 	void DrawInspector();
+	bool DrawSelectedTrackInspector(Engine::CompositeEffect* effect); // 이번 프레임에 값이 바뀌면 true
+	void CommitInspectorEdit();
 	void DrawTransportBar();
 	void DrawTimeline();
 	void SelectTrack(SelectedVFXTrack selection);
@@ -165,6 +168,13 @@ private:
 		bool valid = false;
 	};
 	VFXGizmoSnapshot m_GizmoSnapshot;
+	struct VFXInspectorEdit
+	{
+		Engine::CompositeEffect* effect = nullptr;
+		SelectedVFXTrack track;
+		std::any before;
+	};
+	std::optional<VFXInspectorEdit> m_InspectorEdit;
 	bool m_IsGizmoUsing = false;
 };
 

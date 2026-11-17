@@ -29,6 +29,14 @@ enum class EVFXTrackType : uint8
 	CameraShake         // 임팩트 카메라 셰이크
 };
 
+// 트레일 띠의 폭 방향 결정 방식
+ENUM()
+enum class EVFXTrailAlignment : uint8
+{
+	OffsetAxis = 0, // 오프셋 A-B 축을 면의 법선으로 사용 (검기처럼 칼날 면을 따르는 궤적)
+	ViewFacing,     // 폭 방향을 시선에 수직으로 두어 항상 카메라를 향함 (투사체 꼬리, 연기)
+};
+
 // 1. 2D 스프라이트 플립북 트랙
 STRUCT()
 struct ENGINE_API VFXSpriteTrack
@@ -302,6 +310,9 @@ struct ENGINE_API VFXTrailTrack
 
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_VFX_RENDER"), DISPLAY_NAME("PROP_TAPER_RATIO"), RANGE(0.0, 1.0, 0.02))
 	f32 taperRatio = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_VFX_RENDER"), DISPLAY_NAME("PROP_TRAIL_ALIGNMENT"))
+	EVFXTrailAlignment alignment = EVFXTrailAlignment::OffsetAxis;
 
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_VFX_TRANSFORM"), DISPLAY_NAME("PROP_OFFSET_A"), STEP(0.02))
 	vec3 localOffsetA = vec3(0.0f, 0.3f, 0.0f);

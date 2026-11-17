@@ -588,7 +588,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드, 트레일, 데칼, 카메라 셰이크를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
   - Phase 1 [완료]: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 스프라이트 플립북·파티클·라이트 섬광 연동, `VFXEditorPanel` 저작 도구 구축 완료.
   - Phase 2 [완료]: 메쉬 이펙트(`VFXMeshTrack`) 런타임 렌더링 제출(`ForwardTransparentPass`), 스케일/회전 보간 및 UV 스크롤/컬러 페이드 연동(`SpriteDrawCommand` / `SpriteUBO`), 사운드 트랙(`VFXSoundTrack`) 1회성 정밀 타이밍 트리거 연결 완료.
-  - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집, 테이퍼링 폭 축소 및 방향 정렬 쿼드 세그먼트 고속 렌더링 파이프라인 연계 완료.
+  - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집과 테이퍼링. 2026-11-17 동적 정점 버퍼 기반 연속 Triangle Strip으로 전환(곡선 이음새 해소), 정렬 모드(A-B 축/카메라 정면) 추가. SDL GPU 대체 경로는 미검증.
   - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
   - 후보 B 실환경 검증 & 안정화 [완료: 2026-11-15]: `acceptsSceneSubmissions` 가드를 통한 메인 씬 스카이박스 누출 차단, 타임라인 앞뒤 여백(-0.25s/+1.0s) 및 10배 줌아웃(0.1x)·패닝 확장, 트레일 검증용 프리뷰 모션(원형 궤도) 토글, D3D12 `MISMATCHINGCLEARVALUE` 예외 중단 해제 및 RTV null 가드 크래시 해결, 3단계 배경 프리셋(스튜디오 18% 회색/암실/주간) 및 스튜디오 조명 배율 연동, 차콜 PBR 바닥 슬래브(18% 반사율 매트 머티리얼 인스턴스) 적용으로 바닥 자체 블룸 제거 및 플래시 반사 극대화 완료.
   - Phase 5 [진행 중 / Step 1~2 완료: 2026-11-17]: 상용 엔진(Niagara/VFX Graph) 수준의 환경 상호작용(벽 코너/장애물/더미 마네킹 프리셋, 바람/외력 시뮬레이터), 48m 지면 평면화, 15cm Depth Fade 및 프레넬 림(Step 1 완료). `FloatCurve` (2D 3차 베지어 에르미트 스플라인) 엔진 코어 신설, 메쉬 스케일/알파 및 조도 커브 런타임 샘플링(Ease-Out 폭발 팽창 펀치감 실현), 인스펙터 리플렉션 속성 행 및 프리셋 지원, `EffectTimelineView` 트랙 바 내부 실시간 베지어 곡선 실루엣 및 라벨 뱃지 인라인 렌더링 검증 완료(Step 2 완료). 차기 액션 타임라인 소켓 연동(Step 3) 계획 수립.

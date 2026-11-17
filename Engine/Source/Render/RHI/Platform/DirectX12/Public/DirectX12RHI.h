@@ -70,6 +70,8 @@ public:
 	EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 	EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset = 0) override;
 	EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) override;
+	EResult BindDynamicVertexBuffer(uint32 slot, const void* data, uint32 vertexCount, uint32 stride) override;
+	bool SupportsDynamicVertexBuffers() const override { return true; }
 #pragma endregion
 
 #pragma region RenderPass
@@ -120,6 +122,7 @@ private:
 #pragma region Draw
 private:
 	EResult ApplyShaderResources();
+	D3D12_VERTEX_BUFFER_VIEW GetBoundVertexBufferView(uint32 slot) const;
 public:
 	EResult Draw(uint32 count) override;
 	EResult DrawIndexed(uint32 count) override;

@@ -152,6 +152,7 @@ EResult Renderer::Render(f32 dt)
 			(m_SkinnedDrawCommands.find(pid) != m_SkinnedDrawCommands.end() && !m_SkinnedDrawCommands.at(pid).empty()) ||
 			(m_SpriteDrawCommands.find(pid) != m_SpriteDrawCommands.end() && !m_SpriteDrawCommands.at(pid).empty()) ||
 			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
+			(m_DynamicGeometryDrawCommands.find(pid) != m_DynamicGeometryDrawCommands.end() && !m_DynamicGeometryDrawCommands.at(pid).empty()) ||
 			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
 			hasDelegate;
 
@@ -468,6 +469,16 @@ EResult Renderer::Render(f32 dt)
 					}
 				}
 
+				if (const auto dynIt = m_DynamicGeometryDrawCommands.find(pass->GetID()); dynIt != m_DynamicGeometryDrawCommands.end())
+				{
+					const EResult result = RenderDynamicGeometry(dynIt->second, pass);
+					if (IsFailure(result))
+					{
+						ENGINE_LOG_ERROR("Dynamic geometry rendering failed. Pass ID: {}", pass->GetID());
+						return result;
+					}
+				}
+
 				if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
 				{
 					const EResult result = RenderUIImages(images->second, pass);
@@ -502,7 +513,6 @@ EResult Renderer::Render(f32 dt)
 	return EResult::Success;
 }
 
-TODO("Renderer::RenderMeshes, RenderSkinnedMeshes, RenderSprite 함수에서 Material과 Mesh를 Bind하고 DrawIndexed 호출하는 부분을 RHI에 맞게 구현 필요")
 EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, RenderPass* renderPass, const Frustum* frustum)
 {
 	if (!m_RHI || !renderPass)
@@ -859,6 +869,54 @@ EResult Renderer::RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERen
 	return flushBatch();
 }
 
+EResult Renderer::RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>& commands, RenderPass* renderPass)
+{
+	if (!m_RHI || !renderPass) return EResult::Fail;
+	if (commands.empty()) return EResult::Success;
+
+	RHIPipelineDesc pipelineDesc;
+	if (const EResult result = PreparePassPipelineDesc(renderPass, pipelineDesc); IsFailure(result)) return result;
+	RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+	if (!sampler) return EResult::Fail;
+
+	// 메시와 같은 2스트림 레이아웃(슬롯 0: 위치, 슬롯 1: 재질 속성)을 써서 기존 스프라이트 VS를 그대로 사용한다.
+	static const vector<InputLayoutDesc> s_DynamicLayouts = { VertexPosition::Layout, VertexMaterial::Layout };
+	const ERenderPassType passType = renderPass->GetPassType();
+
+	for (const auto& command : commands)
+	{
+		const uint32 vertexCount = static_cast<uint32>(command.positions.size());
+		if (!command.material || !command.texture || vertexCount < 3 || command.attributes.size() != vertexCount) continue;
+		RHITexture* rhiTexture = command.texture->GetRHITexture();
+		if (!rhiTexture) continue;
+
+		if (IsFailure(PrepareMeshPipelineDesc(nullptr, command.material, passType, pipelineDesc))) continue;
+		pipelineDesc.inputLayouts = s_DynamicLayouts;
+		pipelineDesc.topology = command.topology;
+		auto* pipeline = PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+		if (!pipeline || IsFailure(m_RHI->BindPipeline(pipeline))) continue;
+
+		// 동적 정점 버퍼를 지원하지 않는 백엔드는 조용히 건너뛴다. (호출 측 대체 경로는 3단계에서 처리)
+		const EResult vbResult = m_RHI->BindDynamicVertexBuffer(0, command.positions.data(), vertexCount, sizeof(VertexPosition));
+		if (vbResult == EResult::NotImplemented) return EResult::Success;
+		if (IsFailure(vbResult) ||
+			IsFailure(m_RHI->BindDynamicVertexBuffer(1, command.attributes.data(), vertexCount, sizeof(VertexMaterial))))
+			return EResult::Fail;
+
+		SpriteInstanceData instance{};
+		instance.worldMatrix = glm::identity<mat4>();
+		instance.color = command.color;
+		instance.uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
+		instance.pickingData = vec4(static_cast<f32>(command.pickingId), 0.0f, 0.0f, 0.0f);
+
+		if (IsFailure(m_RHI->BindTextureSampler(rhiTexture, sampler, 0)) ||
+			IsFailure(m_RHI->BindInstanceBuffer(&instance, 1, sizeof(SpriteInstanceData))) ||
+			IsFailure(m_RHI->DrawInstanced(vertexCount, 1)))
+			return EResult::Fail;
+	}
+	return EResult::Success;
+}
+
 EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass)
 {
 	if (!m_RHI || !renderPass) return EResult::Fail;
@@ -959,6 +1017,7 @@ void Renderer::ClearFrameQueues()
 	for (auto& [passID, queue] : m_StaticDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_SkinnedDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_SpriteDrawCommands) queue.clear();
+	for (auto& [passID, queue] : m_DynamicGeometryDrawCommands) queue.clear();
 	for (auto& [passID, queue] : m_UIImageDrawCommands) queue.clear();
 	for (auto& [passID, jobs] : m_ViewportJobsPerPass) jobs.clear();
 
@@ -997,6 +1056,7 @@ void Renderer::ClearRenderQueue(RenderPassID passID)
 	m_StaticDrawCommands.erase(passID);
 	m_SkinnedDrawCommands.erase(passID);
 	m_SpriteDrawCommands.erase(passID);
+	m_DynamicGeometryDrawCommands.erase(passID);
 	m_UIImageDrawCommands.erase(passID);
 	m_ViewportJobsPerPass.erase(passID);
 }
@@ -1011,6 +1071,7 @@ void Renderer::ClearAllRenderQueues()
 	m_StaticDrawCommands.clear();
 	m_SkinnedDrawCommands.clear();
 	m_SpriteDrawCommands.clear();
+	m_DynamicGeometryDrawCommands.clear();
 	m_UIImageDrawCommands.clear();
 	m_ViewportJobsPerPass.clear();
 }
@@ -1035,7 +1096,10 @@ void Renderer::SubmitSprite(const SpriteDrawCommand& command, RenderPassID passI
 {
 	m_SpriteDrawCommands[passID].push_back(command);
 }
-
+void Renderer::SubmitDynamicGeometry(DynamicGeometryDrawCommand command, RenderPassID passID)
+{
+	m_DynamicGeometryDrawCommands[passID].push_back(std::move(command));
+}
 void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID)
 {
 	m_UIImageDrawCommands[passID].push_back(command);

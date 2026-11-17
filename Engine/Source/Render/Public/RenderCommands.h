@@ -34,6 +34,19 @@ struct StaticDrawCommand
 	std::shared_ptr<Mesh> ownedMesh;
 };
 
+// 프레임마다 CPU에서 만든 정점으로 그리는 지오메트리 (트레일·리본 등). 정점은 이미 월드 공간이다.
+struct DynamicGeometryDrawCommand
+{
+	vector<VertexPosition> positions;
+	vector<VertexMaterial> attributes; // positions와 같은 개수
+	class Texture* texture = { nullptr };
+	class MaterialInterface* material = { nullptr };
+	ETopology topology = ETopology::TriangleStrip;
+	glm::vec4 color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 정점 색에 곱해지는 전체 색
+	RenderObjectId objectId{};
+	uint32 pickingId = 0;
+};
+
 struct SkinnedDrawCommand
 {
 	class Mesh* mesh = { nullptr };

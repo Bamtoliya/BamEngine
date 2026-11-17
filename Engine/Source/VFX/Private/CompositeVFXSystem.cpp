@@ -277,6 +277,10 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 			const vec3 currentPosA = vec3(worldMat * vec4(track.localOffsetA, 1.0f));
 			const vec3 currentPosB = vec3(worldMat * vec4(track.localOffsetB, 1.0f));
 
+			rt.headA = currentPosA;
+			rt.headB = currentPosB;
+			rt.hasHead = true;
+
 			if (!rt.hasLastSpawn || glm::distance(currentPosA, rt.lastSpawnPosA) >= track.minVertexDistance)
 			{
 				rt.points.push_back({ currentPosA, currentPosB, 0.0f });
@@ -288,6 +292,7 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 		else
 		{
 			rt.hasLastSpawn = false;
+			rt.hasHead = false;
 		}
 	}
 
@@ -448,6 +453,57 @@ void CompositeVFXSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
 			SubmitSceneVFX(scene, target.cameraBuffer, target.renderPass->GetID());
 		}
 	}
+}
+
+static bool BuildTrailStrip(const std::vector<VFXTrailSamplePoint>& samples, const VFXTrailTrack& track, const vec3& cameraPosition, DynamicGeometryDrawCommand& out)
+{
+	const size_t count = samples.size();
+	if (count < 2) return false;
+
+	std::vector<vec3> centers(count);
+	for (size_t i = 0; i < count; ++i) centers[i] = (samples[i].posA + samples[i].posB) * 0.5f;
+
+	out.topology = ETopology::TriangleStrip;
+	out.positions.reserve(count * 2);
+	out.attributes.reserve(count * 2);
+
+	vec3 prevSide(0.0f);
+	for (size_t i = 0; i < count; ++i)
+	{
+		// 중앙 차분 접선: 앞뒤 세그먼트 방향의 평균이라 이음새에서 양쪽 사각형의 모서리가 일치한다.
+		const vec3 tangentRaw = centers[std::min(i + 1, count - 1)] - centers[i == 0 ? 0 : i - 1];
+		const f32 tangentLen = glm::length(tangentRaw);
+		// 폭 방향 = 기준 축 × 접선. OffsetAxis는 A-B 축, ViewFacing은 점→카메라 방향을 기준 축으로 삼아 띠 면이 카메라를 향한다.
+		const vec3 axis = track.alignment == EVFXTrailAlignment::ViewFacing ? cameraPosition - centers[i] : samples[i].posA - samples[i].posB;
+		vec3 side = glm::cross(axis, tangentRaw);
+		const f32 sideLen = glm::length(side);
+		if (tangentLen < 1e-6f || sideLen < 1e-6f)
+		{
+			if (glm::dot(prevSide, prevSide) == 0.0f) continue; // 방향을 정할 수 없는 첫 점은 건너뛴다.
+			side = prevSide;
+		}
+		else
+		{
+			side /= sideLen;
+			// 진행 방향이 갑자기 뒤집혀도 띠가 꼬이지(나비 모양) 않도록 이전 점과 같은 쪽을 유지한다.
+			if (glm::dot(side, prevSide) < 0.0f) side = -side;
+		}
+		prevSide = side;
+
+		const vec3 tangentDir = tangentLen < 1e-6f ? glm::normalize(glm::cross(prevSide, vec3(0.0f, 1.0f, 0.0f)) + vec3(1e-6f)) : tangentRaw / tangentLen;
+		const vec3 normal = glm::normalize(glm::cross(side, tangentDir)); // 기존 쿼드와 같은 -up 방향
+		const f32 normAge = std::clamp(samples[i].age / std::max(track.lifetime, 0.001f), 0.0f, 1.0f);
+		const f32 halfWidth = track.trailWidth * glm::mix(1.0f, track.taperRatio, normAge) * 0.5f;
+		const vec4 color = glm::mix(track.colorStart, track.colorEnd, normAge);
+		const f32 u = static_cast<f32>(i) / static_cast<f32>(count - 1);
+
+		// QuadMesh와 같은 UV 규칙: +폭 쪽 v=0, -폭 쪽 v=1, 진행 방향이 u
+		out.positions.emplace_back(centers[i] + side * halfWidth);
+		out.attributes.emplace_back(normal, vec2(u, 0.0f), tangentDir, side, color);
+		out.positions.emplace_back(centers[i] - side * halfWidth);
+		out.attributes.emplace_back(normal, vec2(u, 1.0f), tangentDir, side, color);
+	}
+	return out.positions.size() >= 4;
 }
 
 void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& cameraBuffer, uint32 targetPassId)
@@ -707,6 +763,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 
 		// ── 5. 트레일 / 리본 트랙 렌더링 (동적 세그먼트 스트립) ──
 		const auto& trailTracks = effect->GetTrailTracks();
+		const bool useTrailStrip = renderer.GetRHI() && renderer.GetRHI()->SupportsDynamicVertexBuffers();
 		for (size_t trackIdx = 0; trackIdx < trailTracks.size(); ++trackIdx)
 		{
 			const auto& track = trailTracks[trackIdx];
@@ -714,7 +771,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (trackIdx >= vfxComp.trailRuntimes.size()) continue;
 
 			const auto& rt = vfxComp.trailRuntimes[trackIdx];
-			if (rt.points.size() < 2) continue;
+			if (rt.points.empty()) continue;
 
 			Mesh* mesh = defaultQuadMesh;
 			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
@@ -740,12 +797,56 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 
 			if (!texture || !texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
 
-			// 연속된 포인트 쌍을 순회하며 쿼드 세그먼트 빌드 및 제출
-			const size_t ptCount = rt.points.size();
+			// 저장된 점 + 현재 머리 위치를 제어점으로 사용한다.
+			std::vector<VFXTrailSamplePoint> controls(rt.points.begin(), rt.points.end());
+			if (rt.hasHead && glm::distance(rt.headA, controls.back().posA) > 1e-4f)
+				controls.push_back({ rt.headA, rt.headB, 0.0f });
+			if (controls.size() < 2) continue;
+
+			// Catmull-Rom으로 제어점 사이를 보간해 꺾인 직선 대신 곡선을 만들고, 세그먼트 사이 각도를 줄여 이음새 틈을 줄인다.
+			constexpr int kSubdivisions = 4;
+			auto catmullRom = [](const vec3& p0, const vec3& p1, const vec3& p2, const vec3& p3, f32 t)
+				{
+					const f32 t2 = t * t;
+					const f32 t3 = t2 * t;
+					return 0.5f * (2.0f * p1 + (p2 - p0) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 + (3.0f * p1 - p0 - 3.0f * p2 + p3) * t3);
+				};
+
+			std::vector<VFXTrailSamplePoint> samples;
+			samples.reserve((controls.size() - 1) * kSubdivisions + 1);
+			for (size_t c = 0; c + 1 < controls.size(); ++c)
+			{
+				const auto& c0 = controls[c == 0 ? 0 : c - 1];
+				const auto& c1 = controls[c];
+				const auto& c2 = controls[c + 1];
+				const auto& c3 = controls[std::min(c + 2, controls.size() - 1)];
+				for (int s = 0; s < kSubdivisions; ++s)
+				{
+					const f32 t = static_cast<f32>(s) / static_cast<f32>(kSubdivisions);
+					samples.push_back({ catmullRom(c0.posA, c1.posA, c2.posA, c3.posA, t), catmullRom(c0.posB, c1.posB, c2.posB, c3.posB, t), glm::mix(c1.age, c2.age, t) });
+				}
+			}
+			samples.push_back(controls.back());
+
+			if (useTrailStrip)
+			{
+				DynamicGeometryDrawCommand strip;
+				strip.texture = texture;
+				strip.material = material;
+				strip.pickingId = pickingId;
+				if (BuildTrailStrip(samples, track, cameraBuffer.cameraPosition, strip))
+					renderer.SubmitDynamicGeometry(std::move(strip), targetPassId);
+				continue;
+			}
+
+			// 동적 정점 버퍼를 지원하지 않는 백엔드(SDL GPU): 세그먼트별 쿼드로 대체한다. 곡선 구간 이음새가 남는다.
+
+			// 연속된 보간 점 쌍을 순회하며 쿼드 세그먼트 빌드 및 제출
+			const size_t ptCount = samples.size();
 			for (size_t p = 1; p < ptCount; ++p)
 			{
-				const auto& p0 = rt.points[p - 1];
-				const auto& p1 = rt.points[p];
+				const auto& p0 = samples[p - 1];
+				const auto& p1 = samples[p];
 
 				const vec3 mid0 = (p0.posA + p0.posB) * 0.5f;
 				const vec3 mid1 = (p1.posA + p1.posB) * 0.5f;
@@ -765,8 +866,8 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 
 				// 세그먼트 방향으로 정렬된 변환 행렬
 				mat4 orientMat(1.0f);
-				orientMat[0] = vec4(rightNorm * width, 0.0f);
-				orientMat[1] = vec4(dirNorm * segLen, 0.0f);
+				orientMat[0] = vec4(dirNorm * (segLen * 0.5f), 0.0f);
+				orientMat[1] = vec4(rightNorm * (width * 0.5f), 0.0f);
 				orientMat[2] = vec4(upNorm, 0.0f);
 				orientMat[3] = vec4(center, 1.0f);
 

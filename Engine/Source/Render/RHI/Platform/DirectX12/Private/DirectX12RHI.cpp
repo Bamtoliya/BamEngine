@@ -462,6 +462,7 @@ EResult DirectX12RHI::BeginFrame()
 	// 다이내믹 CBV 링 버퍼 커서 초기화 (화이트보드 되감기)
 	m_DynamicBufferCursor = 0;
     m_DynamicInstanceBufferCursor = 0;
+    ResetDynamicVertexBindings();
 	// 캐시 장부에서 동적 데이터(임시 구조체)만 초기화 (객체 바인딩은 유지)
 	for (auto& cache : m_ConstantBuffers)
 	{
@@ -1311,6 +1312,38 @@ EResult DirectX12RHI::BindInstanceBuffer(RHIBuffer* buffer, uint32 offset)
     m_CommandList->SetGraphicsRootShaderResourceView(4, gpuAddress);
     return EResult::Success;
 }
+EResult DirectX12RHI::BindDynamicVertexBuffer(uint32 slot, const void* data, uint32 vertexCount, uint32 stride)
+{
+    if (slot >= MAX_BUFFER_SLOTS || !data || vertexCount == 0 || stride == 0)
+        return EResult::InvalidArgument;
+
+    RHIBuffer* ringBuffer = nullptr;
+    uint32 offset = 0;
+    const uint32 size = vertexCount * stride;
+    if (const EResult result = CopyToDynamicRingBuffer(data, size, ringBuffer, offset); IsFailure(result))
+        return result;
+
+    Safe_Release(m_VertexBuffers[slot]);
+    m_VertexBuffers[slot] = ringBuffer;
+    Safe_AddRef(m_VertexBuffers[slot]);
+    m_DynamicVertexBindings[slot] = { offset, size, stride, true };
+    m_NumVertexBuffersBound = std::max(m_NumVertexBuffersBound, slot + 1);
+    return EResult::Success;
+}
+
+D3D12_VERTEX_BUFFER_VIEW DirectX12RHI::GetBoundVertexBufferView(uint32 slot) const
+{
+    auto* buffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[slot]);
+    if (!buffer) return {};
+
+    const DynamicVertexBinding& binding = m_DynamicVertexBindings[slot];
+    if (!binding.isActive) return buffer->GetVertexBufferView();
+
+    // 링 버퍼는 업로드 힙(GENERIC_READ)이므로 상태 전환 없이 정점 버퍼로 읽을 수 있다.
+    auto* resource = static_cast<ID3D12Resource*>(buffer->GetNativeHandle());
+    if (!resource) return {};
+    return { resource->GetGPUVirtualAddress() + binding.offset, binding.size, binding.stride };
+}
 EResult DirectX12RHI::BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot)
 {
     if (!m_CommandList || !m_FrameRecording || !buffer)
@@ -1959,12 +1992,11 @@ EResult DirectX12RHI::Draw(uint32 count)
 {
     if(!m_CommandList) return EResult::Fail;
 
-	if (m_VertexBuffers[0])
-	{
-		DirectX12Buffer* dxBuffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[0]);
-		D3D12_VERTEX_BUFFER_VIEW vbView = dxBuffer->GetVertexBufferView();
-		m_CommandList->IASetVertexBuffers(0, 1, &vbView);
-	}
+    if (m_VertexBuffers[0])
+    {
+        const D3D12_VERTEX_BUFFER_VIEW vbView = GetBoundVertexBufferView(0);
+        m_CommandList->IASetVertexBuffers(0, 1, &vbView);
+    }
 
     if (m_IndexBuffer)
     {
@@ -1994,13 +2026,8 @@ EResult DirectX12RHI::DrawIndexed(uint32 count)
 
     for (uint32 slot = 0; slot < m_NumVertexBuffersBound; ++slot)
     {
-        if (!m_VertexBuffers[slot])
-            continue;
-
-        DirectX12Buffer* buffer =
-            static_cast<DirectX12Buffer*>(m_VertexBuffers[slot]);
-
-        views[slot] = buffer->GetVertexBufferView();
+        if (m_VertexBuffers[slot])
+            views[slot] = GetBoundVertexBufferView(slot);
     }
 
     if (m_NumVertexBuffersBound > 0)
@@ -2044,9 +2071,8 @@ EResult DirectX12RHI::DrawInstanced(uint32 vertexCountPerInstance, uint32 instan
     D3D12_VERTEX_BUFFER_VIEW views[MAX_BUFFER_SLOTS] = {};
     for (uint32 slot = 0; slot < m_NumVertexBuffersBound; ++slot)
     {
-        if (!m_VertexBuffers[slot]) continue;
-        DirectX12Buffer* buffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[slot]);
-        views[slot] = buffer->GetVertexBufferView();
+        if (m_VertexBuffers[slot])
+            views[slot] = GetBoundVertexBufferView(slot);
     }
 
     if (m_NumVertexBuffersBound > 0)
@@ -2071,9 +2097,8 @@ EResult DirectX12RHI::DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 
     D3D12_VERTEX_BUFFER_VIEW views[MAX_BUFFER_SLOTS] = {};
     for (uint32 slot = 0; slot < m_NumVertexBuffersBound; ++slot)
     {
-        if (!m_VertexBuffers[slot]) continue;
-        DirectX12Buffer* buffer = static_cast<DirectX12Buffer*>(m_VertexBuffers[slot]);
-        views[slot] = buffer->GetVertexBufferView();
+        if (m_VertexBuffers[slot])
+            views[slot] = GetBoundVertexBufferView(slot);
     }
 
     if (m_NumVertexBuffersBound > 0)

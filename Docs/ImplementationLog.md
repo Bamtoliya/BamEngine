@@ -2,6 +2,36 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] VFX 트레일 연속 스트립 렌더링, 정렬 모드, 트랙 인스펙터 Undo
+
+- **배경**:
+  - 트레일이 보간 점 사이마다 독립 쿼드(`SpriteDrawCommand` + `QuadMesh`)로 제출되어 곡선 구간에서 이웃 쿼드의 모서리가 맞지 않았다. 쿼드 하나는 평행사변형까지만 변형되므로 행렬 조정으로는 이음새를 없앨 수 없었다.
+  - VFX 편집기 트랙 인스펙터의 값 변경은 Dirty만 설정하고 `m_TimelineHistory`에 기록되지 않아 Undo/Redo가 되지 않았다.
+- **변경 사항**:
+  - **RHI 동적 정점 버퍼** (`RHI.h/.cpp`, `DirectX12RHI.h/.cpp`): `BindDynamicVertexBuffer(slot, data, vertexCount, stride)`는 기존 인스턴스 업로드 링 버퍼에 복사하고 슬롯별 구간(`DynamicVertexBinding`)으로 정점 버퍼 뷰를 만든다. 복사 경로는 `CopyToDynamicRingBuffer`로 `BindInstanceBuffer(const void*)`와 공유한다. 프레임 시작 시 `ResetDynamicVertexBindings()`로 동적 슬롯을 비운다. `SupportsDynamicVertexBuffers()`는 DX12만 true이고 SDL GPU는 기본 구현(false / `NotImplemented`)이다.
+    - 동작 변경: `BindInstanceBuffer(const void*)`는 바인딩이 실패해도 링 커서를 전진시킨다(해당 프레임 공간만 낭비).
+  - **렌더러** (`RenderCommands.h`, `Renderer.h/.cpp`): `DynamicGeometryDrawCommand`(월드 공간 정점, `VertexPosition`/`VertexMaterial` 2스트림, 토폴로지)와 `SubmitDynamicGeometry`/`RenderDynamicGeometry`를 추가했다. 스프라이트 다음에 그리며 단위 행렬 인스턴스 1개로 기존 `gbufferSpriteVS`를 재사용한다. 빈 패스 판정과 큐 정리 3곳에 반영했다.
+  - **트레일** (`CompositeVFXComponent.h`, `CompositeVFXSystem.cpp`):
+    - 매 프레임 머리 위치(`headA/headB`)를 보관해 마지막 샘플과 현재 위치를 잇고, Catmull-Rom(구간당 4분할)으로 보간한다.
+    - `BuildTrailStrip`: 점마다 좌우 정점 2개를 만드는 Triangle Strip. 폭 방향을 중앙 차분 접선으로 정해 이웃 세그먼트가 정점을 공유한다. 퇴화 점은 이전 방향을 재사용하고 방향 반전 시 부호를 유지해 꼬임을 막는다. 폭(테이퍼)·색·알파는 점별로 계산하고 UV는 QuadMesh 규칙(진행 방향 u, 폭 v)을 따른다.
+    - 동적 정점 버퍼를 지원하지 않는 백엔드는 기존 세그먼트 쿼드 경로(반폭 스케일·축 교정 반영)로 대체한다.
+  - **정렬 모드** (`CompositeEffect.h`): `EVFXTrailAlignment { OffsetAxis, ViewFacing }`와 `VFXTrailTrack::alignment`(`ALLOW_MISSING`, 기본 `OffsetAxis`로 기존 에셋 외형 유지). `ViewFacing`은 점→카메라 방향을 기준 축으로 삼아 폭을 시선에 수직으로 둔다(CompositeVisualEffectPlan 3.3절 사양). 뷰포트별 `CameraBuffer::cameraPosition`을 쓴다. 로캘: `Engine.csv`에 `PROP_TRAIL_ALIGNMENT`, `Engine::EVFXTrailAlignment.*`.
+  - **트랙 인스펙터 Undo** (`VFXEditorPanel.h/.cpp`): `DrawInspector`를 편집 세션 래퍼와 `DrawSelectedTrackInspector`(변경 여부 반환)로 나눴다.
+    - 그리기 전 트랙 복사본(`std::any`)을 첫 변경 시 세션으로 보관하고, 활성 위젯이 없어지면 편집 전/후 트랙 전체를 `CallbackEditorCommand` 하나로 `Record`한다.
+    - Undo/Redo·트랙 삭제·창 숨김 전에 미확정 세션을 확정한다. 사운드 시작 시간은 기존 `ApplyTimelineEdit` 경로를 유지해 중복 기록을 막았다.
+    - 로캘: `Editor.csv`에 `VFXEditor.EditTrackProperties`.
+  - **트랙 추가 메뉴 명칭 일반화**: `Editor.csv`의 `VFXEditor.Add*Track` 7종을 스프라이트/파티클/라이트/메쉬/사운드/트레일/데칼 트랙으로 바꿨다. 기본 트랙 이름 접두사 `Flash_`→`Light_`, `Audio_`→`Sound_`.
+- **검증 (사용자 실행, 2026-11-17)**: 단계별 빌드 후 에디터에서 다음을 확인했다고 보고했다.
+  - 동적 정점 경로 시험 사각형 표시, 기존 렌더 회귀 없음
+  - 트레일 곡선이 끊김 없이 이어지고 알파·폭이 매끄럽게 감소
+  - 정렬 모드 적용
+  - 인스펙터 값 변경의 Undo/Redo 동작
+  - CTest 실행 결과는 기록되지 않았다. 시험 사각형 코드는 커밋 직전에 삭제했으며, 삭제 후 빌드는 커밋 시점에 확인되지 않았다.
+- **미검증·잔여**:
+  - SDL GPU(Vulkan 빌드)의 대체 쿼드 경로는 실행 확인을 하지 않았다. 이 경로는 `alignment`를 무시한다.
+  - 동적 지오메트리 명령마다 vector 2개 할당과 드로우 1회가 든다(측정 없음).
+  - Undo로 저장 시점의 상태까지 되돌아가도 창 제목의 `*`는 남는다(기존 타임라인·기즈모 명령과 동일).
+
 ### [2026-11-17] 에디터 종료 시 리소스 편집기 미저장 변경 보호 (P1-A)
 
 - **배경**: 종료 요청(`ImGuiManager::RequestQuit`)은 `EditorDocumentManager`에 등록된 문서만 확인했고, 등록된 `IEditorDocument` 구현은 `SceneDocument` 하나뿐이었다. Material·Model·Sprite·Particle·VFX·Animator·Prefab·AnimationTimeline·플러그인 편집기의 `HasUnsavedResourceChanges()`는 다른 에셋 열기 차단과 창 제목 `*` 표시에만 쓰여, 미저장 리소스 편집 내용이 확인 없이 종료와 함께 사라졌다. `RecoveryManager`도 씬만 스냅샷한다.

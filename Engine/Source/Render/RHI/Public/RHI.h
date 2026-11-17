@@ -39,6 +39,15 @@ struct ConstantBufferBinding
     bool       isDynamic = false;        // true면 링 버퍼(임시 데이터), false면 객체
 };
 
+// 링 버퍼에 복사한 동적 정점 데이터의 구간 (정점 버퍼 슬롯별)
+struct DynamicVertexBinding
+{
+    uint32 offset = 0;
+    uint32 size = 0;
+    uint32 stride = 0;
+    bool   isActive = false;
+};
+
 class ENGINE_API RHI : public Base
 {
 protected:
@@ -104,6 +113,9 @@ public:
     virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset);
     virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride = 80);
     virtual EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) { return EResult::NotImplemented; }
+    // 프레임마다 바뀌는 정점 데이터를 링 버퍼에 복사해 slot에 묶는다. 지원하지 않는 백엔드는 NotImplemented.
+    virtual EResult BindDynamicVertexBuffer(uint32 slot, const void* data, uint32 vertexCount, uint32 stride) { return EResult::NotImplemented; }
+    virtual bool SupportsDynamicVertexBuffers() const { return false; }
 #pragma endregion
 
 #pragma region RenderPass
@@ -183,12 +195,17 @@ protected:
 protected:
     EResult InitializeConstantBuffers();
     EResult InitializeInstanceBuffers();
+    // 동적 링 버퍼에 data를 복사하고 복사한 버퍼와 위치를 돌려준다. 공간이 부족하면 OutOfMemory.
+    EResult CopyToDynamicRingBuffer(const void* data, uint32 size, RHIBuffer*& outBuffer, uint32& outOffset);
+    // 이전 프레임의 링 버퍼 구간을 가리키는 동적 정점 슬롯을 비운다. 프레임 시작 시 호출한다.
+    void ResetDynamicVertexBindings();
 #pragma endregion
 
 #pragma region Member Variable
 protected:
     RHIBuffer* m_VertexBuffers[MAX_BUFFER_SLOTS] = {nullptr};
     uint32 m_NumVertexBuffersBound = { 0 };
+    DynamicVertexBinding m_DynamicVertexBindings[MAX_BUFFER_SLOTS] = {};
     RHIBuffer* m_IndexBuffer = { nullptr };
 protected:
     ConstantBufferBinding m_ConstantBuffers[MAX_CONSTANT_BUFFER_SLOTS];

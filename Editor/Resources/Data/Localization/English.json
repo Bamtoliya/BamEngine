@@ -1752,11 +1752,13 @@
         "VFXEditor.NoEffectLoaded": "No Composite Effect loaded.",
         "VFXEditor.NoTracks": "No tracks in this effect.",
         "VFXEditor.AddPrompt": "Click '+ Add Track' above to add:",
-        "VFXEditor.AddSpriteTrack": "2D Sprite Flipbook Track",
-        "VFXEditor.AddParticleTrack": "Particle Emitter Track",
-        "VFXEditor.AddLightTrack": "Light Flash Track",
-        "VFXEditor.AddMeshTrack": "Shockwave Mesh Track",
-        "VFXEditor.AddSoundTrack": "Audio Sound Track",
+        "VFXEditor.AddSpriteTrack": "Sprite Track",
+        "VFXEditor.AddParticleTrack": "Particle Track",
+        "VFXEditor.AddLightTrack": "Light Track",
+        "VFXEditor.AddMeshTrack": "Mesh Track",
+        "VFXEditor.AddSoundTrack": "Sound Track",
+        "VFXEditor.AddTrailTrack": "Trail Track",
+        "VFXEditor.AddDecalTrack": "Decal Track",
         "VFXEditor.TrackInspector": "Track Inspector",
         "VFXEditor.SelectTrackPrompt": "Select a track to inspect.",
         "VFXEditor.PropTrackName": "Track Name",
@@ -1797,8 +1799,6 @@
         "VFXEditor.AutoDuration": "Auto Dur",
         "VFXEditor.TimelineUnavailable": "Timeline unavailable - No Effect loaded.",
         "VFXEditor.SaveSuccess": "Effect saved successfully.",
-        "VFXEditor.AddTrailTrack": "Trail / Ribbon Track",
-        "VFXEditor.AddDecalTrack": "Decal Mark Track",
         "VFXEditor.AddCameraShakeTrack": "Camera Shake Track",
         "VFXEditor.PropTrailWidth": "Trail Width",
         "VFXEditor.PropLifetime": "Lifetime",
@@ -2049,6 +2049,7 @@
         "VFXEditor.CurvePresetLinear": "Linear",
         "Inspector.CurveKeys": "Keys ({})",
         "VFXEditor.RingTextureDefault": "(Ring texture default)",
-        "Inspector.CurveEditHint": "Click a key to select and drag to move. Double-click adds a key. Right-click deletes it."
+        "Inspector.CurveEditHint": "Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.",
+        "VFXEditor.EditTrackProperties": "Edit Track Properties"
     }
 }
