@@ -663,33 +663,8 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 	}
 }
 
-void VFXEditorPanel::DrawTrackList()
+void VFXEditorPanel::DrawAddTrackMenuItems(Engine::CompositeEffect& effect)
 {
-	EditorUI::ToolbarLayout toolbar;
-	auto* effect = m_EffectHandle.Get();
-	if (!effect)
-	{
-		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("VFXEditor.NoEffectLoaded"));
-		ImGui::Spacing();
-		if (toolbar.Button("VFXEditor.CreateNewEffect", ICON_FA_FILE, "VFXEditor.CreateNewEffect"))
-		{
-			NewEffect();
-		}
-		if (toolbar.Button("ParticleEditor.MenuOpen", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen"))
-		{
-			OpenEffect();
-		}
-		return;
-	}
-
-	ImGuiTextBuffer trackLabel;
-	trackLabel.appendf("%s %s (%u)", ICON_FA_LAYER_GROUP, LOCAL_CSTR("VFXEditor.Tracks"), effect->GetTotalTrackCount());
-	toolbar.Text(trackLabel.c_str(), false);
-	if (toolbar.Button("AddTrack", ICON_FA_PLUS, "VFXEditor.AddTrack"))
-	{
-		ImGui::OpenPopup("AddVFXTrackPopup");
-	}
-
 	// 트랙 추가를 Undo 가능한 명령으로 실행한다. 실행=목록 끝에 추가, 취소=끝에서 제거 (이력은 선형이라 취소 시점의 마지막 항목이 이 트랙이다)
 	const auto addTrack = [this](ESelectedVFXTrackType type, auto track)
 		{
@@ -723,68 +698,93 @@ void VFXEditorPanel::DrawTrackList()
 				[apply] { return apply(false); }, [apply] { return apply(true); }));
 		};
 
-	auto drawAddTrackMenuItems = [&]()
+	if (ImGui::MenuItem((std::string(ICON_FA_IMAGES " ") + LOCAL_CSTR("VFXEditor.AddSpriteTrack")).c_str()))
+	{
+		Engine::VFXSpriteTrack track;
+		track.trackName = "Sprite_" + std::to_string(effect.GetSpriteTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Sprite, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_WAND_MAGIC_SPARKLES " ") + LOCAL_CSTR("VFXEditor.AddParticleTrack")).c_str()))
+	{
+		Engine::VFXParticleTrack track;
+		track.trackName = "Particle_" + std::to_string(effect.GetParticleTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Particle, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
+	{
+		Engine::VFXLightTrack track;
+		track.trackName = "Light_" + std::to_string(effect.GetLightTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Light, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_CUBE " ") + LOCAL_CSTR("VFXEditor.AddMeshTrack")).c_str()))
+	{
+		Engine::VFXMeshTrack track;
+		track.trackName = "Mesh_" + std::to_string(effect.GetMeshTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Mesh, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
+	{
+		Engine::VFXSoundTrack track;
+		track.trackName = "Sound_" + std::to_string(effect.GetSoundTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Sound, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_LINES_LEANING " ") + LOCAL_CSTR("VFXEditor.AddTrailTrack")).c_str()))
+	{
+		Engine::VFXTrailTrack track;
+		track.trackName = "Trail_" + std::to_string(effect.GetTrailTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Trail, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_STAMP " ") + LOCAL_CSTR("VFXEditor.AddDecalTrack")).c_str()))
+	{
+		Engine::VFXDecalTrack track;
+		track.trackName = "Decal_" + std::to_string(effect.GetDecalTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::Decal, std::move(track));
+	}
+	if (ImGui::MenuItem((std::string(ICON_FA_EARTH_AMERICAS " ") + LOCAL_CSTR("VFXEditor.AddCameraShakeTrack")).c_str()))
+	{
+		Engine::VFXCameraShakeTrack track;
+		track.trackName = "Shake_" + std::to_string(effect.GetCameraShakeTracks().size() + 1);
+		addTrack(ESelectedVFXTrackType::CameraShake, std::move(track));
+	}
+}
+
+void VFXEditorPanel::DrawTrackList()
+{
+	EditorUI::ToolbarLayout toolbar;
+	auto* effect = m_EffectHandle.Get();
+	if (!effect)
+	{
+		ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("VFXEditor.NoEffectLoaded"));
+		ImGui::Spacing();
+		if (toolbar.Button("VFXEditor.CreateNewEffect", ICON_FA_FILE, "VFXEditor.CreateNewEffect"))
 		{
-			if (ImGui::MenuItem((std::string(ICON_FA_IMAGES " ") + LOCAL_CSTR("VFXEditor.AddSpriteTrack")).c_str()))
-			{
-				Engine::VFXSpriteTrack track;
-				track.trackName = "Sprite_" + std::to_string(effect->GetSpriteTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Sprite, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_WAND_MAGIC_SPARKLES " ") + LOCAL_CSTR("VFXEditor.AddParticleTrack")).c_str()))
-			{
-				Engine::VFXParticleTrack track;
-				track.trackName = "Particle_" + std::to_string(effect->GetParticleTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Particle, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_LIGHTBULB " ") + LOCAL_CSTR("VFXEditor.AddLightTrack")).c_str()))
-			{
-				Engine::VFXLightTrack track;
-				track.trackName = "Light_" + std::to_string(effect->GetLightTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Light, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_CUBE " ") + LOCAL_CSTR("VFXEditor.AddMeshTrack")).c_str()))
-			{
-				Engine::VFXMeshTrack track;
-				track.trackName = "Mesh_" + std::to_string(effect->GetMeshTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Mesh, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
-			{
-				Engine::VFXSoundTrack track;
-				track.trackName = "Sound_" + std::to_string(effect->GetSoundTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Sound, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_LINES_LEANING " ") + LOCAL_CSTR("VFXEditor.AddTrailTrack")).c_str()))
-			{
-				Engine::VFXTrailTrack track;
-				track.trackName = "Trail_" + std::to_string(effect->GetTrailTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Trail, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_STAMP " ") + LOCAL_CSTR("VFXEditor.AddDecalTrack")).c_str()))
-			{
-				Engine::VFXDecalTrack track;
-				track.trackName = "Decal_" + std::to_string(effect->GetDecalTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::Decal, std::move(track));
-			}
-			if (ImGui::MenuItem((std::string(ICON_FA_EARTH_AMERICAS " ") + LOCAL_CSTR("VFXEditor.AddCameraShakeTrack")).c_str()))
-			{
-				Engine::VFXCameraShakeTrack track;
-				track.trackName = "Shake_" + std::to_string(effect->GetCameraShakeTracks().size() + 1);
-				addTrack(ESelectedVFXTrackType::CameraShake, std::move(track));
-			}
-		};
+			NewEffect();
+		}
+		if (toolbar.Button("ParticleEditor.MenuOpen", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen"))
+		{
+			OpenEffect();
+		}
+		return;
+	}
+
+	ImGuiTextBuffer trackLabel;
+	trackLabel.appendf("%s %s (%u)", ICON_FA_LAYER_GROUP, LOCAL_CSTR("VFXEditor.Tracks"), effect->GetTotalTrackCount());
+	toolbar.Text(trackLabel.c_str(), false);
+	if (toolbar.Button("AddTrack", ICON_FA_PLUS, "VFXEditor.AddTrack"))
+	{
+		ImGui::OpenPopup("AddVFXTrackPopup");
+	}
 
 	if (ImGui::BeginPopup("AddVFXTrackPopup"))
 	{
-		drawAddTrackMenuItems();
+		DrawAddTrackMenuItems(*effect);
 		ImGui::EndPopup();
 	}
 
 	// 트랙 창 빈 공간 또는 항목 위에서 우클릭 시 컨텍스트 메뉴 오픈
 	if (ImGui::BeginPopupContextWindow("VFXTrackListContextMenu", ImGuiPopupFlags_MouseButtonRight))
 	{
-		drawAddTrackMenuItems();
+		DrawAddTrackMenuItems(*effect);
 		if (m_SelectedTrack.IsValid())
 		{
 			ImGui::Separator();
@@ -1508,16 +1508,25 @@ void VFXEditorPanel::DrawTimeline()
 				.Selected = m_SelectedTrack.type == type && m_SelectedTrack.index == static_cast<int>(i),
 				.Kind = marker ? EditorUI::TimelineRowKind::Marker : EditorUI::TimelineRowKind::Interval,
 				.Curve = activeCurve,
-				.CurveLabel = curveLabel
+				.CurveLabel = curveLabel,
+				.Disabled = !track.enabled || track.isMuted
 				});
 		}
 	});
 	const auto result = EditorUI::DrawEffectTimeline(m_Timeline, rows, GetTimelineDuration(),
-		m_TimelineSeek.value_or(m_CurrentTime), minimumDuration);
+		m_TimelineSeek.value_or(m_CurrentTime), minimumDuration, "VFXEditor.AddTrack");
 	if (result.Selection)
 		SelectTrack({ static_cast<ESelectedVFXTrackType>(*result.Selection >> 32), static_cast<int>(*result.Selection & 0xffffffffu) });
 	if (result.Seek) ScrubTime(*result.Seek);
 	if (result.Commit) ApplyTimelineEdit(*result.Commit);
+
+	// 팝업은 연 창과 같은 창에서 그려야 한다. 타임라인 창 안에서 열고 그린다.
+	if (result.AddTrack) ImGui::OpenPopup("##TimelineAddTrackPopup");
+	if (ImGui::BeginPopup("##TimelineAddTrackPopup"))
+	{
+		DrawAddTrackMenuItems(*effect);
+		ImGui::EndPopup();
+	}
 }
 
 bool VFXEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction action) const

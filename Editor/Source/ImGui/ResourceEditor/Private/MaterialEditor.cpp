@@ -118,7 +118,7 @@ void MaterialEditor::DrawCustomContent()
 	}
 
 	const float availWidth = ImGui::GetContentRegionAvail().x;
-	const float splitterThickness = 4.0f;
+	const float splitterThickness = Editor::SplitterThickness;
 	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
 	// 우측 디테일 창 가용 너비 계산 (최소 320px 보장)
 	const float minLeft = 250.0f;

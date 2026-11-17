@@ -199,7 +199,7 @@ void SpriteEditor::FitView(float canvasW, float canvasH, float texW, float texH)
 void SpriteEditor::DrawCustomContent()
 {
 	const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
-	const float splitterThickness = 4.0f;
+	const float splitterThickness = Editor::SplitterThickness;
 	const float minCanvasW = 200.0f;
 	const float minSidebarW = 220.0f;
 	float canvasWidth = (std::max)(minCanvasW, contentAvail.x - m_SidebarWidth - splitterThickness - ImGui::GetStyle().ItemSpacing.x);

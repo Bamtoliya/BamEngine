@@ -1,6 +1,6 @@
 ﻿#include "AnimationTimelinePanel.h"
 #include "EditorUI.h"
-#include "EffectTimelineView.h"
+#include "TimelineView.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
 #include "ResourceManager.h"
@@ -720,25 +720,12 @@ void AnimationTimelinePanel::DrawCustomContent()
 	const float availHeight = ImGui::GetContentRegionAvail().y;
 	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
 
-	const float splitterThickness = 2.0f; // [수정] 2.0px 초슬림 두께
+	const float splitterThickness = Editor::SplitterThickness;
 	const float upperHeight = std::max(120.0f, availHeight - m_TimelineHeight - splitterThickness - 4.0f);
 	m_LeftPanelWidth = std::clamp(m_LeftPanelWidth, 140.0f, std::max(140.0f, availWidth * 0.35f));
 	m_InspectorWidth = std::clamp(m_InspectorWidth, 180.0f, std::max(180.0f, availWidth * 0.40f));
-	const float previewWidth = std::max(150.0f, availWidth - m_LeftPanelWidth - m_InspectorWidth - splitterThickness * 2.0f - spacingX * 3.0f);
-
-	auto& input = Engine::InputManager::Get();
-
-	// 얇은 세퍼레이터 스플리터 헬퍼 람다
-	const auto drawSlimSplitter = [](const char* id, const ImVec2& size, ImGuiMouseCursor cursor) -> bool
-		{
-			ImGui::InvisibleButton(id, size);
-			if (ImGui::IsItemHovered() || ImGui::IsItemActive()) ImGui::SetMouseCursor(cursor);
-			const ImU32 col = ImGui::IsItemActive() ? ImGui::GetColorU32(ImGuiCol_SeparatorActive)
-				: (ImGui::IsItemHovered() ? ImGui::GetColorU32(ImGuiCol_SeparatorHovered)
-					: ImGui::GetColorU32(ImGuiCol_Separator));
-			ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), col);
-			return ImGui::IsItemActive();
-		};
+	// 한 줄에 [좌측][간격][스플리터][간격][뷰포트][간격][스플리터][간격][인스펙터]: SameLine 간격은 4번이다.
+	const float previewWidth = std::max(150.0f, availWidth - m_LeftPanelWidth - m_InspectorWidth - splitterThickness * 2.0f - spacingX * 4.0f);
 
 	// ── 상단 좌측: 스켈레톤 본 계층 트리 영역 ──
 	ImGui::BeginChild("##LeftPanelRegion", ImVec2(m_LeftPanelWidth, upperHeight), true);
@@ -748,11 +735,8 @@ void AnimationTimelinePanel::DrawCustomContent()
 	ImGui::SameLine();
 
 	// ── [스플리터 1] 좌측 패널 vs 중앙 뷰포트 (2px 슬림) ──
-	if (drawSlimSplitter("##VerticalSplitter_Left", ImVec2(splitterThickness, upperHeight), ImGuiMouseCursor_ResizeEW))
-	{
-		m_LeftPanelWidth += input.GetMouseDelta().x;
-		m_LeftPanelWidth = std::clamp(m_LeftPanelWidth, 140.0f, std::max(140.0f, availWidth - m_InspectorWidth - 250.0f));
-	}
+	if (const float drag = Editor::SplitterBar("##VerticalSplitter_Left", ImGuiAxis_X, upperHeight); drag != 0.0f)
+		m_LeftPanelWidth = std::clamp(m_LeftPanelWidth + drag, 140.0f, std::max(140.0f, availWidth - m_InspectorWidth - 250.0f));
 
 	ImGui::SameLine();
 
@@ -765,11 +749,8 @@ void AnimationTimelinePanel::DrawCustomContent()
 	ImGui::SameLine();
 
 	// ── [스플리터 2] 중앙 뷰포트 vs 우측 인스펙터 (2px 슬림) ──
-	if (drawSlimSplitter("##VerticalSplitter_Inspector", ImVec2(splitterThickness, upperHeight), ImGuiMouseCursor_ResizeEW))
-	{
-		m_InspectorWidth -= input.GetMouseDelta().x;
-		m_InspectorWidth = std::clamp(m_InspectorWidth, 180.0f, std::max(180.0f, availWidth - m_LeftPanelWidth - 250.0f));
-	}
+	if (const float drag = Editor::SplitterBar("##VerticalSplitter_Inspector", ImGuiAxis_X, upperHeight); drag != 0.0f)
+		m_InspectorWidth = std::clamp(m_InspectorWidth - drag, 180.0f, std::max(180.0f, availWidth - m_LeftPanelWidth - 250.0f));
 
 	ImGui::SameLine();
 
@@ -779,11 +760,8 @@ void AnimationTimelinePanel::DrawCustomContent()
 	ImGui::EndChild();
 
 	// ── [스플리터 3] 상단 영역 vs 하단 타임라인 (2px 슬림) ──
-	if (drawSlimSplitter("##HorizontalSplitter_Timeline", ImVec2(-1.0f, splitterThickness), ImGuiMouseCursor_ResizeNS))
-	{
-		m_TimelineHeight -= input.GetMouseDelta().y;
-		m_TimelineHeight = std::clamp(m_TimelineHeight, 130.0f, std::max(130.0f, availHeight - 140.0f));
-	}
+	if (const float drag = Editor::SplitterBar("##HorizontalSplitter_Timeline", ImGuiAxis_Y); drag != 0.0f)
+		m_TimelineHeight = std::clamp(m_TimelineHeight - drag, 130.0f, std::max(130.0f, availHeight - 140.0f));
 
 	// ── 하단: 다중 트랙 타임라인 영역 ──
 	DrawTimelineTrackArea();
@@ -907,18 +885,12 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 void AnimationTimelinePanel::DrawTransportBar()
 {
 	EditorUI::ToolbarLayout toolbar;
-	if (toolbar.Icon("FirstFrame", ICON_FA_BACKWARD_FAST, "Timeline.FirstFrame")) GoToFirstFrame();
-	if (toolbar.Icon("PrevFrame", ICON_FA_BACKWARD_STEP, "Timeline.PrevFrame")) StepFrame(-1);
-	const char* playIcon = m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
-	const char* playTooltip = m_IsPlaying ? "Action.Timeline.Pause" : "Action.Timeline.Play";
-	if (toolbar.Icon("PlayPause", playIcon, playTooltip)) TogglePlayPause();
-	if (toolbar.Icon("NextFrame", ICON_FA_FORWARD_STEP, "Timeline.NextFrame")) StepFrame(1);
-	if (toolbar.Icon("LastFrame", ICON_FA_FORWARD_FAST, "Timeline.LastFrame")) GoToLastFrame();
-	const ImVec4 activeLoopCol(0.3f, 0.8f, 1.0f, 1.0f);
-	const ImVec4 inactiveLoopCol(0.5f, 0.5f, 0.5f, 0.8f);
-	ImGui::PushStyleColor(ImGuiCol_Text, m_IsLooping ? activeLoopCol : inactiveLoopCol);
-	if (toolbar.Icon("Loop", ICON_FA_REPEAT, "Timeline.ToggleLoop")) ToggleLoop();
-	ImGui::PopStyleColor();
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "FirstFrame", ICON_FA_BACKWARD_FAST, "Action.Timeline.FirstFrame");
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "PrevFrame", ICON_FA_BACKWARD_STEP, "Action.Timeline.PrevFrame");
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "PlayPause", m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY, "Action.Timeline.PlayPause");
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "NextFrame", ICON_FA_FORWARD_STEP, "Action.Timeline.NextFrame");
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "LastFrame", ICON_FA_FORWARD_FAST, "Action.Timeline.LastFrame");
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "ToggleLoop", ICON_FA_REPEAT, "Action.Timeline.ToggleLoop", m_IsLooping);
 
 	const int currentFrame = static_cast<int>(m_CurrentTime * m_FPS);
 	const int totalFrames = static_cast<int>(m_Duration * m_FPS);
@@ -939,7 +911,7 @@ void AnimationTimelinePanel::DrawTransportBar()
 	toolbar.Text(zoomLabel.c_str(), false);
 	ImGui::PopStyleColor();
 
-	if (toolbar.Icon("ZoomReset", ICON_FA_MAXIMIZE, "Action.Timeline.ZoomReset")) ResetZoom();
+	EditorUI::DrawTimelineAction(toolbar, "Timeline", "ZoomReset", ICON_FA_MAXIMIZE, "Action.Timeline.ZoomReset");
 
 	if (m_SelectedClipIndex < 0)
 	{
@@ -1208,56 +1180,64 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 {
 	DrawTransportBar();
 
-	ImGui::BeginChild("##TimelineTracksScrollArea", ImVec2(0.0f, 0.0f), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+	// 눈금자와 "트랙" 칸은 이 영역에 고정하고, 트랙 행만 아래 자식 창에서 세로로 스크롤한다 (이펙트 타임라인과 같은 구조).
+	ImGui::BeginChild("##TimelineTracksArea", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
-	const ImVec2 contentMin = ImGui::GetCursorScreenPos();
-	const ImVec2 contentSize = ImGui::GetContentRegionAvail();
+	const ImVec2 areaMin = ImGui::GetCursorScreenPos();
+	const ImVec2 areaSize = ImGui::GetContentRegionAvail();
+	m_TrackHeight = EditorUI::GetTimelineRowHeight();
+	m_TrackAreaLeft = areaMin.x;
 	auto& input = Engine::InputManager::Get();
 	const auto mousePos = input.GetScreenMousePosition();
 	const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
 	const bool isMouseClicked = input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
-	const float rulerHeight = ImGui::GetFrameHeightWithSpacing() * 1.25f;
-	const float splitterHitWidth = 8.0f;
-	const float headerWidth = std::clamp(m_TrackHeaderWidth, 1.0f, std::max(1.0f, contentSize.x * 0.55f));
-	const ImVec2 splitterPos(contentMin.x + headerWidth - splitterHitWidth * 0.5f, contentMin.y);
-
-	const ImVec2 backupCursorPos = ImGui::GetCursorPos();
-	ImGui::SetCursorScreenPos(splitterPos);
-	ImGui::InvisibleButton("##HeaderSplitterHitbox", ImVec2(splitterHitWidth, contentSize.y));
-	const bool isSplitterHovered = ImGui::IsItemHovered();
-	const bool isSplitterActive = ImGui::IsItemActive();
-	ImGui::SetCursorPos(backupCursorPos);
-
-	if (isSplitterHovered || isSplitterActive) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-	if (isSplitterActive && isMouseDown)
-	{
-		m_TrackHeaderWidth += input.GetMouseDelta().x;
-		const float maxHeader = std::max(1.0f, std::min(450.0f, contentSize.x * 0.55f));
-		m_TrackHeaderWidth = std::clamp(m_TrackHeaderWidth, std::min(90.0f, maxHeader), maxHeader);
-	}
-
-	const float timelineWidth = std::max(1.0f, contentSize.x - headerWidth - 4.0f);
-	const ImVec2 timelineMin(contentMin.x + headerWidth, contentMin.y);
-	const ImVec2 timelineMax(timelineMin.x + timelineWidth, contentMin.y + contentSize.y);
+	// 행 영역은 세로 스크롤바를 항상 표시한다. 눈금자도 스크롤바를 뺀 폭을 써야 눈금과 행 그리드가 어긋나지 않는다.
+	const float contentWidth = std::max(1.0f, areaSize.x - ImGui::GetStyle().ScrollbarSize);
+	const float rulerHeight = std::min(areaSize.y, m_TrackHeight * 1.25f);
+	const float rowsViewHeight = std::max(1.0f, areaSize.y - rulerHeight);
+	const float headerWidth = std::clamp(m_TrackHeaderWidth, 1.0f, std::max(1.0f, contentWidth * 0.55f));
+	const float timelineWidth = std::max(1.0f, contentWidth - headerWidth);
+	const ImVec2 timelineMin(areaMin.x + headerWidth, areaMin.y);
+	const ImVec2 timelineMax(timelineMin.x + timelineWidth, areaMin.y + areaSize.y);
 	const ImVec2 rulerMin = timelineMin;
 	const ImVec2 rulerMax(timelineMax.x, timelineMin.y + rulerHeight);
+
+	// 고정 머리 배경과 "트랙" 칸(+ 버튼). 배경을 먼저 그리고, 버튼은 아래 히트박스들보다 먼저 제출한다.
+	drawList->AddRectFilled(areaMin, ImVec2(areaMin.x + areaSize.x, rulerMax.y), EditorUI::TimelineRulerBackground);
+	if (EditorUI::DrawTimelineCorner(*drawList, areaMin, ImVec2(timelineMin.x, rulerMax.y), "Timeline.AddTrack"))
+	{
+		m_AddTrackTime = m_CurrentTime;
+		ImGui::OpenPopup("##MultiTrackContextMenu");
+	}
+
+	// 이름 칸 폭 스플리터: 눈금자부터 행 영역 끝까지 덮는다. 눈금자와 행 자식 창보다 먼저 제출해야 겹친 자리에서 우선 잡힌다.
+	const float splitterHitWidth = Editor::SplitterThickness + Editor::SplitterHoverExtend * 2.0f;
+	const ImRect splitterRect(ImVec2(timelineMin.x - splitterHitWidth * 0.5f, areaMin.y), ImVec2(timelineMin.x + splitterHitWidth * 0.5f, timelineMax.y));
+	const auto headerSplitter = Editor::SplitterHandle("##HeaderSplitterHitbox", splitterRect, ImGuiAxis_X);
+	if (headerSplitter.Held)
+	{
+		m_TrackHeaderWidth += input.GetMouseDelta().x;
+		const float maxHeader = std::max(1.0f, std::min(450.0f, contentWidth * 0.55f));
+		m_TrackHeaderWidth = std::clamp(m_TrackHeaderWidth, std::min(90.0f, maxHeader), maxHeader);
+	}
 
 	ImGui::SetCursorScreenPos(rulerMin);
 	ImGui::InvisibleButton("##TimelineRulerHitbox", ImVec2(timelineWidth, rulerHeight));
 	const bool isRulerHovered = ImGui::IsItemHovered();
 
-	const bool isOverTimelineArea = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
-		mousePos.x >= contentMin.x && mousePos.x <= timelineMax.x &&
-		mousePos.y >= contentMin.y && mousePos.y <= timelineMax.y;
+	// ChildWindows: 아래 행 자식 창 위에 있을 때도 타임라인 영역으로 본다.
+	const bool isOverTimelineArea = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+		mousePos.x >= areaMin.x && mousePos.x <= timelineMax.x && mousePos.y >= areaMin.y && mousePos.y <= timelineMax.y;
 
-	if (isOverTimelineArea && !m_IsScrubbing && !m_IsDraggingItem && !isSplitterActive && mousePos.x >= timelineMin.x)
+	if (isOverTimelineArea && !m_IsScrubbing && !m_IsDraggingItem && !headerSplitter.Held && mousePos.x >= timelineMin.x)
 	{
 		const bool panning = input.IsMouseButtonDragging(Engine::EMouseButton::Middle) ||
 			(input.IsAltPressed() && input.IsMouseButtonDragging(Engine::EMouseButton::Right));
+		const auto wheel = EditorUI::SplitTimelineWheel(input.GetMouseScrollDeltaY(), input.IsShiftPressed(), input.IsAltPressed());
 		const auto scale = EditorUI::MakeTimelineScale(timelineMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
-		EditorUI::NavigateTimeline(mousePos.x, input.GetMouseScrollDeltaY(), panning ? input.GetMouseDelta().x : 0.0f,
+		EditorUI::NavigateTimeline(mousePos.x, wheel.Zoom, wheel.PanPixels + (panning ? input.GetMouseDelta().x : 0.0f),
 			scale, std::max(m_Duration, EditorUI::MinimumTimelineDuration), m_TimelineZoom, m_ViewStartTime);
 	}
 
@@ -1272,66 +1252,64 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 		else m_IsScrubbing = false;
 	}
 
-	const ImVec2 cornerMin(contentMin.x, contentMin.y);
-	const ImVec2 cornerMax(timelineMin.x, rulerMax.y);
-	drawList->AddRectFilled(cornerMin, cornerMax, IM_COL32(24, 26, 30, 255));
-	const std::string tracksLabel = std::string(ICON_FA_LAYER_GROUP " ") + LOCAL("Timeline.Tracks");
-	drawList->AddText(ImVec2(cornerMin.x + 8.0f, cornerMin.y + 5.0f), IM_COL32(170, 180, 195, 255), tracksLabel.c_str());
-	drawList->AddLine(ImVec2(cornerMin.x, rulerMax.y), rulerMax, IM_COL32(50, 54, 62, 255));
-
-	const ImU32 splitterCol = (isSplitterHovered || isSplitterActive) ? IM_COL32(80, 160, 255, 240) : IM_COL32(55, 60, 70, 255);
-	const float splitterThicknessDraw = (isSplitterHovered || isSplitterActive) ? 2.5f : 1.0f;
-	drawList->AddLine(ImVec2(timelineMin.x, cornerMin.y), ImVec2(timelineMin.x, timelineMax.y), splitterCol, splitterThicknessDraw);
-
-	drawList->PushClipRect(timelineMin, rulerMax, true);
-	EditorUI::DrawTimelineRuler(*drawList,
-		EditorUI::MakeTimelineScale(rulerMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime),
-		rulerMin.y, rulerMax.y, m_FPS);
-	drawList->PopClipRect();
-
-	float currentY = rulerMax.y;
-
-	// 1. 베이스 애니메이션 클립 트랙
-	const ImVec2 animTrackMin(timelineMin.x, currentY);
-	const ImVec2 animTrackMax(timelineMax.x, currentY + m_TrackHeight);
-	DrawAnimPoseTrack(drawList, animTrackMin, animTrackMax, timelineWidth);
-	currentY += m_TrackHeight;
-
-	// 2. 다중 노티파이 트랙 목록
-	for (size_t i = 0; i < m_NotifyTracks.size(); ++i)
-	{
-		const ImVec2 tMin(timelineMin.x, currentY);
-		const ImVec2 tMax(timelineMax.x, currentY + m_TrackHeight);
-		DrawNotifyTrackRow(drawList, static_cast<int>(i), m_NotifyTracks[i], tMin, tMax, timelineWidth);
-		currentY += m_TrackHeight;
-	}
-
-	// 3. 다중 카메라 연출 트랙 목록
-	for (size_t i = 0; i < m_CameraTracks.size(); ++i)
-	{
-		const ImVec2 tMin(timelineMin.x, currentY);
-		const ImVec2 tMax(timelineMax.x, currentY + m_TrackHeight);
-		DrawCameraTrackRow(drawList, static_cast<int>(i), m_CameraTracks[i], tMin, tMax, timelineWidth);
-		currentY += m_TrackHeight;
-	}
-
-	// 수직 재생 헤드 라인
+	// ── 트랙 행: 눈금자 아래에서만 세로로 스크롤한다 ──
 	const float curX = TimeToScreenX(m_CurrentTime, timelineMin.x, timelineWidth);
-	drawList->PushClipRect(timelineMin, ImVec2(timelineMax.x, currentY), true);
-	EditorUI::DrawTimelinePlayhead(*drawList, timelineMin, ImVec2(timelineMax.x, currentY), curX);
-	drawList->PopClipRect();
+	float rowsEndY = rulerMax.y;
+	ImGui::SetCursorScreenPos(ImVec2(areaMin.x, rulerMax.y));
+	if (ImGui::BeginChild("##TimelineTrackRows", ImVec2(0.0f, rowsViewHeight), ImGuiChildFlags_None,
+		ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+	{
+		ImDrawList* rowsDraw = ImGui::GetWindowDrawList();
+		// 휠: 막대 칸에서는 줌, 이름 칸이나 Alt를 누른 상태에서는 세로 스크롤 (이펙트 타임라인과 같은 규칙)
+		const float wheel = input.GetMouseScrollDeltaY();
+		if (wheel != 0.0f && ImGui::IsWindowHovered() && (mousePos.x < timelineMin.x || input.IsAltPressed()))
+			ImGui::SetScrollY(ImGui::GetScrollY() - wheel * m_TrackHeight * 3.0f);
+
+		float currentY = ImGui::GetCursorScreenPos().y; // 스크롤만큼 위로 밀린 첫 행의 y
+
+		// 1. 베이스 애니메이션 클립 트랙
+		DrawAnimPoseTrack(rowsDraw, ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
+		currentY += m_TrackHeight;
+
+		// 2. 다중 노티파이 트랙 목록
+		for (size_t i = 0; i < m_NotifyTracks.size(); ++i)
+		{
+			DrawNotifyTrackRow(rowsDraw, static_cast<int>(i), m_NotifyTracks[i], ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
+			currentY += m_TrackHeight;
+		}
+
+		// 3. 다중 카메라 연출 트랙 목록
+		for (size_t i = 0; i < m_CameraTracks.size(); ++i)
+		{
+			DrawCameraTrackRow(rowsDraw, static_cast<int>(i), m_CameraTracks[i], ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
+			currentY += m_TrackHeight;
+		}
+		rowsEndY = currentY;
+
+		// 행 영역의 이름 칸 경계선과 재생 헤드 선 (눈금자 높이 부분은 아래에서 고정 영역에 그린다)
+		const float viewBottom = rulerMax.y + rowsViewHeight;
+		Editor::DrawVerticalSplitterLine(*rowsDraw, headerSplitter, timelineMin.x, rulerMax.y, viewBottom);
+		if (curX >= timelineMin.x && curX <= timelineMax.x)
+			rowsDraw->AddLine(ImVec2(curX, rulerMax.y), ImVec2(curX, std::min(rowsEndY, viewBottom)), EditorUI::TimelinePlayheadColor, 2.0f);
+	}
+	ImGui::EndChild();
+
+	// ── 고정 머리: "트랙" 칸, 눈금자, 재생 헤드 삼각형 ──
+	EditorUI::DrawTimelineRuler(*drawList, EditorUI::MakeTimelineScale(rulerMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime), rulerMin.y, rulerMax.y, m_FPS);
+	drawList->AddLine(ImVec2(areaMin.x, rulerMax.y), ImVec2(areaMin.x + areaSize.x, rulerMax.y), EditorUI::TimelineRowSeparator);
+	Editor::DrawVerticalSplitterLine(*drawList, headerSplitter, timelineMin.x, areaMin.y, rulerMax.y);
+	EditorUI::DrawTimelinePlayhead(*drawList, rulerMin, rulerMax, curX);
 
 	const bool isRulerRightClicked = (isRulerHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right));
-	const bool isEmptyAreaRightClicked = isOverTimelineArea && mousePos.y > currentY && input.IsMouseButtonDown(Engine::EMouseButton::Right);
+	const bool isEmptyAreaRightClicked = isOverTimelineArea && mousePos.y > rowsEndY && input.IsMouseButtonDown(Engine::EMouseButton::Right);
 
 	if (isRulerRightClicked || isEmptyAreaRightClicked)
 	{
+		m_AddTrackTime = std::clamp(ScreenXToTime(mousePos.x, timelineMin.x, timelineWidth), 0.0f, m_Duration);
 		ImGui::OpenPopup("##MultiTrackContextMenu");
 	}
 	if (ImGui::BeginPopup("##MultiTrackContextMenu"))
 	{
-		const float clickTime = ScreenXToTime(mousePos.x, timelineMin.x, timelineWidth);
-
 		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("Timeline.AddFXTrack")).c_str()))
 		{
 			Engine::TimelineNotifyTrack newTrack{};
@@ -1350,7 +1328,7 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 		{
 			Engine::TimelineCameraTrack newCam{};
 			newCam.TrackName = "Cam_Shot_" + std::to_string(m_CameraTracks.size() + 1);
-			newCam.StartTime = clickTime;
+			newCam.StartTime = m_AddTrackTime;
 			newCam.Duration = 0.5f;
 			newCam.TargetFOV = 35.0f;
 			m_CameraTracks.push_back(newCam);
@@ -1365,65 +1343,35 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 	ImGui::EndChild();
 }
 
-void AnimationTimelinePanel::DrawTrackGridLines(ImDrawList* drawList, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
-{
-	const float visibleDuration = (m_Duration > 0.0f) ? (m_Duration / m_TimelineZoom) : 1.0f;
-	const int startFrame = static_cast<int>(std::floor(m_ViewStartTime * m_FPS));
-	const int endFrame = static_cast<int>(std::ceil((m_ViewStartTime + visibleDuration) * m_FPS));
-	const int visibleFrames = std::max(1, endFrame - startFrame);
-	const float totalFrames = std::max(1.0f, m_Duration * m_FPS);
-
-	const float pxPerFrame = timelineWidth / static_cast<float>(visibleFrames);
-
-	int step = 1;
-	if (pxPerFrame < 3.0f) step = 5;
-	if (pxPerFrame < 1.5f) step = 10;
-	if (pxPerFrame < 0.5f) step = 30;
-	if (pxPerFrame < 0.15f) step = 60;
-
-	const int firstTick = (startFrame / step) * step;
-	for (int f = firstTick; f <= endFrame; f += step)
-	{
-		if (f < 0 || f > static_cast<int>(totalFrames)) continue;
-
-		const float time = static_cast<float>(f) / m_FPS;
-		const float x = TimeToScreenX(time, trackMin.x, timelineWidth);
-		if (x < trackMin.x || x > trackMax.x) continue;
-
-		const bool isMajor = (f % (step * 5) == 0);
-		const ImU32 gridColor = isMajor ? IM_COL32(70, 78, 92, 160) : IM_COL32(45, 50, 60, 95);
-		drawList->AddLine(ImVec2(x, trackMin.y), ImVec2(x, trackMax.y), gridColor, 1.0f);
-	}
-}
-
 void AnimationTimelinePanel::DrawAnimPoseTrack(ImDrawList* drawList, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
 {
-	const ImVec2 headerMin(trackMin.x - m_TrackHeaderWidth, trackMin.y);
-	const ImVec2 headerMax(trackMin.x, trackMax.y);
-	drawList->AddRectFilled(headerMin, headerMax, IM_COL32(35, 38, 44, 255));
-	drawList->AddText(ImVec2(headerMin.x + 8.0f, headerMin.y + 7.0f), IM_COL32(200, 210, 225, 255), (std::string(ICON_FA_PERSON_RUNNING " ") + LOCAL("Timeline.Pose")).c_str());
+	const ImVec2 headerMin(m_TrackAreaLeft, trackMin.y);
+	const auto scale = EditorUI::MakeTimelineScale(trackMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+	EditorUI::DrawTimelineRowBackground(*drawList, headerMin.x, scale, trackMin.y, trackMax.y, 0, false);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, trackMin.x, trackMin.y, trackMax.y,
+		ICON_FA_PERSON_RUNNING, IM_COL32(200, 210, 225, 255), LOCAL("Timeline.Pose"), EditorUI::TimelineLabelState::Normal);
 
 	ImGui::SetCursorScreenPos(trackMin);
 	ImGui::InvisibleButton("##AnimPoseTrackHitbox", ImVec2(timelineWidth, m_TrackHeight));
 
 	drawList->PushClipRect(trackMin, trackMax, true);
-	drawList->AddRectFilled(trackMin, trackMax, IM_COL32(40, 44, 52, 255));
-	DrawTrackGridLines(drawList, trackMin, trackMax, timelineWidth);
-
-	const float clipStartX = TimeToScreenX(0.0f, trackMin.x, timelineWidth);
-	const float clipEndX = TimeToScreenX(m_Duration, trackMin.x, timelineWidth);
-	drawList->AddRectFilled(ImVec2(clipStartX, trackMin.y + 4.0f), ImVec2(clipEndX, trackMax.y - 4.0f), IM_COL32(45, 95, 160, 220), 4.0f);
-	drawList->AddText(ImVec2(std::max(trackMin.x + 8.0f, clipStartX + 12.0f), trackMin.y + 7.0f), IM_COL32(255, 255, 255, 255), m_CurrentClipName.c_str());
+	EditorUI::DrawTimelineGrid(*drawList, scale, trackMin.y, trackMax.y, m_FPS);
+	const float inset = EditorUI::GetTimelineBarInset();
+	const ImVec2 clipMin(scale.ToX(0.0f), trackMin.y + inset);
+	const ImVec2 clipMax(std::max(clipMin.x + 1.0f, scale.ToX(m_Duration)), trackMax.y - inset);
+	EditorUI::DrawTimelineBar(*drawList, clipMin, clipMax, IM_COL32(45, 95, 160, 220), false, false);
+	const float textY = trackMin.y + (m_TrackHeight - ImGui::GetFontSize()) * 0.5f;
+	drawList->AddText(ImVec2(std::max(trackMin.x + 8.0f, clipMin.x + 12.0f), textY), IM_COL32(255, 255, 255, 255), m_CurrentClipName.c_str());
 	drawList->PopClipRect();
-
-	drawList->AddLine(ImVec2(headerMin.x, trackMax.y), trackMax, IM_COL32(50, 54, 62, 255));
 }
 
 void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackIdx, Engine::TimelineNotifyTrack& track, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
 {
-	const ImVec2 headerMin(trackMin.x - m_TrackHeaderWidth, trackMin.y);
+	const ImVec2 headerMin(m_TrackAreaLeft, trackMin.y);
 	const ImVec2 headerMax(trackMin.x, trackMax.y);
-	drawList->AddRectFilled(headerMin, headerMax, IM_COL32(30, 33, 38, 255));
+	const auto scale = EditorUI::MakeTimelineScale(trackMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+	const bool rowSelected = m_Selection.Type == ETimelineSelectionType::NotifyMarker && m_Selection.TrackIndex == trackIdx;
+	EditorUI::DrawTimelineRowBackground(*drawList, headerMin.x, scale, trackMin.y, trackMax.y, static_cast<std::size_t>(trackIdx) + 1, rowSelected);
 
 	const float headerCenterY = (headerMin.y + headerMax.y) * 0.5f;
 	auto& input = Engine::InputManager::Get();
@@ -1432,19 +1380,7 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 	const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 	const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
-	const char* muteIcon = track.IsMuted ? ICON_FA_VOLUME_XMARK : ICON_FA_VOLUME_HIGH;
-	const ImU32 muteColor = track.IsMuted ? IM_COL32(180, 70, 70, 255) : IM_COL32(120, 180, 240, 255);
-	const ImVec2 muteSize = ImGui::CalcTextSize(muteIcon);
-	const ImVec2 muteBtnPos(headerMin.x + 10.0f, headerCenterY - muteSize.y * 0.5f);
-	drawList->AddText(muteBtnPos, muteColor, muteIcon);
-
-	const bool isMuteHovered = windowHovered && (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
-	if (isMuteHovered && isMouseClicked)
-	{
-		track.IsMuted = !track.IsMuted;
-		m_IsDirty = true;
-	}
-
+	// 트랙 종류 아이콘 하나만 표시한다. 음소거는 우클릭 메뉴에서 바꾸고, 음소거 상태는 흐린 색으로 나타낸다.
 	const char* trackTypeIcon = ICON_FA_BURST;
 	ImU32 trackIconColor = IM_COL32(255, 175, 45, 255);
 	if (track.TrackName.find("Audio") != std::string::npos || track.TrackName.find("Sound") != std::string::npos)
@@ -1457,15 +1393,16 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 		trackTypeIcon = ICON_FA_BELL;
 		trackIconColor = IM_COL32(200, 120, 255, 255);
 	}
-	if (track.IsMuted) trackIconColor = IM_COL32(110, 110, 110, 200);
-
-	const ImVec2 iconSize = ImGui::CalcTextSize(trackTypeIcon);
-	drawList->AddText(ImVec2(headerMin.x + 40.0f, headerCenterY - iconSize.y * 0.5f), trackIconColor, trackTypeIcon);
+	const auto labelState = rowSelected ? EditorUI::TimelineLabelState::Selected
+		: (track.IsMuted ? EditorUI::TimelineLabelState::Disabled : EditorUI::TimelineLabelState::Normal);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y, trackTypeIcon, trackIconColor, track.TrackName, labelState);
 
 	if (m_RenamingTrackIndex == trackIdx)
 	{
-		ImGui::SetCursorScreenPos(ImVec2(headerMin.x + 70.0f, headerCenterY - 11.0f));
-		ImGui::SetNextItemWidth(m_TrackHeaderWidth - 78.0f);
+		// 입력창 글자가 표시 중인 이름과 같은 위치에서 시작하도록 프레임 안쪽 여백만큼 당긴다.
+		const float nameX = headerMin.x + EditorUI::GetTimelineLabelTextOffset() - ImGui::GetStyle().FramePadding.x;
+		ImGui::SetCursorScreenPos(ImVec2(nameX, headerCenterY - ImGui::GetFrameHeight() * 0.5f));
+		ImGui::SetNextItemWidth(std::max(40.0f, headerMax.x - nameX - 4.0f));
 		if (ImGui::InputText("##RenameTrack", m_RenameBuf, sizeof(m_RenameBuf), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 		{
 			track.TrackName = m_RenameBuf;
@@ -1473,12 +1410,6 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 			m_IsDirty = true;
 		}
 		if (!ImGui::IsItemActive() && isMouseClicked) m_RenamingTrackIndex = -1;
-	}
-	else
-	{
-		const ImU32 textColor = track.IsMuted ? IM_COL32(110, 110, 110, 200) : IM_COL32(230, 210, 160, 255);
-		const ImVec2 nameSize = ImGui::CalcTextSize(track.TrackName.c_str());
-		drawList->AddText(ImVec2(headerMin.x + 72.0f, headerCenterY - nameSize.y * 0.5f), textColor, track.TrackName.c_str());
 	}
 
 	const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && windowHovered);
@@ -1528,10 +1459,9 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 	const bool isTrackHovered = ImGui::IsItemHovered();
 
 	drawList->PushClipRect(trackMin, trackMax, true);
-	drawList->AddRectFilled(trackMin, trackMax, IM_COL32(32, 35, 42, 255));
-	DrawTrackGridLines(drawList, trackMin, trackMax, timelineWidth);
+	EditorUI::DrawTimelineGrid(*drawList, scale, trackMin.y, trackMax.y, m_FPS);
 	const float centerY = (trackMin.y + trackMax.y) * 0.5f;
-	const float markerHalfSize = 7.0f;
+	const float markerHalfSize = EditorUI::GetTimelineMarkerHalfSize(); // 마우스 판정과 그리기 크기를 일치시킨다
 	if (!isMouseDown)
 	{
 		m_IsDraggingItem = false;
@@ -1544,10 +1474,6 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 		auto& notify = track.Notifies[nIdx];
 		const float markerX = TimeToScreenX(notify.TriggerTime, trackMin.x, timelineWidth);
 		if (markerX < trackMin.x - 15.0f || markerX > trackMin.x + timelineWidth + 15.0f) continue;
-		const ImVec2 pTop(markerX, centerY - markerHalfSize);
-		const ImVec2 pRight(markerX + markerHalfSize, centerY);
-		const ImVec2 pBottom(markerX, centerY + markerHalfSize);
-		const ImVec2 pLeft(markerX - markerHalfSize, centerY);
 		const bool isMarkerHovered = isTrackHovered && (std::abs(mousePos.x - markerX) <= markerHalfSize + 2.5f && std::abs(mousePos.y - centerY) <= markerHalfSize + 2.5f);
 		if (isMarkerHovered) anyMarkerHovered = true;
 		const bool isSelected = (m_Selection.Type == ETimelineSelectionType::NotifyMarker && m_Selection.TrackIndex == trackIdx && m_Selection.ItemIndex == static_cast<int>(nIdx));
@@ -1572,8 +1498,7 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 		else if (notify.Type == Engine::EAnimNotifyType::CustomEvent) markerColor = IM_COL32(190, 100, 255, 240);
 		else if (notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX) markerColor = IM_COL32(255, 60, 140, 240);
 
-		drawList->AddQuadFilled(pTop, pRight, pBottom, pLeft, markerColor);
-		drawList->AddQuad(pTop, pRight, pBottom, pLeft, isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(20, 20, 20, 200), isSelected ? 2.0f : 1.0f);
+		EditorUI::DrawTimelineMarker(*drawList, ImVec2(markerX, centerY), markerColor, isSelected);
 
 		if (isMarkerHovered)
 		{
@@ -1592,8 +1517,6 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 		}
 	}
 	drawList->PopClipRect();
-
-	drawList->AddLine(ImVec2(headerMin.x, trackMax.y), trackMax, IM_COL32(50, 54, 62, 255));
 
 	if (isTrackHovered && !anyMarkerHovered && isMouseClicked)
 	{
@@ -1625,9 +1548,12 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 
 void AnimationTimelinePanel::DrawCameraTrackRow(ImDrawList* drawList, int camIdx, Engine::TimelineCameraTrack& camTrack, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
 {
-	const ImVec2 headerMin(trackMin.x - m_TrackHeaderWidth, trackMin.y);
+	const ImVec2 headerMin(m_TrackAreaLeft, trackMin.y);
 	const ImVec2 headerMax(trackMin.x, trackMax.y);
-	drawList->AddRectFilled(headerMin, headerMax, IM_COL32(38, 30, 42, 255));
+	const auto scale = EditorUI::MakeTimelineScale(trackMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+	const bool rowSelected = m_Selection.Type == ETimelineSelectionType::CameraShot && m_Selection.TrackIndex == camIdx;
+	EditorUI::DrawTimelineRowBackground(*drawList, headerMin.x, scale, trackMin.y, trackMax.y,
+		m_NotifyTracks.size() + static_cast<std::size_t>(camIdx) + 1, rowSelected);
 
 	const float headerCenterY = (headerMin.y + headerMax.y) * 0.5f;
 	auto& input = Engine::InputManager::Get();
@@ -1636,26 +1562,10 @@ void AnimationTimelinePanel::DrawCameraTrackRow(ImDrawList* drawList, int camIdx
 	const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 	const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
-	const char* activeIcon = camTrack.IsActive ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
-	const ImU32 activeColor = camTrack.IsActive ? IM_COL32(180, 140, 240, 255) : IM_COL32(120, 120, 120, 200);
-	const ImVec2 eyeSize = ImGui::CalcTextSize(activeIcon);
-	const ImVec2 activeBtnPos(headerMin.x + 10.0f, headerCenterY - eyeSize.y * 0.5f);
-	drawList->AddText(activeBtnPos, activeColor, activeIcon);
-
-	const bool isActiveHovered = windowHovered && (mousePos.x >= headerMin.x + 8.0f && mousePos.x <= headerMin.x + 32.0f && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y);
-	if (isActiveHovered && isMouseClicked)
-	{
-		camTrack.IsActive = !camTrack.IsActive;
-		m_IsDirty = true;
-	}
-
-	const ImU32 camIconColor = camTrack.IsActive ? IM_COL32(200, 130, 255, 255) : IM_COL32(120, 120, 120, 200);
-	const ImVec2 camIconSize = ImGui::CalcTextSize(ICON_FA_VIDEO);
-	drawList->AddText(ImVec2(headerMin.x + 40.0f, headerCenterY - camIconSize.y * 0.5f), camIconColor, ICON_FA_VIDEO);
-
-	const ImU32 textColor = camTrack.IsActive ? IM_COL32(220, 190, 255, 255) : IM_COL32(120, 120, 120, 200);
-	const ImVec2 nameSize = ImGui::CalcTextSize(camTrack.TrackName.c_str());
-	drawList->AddText(ImVec2(headerMin.x + 72.0f, headerCenterY - nameSize.y * 0.5f), textColor, camTrack.TrackName.c_str());
+	// 카메라 아이콘 하나만 표시한다. 활성 여부는 우클릭 메뉴에서 바꾸고, 비활성 샷은 흐린 색으로 나타낸다.
+	const auto labelState = rowSelected ? EditorUI::TimelineLabelState::Selected
+		: (camTrack.IsActive ? EditorUI::TimelineLabelState::Normal : EditorUI::TimelineLabelState::Disabled);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y, ICON_FA_VIDEO, IM_COL32(200, 130, 255, 255), camTrack.TrackName, labelState);
 
 	const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && windowHovered);
 	if (isHeaderHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
@@ -1690,19 +1600,19 @@ void AnimationTimelinePanel::DrawCameraTrackRow(ImDrawList* drawList, int camIdx
 	const bool isTrackHovered = ImGui::IsItemHovered();
 
 	drawList->PushClipRect(trackMin, trackMax, true);
-	drawList->AddRectFilled(trackMin, trackMax, IM_COL32(32, 28, 36, 255));
-	DrawTrackGridLines(drawList, trackMin, trackMax, timelineWidth);
+	EditorUI::DrawTimelineGrid(*drawList, scale, trackMin.y, trackMax.y, m_FPS);
 
 	const float shotStartX = TimeToScreenX(camTrack.StartTime, trackMin.x, timelineWidth);
 	const float shotEndX = TimeToScreenX(camTrack.StartTime + camTrack.Duration, trackMin.x, timelineWidth);
-	const ImVec2 shotMin(shotStartX, trackMin.y + 4.0f);
-	const ImVec2 shotMax(shotEndX, trackMax.y - 4.0f);
+	const float inset = EditorUI::GetTimelineBarInset();
+	const ImVec2 shotMin(shotStartX, trackMin.y + inset);
+	const ImVec2 shotMax(shotEndX, trackMax.y - inset);
 
 	const bool isSelected = (m_Selection.Type == ETimelineSelectionType::CameraShot && m_Selection.TrackIndex == camIdx);
 	const bool isShotHovered = isTrackHovered && (mousePos.x >= shotMin.x && mousePos.x <= shotMax.x && mousePos.y >= shotMin.y && mousePos.y <= shotMax.y);
 
-	drawList->AddRectFilled(shotMin, shotMax, isSelected ? IM_COL32(160, 70, 220, 230) : IM_COL32(110, 45, 160, 210), 4.0f);
-	drawList->AddRect(shotMin, shotMax, isSelected ? IM_COL32(255, 255, 255, 255) : IM_COL32(200, 140, 240, 200), 4.0f, 0, isSelected ? 2.0f : 1.0f);
+	EditorUI::DrawTimelineBar(*drawList, shotMin, ImVec2(std::max(shotMin.x + 1.0f, shotMax.x), shotMax.y),
+		isSelected ? IM_COL32(160, 70, 220, 230) : IM_COL32(110, 45, 160, 210), isSelected, isSelected);
 
 	const std::string shotLabel = std::string(ICON_FA_VIDEO " ") + LOCAL("Timeline.Shot");
 	const ImVec2 labelSize = ImGui::CalcTextSize(shotLabel.c_str());
@@ -1714,8 +1624,6 @@ void AnimationTimelinePanel::DrawCameraTrackRow(ImDrawList* drawList, int camIdx
 		drawList->AddText(ImVec2(shotMin.x + 8.0f, labelPosY), IM_COL32(255, 255, 255, 245), shotLabel.c_str());
 	}
 	drawList->PopClipRect();
-
-	drawList->AddLine(ImVec2(headerMin.x, trackMax.y), trackMax, IM_COL32(50, 54, 62, 255));
 
 	if (isShotHovered && isMouseClicked)
 	{

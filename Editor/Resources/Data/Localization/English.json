@@ -2072,6 +2072,7 @@
         "Timeline.FocusBone": "Focus Bone Camera",
         "Timeline.NoEmbeddedAnimation": "No Embedded Animation (Bind Pose)",
         "Timeline.DurationTooltip": "Adjust timeline duration for static models",
-        "ModelImport.OverwriteMaterials": "Overwrite Existing Materials"
+        "ModelImport.OverwriteMaterials": "Overwrite Existing Materials",
+        "Timeline.AddTrack": "Add Track"
     }
 }

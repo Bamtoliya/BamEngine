@@ -72,7 +72,7 @@ void AnimatorGraphPanel::DrawCustomContent()
 {
 	const float totalWidth = ImGui::GetContentRegionAvail().x;
 	const float contentHeight = ImGui::GetContentRegionAvail().y;
-	const float splitterThickness = 4.0f;
+	const float splitterThickness = Editor::SplitterThickness;
 	const float spacingX = ImGui::GetStyle().ItemSpacing.x;
 	// 캔버스 가용 너비 계산 (전체 폭 - 좌측 - 우측 - 스플리터 2개 - 아이템 간격 2개)
 	const float overhead = (splitterThickness * 2.0f) + (spacingX * 2.0f);

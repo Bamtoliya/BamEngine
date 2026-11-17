@@ -91,7 +91,6 @@ private:
 	void DrawNotifyInspector(Engine::AnimNotifyData& notify);
 	void DrawCameraShotInspector(Engine::TimelineCameraTrack& camShot);
 
-	void DrawTrackGridLines(struct ImDrawList* drawList, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 	void DrawAnimPoseTrack(struct ImDrawList* drawList, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 	void DrawNotifyTrackRow(struct ImDrawList* drawList, int trackIdx, Engine::TimelineNotifyTrack& track, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 	void DrawCameraTrackRow(struct ImDrawList* drawList, int camIdx, Engine::TimelineCameraTrack& camTrack, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
@@ -125,7 +124,9 @@ private:
 	float m_TimelineZoom = 1.0f;
 	float m_ViewStartTime = 0.0f;
 	f32 m_TrackHeaderWidth = 180.0f;
-	const f32 m_TrackHeight = 30.0f;
+	f32 m_TrackHeight = 30.0f;    // 매 프레임 EditorUI::GetTimelineRowHeight()로 갱신 (글꼴 기준)
+	f32 m_TrackAreaLeft = 0.0f;   // 이번 프레임 트랙 이름 칸의 왼쪽 x (DrawTimelineTrackArea가 설정)
+	f32 m_AddTrackTime = 0.0f;    // 트랙 추가 메뉴를 연 시점의 시간 (카메라 샷 시작 시간으로 사용)
 	float m_LeftPanelWidth = 220.0f;
 	float m_InspectorWidth = 280.0f;
 	float m_TimelineHeight = 220.0f;

@@ -2,6 +2,17 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 스플리터 슬림화와 애니메이션·이펙트 타임라인 시각·조작 통일
+
+- **스플리터:** `ImGuiSplitter.h`에 `SplitterThickness`(2px)·`SplitterHoverExtend` 상수, 드래그 이동량을 돌려주는 `SplitterBar`, 자식 창 위에 겹쳐 놓는 `SplitterHandle`(FlattenChildren, 겹침 비허용)과 `DrawVerticalSplitterLine`을 추가했다. Animator 그래프·머티리얼·스프라이트·VFX·애니메이션 타임라인의 4px·8px 경계를 이 규격으로 바꿨다. 애니메이션 패널 상단 폭 계산의 `SameLine` 간격 누락(3→4)으로 생기던 8px 가로 넘침을 고쳤다.
+- **공통 모듈:** `TimelineView.h/.cpp`를 새로 만들어 시간 축·눈금자·재생 헤드·줌/이동, 행 배경·그리드(눈금자와 같은 간격)·이름 칸·막대·마커, 트랙 머리 칸(`DrawTimelineCorner`, `+` 버튼), 휠 규칙(`SplitTimelineWheel`), 재생 버튼(`DrawTimelineAction`/`DrawTimelineTransport`)을 옮겼다. `EffectTimelineView`에는 이펙트 전용 위젯과 편집기 배치만 남겼다.
+- **트랙 이름 칸:** 트랙당 종류 아이콘 하나, 고정 폭 아이콘 칸, 이름 색 3단계(보통·선택·비활성)를 두 타임라인에 적용했다. VFX는 꺼짐·음소거 트랙(`TimelineRow::Disabled`)을, 애니메이션은 노티파이 음소거·비활성 샷을 흐리게 표시한다. 애니메이션의 음소거·샷 활성 토글 아이콘은 없애고 우클릭 메뉴로 일원화했다.
+- **고정 머리:** 애니메이션 타임라인을 VFX와 같은 구조(눈금자 고정, 행만 자식 창 스크롤)로 바꿨다. VFX는 행 자식 창을 닫은 뒤 그 그리기 목록에 그려 잘라내기가 풀리던 결함(스크롤 시 행이 눈금자를 덮음)을 고쳐, 창이 열려 있는 동안 그린다. VFX 이름 칸 폭 조절은 `TimelineDragMode::Header` 분기를 없애고 `SplitterHandle`로 바꿨다.
+- **입력·추가:** Shift+휠 좌우 이동을 애니메이션에도 적용했고, 이름 칸 휠·Alt+휠은 행 세로 스크롤이다. 두 타임라인의 트랙 머리 칸에 `+` 버튼을 넣었다. VFX 트랙 추가 메뉴는 `DrawAddTrackMenuItems`로 빼서 목록 창과 타임라인이 함께 쓴다. 애니메이션 카메라 샷은 메뉴를 연 시점의 시간(`m_AddTrackTime`)에서 시작한다. VFX 타임라인 최소 높이를 트랙 2행 이상이 보이도록 올렸다.
+- **재생 바:** 애니메이션 재생 버튼이 CSV에 없는 `Timeline.FirstFrame` 등의 키를 쓰던 것을, 등록된 `Timeline.*` 액션을 실행하는 `DrawTimelineAction`으로 바꿨다. 툴팁 로캘·단축키 힌트·루프 활성 배경이 VFX와 같다. `Editor.csv`에 `Timeline.AddTrack`을 추가했다(JSON은 빌드 생성물).
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`):** 단계마다 사용자가 빌드하고 에디터에서 두 타임라인의 화면과 동작을 확인했다(스크린샷 비교로 남은 결함을 이어서 수정). 마지막 단계(VFX 이름 칸 스플리터)까지 의도대로 동작한다고 보고했다. 이번 기록 작업에서는 빌드·CTest·실행을 하지 않았고, 이 범위의 CTest 결과는 보고되지 않았다.
+- **미검증·한계:** 패널 폭이 매우 좁으면 상단 세 영역의 최소 폭 때문에 가로로 넘칠 수 있다. 이름 칸 폭 조절은 ESC로 취소되지 않는다. 파티클 편집기는 공용 위젯 변경을 그대로 받으며 별도 확인은 보고되지 않았다. [타임라인 계획 6절](AnimationTimelineEditorPlan.md#6-타임라인-시각-규격-통일과-고정-머리-2026-11-17), [스플리터 공통 구현](EngineEditorClientGuidelines.md#공통-구현-imguisplitterh)
+
 ### [2026-11-17] 모델 재임포트 머티리얼 보존, 배치 회전 및 생성물 폴더 분류
 
 - 기존 머티리얼 인스턴스를 기본 재사용하고 모달에서 덮어쓰기를 선택할 수 있게 했다. 도끼에서 저장한 색의 보존과 원본 색 복원을 사용자 실행으로 확인했다.

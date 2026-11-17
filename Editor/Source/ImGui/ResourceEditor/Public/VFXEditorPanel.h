@@ -83,6 +83,7 @@ private:
 	}
 	float GetTimelineDuration() const;
 	void DrawTrackList();
+	void DrawAddTrackMenuItems(Engine::CompositeEffect& effect); // 트랙 목록(버튼·우클릭)과 타임라인 + 버튼이 함께 쓰는 추가 메뉴
 	void DrawViewport();
 	void DrawInspector();
 	bool DrawSelectedTrackInspector(Engine::CompositeEffect* effect); // 이번 프레임에 값이 바뀌면 true

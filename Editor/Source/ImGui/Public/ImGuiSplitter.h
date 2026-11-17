@@ -4,6 +4,63 @@
 
 namespace Editor
 {
+    // 모든 패널 스플리터의 공통 규격: 레이아웃이 차지하는 보이는 막대 두께, 막대 양옆으로 넓힌 잡기 영역
+    inline constexpr float SplitterThickness = 2.0f;
+    inline constexpr float SplitterHoverExtend = 4.0f;
+
+    /**
+     * @brief 크기 계산을 호출자가 하는 레이아웃용 스플리터 막대
+     * @param str_id 위젯 고유 식별자
+     * @param axis ImGuiAxis_X면 세로 막대(좌우 분할), ImGuiAxis_Y면 가로 막대(상하 분할)
+     * @param length 막대 길이 (0.0f 이하이면 가용 영역 전체)
+     * @return 이번 프레임에 끈 거리(축 방향 px). 드래그 중이 아니면 0
+     */
+    inline float SplitterBar(const char* str_id, ImGuiAxis axis, float length = 0.0f)
+    {
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        if (window->SkipItems) return 0.0f;
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        if (length <= 0.0f) length = (axis == ImGuiAxis_X) ? avail.y : avail.x;
+        const ImVec2 pos = window->DC.CursorPos;
+        const ImVec2 size = (axis == ImGuiAxis_X) ? ImVec2(SplitterThickness, length) : ImVec2(length, SplitterThickness);
+        const ImRect bb(pos, ImVec2(pos.x + size.x, pos.y + size.y));
+        ImGui::ItemSize(bb);
+
+        // 넉넉한 가상 크기 두 개를 넘겨 끈 거리만 얻는다. 실제 패널 크기의 제한은 호출자가 한다.
+        constexpr float virtualSize = 10000.0f;
+        float before = virtualSize, after = virtualSize;
+        const bool active = ImGui::SplitterBehavior(bb, window->GetID(str_id), axis, &before, &after, 0.0f, 0.0f, SplitterHoverExtend);
+        const bool hovered = ImGui::IsItemHovered();
+        window->DrawList->AddRectFilled(bb.Min, bb.Max, ImGui::GetColorU32(active ? ImGuiCol_SeparatorActive : (hovered ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator)));
+        return active ? before - virtualSize : 0.0f;
+    }
+
+    // 다른 자식 창 위에 겹쳐 놓는 스플리터 손잡이. 판정만 하고 그리기는 호출자가 한다.
+    // SplitterBar(SplitterBehavior)는 겹침 허용이라 뒤에 제출된 항목에 호버를 빼앗긴다. 이 손잡이는 겹침 허용을 쓰지 않으므로
+    // 같은 자리의 다른 항목보다 먼저 제출하면 호버를 우선 가져간다. ItemSize를 호출하지 않아 배치에 영향이 없다.
+    struct SplitterHandleState { bool Hovered = false; bool Held = false; };
+    inline SplitterHandleState SplitterHandle(const char* str_id, const ImRect& bb, ImGuiAxis axis)
+    {
+        SplitterHandleState state;
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        if (window->SkipItems) return state;
+        const ImGuiID id = window->GetID(str_id);
+        if (!ImGui::ItemAdd(bb, id, nullptr, ImGuiItemFlags_NoNav)) return state;
+        // FlattenChildren: 마우스가 이 창의 자식 창 위에 있어도 이 창의 항목처럼 판정한다.
+        ImGui::ButtonBehavior(bb, id, &state.Hovered, &state.Held, ImGuiButtonFlags_FlattenChildren);
+        if (state.Hovered || state.Held) ImGui::SetMouseCursor(axis == ImGuiAxis_X ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+        return state;
+    }
+
+    // SplitterHandle로 만든 세로 스플리터 막대를 그린다 (SplitterBar와 같은 두께·색 규칙).
+    // 손잡이가 여러 창에 걸쳐 있으면 창마다 자기 그리기 목록으로 호출한다.
+    inline void DrawVerticalSplitterLine(ImDrawList& draw, const SplitterHandleState& state, float x, float top, float bottom)
+    {
+        const ImU32 color = ImGui::GetColorU32(state.Held ? ImGuiCol_SeparatorActive : (state.Hovered ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+        const float half = SplitterThickness * 0.5f;
+        draw.AddRectFilled(ImVec2(x - half, top), ImVec2(x + half, bottom), color);
+    }
+
     /**
      * @brief ImGui 순정 SplitterBehavior 기반 수직 스플리터 (좌우 분할)
      * @param str_id 위젯 고유 식별자 (예: "##LeftSplitter")
@@ -18,7 +75,7 @@ namespace Editor
      */
     inline bool SplitterV(const char* str_id, float* size1, float* size2,
         float min_size1, float min_size2, float height = 0.0f,
-        float thickness = 2.0f, float hover_extend = 4.0f) // [수정] 기본 2.0f
+        float thickness = SplitterThickness, float hover_extend = SplitterHoverExtend)
     {
         ImGuiContext& g = *GImGui;
         ImGuiWindow* window = g.CurrentWindow;
@@ -45,7 +102,7 @@ namespace Editor
         ImGuiWindowFlags sidebarWindowFlags = ImGuiWindowFlags_HorizontalScrollbar,
         bool reserveHalfForContent = true)
     {
-        constexpr float splitterThickness = 4.0f;
+        constexpr float splitterThickness = SplitterThickness;
         const float spacing = ImGui::GetStyle().ItemSpacing.x;
         const float availableWidth = ImGui::GetContentRegionAvail().x;
         const float paneWidth = std::max(1.0f, availableWidth - splitterThickness - spacing * 2.0f);
@@ -90,7 +147,7 @@ namespace Editor
      */
     inline bool SplitterH(const char* str_id, float* size1, float* size2,
         float min_size1, float min_size2, float width = 0.0f,
-        float thickness = 2.0f, float hover_extend = 4.0f) // [수정] 기본 2.0f
+        float thickness = SplitterThickness, float hover_extend = SplitterHoverExtend)
     {
         ImGuiContext& g = *GImGui;
         ImGuiWindow* window = g.CurrentWindow;
