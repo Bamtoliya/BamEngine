@@ -37,7 +37,12 @@ protected:
     // A panel can scope its own draw context around this call.
     virtual void DrawResourceFrame();
     void DrawCopyResourcePath();
-
+    void RunWithDiscardConfirmation(std::function<void()> action);
+private:
+    void DrawDiscardConfirmation();
+protected:
     std::filesystem::path m_TargetResourcePath;
+private:
+    std::function<void()> m_PendingDiscardAction;
 };
 END

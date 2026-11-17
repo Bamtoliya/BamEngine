@@ -2051,3 +2051,6 @@ Inspector,CurveKeys,Keys ({}),키 {}개
 VFXEditor,RingTextureDefault,(Ring texture default),(링 텍스처 기본값)
 Inspector,CurveEditHint,Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.,키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.
 VFXEditor,EditTrackProperties,Edit Track Properties,트랙 속성 편집
+ResourceEditor,DiscardTitle,Unsaved Changes,저장하지 않은 변경
+ResourceEditor,DiscardMessage,{} has unsaved changes. Continue without saving?,{}에 저장하지 않은 변경 내용이 있습니다. 저장하지 않고 계속할까요?
+ResourceEditor,DiscardContinue,Continue Without Saving,저장하지 않고 계속

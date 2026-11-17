@@ -2,6 +2,21 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 리소스 편집기 공통 교체 확인 (1~2단계)
+
+- **배경**: 리소스 편집기 12종 정적 점검에서 VFX·파티클·스프라이트·애니메이션 타임라인의 자체 새로 만들기·열기가 미저장 문서를 확인 없이 교체하는 것을 확인했다(`SetTargetResource`가 `m_IsDirty = false`로 덮어씀). 콘텐츠 브라우저 경로는 `ImGuiManager`의 공통 차단이 막지만 편집기 내부 메뉴·버튼·드롭은 이를 거치지 않았다. 애니메이터·그래프는 각자 확인 모달을 따로 구현하고 있었다.
+- **변경 사항**:
+  - **공통 장치** (`ResourceEditorInterface.h/.cpp`): `RunWithDiscardConfirmation(action)` — 미저장이 아니면 즉시 실행하고, 미저장이면 동작을 보관한 뒤 `Draw()`에서 `[취소] [저장하지 않고 계속(Danger)]` 모달(`DialogButtonBar`, Escape=취소)을 띄운다. 메뉴 안에서 `OpenPopup`의 ID 범위가 달라지는 문제를 피하려고 요청 시에는 보관만 하고, 열기·그리기는 창 범위에서 처리한다. `DrawResourceFrame`을 재정의하는 편집기도 포함되도록 `Draw()`에서 호출한다. 확인된 동작은 파일 대화상자 같은 블로킹 호출을 고려해 `EndPopup` 이후 실행한다.
+  - **적용**: VFX·파티클 새로 만들기·열기(메뉴·퀵액세스 8곳), 스프라이트 열기(메뉴·퀵액세스)와 캔버스 드롭, 타임라인 열기(메뉴·퀵액세스)와 "엔티티 동기화"의 타임라인 로드 분기. 빈 상태의 열기·새로 만들기 버튼과 로드 실패 시 내부 새 문서 생성은 교체할 문서가 없어 제외했다. 지연 실행 람다는 드롭 경로·타임라인 경로를 값으로 캡처한다.
+  - **스프라이트 정리**: 복사돼 있던 열기 코드 3곳을 `OpenTextureDialog()`로 합치고 하드코딩 필터 문구를 `FileDialog.ImageFiles`로 바꿨다. 두 드롭 페이로드 처리도 하나로 합쳤다.
+  - **로캘**: `Editor.csv`에 `ResourceEditor.DiscardTitle`, `DiscardMessage`, `DiscardContinue`.
+  - 참고: 사용자 적용 과정에서 `ResourceEditorInterface.cpp`의 `BEGIN(Editor)`/`END`가 제거됐다. 프로젝트의 `using namespace` 설정으로 빌드되며(Editor.exe 13:22 빌드 확인), 다른 소스와 같은 형식이다.
+- **검증**: Editor 빌드와 생성 JSON 반영을 확인했다. 단계별 실행 확인 표(저장된 상태 즉시 실행, 미저장 시 모달·취소·계속, 드롭·동기화 경로, 언어 전환)의 결과는 보고받지 못했다. CTest 재실행 결과도 기록되지 않았다.
+- **잔여**:
+  - 3단계(선택): 애니메이터·그래프의 개별 확인 모달과 콘텐츠 브라우저의 알림 차단을 이 장치로 통합.
+  - 타임라인 "엔티티 동기화"의 모델만 바꾸는 분기(`SetTargetModel`)가 문서를 변경하는지는 확인하지 않았다.
+  - 리소스 편집기 기본 기능 기준(저장·`*`·교체 확인·닫기 필수, Undo 선택) 문서화와 Undo 범위 정리는 후속 작업이다.
+
 ### [2026-11-17] GraphPanel 미저장 변경 추적 (P1-A 잔여 해소)
 
 - **배경**: `GraphPanel::HasUnsavedResourceChanges()`가 항상 `false`여서 그래프 편집 내용이 창 제목 `*`, 앱 종료 확인 모달, 다른 에셋 열기 차단의 보호를 받지 못했다. 그래프 데이터를 바꾸는 호출은 패널 2개 파일에 30곳 가까이 흩어져 있고 일부는 결과를 `(void)`로 버려, 호출 지점마다 플래그를 세우는 방식은 누락 위험이 컸다. 또한 `Graph.Open` 단축키(Ctrl+O)는 메뉴와 달리 확인 없이 현재 그래프를 교체했다.

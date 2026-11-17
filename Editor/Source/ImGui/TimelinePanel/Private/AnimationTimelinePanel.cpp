@@ -233,7 +233,8 @@ namespace Editor
 		{
 			if (!timelineComp->timelinePath.empty())
 			{
-				LoadFromFile(timelineComp->timelinePath);
+				std::string path = timelineComp->timelinePath; // 모달 대기 중 엔티티가 삭제될 수 있으므로 값으로 보관
+				RunWithDiscardConfirmation([this, path = std::move(path)] { LoadFromFile(path); });
 				return;
 			}
 		}
@@ -648,7 +649,7 @@ namespace Editor
 	{
 		if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 		{
-			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) OpenTimelineFile();
+			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
 			if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("AnimationTimeline.Save"))) SaveTimelineFile();
 			ImGui::EndMenu();
 		}
@@ -690,7 +691,7 @@ namespace Editor
 	void AnimationTimelinePanel::DrawCustomQuickAccess()
 	{
 		EditorUI::ToolbarLayout toolbar;
-		if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "Timeline.OpenTimeline")) OpenTimelineFile();
+		if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "Timeline.OpenTimeline")) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
 		if (toolbar.Icon("Save", ICON_FA_FLOPPY_DISK, "Timeline.SaveTimeline")) SaveTimelineFile();
 
 		EditorUI::DrawTimelineTransport(toolbar, "Timeline", m_IsPlaying, m_IsLooping);

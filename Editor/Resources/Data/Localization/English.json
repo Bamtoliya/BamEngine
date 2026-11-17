@@ -2050,6 +2050,9 @@
         "Inspector.CurveKeys": "Keys ({})",
         "VFXEditor.RingTextureDefault": "(Ring texture default)",
         "Inspector.CurveEditHint": "Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.",
-        "VFXEditor.EditTrackProperties": "Edit Track Properties"
+        "VFXEditor.EditTrackProperties": "Edit Track Properties",
+        "ResourceEditor.DiscardTitle": "Unsaved Changes",
+        "ResourceEditor.DiscardMessage": "{} has unsaved changes. Continue without saving?",
+        "ResourceEditor.DiscardContinue": "Continue Without Saving"
     }
 }

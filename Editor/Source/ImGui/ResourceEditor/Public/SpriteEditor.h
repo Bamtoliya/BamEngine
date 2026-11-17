@@ -53,6 +53,7 @@ private:
 	std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SaveSlices();
 	bool GenerateAnimation(const SpriteAutoAnimParameters& params);
 	void LoadTextureAndSlices(const std::filesystem::path& path);
+	void OpenTextureDialog(); // 파일 대화상자로 텍스처를 골라 현재 문서를 교체한다. 확인은 호출부가 RunWithDiscardConfirmation으로 처리한다.
 	void FitView(float canvasW, float canvasH, float texW, float texH);
 
 private:

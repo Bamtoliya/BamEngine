@@ -1,7 +1,5 @@
-#include "ResourceEditorInterface.h"
+﻿#include "ResourceEditorInterface.h"
 #include "IconsFontAwesome7.h"
-
-BEGIN(Editor)
 
 string ResourceEditorInterface::BuildResourceWindowTitle() const
 {
@@ -39,7 +37,11 @@ void ResourceEditorInterface::Draw()
         m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
     }
     OnResourceWindowVisibility(visible);
-    if (visible) DrawResourceFrame();
+    if (visible)
+    {
+        DrawResourceFrame();
+        DrawDiscardConfirmation();
+    }
     ImGui::End();
     AfterResourceWindow();
 }
@@ -84,4 +86,42 @@ void ResourceEditorInterface::DrawCopyResourcePath()
         ImGui::SetClipboardText(WStrToStr(m_TargetResourcePath.wstring()).c_str());
 }
 
-END
+void ResourceEditorInterface::RunWithDiscardConfirmation(std::function<void()> action)
+{
+    if (!action) return;
+    if (!HasUnsavedResourceChanges())
+    {
+        action();
+        return;
+    }
+    // 메뉴 안에서는 OpenPopup의 ID 범위가 달라지므로 여기서는 보관만 하고 창 범위에서 모달을 연다.
+    m_PendingDiscardAction = std::move(action);
+}
+
+void ResourceEditorInterface::DrawDiscardConfirmation()
+{
+    if (!m_PendingDiscardAction) return;
+
+    const auto title = LOCAL("ResourceEditor.DiscardTitle") + "###ResourceDiscardConfirm";
+    if (!ImGui::IsPopupOpen(title.c_str())) ImGui::OpenPopup(title.c_str());
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    const auto targetName = m_TargetResourcePath.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(m_TargetResourcePath.filename().wstring());
+    ImGui::TextUnformatted(LOCAL_FMT("ResourceEditor.DiscardMessage", targetName).c_str());
+    ImGui::Spacing();
+
+    const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "ResourceEditor.DiscardContinue", true, true } };
+    const int choice = EditorUI::DialogButtonBar("ResourceDiscardActions", actions, IM_ARRAYSIZE(actions));
+
+    std::function<void()> confirmed;
+    if (choice == 0 || choice == 1)
+    {
+        if (choice == 1) confirmed = std::move(m_PendingDiscardAction);
+        m_PendingDiscardAction = nullptr;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+
+    // 파일 대화상자처럼 블로킹하는 동작은 모달 범위를 벗어난 뒤 실행한다.
+    if (confirmed) confirmed();
+}

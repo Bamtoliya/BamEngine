@@ -55,6 +55,14 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	LoadTextureAndSlices(assetPath);
 }
 
+void SpriteEditor::OpenTextureDialog()
+{
+	std::wstring selectedPath;
+	const std::vector<FileDialogFilter> filters{ { StrToWStr(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } };
+	if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::SpriteOpen))
+		SetTargetResource(selectedPath);
+}
+
 void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
 {
 	m_Slices.clear();
@@ -217,13 +225,7 @@ void SpriteEditor::DrawCustomToolbar()
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
 		if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str()))
-		{
-			std::wstring selectedPath;
-			if (FileDialogs::OpenFileDialog(selectedPath, { { L"Image / Sprite Files", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } }, L"", EFileDialogContext::SpriteOpen))
-			{
-				SetTargetResource(selectedPath);
-			}
-		}
+			RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_CSTR("SpriteEditor.ApplySlices"), nullptr, false, !m_Slices.empty()))
 		{
@@ -266,13 +268,7 @@ void SpriteEditor::DrawCustomQuickAccess()
 {
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Button("SpriteEditor.OpenTexture", ICON_FA_FOLDER_OPEN, "SpriteEditor.OpenTexture"))
-	{
-		std::wstring selectedPath;
-		if (FileDialogs::OpenFileDialog(selectedPath, { { L"Image / Sprite Files", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } }, L"", EFileDialogContext::SpriteOpen))
-		{
-			SetTargetResource(selectedPath);
-		}
-	}
+		RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 
 	ImGui::BeginDisabled(m_Slices.empty());
 	if (toolbar.Button("SpriteEditor.ApplySlices", ICON_FA_FLOPPY_DISK, "SpriteEditor.ApplySlices"))
@@ -459,13 +455,7 @@ void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
 		const float btnH = 36.0f;
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - btnW) * 0.5f, canvasPos.y + canvasSize.y * 0.5f - btnH));
 		if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str(), ImVec2(btnW, btnH)))
-		{
-			std::wstring selectedPath;
-			if (FileDialogs::OpenFileDialog(selectedPath, { { L"Image / Sprite Files", L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } }, L"", EFileDialogContext::SpriteOpen))
-			{
-				SetTargetResource(selectedPath);
-			}
-		}
+			OpenTextureDialog();
 
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - 320.0f) * 0.5f, canvasPos.y + canvasSize.y * 0.5f + 12.0f));
 		ImGui::TextDisabled("%s %s", ICON_FA_ARROW_DOWN, LOCAL_CSTR("TilePalette.NoSprites"));
@@ -474,23 +464,13 @@ void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
 	// 캔버스 영역에서 에셋 드래그 앤 드롭 수신
 	if (ImGui::BeginDragDropTarget())
 	{
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+		const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM");
+		if (!payload) payload = ImGui::AcceptDragDropPayload("ASSET_PATH");
+		if (payload)
 		{
-			const wchar_t* pathStr = static_cast<const wchar_t*>(payload->Data);
-			std::filesystem::path droppedPath(pathStr);
+			const std::filesystem::path droppedPath(static_cast<const wchar_t*>(payload->Data));
 			if (IsSupported(droppedPath))
-			{
-				SetTargetResource(droppedPath);
-			}
-		}
-		else if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH"))
-		{
-			const wchar_t* pathStr = static_cast<const wchar_t*>(payload->Data);
-			std::filesystem::path droppedPath(pathStr);
-			if (IsSupported(droppedPath))
-			{
-				SetTargetResource(droppedPath);
-			}
+				RunWithDiscardConfirmation([this, droppedPath] { SetTargetResource(droppedPath); });
 		}
 		ImGui::EndDragDropTarget();
 	}

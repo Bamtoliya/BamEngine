@@ -528,8 +528,8 @@ void VFXEditorPanel::DrawCustomToolbar()
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuNew").c_str(), nullptr)) NewEffect();
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuOpen").c_str(), nullptr)) OpenEffect();
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuNew").c_str(), nullptr)) RunWithDiscardConfirmation([this] { NewEffect(); });
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuOpen").c_str(), nullptr)) RunWithDiscardConfirmation([this] { OpenEffect(); });
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("CompositeTimeline.Save"), false, hasResource)) SaveEffect();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str(), nullptr, false, hasResource)) SaveEffectAs();
 		ImGui::Separator();
@@ -544,8 +544,8 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 	auto* effect = m_EffectHandle.Get();
 
 	EditorUI::ToolbarLayout toolbar;
-	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew")) NewEffect();
-	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen")) OpenEffect();
+	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew")) RunWithDiscardConfirmation([this] { NewEffect(); });
+	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen")) RunWithDiscardConfirmation([this] { OpenEffect(); });
 	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Save", ICON_FA_FLOPPY_DISK, "EditorCommon.Save");
 	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
 	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");

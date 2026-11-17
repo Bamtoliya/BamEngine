@@ -375,9 +375,9 @@ void ParticleEditorPanel::DrawCustomToolbar()
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
 		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuNew")))
-			NewEffect();
+			RunWithDiscardConfirmation([this] { NewEffect(); });
 		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuOpen")))
-			OpenEffect();
+			RunWithDiscardConfirmation([this] { OpenEffect(); });
 		ImGui::Separator();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Save"), false, hasResource && m_IsDirty))
 			SaveEffect();
@@ -403,10 +403,10 @@ void ParticleEditorPanel::DrawCustomQuickAccess()
 	EditorUI::ToolbarLayout toolbar;
 	// ── 파일 조작 ──
 	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew"))
-		NewEffect();
+		RunWithDiscardConfirmation([this] { NewEffect(); });
 
 	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen"))
-		OpenEffect();
+		RunWithDiscardConfirmation([this] { OpenEffect(); });
 
 	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Save", ICON_FA_FLOPPY_DISK, "EditorCommon.Save");
 	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");

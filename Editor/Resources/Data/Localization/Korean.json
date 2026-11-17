@@ -2050,6 +2050,9 @@
         "Inspector.CurveKeys": "키 {}개",
         "VFXEditor.RingTextureDefault": "(링 텍스처 기본값)",
         "Inspector.CurveEditHint": "키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.",
-        "VFXEditor.EditTrackProperties": "트랙 속성 편집"
+        "VFXEditor.EditTrackProperties": "트랙 속성 편집",
+        "ResourceEditor.DiscardTitle": "저장하지 않은 변경",
+        "ResourceEditor.DiscardMessage": "{}에 저장하지 않은 변경 내용이 있습니다. 저장하지 않고 계속할까요?",
+        "ResourceEditor.DiscardContinue": "저장하지 않고 계속"
     }
 }
