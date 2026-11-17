@@ -646,7 +646,7 @@ void AnimationTimelinePanel::DrawBoneHierarchyTree()
 				}
 			}
 
-			if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+			if (ImGui::IsItemHovered() && Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 			{
 				const vec3 bPos = GetSocketWorldPosition(boneNameStr, vec3(0.0f));
 				m_PreviewWidget.FocusTarget(bPos, 1.2f);
@@ -1511,7 +1511,9 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 			}
 			else if (notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX && !notify.VFXPath.empty())
 			{
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.7f, 1.0f), "[VFX] %s", Engine::WStrToStr(std::filesystem::path(Engine::StrToWStr(notify.VFXPath)).filename().wstring()).c_str());
+				const auto vfxPath = std::filesystem::path(Engine::StrToWStr(notify.VFXPath));
+				const auto vfxName = Engine::WStrToStr(vfxPath.filename().wstring());
+				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.7f, 1.0f), "%s", LOCAL_FMT("Timeline.VFXFile", vfxName).c_str());
 			}
 			ImGui::EndTooltip();
 		}
