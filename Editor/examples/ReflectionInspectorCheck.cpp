@@ -1,4 +1,4 @@
-#include "Engine_Includes.h"
+﻿#include "Engine_Includes.h"
 #include "ReflectionInspectorSupport.h"
 #include "ReflectionPropertyDrawer.h"
 #include "InputManager.h"
@@ -15,6 +15,7 @@
 #include <cstdint>
 #include "ResourcePicker.h"
 #include "PlatformPath.h"
+#include "RectTransformComponent.h"
 
 namespace Editor::Detail
 {
@@ -191,8 +192,12 @@ namespace
         Engine::NameComponent name;
         const auto* lightType = registry.FindType<Engine::LightComponent>();
         const auto* nameType = registry.FindType<Engine::NameComponent>();
+        Engine::RectTransformComponent rect;
+        const auto* rectType = registry.FindType<Engine::RectTransformComponent>();
+        Editor::ReflectionObjectEditSettings anchorOnly;
+        anchorOnly.HiddenProperties = { "sizeDelta", "pivot", "scale", "rotation" };
         const auto* enabled = lightType ? lightType->FindProperty("IsEnabled") : nullptr;
-        if (!enabled || !nameType) return false;
+        if (!enabled || !nameType || !rectType) return false;
         auto& io = ImGui::GetIO();
         ImVec2 clickPoint;
         float expandedHeight = 0.0f;
@@ -207,8 +212,7 @@ namespace
             if (categories)
             {
                 clickPoint = ImVec2(35.0f, 48.0f);
-                Editor::ReflectionPropertyDrawer::DrawPropertyTable(*nameType,
-                    reflection::ObjectView::From(name), &registry);
+                Editor::ReflectionPropertyDrawer::DrawPropertyTable(*rectType, reflection::ObjectView::From(rect), &registry, &anchorOnly);
                 expandedHeight = ImGui::GetCursorScreenPos().y - 40.0f;
             }
             else

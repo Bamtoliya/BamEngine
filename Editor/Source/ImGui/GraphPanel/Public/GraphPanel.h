@@ -87,6 +87,7 @@ private:
 		std::vector<Engine::GraphLinkId> SelectedLinks;
 		std::vector<Engine::GraphDiagnostic> Diagnostics;
 		std::uint64_t NextId = 1;
+		std::uint64_t SavedRevision = 0;
 		Engine::GraphNodeId PendingSelection = 0;
 		bool ResetContext = false;
 		bool RestoreSelection = false;
@@ -106,12 +107,14 @@ private:
 	void DrawFileToolbar(EditorUI::ToolbarLayout& toolbar);
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
-	virtual bool HasUnsavedResourceChanges() const override { return false; }
+	virtual bool HasUnsavedResourceChanges() const override { return IsDocumentDirty(m_Logic) || IsDocumentDirty(m_Shader); }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	bool LoadDocument(const std::filesystem::path& path);
 	void SaveDocument(bool saveAs);
-	void OpenDocument();
+	void RequestOpenDocument(); // 미저장 변경이 있으면 교체 확인 후 열기
 private:
+	void OpenDocument(); // 확인 없이 파일 대화상자를 연다. RequestOpenDocument와 확인 모달만 호출한다.
+	static bool IsDocumentDirty(const GraphDocument& document) { return document.Data.GetRevision() != document.SavedRevision; }
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
 	void DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar);
 	void UpdateLiveDebugging();

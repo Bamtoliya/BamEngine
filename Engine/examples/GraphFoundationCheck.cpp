@@ -150,6 +150,8 @@ void CheckLogicDocument(const GraphRegistry& registry)
 	Accept(graph.SetInputValue(registry, { number, "value" }, 2.0f));
 	Accept(graph.SetInputValue(registry, { sum, "b" }, 3.0f));
 	Accept(graph.CanConnect(registry, { number, "result" }, { sum, "a" }));
+	const auto revisionBeforePreview = graph.GetRevision();
+	Expect(graph.GetRevision() == revisionBeforePreview, "Connection preview changed the revision.");
 	Expect(graph.GetLinks().empty(), "Connection preview changed the document.");
 	Accept(graph.Connect(registry, { number, "result" }, { sum, "a" }));
 	Accept(graph.Connect(registry, { sum, "result" }, { greater, "a" }));
@@ -162,6 +164,7 @@ void CheckLogicDocument(const GraphRegistry& registry)
 	Expect(graph.GetNodes().size() == 6 && graph.GetLinks().size() == 6, "Unexpected document topology.");
 
 	const auto before = graph.GetLinks().size();
+	const auto revisionBeforeRejects = graph.GetRevision();
 	Reject(graph.Connect(registry, { sum, "result" }, { result, "value" }), EGraphError::DuplicateLink);
 	Reject(graph.Connect(registry, { number, "result" }, { result, "value" }), EGraphError::InputAlreadyConnected);
 	Reject(graph.Connect(registry, { sum, "a" }, { number, "value" }), EGraphError::InvalidDirection);
@@ -175,9 +178,13 @@ void CheckLogicDocument(const GraphRegistry& registry)
 	Reject(graph.Connect(registry, { sum, "unknown" }, { result, "value" }), EGraphError::PinNotFound);
 	Reject(graph.Connect(registry, { 0, "result" }, { result, "value" }), EGraphError::NodeNotFound);
 	Expect(graph.GetLinks().size() == before, "Rejected connection changed the document.");
+	Expect(graph.GetRevision() == revisionBeforeRejects, "Rejected edits changed the revision.");
 
 	Accept(graph.Disconnect(data.Link));
+	Expect(graph.GetRevision() > revisionBeforeRejects, "Accepted edit did not change the revision.");
+	const auto revisionAfterDisconnect = graph.GetRevision();
 	Reject(graph.Disconnect(data.Link), EGraphError::LinkNotFound);
+	Expect(graph.GetRevision() == revisionAfterDisconnect, "Failed disconnect changed the revision.");
 	const auto missing = graph.Validate(registry);
 	Expect(missing.size() == 1 && missing[0].Code == EGraphError::MissingRequiredInput &&
 		missing[0].Node == result && missing[0].Pin == "value", "Missing input was not located.");
@@ -197,6 +204,11 @@ void CheckLogicDocument(const GraphRegistry& registry)
 	Reject(graph.ResetInputValue(registry, { start, "exec" }), EGraphError::InvalidDirection);
 	Expect(std::get<float>(graph.FindNode(number)->InputValues.at("value")) == 2.0f,
 		"Rejected value replaced an existing override.");
+
+	const auto revisionBeforeSameValue = graph.GetRevision();
+	Accept(graph.SetInputValue(registry, { number, "value" }, 2.0f));
+	Accept(graph.ResetInputValue(registry, { sum, "a" }));
+	Expect(graph.GetRevision() == revisionBeforeSameValue, "No-op input edits changed the revision.");
 
 	// Definitions and defaults remain shared descriptions; document overrides and edits are independent.
 	Graph copy = graph;

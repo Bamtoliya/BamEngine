@@ -1211,7 +1211,7 @@ void EditorActionRegistry::RegisterAll()
         .DefaultChord = ShortcutChord(Engine::EKeyCode::O, EModifierKey::Ctrl),
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel())
-                gp->OpenDocument();
+                gp->RequestOpenDocument();
         }
         });
     sm.RegisterAction({

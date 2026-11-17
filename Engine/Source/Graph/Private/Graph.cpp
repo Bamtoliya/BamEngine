@@ -1,4 +1,4 @@
-#include "Graph.h"
+﻿#include "Graph.h"
 #include "GraphValue.h"
 #include <unordered_set>
 #include <utility>
@@ -21,6 +21,7 @@ GraphDiagnostic Graph::AddNode(const GraphRegistry& registry, const std::string&
 	const auto id = m_NextNodeId;
 	m_Nodes.push_back({ id, type, {} });
 	++m_NextNodeId;
+	++m_Revision;
 	return { EGraphError::None, id, {}, 0, {} };
 }
 
@@ -30,6 +31,7 @@ GraphDiagnostic Graph::RemoveNode(GraphNodeId id)
 		return { EGraphError::NodeNotFound, id, {}, 0, "Node does not exist." };
 	std::erase_if(m_Links, [&](const GraphLink& link) { return link.From.Node == id || link.To.Node == id; });
 	std::erase_if(m_Nodes, [&](const GraphNode& node) { return node.Id == id; });
+	++m_Revision;
 	return {};
 }
 
@@ -121,6 +123,7 @@ GraphDiagnostic Graph::Connect(const GraphRegistry& registry, GraphPinReference 
 	const auto id = m_NextLinkId;
 	m_Links.push_back({ id, std::move(from), std::move(to) });
 	++m_NextLinkId;
+	++m_Revision;
 	return { EGraphError::None, 0, {}, id, {} };
 }
 
@@ -129,6 +132,7 @@ GraphDiagnostic Graph::Disconnect(GraphLinkId id)
 	const auto count = std::erase_if(m_Links, [&](const GraphLink& link) { return link.Id == id; });
 	if (count == 0)
 		return { EGraphError::LinkNotFound, 0, {}, id, "Link does not exist." };
+	++m_Revision;
 	return {};
 }
 
@@ -143,11 +147,15 @@ GraphDiagnostic Graph::SetInputValue(const GraphRegistry& registry, GraphPinRefe
 		return { EGraphError::InvalidDefault, input.Node, input.Pin, 0, "Default value must be finite and exactly typed." };
 	for (auto& node : m_Nodes)
 	{
-		if (node.Id == input.Node)
+		if (node.Id != input.Node) continue;
+		// 같은 값을 다시 쓰는 것은 수정이 아니다. (주석 크기 동기화 등 반복 쓰기에서 미저장 표시가 켜지지 않도록)
+		const auto found = node.InputValues.find(input.Pin);
+		if (found == node.InputValues.end() || found->second != value)
 		{
 			node.InputValues.insert_or_assign(input.Pin, std::move(value));
-			break;
+			++m_Revision;
 		}
+		break;
 	}
 	return {};
 }
@@ -159,8 +167,10 @@ GraphDiagnostic Graph::ResetInputValue(const GraphRegistry& registry, GraphPinRe
 	if (!result.Succeeded()) return result;
 	if (pin->Direction != EGraphPinDirection::Input || pin->Type == EGraphPinType::Execution)
 		return { EGraphError::InvalidDirection, input.Node, input.Pin, 0, "Only data inputs have default values." };
+	std::size_t erased = 0;
 	for (auto& node : m_Nodes)
-		if (node.Id == input.Node) node.InputValues.erase(input.Pin);
+		if (node.Id == input.Node) erased += node.InputValues.erase(input.Pin);
+	if (erased > 0) ++m_Revision;
 	return {};
 }
 
@@ -263,6 +273,7 @@ GraphDiagnostic Graph::ImportData(const GraphRegistry& registry, const GraphData
 	m_Domain = candidate.m_Domain;
 	m_NextNodeId = candidate.m_NextNodeId;
 	m_NextLinkId = candidate.m_NextLinkId;
+	++m_Revision;
 	return {};
 }
 
@@ -315,6 +326,7 @@ GraphDiagnostic Graph::AddVariable(GraphRegistry& registry, GraphVariable variab
 
 	m_Variables.push_back(std::move(variable));
 	RegisterVariableNodes(registry);
+	++m_Revision;
 	return {};
 }
 
@@ -328,6 +340,7 @@ GraphDiagnostic Graph::RemoveVariable(GraphRegistry& registry, const std::string
 
 	m_Variables.erase(it, m_Variables.end());
 	RegisterVariableNodes(registry);
+	++m_Revision;
 	return {};
 }
 
@@ -374,5 +387,6 @@ Graph::ReconciliationReport Graph::Reconcile(const GraphRegistry& registry)
 			}
 			return false;
 		});
+	if (report.RemovedLinks + report.RemovedValues + report.InjectedDefaults > 0) ++m_Revision;
 	return report;
 }

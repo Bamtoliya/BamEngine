@@ -20,6 +20,7 @@ namespace Engine
 		std::span<const GraphNode> GetNodes() const { return m_Nodes; }
 		std::span<const GraphLink> GetLinks() const { return m_Links; }
 		std::span<const GraphVariable> GetVariables() const { return m_Variables; }
+		std::uint64_t GetRevision() const { return m_Revision; }
 		const GraphNode* FindNode(GraphNodeId id) const;
 		const GraphVariable* FindVariable(const std::string& name) const;
 
@@ -56,6 +57,7 @@ namespace Engine
 		EGraphDomain m_Domain;
 		GraphNodeId m_NextNodeId = 1;
 		GraphLinkId m_NextLinkId = 1;
+		std::uint64_t m_Revision = 0;
 		std::vector<GraphNode> m_Nodes;
 		std::vector<GraphLink> m_Links;
 		std::vector<GraphVariable> m_Variables;

@@ -2,6 +2,25 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] GraphPanel 미저장 변경 추적 (P1-A 잔여 해소)
+
+- **배경**: `GraphPanel::HasUnsavedResourceChanges()`가 항상 `false`여서 그래프 편집 내용이 창 제목 `*`, 앱 종료 확인 모달, 다른 에셋 열기 차단의 보호를 받지 못했다. 그래프 데이터를 바꾸는 호출은 패널 2개 파일에 30곳 가까이 흩어져 있고 일부는 결과를 `(void)`로 버려, 호출 지점마다 플래그를 세우는 방식은 누락 위험이 컸다. 또한 `Graph.Open` 단축키(Ctrl+O)는 메뉴와 달리 확인 없이 현재 그래프를 교체했다.
+- **변경 사항**:
+  - **`Engine::Graph` 수정 카운터** (`Graph.h/.cpp`): `GetRevision()`/`m_Revision`. 데이터를 바꾸는 유일한 통로인 멤버 함수의 성공 경로에서만 증가한다(`AddNode`, `RemoveNode`, `Connect`, `Disconnect`, `ImportData`, `AddVariable`, `RemoveVariable`). `SetInputValue`는 기존 값과 다를 때만, `ResetInputValue`는 실제로 지운 값이 있을 때만, `Reconcile`은 정리 항목이 있을 때만 증가한다(주석 크기 동기화 같은 반복 쓰기에서 미저장 표시가 켜지지 않도록).
+  - **`GraphPanel`** (`GraphPanel.h/.cpp`): `GraphDocument::SavedRevision`을 저장 성공 시와 로드 시(문서 교체 직전) 기록한다. `HasUnsavedResourceChanges()`는 Logic·Shader 중 하나라도 `GetRevision() != SavedRevision`이면 true다. 저장 실패 시에는 갱신하지 않아 미저장 표시가 유지된다.
+  - **열기 확인 통일**: 메뉴와 `Graph.Open` 단축키(`EditorActionRegistry.cpp`)가 `RequestOpenDocument()`를 거친다. 확인 조건을 "그래프가 비어 있지 않음"에서 "어느 도메인이든 미저장"으로 바꿨다(열 파일의 도메인에 따라 현재 화면이 아닌 문서가 교체될 수 있으므로). `OpenDocument()`는 private으로 옮겨 확인 우회 경로를 막았다.
+  - **테스트**: `GraphFoundationCheck`에 연결 미리보기·거부된 편집·실패한 연결 해제·같은 값 쓰기·오버라이드 없는 초기화가 revision을 바꾸지 않고, 성공한 편집은 바꾸는지 검사를 추가했다.
+  - **`ReflectionInspectorCheck` 갱신**: `163f5b08`(CATEGORY 없는 속성은 머리글 없이 맨 위에 표시)에서 깨진 카테고리 접힘 검사를 `RectTransformComponent`의 앵커 카테고리만 남겨(`HiddenProperties`) 검사하도록 바꿨다. 이번 Graph 변경과는 무관한 기존 실패다.
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`)**:
+  - 전체 빌드 후 CTest 38/38 통과.
+  - 에디터: 미저장 상태에서 메뉴 열기·Ctrl+O 모두 교체 확인 모달 표시, 콘텐츠 브라우저로 다른 그래프를 열면 공통 `ResourceEditor.OpenBlocked` 알림으로 차단.
+  - 편집 종류별 `*` 표시, 저장 후 해제, 종료 모달 표시, 다른 도메인 확인은 별도로 보고받지 못했다.
+  - 참고: Visual Studio 빌드(`x64-debug`)에서 `--target GraphFoundationCheck`만 빌드했을 때 다른 그래프 검사 4개가 실패했다. `Graph` 레이아웃 변경 전 실행 파일이 새 `Engine.dll`과 함께 실행된 재빌드 누락으로, 전체 빌드 후 해소됐다.
+- **잔여**:
+  - 콘텐츠 브라우저 경로는 모달 없이 알림으로만 차단한다(모든 리소스 편집기 공통 정책).
+  - 노드 위치와 주석 텍스트(`CommentTexts`)는 `GraphData`에 포함되지 않아 저장되지 않으며, 이것만 바꾸면 미저장 표시도 켜지지 않는다. 로드 시 노드는 3열 격자로 재배치되고 주석은 "Comment"로 돌아간다.
+  - 모듈 핫리로드로 `Reconcile`이 값·링크를 정리하면 미저장 표시가 켜진다(정리된 내용을 저장하도록 하는 의도된 동작).
+
 ### [2026-11-17] VFX 트레일 연속 스트립 렌더링, 정렬 모드, 트랙 인스펙터 Undo
 
 - **배경**:

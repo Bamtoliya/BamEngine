@@ -189,10 +189,7 @@ void GraphPanel::DrawCustomToolbar()
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), sm.GetShortcutHint("Graph.Open")))
-		{
-			if (GetDocument().Data.GetNodes().empty()) OpenDocument();
-			else m_ConfirmOpenRequested = true;
-		}
+			RequestOpenDocument();
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), sm.GetShortcutHint("Graph.Save")))
 			SaveDocument(false);
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.SaveAs").c_str(), sm.GetShortcutHint("Graph.SaveAs")))
@@ -327,7 +324,11 @@ void GraphPanel::SaveDocument(bool saveAs)
 	document.FileResult = SaveGraphJson(path, document.Data, m_Registry,
 		reflection.GetRegistry(), reflection.GetPropertyCodecs());
 
-	if (document.FileResult.Succeeded()) document.FilePath = std::move(path);
+	if (document.FileResult.Succeeded())
+	{
+		document.FilePath = std::move(path);
+		document.SavedRevision = document.Data.GetRevision();
+	}
 }
 
 bool GraphPanel::IsSupported(const std::filesystem::path& assetPath) const
@@ -409,6 +410,7 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 	}
 
 	auto& document = GetDocument();
+	candidate.SavedRevision = candidate.Data.GetRevision(); // 방금 읽은 내용이 저장 기준이다
 	std::swap(document, candidate);
 	document.Context = freshContext;
 	if (candidate.Context) ed::DestroyEditor(candidate.Context);
@@ -424,6 +426,13 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 	m_FocusNodeSearch = false;
 	m_OpenNodePopup = false;
 	return true;
+}
+
+void GraphPanel::RequestOpenDocument()
+{
+	// 어느 도메인이든 미저장이면 확인한다. 열 파일의 도메인에 따라 현재 화면이 아닌 쪽 문서가 교체될 수 있다.
+	if (HasUnsavedResourceChanges()) m_ConfirmOpenRequested = true;
+	else OpenDocument();
 }
 
 void GraphPanel::OpenDocument()
