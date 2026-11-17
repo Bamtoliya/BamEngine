@@ -120,6 +120,10 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 }
 EResult Resource::Reload(const std::filesystem::path& filePath)
 {
+	// 키·경로는 ResourceManager 등록과 묶인 런타임 식별자이므로 파일 내용으로 바꾸지 않는다.
+	const wstring identityKey = m_Key;
+	const wstring identityPath = m_Path;
+
 	const auto& storedPath = m_Path.empty() ? m_Key : m_Path;
 	auto targetPath = filePath.empty() ? std::filesystem::path(storedPath) : filePath;
 
@@ -144,6 +148,8 @@ EResult Resource::Reload(const std::filesystem::path& filePath)
 			{
 				stage = "deserialize resource";
 				result = ReadArchive(ar);
+				m_Key = identityKey;
+				m_Path = identityPath;
 			}
 
 			const auto path = WStrToStr(targetPath.wstring());

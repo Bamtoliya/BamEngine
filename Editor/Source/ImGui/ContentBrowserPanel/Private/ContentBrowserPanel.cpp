@@ -1901,6 +1901,17 @@ filesystem::path ContentBrowserPanel::GenerateUniqueAssetPath(const filesystem::
 	return candidate;
 }
 
+namespace
+{
+	// 새 에셋 파일에 프로젝트 상대 경로를 기록한다. 불러올 때 로더가 다시 지정하므로 파일 값은 참고용이다.
+	void AssignNewAssetIdentity(Engine::Resource& resource, const filesystem::path& outputPath)
+	{
+		const wstring relativePath = Engine::NormalizePath(Engine::PlatformPath::ToProjectRelative(outputPath).wstring());
+		resource.SetKey(relativePath);
+		resource.SetPath(relativePath);
+	}
+}
+
 void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
 {
 	const filesystem::path outputPath = GenerateUniqueAssetPath(path, L"NewMaterial", L".bammat.json");
@@ -1910,6 +1921,7 @@ void ContentBrowserPanel::CreateEmptyMaterial(const filesystem::path& path)
 		return;
 
 	auto& resourceManager = ResourceManager::Get();
+	AssignNewAssetIdentity(*material, outputPath);
 	const EResult result = resourceManager.SaveToJsonFile(material, outputPath.wstring());
 	resourceManager.DestroyResource(material);
 
@@ -1939,6 +1951,7 @@ void ContentBrowserPanel::CreateEmptyMaterialInstance(const filesystem::path& pa
 	if (!instance)
 		return;
 
+	AssignNewAssetIdentity(*instance, outputPath);
 	const EResult result = rm.SaveToJsonFile(instance, outputPath.wstring());
 	rm.DestroyResource(instance);
 
