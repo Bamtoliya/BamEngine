@@ -18,6 +18,7 @@ private:
 public:
     static KinematicCharacterSystem* Create(void* arg = nullptr);
     virtual void Free() override;
+    virtual void OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
     virtual void OnFixedUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
 
 public:

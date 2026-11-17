@@ -86,11 +86,16 @@ namespace Engine
             if (arm)
             {
                 vec2 mouseDelta(0.0f);
-                if (!ctrl.RequireRightClickToRotate)
+                const bool isOrbitHeld = input.IsActionHeld("Gameplay", "OrbitCamera") || input.IsMouseButtonPressed(EMouseButton::Right);
+                const bool canRotate = !ctrl.RequireRightClickToRotate || isOrbitHeld;
+                if (canRotate)
+                {
                     mouseDelta = input.GetActionMapMouseDelta("Gameplay");
-                else if (input.IsActionHeld("Gameplay", "OrbitCamera"))
-                    mouseDelta = input.GetMouseDelta();
-
+                    if (glm::length2(mouseDelta) <= 1.0e-6f)
+                    {
+                        mouseDelta = input.GetMouseDelta();
+                    }
+                }
                 if (glm::length(mouseDelta) > 0.0001f)
                 {
                     arm->Yaw += mouseDelta.x * ctrl.MouseSensitivity;

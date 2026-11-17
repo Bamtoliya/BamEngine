@@ -96,33 +96,52 @@ namespace Engine
             const vec3 forward = armRot * vec3(0.0f, 0.0f, 1.0f);
             const vec3 armDir = -forward; // 후방 방향
 
-            // 3. 벽/장애물 충돌 검사 (Collision Probe)
+            // 3. 벽/장애물 충돌 검사 (Collision Probe: 다중 레이캐스트로 모서리 관통 방지)
             f32 targetDistance = arm.TargetArmLength;
-
             if (arm.DoCollisionTest && arm.TargetArmLength > 0.01f)
             {
-                Ray probeRay(targetWorldPos, armDir);
+                const vec3 armRight = armRot * vec3(1.0f, 0.0f, 0.0f);
+                const vec3 armUp = armRot * vec3(0.0f, 1.0f, 0.0f);
+                const f32 probeOffset = arm.ProbeRadius * 0.7f;
+                // 중심 레이 + 상하좌우 4방향 오프셋 레이 (카메라 구체 볼륨 모사)
+                const vec3 probeOrigins[5] = {
+                    targetWorldPos,
+                    targetWorldPos + armRight * probeOffset,
+                    targetWorldPos - armRight * probeOffset,
+                    targetWorldPos + armUp * probeOffset,
+                    targetWorldPos - armUp * probeOffset
+                };
+                f32 closestHitDistance = arm.TargetArmLength;
                 RaycastQuery query{};
                 query.maxDistance = arm.TargetArmLength;
                 query.layerMask = arm.CollisionMask;
                 query.includeTrigger = false;
                 query.ignoreEntity = ignoreEntity;
-
-                SceneRaycastHit hit{};
-                if (PhysicsSystem::Raycast(scene, probeRay, hit, query) && hit.Hit.hasHit)
+                for (int i = 0; i < 5; ++i)
                 {
-                    targetDistance = glm::max(0.1f, hit.Hit.distance - arm.ProbeRadius);
+                    Ray probeRay(probeOrigins[i], armDir);
+                    SceneRaycastHit hit{};
+                    if (PhysicsSystem::Raycast(scene, probeRay, hit, query) && hit.Hit.hasHit)
+                    {
+                        const f32 hitDist = glm::max(arm.MinArmLength, hit.Hit.distance - arm.ProbeRadius);
+                        if (hitDist < closestHitDistance)
+                        {
+                            closestHitDistance = hitDist;
+                        }
+                    }
                 }
+                targetDistance = closestHitDistance;
             }
-
-            // 장애물에 부딪혀 거리가 줄어들 때는 즉시 당기고, 넓어질 때는 부드럽게 복귀
+            // 장애물에 부딪혀 거리가 줄어들 때는 벽 관통 방지를 위해 즉시 당기고,
+            // 장애물이 사라져 넓어질 때는 부드럽게 LERP 복귀
             if (targetDistance < arm.CurrentArmLength)
             {
                 arm.CurrentArmLength = targetDistance;
             }
             else
             {
-                arm.CurrentArmLength = glm::mix(arm.CurrentArmLength, targetDistance, glm::clamp(arm.CameraLagSpeed * dt, 0.0f, 1.0f));
+                const f32 zoomBlend = glm::clamp(arm.ZoomLagSpeed * dt, 0.0f, 1.0f);
+                arm.CurrentArmLength = glm::mix(arm.CurrentArmLength, targetDistance, zoomBlend);
             }
 
             // 4. 최종 카메라 위치 산출 (암 길이 + 소켓 오프셋)

@@ -5403,3 +5403,21 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 최우선 과제인 에셋 썸네일(P0)을 비롯하여 셰이더 컴파일/PSO(P1), 에셋 파생 데이터(DDC, P1), 지형/물리 쿠킹(P2), 비주얼 스크립팅 바이트코드(P2), 오디오 파형/폰트 아틀라스(P3)의 6대 영역 디스크 캐시 소요처를 체계적으로 분류.
   - 프로젝트 루트 기준 `<ProjectRoot>/.bam/cache/` 표준 레이아웃, 단일 진실의 원천(SSOT) 캐시 키 생성 규칙, 원자적 쓰기(`.tmp` -> `rename`), LRU 용량 제한 관리자, 3계층(VRAM LRU -> 디스크 128x128 PNG -> 온디맨드 렌더/디코드) 썸네일 파이프라인 설계를 포함하는 [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md) 신규 수립.
   - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) 및 [DevelopmentPriorities.md](DevelopmentPriorities.md)에 신규 계획 교차 참조 연결 반영.
+
+### [2026-11-17] 3인칭 KCC 물리 고도화 및 경사면 상호작용 구현 / 이슈 기록
+
+- **회전된 경사로(OBB) 캡슐 스윕 및 지면 안착 기하학 개선**:
+  - `SweepCharacter`에서 회전된 박스(`isRotated`)에 대해 외접 AABB 대신 `Collision::Sweep(charCap, direction, closestDist, localBox, colliderWorld, tempHit)`를 호출하여 실제 $30^\circ, 45^\circ, 60^\circ$ 경사면과의 정밀 OBB 충돌 검사를 지원했다.
+  - 경사 평면 기하학 공식($\vec{n} \cdot (C - P_{hit}) = R$) 기반의 `CalculateGroundContactY` 헬퍼 함수를 도입하여 Sweep과 Ray 접점 오프셋으로 인한 프레임 간 14cm 높이 요동(덜컹거림)을 원천 해소했다.
+- **완만한 경사면 접선 이동 및 틈새(Crevice) 슬라이딩**:
+  - 완만한 경사면($\le 45^\circ$) 이동 시 지면 법선 평면에 속도를 투영($\vec{v} - \vec{n}(\vec{v}\cdot\vec{n})$)하여 경사면을 따라 대각선으로 자연스럽게 오르내리도록 개선했다.
+  - 마주보는 두 벽($\vec{n}_1 \cdot \vec{n}_2 < -0.01$) 사이에 끼였을 때 골짜기 교선($\vec{d} = \vec{n}_1 \times \vec{n}_2$) 방향으로 이동 방향을 자동 정렬하여 1.0m 좁은 틈새 끼임 고착 현상을 해소했다.
+- **급경사면 미끄러짐 및 점프/평지 전환 안정화**:
+  - $60^\circ$ 경사로 등 한계 각도 초과 시 중력 투영 가속도(`slideAccel`)를 적용한 3차원 미끄러짐을 구현했다.
+  - 하향 스윕 시의 `(0, 1, 0)` 오염 법선 문제를 방지하기 위해 경사면(`raySlope > 5°`) 감지 시 순수 기하학적 레이캐스트를 최우선 채택하고, $75^\circ$ 이상을 커버하도록 레이 사거리(`rayDist ≈ 2.1m`)를 확장했다.
+  - 점프 상승 중(`Velocity.y > 0.05f`) 지면 재흡착 방지 가드를 추가하여 점프 궤적을 보장하고, 평지 전환 시 `glm::mix` 관성 감속 보간을 적용했다.
+- **최종 관측 현상 및 기술적 과제 기록 ([ThirdPersonCharacterSystemPlan.md](ThirdPersonCharacterSystemPlan.md))**:
+  - 1) 점프 정점 후 낙하 시 과도한 레이 사거리/스냅 마진으로 인한 공중 조기 흡착 현상.
+  - 2) $30^\circ$ 완만한 경사로 보행 시 발바닥이 경사면 안쪽으로 미세하게 파고드는 현상.
+  - 3) $45^\circ, 60^\circ$ 가파른 경사로 끝단에서 평지로 착지할 때 판자 두께 단차 및 급격한 수직 안착으로 인해 '탁' 하고 뚝 떨어지듯 바닥에 붙는 부자연스러움 관측.
+  - 후속 물리 튜닝 및 착지 완충(Soft Landing) 계획을 문서에 반영했다.

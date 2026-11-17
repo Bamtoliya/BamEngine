@@ -217,7 +217,8 @@ protected:
     uint32     m_DynamicBufferCursor = 0;
     uint32     m_ConstantBufferAlignment = 256;
 
-    static constexpr uint32 DYNAMIC_INSTANCE_BUFFER_SIZE = 65536 * 80; // 5MB (최대 65,536개 인스턴스)
+    // 동적 인스턴스/스킨드 본 링 버퍼 크기 (멀티 뷰포트 PIE + 섀도우 캐스케이드 지원: 20MB)
+    static constexpr uint32 DYNAMIC_INSTANCE_BUFFER_SIZE = 4 * 65536 * 80; // 20MB (최대 262,144개 인스턴스 또는 1,280회 스킨드 본 드로우)
     RHIBuffer* m_DynamicInstanceBuffers[MAX_SWAPCHAIN_BUFFERS] = { nullptr };
     uint32     m_DynamicInstanceBufferCursor = 0;
 protected:

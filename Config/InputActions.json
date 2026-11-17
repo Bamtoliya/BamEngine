@@ -8,6 +8,14 @@
                         "Type": "Button"
                     },
                     {
+                        "Id": "Sprint",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "OrbitCamera",
+                        "Type": "Button"
+                    },
+                    {
                         "Id": "MoveForward",
                         "Type": "Button"
                     },
@@ -30,12 +38,16 @@
                         "Key": "Space"
                     },
                     {
-                        "ActionId": "Jump",
-                        "Key": "J"
+                        "ActionId": "Sprint",
+                        "Key": "LShift"
                     },
                     {
-                        "ActionId": "Jump",
-                        "Key": "K"
+                        "ActionId": "Sprint",
+                        "Key": "RShift"
+                    },
+                    {
+                        "ActionId": "OrbitCamera",
+                        "Key": "Mouse:Right"
                     },
                     {
                         "ActionId": "MoveForward",

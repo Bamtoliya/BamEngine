@@ -44,6 +44,13 @@ namespace Engine
         PROPERTY(EDITABLE, RANGE(0.1, 50.0), DISPLAY_NAME("PROP_CAMERA_LAG_SPEED"))
             f32 CameraLagSpeed = 12.0f;
 
+        // 장애물 해제 시 카메라 암 길이 복귀 보간 속도
+        PROPERTY(EDITABLE, RANGE(1.0, 50.0), DISPLAY_NAME("PROP_ZOOM_LAG_SPEED"), ALLOW_MISSING)
+            f32 ZoomLagSpeed = 12.0f;
+        // 충돌 시 카메라 최소 허용 거리 (m)
+        PROPERTY(EDITABLE, RANGE(0.1, 5.0), DISPLAY_NAME("PROP_MIN_ARM_LENGTH"), ALLOW_MISSING)
+            f32 MinArmLength = 0.3f;
+
         // 상하 회전 각도 제한 (Pitch Min / Max)
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_MIN_PITCH"))
             f32 MinPitch = -75.0f;
