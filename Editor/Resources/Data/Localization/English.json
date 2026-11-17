@@ -2073,6 +2073,15 @@
         "Timeline.NoEmbeddedAnimation": "No Embedded Animation (Bind Pose)",
         "Timeline.DurationTooltip": "Adjust timeline duration for static models",
         "ModelImport.OverwriteMaterials": "Overwrite Existing Materials",
-        "Timeline.AddTrack": "Add Track"
+        "Timeline.AddTrack": "Add Track",
+        "EditorCommon.Cut": "Cut",
+        "ContentBrowser.CopyFilesResult": "Copied {}. Could not copy {}.",
+        "ContentBrowser.MoveFilesResult": "Moved {}. Could not move {}. Check references to moved assets.",
+        "ContentBrowser.FileCopy": "Copy Files",
+        "ContentBrowser.FileMove": "Move Files",
+        "ContentBrowser.FileDelete": "Delete Files",
+        "ContentBrowser.DeleteFilesConfirm": "Delete {} selected items? Check assets that reference them.",
+        "ContentBrowser.FileHistoryFailed": "The file operation could not complete. Check the log for the affected paths.",
+        "ContentBrowser.FileHistoryRollbackFailed": "Some files could not be restored. File history was cleared. Check the log and recovery folder."
     }
 }

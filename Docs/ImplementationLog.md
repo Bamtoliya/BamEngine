@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 콘텐츠 브라우저 파일 이력과 계층 다중 선택
+
+- 콘텐츠 브라우저의 공통 우클릭 메뉴에 복사·잘라내기·붙여넣기 아이콘과 묶음 삭제를 연결했다. X1/X2는 방문한 폴더를 탐색하며 경로 표시줄·폴더 타일·트리 이동을 같은 이력에 기록한다.
+- 로컬 Delete, Ctrl+Z/Y를 등록했다. 일괄 삭제·복사 Undo에서 복구 파일을 프로젝트 `.bam/content-browser-history/`에 보관한다. 붙여넣기와 폴더 드롭은 성공한 전송을 한 명령으로 기록한다. 파일과 씬 이력을 각각 유지한다.
+- 계층 트리의 박스 선택을 `SelectionManager`에 연결했다. 우클릭 및 Ctrl+D 복제에서 선택한 루트마다 원래 부모를 사용한다. 단축키 문맥은 패널 그리기 후 실제 포커스된 창에서 결정한다.
+- 사용자 실환경 확인에서 변경된 동작이 의도대로 동작하는 것으로 보고되었다. 개별 시나리오와 빌드 구성, CTest 결과는 제공되지 않았다.
+- `audit_localization.py --strict`와 `git diff --check`를 통과했다. [파일 작업과 계층 선택](ImGuiDevelopmentPlan.md#g-콘텐츠-브라우저-파일-작업과-계층-선택) · [파일 이력과 복구 정책](EditorUndoRedo.md#콘텐츠-브라우저-파일-이력)
+
 ### [2026-11-17] 스플리터 슬림화와 애니메이션·이펙트 타임라인 시각·조작 통일
 
 - **스플리터:** `ImGuiSplitter.h`에 `SplitterThickness`(2px)·`SplitterHoverExtend` 상수, 드래그 이동량을 돌려주는 `SplitterBar`, 자식 창 위에 겹쳐 놓는 `SplitterHandle`(FlattenChildren, 겹침 비허용)과 `DrawVerticalSplitterLine`을 추가했다. Animator 그래프·머티리얼·스프라이트·VFX·애니메이션 타임라인의 4px·8px 경계를 이 규격으로 바꿨다. 애니메이션 패널 상단 폭 계산의 `SameLine` 간격 누락(3→4)으로 생기던 8px 가로 넘침을 고쳤다.

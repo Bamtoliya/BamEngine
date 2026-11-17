@@ -378,7 +378,7 @@ void Editor::EntityHierarchyView::ReleaseFinishedDrag()
 }
 
 Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& scene,
-    std::span<const entt::entity> selected, entt::entity reveal, bool locked, std::string_view filter)
+    std::span<const entt::entity> selected, entt::entity reveal, bool locked, std::string_view filter, bool multiSelect)
 {
     ReleaseFinishedDrag();
     const auto& tree = GetEntityHierarchyTree(scene);
@@ -386,6 +386,12 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     auto& textCache = world.ctx().emplace<HierarchyTextCache>();
     std::erase_if(textCache.Entries, [&](const auto& item) { return !tree.Parents.contains(item.first); });
     EntityHierarchyAction action;
+    const bool selectableRows = multiSelect && !locked;
+    std::vector<entt::entity> nextSelection(selected.begin(), selected.end());
+    const auto selectionId = [](entt::entity entity)
+    {
+        return static_cast<ImGuiSelectionUserData>(entt::to_integral(entity));
+    };
 
     // --- 검색 필터링 및 조상 노드 수집 ---
     const bool isFiltering = !filter.empty();
@@ -464,10 +470,11 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 
             const auto& children = tree.Children.at(entity);
             const bool isCanvas = world.all_of<Engine::CanvasComponent>(entity);
-            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanFullWidth | ImGuiTreeNodeFlags_FramePadding;
+            const auto spanFlag = selectableRows ? ImGuiTreeNodeFlags_SpanAvailWidth : ImGuiTreeNodeFlags_SpanFullWidth;
+            auto flags = ImGuiTreeNodeFlags_OpenOnArrow | spanFlag | ImGuiTreeNodeFlags_FramePadding;
             if (children.empty()) flags |= ImGuiTreeNodeFlags_Leaf; // 자식이 없으면 리프 노드로 처리하여 > 화살표 숨김
             if (!isCanvas) flags |= ImGuiTreeNodeFlags_OpenOnDoubleClick;
-            if (std::ranges::find(selected, entity) != selected.end()) flags |= ImGuiTreeNodeFlags_Selected;
+            if (std::ranges::find(nextSelection, entity) != nextSelection.end()) flags |= ImGuiTreeNodeFlags_Selected;
             flags |= ImGuiTreeNodeFlags_NoTreePushOnOpen; // 자식은 평탄화된 줄 목록에서 따로 그린다
             PushEntityId(world, entity);
             if (row.Depth > 0) ImGui::Indent(indentStep * static_cast<float>(row.Depth));
@@ -536,18 +543,15 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
             else
             {
+                if (selectableRows)
+                    ImGui::SetNextItemSelectionUserData(selectionId(entity));
                 opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
                 syncOpen(opened);
                 ImGui::PopStyleColor();
             }
 
-            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen() && !locked)
-            {
-                auto& input = Engine::InputManager::Get();
+            if (!selectableRows && !locked && ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
                 action.Clicked = entity;
-                action.Toggle = input.IsCtrlPressed();
-                action.Range = input.IsShiftPressed();
-            }
             if (!locked && m_RenamingEntity != entity && isCanvas &&
                 ImGui::IsItemHovered() && !ImGui::IsItemToggledOpen() &&
                 Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
@@ -644,8 +648,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 }
                 ImGui::Separator();
                 // 6. 삭제
-                const bool isEntitySelected = std::find(selected.begin(), selected.end(), entity) != selected.end();
-                const size_t selectedCount = selected.size();
+                const bool isEntitySelected = std::ranges::find(nextSelection, entity) != nextSelection.end();
+                const size_t selectedCount = nextSelection.size();
                 std::string deleteLabel;
                 if (isEntitySelected && selectedCount > 1)
                     deleteLabel = Text("Hierarchy.DeleteSelectedEntities", "Delete selected entities") + " (" + std::to_string(selectedCount) + ")";
@@ -654,7 +658,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 if (ImGui::MenuItem((std::string(ICON_FA_TRASH " ") + deleteLabel).c_str(), ShortcutManager::Get().GetShortcutHint("Edit.Delete")))
                 {
                     if (isEntitySelected && selectedCount > 1)
-                        action.DeleteEntities.assign(selected.begin(), selected.end());
+                        action.DeleteEntities = nextSelection;
                     else
                         action.DeleteEntities.push_back(entity);
                 }
@@ -732,11 +736,65 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         };
     for (const auto root : tree.Roots) collect(collect, root, 0);
 
-    action.VisibleEntities.reserve(rows.size());
+    const auto findRow = [&](ImGuiSelectionUserData id)
+    {
+        return std::ranges::find_if(rows, [&](const auto& row) { return selectionId(row.Entity) == id; });
+    };
+
+    const auto applyRequests = [&](const ImGuiMultiSelectIO& io)
+    {
+        for (const auto& request : io.Requests)
+        {
+            if (request.Type == ImGuiSelectionRequestType_SetAll)
+            {
+                nextSelection.clear();
+                if (request.Selected)
+                    for (const auto& row : rows) nextSelection.push_back(row.Entity);
+            }
+            else if (request.Type == ImGuiSelectionRequestType_SetRange)
+            {
+                auto first = findRow(request.RangeFirstItem);
+                auto last = findRow(request.RangeLastItem);
+                if (first == rows.end() || last == rows.end())
+                    continue;
+
+                if (request.RangeDirection < 0)
+                    std::swap(first, last);
+
+                const int step = first <= last ? 1 : -1;
+                for (auto row = first;; row += step)
+                {
+                    const auto it = std::ranges::find(nextSelection, row->Entity);
+                    if (request.Selected && it == nextSelection.end())
+                        nextSelection.push_back(row->Entity);
+                    else if (!request.Selected && it != nextSelection.end())
+                        nextSelection.erase(it);
+
+                    if (row == last)
+                        break;
+                }
+            }
+        }
+    };
+
+    int selectionAnchorIndex = -1;
+    const float selectionGutter = ImGui::GetFontSize() * 0.75f;
+    if (selectableRows)
+    {
+        const auto flags = ImGuiMultiSelectFlags_ScopeWindow | ImGuiMultiSelectFlags_BoxSelect2d |
+            ImGuiMultiSelectFlags_ClearOnClickVoid | ImGuiMultiSelectFlags_SelectOnClickRelease |
+            ImGuiMultiSelectFlags_NoSelectAll;
+        const auto* io = ImGui::BeginMultiSelect(flags, static_cast<int>(nextSelection.size()), static_cast<int>(rows.size()));
+        applyRequests(*io);
+        const auto anchor = findRow(io->RangeSrcItem);
+        if (anchor != rows.end())
+            selectionAnchorIndex = static_cast<int>(anchor - rows.begin());
+        ImGui::Indent(selectionGutter);
+    }
+
     int revealIndex = -1, renameIndex = -1;
     for (int i = 0; i < static_cast<int>(rows.size()); ++i)
     {
-        action.VisibleEntities.push_back(rows[i].Entity);
         if (rows[i].Entity == reveal) revealIndex = i;
         if (rows[i].Entity == m_RenamingEntity) renameIndex = i;
     }
@@ -746,9 +804,17 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     clipper.Begin(static_cast<int>(rows.size()), ImGui::GetFrameHeight());
     if (revealIndex >= 0) clipper.IncludeItemByIndex(revealIndex);
     if (renameIndex >= 0) clipper.IncludeItemByIndex(renameIndex);
+    if (selectionAnchorIndex >= 0) clipper.IncludeItemByIndex(selectionAnchorIndex);
     while (clipper.Step())
         for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
             drawRow(rows[i], i);
+    if (selectableRows)
+    {
+        ImGui::Unindent(selectionGutter);
+        applyRequests(*ImGui::EndMultiSelect());
+        if (!std::ranges::equal(selected, nextSelection))
+            action.Selection = std::move(nextSelection);
+    }
     ImGui::PopStyleVar();
 
     if (isFiltering && matchingEntities.empty())

@@ -4,6 +4,8 @@
 #include "ContentBrowserPanel.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
+#include "ContentBrowserDragPayload.h"
+#include "PIEManager.h"
 #include "Editor_Macros.h"
 #include "EditorSettings.h"
 #include <stb_image.h>
@@ -218,6 +220,24 @@ void ContentBrowserPanel::Update(f32 dt)
 	}
 }
 
+void ContentBrowserPanel::DrawFolderDropTarget(const filesystem::path& directory)
+{
+	if (m_DragPaths.empty() || !ImGui::BeginDragDropTarget())
+		return;
+
+	if (CanTransferTo(directory))
+	{
+		const auto* payload = ImGui::AcceptDragDropPayload(ContentBrowser::MultipleItemsPayload);
+		if (!payload)
+			payload = ImGui::AcceptDragDropPayload(ContentBrowser::SingleItemPayload);
+
+		if (payload && payload->IsDelivery())
+			m_PendingFileDropDirectory = directory;
+	}
+
+	ImGui::EndDragDropTarget();
+}
+
 void ContentBrowserPanel::Draw()
 {
 	m_Focused = false;
@@ -246,7 +266,19 @@ void ContentBrowserPanel::Draw()
 	m_Focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
 	m_Hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
 
+	if (m_Hovered && m_RenamingPath.empty() && !ImGui::GetIO().WantTextInput &&
+		!ImGui::IsAnyItemActive() && !ImGui::GetDragDropPayload() &&
+		!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+	{
+		auto& input = InputManager::Get();
+		if (input.IsMouseButtonDown(EMouseButton::X1))
+			StepFolderHistory(false);
+		else if (input.IsMouseButtonDown(EMouseButton::X2))
+			StepFolderHistory(true);
+	}
+
 	FileConfilictPopup();
+	DrawFileDeletionConfirmation();
 
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
@@ -297,6 +329,12 @@ void ContentBrowserPanel::Draw()
 	if (ImGui::IsWindowAppearing()) m_NeedToExpandTree = true;
 	ImGui::End();
 	m_NeedToExpandTree = false;
+
+	if (!m_PendingFileDropDirectory.empty())
+	{
+		const auto directory = std::exchange(m_PendingFileDropDirectory, filesystem::path{});
+		TransferFiles(m_DragPaths, directory, true);
+	}
 }
 void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
 {
@@ -386,7 +424,7 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path, const 
 	const bool isRoot = (path.native() == rootPath.native());
 	const bool isEngineRoot = isRoot && rootPath.native() == m_EngineRootPath.native();
 	const bool isEditorRoot = isRoot && rootPath.native() == m_EditorRootPath.native();
-	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(path, rootPath, hasChildDirectory, isSelected, m_NeedToExpandTree,
+	bool shouldDrawChildren = ContentBrowserTreeItem::DrawNode(*this, path, rootPath, hasChildDirectory, isSelected, m_NeedToExpandTree,
 		readOnlyIt->second, isEngineRoot, isEditorRoot, m_RenamingPath, m_RenameBuffer, sizeof(m_RenameBuffer), m_CurrentDirectory);
 	if (shouldDrawChildren)
 	{
@@ -427,6 +465,9 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 			}
 		}
 
+		if (m_LastWatchedDirectory != m_CurrentDirectory)
+			RefreshCacheIfNeeded();
+
 		DrawGrid(enterPressed);
 		GridViewContextMenu(m_CurrentDirectory);
 	}
@@ -438,6 +479,10 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 	if (ImGui::BeginPopupContextWindow("GridContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
 		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+		DrawFileClipboardMenu({}, path);
+		ACTION_MENU_ITEM((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("EditorCommon.Undo")).c_str(), "ContentBrowser.UndoFiles");
+		ACTION_MENU_ITEM((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("EditorCommon.Redo")).c_str(), "ContentBrowser.RedoFiles");
+		ImGui::Separator();
 		ImGui::BeginDisabled(isReadOnly);
 		if (ImGui::BeginMenu((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.Create")).c_str()))
 		{
@@ -516,12 +561,53 @@ void ContentBrowserPanel::BackButton()
 
 	EditorUI::IconButtonOptions options;
 	options.Enabled = !isRoot;
-	if (EditorUI::IconButton("ContentBack", ICON_FA_ARROW_LEFT_LONG, "ContentBrowser.ParentFolder", options))
+	if (EditorUI::IconButton("ContentBack", ICON_FA_ARROW_UP, "ContentBrowser.ParentFolder", options))
 	{
-		m_CurrentDirectory = m_CurrentDirectory.parent_path();
-		memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
+		NavigateTo(m_CurrentDirectory.parent_path());
 	}
+}
 
+void ContentBrowserPanel::ApplyDirectory(const filesystem::path& directory)
+{
+	m_CurrentDirectory = directory;
+	m_SearchBuffer[0] = '\0';
+	m_NeedToExpandTree = true;
+}
+
+void ContentBrowserPanel::NavigateTo(const filesystem::path& directory)
+{
+	const auto next = directory.lexically_normal();
+	if (next == m_CurrentDirectory)
+		return;
+
+	std::error_code error;
+	if (!filesystem::is_directory(next, error))
+		return;
+
+	m_BackFolders.push_back(m_CurrentDirectory);
+	m_ForwardFolders.clear();
+	ApplyDirectory(next);
+}
+
+void ContentBrowserPanel::StepFolderHistory(bool forward)
+{
+	auto& from = forward ? m_ForwardFolders : m_BackFolders;
+	auto& to = forward ? m_BackFolders : m_ForwardFolders;
+	while (!from.empty())
+	{
+		const auto next = std::move(from.back());
+		from.pop_back();
+
+		std::error_code error;
+		if (next == m_CurrentDirectory || !filesystem::is_directory(next, error))
+			continue;
+		if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(next))
+			continue;
+
+		to.push_back(m_CurrentDirectory);
+		ApplyDirectory(next);
+		return;
+	}
 }
 
 void ContentBrowserPanel::RefreshButton()
@@ -576,10 +662,7 @@ void ContentBrowserPanel::AddressBar(float width)
 		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
 		if (ImGui::Button(name.c_str()))
 		{
-			m_CurrentDirectory = nodes[i];
-			memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
-			m_LastSearchString = "";
-			m_SearchResults.clear();
+			NavigateTo(nodes[i]);
 		}
 
 		// 마지막 노드가 아니라면 구분자(>) 추가
@@ -697,17 +780,20 @@ void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& direct
 
 	const bool keepAlive = ContentBrowserGridItem::Draw(*this, directoryEntry, thumbnailTexID, thumbnailSpriteHandle,
 		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId), m_RenamingPath, m_RenameBuffer,
-		sizeof(m_RenameBuffer), m_CurrentDirectory, m_SearchBuffer);
+		sizeof(m_RenameBuffer), m_CurrentDirectory);
 
 	if (keepAlive)
 		m_InteractionPaths.push_back(path);
 }
 
-vector<filesystem::path> ContentBrowserPanel::GetInteractionPaths(ImGuiSelectionUserData itemId, const filesystem::path& path) const
+vector<filesystem::path> ContentBrowserPanel::GetInteractionPaths(ImGuiSelectionUserData itemId,
+	const filesystem::path& path) const
 {
-	if (m_SelectedGridIds.size() <= 1 || !m_SelectedGridIds.contains(itemId))
-		return { path };
+	return m_SelectedGridIds.contains(itemId) ? GetSelectedFilePaths() : vector<filesystem::path>{ path };
+}
 
+vector<filesystem::path> ContentBrowserPanel::GetSelectedFilePaths() const
+{
 	vector<filesystem::path> paths;
 	paths.reserve(m_SelectedGridIds.size());
 	for (const auto& item : m_GridSelectionItems)
@@ -716,6 +802,581 @@ vector<filesystem::path> ContentBrowserPanel::GetInteractionPaths(ImGuiSelection
 			paths.push_back(item.Path);
 	}
 	return paths;
+}
+
+bool ContentBrowserPanel::CanStoreFiles(const vector<filesystem::path>& paths, bool cut) const
+{
+	return m_Open && m_RenamingPath.empty() && PIEManager::Get().IsEditing() && !paths.empty() &&
+		(!cut || std::ranges::none_of(paths, [](const auto& path)
+			{ return Engine::PlatformPath::IsReadOnlyTarget(path); }));
+}
+
+bool ContentBrowserPanel::CanStoreSelectedFiles(bool cut) const
+{
+	return m_CurrentDirectory == m_LastWatchedDirectory && CanStoreFiles(GetSelectedFilePaths(), cut);
+}
+
+void ContentBrowserPanel::StoreSelectedFiles(bool cut)
+{
+	auto paths = GetSelectedFilePaths();
+	if (m_CurrentDirectory == m_LastWatchedDirectory && CanStoreFiles(paths, cut))
+	{
+		m_FileClipboardPaths = std::move(paths);
+		m_FileClipboardCut = cut;
+	}
+}
+
+static bool ContentBrowserPathWithin(const filesystem::path& path, const filesystem::path& root)
+{
+	if (root.empty())
+		return false;
+
+	const auto sameComponent = [](const auto& lhs, const auto& rhs)
+		{
+			return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
+		};
+	return std::mismatch(path.begin(), path.end(), root.begin(), root.end(), sameComponent).second == root.end();
+}
+
+static void CheckContentBrowserEntry(const filesystem::path& path)
+{
+	const auto nativePath = filesystem::path(path).make_preferred();
+	const DWORD attributes = GetFileAttributesW(nativePath.c_str());
+	if (attributes == INVALID_FILE_ATTRIBUTES)
+	{
+		throw filesystem::filesystem_error("GetFileAttributesW", path,
+			{ static_cast<int>(GetLastError()), std::system_category() });
+	}
+	if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+	{
+		throw filesystem::filesystem_error("Reparse point", path,
+			std::make_error_code(std::errc::operation_not_supported));
+	}
+}
+
+static void CheckContentBrowserPath(const filesystem::path& path, const filesystem::path& root)
+{
+	for (auto current = path; ContentBrowserPathWithin(current, root); current = current.parent_path())
+	{
+		CheckContentBrowserEntry(current);
+		if (ContentBrowserPathWithin(root, current))
+			break;
+	}
+}
+
+static void MoveContentBrowserEntry(const filesystem::path& source, const filesystem::path& target)
+{
+	const auto nativeSource = filesystem::path(source).make_preferred();
+	const auto nativeTarget = filesystem::path(target).make_preferred();
+	if (!MoveFileExW(nativeSource.c_str(), nativeTarget.c_str(), 0))
+	{
+		throw filesystem::filesystem_error("MoveFileExW", source, target,
+			{ static_cast<int>(GetLastError()), std::system_category() });
+	}
+}
+
+static BY_HANDLE_FILE_INFORMATION ReadBrowserFileIdentity(const filesystem::path& path)
+{
+	const auto native = filesystem::path(path).make_preferred();
+	const HANDLE handle = CreateFileW(native.c_str(), FILE_READ_ATTRIBUTES,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+		FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+	if (handle == INVALID_HANDLE_VALUE)
+		throw filesystem::filesystem_error("Open file for history", path,
+			{ static_cast<int>(GetLastError()), std::system_category() });
+
+	BY_HANDLE_FILE_INFORMATION result{};
+	const BOOL read = GetFileInformationByHandle(handle, &result);
+	const DWORD error = read ? ERROR_SUCCESS : GetLastError();
+	CloseHandle(handle);
+	if (!read)
+		throw filesystem::filesystem_error("Read file identity", path, { static_cast<int>(error), std::system_category() });
+
+	if ((result.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+		throw filesystem::filesystem_error("Reparse point", path, std::make_error_code(std::errc::operation_not_supported));
+	return result;
+}
+
+static bool SameBrowserFile(const BY_HANDLE_FILE_INFORMATION& lhs, const BY_HANDLE_FILE_INFORMATION& rhs)
+{
+	return lhs.dwVolumeSerialNumber == rhs.dwVolumeSerialNumber &&
+		lhs.nFileIndexHigh == rhs.nFileIndexHigh && lhs.nFileIndexLow == rhs.nFileIndexLow;
+}
+
+static bool BrowserPathHasSelectedParent(const filesystem::path& source, const vector<filesystem::path>& paths)
+{
+	return std::ranges::any_of(paths, [&source](const auto& candidate)
+	{
+		const auto parent = candidate.lexically_normal();
+		return ContentBrowserPathWithin(source, parent) && !ContentBrowserPathWithin(parent, source);
+	});
+}
+
+static void CheckBrowserTransferTree(const filesystem::path& source, const filesystem::path& target, bool move)
+{
+	const auto check = [move](const auto& from, const auto& to)
+	{
+		CheckContentBrowserEntry(from);
+		if (Engine::PlatformPath::IsReadOnlyTarget(to) || (move && Engine::PlatformPath::IsReadOnlyTarget(from)))
+			throw filesystem::filesystem_error("Read-only asset", from, to,
+				std::make_error_code(std::errc::permission_denied));
+	};
+
+	check(source, target);
+	if (filesystem::is_directory(source))
+	{
+		for (const auto& entry : filesystem::recursive_directory_iterator(source))
+			check(entry.path(), target / entry.path().lexically_relative(source));
+	}
+}
+
+static BY_HANDLE_FILE_INFORMATION CopyContentBrowserEntry(const filesystem::path& source, const filesystem::path& target)
+{
+	filesystem::path staging;
+	for (int index = 0; index < 128; ++index)
+	{
+		const auto candidate = target.parent_path() / (L".bam-copy-tmp-" + std::to_wstring(index));
+		std::error_code error;
+		if (filesystem::create_directory(candidate, error))
+		{
+			staging = candidate;
+			break;
+		}
+		if (error && error != std::errc::file_exists)
+			throw filesystem::filesystem_error("Create copy staging directory", candidate, error);
+	}
+	if (staging.empty())
+	{
+		throw filesystem::filesystem_error("Reserve copy staging directory", target,
+			std::make_error_code(std::errc::file_exists));
+	}
+
+	const auto cleanup = [&staging]()
+		{
+			std::error_code error;
+			filesystem::remove_all(staging, error);
+			if (error)
+				EDITOR_LOG_WARN("Copy staging cleanup failed: {}", Engine::WStrToStr(staging.wstring()));
+		};
+
+	BY_HANDLE_FILE_INFORMATION identity{};
+	try
+	{
+		const auto stagedEntry = staging / L"entry";
+		filesystem::copy(source, stagedEntry, filesystem::copy_options::recursive);
+		identity = ReadBrowserFileIdentity(stagedEntry);
+		MoveContentBrowserEntry(stagedEntry, target);
+	}
+	catch (...)
+	{
+		cleanup();
+		throw;
+	}
+	cleanup();
+	return identity;
+}
+
+bool ContentBrowserPanel::CanTransferTo(const filesystem::path& directory) const
+{
+	return CanUseFileCommands() &&
+		ContentBrowserPathWithin(directory.lexically_normal(), m_RootPath.lexically_normal()) &&
+		!Engine::PlatformPath::IsReadOnlyTarget(directory);
+}
+
+bool ContentBrowserPanel::CanPasteFiles(const filesystem::path& directory) const
+{
+	return !m_FileClipboardPaths.empty() && CanTransferTo(directory);
+}
+
+void ContentBrowserPanel::PasteFiles(const filesystem::path& directory)
+{
+	if (!CanPasteFiles(directory))
+		return;
+
+	auto remaining = TransferFiles(m_FileClipboardPaths, directory, m_FileClipboardCut);
+	if (m_FileClipboardCut)
+		m_FileClipboardPaths = std::move(remaining);
+}
+
+vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesystem::path>& paths,
+	const filesystem::path& directory, bool move)
+{
+	const auto destination = directory.lexically_normal();
+	vector<filesystem::path> failed;
+	vector<FileMove> changes;
+	changes.reserve(paths.size());
+	filesystem::path copyBatch;
+	size_t copySlot = 0;
+
+	for (const auto& path : paths)
+	{
+		const auto source = path.lexically_normal();
+		if (BrowserPathHasSelectedParent(source, paths))
+			continue;
+
+		try
+		{
+			const auto root = GetActiveRootForPath(source).lexically_normal();
+			if (!CanTransferTo(destination) || !ContentBrowserPathWithin(source, root) ||
+				ContentBrowserPathWithin(root, source) || ContentBrowserPathWithin(destination, source))
+			{
+				throw filesystem::filesystem_error("Invalid source or destination", source, destination,
+					std::make_error_code(std::errc::invalid_argument));
+			}
+
+			CheckContentBrowserPath(source, root);
+			CheckContentBrowserPath(destination, m_RootPath.lexically_normal());
+
+			const bool isDirectory = filesystem::is_directory(source);
+			auto target = destination / source.filename();
+			if (!move && ContentBrowserPathWithin(destination, source.parent_path()) &&
+				ContentBrowserPathWithin(source.parent_path(), destination))
+			{
+				auto stem = isDirectory ? source.filename() : source.stem();
+				auto extension = isDirectory ? wstring{} : source.extension().wstring();
+				if (extension == L".json" && stem.has_extension())
+				{
+					extension = stem.extension().wstring() + extension;
+					stem = stem.stem();
+				}
+				target = GenerateUniqueAssetPath(destination, stem.wstring(), extension);
+			}
+
+			CheckBrowserTransferTree(source, target, move);
+			if (move)
+			{
+				FileMove entry{ source, target, ReadBrowserFileIdentity(source) };
+				MoveContentBrowserEntry(source, target);
+				changes.push_back(std::move(entry));
+			}
+			else
+			{
+				if (copyBatch.empty())
+					copyBatch = CreateFileHistoryBatch();
+				if (ReadBrowserFileIdentity(copyBatch).dwVolumeSerialNumber !=
+					ReadBrowserFileIdentity(destination).dwVolumeSerialNumber)
+				{
+					throw filesystem::filesystem_error("File history on another volume", destination,
+						std::make_error_code(std::errc::cross_device_link));
+				}
+
+				const auto slot = copyBatch / std::to_wstring(copySlot++);
+				filesystem::create_directory(slot);
+				FileMove entry{ slot / target.filename(), target, {} };
+				entry.Identity = CopyContentBrowserEntry(source, target);
+				changes.push_back(std::move(entry));
+			}
+		}
+		catch (const filesystem::filesystem_error& error)
+		{
+			failed.push_back(path);
+			EDITOR_LOG_WARN("Asset transfer failed for {}: {}", Engine::WStrToStr(source.wstring()),
+				error.code().message());
+		}
+	}
+
+	const size_t succeeded = changes.size();
+	if (succeeded > 0)
+	{
+		RequestRefresh();
+		SubmitFileMoves(std::move(changes), move ? "ContentBrowser.FileMove" : "ContentBrowser.FileCopy", false);
+	}
+
+	const char* resultKey = move ? "ContentBrowser.MoveFilesResult" : "ContentBrowser.CopyFilesResult";
+	NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+		LOCAL_FMT(resultKey, succeeded, failed.size()),
+		failed.empty() ? ELogLevel::Info : ELogLevel::Warn, 5.0f);
+	return failed;
+}
+
+filesystem::path ContentBrowserPanel::FileHistoryRoot() const
+{
+	return (Engine::PlatformPath::GetProjectRoot() / L".bam" / L"content-browser-history").lexically_normal();
+}
+
+filesystem::path ContentBrowserPanel::CreateFileHistoryBatch() const
+{
+	const auto project = Engine::PlatformPath::GetProjectRoot().lexically_normal();
+	const auto root = FileHistoryRoot();
+	if (ContentBrowserPathWithin(root, m_RootPath.lexically_normal()))
+		throw filesystem::filesystem_error("History inside asset root", root, std::make_error_code(std::errc::invalid_argument));
+
+	CheckContentBrowserEntry(project);
+	filesystem::create_directory(root.parent_path());
+	CheckContentBrowserEntry(root.parent_path());
+	filesystem::create_directory(root);
+	CheckContentBrowserEntry(root);
+
+	const auto prefix = std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64());
+	for (size_t index = 0;; ++index)
+	{
+		const auto batch = root / (prefix + L"-" + std::to_wstring(index));
+		if (filesystem::create_directory(batch))
+			return batch;
+	}
+}
+
+bool ContentBrowserPanel::ReplayFileMoves(const vector<FileMove>& moves, bool forward)
+{
+	const auto assetRoot = m_RootPath.lexically_normal();
+	const auto historyRoot = FileHistoryRoot();
+	const auto endpoints = [forward](const FileMove& move)
+	{
+		using PathRef = const filesystem::path&;
+		return std::pair<PathRef, PathRef>(forward ? move.Before : move.After, forward ? move.After : move.Before);
+	};
+
+	const auto validateParent = [&](const filesystem::path& path)
+	{
+		const auto parent = path.parent_path();
+		if (ContentBrowserPathWithin(parent, assetRoot) && CanTransferTo(parent))
+			CheckContentBrowserPath(parent, assetRoot);
+		else if (ContentBrowserPathWithin(parent, historyRoot))
+			CheckContentBrowserPath(parent, Engine::PlatformPath::GetProjectRoot().lexically_normal());
+		else
+			throw filesystem::filesystem_error("Invalid file history path", path,
+				std::make_error_code(std::errc::permission_denied));
+	};
+
+	size_t applied = 0;
+	try
+	{
+		for (const auto& move : moves)
+		{
+			const auto [source, target] = endpoints(move);
+			validateParent(source);
+			validateParent(target);
+			CheckBrowserTransferTree(source, target, true);
+			if (!SameBrowserFile(ReadBrowserFileIdentity(source), move.Identity))
+				throw filesystem::filesystem_error("File history source was replaced", source,
+					std::make_error_code(std::errc::state_not_recoverable));
+			if (filesystem::exists(filesystem::symlink_status(target)))
+				throw filesystem::filesystem_error("File history target exists", target,
+					std::make_error_code(std::errc::file_exists));
+		}
+
+		for (const auto& move : moves)
+		{
+			const auto [source, target] = endpoints(move);
+			if (!SameBrowserFile(ReadBrowserFileIdentity(source), move.Identity))
+				throw filesystem::filesystem_error("File history source was replaced", source,
+					std::make_error_code(std::errc::state_not_recoverable));
+			MoveContentBrowserEntry(source, target);
+			++applied;
+		}
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("File history failed: {}", error.what());
+		while (applied > 0)
+		{
+			const auto& move = moves[--applied];
+			const auto [source, target] = endpoints(move);
+			try
+			{
+				validateParent(source);
+				validateParent(target);
+				if (!SameBrowserFile(ReadBrowserFileIdentity(target), move.Identity))
+					throw filesystem::filesystem_error("Rollback file was replaced", target,
+						std::make_error_code(std::errc::state_not_recoverable));
+				MoveContentBrowserEntry(target, source);
+			}
+			catch (const filesystem::filesystem_error& rollbackError)
+			{
+				m_FileHistoryInvalid = true;
+				EDITOR_LOG_ERROR("File history rollback failed: {}", rollbackError.what());
+			}
+		}
+
+		RequestRefresh();
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL(m_FileHistoryInvalid ? "ContentBrowser.FileHistoryRollbackFailed" : "ContentBrowser.FileHistoryFailed"),
+			ELogLevel::Warn);
+		return false;
+	}
+
+	RequestRefresh();
+	return true;
+}
+
+void ContentBrowserPanel::FinishFileHistoryOperation()
+{
+	if (std::exchange(m_FileHistoryInvalid, false))
+		m_FileHistory.Clear();
+}
+
+void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* label, bool execute)
+{
+	if (moves.empty())
+		return;
+
+	const auto batch = std::make_shared<const vector<FileMove>>(std::move(moves));
+	auto command = std::make_unique<CallbackEditorCommand>(label,
+		[this, batch]() { return ReplayFileMoves(*batch, true); },
+		[this, batch]() { return ReplayFileMoves(*batch, false); });
+
+	if (execute)
+		m_FileHistory.Execute(std::move(command));
+	else
+		m_FileHistory.Record(std::move(command));
+	FinishFileHistoryOperation();
+}
+
+bool ContentBrowserPanel::CanUseFileCommands() const
+{
+	return m_Open && m_RenamingPath.empty() && PIEManager::Get().IsEditing();
+}
+
+bool ContentBrowserPanel::CanUndoFileEdit() const
+{
+	return CanUseFileCommands() && m_FileHistory.CanUndo();
+}
+
+bool ContentBrowserPanel::CanRedoFileEdit() const
+{
+	return CanUseFileCommands() && m_FileHistory.CanRedo();
+}
+
+void ContentBrowserPanel::UndoFileEdit()
+{
+	if (CanUndoFileEdit())
+		m_FileHistory.Undo();
+	FinishFileHistoryOperation();
+}
+
+void ContentBrowserPanel::RedoFileEdit()
+{
+	if (CanRedoFileEdit())
+		m_FileHistory.Redo();
+	FinishFileHistoryOperation();
+}
+
+bool ContentBrowserPanel::CanDeleteFiles(const vector<filesystem::path>& paths) const
+{
+	return !paths.empty() && std::ranges::all_of(paths, [this](const auto& path)
+	{
+		return CanTransferTo(path.parent_path()) && !Engine::PlatformPath::IsReadOnlyTarget(path);
+	});
+}
+
+bool ContentBrowserPanel::CanDeleteSelectedFiles() const
+{
+	return m_CurrentDirectory == m_LastWatchedDirectory && CanDeleteFiles(GetSelectedFilePaths());
+}
+
+void ContentBrowserPanel::DeleteSelectedFiles()
+{
+	if (m_CurrentDirectory == m_LastWatchedDirectory)
+		QueueFileDeletion(GetSelectedFilePaths());
+}
+
+void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& paths)
+{
+	if (!CanDeleteFiles(paths))
+		return;
+
+	try
+	{
+		vector<FileMove> moves;
+		moves.reserve(paths.size());
+		for (const auto& path : paths)
+		{
+			const auto source = path.lexically_normal();
+			if (BrowserPathHasSelectedParent(source, paths))
+				continue;
+
+			CheckContentBrowserPath(source, m_RootPath.lexically_normal());
+			moves.push_back({ source, {}, ReadBrowserFileIdentity(source) });
+		}
+		m_PendingFileDeletion = std::move(moves);
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Could not capture file deletion targets: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
+}
+
+void ContentBrowserPanel::DeleteFiles(vector<FileMove> moves)
+{
+	try
+	{
+		const auto batch = CreateFileHistoryBatch();
+		for (size_t index = 0; index < moves.size(); ++index)
+		{
+			const auto slot = batch / std::to_wstring(index);
+			filesystem::create_directory(slot);
+			moves[index].After = slot / moves[index].Before.filename();
+		}
+		SubmitFileMoves(std::move(moves), "ContentBrowser.FileDelete", true);
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Could not prepare file deletion: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
+}
+
+void ContentBrowserPanel::DrawFileDeletionConfirmation()
+{
+	if (m_PendingFileDeletion.empty())
+		return;
+
+	const auto title = LOCAL_LABEL("EditorCommon.Delete");
+	if (!ImGui::IsPopupOpen(title.c_str()))
+		ImGui::OpenPopup(title.c_str());
+	if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteFilesConfirm", m_PendingFileDeletion.size()).c_str());
+	const EditorUI::DialogAction actions[] = {
+		{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", CanUseFileCommands(), true }
+	};
+	const int action = EditorUI::DialogButtonBar("ContentBrowserDeleteActions", actions, IM_ARRAYSIZE(actions));
+	if (action >= 0)
+	{
+		auto moves = std::exchange(m_PendingFileDeletion, vector<FileMove>{});
+		ImGui::CloseCurrentPopup();
+		if (action == 1)
+			DeleteFiles(std::move(moves));
+	}
+	ImGui::EndPopup();
+}
+
+void ContentBrowserPanel::DrawFileClipboardMenu(const vector<filesystem::path>& paths,
+	const filesystem::path& directory)
+{
+	auto& shortcuts = ShortcutManager::Get();
+	if (!paths.empty())
+	{
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.Copy")).c_str(),
+			shortcuts.GetShortcutHint("ContentBrowser.CopyFiles"), false, CanStoreFiles(paths, false)))
+		{
+			m_FileClipboardPaths = paths;
+			m_FileClipboardCut = false;
+		}
+
+		if (ImGui::MenuItem((ICON_FA_SCISSORS " " + LOCAL_LABEL("EditorCommon.Cut")).c_str(),
+			shortcuts.GetShortcutHint("ContentBrowser.CutFiles"), false, CanStoreFiles(paths, true)))
+		{
+			m_FileClipboardPaths = paths;
+			m_FileClipboardCut = true;
+		}
+
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(),
+			shortcuts.GetShortcutHint("ContentBrowser.DeleteFiles"), false, CanDeleteFiles(paths)))
+		{
+			QueueFileDeletion(paths);
+		}
+	}
+
+	if (ImGui::MenuItem((ICON_FA_PASTE " " + LOCAL_LABEL("EditorCommon.Paste")).c_str(),
+		shortcuts.GetShortcutHint("ContentBrowser.PasteFiles"), false, CanPasteFiles(directory)))
+	{
+		PasteFiles(directory);
+	}
 }
 
 void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_entry>& source)
@@ -795,11 +1456,11 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 {
 	std::vector<filesystem::path> interactionPaths;
 	interactionPaths.swap(m_InteractionPaths);
-	const string searchStr(m_SearchBuffer);
+	const string searchStr = enterPressed || m_SearchBuffer[0] == '\0' ? string(m_SearchBuffer) : m_LastSearchString;
 	const bool isSearching = !searchStr.empty();
 	const bool searchCleared = !isSearching && !m_LastSearchString.empty();
 
-	if (enterPressed)
+	if (enterPressed || (isSearching && m_GridItemsDirty))
 	{
 		m_LastSearchString = searchStr;
 		m_SearchResults.clear();
@@ -1099,7 +1760,7 @@ bool ContentBrowserPanel::RequestRevealAsset(const filesystem::path& resourcePat
 		return false;
 
 	m_RevealedAssetPath = (activeRoot / relativePath).lexically_normal();
-	m_CurrentDirectory = m_RevealedAssetPath.parent_path();
+	NavigateTo(m_RevealedAssetPath.parent_path());
 	m_RevealScrollPending = true;
 	m_NeedToExpandTree = true;
 
@@ -1495,6 +2156,8 @@ void ContentBrowserPanel::RestoreViewState(const std::string& relativeDirectory,
 	m_ThumbnailSize = std::isfinite(thumbnailSize) && thumbnailSize >= 32.0f && thumbnailSize <= 256.0f
 		? thumbnailSize : 64.0f;
 
+	m_BackFolders.clear();
+	m_ForwardFolders.clear();
 	m_CurrentDirectory = m_RootPath;
 	m_LastDirectory.clear();
 	m_LastWatchedDirectory.clear();

@@ -383,19 +383,24 @@ void ImGuiManager::Draw()
 			ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 		EShortcutContext activeContext = EShortcutContext::Global;
 		std::wstring_view activePanel;
+		const auto* navWindow = ImGui::GetCurrentContext()->NavWindow;
+		const auto* focusedWindow = navWindow ? navWindow->RootWindow : nullptr;
+
 		for (const auto* panel : m_ImGuiPanels)
 		{
-			if (panel && panel->IsOpen() && panel->IsFocused())
-			{
-				const auto ctx = panel->GetShortcutContext();
-				if (ctx != EShortcutContext::Global)
-				{
-					activeContext = ctx;
-					activePanel = panel->GetName();
-					break;
-				}
-			}
+			if (!panel || !panel->IsOpen() || !focusedWindow || panel->m_PanelWindowId != focusedWindow->ID)
+				continue;
+
+			activeContext = panel->GetShortcutContext();
+			activePanel = panel->GetName();
+			break;
 		}
+
+		// Panel draws can change focus before we evaluate the shortcuts for this frame.
+		if (activeContext == EShortcutContext::ContentBrowser)
+			history.BeginFrame();
+		else
+			history.AllowShortcuts(activeContext == EShortcutContext::Hierarchy);
 		ShortcutManager::Get().ProcessShortcuts(activeContext, suppressed, activePanel);
 
 		if (const auto result = m_DocumentController->ProcessPendingSave())

@@ -8,6 +8,7 @@
 #include "ContentBrowserRename.h"
 
 bool ContentBrowserTreeItem::DrawNode(
+	ContentBrowserPanel& browser,
 	const std::filesystem::path& path,
 	const std::filesystem::path& rootPath,
 	bool hasChildDirectory,
@@ -70,6 +71,8 @@ bool ContentBrowserTreeItem::DrawNode(
 	// 트리 노드 렌더링
 	bool opened = ImGui::TreeNodeEx((void*)std::hash<std::wstring>{}(path.native()), baseFlags, "%s", label.c_str());
 
+	if (!isRenaming) browser.DrawFolderDropTarget(path);
+
 	// 인라인 이름 변경 UI
 	if (isRenaming)
 	{
@@ -78,30 +81,32 @@ bool ContentBrowserTreeItem::DrawNode(
 	}
 
 	// 컨텍스트 메뉴 및 단축키(F2) 처리
-	ContextMenu(path, rootPath, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+	ContextMenu(browser, path, rootPath);
 
 	// 클릭 시 디렉토리 이동
 	if (ImGui::IsItemClicked())
 	{
-		currentDirectory = path;
+		browser.NavigateTo(path);
 	}
 
 	// 자식 노드가 있고, 트리가 열렸을 때만 true 반환
 	return opened && hasChildDirectory;
 }
 
-void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, const std::filesystem::path& rootPath, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
+void ContentBrowserTreeItem::ContextMenu(ContentBrowserPanel& browser, const std::filesystem::path& path,
+	const std::filesystem::path& rootPath)
 {
-	auto* browser = dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
-	if (browser && ImGui::IsItemHovered())
-		browser->SetRenameTarget(path);
+	if (ImGui::IsItemHovered())
+		browser.SetRenameTarget(path);
 	if (ImGui::BeginPopupContextItem())
 	{
-		if (browser)
-			browser->SetRenameTarget(path);
+		browser.SetRenameTarget(path);
 
-		currentDirectory = path;
 		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+
+		browser.DrawFileClipboardMenu(path == rootPath ? std::vector<std::filesystem::path>{} :
+			std::vector<std::filesystem::path>{ path }, path);
+		ImGui::Separator();
 
 		ImGui::BeginDisabled(isReadOnly);
 		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
@@ -128,19 +133,6 @@ void ContentBrowserTreeItem::ContextMenu(const std::filesystem::path& path, cons
 		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
 		{
 			ImGui::SetClipboardText(path.string().c_str());
-		}
-
-		ImGui::Separator();
-
-		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), nullptr, false,
-			path != rootPath && !isReadOnly))
-		{
-			std::error_code ec;
-			if (currentDirectory == path)
-				currentDirectory = path.parent_path();
-			std::filesystem::remove_all(path, ec);
-			if (browser)
-				browser->RequestRefresh();
 		}
 
 		ImGui::EndPopup();

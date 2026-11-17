@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include "ModelImporter.h"
 #include "PreviewViewportWidget.h"
+#include "CommandHistory.h"
 
 BEGIN(Editor)
 
@@ -57,6 +58,63 @@ public:
 
 private:
 	EResult OnInitialize(void* arg) override;
+
+#pragma region File Actions
+	friend class ContentBrowserTreeItem;
+
+public:
+	bool CanStoreSelectedFiles(bool cut) const;
+	void StoreSelectedFiles(bool cut);
+	bool CanPasteFiles(const filesystem::path& directory) const;
+	void PasteFiles(const filesystem::path& directory);
+	const filesystem::path& GetCurrentDirectory() const { return m_CurrentDirectory; }
+	void NavigateTo(const filesystem::path& directory);
+	bool CanDeleteSelectedFiles() const;
+	void DeleteSelectedFiles();
+	bool CanUndoFileEdit() const;
+	bool CanRedoFileEdit() const;
+	void UndoFileEdit();
+	void RedoFileEdit();
+
+private:
+	vector<filesystem::path> GetSelectedFilePaths() const;
+	bool CanStoreFiles(const vector<filesystem::path>& paths, bool cut) const;
+	bool CanTransferTo(const filesystem::path& directory) const;
+	void DrawFileClipboardMenu(const vector<filesystem::path>& paths, const filesystem::path& directory);
+	void DrawFolderDropTarget(const filesystem::path& directory);
+	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory, bool move);
+	void ApplyDirectory(const filesystem::path& directory);
+	void StepFolderHistory(bool forward);
+
+	struct FileMove
+	{
+		filesystem::path Before;
+		filesystem::path After;
+		BY_HANDLE_FILE_INFORMATION Identity;
+	};
+
+	bool CanUseFileCommands() const;
+	bool CanDeleteFiles(const vector<filesystem::path>& paths) const;
+	void DrawFileDeletionConfirmation();
+	void QueueFileDeletion(const vector<filesystem::path>& paths);
+	void DeleteFiles(vector<FileMove> moves);
+	filesystem::path FileHistoryRoot() const;
+	filesystem::path CreateFileHistoryBatch() const;
+	bool ReplayFileMoves(const vector<FileMove>& moves, bool forward);
+	void SubmitFileMoves(vector<FileMove> moves, const char* label, bool execute);
+	void FinishFileHistoryOperation();
+
+	CommandHistory m_FileHistory;
+	bool m_FileHistoryInvalid = false;
+	vector<FileMove> m_PendingFileDeletion;
+	vector<filesystem::path> m_BackFolders;
+	vector<filesystem::path> m_ForwardFolders;
+	vector<filesystem::path> m_FileClipboardPaths;
+	bool m_FileClipboardCut = false;
+	vector<filesystem::path> m_DragPaths;
+	filesystem::path m_PendingFileDropDirectory;
+#pragma endregion
+
 
 #pragma region TreeView
 private:

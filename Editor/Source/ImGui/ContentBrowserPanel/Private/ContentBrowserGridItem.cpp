@@ -406,12 +406,11 @@ namespace
 	{
 		return Editor::ImGuiManager::Get().RequestOpenScene(path);
 	}
-	void OpenAssetOrFolder(const std::filesystem::path& path, bool isDirectory, std::filesystem::path& currentDirectory, char* searchBuffer)
+	void OpenAssetOrFolder(ContentBrowserPanel& browser, const std::filesystem::path& path, bool isDirectory)
 	{
 		if (isDirectory)
 		{
-			currentDirectory /= path.filename();
-			if (searchBuffer) searchBuffer[0] = '\0';
+			browser.NavigateTo(path);
 			return;
 		}
 		// 1. Scene JSON 파일인 경우
@@ -448,7 +447,7 @@ float ContentBrowserGridItem::GetNameBoxHeight()
 bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::filesystem::directory_entry& directoryEntry,
 	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
 	ImGuiSelectionUserData itemId, bool selected, std::filesystem::path& outRenamingPath,
-	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory, char* searchBuffer)
+	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
 {
 	const auto& path = directoryEntry.path();
 	const bool renaming = (outRenamingPath == path);
@@ -482,11 +481,15 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 			!input.IsCtrlPressed() && !input.IsShiftPressed();
 
 		ToolTip(directoryEntry);
-		ContextMenu(browser, itemId, path, currentDirectory, searchBuffer);
+		ContextMenu(browser, itemId, path, currentDirectory);
 		contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
 		dragging = DrawDragSource(browser, itemId, path);
+
+		if (visible && directoryEntry.is_directory())
+			browser.DrawFolderDropTarget(path);
+
 		if (open && !dragging)
-			OpenAssetOrFolder(path, directoryEntry.is_directory(), currentDirectory, searchBuffer);
+			OpenAssetOrFolder(browser, path, directoryEntry.is_directory());
 	}
 
 	if (visible)
@@ -609,7 +612,7 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 }
 void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId,
 	const std::filesystem::path& path,
-	std::filesystem::path& currentDirectory, char* searchBuffer)
+	std::filesystem::path& currentDirectory)
 {
 	if (ImGui::IsItemHovered())
 		browser.SetRenameTarget(path);
@@ -617,6 +620,12 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 	{
 		if (ImGui::IsWindowAppearing())
 			browser.m_ContextMenuPaths = browser.GetInteractionPaths(itemId, path);
+
+		std::error_code directoryError;
+		const bool isDir = std::filesystem::is_directory(path, directoryError);
+		const auto& pasteDirectory = isDir && browser.m_ContextMenuPaths.size() == 1 ? path : currentDirectory;
+		browser.DrawFileClipboardMenu(browser.m_ContextMenuPaths, pasteDirectory);
+		ImGui::Separator();
 
 		if (browser.m_ContextMenuPaths.size() > 1)
 		{
@@ -636,12 +645,11 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 			return;
 		}
 
-		const bool isDir = std::filesystem::is_directory(path);
 		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
 		browser.SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
-			OpenAssetOrFolder(path, isDir, currentDirectory, searchBuffer);
+			OpenAssetOrFolder(browser, path, isDir);
 		// 2. 파일인 경우: [외부 프로그램으로 열기]
 		if (!isDir)
 		{
@@ -805,19 +813,6 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				ImGui::EndDisabled();
 			}
 		}
-		ImGui::Separator();
-		ImGui::BeginDisabled(isReadOnly);
-		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
-		{
-			std::error_code ec;
-			if (isDir)
-				std::filesystem::remove_all(path, ec);
-			else
-				std::filesystem::remove(path, ec);
-			if (ec) EDITOR_LOG_ERROR("Failed to delete asset {}: {}", path.string(), ec.message());
-			else EDITOR_LOG_INFO("Deleted asset: {}", path.string());
-		}
-		ImGui::EndDisabled();
 		ImGui::EndPopup();
 	}
 }
@@ -866,7 +861,8 @@ bool ContentBrowserGridItem::DrawDragSource(ContentBrowserPanel& browser, ImGuiS
 	const auto* payload = ImGui::GetDragDropPayload();
 	if (!payload || payload->DataSize == 0)
 	{
-		const auto paths = browser.GetInteractionPaths(itemId, path);
+		browser.m_DragPaths = browser.GetInteractionPaths(itemId, path);
+		const auto& paths = browser.m_DragPaths;
 		browser.m_DragAssetCount = paths.size();
 		browser.m_DragPayload.clear();
 		for (const auto& selectedPath : paths)

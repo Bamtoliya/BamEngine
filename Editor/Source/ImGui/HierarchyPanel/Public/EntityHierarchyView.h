@@ -51,9 +51,7 @@ namespace Editor
         entt::entity PasteAsChild = entt::null;
         std::wstring DropPrefabFile;
         entt::entity DropPrefabTarget = entt::null;
-        bool Toggle = false;
-        bool Range = false;
-        std::vector<entt::entity> VisibleEntities;
+        std::optional<std::vector<entt::entity>> Selection;
         bool RejectedDrop = false;
         std::optional<EntityHierarchyMove> Move;
     };
@@ -73,7 +71,8 @@ namespace Editor
         ~EntityHierarchyView();
         EntityHierarchyView(const EntityHierarchyView&) = delete;
         EntityHierarchyView& operator=(const EntityHierarchyView&) = delete;
-        EntityHierarchyAction Draw(Engine::Scene& scene, std::span<const entt::entity> selected, entt::entity reveal = entt::null, bool locked = false, std::string_view filter = {});
+        EntityHierarchyAction Draw(Engine::Scene& scene, std::span<const entt::entity> selected,
+            entt::entity reveal = entt::null, bool locked = false, std::string_view filter = {}, bool multiSelect = false);
         void StartRename(entt::entity entity, const std::string& currentName);
         void ReleaseFinishedDrag();
         void ResetDrag();

@@ -11,14 +11,14 @@ public:
 	static bool Draw(ContentBrowserPanel& browser, const std::filesystem::directory_entry& directoryEntry,
 		ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize, ImGuiSelectionUserData itemId, bool selected,
 		std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize,
-		std::filesystem::path& currentDirectory, char* searchBuffer);
+		std::filesystem::path& currentDirectory);
 	static float GetNameBoxHeight();
 
 private:
 	static void DrawThumbnail(const std::filesystem::directory_entry& directoryEntry, ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle,
 		float thumbnailSize, const ImVec2& tileMin);
 	static void ContextMenu(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId, const std::filesystem::path& path,
-		std::filesystem::path& currentDirectory, char* searchBuffer);
+		std::filesystem::path& currentDirectory);
 	static void ToolTip(const std::filesystem::directory_entry& directoryEntry);
 	static bool DrawDragSource(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId, const std::filesystem::path& path);
 

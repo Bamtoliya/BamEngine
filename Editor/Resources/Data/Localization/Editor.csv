@@ -2073,4 +2073,12 @@ Timeline,FocusBone,Focus Bone Camera,본으로 카메라 이동
 Timeline,NoEmbeddedAnimation,No Embedded Animation (Bind Pose),내장 애니메이션 없음 (바인드 포즈)
 Timeline,DurationTooltip,Adjust timeline duration for static models,애니메이션이 없는 모델의 타임라인 지속시간을 조절합니다
 ModelImport,OverwriteMaterials,Overwrite Existing Materials,기존 머티리얼 덮어쓰기
-Timeline,AddTrack,Add Track,트랙 추가
+EditorCommon,Cut,Cut,잘라내기
+ContentBrowser,CopyFilesResult,Copied {}. Could not copy {}.,복사 {}개 완료. 실패 {}개.
+ContentBrowser,MoveFilesResult,Moved {}. Could not move {}. Check references to moved assets.,이동 {}개 완료. 실패 {}개. 이동한 에셋의 참조를 확인하세요.
+ContentBrowser,FileCopy,Copy Files,파일 복사
+ContentBrowser,FileMove,Move Files,파일 이동
+ContentBrowser,FileDelete,Delete Files,파일 삭제
+ContentBrowser,DeleteFilesConfirm,Delete {} selected items? Check assets that reference them.,선택한 항목 {}개를 삭제할까요? 이 항목을 사용하는 에셋의 참조를 확인하세요.
+ContentBrowser,FileHistoryFailed,The file operation could not complete. Check the log for the affected paths.,파일 작업을 완료하지 못했습니다. 해당 경로는 로그를 확인하세요.
+ContentBrowser,FileHistoryRollbackFailed,Some files could not be restored. File history was cleared. Check the log and recovery folder.,일부 파일을 원래 위치로 돌리지 못했습니다. 파일 이력을 지웠습니다. 로그와 복구 폴더를 확인하세요.

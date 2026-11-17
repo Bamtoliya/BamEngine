@@ -91,27 +91,6 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 	// 가져온 ID(targetId)를 사용하여 TreeNode 생성
 	bool opened = ImGui::TreeNodeEx(targetId, flags, "%s", name.c_str());
 
-	if (m_IsBoxSelecting)
-	{
-		// 1. 현재 노드의 화면상 영역 가져오기
-		ImVec2 itemMin = ImGui::GetItemRectMin();
-		ImVec2 itemMax = ImGui::GetItemRectMax();
-
-		// 2. 선택 박스 영역 계산
-		ImVec2 boxMin = ImVec2(std::min(m_BoxStartPos.x, m_BoxEndPos.x), std::min(m_BoxStartPos.y, m_BoxEndPos.y));
-		ImVec2 boxMax = ImVec2(std::max(m_BoxStartPos.x, m_BoxEndPos.x), std::max(m_BoxStartPos.y, m_BoxEndPos.y));
-
-		// 3. BoundingBox(Axis-Aligned Bounding Box) 교차 검사
-		// 두 사각형이 겹치는지 확인
-		bool overlap = (itemMin.x < boxMax.x && itemMax.x > boxMin.x) &&
-			(itemMin.y < boxMax.y && itemMax.y > boxMin.y);
-
-		if (overlap)
-		{
-			// 1. 시각적 피드백 (하이라이트)
-			ImGui::GetWindowDrawList()->AddRectFilled(itemMin, itemMax, IM_COL32(255, 255, 255, 50));
-		}
-	}
 
 	if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
 	{
@@ -179,6 +158,8 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 void HierarchyPanel::Draw()
 {
     m_EntityTree.ReleaseFinishedDrag();
+    m_Focused = false;
+    m_Hovered = false;
     if (!m_Open) return;
     const string windowTitle = LOCAL("Hierarchy.Title") + "###HierarchyPanel";
     if (!BeginPanelWindow(windowTitle.c_str(), m_Open))
@@ -198,14 +179,17 @@ void HierarchyPanel::Draw()
 		EditorUI::SearchBar("HierarchySearch", m_SearchFilter, sizeof(m_SearchFilter));
 		ImGui::Spacing();
 
-		DrawEntityHierarchy(currentScene);
-		DrawSceneContextMenu(currentScene);
+		if (ImGui::BeginChild("HierarchyRows", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoMove))
+		{
+			DrawEntityHierarchy(currentScene);
+			DrawSceneContextMenu(currentScene);
+		}
+		ImGui::EndChild();
     }
     else
     {
         m_LastHierarchyScene = nullptr;
         m_LastHierarchyPrimary = entt::null;
-		m_RangeAnchorId = 0;
         m_HierarchyMessage.clear();
         ImGui::TextUnformatted(LOCAL_CSTR("EditorDocument.NoSceneLoaded"));
 		if (SceneManager::IsCreated() && ImGui::Button(LOCAL_CSTR("EditorDocument.CreateNewScene")))
@@ -213,9 +197,6 @@ void HierarchyPanel::Draw()
 			ToolBar::NewScene();
 		}
     }
-    if (InputManager::Get().IsMouseButtonDown(EMouseButton::Left) && ImGui::IsWindowHovered() &&
-        !ImGui::IsAnyItemHovered() && !InputManager::Get().IsCtrlPressed())
-        SelectionManager::Get().ClearSelection();
     ImGui::End();
 }
 
@@ -410,53 +391,23 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 	if (changedScene)
 	{
 		m_HierarchyMessage.clear();
-		m_RangeAnchorId = 0;
 	}
-	if (selected.empty()) m_RangeAnchorId = 0;
     m_LastHierarchyScene = scene;
     m_LastHierarchyPrimary = primary;
     m_RevealEntity = entt::null;
-	auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked(), m_SearchFilter);
-	if (action.Clicked != entt::null && !selection.IsPrimarySelectionLocked())
+	auto action = m_EntityTree.Draw(*scene, selected, reveal, selection.IsPrimarySelectionLocked(), m_SearchFilter, true);
+	if (action.Selection && !selection.IsPrimarySelectionLocked())
 	{
-		auto* entity = scene->FindEntity(action.Clicked);
-		if (entity)
+		selection.ClearSelection();
+		for (const auto handle : *action.Selection)
+			selection.AddToEntitySelection(scene->FindEntity(handle));
+
+		// Do not auto-scroll to rows selected by a box drag in this tree.
+		m_LastHierarchyPrimary = action.Selection->empty() ? entt::null : action.Selection->back();
+		if (!action.Selection->empty())
 		{
-			bool appliedRange = false;
-			auto* anchor = m_RangeAnchorId != 0 ? scene->FindEntityById(m_RangeAnchorId) : nullptr;
-
-			if (action.Range && anchor && selection.IsEntitySelected(anchor))
-			{
-				const auto& rows = action.VisibleEntities;
-				const auto first = std::find(rows.begin(), rows.end(), anchor->GetEntityHandle());
-				const auto last = std::find(rows.begin(), rows.end(), action.Clicked);
-
-				if (first != rows.end() && last != rows.end())
-				{
-					if (!action.Toggle) selection.ClearSelection();
-
-					const int step = first <= last ? 1 : -1;
-					for (auto it = first;; it += step)
-					{
-						selection.AddToEntitySelection(scene->FindEntity(*it));
-						if (it == last) break;
-					}
-					appliedRange = true;
-				}
-			}
-
-			if (!appliedRange)
-			{
-				if (action.Toggle) selection.ToggleEntitySelection(entity);
-				else selection.SetSelectedEntity(entity);
-				const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(action.Clicked);
-				m_RangeAnchorId = id && selection.IsEntitySelected(entity) ? id->id : 0;
-			}
-			// 계층 패널에서 엔티티를 클릭하면 인스펙터 창/탭을 맨 위(전면)로 올리고 포커스
-			if (auto* inspector = dynamic_cast<InspectorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Inspector")))
-			{
+			if (auto* inspector = ImGuiManager::Get().GetImGuiPanel(L"Inspector"))
 				inspector->Open();
-			}
 		}
 	}
 	if (!action.DeleteEntities.empty())
@@ -646,19 +597,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			}
 		}
 	}
-	if (action.Duplicate)
-	{
-		auto* primary = selection.GetPrimarySelectedEntity();
-		Entity* parent = nullptr;
-		if (primary)
-		{
-			const auto* hier = scene->GetRegistry().try_get<Engine::HierarchyComponent>(primary->GetEntityHandle());
-			if (hier && hier->parent != entt::null)
-				parent = scene->FindEntity(hier->parent);
-		}
-		if (EntityClipboard::CopySelected(scene))
-			EntityClipboard::Paste(scene, parent);
-	}
+	if (action.Duplicate && EntityClipboard::CopySelected(scene))
+		EntityClipboard::Paste(scene, nullptr);
 	if (action.Unparent != entt::null)
 	{
 		auto* child = scene->FindEntity(action.Unparent);

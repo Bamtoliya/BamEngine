@@ -1243,6 +1243,86 @@ void EditorActionRegistry::RegisterAll()
             }
         });
 
+    const auto getContentBrowser = []()
+        {
+            return dynamic_cast<ContentBrowserPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Content Browser"));
+        };
+
+    const auto registerFileAction = [&](EditorAction action, void (ContentBrowserPanel::*run)(),
+        bool (ContentBrowserPanel::*canRun)() const)
+    {
+        action.CategoryKey = "ContentBrowser.Title";
+        action.Context = EShortcutContext::ContentBrowser;
+        action.ExecuteHandler = [getContentBrowser, run]() {
+            if (auto* browser = getContentBrowser()) (browser->*run)();
+        };
+        action.CanExecute = [getContentBrowser, canRun]() {
+            const auto* browser = getContentBrowser();
+            return browser && (browser->*canRun)();
+        };
+        sm.RegisterAction(action);
+    };
+
+    registerFileAction({ .Id = "ContentBrowser.DeleteFiles", .DisplayNameKey = "EditorCommon.Delete",
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete) },
+        &ContentBrowserPanel::DeleteSelectedFiles, &ContentBrowserPanel::CanDeleteSelectedFiles);
+
+    registerFileAction({ .Id = "ContentBrowser.UndoFiles", .DisplayNameKey = "EditorCommon.Undo",
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Z, EModifierKey::Ctrl) },
+        &ContentBrowserPanel::UndoFileEdit, &ContentBrowserPanel::CanUndoFileEdit);
+
+    registerFileAction({ .Id = "ContentBrowser.RedoFiles", .DisplayNameKey = "EditorCommon.Redo",
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Y, EModifierKey::Ctrl) },
+        &ContentBrowserPanel::RedoFileEdit, &ContentBrowserPanel::CanRedoFileEdit);
+
+    sm.RegisterAction({
+    .Id = "ContentBrowser.CopyFiles",
+    .DisplayNameKey = "EditorCommon.Copy",
+    .CategoryKey = "ContentBrowser.Title",
+    .Context = EShortcutContext::ContentBrowser,
+    .DefaultChord = ShortcutChord(Engine::EKeyCode::C, EModifierKey::Ctrl),
+    .ExecuteHandler = [getContentBrowser]() {
+        if (auto* panel = getContentBrowser())
+            panel->StoreSelectedFiles(false);
+    },
+    .CanExecute = [getContentBrowser]() {
+        const auto* panel = getContentBrowser();
+        return panel && panel->CanStoreSelectedFiles(false);
+    }
+        });
+
+    sm.RegisterAction({
+        .Id = "ContentBrowser.CutFiles",
+        .DisplayNameKey = "EditorCommon.Cut",
+        .CategoryKey = "ContentBrowser.Title",
+        .Context = EShortcutContext::ContentBrowser,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::X, EModifierKey::Ctrl),
+        .ExecuteHandler = [getContentBrowser]() {
+            if (auto* panel = getContentBrowser())
+                panel->StoreSelectedFiles(true);
+        },
+        .CanExecute = [getContentBrowser]() {
+            const auto* panel = getContentBrowser();
+            return panel && panel->CanStoreSelectedFiles(true);
+        }
+        });
+
+    sm.RegisterAction({
+        .Id = "ContentBrowser.PasteFiles",
+        .DisplayNameKey = "EditorCommon.Paste",
+        .CategoryKey = "ContentBrowser.Title",
+        .Context = EShortcutContext::ContentBrowser,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::V, EModifierKey::Ctrl),
+        .ExecuteHandler = [getContentBrowser]() {
+            if (auto* panel = getContentBrowser())
+                panel->PasteFiles(panel->GetCurrentDirectory());
+        },
+        .CanExecute = [getContentBrowser]() {
+            const auto* panel = getContentBrowser();
+            return panel && panel->CanPasteFiles(panel->GetCurrentDirectory());
+        }
+        });
+
     sm.RegisterAction({
     .Id = "Edit.Rename",
     .DisplayNameKey = "EditorCommon.Rename",
