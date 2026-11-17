@@ -155,6 +155,7 @@ namespace Editor
 		OutputReservation Output;
 		ModelImportDesc Settings;
 		ModelCreateDesc ModelDesc;
+		filesystem::path MeshDirectory;
 		ResourceHandle<Material> BaseMaterial;
 		std::vector<PendingMesh> Meshes;
 		unordered_map<wstring, uint32> NameCounts;
@@ -319,6 +320,11 @@ namespace
 		if (std::cmp_greater(bytes.size(), (std::numeric_limits<std::streamsize>::max)()))
 			return EResult::InvalidArgument;
 
+		std::error_code ec;
+		filesystem::create_directories(target.parent_path(), ec);
+		if (ec)
+			return EResult::Fail;
+
 		ModelFinalizeState::StagedFile staged;
 		staged.Path = MakeImportStagingPath(target);
 		std::ofstream file(staged.Path, std::ios::out | std::ios::binary | std::ios::noreplace);
@@ -331,7 +337,6 @@ namespace
 		if (!file)
 			return EResult::Fail;
 
-		std::error_code ec;
 		filesystem::rename(staged.Path, target, ec);
 		if (ec)
 			return EResult::Fail;
@@ -623,6 +628,7 @@ namespace
 			}
 		}
 
+		const auto animationDir = modelDesc.UseAnimationSubfolder ? outputDir / L"Animations" : outputDir;
 		// 애니메이션 클립 생성 및 저장 (.bamanim)
 		if (HasFlag(settings.ImportOptions, EModelImportOption::Animations) && !data.Animations.empty())
 		{
@@ -633,7 +639,7 @@ namespace
 				const auto& srcAnim = data.Animations[animIdx];
 				const wstring rawAnimName = StrToWStr(srcAnim.Name);
 				const wstring animStem = MakeUniqueStem(sourceStem, rawAnimName, L"Anim", animIdx, state.NameCounts);
-				const wstring animKey = NormalizePath((outputDir / (animStem + L".bamanim")).wstring());
+				const wstring animKey = NormalizePath((animationDir / (animStem + L".bamanim")).wstring());
 
 				if (const EResult result = ValidateImportOutput(manager, animKey, settings.SaveToFile, settings.Overwrite);
 					result != EResult::Success)
@@ -724,6 +730,7 @@ namespace
 		{
 			const auto& baseMat = state.BaseMaterial;
 
+			const auto textureDir = modelDesc.UseTextureSubfolder ? outputDir / L"Textures" : outputDir;
 			// 텍스처 로드/추출 헬퍼 람다
 			auto bindTexture = [&](MaterialInstance& material, uint32 slot,
 				const Tools::ModelConversion::TextureBindingInfo& info, const wstring& matStem,
@@ -738,7 +745,8 @@ namespace
 
 					if (embedded)
 					{
-						texFilePath = Engine::PlatformPath::ResolveProjectRelative(outputDir / (matStem + L"_" + slotName + L".png"));
+						const wstring texName = matStem + L"_" + slotName + L".png";
+						texFilePath = Engine::PlatformPath::ResolveProjectRelative(textureDir / texName);
 
 						if (!settings.SaveToFile)
 						{
@@ -828,12 +836,13 @@ namespace
 					return EResult::Success;
 				};
 
+			const auto materialDir = modelDesc.UseMaterialSubfolder ? outputDir / L"Materials" : outputDir;
 			for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
 			{
 				const auto& srcMat = data.Materials[matIdx];
 				const wstring rawMatName = StrToWStr(srcMat.Name);
 				const wstring matStem = MakeUniqueStem(sourceStem, rawMatName, L"Mat", static_cast<uint32>(matIdx), state.NameCounts);
-				const wstring matKey = NormalizePath((outputDir / (matStem + L".bammatinst")).wstring());
+				const wstring matKey = NormalizePath((materialDir / (matStem + L".bammatinst")).wstring());
 
 				if (const EResult result = ValidateImportOutput(manager, matKey, settings.SaveToFile, settings.Overwrite);
 					result != EResult::Success)
@@ -842,6 +851,38 @@ namespace
 				}
 
 				auto existingMatHandle = manager.FindHandleByKey(matKey);
+				if (settings.Overwrite && !settings.OverwriteMaterials)
+				{
+					bool hasExistingMaterial = manager.IsValid(existingMatHandle);
+					if (!hasExistingMaterial && settings.SaveToFile)
+					{
+						const auto path = Engine::PlatformPath::ResolveUri(matKey);
+						std::error_code ec;
+						hasExistingMaterial = filesystem::exists(path, ec);
+						if (ec)
+						{
+							BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", WStrToStr(matKey), ec.message());
+							return EResult::Fail;
+						}
+
+						if (hasExistingMaterial)
+							existingMatHandle = manager.LoadFile(matKey);
+					}
+
+					if (hasExistingMaterial)
+					{
+						if (!dynamic_cast<MaterialInstance*>(manager.GetResource(existingMatHandle)))
+						{
+							BAM_LOG(Error, "Editor", "Asset", "Failed to reuse existing material: {}", WStrToStr(matKey));
+							return EResult::Fail;
+						}
+
+						if (matIdx < modelDesc.Materials.size())
+							modelDesc.Materials[matIdx] = ResourceHandle<MaterialInterface>(existingMatHandle);
+
+						continue;
+					}
+				}
 				MaterialInstanceDesc matDesc;
 				matDesc.Key = matKey;
 				matDesc.Path = matKey;
@@ -1142,12 +1183,67 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			const wstring stem = SanitizeFileName(data.SourcePath.stem().wstring());
 			desc.Key = NormalizePath((outputDir / (stem + L".bammodel")).wstring());
 			desc.Path = desc.Key;
+			const auto& rotation = state.Settings.RotationOffset;
+			desc.PlacementEulerDegrees = vec3(rotation[0], rotation[1], rotation[2]);
+			const auto sourceUri = Engine::PlatformPath::ToVirtualUri(data.SourcePath);
+			if (Engine::PlatformPath::IsProjectUri(sourceUri))
+				desc.ImportSourceUri = sourceUri;
 
 			if (const EResult result = ValidateImportOutput(manager, desc.Key, state.Settings.SaveToFile, state.Settings.Overwrite);
 				result != EResult::Success)
 			{
 				return finish(result);
 			}
+
+			desc.UseMeshSubfolder = true;
+			desc.UseMaterialSubfolder = true;
+			desc.UseAnimationSubfolder = true;
+			desc.UseTextureSubfolder = true;
+
+
+			auto modelHandle = manager.FindHandleByKey(desc.Key);
+			bool hasExistingModel = manager.IsValid(modelHandle);
+
+			if (!hasExistingModel && state.Settings.SaveToFile)
+			{
+				auto modelPath = Engine::PlatformPath::ResolveUri(desc.Key);
+				std::error_code ec;
+				hasExistingModel = filesystem::exists(modelPath, ec);
+				if (ec)
+					return finish(EResult::Fail);
+
+				if (hasExistingModel)
+				{
+					modelHandle = manager.LoadFile(desc.Key);
+				}
+				else
+				{
+					modelPath += L".json";
+					desc.UseMeshSubfolder = !filesystem::exists(modelPath, ec);
+					desc.UseMaterialSubfolder = desc.UseMeshSubfolder;
+					desc.UseAnimationSubfolder = desc.UseMeshSubfolder;
+					desc.UseTextureSubfolder = desc.UseMeshSubfolder;
+					if (ec)
+						return finish(EResult::Fail);
+				}
+			}
+
+			if (hasExistingModel)
+			{
+				const auto* existingModel = dynamic_cast<Model*>(manager.GetResource(modelHandle));
+				if (!existingModel)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Failed to read existing model layout: {}", WStrToStr(desc.Key));
+					return finish(EResult::Fail);
+				}
+
+				desc.UseMeshSubfolder = existingModel->UsesMeshSubfolder();
+				desc.UseMaterialSubfolder = existingModel->UsesMaterialSubfolder();
+				desc.UseAnimationSubfolder = existingModel->UsesAnimationSubfolder();
+				desc.UseTextureSubfolder = existingModel->UsesTextureSubfolder();
+			}
+
+			state.MeshDirectory = desc.UseMeshSubfolder ? outputDir / L"Meshes" : outputDir;
 
 			const auto options = state.Settings.ImportOptions;
 			if (HasFlag(options, EModelImportOption::Materials) && !data.Materials.empty())
@@ -1210,7 +1306,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (state.Settings.SaveToFile)
 			{
 				std::error_code ec;
-				filesystem::create_directories(Engine::PlatformPath::ResolveProjectRelative(outputDir), ec);
+				filesystem::create_directories(Engine::PlatformPath::ResolveProjectRelative(state.MeshDirectory), ec);
 				if (ec)
 					return finish(EResult::Fail);
 			}
@@ -1239,7 +1335,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 
 			const wstring stem = MakeUniqueStem(data.SourcePath.stem().wstring(),
 				StrToWStr(source.Name), L"Mesh", static_cast<uint32>(state->NextMesh), state->NameCounts);
-			const wstring key = NormalizePath((outputDir / (stem + L".bammesh")).wstring());
+			const wstring key = NormalizePath((state->MeshDirectory / (stem + L".bammesh")).wstring());
 
 			if (const EResult result = ValidateImportOutput(manager, key, state->Settings.SaveToFile, state->Settings.Overwrite);
 				result != EResult::Success)
@@ -1297,7 +1393,8 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 					continue;
 
 				const bool lodHasSkinWeights = !lodSource.SkinWeights.empty();
-				const wstring lodKey = NormalizePath((outputDir / (stem + L"_LOD" + std::to_wstring(lodIdx + 1) + L".bammesh")).wstring());
+				const wstring lodName = stem + L"_LOD" + std::to_wstring(lodIdx + 1) + L".bammesh";
+				const wstring lodKey = NormalizePath((state->MeshDirectory / lodName).wstring());
 
 				if (const EResult result = ValidateImportOutput(manager, lodKey, state->Settings.SaveToFile, state->Settings.Overwrite);
 					result != EResult::Success)
@@ -1479,7 +1576,6 @@ Tools::ModelConversion::Options ModelImporter::MakeConversionOptions(const Model
 	options.ConvertToLeftHanded = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded);
 	options.FlipWindingOrder = HasFlag(desc.PostProcessFlags, EModelPostProcessFlag::FlipWindingOrder);
 	options.UniformScale = desc.UniformScale;
-	options.RotationOffset = desc.RotationOffset;
 	options.FlipPitch = desc.FlipPitch;
 	options.FlipHeading = desc.FlipHeading;
 	options.GenerateLODs = desc.GenerateLODs;

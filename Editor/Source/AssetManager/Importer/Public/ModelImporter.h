@@ -70,6 +70,7 @@ struct ModelImportDesc
 	std::array<float, 3> RotationOffset{ 0.0f, 0.0f, 0.0f };
 	bool SaveToFile = true;
 	bool Overwrite = true;
+	bool OverwriteMaterials = false;
 	bool FlipPitch = false;
 	bool FlipHeading = false;
 

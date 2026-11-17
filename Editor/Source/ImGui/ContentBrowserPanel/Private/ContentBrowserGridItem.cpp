@@ -1158,29 +1158,45 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 	}
 	else if (filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json"))
 	{
-		std::filesystem::path sourceCandidate;
-		std::string stem = path.stem().string();
-		if (stem.ends_with(".bammodel")) stem = stem.substr(0, stem.length() - 9);
+		if (!ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
+			return;
 
-		const std::vector<std::string> exts = { ".glb", ".gltf", ".fbx", ".obj" };
-		for (const auto& candidateExt : exts)
+		auto& rm = Engine::ResourceManager::Get();
+		const auto* model = dynamic_cast<Engine::Model*>(rm.GetResource(rm.LoadFile(path.wstring())));
+		auto modelStem = path.stem();
+		if (filename.ends_with(".bammodel.json"))
+			modelStem.replace_extension();
+
+		std::filesystem::path source;
+		std::error_code ec;
+		if (model && Engine::PlatformPath::IsProjectUri(model->GetImportSourceUri()))
 		{
-			std::filesystem::path candidatePath = path.parent_path() / (stem + candidateExt);
-			if (std::filesystem::exists(candidatePath))
+			source = Engine::PlatformPath::ResolveUri(model->GetImportSourceUri());
+		}
+		else if (model && model->GetImportSourceUri().empty())
+		{
+			for (const auto* ext : { L".glb", L".gltf", L".fbx", L".obj" })
 			{
-				sourceCandidate = candidatePath;
-				break;
+				auto candidate = path.parent_path() / modelStem;
+				candidate += ext;
+				if (std::filesystem::is_regular_file(candidate, ec))
+				{
+					source = std::move(candidate);
+					break;
+				}
 			}
 		}
 
-		if (!sourceCandidate.empty())
+		if (source.empty() || source.stem() != modelStem || !std::filesystem::is_regular_file(source, ec))
 		{
-			if (ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
-			{
-				if (auto* modal = ModelImportModal::Get())
-					modal->Open(sourceCandidate, path.parent_path());
-			}
+			NotificationManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
+				LOCAL_FMT("Notification.ReimportFailedFile", Engine::WStrToStr(path.filename().wstring())),
+				ELogLevel::Warn, 3.0f);
+			return;
 		}
+
+		if (auto* modal = ModelImportModal::Get())
+			modal->Open(source, path.parent_path());
 	}
 }
 

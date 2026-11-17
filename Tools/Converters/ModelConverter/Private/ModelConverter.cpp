@@ -21,7 +21,7 @@ namespace Tools::ModelConversion
     namespace
     {
         constexpr uint32_t MODEL_DDC_MAGIC = 0x43444D42; // "BMDC"
-        constexpr uint32_t MODEL_DDC_VERSION = 1;
+        constexpr uint32_t MODEL_DDC_VERSION = 2;
 
         void WriteString(std::ostream& os, const std::string& str)
         {
@@ -106,7 +106,6 @@ namespace Tools::ModelConversion
             hasher.CombinePod(options.FlipUVs);
             hasher.CombinePod(options.ConvertToLeftHanded);
             hasher.CombinePod(options.UniformScale);
-            hasher.Combine(options.RotationOffset.data(), sizeof(float) * 3);
             hasher.CombinePod(options.FlipWindingOrder);
             hasher.CombinePod(options.FlipPitch);
             hasher.CombinePod(options.FlipHeading);
@@ -114,7 +113,7 @@ namespace Tools::ModelConversion
             hasher.CombinePod(options.LODCount);
             hasher.CombinePod(options.TargetError);
             for (float rate : options.LODReductionRates) hasher.CombinePod(rate);
-            hasher.CombineString("model_ddc_v1");
+            hasher.CombineString("model_ddc_v2");
 
             return hasher.ResolvePath(Tools::Ddc::FindDdcDirectory("models"));
         }
@@ -547,20 +546,7 @@ namespace Tools::ModelConversion
             NodeData node;
             node.Name = source.mName.C_Str();
             node.ParentIndex = current.ParentIndex;
-            aiMatrix4x4 localMat = orientation * source.mTransformation * orientation;
-            if (current.ParentIndex == -1)
-            {
-                aiMatrix4x4 rotX, rotY, rotZ;
-                const float radX = options.RotationOffset[0] * (3.14159265359f / 180.0f);
-                const float radY = options.RotationOffset[1] * (3.14159265359f / 180.0f);
-                const float radZ = options.RotationOffset[2] * (3.14159265359f / 180.0f);
-                aiMatrix4x4::RotationX(radX, rotX);
-                aiMatrix4x4::RotationY(radY, rotY);
-                aiMatrix4x4::RotationZ(radZ, rotZ);
-                localMat = rotZ * rotY * rotX * localMat;
-            }
-            // Uniform import scale changes asset units, so scale translations and mesh positions together.
-            node.LocalTransform = CopyMatrixColumnMajor(localMat, options.UniformScale);
+            node.LocalTransform = CopyMatrixColumnMajor(orientation * source.mTransformation * orientation, options.UniformScale);
             if (!IsFinite(node.LocalTransform))
                 return Fail(Error::InvalidData, "A node transform contains a non-finite value.");
 

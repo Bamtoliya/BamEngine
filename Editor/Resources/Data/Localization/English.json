@@ -2071,6 +2071,7 @@
         "Timeline.SetAsSocket": "Set as Notify Socket",
         "Timeline.FocusBone": "Focus Bone Camera",
         "Timeline.NoEmbeddedAnimation": "No Embedded Animation (Bind Pose)",
-        "Timeline.DurationTooltip": "Adjust timeline duration for static models"
+        "Timeline.DurationTooltip": "Adjust timeline duration for static models",
+        "ModelImport.OverwriteMaterials": "Overwrite Existing Materials"
     }
 }

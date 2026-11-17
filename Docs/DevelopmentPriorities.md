@@ -565,7 +565,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 ### 11.2 사용 조건에 따라 앞당길 작업
 
 - **다수 광원 지원 확장 — A06 본체 / F10 [해소 완료: 2026-11-15]**: `LightManager`의 씬 광원 상한을 1024개(`MAX_LIGHTS`)로 확장하고, `tiledLightCullingCS.hlsl`의 실제 누적 카운트(`s_TileLightCount`) 보존 및 `lightingPS.hlsl`의 256개 초과 타일 안전 전체 순회 폴백(`useTiled = false; loopCount = numLights;`)을 적용하여 조도 누락을 해소했다(`x64-debug` 빌드 및 CTest 36/36 통과 확인).
-- **재임포트 작업**: Overwrite/SaveToFile 조합, 기존 핸들 유지, 중간 파일 저장/부모 머티리얼 실패를 확인한다. 정적 검토만으로 다중 파일 트랜잭션 완료를 선언하지 않는다.
+- **모델 재임포트** — 기존 머티리얼 보존, 원본 추적, 생성물 하위 폴더 분류를 반영하고 도끼·활·Fox의 사용자 확인 결과를 기록했다. 모델 전용 폴더와 원본 보관 자동화, 기존 에셋 이관은 후속이다. `Overwrite`·`SaveToFile` 조합과 중간 저장·부모 머티리얼 실패의 복구는 별도로 검증한다. [모델 임포트 계획](InteractiveModelImportPreviewPlan.md#phase-6-하이브리드-모델-에셋-정리-파이프라인-hybrid-source-to-asset-pipeline)
 - **클라이언트 빌드 시 에디터·디버그 코드 스트립 및 안전 실행 보장 (No-Op 스텁화 / ABI 보호)**: 엔진 내 에디터 및 디버깅 전용 함수를 식별하고, 클라이언트 DLL/바이너리 빌드 시 전처리기로 완전히 제거(Strip)하되 링크 오류 및 널 크래시를 방지하기 위해 No-Op 인라인 스텁 및 안전 매크로를 적용한다. 코어 데이터 구조의 ABI 불변성과 호출부 널 안전성을 보장한다. (참조: [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 3.1절)
 - **비정상 종료 진단(크래시 리포터) 및 에디터 작업 복원 시스템 (Crash Recovery)**: Windows SEH 및 미니덤프(`MiniDumpWriteDump`) 연동, 블랙박스 로그 플러시, 구조화된 크래시 리포트(`.crash.json`), 5분 주기 하트비트 자동 저장(Heartbeat Auto-Save) 및 차기 실행 시 복원 마법사 구축. (참조: [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md))
 - **2D 제작 예제**: 로그에 남은 구형 sprite/texture 로드 실패의 현재 재현 여부를 먼저 확인한다. 현행 로더 문제와 오래된 샘플 데이터 문제를 분리한 뒤 Engine 14절 L의 Simple/Filled 또는 기본 TileMap 중 필요한 작은 예제로 진행한다.

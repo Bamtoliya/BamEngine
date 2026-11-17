@@ -557,6 +557,9 @@ namespace Editor
 
 							m_PreviewReloadRequested = true;
 						}
+						ImGui::BeginDisabled(!importMats);
+						ImGui::Checkbox(LOCAL_LABEL("ModelImport.OverwriteMaterials").c_str(), &m_Desc.OverwriteMaterials);
+						ImGui::EndDisabled();
 					}
 
 					ImGui::Spacing();

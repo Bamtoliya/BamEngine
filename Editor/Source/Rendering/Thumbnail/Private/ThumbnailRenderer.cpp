@@ -320,12 +320,17 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 	const auto& nodes = model->GetNodes();
 	const auto& meshes = model->GetMeshes();
 	if (meshes.empty()) return false;
+	Engine::TransformComponent rootTransform{};
+	if (!rootTransform.SetEulerRotation(model->GetPlacementEulerDegrees()))
+		return false;
+
+	const mat4 placementMatrix = rootTransform.GetLocalMatrix();
 	std::vector<mat4> worldTransforms(nodes.size(), mat4(1.0f));
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		const auto& node = nodes[i];
 		worldTransforms[i] = (node.ParentIndex >= 0 && static_cast<size_t>(node.ParentIndex) < i)
-			? worldTransforms[node.ParentIndex] * node.LocalTransform : node.LocalTransform;
+			? worldTransforms[node.ParentIndex] * node.LocalTransform : placementMatrix * node.LocalTransform;
 	}
 	Engine::BoundingBox bounds;
 	bool hasValidBounds = false;
@@ -403,7 +408,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 				cmd.mesh = mesh;
 				cmd.material = material;
 				if (material) material->BuildMaterialConstants(cmd.materialConstants);
-				cmd.worldMatrix = m_BindPoseMatrices.empty() ? worldTransforms[i] : mat4(1.0f);
+				cmd.worldMatrix = m_BindPoseMatrices.empty() ? worldTransforms[i] : placementMatrix;
 				cmd.boneMatrices = m_BindPoseMatrices.empty() ? nullptr : &m_BindPoseMatrices;
 				cmd.pickingId = 0;
 				renderer.SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());

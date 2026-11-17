@@ -204,13 +204,17 @@ namespace Engine
 			entityCount += extraMeshes;
 		}
 
+		TransformComponent rootTransform{};
+		if (!rootTransform.SetEulerRotation(model.GetPlacementEulerDegrees()))
+			return EResult::InvalidArgument;
+
 		const uint64 savedNextId = m_NextEntityId;
 		const auto created = CreateEntities(entityCount);
 		auto& world = m_LocalRegistry;
 
 		const auto rootHandle = created.front();
 		const auto modelPath = model.GetPath().empty() ? model.GetKey() : model.GetPath();
-		InitializeModelEntity(world, rootHandle, std::filesystem::path(modelPath).stem().wstring(), TransformComponent{});
+		InitializeModelEntity(world, rootHandle, std::filesystem::path(modelPath).stem().wstring(), rootTransform);
 
 		if (linked)
 		{

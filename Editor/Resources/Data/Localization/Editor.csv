@@ -2072,3 +2072,4 @@ Timeline,SetAsSocket,Set as Notify Socket,노티파이 소켓으로 지정
 Timeline,FocusBone,Focus Bone Camera,본으로 카메라 이동
 Timeline,NoEmbeddedAnimation,No Embedded Animation (Bind Pose),내장 애니메이션 없음 (바인드 포즈)
 Timeline,DurationTooltip,Adjust timeline duration for static models,애니메이션이 없는 모델의 타임라인 지속시간을 조절합니다
+ModelImport,OverwriteMaterials,Overwrite Existing Materials,기존 머티리얼 덮어쓰기

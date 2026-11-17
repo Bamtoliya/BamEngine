@@ -18,6 +18,13 @@ EResult Model::Initialize(void* arg)
     m_Animations = desc->Animations;
 	m_MeshMaterialIndices = desc->MeshMaterialIndices;
 	m_MeshLODs = desc->MeshLODs;
+	m_PlacementEulerDegrees = desc->PlacementEulerDegrees;
+	m_ImportSourceUri = desc->ImportSourceUri;
+	m_UseMeshSubfolder = desc->UseMeshSubfolder;
+	m_UseMaterialSubfolder = desc->UseMaterialSubfolder;
+	m_UseAnimationSubfolder = desc->UseAnimationSubfolder;
+	m_UseTextureSubfolder = desc->UseTextureSubfolder;
+
     return OnPostLoad();
 }
 
@@ -35,6 +42,7 @@ Model* Model::Create(void* arg)
 
 void Model::Free()
 {
+	m_PlacementEulerDegrees = vec3(0.0f);
 	m_Nodes.clear();
 	m_Meshes.clear();
 	m_Materials.clear();
@@ -42,6 +50,11 @@ void Model::Free()
 	m_Animations.clear();
 	m_MeshMaterialIndices.clear();
 	m_MeshLODs.clear();
+	m_ImportSourceUri.clear();
+	m_UseMeshSubfolder = false;
+	m_UseMaterialSubfolder = false;
+	m_UseAnimationSubfolder = false;
+	m_UseTextureSubfolder = false;
 }
 
 EResult Model::OnPostLoad()
@@ -168,7 +181,12 @@ archive::ArchiveResult Model::ReadArchive(const archive::IArchive& ar)
 	m_Skeleton = std::move(candidate.m_Skeleton);
 	m_Animations = std::move(candidate.m_Animations);
 	m_MeshLODs = std::move(candidate.m_MeshLODs);
-
+	m_PlacementEulerDegrees = candidate.m_PlacementEulerDegrees;
+	m_ImportSourceUri = std::move(candidate.m_ImportSourceUri);
+	m_UseMeshSubfolder = candidate.m_UseMeshSubfolder;
+	m_UseMaterialSubfolder = candidate.m_UseMaterialSubfolder;
+	m_UseAnimationSubfolder = candidate.m_UseAnimationSubfolder;
+	m_UseTextureSubfolder = candidate.m_UseTextureSubfolder;
 	return result;
 }
 #pragma endregion

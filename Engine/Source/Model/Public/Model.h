@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Resource.h"
 #include "ResourceHandle.h"
@@ -55,6 +55,12 @@ struct ModelCreateDesc : public ResourceCreateDesc
 	vector<ResourceHandle<Animation>> Animations;
 	vector<uint32> MeshMaterialIndices;
 	vector<ModelMeshLOD> MeshLODs;
+	vec3 PlacementEulerDegrees{ 0.0f };
+	wstring ImportSourceUri;
+	bool UseMeshSubfolder = false;
+	bool UseMaterialSubfolder = false;
+	bool UseAnimationSubfolder = false;
+	bool UseTextureSubfolder = false;
 };
 
 CLASS()
@@ -107,6 +113,12 @@ public:
 		}
 		return false;
 	}
+	const vec3& GetPlacementEulerDegrees() const { return m_PlacementEulerDegrees; }
+	const wstring& GetImportSourceUri() const { return m_ImportSourceUri; }
+	bool UsesMeshSubfolder() const { return m_UseMeshSubfolder; }
+	bool UsesMaterialSubfolder() const { return m_UseMaterialSubfolder; }
+	bool UsesAnimationSubfolder() const { return m_UseAnimationSubfolder; }
+	bool UsesTextureSubfolder() const { return m_UseTextureSubfolder; }
 #pragma endregion
 
 #pragma region Setter
@@ -136,6 +148,18 @@ private:
 	vector<uint32> m_MeshMaterialIndices;
 	PROPERTY(ALLOW_MISSING)
 	vector<ModelMeshLOD> m_MeshLODs;
+	PROPERTY(ALLOW_MISSING)
+	vec3 m_PlacementEulerDegrees{ 0.0f };
+	PROPERTY(ALLOW_MISSING)
+	wstring m_ImportSourceUri;
+	PROPERTY(ALLOW_MISSING)
+	bool m_UseMeshSubfolder = false;
+	PROPERTY(ALLOW_MISSING)
+	bool m_UseMaterialSubfolder = false;
+	PROPERTY(ALLOW_MISSING)
+	bool m_UseAnimationSubfolder = false;
+	PROPERTY(ALLOW_MISSING)
+	bool m_UseTextureSubfolder = false;
 #pragma endregion
 };
 END
