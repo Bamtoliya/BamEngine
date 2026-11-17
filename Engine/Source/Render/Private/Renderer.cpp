@@ -80,6 +80,22 @@ void Renderer::Free()
 }
 #pragma endregion
 
+namespace
+{
+	// 반투명 패스: 카메라에서 먼 물체부터 그린다. 거리가 같으면 제출 순서를 유지해 깜빡임을 막는다.
+	void SortStaticBackToFront(vector<StaticDrawCommand>& commands, const vec3& cameraPos)
+	{
+		const auto distanceSq = [&cameraPos](const StaticDrawCommand& command)
+			{
+				const vec3 center = command.worldBounds ? command.worldBounds->Center() : vec3(command.worldMatrix[3]);
+				const vec3 offset = center - cameraPos;
+				return glm::dot(offset, offset);
+			};
+
+		std::stable_sort(commands.begin(), commands.end(), [&distanceSq](const StaticDrawCommand& a, const StaticDrawCommand& b) { return distanceSq(a) > distanceSq(b); });
+	}
+}
+
 #pragma region Render Management	
 EResult Renderer::BeginFrame()
 {
@@ -430,6 +446,9 @@ EResult Renderer::Render(f32 dt)
 				auto meshIt = m_StaticDrawCommands.find(pass->GetID());
 				if (meshIt != m_StaticDrawCommands.end())
 				{
+					if (pass->GetSortType() == ERenderSortType::BackToFront && job.hasCamera)
+						SortStaticBackToFront(meshIt->second, cameraBuffer.cameraPosition);
+
 					Frustum frustum{};
 					const Frustum* activeFrustum = nullptr;
 

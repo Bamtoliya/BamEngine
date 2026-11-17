@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 반투명 정적 메시의 카메라 기준 정렬 (Render S6 1단계)
+
+- `Renderer::Render`의 뷰포트(job) 반복에서 `BackToFront` 패스의 정적 메시 명령을 카메라 위치 기준 거리 내림차순으로 정렬한다(`SortStaticBackToFront`, 동일 거리는 `stable_sort`로 제출 순서 유지). 기존에는 `BackToFront`일 때 정렬을 건너뛰어 합성 순서가 엔티티 생성 순서를 따랐다. 명령 목록은 패스 단위로 공유되므로 뷰포트 카메라마다 다시 정렬한다. 정렬 후 연속한 같은 메시·머티리얼은 기존처럼 인스턴싱으로 묶이며 인스턴스 순서는 래스터 순서로 유지된다.
+- 정적 메시용 반투명 검증 셰이더 `forwardTransparentPS.hlsl`(머티리얼 `BaseColor`를 비조명 출력)을 추가했다. 기존 `TransparentMaterial`은 `defaultPS`가 불투명 흰색을 반환해 반투명 확인에 쓸 수 없다.
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`):** 서로 다른 색의 반투명 판(AlphaBlend, DepthMode ReadOnly) 겹침 합성, 카메라 반대편 이동 시 순서 반전, 생성 순서 변경 시 동일 결과, 불투명 큐브와의 가림, Scene·Game View 동시 표시, 파티클·스프라이트 회귀를 확인했다고 보고했다. 이번 기록 작업에서는 빌드·CTest·실행을 하지 않았고 CTest 결과는 보고되지 않았다.
+- **미검증·한계:** Windows 배포 Client 비교(S6 공통 완료 기준)는 미수행이다. 한 패스 안에서 정적→스킨드→스프라이트→동적 지오메트리→커스텀 큐 순서로 그리므로 반투명 판 뒤의 파티클도 판 위에 그려진다. 반투명 메시는 Geometry 패스에 들어가지 않아 뷰포트 클릭으로 선택되지 않는다. 관통하는 판은 물체 단위 정렬로 해결되지 않는다. [S6 계획](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면)
+
 ### [2026-11-17] 콘텐츠 브라우저 파일 이력과 계층 다중 선택
 
 - 콘텐츠 브라우저의 공통 우클릭 메뉴에 복사·잘라내기·붙여넣기 아이콘과 묶음 삭제를 연결했다. X1/X2는 방문한 폴더를 탐색하며 경로 표시줄·폴더 타일·트리 이동을 같은 이력에 기록한다.
