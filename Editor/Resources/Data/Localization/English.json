@@ -2053,6 +2053,7 @@
         "VFXEditor.EditTrackProperties": "Edit Track Properties",
         "ResourceEditor.DiscardTitle": "Unsaved Changes",
         "ResourceEditor.DiscardMessage": "{} has unsaved changes. Continue without saving?",
-        "ResourceEditor.DiscardContinue": "Continue Without Saving"
+        "ResourceEditor.DiscardContinue": "Continue Without Saving",
+        "GraphPanel.LoadFailed": "Cannot open {} (stage {}: {})"
     }
 }

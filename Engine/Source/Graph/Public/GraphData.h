@@ -32,7 +32,7 @@ namespace Engine
 		PROPERTY()
 		std::vector<GraphLink> Links;
 
-		PROPERTY()
+		PROPERTY(ALLOW_MISSING)
 		std::vector<GraphVariable> Variables;
 	};
 

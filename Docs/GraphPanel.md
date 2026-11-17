@@ -137,8 +137,12 @@ Logic 실행·추적 미리보기의 사용법은 `Docs/GraphExecution.md`에 �
 
 ### 저장 범위와 미저장 표시 (2026-11-17)
 
-- 파일에 저장되는 것은 `Engine::Graph`(노드·연결·입력값·변수)뿐이다. 노드 위치와 주석 텍스트(`CommentTexts`)는 저장되지 않아, 다시 열면 노드는 3열 격자로 배치되고 주석은 기본 문구로 돌아간다. 저장하려면 `GraphData` 형식 확장이 필요하다.
-- 미저장 판정은 `Graph::GetRevision()`과 문서별 `SavedRevision`(저장 성공·로드 시점)을 비교한다. Logic·Shader 중 하나라도 다르면 창 제목 `*`, 앱 종료 확인, 다른 에셋 열기 차단이 적용된다. 위치·주석만 바꾼 경우는 표시되지 않는다.
+- 파일에 저장되는 것은 `Engine::Graph`(노드·연결·입력값·변수)와 노드의 에디터 메타데이터(`GraphNode::PositionX/PositionY/HasPosition`, `Comment`)다. 메타데이터 필드는 `ALLOW_MISSING`이라 예전 파일도 열린다. 위치가 없는 예전 노드는 3열 격자에 배치하고, 그 배치를 로드 시점의 저장 기준에 포함한다.
+- 주석 박스(`Core.Comment`)는 엔진 기본 노드다. 제목은 `GraphNode::Comment`, 크기는 리터럴 전용 `Size`(Float2) 입력값이며 `Size`는 노드 전체가 아니라 노드 에디터의 그룹 영역 크기(`ed::NodeState::GroupSize`)다. 실행기와 셰이더 컴파일러는 주석을 건너뛴다.
+- 캔버스 위치는 매 프레임 `ed::GetNodePosition`에서 문서로 반영하며(`Graph::SetNodePosition`, 0.5px 미만 차이는 수정 아님), 노드 에디터 상태를 `imgui.ini`에 저장하지 않는다(`SettingsName = nullptr`). 그래서 캔버스 화면 이동·확대는 재실행 시 기억되지 않는다.
+- 미저장 판정은 `Graph::GetRevision()`과 문서별 `SavedRevision`(저장 성공·로드 시점)을 비교한다. Logic·Shader 중 하나라도 다르면 창 제목 `*`, 앱 종료 확인, 다른 에셋 열기 차단이 적용된다. 노드 이동·주석 제목·주석 크기 조절도 미저장으로 표시된다.
+- 로드에 실패하면 단계와 원인을 알림으로 표시하고 기존 문서·대상 경로를 유지한다(`ReportLoadFailure`).
+- 데이터 핀 원은 노드 테두리 위에 반쯤 걸쳐 그린다(행을 그린 뒤 테두리 좌표에서 `PinRect`/`PinPivotRect` 선언). 실행 핀은 노드 안쪽에 둔다. 캔버스 이동은 휠 클릭 드래그이며, 우클릭은 컨텍스트 메뉴 전용이다(`CreateEditorContext`).
 - 파일 열기는 메뉴와 Ctrl+O 모두 `RequestOpenDocument()`를 거치며, 어느 도메인이든 미저장이면 교체 확인 모달을 띄운다. 콘텐츠 브라우저 경로는 리소스 편집기 공통 정책에 따라 알림으로 차단한다.
 Undo/Redo·씬 객체 바인딩·PIE 자동 실행은 현재 소유자와 호출 경로를 다시 확인해 후속 범위를 정한다.
 현재 씬 연결 검토 대상은 GraphBindingComponent이며, 과거 GraphComponent와 Python GraphCompiler 실험을 같은 경로로 취급하지 않는다.

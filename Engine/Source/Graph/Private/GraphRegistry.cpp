@@ -149,6 +149,9 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "In", Direction::Input, Type::Float3, std::array<float, 3>{} }, { "Out", Direction::Output, Type::Float3, {} } } },
 		{ "Core.Reroute.Float4", common, {
 			{ "In", Direction::Input, Type::Float4, std::array<float, 4>{} }, { "Out", Direction::Output, Type::Float4, {} } } },
+		// 정리용 주석 박스: 실행·셰이더 생성 대상이 아니며 크기와 문구만 보관한다. 런타임 로드 검증을 위해 엔진 기본 노드로 둔다.
+		{ "Core.Comment", common, {
+			{ "Size", Direction::Input, Type::Float2, std::array<float, 2>{ 400.0f, 250.0f } } } },
 		{ "Math.AddFloat", common, {
 			{ "a", Direction::Input, Type::Float, 0.0f }, { "b", Direction::Input, Type::Float, 0.0f },
 			{ "result", Direction::Output, Type::Float, {} } } },
@@ -273,6 +276,11 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			definition.Category = "Organization";
 			definition.DisplayName = "Reroute";
 			definition.Tooltip = "Pass through execution or data wire cleanly.";
+		}
+		if (definition.Type == "Core.Comment")
+		{
+			definition.Category = "Organization";
+			for (auto& pin : definition.Pins) pin.LiteralOnly = true; // 연결 불가, 값만 저장
 		}
 	}
 	for (auto& definition : definitions)

@@ -16,31 +16,36 @@ namespace
 }
 
 #pragma region Context
+ed::EditorContext* GraphPanel::CreateEditorContext()
+{
+	ed::Config config;
+	config.SettingsName = nullptr;  // 노드 위치·그룹 크기는 그래프 파일이 기준이다. 편집용 ID 기준의 imgui.ini 상태가 다른 그래프에 적용되지 않게 한다.
+	config.NavigateButtonIndex = 2; // 휠 클릭 드래그로 화면 이동. 우클릭은 컨텍스트 메뉴 전용이다.
+	auto* context = ed::CreateEditor(&config);
+
+	// ── 언리얼 블루프린트 글로벌 테마 설정 (GetStyle은 현재 편집기 대상이므로 잠시 전환) ──
+	auto* previous = ed::GetCurrentEditor();
+	ed::SetCurrentEditor(context);
+	auto& style = ed::GetStyle();
+	style.NodeRounding = 6.0f;
+	style.NodeBorderWidth = 1.2f;
+	style.NodePadding = ImVec4(10.0f, 6.0f, 10.0f, 8.0f);
+	style.Colors[ed::StyleColor_NodeBg] = ImVec4(0.09f, 0.09f, 0.11f, 0.95f);
+	style.Colors[ed::StyleColor_NodeBorder] = ImVec4(0.24f, 0.25f, 0.28f, 1.0f);
+	style.Colors[ed::StyleColor_HovNodeBorder] = ImVec4(0.95f, 0.70f, 0.20f, 1.0f);
+	style.Colors[ed::StyleColor_SelNodeBorder] = ImVec4(1.0f, 0.85f, 0.30f, 1.0f);
+	style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.95f, 0.35f, 1.0f);
+	style.Colors[ed::StyleColor_FlowMarker] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	style.FlowSpeed = 160.0f;
+	style.FlowMarkerDistance = 28.0f;
+	ed::SetCurrentEditor(previous);
+	return context;
+}
+
 void GraphPanel::ActivateDocument()
 {
 	auto& document = GetDocument();
-	if (!document.Context)
-	{
-		ed::Config config;
-		config.SettingsName = (m_Domain == Engine::EGraphDomain::Logic) ? "LogicGraph" : "ShaderGraph";
-		config.NavigateButtonIndex = 2; // ★ 2 = 마우스 가운데 버튼(휠 클릭)으로 캔버스 화면 이동!
-		document.Context = ed::CreateEditor(&config);
-
-		// ── 언리얼 블루프린트 글로벌 테마 설정 ──
-		ed::SetCurrentEditor(document.Context);
-		auto& style = ed::GetStyle();
-		style.NodeRounding = 6.0f;
-		style.NodeBorderWidth = 1.2f;
-		style.NodePadding = ImVec4(10.0f, 6.0f, 10.0f, 8.0f);
-		style.Colors[ed::StyleColor_NodeBg] = ImVec4(0.09f, 0.09f, 0.11f, 0.95f);
-		style.Colors[ed::StyleColor_NodeBorder] = ImVec4(0.24f, 0.25f, 0.28f, 1.0f);
-		style.Colors[ed::StyleColor_HovNodeBorder] = ImVec4(0.95f, 0.70f, 0.20f, 1.0f);
-		style.Colors[ed::StyleColor_SelNodeBorder] = ImVec4(1.0f, 0.85f, 0.30f, 1.0f);
-		style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.95f, 0.35f, 1.0f);
-		style.Colors[ed::StyleColor_FlowMarker] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-		style.FlowSpeed = 160.0f;
-		style.FlowMarkerDistance = 28.0f;
-	}
+	if (!document.Context) document.Context = CreateEditorContext();
 	ed::SetCurrentEditor(document.Context);
 	// Keyboard commands are owned by ShortcutManager, including the library's default Delete and F.
 	ed::EnableShortcuts(false);
@@ -129,6 +134,13 @@ void GraphPanel::DrawCanvas(float height)
 	DrawLinks();
 	HandleConnections(ImVec2(0, 0), true);
 	ReadSelection();
+	// 캔버스 위치를 문서에 반영한다(드래그·정렬·그룹 이동·복제 배치 공통). 0.5px 미만 차이는 수정으로 세지 않는다.
+	for (const auto& [nodeId, view] : document.Nodes)
+	{
+		const ImVec2 position = ed::GetNodePosition(view.Id);
+		if (position.x != FLT_MAX && position.y != FLT_MAX)
+			(void)document.Data.SetNodePosition(nodeId, position.x, position.y);
+	}
 	ed::End();
 
 	// ★ 와이어(링크) 좌클릭 더블클릭 시 리루트 노드 즉시 자동 삽입!
@@ -454,6 +466,16 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	else if (node.Type.rfind("Variable.Set.", 0) == 0) headerColor = IM_COL32(190, 100, 30, 240);
 	else if (execInputs.empty() && execOutputs.empty()) headerColor = IM_COL32(40, 135, 65, 240);
 
+	// 데이터 핀은 행을 그린 뒤 노드 테두리 위에 원으로 선언한다. 테두리 좌표는 노드 내용을 다 그린 뒤에야 확정된다.
+	struct BorderPin
+	{
+		int Id = 0;
+		ed::PinKind Kind = ed::PinKind::Input;
+		float CenterY = 0.0f;
+		ImU32 Color = 0;
+	};
+	std::vector<BorderPin> borderPins;
+
 	ed::BeginNode(found->second.Id);
 	ImGui::PushID(static_cast<int>(node.Id));
 
@@ -496,19 +518,14 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
 		for (const auto* inPin : dataInputs)
 		{
-			if (!inPin->LiteralOnly)
-			{
-				const int id = found->second.Pins.at(inPin->Key);
-				const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(inPin->Type));
-				ed::BeginPin(id, ed::PinKind::Input);
-				ed::PinPivotAlignment(ImVec2(0.0f, 0.5f));
-				ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
-				ed::EndPin();
-				ImGui::SameLine(0.0f, 6.0f);
-			}
 			const auto pinText = localization.GetTextForDisplay(inPin->DisplayName);
 			const char* label = inPin->DisplayName.empty() ? inPin->Key.c_str() : pinText.c_str();
 			ImGui::TextUnformatted(label);
+			if (!inPin->LiteralOnly)
+			{
+				const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
+				borderPins.push_back({ found->second.Pins.at(inPin->Key), ed::PinKind::Input, centerY, PinColor(inPin->Type) });
+			}
 			DrawPinValue(node, *inPin, 80.0f);
 		}
 		if (dataStraight) ed::PopStyleVar();
@@ -547,24 +564,42 @@ void GraphPanel::DrawNode(const GraphNode& node)
 		{
 			const auto pinText = localization.GetTextForDisplay(outPin->DisplayName);
 			const char* label = outPin->DisplayName.empty() ? outPin->Key.c_str() : pinText.c_str();
-			const float textW = ImGui::CalcTextSize(label).x;
-			const float actualRowW = textW + pinIconWidth;
-			const float indent = std::max(0.0f, maxOutWidth - actualRowW);
+			const float indent = std::max(0.0f, maxOutWidth - ImGui::CalcTextSize(label).x);
 			if (indent > 0.0f) ImGui::Indent(indent);
 			ImGui::TextUnformatted(label);
-			ImGui::SameLine(0.0f, 6.0f);
-			const int id = found->second.Pins.at(outPin->Key);
-			const ImVec4 pinColor = ImGui::ColorConvertU32ToFloat4(PinColor(outPin->Type));
-			ed::BeginPin(id, ed::PinKind::Output);
-			ed::PinPivotAlignment(ImVec2(1.0f, 0.5f));
-			ImGui::TextColored(pinColor, ICON_FA_CIRCLE);
-			ed::EndPin();
+			const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
+			borderPins.push_back({ found->second.Pins.at(outPin->Key), ed::PinKind::Output, centerY, PinColor(outPin->Type) });
 			if (indent > 0.0f) ImGui::Unindent(indent);
 		}
 		if (dataStraight) ed::PopStyleVar();
 		ImGui::EndGroup();
 	}
 	ImGui::EndGroup(); // 노드 전체 그룹 닫기
+
+	// 데이터 핀: 원의 중심을 노드 테두리에 두어 반쯤 걸치게 한다. 테두리 = 내용 영역 + 노드 안쪽 여백.
+	if (!borderPins.empty())
+	{
+		const auto& style = ed::GetStyle();
+		const float leftX = ImGui::GetItemRectMin().x - style.NodePadding.x;
+		const float rightX = ImGui::GetItemRectMax().x + style.NodePadding.z;
+		const float radius = ImGui::GetFontSize() * 0.3f;
+		const float hitExtent = radius + 3.0f; // 원보다 조금 넓게 잡아 마우스로 쉽게 집히게 한다
+		auto* drawList = ImGui::GetWindowDrawList();
+
+		// 링크 직선 스타일은 BeginPin 시점의 값이 핀에 저장되므로 지연 선언에도 다시 적용한다.
+		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		for (const auto& pin : borderPins)
+		{
+			const ImVec2 center(pin.Kind == ed::PinKind::Input ? leftX : rightX, pin.CenterY);
+			ed::BeginPin(pin.Id, pin.Kind);
+			ed::PinRect(ImVec2(center.x - hitExtent, center.y - hitExtent), ImVec2(center.x + hitExtent, center.y + hitExtent));
+			ed::PinPivotRect(center, center);
+			ed::EndPin();
+			drawList->AddCircleFilled(center, radius, pin.Color);
+			drawList->AddCircle(center, radius, IM_COL32(20, 20, 24, 255), 0, 1.5f); // 노드 테두리선과 구분되는 외곽선
+		}
+		if (dataStraight) ed::PopStyleVar();
+	}
 
 	ImGui::PopID();
 	ed::EndNode();
@@ -883,10 +918,8 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 
 	auto& document = GetDocument();
 
-	// 1. 코멘트 텍스트 조회
-	std::string commentText = "Comment";
-	const auto itText = document.CommentTexts.find(node.Id);
-	if (itText != document.CommentTexts.end() && !itText->second.empty()) commentText = itText->second;
+	// 1. 코멘트 텍스트 조회 (노드 메모, 없으면 기본 문구)
+	const std::string commentText = node.Comment.empty() ? std::string("Comment") : node.Comment;
 
 	// 2. 크기(Size) 조회
 	ImVec2 groupSize(400.0f, 250.0f);
@@ -920,12 +953,12 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 		if (ImGui::InputText("##CommentEdit", m_CommentEditBuffer, sizeof(m_CommentEditBuffer),
 			ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 		{
-			document.CommentTexts[node.Id] = m_CommentEditBuffer;
+			(void)document.Data.SetNodeComment(node.Id, m_CommentEditBuffer);
 			m_EditingCommentNode = 0;
 		}
 		if (!ImGui::IsItemActive() && Engine::InputManager::Get().IsMouseButtonDown(Engine::EMouseButton::Left))
 		{
-			document.CommentTexts[node.Id] = m_CommentEditBuffer;
+			(void)document.Data.SetNodeComment(node.Id, m_CommentEditBuffer);
 			m_EditingCommentNode = 0;
 		}
 	}
@@ -952,13 +985,13 @@ void GraphPanel::DrawCommentNode(const GraphNode& node)
 	ed::PopStyleVar(4);
 	ed::PopStyleColor(4);
 
-	// 마우스로 코멘트 박스 크기를 조절(Resize)했을 때 새 크기 동기화
-	const ImVec2 currentSize = ed::GetNodeSize(found->second.Id);
-	if (currentSize.x > 0.0f && currentSize.y > 0.0f &&
-		(std::abs(currentSize.x - groupSize.x) > 2.0f || std::abs(currentSize.y - groupSize.y) > 2.0f))
+	// 사용자가 그룹 영역 크기를 조절했을 때만 저장값을 바꾼다.
+	// 비교 대상은 노드 전체 크기(헤더·여백 포함)가 아니라 에디터가 가진 그룹 영역 크기다. (Group(size)는 첫 생성 때만 size를 쓴다)
+	ed::NodeState state{};
+	if (ed::GetNodeState(found->second.Id, &state) && state.GroupSize.x > 0.0f && state.GroupSize.y > 0.0f &&
+		(std::abs(state.GroupSize.x - groupSize.x) > 0.5f || std::abs(state.GroupSize.y - groupSize.y) > 0.5f))
 	{
-		(void)document.Data.SetInputValue(m_Registry, { node.Id, "Size" },
-			std::array<float, 2>{ currentSize.x, currentSize.y });
+		(void)document.Data.SetInputValue(m_Registry, { node.Id, "Size" }, std::array<float, 2>{ state.GroupSize.x, state.GroupSize.y });
 	}
 }
 
@@ -1021,7 +1054,6 @@ void GraphPanel::CreateCommentBoxFromSelection()
 		const auto lastNodeId = document.PendingSelection;
 		(void)document.Data.SetInputValue(m_Registry, { lastNodeId, "Size" },
 			std::array<float, 2>{ commentSize.x, commentSize.y });
-		document.CommentTexts[lastNodeId] = "Comment";
 	}
 }
 
@@ -1269,15 +1301,32 @@ void GraphPanel::DuplicateSelection()
 			const auto newNodeId = document.PendingSelection;
 			newSelected.push_back(newNodeId);
 
-			for (const auto& [key, val] : origNode->InputValues)
+			for (auto selNodeId : document.SelectedNodes)
 			{
-				(void)document.Data.SetInputValue(m_Registry, { newNodeId, key }, val);
-			}
+				const auto* found = document.Data.FindNode(selNodeId);
+				if (!found) continue;
+				// AddNode가 노드 벡터에 push_back하므로 그 전에 값으로 복사한다(포인터는 재할당 후 무효가 된다).
+				const Engine::GraphNode original = *found;
 
-			auto itComment = document.CommentTexts.find(selNodeId);
-			if (itComment != document.CommentTexts.end())
-			{
-				document.CommentTexts[newNodeId] = itComment->second;
+				const auto origView = document.Nodes.find(selNodeId);
+				ImVec2 origPos = m_AddPosition;
+				if (origView != document.Nodes.end())
+				{
+					const ImVec2 pos = ed::GetNodePosition(origView->second.Id);
+					if (pos.x != FLT_MAX) origPos = ImVec2(pos.x + offset, pos.y + offset);
+				}
+
+				m_AddPosition = origPos;
+				GraphNodeCandidate candidate{ original.Type, {} };
+				if (AddNode(candidate))
+				{
+					const auto newNodeId = document.PendingSelection;
+					newSelected.push_back(newNodeId);
+
+					for (const auto& [key, val] : original.InputValues)
+						(void)document.Data.SetInputValue(m_Registry, { newNodeId, key }, val);
+					(void)document.Data.SetNodeComment(newNodeId, original.Comment);
+				}
 			}
 		}
 	}

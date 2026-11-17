@@ -12,6 +12,7 @@ namespace
 		if (IsActionEventEntry(type)) return true;
 		if (type.rfind("Variable.Get.", 0) == 0 || type.rfind("Variable.Set.", 0) == 0) return true;
 		if (type.rfind("Core.Reroute", 0) == 0) return true;
+		if (type == "Core.Comment") return true;
 
 		const char* types[]{ "Core.Bool", "Core.Int", "Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Math.AddFloat", "Math.MultiplyFloat", "Math.GreaterFloat", "Math.LessFloat", "Logic.And", "Logic.Or",

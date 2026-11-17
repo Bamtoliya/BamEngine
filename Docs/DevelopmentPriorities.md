@@ -141,6 +141,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - **2026-11-02 최우선 잔여**: 씬에 있는 보호를 AnimatorGraphPanel의 저장/로드·New/Open/종료에도 연결한다(F01). 같은 패널을 수정할 때 로캘·InputManager 기준(F11)을 함께 적용한다.
 - **2026-11-17 반영 (빌드·실행 시나리오 사용자 확인 완료)**: AnimatorGraphPanel 내부 New/Open/Close 확인은 이미 있다. 앱 종료 경로는 씬 문서만 확인하고 있었으므로, `ImGuiManager::RequestQuit`에 모든 리소스 편집기의 미저장 변경 확인 모달을 씬 확인보다 먼저 추가했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). `GraphPanel`의 dirty 추적 부재는 잔여다.
 - **2026-11-17 GraphPanel 반영 (CTest 38/38, 열기 확인 사용자 확인)**: `Engine::Graph` 수정 카운터와 `GraphDocument::SavedRevision` 비교로 GraphPanel 미저장 판정을 연결해 창 제목 `*`·종료 확인·다른 에셋 열기 차단에 포함시켰다. 메뉴와 Ctrl+O 열기가 같은 확인(`RequestOpenDocument`)을 거친다. 잔여: 그래프 노드 위치·주석 텍스트 미저장(저장 형식 확장 필요), 콘텐츠 브라우저 경로는 모달 없이 알림 차단(편집기 공통).
+- **2026-11-17 그래프 저장 범위 확장 (사용자 확인)**: 노드 위치·주석 제목을 `GraphNode` 메타데이터로 저장하고, 2026-10-31 이전 파일이 `Variables` 필수 필드 때문에 열리지 않던 결함과 주석 그래프의 실행·셰이더 컴파일 실패를 해결했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). 잔여: 콘텐츠 브라우저 경로의 알림 차단(편집기 공통).
 - 완료 기준: 취소가 씬 교체를 막고, 저장 실패 후 초안·기존 파일·변경 표시가 보존되며, `HistoryPanel`에서 현재 Undo/Redo 위치와 저장 기준점을 확인할 수 있다.
 
 ### P1-B. 설정 적용 경로와 기존 저장/복원 연결

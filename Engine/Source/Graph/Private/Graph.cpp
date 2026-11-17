@@ -174,6 +174,41 @@ GraphDiagnostic Graph::ResetInputValue(const GraphRegistry& registry, GraphPinRe
 	return {};
 }
 
+GraphDiagnostic Graph::SetNodePosition(GraphNodeId id, float x, float y)
+{
+	if (!std::isfinite(x) || !std::isfinite(y))
+		return { EGraphError::InvalidDocument, id, {}, 0, "Node position must be finite." };
+	for (auto& node : m_Nodes)
+	{
+		if (node.Id != id) continue;
+		constexpr float tolerance = 0.5f;
+		if (!node.HasPosition || std::abs(node.PositionX - x) >= tolerance || std::abs(node.PositionY - y) >= tolerance)
+		{
+			node.PositionX = x;
+			node.PositionY = y;
+			node.HasPosition = true;
+			++m_Revision;
+		}
+		return {};
+	}
+	return { EGraphError::NodeNotFound, id, {}, 0, "Node does not exist." };
+}
+
+GraphDiagnostic Graph::SetNodeComment(GraphNodeId id, std::string comment)
+{
+	for (auto& node : m_Nodes)
+	{
+		if (node.Id != id) continue;
+		if (node.Comment != comment)
+		{
+			node.Comment = std::move(comment);
+			++m_Revision;
+		}
+		return {};
+	}
+	return { EGraphError::NodeNotFound, id, {}, 0, "Node does not exist." };
+}
+
 std::vector<GraphDiagnostic> Graph::Validate(const GraphRegistry& registry) const
 {
 	std::vector<GraphDiagnostic> errors;

@@ -92,7 +92,6 @@ private:
 		bool ResetContext = false;
 		bool RestoreSelection = false;
 		ShaderBuildState ShaderBuild;
-		std::unordered_map<Engine::GraphNodeId, std::string> CommentTexts;
 	};
 
 #pragma region DrawUI
@@ -115,6 +114,7 @@ public:
 private:
 	void OpenDocument(); // 확인 없이 파일 대화상자를 연다. RequestOpenDocument와 확인 모달만 호출한다.
 	static bool IsDocumentDirty(const GraphDocument& document) { return document.Data.GetRevision() != document.SavedRevision; }
+	void ReportLoadFailure(const std::filesystem::path& path, const Engine::GraphFileResult& result);
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
 	void DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar);
 	void UpdateLiveDebugging();
@@ -153,6 +153,7 @@ private:
 
 #pragma region NodeEditor
 private:
+	static ax::NodeEditor::EditorContext* CreateEditorContext(); // 입력 설정·테마를 적용한 노드 에디터 생성 (모든 생성 경로 공통)
 	void ActivateDocument();
 	void SuspendDocument();
 	void DrawCanvas(float height);

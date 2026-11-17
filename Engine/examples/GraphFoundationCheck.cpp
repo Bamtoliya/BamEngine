@@ -210,6 +210,22 @@ void CheckLogicDocument(const GraphRegistry& registry)
 	Accept(graph.ResetInputValue(registry, { sum, "a" }));
 	Expect(graph.GetRevision() == revisionBeforeSameValue, "No-op input edits changed the revision.");
 
+	const auto revisionBeforeMove = graph.GetRevision();
+	Accept(graph.SetNodePosition(number, 120.0f, 40.0f));
+	Expect(graph.GetRevision() == revisionBeforeMove + 1, "Moving a node did not change the revision.");
+	Accept(graph.SetNodePosition(number, 120.2f, 40.0f));
+	Expect(graph.GetRevision() == revisionBeforeMove + 1, "A sub-pixel move changed the revision.");
+	const auto* moved = graph.FindNode(number);
+	Expect(moved && moved->HasPosition && moved->PositionX == 120.0f && moved->PositionY == 40.0f, "Node position was not stored.");
+	Reject(graph.SetNodePosition(0, 0.0f, 0.0f), EGraphError::NodeNotFound);
+	Reject(graph.SetNodePosition(number, std::numeric_limits<float>::infinity(), 0.0f), EGraphError::InvalidDocument);
+
+	const auto revisionBeforeComment = graph.GetRevision();
+	Accept(graph.SetNodeComment(number, "Note"));
+	Accept(graph.SetNodeComment(number, "Note"));
+	Expect(graph.GetRevision() == revisionBeforeComment + 1, "Repeated comment edits changed the revision twice.");
+	Reject(graph.SetNodeComment(0, "Note"), EGraphError::NodeNotFound);
+
 	// Definitions and defaults remain shared descriptions; document overrides and edits are independent.
 	Graph copy = graph;
 	Accept(copy.SetInputValue(registry, { number, "value" }, 9.0f));
@@ -413,7 +429,8 @@ bool SameGraphData(const GraphData& left, const GraphData& right)
 	const bool sameNodes = std::equal(left.Nodes.begin(), left.Nodes.end(), right.Nodes.begin(),
 		[](const GraphNode& a, const GraphNode& b)
 		{
-			return a.Id == b.Id && a.Type == b.Type && a.InputValues == b.InputValues;
+			return a.Id == b.Id && a.Type == b.Type && a.InputValues == b.InputValues &&
+				a.HasPosition == b.HasPosition && a.PositionX == b.PositionX && a.PositionY == b.PositionY && a.Comment == b.Comment;
 		});
 
 	const bool sameLinks = std::equal(left.Links.begin(), left.Links.end(), right.Links.begin(),
@@ -477,6 +494,8 @@ void CheckGraphFile(const GraphRegistry& registry)
 	const auto sum = Add(source, registry, "Math.AddFloat");
 	Accept(source.SetInputValue(registry, { number, "value" }, 2.0f));
 	Accept(source.Connect(registry, { number, "result" }, { sum, "a" }));
+	Accept(source.SetNodePosition(number, 120.0f, 40.0f)); // sum은 위치 없음 상태로 남겨 둘 다 왕복을 확인한다
+	Accept(source.SetNodeComment(number, "입력 값"));
 
 	AcceptGraphFile(SaveGraphJson(path, source, registry, types, codecs));
 	Graph restored(EGraphDomain::Shader);

@@ -37,7 +37,7 @@ namespace Engine
 			static const std::unordered_set<std::string> supported{
 				"Shader.ColorOutput", "Shader.MaterialOutput",
 				"Core.Float", "Core.Float3", "Core.Float4",
-				"Core.Reroute.Float", "Core.Reroute.Float3", "Core.Reroute.Float4",
+				"Core.Reroute.Float", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
 				"Math.MakeFloat3", "Math.BreakFloat3",
 				"Math.MakeFloat4", "Math.BreakFloat4"
 			};

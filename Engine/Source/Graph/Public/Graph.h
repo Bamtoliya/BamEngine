@@ -32,6 +32,10 @@ namespace Engine
 		[[nodiscard]] GraphDiagnostic Disconnect(GraphLinkId id);
 		[[nodiscard]] GraphDiagnostic SetInputValue(const GraphRegistry& registry, GraphPinReference input, GraphValue value);
 		[[nodiscard]] GraphDiagnostic ResetInputValue(const GraphRegistry& registry, GraphPinReference input);
+		// 에디터 캔버스 위치를 기록한다. 0.5px 이상 바뀔 때만 수정으로 센다.
+		[[nodiscard]] GraphDiagnostic SetNodePosition(GraphNodeId id, float x, float y);
+		// 노드 메모(주석 제목 등)를 기록한다. 실제로 바뀔 때만 수정으로 센다.
+		[[nodiscard]] GraphDiagnostic SetNodeComment(GraphNodeId id, std::string comment);
 		[[nodiscard]] std::vector<GraphDiagnostic> Validate(const GraphRegistry& registry) const;
 		GraphData ExportData() const;
 		[[nodiscard]] GraphDiagnostic ImportData(const GraphRegistry& registry, const GraphData& data);

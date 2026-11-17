@@ -2,6 +2,33 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-17] 그래프 노드 위치·주석 저장, 주석 노드 결함, 핀 표시와 캔버스 조작
+
+- **배경**: 그래프 저장 범위가 `Engine::Graph`뿐이라 노드 위치와 주석 제목이 사라졌다. 조사 중 다음 결함을 함께 확인했다.
+  - `Core.Comment`가 에디터 패널에서만 등록돼, 주석이 들어간 로직 그래프는 실행기("No execution binding"), 셰이더 그래프는 컴파일러(`ShaderGraph.UnsupportedNode`)에서 실패했고 런타임 `GraphSystem` 로드 검증도 통과하지 못했다.
+  - `GraphData::Variables`(2026-10-31 `6bba12ff`)가 필수 필드라 그 전에 저장한 파일(GraphMovement, BuildSmokeMovement)이 역직렬화 단계에서 실패했다. 패널은 실패를 표시하지 않고 대상 경로(제목)만 먼저 바꿨다.
+  - `DuplicateSelection`이 `AddNode`(노드 벡터 `push_back`) 뒤에 원본 노드 포인터를 읽었다(재할당 시 댕글링).
+  - 주석 크기 동기화가 노드 전체 크기(헤더·여백 포함)를 저장 `Size`와 비교·기록해, 열 때마다 미저장이 되고 저장할 때마다 박스가 커졌다.
+  - 파일을 열 때 만드는 노드 에디터에는 휠 클릭 이동(`NavigateButtonIndex = 2`)과 테마가 빠져 있어 우클릭 드래그가 화면 이동과 컨텍스트 메뉴를 동시에 일으켰다.
+- **변경 사항**:
+  - **Engine** (`GraphNode.h`, `Graph.h/.cpp`, `GraphData.h`, `GraphRegistry.cpp`, `GraphExecutor.cpp`, `ShaderGraphCompiler.cpp`):
+    - `GraphNode`에 에디터 메타데이터 `PositionX/PositionY/HasPosition`, `Comment` 추가(`ALLOW_MISSING`). `Graph::SetNodePosition`(0.5px 이상 변경 시)·`SetNodeComment`(값이 바뀔 때)만 수정 카운터를 올린다.
+    - `Core.Comment`를 엔진 기본 노드로 등록(리터럴 전용 `Size` Float2). 제목을 String 핀으로 두면 셰이더 노드의 문자열 핀 금지 규칙에 걸려 기본 노드 등록 전체가 실패하므로 노드 메타데이터로 저장한다. 실행기·셰이더 컴파일러는 주석을 지원 노드로 인정하고 건너뛴다.
+    - `GraphData::Variables`를 `ALLOW_MISSING`으로 바꿔 예전 파일을 연다.
+  - **Editor** (`GraphPanel.h/.cpp`, `GraphPanelNodeEditor.cpp`):
+    - 로드 시 저장 위치 복원, 위치 없는 노드는 격자 배치를 문서에도 기록해 저장 기준에 포함. 주석 그룹 크기는 `ed::SetGroupSize`로 설정. 그릴 때 매 프레임 `ed::GetNodePosition`을 문서에 반영.
+    - 주석 크기 동기화는 `ed::GetNodeState`의 `GroupSize`(그룹 영역)와 비교해 사용자가 조절했을 때만 기록.
+    - 주석 제목은 `SetNodeComment`로 저장, `CommentTexts` 맵 제거. 복제는 원본 노드를 값으로 복사한 뒤 입력값·메모를 복사.
+    - `SetTargetResource`는 로드 성공 시에만 대상을 바꾸고, 실패는 `ReportLoadFailure`가 알림(단계·필드)으로 표시. 로캘 `GraphPanel.LoadFailed`.
+    - 데이터 핀 원을 노드 테두리 위에 반쯤 걸쳐 그린다. 행을 그릴 때 세로 중심을 모으고, 노드 그룹을 닫은 뒤 내용 영역+`NodePadding`으로 테두리 좌표를 구해 `PinRect`/`PinPivotRect`로 지연 선언한다(링크 직선 스타일 푸시를 다시 적용). 실행 핀은 안쪽 유지.
+    - 노드 에디터 생성을 `CreateEditorContext()`로 통일(휠 클릭 이동, 테마, `SettingsName = nullptr`로 편집용 ID 기준의 `imgui.ini` 상태 저장 중단).
+  - **테스트** (`GraphFoundationCheck`): 위치 저장·0.5px 미만 무시·존재하지 않는 노드·비유한 값 거부, 메모 반복 쓰기 시 수정 카운터 1회, 파일 왕복에서 위치·메모(한글) 보존.
+- **검증 (사용자 실행, 2026-11-17, `x64-ninja-debug`)**: 주석 메타데이터 수정 후 CTest와 에디터에서 주석 제목·크기·위치 저장, 예전 파일 열기, 열자마자 `*`가 켜지지 않음, 휠 클릭 이동·우클릭 메뉴 분리, 데이터 핀 테두리 표시와 연결을 "잘 동작함"으로 확인했다. 단계별 CTest 개수는 따로 기록되지 않았다.
+- **동작 변화·잔여**:
+  - 예전에 노드 전체 크기로 저장된 주석 `Size`는 이제 그룹 영역 크기로 해석돼 처음 한 번 헤더·여백만큼 크게 보인다.
+  - 캔버스 화면 이동·확대는 재실행 시 기억되지 않는다(`imgui.ini` 저장 중단).
+  - 노드 메타데이터는 `GraphNode`에 있어 런타임 그래프에도 함께 로드된다(실행에는 쓰지 않음).
+
 ### [2026-11-17] VFX 편집기 이력 정합성 (트랙 추가 Undo, 편집 메뉴, 저장 기준점)
 
 - **배경**: 리소스 편집기 기본 기능 기준(EngineEditorClientGuidelines 19절 7항)의 Undo 조건과 대조한 결과, VFX 편집기는 트랙 추가 메뉴 8곳이 `m_TimelineHistory.Clear()`로 이전 Undo 이력을 모두 지우고 추가 자체도 되돌릴 수 없었다. 편집 메뉴에는 Undo/Redo가 없었다. `InvalidateTimelinePreview()`가 매번 `m_IsDirty = true`를 설정해 Undo로 저장 상태에 돌아가도 `*`가 꺼지지 않았다.

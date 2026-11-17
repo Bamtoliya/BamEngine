@@ -10,6 +10,7 @@
 #include "HotReloadManager.h"
 #include "ModuleHotReloadManager.h"
 #include <imgui_node_editor.h>
+#include "NotificationManager.h"
 
 namespace ed = ax::NodeEditor;
 
@@ -18,23 +19,7 @@ GraphPanel::GraphPanel()
 {
 	m_Name = L"Graph"; m_DisplayNameKey = "GraphPanel.Title";
 	m_LastDiagnostic = m_Registry.RegisterBuiltins();
-	// ── 코멘트 그룹 노드 등록 ──
-	Engine::GraphNodeDefinition commentDef;
-	commentDef.Type = "Core.Comment";
-	commentDef.DisplayName = "Comment";
-	commentDef.Category = "Organization";
-	commentDef.Domains = { Engine::EGraphDomain::Logic, Engine::EGraphDomain::Shader };
 
-	// 크기(Size) 저장을 위한 Float2 핀 정의 (내부 저장용)
-	Engine::GraphPin sizePin;
-	sizePin.Key = "Size";
-	sizePin.DisplayName = "Size";
-	sizePin.Type = Engine::EGraphPinType::Float2;
-	sizePin.Direction = Engine::EGraphPinDirection::Input;
-	sizePin.DefaultValue = std::array<float, 2>{ 400.0f, 250.0f };
-	commentDef.Pins.push_back(sizePin);
-
-	(void)m_Registry.Register(std::move(commentDef));
 	m_Ready = m_LastDiagnostic.Succeeded();
 	if (m_Ready && ReflectionRegistry::IsCreated())
 	{
@@ -341,8 +326,16 @@ bool GraphPanel::IsSupported(const std::filesystem::path& assetPath) const
 
 void GraphPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
-	ResourceEditorInterface::SetTargetResource(assetPath);
+	// 로드에 성공해야 대상이 바뀐다(LoadDocument가 m_TargetResourcePath를 갱신). 실패하면 기존 문서와 제목을 유지한다.
 	LoadDocument(assetPath);
+}
+
+void GraphPanel::ReportLoadFailure(const std::filesystem::path& path, const Engine::GraphFileResult& result)
+{
+	// 어느 단계(읽기·역직렬화·검증)에서 무엇 때문에 실패했는지 알려야 사용자가 원인을 알 수 있다.
+	const std::string detail = !result.ArchiveError.Field.empty() ? result.ArchiveError.Field : result.GraphError.Message;
+	NotificationManager::Get().AddNotification(LOCAL("GraphPanel.Title"),
+		LOCAL_FMT("GraphPanel.LoadFailed", WStrToStr(path.filename().wstring()), static_cast<int>(result.Stage), detail), ELogLevel::Warn);
 }
 
 bool GraphPanel::LoadDocument(const std::filesystem::path& path)
@@ -354,6 +347,7 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 			EGraphFileStage::Deserialize,
 			{ archive::ArchiveErrorCode::UnsupportedType, "ReflectionRegistry" }
 		};
+		ReportLoadFailure(path, document.FileResult);
 		return false;
 	}
 
@@ -368,6 +362,7 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 	{
 		auto& document = GetDocument();
 		document.FileResult = loaded;
+		ReportLoadFailure(path, document.FileResult);
 		return false;
 	}
 
@@ -384,23 +379,42 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 	{
 		auto& document = GetDocument();
 		document.FileResult = { EGraphFileStage::Validate, {}, views };
+		ReportLoadFailure(path, document.FileResult);
 		return false;
 	}
 
 	candidate.Diagnostics = candidate.Data.Validate(m_Registry);
 
-	ed::Config config;
-	config.SettingsName = (m_Domain == EGraphDomain::Logic) ? "LogicGraph" : "ShaderGraph";
-	auto* freshContext = ed::CreateEditor(&config);
+	auto* freshContext = CreateEditorContext();
 	ed::SetCurrentEditor(freshContext);
 
-	std::size_t index = 0;
+	// 저장된 위치를 복원한다. 위치가 없는 예전 노드는 격자에 배치하고 그 위치를 문서에도 기록해, 저장 기준에 포함시킨다(열자마자 미저장이 되지 않도록).
+	std::vector<std::pair<GraphNodeId, ImVec2>> layout;
+	std::size_t gridIndex = 0;
 	for (const auto& node : candidate.Data.GetNodes())
 	{
-		const float x = 40.0f + static_cast<float>(index % 3) * 420.0f;
-		const float y = 40.0f + static_cast<float>(index / 3) * 360.0f;
-		ed::SetNodePosition(candidate.Nodes.at(node.Id).Id, ImVec2(x, y));
-		++index;
+		ImVec2 position(node.PositionX, node.PositionY);
+		if (!node.HasPosition)
+		{
+			position = ImVec2(40.0f + static_cast<float>(gridIndex % 3) * 420.0f, 40.0f + static_cast<float>(gridIndex / 3) * 360.0f);
+			++gridIndex;
+		}
+		layout.emplace_back(node.Id, position);
+	}
+	for (const auto& [nodeId, position] : layout)
+	{
+		ed::SetNodePosition(candidate.Nodes.at(nodeId).Id, position);
+		(void)candidate.Data.SetNodePosition(nodeId, position.x, position.y);
+	}
+
+	// 주석 박스의 그룹 영역 크기를 문서 값으로 맞춘다(없으면 핀 기본값). SetGroupSize는 노드 위치를 기준으로 하므로 위치 적용 뒤에 호출한다.
+	for (const auto& node : candidate.Data.GetNodes())
+	{
+		if (node.Type != "Core.Comment") continue;
+		ImVec2 groupSize(400.0f, 250.0f);
+		if (const auto size = node.InputValues.find("Size"); size != node.InputValues.end())
+			if (const auto* value = std::get_if<std::array<float, 2>>(&size->second)) groupSize = ImVec2((*value)[0], (*value)[1]);
+		ed::SetGroupSize(candidate.Nodes.at(node.Id).Id, groupSize);
 	}
 
 	if (m_Domain == EGraphDomain::Logic)
