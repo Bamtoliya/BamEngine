@@ -2285,3 +2285,48 @@ std::string ContentBrowserPanel::GetRelativeDirectory() const
 		return {};
 	}
 }
+
+void ContentBrowserPanel::DrawPathCopyMenu(const vector<filesystem::path>& paths)
+{
+	string pathText;
+	string uriText;
+	bool canCopyPath = !paths.empty();
+	bool canCopyUri = !paths.empty();
+
+	for (const auto& path : paths)
+	{
+		std::error_code error;
+		auto absolutePath = filesystem::absolute(path, error);
+		if (error)
+		{
+			canCopyPath = false;
+			canCopyUri = false;
+			break;
+		}
+
+		absolutePath = absolutePath.lexically_normal();
+		const auto uri = Engine::PlatformPath::ToVirtualUri(absolutePath);
+		canCopyUri = canCopyUri && Engine::PlatformPath::IsVirtualUri(uri);
+
+		if (!pathText.empty())
+		{
+			pathText += '\n';
+			uriText += '\n';
+		}
+
+		pathText += Engine::WStrToStr(absolutePath.make_preferred().wstring());
+		uriText += Engine::WStrToStr(uri);
+	}
+
+	if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(),
+		nullptr, false, canCopyPath))
+	{
+		ImGui::SetClipboardText(pathText.c_str());
+	}
+
+	if (ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("EditorCommon.CopyUri")).c_str(),
+		nullptr, false, canCopyUri))
+	{
+		ImGui::SetClipboardText(uriText.c_str());
+	}
+}

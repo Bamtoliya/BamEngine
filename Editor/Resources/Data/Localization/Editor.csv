@@ -224,6 +224,7 @@ EditorCommon,Clear,Clear,지우기
 EditorCommon,Close,Close,닫기
 EditorCommon,Copy,Copy,복사
 EditorCommon,CopyPath,Copy Path,경로 복사
+EditorCommon,CopyUri,Copy URI,URI 복사
 EditorCommon,Create,Create,생성
 EditorCommon,Delete,Delete,삭제
 EditorCommon,General,General,일반

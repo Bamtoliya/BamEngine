@@ -82,6 +82,7 @@ private:
 	bool CanStoreFiles(const vector<filesystem::path>& paths, bool cut) const;
 	bool CanTransferTo(const filesystem::path& directory) const;
 	void DrawFileClipboardMenu(const vector<filesystem::path>& paths, const filesystem::path& directory);
+	void DrawPathCopyMenu(const vector<filesystem::path>& paths);
 	void DrawFolderDropTarget(const filesystem::path& directory);
 	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory, bool move);
 	void ApplyDirectory(const filesystem::path& directory);

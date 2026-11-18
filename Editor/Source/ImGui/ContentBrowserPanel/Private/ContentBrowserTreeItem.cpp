@@ -130,10 +130,7 @@ void ContentBrowserTreeItem::ContextMenu(ContentBrowserPanel& browser, const std
 			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-		{
-			ImGui::SetClipboardText(path.string().c_str());
-		}
+		browser.DrawPathCopyMenu({ path });
 
 		ImGui::EndPopup();
 	}

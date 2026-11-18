@@ -631,17 +631,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		if (browser.m_ContextMenuPaths.size() > 1)
 		{
 			browser.SetRenameTarget({});
-			if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-			{
-				std::string clipboardText;
-				for (const auto& selectedPath : browser.m_ContextMenuPaths)
-				{
-					if (!clipboardText.empty())
-						clipboardText += '\n';
-					clipboardText += Engine::WStrToStr(selectedPath.wstring());
-				}
-				ImGui::SetClipboardText(clipboardText.c_str());
-			}
+			browser.DrawPathCopyMenu(browser.m_ContextMenuPaths);
 			ImGui::EndPopup();
 			return;
 		}
@@ -686,8 +676,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
 		ImGui::EndDisabled();
 
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-			ImGui::SetClipboardText(Engine::WStrToStr(path.wstring()).c_str());
+		browser.DrawPathCopyMenu({ path });
 
 		if (isReadOnly && !isDir)
 		{
