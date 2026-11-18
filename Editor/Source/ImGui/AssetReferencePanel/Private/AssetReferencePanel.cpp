@@ -17,6 +17,28 @@
 
 namespace Editor
 {
+    struct AssetReferenceIssueFilter
+    {
+        std::optional<EAssetReferenceIssueType> Type;
+        const char* LabelKey;
+    };
+
+    static constexpr AssetReferenceIssueFilter issueFilters[] = {
+        { std::nullopt, "AssetRef.FilterAll" },
+        { EAssetReferenceIssueType::MissingFile, "AssetRef.FilterMissing" },
+        { EAssetReferenceIssueType::ExternalAbsolutePath, "AssetRef.FilterExternal" },
+        { EAssetReferenceIssueType::InvalidExtension, "AssetRef.FilterInvalid" },
+        { EAssetReferenceIssueType::UnreadableDocument, "AssetRef.UnreadableDocument" },
+        { EAssetReferenceIssueType::OutsideRuntimeRoots, "AssetRef.OutsideMounts" },
+    };
+
+    static std::wstring NormalizeReferenceSearch(std::wstring text)
+    {
+        text = Engine::ToLowerWStr(std::move(text));
+        std::ranges::replace(text, L'\\', L'/');
+        return text;
+    }
+
     static void DrawReferenceAssetActions(const char* popupId, const std::filesystem::path& path)
     {
         if (!ImGui::BeginPopupContextItem(popupId))
@@ -254,8 +276,7 @@ namespace Editor
         if (m_ReferenceSearch[0] == '\0')
             return;
 
-        auto query = Engine::ToLowerWStr(Engine::StrToWStr(m_ReferenceSearch));
-        std::ranges::replace(query, L'\\', L'/');
+        const auto query = NormalizeReferenceSearch(Engine::StrToWStr(m_ReferenceSearch));
         CollectReferenceMatches(m_Users, query, m_MatchingUsers);
         CollectReferenceMatches(m_Dependencies, query, m_MatchingDependencies);
     }
@@ -443,36 +464,83 @@ namespace Editor
 
     void AssetReferencePanel::DrawToolbar()
     {
-        if (ImGui::Button(LOCAL_CSTR("AssetRef.ScanAll")))
-        {
+        EditorUI::ToolbarLayout toolbar;
+        if (toolbar.Button("IssueScan", ICON_FA_MAGNIFYING_GLASS, "AssetRef.ScanAll"))
             RunValidation(AssetReferenceTimingKind::Manual);
-        }
 
-        ImGui::SameLine();
-        const bool canFixAny = std::ranges::any_of(m_Issues, [](const auto& i) { return i.CanAutoFix; });
-        if (!canFixAny) ImGui::BeginDisabled();
-        if (ImGui::Button(LOCAL_CSTR("AssetRef.FixSafe")))
-        {
+        ImGui::BeginDisabled(m_FixableIssueCount == 0);
+        const bool repair = toolbar.Button("IssueRepairAll", ICON_FA_WRENCH, "AssetRef.FixSafe");
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", LOCAL_CSTR("AssetRef.FixSafeScope"));
+        if (repair)
             FixAllSafe();
-        }
-        if (!canFixAny) ImGui::EndDisabled();
 
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
-        const std::string filterLabels[] = { LOCAL("AssetRef.FilterAll"), LOCAL("AssetRef.FilterMissing"), LOCAL("AssetRef.FilterExternal"), LOCAL("AssetRef.FilterInvalid") };
-        const char* filterItems[] = { filterLabels[0].c_str(), filterLabels[1].c_str(), filterLabels[2].c_str(), filterLabels[3].c_str() };
-        ImGui::Combo("##FilterType", &m_FilterType, filterItems, IM_ARRAYSIZE(filterItems));
-
-        ImGui::SameLine();
-        EditorUI::SearchBarOptions searchOptions;
-        searchOptions.Width = 200.0f;
-        EditorUI::DrawSearchBar("AssetReferenceSearch", m_SearchFilter, sizeof(m_SearchFilter),
-            "AssetRef.SearchHint", searchOptions);
+        const bool filterChanged = DrawIssueTypeFilter();
+        const bool searchChanged = EditorUI::SearchBar("AssetReferenceSearch", m_SearchFilter,
+            sizeof(m_SearchFilter), "AssetRef.IssueSearchHint");
+        if (filterChanged || searchChanged)
+            UpdateVisibleIssues();
 
         if (!m_StatusMessage.empty())
-        {
-            ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", LOCAL_FMT(m_StatusMessage, m_FixedCount).c_str());
+    }
+
+    bool AssetReferencePanel::DrawIssueTypeFilter()
+    {
+        const auto getLabel = [this](const AssetReferenceIssueFilter& option)
+        {
+            size_t count = m_Issues.size();
+            if (option.Type)
+            {
+                const auto found = m_IssueTypeCounts.find(*option.Type);
+                count = found == m_IssueTypeCounts.end() ? 0 : found->second;
+            }
+            return LOCAL_FMT("AssetRef.FilterCount", LOCAL(option.LabelKey), count);
+        };
+
+        const auto preview = getLabel(issueFilters[m_IssueFilterIndex]);
+        const float width = std::max(ImGui::GetFontSize() * 12.0f, ImGui::CalcTextSize(preview.c_str()).x +
+            ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f);
+        EditorUI::SameLineIfFits(width);
+        ImGui::SetNextItemWidth(std::min(width, ImGui::GetContentRegionAvail().x));
+        if (!ImGui::BeginCombo("##ReferenceIssueType", preview.c_str()))
+            return false;
+
+        const auto previous = m_IssueFilterIndex;
+        for (size_t index = 0; index < IM_ARRAYSIZE(issueFilters); ++index)
+        {
+            const bool selected = index == m_IssueFilterIndex;
+            ImGui::PushID(static_cast<int>(index));
+            if (ImGui::Selectable((getLabel(issueFilters[index]) + "###IssueFilterOption").c_str(), selected))
+                m_IssueFilterIndex = index;
+            if (selected)
+                ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+        return previous != m_IssueFilterIndex;
+    }
+
+    void AssetReferencePanel::UpdateVisibleIssues()
+    {
+        m_VisibleIssueIndices.clear();
+        const auto& type = issueFilters[m_IssueFilterIndex].Type;
+        const auto query = NormalizeReferenceSearch(Engine::StrToWStr(m_SearchFilter));
+        const auto matches = [&query](std::wstring text)
+        {
+            return NormalizeReferenceSearch(std::move(text)).find(query) != std::wstring::npos;
+        };
+
+        for (size_t index = 0; index < m_Issues.size(); ++index)
+        {
+            const auto& issue = m_Issues[index];
+            if (type && issue.IssueType != *type)
+                continue;
+
+            if (query.empty() || matches(issue.SourceFile.generic_wstring()) ||
+                matches(Engine::StrToWStr(issue.PropertyName)) || matches(Engine::StrToWStr(issue.TargetReference)))
+                m_VisibleIssueIndices.push_back(index);
         }
     }
 
@@ -484,38 +552,23 @@ namespace Editor
             return;
         }
 
-        size_t missingCount = 0;
-        size_t extCount = 0;
-        size_t invalidExtCount = 0;
-        size_t fixableCount = 0;
-
-        for (const auto& issue : m_Issues)
-        {
-            if (issue.IssueType == EAssetReferenceIssueType::MissingFile) ++missingCount;
-            else if (issue.IssueType == EAssetReferenceIssueType::ExternalAbsolutePath) ++extCount;
-            else if (issue.IssueType == EAssetReferenceIssueType::InvalidExtension) ++invalidExtCount;
-            if (issue.CanAutoFix) ++fixableCount;
-        }
-
-        ImGui::Text(LOCAL_CSTR("AssetRef.TotalIssues"), m_Issues.size());
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.Missing"), missingCount);
-        ImGui::SameLine();
-        ImGui::Text(" | ");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.95f, 0.7f, 0.2f, 1.0f), LOCAL_CSTR("AssetRef.External"), extCount);
-        ImGui::SameLine();
-        ImGui::Text(" | ");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.9f, 0.9f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.InvalidExt"), invalidExtCount);
-        ImGui::SameLine();
-        ImGui::Text(" | ");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), LOCAL_CSTR("AssetRef.AutoFixable"), fixableCount);
+        const auto count = LOCAL_FMT("AssetRef.VisibleIssueCount", m_VisibleIssueIndices.size(), m_Issues.size());
+        ImGui::TextUnformatted(count.c_str());
+        const auto fixable = LOCAL_FMT("AssetRef.AutoFixable", m_FixableIssueCount);
+        EditorUI::SameLineIfFits(ImGui::CalcTextSize(fixable.c_str()).x);
+        ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", fixable.c_str());
     }
 
     void AssetReferencePanel::DrawIssuesTable()
     {
+        if (!m_HasScanned)
+            return;
+        if (m_VisibleIssueIndices.empty())
+        {
+            EditorUI::EmptyState(m_Issues.empty() ? "AssetRef.NoIssues" : "AssetRef.NoMatchingIssues");
+            return;
+        }
+
         static const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
             ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
 
@@ -530,21 +583,9 @@ namespace Editor
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.FixAction").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
             ImGui::TableHeadersRow();
 
-            for (size_t i = 0; i < m_Issues.size(); ++i)
+            for (const size_t i : m_VisibleIssueIndices)
             {
                 const auto& issue = m_Issues[i];
-
-                // 1. 타입 필터
-                if (m_FilterType == 1 && issue.IssueType != EAssetReferenceIssueType::MissingFile) continue;
-                if (m_FilterType == 2 && issue.IssueType != EAssetReferenceIssueType::ExternalAbsolutePath) continue;
-                if (m_FilterType == 3 && issue.IssueType != EAssetReferenceIssueType::InvalidExtension) continue;
-
-                // 2. 검색어 필터
-                const auto sourceLabel = Engine::WStrToStr(issue.SourceFile.generic_wstring());
-                if (m_SearchFilter[0] != '\0' && sourceLabel.find(m_SearchFilter) == std::string::npos &&
-                    issue.TargetReference.find(m_SearchFilter) == std::string::npos)
-                    continue;
-
                 ImGui::TableNextRow();
                 ImGui::PushID(static_cast<int>(i));
 
@@ -563,7 +604,7 @@ namespace Editor
 
                 // Column 1: Source Asset
                 if (ImGui::TableSetColumnIndex(1))
-                    DrawIssueSourceActions(issue.SourceFile, sourceLabel);
+                    DrawIssueSourceActions(issue.SourceFile, Engine::WStrToStr(issue.SourceFile.generic_wstring()));
 
                 // Column 2: Property
                 ImGui::TableSetColumnIndex(2);
@@ -608,6 +649,15 @@ namespace Editor
         const auto start = std::chrono::steady_clock::now();
         auto scan = AssetReferenceValidator::ScanProject();
         m_Issues.swap(scan.Issues);
+        m_IssueTypeCounts.clear();
+        m_FixableIssueCount = 0;
+        for (const auto& issue : m_Issues)
+        {
+            ++m_IssueTypeCounts[issue.IssueType];
+            if (issue.CanAutoFix)
+                ++m_FixableIssueCount;
+        }
+        UpdateVisibleIssues();
         RebuildReferenceTrees(scan.References);
         SetReferenceTarget(m_ReferenceTarget);
         m_HasScanned = true;

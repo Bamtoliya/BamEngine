@@ -34,8 +34,10 @@ private:
     using ReferenceAdjacency = std::unordered_map<std::filesystem::path, ReferenceChildren>;
 
     void DrawToolbar();
+    bool DrawIssueTypeFilter();
     void DrawSummaryStats();
     void DrawIssuesTable();
+    void UpdateVisibleIssues();
     void DrawReferences();
     void DrawReferenceToolbar();
     void DrawReferenceMatches(const char* labelKey, const ReferencePaths& matches, std::filesystem::path& next);
@@ -58,6 +60,9 @@ private:
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 private:
     std::vector<AssetReferenceIssue> m_Issues;
+    std::vector<size_t> m_VisibleIssueIndices;
+    std::unordered_map<EAssetReferenceIssueType, size_t> m_IssueTypeCounts;
+    size_t m_FixableIssueCount = 0;
     std::filesystem::path m_ReferenceTarget;
     ReferencePaths m_BackTargets;
     ReferencePaths m_ForwardTargets;
@@ -71,7 +76,7 @@ private:
     std::optional<std::chrono::steady_clock::time_point> m_ScanAfter;
     bool m_HasScanned = false;
     bool m_ReferenceTargetMissing = false;
-    int m_FilterType = 0; // 0: All, 1: Missing, 2: External, 3: InvalidExt
+    size_t m_IssueFilterIndex = 0;
     char m_SearchFilter[128] = "";
     std::string m_StatusMessage;
     size_t m_FixedCount = 0;
