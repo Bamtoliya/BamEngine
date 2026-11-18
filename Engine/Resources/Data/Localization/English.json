@@ -587,6 +587,7 @@
         "PROP_SCALE_START": "Start Scale",
         "PROP_SEED": "Random Seed",
         "PROP_SETTINGS": "Settings",
+        "PROP_SHADOW_AMBIENT_FLOOR": "Shadow Ambient Floor",
         "PROP_SHADOW_BIAS": "Shadow Bias",
         "PROP_SHADOW_MAX_DISTANCE": "Shadow Max Distance",
         "PROP_SHADOW_NORMAL_BIAS": "Shadow Noraml Bias",

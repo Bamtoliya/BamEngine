@@ -111,7 +111,7 @@ namespace Engine
 		return vec2(A / static_cast<float>(numSamples), B / static_cast<float>(numSamples));
 	}
 
-	Texture* IBLManager::GenerateBRDFLUT(uint32 size)
+	Texture* IBLManager::GenerateBRDFLUT(uint32 size, RHI* rhi)
 	{
 		TextureBinaryHeader header{};
 		header.width = size;
@@ -161,79 +161,68 @@ namespace Engine
 		}
 
 		const std::wstring uri = L"Engine://Texture/DefaultBRDFLut";
-		RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
-		if (rhi)
-		{
-			RHITextureDesc desc{};
-			desc.width = size;
-			desc.height = size;
-			desc.depth = 1;
-			desc.mipLevels = 1;
-			desc.arraySize = 1;
-			desc.format = ETextureFormat::R16G16_FLOAT;
-			desc.dimension = ETextureDimension::Texture2D;
-			desc.usage = ETextureUsage::Sampler;
-			desc.data = pixelData.data();
-			desc.dataSize = header.dataSize;
+		if (!rhi)
+			return Texture::Create(header, pixelData, uri);
 
-			RHITexture* rhiTex = rhi->CreateTexture(desc);
-			if (rhiTex)
-			{
-				Texture* tex = Texture::CreateFromRHITexture(rhiTex, uri);
-				if (tex)
-				{
-					tex->SetTempData(pixelData);
-					return tex;
-				}
-			}
-		}
+		RHITextureDesc desc{};
+		desc.width = size;
+		desc.height = size;
+		desc.depth = 1;
+		desc.mipLevels = 1;
+		desc.arraySize = 1;
+		desc.format = ETextureFormat::R16G16_FLOAT;
+		desc.dimension = ETextureDimension::Texture2D;
+		desc.usage = ETextureUsage::Sampler;
+		desc.data = pixelData.data();
+		desc.dataSize = header.dataSize;
 
-		Texture* tex = Texture::Create(header, pixelData, uri);
+		RHITexture* rhiTex = rhi->CreateTexture(desc);
+		if (!rhiTex)
+			return nullptr;
+
+		Texture* tex = Texture::CreateFromRHITexture(rhiTex, uri);
+		tex->SetTempData(pixelData);
 		return tex;
 	}
 
 	Texture* IBLManager::GetDefaultBRDFLUT()
 	{
-		if (m_DefaultBRDFLUT)
-			return m_DefaultBRDFLUT;
+		if (!Renderer::IsCreated())
+		{
+			if (!m_HeadlessBRDFLUT)
+				m_HeadlessBRDFLUT.reset(GenerateBRDFLUT(256, nullptr));
+			return m_HeadlessBRDFLUT.get();
+		}
+
+		RHI* rhi = Renderer::Get().GetRHI();
+		if (!rhi || !ResourceManager::IsCreated())
+			return nullptr;
+
+		if (auto* cached = m_DefaultBRDFLUTHandle.Get(); cached && cached->GetRHITexture())
+			return cached;
 
 		const std::wstring uri = L"Engine://Texture/DefaultBRDFLut";
-
-		if (ResourceManager::IsCreated())
+		auto& resources = ResourceManager::Get();
+		auto handle = resources.GetResourceHandle<Texture>(uri);
+		if (!handle.Get())
 		{
-			auto& rm = ResourceManager::Get();
-			auto handle = rm.GetResourceHandle<Texture>(uri);
-			if (handle.IsValid() && handle.Get())
-			{
-				m_DefaultBRDFLUTHandle = handle;
-				m_DefaultBRDFLUT = handle.Get();
-				return m_DefaultBRDFLUT;
-			}
+			auto* generated = GenerateBRDFLUT(256, rhi);
+			if (!generated)
+				return nullptr;
+			handle = resources.AddResource<Texture>(uri, generated);
 		}
 
-		Texture* created = GenerateBRDFLUT(256);
-		if (created)
-		{
-			m_DefaultBRDFLUT = created;
-			if (ResourceManager::IsCreated())
-			{
-				m_DefaultBRDFLUTHandle = ResourceManager::Get().AddResource<Texture>(uri, created);
-			}
-		}
-		return m_DefaultBRDFLUT;
+		auto* texture = handle.Get();
+		if (!texture || !texture->GetRHITexture())
+			return nullptr;
+
+		m_DefaultBRDFLUTHandle = handle;
+		return texture;
 	}
 
 	void IBLManager::Free()
 	{
-		m_DefaultBRDFLUTHandle = {};
-		if (m_DefaultBRDFLUT)
-		{
-			if (!ResourceManager::IsCreated())
-			{
-				m_DefaultBRDFLUT->Free();
-				delete m_DefaultBRDFLUT;
-			}
-			m_DefaultBRDFLUT = nullptr;
-		}
+		m_DefaultBRDFLUTHandle.Reset();
+		m_HeadlessBRDFLUT.reset();
 	}
 }

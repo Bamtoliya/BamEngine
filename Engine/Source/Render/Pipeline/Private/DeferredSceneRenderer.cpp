@@ -214,8 +214,29 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, Scene* targetScene,
 	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes)
 {
+	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
+	Texture* defaultBRDFLUT = nullptr;
+	if (targetScene)
+	{
+		auto skyView = targetScene->GetRegistry().view<SkyAtmosphereComponent>();
+		for (auto [entity, sky] : skyView.each())
+		{
+			if (!sky.IsEnabled)
+				continue;
+			const auto* prefiltered = sky.PrefilteredMap.Get();
+			const auto* irradiance = sky.IrradianceMap.Get();
+			if (!prefiltered || !prefiltered->GetRHITexture() || (irradiance && !irradiance->GetRHITexture()))
+				continue;
+
+			const auto* lut = sky.BRDFLutMap.Get();
+			if (!lut || !lut->GetRHITexture())
+				defaultBRDFLUT = IBLManager::Get().GetDefaultBRDFLUT();
+			break;
+		}
+	}
+
 	Engine::Renderer::Get().SubmitCustomCommand(
-		[this, cameraBuffer, targetScene, skyData, inputs = passes.LightingInputs,
+		[this, cameraBuffer, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
 			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
@@ -367,7 +388,9 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 
 						Texture* irrTex = sky.IrradianceMap.IsValid() ? sky.IrradianceMap.Get() : nullptr;
 						Texture* prefTex = sky.PrefilteredMap.IsValid() ? sky.PrefilteredMap.Get() : nullptr;
-						Texture* lutTex = sky.BRDFLutMap.IsValid() ? sky.BRDFLutMap.Get() : IBLManager::Get().GetDefaultBRDFLUT();
+						Texture* lutTex = sky.BRDFLutMap.Get();
+						if (!lutTex || !lutTex->GetRHITexture())
+							lutTex = defaultBRDFLUT;
 
 						// Prefiltered 큐브맵만 있고 Irradiance가 없으면 Prefiltered로 대체
 						if (prefTex && !irrTex)

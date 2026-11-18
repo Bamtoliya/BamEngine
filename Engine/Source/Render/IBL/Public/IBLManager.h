@@ -4,8 +4,11 @@
 #include "Types.h"
 #include "ResourceHandle.h"
 #include "Texture.h"
+#include <memory>
 
 BEGIN(Engine)
+
+class RHI;
 
 CLASS()
 class ENGINE_API IBLManager final
@@ -26,11 +29,11 @@ private:
 	IBLManager() = default;
 	~IBLManager() { Free(); }
 
-	Texture* GenerateBRDFLUT(uint32 size = 256);
+	Texture* GenerateBRDFLUT(uint32 size, RHI* rhi);
 
 private:
 	ResourceHandle<Texture> m_DefaultBRDFLUTHandle;
-	Texture* m_DefaultBRDFLUT = nullptr;
+	std::unique_ptr<Texture> m_HeadlessBRDFLUT;
 };
 
 END

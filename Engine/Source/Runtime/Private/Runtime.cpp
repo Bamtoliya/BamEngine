@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Runtime.h"
+#include "IBLManager.h"
 #include "Logger.h"
 
 IMPLEMENT_SINGLETON(Runtime)
@@ -89,6 +90,8 @@ void Runtime::Free()
 	Safe_Destroy(m_InputManager);
 	Safe_Destroy(m_LocalizationManager);
 	// ── 5. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
+	if (m_ResourceManager)
+		IBLManager::Get().Free();
 	Safe_Destroy(m_ResourceManager);
 	Safe_Destroy(m_AudioManager);
 	// ── 6. 렌더링 인프라 (RHI 리소스) ──
