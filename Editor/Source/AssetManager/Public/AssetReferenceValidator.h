@@ -66,7 +66,10 @@ namespace Editor
         static std::vector<AssetReferenceIssue> ValidateBuildScene(const std::filesystem::path& scenePath,
             std::vector<std::filesystem::path>* referencedFiles = nullptr);
 
-        // 프로젝트 에셋 루트에서 저장된 JSON 문서의 직접 참조와 문제를 수집한다.
+        // 파일 존재 여부와 별개로 참조 검사에서 읽을 확장자인지 확인한다.
+        static bool IsReferenceDocumentPath(const std::filesystem::path& path);
+
+        // 프로젝트 에셋 루트에서 저장된 문서의 직접 참조와 문제를 수집한다.
         static AssetReferenceScan ScanProject();
         static std::vector<AssetReferenceIssue> ValidateAllResources();
         static AssetReferenceImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);

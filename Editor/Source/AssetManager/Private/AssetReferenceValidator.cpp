@@ -14,7 +14,6 @@
 #include "Functions.h"
 #include <glaze/glaze.hpp>
 #include <set>
-#include <string_view>
 #include <tuple>
 #include <Windows.h>
 
@@ -52,12 +51,6 @@ namespace Editor
         enum class ReferenceKind { Handle, AnimatorController, DirectFile, Graph };
         using ReferenceFields = std::map<std::pair<std::string, ReferenceKind>, const char*>;
         using ReferenceJson = glz::generic_u64;
-
-        bool IsReferenceDocumentExtension(std::string_view extension)
-        {
-            return extension == ".json" || extension == ".animator" || extension == ".bamanimator" ||
-                extension == ".actiontimeline";
-        }
 
         bool ReadReferenceDocument(const std::filesystem::path& source, glz::generic_u64& document)
         {
@@ -496,13 +489,19 @@ namespace Editor
 
                 if (referencedFiles)
                     referencedFiles->push_back(file);
-                const auto extension = Engine::ToLowerStr(Engine::WStrToStr(file.extension().wstring()));
-                if (kind == ReferenceKind::AnimatorController || IsReferenceDocumentExtension(extension))
+                if (kind == ReferenceKind::AnimatorController || IsReferenceDocumentPath(file))
                     pending.push_back(file);
             }
         }
 
         return issues;
+    }
+
+    bool AssetReferenceValidator::IsReferenceDocumentPath(const std::filesystem::path& path)
+    {
+        const auto extension = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+        return extension == ".json" || extension == ".animator" || extension == ".bamanimator" ||
+            extension == ".actiontimeline";
     }
 
     AssetReferenceScan AssetReferenceValidator::ScanProject()
@@ -539,8 +538,7 @@ namespace Editor
                     continue;
 
                 const bool isDirectory = fs::is_directory(status);
-                const auto extension = Engine::ToLowerStr(Engine::WStrToStr(entry->path().extension().wstring()));
-                const bool isDocument = fs::is_regular_file(status) && IsReferenceDocumentExtension(extension);
+                const bool isDocument = fs::is_regular_file(status) && IsReferenceDocumentPath(entry->path());
                 if (!isDirectory && !isDocument)
                     continue;
 

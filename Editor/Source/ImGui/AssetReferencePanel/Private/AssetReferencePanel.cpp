@@ -25,7 +25,7 @@ namespace Editor
 
         if (BeginPanelWindow(title.c_str(), m_Open))
         {
-            if (m_ScanRequested)
+            if (m_ScanAfter && std::chrono::steady_clock::now() >= *m_ScanAfter)
                 RunValidation();
 
             if (ImGui::BeginTabBar("AssetReferenceViews"))
@@ -57,15 +57,18 @@ namespace Editor
     {
         SetReferenceTarget(asset);
         if (!m_HasScanned)
-            m_ScanRequested = true;
+            m_ScanAfter = std::chrono::steady_clock::now();
         m_SelectReferencesTab = true;
         Focus();
     }
 
     void AssetReferencePanel::RequestScanRefresh()
     {
-        if (m_HasScanned)
-            m_ScanRequested = true;
+        if (!m_HasScanned)
+            return;
+
+        // File writes can arrive as a burst of change notifications.
+        m_ScanAfter = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
     }
 
     void AssetReferencePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
@@ -387,7 +390,7 @@ namespace Editor
         RebuildReferenceTrees(scan.References);
         SetReferenceTarget(m_ReferenceTarget);
         m_HasScanned = true;
-        m_ScanRequested = false;
+        m_ScanAfter.reset();
         m_StatusMessage = "AssetRef.ScanCompleted";
     }
 

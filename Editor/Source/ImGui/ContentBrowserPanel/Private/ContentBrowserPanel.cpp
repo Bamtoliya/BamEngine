@@ -45,16 +45,20 @@ void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const s
 		auto& cache = AssetCache::Get();
 
 		const filesystem::path filePath = directory / reinterpret_cast<const char8_t*>(filename.c_str());
+		const bool projectWatch = watchid == m_ProjectWatchId;
+		bool documentChanged = projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(filePath);
 		cache.RequestInvalidate(filePath);
 
 		if (action == efsw::Action::Moved && !oldFilename.empty())
 		{
 			const filesystem::path oldFilePath = directory / reinterpret_cast<const char8_t*>(oldFilename.c_str());
+			documentChanged |= projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(oldFilePath);
 			cache.RequestInvalidate(oldFilePath);
 		}
 
-		if (m_RefreshFlag)
-			m_RefreshFlag->store(true);
+		if (documentChanged)
+			m_ReferenceDocumentsChanged.store(true);
+		m_RefreshFlag.store(true);
 	}
 	catch (const std::exception& e)
 	{
@@ -160,8 +164,9 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_NeedToExpandTree = true;
 	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
 	m_FileWatcher = new efsw::FileWatcher();
-	m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
+	m_FileListener = new ContentBrowserFileListener(m_NeedsCacheRefresh, m_ReferenceDocumentsChanged);
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
+	m_FileListener->SetProjectWatchId(m_WatchID);
 	std::error_code ec;
 	if (m_EngineRootPath != m_RootPath && std::filesystem::is_directory(m_EngineRootPath, ec))
 		m_EngineWatchID = m_FileWatcher->addWatch(m_EngineRootPath.string(), m_FileListener, true);
@@ -215,9 +220,19 @@ const filesystem::path& ContentBrowserPanel::GetActiveRootForPath(const filesyst
 	return m_RootPath;
 }
 
+static void RequestAssetReferenceScanRefresh()
+{
+	auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
+	if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+		references->RequestScanRefresh();
+}
+
 void ContentBrowserPanel::Update(f32 dt)
 {
-	if (m_IsImportModalActive)
+	if (m_ReferenceDocumentsChanged.exchange(false))
+		RequestAssetReferenceScanRefresh();
+
+	if (m_Open && m_IsImportModalActive)
 	{
 		m_ImportPreviewWidget.BeginFrame(dt);
 		m_ImportPreviewWidget.Submit(dt);
@@ -1620,19 +1635,12 @@ void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* la
 	if (moves.empty())
 		return;
 
-	const auto refreshReferences = []()
-	{
-		auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
-		if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
-			references->RequestScanRefresh();
-	};
-
 	const auto batch = std::make_shared<const vector<FileMove>>(std::move(moves));
-	const auto replay = [this, batch, refreshReferences](bool forward)
+	const auto replay = [this, batch](bool forward)
 	{
 		if (!ReplayFileMoves(*batch, forward))
 			return false;
-		refreshReferences();
+		RequestAssetReferenceScanRefresh();
 		return true;
 	};
 	auto command = std::make_unique<CallbackEditorCommand>(label,
@@ -1644,7 +1652,7 @@ void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* la
 	else
 	{
 		m_FileHistory.Record(std::move(command));
-		refreshReferences();
+		RequestAssetReferenceScanRefresh();
 	}
 	FinishFileHistoryOperation();
 }

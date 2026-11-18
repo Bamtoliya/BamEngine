@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
 #include <efsw/efsw.hpp>
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
@@ -17,9 +18,15 @@ class AssetPathRelocation;
 class ContentBrowserFileListener : public efsw::FileWatchListener
 {
 public:
-	std::atomic<bool>* m_RefreshFlag;
-	ContentBrowserFileListener(std::atomic<bool>* flag) : m_RefreshFlag(flag) {}
+	ContentBrowserFileListener(std::atomic<bool>& refreshFlag, std::atomic<bool>& referenceDocumentsChanged)
+		: m_RefreshFlag(refreshFlag), m_ReferenceDocumentsChanged(referenceDocumentsChanged) {}
+	void SetProjectWatchId(efsw::WatchID watchId) { m_ProjectWatchId = watchId; }
 	void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename, efsw::Action action, std::string oldFilename) override;
+
+private:
+	std::atomic<bool>& m_RefreshFlag;
+	std::atomic<bool>& m_ReferenceDocumentsChanged;
+	efsw::WatchID m_ProjectWatchId = 0;
 };
 
 struct FileDropConflict
@@ -36,6 +43,7 @@ public:
 	ContentBrowserPanel() = default;
 	virtual ~ContentBrowserPanel() = default;
 	virtual void Update(f32 dt) override;
+	bool ShouldUpdateWhenClosed() const override { return m_ReferenceDocumentsChanged.load(); }
 	virtual void Draw() override;
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
@@ -264,6 +272,7 @@ private:
 	efsw::WatchID m_EditorWatchID = 0;
 	class ContentBrowserFileListener* m_FileListener = nullptr;
 	atomic<bool> m_NeedsCacheRefresh = { false };
+	std::atomic<bool> m_ReferenceDocumentsChanged{ false };
 private:
 	bool m_OpenConflictPopup = false;
 	bool m_ApplyToAllConflicts = false;

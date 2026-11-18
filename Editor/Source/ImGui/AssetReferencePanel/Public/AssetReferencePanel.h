@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "ImGuiInterface.h"
 #include "AssetReferenceValidator.h"
+#include <chrono>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -51,7 +53,7 @@ private:
     ReferenceAdjacency m_Dependencies;
     ReferenceAdjacency m_Users;
     bool m_SelectReferencesTab = false;
-    bool m_ScanRequested = false;
+    std::optional<std::chrono::steady_clock::time_point> m_ScanAfter;
     bool m_HasScanned = false;
     bool m_ReferenceTargetMissing = false;
     int m_FilterType = 0; // 0: All, 1: Missing, 2: External, 3: InvalidExt

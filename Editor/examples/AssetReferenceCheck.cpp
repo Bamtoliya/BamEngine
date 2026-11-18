@@ -239,6 +239,15 @@ namespace
 
 int RunAssetReferenceChecks()
 {
+    using Editor::AssetReferenceValidator;
+    if (!AssetReferenceValidator::IsReferenceDocumentPath(L"씬.BAMSCENE.JSON") ||
+        !AssetReferenceValidator::IsReferenceDocumentPath(L"Controller.ANIMATOR") ||
+        !AssetReferenceValidator::IsReferenceDocumentPath(L"Controller.bamanimator") ||
+        !AssetReferenceValidator::IsReferenceDocumentPath(L"Timeline.ACTIONTIMELINE") ||
+        AssetReferenceValidator::IsReferenceDocumentPath(L"Material.bammat.json.tmp") ||
+        AssetReferenceValidator::IsReferenceDocumentPath(L"Texture.png"))
+        return 55;
+
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto root = fs::temp_directory_path() / ("BamAssetReferenceCheck-" + std::to_string(stamp));
     if (!fs::create_directory(root))
