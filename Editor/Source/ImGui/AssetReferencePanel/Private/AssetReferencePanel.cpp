@@ -9,6 +9,7 @@
 #include "InputManager.h"
 #include <imgui.h>
 #include <algorithm>
+#include <unordered_set>
 #include <utility>
 
 namespace Editor
@@ -27,6 +28,14 @@ namespace Editor
             AssetFileActions::Open(path);
         if (reveal)
             AssetFileActions::RevealInContentBrowser(path);
+    }
+
+    static void DrawReferenceRowActions(const std::filesystem::path& path, const std::string& display)
+    {
+        const bool hovered = ImGui::IsItemHovered();
+        DrawReferenceAssetActions("ReferenceRowActions", path);
+        if (hovered)
+            ImGui::SetTooltip("%s", display.c_str());
     }
 
     AssetReferencePanel::AssetReferencePanel()
@@ -136,6 +145,7 @@ namespace Editor
 
     void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
     {
+        m_ReferenceSearchDirty = true;
         if (asset.empty())
         {
             m_ReferenceTarget.clear();
@@ -172,6 +182,50 @@ namespace Editor
         };
         prepareChildren(m_Dependencies);
         prepareChildren(m_Users);
+    }
+
+    void AssetReferencePanel::CollectReferenceMatches(const ReferenceAdjacency& links, std::wstring_view query,
+        ReferencePaths& matches) const
+    {
+        std::unordered_set<std::filesystem::path> visited{ m_ReferenceTarget };
+        ReferencePaths pending{ m_ReferenceTarget };
+        while (!pending.empty())
+        {
+            const auto asset = std::move(pending.back());
+            pending.pop_back();
+            const auto children = links.find(asset);
+            if (children == links.end())
+                continue;
+
+            for (const auto& path : children->second.Paths)
+            {
+                if (!visited.insert(path).second)
+                    continue;
+
+                const auto uri = Engine::ToLowerWStr(Engine::PlatformPath::ToVirtualUri(path));
+                if (uri.find(query) != std::wstring::npos ||
+                    Engine::ToLowerWStr(path.generic_wstring()).find(query) != std::wstring::npos)
+                    matches.push_back(path);
+
+                if (links.contains(path))
+                    pending.push_back(path);
+            }
+        }
+        std::ranges::sort(matches);
+    }
+
+    void AssetReferencePanel::UpdateReferenceMatches()
+    {
+        m_ReferenceSearchDirty = false;
+        m_MatchingUsers.clear();
+        m_MatchingDependencies.clear();
+        if (m_ReferenceSearch[0] == '\0')
+            return;
+
+        auto query = Engine::ToLowerWStr(Engine::StrToWStr(m_ReferenceSearch));
+        std::ranges::replace(query, L'\\', L'/');
+        CollectReferenceMatches(m_Users, query, m_MatchingUsers);
+        CollectReferenceMatches(m_Dependencies, query, m_MatchingDependencies);
     }
 
     void AssetReferencePanel::DrawReferenceToolbar()
@@ -211,7 +265,12 @@ namespace Editor
         const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_ReferenceTarget));
         ImGui::TextWrapped("%s", target.c_str());
         if (!m_ReferenceTargetMissing)
+        {
             DrawReferenceAssetActions("ReferenceTargetActions", m_ReferenceTarget);
+            if (EditorUI::SearchBar("ReferencePathSearch", m_ReferenceSearch, sizeof(m_ReferenceSearch),
+                "AssetRef.SearchHint"))
+                m_ReferenceSearchDirty = true;
+        }
         ImGui::Separator();
 
         if (m_ReferenceTargetMissing)
@@ -220,15 +279,64 @@ namespace Editor
             return;
         }
 
-        std::filesystem::path next;
-        if (ImGui::BeginChild("AssetReferenceLists"))
+        if (m_ReferenceSearchDirty)
+            UpdateReferenceMatches();
+        const bool searching = m_ReferenceSearch[0] != '\0';
+        if (searching && m_MatchingUsers.empty() && m_MatchingDependencies.empty())
         {
-            DrawReferenceTree("AssetRef.UsedBy", m_Users, next);
-            ImGui::Separator();
-            DrawReferenceTree("AssetRef.Uses", m_Dependencies, next);
+            EditorUI::EmptyState("AssetRef.NoMatchingReferences");
+            return;
+        }
+
+        std::filesystem::path next;
+        if (ImGui::BeginChild(searching ? "AssetReferenceSearchResults" : "AssetReferenceLists"))
+        {
+            if (searching)
+            {
+                DrawReferenceMatches("AssetRef.UsedBy", m_MatchingUsers, next);
+                ImGui::Separator();
+                DrawReferenceMatches("AssetRef.Uses", m_MatchingDependencies, next);
+            }
+            else
+            {
+                DrawReferenceTree("AssetRef.UsedBy", m_Users, next);
+                ImGui::Separator();
+                DrawReferenceTree("AssetRef.Uses", m_Dependencies, next);
+            }
         }
         ImGui::EndChild();
         NavigateToReference(next);
+    }
+
+    void AssetReferencePanel::DrawReferenceMatches(const char* labelKey, const ReferencePaths& matches,
+        std::filesystem::path& next)
+    {
+        ImGui::TextUnformatted(LOCAL_CSTR(labelKey));
+        if (matches.empty())
+        {
+            ImGui::TextDisabled("%s", LOCAL_CSTR("AssetRef.NoMatchingReferences"));
+            return;
+        }
+
+        ImGui::PushID(labelKey);
+        ImGui::PushID(static_cast<int>(std::filesystem::hash_value(m_ReferenceTarget)));
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(matches.size()));
+        while (clipper.Step())
+        {
+            for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
+            {
+                const auto& path = matches[index];
+                const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+                ImGui::PushID(static_cast<int>(std::filesystem::hash_value(path)));
+                if (ImGui::Selectable((display + "###ReferenceMatch").c_str()))
+                    next = path;
+                DrawReferenceRowActions(path, display);
+                ImGui::PopID();
+            }
+        }
+        ImGui::PopID();
+        ImGui::PopID();
     }
 
     void AssetReferencePanel::DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links,
@@ -289,10 +397,7 @@ namespace Editor
             noteKey ? "  " : "", noteKey ? LOCAL_CSTR(noteKey) : "");
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             next = path;
-        const bool hovered = ImGui::IsItemHovered();
-        DrawReferenceAssetActions("ReferenceRowActions", path);
-        if (hovered)
-            ImGui::SetTooltip("%s", display.c_str());
+        DrawReferenceRowActions(path, display);
 
         if (open && expandable)
         {

@@ -134,6 +134,7 @@ AssetRef,Uses,Uses,이 에셋이 참조하는 파일
 AssetRef,ReferenceCycle,(Cycle),(순환 참조)
 AssetRef,ReferenceDepthLimit,(Open this asset to continue),(이 에셋을 선택해 계속 보기)
 AssetRef,NoDirectReferences,No direct references found in the scanned project documents.,검사한 프로젝트 문서에서 직접 참조를 찾지 못했습니다.
+AssetRef,NoMatchingReferences,No matching asset references.,검색어와 일치하는 에셋 참조가 없습니다.
 AssetRef,UnreadableDocument,Could not read document,문서를 읽을 수 없음
 AssetRef,OutsideMounts,Outside asset roots,에셋 루트 외부
 AssetRef,ScanAll,Scan Resources,에셋 참조 검사

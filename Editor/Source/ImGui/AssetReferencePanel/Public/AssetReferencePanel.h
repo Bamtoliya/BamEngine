@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <string_view>
 
 BEGIN(Editor)
 
@@ -36,6 +37,7 @@ private:
     void DrawIssuesTable();
     void DrawReferences();
     void DrawReferenceToolbar();
+    void DrawReferenceMatches(const char* labelKey, const ReferencePaths& matches, std::filesystem::path& next);
     void DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links, std::filesystem::path& next);
     void DrawReferenceChildren(const ReferenceChildren& children, const ReferenceAdjacency& links,
         ReferencePaths& ancestors, std::filesystem::path& next);
@@ -45,6 +47,8 @@ private:
     void StepReferenceHistory(bool forward);
     void SetReferenceTarget(const std::filesystem::path& asset);
     void RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references);
+    void UpdateReferenceMatches();
+    void CollectReferenceMatches(const ReferenceAdjacency& links, std::wstring_view query, ReferencePaths& matches) const;
 
     void RunValidation();
     void FixSelectedIssue(size_t index);
@@ -57,6 +61,10 @@ private:
     ReferencePaths m_ForwardTargets;
     ReferenceAdjacency m_Dependencies;
     ReferenceAdjacency m_Users;
+    ReferencePaths m_MatchingDependencies;
+    ReferencePaths m_MatchingUsers;
+    char m_ReferenceSearch[256] = "";
+    bool m_ReferenceSearchDirty = false;
     bool m_SelectReferencesTab = false;
     std::optional<std::chrono::steady_clock::time_point> m_ScanAfter;
     bool m_HasScanned = false;
