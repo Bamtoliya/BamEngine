@@ -2,6 +2,31 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 리플렉션 생성 등록 함수의 Debug 스택 오버플로 수정
+
+- Debug CTest에서 `ReflectionRegistry::Create()`를 호출하는 10개 테스트가 모두 `c00000fd`(스택 오버플로)로 종료됐다. 이벤트 로그와 PDB로 확인한 위치는 `Engine.dll`의 `__chkstk`였다.
+- 생성된 `Register_BamEngine`은 중복 검사, 열거형 59개, 자유 함수 169개 등록을 한 함수에 담았다. Debug(`/Od`)는 임시 문자열마다 스택 슬롯을 따로 잡아 프레임이 852KB였다. 여기에 `ParticleEmitterData` 등록(메타데이터 추가 후 164KB)이 중첩되면서 기본 1MB를 넘었다. Editor·Client도 스택 예약이 1MB라 같은 위험이 있었다.
+- `RegistrationEmitter.cpp`가 중복 검사, 열거형 하나, 자유 함수 하나를 각각 `Register_<모듈>_CheckDuplicates`·`_Enum<N>`·`_Function<N>` 내부 함수로 생성한다. `Register_<모듈>`은 이 함수들을 순서대로 호출한다. 공개 함수의 시그니처와 검사·등록 순서는 같다.
+- **검증**: Debug 전체 빌드에서 새 경고·오류가 없었다(기존 `ActionTimelineSystem.cpp`의 `C4834` 10건만). CTest 39/39 통과. 재빌드 후 `Register_BamEngine`의 프레임은 13KB였다.
+- **잔여**: 타입별 등록 함수도 속성 수에 비례해 커진다(최대 `ParticleEmitterData` 164KB). 현재 호출 깊이에서는 문제가 없지만, 속성 블록을 더 나누는 생성 방식은 후속 검토 대상이다.
+
+### [2026-11-18] 기본 UI 리소스 조회와 핸들 경로 해석 순서
+
+- `UIRenderSystem`과 `Renderer`의 UI 대체 경로가 기본 머티리얼·흰 텍스처를 레거시 키(`Resources/...`)로 찾았다. 시작 매니페스트는 엔진 리소스를 `Engine://` URI 키로 등록하므로 조회가 실패해, 머티리얼이나 스프라이트가 비어 있는 UI 이미지가 그려지지 않았다. 에디터의 UI Image 생성도 같은 이유로 머티리얼이 항상 비어 있었다.
+- `UIRenderSystem::GetDefaultMaterial`·`GetDefaultTexture`가 `Engine://` 키를 먼저 찾고 레거시 키로 대체한다(Client는 UI 머티리얼을 레거시 키로도 등록한다). `OnSubmit`은 프레임마다 한 번 조회하고, `EntityFactory`의 UI Image 생성과 `Renderer`의 UI 대체 머티리얼도 같은 키를 쓴다.
+- `ResolveResourceHandle`은 이미 로드된 리소스를 찾지 못하면 저장된 절대 `AssetPath`를 먼저 로드했다. 워크트리처럼 다른 위치에서 실행하면 원래 체크아웃의 파일을 읽고, 그 절대 경로가 다시 씬에 저장됐다. 이제 `AssetKey`가 가상 URI이고 현재 프로젝트에 파일이 있으면 키로 먼저 로드한다.
+- **검증**: Debug 빌드와 CTest 39/39(위 리플렉션 수정 포함) 통과. Game View·Client에서 머티리얼·스프라이트가 비어 있는 UI 이미지 표시, 새 UI Image의 기본 머티리얼, 워크트리에서 다시 지정한 스프라이트 핸들의 URI 저장은 이 커밋 시점에 실행 확인 결과를 받지 못했다.
+- **잔여**: `PostProcessPipeline`, `LightManager`, `ParticleSystem` 등에도 레거시 키 조회가 남아 있다. `ClientRenderPipeline`의 UI 머티리얼 레거시 키 등록 정리도 후속이다.
+
+### [2026-11-18] 파티클 에디터 인스펙터의 공용 속성 표 전환과 이펙트 경로 정리
+
+- 파티클 에디터의 이미터 인스펙터를 손으로 작성한 표 대신 `ReflectionPropertyDrawer::DrawPropertyTable`로 그린다. 범주·범위·표시 조건은 `ParticleEmitterData`의 `CATEGORY`·`RANGE`·`EDITCONDITION` 메타데이터로 옮겼다. 단일 조건으로 표현할 수 없는 항목(연속 방출의 상속 비율, 버스트 0의 주기, 충돌 없음의 반발·최소 바운스 속도)은 `HiddenProperties`로 숨긴다. 부모 이미터는 이미터 이름 목록이 필요해 공용 속성 행으로 따로 그린다.
+- Undo는 VFX 에디터와 같은 편집 세션으로 바꿨다. 첫 변경 때 이전 상태를 저장하고, 입력이 끝나거나 Undo·Redo·삭제·저장 전에 이력 한 건으로 확정한다. 기존 체크박스는 변경 뒤 상태를 이전 상태로 기록해 되돌리기가 동작하지 않았다.
+- 로캘: `Engine.csv`에 `CATEGORY_PARTICLE_TRIGGER`·`CATEGORY_PARTICLE_FORCES`와 파티클 enum 4종 12행을 추가했고, 쓰지 않게 된 `ParticleEditor.*` 52행을 `Editor.csv`에서 제거했다.
+- 데이터(Git 제외 `Assets`): 원본 체크아웃과 기준선 워크트리의 `Explosion_Fireball.bameffect.json`에서 절대 경로 핸들 8개를 `Engine://` URI로 바꿨다. 두 `Assets` 전체 검사에서 절대 경로 핸들은 0건이다.
+- **검증**: `audit_localization.py --strict` 통과, Debug 빌드와 CTest 39/39 통과. 파티클 에디터의 범주·조건부 표시·Undo와 이펙트 저장 결과의 URI는 이 커밋 시점에 실행 확인 결과를 받지 못했다.
+- **사용성 변화**: 수명·속도·회전 속도의 최소/최대가 두 행으로 나뉘고, 활성화·방출 시간·시뮬레이션 공간·메시·빌보드·SubUV가 인스펙터에 표시된다.
+
 ### [2026-11-18] 다중 Git 워크트리(Worktrees) 환경 애셋 및 리소스 핫로드 지원
 
 - **문제점 분석**:
