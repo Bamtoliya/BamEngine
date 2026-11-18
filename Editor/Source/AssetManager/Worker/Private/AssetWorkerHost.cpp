@@ -1,6 +1,7 @@
 #include "AssetWorkerHost.h"
 #include "Functions.h"
 #include "PlatformPath.h"
+#include <stb_image.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -8,12 +9,41 @@
 #include <Windows.h>
 
 #include <cstdlib>
+#include <fstream>
+#include <memory>
 #include <sstream>
 
 IMPLEMENT_SINGLETON(AssetWorkerHost)
 
 namespace
 {
+    bool DecodePngToRgba(const std::filesystem::path& pngPath, int32& outWidth, int32& outHeight, std::vector<uint8_t>& outRgba)
+    {
+        outWidth = 0;
+        outHeight = 0;
+        outRgba.clear();
+
+        std::ifstream file(pngPath, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) return false;
+
+        const std::streamsize size = file.tellg();
+        if (size <= 0 || size > 2 * 1024 * 1024) return false;
+
+        file.seekg(0, std::ios::beg);
+        std::vector<uint8_t> encoded(static_cast<size_t>(size));
+        if (!file.read(reinterpret_cast<char*>(encoded.data()), size)) return false;
+
+        int w = 0, h = 0, c = 0;
+        std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
+            stbi_load_from_memory(encoded.data(), static_cast<int>(size), &w, &h, &c, STBI_rgb_alpha), stbi_image_free);
+        if (!pixels || w <= 0 || h <= 0) return false;
+
+        outWidth = w;
+        outHeight = h;
+        outRgba.assign(pixels.get(), pixels.get() + static_cast<size_t>(w) * h * 4);
+        return true;
+    }
+
     std::string SanitizeField(std::string value)
     {
         for (char& ch : value)
@@ -270,7 +300,8 @@ bool AssetWorkerHost::EnqueueThumbnail(const std::string& assetKey, Engine::uint
     if (!m_Available || sourcePath.empty() || outputPngPath.empty()) return false;
 
     std::lock_guard lock(m_QueueMutex);
-    if (m_StopRequested || m_PendingQueue.size() >= MAX_QUEUE_SIZE) return false;
+    if (m_StopRequested) return false;
+    if (m_PendingQueue.size() >= MAX_QUEUE_SIZE) m_PendingQueue.pop_front();
 
     PendingThumbnailTask task;
     task.AssetKey = assetKey;
@@ -315,8 +346,8 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
             std::unique_lock lock(m_QueueMutex);
             m_QueueCv.wait(lock, [&]() { return m_StopRequested || !m_PendingQueue.empty(); });
             if (m_StopRequested) break;
-            task = std::move(m_PendingQueue.front());
-            m_PendingQueue.pop_front();
+            task = std::move(m_PendingQueue.back());
+            m_PendingQueue.pop_back();
         }
 
         if (!proc.IsAlive())
@@ -324,7 +355,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
             if (!SpawnWorkerProcess(m_WorkerExePath, m_ProjectRoot, static_cast<HANDLE>(m_JobObject), proc))
             {
                 std::lock_guard lock(m_CompletedMutex);
-                m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), false });
+                m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), 0, 0, {}, false });
                 continue;
             }
             setActiveHandle(proc.Process);
@@ -370,9 +401,20 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
             proc.Close();
         }
 
+        int32 width = 0;
+        int32 height = 0;
+        std::vector<uint8_t> rgbaData;
+        if (success && !DecodePngToRgba(task.OutputPngPath, width, height, rgbaData))
+        {
+            success = false;
+            width = 0;
+            height = 0;
+            rgbaData.clear();
+        }
+
         {
             std::lock_guard lock(m_CompletedMutex);
-            m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), success });
+            m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), width, height, std::move(rgbaData), success });
         }
     }
 

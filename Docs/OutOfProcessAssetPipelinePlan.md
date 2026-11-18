@@ -148,6 +148,7 @@ flowchart TD
   - 위치: `Editor/Source/AssetManager/Worker/` (`AssetWorkerHost.h/.cpp`)
   - `Windows Job Object`(`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) + `CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS` + 2개 데몬 프로세스 풀 운영.
   - `AssetCache`는 `_v2` 디스크 캐시 시드를 사용하며, 캐시 미스 시 3D 모델·메시·프리팹 베이킹을 `AssetWorkerHost`로 위임하고, 완료된 PNG를 `m_DecodeWorkers`로 비동기 로드해 GPU 텍스처로 업로드. 워커 미사용 시 인-프로세스 폴백(`ThumbnailRenderer::SubmitPrefab` 포함) 유지.
+  - **대량 썸네일 프레임 방어 최적화**: 2048×2048 썸네일 공용 아틀라스(256슬롯/페이지), `Renderer::GetPreRenderDelegate()` 기반 렌더 프레임 기록 중 무대기(Fence Stall 0회) 부분 텍스처 업로드, LIFO 스케줄링 및 콘텐츠 브라우저 3-채널 `ImDrawListSplitter` 일괄 배칭 연동.
 
 ---
 

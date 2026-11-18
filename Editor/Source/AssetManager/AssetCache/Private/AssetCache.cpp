@@ -182,11 +182,24 @@ IMPLEMENT_SINGLETON(AssetCache)
 EResult AssetCache::Initialize(void* arg)
 {
     if (!AssetWorkerHost::IsCreated()) (void)AssetWorkerHost::Create();
+    if (m_PreRenderHandle == 0 && Engine::Renderer::IsCreated())
+    {
+        m_PreRenderHandle = Engine::Renderer::Get().GetPreRenderDelegate().AddLambda([this](Engine::f32)
+            {
+                FlushPendingUploads();
+            });
+    }
     return EResult::Success;
 }
 
 void AssetCache::Free()
 {
+    if (m_PreRenderHandle != 0 && Engine::Renderer::IsCreated())
+    {
+        Engine::Renderer::Get().GetPreRenderDelegate().Remove(m_PreRenderHandle);
+        m_PreRenderHandle = 0;
+    }
+
     if (AssetWorkerHost::IsCreated()) AssetWorkerHost::Destroy();
 
     for (auto& worker : m_DecodeWorkers)
@@ -208,6 +221,12 @@ void AssetCache::Free()
     m_TempCaptureResources.clear();
 
     ClearAll();
+    for (auto& page : m_AtlasPages)
+    {
+        Safe_Release(page.Texture);
+        page.FreeSlots.clear();
+    }
+    m_AtlasPages.clear();
     PruneDiskCache();
 }
 #pragma endregion
@@ -217,28 +236,15 @@ void AssetCache::Update()
 {
     if (AssetWorkerHost::IsCreated())
     {
-        std::error_code ec;
         for (auto& task : AssetWorkerHost::Get().PollCompletedTasks())
         {
             const auto loading = m_LoadingPaths.find(task.AssetKey);
             if (loading == m_LoadingPaths.end() || loading->second != task.RequestId) continue;
 
-            if (task.Success && std::filesystem::exists(task.OutputPngPath, ec))
+            if (task.Success && task.Width > 0 && task.Height > 0 && !task.RgbaData.empty())
             {
-                if (m_DecodeWorkers.size() < MAX_DECODE_WORKERS * 4)
-                {
-                    try
-                    {
-                        auto future = std::async(std::launch::async, [diskCachePath = task.OutputPngPath, key = task.AssetKey]()
-                            {
-                                return AssetCache::LoadThumbnailFromDiskCache(diskCachePath, key);
-                            });
-                        m_DecodeWorkers.push_back(ThumbnailDecodeWorker{ task.AssetKey, task.RequestId, std::move(future) });
-                        continue;
-                    }
-                    catch (...) {}
-                }
-                m_LoadingPaths.erase(loading);
+                m_PendingUploadQueue.push_back(ThumbnailUploadTask{
+                    task.AssetKey, task.RequestId, task.Width, task.Height, std::move(task.RgbaData) });
             }
             else
             {
@@ -263,14 +269,23 @@ void AssetCache::Update()
     for (const auto& path : invalidations)
         ClearCache(Engine::Utf8ToPath(path));
 
+    if (m_PreRenderHandle == 0)
+        FlushPendingUploads();
+
+    // 3D 1프레임 오프스크린 캡처 파이프라인 처리
+    ProcessPending3DThumbnail();
+}
+
+void AssetCache::FlushPendingUploads()
+{
     RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 
-    // F12: 프레임당 최대 MAX_UPLOADS_PER_FRAME개씩만 텍스처를 생성하여 프레임 드랍을 방지합니다.
+    // F12: 프레임당 최대 MAX_UPLOADS_PER_FRAME개씩만 LIFO(가시 영역 우선) 업로드
     size_t uploadsThisFrame = 0;
     while (!m_PendingUploadQueue.empty() && uploadsThisFrame < MAX_UPLOADS_PER_FRAME)
     {
-        ThumbnailUploadTask task = std::move(m_PendingUploadQueue.front());
-        m_PendingUploadQueue.pop_front();
+        ThumbnailUploadTask task = std::move(m_PendingUploadQueue.back());
+        m_PendingUploadQueue.pop_back();
 
         const auto loading = m_LoadingPaths.find(task.AssetPath);
         if (loading == m_LoadingPaths.end() || loading->second != task.RequestId)
@@ -282,58 +297,84 @@ void AssetCache::Update()
 
         m_LoadingPaths.erase(loading);
 
-        RHITexture* texture = nullptr;
-        size_t byteSize = 0;
-
-        if (rhi && task.Width > 0 && task.Height > 0 && !task.Data.empty())
+        if (rhi && task.Width > 0 && task.Height > 0 && !task.Data.empty() &&
+            task.Width <= ATLAS_SLOT_DIM && task.Height <= ATLAS_SLOT_DIM)
         {
+            int32 pageIdx = -1;
+            int32 slotIdx = -1;
+            if (AllocateAtlasSlot(rhi, pageIdx, slotIdx))
+            {
+                const uint32 dstX = static_cast<uint32>(slotIdx % ATLAS_SLOTS_PER_ROW) * ATLAS_SLOT_DIM;
+                const uint32 dstY = static_cast<uint32>(slotIdx / ATLAS_SLOTS_PER_ROW) * ATLAS_SLOT_DIM;
+
+                RHITextureDesc tileDesc = {};
+                tileDesc.width = static_cast<uint32>(task.Width);
+                tileDesc.height = static_cast<uint32>(task.Height);
+                tileDesc.mipLevels = 1;
+                tileDesc.arraySize = 1;
+                tileDesc.format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+                tileDesc.dimension = Engine::ETextureDimension::Texture2D;
+                tileDesc.usage = Engine::ETextureUsage::Sampler;
+                tileDesc.data = task.Data.data();
+                tileDesc.dataSize = static_cast<uint32>(task.Data.size());
+
+                if (Engine::IsSuccess(rhi->UploadTextureData(m_AtlasPages[pageIdx].Texture, tileDesc, dstX, dstY)))
+                {
+                    const float insetX = task.Width > 2 ? 0.5f : 0.0f;
+                    const float insetY = task.Height > 2 ? 0.5f : 0.0f;
+                    const ImVec2 uv0((static_cast<float>(dstX) + insetX) / static_cast<float>(ATLAS_PAGE_DIM),
+                        (static_cast<float>(dstY) + insetY) / static_cast<float>(ATLAS_PAGE_DIM));
+                    const ImVec2 uv1((static_cast<float>(dstX + task.Width) - insetX) / static_cast<float>(ATLAS_PAGE_DIM),
+                        (static_cast<float>(dstY + task.Height) - insetY) / static_cast<float>(ATLAS_PAGE_DIM));
+                    InsertAtlasToCache(task.AssetPath, m_AtlasPages[pageIdx].Texture, pageIdx, slotIdx,
+                        uv0, uv1, task.Width, task.Height, std::move(task.Data));
+                    ++uploadsThisFrame;
+                    continue;
+                }
+
+                FreeAtlasSlot(pageIdx, slotIdx);
+            }
+
             RHITextureDesc desc = {};
-            desc.width = task.Width;
-            desc.height = task.Height;
+            desc.width = static_cast<uint32>(task.Width);
+            desc.height = static_cast<uint32>(task.Height);
             desc.data = task.Data.data();
             desc.dataSize = static_cast<uint32>(task.Data.size());
 
-            if (task.Data.size() == desc.dataSize)
+            RHITexture* standalone = task.Data.size() == desc.dataSize ? rhi->CreateTexture(desc) : nullptr;
+            if (standalone)
             {
-                texture = rhi->CreateTexture(desc);
-                if (texture)
-                {
-                    byteSize = task.Data.size();
-                    ++uploadsThisFrame;
-                }
+                InsertToCache(task.AssetPath, standalone, task.Data.size());
+                ++uploadsThisFrame;
+                continue;
             }
         }
 
-        InsertToCache(task.AssetPath, texture, byteSize);
+        InsertToCache(task.AssetPath, nullptr, 0);
     }
-
-    // 3D 1프레임 오프스크린 캡처 파이프라인 처리
-    ProcessPending3DThumbnail();
 }
 #pragma endregion
 
 #pragma region Thumbnail Management
-RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* spriteHandle)
+std::string AssetCache::BuildCacheKey(const filesystem::path& assetPath)
 {
-    const std::string key = ThumbnailCacheKey(assetPath);
+    return ThumbnailCacheKey(assetPath);
+}
+
+AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath)
+{
+    const std::string key = cacheKey.empty() ? ThumbnailCacheKey(assetPath) : cacheKey;
     if (key.empty())
-        return nullptr;
+        return {};
 
-    if (spriteHandle)
-        *spriteHandle = {};
-
-    // 기존 캐시 적중 분기 교체
     if (auto cached = m_ThumbnailCache.find(key); cached != m_ThumbnailCache.end())
     {
         m_LruList.splice(m_LruList.begin(), m_LruList, cached->second.LruIt);
-        if (spriteHandle)
-            *spriteHandle = cached->second.SpriteHandle;
-
-        return cached->second.Texture;
+        return ThumbnailView{ cached->second.Texture, cached->second.UV0, cached->second.UV1, cached->second.SpriteHandle };
     }
 
     if (m_LoadingPaths.contains(key))
-        return nullptr;
+        return {};
 
     std::string filename = Engine::WStrToStr(assetPath.filename().wstring());
     for (char& ch : filename)
@@ -361,7 +402,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
         if (!diskCachePath.empty() && std::filesystem::exists(diskCachePath))
         {
             if (m_DecodeWorkers.size() >= MAX_DECODE_WORKERS)
-                return nullptr;
+                return {};
             const Engine::uint64 requestId = ++m_NextRequestId;
             m_LoadingPaths.emplace(key, requestId);
             try
@@ -377,7 +418,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
                 m_LoadingPaths.erase(key);
                 InsertToCache(key, nullptr, 0);
             }
-            return nullptr;
+            return {};
         }
 
         // [방향 B] 3D 모델·메시·프리팹은 독립 워커 프로세스로 100% 격리 베이킹 (크기 제한 없이 무간섭 처리)
@@ -386,12 +427,12 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
             if (diskCachePath.empty())
             {
                 InsertToCache(key, nullptr, 0);
-                return nullptr;
+                return {};
             }
             const Engine::uint64 requestId = ++m_NextRequestId;
             if (AssetWorkerHost::Get().EnqueueThumbnail(key, requestId, assetPath, diskCachePath, MAX_THUMBNAIL_DIM))
                 m_LoadingPaths.emplace(key, requestId);
-            return nullptr;
+            return {};
         }
 
         // 워커 미사용 시 인-프로세스 폴백: 대용량 모델/메시 Fast Reject로 메인 스레드 프리징 방어
@@ -404,7 +445,7 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
                 if (!diskCachePath.empty())
                     SaveNegativeCacheToDisk(diskCachePath);
                 InsertToCache(key, nullptr, 0);
-                return nullptr;
+                return {};
             }
         }
 
@@ -417,26 +458,26 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
                 if (!diskCachePath.empty())
                     SaveNegativeCacheToDisk(diskCachePath);
                 InsertToCache(key, nullptr, 0);
-                return nullptr;
+                return {};
             }
         }
 
         if (m_Pending3DQueue.size() >= MAX_PENDING_3D_REQUESTS)
-            return nullptr;
+            return {};
         const Engine::uint64 requestId = ++m_NextRequestId;
         m_LoadingPaths.emplace(key, requestId);
         m_Pending3DQueue.push(Thumbnail3DRequest{ key, requestId });
-        return nullptr;
+        return {};
     }
 
     if (!isImage)
     {
         InsertToCache(key, nullptr, 0);
-        return nullptr;
+        return {};
     }
 
     if (m_DecodeWorkers.size() >= MAX_DECODE_WORKERS)
-        return nullptr;
+        return {};
 
     const Engine::uint64 requestId = ++m_NextRequestId;
     m_LoadingPaths.emplace(key, requestId);
@@ -457,7 +498,42 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
         BAM_LOG(Error, "Editor", "Asset", "Failed to queue thumbnail generation: path={}", key);
     }
 
-    return nullptr;
+    return {};
+}
+
+RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* spriteHandle)
+{
+    if (spriteHandle) *spriteHandle = {};
+
+    const std::string key = ThumbnailCacheKey(assetPath);
+    if (key.empty()) return nullptr;
+
+    (void)GetThumbnailView(key, assetPath);
+
+    auto cached = m_ThumbnailCache.find(key);
+    if (cached == m_ThumbnailCache.end()) return nullptr;
+
+    auto& entry = cached->second;
+    if (spriteHandle) *spriteHandle = entry.SpriteHandle;
+
+    if (entry.AtlasPage >= 0)
+    {
+        if (!entry.StandaloneTexture && !entry.RawPixels.empty())
+        {
+            if (RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr)
+            {
+                RHITextureDesc desc = {};
+                desc.width = static_cast<uint32>(entry.Width);
+                desc.height = static_cast<uint32>(entry.Height);
+                desc.data = entry.RawPixels.data();
+                desc.dataSize = static_cast<uint32>(entry.RawPixels.size());
+                entry.StandaloneTexture = rhi->CreateTexture(desc);
+            }
+        }
+        return entry.StandaloneTexture;
+    }
+
+    return entry.Texture;
 }
 
 void AssetCache::RequestInvalidate(const filesystem::path& assetPath)
@@ -477,7 +553,7 @@ void AssetCache::ClearCache(const filesystem::path& assetPath)
     if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
     {
         m_CurrentCacheBytes -= it->second.ByteSize;
-        Safe_Release(it->second.Texture);
+        ReleaseCacheEntryTextures(it->second);
         m_LruList.erase(it->second.LruIt);
         m_ThumbnailCache.erase(it);
     }
@@ -494,7 +570,7 @@ void AssetCache::ClearAll()
     m_CurrentCapturingRequestId = 0;
     m_CaptureState = ECaptureState::Idle;
     for (auto& [path, entry] : m_ThumbnailCache)
-        Safe_Release(entry.Texture);
+        ReleaseCacheEntryTextures(entry);
     m_ThumbnailCache.clear();
     m_LruList.clear();
     m_CurrentCacheBytes = 0;
@@ -927,13 +1003,79 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadModelThumbnail(co
     return std::nullopt;
 }
 
+bool AssetCache::AllocateAtlasSlot(RHI* rhi, int32& outPage, int32& outSlot)
+{
+    for (size_t p = 0; p < m_AtlasPages.size(); ++p)
+    {
+        if (!m_AtlasPages[p].FreeSlots.empty() && m_AtlasPages[p].Texture)
+        {
+            outPage = static_cast<int32>(p);
+            outSlot = m_AtlasPages[p].FreeSlots.back();
+            m_AtlasPages[p].FreeSlots.pop_back();
+            return true;
+        }
+    }
+
+    if (!rhi) return false;
+
+    RHITextureDesc desc{};
+    desc.width = ATLAS_PAGE_DIM;
+    desc.height = ATLAS_PAGE_DIM;
+    desc.mipLevels = 1;
+    desc.arraySize = 1;
+    desc.format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+    desc.dimension = Engine::ETextureDimension::Texture2D;
+    desc.sampleCount = Engine::ETextureSampleCount::TextureSampleCount1;
+    desc.usage = Engine::ETextureUsage::Sampler;
+    desc.data = nullptr;
+    desc.dataSize = 0;
+
+    RHITexture* pageTex = rhi->CreateTexture(desc);
+    if (!pageTex) return false;
+
+    AtlasPage newPage;
+    newPage.Texture = pageTex;
+    newPage.FreeSlots.reserve(ATLAS_SLOTS_PER_PAGE);
+    for (int32 s = ATLAS_SLOTS_PER_PAGE - 1; s >= 1; --s)
+        newPage.FreeSlots.push_back(s);
+
+    outPage = static_cast<int32>(m_AtlasPages.size());
+    outSlot = 0;
+    m_AtlasPages.push_back(std::move(newPage));
+    return true;
+}
+
+void AssetCache::FreeAtlasSlot(int32 page, int32 slot)
+{
+    if (page < 0 || static_cast<size_t>(page) >= m_AtlasPages.size()) return;
+    if (slot < 0 || slot >= ATLAS_SLOTS_PER_PAGE) return;
+    m_AtlasPages[page].FreeSlots.push_back(slot);
+}
+
+void AssetCache::ReleaseCacheEntryTextures(CacheEntry& entry)
+{
+    if (entry.AtlasPage >= 0)
+    {
+        FreeAtlasSlot(entry.AtlasPage, entry.AtlasSlot);
+        entry.Texture = nullptr;
+        entry.AtlasPage = -1;
+        entry.AtlasSlot = -1;
+    }
+    else
+    {
+        Safe_Release(entry.Texture);
+    }
+    Safe_Release(entry.StandaloneTexture);
+    entry.RawPixels.clear();
+}
+
 void AssetCache::InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize, Engine::Handle spriteHandle)
 {
     // 이미 캐시되어 있던 항목이면 이전 리소스 정리
     if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
     {
         m_CurrentCacheBytes -= it->second.ByteSize;
-        Safe_Release(it->second.Texture);
+        ReleaseCacheEntryTextures(it->second);
         m_LruList.erase(it->second.LruIt);
         m_ThumbnailCache.erase(it);
     }
@@ -951,10 +1093,45 @@ void AssetCache::InsertToCache(const std::string& key, RHITexture* texture, size
     entry.Texture = texture;
     entry.ByteSize = texture ? byteSize : 0;
     entry.LruIt = m_LruList.begin();
-	entry.SpriteHandle = spriteHandle;
+    entry.SpriteHandle = spriteHandle;
 
     m_CurrentCacheBytes += entry.ByteSize;
-    m_ThumbnailCache.emplace(key, entry);
+    m_ThumbnailCache.emplace(key, std::move(entry));
+}
+
+void AssetCache::InsertAtlasToCache(const std::string& key, RHITexture* atlasTexture, int32 page, int32 slot,
+    const ImVec2& uv0, const ImVec2& uv1, int32 width, int32 height, std::vector<uint8_t>&& rawPixels)
+{
+    const size_t byteSize = static_cast<size_t>(width) * height * 4;
+    if (auto it = m_ThumbnailCache.find(key); it != m_ThumbnailCache.end())
+    {
+        m_CurrentCacheBytes -= it->second.ByteSize;
+        ReleaseCacheEntryTextures(it->second);
+        m_LruList.erase(it->second.LruIt);
+        m_ThumbnailCache.erase(it);
+    }
+
+    while (!m_LruList.empty() &&
+        (m_ThumbnailCache.size() >= MAX_CACHE_ENTRIES || m_CurrentCacheBytes + byteSize > MAX_CACHE_BYTES))
+    {
+        EvictOldest();
+    }
+
+    m_LruList.push_front(key);
+    CacheEntry entry;
+    entry.Texture = atlasTexture;
+    entry.UV0 = uv0;
+    entry.UV1 = uv1;
+    entry.AtlasPage = page;
+    entry.AtlasSlot = slot;
+    entry.Width = width;
+    entry.Height = height;
+    entry.RawPixels = std::move(rawPixels);
+    entry.ByteSize = byteSize;
+    entry.LruIt = m_LruList.begin();
+
+    m_CurrentCacheBytes += entry.ByteSize;
+    m_ThumbnailCache.emplace(key, std::move(entry));
 }
 
 void AssetCache::EvictOldest()
@@ -967,7 +1144,7 @@ void AssetCache::EvictOldest()
     if (auto it = m_ThumbnailCache.find(oldestKey); it != m_ThumbnailCache.end())
     {
         m_CurrentCacheBytes -= it->second.ByteSize;
-        Safe_Release(it->second.Texture);
+        ReleaseCacheEntryTextures(it->second);
         m_ThumbnailCache.erase(it);
     }
 }
@@ -977,7 +1154,7 @@ void AssetCache::ProcessPending3DThumbnail()
     auto* thumbRenderer = ThumbnailRenderer::IsCreated() ? &ThumbnailRenderer::Get() : nullptr;
     auto* rhi = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHI() : nullptr;
 
-    // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 텍스처 복제하여 캐시에 등록
+    // 1단계: 이전 프레임에서 제출한 렌더링 결과물이 있으면 아틀라스 업로드 큐 및 디스크 캐시로 전달
     if (m_CaptureState == ECaptureState::Rendering)
     {
         const auto loading = m_LoadingPaths.find(m_CurrentCapturingKey);
@@ -987,10 +1164,8 @@ void AssetCache::ProcessPending3DThumbnail()
         if (isCurrent)
         {
             RHITexture* newTexture = thumbRenderer->CreateThumbnailTexture();
-            m_LoadingPaths.erase(loading);
-            const size_t byteSize = newTexture != nullptr ?
-                static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
-            // [신규] 3D 오프스크린 렌더링 결과물을 CPU로 리드백하여 디스크 캐시 PNG로 영속화
+            bool queuedToAtlas = false;
+
             if (newTexture != nullptr && rhi != nullptr)
             {
                 std::vector<uint8_t> pixels(MAX_THUMBNAIL_DIM * MAX_THUMBNAIL_DIM * 4);
@@ -999,14 +1174,25 @@ void AssetCache::ProcessPending3DThumbnail()
                     const auto diskCachePath = CalculateDiskCachePath(Engine::Utf8ToPath(m_CurrentCapturingKey));
                     if (!diskCachePath.empty())
                     {
-                        std::async(std::launch::async, [diskCachePath, pixels = std::move(pixels)]()
+                        std::async(std::launch::async, [diskCachePath, pixelsCopy = pixels]()
                             {
-                                AssetCache::SaveThumbnailToDiskCache(diskCachePath, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, pixels.data());
+                                AssetCache::SaveThumbnailToDiskCache(diskCachePath, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, pixelsCopy.data());
                             });
                     }
+                    Safe_Release(newTexture);
+                    m_PendingUploadQueue.push_back(ThumbnailUploadTask{
+                        m_CurrentCapturingKey, m_CurrentCapturingRequestId, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, std::move(pixels) });
+                    queuedToAtlas = true;
                 }
             }
-            InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
+
+            if (!queuedToAtlas)
+            {
+                m_LoadingPaths.erase(loading);
+                const size_t byteSize = newTexture != nullptr ?
+                    static_cast<size_t>(MAX_THUMBNAIL_DIM) * MAX_THUMBNAIL_DIM * 4 : 0;
+                InsertToCache(m_CurrentCapturingKey, newTexture, byteSize);
+            }
         }
         else
         {

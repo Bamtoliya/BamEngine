@@ -854,21 +854,30 @@ void ContentBrowserPanel::ContentFilter()
 }
 #pragma endregion
 
-void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId)
+void ContentBrowserPanel::DrawGridItem(const filesystem::directory_entry& directoryEntry, GridSelectionItem& item, ImDrawListSplitter* splitter)
 {
 	const auto& path = directoryEntry.path();
 
-	ImTextureID thumbnailTexID{};
-	Engine::Handle thumbnailSpriteHandle{};
+	ContentBrowserGridItem::TileRenderContext ctx;
+	ctx.Visual = &item.Visual;
+	ctx.IsReadOnly = item.IsReadOnly;
+	ctx.ImGuiId = item.ImGuiIdStr.empty() ? nullptr : item.ImGuiIdStr.c_str();
+	ctx.CachedTruncatedName = &item.TruncatedName;
+	ctx.CachedTruncatedKey = &item.TruncatedKey;
+	ctx.Splitter = splitter;
+
 	if (path != m_RenamingPath && path != m_QueuedRenamePath &&
-		ImGui::IsRectVisible(ImVec2(m_ThumbnailSize, m_ThumbnailSize)) && !directoryEntry.is_directory())
+		ImGui::IsRectVisible(ImVec2(m_ThumbnailSize, m_ThumbnailSize)) && !item.IsDirectory)
 	{
-		auto* texture = AssetCache::Get().GetThumbnail(path, &thumbnailSpriteHandle);
-		thumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(texture);
+		const auto view = AssetCache::Get().GetThumbnailView(item.CacheKey, path);
+		ctx.ThumbnailTexID = ImGuiManager::Get().GetImGuiTextureID(view.Texture);
+		ctx.UV0 = view.UV0;
+		ctx.UV1 = view.UV1;
+		ctx.SpriteHandle = view.SpriteHandle;
 	}
 
-	const bool keepAlive = ContentBrowserGridItem::Draw(*this, directoryEntry, thumbnailTexID, thumbnailSpriteHandle,
-		m_ThumbnailSize, itemId, m_SelectedGridIds.contains(itemId));
+	const bool keepAlive = ContentBrowserGridItem::Draw(*this, directoryEntry, ctx,
+		m_ThumbnailSize, item.Id, m_SelectedGridIds.contains(item.Id));
 
 	if (keepAlive)
 		m_InteractionPaths.push_back(path);
@@ -1899,13 +1908,30 @@ void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_en
 		const auto& entry = source[index];
 		const auto& path = entry.path();
 
-		if ((hideEngineContent && Engine::PlatformPath::IsReadOnlyTarget(path)) || !PassesFilter(entry, m_FilterMask))
+		auto readOnlyIt = m_ReadOnlyCache.find(path.native());
+		if (readOnlyIt == m_ReadOnlyCache.end())
+			readOnlyIt = m_ReadOnlyCache.emplace(path.native(), Engine::PlatformPath::IsReadOnlyTarget(path)).first;
+		const bool isReadOnly = readOnlyIt->second;
+
+		if ((hideEngineContent && isReadOnly) || !PassesFilter(entry, m_FilterMask))
 			continue;
 
 		const auto previous = previousIds.find(path);
 		const auto id = previous != previousIds.end() ? previous->second : m_NextGridSelectionId++;
+		const bool isDir = entry.is_directory();
+
+		GridSelectionItem item{};
+		item.Path = path;
+		item.Id = id;
+		item.SourceIndex = index;
+		item.IsDirectory = isDir;
+		item.IsReadOnly = isReadOnly;
+		item.CacheKey = isDir ? std::string{} : AssetCache::BuildCacheKey(path);
+		item.ImGuiIdStr = Engine::WStrToStr(path.wstring());
+		item.Visual = ContentBrowserGridItem::DescribeAssetVisual(path, isDir);
+
 		m_GridSelectionIndices.emplace(id, static_cast<int>(m_GridSelectionItems.size()));
-		m_GridSelectionItems.push_back({ path, id, index });
+		m_GridSelectionItems.push_back(std::move(item));
 	}
 
 	std::erase_if(m_SelectedGridIds, [this](ImGuiSelectionUserData id)
@@ -2093,22 +2119,15 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 	const int columnCount = std::clamp(static_cast<int>(panelWidth / cellSize), 1, 64);
 	const int rowCount = (itemCount + columnCount - 1) / columnCount;
 
-	ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(m_Padding * 0.5f, m_Padding * 0.5f));
-
-	const ImGuiTableFlags flags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
-	if (!ImGui::BeginTable("ContentBrowserTable", columnCount, flags))
-	{
-		ImGui::PopStyleVar();
-		ApplyGridSelectionRequests(*ImGui::EndMultiSelect());
-		return;
-	}
-
-	for (int column = 0; column < columnCount; ++column)
-		ImGui::TableSetupColumn("##AssetColumn", ImGuiTableColumnFlags_WidthFixed, m_ThumbnailSize);
-
 	// 이름 변경 입력창도 같은 행 높이 안에 들어가도록 최소 높이를 확보합니다.
 	const float nameHeight = ContentBrowserGridItem::GetNameBoxHeight();
-	const float rowHeight = std::ceil(m_ThumbnailSize + nameHeight + ImGui::GetStyle().CellPadding.y * 2.0f);
+	const float rowHeight = std::ceil(m_ThumbnailSize + nameHeight + m_Padding);
+	const ImVec2 gridStartScreen = ImGui::GetCursorScreenPos();
+	const float startX = gridStartScreen.x + m_Padding * 0.5f;
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	ImDrawListSplitter splitter;
+	splitter.Split(drawList, 3);
 
 	ImGuiListClipper clipper;
 	clipper.Begin(rowCount, rowHeight);
@@ -2134,7 +2153,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 	{
 		for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row)
 		{
-			ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
+			const float rowStartY = gridStartScreen.y + static_cast<float>(row) * rowHeight;
 
 			for (int column = 0; column < columnCount; ++column)
 			{
@@ -2142,15 +2161,18 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 				if (index >= itemCount)
 					break;
 
-				ImGui::TableSetColumnIndex(column);
-				const ImVec2 tileMin = ImGui::GetCursorScreenPos();
-				const auto& item = m_GridSelectionItems[index];
-				DrawGridItem(source[item.SourceIndex], item.Id);
+				const ImVec2 tileMin(startX + static_cast<float>(column) * cellSize, rowStartY + m_Padding * 0.5f);
+				ImGui::SetCursorScreenPos(tileMin);
+
+				auto& item = m_GridSelectionItems[index];
+				DrawGridItem(source[item.SourceIndex], item, &splitter);
 
 				if (!m_RevealedAssetPath.empty() && item.Path.lexically_normal() == m_RevealedAssetPath)
 				{
+					splitter.SetCurrentChannel(drawList, 2);
 					const ImVec2 tileMax(tileMin.x + m_ThumbnailSize, tileMin.y + m_ThumbnailSize);
-					ImGui::GetWindowDrawList()->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark), 4.0f);
+					drawList->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark), 4.0f);
+					splitter.SetCurrentChannel(drawList, 0);
 
 					if (index == revealIndex)
 					{
@@ -2162,8 +2184,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		}
 	}
 
-	ImGui::EndTable();
-	ImGui::PopStyleVar();
+	splitter.Merge(drawList);
 	ApplyGridSelectionRequests(*ImGui::EndMultiSelect());
 }
 

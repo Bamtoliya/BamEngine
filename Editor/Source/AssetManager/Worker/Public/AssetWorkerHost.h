@@ -21,6 +21,9 @@ public:
         std::string AssetKey;
         Engine::uint64 RequestId = 0;
         std::filesystem::path OutputPngPath;
+        int32 Width = 0;
+        int32 Height = 0;
+        std::vector<uint8_t> RgbaData;
         bool Success = false;
     };
 

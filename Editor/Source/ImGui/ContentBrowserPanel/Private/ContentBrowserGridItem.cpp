@@ -28,14 +28,6 @@
 
 namespace
 {
-	struct AssetVisualDesc
-	{
-		const char* Icon = ICON_FA_FILE;
-		ImVec4 BgColor = ImVec4(1.0f, 1.0f, 1.0f, 0.10f);
-		ImVec4 AccentColor = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
-		std::string BadgeText;
-		std::string CleanName;
-	};
 	std::string ToLowerAscii(std::string_view str)
 	{
 		std::string out;
@@ -61,10 +53,13 @@ namespace
 		}
 		return false;
 	}
-	// 디스크 I/O 없이 파일명·복합 확장자·상위 폴더만으로 즉시 시각 정보를 결정합니다.
-	AssetVisualDesc DescribeAssetVisual(const std::filesystem::path& path, bool isDirectory)
-	{
-		AssetVisualDesc desc;
+}
+
+// 디스크 I/O 없이 파일명·복합 확장자·상위 폴더만으로 즉시 시각 정보를 결정합니다.
+ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVisual(const std::filesystem::path& path, bool isDirectory)
+{
+	AssetVisualDesc desc;
+	desc.Icon = ICON_FA_FILE;
 		const std::string rawFilename = path.filename().string();
 		if (isDirectory)
 		{
@@ -317,8 +312,11 @@ namespace
 			desc.BgColor = ImVec4(0.55f, 0.55f, 0.55f, 0.35f);
 			desc.AccentColor = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
 		}
-		return desc;
-	}
+	return desc;
+}
+
+namespace
+{
 	Engine::EResourceType PeekResourceType(const std::filesystem::path& path)
 	{
 		std::string ext = ToLowerAscii(path.extension().string());
@@ -382,6 +380,16 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
 	ImGuiSelectionUserData itemId, bool selected)
 {
+	TileRenderContext ctx;
+	ctx.ThumbnailTexID = thumbnailTexID;
+	ctx.SpriteHandle = thumbnailSpriteHandle;
+	ctx.IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(directoryEntry.path());
+	return Draw(browser, directoryEntry, ctx, thumbnailSize, itemId, selected);
+}
+
+bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::filesystem::directory_entry& directoryEntry,
+	const TileRenderContext& ctx, f32 thumbnailSize, ImGuiSelectionUserData itemId, bool selected)
+{
 	const auto& path = directoryEntry.path();
 	auto& currentDirectory = browser.m_CurrentDirectory;
 	const bool renaming = (browser.m_RenamingPath == path && !browser.m_RenameInTree);
@@ -389,8 +397,11 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 	const ImVec2 tileMin = ImGui::GetCursorScreenPos();
 	const ImVec2 nameMin(tileMin.x, tileMin.y + thumbnailSize);
 	const ImVec2 tileMax(tileMin.x + thumbnailSize, nameMin.y + nameHeight);
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-	ImGui::PushID(Engine::WStrToStr(path.wstring()).c_str());
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
+
+	ImGui::PushID(ctx.ImGuiId ? ctx.ImGuiId : Engine::WStrToStr(path.wstring()).c_str());
 	// 타일 사이에 박스 선택을 시작할 여백을 남긴다.
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	ImGui::BeginDisabled(renaming);
@@ -414,7 +425,7 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 		const bool open = hovered && input.IsMouseButtonDoubleClicked(EMouseButton::Left) &&
 			!input.IsCtrlPressed() && !input.IsShiftPressed();
 
-		ToolTip(directoryEntry);
+		ToolTip(directoryEntry, ctx);
 		ContextMenu(browser, itemId, path, currentDirectory);
 		contextMenuOpen = ImGui::IsPopupOpen("##AssetContextMenu");
 		dragging = DrawDragSource(browser, itemId, path);
@@ -427,22 +438,26 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 	}
 
 	if (visible)
-		DrawThumbnail(directoryEntry, thumbnailTexID, thumbnailSpriteHandle, thumbnailSize, tileMin);
+		DrawThumbnail(directoryEntry, ctx, thumbnailSize, tileMin);
 
 	if (renaming)
 	{
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 2);
 		ImGui::SetCursorScreenPos(nameMin);
 		DrawRename(browser, path, thumbnailSize);
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 	}
 	else if (visible)
 	{
-		DrawNameBox(directoryEntry, nameMin, thumbnailSize, nameHeight);
+		DrawNameBox(directoryEntry, ctx, nameMin, thumbnailSize, nameHeight);
 	}
 
 	if (visible && selected)
 	{
-		ImGui::GetWindowDrawList()->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark),
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 2);
+		drawList->AddRect(tileMin, tileMax, ImGui::GetColorU32(ImGuiCol_CheckMark),
 			4.0f, ImDrawFlags_None, 2.0f);
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 	}
 
 	ImGui::PopID();
@@ -450,15 +465,22 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 }
 
 void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entry& directoryEntry,
-	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, float thumbnailSize, const ImVec2& cursorPos)
+	const TileRenderContext& ctx, float thumbnailSize, const ImVec2& cursorPos)
 {
-	const AssetVisualDesc visual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory());
+	AssetVisualDesc fallbackVisual;
+	const AssetVisualDesc& visual = ctx.Visual ? *ctx.Visual
+		: (fallbackVisual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory()));
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
-	if (!thumbnailTexID)
+
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
+
+	if (!ctx.ThumbnailTexID)
 	{
 		// 썸네일이 없을 때: 상단 모서리가 둥근 타입별 틴트 배경 + 밝은 타입 포인트 컬러 아이콘 렌더링
 		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 			ImGui::GetColorU32(visual.BgColor), 4.0f, ImDrawFlags_RoundCornersTop);
+
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 2);
 		ImFont* font = ImGui::GetFont();
 		float iconFontSize = thumbnailSize * 0.52f;
 		ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, visual.Icon);
@@ -471,8 +493,8 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		drawList->AddRectFilled(cursorPos, ImVec2(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize),
 			ImGui::GetColorU32(ImVec4(visual.BgColor.x, visual.BgColor.y, visual.BgColor.z, 0.18f)), 4.0f, ImDrawFlags_RoundCornersTop);
 
-		ImVec2 uv0(0.0f, 0.0f);
-		ImVec2 uv1(1.0f, 1.0f);
+		ImVec2 uv0 = ctx.UV0;
+		ImVec2 uv1 = ctx.UV1;
 		ImVec2 imgMin = cursorPos;
 		ImVec2 imgMax(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize);
 
@@ -481,8 +503,8 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		if (lowerFilename.ends_with(".bamsprite") || lowerFilename.ends_with(".bamsprite.json"))
 		{
 			auto& rm = Engine::ResourceManager::Get();
-			auto* sprite = thumbnailSpriteHandle.IsValid()
-				? dynamic_cast<Engine::Sprite*>(rm.GetResource(thumbnailSpriteHandle))
+			auto* sprite = ctx.SpriteHandle.IsValid()
+				? dynamic_cast<Engine::Sprite*>(rm.GetResource(ctx.SpriteHandle))
 				: nullptr;
 
 			if (!sprite)
@@ -526,8 +548,12 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 			}
 		}
 
-		drawList->AddImage(thumbnailTexID, imgMin, imgMax, uv0, uv1);
+		if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 1);
+		drawList->AddImage(ctx.ThumbnailTexID, imgMin, imgMax, uv0, uv1);
 	}
+
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 2);
+
 	// 썸네일 하단 2px 타입 액센트 스트립 (썸네일 유무와 무관하게 리소스 종류를 한눈에 식별)
 	drawList->AddRectFilled(
 		ImVec2(cursorPos.x, cursorPos.y + thumbnailSize - 2.0f),
@@ -535,7 +561,7 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		ImGui::GetColorU32(visual.AccentColor));
 
 	// 엔진 빌트인 읽기 전용 리소스인 경우 좌상단에 자물쇠 배지 표시
-	if (Engine::PlatformPath::IsReadOnlyTarget(directoryEntry.path()))
+	if (ctx.IsReadOnly)
 	{
 		const ImVec2 lockBadgeMin(cursorPos.x + 3.0f, cursorPos.y + 3.0f);
 		const ImVec2 lockBadgeMax(cursorPos.x + 21.0f, cursorPos.y + 21.0f);
@@ -543,6 +569,8 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		drawList->AddText(ImVec2(lockBadgeMin.x + 3.0f, lockBadgeMin.y + 2.0f),
 			ImGui::GetColorU32(ImVec4(0.95f, 0.78f, 0.25f, 1.0f)), ICON_FA_LOCK);
 	}
+
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 }
 void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSelectionUserData itemId,
 	const std::filesystem::path& path,
@@ -745,16 +773,18 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		ImGui::EndPopup();
 	}
 }
-void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& directoryEntry)
+void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& directoryEntry, const TileRenderContext& ctx)
 {
 	if (ImGui::IsItemHovered())
 	{
 		std::filesystem::path path = directoryEntry.path();
 		std::string filenameString = path.filename().string();
-		const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
+		AssetVisualDesc fallbackVisual;
+		const AssetVisualDesc& visual = ctx.Visual ? *ctx.Visual
+			: (fallbackVisual = DescribeAssetVisual(path, directoryEntry.is_directory()));
 		ImGui::BeginTooltip();
 		ImGui::TextUnformatted(filenameString.c_str());
-		if (Engine::PlatformPath::IsReadOnlyTarget(path))
+		if (ctx.IsReadOnly)
 		{
 			ImGui::TextColored(ImVec4(0.95f, 0.78f, 0.25f, 1.0f), ICON_FA_LOCK " %s", LOCAL_CSTR("ContentBrowser.EngineReadOnlyBadge"));
 		}
@@ -825,42 +855,73 @@ void ContentBrowserGridItem::DrawRename(ContentBrowserPanel& browser, const std:
 	browser.DrawRenameEditor("##RenameInput", path);
 }
 void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry,
-	const ImVec2& boxMin, float boxWidth, float boxHeight)
+	const TileRenderContext& ctx, const ImVec2& boxMin, float boxWidth, float boxHeight)
 {
-	const auto& path = directoryEntry.path();
-	const AssetVisualDesc visual = DescribeAssetVisual(path, directoryEntry.is_directory());
+	AssetVisualDesc fallbackVisual;
+	const AssetVisualDesc& visual = ctx.Visual ? *ctx.Visual
+		: (fallbackVisual = DescribeAssetVisual(directoryEntry.path(), directoryEntry.is_directory()));
 	const std::string& filenameString = visual.CleanName;
 	const std::string& typeStr = visual.BadgeText;
 	ImVec2 typeTextSize = ImGui::CalcTextSize(typeStr.c_str());
 	ImVec2 boxMax = ImVec2(boxMin.x + boxWidth, boxMin.y + boxHeight);
 	ImDrawList* drawList = ImGui::GetWindowDrawList();
-	// 1. 네임 박스 배경
+
+	// 1. 네임 박스 배경 (Channel 0)
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 	ImU32 boxColor = ImGui::GetColorU32(ImVec4(0.15f, 0.15f, 0.15f, 0.85f));
 	drawList->AddRectFilled(boxMin, boxMax, boxColor, 4.0f, ImDrawFlags_RoundCornersBottom);
-	// 2. 텍스트 축약(Ellipsis) 로직 (UTF-8 한글 깨짐 방지 처리 포함)
-	float maxTextWidth = boxWidth - 8.0f;
-	std::string displayFileName = filenameString;
-	if (ImGui::CalcTextSize(displayFileName.c_str()).x > maxTextWidth)
+
+	// 2. 텍스트 축약(Ellipsis) 캐시 활용 (박스 너비/폰트 크기 변경 시에만 계산)
+	const float widthFontKey = boxWidth * 1000.0f + ImGui::GetFontSize();
+	std::string localDisplay;
+	const std::string* displayPtr = nullptr;
+
+	if (ctx.CachedTruncatedName && ctx.CachedTruncatedKey && *ctx.CachedTruncatedKey == widthFontKey)
 	{
-		while (!displayFileName.empty() && ImGui::CalcTextSize((displayFileName + "...").c_str()).x > maxTextWidth)
-		{
-			while (!displayFileName.empty())
-			{
-				char c = displayFileName.back();
-				displayFileName.pop_back();
-				if ((c & 0xC0) != 0x80) break;
-			}
-		}
-		displayFileName += "...";
+		displayPtr = ctx.CachedTruncatedName;
 	}
-	// 3. 깔끔하게 정제된 파일 이름 렌더링 (.bam* 중간 확장자 제거됨)
-	drawList->AddText(ImVec2(boxMin.x + 4.0f, boxMin.y + 4.0f), ImGui::GetColorU32(ImGuiCol_Text), displayFileName.c_str());
-	// 4. 우측 하단 타입 배지 렌더링 (리소스 고유 AccentColor 적용)
+	else
+	{
+		float maxTextWidth = boxWidth - 8.0f;
+		std::string displayFileName = filenameString;
+		if (ImGui::CalcTextSize(displayFileName.c_str()).x > maxTextWidth)
+		{
+			while (!displayFileName.empty() && ImGui::CalcTextSize((displayFileName + "...").c_str()).x > maxTextWidth)
+			{
+				while (!displayFileName.empty())
+				{
+					char c = displayFileName.back();
+					displayFileName.pop_back();
+					if ((c & 0xC0) != 0x80) break;
+				}
+			}
+			displayFileName += "...";
+		}
+
+		if (ctx.CachedTruncatedName && ctx.CachedTruncatedKey)
+		{
+			*ctx.CachedTruncatedName = std::move(displayFileName);
+			*ctx.CachedTruncatedKey = widthFontKey;
+			displayPtr = ctx.CachedTruncatedName;
+		}
+		else
+		{
+			localDisplay = std::move(displayFileName);
+			displayPtr = &localDisplay;
+		}
+	}
+
+	// 3. 깔끔하게 정제된 파일 이름 및 배지 렌더링 (Channel 2)
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 2);
+	drawList->AddText(ImVec2(boxMin.x + 4.0f, boxMin.y + 4.0f), ImGui::GetColorU32(ImGuiCol_Text), displayPtr->c_str());
+
 	ImVec2 typePos = ImVec2(boxMax.x - typeTextSize.x - 4.0f, boxMax.y - typeTextSize.y - 4.0f);
 	ImVec4 badgeColor = directoryEntry.is_directory()
 		? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
 		: ImVec4(visual.AccentColor.x, visual.AccentColor.y, visual.AccentColor.z, 0.90f);
 	drawList->AddText(typePos, ImGui::GetColorU32(badgeColor), typeStr.c_str());
+
+	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 }
 
 void ContentBrowserGridItem::ContextMenu_Material(ContentBrowserPanel& browser, const std::filesystem::path& path)

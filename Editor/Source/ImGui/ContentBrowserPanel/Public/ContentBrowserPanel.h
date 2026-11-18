@@ -11,6 +11,7 @@
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
 #include "AssetReferenceValidator.h"
+#include "ContentBrowserGridItem.h"
 
 BEGIN(Editor)
 class AssetPathRelocation;
@@ -185,7 +186,20 @@ private:
 private:
 	void ContentFilter();
 private:
-	void DrawGridItem(const filesystem::directory_entry& directoryEntry, ImGuiSelectionUserData itemId);
+	struct GridSelectionItem
+	{
+		filesystem::path Path;
+		ImGuiSelectionUserData Id = 0;
+		size_t SourceIndex = 0;
+		bool IsDirectory = false;
+		bool IsReadOnly = false;
+		std::string CacheKey;
+		std::string ImGuiIdStr;
+		ContentBrowserGridItem::AssetVisualDesc Visual;
+		std::string TruncatedName;
+		float TruncatedKey = -1.0f;
+	};
+	void DrawGridItem(const filesystem::directory_entry& directoryEntry, GridSelectionItem& item, ImDrawListSplitter* splitter = nullptr);
 	vector<filesystem::path> GetInteractionPaths(ImGuiSelectionUserData itemId, const filesystem::path& path) const;
 	void RebuildGridItems(const vector<filesystem::directory_entry>& source);
 	void ApplyGridSelectionRequests(const ImGuiMultiSelectIO& selection);
@@ -238,12 +252,6 @@ private:
 	size_t m_DragAssetCount = 0;
 	char m_RenameBuffer[256];
 private:
-	struct GridSelectionItem
-	{
-		filesystem::path Path;
-		ImGuiSelectionUserData Id;
-		size_t SourceIndex;
-	};
 	bool m_GridItemsDirty = true;
 	bool m_GridUsesSearch = false;
 	bool m_GridShowsEngineContent = true;

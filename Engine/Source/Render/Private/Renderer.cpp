@@ -110,6 +110,8 @@ EResult Renderer::BeginFrame()
 
 EResult Renderer::Render(f32 dt)
 {
+	m_PreRenderDelegate.Broadcast(dt);
+
 	const EResult lightResult = LightManager::Get().UpdateLightBuffer();
 	if (IsFailure(lightResult))
 		return lightResult;

@@ -112,6 +112,7 @@ public:
 	{
 		return m_RenderPassDelegates[passID];
 	}
+	RenderDelegate& GetPreRenderDelegate() { return m_PreRenderDelegate; }
 	ERHIType GetRHIType() const { return m_RHIType; }
 #pragma endregion
 
@@ -126,6 +127,7 @@ private:
 private:
 	class RHI* m_RHI = { nullptr };
 	ERHIType m_RHIType = ERHIType::Unknown;
+	RenderDelegate m_PreRenderDelegate;
 	map<RenderPassID, RenderDelegate> m_RenderPassDelegates;
 	map<RenderPassID, vector<CustomRenderCommand>> m_CustomRenderQueues;
 private: //ECS Based Render Queue
