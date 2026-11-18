@@ -144,6 +144,7 @@ AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
 AssetRef,ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.
 AssetRef,SearchHint,Search path...,경로 검색...
 AssetRef,SourceAsset,Source Asset,원본 에셋
+AssetRef,SourceActionsHint,Double-click to open or locate the source. Right-click for actions.,더블클릭으로 원본을 열거나 위치를 찾으세요. 우클릭하면 파일 메뉴가 열립니다.
 AssetRef,SuggestedFix,Suggested Fix,수정 제안
 AssetRef,TargetReference,Target Reference,참조 대상
 AssetRef,Title,Asset Reference Checker,에셋 참조 검사기

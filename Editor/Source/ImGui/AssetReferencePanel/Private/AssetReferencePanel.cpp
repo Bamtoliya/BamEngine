@@ -21,7 +21,9 @@ namespace Editor
         if (!ImGui::BeginPopupContextItem(popupId))
             return;
 
-        const bool open = ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str());
+        std::error_code error;
+        const bool open = ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str(),
+            nullptr, false, !std::filesystem::is_directory(path, error));
         const bool reveal = ImGui::MenuItem(
             (ICON_FA_MAGNIFYING_GLASS " " + LOCAL_LABEL("EditorCommon.RevealInContentBrowser")).c_str());
         ImGui::EndPopup();
@@ -38,6 +40,33 @@ namespace Editor
         DrawReferenceAssetActions("ReferenceRowActions", path);
         if (hovered)
             ImGui::SetTooltip("%s", display.c_str());
+    }
+
+    static void DrawIssueSourceActions(const std::filesystem::path& sourceFile, const std::string& display)
+    {
+        ImGui::TextUnformatted(display.c_str());
+        if (sourceFile.empty() || !ImGui::IsItemVisible())
+            return;
+
+        const bool hovered = ImGui::IsItemHovered();
+        const auto source = Engine::PlatformPath::GetProjectRoot() / sourceFile;
+        // A refreshed issue at the same row index must not inherit another file's open menu.
+        ImGui::PushID(static_cast<int>(std::filesystem::hash_value(source)));
+        DrawReferenceAssetActions("IssueSourceActions", source);
+        ImGui::PopID();
+
+        if (!hovered)
+            return;
+
+        ImGui::SetTooltip("%s\n%s", display.c_str(), LOCAL_CSTR("AssetRef.SourceActionsHint"));
+        if (Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
+        {
+            std::error_code error;
+            if (std::filesystem::is_directory(source, error))
+                AssetFileActions::RevealInContentBrowser(source);
+            else
+                AssetFileActions::Open(source);
+        }
     }
 
     AssetReferencePanel::AssetReferencePanel()
@@ -510,13 +539,10 @@ namespace Editor
                 if (m_FilterType == 3 && issue.IssueType != EAssetReferenceIssueType::InvalidExtension) continue;
 
                 // 2. 검색어 필터
-                if (m_SearchFilter[0] != '\0')
-                {
-                    const std::string sFilter = m_SearchFilter;
-                    if (Engine::WStrToStr(issue.SourceFile.generic_wstring()).find(sFilter) == std::string::npos &&
-                        issue.TargetReference.find(sFilter) == std::string::npos)
-                        continue;
-                }
+                const auto sourceLabel = Engine::WStrToStr(issue.SourceFile.generic_wstring());
+                if (m_SearchFilter[0] != '\0' && sourceLabel.find(m_SearchFilter) == std::string::npos &&
+                    issue.TargetReference.find(m_SearchFilter) == std::string::npos)
+                    continue;
 
                 ImGui::TableNextRow();
                 ImGui::PushID(static_cast<int>(i));
@@ -535,8 +561,8 @@ namespace Editor
                     ImGui::TextDisabled("%s", LOCAL_CSTR("AssetRef.OutsideMounts"));
 
                 // Column 1: Source Asset
-                ImGui::TableSetColumnIndex(1);
-                ImGui::TextUnformatted(Engine::WStrToStr(issue.SourceFile.generic_wstring()).c_str());
+                if (ImGui::TableSetColumnIndex(1))
+                    DrawIssueSourceActions(issue.SourceFile, sourceLabel);
 
                 // Column 2: Property
                 ImGui::TableSetColumnIndex(2);
