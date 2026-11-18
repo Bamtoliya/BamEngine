@@ -42,6 +42,16 @@ namespace
         return { std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
     }
 
+    bool ExpectValidBuildScene(const fs::path& scene)
+    {
+        const auto issues = Editor::AssetReferenceValidator::ValidateBuildScene(scene);
+        for (const auto& issue : issues)
+            std::cerr << "Reference issue: type=" << static_cast<int>(issue.IssueType)
+                << ", source=" << Engine::WStrToStr(issue.SourceFile.wstring())
+                << ", target=" << issue.TargetReference << '\n';
+        return issues.empty();
+    }
+
     class RelocationProbe final : public Engine::Resource
     {
     public:
@@ -52,7 +62,7 @@ namespace
     };
 }
 
-int main()
+int RunAssetReferenceChecks()
 {
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto root = fs::temp_directory_path() / ("BamAssetReferenceCheck-" + std::to_string(stamp));
@@ -218,6 +228,11 @@ int main()
         return 16;
 
     using Validator = Editor::AssetReferenceValidator;
+    if (!ExpectValidBuildScene(scene))
+    {
+        std::cerr << "Legacy Resources/*.bammat aliases must resolve before planning the move.\n";
+        return 49;
+    }
     const std::vector<Editor::AssetPathMove> moves{
         { materials, destination / "Materials" }, { controller, destination / controller.filename() }
     };
@@ -247,14 +262,25 @@ int main()
         return 20;
     const auto sceneAfter = ReadFixture(scene);
     const auto materialAfter = ReadFixture(destination / "Materials/Brick.bammat.json");
-    if (sceneAfter.find("Project://Materials/벽.png") == std::string::npos ||
-        sceneAfter.find("Project://옮긴 폴더/Walk.bamanimator") == std::string::npos ||
-        sceneAfter.find("18446744073709551615") == std::string::npos ||
-        sceneAfter.find("-9223372036854775808") == std::string::npos ||
-        materialAfter.find("old.png") != std::string::npos ||
-        materialAfter.find("Project://옮긴 폴더/Materials/벽.png") == std::string::npos ||
-        !ReadFixture(destination / controller.filename()).starts_with("\xEF\xBB\xBF") ||
-        !Validator::ValidateBuildScene(scene).empty())
+    const auto expect = [](bool valid, const char* message)
+    {
+        if (!valid) std::cerr << message << '\n';
+        return valid;
+    };
+    bool validMove = true;
+    validMove &= expect(sceneAfter.find("Project://Materials/벽.png") != std::string::npos, "Unrelated note changed.");
+    validMove &= expect(sceneAfter.find("Project://옮긴 폴더/Walk.bamanimator") != std::string::npos,
+        "Controller reference was not remapped.");
+    validMove &= expect(sceneAfter.find("Project://옮긴 폴더/Materials/Brick.bammat.json") != std::string::npos,
+        "Legacy material reference was not remapped.");
+    validMove &= expect(sceneAfter.find("18446744073709551615") != std::string::npos, "Unsigned 64-bit ID changed.");
+    validMove &= expect(sceneAfter.find("-9223372036854775808") != std::string::npos, "Signed 64-bit value changed.");
+    validMove &= expect(materialAfter.find("old.png") == std::string::npos, "Fallback resource path was not remapped.");
+    validMove &= expect(materialAfter.find("Project://옮긴 폴더/Materials/벽.png") != std::string::npos,
+        "Texture reference was not remapped.");
+    validMove &= expect(ReadFixture(destination / controller.filename()).starts_with("\xEF\xBB\xBF"), "BOM changed.");
+    validMove &= ExpectValidBuildScene(scene);
+    if (!validMove)
     {
         std::cerr << "Only reference fields must change; all moved dependencies must still resolve.\n";
         return 21;
@@ -404,4 +430,13 @@ int main()
     if (!manager.RelocateFileResources({ { upperPath, material } }, []() { return true; }) ||
         manager.FindHandleByKey(oldKey) != raw)
         return 47;
+    return 0;
+}
+
+int main()
+{
+    const int result = RunAssetReferenceChecks();
+    if (result != 0)
+        std::cerr << "AssetReferenceCheck failed at check " << result << ".\n";
+    return result;
 }

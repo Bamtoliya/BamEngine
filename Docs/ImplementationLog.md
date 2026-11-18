@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 에셋 참조 검사 실패의 레거시 경로 해석 순서 수정
+
+- 최신 사용자 터미널에서 Editor 링크 완료와 CTest 세 검사 실행을 확인했다. `TransformInheritanceCheck`·`EditorHistoryCheck`는 통과했고 `AssetReferenceCheck`는 이동 후 참조 검사(반환 코드 21의 공통 메시지)에서 실패했다. 이 메시지는 여러 조건이 공유하므로 기존 로그만으로 실패한 세부 조건을 직접 식별할 수 없었다.
+- 코드 대조에서 `Resources/Materials/Brick.bammat`의 해석 순서 결함을 확인했다. 실제 파일은 `Assets/Materials/Brick.bammat.json`에 있지만, 저장 형식 확장자(`.json`·`.beve`)가 생략된 별칭을 먼저 해석하면 존재하지 않는 프로젝트 `Resources/.../Brick.bammat` 경로로 돌아온다. 그 물리 경로에만 `.json`·`.beve`를 붙이면 마운트 내부의 실제 파일을 찾지 못한다. 이 참조는 씬을 갱신할 때 건너뛰고 이동 후 패키징 참조 검사에서도 누락 파일이 된다.
+- 공유 `ResolveDocumentReference`가 기존 물리 경로의 후보와 실제 파일을 먼저 확인하고, 찾지 못하면 원문 별칭에 `.json`·`.beve`를 보완한 후보를 다시 마운트로 해석하도록 수정했다. 프로젝트 스캔·참조 갱신·빌드 씬 검사가 같은 해석을 사용하며 파일을 로드하거나 임의의 전체 이름 검색을 하지 않는다.
+- 검사에 이동 전 레거시 별칭 해석을 별도로 추가하고, 이동 후 씬의 머티리얼 URI 갱신을 명시적으로 확인한다. 기존 일반 문자열·64비트 정수·텍스처 경로·BOM·참조 유효성 조건을 모두 유지하면서 실패 항목과 참조 문제의 종류/원본/대상을 출력하도록 나눴다. 진입점에서도 비정상 반환 코드를 검사 번호로 출력한다. 새 핸들 동기화 검사는 기존 실패 지점보다 뒤에 있으므로 아직 실행 통과를 확인하지 못했다.
+- 수정부와 공백을 정적으로 확인했다. 수정 후 빌드·CTest는 지침에 따라 AI가 실행하지 않았다. 사용자에게 `AssetReferenceCheck` 재빌드와 단독 CTest 재실행을 안내한다. 기존 두 검사 통과를 이번 수정의 통과로 확장하지 않는다.
+
 ### [2026-11-18] 백그라운드 빌드 실행기의 Win32·SDL 헤더 의존성 수정
 
 - 후속 사용자 터미널에서 `ClientBuildJob.cpp:28/34/36`의 `CP_UTF8`·`CP_OEMCP`·`MB_ERR_INVALID_CHARS` 미선언과 `MultiByteToWideChar` 미식별, 240행의 `SDL_CleanupTLS` 미식별로 Ninja가 중단된 것을 확인했다. 이 로그의 실패 위치는 프리뷰 위젯이 아닌 백그라운드 빌드 실행기다.

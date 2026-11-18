@@ -137,6 +137,19 @@ namespace Editor
                     return jsonPath;
                 if (std::filesystem::is_regular_file(bevePath, error))
                     return bevePath;
+                // A legacy relative alias can resolve to a missing ProjectRoot/Resources file.
+                // Resolve the completed filename again so the Assets/Engine mounts can find it.
+                if (!std::filesystem::is_regular_file(resolved, error))
+                {
+                    for (const auto* suffix : { L".json", L".beve" })
+                    {
+                        auto candidate = rawPath;
+                        candidate += suffix;
+                        candidate = Path::ResolveUri(candidate);
+                        if (std::filesystem::is_regular_file(candidate, error))
+                            return candidate;
+                    }
+                }
             }
             return resolved;
         }
