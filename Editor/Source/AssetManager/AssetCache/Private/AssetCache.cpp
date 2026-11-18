@@ -15,6 +15,9 @@
 #include "Sprite.h"
 #include "Model.h"
 #include "Mesh.h"
+#include "Vertex.h"
+#include "ModelConverter.h"
+#include <DirectXTex.h>
 #include "Functions.h"
 #include "PlatformPath.h"
 #include <fstream>
@@ -189,6 +192,17 @@ void AssetCache::Free()
     }
 
     m_DecodeWorkers.clear();
+
+    for (auto* res : m_TempCaptureResources)
+    {
+        if (res)
+        {
+            res->Free();
+            delete res;
+        }
+    }
+    m_TempCaptureResources.clear();
+
     ClearAll();
     PruneDiskCache();
 }
@@ -291,10 +305,11 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
     for (char& ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp";
+    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds";
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
-    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" ||
+    const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
+    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" || isRawModel ||
         filename.ends_with(".bammodel.json") || filename.ends_with(".bammesh.json");
     const bool isTextureOrSprite = ext == ".bamtex" || ext == ".bamsprite" ||
         filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json");
@@ -578,6 +593,67 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
             return cachedTask;
     }
     // 2. 디스크 캐시 미적중 시: 원본 파일 로드 및 다운샘플링 (기존 로직)
+    std::string ext = fullPath.extension().string();
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    if (ext == ".dds")
+    {
+        DirectX::ScratchImage ddsImage;
+        HRESULT hr = DirectX::LoadFromDDSFile(fullPath.wstring().c_str(), DirectX::DDS_FLAGS_NONE, nullptr, ddsImage);
+        if (FAILED(hr)) return std::nullopt;
+
+        const DirectX::ScratchImage* finalImage = &ddsImage;
+        DirectX::ScratchImage decompressedImage;
+        if (DirectX::IsCompressed(ddsImage.GetMetadata().format))
+        {
+            hr = DirectX::Decompress(*ddsImage.GetImage(0, 0, 0), DXGI_FORMAT_R8G8B8A8_UNORM, decompressedImage);
+            if (FAILED(hr)) return std::nullopt;
+            finalImage = &decompressedImage;
+        }
+        else if (ddsImage.GetMetadata().format != DXGI_FORMAT_R8G8B8A8_UNORM)
+        {
+            hr = DirectX::Convert(*ddsImage.GetImage(0, 0, 0), DXGI_FORMAT_R8G8B8A8_UNORM, DirectX::TEX_FILTER_DEFAULT, 0.5f, decompressedImage);
+            if (FAILED(hr)) return std::nullopt;
+            finalImage = &decompressedImage;
+        }
+
+        const auto* img = finalImage->GetImage(0, 0, 0);
+        if (!img || !img->pixels) return std::nullopt;
+
+        const int width = static_cast<int>(img->width);
+        const int height = static_cast<int>(img->height);
+        if (width <= 0 || height <= 0) return std::nullopt;
+
+        ThumbnailUploadTask task;
+        task.AssetPath = key;
+
+        if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
+        {
+            const float aspect = static_cast<float>(width) / static_cast<float>(height);
+            int32 targetW = MAX_THUMBNAIL_DIM;
+            int32 targetH = MAX_THUMBNAIL_DIM;
+            if (aspect >= 1.0f)
+                targetH = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM / aspect));
+            else
+                targetW = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM * aspect));
+            task.Width = targetW;
+            task.Height = targetH;
+            task.Data = DownsampleRGBA(img->pixels, width, height, targetW, targetH);
+        }
+        else
+        {
+            task.Width = width;
+            task.Height = height;
+            task.Data.assign(img->pixels, img->pixels + (static_cast<size_t>(width) * height * 4));
+        }
+
+        if (!diskCachePath.empty() && !task.Data.empty())
+        {
+            SaveThumbnailToDiskCache(diskCachePath, task.Width, task.Height, task.Data.data());
+        }
+        return task;
+    }
+
     std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
     if (!file.is_open()) return std::nullopt;
     const std::streamsize size = file.tellg();
@@ -835,6 +911,15 @@ void AssetCache::ProcessPending3DThumbnail()
         m_CurrentCapturingKey.clear();
         m_CurrentCapturingRequestId = 0;
         m_CaptureState = ECaptureState::Idle;
+        for (auto* res : m_TempCaptureResources)
+        {
+            if (res)
+            {
+                res->Free();
+                delete res;
+            }
+        }
+        m_TempCaptureResources.clear();
     }
 
     // 2단계: 대기열에서 다음 에셋 1개를 꺼내어 타입별 자동 프레이밍 렌더링 제출
@@ -869,7 +954,8 @@ void AssetCache::ProcessPending3DThumbnail()
 
         const bool isMat = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
             filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
-        const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json");
+        const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
+        const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json") || isRawModel;
         const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
         const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
         const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
@@ -941,13 +1027,83 @@ void AssetCache::ProcessPending3DThumbnail()
         }
         else if (isModel)
         {
-            auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
-            if (!handle.IsValid())
+            if (isRawModel)
             {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+                // 1. 동명의 임포트된 .bammodel이 존재하는지 먼저 탐색
+                const auto parentDir = path.parent_path();
+                const auto stem = path.stem().wstring();
+                const auto candidate1 = parentDir / (stem + L".bammodel");
+                const auto candidate2 = parentDir / stem / (stem + L".bammodel");
+
+                std::filesystem::path modelToLoad;
+                std::error_code ec;
+                if (std::filesystem::exists(candidate1, ec)) modelToLoad = candidate1;
+                else if (std::filesystem::exists(candidate2, ec)) modelToLoad = candidate2;
+
+                if (!modelToLoad.empty())
+                {
+                    const std::wstring modelRel = Engine::PlatformPath::ToProjectRelative(modelToLoad).wstring();
+                    auto handle = rm.GetResourceHandle<Engine::Model>(modelRel);
+                    if (!handle.IsValid())
+                    {
+                        auto loaded = rm.LoadFile(modelRel);
+                        if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+                    }
+                    if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
+                }
+                else
+                {
+                    // 2. 임포트되지 않은 원본 모델이면 ModelConverter를 통해 가볍게 로드하여 임시 Mesh 렌더링
+                    Tools::ModelConversion::Options opt{};
+                    opt.FlipUVs = true;
+                    const auto modelData = Tools::ModelConversion::ConvertModel(path, opt);
+                    if (modelData.has_value() && !modelData->Meshes.empty())
+                    {
+                        const auto& srcMesh = modelData->Meshes[0];
+                        if (!srcMesh.Vertices.empty() && !srcMesh.Indices.empty())
+                        {
+                            Engine::MeshCreateDesc meshDesc{};
+                            const auto vertexCount = static_cast<Engine::uint32>(srcMesh.Vertices.size());
+
+                            std::vector<Engine::VertexPosition> pos(vertexCount);
+                            std::vector<Engine::VertexMaterial> attr(vertexCount);
+                            for (size_t vIdx = 0; vIdx < vertexCount; ++vIdx)
+                            {
+                                pos[vIdx].Position = glm::vec3(srcMesh.Vertices[vIdx].Position[0], srcMesh.Vertices[vIdx].Position[1], srcMesh.Vertices[vIdx].Position[2]);
+                                attr[vIdx].Normal = glm::vec3(srcMesh.Vertices[vIdx].Normal[0], srcMesh.Vertices[vIdx].Normal[1], srcMesh.Vertices[vIdx].Normal[2]);
+                                attr[vIdx].TexCoord = glm::vec2(srcMesh.Vertices[vIdx].TexCoord[0], srcMesh.Vertices[vIdx].TexCoord[1]);
+                                attr[vIdx].Tangent = glm::vec3(srcMesh.Vertices[vIdx].Tangent[0], srcMesh.Vertices[vIdx].Tangent[1], srcMesh.Vertices[vIdx].Tangent[2]);
+                                attr[vIdx].Bitangent = glm::vec3(srcMesh.Vertices[vIdx].Bitangent[0], srcMesh.Vertices[vIdx].Bitangent[1], srcMesh.Vertices[vIdx].Bitangent[2]);
+                            }
+
+                            meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Position)] = { pos.data(), vertexCount, sizeof(Engine::VertexPosition) };
+                            meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Material)] = { attr.data(), vertexCount, sizeof(Engine::VertexMaterial) };
+                            meshDesc.IndexData = srcMesh.Indices.data();
+                            meshDesc.IndexCount = static_cast<Engine::uint32>(srcMesh.Indices.size());
+                            meshDesc.IndexStride = sizeof(Engine::uint32);
+                            meshDesc.BoundingBoxMin = glm::vec3(srcMesh.BoundsMin[0], srcMesh.BoundsMin[1], srcMesh.BoundsMin[2]);
+                            meshDesc.BoundingBoxMax = glm::vec3(srcMesh.BoundsMax[0], srcMesh.BoundsMax[1], srcMesh.BoundsMax[2]);
+
+                            auto* tempMesh = Engine::Mesh::Create(&meshDesc);
+                            if (tempMesh)
+                            {
+                                submitSuccess = thumbRenderer->SubmitMesh(tempMesh);
+                                m_TempCaptureResources.push_back(tempMesh);
+                            }
+                        }
+                    }
+                }
             }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
+            else
+            {
+                auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
+                if (!handle.IsValid())
+                {
+                    auto loaded = rm.LoadFile(relPath);
+                    if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+                }
+                if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
+            }
         }
         else if (isMesh)
         {

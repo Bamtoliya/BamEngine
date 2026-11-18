@@ -31,6 +31,9 @@ EResult AssetManager::Initialize(void* arg)
 	m_Importers[".jpg"] = m_Importers[".png"];
 	Safe_AddRef(m_Importers[".jpg"]);
 
+	m_Importers[".jpeg"] = m_Importers[".png"];
+	Safe_AddRef(m_Importers[".jpeg"]);
+
 	m_Importers[".tga"] = m_Importers[".png"];
 	Safe_AddRef(m_Importers[".tga"]);
 

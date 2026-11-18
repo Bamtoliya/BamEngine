@@ -30,7 +30,7 @@ namespace
 	{
 		const auto ext = LowerAscii(path.extension().wstring());
 		if (ext == L".png" || ext == L".jpg" || ext == L".jpeg" ||
-			ext == L".tga" || ext == L".bmp" || ext == L".dds")
+			ext == L".tga" || ext == L".bmp" || ext == L".dds" || ext == L".bamtex")
 			return EAssetReloadKind::Texture;
 
 		const auto name = LowerAscii(path.filename().wstring());

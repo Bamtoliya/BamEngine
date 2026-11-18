@@ -12,6 +12,10 @@
 #include <stb_image_resize2.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "DDSLoader.h"
+#pragma push_macro("new")
+#undef new
+#include <archive/BeveArchive.h>
+#pragma pop_macro("new")
 
 ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
 {
@@ -587,9 +591,28 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 		return EResult::Fail;
 
 	const bool isDDS = (targetPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0));
-	const EResult result = isDDS ? InitializeFromDDSMemory(buffer) : ReloadFromEncodedMemory(buffer);
-	if (isDDS && result == EResult::Success)
-		IncreaseVersion();
+	const bool isBamtex = (targetPath.extension() == ".bamtex" || targetPath.extension() == ".beve");
+	EResult result = EResult::Fail;
+	if (isDDS)
+	{
+		result = InitializeFromDDSMemory(buffer);
+		if (result == EResult::Success)
+			IncreaseVersion();
+	}
+	else if (isBamtex)
+	{
+		archive::BeveArchive ar;
+		if (ar.LoadFromFile(targetPath))
+		{
+			Safe_Release(m_RHITexture);
+			auto archiveResult = ReadArchive(ar);
+			result = archiveResult ? EResult::Success : EResult::Fail;
+		}
+	}
+	else
+	{
+		result = ReloadFromEncodedMemory(buffer);
+	}
 
 	if (IsFailure(result))
 	{

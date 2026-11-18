@@ -180,6 +180,29 @@ This document tracks implementation details, architectural decisions, and techni
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
 
+### [2026-11-18] 텍스처 핫리로드(.bamtex), 인스펙터 지원 포맷 확장 및 DDS/3D 모델(FBX/GLTF/OBJ) 썸네일 캐시 파이프라인 구축
+
+- 텍스처 오프라인 베이킹 파이프라인 완결에 이어, 엔진 바이너리 `.bamtex`의 실시간 핫리로드 무결성을 확보하고 에디터 Content Browser에서 DDS 텍스처 및 원본 3D 모델 파일 포맷들의 썸네일 표시 파이프라인을 전면 고도화했다.
+- **에셋 핫리로드 및 바이너리 텍스처 리로드 보강 (`AssetHotReloadManager.cpp`, `Texture.cpp`)**:
+  - `AssetHotReloadManager`: 에셋 변경 분류기(`ClassifyAssetReload`)에 `ext == L".bamtex"`를 추가하여, 외부에서 `.bamtex`가 갱신되거나 재베이킹되었을 때 핫리로드 이벤트가 정상 발동하도록 수정.
+  - `Texture::Reload`: 파일 확장자가 `.bamtex` 또는 `.beve`인 경우 바이너리 아카이브(`BeveArchive`)로부터 역직렬화(`ReadArchive`)를 수행하고 GPU 서브리소스를 안전하게 재업로드하도록 분기 처리.
+- **텍스처 인스펙터 및 에셋 매니저 확장 (`TextureInspector.cpp`, `AssetManager.cpp`)**:
+  - `TextureInspector`: `IsSupported()`에 `.tga`, `.bmp`, `.dds` 지원 추가 및 대소문자 무관 비교 처리. 파일 포맷별(`DirectX::GetMetadataFromDDSFile`, `GetMetadataFromTGAFile`, `GetMetadataFromWICFile`) 메타데이터 조회 분기 구축.
+  - `AssetManager`: `.jpeg` 확장자 매핑(`m_Importers[".jpeg"] = m_Importers[".png"]`) 추가.
+- **Content Browser DDS 및 원본 3D 모델 포맷 썸네일 파이프라인 구축 (`AssetCache.h/.cpp`)**:
+  - **DDS 썸네일**: `isImage`에 `.dds`를 추가하고, `LoadImageThumbnail` 내에서 `DirectX::LoadFromDDSFile` 및 `DirectX::Decompress`(BC1~BC7)를 연동하여 블록 압축 DDS 파일의 128x128 RGBA 다운샘플링 썸네일 및 디스크 캐시 영속화 지원.
+  - **3D 원본 모델 포맷(FBX, OBJ, GLTF, GLB) 썸네일**:
+    - `isModelOrMesh` 및 `ProcessPending3DThumbnail`에 `isRawModel`(`.fbx`, `.obj`, `.gltf`, `.glb`) 지원 추가.
+    - 동명의 임포트된 `.bammodel`이 존재하는 경우 해당 모델을 자동 연동하여 고품질 썸네일 렌더링.
+    - 아직 임포트되지 않은 원본 모델인 경우, `ModelConverter::ConvertModel`을 통해 3D 정점을 읽어 임시 `Mesh`를 생성하고 `ThumbnailRenderer::SubmitMesh`로 AABB 자동 프레이밍 렌더링 제출.
+    - 캡처 완료 시 GPU 픽셀 리드백을 통해 128x128 PNG 디스크 캐시로 영속화하여 이후 프레임부터는 Assimp/렌더러 오버헤드 없이 수 밀리초만에 즉각 표시.
+    - 임시 캡처 리소스는 `m_TempCaptureResources`를 통해 캡처 완료/Free 시점에 안전하게 일괄 해제.
+- **검증**:
+  - `audit_localization.py` 다국어 정적 감사 100% 통과.
+  - C++ 정적 구조 검토 및 자원 해제/소유권 안정성 검토 완료.
+- **미검증/사용자 확인 필요**:
+  - 에디터 실행 후 Content Browser에서 DDS 파일 및 FBX/OBJ/GLTF 파일의 썸네일이 정상 생성되는지, 텍스처 인스펙터에서 TGA/BMP 파일 설정이 열리는지 확인 필요.
+
 ### [2026-11-18] 모델 임포터 텍스처 오프라인 BC 블록 압축(BC7/BC5) 및 DDS/.bamtex 자동 베이킹 파이프라인 연계
 
 - 모델 임포트 시 내장(Embedded) 및 외부(External) 텍스처들이 비압축 `R8G8B8A8_UNORM` 원본 이미지로 유지되던 문제를 해소하기 위해, 모델 임포트 단계에서 `TextureImporter`를 연계 호출하여 자동으로 GPU 블록 압축(BC7/BC5) 및 `.dds` + `.bamtex` 오프라인 베이킹을 수행하고 머티리얼이 베이킹된 에셋을 참조하도록 파이프라인을 완성했다.

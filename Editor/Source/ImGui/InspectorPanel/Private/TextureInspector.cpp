@@ -17,7 +17,9 @@ static bool s_ShowSuccessPopup = false;  // 작업 완료 팝업 트리거
 
 bool TextureInspector::IsSupported(const std::filesystem::path& assetPath)
 {
-	return assetPath.extension() == L".png" || assetPath.extension() == L".jpg" || assetPath.extension() == L".jpeg";
+	auto ext = assetPath.extension().wstring();
+	std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+	return ext == L".png" || ext == L".jpg" || ext == L".jpeg" || ext == L".tga" || ext == L".bmp" || ext == L".dds";
 }
 
 bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
@@ -35,9 +37,24 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
     // 1. 파일 기본 정보
     ImGui::Text("%s", LOCAL_FMT("TextureInspector.FileName", assetPath.filename().string().c_str()).c_str());
 
-    // 2. DirectXTex를 이용한 실제 메타데이터 추출
+    auto ext = assetPath.extension().wstring();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+
+    // 2. DirectXTex를 이용한 실제 메타데이터 추출 (WIC / TGA / DDS 포맷 분기)
     DirectX::TexMetadata meta;
-    HRESULT hr = DirectX::GetMetadataFromWICFile(assetPath.wstring().c_str(), DirectX::WIC_FLAGS_NONE, meta);
+    HRESULT hr;
+    if (ext == L".dds")
+    {
+        hr = DirectX::GetMetadataFromDDSFile(assetPath.wstring().c_str(), DirectX::DDS_FLAGS_NONE, meta);
+    }
+    else if (ext == L".tga")
+    {
+        hr = DirectX::GetMetadataFromTGAFile(assetPath.wstring().c_str(), DirectX::TGA_FLAGS_NONE, meta);
+    }
+    else
+    {
+        hr = DirectX::GetMetadataFromWICFile(assetPath.wstring().c_str(), DirectX::WIC_FLAGS_NONE, meta);
+    }
 
     if (SUCCEEDED(hr)) {
         ImGui::Text("%s", LOCAL_FMT("TextureInspector.Resolution", meta.width, meta.height).c_str());

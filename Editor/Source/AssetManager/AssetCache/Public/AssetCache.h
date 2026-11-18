@@ -101,6 +101,7 @@ private:
 	std::string m_CurrentCapturingKey;
 	Engine::uint64 m_CurrentCapturingRequestId = 0;
 	ECaptureState m_CaptureState = ECaptureState::Idle;
+	std::vector<Engine::Resource*> m_TempCaptureResources;
 #pragma endregion
 
 #pragma region Member Variables
