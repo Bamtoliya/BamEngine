@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 종료 시 FMOD Sound 이중 해제 크래시 수정
+
+- AudioClip을 한 번이라도 로드한 뒤 에디터나 클라이언트를 종료하면 크래시가 났다. `Runtime::Free`가 `AudioManager`(FMOD `System::close/release`)를 `ResourceManager`보다 먼저 해제했고, 이후 `ResourceManager::Free → AudioClip::Free`가 이미 해제된 System 소속의 `FMOD::Sound::release()`를 호출했다. 생성 순서(Audio → Resource)의 역순 해제도 깨져 있었다.
+- `Safe_Destroy(m_AudioManager)`를 `Safe_Destroy(m_ResourceManager)` 뒤로 옮겼다. `AudioClip::Free`는 `AudioManager`를 참조하지 않으므로 새 순서에서 추가 의존이 생기지 않는다.
+- 사용자가 수정 후 종료 크래시가 재현되지 않는다고 보고했다. 수정 전 콜스택은 확인하지 않았고, 원인은 코드 대조로 판단했다. PIE 중 종료, 루프 재생 중 종료, 클라이언트 종료를 시나리오별로 따로 확인한 기록은 없다.
+- 남은 문제(별도): `~AudioSourceComponent`의 `Stop()`은 요청 플래그만 바꾸므로, 재생 중인 엔티티를 삭제하면 채널이 멈추지 않는다.
+
 ### [2026-11-18] 핫리로드 시스템 원자적 파일 저장(Moved) 지원 및 부모-자식 재귀 감시 충돌 해소
 
 - `ShaderHotReloadManager`, `AssetHotReloadManager`, `ModuleHotReloadManager`, `ModuleBuildManager`의 `efsw::FileWatchListener` 이벤트 수신부에 `efsw::Actions::Moved` 액션 처리를 추가했다. Visual Studio, VS Code 등에서 파일 저장 시 임시 파일 후 `MoveFileEx`(원자적 교체)로 덮어쓸 때 핫로드 이벤트가 누락되던 문제를 전면 해소했다.
