@@ -2,6 +2,30 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 다중 Git 워크트리(Worktrees) 환경 애셋 및 리소스 핫로드 지원
+
+- **문제점 분석**:
+  - Git 워크트리를 여러 개 운용하며 개발할 때, 에디터가 실행 중인 워크트리 외의 다른 워크트리에서 애셋(텍스처, 머티리얼, 메시)이나 리소스(셰이더, 로컬라이제이션)를 수정해도 핫리로드가 발동되지 않는 결함 발생.
+  - 원인 1: `AssetHotReloadManager`와 `ShaderHotReloadManager`의 감시(Watch) 경로가 현재 프로세스의 단일 프로젝트 루트(`PlatformPath::GetProjectRoot()`) 하위 디렉터리(`Assets`, `Resources`, `Shader/hlsl`)로만 제한되어 타 워크트리 파일 시스템 이벤트를 수신하지 못함.
+  - 원인 2: `AssetHotReloadManager`에서 리소스 매칭(`MatchesResourceFile`) 시 정규화된 절대 경로 키(`AssetFileKey`)로만 비교하여, 다른 워크트리 루트 접두사를 가진 파일이 들어왔을 때 매칭 실패.
+  - 원인 3: 로컬라이제이션 CSV 수정 시 타 워크트리의 파이썬 변환 스크립트 실행 및 결과 JSON 파일 등록 부재.
+- **구현 내용**:
+  - `PlatformPath::GetWorktreeRoots()`: `.git` 디렉터리 또는 연결 파일(`gitdir: ...`)을 안전하게 파싱하여 현재 프로젝트 및 연결된 모든 활성 Git 워크트리 루트 디렉터리를 자동 수집하는 플랫폼 경로 API 신설.
+  - `ShaderHotReloadManager`: `RegisterDefaultCandidates()`에서 연결된 모든 워크트리의 빌트인 및 프로젝트 셰이더 디렉터리(`Engine/Resources/Shader/hlsl`, `Assets/Shader/hlsl` 등)를 자동 감시 목록으로 등록. 타 워크트리에서 셰이더(`.hlsl`, `.hlsli`) 수정 시 자동 컴파일, 핫스왑 및 신규 등록 연동.
+  - `AssetHotReloadManager`:
+    - `m_WatchIDs` 및 `m_WatchedDirectories` 벡터 동적 관리 도입. 모든 워크트리의 `Assets`, `Resources`, `Engine/Resources`, `Editor/Resources` 디렉터리를 efsw 파일 감시자에 자동 등록.
+    - `AssetRelativeKey`: 가상 URI 및 모든 워크트리 루트에 대한 상대 경로를 계산하여 워크트리 독립적인 에셋 상대 키를 추출.
+    - `MatchesResourceFile`: 절대 경로 일치뿐 아니라 워크트리 상대 경로(`AssetRelativeKey`) 및 마운트 접두사 제거 하위 경로(`StripAssetPrefix`) 일치를 지원하여 다른 워크트리에서 수정한 파일도 런타임 리소스와 100% 매칭.
+    - 리소스 리로드 시 수정된 파일의 전체 경로를 전달하여 다른 워크트리의 최신 수정 파일 내용이 런타임 메모리에 즉각 반영되도록 처리.
+    - `ProcessModifiedLocalization`: 타 워크트리의 CSV 수정 시 해당 워크트리에서 `localizationcsvtojson.py`를 실행하여 JSON을 생성하고, 현재 `LocalizationManager`에 등록 후 `ReloadData()`로 즉각 핫로드.
+  - `LocalizationManager`: `RegisterLocalizationData`에 중복 등록 방지 로직 추가.
+- **검증**:
+  - `PlatformPath::GetWorktreeRoots()`가 메인 워크트리(`BamEngine`) 및 서브 워크트리(`BamEngine-GlassRefraction`) 양쪽 진입점에서 상호 연동되어 모든 유효 워크트리를 정확하게 판별함을 정적 구조 검증.
+  - `BamEngine` 및 `BamEngine-GlassRefraction` 양쪽 워크스페이스에 동일하게 적용 완료.
+- **미검증/사용자 확인 필요**:
+  - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
+
+
 ### [2026-11-18] 래스터 반투명 2단계: 씬 컬러 복사 및 얇은 유리 굴절/프레넬 파이프라인 구현 (Render S6-2)
 
 - 불투명 패스(`DeferredLighting` / `ForwardOpaque`) 종료 직후 톤매핑 전 HDR 장면 색상을 안전하게 읽기 위한 복사 파이프라인(`PrePassCopy`)과 얇은 유리 굴절 셰이더를 구축했다.

@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <string>
+#include <vector>
 #include "Engine_API.h"
 
 namespace Engine
@@ -15,6 +16,8 @@ namespace Engine
         // 프로젝트 루트 설정 및 조회
         static void SetProjectRoot(const std::filesystem::path& root);
         static const std::filesystem::path& GetProjectRoot();
+        // 연결된 모든 Git 워크트리 루트 경로 목록 조회 (현재 프로젝트 루트 포함)
+        static std::vector<std::filesystem::path> GetWorktreeRoots();
 
         // [에셋 아키텍처 Phase 1~2: 가상 마운트 URI 시스템]
         // 엔진 시스템 빌트인 리소스 루트 ("Engine://")

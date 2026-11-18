@@ -107,6 +107,17 @@ void ShaderHotReloadManager::RegisterDefaultCandidates()
 
 	// 3. 환경 변수 기반 셰이더 경로 등록 (예: BAM_SHADER_PATH="C:/CustomShaders;D:/Plugins/Shader")
 	AddWatchPathsFromEnvironment("BAM_SHADER_PATH");
+
+	// 4. 모든 연결된 Git 워크트리의 셰이더 경로 자동 감시 등록
+	for (const auto& root : Engine::PlatformPath::GetWorktreeRoots())
+	{
+		AddWatchPath(root / "Engine/Resources/Shader/hlsl");
+		AddWatchPath(root / "Engine/Resources/Shader");
+		AddWatchPath(root / "Assets/Shader/hlsl");
+		AddWatchPath(root / "Assets/Shader");
+		AddWatchPath(root / "Resources/Shader/hlsl");
+		AddWatchPath(root / "Resources/Shader");
+	}
 }
 
 #pragma region Constructor&Destrcutor

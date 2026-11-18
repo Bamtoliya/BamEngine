@@ -1,4 +1,5 @@
 #include "PlatformPath.h"
+#include "Functions.h"
 #include <SDL3/SDL_filesystem.h>
 #if defined(_WIN32)
 #include <windows.h>
@@ -6,6 +7,7 @@
 #endif
 #include <algorithm>
 #include <cwctype>
+#include <fstream>
 
 namespace Engine
 {
@@ -126,6 +128,102 @@ namespace Engine
             s_ProjectRoot = GetExecutableDirectory();
         }
         return s_ProjectRoot;
+    }
+
+    std::vector<std::filesystem::path> PlatformPath::GetWorktreeRoots()
+    {
+        std::vector<std::filesystem::path> roots;
+        const auto currentRoot = GetProjectRoot();
+        if (currentRoot.empty()) return roots;
+
+        roots.push_back(currentRoot);
+
+        std::error_code ec;
+        const auto gitPath = currentRoot / ".git";
+        std::filesystem::path mainGitDir;
+
+        if (std::filesystem::is_directory(gitPath, ec))
+        {
+            mainGitDir = gitPath;
+        }
+        else if (std::filesystem::is_regular_file(gitPath, ec))
+        {
+            std::ifstream file(gitPath);
+            if (file.is_open())
+            {
+                std::string line;
+                if (std::getline(file, line))
+                {
+                    const std::string prefix = "gitdir:";
+                    const auto pos = line.find(prefix);
+                    if (pos != std::string::npos)
+                    {
+                        std::string gitdirStr = line.substr(pos + prefix.length());
+                        const auto first = gitdirStr.find_first_not_of(" \t\r\n");
+                        const auto last = gitdirStr.find_last_not_of(" \t\r\n");
+                        if (first != std::string::npos && last != std::string::npos)
+                        {
+                            gitdirStr = gitdirStr.substr(first, last - first + 1);
+                            std::filesystem::path linkedGitDir = Utf8ToPath(gitdirStr);
+                            if (linkedGitDir.is_relative()) linkedGitDir = currentRoot / linkedGitDir;
+                            linkedGitDir = Normalize(linkedGitDir);
+
+                            if (linkedGitDir.parent_path().filename() == "worktrees")
+                            {
+                                mainGitDir = linkedGitDir.parent_path().parent_path();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!mainGitDir.empty() && std::filesystem::is_directory(mainGitDir, ec))
+        {
+            const auto mainRoot = Normalize(mainGitDir.parent_path());
+            if (std::filesystem::is_directory(mainRoot, ec))
+            {
+                if (std::find(roots.begin(), roots.end(), mainRoot) == roots.end())
+                    roots.push_back(mainRoot);
+            }
+
+            const auto worktreesDir = mainGitDir / "worktrees";
+            if (std::filesystem::is_directory(worktreesDir, ec))
+            {
+                for (const auto& entry : std::filesystem::directory_iterator(worktreesDir, ec))
+                {
+                    if (!entry.is_directory(ec)) continue;
+
+                    const auto gitdirFile = entry.path() / "gitdir";
+                    if (!std::filesystem::is_regular_file(gitdirFile, ec)) continue;
+
+                    std::ifstream subFile(gitdirFile);
+                    if (!subFile.is_open()) continue;
+
+                    std::string line;
+                    if (std::getline(subFile, line))
+                    {
+                        const auto first = line.find_first_not_of(" \t\r\n");
+                        const auto last = line.find_last_not_of(" \t\r\n");
+                        if (first != std::string::npos && last != std::string::npos)
+                        {
+                            std::filesystem::path subGitPath = Utf8ToPath(line.substr(first, last - first + 1));
+                            if (subGitPath.is_relative()) subGitPath = mainGitDir / subGitPath;
+                            subGitPath = Normalize(subGitPath);
+
+                            const auto wtRoot = Normalize(subGitPath.parent_path());
+                            if (std::filesystem::is_directory(wtRoot, ec))
+                            {
+                                if (std::find(roots.begin(), roots.end(), wtRoot) == roots.end())
+                                    roots.push_back(wtRoot);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return roots;
     }
 
     void PlatformPath::SetEngineResourceRoot(const std::filesystem::path& root)

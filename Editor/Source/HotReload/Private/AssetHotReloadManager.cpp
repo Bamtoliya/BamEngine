@@ -95,10 +95,81 @@ namespace
 		return key;
 	}
 
-	bool MatchesResourceFile(const Engine::Resource& resource, const std::wstring& targetKey)
+	std::wstring AssetRelativeKey(const std::filesystem::path& filePath)
 	{
-		const auto& path = resource.GetPath().empty() ? resource.GetKey() : resource.GetPath();
-		return !path.empty() && AssetFileKey(path) == targetKey;
+		if (filePath.empty()) return {};
+
+		const std::wstring uri = filePath.wstring();
+		if (Engine::PlatformPath::IsVirtualUri(uri))
+		{
+			const auto resolved = Engine::PlatformPath::ResolveUri(uri);
+			return AssetRelativeKey(resolved);
+		}
+
+		std::error_code ec;
+		const auto canonicalPath = std::filesystem::weakly_canonical(filePath, ec);
+		const auto absPath = ec ? filePath : canonicalPath;
+
+		for (const auto& wt : Engine::PlatformPath::GetWorktreeRoots())
+		{
+			const auto canonicalWt = std::filesystem::weakly_canonical(wt, ec);
+			const auto wtRoot = ec ? wt : canonicalWt;
+			const auto rel = absPath.lexically_relative(wtRoot);
+			if (!rel.empty() && !rel.native().starts_with(L".."))
+			{
+				auto key = rel.generic_wstring();
+				for (wchar_t& ch : key)
+					ch = static_cast<wchar_t>(std::towlower(ch));
+				return key;
+			}
+		}
+
+		const auto rel = absPath.lexically_relative(Engine::PlatformPath::GetProjectRoot());
+		if (!rel.empty() && !rel.native().starts_with(L".."))
+		{
+			auto key = rel.generic_wstring();
+			for (wchar_t& ch : key)
+				ch = static_cast<wchar_t>(std::towlower(ch));
+			return key;
+		}
+
+		return AssetFileKey(absPath);
+	}
+
+	std::wstring_view StripAssetPrefix(std::wstring_view sv)
+	{
+		if (sv.starts_with(L"assets/")) return sv.substr(7);
+		if (sv.starts_with(L"resources/")) return sv.substr(10);
+		if (sv.starts_with(L"engine/resources/")) return sv.substr(17);
+		if (sv.starts_with(L"editor/resources/")) return sv.substr(17);
+		return sv;
+	}
+
+	bool MatchesResourceFile(const Engine::Resource& resource, const std::filesystem::path& modifiedFilePath)
+	{
+		const auto& storedPath = resource.GetPath().empty() ? resource.GetKey() : resource.GetPath();
+		if (storedPath.empty()) return false;
+
+		// 1. 기존 절대 경로 일치 검사 (동일 워크트리 내 수정)
+		const auto modAbsKey = AssetFileKey(modifiedFilePath);
+		if (!modAbsKey.empty() && AssetFileKey(storedPath) == modAbsKey)
+			return true;
+
+		// 2. 워크트리 상대 경로 일치 검사 (다중 워크트리 간 수정)
+		const auto modRelKey = AssetRelativeKey(modifiedFilePath);
+		if (modRelKey.empty()) return false;
+
+		const auto resRelKey = AssetRelativeKey(storedPath);
+		if (!resRelKey.empty() && modRelKey == resRelKey)
+			return true;
+
+		// 3. 접두사 제거 하위 경로 일치 검사 (Assets/ vs Resources/ 등)
+		const auto modSub = StripAssetPrefix(modRelKey);
+		const auto resSub = StripAssetPrefix(resRelKey);
+		if (!modSub.empty() && modSub == resSub)
+			return true;
+
+		return false;
 	}
 
 	void RequestThumbnailRefresh(const std::filesystem::path& changedPath, const Engine::Resource* resource = nullptr)
@@ -125,57 +196,50 @@ std::filesystem::path AssetHotReloadManager::ResolveTextureDirectory()
 #pragma region Constructor&Destructor
 EResult AssetHotReloadManager::Initialize(void* arg)
 {
-	m_WatchDirectory = ResolveTextureDirectory();
-	m_EngineWatchDirectory = Engine::PlatformPath::GetEngineResourceRoot();
-	m_EditorWatchDirectory = Engine::PlatformPath::GetEditorResourceRoot();
-	const auto watchPath = Engine::WStrToStr(m_WatchDirectory.wstring());
 	auto watcher = std::make_unique<efsw::FileWatcher>();
 	auto listener = std::make_unique<TextureFileListener>(this);
-	std::error_code ec;
-	if (std::filesystem::is_directory(m_WatchDirectory, ec))
+
+	const auto registerDirectory = [&](const std::filesystem::path& dir, const char* label)
 	{
-		m_WatchID = watcher->addWatch(watchPath, listener.get(), true);
-		if (m_WatchID <= 0)
+		std::error_code ec;
+		if (dir.empty() || !std::filesystem::is_directory(dir, ec))
+			return;
+
+		const auto norm = Engine::PlatformPath::Normalize(dir);
+		for (const auto& watched : m_WatchedDirectories)
 		{
-			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register watch: {}, code={}", watchPath, m_WatchID);
+			if (watched == norm)
+				return;
+		}
+
+		const auto watchPath = Engine::WStrToStr(norm.wstring());
+		const efsw::WatchID watchId = watcher->addWatch(watchPath, listener.get(), true);
+		if (watchId <= 0)
+		{
+			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register {} watch: {}, code={}", label, watchPath, watchId);
 		}
 		else
 		{
-			EDITOR_LOG_INFO("[Asset Hot Reload] Watching project directory: {}", watchPath);
+			m_WatchIDs.push_back(watchId);
+			m_WatchedDirectories.push_back(norm);
+			EDITOR_LOG_INFO("[Asset Hot Reload] Watching {} directory: {}", label, watchPath);
 		}
-	}
-	else
+	};
+
+	// 1. 현재 프로젝트 루트 기준 기본 디렉터리 등록
+	registerDirectory(Engine::PlatformPath::GetProjectAssetRoot(), "project assets");
+	registerDirectory(Engine::PlatformPath::GetEngineResourceRoot(), "engine resources");
+	registerDirectory(Engine::PlatformPath::GetEditorResourceRoot(), "editor resources");
+
+	// 2. 모든 연결된 Git 워크트리의 에셋 및 리소스 디렉터리 자동 감시 등록
+	for (const auto& root : Engine::PlatformPath::GetWorktreeRoots())
 	{
-		EDITOR_LOG_WARN("[Asset Hot Reload] Watch directory unavailable: {}, code={}", watchPath, ec.value());
+		registerDirectory(root / "Assets", "worktree assets");
+		registerDirectory(root / "Resources", "worktree resources");
+		registerDirectory(root / "Engine/Resources", "worktree engine resources");
+		registerDirectory(root / "Editor/Resources", "worktree editor resources");
 	}
-	if (m_EngineWatchDirectory != m_WatchDirectory && std::filesystem::is_directory(m_EngineWatchDirectory, ec))
-	{
-		const auto engineWatchPath = Engine::WStrToStr(m_EngineWatchDirectory.wstring());
-		m_EngineWatchID = watcher->addWatch(engineWatchPath, listener.get(), true);
-		if (m_EngineWatchID <= 0)
-		{
-			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register engine watch: {}, code={}",
-				engineWatchPath, m_EngineWatchID);
-		}
-		else
-		{
-			EDITOR_LOG_INFO("[Asset Hot Reload] Watching engine directory: {}", engineWatchPath);
-		}
-	}
-	if (m_EditorWatchDirectory != m_WatchDirectory && std::filesystem::is_directory(m_EditorWatchDirectory, ec))
-	{
-		const auto editorWatchPath = Engine::WStrToStr(m_EditorWatchDirectory.wstring());
-		m_EditorWatchID = watcher->addWatch(editorWatchPath, listener.get(), true);
-		if (m_EditorWatchID <= 0)
-		{
-			EDITOR_LOG_WARN("[Asset Hot Reload] Failed to register editor watch: {}, code={}",
-				editorWatchPath, m_EditorWatchID);
-		}
-		else
-		{
-			EDITOR_LOG_INFO("[Asset Hot Reload] Watching editor directory: {}", editorWatchPath);
-		}
-	}
+
 	watcher->watch();
 	m_FileListener = listener.release();
 	m_FileWatcher = watcher.release();
@@ -186,9 +250,13 @@ void AssetHotReloadManager::Free()
 {
 	if (m_FileWatcher)
 	{
-		if (m_WatchID != 0) m_FileWatcher->removeWatch(m_WatchID);
-		if (m_EngineWatchID != 0) m_FileWatcher->removeWatch(m_EngineWatchID);
-		if (m_EditorWatchID != 0) m_FileWatcher->removeWatch(m_EditorWatchID);
+		for (const auto watchId : m_WatchIDs)
+		{
+			if (watchId > 0)
+				m_FileWatcher->removeWatch(watchId);
+		}
+		m_WatchIDs.clear();
+		m_WatchedDirectories.clear();
 		delete m_FileWatcher;
 		m_FileWatcher = nullptr;
 	}
@@ -227,9 +295,7 @@ void AssetHotReloadManager::Update()
 
 void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& texturePath)
 {
-	const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(texturePath);
-	const auto targetKey = AssetFileKey(fullPath);
-	if (targetKey.empty()) return;
+	if (texturePath.empty()) return;
 
 	auto& manager = Engine::ResourceManager::Get();
 	bool matched = false;
@@ -237,31 +303,29 @@ void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& 
 	for (const auto& handle : manager.GetResourceHandles<Engine::Texture>())
 	{
 		auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(handle));
-		if (texture == nullptr || !MatchesResourceFile(*texture, targetKey))
+		if (texture == nullptr || !MatchesResourceFile(*texture, texturePath))
 			continue;
 
 		matched = true;
 
-		if (!IsSuccess(texture->Reload(fullPath)))
+		if (!IsSuccess(texture->Reload(texturePath)))
 			continue;
 
-		RequestThumbnailRefresh(fullPath, texture);
+		RequestThumbnailRefresh(texturePath, texture);
 
 		NotificationManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(fullPath.filename().wstring())),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(texturePath.filename().wstring())),
 			ELogLevel::Info, 3.0f);
 	}
 
 	// 로드된 리소스 없이 콘텐츠 브라우저 썸네일만 존재할 수도 있습니다.
 	if (!matched)
-		RequestThumbnailRefresh(fullPath);
+		RequestThumbnailRefresh(texturePath);
 }
 
 void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path& materialPath)
 {
-	const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(materialPath);
-	const auto targetKey = AssetFileKey(fullPath);
-	if (targetKey.empty()) return;
+	if (materialPath.empty()) return;
 
 	auto& manager = Engine::ResourceManager::Get();
 	bool matched = false;
@@ -271,18 +335,18 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 			for (const auto& handle : handles)
 			{
 				auto* material = dynamic_cast<Engine::MaterialInterface*>(manager.GetResource(handle));
-				if (material == nullptr || !MatchesResourceFile(*material, targetKey))
+				if (material == nullptr || !MatchesResourceFile(*material, materialPath))
 					continue;
 
 				matched = true;
 
-				if (!IsSuccess(material->Reload(fullPath)))
+				if (!IsSuccess(material->Reload(materialPath)))
 					continue;
 
-				RequestThumbnailRefresh(fullPath, material);
+				RequestThumbnailRefresh(materialPath, material);
 
 				NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(fullPath.filename().wstring())),
+					LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(materialPath.filename().wstring())),
 					ELogLevel::Info, 3.0f);
 			}
 		};
@@ -291,7 +355,7 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 	tryReload(manager.GetResourceHandles<Engine::MaterialInstance>());
 
 	if (!matched)
-		RequestThumbnailRefresh(fullPath);
+		RequestThumbnailRefresh(materialPath);
 }
 
 void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::path& locPath)
@@ -302,6 +366,19 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 		std::error_code ec;
 		std::filesystem::path scriptPath = Engine::PlatformPath::ResolveProjectRelative(
 			"Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py");
+		if (!std::filesystem::exists(scriptPath, ec))
+		{
+			for (const auto& wt : Engine::PlatformPath::GetWorktreeRoots())
+			{
+				const auto candidate = wt / "Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py";
+				if (std::filesystem::exists(candidate, ec))
+				{
+					scriptPath = candidate;
+					break;
+				}
+			}
+		}
+
 		if (std::filesystem::exists(scriptPath, ec))
 		{
 			const auto parentDir = locPath.parent_path();
@@ -310,6 +387,16 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 			_wsystem(cmd.c_str());
 		}
 	}
+
+	// 로컬라이제이션 데이터 등록 및 리로드
+	const auto parentDir = locPath.parent_path();
+	const auto koreanJson = parentDir / L"Korean.json";
+	const auto englishJson = parentDir / L"English.json";
+	std::error_code ec;
+	if (std::filesystem::exists(koreanJson, ec))
+		Engine::LocalizationManager::Get().RegisterLocalizationData(koreanJson.wstring());
+	if (std::filesystem::exists(englishJson, ec))
+		Engine::LocalizationManager::Get().RegisterLocalizationData(englishJson.wstring());
 
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
@@ -323,9 +410,10 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 
 void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& meshPath)
 {
-	const auto targetKey = AssetFileKey(meshPath);
-	if (targetKey.empty())
-		return;
+	if (meshPath.empty()) return;
+
+	const auto targetKey = AssetRelativeKey(meshPath);
+	if (targetKey.empty()) return;
 
 	MeshFileState currentState;
 	const bool hasState = ReadMeshFileState(meshPath, currentState);
@@ -341,11 +429,9 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 	for (const auto& handle : manager.GetResourceHandles<Mesh>())
 	{
 		auto* mesh = dynamic_cast<Mesh*>(manager.GetResource(handle));
-		if (!mesh)
-			continue;
+		if (!mesh) continue;
 
-		const auto& resourcePath = mesh->GetPath().empty() ? mesh->GetKey() : mesh->GetPath();
-		if (AssetFileKey(std::filesystem::path(resourcePath)) != targetKey)
+		if (!MatchesResourceFile(*mesh, meshPath))
 			continue;
 
 		matched = true;
@@ -381,7 +467,7 @@ bool AssetHotReloadManager::ReadMeshFileState(const std::filesystem::path& fileP
 
 void AssetHotReloadManager::RecordMeshFileState(const std::filesystem::path& filePath)
 {
-	const auto key = AssetFileKey(filePath);
+	const auto key = AssetRelativeKey(filePath);
 	if (key.empty())
 		return;
 

@@ -83,7 +83,10 @@ EResult LocalizationManager::RegisterLocalizationData(const wstring& filePath)
 {
 	const auto resolved = PlatformPath::ResolveUri(filePath);
 	if (!filesystem::exists(resolved)) return EResult::FileNotFound;
-	m_RegisteredFiles.push_back(resolved.wstring());
+	const auto norm = PlatformPath::Normalize(resolved).wstring();
+	if (std::find(m_RegisteredFiles.begin(), m_RegisteredFiles.end(), norm) != m_RegisteredFiles.end())
+		return EResult::Success;
+	m_RegisteredFiles.push_back(norm);
 	return EResult::Success;
 }
 
