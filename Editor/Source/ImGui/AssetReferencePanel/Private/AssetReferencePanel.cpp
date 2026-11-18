@@ -1,4 +1,5 @@
 ﻿#include "AssetReferencePanel.h"
+#include "AssetPathRelocation.h"
 #include "EditorUI.h"
 #include "Functions.h"
 #include "PlatformPath.h"
@@ -25,10 +26,7 @@ namespace Editor
         if (BeginPanelWindow(title.c_str(), m_Open))
         {
             if (m_ScanRequested)
-            {
                 RunValidation();
-                m_ScanRequested = false;
-            }
 
             if (ImGui::BeginTabBar("AssetReferenceViews"))
             {
@@ -58,32 +56,55 @@ namespace Editor
     void AssetReferencePanel::ShowReferences(const std::filesystem::path& asset)
     {
         SetReferenceTarget(asset);
-        m_ScanRequested = !m_HasScanned;
+        if (!m_HasScanned)
+            m_ScanRequested = true;
         m_SelectReferencesTab = true;
         Focus();
     }
 
-    void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
+    void AssetReferencePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
     {
-        std::error_code error;
-        const auto resolved = std::filesystem::canonical(asset, error);
-        m_ReferenceTarget = error ? asset.lexically_normal() : resolved;
-        UpdateReferenceLists();
+        relocation.Add(m_ReferenceTarget);
+        if (m_HasScanned)
+            relocation.AfterCommit([this]() { m_ScanRequested = true; });
     }
 
-    void AssetReferencePanel::UpdateReferenceLists()
+    void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
+    {
+        if (asset.empty())
+        {
+            m_ReferenceTarget.clear();
+            return;
+        }
+
+        const auto physical = Engine::PlatformPath::ResolveUri(asset);
+        std::error_code error;
+        const auto resolved = std::filesystem::canonical(physical, error);
+        m_ReferenceTarget = error ? physical.lexically_normal() : resolved;
+    }
+
+    void AssetReferencePanel::RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references)
     {
         m_Dependencies.clear();
         m_Users.clear();
-        for (const auto& link : m_Scan.References)
+        for (const auto& link : references)
         {
-            if (link.Source == m_ReferenceTarget)
-                m_Dependencies.push_back(link.Target);
-            if (link.Target == m_ReferenceTarget)
-                m_Users.push_back(link.Source);
+            m_Dependencies[link.Source].Paths.push_back(link.Target);
+            m_Users[link.Target].Paths.push_back(link.Source);
         }
-        std::ranges::sort(m_Dependencies);
-        std::ranges::sort(m_Users);
+
+        const auto prepareChildren = [](ReferenceAdjacency& links)
+        {
+            for (auto& entry : links)
+            {
+                auto& children = entry.second;
+                std::ranges::sort(children.Paths);
+                children.AllLeaves = std::ranges::none_of(children.Paths,
+                    [&links](const auto& path) { return links.contains(path); });
+            }
+        };
+        prepareChildren(m_Dependencies);
+        prepareChildren(m_Users);
     }
 
     void AssetReferencePanel::DrawReferences()
@@ -104,46 +125,84 @@ namespace Editor
         std::filesystem::path next;
         if (ImGui::BeginChild("AssetReferenceLists"))
         {
-            const auto user = DrawReferenceList("AssetRef.UsedBy", m_Users);
+            DrawReferenceTree("AssetRef.UsedBy", m_Users, next);
             ImGui::Separator();
-            const auto dependency = DrawReferenceList("AssetRef.Uses", m_Dependencies);
-            next = user.empty() ? dependency : user;
+            DrawReferenceTree("AssetRef.Uses", m_Dependencies, next);
         }
         ImGui::EndChild();
         if (!next.empty())
             SetReferenceTarget(next);
     }
 
-    std::filesystem::path AssetReferencePanel::DrawReferenceList(const char* labelKey,
-        const std::vector<std::filesystem::path>& paths)
+    void AssetReferencePanel::DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links,
+        std::filesystem::path& next)
     {
         ImGui::TextUnformatted(LOCAL_CSTR(labelKey));
-        if (paths.empty())
+        const auto root = links.find(m_ReferenceTarget);
+        if (root == links.end())
         {
             ImGui::TextDisabled("%s", LOCAL_CSTR("AssetRef.NoDirectReferences"));
-            return {};
+            return;
         }
 
-        std::filesystem::path next;
         ImGui::PushID(labelKey);
+        ImGui::PushID(static_cast<int>(std::filesystem::hash_value(m_ReferenceTarget)));
+        ReferencePaths ancestors{ m_ReferenceTarget };
+        DrawReferenceChildren(root->second, links, ancestors, next);
+        ImGui::PopID();
+        ImGui::PopID();
+    }
+
+    void AssetReferencePanel::DrawReferenceChildren(const ReferenceChildren& children, const ReferenceAdjacency& links,
+        ReferencePaths& ancestors, std::filesystem::path& next)
+    {
+        if (!children.AllLeaves)
+        {
+            for (const auto& path : children.Paths)
+                DrawReferenceBranch(path, links, ancestors, next);
+            return;
+        }
+
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(paths.size()));
+        clipper.Begin(static_cast<int>(children.Paths.size()));
         while (clipper.Step())
         {
             for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
-            {
-                const auto& path = paths[index];
-                const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
-                ImGui::PushID(index);
-                if (ImGui::Selectable(display.c_str()))
-                    next = path;
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", display.c_str());
-                ImGui::PopID();
-            }
+                DrawReferenceBranch(children.Paths[index], links, ancestors, next);
+        }
+    }
+
+    void AssetReferencePanel::DrawReferenceBranch(const std::filesystem::path& path, const ReferenceAdjacency& links,
+        ReferencePaths& ancestors, std::filesystem::path& next)
+    {
+        constexpr size_t maxDepth = 24;
+        const auto children = links.find(path);
+        const bool cycle = std::ranges::find(ancestors, path) != ancestors.end();
+        const bool atDepthLimit = !cycle && children != links.end() && ancestors.size() >= maxDepth;
+        const bool expandable = children != links.end() && !cycle && !atDepthLimit;
+        const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+        const char* noteKey = cycle ? "AssetRef.ReferenceCycle" :
+            atDepthLimit ? "AssetRef.ReferenceDepthLimit" : nullptr;
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (!expandable)
+            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+        ImGui::PushID(static_cast<int>(std::filesystem::hash_value(path)));
+        const bool open = ImGui::TreeNodeEx("Reference", flags, "%s%s%s", display.c_str(),
+            noteKey ? "  " : "", noteKey ? LOCAL_CSTR(noteKey) : "");
+        if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+            next = path;
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", display.c_str());
+
+        if (open && expandable)
+        {
+            ancestors.push_back(path);
+            DrawReferenceChildren(children->second, links, ancestors, next);
+            ancestors.pop_back();
+            ImGui::TreePop();
         }
         ImGui::PopID();
-        return next;
     }
 
     void AssetReferencePanel::DrawToolbar()
@@ -154,7 +213,7 @@ namespace Editor
         }
 
         ImGui::SameLine();
-        const bool canFixAny = std::ranges::any_of(m_Scan.Issues, [](const auto& i) { return i.CanAutoFix; });
+        const bool canFixAny = std::ranges::any_of(m_Issues, [](const auto& i) { return i.CanAutoFix; });
         if (!canFixAny) ImGui::BeginDisabled();
         if (ImGui::Button(LOCAL_CSTR("AssetRef.FixSafe")))
         {
@@ -194,7 +253,7 @@ namespace Editor
         size_t invalidExtCount = 0;
         size_t fixableCount = 0;
 
-        for (const auto& issue : m_Scan.Issues)
+        for (const auto& issue : m_Issues)
         {
             if (issue.IssueType == EAssetReferenceIssueType::MissingFile) ++missingCount;
             else if (issue.IssueType == EAssetReferenceIssueType::ExternalAbsolutePath) ++extCount;
@@ -202,7 +261,7 @@ namespace Editor
             if (issue.CanAutoFix) ++fixableCount;
         }
 
-        ImGui::Text(LOCAL_CSTR("AssetRef.TotalIssues"), m_Scan.Issues.size());
+        ImGui::Text(LOCAL_CSTR("AssetRef.TotalIssues"), m_Issues.size());
         ImGui::SameLine();
         ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("AssetRef.Missing"), missingCount);
         ImGui::SameLine();
@@ -234,9 +293,9 @@ namespace Editor
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.FixAction").c_str(), ImGuiTableColumnFlags_WidthFixed, 65.0f);
             ImGui::TableHeadersRow();
 
-            for (size_t i = 0; i < m_Scan.Issues.size(); ++i)
+            for (size_t i = 0; i < m_Issues.size(); ++i)
             {
-                const auto& issue = m_Scan.Issues[i];
+                const auto& issue = m_Issues[i];
 
                 // 1. 타입 필터
                 if (m_FilterType == 1 && issue.IssueType != EAssetReferenceIssueType::MissingFile) continue;
@@ -310,16 +369,19 @@ namespace Editor
 
     void AssetReferencePanel::RunValidation()
     {
-        m_Scan = AssetReferenceValidator::ScanProject();
-        UpdateReferenceLists();
+        auto scan = AssetReferenceValidator::ScanProject();
+        m_Issues.swap(scan.Issues);
+        RebuildReferenceTrees(scan.References);
+        SetReferenceTarget(m_ReferenceTarget);
         m_HasScanned = true;
+        m_ScanRequested = false;
         m_StatusMessage = "AssetRef.ScanCompleted";
     }
 
     void AssetReferencePanel::FixSelectedIssue(size_t index)
     {
-        if (index >= m_Scan.Issues.size()) return;
-        if (AssetReferenceValidator::FixIssue(m_Scan.Issues[index]))
+        if (index >= m_Issues.size()) return;
+        if (AssetReferenceValidator::FixIssue(m_Issues[index]))
         {
             RunValidation();
             m_FixedCount = 1;
@@ -329,7 +391,7 @@ namespace Editor
 
     void AssetReferencePanel::FixAllSafe()
     {
-        const size_t fixedCount = AssetReferenceValidator::FixAllSafeIssues(m_Scan.Issues);
+        const size_t fixedCount = AssetReferenceValidator::FixAllSafeIssues(m_Issues);
         RunValidation();
         m_FixedCount = fixedCount;
         m_StatusMessage = "AssetRef.FixedIssues";

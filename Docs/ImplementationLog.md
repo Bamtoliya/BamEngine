@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 에셋 참조 관계 트리와 파일 이동 동기화
+
+- 콘텐츠 브라우저의 이동·이름 변경과 파일 Undo/Redo에 참조 패널을 연결했다. 성공 시 대상 파일 또는 상위 폴더의 새 경로를 반영한다. 검사 완료 상태에서는 결과 갱신을 예약하며 숨긴 동안 변경이 누적돼도 다시 표시할 때 한 번만 검사한다.
+- 참조 검사에서 만든 양방향 인접 목록을 사용처와 의존성 트리로 표시한다. 순환은 현재 가지에서 멈추고 공유된 의존성은 가지마다 표시한다. 한 가지에서 24단계까지 펼칠 수 있고 이후에는 행을 선택해 계속 탐색할 수 있다.
+- 로캘 엄격 감사와 변경부 공백 검사를 통과했다. 이번 변경의 빌드·CTest·대화형 검증은 사용자 실행 전이다. [참조 패널 계획](ImGuiDevelopmentPlan.md#b-assetreferencepanel과-에셋-검증--우선순위-높음)과 [대화형 점검 F](EditorUXTestGuidelines.md#52-tier-3-대화형-ui-점검-체크리스트)에 범위와 확인 절차를 기록했다.
+
 ### [2026-11-18] 배치된 프리팹·그래프 이동과 참조 조사 통합
 
 - 저장된 씬·프리팹의 `PrefabInstanceComponent.prefabAssetPath`와 `GraphBindingComponent.graphFile`을 참조 조사와 이동 트랜잭션에 연결했다. 열린 메인 씬과 씬 이력의 참조는 파일 기록 후 갱신한다. 프리팹 원본 열기·선택·덮어쓰기·재생성은 `Project://`를 물리 경로로 해석한다. 별도의 프리팹 편집 씬과 미저장 편집에 대한 보호를 유지한다.

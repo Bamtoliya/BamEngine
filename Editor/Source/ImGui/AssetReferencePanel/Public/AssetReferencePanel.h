@@ -1,10 +1,13 @@
 ﻿#pragma once
 #include "ImGuiInterface.h"
 #include "AssetReferenceValidator.h"
+#include <unordered_map>
 #include <vector>
 #include <string>
 
 BEGIN(Editor)
+
+class AssetPathRelocation;
 
 class AssetReferencePanel final : public IImGui
 {
@@ -14,25 +17,38 @@ public:
 
     void Draw() override;
     void ShowReferences(const std::filesystem::path& asset);
+    void PrepareAssetPathRelocation(AssetPathRelocation& relocation);
 
 private:
+    using ReferencePaths = std::vector<std::filesystem::path>;
+    struct ReferenceChildren
+    {
+        ReferencePaths Paths;
+        bool AllLeaves = false;
+    };
+    using ReferenceAdjacency = std::unordered_map<std::filesystem::path, ReferenceChildren>;
+
     void DrawToolbar();
     void DrawSummaryStats();
     void DrawIssuesTable();
     void DrawReferences();
-    std::filesystem::path DrawReferenceList(const char* labelKey, const std::vector<std::filesystem::path>& paths);
+    void DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links, std::filesystem::path& next);
+    void DrawReferenceChildren(const ReferenceChildren& children, const ReferenceAdjacency& links,
+        ReferencePaths& ancestors, std::filesystem::path& next);
+    void DrawReferenceBranch(const std::filesystem::path& path, const ReferenceAdjacency& links,
+        ReferencePaths& ancestors, std::filesystem::path& next);
     void SetReferenceTarget(const std::filesystem::path& asset);
-    void UpdateReferenceLists();
+    void RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references);
 
     void RunValidation();
     void FixSelectedIssue(size_t index);
     void FixAllSafe();
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 private:
-    AssetReferenceScan m_Scan;
+    std::vector<AssetReferenceIssue> m_Issues;
     std::filesystem::path m_ReferenceTarget;
-    std::vector<std::filesystem::path> m_Dependencies;
-    std::vector<std::filesystem::path> m_Users;
+    ReferenceAdjacency m_Dependencies;
+    ReferenceAdjacency m_Users;
     bool m_SelectReferencesTab = false;
     bool m_ScanRequested = false;
     bool m_HasScanned = false;

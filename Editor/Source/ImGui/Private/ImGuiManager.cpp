@@ -1491,6 +1491,8 @@ bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) cons
 	{
 		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
 		if (editor && !editor->PrepareAssetPathRelocation(relocation)) return false;
+		if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+			references->PrepareAssetPathRelocation(relocation);
 	}
 	if (Engine::SystemManager::IsCreated())
 	{
