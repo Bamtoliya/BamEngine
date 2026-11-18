@@ -265,7 +265,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 ### P2-B. 기본 렌더 확장 (S3·S4·S5 검증 및 완성)
 
 - **2026-11-01 현황**:
-  - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 다중 뷰포트/패스별 카메라 기준 화면 덮개 비율 + 히스테리시스 독립 LOD 선택(및 주 뷰포트 전용 상태 보존), `Renderer::RenderMeshes` 인스턴스 배칭(`DrawIndexedInstanced` 및 비인덱스 `DrawInstanced` 지원) 반영 및 배칭 드로우콜 유지(56 -> 57회) 실측 검증 완료.
+  - **S3**: `InstanceData`, `LODGroupComponent`, `MeshRenderSystem` 다중 뷰포트/패스별 카메라 기준 화면 덮개 비율 + 히스테리시스 독립 LOD 선택(및 주 뷰포트 전용 상태 보존), `Renderer::RenderMeshes` 인스턴스 배칭(`DrawIndexedInstanced` 및 비인덱스 `DrawInstanced` 지원) 반영. **(2026-11-18 고도화)** 그림자 패스(`ShadowDepthPass`) 메시 우선 정렬 및 동일 메시 다중 머티리얼 단일 인스턴스 배치 병합 최적화, 1024개 분할 플러시 가드 추가, 메모리 레이아웃(80B/112B)·여인수 기저 노멀 역전치 외적 공식·배칭 시뮬레이션·LOD 히스테리시스 진동 억제 전용 단위 테스트 `MeshInstancingCheck` CTest 등록 완료.
   - **S4**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling`, `lightingPS.hlsl` 선별 광원 루프 순회 반영 및 라이팅 GPU 시간 77% 단축(1.10 ms -> 0.25 ms) 실측 검증 완료.
   - **S5 및 후처리/HDR 파이프라인 일원화**:
     - `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.

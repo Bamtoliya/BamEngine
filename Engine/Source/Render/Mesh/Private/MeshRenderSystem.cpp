@@ -294,7 +294,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     float lod2Thresh = lodGroup->lod2ScreenCoverage;
                     if (current == 2) lod2Thresh += margin;
                     float lod1Thresh = lodGroup->lod1ScreenCoverage;
-                    if (current == 1) lod1Thresh += (coverage < lod1Thresh ? -margin : margin);
+                    if (current == 1) lod1Thresh += margin;
 
                     int32 targetLOD = 0;
                     if (lodGroup->lod2Mesh.Get() && coverage <= lod2Thresh)

@@ -191,12 +191,31 @@ EResult Renderer::Render(f32 dt)
 			pass->GetSortType() != ERenderSortType::BackToFront)
 		{
 			auto& commands = staticIt->second;
-			std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
-				{
-					if (a.material != b.material)
+			if (passType == ERenderPassType::Shadow)
+			{
+				std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
+					{
+						if (a.mesh != b.mesh)
+							return std::less<Mesh*>{}(a.mesh, b.mesh);
+						if (a.material && b.material)
+						{
+							if (a.material->GetCullMode() != b.material->GetCullMode())
+								return a.material->GetCullMode() < b.material->GetCullMode();
+							if (a.material->GetFrontFace() != b.material->GetFrontFace())
+								return a.material->GetFrontFace() < b.material->GetFrontFace();
+						}
 						return std::less<MaterialInterface*>{}(a.material, b.material);
-					return std::less<Mesh*>{}(a.mesh, b.mesh);
-				});
+					});
+			}
+			else
+			{
+				std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
+					{
+						if (a.material != b.material)
+							return std::less<MaterialInterface*>{}(a.material, b.material);
+						return std::less<Mesh*>{}(a.mesh, b.mesh);
+					});
+			}
 		}
 		const auto spriteIt = m_SpriteDrawCommands.find(pid);
 		if (spriteIt != m_SpriteDrawCommands.end() && passType == ERenderPassType::Geometry &&
@@ -680,12 +699,53 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			continue;
 		}
 
-		// 일반 정적 메시: 머티리얼 또는 메시가 달라지면 이전 배치 플러시
-		if (material != batchMaterial || mesh != batchMesh)
+		// 일반 정적 메시 배칭 플러시 판정:
+		// 1) 메시가 달라진 경우 무조건 플러시
+		// 2) 일반 패스(Geometry 등): 머티리얼이 달라지면 플러시
+		// 3) 섀도우 패스: 깊이 전용 렌더링이므로 CullMode와 FrontFace가 일치하면 서로 다른 머티리얼이라도 단일 인스턴스 배치로 병합 허용
+		// 4) 동적 링 버퍼 오버플로 방지를 위한 최대 배치 인스턴스 수(1024) 도달 시 분할 플러시
+		const bool isShadowPass = (passType == ERenderPassType::Shadow);
+		bool needsFlush = false;
+
+		if (batchMesh)
+		{
+			if (mesh != batchMesh)
+			{
+				needsFlush = true;
+			}
+			else if (!isShadowPass)
+			{
+				if (material != batchMaterial)
+					needsFlush = true;
+			}
+			else
+			{
+				if (batchMaterial && material)
+				{
+					if (material->GetCullMode() != batchMaterial->GetCullMode() ||
+						material->GetFrontFace() != batchMaterial->GetFrontFace())
+					{
+						needsFlush = true;
+					}
+				}
+			}
+
+			if (!needsFlush && instanceBatch.size() >= 1024)
+			{
+				needsFlush = true;
+			}
+		}
+
+		if (needsFlush)
 		{
 			if (IsFailure(flushBatch()))
 				return EResult::Fail;
 
+			batchMaterial = material;
+			batchMesh = mesh;
+		}
+		else if (!batchMesh)
+		{
 			batchMaterial = material;
 			batchMesh = mesh;
 		}

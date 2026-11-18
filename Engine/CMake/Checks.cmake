@@ -134,3 +134,15 @@ if(BUILD_TESTING)
     set_tests_properties(RenderPipelineProfileCheck PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/render-pipeline-profile-check")
 endif()
+
+add_executable(MeshInstancingCheck examples/MeshInstancingCheck.cpp)
+target_link_libraries(MeshInstancingCheck PRIVATE BamEngine::Engine)
+set_target_properties(MeshInstancingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(MeshInstancingCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME MeshInstancingCheck COMMAND MeshInstancingCheck)
+endif()

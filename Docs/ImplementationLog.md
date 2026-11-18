@@ -2,6 +2,84 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 독립 워커 프로세스(`BamAssetWorker`) 기반 3D 에셋·서브메시·프리팹 썸네일 비동기 베이킹
+
+- **배경 및 목표**:
+  - 기존 인-프로세스 Fast Reject로 `sponza` 폴더 프리징을 제거했으나, `.bammesh`(1,023개), 대형 복합 `.bammodel`(`sponza.bammodel`, `dragon.bammodel`), 원시 모델(`.obj`, `.fbx`, `.glb`), 프리팹(`.bamprefab.json`)도 메인 스레드 부하 없이 실제 3D 썸네일로 표시되도록 Out-of-Process 워커 아키텍처(방향 B)를 구축함.
+- **구현 내역**:
+  - `Tools/AssetWorker/` (`CMakeLists.txt`, `main.cpp`, `HeadlessThumbnailRasterizer.h/.cpp`):
+    - GPU/RHI 및 ImGui 의존성이 없는 헤드리스 워커 실행 파일 `BamAssetWorker` 신설 (`Editor` 타겟이 의존).
+    - 단발 CLI(`--mode thumbnail`) 및 표준입출력 파이프 데몬(`--daemon`) 모드 지원.
+    - 2x SSAA (`256x256` -> `128x128`) 스튜디오 3점 조명 PBR 소프트웨어 래스터라이저 및 ACES 톤매핑·텍스처 샘플링(`.bamtex`, `.dds`, `.png`, `.tga`, `.jpg`) 구현.
+    - 대형 복합 모델은 최경량 LOD(`.bammesh` LOD2) 우선 로드, 초대형 단일 메시(`198MB` 등)는 정점 AABB를 유지한 균등 삼각형 샘플링으로 수십 ms 내 고속 베이킹, 프리팹은 `Scene::InstantiatePrefabArchive` + 아카이브 직접 파싱 폴백 모두 지원.
+  - `Editor/Source/AssetManager/Worker/` (`AssetWorkerHost.h/.cpp`):
+    - `Windows Job Object`(`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`), `CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS` 기반 데몬 프로세스 2개 풀 관리 및 비정상 종료 시 자동 재스폰 구축.
+  - `Engine/Source/Resource/Public/ResourceHandleArchiveAdapter.h`:
+    - `ResolveResourceHandle`에 레거시 `Resources/` -> `Assets/` 경로 치환 폴백을 추가해 과거 임포트 모델(`cube.bammodel`, `Plane.bammodel`, `Road-subdi.bammodel`) 및 프리팹(`Large Floor Sphere.bamprefab.json`) 참조 오류 해소.
+  - `Editor/Source/Rendering/Thumbnail/Public/ThumbnailRenderer.h` & `Private/ThumbnailRenderer.cpp`:
+    - 워커 미사용 시의 인-프로세스 폴백용 `SubmitPrefab` 구현.
+  - `Editor/Source/ImGui/PrefabEditor/Private/PrefabModeManager.cpp` & `PrefabEditorPanel.cpp`:
+    - `SavePrefab` 성공 시 `AssetCache::RequestInvalidate`를 호출하여 프리팹 저장 즉시 썸네일 갱신.
+  - `Editor/Source/AssetManager/AssetCache/Public/AssetCache.h` & `Private/AssetCache.cpp`:
+    - `MAX_CACHE_ENTRIES = 1024`, `MAX_CACHE_BYTES = 128MB` 상향 및 디스크 캐시 시드 `_v2` 갱신.
+    - `GetThumbnail`/`Update`에서 모델·메시·프리팹 썸네일을 `AssetWorkerHost`로 위임하고 완료된 PNG를 `m_DecodeWorkers`로 비동기 로드.
+- **검증 상태**:
+  - 구현 완료 후 정적 파일 확인 완료. 지침에 따라 빌드(`cmake --build --preset x64-debug --target Editor`)와 실환경 에디터·CLI 검증은 사용자 실행 대상으로 안내함.
+
+### [2026-11-18] 정적 메시 인스턴싱 고도화 및 섀도우 패스 배칭 통합, 단위 테스트(MeshInstancingCheck) 구축 (S3)
+
+- **배경 및 원인**:
+  - `Renderer::RenderMeshes` 배칭 파이프라인에서 드로우 커맨드가 `material` 우선으로 정렬되어 있어, 깊이만 기록하는 그림자 패스(`ShadowDepthPass`)에서도 머티리얼이 다르면 동일 메시임에도 인스턴스 배치가 분리되어 수십~수백 개의 불필요한 드로우콜이 발생하는 결함이 확인됨.
+  - 대규모 인스턴스 씬에서 `instanceBatch`가 링 버퍼 크기를 초과하여 오버플로(`EResult::OutOfMemory`)를 유발할 수 있는 가드가 부재함.
+  - 인스턴싱 메모리 레이아웃(80B 정렬), 비균일/음수 스케일 노멀 역전치 외적 공식, 패스별 배칭 및 LOD 히스테리시스 전환 알고리즘을 회귀 방지 차원에서 검증하는 전용 CTest가 부재함.
+- **수정 내용**:
+  - `Engine/Source/Render/Private/Renderer.cpp`:
+    - 커맨드 정렬 분기: `passType == ERenderPassType::Shadow`인 경우 `a.mesh`를 최우선 정렬 키로 사용하고, 동일 메시 내에서는 래스터라이저 호환성(`cullMode`, `frontFace`) 순으로 정렬하도록 최적화.
+    - `RenderMeshes` 배칭 플러시 판정:
+      - 섀도우 패스일 때 동일 메시이면서 `cullMode`와 `frontFace`가 동일한 경우, 서로 다른 머티리얼이라도 단일 인스턴스 배치로 병합 허용.
+      - 동적 링 버퍼 오버플로 방지: 최대 인스턴스 배치 수 가드(`MAX_INSTANCES_PER_BATCH = 1024`)를 두어 1024개 도달 시 안전하게 분할 플러시 수행.
+  - `Engine/examples/MeshInstancingCheck.cpp`:
+    - [Test 1] `InstanceData` 80바이트 정렬 단언 (`offsetof`, 16바이트 GPU 정렬 검증) 및 `SpriteInstanceData`(112B) 레이아웃 검증.
+    - [Test 2] `gbufferVS.hlsl`의 여인수 기저 외적 계산 공식과 수학적 $M^{-T} \cdot n$ 간의 20가지 케이스(비균일, 음수 반전 스케일 등) 내적 0.9999 일치성 검증.
+    - [Test 3] Geometry Pass(머티리얼별 분리 5 드로우콜) 대비 Shadow Pass(동일 메시 3개 머티리얼 600개 인스턴스 단일 드로우콜 압축 및 2500개 1024 분할 플러시) 시뮬레이션 검증.
+    - [Test 4] `LODGroupComponent` 거리/커버리지별 LOD 0 $\to$ 1 $\to$ 2 전환 및 $\pm 0.05$ 히스테리시스 마진을 통한 경계면 LOD 깜빡임(Oscillation) 방지 검증.
+  - `Engine/CMake/Checks.cmake`:
+    - `MeshInstancingCheck` 실행 파일 및 CTest 테스트 타깃 등록.
+  - `Engine/Source/Render/Public/InstanceData.h`:
+    - `Engine::mat4`, `Engine::vec4` 네임스페이스 수식어를 명시하여 독립 컴파일 단위에서 타입 누락 방지.
+  - `Engine/Source/Render/Mesh/Private/MeshRenderSystem.cpp`:
+    - `current == 1`일 때의 히스테리시스 임계값을 `lod1Thresh += margin`으로 정정하여, 0.45~0.50 화면 점유율 구간에서 LOD 1이 LOD 0으로 역전되어 깜빡이던 실제 엔진 런타임 결함 해결.
+  - `CMakePresets.json`:
+    - `testPresets`에 `x64-ninja-debug` 및 `x64-ninja-release` 추가.
+- **검증**:
+  - `ctest --preset x64-ninja-debug -R MeshInstancingCheck` 실행을 통해 [Test 1] 메모리 레이아웃 단언, [Test 2] 여인수 기저 외적 법선 변환 20개 케이스 수학적 일치, [Test 3] 섀도우 패스 600개 단일 드로우콜 압축 및 1024 분할 플러시, [Test 4] 거리별 LOD 전환 및 히스테리시스 진동 억제 전체 통과(100% Pass) 확인 완료.
+
+### [2026-11-18] 대형 복합 모델 및 서브메시 Fast Reject 적용을 통한 콘텐츠 브라우저 스폰자 프리징 원천 해소
+
+- **배경 및 원인**:
+  - `Assets/Model/sponza` 폴더에는 1,023개의 `.bammesh` 파일, 26개의 `.bammatinst`, 1개의 대형 복합 모델 `sponza.bammodel`(288KB, 내부에 1,143개 서브메시 참조), 1개의 원본 모델 `sponza.obj`(21.1MB)가 존재함.
+  - 기존에는 `isModelOrMesh`에 `.bammesh`가 포함되어 폴더 진입 시 1,023개의 서브메시가 전부 메인 스레드 3D 렌더링 큐에 등록되었고, `ProcessPending3DThumbnail`에서 `sponza.obj` 처리 시 동명의 `sponza.bammodel`을 발견했을 때 파일 크기 검사 없이 `rm.LoadFile`을 호출하여 1,143개 서브메시지를 동기로 파싱하고 D3D12 버퍼를 생성하느라 UI가 20~30초간 완전히 멈추는 현상이 발생함.
+  - 또한 `ToProjectRelative` 경로와 `ResourceManager` 표준 가상 URI(`Project://`) 간 불일치로 인해 캐시 적중에 실패하는 문제가 확인됨.
+- **수정 내용**:
+  - `Editor/Source/AssetManager/AssetCache/Public/AssetCache.h`:
+    - `MAX_RAW_MODEL_PARSE_BYTES = 4 * 1024 * 1024` (4MB), `MAX_COMPOSITE_MODEL_PARSE_BYTES = 64 * 1024` (64KB) 가드 상수 정의.
+    - `SaveNegativeCacheToDisk` 선언 추가.
+  - `Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp`:
+    - `GetThumbnail`:
+      - `.bammesh`를 `isModel`에서 완전 제외하여 3D 큐 등록 없이 0ms 즉시 `ICON_FA_DRAW_POLYGON`("MESH") 아이콘으로 렌더링되도록 변경.
+      - 4MB 초과 미임포트 원시 모델(`.obj`, `.fbx` 등) 및 64KB 초과 대형 복합 모델(`.bammodel`) Fast Reject 및 네거티브 디스크 캐시(0바이트 파일) 기록 적용.
+    - `LoadThumbnailFromDiskCache`: 0바이트 네거티브 캐시 감지 시 빈 태스크를 반환하여 디스크/오프스크린 재시도 완전 차단.
+    - `SaveThumbnailToDiskCache`: `std::async(std::launch::async, ...)`로 디스크 파일 저장을 비동기화하여 메인 스레드 I/O 블로킹 제거.
+    - `ProcessPending3DThumbnail`:
+      - `sponza.obj` 등 원본 모델의 동명 `.bammodel` 연계 로드 경로(`candidate1`, `candidate2`)에 `fileSize <= MAX_COMPOSITE_MODEL_PARSE_BYTES` (64KB) 가드 추가. 초과 시 동기 로드를 포기하고 Fast Reject.
+      - 모델 URI 변환을 `Engine::PlatformPath::ToVirtualUri(modelToLoad)`로 일원화하여 `ResourceManager` 캐시 적중 보장.
+      - 독립 `.bammodel` 처리부에도 동일하게 64KB 초과 가드 적용.
+      - 미정의 변수 `else if (isMesh)` 블록을 완전 제거하여 컴파일 오류 해결.
+  - `Docs/OutOfProcessAssetPipelinePlan.md`:
+    - 향후 근본적인 백그라운드 프리뷰 베이킹을 위한 독립 프로세스 워커 아키텍처(3.5절) 상세 설계 문서화.
+- **검증**:
+  - 정적 코드 검토 및 지침 준수 확인 완료. 빌드 및 테스트는 지침에 따라 AI가 직접 실행하지 않고 사용자 검증으로 안내함.
+
 ### [2026-11-18] 계층 패널의 다중 드래그 이동
 
 - 선택된 행에서 드래그를 시작할 때 같은 씬의 선택 엔티티와 영구 ID를 보관한다. 다른 엔티티나 씬 루트에 드롭하면 묶음을 이동하며 선택 밖에서 시작하면 해당 엔티티만 이동한다. 단일 참조 입력칸은 드래그를 시작한 엔티티의 기존 페이로드를 사용한다.
@@ -5858,6 +5936,19 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 최우선 과제인 에셋 썸네일(P0)을 비롯하여 셰이더 컴파일/PSO(P1), 에셋 파생 데이터(DDC, P1), 지형/물리 쿠킹(P2), 비주얼 스크립팅 바이트코드(P2), 오디오 파형/폰트 아틀라스(P3)의 6대 영역 디스크 캐시 소요처를 체계적으로 분류.
   - 프로젝트 루트 기준 `<ProjectRoot>/.bam/cache/` 표준 레이아웃, 단일 진실의 원천(SSOT) 캐시 키 생성 규칙, 원자적 쓰기(`.tmp` -> `rename`), LRU 용량 제한 관리자, 3계층(VRAM LRU -> 디스크 128x128 PNG -> 온디맨드 렌더/디코드) 썸네일 파이프라인 설계를 포함하는 [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md) 신규 수립.
   - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md) 및 [DevelopmentPriorities.md](DevelopmentPriorities.md)에 신규 계획 교차 참조 연결 반영.
+
+### [2026-11-18] 대용량 3D 모델 썸네일 메인 스레드 프리징 방지 및 비동기 캐시 안정화 (방향 3 적용 및 방향 2 문서화)
+
+- **대용량 미임포트 원시 3D 모델 Fast Reject 가드**:
+  - `Assets/Model/sponza/sponza.obj`(21.1MB) 등 4MB(`MAX_RAW_MODEL_PARSE_BYTES`)를 초과하는 대용량 모델 파일에 대해 메인 스레드 실시간 Assimp 파싱을 즉시 스킵하고 기본 3D 모델 아이콘을 사용하도록 개선했다.
+  - 정식 임포트를 거쳐 가벼운 바이너리 `.bammodel`이 존재하는 경우에만 안전하게 3D 썸네일 렌더링 대기열에 등록한다.
+- **디스크 캐시 저장 비동기화 (Fire-and-Forget `std::async`)**:
+  - 3D 썸네일 오프스크린 렌더링 완료 후 CPU 리드백된 픽셀을 디스크 PNG로 쓰는 `SaveThumbnailToDiskCache` 작업을 `std::async(std::launch::async)` 백그라운드 스레드로 격리하여 메인 렌더/UI 스레드에서의 파일 쓰기 및 PNG 인코딩 블로킹을 원천 제거했다.
+- **실패 에셋 및 스킵 에셋 네거티브 캐시 (Negative Caching)**:
+  - 서브메시가 누락되어 로드 실패한 과거 에셋(`cube.bammodel`, `Plane.bammodel` 등) 및 4MB 초과 스킵 에셋에 대해 0바이트 디스크 캐시 마커 파일(`SaveNegativeCacheToDisk`)을 생성하도록 했다.
+  - `LoadThumbnailFromDiskCache`가 0바이트 파일을 감지하면 재시도 없이 기본 아이콘으로 즉시 반환하여, 폴더 재진입 시 `Resource archive read failed: code=2` 에러 로그 폭주 및 디스크 역직렬화 반복 루프를 원천 차단했다.
+- **독립 워커 프로세스 기반 파이프라인(방향 2) 문서화 ([OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md))**:
+  - 3.5절에 대용량 3D 에셋 썸네일 & 프리뷰 베이킹을 전담하는 헤드리스 D3D12/Software 워커 모드(`--mode thumbnail`), 에디터 `AssetCache` 무간섭 연동, 크래시 및 타임아웃 격리 설계를 추가 문서화했다.
 
 ### [2026-11-17] 3인칭 KCC 물리 고도화 및 경사면 상호작용 구현 / 이슈 기록
 
