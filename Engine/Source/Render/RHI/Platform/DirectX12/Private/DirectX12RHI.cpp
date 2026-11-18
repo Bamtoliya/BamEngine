@@ -877,6 +877,147 @@ RHIBuffer* DirectX12RHI::CreateIndexBuffer(void* data, uint32 size, uint32 strid
 {
     return CreateBuffer(data, size, stride, ERHIBufferType::Index);
 }
+
+EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint32 size, uint32 offset)
+{
+    if (!buffer || !data || size == 0 || !m_Device || !m_CommandQueue)
+        return EResult::InvalidArgument;
+
+    if (buffer->GetBufferType() == ERHIBufferType::Readback)
+        return EResult::InvalidArgument;
+
+    auto* dxBuffer = static_cast<DirectX12Buffer*>(buffer);
+    auto* destination = static_cast<ID3D12Resource*>(dxBuffer->GetNativeHandle());
+    if (!destination)
+        return EResult::Fail;
+
+    if (offset > dxBuffer->GetSize() || size > dxBuffer->GetSize() - offset)
+        return EResult::InvalidArgument;
+
+    if (void* mappedPtr = dxBuffer->GetMappedPointer())
+    {
+        std::memcpy(static_cast<uint8*>(mappedPtr) + offset, data, size);
+        return EResult::Success;
+    }
+
+    if (m_FrameFailed)
+        return EResult::Fail;
+
+    const bool recordInFrame = m_FrameRecording && (m_CommandList != nullptr);
+
+    ComPtr<ID3D12Resource> uploadBuffer;
+    if (recordInFrame)
+    {
+        auto& buffers = m_TextureUploadBuffers[m_CurrentBackBufferIndex];
+        auto& cursor = m_TextureUploadCursors[m_CurrentBackBufferIndex];
+
+        if (cursor == buffers.size())
+            buffers.emplace_back();
+
+        auto& cachedBuffer = buffers[cursor];
+        if (!cachedBuffer || cachedBuffer->GetDesc().Width < size)
+        {
+            auto newBuffer = CreateTextureUploadBuffer(size);
+            if (!newBuffer)
+                return EResult::Fail;
+            cachedBuffer = newBuffer;
+        }
+
+        uploadBuffer = cachedBuffer;
+        ++cursor;
+    }
+    else
+    {
+        uploadBuffer = CreateTextureUploadBuffer(size);
+        if (!uploadBuffer)
+            return EResult::Fail;
+    }
+
+    void* mapped = nullptr;
+    D3D12_RANGE readRange = { 0, 0 };
+    if (FAILED(uploadBuffer->Map(0, &readRange, &mapped)))
+        return EResult::Fail;
+
+    std::memcpy(mapped, data, size);
+    uploadBuffer->Unmap(0, nullptr);
+
+    ComPtr<ID3D12CommandAllocator> allocator;
+    ComPtr<ID3D12GraphicsCommandList> list;
+    ComPtr<ID3D12Fence> fence;
+    ID3D12GraphicsCommandList* copyList = nullptr;
+
+    if (recordInFrame)
+    {
+        copyList = m_CommandList.Get();
+    }
+    else
+    {
+        if (FAILED(m_Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))))
+            return EResult::Fail;
+
+        if (FAILED(m_Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, allocator.Get(), nullptr, IID_PPV_ARGS(&list))))
+            return EResult::Fail;
+
+        if (FAILED(m_Device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))))
+            return EResult::Fail;
+
+        copyList = list.Get();
+    }
+
+    const D3D12_RESOURCE_STATES previousState = dxBuffer->GetCurrentState();
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = destination;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    if (previousState != D3D12_RESOURCE_STATE_COPY_DEST)
+    {
+        barrier.Transition.StateBefore = previousState;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+        copyList->ResourceBarrier(1, &barrier);
+    }
+
+    copyList->CopyBufferRegion(destination, offset, uploadBuffer.Get(), 0, size);
+
+    D3D12_RESOURCE_STATES targetState = D3D12_RESOURCE_STATE_GENERIC_READ;
+    if (dxBuffer->GetBufferType() == ERHIBufferType::Vertex)
+        targetState = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    else if (dxBuffer->GetBufferType() == ERHIBufferType::Index)
+        targetState = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = targetState;
+    copyList->ResourceBarrier(1, &barrier);
+
+    if (recordInFrame)
+    {
+        dxBuffer->SetCurrentState(targetState);
+        return EResult::Success;
+    }
+
+    if (FAILED(list->Close()))
+        return EResult::Fail;
+
+    ID3D12CommandList* lists[] = { list.Get() };
+    m_CommandQueue->ExecuteCommandLists(1, lists);
+
+    if (FAILED(m_CommandQueue->Signal(fence.Get(), 1)))
+    {
+        ENGINE_LOG_ERROR("Buffer upload: CommandQueue signal failed.");
+        return EResult::Fail;
+    }
+    if (FAILED(fence->SetEventOnCompletion(1, nullptr)))
+    {
+        ENGINE_LOG_ERROR("Buffer upload: Fence wait failed.");
+        return EResult::Fail;
+    }
+
+    if (FAILED(m_Device->GetDeviceRemovedReason()))
+        return EResult::Fail;
+
+    dxBuffer->SetCurrentState(targetState);
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Texture
@@ -2154,8 +2295,6 @@ EResult DirectX12RHI::DrawIndexed(uint32 count)
     // slot 3 = Pass CBV #1 → Root Param 6
     if (IsFailure(ApplyShaderResources()))
         return EResult::Fail;
-
-    // TODO: SRV(텍스처) 다이내믹 힙 복사 및 바인딩 로직 (추후 구현)
 
     m_CommandList->DrawIndexedInstanced(count, 1, 0, 0, 0);
     RecordIndexedDraw(count);

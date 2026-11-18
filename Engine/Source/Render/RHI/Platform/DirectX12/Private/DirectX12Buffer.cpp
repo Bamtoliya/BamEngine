@@ -15,6 +15,10 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 	D3D12_RESOURCE_STATES initialState = D3D12_RESOURCE_STATE_GENERIC_READ;
 	D3D12_RESOURCE_FLAGS resourceFlags = D3D12_RESOURCE_FLAG_NONE;
 
+	const bool isStaticGeometryBuffer =
+		(m_BufferType == ERHIBufferType::Vertex || m_BufferType == ERHIBufferType::Index) &&
+		desc.initialData != nullptr;
+
 	if (m_BufferType == ERHIBufferType::Readback)
 	{
 		heapProps.Type = D3D12_HEAP_TYPE_READBACK;
@@ -26,12 +30,18 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 		initialState = D3D12_RESOURCE_STATE_COMMON;
 		resourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 	}
+	else if (isStaticGeometryBuffer)
+	{
+		heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+		initialState = D3D12_RESOURCE_STATE_COMMON;
+	}
 	else
 	{
-		TODO("StaticMesh May Use D3D12_HEAP_TYPE_DEFAULT");
 		heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
 		initialState = D3D12_RESOURCE_STATE_GENERIC_READ;
 	}
+
+	m_CurrentState = initialState;
 
 	D3D12_RESOURCE_DESC resourceDesc = {};
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -64,11 +74,19 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 		{
 			return EResult::Fail;
 		}
+
+		// 초기 데이터(initialData)가 있다면 즉시 복사
+		if (desc.initialData != nullptr && m_MappedData != nullptr)
+		{
+			memcpy(m_MappedData, desc.initialData, desc.size);
+		}
 	}
-	// 초기 데이터(initialData)가 있다면 즉시 복사
-	if (desc.initialData != nullptr && m_MappedData != nullptr)
+	else if (heapProps.Type == D3D12_HEAP_TYPE_DEFAULT && desc.initialData != nullptr)
 	{
-		memcpy(m_MappedData, desc.initialData, desc.size);
+		if (IsFailure(dxRHI->UploadBufferData(this, desc.initialData, desc.size, 0)))
+		{
+			return EResult::Fail;
+		}
 	}
 	return EResult::Success;
 }
@@ -125,9 +143,19 @@ D3D12_INDEX_BUFFER_VIEW DirectX12Buffer::GetIndexBufferView() const
 
 void DirectX12Buffer::SetData(const void* data, uint32 size)
 {
-	if (m_MappedData && data)
+	if (!data || size == 0 || !m_Buffer)
+		return;
+
+	if (size > m_Size)
+		size = m_Size;
+
+	if (m_MappedData)
 	{
 		memcpy(m_MappedData, data, size);
+	}
+	else if (m_RHI)
+	{
+		static_cast<DirectX12RHI*>(m_RHI)->UploadBufferData(this, data, size, 0);
 	}
 }
 
@@ -136,12 +164,17 @@ EResult DirectX12Buffer::UploadRangeInternal(const void* data, uint32 size, uint
 	if (!m_Buffer)
 		return EResult::Fail;
 
-	if (!m_MappedData)
-		return EResult::NotImplemented;
+	if (m_MappedData)
+	{
+		auto* destination = static_cast<uint8*>(m_MappedData) + offset;
+		std::memcpy(destination, data, size);
+		return EResult::Success;
+	}
 
-	auto* destination = static_cast<uint8*>(m_MappedData) + offset;
-	std::memcpy(destination, data, size);
-	return EResult::Success;
+	if (!m_RHI)
+		return EResult::Fail;
+
+	return static_cast<DirectX12RHI*>(m_RHI)->UploadBufferData(this, data, size, offset);
 }
 
 EResult DirectX12Buffer::QueryUploadComplete(bool& complete)
@@ -150,9 +183,6 @@ EResult DirectX12Buffer::QueryUploadComplete(bool& complete)
 
 	if (!m_Buffer)
 		return EResult::Fail;
-
-	if (!m_MappedData)
-		return EResult::NotImplemented;
 
 	complete = true;
 	return EResult::Success;

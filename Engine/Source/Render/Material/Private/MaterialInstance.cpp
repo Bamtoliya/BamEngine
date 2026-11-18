@@ -35,8 +35,21 @@ MaterialInstance* MaterialInstance::Create(const ResourceHandle<Material>& baseM
 
 MaterialInstance* MaterialInstance::Clone(void* arg)
 {
-	TODO("MaterialInstance Clone 구현 필요");
-	return nullptr;
+	MaterialInstance* instance = new MaterialInstance(*this);
+	instance->m_Version = 0;
+	if (arg)
+	{
+		auto* desc = static_cast<DESC*>(arg);
+		if (!desc->Key.empty() || !desc->Path.empty())
+		{
+			instance->m_Key = NormalizePath(desc->Key.empty() ? desc->Path : desc->Key);
+			instance->m_Path = NormalizePath(desc->Path);
+		}
+		if (desc->BaseMaterialHandle.IsValid())
+			instance->m_BaseMaterialHandle = desc->BaseMaterialHandle;
+	}
+	instance->RebuildTextureBindingCache();
+	return instance;
 }
 
 void MaterialInstance::Free()

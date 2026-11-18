@@ -20,6 +20,8 @@ public:
 public:
 	D3D12_VERTEX_BUFFER_VIEW GetVertexBufferView() const;
 	D3D12_INDEX_BUFFER_VIEW GetIndexBufferView() const;
+	D3D12_RESOURCE_STATES GetCurrentState() const { return m_CurrentState; }
+	void SetCurrentState(D3D12_RESOURCE_STATES state) { m_CurrentState = state; }
 
 public:
 	virtual void* GetNativeHandle() const override { return m_Buffer.Get(); }
@@ -38,5 +40,6 @@ protected:
 private:
 	ComPtr<ID3D12Resource> m_Buffer;
 	void* m_MappedData = nullptr;
+	D3D12_RESOURCE_STATES m_CurrentState = D3D12_RESOURCE_STATE_COMMON;
 };
 END

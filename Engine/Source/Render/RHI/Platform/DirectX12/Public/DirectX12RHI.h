@@ -41,6 +41,7 @@ public:
 	RHIBuffer* CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type) override;
 	RHIBuffer* CreateVertexBuffer(void* data, uint32 size, uint32 stride) override;
 	RHIBuffer* CreateIndexBuffer(void* data, uint32 size, uint32 stride) override;
+	EResult UploadBufferData(RHIBuffer* buffer, const void* data, uint32 size, uint32 offset = 0);
 public:
 	RHITexture* CreateTextureFromFile(const char* filename) override;
 	RHITexture* CreateTextureFromFile(const wchar* filename) override;

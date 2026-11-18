@@ -552,7 +552,7 @@ void MaterialInterface::RemovePassShader(ERenderPassType passType)
 #pragma region Getter
 BlendState MaterialInterface::GetBlendState()
 {
-    return BlendState(m_BlendMode);
+    return BlendState(GetBlendMode());
 }
 #pragma endregion
 

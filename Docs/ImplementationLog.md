@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] DirectX12 정적 메시 버퍼 Default Heap 전환 및 MaterialInstance::Clone 구현
+
+- **배경 및 목표**:
+  - 빌드 로그에 남아 있던 `TODO` 선언 2건(`DirectX12Buffer.cpp`의 정적 메시 Default Heap 전환, `MaterialInstance.cpp`의 `Clone` 미구현)을 실제 기능으로 구현해 제거함.
+- **구현 내역**:
+  - **1) DirectX12 정적 Vertex/Index 버퍼 `D3D12_HEAP_TYPE_DEFAULT` 전환**:
+    - `Engine/Source/Render/RHI/Platform/DirectX12/Public/DirectX12Buffer.h` & `Private/DirectX12Buffer.cpp`: 리소스 상태(`m_CurrentState`) 추적을 추가하고, 초기 데이터가 제공되는 정적 `Vertex`/`Index` 버퍼는 `D3D12_HEAP_TYPE_DEFAULT` 힙(`D3D12_RESOURCE_STATE_COMMON`)으로 생성하도록 전환(`DebugRenderer` 등 `initialData == nullptr` 동적 버퍼는 기존 `D3D12_HEAP_TYPE_UPLOAD` 유지). `SetData`, `UploadRangeInternal`, `QueryUploadComplete`가 Default 힙 버퍼에서도 RHI 업로드를 통해 동작하도록 보완.
+    - `Engine/Source/Render/RHI/Platform/DirectX12/Public/DirectX12RHI.h` & `Private/DirectX12RHI.cpp`: `UploadBufferData(RHIBuffer*, const void*, uint32, uint32)` 신설. 프레임 기록 중(`m_FrameRecording`)에는 프레임별 업로드 스테이징 버퍼 풀(`m_TextureUploadBuffers`)을 재사용해 무대기로 `CopyBufferRegion` 및 `VERTEX_AND_CONSTANT_BUFFER`/`INDEX_BUFFER` 상태 전이를 기록하고, 프레임 외부에서는 임시 커맨드 리스트와 펜스 완료 대기로 안전하게 GPU 업로드를 수행.
+  - **2) `MaterialInstance::Clone` 구현 및 `GetBlendState` 일관성 수정**:
+    - `Engine/Source/Render/Material/Private/MaterialInstance.cpp`: `MaterialInstance::Clone(void* arg)`에서 베이스 머티리얼 핸들, 오버라이드 플래그, 파라미터, 텍스처 바인딩, 패스 셰이더를 복제하고 `RebuildTextureBindingCache()`를 호출해 유효한 복제 인스턴스를 반환하도록 구현(`arg`로 `DESC` 전달 시 `Key`/`Path`/`BaseMaterialHandle` 갱신 지원).
+    - `Engine/Source/Render/Material/Private/MaterialInterface.cpp`: `GetBlendState()`가 `m_BlendMode` 직접 참조 대신 가상 함수 `GetBlendMode()`를 호출하도록 수정하여 오버라이드되지 않은 `MaterialInstance`도 베이스 머티리얼의 `BlendMode`를 반영하도록 교정.
+- **검증 상태**:
+  - 정적 검토 및 코드베이스 `TODO` 잔여 확인. 지침에 따라 빌드(`cmake --build`)와 실환경 렌더링/테스트 검증은 사용자 직접 실행 대상으로 안내함.
+
 ### [2026-11-18] 콘텐츠 브라우저 썸네일 아틀라스, 무대기 업로드 및 그리드 배칭 최적화 (방안 A+B+C+D)
 
 - **배경 및 목표**:
