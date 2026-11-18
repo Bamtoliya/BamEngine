@@ -599,7 +599,7 @@ Visual Studio F5 수동 확인 항목:
 - 배치된 프리팹의 `PrefabInstanceComponent.prefabAssetPath`와 그래프 바인딩의 `GraphBindingComponent.graphFile`도 저장된 씬·프리팹 JSON, 메인 씬과 씬 Undo/Redo에서 함께 갱신한다. 프리팹 원본 열기·선택·덮어쓰기·재생성은 새 `Project://` 경로를 사용한다. 그래프의 레거시 경로는 검사와 실행에서 동일하게 해석하고, 이동된 그래프의 실행 상태와 중단점 위치를 새 경로로 이어간다.
 - 로드된 셰이더의 내부 바이너리 경로와 모델의 임포트 원본은 영향받으면 이동을 거부한다. 로드된 바이너리·프로젝트 외부 타임라인의 내부 의존 경로도 계속 보호한다. 그래프 노드의 일반 문자열과 동적 참조는 갱신하지 않는다.
 - 엔진의 리소스 경로 재등록은 메인 스레드에서 실행한다. 풀 잠금 안에서 새 검색 인덱스와 값을 준비한 뒤 파일 콜백을 실행하고 성공에만 교체한다. 콜백과 리소스별 사전 검사에서 ResourceManager 재진입을 금지한다. 기존 raw pointer를 가진 워커가 동시에 리소스 속성을 읽는 상황은 호출자가 배제해야 한다. 재로드로 객체를 교체하는 기능은 아니다.
-- 검증 상태: 사용자 빌드 완료 및 `TransformInheritanceCheck`·`EditorHistoryCheck` 통과를 터미널에서 확인했다. 레거시 참조 해석 순서 수정(`f1ffddb4`) 후 `AssetReferenceCheck` 통과는 사용자가 후속 보고했다. 전체 CTest·Release 통과로 확대하지 않으며 실제 Editor의 이동·이름 변경·Undo/Redo·저장 경로·실패 보호 확인은 남아 있다.
+- 검증 상태: 프리팹·그래프 이동(`aef4f4fd`) 이후 Windows Ninja Debug의 `AssetReferenceCheck`·`EditorHistoryCheck`·`GraphExecutionCheck`가 통과했다. 실제 Editor에서 프리팹 원본 작업·그래프 중단점·파일과 씬 이력의 연동 확인은 남아 있다.
 - 변경 대상 문서는 파일을 잠근 상태에서 원문 일치를 다시 검사한다. 실행과 Undo/Redo 직전에도 사용처를 재검사해 새로 생긴 참조 문서가 있으면 거부한다. 변경 전후 원문과 경로표를 `.bam/content-browser-history/`에 보관하며, 복원까지 실패하면 이력을 비우고 로그에 복구 위치를 남긴다. 바이너리 내부·동적 로드·미저장 참조와 외부 프로세스 동시 편집 전체를 포괄하는 트랜잭션은 아니다.
 
 - 파일 복사·잘라내기·붙여넣기와 삭제는 그리드 선택 및 우클릭 대상 묶음을 사용한다. 삭제는 확인 후 프로젝트의 복구 폴더로 옮긴다. 파일 작업 Undo/Redo는 [EditorUndoRedo.md](EditorUndoRedo.md)를 따른다.
