@@ -83,7 +83,7 @@ public:
 	const wstring& GetDxilPath() const { return m_DxilPath; }
 	const wstring& GetSpirvPath() const { return m_SpirvPath; }
 	const wstring& GetWgslPath() const { return m_WgslPath; }
-	bool CanRelocateFilePaths(const vector<FilePathChange>& changes) const override
+	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>&) override
 	{
 		return !PlatformPath::IsFilePathAffected(m_DxilPath, changes) &&
 			!PlatformPath::IsFilePathAffected(m_SpirvPath, changes) &&

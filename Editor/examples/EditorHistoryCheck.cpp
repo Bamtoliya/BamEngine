@@ -12,6 +12,7 @@
 #include "AssetPathRelocation.h"
 #include "AnimatorComponent.h"
 #include "ActionTimelineAsset.h"
+#include "ActionTimelineComponent.h"
 #include "SceneManager.h"
 #include "EditorDocumentController.h"
 #include "SplineComponent.h"
@@ -679,6 +680,12 @@ namespace
         const auto animatedHandle = animated.GetEntityHandle();
         const auto controller = directory / "before.bamanimator";
         const auto renamedController = directory / "after.bamanimator";
+        const auto timelinePath = directory / L"이전.bamtimeline.json";
+        const auto movedTimelinePath = directory / L"이동.bamtimeline.json";
+        auto& timelineComponent = document.GetScene()->GetRegistry().emplace<Engine::ActionTimelineComponent>(animatedHandle);
+        timelineComponent.timelinePath = Engine::WStrToStr(timelinePath.wstring());
+        timelineComponent.loadedTimelinePath = timelineComponent.timelinePath;
+        timelineComponent.currentTime = 0.5f;
         animator.controllerPath = Engine::WStrToStr(controller.wstring());
         animator.loadedControllerPath = animator.controllerPath;
         animator.stateMachineAsset = std::make_shared<Engine::AnimatorStateMachine>();
@@ -689,18 +696,25 @@ namespace
             document.GetScene()->SetName(L"controller history");
         }
         Check(history.MarkSaved() && history.CanUndo(), "controller history setup");
-        Editor::AssetPathRelocation controllerMove({ { controller, renamedController } }, { document.GetPath() });
+        Editor::AssetPathRelocation controllerMove({ { controller, renamedController }, { timelinePath, movedTimelinePath } },
+            { document.GetPath() });
         Check(document.PrepareAssetPathRelocation(controllerMove), "loaded controller relocation rejected");
         Check(animator.controllerPath == Engine::WStrToStr(controller.wstring()), "controller changed during preparation");
+        Check(timelineComponent.timelinePath == Engine::WStrToStr(timelinePath.wstring()), "timeline changed during preparation");
         controllerMove.Apply();
         Check(animator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)) &&
             animator.loadedControllerPath == animator.controllerPath && animator.stateMachineAsset == stateMachine &&
             animator.currentTime == 0.75f, "controller relocation reloaded playback or retained old paths");
+        const auto movedTimelineUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(movedTimelinePath));
+        Check(timelineComponent.timelinePath == movedTimelineUri && timelineComponent.loadedTimelinePath == movedTimelineUri &&
+            timelineComponent.currentTime == 0.5f, "timeline relocation changed playback or retained an old path");
         Check(history.Undo(), "controller relocation lost scene undo");
         const auto& restoredAnimator = document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(
             animatedHandle);
         Check(restoredAnimator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)),
             "scene undo restored a stale controller path");
+        Check(document.GetScene()->GetRegistry().get<Engine::ActionTimelineComponent>(animatedHandle).timelinePath ==
+            movedTimelineUri, "scene undo restored a stale timeline path");
         Check(history.MarkSaved(), "controller reverse baseline");
         Editor::AssetPathRelocation controllerReverse({ { renamedController, controller } }, { document.GetPath() });
         Check(document.PrepareAssetPathRelocation(controllerReverse), "controller reverse preparation");

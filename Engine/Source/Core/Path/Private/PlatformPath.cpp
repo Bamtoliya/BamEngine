@@ -6,6 +6,7 @@
 #endif
 #include <algorithm>
 #include <cwctype>
+#include "Functions.h"
 
 namespace Engine
 {
@@ -493,6 +494,17 @@ namespace Engine
             return result;
         }
         return normalized;
+    }
+
+    bool PlatformPath::PrepareUtf8FilePathUpdate(std::string& path, const std::vector<FilePathChange>& changes,
+        std::vector<Utf8FilePathUpdate>& updates, bool asUri)
+    {
+        if (path.empty()) return false;
+        const auto physical = Normalize(ResolveUri(Utf8ToPath(path)));
+        const auto mapped = RemapFilePath(physical, changes);
+        if (physical == mapped) return false;
+        updates.push_back({ &path, WStrToStr(asUri || IsVirtualUri(path) ? ToVirtualUri(mapped) : mapped.wstring()) });
+        return true;
     }
 
     std::filesystem::path PlatformPath::Normalize(const std::filesystem::path& path)

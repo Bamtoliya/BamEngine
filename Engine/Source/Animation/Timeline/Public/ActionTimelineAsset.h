@@ -148,7 +148,10 @@ private:
 public:
 	virtual EResult Initialize(void* arg = nullptr) override;
 	virtual void Free() override;
-	bool CanRelocateFilePaths(const vector<FilePathChange>& changes) const override;
+	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates) override;
+	static void PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,
+		const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates);
+	static bool IsProjectJsonDocument(const std::filesystem::path& pathOrUri);
 
 	static ActionTimelineAsset* Create(void* arg = nullptr);
 

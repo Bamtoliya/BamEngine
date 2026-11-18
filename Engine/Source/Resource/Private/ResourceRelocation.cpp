@@ -24,6 +24,7 @@ bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>
     // A file callback must not acquire this lock again. Resource loads/unloads wait for the full transaction.
     unique_lock lock(m_PoolMutex);
     vector<PreparedIdentity> identities;
+    vector<Utf8FilePathUpdate> references;
     auto nextIndex = m_HashToHandle;
     for (size_t index = 0; index < m_Resources.size(); ++index)
     {
@@ -31,7 +32,7 @@ bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>
         if (!slot.IsActive || !slot.Instance)
             continue;
         auto* resource = slot.Instance;
-        if (!resource->CanRelocateFilePaths(changes))
+        if (!resource->PrepareFilePathRelocation(changes, references))
         {
             ENGINE_LOG_WARN("Resource retains unsupported relocation paths: key={}, path={}",
                 WStrToStr(resource->GetKey()), WStrToStr(resource->GetPath()));
@@ -75,6 +76,8 @@ bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>
     // No allocation follows a successful file commit. Objects, handles, generations and references stay intact.
     if (!commitFiles())
         return false;
+    for (auto& reference : references)
+        reference.Apply();
     for (auto& identity : identities)
     {
         identity.Instance->m_Key.swap(identity.Key);

@@ -58,7 +58,6 @@ public:
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override
 	{
-		ResourceEditorInterface::SetTargetResource(assetPath);
 		LoadFromFile(WStrToStr(assetPath.wstring()));
 	}
 	void SetTargetModel(const Engine::ResourceHandle<Engine::Model>& model);
@@ -161,6 +160,7 @@ private:
 	std::vector<entt::entity> m_PreviewVFXEntities;
 
 	std::string m_CurrentAssetPath;
+	std::string m_ModelAssetPath;
 	bool m_IsDirty = false;
 
 private:

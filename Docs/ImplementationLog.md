@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 액션 타임라인 참조의 에셋 이동·이름 변경 지원
+
+- 씬의 `ActionTimelineComponent.timelinePath`와 JSON 타임라인의 모델·노티파이 사운드·VFX 경로를 기존 참조 수집, 빌드 씬 검사, 파일 이동 Undo/Redo에 연결했다. 타임라인은 `AssetHeader.ResourceType`과 지정된 필드 위치로 식별한다. `.actiontimeline`과 `.actiontimeline.json` 런타임 로딩도 JSON 경로에 연결했다.
+- 메인 씬과 씬 편집 이력의 타임라인 경로, 로드된 타임라인 리소스 및 열린/닫힌 편집기의 경로는 파일 기록 성공 후 바뀐다. 리소스 핸들·재생 상태를 유지하고, 실패 시 준비해 둔 변경을 폐기한다. 로드되지 않은 모델의 파일 경로도 편집기가 보존한다. 로드 상태의 바이너리/프로젝트 외부 타임라인 내부 참조는 보호를 위해 차단한다.
+- `AssetReferenceCheck`는 실제 타임라인 아카이브로 씬 → 타임라인 → 모델/사운드/VFX 수집, 한글 폴더 이동, 저장 문서 재열기, 실패 시 메모리 보존, 원문 Undo/Redo와 기존 핸들을 검사한다. `EditorHistoryCheck`는 씬 이력의 타임라인 참조와 현재 재생 위치를 확인한다.
+- 정적 공백 검사를 완료했다. 이 변경의 빌드·CTest 및 실제 UI 검증은 사용자 실행 전이다. 이전 단계의 `AssetReferenceCheck` 통과는 신규 검사 결과에 포함하지 않는다. 자세한 범위와 검증 절차는 [타임라인 계획](AnimationTimelineEditorPlan.md)과 [파일 이력](EditorUndoRedo.md)을 따른다.
+
 ### [2026-11-18] 에셋 참조 검사 사용자 재검증 결과
 
 - 사용자가 `f1ffddb4` 수정 후 `AssetReferenceCheck` 통과를 보고했다. 수정 전 같은 작업에서 `TransformInheritanceCheck`·`EditorHistoryCheck`가 통과한 터미널 결과와 구분해 기록한다. 최신 전체 CTest 또는 Release 통과로 확장하지 않는다.

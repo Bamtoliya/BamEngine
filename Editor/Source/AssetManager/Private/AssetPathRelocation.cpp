@@ -2,6 +2,7 @@
 #include "Engine_Includes.h"
 #include "Functions.h"
 #include "AnimatorComponent.h"
+#include "ActionTimelineAsset.h"
 #include "ActionTimelineComponent.h"
 #include "PrefabInstanceComponent.h"
 #include "GraphBindingComponent.h"
@@ -45,17 +46,14 @@ namespace Editor
 
     bool AssetPathRelocation::AddUtf8(std::string& path, bool asUri)
     {
-        if (path.empty())
-            return false;
-        const auto raw = Engine::Utf8ToPath(path);
-        const auto physical = Engine::PlatformPath::Normalize(Engine::PlatformPath::ResolveUri(raw));
-        const auto mapped = Engine::PlatformPath::RemapFilePath(physical, m_Changes);
-        if (physical == mapped)
-            return false;
-        auto text = Engine::WStrToStr(asUri || Engine::PlatformPath::IsVirtualUri(raw.wstring())
-            ? Engine::PlatformPath::ToVirtualUri(mapped) : mapped.wstring());
-        m_Updates.emplace_back([&path, text = std::move(text)]() mutable { path.swap(text); });
-        return true;
+        return Engine::PlatformPath::PrepareUtf8FilePathUpdate(path, m_Changes, m_Utf8Updates, asUri);
+    }
+
+    bool AssetPathRelocation::AddTimelineNotifyPaths(std::vector<Engine::TimelineNotifyTrack>& tracks)
+    {
+        const auto previousSize = m_Utf8Updates.size();
+        Engine::ActionTimelineAsset::PrepareNotifyPathRelocation(tracks, m_Changes, m_Utf8Updates);
+        return m_Utf8Updates.size() != previousSize;
     }
 
     bool AssetPathRelocation::PrepareScenePaths(entt::registry& registry)
@@ -67,9 +65,9 @@ namespace Editor
             if (Affects(registry.get<Engine::GraphBindingComponent>(entity).graphFile)) return false;
         for (const auto entity : std::as_const(registry).view<Engine::ActionTimelineComponent>())
         {
-            const auto& timeline = registry.get<Engine::ActionTimelineComponent>(entity);
-            if (Affects(Engine::Utf8ToPath(timeline.timelinePath)) ||
-                Affects(Engine::Utf8ToPath(timeline.loadedTimelinePath))) return false;
+            auto& timeline = registry.get<Engine::ActionTimelineComponent>(entity);
+            AddUtf8(timeline.timelinePath, true);
+            AddUtf8(timeline.loadedTimelinePath, true);
         }
         for (const auto entity : std::as_const(registry).view<Engine::AnimatorComponent>())
         {
@@ -84,9 +82,12 @@ namespace Editor
     {
         for (auto& update : m_Updates)
             update();
+        for (auto& update : m_Utf8Updates)
+            update.Apply();
         for (auto& action : m_AfterCommit)
             action();
         m_Updates.clear();
+        m_Utf8Updates.clear();
         m_AfterCommit.clear();
     }
 }

@@ -115,7 +115,7 @@ public:
 	}
 	const vec3& GetPlacementEulerDegrees() const { return m_PlacementEulerDegrees; }
 	const wstring& GetImportSourceUri() const { return m_ImportSourceUri; }
-	bool CanRelocateFilePaths(const vector<FilePathChange>& changes) const override
+	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>&) override
 	{
 		return !PlatformPath::IsFilePathAffected(m_ImportSourceUri, changes);
 	}

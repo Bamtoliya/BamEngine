@@ -12,6 +12,13 @@ namespace Engine
         std::filesystem::path After;
     };
 
+    struct Utf8FilePathUpdate
+    {
+        std::string* Path;
+        std::string Replacement;
+        void Apply() noexcept { Path->swap(Replacement); }
+    };
+
     class ENGINE_API PlatformPath
     {
     public:
@@ -23,6 +30,8 @@ namespace Engine
         // Physical paths only; no filesystem access. Windows path components compare without case.
         static std::filesystem::path RemapFilePath(const std::filesystem::path& path,
             const std::vector<FilePathChange>& changes);
+        static bool PrepareUtf8FilePathUpdate(std::string& path, const std::vector<FilePathChange>& changes,
+            std::vector<Utf8FilePathUpdate>& updates, bool asUri = false);
 
         // 프로젝트 루트 설정 및 조회
         static void SetProjectRoot(const std::filesystem::path& root);

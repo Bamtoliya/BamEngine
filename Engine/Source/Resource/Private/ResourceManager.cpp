@@ -151,7 +151,7 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 	if (extension == L".json" || extension == L".beve")
 	{
 		const wstring embeddedExtension = ToLowerExt(absolutePath.stem().extension().wstring());
-		if (embeddedExtension.rfind(L".bam", 0) == 0)
+		if (embeddedExtension.rfind(L".bam", 0) == 0 || embeddedExtension == L".actiontimeline")
 			logicalExtension = embeddedExtension;
 	}
 

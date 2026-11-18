@@ -37,16 +37,32 @@ void ActionTimelineAsset::Free()
 	m_CameraTracks.clear();
 }
 
-bool ActionTimelineAsset::CanRelocateFilePaths(const vector<FilePathChange>& changes) const
+void ActionTimelineAsset::PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,
+	const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates)
 {
-	if (PlatformPath::IsFilePathAffected(Utf8ToPath(m_ModelPath), changes))
-		return false;
-	for (const auto& track : m_NotifyTracks)
-		for (const auto& notify : track.Notifies)
-			if (PlatformPath::IsFilePathAffected(Utf8ToPath(notify.SoundPath), changes) ||
-				PlatformPath::IsFilePathAffected(Utf8ToPath(notify.VFXPath), changes))
-				return false;
-	return true;
+	for (auto& track : tracks)
+		for (auto& notify : track.Notifies)
+		{
+			PlatformPath::PrepareUtf8FilePathUpdate(notify.SoundPath, changes, updates, true);
+			PlatformPath::PrepareUtf8FilePathUpdate(notify.VFXPath, changes, updates, true);
+		}
+}
+
+bool ActionTimelineAsset::PrepareFilePathRelocation(const vector<FilePathChange>& changes,
+	vector<Utf8FilePathUpdate>& updates)
+{
+	const auto previousSize = updates.size();
+	PlatformPath::PrepareUtf8FilePathUpdate(m_ModelPath, changes, updates, true);
+	PrepareNotifyPathRelocation(m_NotifyTracks, changes, updates);
+	return updates.size() == previousSize || GetPath().empty() || IsProjectJsonDocument(GetPath());
+}
+
+bool ActionTimelineAsset::IsProjectJsonDocument(const std::filesystem::path& pathOrUri)
+{
+	const auto path = PlatformPath::ResolveUri(pathOrUri);
+	const auto extension = ToLowerStr(WStrToStr(path.extension().wstring()));
+	return PlatformPath::IsProjectUri(PlatformPath::ToVirtualUri(path)) &&
+		(extension == ".json" || extension == ".actiontimeline");
 }
 
 ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
@@ -81,9 +97,10 @@ bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 
 bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 {
-	std::filesystem::path fullPath = PlatformPath::ResolveUri(filePath);
+	const auto path = Utf8ToPath(filePath);
+	std::filesystem::path fullPath = PlatformPath::ResolveUri(path);
 	if (!std::filesystem::exists(fullPath))
-		fullPath = PlatformPath::ResolveProjectRelative(Utf8ToPath(filePath));
+		fullPath = PlatformPath::ResolveProjectRelative(path);
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(fullPath);
 	if (!loadRes) return false;

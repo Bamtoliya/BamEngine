@@ -7,6 +7,8 @@
 #include <utility>
 #include <entt/entity/fwd.hpp>
 
+namespace Engine { struct TimelineNotifyTrack; }
+
 namespace Editor
 {
     // Prepared on the UI thread, applied synchronously only after the disk and ResourceManager commit.
@@ -23,6 +25,7 @@ namespace Editor
         bool Rewrites(const std::filesystem::path& path) const;
         bool Add(std::filesystem::path& path);
         bool AddUtf8(std::string& path, bool asUri = false);
+        bool AddTimelineNotifyPaths(std::vector<Engine::TimelineNotifyTrack>& tracks);
         bool PrepareScenePaths(entt::registry& registry);
         void AfterCommit(std::function<void()> action) { m_AfterCommit.push_back(std::move(action)); }
         void Apply();
@@ -31,6 +34,7 @@ namespace Editor
         std::vector<Engine::FilePathChange> m_Changes;
         std::vector<std::filesystem::path> m_Documents;
         std::vector<std::function<void()>> m_Updates;
+        std::vector<Engine::Utf8FilePathUpdate> m_Utf8Updates;
         std::vector<std::function<void()>> m_AfterCommit;
     };
 }

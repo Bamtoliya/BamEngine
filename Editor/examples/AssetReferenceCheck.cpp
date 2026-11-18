@@ -4,6 +4,8 @@
 #include "Engine_Includes.h"
 #include "ResourceManager.h"
 #include "AssetPathRelocation.h"
+#include "ActionTimelineAsset.h"
+#include "ReflectionRegistry.h"
 
 #include <algorithm>
 #include <chrono>
@@ -57,9 +59,90 @@ namespace
     public:
         RelocationProbe() : Resource(Engine::EResourceType::Unknown) {}
         void Free() override {}
-        bool CanRelocateFilePaths(const std::vector<Engine::FilePathChange>&) const override { return AllowRelocation; }
+        bool PrepareFilePathRelocation(const std::vector<Engine::FilePathChange>&,
+            std::vector<Engine::Utf8FilePathUpdate>&) override { return AllowRelocation; }
         bool AllowRelocation = true;
     };
+
+    bool CheckTimelineRelocation(const fs::path& assets, const fs::path& recovery)
+    {
+        using Validator = Editor::AssetReferenceValidator;
+        using Path = Engine::PlatformPath;
+        auto& manager = Engine::ResourceManager::Get();
+        const auto scenario = assets / L"TimelineScene.bamscene.json";
+        const auto folder = assets / L"TimelineDependencies";
+        const auto target = assets / L"타임라인 이동";
+        const auto timeline = folder / L"Attack.actiontimeline.json";
+        const auto model = folder / L"Actor.bammodel";
+        const auto sound = folder / L"Hit.wav";
+        const auto vfx = folder / L"Impact.bamvfx";
+        fs::create_directory(folder);
+        fs::create_directory(recovery);
+        const auto uri = [](const fs::path& path) { return Engine::WStrToStr(Path::ToVirtualUri(path)); };
+
+        if (!WriteFixture(scenario, R"({"Scene":{"Components":[
+            {"Type":"Engine::ActionTimelineComponent","Data":{"timelinePath":"Resources/TimelineDependencies/Attack.actiontimeline.json"}},
+            {"Type":"Custom::Component","Data":{"timelinePath":"Project://TimelineDependencies/Attack.actiontimeline.json"}}
+            ]}})") || !WriteFixture(model, "") || !WriteFixture(sound, "") || !WriteFixture(vfx, "")) return false;
+
+        std::unique_ptr<Engine::Resource> fixture(Engine::ActionTimelineAsset::CreateEmpty());
+        auto& source = static_cast<Engine::ActionTimelineAsset&>(*fixture);
+        source.SetModelPath(uri(model));
+        auto& notify = source.GetNotifyTracks().emplace_back().Notifies.emplace_back();
+        notify.SoundPath = uri(sound);
+        notify.VFXPath = uri(vfx);
+        notify.EventTag = uri(sound);
+        if (!source.SaveToFile(uri(timeline))) return false;
+
+        auto handle = Engine::ResourceHandle<Engine::ActionTimelineAsset>(manager.LoadFile(uri(timeline)));
+        auto* loaded = handle.Get();
+        if (!loaded) return false;
+        const auto originalTimeline = ReadFixture(timeline);
+        const auto originalScene = ReadFixture(scenario);
+        const std::vector<Editor::AssetPathMove> changes{ { folder, target } };
+        std::vector<Editor::AssetReferenceEdit> edits;
+        const auto impact = Validator::AnalyzeMove({ folder });
+        if (!impact.IsComplete || impact.References.size() != 4 || !ExpectValidBuildScene(scenario) ||
+            !Validator::PrepareMoveReferences(changes, edits) || edits.size() != 2) return false;
+
+        const auto checkPaths = [&](const fs::path& directory)
+        {
+            const auto& movedNotify = loaded->GetNotifyTracks().front().Notifies.front();
+            return handle.Get() == loaded && loaded->GetModelPath() == uri(directory / model.filename()) &&
+                movedNotify.SoundPath == uri(directory / sound.filename()) && movedNotify.VFXPath == uri(directory / vfx.filename()) &&
+                movedNotify.EventTag == uri(sound);
+        };
+        bool attempted = false;
+        if (manager.RelocateFileResources(changes, [&]() { attempted = true; return false; }) || !attempted ||
+            !checkPaths(folder) || ReadFixture(timeline) != originalTimeline) return false;
+
+        const auto replay = [&](bool forward)
+        {
+            const auto& before = forward ? folder : target;
+            const auto& after = forward ? target : folder;
+            return manager.RelocateFileResources({ { before, after } }, [&]()
+            {
+                fs::rename(before, after);
+                if (Validator::ApplyMoveReferences(edits, forward, recovery) == Editor::EAssetReferenceWriteResult::Success)
+                    return true;
+                fs::rename(after, before);
+                return false;
+            });
+        };
+        const auto movedTimeline = target / timeline.filename();
+        if (!replay(true) || !ExpectValidBuildScene(scenario) || !checkPaths(target) ||
+            manager.FindHandleByFilePath(movedTimeline) != handle.GetRawHandle()) return false;
+        if (!source.LoadFromFile(uri(movedTimeline)) || source.GetModelPath() != loaded->GetModelPath() ||
+            source.GetNotifyTracks() != loaded->GetNotifyTracks()) return false;
+        const auto movedScene = ReadFixture(scenario);
+        const auto movedContents = ReadFixture(movedTimeline);
+        if (movedScene.find(uri(timeline)) == std::string::npos ||
+            movedScene.find(uri(movedTimeline)) == std::string::npos) return false;
+
+        return replay(false) && checkPaths(folder) && ReadFixture(scenario) == originalScene &&
+            ReadFixture(timeline) == originalTimeline && replay(true) && checkPaths(target) &&
+            ReadFixture(scenario) == movedScene && ReadFixture(movedTimeline) == movedContents;
+    }
 }
 
 int RunAssetReferenceChecks()
@@ -430,6 +513,9 @@ int RunAssetReferenceChecks()
     if (!manager.RelocateFileResources({ { upperPath, material } }, []() { return true; }) ||
         manager.FindHandleByKey(oldKey) != raw)
         return 47;
+    if (!fs::remove(invalid) || !Engine::ReflectionRegistry::Create()) return 50;
+    struct ReflectionScope { ~ReflectionScope() { Engine::ReflectionRegistry::Destroy(); } } reflection;
+    if (!CheckTimelineRelocation(assets, root / L"TimelineRecovery")) return 51;
     return 0;
 }
 
