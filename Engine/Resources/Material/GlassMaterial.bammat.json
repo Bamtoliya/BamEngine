@@ -5,7 +5,7 @@
         "Version": 0
     },
     "m_BlendMode": 2,
-    "m_CullMode": 0,
+    "m_CullMode": 2,
     "m_DepthCompareOp": 1,
     "m_DepthMode": 1,
     "m_FillMode": 1,
