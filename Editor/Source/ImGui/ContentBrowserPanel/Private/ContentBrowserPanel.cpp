@@ -1153,9 +1153,9 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 			moves.push_back({ source, target, ReadBrowserFileIdentity(source) });
 			sources.push_back(source);
 		}
-		auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+		AssetReferenceImpact impact;
 		vector<AssetReferenceEdit> references;
-		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, references);
+		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, references, &impact);
 		m_MoveDocumentsAvailable = CanApplyAssetMove(moves, references);
 		m_MoveSourcePaths = std::move(sources);
 		m_MoveDestination = destination;

@@ -6,6 +6,13 @@
 #include "AssetPathRelocation.h"
 #include "ActionTimelineAsset.h"
 #include "ReflectionRegistry.h"
+#include "GraphFile.h"
+#include "GraphSystem.h"
+#include "GraphBindingComponent.h"
+#include "PrefabInstanceComponent.h"
+#include "SceneManager.h"
+#include "Entity.h"
+#include <archive/JsonArchive.h>
 
 #include <algorithm>
 #include <chrono>
@@ -63,6 +70,91 @@ namespace
             std::vector<Engine::Utf8FilePathUpdate>&) override { return AllowRelocation; }
         bool AllowRelocation = true;
     };
+
+    bool CheckPrefabGraphRelocation(const fs::path& assets, const fs::path& recovery)
+    {
+        using Path = Engine::PlatformPath;
+        using Validator = Editor::AssetReferenceValidator;
+        if (!Engine::SceneManager::Create()) return false;
+        struct SceneManagerScope { ~SceneManagerScope() { Engine::SceneManager::Destroy(); } } sceneManagerScope;
+        auto& scenes = Engine::SceneManager::Get();
+        if (scenes.NewScene() != Engine::EResult::Success) return false;
+        auto* scene = scenes.GetCurrentScene();
+        auto& registry = scene->GetRegistry();
+
+        const auto folder = assets / L"MovePrefabGraph";
+        const auto target = assets / L"프리팹 그래프";
+        const auto graphFile = folder / L"Behavior.bamgraph.json";
+        const auto prefabFile = folder / L"Actor.bamprefab.json";
+        const auto sceneFile = assets / L"PrefabGraph.bamscene.json";
+        const std::wstring legacyGraph = L"Resources/MovePrefabGraph/Behavior.json";
+        fs::create_directory(folder);
+        fs::create_directory(recovery);
+
+        Engine::GraphRegistry nodes;
+        Engine::Graph graph;
+        const auto& reflection = Engine::ReflectionRegistry::Get();
+        if (!nodes.RegisterBuiltins().Succeeded() || !graph.AddNode(nodes, "Event.Start").Succeeded() ||
+            !Engine::SaveGraphJson(graphFile, graph, nodes, reflection.GetRegistry(), reflection.GetPropertyCodecs()).Succeeded())
+            return false;
+        auto& root = scene->CreateEntity();
+        registry.emplace<Engine::GraphBindingComponent>(root.GetEntityHandle()).graphFile = legacyGraph;
+        archive::JsonArchive prefabWriter;
+        if (scenes.SavePrefab(prefabWriter, prefabFile.wstring(), root) != Engine::EResult::Success) return false;
+        archive::JsonArchive prefabReader;
+        Engine::Entity* instance = nullptr;
+        if (scenes.InstantiatePrefab(prefabReader, Path::ToVirtualUri(prefabFile), instance) != Engine::EResult::Success ||
+            !instance) return false;
+        archive::JsonArchive sceneWriter;
+        if (!scene->WriteArchive(sceneWriter) || !sceneWriter.SaveToFile(sceneFile)) return false;
+
+        const auto release = [](Engine::GraphSystem* system) { if (system) system->Release(); };
+        std::unique_ptr<Engine::GraphSystem, decltype(release)> graphSystem(Engine::GraphSystem::Create(), release);
+        if (!graphSystem) return false;
+        const auto* cached = graphSystem->GetOrLoadGraph(legacyGraph);
+        if (!cached || cached != graphSystem->GetOrLoadGraph(Path::ToVirtualUri(graphFile))) return false;
+        auto& runtime = registry.emplace<Engine::GraphRuntimeState>(root.GetEntityHandle());
+        runtime.loadedPath = legacyGraph;
+        runtime.sourcePath = Engine::GraphSystem::ResolveGraphPath(legacyGraph).wstring();
+        runtime.hasStarted = true;
+
+        const std::vector<Editor::AssetPathMove> moves{ { folder, target } };
+        Editor::AssetReferenceImpact impact;
+        std::vector<Editor::AssetReferenceEdit> edits;
+        const auto originalScene = ReadFixture(sceneFile);
+        const auto originalPrefab = ReadFixture(prefabFile);
+        if (!ExpectValidBuildScene(sceneFile) || !Validator::PrepareMoveReferences(moves, edits, &impact) ||
+            !impact.IsComplete || impact.References.size() != 3 || edits.size() != 2) return false;
+
+        const auto replay = [&](bool forward)
+        {
+            const auto& before = forward ? folder : target;
+            const auto& after = forward ? target : folder;
+            Editor::AssetPathRelocation relocation({ { before, after } }, { sceneFile, before / prefabFile.filename() });
+            if (!relocation.PrepareScenePaths(registry) || !Validator::ValidateMoveReferences(edits, forward)) return false;
+            fs::rename(before, after);
+            if (Validator::ApplyMoveReferences(edits, forward, recovery) != Editor::EAssetReferenceWriteResult::Success) return false;
+            relocation.Apply();
+            graphSystem->InvalidateGraphCache([&](const fs::path& path) { return relocation.Affects(path); });
+            return true;
+        };
+        const auto movedGraph = target / graphFile.filename();
+        const auto movedPrefab = target / prefabFile.filename();
+        if (!replay(true) || !ExpectValidBuildScene(sceneFile) || graphSystem->GetOrLoadGraph(legacyGraph) ||
+            !graphSystem->GetOrLoadGraph(Path::ToVirtualUri(movedGraph)) || !runtime.hasStarted ||
+            runtime.loadedPath != Path::ToVirtualUri(movedGraph) || !Path::IsSamePath(runtime.sourcePath, movedGraph) ||
+            registry.get<Engine::PrefabInstanceComponent>(instance->GetEntityHandle()).prefabAssetPath !=
+                Path::ToVirtualUri(movedPrefab)) return false;
+
+        archive::JsonArchive reopened;
+        Engine::Entity* reloaded = nullptr;
+        if (scenes.InstantiatePrefab(reopened, Path::ToVirtualUri(movedPrefab), reloaded) != Engine::EResult::Success ||
+            !reloaded || registry.get<Engine::GraphBindingComponent>(reloaded->GetEntityHandle()).graphFile !=
+                Path::ToVirtualUri(movedGraph)) return false;
+        return replay(false) && ReadFixture(sceneFile) == originalScene && ReadFixture(prefabFile) == originalPrefab &&
+            runtime.loadedPath == Path::ToVirtualUri(graphFile) && runtime.hasStarted &&
+            replay(true) && runtime.loadedPath == Path::ToVirtualUri(movedGraph);
+    }
 
     bool CheckTimelineRelocation(const fs::path& assets, const fs::path& recovery)
     {
@@ -255,6 +347,12 @@ int RunAssetReferenceChecks()
         std::cerr << "Move analysis must keep internal references and report an incomplete scan.\n";
         return 11;
     }
+
+    Editor::AssetReferenceImpact incompletePlan;
+    std::vector<Editor::AssetReferenceEdit> discardedEdits;
+    if (Editor::AssetReferenceValidator::PrepareMoveReferences({ { materials, assets / L"MovedMaterials" } },
+        discardedEdits, &incompletePlan) || incompletePlan.IsComplete || incompletePlan.References.size() != 2 ||
+        !discardedEdits.empty()) return 53;
 
     if (!fs::remove(invalid))
         return 7;
@@ -516,6 +614,7 @@ int RunAssetReferenceChecks()
     if (!fs::remove(invalid) || !Engine::ReflectionRegistry::Create()) return 50;
     struct ReflectionScope { ~ReflectionScope() { Engine::ReflectionRegistry::Destroy(); } } reflection;
     if (!CheckTimelineRelocation(assets, root / L"TimelineRecovery")) return 51;
+    if (!CheckPrefabGraphRelocation(assets, root / L"PrefabGraphRecovery")) return 52;
     return 0;
 }
 

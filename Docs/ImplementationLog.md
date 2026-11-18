@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 배치된 프리팹·그래프 이동과 참조 조사 통합
+
+- 저장된 씬·프리팹의 `PrefabInstanceComponent.prefabAssetPath`와 `GraphBindingComponent.graphFile`을 참조 조사와 이동 트랜잭션에 연결했다. 열린 메인 씬과 씬 이력의 참조는 파일 기록 후 갱신한다. 프리팹 원본 열기·선택·덮어쓰기·재생성은 `Project://`를 물리 경로로 해석한다. 별도의 프리팹 편집 씬과 미저장 편집에 대한 보호를 유지한다.
+- 그래프가 사용하는 경로 해석을 참조 검사와 공유한다. 그래프 캐시와 중단점은 전체 파일 경로로 구분한다. 정상 이동·Undo/Redo에서 영향받는 캐시를 무효화하고 중단점을 갱신한다. 실행기는 새 경로를 적용해도 현재 변수와 `Start` 실행 여부를 유지하며, 디버그 알림은 실행 당시의 경로를 사용한다. 편집 중인 그래프의 내용 갱신과 노드 일반 문자열은 제외 범위다.
+- 이동 확인창의 사용처와 갱신 계획은 같은 프로젝트 스캔을 공유한다. 확인 후 실행 및 Undo/Redo에서는 사용처와 보관 원문을 다시 검증한다. 스캔이 불완전하면 수집된 사용처를 보여주고 적용을 차단한다.
+- `AssetReferenceCheck`에 실제 프리팹 재생성, 그래프 레거시 별칭·캐시 갱신, 한글 폴더 이동, 정확한 원문 복원과 불완전 스캔을 추가했다. `EditorHistoryCheck`에 씬 이력의 프리팹·그래프 경로 회귀를 추가했다. [콘텐츠 브라우저 계획](ImGuiDevelopmentPlan.md#g-콘텐츠-브라우저-파일-작업과-계층-선택)과 [그래프 편집기](GraphPanel.md)에 현행 범위를 기록했다.
+- 이전 액션 타임라인 커밋 뒤의 CTest 로그에서 세 검사 통과를 확인했다. 이 변경은 공백 검사와 코드 경로를 정적으로 확인했으며, 빌드·CTest와 프리팹/그래프 실환경 조작은 사용자 검증 전이다.
+
 ### [2026-11-18] 액션 타임라인 참조의 에셋 이동·이름 변경 지원
 
 - 씬의 `ActionTimelineComponent.timelinePath`와 JSON 타임라인의 모델·노티파이 사운드·VFX 경로를 기존 참조 수집, 빌드 씬 검사, 파일 이동 Undo/Redo에 연결했다. 타임라인은 `AssetHeader.ResourceType`과 지정된 필드 위치로 식별한다. `.actiontimeline`과 `.actiontimeline.json` 런타임 로딩도 JSON 경로에 연결했다.

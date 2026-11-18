@@ -12,6 +12,7 @@
 #include "EntityClipboard.h"
 #include "ShortcutManager.h"
 #include "PrefabInstanceComponent.h"
+#include "PlatformPath.h"
 #include "PrefabModeManager.h"
 #include "SelectionManager.h"
 #include "ReflectionInspectorSupport.h"
@@ -630,7 +631,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                         if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL("Prefab.Open")).c_str()))
                             PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
                         if (ImGui::MenuItem((std::string(ICON_FA_LOCATION_ARROW " ") + LOCAL("Prefab.Select")).c_str()))
-                            SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
+                            SelectionManager::Get().SetSelectedAsset(Engine::PlatformPath::ResolveUri(prefabComp->prefabAssetPath));
                         if (ImGui::MenuItem((std::string(ICON_FA_LINK_SLASH " ") + LOCAL("Prefab.Unpack")).c_str()))
                             action.UnpackPrefab = prefabRoot;
                     }

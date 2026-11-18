@@ -6,6 +6,7 @@
 #include "ActionTimelineComponent.h"
 #include "PrefabInstanceComponent.h"
 #include "GraphBindingComponent.h"
+#include "GraphSystem.h"
 #include <algorithm>
 #include <entt/entity/registry.hpp>
 
@@ -56,13 +57,33 @@ namespace Editor
         return m_Utf8Updates.size() != previousSize;
     }
 
+    void AssetPathRelocation::AddWidePath(std::wstring& path, const std::filesystem::path& physical, bool asUri)
+    {
+        const auto before = Engine::PlatformPath::Normalize(physical);
+        const auto after = Engine::PlatformPath::RemapFilePath(before, m_Changes);
+        if (after == before) return;
+        auto replacement = asUri ? Engine::PlatformPath::ToVirtualUri(after) : after.wstring();
+        m_Updates.emplace_back([&path, replacement = std::move(replacement)]() mutable { path.swap(replacement); });
+    }
+
     bool AssetPathRelocation::PrepareScenePaths(entt::registry& registry)
     {
-        // These strings are outside the saved-reference writer's supported fields.
         for (const auto entity : std::as_const(registry).view<Engine::PrefabInstanceComponent>())
-            if (Affects(registry.get<Engine::PrefabInstanceComponent>(entity).prefabAssetPath)) return false;
+        {
+            auto& prefab = registry.get<Engine::PrefabInstanceComponent>(entity);
+            AddWidePath(prefab.prefabAssetPath, Engine::PlatformPath::ResolveUri(prefab.prefabAssetPath), true);
+        }
         for (const auto entity : std::as_const(registry).view<Engine::GraphBindingComponent>())
-            if (Affects(registry.get<Engine::GraphBindingComponent>(entity).graphFile)) return false;
+        {
+            auto& binding = registry.get<Engine::GraphBindingComponent>(entity);
+            AddWidePath(binding.graphFile, Engine::GraphSystem::ResolveGraphPath(binding.graphFile), true);
+            if (auto* runtime = registry.try_get<Engine::GraphRuntimeState>(entity))
+            {
+                const std::filesystem::path physical(runtime->sourcePath);
+                AddWidePath(runtime->loadedPath, physical, true);
+                AddWidePath(runtime->sourcePath, physical, false);
+            }
+        }
         for (const auto entity : std::as_const(registry).view<Engine::ActionTimelineComponent>())
         {
             auto& timeline = registry.get<Engine::ActionTimelineComponent>(entity);

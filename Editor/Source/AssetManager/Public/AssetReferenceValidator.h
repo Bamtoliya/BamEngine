@@ -73,7 +73,8 @@ namespace Editor
         static AssetReferenceImpact AnalyzeMove(const std::vector<std::filesystem::path>& targets);
 
         // Prepare without writing. Reject incomplete scans and edits outside the project asset root.
-        static bool PrepareMoveReferences(const std::vector<AssetPathMove>& moves, std::vector<AssetReferenceEdit>& edits);
+        static bool PrepareMoveReferences(const std::vector<AssetPathMove>& moves, std::vector<AssetReferenceEdit>& edits,
+            AssetReferenceImpact* impact = nullptr);
         static bool ValidateMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward);
         // Call after the corresponding file moves. Hold write locks and restore all touched documents on failure.
         static EAssetReferenceWriteResult ApplyMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward,

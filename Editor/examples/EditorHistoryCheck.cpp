@@ -13,6 +13,8 @@
 #include "AnimatorComponent.h"
 #include "ActionTimelineAsset.h"
 #include "ActionTimelineComponent.h"
+#include "GraphBindingComponent.h"
+#include "PrefabInstanceComponent.h"
 #include "SceneManager.h"
 #include "EditorDocumentController.h"
 #include "SplineComponent.h"
@@ -686,6 +688,19 @@ namespace
         timelineComponent.timelinePath = Engine::WStrToStr(timelinePath.wstring());
         timelineComponent.loadedTimelinePath = timelineComponent.timelinePath;
         timelineComponent.currentTime = 0.5f;
+        const auto prefabPath = directory / L"이전.bamprefab.json";
+        const auto movedPrefabPath = directory / L"이동.bamprefab.json";
+        const auto graphPath = directory / L"이전.bamgraph.json";
+        const auto movedGraphPath = directory / L"이동.bamgraph.json";
+        auto& world = document.GetScene()->GetRegistry();
+        auto& prefab = world.emplace<Engine::PrefabInstanceComponent>(animatedHandle);
+        prefab.prefabAssetPath = prefabPath.wstring();
+        auto& graph = world.emplace<Engine::GraphBindingComponent>(animatedHandle);
+        graph.graphFile = graphPath.wstring();
+        {
+            std::ofstream file(graphPath, std::ios::trunc);
+            Check(bool(file), "graph path fixture creation");
+        }
         animator.controllerPath = Engine::WStrToStr(controller.wstring());
         animator.loadedControllerPath = animator.controllerPath;
         animator.stateMachineAsset = std::make_shared<Engine::AnimatorStateMachine>();
@@ -696,11 +711,12 @@ namespace
             document.GetScene()->SetName(L"controller history");
         }
         Check(history.MarkSaved() && history.CanUndo(), "controller history setup");
-        Editor::AssetPathRelocation controllerMove({ { controller, renamedController }, { timelinePath, movedTimelinePath } },
-            { document.GetPath() });
+        Editor::AssetPathRelocation controllerMove({ { controller, renamedController }, { timelinePath, movedTimelinePath },
+            { prefabPath, movedPrefabPath }, { graphPath, movedGraphPath } }, { document.GetPath() });
         Check(document.PrepareAssetPathRelocation(controllerMove), "loaded controller relocation rejected");
         Check(animator.controllerPath == Engine::WStrToStr(controller.wstring()), "controller changed during preparation");
         Check(timelineComponent.timelinePath == Engine::WStrToStr(timelinePath.wstring()), "timeline changed during preparation");
+        std::filesystem::rename(graphPath, movedGraphPath);
         controllerMove.Apply();
         Check(animator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)) &&
             animator.loadedControllerPath == animator.controllerPath && animator.stateMachineAsset == stateMachine &&
@@ -715,13 +731,22 @@ namespace
             "scene undo restored a stale controller path");
         Check(document.GetScene()->GetRegistry().get<Engine::ActionTimelineComponent>(animatedHandle).timelinePath ==
             movedTimelineUri, "scene undo restored a stale timeline path");
+        Check(world.get<Engine::PrefabInstanceComponent>(animatedHandle).prefabAssetPath ==
+            Engine::PlatformPath::ToVirtualUri(movedPrefabPath), "scene undo restored a stale prefab path");
+        Check(world.get<Engine::GraphBindingComponent>(animatedHandle).graphFile ==
+            Engine::PlatformPath::ToVirtualUri(movedGraphPath), "scene undo restored a stale graph path");
         Check(history.MarkSaved(), "controller reverse baseline");
-        Editor::AssetPathRelocation controllerReverse({ { renamedController, controller } }, { document.GetPath() });
+        Editor::AssetPathRelocation controllerReverse({ { renamedController, controller }, { movedPrefabPath, prefabPath },
+            { movedGraphPath, graphPath } }, { document.GetPath() });
         Check(document.PrepareAssetPathRelocation(controllerReverse), "controller reverse preparation");
+        std::filesystem::rename(movedGraphPath, graphPath);
         controllerReverse.Apply();
         Check(history.Redo(), "controller relocation lost scene redo");
         Check(document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(animatedHandle).controllerPath ==
             Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(controller)), "scene redo restored a stale controller path");
+        Check(world.get<Engine::PrefabInstanceComponent>(animatedHandle).prefabAssetPath ==
+            Engine::PlatformPath::ToVirtualUri(prefabPath) && world.get<Engine::GraphBindingComponent>(animatedHandle).graphFile ==
+            Engine::PlatformPath::ToVirtualUri(graphPath), "scene redo restored a stale prefab or graph path");
 
         const auto unicodeController = directory / L"컨트롤러 이동.bamanimator.json";
         const auto unicodeTimeline = directory / L"타임라인 이동.bamtimeline.json";

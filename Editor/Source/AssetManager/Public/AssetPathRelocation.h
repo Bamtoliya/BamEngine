@@ -31,6 +31,7 @@ namespace Editor
         void Apply();
 
     private:
+        void AddWidePath(std::wstring& path, const std::filesystem::path& physical, bool asUri);
         std::vector<Engine::FilePathChange> m_Changes;
         std::vector<std::filesystem::path> m_Documents;
         std::vector<std::function<void()>> m_Updates;

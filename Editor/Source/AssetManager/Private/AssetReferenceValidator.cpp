@@ -1,6 +1,7 @@
 ﻿#include "AssetReferenceValidator.h"
 #include "PlatformPath.h"
 #include "AnimatorStateMachine.h"
+#include "GraphSystem.h"
 #include "ResourceBinaryHeader.h"
 #include "Logger.h"
 #include <algorithm>
@@ -48,7 +49,7 @@ namespace Editor
             return true;
         }
 
-        enum class ReferenceKind { Handle, AnimatorController, Timeline };
+        enum class ReferenceKind { Handle, AnimatorController, DirectFile, Graph };
         using ReferenceFields = std::map<std::pair<std::string, ReferenceKind>, const char*>;
         using ReferenceJson = glz::generic_u64;
 
@@ -109,16 +110,19 @@ namespace Editor
                 {
                     if (auto* fields = data->second.template get_if<Json::object_t>())
                     {
+                        const auto visitPath = [&](const char* key, ReferenceKind kind)
+                        {
+                            if (const auto* path = readString(*fields, key); path && !path->empty())
+                                visit(*fields, key, kind);
+                        };
                         if (*type == "Engine::AnimatorComponent")
-                        {
-                            if (const auto* path = readString(*fields, "controllerPath"); path && !path->empty())
-                                visit(*fields, "controllerPath", ReferenceKind::AnimatorController);
-                        }
+                            visitPath("controllerPath", ReferenceKind::AnimatorController);
                         else if (*type == "Engine::ActionTimelineComponent")
-                        {
-                            if (const auto* path = readString(*fields, "timelinePath"); path && !path->empty())
-                                visit(*fields, "timelinePath", ReferenceKind::Timeline);
-                        }
+                            visitPath("timelinePath", ReferenceKind::DirectFile);
+                        else if (*type == "Engine::PrefabInstanceComponent")
+                            visitPath("prefabAssetPath", ReferenceKind::DirectFile);
+                        else if (*type == "Engine::GraphBindingComponent")
+                            visitPath("graphFile", ReferenceKind::Graph);
                     }
                 }
 
@@ -149,7 +153,7 @@ namespace Editor
                 const auto entry = fields.find(key);
                 if (entry == fields.end()) return;
                 const auto* path = entry->second.template get_if<std::string>();
-                if (path && !path->empty()) visit(fields, key, ReferenceKind::Timeline);
+                if (path && !path->empty()) visit(fields, key, ReferenceKind::DirectFile);
             };
             visitPath(root, "m_ModelPath");
 
@@ -178,6 +182,7 @@ namespace Editor
         std::filesystem::path ResolveDocumentReference(const std::filesystem::path& rawPath, ReferenceKind kind)
         {
             using Path = Engine::PlatformPath;
+            if (kind == ReferenceKind::Graph) return Engine::GraphSystem::ResolveGraphPath(rawPath);
             const auto wide = rawPath.wstring();
             auto resolved = rawPath;
             if (!rawPath.has_root_path() || Path::IsVirtualUri(wide))
@@ -608,11 +613,12 @@ namespace Editor
     }
 
     bool AssetReferenceValidator::PrepareMoveReferences(const std::vector<AssetPathMove>& moves,
-        std::vector<AssetReferenceEdit>& edits)
+        std::vector<AssetReferenceEdit>& edits, AssetReferenceImpact* impact)
     {
         namespace fs = std::filesystem;
         using Path = Engine::PlatformPath;
         edits.clear();
+        if (impact) *impact = { {}, false };
         try
         {
             std::vector<AssetPathMove> canonicalMoves;
@@ -631,17 +637,28 @@ namespace Editor
                 canonicalMoves.push_back({ before, after });
             }
             // Resolve casing and relative paths once, before using component-wise prefix matching.
-            const auto scan = ScanProject();
-            if (std::ranges::any_of(scan.Issues, [](const auto& issue)
-                { return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument; }))
-                return false;
+            auto scan = ScanProject();
+            const bool complete = std::ranges::none_of(scan.Issues, [](const auto& issue)
+            {
+                return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument;
+            });
 
             std::set<fs::path> documents;
-            for (const auto& link : scan.References)
+            for (auto& link : scan.References)
             {
-                if (remap(link.Target) != link.Target)
-                    documents.insert(link.Source);
+                if (remap(link.Target) == link.Target) continue;
+                documents.insert(link.Source);
+                if (impact) impact->References.push_back(std::move(link));
             }
+            if (impact)
+            {
+                impact->IsComplete = complete;
+                std::ranges::sort(impact->References, [](const auto& lhs, const auto& rhs)
+                {
+                    return std::tie(lhs.Source, lhs.Target) < std::tie(rhs.Source, rhs.Target);
+                });
+            }
+            if (!complete) return false;
             std::vector<AssetReferenceEdit> prepared;
             for (const auto& source : documents)
             {

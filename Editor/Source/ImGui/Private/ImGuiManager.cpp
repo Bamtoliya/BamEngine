@@ -16,6 +16,8 @@
 #pragma endregion
 
 #include "PlatformPath.h"
+#include "GraphSystem.h"
+#include "SystemManager.h"
 #include "Functions.h"
 #include "ImGuiManager.h"
 #include "Application.h"
@@ -1489,6 +1491,14 @@ bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) cons
 	{
 		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
 		if (editor && !editor->PrepareAssetPathRelocation(relocation)) return false;
+	}
+	if (Engine::SystemManager::IsCreated())
+	{
+		if (auto* graphSystem = Engine::SystemManager::Get().GetSystem<Engine::GraphSystem>())
+		{
+			const auto affects = [&relocation](const std::filesystem::path& path) { return relocation.Affects(path); };
+			relocation.AfterCommit([graphSystem, affects]() { graphSystem->InvalidateGraphCache(affects); });
+		}
 	}
 	if (EntityClipboard::HasData())
 	{

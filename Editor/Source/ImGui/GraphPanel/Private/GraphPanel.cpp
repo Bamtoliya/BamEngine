@@ -3,6 +3,8 @@
 #include "AssetPathRelocation.h"
 #include "GraphMessageLocalization.h"
 #include "GraphSystem.h"
+#include "PlatformPath.h"
+#include <algorithm>
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include "FileDialogs.h"
@@ -15,6 +17,19 @@
 
 namespace ed = ax::NodeEditor;
 
+namespace
+{
+	auto FindGraphBreakpointSet(auto& breakpoints, const std::filesystem::path& path)
+	{
+		const auto exact = breakpoints.find(path.wstring());
+		if (exact != breakpoints.end()) return exact;
+		return std::ranges::find_if(breakpoints, [&path](const auto& entry)
+		{
+			return Engine::PlatformPath::IsSamePath(entry.first, path);
+		});
+	}
+}
+
 bool GraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
 {
 	// Graph values can contain paths without resource handles; only a filename change is supported here.
@@ -23,6 +38,25 @@ bool GraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
 		return false;
 	relocation.Add(m_Logic.FilePath);
 	relocation.Add(m_Shader.FilePath);
+	decltype(m_Breakpoints) movedBreakpoints;
+	for (const auto& [key, nodes] : m_Breakpoints)
+	{
+		const auto path = Engine::PlatformPath::Normalize(key);
+		const auto mapped = Engine::PlatformPath::RemapFilePath(path, relocation.Changes());
+		if (mapped != path) movedBreakpoints.emplace(mapped.wstring(), nodes);
+	}
+	if (!movedBreakpoints.empty())
+	{
+		auto updated = m_Breakpoints;
+		std::erase_if(updated, [&relocation, &movedBreakpoints](const auto& entry)
+		{
+			const auto path = Engine::PlatformPath::Normalize(entry.first);
+			return Engine::PlatformPath::RemapFilePath(path, relocation.Changes()) != path ||
+				FindGraphBreakpointSet(movedBreakpoints, path) != movedBreakpoints.end();
+		});
+		updated.merge(movedBreakpoints);
+		relocation.AfterCommit([this, updated = std::move(updated)]() mutable { m_Breakpoints.swap(updated); });
+	}
 	return true;
 }
 
@@ -41,8 +75,7 @@ GraphPanel::GraphPanel()
 
 	Engine::GraphSystem::SetNodeExecuteHook([this](const std::wstring& path, Engine::GraphNodeId node)
 		{
-			const auto key = std::filesystem::path(path).filename().wstring();
-			auto it = m_Breakpoints.find(key);
+			auto it = FindGraphBreakpointSet(m_Breakpoints, path);
 			if (it != m_Breakpoints.end() && it->second.contains(node))
 			{
 				m_HitBreakpointNode = node;
@@ -999,22 +1032,22 @@ void GraphPanel::DrawStatus()
 #pragma region Debugging
 void GraphPanel::ToggleBreakpoint(Engine::GraphNodeId node)
 {
-	if (node == 0) return;
-	const auto key = GetDocument().FilePath.filename().wstring();
-	if (key.empty()) return;
+	if (node == 0 || GetDocument().FilePath.empty()) return;
+	const auto path = Engine::PlatformPath::ResolveUri(GetDocument().FilePath);
+	auto it = FindGraphBreakpointSet(m_Breakpoints, path);
+	if (it == m_Breakpoints.end()) it = m_Breakpoints.try_emplace(path.wstring()).first;
 
-	auto& set = m_Breakpoints[key];
-	if (set.contains(node)) set.erase(node);
-	else set.insert(node);
+	auto& set = it->second;
+	if (set.erase(node) == 0) set.insert(node);
+	if (set.empty()) m_Breakpoints.erase(it);
 }
 
 bool GraphPanel::HasBreakpoint(Engine::GraphNodeId node) const
 {
-	if (node == 0) return false;
-	const auto key = GetDocument().FilePath.filename().wstring();
-	if (key.empty()) return false;
+	if (node == 0 || m_Breakpoints.empty() || GetDocument().FilePath.empty()) return false;
+	const auto path = Engine::PlatformPath::ResolveUri(GetDocument().FilePath);
 
-	auto it = m_Breakpoints.find(key);
+	auto it = FindGraphBreakpointSet(m_Breakpoints, path);
 	return it != m_Breakpoints.end() && it->second.contains(node);
 }
 #pragma endregion
