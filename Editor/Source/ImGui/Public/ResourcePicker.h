@@ -205,6 +205,173 @@ namespace Editor
 
 		bool DrawResourceContextMenu(const std::filesystem::path& resourcePath);
 		bool RequestOpenResourceEditor(const std::filesystem::path& resourcePath);
+
+		// 피커 목록의 한 줄(썸네일·이름·경로·배지)을 그린다. 리소스 피커와 경로 피커가 같은 모양을 쓰도록 공유한다.
+		struct PickerItemView
+		{
+			std::string_view Id;
+			std::string_view Filename;
+			std::string_view SubPath;
+			ResourceVisual Visual;
+			std::filesystem::path ContextPath;
+			ImTextureID Texture{};
+			ImVec2 UV0 = ImVec2(0.0f, 0.0f);
+			ImVec2 UV1 = ImVec2(1.0f, 1.0f);
+			ImVec2 CropSize = ImVec2(0.0f, 0.0f); // 0보다 크면 비율을 유지해 맞춘다(스프라이트). 아니면 칸 전체를 채운다.
+		};
+
+		// 클릭되면 true를 돌려준다. 컨텍스트 메뉴에서 에디터 열기를 요청하면 openEditorRequested를 켠다.
+		inline bool DrawPickerItem(const PickerItemView& item, bool isSelected, float thumbSize, float itemHeight, bool& openEditorRequested)
+		{
+			const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+			const float availWidth = ImGui::GetContentRegionAvail().x;
+
+			ImGui::PushID(item.Id.data(), item.Id.data() + item.Id.size());
+			const bool clicked = ImGui::Selectable("##ItemSelectable", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
+			const bool isHovered = ImGui::IsItemHovered();
+
+			if (DrawResourceContextMenu(item.ContextPath)) openEditorRequested = true;
+
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+			// 1) 좌측 대형 썸네일 박스 (itemHeight 세로 중앙 정렬)
+			const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
+			const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
+			const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
+			drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.12f, 0.95f)), 6.0f);
+
+			ImVec2 imgMin = thumbMin;
+			ImVec2 imgMax = thumbMax;
+			ImVec2 tooltipImgSize(128.0f, 128.0f);
+			if (item.Texture && item.CropSize.x > 0.0f && item.CropSize.y > 0.0f)
+			{
+				const float scale = thumbSize / std::max(item.CropSize.x, item.CropSize.y);
+				const ImVec2 fitSize(item.CropSize.x * scale, item.CropSize.y * scale);
+				imgMin = ImVec2(thumbMin.x + (thumbSize - fitSize.x) * 0.5f, thumbMin.y + (thumbSize - fitSize.y) * 0.5f);
+				imgMax = ImVec2(imgMin.x + fitSize.x, imgMin.y + fitSize.y);
+
+				const float tipScale = 128.0f / std::max(item.CropSize.x, item.CropSize.y);
+				tooltipImgSize = ImVec2(item.CropSize.x * tipScale, item.CropSize.y * tipScale);
+			}
+
+			if (item.Texture)
+			{
+				drawList->AddImage(item.Texture, imgMin, imgMax, item.UV0, item.UV1);
+			}
+			else
+			{
+				ImFont* font = ImGui::GetFont();
+				const float iconFontSize = thumbSize * 0.45f;
+				const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, item.Visual.Icon);
+				const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
+				drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(item.Visual.Color), item.Visual.Icon);
+			}
+			drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.15f)), 6.0f);
+
+			// 2) 우측 정보 레이아웃
+			const auto& visual = item.Visual;
+			const float textStartX = thumbMax.x + 12.0f;
+			const float lineHeight = ImGui::GetTextLineHeight();
+			const float iconWidth = ImGui::CalcTextSize(visual.Icon).x;
+			const float iconHeight = ImGui::CalcTextSize(visual.Icon).y;
+			const float badgeTextWidth = ImGui::CalcTextSize(visual.Badge).x;
+			const float badgeTextHeight = ImGui::CalcTextSize(visual.Badge).y;
+
+			const float badgePadX = 10.0f;
+			const float badgePadY = 5.0f;
+			const float badgeSpacing = 7.0f;
+			const float totalBadgeWidth = badgePadX * 2.0f + iconWidth + badgeSpacing + badgeTextWidth;
+			const float badgeHeight = std::max(iconHeight, badgeTextHeight) + badgePadY * 2.0f;
+
+			const float rightReserved = isSelected ? 34.0f : 12.0f;
+			const float badgeStartX = cursorPos.x + availWidth - totalBadgeWidth - rightReserved;
+			const float badgeStartY = cursorPos.y + (itemHeight - badgeHeight) * 0.5f;
+
+			if (thumbSize >= 48.0f)
+			{
+				const ImVec2 badgeBoxMin = ImVec2(badgeStartX, badgeStartY);
+				const ImVec2 badgeBoxMax = ImVec2(badgeBoxMin.x + totalBadgeWidth, badgeBoxMin.y + badgeHeight);
+
+				drawList->AddRectFilled(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.18f)), 6.0f);
+				drawList->AddRect(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.45f)), 6.0f, 0, 1.2f);
+
+				const ImVec2 iconPos = ImVec2(badgeBoxMin.x + badgePadX, badgeBoxMin.y + (badgeHeight - iconHeight) * 0.5f);
+				const ImVec2 textPos = ImVec2(iconPos.x + iconWidth + badgeSpacing, badgeBoxMin.y + (badgeHeight - badgeTextHeight) * 0.5f);
+
+				drawList->AddText(iconPos, ImGui::GetColorU32(visual.Color), visual.Icon);
+				drawList->AddText(textPos, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.95f)), visual.Badge);
+			}
+
+			const float textCenterY = cursorPos.y + (itemHeight * 0.5f);
+			const float spacingY = 3.0f;
+			const float nameY = item.SubPath.empty() ? (textCenterY - lineHeight * 0.5f) : (textCenterY - lineHeight - spacingY * 0.5f);
+			const float pathY = textCenterY + spacingY * 0.5f;
+			const ImU32 nameColor = ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text));
+
+			drawList->AddText(ImVec2(textStartX, nameY), nameColor, item.Filename.data(), item.Filename.data() + item.Filename.size());
+			if (!item.SubPath.empty())
+				drawList->AddText(ImVec2(textStartX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), item.SubPath.data(), item.SubPath.data() + item.SubPath.size());
+
+			if (isSelected)
+			{
+				const ImVec2 checkPos = ImVec2(cursorPos.x + availWidth - 24.0f, cursorPos.y + (itemHeight - 16.0f) * 0.5f);
+				drawList->AddText(checkPos, ImGui::GetColorU32(ImVec4(0.35f, 0.95f, 0.45f, 1.0f)), ICON_FA_CHECK);
+			}
+
+			if (isHovered && !openEditorRequested)
+			{
+				ImGui::BeginTooltip();
+				if (item.Texture)
+				{
+					ImGui::Image(item.Texture, tooltipImgSize, item.UV0, item.UV1);
+					ImGui::Separator();
+				}
+				ImGui::TextUnformatted(item.Filename.data(), item.Filename.data() + item.Filename.size());
+				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+				ImGui::TextUnformatted(item.SubPath.data(), item.SubPath.data() + item.SubPath.size());
+				ImGui::PopStyleColor();
+				ImGui::EndTooltip();
+			}
+
+			ImGui::PopID();
+			return clicked;
+		}
+
+		// 피커 목록 맨 위의 '연결 해제' 항목을 그린다. 클릭되면 true를 돌려준다.
+		inline bool DrawPickerClearItem(bool isSelected, float thumbSize, float itemHeight)
+		{
+			const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+			const float availWidth = ImGui::GetContentRegionAvail().x;
+
+			ImGui::PushID("##ClearResourceItem");
+			const bool clicked = ImGui::Selectable("##ClearSelectable", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
+			if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LocalizeInspectorText("ResourcePicker.Clear").c_str());
+
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
+			const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
+			const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
+			drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.35f, 0.15f, 0.15f, 0.85f)), 6.0f);
+			drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.85f, 0.35f, 0.35f, 0.6f)), 6.0f);
+
+			ImFont* font = ImGui::GetFont();
+			const float iconFontSize = thumbSize * 0.45f;
+			const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, ICON_FA_BAN);
+			const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
+			drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(ImVec4(0.95f, 0.40f, 0.40f, 1.0f)), ICON_FA_BAN);
+
+			const float textStartX = thumbMax.x + 12.0f;
+			drawList->AddText(ImVec2(textStartX, cursorPos.y + 6.0f), ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)), LocalizeInspectorText("ResourcePicker.Clear").c_str());
+			drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f), ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
+
+			if (isSelected)
+			{
+				const ImVec2 checkPos = ImVec2(cursorPos.x + availWidth - 26.0f, cursorPos.y + (itemHeight - 18.0f) * 0.5f);
+				drawList->AddText(checkPos, ImGui::GetColorU32(ImVec4(0.35f, 0.95f, 0.45f, 1.0f)), ICON_FA_CHECK);
+			}
+			ImGui::PopID();
+			return clicked;
+		}
 	}
 
 	template<typename T>
@@ -543,38 +710,15 @@ namespace Editor
 			bool openEditorRequested = false;
 			auto drawResourceItem = [&](const CachedAssetEntry& entry, bool isSelected, auto onSelect)
 				{
-					const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-					const float availWidth = ImGui::GetContentRegionAvail().x;
-
-					ImGui::PushID(entry.UniqueId.c_str());
-					const bool clicked = ImGui::Selectable("##ItemSelectable", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight));
-					const bool isHovered = ImGui::IsItemHovered();
-
-					if (Detail::DrawResourceContextMenu(entry.FullPath)) openEditorRequested = true;
-
-					ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-					// 1) 좌측 대형 썸네일 박스 (itemHeight 세로 중앙 정렬)
-					const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
-					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
-					const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
-					drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.12f, 0.12f, 0.12f, 0.95f)), 6.0f);
-
-					ImTextureID texID = 0;
-					ImVec2 uv0(0.0f, 0.0f);
-					ImVec2 uv1(1.0f, 1.0f);
-					ImVec2 imgMin = thumbMin;
-					ImVec2 imgMax = thumbMax;
-					ImVec2 tooltipImgSize(128.0f, 128.0f);
-
+					Detail::PickerItemView view{ entry.UniqueId, entry.Filename, entry.SubPath, Detail::GetResourceVisual<T>(entry.Filename), entry.FullPath };
 					if (entry.DirectTexture != nullptr)
 					{
-						texID = Detail::GetResourcePickerTextureID(entry.DirectTexture);
+						view.Texture = Detail::GetResourcePickerTextureID(entry.DirectTexture);
 					}
 					else if (!entry.FullPath.empty())
 					{
 						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(entry.FullPath))
-							texID = Detail::GetResourcePickerTextureID(rhiTex);
+							view.Texture = Detail::GetResourcePickerTextureID(rhiTex);
 
 						if constexpr (std::is_same_v<T, Engine::Sprite>)
 						{
@@ -591,155 +735,29 @@ namespace Editor
 								const auto fieldThumb = Detail::GetResourceFieldThumbnail(sp);
 								if (fieldThumb.Texture)
 								{
-									texID = Detail::GetResourcePickerTextureID(fieldThumb.Texture);
-									uv0 = fieldThumb.UV0;
-									uv1 = fieldThumb.UV1;
-
-									const float cropW = static_cast<float>(fieldThumb.Texture->GetWidth()) * (uv1.x - uv0.x);
-									const float cropH = static_cast<float>(fieldThumb.Texture->GetHeight()) * (uv1.y - uv0.y);
-									if (cropW > 0.0f && cropH > 0.0f)
-									{
-										const float scale = thumbSize / std::max(cropW, cropH);
-										const ImVec2 fitSize(cropW * scale, cropH * scale);
-										imgMin = ImVec2(thumbMin.x + (thumbSize - fitSize.x) * 0.5f, thumbMin.y + (thumbSize - fitSize.y) * 0.5f);
-										imgMax = ImVec2(imgMin.x + fitSize.x, imgMin.y + fitSize.y);
-
-										const float tipScale = 128.0f / std::max(cropW, cropH);
-										tooltipImgSize = ImVec2(cropW * tipScale, cropH * tipScale);
-									}
+									view.Texture = Detail::GetResourcePickerTextureID(fieldThumb.Texture);
+									view.UV0 = fieldThumb.UV0;
+									view.UV1 = fieldThumb.UV1;
+									view.CropSize = ImVec2(static_cast<float>(fieldThumb.Texture->GetWidth()) * (view.UV1.x - view.UV0.x), static_cast<float>(fieldThumb.Texture->GetHeight()) * (view.UV1.y - view.UV0.y));
 								}
 							}
 						}
 					}
-
-					if (texID)
-					{
-						drawList->AddImage(texID, imgMin, imgMax, uv0, uv1);
-					}
-					else
-					{
-						const auto visual = Detail::GetResourceVisual<T>(entry.Filename);
-						ImFont* font = ImGui::GetFont();
-						const float iconFontSize = thumbSize * 0.45f;
-						const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, visual.Icon);
-						const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
-						drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(visual.Color), visual.Icon);
-					}
-					drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.15f)), 6.0f);
-
-					// 2) 우측 정보 레이아웃
-					const float textStartX = thumbMax.x + 12.0f;
-					const auto visual = Detail::GetResourceVisual<T>(entry.Filename);
-					const float lineHeight = ImGui::GetTextLineHeight();
-					const float iconWidth = ImGui::CalcTextSize(visual.Icon).x;
-					const float iconHeight = ImGui::CalcTextSize(visual.Icon).y;
-					const float badgeTextWidth = ImGui::CalcTextSize(visual.Badge).x;
-					const float badgeTextHeight = ImGui::CalcTextSize(visual.Badge).y;
-
-					const float badgePadX = 10.0f;
-					const float badgePadY = 5.0f;
-					const float badgeSpacing = 7.0f;
-					const float totalBadgeWidth = badgePadX * 2.0f + iconWidth + badgeSpacing + badgeTextWidth;
-					const float badgeHeight = std::max(iconHeight, badgeTextHeight) + badgePadY * 2.0f;
-
-					const float rightReserved = isSelected ? 34.0f : 12.0f;
-					const float badgeStartX = cursorPos.x + availWidth - totalBadgeWidth - rightReserved;
-					const float badgeStartY = cursorPos.y + (itemHeight - badgeHeight) * 0.5f;
-
-					if (thumbSize >= 48.0f)
-					{
-						const ImVec2 badgeBoxMin = ImVec2(badgeStartX, badgeStartY);
-						const ImVec2 badgeBoxMax = ImVec2(badgeBoxMin.x + totalBadgeWidth, badgeBoxMin.y + badgeHeight);
-
-						drawList->AddRectFilled(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.18f)), 6.0f);
-						drawList->AddRect(badgeBoxMin, badgeBoxMax, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.45f)), 6.0f, 0, 1.2f);
-
-						const ImVec2 iconPos = ImVec2(badgeBoxMin.x + badgePadX, badgeBoxMin.y + (badgeHeight - iconHeight) * 0.5f);
-						const ImVec2 textPos = ImVec2(iconPos.x + iconWidth + badgeSpacing, badgeBoxMin.y + (badgeHeight - badgeTextHeight) * 0.5f);
-
-						drawList->AddText(iconPos, ImGui::GetColorU32(visual.Color), visual.Icon);
-						drawList->AddText(textPos, ImGui::GetColorU32(ImVec4(visual.Color.x, visual.Color.y, visual.Color.z, 0.95f)), visual.Badge);
-					}
-
-					const float textCenterY = cursorPos.y + (itemHeight * 0.5f);
-					const float spacingY = 3.0f;
-					const float nameY = entry.SubPath.empty() ? (textCenterY - lineHeight * 0.5f) : (textCenterY - lineHeight - spacingY * 0.5f);
-					const float pathY = textCenterY + spacingY * 0.5f;
-
-					drawList->AddText(ImVec2(textStartX, nameY), ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)), entry.Filename.c_str());
-
-					if (!entry.SubPath.empty())
-					{
-						drawList->AddText(ImVec2(textStartX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), entry.SubPath.c_str());
-					}
-
-					if (isSelected)
-					{
-						const ImVec2 checkPos = ImVec2(cursorPos.x + availWidth - 24.0f, cursorPos.y + (itemHeight - 16.0f) * 0.5f);
-						drawList->AddText(checkPos, ImGui::GetColorU32(ImVec4(0.35f, 0.95f, 0.45f, 1.0f)), ICON_FA_CHECK);
-					}
-
-					if (isHovered && !openEditorRequested)
-					{
-						ImGui::BeginTooltip();
-						if (texID)
-						{
-							ImGui::Image(texID, tooltipImgSize, uv0, uv1);
-							ImGui::Separator();
-						}
-						ImGui::Text("%s", entry.Filename.c_str());
-						ImGui::TextDisabled("%s", entry.SubPath.c_str());
-						ImGui::EndTooltip();
-					}
-
-					if (clicked) onSelect();
-
-					ImGui::PopID();
+					if (Detail::DrawPickerItem(view, isSelected, thumbSize, itemHeight, openEditorRequested))
+						onSelect();
 				};
 
 			// ── 4. 리스트 스크롤 영역 (ImGuiListClipper 기반 가상 스크롤) ──
 			if (ImGui::BeginChild("##ResourceListRegion", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 			{
 				// 최상단: 리소스 할당 해제 (None / Clear)
+				if (Detail::DrawPickerClearItem(current == nullptr, thumbSize, itemHeight))
 				{
-					const bool isNoneSelected = (current == nullptr);
-					const ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-					const float availWidth = ImGui::GetContentRegionAvail().x;
-
-					ImGui::PushID("##ClearResourceItem");
-					if (ImGui::Selectable("##ClearSelectable", isNoneSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(availWidth, itemHeight)))
-					{
-						value.Reset();
-						changed = true;
-						failed = false;
-						s_SearchBuffer[0] = '\0';
-						ImGui::CloseCurrentPopup();
-					}
-					if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LocalizeInspectorText("ResourcePicker.Clear").c_str());
-
-					ImDrawList* drawList = ImGui::GetWindowDrawList();
-					const float thumbOffsetY = (itemHeight - thumbSize) * 0.5f;
-					const ImVec2 thumbMin = ImVec2(cursorPos.x + 4.0f, cursorPos.y + thumbOffsetY);
-					const ImVec2 thumbMax = ImVec2(thumbMin.x + thumbSize, thumbMin.y + thumbSize);
-					drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.35f, 0.15f, 0.15f, 0.85f)), 6.0f);
-					drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(ImVec4(0.85f, 0.35f, 0.35f, 0.6f)), 6.0f);
-
-					ImFont* font = ImGui::GetFont();
-					const float iconFontSize = thumbSize * 0.45f;
-					const ImVec2 iconTextSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, ICON_FA_BAN);
-					const ImVec2 iconPos = ImVec2(thumbMin.x + (thumbSize - iconTextSize.x) * 0.5f, thumbMin.y + (thumbSize - iconTextSize.y) * 0.5f);
-					drawList->AddText(font, iconFontSize, iconPos, ImGui::GetColorU32(ImVec4(0.95f, 0.40f, 0.40f, 1.0f)), ICON_FA_BAN);
-
-					const float textStartX = thumbMax.x + 12.0f;
-					drawList->AddText(ImVec2(textStartX, cursorPos.y + 6.0f), ImGui::GetColorU32(isNoneSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text)), LocalizeInspectorText("ResourcePicker.Clear").c_str());
-					drawList->AddText(ImVec2(textStartX, cursorPos.y + 26.0f), ImGui::GetColorU32(ImGuiCol_TextDisabled), LocalizeInspectorText("ResourcePicker.ClearHint").c_str());
-
-					if (isNoneSelected)
-					{
-						const ImVec2 checkPos = ImVec2(cursorPos.x + availWidth - 26.0f, cursorPos.y + (itemHeight - 18.0f) * 0.5f);
-						drawList->AddText(checkPos, ImGui::GetColorU32(ImVec4(0.35f, 0.95f, 0.45f, 1.0f)), ICON_FA_CHECK);
-					}
-					ImGui::PopID();
+					value.Reset();
+					changed = true;
+					failed = false;
+					s_SearchBuffer[0] = '\0';
+					ImGui::CloseCurrentPopup();
 				}
 
 				ImGui::Spacing();

@@ -31,6 +31,26 @@
 #include "SplineComponent.h"
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
+#include "AssetPathPicker.h"
+
+namespace
+{
+	bool IsAnimatorControllerFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".animator") || name.ends_with(".animator.json") || name.ends_with(".bamanimator") || name.ends_with(".bamanimator.json");
+	}
+
+	bool IsActionTimelineFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".bamtimeline.json") || name.ends_with(".actiontimeline.json") || name.ends_with(".bamtimeline") || name.ends_with(".actiontimeline");
+	}
+
+	// 아이콘과 색은 콘텐츠 브라우저의 Animator·Timeline 표시와 맞춘다.
+	const Editor::AssetPathPickerDesc AnimatorControllerPicker{ { ICON_FA_DIAGRAM_PROJECT, ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" }, IsAnimatorControllerFile };
+	const Editor::AssetPathPickerDesc ActionTimelinePicker{ { ICON_FA_STOPWATCH, ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" }, IsActionTimelineFile };
+}
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -1193,31 +1213,23 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			ImGui::Spacing();
 			ImGui::Separator();
 
-			// ── Animator Controller 에셋 로드 UI ──
+			// ── Animator Controller 에셋 선택 UI ──
 			ImGui::Text("%s", LOCAL_CSTR("Animator.ControllerPath"));
-			char pathBuf[260] = {};
-			std::strncpy(pathBuf, animator.controllerPath.c_str(), sizeof(pathBuf) - 1);
-			const float folderBtnSize = ImGui::GetFrameHeight();
-			const float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
-			ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - folderBtnSize - itemSpacing));
-			if (ImGui::InputText("##ControllerPathInput", pathBuf, sizeof(pathBuf)))
+			std::string pickedController;
+			if (Editor::DrawInspectorAssetPathPicker(animator.controllerPath, pickedController, AnimatorControllerPicker))
 			{
-				animator.controllerPath = pathBuf;
-				changed = true;
-			}
-			ImGui::SameLine();
-			// 파일 탐색기 열기 버튼
-			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseController"), ImVec2(folderBtnSize, folderBtnSize)))
-			{
-				std::wstring selectedPath;
-				const std::vector<FileDialogFilter> filters{
-					{ Engine::StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.animator" },
-					{ Engine::StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
-				};
-				if (FileDialogs::OpenFileDialog(selectedPath, filters))
+				if (pickedController.empty())
 				{
-					animator.controllerPath = WStrToStr(selectedPath);
-					if (animator.LoadController(animator.controllerPath)) changed = true;
+					animator.ClearController();
+					changed = true;
+				}
+				else if (animator.LoadController(pickedController))
+				{
+					changed = true;
+				}
+				else
+				{
+					NotificationManager::Get().AddNotification(LOCAL("Animator.ControllerPath"), LOCAL("ResourcePicker.Rejected"), ELogLevel::Warn);
 				}
 			}
 			ImGui::Spacing();
@@ -1390,6 +1402,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		}
 		else if (object.Is<Engine::ActionTimelineComponent>())
 		{
+			componentSettings.HiddenProperties.insert("timelinePath");
 			bool isOpen = false;
 			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
 			if (isOpen)
@@ -1400,29 +1413,11 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 			// 1. 에셋 파일 브라우저 UI
 			ImGui::Text("%s", LOCAL_CSTR("Timeline.AssetFile"));
-			char pathBuf[260] = {};
-			std::strncpy(pathBuf, timeline.timelinePath.c_str(), sizeof(pathBuf) - 1);
-			const float browseBtnSize = ImGui::GetFrameHeight();
-			const float browseSpacing = ImGui::GetStyle().ItemSpacing.x;
-			ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - browseBtnSize - browseSpacing));
-			if (ImGui::InputText("##TimelinePathInput", pathBuf, sizeof(pathBuf)))
+			std::string pickedTimeline;
+			if (Editor::DrawInspectorAssetPathPicker(timeline.timelinePath, pickedTimeline, ActionTimelinePicker))
 			{
-				timeline.timelinePath = pathBuf;
+				timeline.timelinePath = std::move(pickedTimeline);
 				changed = true;
-			}
-			ImGui::SameLine();
-			if (ImGui::Button((ICON_FA_FOLDER_OPEN "##BrowseTimeline"), ImVec2(browseBtnSize, browseBtnSize)))
-			{
-				std::wstring selectedPath;
-				const std::vector<FileDialogFilter> filters{
-					{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" },
-					{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
-				};
-				if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Animation"))
-				{
-					timeline.timelinePath = Engine::WStrToStr(selectedPath);
-					changed = true;
-				}
 			}
 
 			// 2. 런타임 제어 툴바 (Play, Pause, Stop)

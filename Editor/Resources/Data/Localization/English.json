@@ -1162,6 +1162,8 @@
         "ResourcePicker.ScopeEngine": "Engine Built-in",
         "ResourcePicker.SearchHint": "Search resources...",
         "ResourcePicker.ThumbnailSizeHint": "Thumbnail Size ({}px ~ {}px)",
+        "ResourcePicker.OutsideRoots": "The file must be inside the project or engine resource folders.",
+        "ResourcePicker.NoMatchingFiles": "No matching files.",
         "ResourceType.Animation": "Animation",
         "ResourceType.AudioClip": "AudioClip",
         "ResourceType.Material": "Material",

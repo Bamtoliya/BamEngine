@@ -1161,6 +1161,8 @@ ResourcePicker,ScopeProject,Project,프로젝트
 ResourcePicker,ScopeEngine,Engine Built-in,엔진 내장
 ResourcePicker,SearchHint,Search resources...,리소스 검색...
 ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
+ResourcePicker,OutsideRoots,The file must be inside the project or engine resource folders.,파일이 프로젝트 또는 엔진 리소스 폴더 안에 있어야 합니다.
+ResourcePicker,NoMatchingFiles,No matching files.,일치하는 파일이 없습니다.
 ResourceType,Animation,Animation,애니메이션
 ResourceType,AudioClip,AudioClip,오디오 클립
 ResourceType,Material,Material,머티리얼

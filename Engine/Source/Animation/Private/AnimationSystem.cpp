@@ -49,9 +49,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 			{
 				if (animator.controllerPath.empty())
 				{
-					animator.stateMachineAsset.reset();
-					animator.runtimeState.BindStateMachine(nullptr);
-					animator.loadedControllerPath.clear();
+					animator.ClearController();
 				}
 				else if (!animator.LoadController(animator.controllerPath))
 				{
