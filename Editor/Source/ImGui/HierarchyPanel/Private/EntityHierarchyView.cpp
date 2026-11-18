@@ -17,6 +17,7 @@
 #include "SelectionManager.h"
 #include "ReflectionInspectorSupport.h"
 #include <cctype>
+#include <utility>
 
 namespace
 {
@@ -370,6 +371,8 @@ void Editor::EntityHierarchyView::ResetDrag()
 {
     if (m_DragSource) m_DragSource->Release();
     m_DragSource = nullptr;
+    m_DragAnchor = entt::null;
+    m_DragMembers.clear();
 }
 
 void Editor::EntityHierarchyView::ReleaseFinishedDrag()
@@ -389,6 +392,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     EntityHierarchyAction action;
     const bool selectableRows = multiSelect && !locked;
     std::vector<entt::entity> nextSelection(selected.begin(), selected.end());
+    entt::entity selectDragged = entt::null;
     const auto selectionId = [](entt::entity entity)
     {
         return static_cast<ImGuiSelectionUserData>(entt::to_integral(entity));
@@ -426,11 +430,35 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         EntityDragPayload source;
         if (payload->DataSize != static_cast<int>(sizeof(source))) { action.RejectedDrop = true; return; }
         std::memcpy(&source, payload->Data, sizeof(source));
-        if (source.Scene != &scene || !world.valid(source.Entity)) { action.RejectedDrop = true; return; }
-        const auto* id = world.try_get<Engine::IDComponent>(source.Entity);
-        if (!scene.FindEntity(source.Entity) || !id || id->id != source.PersistentId)
+        const auto isCurrent = [&](entt::entity entity, std::uint64_t persistentId)
+        {
+            const auto* id = world.valid(entity) ? world.try_get<Engine::IDComponent>(entity) : nullptr;
+            return id && persistentId != 0 && id->id == persistentId && scene.FindEntity(entity);
+        };
+        if (source.Scene != &scene || !isCurrent(source.Entity, source.PersistentId))
+        {
             action.RejectedDrop = true;
-        else action.Move = EntityHierarchyMove{ source.Entity, parent };
+            return;
+        }
+
+        std::vector<entt::entity> children;
+        if (m_DragSource == source.Scene && m_DragAnchor == source.Entity)
+        {
+            children.reserve(m_DragMembers.size());
+            for (const auto& member : m_DragMembers)
+            {
+                if (!isCurrent(member.Entity, member.PersistentId))
+                {
+                    action.RejectedDrop = true;
+                    return;
+                }
+                children.push_back(member.Entity);
+            }
+        }
+        else
+            children.push_back(source.Entity);
+
+        action.Move = EntityHierarchyMove{ std::move(children), parent, source.Entity };
     };
     const auto acceptPrefab = [&](entt::entity parent)
         {
@@ -567,15 +595,37 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             const auto* id = world.try_get<Engine::IDComponent>(entity);
             if (!locked && m_RenamingEntity != entity && id && id->id != 0 && ImGui::BeginDragDropSource())
             {
-                if (m_DragSource != &scene)
+                if (m_DragSource != &scene || m_DragAnchor != entity)
                 {
                     ResetDrag();
                     scene.AddRef();
                     m_DragSource = &scene;
+                    m_DragAnchor = entity;
+                    if (selectableRows && std::ranges::find(selected, entity) != selected.end())
+                    {
+                        for (const auto handle : selected)
+                        {
+                            const auto* memberId = world.valid(handle) ? world.try_get<Engine::IDComponent>(handle) : nullptr;
+                            m_DragMembers.push_back({ handle, memberId ? memberId->id : 0 });
+                        }
+                    }
+                    else
+                    {
+                        m_DragMembers.push_back({ entity, id->id });
+                        if (selectableRows)
+                            selectDragged = entity;
+                    }
                 }
+                // Single-entity drop targets still consume the original anchor payload.
                 const EntityDragPayload payload{ &scene, entity, id->id };
                 ImGui::SetDragDropPayload(EntityPayload, &payload, sizeof(payload));
-                ImGui::TextUnformatted(label.c_str());
+                if (m_DragMembers.size() > 1)
+                {
+                    const auto dragLabel = fmt::format(fmt::runtime(Text("Hierarchy.DragSelection")), m_DragMembers.size());
+                    ImGui::TextUnformatted(dragLabel.c_str());
+                }
+                else
+                    ImGui::TextUnformatted(label.c_str());
                 ImGui::EndDragDropSource();
             }
             if (!locked && ImGui::BeginDragDropTarget())
@@ -813,6 +863,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     {
         ImGui::Unindent(selectionGutter);
         applyRequests(*ImGui::EndMultiSelect());
+        if (selectDragged != entt::null)
+            nextSelection.assign(1, selectDragged);
         if (!std::ranges::equal(selected, nextSelection))
             action.Selection = std::move(nextSelection);
     }

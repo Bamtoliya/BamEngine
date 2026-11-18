@@ -657,18 +657,25 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
     {
         auto& history = Application::Get().GetEditHistory();
         auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
-        auto* child = scene->FindEntity(action.Move->Child);
-        auto* parent = scene->FindEntity(action.Move->Parent);
-        const bool editLocked = child && TransformPropertyEditor::HasAnyLock(
-            scene->GetRegistry(), child->GetEntityHandle());
-		const bool canCapture = !history.Enabled() || before;
-		const auto result = !editLocked && canCapture && child && (parent || action.Move->Parent == entt::null) ?
-            scene->ReparentEntity(*child, parent) : EntityReparentResult::InvalidEntity;
+        const auto& move = *action.Move;
+        auto* parent = scene->FindEntity(move.Parent);
+        std::vector<Engine::Entity*> children;
+        children.reserve(move.Children.size());
+        bool editLocked = false;
+        for (const auto entity : move.Children)
+        {
+            auto* child = scene->FindEntity(entity);
+            children.push_back(child);
+            editLocked |= child && TransformPropertyEditor::HasAnyLock(scene->GetRegistry(), entity);
+        }
+        const bool canCapture = !history.Enabled() || before;
+        const auto result = !editLocked && canCapture && (parent || move.Parent == entt::null) ?
+            scene->ReparentEntities(children, parent) : EntityReparentResult::InvalidEntity;
         switch (result)
         {
         case EntityReparentResult::Success:
             history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.Reparent");
-            m_RevealEntity = action.Move->Child;
+            m_RevealEntity = move.Anchor;
             [[fallthrough]];
         case EntityReparentResult::Unchanged: m_HierarchyMessage.clear(); break;
         case EntityReparentResult::Cycle:

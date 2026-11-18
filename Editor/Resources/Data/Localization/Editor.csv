@@ -576,6 +576,7 @@ Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 
 Hierarchy,DeleteEntityAndChildren,Delete entity and children,엔티티와 자식 삭제
 Hierarchy,DeleteSelectedEntities,Delete Selected Entities,선택한 엔티티 삭제
 Hierarchy,DepthLimitReached,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
+Hierarchy,DragSelection,Move {} selected entities,선택한 엔티티 {}개 이동
 Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
 Hierarchy,Duplicate,Duplicate,복제
 Hierarchy,EditFailed,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.

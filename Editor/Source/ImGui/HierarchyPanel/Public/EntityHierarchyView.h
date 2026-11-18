@@ -24,8 +24,9 @@ namespace Editor
 
     struct EntityHierarchyMove
     {
-        entt::entity Child = entt::null;
+        std::vector<entt::entity> Children;
         entt::entity Parent = entt::null;
+        entt::entity Anchor = entt::null;
     };
 
     struct EntityHierarchyAction
@@ -77,7 +78,15 @@ namespace Editor
         void ReleaseFinishedDrag();
         void ResetDrag();
     private:
+        struct DragMember
+        {
+            entt::entity Entity;
+            std::uint64_t PersistentId;
+        };
+
         Engine::Scene* m_DragSource = nullptr;
+        entt::entity m_DragAnchor = entt::null;
+        std::vector<DragMember> m_DragMembers;
         entt::entity m_RenamingEntity = entt::null;
         char m_RenameBuffer[128] = "";
         bool m_FocusRenameInput = false;

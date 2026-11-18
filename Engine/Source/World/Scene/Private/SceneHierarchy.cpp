@@ -3,6 +3,11 @@
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include <glm/gtx/matrix_decompose.hpp>
+#include <algorithm>
+#include <optional>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 
 namespace
 {
@@ -119,84 +124,172 @@ namespace
 
 Engine::EntityReparentResult Engine::Scene::ReparentEntity(Entity& child, Entity* parent)
 {
+    Entity* children[] = { &child };
+    return ReparentEntities(children, parent);
+}
+
+Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* const> children, Entity* parent)
+{
     using Result = EntityReparentResult;
     auto& world = m_LocalRegistry;
-    const auto handle = child.GetEntityHandle();
     const auto target = parent ? parent->GetEntityHandle() : entt::null;
-    if (child.GetScene() != this || !world.valid(handle) || FindEntity(handle) != &child ||
-        (parent && (parent->GetScene() != this || !world.valid(target) || FindEntity(target) != parent)))
+    const auto belongsToScene = [&](const Entity* entity)
+    {
+        return entity && entity->GetScene() == this && world.valid(entity->GetEntityHandle()) &&
+            FindEntity(entity->GetEntityHandle()) == entity;
+    };
+    if (parent && !belongsToScene(parent))
         return Result::InvalidEntity;
-    if (handle == target) return Result::Cycle;
+
+    std::vector<entt::entity> selection;
+    std::unordered_set<entt::entity> selected;
+    for (const auto* child : children)
+    {
+        if (!belongsToScene(child))
+            return Result::InvalidEntity;
+        const auto handle = child->GetEntityHandle();
+        if (selected.insert(handle).second)
+            selection.push_back(handle);
+    }
+    if (selection.empty()) return Result::Unchanged;
+    if (selected.contains(target)) return Result::Cycle;
     if (!ValidHierarchy(*this)) return Result::InvalidHierarchy;
-    const auto* previous = world.try_get<HierarchyComponent>(handle);
-    const auto oldParent = previous ? previous->parent : entt::null;
-    if (oldParent == target) return Result::Unchanged;
-    // UI reparenting needs anchor/size preservation, not a 3D TRS decomposition.
-    if (world.any_of<CanvasComponent, RectTransformComponent>(handle) ||
-        (parent && world.any_of<CanvasComponent, RectTransformComponent>(target))) return Result::InvalidTransform;
-    if (!world.all_of<TransformComponent, WorldTransformComponent>(handle) ||
-        (parent && !world.all_of<TransformComponent, WorldTransformComponent>(target)))
-        return Result::InvalidTransform;
 
+    const auto getParent = [&world](entt::entity entity)
+    {
+        const auto* link = world.try_get<HierarchyComponent>(entity);
+        return link ? link->parent : entt::null;
+    };
     std::size_t parentDepth = 0;
-    for (auto current = target; current != entt::null;)
+    for (auto current = target; current != entt::null; current = getParent(current))
     {
-        if (current == handle) return Result::Cycle;
+        if (selected.contains(current)) return Result::Cycle;
         ++parentDepth;
-        const auto* link = world.try_get<HierarchyComponent>(current);
-        current = link ? link->parent : entt::null;
-    }
-    std::vector<std::pair<entt::entity, std::size_t>> pending{ { handle, parentDepth + 1 } };
-    while (!pending.empty())
-    {
-        const auto [current, depth] = pending.back();
-        pending.pop_back();
-        if (depth > MaxDepth) return Result::DepthLimit;
-        if (const auto* link = world.try_get<HierarchyComponent>(current))
-            for (const auto descendant : link->children) pending.emplace_back(descendant, depth + 1);
     }
 
-    const auto desiredWorld = WorldMatrix(world, handle);
-    const auto parentWorld = WorldMatrix(world, target);
-    if (!desiredWorld || !parentWorld) return Result::InvalidTransform;
-    auto candidate = world.get<TransformComponent>(handle);
-    glm::dmat4 local;
-    glm::mat4 rebuilt;
-    if (!TransformSystem::TryGetLocalMatrix(glm::mat4(*parentWorld), candidate.absolute, glm::mat4(*desiredWorld), local) ||
-        !TransformSystem::TryAssignLocalMatrix(candidate, local) ||
-        !TransformSystem::TryComposeWorld(candidate, glm::mat4(*parentWorld), rebuilt) ||
-        !HierarchyMatches(glm::dmat4(rebuilt), *desiredWorld)) return Result::InvalidTransform;
-
-    // Stage vector edits before changing either side. Allocation exceptions are outside the transaction contract.
-    HierarchyComponent childLink = previous ? *previous : HierarchyComponent{};
-    auto oldLink = oldParent != entt::null ? world.get<HierarchyComponent>(oldParent) : HierarchyComponent{};
-    auto newLink = target != entt::null && world.all_of<HierarchyComponent>(target) ?
-        world.get<HierarchyComponent>(target) : HierarchyComponent{};
-    const bool hadChildLink = previous != nullptr;
-    const bool hadParentLink = target != entt::null && world.all_of<HierarchyComponent>(target);
-    const auto childBefore = childLink, oldBefore = oldLink, parentBefore = newLink;
-    const auto transformBefore = world.get<TransformComponent>(handle);
-    std::erase(oldLink.children, handle);
-    if (target != entt::null) newLink.children.push_back(handle);
-    childLink.parent = target;
-    static_cast<void>(world.get_or_emplace<HierarchyComponent>(handle));
-    if (target != entt::null) static_cast<void>(world.get_or_emplace<HierarchyComponent>(target));
-    if (oldParent != entt::null) world.get<HierarchyComponent>(oldParent) = std::move(oldLink);
-    if (target != entt::null) world.get<HierarchyComponent>(target) = std::move(newLink);
-    world.get<HierarchyComponent>(handle) = std::move(childLink);
-    world.get<TransformComponent>(handle) = candidate;
-    if (!TransformSystem::UpdateHierarchy(world))
+    std::vector<entt::entity> roots;
+    for (const auto handle : selection)
     {
-        world.get<TransformComponent>(handle) = transformBefore;
-        if (hadChildLink) world.get<HierarchyComponent>(handle) = childBefore;
-        else world.remove<HierarchyComponent>(handle);
-        if (oldParent != entt::null) world.get<HierarchyComponent>(oldParent) = oldBefore;
-        if (target != entt::null)
-        {
-            if (hadParentLink) world.get<HierarchyComponent>(target) = parentBefore;
-            else world.remove<HierarchyComponent>(target);
-        }
+        const auto oldParent = getParent(handle);
+        if (oldParent == target)
+            continue;
+
+        auto ancestor = oldParent;
+        while (ancestor != entt::null && !selected.contains(ancestor))
+            ancestor = getParent(ancestor);
+        if (ancestor == entt::null)
+            roots.push_back(handle);
+    }
+    if (roots.empty()) return Result::Unchanged;
+
+    // A UI reparent needs anchor/size preservation rather than 3D TRS decomposition.
+    if (parent && (world.any_of<CanvasComponent, RectTransformComponent>(target) ||
+        !world.all_of<TransformComponent, WorldTransformComponent>(target)))
         return Result::InvalidTransform;
+    const auto parentWorld = WorldMatrix(world, target);
+    if (!parentWorld) return Result::InvalidTransform;
+
+    struct TransformEdit
+    {
+        entt::entity Handle;
+        TransformComponent Before;
+        TransformComponent After;
+    };
+    std::vector<TransformEdit> transforms;
+    transforms.reserve(roots.size());
+    std::vector<std::pair<entt::entity, std::size_t>> pending;
+    for (const auto handle : roots)
+    {
+        if (world.any_of<CanvasComponent, RectTransformComponent>(handle) ||
+            !world.all_of<TransformComponent, WorldTransformComponent>(handle))
+            return Result::InvalidTransform;
+
+        pending.emplace_back(handle, parentDepth + 1);
+        while (!pending.empty())
+        {
+            const auto [current, depth] = pending.back();
+            pending.pop_back();
+            if (depth > MaxDepth) return Result::DepthLimit;
+            if (const auto* link = world.try_get<HierarchyComponent>(current))
+                for (const auto descendant : link->children) pending.emplace_back(descendant, depth + 1);
+        }
+
+        const auto desiredWorld = WorldMatrix(world, handle);
+        if (!desiredWorld) return Result::InvalidTransform;
+        const auto before = world.get<TransformComponent>(handle);
+        auto after = before;
+        glm::dmat4 local;
+        glm::mat4 rebuilt;
+        if (!TransformSystem::TryGetLocalMatrix(glm::mat4(*parentWorld), after.absolute, glm::mat4(*desiredWorld), local) ||
+            !TransformSystem::TryAssignLocalMatrix(after, local) ||
+            !TransformSystem::TryComposeWorld(after, glm::mat4(*parentWorld), rebuilt) ||
+            !HierarchyMatches(glm::dmat4(rebuilt), *desiredWorld))
+            return Result::InvalidTransform;
+        transforms.push_back({ handle, before, after });
     }
-    return Result::Success;
+
+    struct LinkEdit
+    {
+        std::optional<HierarchyComponent> Before;
+        HierarchyComponent After;
+    };
+    std::unordered_map<entt::entity, LinkEdit> links;
+    const auto stageLink = [&](entt::entity entity) -> HierarchyComponent&
+    {
+        auto [entry, inserted] = links.try_emplace(entity);
+        if (inserted)
+        {
+            if (const auto* previous = world.try_get<HierarchyComponent>(entity))
+            {
+                entry->second.Before = *previous;
+                entry->second.After = *previous;
+            }
+        }
+        return entry->second.After;
+    };
+
+    const std::unordered_set<entt::entity> moving(roots.begin(), roots.end());
+    for (const auto handle : roots)
+    {
+        const auto oldParent = getParent(handle);
+        if (oldParent != entt::null) stageLink(oldParent);
+        stageLink(handle).parent = target;
+    }
+    for (auto& entry : links)
+        std::erase_if(entry.second.After.children, [&moving](auto child) { return moving.contains(child); });
+    if (target != entt::null)
+    {
+        auto& destination = stageLink(target).children;
+        destination.insert(destination.end(), roots.begin(), roots.end());
+    }
+
+    // The transform solver computes the new hierarchy before publishing world matrices.
+    const auto restore = [&]()
+    {
+        for (const auto& edit : transforms)
+            world.get<TransformComponent>(edit.Handle) = edit.Before;
+        for (auto& [entity, link] : links)
+        {
+            if (link.Before)
+                world.get<HierarchyComponent>(entity) = std::move(*link.Before);
+            else
+                world.remove<HierarchyComponent>(entity);
+        }
+    };
+    try
+    {
+        for (auto& [entity, link] : links)
+            world.get_or_emplace<HierarchyComponent>(entity) = std::move(link.After);
+        for (const auto& edit : transforms)
+            world.get<TransformComponent>(edit.Handle) = edit.After;
+        if (TransformSystem::UpdateHierarchy(world))
+            return Result::Success;
+    }
+    catch (...)
+    {
+        restore();
+        throw;
+    }
+    restore();
+    return Result::InvalidTransform;
 }
