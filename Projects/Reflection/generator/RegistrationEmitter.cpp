@@ -552,14 +552,18 @@ namespace reflection_codegen
                 << "}\n";
         }
 
+        // 중복 검사, 열거형, 자유 함수 등록을 각각 별도 함수로 생성한다.
+        // Debug 빌드는 임시 객체마다 스택 슬롯을 따로 잡으므로, 한 함수에 모으면 큰 모듈에서 기본 1MB 스택을 넘는다.
+        const std::string helperPrefix = "Register_" + std::string(moduleName) + "_";
+
         output << "}\n\n"
             << "namespace reflection_generated\n"
             << "{\n"
-            << "bool Register_" << moduleName
-            << "(reflection::Registry& registry, reflection::RegistrationResult& failure)\n"
+            << "namespace\n"
             << "{\n"
-            << "    failure = {};\n"
-            << "    reflection::Registry staged;\n";
+            << "bool " << helperPrefix
+            << "CheckDuplicates(const reflection::Registry& registry, reflection::RegistrationResult& failure)\n"
+            << "{\n";
 
         for (const ReflectedType& type : unit.Types)
         {
@@ -597,18 +601,18 @@ namespace reflection_codegen
                 << "    }\n";
         }
 
-        for (const ReflectedType& type : unit.Types)
-        {
-            output << "    if (!reflection::detail::TypeRegistration<::"
-                << type.Declaration.QualifiedName
-                << ">::Register(staged, failure)) return false;\n";
-        }
+        output << "    return true;\n"
+            << "}\n\n";
 
+        std::size_t enumCount = 0;
         for (const DeclarationModel& enumeration : unit.Enums)
         {
             const auto& details = std::get<EnumDetails>(enumeration.Details);
 
-            output << "    {\n"
+            output << "bool " << helperPrefix << "Enum" << enumCount++
+                << "(reflection::Registry& staged, reflection::RegistrationResult& failure)\n"
+                << "{\n"
+                << "    {\n"
                 << "        auto enumeration = reflection::EnumInfo::For<::"
                 << enumeration.QualifiedName << ">("
                 << EmitString(enumeration.QualifiedName) << ");\n"
@@ -630,14 +634,43 @@ namespace reflection_codegen
 
             output << "        failure = staged.TryRegisterEnum(std::move(enumeration));\n"
                 << "        if (!failure) return false;\n"
-                << "    }\n";
+                << "    }\n"
+                << "    return true;\n"
+                << "}\n\n";
         }
 
+        std::size_t functionCount = 0;
         for (const DeclarationModel& function : unit.FreeFunctions)
         {
             const auto& details = std::get<FunctionDetails>(function.Details);
+            output << "bool " << helperPrefix << "Function" << functionCount++
+                << "(reflection::Registry& staged, reflection::RegistrationResult& failure)\n"
+                << "{\n";
             EmitFunction(output, function, details.BindingStatus, "staged");
+            output << "    return true;\n"
+                << "}\n\n";
         }
+
+        output << "}\n\n"
+            << "bool Register_" << moduleName
+            << "(reflection::Registry& registry, reflection::RegistrationResult& failure)\n"
+            << "{\n"
+            << "    failure = {};\n"
+            << "    if (!" << helperPrefix << "CheckDuplicates(registry, failure)) return false;\n"
+            << "    reflection::Registry staged;\n";
+
+        for (const ReflectedType& type : unit.Types)
+        {
+            output << "    if (!reflection::detail::TypeRegistration<::"
+                << type.Declaration.QualifiedName
+                << ">::Register(staged, failure)) return false;\n";
+        }
+
+        for (std::size_t index = 0; index < enumCount; ++index)
+            output << "    if (!" << helperPrefix << "Enum" << index << "(staged, failure)) return false;\n";
+
+        for (std::size_t index = 0; index < functionCount; ++index)
+            output << "    if (!" << helperPrefix << "Function" << index << "(staged, failure)) return false;\n";
 
         output << "    failure = registry.TryMerge(std::move(staged));\n"
             << "    return failure.Succeeded();\n"
