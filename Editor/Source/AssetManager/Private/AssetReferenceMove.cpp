@@ -135,7 +135,7 @@ namespace Editor
         }
         catch (const std::exception& error)
         {
-            EDITOR_LOG_WARN("Could not validate moved references: {}", error.what());
+            BAM_LOG(Warn, "Editor", "Asset", "Could not validate moved references: {}", error.what());
             return false;
         }
     }
@@ -170,7 +170,7 @@ namespace Editor
         }
         catch (const std::exception& error)
         {
-            EDITOR_LOG_WARN("Could not lock or back up moved references: {}", error.what());
+            BAM_LOG(Warn, "Editor", "Asset", "Could not lock or back up moved references: {}", error.what());
             return EAssetReferenceWriteResult::Failed;
         }
 

@@ -59,6 +59,7 @@ Get-Command cl.exe
 
 - `Projects/Reflection/dependencies/`도 Git 제외 대상이다. LLVM SDK를 별도로 준비하거나, 구성 시 기존 SDK의 `LLVM_DIR`, `Clang_DIR`, `REFLECTION_CLANG_RESOURCE_DIR`를 명시한다. 경로 준비 기준은 [Reflection·Archive 빌드 안내](ReflectionArchiveBuild.md#환경과-경로-준비)를 따른다.
 - 구성 성공 후 필요한 타깃을 빌드하고, 빌드 성공을 확인한 뒤 CTest를 실행한다. 콘텐츠 브라우저 참조 검사의 예시는 다음과 같다.
+- `AssetReferenceCheck`는 Editor의 Unity/PCH 없이 참조 구현을 별도 컴파일한다. 로그는 직접 포함한 `Logger.h`의 `BAM_LOG`를 사용하며 `Editor_Macros.h`의 간접 포함에 의존하지 않는다. MSVC에서는 Editor와 해당 검사 타깃에 `/EHsc`를 명시해 예외 처리와 파일 잠금 핸들의 스택 해제를 활성화한다. 다른 타깃의 예외 옵션을 변경하는 것은 이 수정 범위가 아니다.
 
 ```powershell
 cmake --build --preset x64-ninja-debug --target Editor AssetReferenceCheck

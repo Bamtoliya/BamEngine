@@ -642,7 +642,7 @@ namespace Editor
         }
         catch (const std::exception& error)
         {
-            EDITOR_LOG_WARN("Could not prepare moved references: {}", error.what());
+            BAM_LOG(Warn, "Editor", "Asset", "Could not prepare moved references: {}", error.what());
             return false;
         }
     }

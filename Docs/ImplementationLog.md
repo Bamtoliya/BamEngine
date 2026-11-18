@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 에셋 참조 검사 타깃의 독립 컴파일 오류 수정
+
+- 사용자 빌드 로그에서 `AssetReferenceMove.cpp` 두 곳과 `AssetReferenceValidator.cpp` 한 곳의 `EDITOR_LOG_WARN` 미정의(C3861)를 확인했다. Editor의 Unity 간접 포함으로 가려진 매크로 의존성이 원인이며, 직접 포함한 `Logger.h`가 제공하는 `BAM_LOG(Warn, "Editor", "Asset", ...)`로 수정했다. 검사 타깃에 Editor 전체 include 경로를 추가하지 않는다.
+- 같은 로그에서 C4530과 `/EHsc` 없는 컴파일 명령을 확인했다. MSVC의 Editor와 AssetReferenceCheck 타깃에 `/EHsc`를 명시해 예외 시 파일 잠금 등 RAII 자원을 해제하도록 했다. 다른 타깃의 전역 옵션은 변경하지 않는다.
+- 변경부 정적 검토와 `git diff --check`를 수행했다. 수정 후 빌드·CTest는 실행하지 않았으며 사용자 재실행이 필요하다. 이전 테스트 통과 기록은 이번 수정의 검증 결과가 아니다.
+
 ### [2026-11-18] 에셋 이동의 저장된 참조 갱신과 Undo/Redo
 
 - 기존 참조 수집기를 읽기·갱신에 공유한다. 프로젝트 JSON·JSON 형식 Animator 컨트롤러에서 리소스 핸들의 `AssetKey`·`AssetPath`와 Animator 컴포넌트의 `controllerPath`를 새 `Project://` URI로 갱신한다. 함께 이동하는 폴더 내부 문서도 처리하고 일반 문자열·`Null` 참조는 보존한다.

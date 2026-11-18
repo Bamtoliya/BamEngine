@@ -72,6 +72,7 @@ set_target_properties(Editor PROPERTIES
 
 if(MSVC)
     target_compile_options(Editor PRIVATE
+        /EHsc
         $<$<CONFIG:Debug>:/ZI>
         $<$<CONFIG:Debug>:/FS>
         /Zc:preprocessor
