@@ -118,7 +118,9 @@ AssetRef,FilterInvalid,Invalid Ext,잘못된 확장자
 AssetRef,FilterMissing,Missing,누락
 AssetRef,FixAction,Fix Action,복구 동작
 AssetRef,FixSafe,Fix Safe Issues,안전 항목 자동 복구
-AssetRef,FixedIssues,Fixed {} issues.,문제 {}개를 수정했습니다.
+AssetRef,FixedIssues,Repaired {} resource references.,리소스 참조 {}개를 복구했습니다.
+AssetRef,RepairBlocked,Some sources are in use. Switch away from those assets and finish play or document operations before repairing.,사용 중인 원본이 있습니다. 해당 에셋에서 전환하고 재생이나 문서 작업을 마친 뒤 복구하세요.
+AssetRef,RepairFailed,No references were repaired. Refresh the scan or check the log for file write errors.,복구한 참조가 없습니다. 다시 검사하거나 로그에서 파일 기록 오류를 확인하세요.
 AssetRef,InvalidExt,Invalid Ext: %zu,잘못된 확장자: %zu
 AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
 AssetRef,IssueType,Issue Type,문제 유형

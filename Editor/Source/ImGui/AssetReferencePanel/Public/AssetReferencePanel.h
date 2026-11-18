@@ -53,6 +53,7 @@ private:
     void RunValidation();
     void FixSelectedIssue(size_t index);
     void FixAllSafe();
+    void ReportRepairResult(size_t count);
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 private:
     std::vector<AssetReferenceIssue> m_Issues;

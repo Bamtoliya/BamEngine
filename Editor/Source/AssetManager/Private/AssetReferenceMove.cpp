@@ -120,6 +120,47 @@ namespace Editor
         }
     }
 
+    bool AssetReferenceValidator::ApplyReferenceRepairs(const std::vector<AssetReferenceEdit>& edits)
+    {
+        if (edits.empty())
+            return true;
+
+        try
+        {
+            using Path = Engine::PlatformPath;
+            const auto project = Path::Normalize(Path::GetProjectRoot());
+            const auto backupRoot = project / ".bam" / "asset-reference-repair";
+            const auto relative = backupRoot.lexically_relative(Path::Normalize(Path::GetProjectAssetRoot()));
+            if (project.empty() || (!relative.empty() && !relative.has_root_path() && *relative.begin() != ".."))
+                return false;
+
+            CheckReferencePath(project, project);
+            fs::create_directory(backupRoot.parent_path());
+            CheckReferencePath(backupRoot.parent_path(), project);
+            fs::create_directory(backupRoot);
+            CheckReferencePath(backupRoot, project);
+            const auto prefix = std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(GetTickCount64());
+            fs::path batch;
+            for (size_t index = 0;; ++index)
+            {
+                batch = backupRoot / (prefix + L"-" + std::to_wstring(index));
+                if (fs::create_directory(batch))
+                    break;
+            }
+
+            const auto result = ApplyMoveReferences(edits, true, batch);
+            if (result == EAssetReferenceWriteResult::RollbackFailed)
+                BAM_LOG(Error, "Editor", "Asset", "Reference repair rollback failed. Backups: {}",
+                    Engine::WStrToStr(batch.wstring()));
+            return result == EAssetReferenceWriteResult::Success;
+        }
+        catch (const std::exception& error)
+        {
+            BAM_LOG(Warn, "Editor", "Asset", "Could not create reference repair backups: {}", error.what());
+            return false;
+        }
+    }
+
     bool AssetReferenceValidator::ValidateMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward)
     {
         try
@@ -170,7 +211,7 @@ namespace Editor
         }
         catch (const std::exception& error)
         {
-            BAM_LOG(Warn, "Editor", "Asset", "Could not lock or back up moved references: {}", error.what());
+            BAM_LOG(Warn, "Editor", "Asset", "Could not lock or back up reference documents: {}", error.what());
             return EAssetReferenceWriteResult::Failed;
         }
 

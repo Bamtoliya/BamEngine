@@ -476,7 +476,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - LRU 기반 최대 256개 항목 / 최대 64MB VRAM 바이트 예산 퇴거(Eviction) 메커니즘 구축 완료.
 - **참조 검증·재임포트 완성 및 바이너리 머티리얼 조사 — F02 잔여 [완료]**:
   - `PlatformPath::ToProjectRelative` 유틸리티 추가 및 `ModelImporter::CreateJob`에서 에셋 출력 경로의 절대 경로 하드코딩 방지 완료.
-  - `AssetReferenceValidator` 정적 검증 코어 구현: `Resources/` 내 전체 씬/프리팹/머티리얼/모델 JSON 대상 누락(`MissingFile`), 외부 절대 경로(`ExternalAbsolutePath`), 확장자 오류(`InvalidExtension`) 전수 검출 및 원자적 자동 복구(`FixIssue`, `FixAllSafeIssues`) 지원.
+  - `AssetReferenceValidator` 정적 검증 코어 구현: `Resources/` 내 전체 씬/프리팹/머티리얼/모델 JSON 대상 누락(`MissingFile`), 외부 절대 경로(`ExternalAbsolutePath`), 확장자 오류(`InvalidExtension`) 전수 검출 및 구조 기반 자동 복구(`FixIssue`, `FixAllSafeIssues`) 지원. 기록 전 문서 잠금·원문 검증·백업을 사용한다.
   - `AssetReferencePanel` 에디터 UI 구축 및 `ImGuiManager` 메뉴 등록 (`Window -> Panels -> Asset Reference Checker`): 누락/외부/확장자별 필터링, 경로 검색, 안전 항목 원클릭 일괄 복구 연동 완료.
   - 구형 28바이트 바이너리 머티리얼 및 확장자 오류 파일 조사 완료, `TestScene.json` 및 `TestScene4.json` 내 구형 `.bammat` 참조를 최신 `.bammat.json` 표준 규약으로 정규화 완료.
 - **완료 기준 달성**: 에셋 탐색의 메모리·대기열·업로드가 설정한 상한 안에서 관리되고, 누락 참조 식별 및 안전 복구 정책이 에디터 UI와 코어로 확보되었다.

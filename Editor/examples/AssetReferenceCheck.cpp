@@ -61,6 +61,82 @@ namespace
         return issues.empty();
     }
 
+    bool CheckReferenceRepair(const fs::path& assets)
+    {
+        using Editor::AssetReferenceValidator;
+        const auto directory = assets / "ReferenceRepair";
+        if (!fs::create_directory(directory))
+            return false;
+        const auto material = directory / "Material.bammat.json";
+        const auto mesh = directory / "Mesh.bammesh.json";
+        const auto first = directory / "A.bamscene.json";
+        const auto second = directory / "B.bamscene.json";
+        constexpr auto original = "\xEF\xBB\xBF" R"json({
+            "Id":18446744073709551614,
+            "Memo":"Assets/ReferenceRepair/Material",
+            "First":{"AssetPath":"Assets/ReferenceRepair/Material","AssetKey":"Assets/ReferenceRepair/Material"},
+            "Second":{"AssetPath":"Assets\\ReferenceRepair\\Mesh","AssetKey":"OriginalAlias"},
+            "NullHandle":{"Null":true,"AssetPath":"Assets/ReferenceRepair/Material"},
+            "Binding":{"Type":"Engine::GraphBindingComponent","Data":{"graphFile":"Assets/ReferenceRepair/Material"}}
+        })json";
+        constexpr auto other = R"json({"AssetPath":"Assets/ReferenceRepair/Material"})json";
+        if (!WriteFixture(material, "{}") || !WriteFixture(mesh, "{}") ||
+            !WriteFixture(first, original) || !WriteFixture(second, other))
+            return false;
+
+        auto issues = AssetReferenceValidator::ValidateFile(first);
+        const auto otherIssues = AssetReferenceValidator::ValidateFile(second);
+        issues.insert(issues.end(), otherIssues.begin(), otherIssues.end());
+        if (std::ranges::count_if(issues, [](const auto& issue) { return issue.CanAutoFix; }) != 3)
+            return false;
+
+        // The second document can be read during preparation, but the writer cannot lock it.
+        const HANDLE locked = CreateFileW(second.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (locked == INVALID_HANDLE_VALUE)
+            return false;
+        const auto lockedCount = AssetReferenceValidator::FixAllSafeIssues(issues);
+        CloseHandle(locked);
+        if (lockedCount != 0 || ReadFixture(first) != original || ReadFixture(second) != other)
+            return false;
+
+        if (AssetReferenceValidator::FixAllSafeIssues(issues) != 3)
+            return false;
+        const auto repaired = ReadFixture(first);
+        if (!repaired.starts_with("\xEF\xBB\xBF") ||
+            repaired.find(R"("Id":18446744073709551614)") == std::string::npos ||
+            repaired.find(R"("Memo":"Assets/ReferenceRepair/Material")") == std::string::npos ||
+            repaired.find(R"("graphFile":"Assets/ReferenceRepair/Material")") == std::string::npos ||
+            repaired.find(R"("NullHandle":{"AssetPath":"Assets/ReferenceRepair/Material","Null":true})") == std::string::npos ||
+            repaired.find(R"("First":{"AssetKey":"Project://ReferenceRepair/Material.bammat.json",)"
+                R"("AssetPath":"Project://ReferenceRepair/Material.bammat.json"})") == std::string::npos ||
+            repaired.find(R"("AssetKey":"OriginalAlias","AssetPath":"Project://ReferenceRepair/Mesh.bammesh.json")") == std::string::npos ||
+            ReadFixture(second).find("Project://ReferenceRepair/Material.bammat.json") == std::string::npos)
+            return false;
+
+        // The old issue must never replace a matching string that is no longer a reference field.
+        constexpr auto stale = R"json({"Memo":"Assets/ReferenceRepair/Material"})json";
+        if (otherIssues.size() != 1 || !WriteFixture(second, stale) ||
+            AssetReferenceValidator::FixIssue(otherIssues.front()) || ReadFixture(second) != stale)
+            return false;
+
+        if (!WriteFixture(directory / "Material.json", "{}") || !WriteFixture(second, other))
+            return false;
+        const auto ambiguous = AssetReferenceValidator::ValidateFile(second);
+        if (ambiguous.size() != 1 || ambiguous.front().CanAutoFix ||
+            AssetReferenceValidator::FixIssue(otherIssues.front()) || ReadFixture(second) != other)
+            return false;
+
+        if (!fs::remove(directory / "Material.json") || !AssetReferenceValidator::FixIssue(otherIssues.front()) ||
+            ReadFixture(second).find("Project://ReferenceRepair/Material.bammat.json") == std::string::npos)
+            return false;
+
+        const auto outside = assets.parent_path() / "OutsideReferenceRepair.json";
+        std::filesystem::path suggestion;
+        return WriteFixture(outside, "{}") &&
+            !AssetReferenceValidator::TryResolveFallbackPath(Engine::WStrToStr(outside.wstring()), suggestion);
+    }
+
     class RelocationProbe final : public Engine::Resource
     {
     public:
@@ -624,6 +700,7 @@ int RunAssetReferenceChecks()
     struct ReflectionScope { ~ReflectionScope() { Engine::ReflectionRegistry::Destroy(); } } reflection;
     if (!CheckTimelineRelocation(assets, root / L"TimelineRecovery")) return 51;
     if (!CheckPrefabGraphRelocation(assets, root / L"PrefabGraphRecovery")) return 52;
+    if (!CheckReferenceRepair(assets)) return 56;
     return 0;
 }
 

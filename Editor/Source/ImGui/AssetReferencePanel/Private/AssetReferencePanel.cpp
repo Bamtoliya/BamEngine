@@ -7,6 +7,8 @@
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
 #include "InputManager.h"
+#include "ImGuiManager.h"
+#include "NotificationManager.h"
 #include <imgui.h>
 #include <algorithm>
 #include <unordered_set>
@@ -487,6 +489,7 @@ namespace Editor
         static const ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
             ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY;
 
+        std::optional<size_t> requestedRepair;
         if (ImGui::BeginTable("##IssuesTable", 6, flags))
         {
             ImGui::TableSetupColumn(LOCAL_LABEL("AssetRef.IssueType").c_str(), ImGuiTableColumnFlags_WidthFixed, 90.0f);
@@ -546,7 +549,7 @@ namespace Editor
                 // Column 4: Suggested Fix
                 ImGui::TableSetColumnIndex(4);
                 if (!issue.SuggestedFix.empty())
-                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", Engine::WStrToStr(issue.SuggestedFix.generic_wstring()).c_str());
+                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", Engine::WStrToStr(issue.SuggestedFix.wstring()).c_str());
                 else
                     ImGui::TextDisabled(LOCAL_CSTR("EditorCommon.None"));
 
@@ -556,7 +559,7 @@ namespace Editor
                 {
                     if (ImGui::SmallButton(LOCAL_CSTR("AssetRef.BtnFix")))
                     {
-                        FixSelectedIssue(i);
+                        requestedRepair = i;
                     }
                 }
                 else
@@ -569,6 +572,8 @@ namespace Editor
 
             ImGui::EndTable();
         }
+        if (requestedRepair)
+            FixSelectedIssue(*requestedRepair);
     }
 
     void AssetReferencePanel::RunValidation()
@@ -584,20 +589,53 @@ namespace Editor
 
     void AssetReferencePanel::FixSelectedIssue(size_t index)
     {
-        if (index >= m_Issues.size()) return;
-        if (AssetReferenceValidator::FixIssue(m_Issues[index]))
+        if (index >= m_Issues.size())
+            return;
+
+        const auto& issue = m_Issues[index];
+        if (!ImGuiManager::Get().CanRepairAssetReferenceSource(issue.SourceFile))
         {
-            RunValidation();
-            m_FixedCount = 1;
-            m_StatusMessage = "AssetRef.FixedIssues";
+            NotificationManager::Get().AddNotification(LOCAL("AssetRef.Title"), LOCAL("AssetRef.RepairBlocked"),
+                ELogLevel::Warn);
+            return;
         }
+
+        ReportRepairResult(AssetReferenceValidator::FixAllSafeIssues({ issue }));
     }
 
     void AssetReferencePanel::FixAllSafe()
     {
-        const size_t fixedCount = AssetReferenceValidator::FixAllSafeIssues(m_Issues);
+        std::vector<AssetReferenceIssue> eligible;
+        bool blocked = false;
+        for (const auto& issue : m_Issues)
+        {
+            if (!issue.CanAutoFix)
+                continue;
+            if (ImGuiManager::Get().CanRepairAssetReferenceSource(issue.SourceFile))
+                eligible.push_back(issue);
+            else
+                blocked = true;
+        }
+        if (blocked)
+        {
+            NotificationManager::Get().AddNotification(LOCAL("AssetRef.Title"), LOCAL("AssetRef.RepairBlocked"),
+                ELogLevel::Warn);
+        }
+        if (!eligible.empty())
+            ReportRepairResult(AssetReferenceValidator::FixAllSafeIssues(eligible));
+    }
+
+    void AssetReferencePanel::ReportRepairResult(size_t count)
+    {
         RunValidation();
-        m_FixedCount = fixedCount;
+        if (count == 0)
+        {
+            NotificationManager::Get().AddNotification(LOCAL("AssetRef.Title"), LOCAL("AssetRef.RepairFailed"),
+                ELogLevel::Warn);
+            return;
+        }
+
+        m_FixedCount = count;
         m_StatusMessage = "AssetRef.FixedIssues";
     }
 }

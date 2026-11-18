@@ -165,6 +165,7 @@ public:
 	bool RequestQuit();
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
 	bool PrepareAssetFileChanges(AssetPathRelocation& relocation) const;
+	bool CanRepairAssetReferenceSource(const std::filesystem::path& sourceFile) const;
 	bool PreparePendingSceneSave();
 private:
 	enum class ESceneDocumentAction

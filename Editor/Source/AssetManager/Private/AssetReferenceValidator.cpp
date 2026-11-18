@@ -5,7 +5,6 @@
 #include "ResourceBinaryHeader.h"
 #include "Logger.h"
 #include <algorithm>
-#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -14,6 +13,7 @@
 #include "Functions.h"
 #include <glaze/glaze.hpp>
 #include <set>
+#include <string_view>
 #include <tuple>
 #include <Windows.h>
 
@@ -52,14 +52,17 @@ namespace Editor
         using ReferenceFields = std::map<std::pair<std::string, ReferenceKind>, const char*>;
         using ReferenceJson = glz::generic_u64;
 
-        bool ReadReferenceDocument(const std::filesystem::path& source, glz::generic_u64& document)
+        bool ParseReferenceDocument(std::string_view text, ReferenceJson& document)
+        {
+            if (text.starts_with("\xEF\xBB\xBF"))
+                text.remove_prefix(3);
+            return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
+        }
+
+        bool ReadReferenceDocument(const std::filesystem::path& source, ReferenceJson& document)
         {
             std::string text;
-            if (!ReadTextFile(source, text))
-                return false;
-            if (text.starts_with("\xEF\xBB\xBF"))
-                text.erase(0, 3);
-            return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
+            return ReadTextFile(source, text) && ParseReferenceDocument(text, document);
         }
 
         template<typename Value, typename Visitor>
@@ -251,17 +254,11 @@ namespace Editor
             scan.Issues.push_back(std::move(issue));
         }
 
-        void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
+        void InspectReferenceDocument(const std::filesystem::path& source, const ReferenceJson& document,
+            AssetReferenceScan& scan)
         {
             using Path = Engine::PlatformPath;
             using Issue = EAssetReferenceIssueType;
-
-            glz::generic_u64 document;
-            if (!ReadReferenceDocument(source, document))
-            {
-                ReportUnreadableDocument(source, scan);
-                return;
-            }
 
             const auto relativeSource = Path::ToProjectRelative(source);
             std::set<std::filesystem::path> targets;
@@ -305,9 +302,8 @@ namespace Editor
                     }
                 }
 
-                // 기존 복구는 파일을 변경하므로 이전에 지원한 단순 레거시 참조에만 유지한다.
                 if (!hasUri && kind == ReferenceKind::Handle && issue.IssueType != Issue::OutsideRuntimeRoots &&
-                    !Path::IsReadOnlyTarget(source) && reference.find_first_of("\\\"") == std::string::npos &&
+                    IsInAssetTree(source, Path::Normalize(Path::GetProjectAssetRoot())) && !Path::IsReadOnlyTarget(source) &&
                     AssetReferenceValidator::TryResolveFallbackPath(reference, issue.SuggestedFix))
                 {
                     issue.CanAutoFix = true;
@@ -316,74 +312,123 @@ namespace Editor
             }
         }
 
-        bool WriteTextFileAtomic(const std::filesystem::path& targetPath, const std::string& content)
+        void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
         {
-            std::error_code ec;
-            auto tempPath = targetPath;
-            tempPath += L".tmp_" + std::to_wstring(std::chrono::steady_clock::now().time_since_epoch().count());
+            ReferenceJson document;
+            if (ReadReferenceDocument(source, document))
+                InspectReferenceDocument(source, document, scan);
+            else
+                ReportUnreadableDocument(source, scan);
+        }
+
+        using RepairRequests = std::map<std::string, const AssetReferenceIssue*>;
+
+        size_t PrepareReferenceRepair(AssetReferenceEdit& edit, const RepairRequests& requests)
+        {
+            ReferenceJson document;
+            if (!ReadTextFile(edit.BeforePath, edit.BeforeText) || !ParseReferenceDocument(edit.BeforeText, document))
+                return 0;
+
+            AssetReferenceScan current;
+            InspectReferenceDocument(edit.BeforePath, document, current);
+            std::map<std::string, std::string> replacements;
+            for (const auto& issue : current.Issues)
             {
-                std::ofstream file(tempPath, std::ios::binary | std::ios::trunc);
-                if (!file.is_open()) return false;
-                file.write(content.data(), static_cast<std::streamsize>(content.size()));
-                file.close();
-                if (!file) { std::filesystem::remove(tempPath, ec); return false; }
+                const auto request = requests.find(issue.TargetReference);
+                if (issue.CanAutoFix && request != requests.end() && request->second->IssueType == issue.IssueType &&
+                    request->second->SuggestedFix == issue.SuggestedFix)
+                {
+                    replacements.emplace(issue.TargetReference, Engine::WStrToStr(issue.SuggestedFix.wstring()));
+                }
             }
-            std::filesystem::rename(tempPath, targetPath, ec);
-            if (ec) { std::filesystem::remove(tempPath, ec); return false; }
-            return true;
+            if (replacements.empty())
+                return 0;
+
+            size_t count = 0;
+            VisitDocumentReferences(document, [&](auto& fields, const char* key, ReferenceKind kind)
+            {
+                if (kind != ReferenceKind::Handle)
+                    return;
+                const auto replacement = replacements.find(fields.at(key).get_string());
+                if (replacement == replacements.end())
+                    return;
+
+                for (const char* alias : { "AssetKey", "AssetPath" })
+                {
+                    const auto field = fields.find(alias);
+                    if (field != fields.end())
+                    {
+                        const auto* value = field->second.template get_if<std::string>();
+                        if (value && *value == replacement->first)
+                            field->second = replacement->second;
+                    }
+                }
+                ++count;
+            });
+            if (count == 0 || glz::write_json(document, edit.AfterText))
+                return 0;
+            if (edit.BeforeText.starts_with("\xEF\xBB\xBF"))
+                edit.AfterText.insert(0, "\xEF\xBB\xBF");
+            return count;
         }
     }
 
     bool AssetReferenceValidator::TryResolveFallbackPath(const std::string& brokenPath, std::filesystem::path& outResolvedPath)
     {
-        if (brokenPath.empty()) return false;
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        if (brokenPath.empty())
+            return false;
 
         const auto target = Engine::Utf8ToPath(brokenPath);
-        const auto root = Engine::PlatformPath::GetProjectRoot();
+        const auto mountedFile = [](const fs::path& candidate) -> fs::path
+        {
+            std::error_code error;
+            const auto file = fs::canonical(Path::ResolveUri(candidate), error);
+            if (error || !fs::is_regular_file(file, error) || !IsMountedReference(file))
+                return {};
+            return file;
+        };
 
-        // 1. 절대 경로인 경우 프로젝트 루트 하위면 상대 경로로 정규화
+        fs::path match;
         if (target.is_absolute())
-        {
-            auto rel = Engine::PlatformPath::ToProjectRelative(target);
-            if (std::filesystem::exists(root / rel))
-            {
-                outResolvedPath = rel;
-                return true;
-            }
-        }
+            match = mountedFile(target);
 
-        // 2. 확장자가 없는 경우 (.bammat.json, .bammatinst.json, .bammesh.json 등 순차 탐색)
-        if (!target.has_extension())
+        if (match.empty() && !target.has_extension())
         {
-            static const std::vector<std::string> candidateExts = {
-                ".bammat.json", ".bammatinst.json", ".bammesh.json", ".bammodel.json", ".bamsprite.json", ".json"
-            };
-            for (const auto& ext : candidateExts)
+            for (const auto* extension : { L".bammat.json", L".bammatinst.json", L".bammesh.json",
+                L".bammodel.json", L".bamsprite.json", L".json" })
             {
                 auto candidate = target;
-                candidate += ext;
-                if (std::filesystem::exists(root / candidate))
-                {
-                    outResolvedPath = candidate;
-                    return true;
-                }
+                candidate += extension;
+                auto file = mountedFile(candidate);
+                if (file.empty())
+                    continue;
+                if (!match.empty() && !Path::IsSamePath(match, file))
+                    return false;
+                match = std::move(file);
             }
         }
 
-        // 3. 구형 .bammat / .bammatinst 바이너리 참조인 경우 최신 .json 원본 존재 여부 확인
-        const std::string ext = target.extension().string();
-        if (ext == ".bammat" || ext == ".bammatinst" || ext == ".bammesh" || ext == ".bammodel")
+        if (match.empty())
         {
-            auto candidate = target;
-            candidate += ".json";
-            if (std::filesystem::exists(root / candidate))
+            const auto extension = target.extension().wstring();
+            if (extension == L".bammat" || extension == L".bammatinst" ||
+                extension == L".bammesh" || extension == L".bammodel")
             {
-                outResolvedPath = candidate;
-                return true;
+                auto candidate = target;
+                candidate += L".json";
+                match = mountedFile(candidate);
             }
         }
 
-        return false;
+        if (match.empty())
+            return false;
+        const fs::path proposed(Path::ToVirtualUri(match));
+        if (proposed == target)
+            return false;
+        outResolvedPath = proposed;
+        return true;
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateFile(const std::filesystem::path& filePath)
@@ -663,12 +708,9 @@ namespace Editor
                 AssetReferenceEdit edit{ source, remap(source), {}, {} };
                 if (Path::IsReadOnlyTarget(source) || !ReadTextFile(source, edit.BeforeText))
                     return false;
-                auto text = edit.BeforeText;
-                const bool bom = text.starts_with("\xEF\xBB\xBF");
-                if (bom)
-                    text.erase(0, 3);
-                glz::generic_u64 document;
-                if (glz::validate_json(text) || glz::read_json(document, text) || !document.is_object())
+                const bool bom = edit.BeforeText.starts_with("\xEF\xBB\xBF");
+                ReferenceJson document;
+                if (!ParseReferenceDocument(edit.BeforeText, document))
                     return false;
                 bool changed = false;
                 VisitDocumentReferences(document, [&](auto& fields, const char* key, ReferenceKind kind)
@@ -721,80 +763,44 @@ namespace Editor
 
     bool AssetReferenceValidator::FixIssue(const AssetReferenceIssue& issue)
     {
-        if (!issue.CanAutoFix || issue.SuggestedFix.empty()) return false;
-
-        const auto root = Engine::PlatformPath::GetProjectRoot();
-        const auto fullSource = root / issue.SourceFile;
-        if (Engine::PlatformPath::IsReadOnlyTarget(fullSource))
-            return false;
-
-        std::string content;
-        if (!ReadTextFile(fullSource, content)) return false;
-
-        const std::string targetStr = "\"" + issue.TargetReference + "\"";
-        const std::string replacementStr = "\"" + Engine::WStrToStr(issue.SuggestedFix.generic_wstring()) + "\"";
-
-        size_t pos = 0;
-        bool modified = false;
-        while ((pos = content.find(targetStr, pos)) != std::string::npos)
-        {
-            content.replace(pos, targetStr.length(), replacementStr);
-            pos += replacementStr.length();
-            modified = true;
-        }
-
-        if (modified)
-        {
-            return WriteTextFileAtomic(fullSource, content);
-        }
-        return false;
+        return FixAllSafeIssues({ issue }) != 0;
     }
 
     size_t AssetReferenceValidator::FixAllSafeIssues(const std::vector<AssetReferenceIssue>& issues)
     {
-        // 동일 파일 내 다중 참조 치환을 위해 파일별로 묶어 처리
-        std::map<std::filesystem::path, std::vector<std::pair<std::string, std::string>>> fileReplacements;
-        for (const auto& issue : issues)
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        try
         {
-            if (issue.CanAutoFix && !issue.SuggestedFix.empty())
+            const auto root = Path::Normalize(Path::GetProjectAssetRoot());
+            std::map<fs::path, RepairRequests> documents;
+            for (const auto& issue : issues)
             {
-                fileReplacements[issue.SourceFile].emplace_back(issue.TargetReference,
-                    Engine::WStrToStr(issue.SuggestedFix.generic_wstring()));
+                if (!issue.CanAutoFix || issue.SuggestedFix.empty())
+                    continue;
+
+                const auto source = Path::Normalize(Path::GetProjectRoot() / issue.SourceFile);
+                if (IsInAssetTree(source, root) && !Path::IsReadOnlyTarget(source))
+                    documents[source].try_emplace(issue.TargetReference, &issue);
             }
-        }
 
-        size_t fixedCount = 0;
-        const auto root = Engine::PlatformPath::GetProjectRoot();
-
-        for (const auto& [srcRel, repls] : fileReplacements)
-        {
-            const auto fullSource = root / srcRel;
-            if (Engine::PlatformPath::IsReadOnlyTarget(fullSource))
-                continue;
-            std::string content;
-            if (!ReadTextFile(fullSource, content)) continue;
-
-            bool fileModified = false;
-            for (const auto& [target, replacement] : repls)
+            size_t count = 0;
+            std::vector<AssetReferenceEdit> edits;
+            for (const auto& [source, requests] : documents)
             {
-                const std::string targetStr = "\"" + target + "\"";
-                const std::string replacementStr = "\"" + replacement + "\"";
-
-                size_t pos = 0;
-                while ((pos = content.find(targetStr, pos)) != std::string::npos)
+                AssetReferenceEdit edit{ source, source, {}, {} };
+                if (const auto fixed = PrepareReferenceRepair(edit, requests); fixed != 0)
                 {
-                    content.replace(pos, targetStr.length(), replacementStr);
-                    pos += replacementStr.length();
-                    fileModified = true;
-                    ++fixedCount;
+                    count += fixed;
+                    edits.push_back(std::move(edit));
                 }
             }
-
-            if (fileModified)
-            {
-                WriteTextFileAtomic(fullSource, content);
-            }
+            return ApplyReferenceRepairs(edits) ? count : 0;
         }
-        return fixedCount;
+        catch (const std::exception& error)
+        {
+            BAM_LOG(Warn, "Editor", "Asset", "Could not prepare reference repairs: {}", error.what());
+            return 0;
+        }
     }
 }
