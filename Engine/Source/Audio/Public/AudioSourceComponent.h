@@ -14,13 +14,18 @@ namespace Engine
 	class AudioSystem;
 
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_AUDIO_SOURCE"), CATEGORY("CATEGORY_AUDIO"))
-	struct AudioSourceComponent
+	struct ENGINE_API AudioSourceComponent
 	{
 	public:
-		~AudioSourceComponent()
-		{
-			Stop();
-		}
+		AudioSourceComponent() = default;
+		~AudioSourceComponent();
+
+		AudioSourceComponent(const AudioSourceComponent& other);
+		AudioSourceComponent& operator=(const AudioSourceComponent& other);
+
+		AudioSourceComponent(AudioSourceComponent&& other) noexcept;
+		AudioSourceComponent& operator=(AudioSourceComponent&& other) noexcept;
+
 		REFLECT_BODY()
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AUDIO_CLIP"))
@@ -52,6 +57,7 @@ namespace Engine
 		void Stop() { m_StopRequested = true; m_PlayRequested = false; }
 		void Pause() { m_PauseRequested = true; }
 		void Resume() { m_ResumeRequested = true; }
+		void StopImmediate();
 		bool IsPlaying() const { return m_IsPlaying; }
 
 	private:

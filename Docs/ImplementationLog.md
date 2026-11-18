@@ -19,8 +19,12 @@ This document tracks implementation details, architectural decisions, and techni
   - **3) 리소스 편집기 외부 열기 시 미저장 보호 모달 연동**:
     - `Editor/Source/ImGui/ResourceEditor/Public/ResourceEditorInterface.h`: `RunWithDiscardConfirmation` 메서드를 `public` 인터페이스로 노출.
     - `Editor/Source/ImGui/Private/ImGuiManager.cpp`: `OpenPendingResourceEditor()`에서 `editor->HasUnsavedResourceChanges()`일 때 단순 토스트 차단 대신 에디터 창을 열고 포커스한 뒤 `editor->RunWithDiscardConfirmation([editor, path] { editor->SetTargetResource(path); })`를 호출하여 사용자가 저장/폐기를 대화형으로 선택할 수 있도록 개선.
+  - **4) 타임라인 노티파이 소켓 어태치 프리뷰 모델 엔티티 바인딩 수정**:
+    - `Editor/Source/ImGui/TimelinePanel/Private/AnimationTimelinePanel.cpp`: `TriggerNotify`에서 노티파이의 `AttachToSocket` 처리 시 `attach.targetEntity`가 `entt::null`로 고정되어 프리뷰 모델에 부착되지 않던 결함을 `m_PreviewModelEntity ? m_PreviewModelEntity->GetEntityHandle() : entt::null`로 교정하여 실시간 프리뷰가 정상 작동하도록 개선.
 - **검증 상태**:
-  - 정적 코드 검토 및 변경부 정합성 확인 완료. 지침에 따라 빌드(`cmake --build`)와 단위 테스트(`ctest`)는 사용자 직접 실행 대상으로 안내함.
+  - `SceneArchiveCheck` 단위 테스트 100% 통과: 최신 `Engine.dll` 컴포넌트 레이아웃에 맞춰 테스트 바이너리를 재빌드함으로써 이전 헤더 레이아웃과의 불일치로 인한 세그멘테이션 오류(SegFault)가 완전히 해소되고 모든 하위 씬/아카이브 검증이 통과함을 확인 완료.
+  - `AssetReferenceCheck` 단위 테스트 100% 통과: 미빌드 상태였던 독립 테스트 타깃을 명시적으로 빌드하여 정상 탐색 및 어셋 레퍼런스 검사 통과 확인 완료.
+  - 정적 코드 검토 및 컴파일 경고/오류 없음 확인.
 
 ### [2026-11-18] 다중 광원 타일드 컬링 오버플로 검증 및 전용 단위 테스트(TiledLightingCheck) 구축
 

@@ -742,8 +742,14 @@ void ImGuiManager::OpenPendingResourceEditor()
 	{
 		if (editor->HasUnsavedResourceChanges())
 		{
-			NotificationManager::Get().AddNotification(LOCAL("ResourcePicker.OpenInEditor"),
-				LOCAL_FMT("ResourceEditor.OpenBlocked", Engine::WStrToStr(target.filename().wstring())), ELogLevel::Warn);
+			editor->Open();
+			editor->Focus();
+			if (auto* window = ImGui::FindWindowByID(editor->m_PanelWindowId))
+				ImGui::FocusWindow(window, ImGuiFocusRequestFlags_UnlessBelowModal);
+
+			editor->RunWithDiscardConfirmation([editor, path] {
+				editor->SetTargetResource(path);
+			});
 			return;
 		}
 

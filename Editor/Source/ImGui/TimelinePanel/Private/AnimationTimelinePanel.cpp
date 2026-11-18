@@ -444,7 +444,7 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify)
 				if (notify.AttachToSocket)
 				{
 					auto& attach = reg.emplace<Engine::SocketAttachmentComponent>(e);
-					attach.targetEntity = entt::null;
+					attach.targetEntity = m_PreviewModelEntity ? m_PreviewModelEntity->GetEntityHandle() : entt::null;
 					attach.boneName = notify.SocketBoneName;
 					attach.offsetPosition = notify.OffsetPosition;
 					attach.offsetRotation = notify.OffsetRotation;

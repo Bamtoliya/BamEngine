@@ -120,9 +120,7 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 		// 2. Stop 요청
 		if (source.m_StopRequested)
 		{
-			if (source.m_Channel) { source.m_Channel->stop(); source.m_Channel = nullptr; }
-			source.m_IsPlaying = false;
-			source.m_StopRequested = false;
+			source.StopImmediate();
 		}
 
 		// 3. Pause / Resume 요청

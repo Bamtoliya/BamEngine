@@ -25,6 +25,7 @@ public:
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 public:
 	void Draw() final;
+	void RunWithDiscardConfirmation(std::function<void()> action);
 protected:
     bool PrepareTargetPathRelocation(AssetPathRelocation& relocation);
     virtual ImVec2 GetInitialResourceWindowSize() const { return {}; }
@@ -41,7 +42,6 @@ protected:
     // A panel can scope its own draw context around this call.
     virtual void DrawResourceFrame();
     void DrawCopyResourcePath();
-    void RunWithDiscardConfirmation(std::function<void()> action);
 private:
     void DrawDiscardConfirmation();
 protected:

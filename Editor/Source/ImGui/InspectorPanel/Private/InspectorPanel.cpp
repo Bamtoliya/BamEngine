@@ -1403,6 +1403,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		}
 		else if (object.Is<Engine::ActionTimelineComponent>())
 		{
+			componentSettings.HiddenProperties.insert("timelineAsset");
 			componentSettings.HiddenProperties.insert("timelinePath");
 			bool isOpen = false;
 			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);

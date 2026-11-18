@@ -10,15 +10,16 @@
 namespace Engine
 {
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ACTION_TIMELINE"), CATEGORY("CATEGORY_RENDER"))
-		struct ActionTimelineComponent
+	struct ActionTimelineComponent
 	{
 		REFLECT_BODY()
 
-			PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TIMELINE_ASSET"))
-			ResourceHandle<ActionTimelineAsset> timelineAsset;
+		// 런타임 캐시 (직렬화 대상 아님 - timelinePath가 단일 진실의 원천)
+		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_TIMELINE_ASSET"))
+		ResourceHandle<ActionTimelineAsset> timelineAsset;
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TIMELINE_PATH"))
-			std::string timelinePath;
+		std::string timelinePath;
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PLAY_RATE"))
 			f32 playRate = 1.0f;
