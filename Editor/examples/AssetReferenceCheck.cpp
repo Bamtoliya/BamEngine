@@ -66,6 +66,10 @@ namespace
     {
         using enum Editor::AssetReferenceTimingKind;
         Editor::AssetReferenceTimings timings;
+        Editor::AssetReferenceScanTiming scan;
+        scan.Documents = 12;
+        scan.ReadParseMs = 0.5;
+        timings.Record(Automatic, 7, 1.0, &scan);
         timings.Record(MovePreparation, 8, 3.0);
         timings.Record(MoveRecheck, 8, 2.0);
         if (timings.LastFrame != 8 || timings.LastFrameMs != 5.0 || timings.PeakFrameMs != 5.0)
@@ -77,8 +81,12 @@ namespace
             preparation.PeakMs != 3.0 || timings.LastFrameMs != 1.0 || timings.PeakFrameMs != 5.0)
             return false;
 
+        const auto& latest = timings.LastScan;
+        if (latest.Kind != Automatic || latest.Frame != 7 || latest.Documents != 12 || latest.ReadParseMs != 0.5)
+            return false;
+
         timings = {};
-        return timings.LastFrame == -1 && timings.PeakFrameMs == 0.0 && preparation.Samples == 0;
+        return timings.LastFrame == -1 && timings.PeakFrameMs == 0.0 && preparation.Samples == 0 && latest.Frame == -1;
     }
 
     bool CheckReferenceRepair(const fs::path& assets)
@@ -401,7 +409,12 @@ int RunAssetReferenceChecks()
         !WriteFixture(legacy / "Ignored.bamscene.json", R"({"Texture":{"AssetPath":"ignored.png"}})"))
         return 2;
 
-    const auto scan = Editor::AssetReferenceValidator::ScanProject();
+    Editor::AssetReferenceScanTiming scanTiming;
+    Editor::AssetReferenceScanIndex scanIndex;
+    const auto scan = Editor::AssetReferenceValidator::ScanProject(&scanTiming, &scanIndex);
+    if (scanTiming.Directories != 2 || scanTiming.Documents != 5 ||
+        scanTiming.References != scan.References.size() || scanTiming.Issues != scan.Issues.size())
+        return 67;
     const auto uses = [&](const fs::path& user, const fs::path& asset)
     {
         const auto canonicalUser = fs::canonical(user);
@@ -428,6 +441,80 @@ int RunAssetReferenceChecks()
         std::cerr << "Expected only the missing reference and unreadable JSON.\n";
         return 4;
     }
+
+    Editor::AssetReferenceChanges changes;
+    changes.ObserveFile(assets / ".archive-save-100-0", true, true);
+    changes.ObserveFile(assets / ".archive-save-100-0" / "document.tmp", true, true);
+    if (!changes.Empty()) return 68;
+    changes.ObserveFile(scene, true, true);
+    changes.ObserveFile(scene, true, false);
+    if (changes.RequiresFullScan || changes.Documents.size() != 1) return 68;
+
+    const auto originalScene = ReadFixture(scene);
+    if (!WriteFixture(scene, R"({"Scene":{"Texture":{"AssetPath":"Project://missing-after-save.png"},
+        "Valid":{"AssetPath":"Asset://Materials/벽.png"}}})"))
+        return 69;
+    auto refreshed = scan;
+    Editor::AssetReferenceScanDelta delta;
+    if (!AssetReferenceValidator::RefreshProjectDocuments(scanIndex, changes.Documents, refreshed, delta, &scanTiming) ||
+        scanTiming.Documents != 1 || scanTiming.Directories != 0 ||
+        delta.FirstAddedIssue != scan.Issues.size() || !delta.RemovedIssues.empty() ||
+        delta.RemovedReferences.size() != 1 || delta.AddedReferences.size() != 1 ||
+        delta.RemovedReferences.front().Source != fs::canonical(scene) ||
+        delta.RemovedReferences.front().Target != fs::canonical(material) ||
+        delta.AddedReferences.front().Source != fs::canonical(scene) ||
+        delta.AddedReferences.front().Target != fs::canonical(texture))
+        return 69;
+
+    const auto rescanned = AssetReferenceValidator::ScanProject();
+    if (rescanned.References.size() != 3 || rescanned.Issues.size() != 3 ||
+        rescanned.References.size() != refreshed.References.size() || rescanned.Issues.size() != refreshed.Issues.size() ||
+        !std::ranges::all_of(refreshed.References, [&](const auto& link)
+        {
+            return std::ranges::any_of(rescanned.References, [&](const auto& other)
+            {
+                return link.Source == other.Source && link.Target == other.Target;
+            });
+        }) || !std::ranges::all_of(refreshed.Issues, [&](const auto& issue)
+        {
+            return std::ranges::any_of(rescanned.Issues, [&](const auto& other)
+            {
+                return issue.SourceFile == other.SourceFile && issue.TargetReference == other.TargetReference &&
+                    issue.IssueType == other.IssueType;
+            });
+        }))
+        return 69;
+
+    const auto newDocument = assets / "NewDocument.json";
+    if (!WriteFixture(newDocument, "{}")) return 70;
+    auto withNewDocument = changes;
+    withNewDocument.ObserveFile(newDocument, true, true);
+    if (AssetReferenceValidator::RefreshProjectDocuments(scanIndex, withNewDocument.Documents, refreshed, delta) ||
+        refreshed.References.size() != 3 || refreshed.Issues.size() != 3 ||
+        delta.RemovedReferences.size() != 1 || delta.AddedReferences.size() != 1)
+        return 70;
+    if (!fs::remove(newDocument) || !WriteFixture(scene, originalScene)) return 70;
+
+    // Restoring the scene while re-reading an unchanged material must not emit the material's link.
+    changes.ObserveFile(material, true, false);
+    if (!AssetReferenceValidator::RefreshProjectDocuments(scanIndex, changes.Documents, refreshed, delta) ||
+        delta.RemovedIssues.size() != 1 || delta.RemovedIssues.front().PreviousIndex != scan.Issues.size() ||
+        delta.RemovedIssues.front().IssueType != Issue::MissingFile || delta.RemovedIssues.front().CanAutoFix ||
+        delta.FirstAddedIssue != scan.Issues.size() || refreshed.Issues.size() != scan.Issues.size() ||
+        delta.RemovedReferences.size() != 1 || delta.AddedReferences.size() != 1 ||
+        delta.RemovedReferences.front().Target != fs::canonical(texture) ||
+        delta.AddedReferences.front().Target != fs::canonical(material))
+        return 72;
+    if (!AssetReferenceValidator::RefreshProjectDocuments(scanIndex, changes.Documents, refreshed, delta) ||
+        !delta.RemovedIssues.empty() || delta.FirstAddedIssue != refreshed.Issues.size() ||
+        !delta.RemovedReferences.empty() || !delta.AddedReferences.empty())
+        return 73;
+
+    changes.ObserveFile(texture, true, true);
+    if (!changes.RequiresFullScan || !changes.Documents.empty()) return 71;
+    changes = {};
+    changes.ObserveFile(engine / "builtIn.png", false, true);
+    if (!changes.RequiresFullScan) return 71;
 
     std::vector<fs::path> packaged;
     if (!Editor::AssetReferenceValidator::ValidateBuildScene(scene, &packaged).empty() ||

@@ -44,7 +44,8 @@ public:
 	size_t GetActiveTaskCount() const;
 	// These timings are recorded and read on the editor thread.
 	AssetReferenceTimings GetAssetReferenceTimings() const { return m_AssetReferenceTimings; }
-	void RecordAssetReferenceTiming(AssetReferenceTimingKind kind, int frame, std::chrono::steady_clock::time_point start);
+	void RecordAssetReferenceTiming(AssetReferenceTimingKind kind, int frame,
+		std::chrono::steady_clock::time_point start, const AssetReferenceScanTiming* scan = nullptr);
 	void ResetAssetReferenceTimings() { m_AssetReferenceTimings = {}; }
 #pragma endregion
 

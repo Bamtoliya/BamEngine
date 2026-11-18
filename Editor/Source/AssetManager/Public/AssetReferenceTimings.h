@@ -16,6 +16,7 @@ namespace Editor
         DeleteImpact,
         MovePreparation,
         MoveRecheck,
+        Incremental,
         Count
     };
 
@@ -32,6 +33,20 @@ namespace Editor
         }
     };
 
+    struct AssetReferenceScanTiming
+    {
+        AssetReferenceTimingKind Kind = AssetReferenceTimingKind::Count;
+        int Frame = -1;
+        std::size_t Directories = 0;
+        std::size_t Documents = 0;
+        std::size_t References = 0;
+        std::size_t Issues = 0;
+        double TraversalMs = 0.0;
+        double ReadParseMs = 0.0;
+        double ResolveMs = 0.0;
+        double RefreshViewMs = 0.0;
+    };
+
     // Synchronous editor operations. Record only non-overlapping scopes on the editor thread.
     struct AssetReferenceTimings
     {
@@ -40,8 +55,10 @@ namespace Editor
         int LastFrame = -1;
         double LastFrameMs = 0.0;
         double PeakFrameMs = 0.0;
+        AssetReferenceScanTiming LastScan;
 
-        void Record(AssetReferenceTimingKind kind, int frame, double elapsedMs)
+        void Record(AssetReferenceTimingKind kind, int frame, double elapsedMs,
+            const AssetReferenceScanTiming* scan = nullptr)
         {
             const auto index = static_cast<std::size_t>(kind);
             if (index >= ByKind.size())
@@ -52,6 +69,13 @@ namespace Editor
             sample.LastMs = elapsedMs;
             sample.TotalMs += elapsedMs;
             sample.PeakMs = (std::max)(sample.PeakMs, elapsedMs);
+
+            if (scan)
+            {
+                LastScan = *scan;
+                LastScan.Kind = kind;
+                LastScan.Frame = frame;
+            }
 
             if (LastFrame != frame)
             {

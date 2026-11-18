@@ -98,9 +98,20 @@ void EngineTaskMetricsWidget::DrawReferenceTimings() const
     constexpr const char* labels[] = {
         "Metrics.ReferenceInitial", "Metrics.ReferenceManual", "Metrics.ReferenceAutomatic",
         "Metrics.ReferenceAfterRepair", "Metrics.ReferenceDeleteImpact", "Metrics.ReferenceMovePreparation",
-        "Metrics.ReferenceMoveRecheck"
+        "Metrics.ReferenceMoveRecheck", "Metrics.ReferenceIncremental"
     };
     static_assert(IM_ARRAYSIZE(labels) == AssetReferenceTimings::KindCount);
+
+    const auto& scan = m_ReferenceTimings.LastScan;
+    if (scan.Frame >= 0)
+    {
+        const auto latest = LOCAL_FMT("Metrics.ReferenceScanLatest", LOCAL(labels[static_cast<std::size_t>(scan.Kind)]),
+            scan.Frame, scan.Directories, scan.Documents, scan.References, scan.Issues);
+        const auto phases = LOCAL_FMT("Metrics.ReferenceScanPhases", scan.TraversalMs, scan.ReadParseMs,
+            scan.ResolveMs, scan.RefreshViewMs);
+        ImGui::TextWrapped("%s", latest.c_str());
+        ImGui::TextWrapped("%s", phases.c_str());
+    }
 
     const auto flags = ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
     if (!ImGui::BeginTable("AssetReferenceTimings", 5, flags))

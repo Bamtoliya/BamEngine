@@ -31,6 +31,21 @@
 using namespace std;
 
 #pragma region ContentBrowserFileListner
+void ContentBrowserFileListener::QueueReferenceChanges(AssetReferenceChanges changes)
+{
+	if (changes.Empty()) return;
+	std::lock_guard lock(m_ReferenceChangesMutex);
+	m_ReferenceChanges.Merge(std::move(changes));
+	m_HasReferenceChanges.store(true);
+}
+
+AssetReferenceChanges ContentBrowserFileListener::TakeReferenceChanges()
+{
+	std::lock_guard lock(m_ReferenceChangesMutex);
+	m_HasReferenceChanges.store(false);
+	return std::exchange(m_ReferenceChanges, {});
+}
+
 void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const std::string& dir,
 	const std::string& filename, efsw::Action action, std::string oldFilename)
 {
@@ -51,23 +66,29 @@ void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const s
 
 		const filesystem::path filePath = directory / reinterpret_cast<const char8_t*>(filename.c_str());
 		const bool projectWatch = watchid == m_ProjectWatchId;
-		bool documentChanged = projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(filePath);
+		AssetReferenceChanges changes;
+		changes.ObserveFile(filePath, projectWatch, action != efsw::Action::Modified);
 		cache.RequestInvalidate(filePath);
 
-		if (action == efsw::Action::Moved && !oldFilename.empty())
+		if (action == efsw::Action::Moved)
 		{
-			const filesystem::path oldFilePath = directory / reinterpret_cast<const char8_t*>(oldFilename.c_str());
-			documentChanged |= projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(oldFilePath);
-			cache.RequestInvalidate(oldFilePath);
+			if (oldFilename.empty())
+				changes.RequireFullScan();
+			else
+			{
+				const filesystem::path oldFilePath = directory / reinterpret_cast<const char8_t*>(oldFilename.c_str());
+				changes.ObserveFile(oldFilePath, projectWatch, true);
+				cache.RequestInvalidate(oldFilePath);
+			}
 		}
 
-		if (documentChanged)
-			m_ReferenceDocumentsChanged.store(true);
+		QueueReferenceChanges(std::move(changes));
 		m_RefreshFlag.store(true);
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
-		// 백그라운드 파일 감시자 스레드 예외로 인한 전체 프로세스 크래시 방어
+		QueueReferenceChanges({ true, {} });
+		m_RefreshFlag.store(true);
 	}
 }
 #pragma endregion
@@ -169,7 +190,7 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_NeedToExpandTree = true;
 	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
 	m_FileWatcher = new efsw::FileWatcher();
-	m_FileListener = new ContentBrowserFileListener(m_NeedsCacheRefresh, m_ReferenceDocumentsChanged);
+	m_FileListener = new ContentBrowserFileListener(m_NeedsCacheRefresh);
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
 	m_FileListener->SetProjectWatchId(m_WatchID);
 	std::error_code ec;
@@ -225,17 +246,17 @@ const filesystem::path& ContentBrowserPanel::GetActiveRootForPath(const filesyst
 	return m_RootPath;
 }
 
-static void RequestAssetReferenceScanRefresh()
+static void RequestAssetReferenceScanRefresh(AssetReferenceChanges changes = { true, {} })
 {
 	auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
 	if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
-		references->RequestScanRefresh();
+		references->RequestScanRefresh(std::move(changes));
 }
 
 void ContentBrowserPanel::Update(f32 dt)
 {
-	if (m_ReferenceDocumentsChanged.exchange(false))
-		RequestAssetReferenceScanRefresh();
+	if (m_FileListener && m_FileListener->HasReferenceChanges())
+		RequestAssetReferenceScanRefresh(m_FileListener->TakeReferenceChanges());
 
 	if (m_Open && m_IsImportModalActive)
 	{

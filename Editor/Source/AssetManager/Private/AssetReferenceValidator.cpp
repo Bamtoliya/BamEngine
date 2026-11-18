@@ -1,10 +1,13 @@
 ﻿#include "AssetReferenceValidator.h"
+#include "AssetReferenceTimings.h"
 #include "PlatformPath.h"
 #include "AnimatorStateMachine.h"
 #include "GraphSystem.h"
 #include "ResourceBinaryHeader.h"
 #include "Logger.h"
 #include <algorithm>
+#include <chrono>
+#include <iterator>
 #include <fstream>
 #include <sstream>
 #include <utility>
@@ -312,13 +315,31 @@ namespace Editor
             }
         }
 
-        void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan)
+        void InspectProjectDocument(const std::filesystem::path& source, AssetReferenceScan& scan,
+            AssetReferenceScanTiming* timing)
         {
-            ReferenceJson document;
-            if (ReadReferenceDocument(source, document))
-                InspectReferenceDocument(source, document, scan);
-            else
-                ReportUnreadableDocument(source, scan);
+            using Clock = std::chrono::steady_clock;
+            using Milliseconds = std::chrono::duration<double, std::milli>;
+            const auto started = timing ? Clock::now() : Clock::time_point{};
+            Clock::time_point parsed, inspected;
+            {
+                ReferenceJson document;
+                const bool read = ReadReferenceDocument(source, document);
+                if (timing) parsed = Clock::now();
+
+                if (read)
+                    InspectReferenceDocument(source, document, scan);
+                else
+                    ReportUnreadableDocument(source, scan);
+                if (timing) inspected = Clock::now();
+            }
+
+            if (timing)
+            {
+                ++timing->Documents;
+                timing->ReadParseMs += Milliseconds((parsed - started) + (Clock::now() - inspected)).count();
+                timing->ResolveMs += Milliseconds(inspected - parsed).count();
+            }
         }
 
         using RepairRequests = std::map<std::string, const AssetReferenceIssue*>;
@@ -436,7 +457,7 @@ namespace Editor
         AssetReferenceScan scan;
         std::error_code error;
         const auto source = std::filesystem::canonical(filePath, error);
-        InspectProjectDocument(error ? filePath : source, scan);
+        InspectProjectDocument(error ? filePath : source, scan, nullptr);
         return std::move(scan.Issues);
     }
 
@@ -549,19 +570,102 @@ namespace Editor
             extension == ".actiontimeline";
     }
 
-    AssetReferenceScan AssetReferenceValidator::ScanProject()
+    namespace
+    {
+        bool IsSaveStagingPath(const std::filesystem::path& path)
+        {
+            const auto matches = [](std::wstring_view name, std::wstring_view prefix)
+            {
+                if (!name.starts_with(prefix)) return false;
+                const auto suffix = name.substr(prefix.size());
+                const auto separator = suffix.find(L'-');
+                if (separator == 0 || separator == suffix.npos || separator + 1 >= suffix.size()) return false;
+                const auto isDigit = [](wchar_t ch) { return ch >= L'0' && ch <= L'9'; };
+                return std::ranges::all_of(suffix.substr(0, separator), isDigit) &&
+                    std::ranges::all_of(suffix.substr(separator + 1), isDigit);
+            };
+            const auto name = path.filename().wstring();
+            const auto parent = path.parent_path().filename().wstring();
+            return matches(name, L".archive-save-") || matches(name, L".bamgraph-save-") ||
+                (name == L"document.tmp" && matches(parent, L".archive-save-")) ||
+                (name == L"graph.tmp" && matches(parent, L".bamgraph-save-"));
+        }
+    }
+
+    void AssetReferenceChanges::ObserveFile(std::filesystem::path path, bool inProject, bool membershipChanged)
+    {
+        if (RequiresFullScan) return;
+        const bool isDocument = inProject && AssetReferenceValidator::IsReferenceDocumentPath(path);
+        if ((!isDocument && !membershipChanged) || IsSaveStagingPath(path)) return;
+
+        if (isDocument) AddDocument(std::move(path));
+        else RequireFullScan();
+    }
+
+    void AssetReferenceChanges::RequireFullScan()
+    {
+        RequiresFullScan = true;
+        Documents.clear();
+    }
+
+    void AssetReferenceChanges::AddDocument(std::filesystem::path path)
+    {
+        if (RequiresFullScan || std::ranges::find(Documents, path) != Documents.end()) return;
+        constexpr std::size_t maxDocumentsPerRefresh = 64;
+        if (Documents.size() == maxDocumentsPerRefresh)
+        {
+            RequireFullScan();
+            return;
+        }
+        Documents.push_back(std::move(path));
+    }
+
+    void AssetReferenceChanges::Merge(AssetReferenceChanges changes)
+    {
+        if (changes.RequiresFullScan)
+            RequireFullScan();
+        else
+            for (auto& path : changes.Documents)
+                AddDocument(std::move(path));
+    }
+
+    AssetReferenceScan AssetReferenceValidator::ScanProject(AssetReferenceScanTiming* timing,
+        AssetReferenceScanIndex* index)
     {
         namespace fs = std::filesystem;
         using Path = Engine::PlatformPath;
+        using Clock = std::chrono::steady_clock;
+        using Milliseconds = std::chrono::duration<double, std::milli>;
         AssetReferenceScan scan;
+        if (timing) *timing = {};
+        if (index) *index = {};
+
+        const auto started = timing ? Clock::now() : Clock::time_point{};
+        const auto finishTiming = [&]
+        {
+            if (!timing) return;
+            const auto elapsedMs = Milliseconds(Clock::now() - started).count();
+            timing->TraversalMs = (std::max)(0.0, elapsedMs - timing->ReadParseMs - timing->ResolveMs);
+            timing->References = scan.References.size();
+            timing->Issues = scan.Issues.size();
+        };
+
         std::error_code error;
         const auto root = fs::canonical(Path::GetProjectAssetRoot(), error);
         if (error || !fs::is_directory(root, error))
         {
             ReportUnreadableDocument(Path::GetProjectAssetRoot(), scan);
+            finishTiming();
             return scan;
         }
 
+        if (index)
+        {
+            index->Root = root;
+            index->ProjectRoot = Path::GetProjectRoot();
+            index->EngineRoot = Path::GetEngineResourceRoot();
+            index->EditorRoot = Path::GetEditorResourceRoot();
+        }
         // Keep scanning other directories if one subtree cannot be listed.
         std::set<fs::path> visited{ root };
         std::vector<fs::path> pending{ root };
@@ -569,6 +673,7 @@ namespace Editor
         {
             auto directory = std::move(pending.back());
             pending.pop_back();
+            if (timing) ++timing->Directories;
             for (auto entry = fs::directory_iterator(directory, error);
                 !error && entry != fs::directory_iterator{}; entry.increment(error))
             {
@@ -576,6 +681,7 @@ namespace Editor
                 const auto status = entry->symlink_status(entryError);
                 if (entryError)
                 {
+                    if (index) index->Root.clear();
                     ReportUnreadableDocument(entry->path(), scan);
                     continue;
                 }
@@ -590,6 +696,7 @@ namespace Editor
                 const auto source = fs::canonical(entry->path(), entryError);
                 if (entryError)
                 {
+                    if (index) index->Root.clear();
                     ReportUnreadableDocument(entry->path(), scan);
                     continue;
                 }
@@ -598,12 +705,107 @@ namespace Editor
                 if (isDirectory && visited.insert(source).second)
                     pending.push_back(source);
                 if (isDocument)
-                    InspectProjectDocument(source, scan);
+                {
+                    if (index) index->Documents.insert(source);
+                    InspectProjectDocument(source, scan, timing);
+                }
             }
             if (error)
+            {
+                if (index) index->Root.clear();
                 ReportUnreadableDocument(directory, scan);
+            }
         }
+        finishTiming();
         return scan;
+    }
+
+    bool AssetReferenceValidator::RefreshProjectDocuments(const AssetReferenceScanIndex& index,
+        std::span<const std::filesystem::path> paths, AssetReferenceScan& scan, AssetReferenceScanDelta& delta,
+        AssetReferenceScanTiming* timing)
+    {
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        using Clock = std::chrono::steady_clock;
+        using Milliseconds = std::chrono::duration<double, std::milli>;
+        const auto started = timing ? Clock::now() : Clock::time_point{};
+        if (timing) *timing = {};
+
+        if (paths.empty() || index.Root.empty() || index.ProjectRoot != Path::GetProjectRoot() ||
+            index.EngineRoot != Path::GetEngineResourceRoot() || index.EditorRoot != Path::GetEditorResourceRoot())
+            return false;
+
+        std::error_code error;
+        const auto root = fs::canonical(Path::GetProjectAssetRoot(), error);
+        if (error || root != index.Root) return false;
+
+        std::unordered_set<fs::path> sources, relativeSources;
+        for (const auto& path : paths)
+        {
+            if (!IsReferenceDocumentPath(path) || !fs::is_regular_file(fs::symlink_status(path, error)) || error)
+                return false;
+            auto source = fs::canonical(path, error);
+            if (error || !index.Documents.contains(source)) return false;
+            relativeSources.insert(Path::ToProjectRelative(source));
+            sources.insert(std::move(source));
+        }
+        if (timing) timing->TraversalMs = Milliseconds(Clock::now() - started).count();
+
+        AssetReferenceScan refreshed;
+        for (const auto& source : sources)
+            InspectProjectDocument(source, refreshed, timing);
+
+        const auto mergeStarted = timing ? Clock::now() : Clock::time_point{};
+        delta = {};
+        scan.Issues.reserve(scan.Issues.size() + refreshed.Issues.size());
+        scan.References.reserve(scan.References.size() + refreshed.References.size());
+
+        size_t keptIssues = 0;
+        for (size_t index = 0; index < scan.Issues.size(); ++index)
+        {
+            auto& issue = scan.Issues[index];
+            if (relativeSources.contains(issue.SourceFile))
+            {
+                delta.RemovedIssues.push_back({ index, issue.IssueType, issue.CanAutoFix });
+                continue;
+            }
+            if (keptIssues != index)
+                scan.Issues[keptIssues] = std::move(issue);
+            ++keptIssues;
+        }
+        scan.Issues.resize(keptIssues);
+        delta.FirstAddedIssue = keptIssues;
+        scan.Issues.insert(scan.Issues.end(), std::make_move_iterator(refreshed.Issues.begin()),
+            std::make_move_iterator(refreshed.Issues.end()));
+
+        std::vector<AssetReferenceLink> previousLinks;
+        std::erase_if(scan.References, [&](const AssetReferenceLink& link)
+        {
+            if (!sources.contains(link.Source))
+                return false;
+            previousLinks.push_back(link);
+            return true;
+        });
+        const auto byEndpoints = [](const AssetReferenceLink& left, const AssetReferenceLink& right)
+        {
+            return std::tie(left.Source, left.Target) < std::tie(right.Source, right.Target);
+        };
+        std::ranges::sort(previousLinks, byEndpoints);
+        std::ranges::sort(refreshed.References, byEndpoints);
+        std::ranges::set_difference(previousLinks, refreshed.References,
+            std::back_inserter(delta.RemovedReferences), byEndpoints);
+        std::ranges::set_difference(refreshed.References, previousLinks,
+            std::back_inserter(delta.AddedReferences), byEndpoints);
+        scan.References.insert(scan.References.end(), std::make_move_iterator(refreshed.References.begin()),
+            std::make_move_iterator(refreshed.References.end()));
+
+        if (timing)
+        {
+            timing->RefreshViewMs = Milliseconds(Clock::now() - mergeStarted).count();
+            timing->References = scan.References.size();
+            timing->Issues = scan.Issues.size();
+        }
+        return true;
     }
 
     static AssetReferenceImpact AnalyzeFileChange(const std::vector<std::filesystem::path>& targets, bool includeInternal)

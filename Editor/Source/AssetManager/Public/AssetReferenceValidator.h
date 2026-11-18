@@ -2,11 +2,15 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <span>
+#include <unordered_set>
 #include "Engine_API.h"
 #include "PlatformPath.h"
 
 namespace Editor
 {
+    struct AssetReferenceScanTiming;
+
     enum class EAssetReferenceIssueType
     {
         MissingFile,          // 디스크에 대상 파일이 존재하지 않음 (누락)
@@ -37,6 +41,45 @@ namespace Editor
     {
         std::vector<AssetReferenceIssue> Issues;
         std::vector<AssetReferenceLink> References;
+    };
+
+    struct AssetReferenceScanDelta
+    {
+        struct RemovedIssue
+        {
+            size_t PreviousIndex;
+            EAssetReferenceIssueType IssueType;
+            bool CanAutoFix;
+        };
+
+        // Removed rows are in previous list order. New rows form a suffix of the updated list.
+        std::vector<RemovedIssue> RemovedIssues;
+        size_t FirstAddedIssue = 0;
+        std::vector<AssetReferenceLink> RemovedReferences;
+        std::vector<AssetReferenceLink> AddedReferences;
+    };
+
+    struct AssetReferenceScanIndex
+    {
+        std::filesystem::path Root;
+        std::filesystem::path ProjectRoot;
+        std::filesystem::path EngineRoot;
+        std::filesystem::path EditorRoot;
+        std::unordered_set<std::filesystem::path> Documents;
+    };
+
+    struct AssetReferenceChanges
+    {
+        bool RequiresFullScan = false;
+        std::vector<std::filesystem::path> Documents;
+
+        bool Empty() const { return !RequiresFullScan && Documents.empty(); }
+        void RequireFullScan();
+        void ObserveFile(std::filesystem::path path, bool inProject, bool membershipChanged);
+        void Merge(AssetReferenceChanges changes);
+
+    private:
+        void AddDocument(std::filesystem::path path);
     };
 
     struct AssetReferenceImpact
@@ -70,7 +113,12 @@ namespace Editor
         static bool IsReferenceDocumentPath(const std::filesystem::path& path);
 
         // 프로젝트 에셋 루트에서 저장된 문서의 직접 참조와 문제를 수집한다.
-        static AssetReferenceScan ScanProject();
+        static AssetReferenceScan ScanProject(AssetReferenceScanTiming* timing = nullptr,
+            AssetReferenceScanIndex* index = nullptr);
+        // Return false without modifying the scan or delta when an event cannot be matched to an existing source.
+        static bool RefreshProjectDocuments(const AssetReferenceScanIndex& index,
+            std::span<const std::filesystem::path> paths, AssetReferenceScan& scan,
+            AssetReferenceScanDelta& delta, AssetReferenceScanTiming* timing = nullptr);
         static std::vector<AssetReferenceIssue> ValidateAllResources();
         static AssetReferenceImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
         static AssetReferenceImpact AnalyzeMove(const std::vector<std::filesystem::path>& targets);

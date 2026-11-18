@@ -144,11 +144,12 @@ namespace Editor
         Focus();
     }
 
-    void AssetReferencePanel::RequestScanRefresh()
+    void AssetReferencePanel::RequestScanRefresh(AssetReferenceChanges changes)
     {
-        if (!m_HasScanned)
+        if (!m_HasScanned || changes.Empty())
             return;
 
+        m_PendingScanChanges.Merge(std::move(changes));
         // File writes can arrive as a burst of change notifications.
         m_ScanAfter = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
     }
@@ -199,9 +200,9 @@ namespace Editor
 
     void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
     {
-        m_ReferenceSearchDirty = true;
         if (asset.empty())
         {
+            m_ReferenceSearchDirty |= !m_ReferenceTarget.empty();
             m_ReferenceTarget.clear();
             m_ReferenceTargetMissing = false;
             return;
@@ -209,8 +210,11 @@ namespace Editor
 
         const auto physical = Engine::PlatformPath::ResolveUri(asset);
         std::error_code error;
-        const auto resolved = std::filesystem::canonical(physical, error);
-        m_ReferenceTarget = error ? physical.lexically_normal() : resolved;
+        auto resolved = std::filesystem::canonical(physical, error);
+        if (error)
+            resolved = physical.lexically_normal();
+        m_ReferenceSearchDirty |= resolved != m_ReferenceTarget;
+        m_ReferenceTarget = std::move(resolved);
         m_ReferenceTargetMissing = !std::filesystem::is_regular_file(m_ReferenceTarget, error);
     }
 
@@ -230,12 +234,75 @@ namespace Editor
             {
                 auto& children = entry.second;
                 std::ranges::sort(children.Paths);
-                children.AllLeaves = std::ranges::none_of(children.Paths,
-                    [&links](const auto& path) { return links.contains(path); });
+                UpdateReferenceLeaves(children, links);
             }
         };
         prepareChildren(m_Dependencies);
         prepareChildren(m_Users);
+        m_ReferenceSearchDirty = true;
+    }
+
+    void AssetReferencePanel::UpdateReferenceLeaves(ReferenceChildren& children, const ReferenceAdjacency& links)
+    {
+        children.AllLeaves = std::ranges::none_of(children.Paths,
+            [&links](const auto& path) { return links.contains(path); });
+    }
+
+    void AssetReferencePanel::ApplyReferenceDelta(const AssetReferenceScanDelta& delta)
+    {
+        if (delta.RemovedReferences.empty() && delta.AddedReferences.empty())
+            return;
+
+        const auto updatePaths = [&](ReferenceAdjacency& links, auto ownerPath, auto childPath)
+        {
+            std::unordered_map<std::filesystem::path, bool> hadChildren;
+            for (const auto& link : delta.RemovedReferences)
+            {
+                const auto& owner = link.*ownerPath;
+                auto entry = links.find(owner);
+                hadChildren.try_emplace(owner, true);
+
+                auto& paths = entry->second.Paths;
+                paths.erase(std::ranges::lower_bound(paths, link.*childPath));
+                if (paths.empty())
+                    links.erase(entry);
+            }
+            for (const auto& link : delta.AddedReferences)
+            {
+                const auto& owner = link.*ownerPath;
+                auto [entry, inserted] = links.try_emplace(owner);
+                hadChildren.try_emplace(owner, !inserted);
+
+                auto& paths = entry->second.Paths;
+                paths.insert(std::ranges::lower_bound(paths, link.*childPath), link.*childPath);
+            }
+            return hadChildren;
+        };
+        const auto changedDependencies = updatePaths(m_Dependencies, &AssetReferenceLink::Source,
+            &AssetReferenceLink::Target);
+        const auto changedUsers = updatePaths(m_Users, &AssetReferenceLink::Target, &AssetReferenceLink::Source);
+
+        const auto refreshLeaves = [](ReferenceAdjacency& links, const ReferenceAdjacency& reverse, const auto& changed)
+        {
+            std::unordered_set<std::filesystem::path> owners;
+            for (const auto& [path, hadChildren] : changed)
+            {
+                const bool hasChildren = links.contains(path);
+                if (hasChildren)
+                    owners.insert(path);
+                if (hasChildren == hadChildren)
+                    continue;
+
+                // A child that gains or loses its last branch changes how its parents are drawn.
+                if (const auto parents = reverse.find(path); parents != reverse.end())
+                    owners.insert(parents->second.Paths.begin(), parents->second.Paths.end());
+            }
+            for (const auto& owner : owners)
+                UpdateReferenceLeaves(links.at(owner), links);
+        };
+        refreshLeaves(m_Dependencies, m_Users, changedDependencies);
+        refreshLeaves(m_Users, m_Dependencies, changedUsers);
+        m_ReferenceSearchDirty = true;
     }
 
     void AssetReferencePanel::CollectReferenceMatches(const ReferenceAdjacency& links, std::wstring_view query,
@@ -490,7 +557,7 @@ namespace Editor
     {
         const auto getLabel = [this](const AssetReferenceIssueFilter& option)
         {
-            size_t count = m_Issues.size();
+            size_t count = m_Scan.Issues.size();
             if (option.Type)
             {
                 const auto found = m_IssueTypeCounts.find(*option.Type);
@@ -525,6 +592,14 @@ namespace Editor
     void AssetReferencePanel::UpdateVisibleIssues()
     {
         m_VisibleIssueIndices.clear();
+        AppendVisibleIssues(0);
+    }
+
+    void AssetReferencePanel::AppendVisibleIssues(size_t first)
+    {
+        if (first == m_Scan.Issues.size())
+            return;
+
         const auto& type = issueFilters[m_IssueFilterIndex].Type;
         const auto query = NormalizeReferenceSearch(Engine::StrToWStr(m_SearchFilter));
         const auto matches = [&query](std::wstring text)
@@ -532,9 +607,9 @@ namespace Editor
             return NormalizeReferenceSearch(std::move(text)).find(query) != std::wstring::npos;
         };
 
-        for (size_t index = 0; index < m_Issues.size(); ++index)
+        for (size_t index = first; index < m_Scan.Issues.size(); ++index)
         {
-            const auto& issue = m_Issues[index];
+            const auto& issue = m_Scan.Issues[index];
             if (type && issue.IssueType != *type)
                 continue;
 
@@ -542,6 +617,46 @@ namespace Editor
                 matches(Engine::StrToWStr(issue.PropertyName)) || matches(Engine::StrToWStr(issue.TargetReference)))
                 m_VisibleIssueIndices.push_back(index);
         }
+    }
+
+    void AssetReferencePanel::CountAddedIssues(size_t first)
+    {
+        for (size_t index = first; index < m_Scan.Issues.size(); ++index)
+        {
+            const auto& issue = m_Scan.Issues[index];
+            ++m_IssueTypeCounts[issue.IssueType];
+            if (issue.CanAutoFix)
+                ++m_FixableIssueCount;
+        }
+    }
+
+    void AssetReferencePanel::ApplyIssueDelta(const AssetReferenceScanDelta& delta)
+    {
+        for (const auto& issue : delta.RemovedIssues)
+        {
+            --m_IssueTypeCounts.at(issue.IssueType);
+            if (issue.CanAutoFix)
+                --m_FixableIssueCount;
+        }
+
+        if (!delta.RemovedIssues.empty())
+        {
+            size_t kept = 0;
+            size_t removedBefore = 0;
+            for (const size_t index : m_VisibleIssueIndices)
+            {
+                while (removedBefore < delta.RemovedIssues.size() &&
+                    delta.RemovedIssues[removedBefore].PreviousIndex < index)
+                    ++removedBefore;
+                if (removedBefore < delta.RemovedIssues.size() && delta.RemovedIssues[removedBefore].PreviousIndex == index)
+                    continue;
+
+                m_VisibleIssueIndices[kept++] = index - removedBefore;
+            }
+            m_VisibleIssueIndices.resize(kept);
+        }
+        CountAddedIssues(delta.FirstAddedIssue);
+        AppendVisibleIssues(delta.FirstAddedIssue);
     }
 
     void AssetReferencePanel::DrawSummaryStats()
@@ -552,7 +667,7 @@ namespace Editor
             return;
         }
 
-        const auto count = LOCAL_FMT("AssetRef.VisibleIssueCount", m_VisibleIssueIndices.size(), m_Issues.size());
+        const auto count = LOCAL_FMT("AssetRef.VisibleIssueCount", m_VisibleIssueIndices.size(), m_Scan.Issues.size());
         ImGui::TextUnformatted(count.c_str());
         const auto fixable = LOCAL_FMT("AssetRef.AutoFixable", m_FixableIssueCount);
         EditorUI::SameLineIfFits(ImGui::CalcTextSize(fixable.c_str()).x);
@@ -565,7 +680,7 @@ namespace Editor
             return;
         if (m_VisibleIssueIndices.empty())
         {
-            EditorUI::EmptyState(m_Issues.empty() ? "AssetRef.NoIssues" : "AssetRef.NoMatchingIssues");
+            EditorUI::EmptyState(m_Scan.Issues.empty() ? "AssetRef.NoIssues" : "AssetRef.NoMatchingIssues");
             return;
         }
 
@@ -585,7 +700,7 @@ namespace Editor
 
             for (const size_t i : m_VisibleIssueIndices)
             {
-                const auto& issue = m_Issues[i];
+                const auto& issue = m_Scan.Issues[i];
                 ImGui::TableNextRow();
                 ImGui::PushID(static_cast<int>(i));
 
@@ -646,32 +761,55 @@ namespace Editor
 
     void AssetReferencePanel::RunValidation(AssetReferenceTimingKind kind)
     {
-        const auto start = std::chrono::steady_clock::now();
-        auto scan = AssetReferenceValidator::ScanProject();
-        m_Issues.swap(scan.Issues);
-        m_IssueTypeCounts.clear();
-        m_FixableIssueCount = 0;
-        for (const auto& issue : m_Issues)
+        using Clock = std::chrono::steady_clock;
+        using Milliseconds = std::chrono::duration<double, std::milli>;
+        const auto start = Clock::now();
+        AssetReferenceScanTiming timing;
+        AssetReferenceScanDelta delta;
+        constexpr std::size_t maxIncrementalScans = 32;
+        const bool incremental = kind == AssetReferenceTimingKind::Automatic && !m_PendingScanChanges.RequiresFullScan &&
+            m_IncrementalScans < maxIncrementalScans &&
+            AssetReferenceValidator::RefreshProjectDocuments(m_ScanIndex, m_PendingScanChanges.Documents, m_Scan, delta, &timing);
+        if (incremental)
         {
-            ++m_IssueTypeCounts[issue.IssueType];
-            if (issue.CanAutoFix)
-                ++m_FixableIssueCount;
+            kind = AssetReferenceTimingKind::Incremental;
+            ++m_IncrementalScans;
         }
-        UpdateVisibleIssues();
-        RebuildReferenceTrees(scan.References);
+        else
+        {
+            m_Scan = AssetReferenceValidator::ScanProject(&timing, &m_ScanIndex);
+            m_IncrementalScans = 0;
+        }
+        const auto scanned = Clock::now();
+        m_PendingScanChanges = {};
+
+        if (incremental)
+        {
+            ApplyIssueDelta(delta);
+            ApplyReferenceDelta(delta);
+        }
+        else
+        {
+            m_IssueTypeCounts.clear();
+            m_FixableIssueCount = 0;
+            CountAddedIssues(0);
+            UpdateVisibleIssues();
+            RebuildReferenceTrees(m_Scan.References);
+        }
         SetReferenceTarget(m_ReferenceTarget);
         m_HasScanned = true;
         m_ScanAfter.reset();
         m_StatusMessage = "AssetRef.ScanCompleted";
-        AssetManager::Get().RecordAssetReferenceTiming(kind, ImGui::GetFrameCount(), start);
+        timing.RefreshViewMs += Milliseconds(Clock::now() - scanned).count();
+        AssetManager::Get().RecordAssetReferenceTiming(kind, ImGui::GetFrameCount(), start, &timing);
     }
 
     void AssetReferencePanel::FixSelectedIssue(size_t index)
     {
-        if (index >= m_Issues.size())
+        if (index >= m_Scan.Issues.size())
             return;
 
-        const auto& issue = m_Issues[index];
+        const auto& issue = m_Scan.Issues[index];
         if (!ImGuiManager::Get().CanRepairAssetReferenceSource(issue.SourceFile))
         {
             NotificationManager::Get().AddNotification(LOCAL("AssetRef.Title"), LOCAL("AssetRef.RepairBlocked"),
@@ -686,7 +824,7 @@ namespace Editor
     {
         std::vector<AssetReferenceIssue> eligible;
         bool blocked = false;
-        for (const auto& issue : m_Issues)
+        for (const auto& issue : m_Scan.Issues)
         {
             if (!issue.CanAutoFix)
                 continue;

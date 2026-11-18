@@ -21,7 +21,7 @@ public:
 
     void Draw() override;
     void ShowReferences(const std::filesystem::path& asset);
-    void RequestScanRefresh();
+    void RequestScanRefresh(AssetReferenceChanges changes = { true, {} });
     void PrepareAssetPathRelocation(AssetPathRelocation& relocation);
 
 private:
@@ -38,6 +38,9 @@ private:
     void DrawSummaryStats();
     void DrawIssuesTable();
     void UpdateVisibleIssues();
+    void AppendVisibleIssues(size_t first);
+    void CountAddedIssues(size_t first);
+    void ApplyIssueDelta(const AssetReferenceScanDelta& delta);
     void DrawReferences();
     void DrawReferenceToolbar();
     void DrawReferenceMatches(const char* labelKey, const ReferencePaths& matches, std::filesystem::path& next);
@@ -50,6 +53,8 @@ private:
     void StepReferenceHistory(bool forward);
     void SetReferenceTarget(const std::filesystem::path& asset);
     void RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references);
+    void ApplyReferenceDelta(const AssetReferenceScanDelta& delta);
+    static void UpdateReferenceLeaves(ReferenceChildren& children, const ReferenceAdjacency& links);
     void UpdateReferenceMatches();
     void CollectReferenceMatches(const ReferenceAdjacency& links, std::wstring_view query, ReferencePaths& matches) const;
 
@@ -59,7 +64,10 @@ private:
     void ReportRepairResult(size_t count);
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 private:
-    std::vector<AssetReferenceIssue> m_Issues;
+    AssetReferenceScan m_Scan;
+    AssetReferenceScanIndex m_ScanIndex;
+    AssetReferenceChanges m_PendingScanChanges;
+    std::size_t m_IncrementalScans = 0;
     std::vector<size_t> m_VisibleIssueIndices;
     std::unordered_map<EAssetReferenceIssueType, size_t> m_IssueTypeCounts;
     size_t m_FixableIssueCount = 0;

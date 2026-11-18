@@ -864,10 +864,13 @@ Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
 Metrics,ReferenceTimings,Asset reference timings (ms),에셋 참조 검사 시간 (ms)
 Metrics,ReferenceNoSamples,No measured reference work yet.,아직 측정된 참조 작업이 없습니다.
 Metrics,ReferenceFrameSum,Reference work on frame #{}: {:.2f} ms (peak {:.2f} ms),참조 작업 프레임 #{}: {:.2f} ms (최대 {:.2f} ms)
+Metrics,ReferenceScanLatest,{} on frame #{} · {} directories · {} documents · {} links · {} issues,{} 프레임 #{} · 폴더 {}개 · 문서 {}개 · 참조 링크 {}개 · 문제 {}건
+Metrics,ReferenceScanPhases,Traversal {:.2f} ms · Read and parse {:.2f} ms · Resolve references {:.2f} ms · Refresh view {:.2f} ms,경로 순회 {:.2f} ms · 읽기 및 파싱 {:.2f} ms · 참조 확인 {:.2f} ms · 화면 갱신 {:.2f} ms
 Metrics,ReferenceLast,Latest,최근
 Metrics,ReferenceInitial,First reference lookup,첫 참조 조회
 Metrics,ReferenceManual,Manual reference scan,수동 참조 검사
-Metrics,ReferenceAutomatic,Automatic refresh,자동 갱신
+Metrics,ReferenceAutomatic,Automatic full scan,자동 전체 검사
+Metrics,ReferenceIncremental,Changed document scan,변경 문서 검사
 Metrics,ReferenceAfterRepair,Scan after repair,복구 후 검사
 Metrics,ReferenceDeleteImpact,Deletion impact scan,삭제 영향 검사
 Metrics,ReferenceMovePreparation,Move reference preparation,이동 참조 갱신 준비

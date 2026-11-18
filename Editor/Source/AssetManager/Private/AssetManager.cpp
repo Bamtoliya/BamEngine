@@ -352,10 +352,10 @@ AssetTaskMetrics AssetManager::GetTaskMetrics() const
 }
 
 void AssetManager::RecordAssetReferenceTiming(AssetReferenceTimingKind kind, int frame,
-	std::chrono::steady_clock::time_point start)
+	std::chrono::steady_clock::time_point start, const AssetReferenceScanTiming* scan)
 {
 	const auto elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-	m_AssetReferenceTimings.Record(kind, frame, elapsedMs);
+	m_AssetReferenceTimings.Record(kind, frame, elapsedMs, scan);
 }
 
 size_t AssetManager::GetActiveTaskCount() const
