@@ -278,6 +278,7 @@ flowchart TD
    - `LightingPass`에서 허공 픽셀이 `discard`되어 `LightingColor` 버퍼의 배경이 완전한 암흑 `(0, 0, 0, 0)`으로 남음.
    - 표준 알파 블렌딩 공식 $\text{Final} = \text{Src} \times \alpha + \text{Dest} \times (1 - \alpha)$에 의해, 허공 영역의 메쉬는 $(0, 0, 0)$과 강제로 섞여 밝기가 반 토막 난 어두운 흙갈색으로 렌더링됨.
    - 반면 바닥이 있는 곳은 빛을 받은 밝은 지면 색상($\text{Dest} \approx 0.6$)과 섞여 화사하게 출력됨.
+   - **(2026-11-19 정정)** 9.1절 2·4번의 직접 원인은 배경 버퍼 암흑이 아니라, 프리뷰 Geometry 패스가 반투명·가산 트랙을 걸러내지 않아 G-Buffer에 기록하던 결함이다. 9.11절을 따른다.
 
 ### 9.3 상용 엔진급 해결 아키텍처 및 조치 내역
 1. **프리뷰 지면 평면화:** 두께 큐브 슬래브를 걷어내고 $y=0$에 놓이는 48m 수평 `PlaneMesh`로 교체하여 단면 잘림 원천 제거.
@@ -354,6 +355,8 @@ flowchart TD
   4. **블렌드 모드 ($SrcAlpha / One$)**:
      - 현재 `Additive` 블렌드는 $SrcColor \times SrcAlpha + DstColor$ 방식으로 동작하여, 텍스처나 트랙의 Alpha가 감소할 때 방출 광량이 비례하여 급감함.
 
+- **2026-11-19 정정**: 위 1번은 실제 원인이 아니었다. VFX 프리뷰의 허공 배경은 배경 프리셋 클리어 색(StudioGray `(0.18, 0.18, 0.19)`)이며, Additive 합성은 배경보다 어두워질 수 없다. 배경보다 어두운 흙갈색은 G-Buffer에 잘못 기록된 트랙을 조명 패스가 불투명 표면으로 칠한 결과다(9.11절). 아래 로드맵 2번(공중 모드 가상 환경광)은 이 결함을 가릴 뿐이므로 진행하지 않는다. 3번의 정면 알파 완화(`0.90`)는 반영되어 있다.
+
 - **향후 해결 과제 (Roadmap)**:
   1. **순수 가산 블렌드(Pure Additive, $One / One$) 머티리얼 분리**:
      - 알파 채널에 의한 광량 감쇄 없이 방출 광량을 $100\%$ 보존하는 완전 자체 발광형 언릿 머티리얼 지원.
@@ -371,5 +374,29 @@ flowchart TD
 - **VFXEditorPanel 및 인스펙터 연동**:
   - Light(조도), Mesh(스케일, 알파) 트랙의 프리셋 행 옆 베지어 버튼 연동 및 확인 시 타임라인 즉시 동기화.
   - UI/UX 디테일 정돈: 타이틀 `###ID` 노출 제거, 다국어 표준화(`PROP_TIME` 등), `PushTextWrapPos` 안내문 자동 줄바꿈, 메시 힌트 분리, `EditorCommon.OK` 확인 버튼 라벨 교정.
+
+### 9.11 트랙 블렌드 모드별 제출 패스 교정 (2026-11-19)
+
+- **현상**:
+  - VFX 프리뷰의 허공에서 Additive 메쉬 트랙이 배경보다 어두운 흙갈색으로 보였다. 지면 위에서는 밝게 보였다(9.1절 2·4번, 9.9절).
+  - 씬·게임 뷰포트에서는 Additive·AlphaBlend 메쉬 트랙과 기본 머티리얼(`ParticleMaterial_AlphaBlend`) 데칼 트랙이 보이지 않았다.
+- **원인 1 — 프리뷰 Geometry 패스 필터 누락**:
+  - 프리뷰 파이프라인(`ViewportDeferredPipeline::Initialize(..., false)`)은 메인 씬 유입을 막으려고 GeometryPass의 `acceptedBlendModes`를 `None`으로 둔다.
+  - `CompositeVFXSystem::SubmitSceneVFX`는 `None`을 "제한 없음"으로 해석해 모든 트랙을 GeometryPass에 제출했다. `ParticleSystem`에는 `0809895a`에서 이 경우를 `Opaque | Masked`로 보정했지만 복합 VFX에는 빠져 있었다.
+  - Additive 트랙은 `forwardParticlePS`로 G-Buffer에 그려진다. 이 셰이더는 `SV_TARGET0`(Diffuse)에만 출력하므로 Diffuse에는 링 색이 더해지고 Normal·PBR·Position은 기록되지 않는다.
+  - 조명 패스는 Diffuse 알파가 있는 픽셀을 불투명 표면으로 계산한다. 허공에서는 법선 0(아래 방향)과 AO 0 때문에 어두운 링 색이 배경 클리어 색을 덮어쓴다. 지면 위에서는 지면의 법선·PBR이 남아 밝게 조명된다.
+- **원인 2 — 씬 제출 대상이 Geometry 패스뿐**:
+  - `CompositeVFXSystem::OnSubmit`이 `Renderer::CollectGeometryViewportCameras()`만 사용해 ForwardTransparent 패스에 제출하지 않았다. 씬 GeometryPass는 `Opaque | Masked`만 받으므로 반투명·가산·데칼 트랙은 어느 패스에도 들어가지 못했다.
+- **조치** (`Engine/Source/VFX/Private/CompositeVFXSystem.cpp`):
+  - `SubmitSceneVFX`가 패스의 허용 블렌드 모드를 한 번 계산한다. `None`인 Geometry 패스는 `Opaque | Masked`로 보정하고, 스프라이트·메쉬·데칼·트레일 트랙 4곳이 같은 값으로 거른다.
+  - `OnSubmit`은 `ParticleSystem::OnSubmit`과 같은 규칙으로 씬 제출을 허용한 Geometry와 ForwardTransparent 패스를 모은다. 각 트랙은 블렌드 모드를 받는 패스 하나에만 들어간다.
+- **사용 기준**: `VFXMeshTrack::emissiveIntensity`(HDR 배율)는 섬광·불꽃 코어처럼 스스로 빛나는 Additive 트랙에만 쓴다. 배경을 가리거나 배경보다 어두운 색이 필요한 연기·먼지·형태가 분명한 링은 AlphaBlend를 쓴다.
+- **알려진 한계**: 피킹은 Geometry 패스 기준이므로 ForwardTransparent에만 그려지는 트랙은 클릭해도 엔티티가 선택되지 않는다(일반 파티클과 같음). 대상 패스 수집 코드는 `ParticleSystem`과 중복된다.
+- **검증 (사용자 실행)**:
+  - 수정 전 프리뷰 `GBuffer_Diffuse`에 Additive 링이 기록되고 `GBuffer_Normal`의 같은 영역은 비어 있음을 확인했다.
+  - 수정 후 `GBuffer_Diffuse`에 링이 없고, 최종 출력에서 링이 배경보다 어두워지지 않으며 배경 프리셋 변경에 따라 가산 결과만 바뀜을 확인했다.
+  - 프리뷰의 Opaque 메쉬 트랙이 최종 출력과 `GBuffer_Diffuse`·`GBuffer_Normal`에 그려짐을 확인했다.
+  - 씬 뷰포트에서 Opaque 트랙이 유지되고, Additive 메쉬 트랙과 데칼 트랙이 표시됨을 확인했다.
+  - 게임 뷰·패키지 실행과 CTest 결과는 기록되지 않았다.
 
 ---

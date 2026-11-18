@@ -440,18 +440,27 @@ Engine::uint32 CompositeVFXSystem::CollectFlashLights(const Scene& scene, std::s
 
 void CompositeVFXSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
-	auto& renderer = Renderer::Get();
-	const auto geometryTargets = renderer.CollectGeometryViewportCameras();
-	if (geometryTargets.empty()) return;
+	// 불투명·마스크드 트랙은 Geometry, 알파·가산·데칼 트랙은 ForwardTransparent로 제출한다.
+	vector<ViewportCameraInfo> targets;
+	for (const auto& viewport : Renderer::Get().GetActiveViewportCameras())
+	{
+		const auto* pass = viewport.renderPass;
+		if (!viewport.hasCamera || !viewport.acceptsSceneSubmissions || !pass || !pass->IsEnabled()) continue;
+
+		const auto type = pass->GetPassType();
+		if (type != ERenderPassType::Geometry && type != ERenderPassType::ForwardTransparent) continue;
+		if (pass->GetAcceptedBlendModes() == EBlendMode::None) continue;
+
+		if (std::ranges::find(targets, viewport.renderPass, &ViewportCameraInfo::renderPass) == targets.end())
+			targets.push_back(viewport);
+	}
+	if (targets.empty()) return;
 
 	for (Scene* scene : activeScenes)
 	{
 		if (!scene) continue;
-
-		for (const auto& target : geometryTargets)
-		{
+		for (const auto& target : targets)
 			SubmitSceneVFX(scene, target.cameraBuffer, target.renderPass->GetID());
-		}
 	}
 }
 
@@ -513,6 +522,11 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 	RenderPass* renderPass = RenderPassManager::Get().GetRenderPassByID(targetPassId);
 	if (!renderPass) return;
 
+	EBlendMode acceptedBlendModes = renderPass->GetAcceptedBlendModes();
+	// 프리뷰 Geometry 패스는 메인 씬 유입만 막으며, 자체 이펙트는 불투명·마스크드만 받는다.
+	if (acceptedBlendModes == EBlendMode::None && renderPass->GetPassType() == ERenderPassType::Geometry)
+		acceptedBlendModes = EBlendMode::Opaque | EBlendMode::Masked;
+
 	auto& renderer = Renderer::Get();
 	auto& resourceManager = ResourceManager::Get();
 	Mesh* defaultQuadMesh = resourceManager.GetResourceHandle<Mesh>(L"QuadMesh").Get();
@@ -570,8 +584,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (!mesh || !material) continue;
 
 			// 렌더 패스가 특정 블렌드 모드를 명시적으로 제한하고 있는 경우 검사
-			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&
-				!renderPass->IsAcceptsBlendMode(material->GetBlendMode()))
+			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None)
 				continue;
 
 			mat4 localMat = glm::translate(mat4(1.0f), track.localPosition) *
@@ -625,8 +638,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (!mesh || !material) continue;
 
 			// 렌더 패스가 특정 블렌드 모드를 명시적으로 제한하고 있는 경우 검사
-			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&
-				!renderPass->IsAcceptsBlendMode(material->GetBlendMode()))
+			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None)
 				continue;
 
 			const f32 duration = std::max(track.duration, 0.001f);
@@ -710,8 +722,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
 			if (!mesh || !material) continue;
 
-			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&
-				!renderPass->IsAcceptsBlendMode(material->GetBlendMode()))
+			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None)
 				continue;
 
 			// 페이드아웃 알파 계산
@@ -777,8 +788,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
 			if (!mesh || !material) continue;
 
-			if (renderPass->GetAcceptedBlendModes() != EBlendMode::None &&
-				!renderPass->IsAcceptsBlendMode(material->GetBlendMode()))
+			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None)
 				continue;
 
 			Texture* texture = track.textureHandle.Get();

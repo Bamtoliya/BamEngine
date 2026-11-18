@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] 복합 VFX 트랙의 블렌드 모드별 제출 패스 교정
+
+- VFX 프리뷰 허공의 흙갈색 메쉬 이펙트는 배경 버퍼나 톤매핑 문제가 아니었다. 프리뷰 GeometryPass의 `acceptedBlendModes == None`을 `SubmitSceneVFX`가 "제한 없음"으로 해석해 Additive 트랙을 G-Buffer에 기록했다. 조명 패스가 이 픽셀을 법선 0·AO 0의 불투명 표면으로 칠해 배경을 덮어썼다. 같은 함수가 이 경우를 `Opaque | Masked`로 보정하고, 스프라이트·메쉬·데칼·트레일 트랙을 한 값으로 거른다.
+- 씬·게임 뷰포트의 `OnSubmit`이 Geometry 패스에만 제출해 Additive·AlphaBlend 메쉬와 기본 데칼 트랙이 보이지 않았다. `ParticleSystem`과 같은 규칙으로 Geometry와 ForwardTransparent 패스를 함께 모은다. ForwardTransparent에만 그려지는 트랙은 피킹되지 않는다.
+- 사용자 실행으로 수정 전 `GBuffer_Diffuse`의 링 기록과 `GBuffer_Normal` 공백을 확인했다. 수정 후 Diffuse의 링 제거, 프리뷰 링의 가산 합성, Opaque 트랙의 프리뷰·씬 표시, 씬의 Additive 메쉬·데칼 표시를 확인했다. 게임 뷰·패키지 실행과 CTest 결과는 기록되지 않았다. [복합 VFX 9.11](CompositeVisualEffectPlan.md#911-트랙-블렌드-모드별-제출-패스-교정-2026-11-19)
+
 ### [2026-11-18] 에셋 참조 패널 결과의 증분 갱신
 
 - 변경 문서 검사에서 이전 문제 행의 위치와 실제로 추가·삭제된 링크를 반환한다. 패널은 바뀐 경로의 양방향 관계 색인과 펼치기 판정을 갱신하고, 유지되는 문제 행의 필터 일치 여부를 재사용한다.
