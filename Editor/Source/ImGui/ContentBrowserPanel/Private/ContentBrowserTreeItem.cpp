@@ -5,22 +5,10 @@
 #include "ImGuiManager.h"
 #include "ShortcutManager.h"
 #include "Editor_Macros.h"
-#include "ContentBrowserRename.h"
 
-bool ContentBrowserTreeItem::DrawNode(
-	ContentBrowserPanel& browser,
-	const std::filesystem::path& path,
-	const std::filesystem::path& rootPath,
-	bool hasChildDirectory,
-	bool isSelected,
-	bool needToExpand,
-	bool isReadOnly,
-	bool isEngineRoot,
-	bool isEditorRoot,
-	std::filesystem::path& outRenamingPath,
-	char* renameBuffer,
-	size_t renameBufferSize,
-	std::filesystem::path& currentDirectory)
+bool ContentBrowserTreeItem::DrawNode(ContentBrowserPanel& browser, const std::filesystem::path& path,
+	const std::filesystem::path& rootPath, bool hasChildDirectory, bool isSelected, bool needToExpand,
+	bool isReadOnly, bool isEngineRoot, bool isEditorRoot)
 {
 	ImGuiTreeNodeFlags baseFlags = (isSelected ? ImGuiTreeNodeFlags_Selected : 0);
 	baseFlags |= ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
@@ -29,7 +17,7 @@ bool ContentBrowserTreeItem::DrawNode(
 	if (needToExpand)
 	{
 		try {
-			auto rel = currentDirectory.lexically_relative(path);
+			auto rel = browser.GetCurrentDirectory().lexically_relative(path);
 			bool isAncestor = !rel.empty() && rel.string().find("..") == std::string::npos;
 			if (isAncestor)
 			{
@@ -44,7 +32,7 @@ bool ContentBrowserTreeItem::DrawNode(
 		baseFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 	}
 
-	std::string filename = path.filename().string();
+	std::string filename = Engine::WStrToStr(path.filename().wstring());
 	std::string icon = (isSelected && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
 	if (path == rootPath)
 	{
@@ -56,7 +44,7 @@ bool ContentBrowserTreeItem::DrawNode(
 			icon = ICON_FA_DATABASE;
 	}
 
-	bool isRenaming = (outRenamingPath == path);
+	bool isRenaming = (browser.m_RenamingPath == path && browser.m_RenameInTree);
 	std::string label = isRenaming ? "" : (icon + " " + filename + (isReadOnly && path != rootPath ? (" " ICON_FA_LOCK) : ""));
 	if (path == rootPath && !isRenaming)
 	{
@@ -77,16 +65,15 @@ bool ContentBrowserTreeItem::DrawNode(
 	if (isRenaming)
 	{
 		ImGui::SameLine();
-		DrawRename(path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+		DrawRename(browser, path);
 	}
 
 	// 컨텍스트 메뉴 및 단축키(F2) 처리
-	ContextMenu(browser, path, rootPath);
-
-	// 클릭 시 디렉토리 이동
-	if (ImGui::IsItemClicked())
+	if (!isRenaming)
 	{
-		browser.NavigateTo(path);
+		ContextMenu(browser, path, rootPath);
+		if (ImGui::IsItemClicked())
+			browser.NavigateTo(path);
 	}
 
 	// 자식 노드가 있고, 트리가 열렸을 때만 true 반환
@@ -97,10 +84,10 @@ void ContentBrowserTreeItem::ContextMenu(ContentBrowserPanel& browser, const std
 	const std::filesystem::path& rootPath)
 {
 	if (ImGui::IsItemHovered())
-		browser.SetRenameTarget(path);
+		browser.SetRenameTarget(path, true);
 	if (ImGui::BeginPopupContextItem())
 	{
-		browser.SetRenameTarget(path);
+		browser.SetRenameTarget(path, true);
 
 		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
 
@@ -108,16 +95,10 @@ void ContentBrowserTreeItem::ContextMenu(ContentBrowserPanel& browser, const std
 			std::vector<std::filesystem::path>{ path }, path);
 		ImGui::Separator();
 
-		ImGui::BeginDisabled(isReadOnly);
+		ImGui::BeginDisabled(isReadOnly || !browser.CanUseFileCommands());
 		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.NewFolder")).c_str()))
 		{
-			std::filesystem::path newFolderPath = path / "NewFolder";
-			int suffix = 1;
-			while (std::filesystem::exists(newFolderPath))
-			{
-				newFolderPath = path / ("NewFolder_" + std::to_string(suffix++));
-			}
-			std::filesystem::create_directory(newFolderPath);
+			browser.CreateFolder(path);
 		}
 
 		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
@@ -136,8 +117,8 @@ void ContentBrowserTreeItem::ContextMenu(ContentBrowserPanel& browser, const std
 	}
 }
 
-void ContentBrowserTreeItem::DrawRename(const std::filesystem::path& path, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
+void ContentBrowserTreeItem::DrawRename(ContentBrowserPanel& browser, const std::filesystem::path& path)
 {
 	ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-	Editor::ContentBrowser::DrawRenameInput("##TreeRenameInput", path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+	browser.DrawRenameEditor("##TreeRenameInput", path);
 }

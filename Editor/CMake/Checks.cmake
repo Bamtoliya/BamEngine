@@ -1,6 +1,8 @@
 ﻿add_executable(AssetReferenceCheck examples/AssetReferenceCheck.cpp
-    Source/AssetManager/Private/AssetReferenceValidator.cpp Source/AssetManager/Private/AssetReferenceMove.cpp)
-target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public")
+    Source/AssetManager/Private/AssetReferenceValidator.cpp Source/AssetManager/Private/AssetReferenceMove.cpp
+    Source/ImGui/ContentBrowserPanel/Private/ContentBrowserRenameRules.cpp)
+target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public"
+    "${EDITOR_SOURCE_DIR}/ImGui/ContentBrowserPanel/Public")
 target_link_libraries(AssetReferenceCheck PRIVATE BamEngine::Engine)
 set_target_properties(AssetReferenceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 if(MSVC)

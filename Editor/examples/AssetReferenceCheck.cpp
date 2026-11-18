@@ -1,4 +1,5 @@
 #include "AssetReferenceValidator.h"
+#include "ContentBrowserRename.h"
 #include "PlatformPath.h"
 
 #include <algorithm>
@@ -64,6 +65,27 @@ int main()
     const auto material = materials / "Brick.bammat.json";
     const auto texture = materials / L"벽.png";
     const auto invalid = assets / "Invalid.bamprefab.json";
+    fs::path renamed;
+    using Editor::ContentBrowser::GetRenameBaseName;
+    using Editor::ContentBrowser::TryBuildRenamePath;
+    if (GetRenameBaseName(material, false) != "Brick" ||
+        GetRenameBaseName(assets / "Folder.old", true) != "Folder.old" ||
+        GetRenameBaseName(materials / "Brick.BAMMAT.JSON", false) != "Brick" ||
+        !TryBuildRenamePath(material, false, "새 머티리얼", renamed) ||
+        renamed != materials / L"새 머티리얼.bammat.json" ||
+        !TryBuildRenamePath(material, false, "Other.bammat.json", renamed) ||
+        renamed != materials / "Other.bammat.json" ||
+        !TryBuildRenamePath(assets / "Folder.old", true, "Folder.new", renamed) ||
+        renamed != assets / "Folder.new")
+        return 29;
+    for (const char* invalidName : { "", ".", "..", "../outside", "bad\\name", "bad:name", "bad?name",
+        "trailing.", "trailing ", "CON", "nul.txt", "CON .txt", "COM1", "Lpt9.backup", "COM¹" })
+    {
+        if (TryBuildRenamePath(material, false, invalidName, renamed))
+            return 30;
+    }
+    if (TryBuildRenamePath(material, false, std::string(256, 'a'), renamed))
+        return 34;
     if (!WriteFixture(scene, R"({"Scene":{"Material":{"AssetPath":"Resources/Materials/Brick.bammat.json"}}})") ||
         !WriteFixture(material, R"({"Texture":{"AssetKey":"Project://Materials/벽.png","AssetPath":"old.png"},
             "AnotherUse":{"AssetPath":"Asset://Materials/벽.png"},"Unset":{"Null":true,"AssetPath":"unused.png"},
@@ -260,6 +282,21 @@ int main()
         return 27;
     if (Validator::ApplyMoveReferences(edits, false, recovery) != Editor::EAssetReferenceWriteResult::Success)
         return 28;
+
+    // A name change uses the same plan and exact-byte Undo path as a folder move.
+    const auto renamedMaterial = materials / L"새 머티리얼.bammat.json";
+    if (!Validator::PrepareMoveReferences({ { material, renamedMaterial } }, edits) || edits.size() != 1)
+        return 31;
+    const auto renameRecovery = root / "RenameRecovery";
+    fs::create_directory(renameRecovery);
+    fs::rename(material, renamedMaterial);
+    if (Validator::ApplyMoveReferences(edits, true, renameRecovery) != Editor::EAssetReferenceWriteResult::Success ||
+        !Validator::ValidateBuildScene(scene).empty())
+        return 32;
+    fs::rename(renamedMaterial, material);
+    if (Validator::ApplyMoveReferences(edits, false, renameRecovery) != Editor::EAssetReferenceWriteResult::Success ||
+        ReadFixture(scene) != sceneBefore)
+        return 33;
 
     if (!WriteFixture(invalid, "{") || Validator::PrepareMoveReferences({ { scene, destination / scene.filename() } }, edits))
         return 25;

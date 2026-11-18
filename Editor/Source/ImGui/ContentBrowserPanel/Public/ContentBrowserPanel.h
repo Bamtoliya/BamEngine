@@ -5,6 +5,7 @@
 #include <efsw/efsw.hpp>
 #include <unordered_map>
 #include <unordered_set>
+#include <optional>
 #include "ModelImporter.h"
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
@@ -38,7 +39,11 @@ public:
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::ContentBrowser; }
-	void SetRenameTarget(const filesystem::path& path) { m_RenameTargetPath = path; }
+	void SetRenameTarget(const filesystem::path& path, bool inTree = false)
+	{
+		m_RenameTargetPath = path;
+		m_RenameTargetInTree = inTree;
+	}
 	bool CanRenameTarget() const;
 	void RenameTarget();
 
@@ -59,6 +64,11 @@ public:
 
 private:
 	EResult OnInitialize(void* arg) override;
+	void BeginRename(const filesystem::path& path, bool inTree);
+	void DrawRenameEditor(const char* id, const filesystem::path& path);
+	void QueueCreatedAssetRename(const filesystem::path& path);
+	void ProcessQueuedRename();
+	void CreateFolder(const filesystem::path& directory);
 
 #pragma region File Actions
 	friend class ContentBrowserTreeItem;
@@ -104,6 +114,8 @@ private:
 	bool ReplayAssetMove(const AssetMoveBatch& batch, bool forward);
 	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references) const;
 	void QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory, bool fromClipboard);
+	void QueueAssetPathChanges(const vector<AssetPathMove>& moves, bool fromClipboard, bool rename);
+	void RemapBrowserPaths(const vector<FileMove>& moves, bool forward);
 	void DrawFileMoveConfirmation();
 	void DrawFileMovePaths() const;
 	void ConfirmFileMove();
@@ -129,6 +141,7 @@ private:
 	filesystem::path m_MoveDestination;
 	BY_HANDLE_FILE_INFORMATION m_MoveDestinationIdentity{};
 	bool m_MoveFromClipboard = false;
+	bool m_PendingRename = false;
 	AssetReferenceImpact m_MoveImpact;
 	vector<AssetReferenceEdit> m_MoveReferences;
 	bool m_MoveReferencesReady = false;
@@ -203,6 +216,11 @@ private:
 private:
 	filesystem::path m_RenameTargetPath;
 	filesystem::path m_RenamingPath;
+	filesystem::path m_QueuedRenamePath;
+	std::optional<AssetPathMove> m_SubmittedRename;
+	bool m_RenameTargetInTree = false;
+	bool m_RenameInTree = false;
+	bool m_RenameFocusRequested = false;
 	vector<filesystem::path> m_InteractionPaths;
 	vector<filesystem::path> m_ContextMenuPaths;
 	wstring m_DragPayload;
