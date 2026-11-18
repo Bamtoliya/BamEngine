@@ -204,5 +204,17 @@
       "configurePreset": "x64-ninja-release",
       "inherits": "windows-ninja-build-base"
     }
+  ],
+  "testPresets": [
+    {
+      "name": "x64-debug",
+      "configurePreset": "x64-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x64-release",
+      "configurePreset": "x64-release",
+      "configuration": "Release"
+    }
   ]
 }

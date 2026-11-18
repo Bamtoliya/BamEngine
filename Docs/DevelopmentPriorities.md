@@ -505,10 +505,10 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - `meshoptimizer`(`meshopt_simplify`) 기반 QEM 메쉬 간소화 알고리즘 도입.
   - 임포트 옵션(`GenerateLODs`, `LODCount`, `LODReductionRates`)에 따라 `Model_Mesh_LOD1.bammesh` 파생 에셋 자동 영속화.
   - 엔티티 인스턴스화 시 `LODGroupComponent` 자동 장착 및 기존 `MeshRenderSystem`의 다중 뷰포트/패스별 화면 커버리지 렌더링에 자동 연동.
-- **텍스처 밉맵 체인 및 GPU 블록 압축 파이프라인 — P3 / S2-D ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md)) [1·2단계 완결: 2026-11-18]**:
+- **텍스처 밉맵 체인 및 GPU 블록 압축 파이프라인 — P3 / S2-D ([RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md)) [1·2·3단계 완결: 2026-11-18]**:
   - 1단계(런타임): `stb_image_resize2` 기반 CPU 밉맵 체인 생성 및 RHI 다중 서브리소스 순회 업로드 (2026-11-08).
   - 2단계(블록 압축 및 컨테이너): `RHITextureTypes.h` 헬퍼 함수, `DirectX12RHI::UploadTextureData`의 4x4 블록 압축 포맷(BC1~BC7) 서브리소스 업로드 지원, 고속 인메모리 `DDSLoader` 파서 구축, `Texture` 및 `ResourceManager`에 `L".dds"` 확장자 등록, `TextureMipmapCheck` 9레벨 Mipmap BC7 검증 완결 (2026-11-18).
-  - 3단계(오프라인 베이킹, 후속): `DirectXTex`(`texconv`)를 활용한 에셋 임포트 시 자동 `.dds` 베이킹 파이프라인 연결.
+  - 3단계(오프라인 베이킹): `TextureImporter`에서 `kQuickTextureSanityMode` 제거, 노멀 맵(`BC5_RG_UNORM`) 및 베이스 컬러(`BC7_RGBA_UNORM_SRGB`) 스마트 기본값 감지, 에디터 임포트 시 `.bamtex` + 표준 `.dds` 동시 베이킹, `DirectXTexCompressor` sRGB 포맷 정밀 동기화 및 `CMakePresets.json` CTest 프리셋 완결 (2026-11-18).
 - **빌트인 리소스와 사용자 애셋 분리 보관 파이프라인 — P3 / 에셋 아키텍처 ([ResourceAndAssetSeparationPlan.md](ResourceAndAssetSeparationPlan.md))**:
   - `Engine/Resources/` 불변 시스템 자원(기본 셰이더, 프리미티브 메시, 기본 텍스처, 엔진 로캘)과 `Assets/` 가변 사용자 콘텐츠(씬, 임포트 모델, 텍스처, 오디오, 머티리얼)의 물리 디렉터리 분리.
   - `ResourceManager` 및 `PlatformPath`에 가상 마운트 URI(`Engine://`, `Project://`) 해석 계층 구축 및 레거시 상대 경로 하위 호환 매핑.

@@ -108,6 +108,10 @@ bool DirectXTexCompressor::CompressTexture(const std::wstring& inputFilePath, co
 
 	DirectX::ScratchImage compressedImage;
 	DXGI_FORMAT dxgiFormat = GetDXGIFormat(targetFormat);
+	if (HasFlag(flags, ECompressFlags::SRGB))
+	{
+		dxgiFormat = DirectX::MakeSRGB(dxgiFormat);
+	}
 
 	// 3. 텍스처 압축 (BC7 등)
 	if (DirectX::IsCompressed(dxgiFormat))
@@ -161,6 +165,10 @@ bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePat
 
 	DirectX::ScratchImage compressedImage;
 	DXGI_FORMAT dxgiFormat = GetDXGIFormat(targetFormat);
+	if (HasFlag(flags, ECompressFlags::SRGB))
+	{
+		dxgiFormat = DirectX::MakeSRGB(dxgiFormat);
+	}
 
 	// 3. 텍스처 압축
 	if (DirectX::IsCompressed(dxgiFormat))
@@ -187,6 +195,19 @@ bool DirectXTexCompressor::GetRawCompressedData(const std::wstring& inputFilePat
 	outHeader.mipLevels = static_cast<uint32>(meta.mipLevels);
 	outHeader.arraySize = static_cast<uint32>(meta.arraySize);
 	outHeader.format = targetFormat;
+	if (HasFlag(flags, ECompressFlags::SRGB))
+	{
+		if (targetFormat == Engine::ETextureFormat::BC7_RGBA_UNORM)
+			outHeader.format = Engine::ETextureFormat::BC7_RGBA_UNORM_SRGB;
+		else if (targetFormat == Engine::ETextureFormat::BC1_RGBA_UNORM)
+			outHeader.format = Engine::ETextureFormat::BC1_RGBA_UNORM_SRGB;
+		else if (targetFormat == Engine::ETextureFormat::BC2_RGBA_UNORM)
+			outHeader.format = Engine::ETextureFormat::BC2_RGBA_UNORM_SRGB;
+		else if (targetFormat == Engine::ETextureFormat::BC3_RGBA_UNORM)
+			outHeader.format = Engine::ETextureFormat::BC3_RGBA_UNORM_SRGB;
+		else if (targetFormat == Engine::ETextureFormat::R8G8B8A8_UNORM)
+			outHeader.format = Engine::ETextureFormat::R8G8B8A8_UNORM_SRGB;
+	}
 
 	switch (meta.dimension)
 	{

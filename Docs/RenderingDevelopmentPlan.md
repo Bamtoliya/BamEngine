@@ -164,11 +164,13 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
      - `DDSLoader.h/.cpp`: DX10 헤더 및 레거시 FourCC(`DXT1`, `DXT3`, `DXT5`, `ATI1/BC4U`, `ATI2/BC5U`)를 지원하는 고속 인메모리 DDS 파서 신설.
      - `Texture.h/.cpp`: `InitializeFromDDSMemory`, `CreateFromDDSMemory` 및 핫로드 경로 연동, `ResourceManager`에 `L".dds"` 확장자 등록.
      - `TextureMipmapCheck`: 256x128 9레벨 Mipmap BC7 DDS 파싱 및 75% 메모리 절감 검증 단위 테스트 추가 완결.
-  3. **에디터 임포트 파이프라인 (texconv 기반 DDS / BC7 블록 압축 오프라인 베이킹) [후속 과제]**:
-     - 런타임 CPU 밉맵 생성 오버헤드를 원천 제거하기 위해, 에디터 모델/텍스처 임포트 단계에서 DirectXTex(`texconv`) 기반의 오프라인 베이킹 파이프라인 연결.
-     - BaseColor(BC7_SRGB), NormalMap(BC5_UNORM / reconstructz) 등 텍스처 용도별 프로필 자동 적용.
+  3. **에디터 임포트 파이프라인 (DirectXTex 기반 DDS / BC7 블록 압축 오프라인 베이킹) [완료 (2026-11-18)]**:
+     - `TextureImporter.cpp`: `kQuickTextureSanityMode` 강제 다운그레이드를 해제하고 사용자 선택 `TargetFormat` 및 `CompressFlags`를 100% 반영.
+     - 노멀 맵 파일명(`_Normal`, `_norm` 등) 자동 감지 시 `BC5_RG_UNORM` 및 `NormalMap` 최적 압축 자동 지정, 일반 텍스처는 `BC7_RGBA_UNORM` 및 밉맵 체인 자동 생성.
+     - 텍스처 임포트 시 `.bamtex` 바이너리뿐만 아니라 표준 `.dds` 파일도 동시에 오프라인 베이킹하여 저장.
+     - `DirectXTexCompressor.cpp`: `ECompressFlags::SRGB` 활성화 시 `DirectX::MakeSRGB()` 및 `BC7_RGBA_UNORM_SRGB` 정밀 포맷 동기화.
 
-**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 비압축 텍스처뿐만 아니라 BC1~BC7 블록 압축 밉맵 DDS 텍스처가 D3D12 서브리소스 검증 오류 없이 고속 로드 및 렌더링된다. (1단계 CPU 체인 및 2단계 BC 포맷 RHI 업로드 / DDS 파서 달성)
+**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 비압축 텍스처뿐만 아니라 BC1~BC7 블록 압축 밉맵 DDS 및 `.bamtex` 텍스처가 D3D12 서브리소스 검증 오류 없이 고속 로드 및 렌더링된다. (1~3단계 런타임/오프라인 파이프라인 전체 달성)
 
 ### S3. 정적 메시 인스턴싱과 기본 LOD
 

@@ -180,6 +180,29 @@ This document tracks implementation details, architectural decisions, and techni
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
 
+### [2026-11-18] 렌더링 S2-D 3단계: DirectXTex 기반 에디터 오프라인 BC 블록 압축 베이킹 및 CTest 프리셋 완결
+
+- 런타임 CPU 밉 체인 연산 오버헤드를 원천 제거하고 VRAM 대역폭을 최적화하기 위해, 에디터 텍스처 임포트 파이프라인에서 `DirectXTex`를 활용한 GPU 블록 압축(BC1~BC7) 및 표준 `.dds` + `.bamtex` 동시 오프라인 베이킹을 완성했다.
+- **에디터 텍스처 임포터 고도화 (`TextureImporter.cpp`)**:
+  - 기존의 임시 디버깅 플래그(`kQuickTextureSanityMode = true`)로 인해 모든 텍스처가 비압축 `R8G8B8A8_UNORM`으로 강제 다운그레이드되던 문제를 완전히 제거.
+  - 인자 없이 호출되는 기본 임포트 시 파일명 기반 스마트 감지 도입:
+    - 노멀 맵 패턴(`_Normal`, `_normal`, `_Norm`, `_norm`, `_nrm`, `_N`): `BC5_RG_UNORM` 포맷 및 `GenerateMipMaps | HighQuality | NormalMap` 플래그 자동 지정.
+    - 일반 컬러/베이스 텍스처: `BC7_RGBA_UNORM` 포맷 및 `GenerateMipMaps | HighQuality | SRGB` 플래그 자동 지정.
+  - 텍스처 임포트 시 엔진 바이너리인 `.bamtex`뿐만 아니라 표준 DirectDraw Surface 파일인 `.dds`를 대상 폴더에 동시에 베이킹하여 저장.
+- **DirectXTex 압축기 정밀 sRGB 동기화 (`DirectXTexCompressor.cpp`)**:
+  - `CompressTexture` 및 `GetRawCompressedData`에서 `ECompressFlags::SRGB` 활성화 시 `DirectX::MakeSRGB()`를 적용하여 sRGB 감마 인코딩이 보존된 DXGI 포맷으로 변환.
+  - `GetRawCompressedData`의 출력 `TextureBinaryHeader` 포맷을 `BC7_RGBA_UNORM_SRGB`, `BC1_RGBA_UNORM_SRGB`, `BC2/BC3`, `R8G8B8A8_UNORM_SRGB`로 정확하게 매핑.
+- **CTest 프리셋 설정 복구 (`CMakePresets.json`)**:
+  - `testPresets` 섹션 누락으로 인한 `ctest --preset x64-debug` 실패 오류를 해결하기 위해 `x64-debug`, `x64-release` 프리셋을 추가 등록.
+- **검증**:
+  - 사용자 환경에서 `TextureMipmapCheck` 단위 테스트 4개 항목 전체 통과 확인 완료:
+    - `[Test 1] Texture::CalculateMipLevels Verification` (경계 조건 단언 통과)
+    - `[Test 2] CPU Mip Chain Downsampling Verification` (100% 색상 보존율 확인)
+    - `[Test 3] TextureBinaryHeader Multilevel Mipmap Layout Verification` (256x128 9레벨 174,764B 바이트 오버헤드 1.33334x 일치)
+    - `[Test 4] DDSLoader Parsing & Block Compression Verification` (BC7 9레벨 Mips 파싱 성공, 43,728B로 비압축 대비 74.98% VRAM 절감 확인)
+- **미검증/사용자 확인 필요**:
+  - 에디터 실제 구동 후 콘텐츠 브라우저에서 PNG/TGA/JPG 임포트 시 생성된 `.dds`와 `.bamtex`가 머티리얼 및 씬 뷰포트에서 정상 렌더링되는지 확인 필요.
+
 ### [2026-11-18] 렌더링 S2-D 2단계: GPU 블록 압축(BC1~BC7) 및 고속 DirectDraw Surface(`.dds`) 컨테이너 로더 구축 완결
 
 - 비압축 텍스처(R8G8B8A8, 32bpp)의 높은 VRAM 대역폭 점유와 런타임 CPU 밉맵 연산 오버헤드를 해소하기 위해, GPU 하드웨어 블록 압축(BC1~BC7) 포맷 지원 및 사전 베이킹된 밉맵 체인을 CPU 재연산 없이 GPU로 직접 업로드하는 고속 `.dds` 파이프라인을 완성했다.
@@ -199,8 +222,9 @@ This document tracks implementation details, architectural decisions, and techni
 - **검증**:
   - C++ 정적 구조 및 참조 검증 완료.
   - `audit_localization.py` 다국어 정적 감사 100% 통과.
+  - 사용자가 Windows 환경에서 `TextureMipmapCheck` 단위 테스트 4개 항목 실행하여 전체 통과(Test 1~4 PASSED) 확인 완료.
 - **미검증/사용자 확인 필요**:
-  - 에디터 및 Client 빌드 후 `TextureMipmapCheck` 단위 테스트 및 실제 `.dds` 텍스처 렌더링 확인 필요.
+  - 에디터 실제 구동 후 `.dds` 텍스처 실시간 렌더링 확인 필요.
 
 ### [2026-11-18] 래스터 반투명 4단계: 움직이는 파도(Gerstner Wave 정점 변위, 64x64 격자 메시, 파도 머티리얼) 파이프라인 구현 (Render S6-4)
 
