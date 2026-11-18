@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 로드된 에셋 경로 동기화 후 프리뷰 빌드 의존성 보완
+
+- `2dd05631` 이후 사용자 터미널에서 `PreviewViewportWidget.cpp:526`의 `ImGuizmo` 미선언(C2653)과 `IsOver`·`IsUsing` 미식별(C3861)로 Ninja가 중단된 것을 확인했다. 생성된 `unity_14_cxx.cxx`는 이 구현 파일을 첫 번째로 포함하며, 해당 파일은 사용 중인 `ImGuizmo.h`를 직접 포함하지 않았다. 기존 간접 포함에 의존하던 문제가 Unity 묶음 변경으로 드러난 것이다.
+- `PreviewViewportWidget.cpp`에 `ImGuizmo.h`를 직접 포함했다. 공용 헤더나 PCH로 의존성을 넓히지 않고 해당 구현 파일에서 선언을 공급한다.
+- 뒤의 CTest 명령은 빌드 종료 코드 조건에 의해 실행되지 않았다. 남아 있는 `LastTest.log`는 11:37의 이전 `AssetReferenceCheck` 단일 통과 기록이며 이번 변경의 검증 결과가 아니다.
+- 수정부와 공백을 정적으로 확인했다. 수정 후 빌드·CTest는 AI가 실행하지 않았으며 사용자가 동일한 네 타깃 빌드와 세 검사 명령을 재실행해야 한다. 전체 빌드·테스트 통과로 판정하지 않는다.
+
 ### [2026-11-18] 로드된 에셋 이동·이름 변경과 메모리 경로 동기화
 
 - 이전 기즈모 헤더 수정 뒤의 사용자 터미널에서 `Editor.exe`와 `AssetReferenceCheck.exe` 링크 완료 및 프롬프트 복귀를 확인했다. 해당 로그에 최신 CTest 결과는 없으며 아래 신규 변경의 빌드 결과로 사용하지 않는다.

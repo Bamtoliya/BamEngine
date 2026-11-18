@@ -1,5 +1,6 @@
 ﻿#include "InputManager.h"
 #include "EditorUI.h"
+#include "ImGuizmo.h"
 #include <cmath>
 #include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"
