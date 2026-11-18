@@ -57,6 +57,7 @@
         "Action.Viewport.ToggleRealtime": "Toggle Realtime",
         "Action.Viewport.ToggleSnap": "Toggle Grid Snap",
         "Animator.ControllerPath": "Controller Path",
+        "Animator.ControllerOutsideProject": "The controller must be inside the project or engine resource folders.",
         "Animator.CurrentState": "Current State",
         "Animator.MissingRendererWarning": "Requires SkinnedMeshRendererComponent with Skeleton to animate.",
         "Animator.New": "New Controller",

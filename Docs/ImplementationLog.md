@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] Animator 컨트롤러 경로를 가상 URI로 저장
+
+- 인스펙터 Animator의 찾아보기 버튼이 파일 대화상자의 절대 경로를 `controllerPath`에 그대로 저장했다. 이 씬은 패키징 참조 검사에서 `ExternalAbsolutePath`로 실패한다. Windows 기준선 검증 중 `RaytracingScene3`가 원본 체크아웃의 컨트롤러를 절대 경로로 가리켜 내보내기가 막힌 것으로 확인했다.
+- 찾아보기 결과와 콘텐츠 브라우저 드롭(`CONTENT_BROWSER_ITEM`)을 `PlatformPath::ToVirtualUri`로 `Project://`·`Engine://`·`Editor://` URI로 바꿔 `LoadController`에 넘긴다. 마운트 루트 밖의 파일은 `Animator.ControllerOutsideProject` 알림과 함께 거부하고 기존 경로를 유지한다. 로드에 실패하면 경로를 덮어쓰지 않는다. 드롭은 `.animator`·`.animator.json`·`.bamanimator`·`.bamanimator.json`만 받는다. 직접 입력칸은 그대로다.
+- 로캘은 `Editor.csv`에 한 행을 추가했고 빌드가 JSON을 다시 생성했다.
+- **검증**: Debug Editor 빌드에서 컴파일 경고·오류가 없었다. 루트 밖 컨트롤러를 골랐을 때 경고 알림이 번역된 문장으로 표시되는 것을 사용자가 확인했다. 찾아보기·드롭 결과의 URI 표시, 비컨트롤러 드롭 무시, 저장 후 씬 참조 검사 0건은 커밋 시점에 확인 결과를 받지 못했다.
+- **잔여**: `ActionTimelineComponent::timelinePath` 찾아보기(`InspectorPanel.cpp`)도 절대 경로를 저장한다. 두 필드를 ResourcePicker와 같은 형태의 경로 피커로 바꾸는 작업을 이어서 진행한다.
+
 ### [2026-11-17] 에디터 UI·인스펙터·리소스 에디터 로캘 및 입력(InputManager) 표준화
 
 - **로컬라이제이션 키 확장 및 동기화 (`65479627`)**:

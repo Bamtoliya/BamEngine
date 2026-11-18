@@ -31,6 +31,23 @@
 #include "SplineComponent.h"
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
+#include "PlatformPath.h"
+
+namespace
+{
+	// 컨트롤러 경로를 배포본에서도 풀리는 가상 URI로 바꾼다. 마운트된 루트 밖의 파일이면 빈 문자열을 돌려준다.
+	std::string ToControllerReference(const std::filesystem::path& path)
+	{
+		const std::wstring uri = Engine::PlatformPath::ToVirtualUri(path);
+		return Engine::PlatformPath::IsVirtualUri(uri) ? Engine::WStrToStr(uri) : std::string{};
+	}
+
+	bool IsAnimatorControllerFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".animator") || name.ends_with(".animator.json") || name.ends_with(".bamanimator") || name.ends_with(".bamanimator.json");
+	}
+}
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
 {
@@ -1195,6 +1212,17 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 			// ── Animator Controller 에셋 로드 UI ──
 			ImGui::Text("%s", LOCAL_CSTR("Animator.ControllerPath"));
+			const auto assignController = [&](const std::filesystem::path& selected)
+				{
+					const std::string reference = ToControllerReference(selected);
+					if (reference.empty())
+					{
+						NotificationManager::Get().AddNotification(LOCAL("Animator.ControllerPath"), LOCAL("Animator.ControllerOutsideProject"), ELogLevel::Warn);
+						return;
+					}
+					if (animator.LoadController(reference)) changed = true;
+				};
+
 			char pathBuf[260] = {};
 			std::strncpy(pathBuf, animator.controllerPath.c_str(), sizeof(pathBuf) - 1);
 			const float folderBtnSize = ImGui::GetFrameHeight();
@@ -1204,6 +1232,17 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			{
 				animator.controllerPath = pathBuf;
 				changed = true;
+			}
+			// 콘텐츠 브라우저에서 컨트롤러 파일을 끌어다 놓을 수 있게 한다.
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const auto* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+				{
+					const auto dropped = Editor::DecodeInspectorResourcePath(payload->Data, payload->DataSize);
+					if (dropped && IsAnimatorControllerFile(*dropped))
+						assignController(*dropped);
+				}
+				ImGui::EndDragDropTarget();
 			}
 			ImGui::SameLine();
 			// 파일 탐색기 열기 버튼
@@ -1215,10 +1254,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					{ Engine::StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
 				};
 				if (FileDialogs::OpenFileDialog(selectedPath, filters))
-				{
-					animator.controllerPath = WStrToStr(selectedPath);
-					if (animator.LoadController(animator.controllerPath)) changed = true;
-				}
+					assignController(selectedPath);
 			}
 			ImGui::Spacing();
 

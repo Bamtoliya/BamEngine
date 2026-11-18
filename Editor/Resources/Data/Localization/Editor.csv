@@ -56,6 +56,7 @@ Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
 Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
 Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
 Animator,ControllerPath,Controller Path,컨트롤러 경로
+Animator,ControllerOutsideProject,The controller must be inside the project or engine resource folders.,컨트롤러는 프로젝트 또는 엔진 리소스 폴더 안에 있어야 합니다.
 Animator,CurrentState,Current State,현재 상태
 Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
 Animator,New,New Controller,새 컨트롤러
