@@ -1,6 +1,6 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-06)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-13)
 - 상태: 2026-11-05 단계 1(F02), 단계 2(F05, F06, F07, F08), 단계 3(P1-E/3-A, 3-B), 단계 4(F12), 빌드/배포(F13, F04) 및 강화학습(F09) 구현 반영, Standalone Client 독립 실행 및 Unity 빌드 정합성 검증 완료, 단일 CPU 파티클 시스템 1단계 코어(Engine 4절) 구축, AnimationTimelineEditorPlan(에디터 저작 도구 및 런타임 액션 타임라인 재생 시스템 Phase 1~5) 구축 완료, 네트워크 기초 파이프라인 및 키네마틱 캐릭터 컨트롤러 구축 완료, 3인칭 캐릭터 Locomotion 1D 블렌드 트리 위상 동기화(Phase Matching) 및 루프 크로스페이드·속도 연동 재생 배속 완성, 모델 재임포트 인플레이스 핫 리로드 및 대화형 3D 임포트 모달(ModelImportModal) 구축 완료.
 - 최신 근거: [2026-11-06 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-06.md). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 완료 표시는 당시 기록이며 A01~A10의 현행 잔여 사항을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
@@ -19,6 +19,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [ImGuiDevelopmentPlan.md](ImGuiDevelopmentPlan.md): 편집·미리보기·문서 보호·탐색·리소스 선택과 제작 흐름.
 - [BuildAndPackagingPlan.md](BuildAndPackagingPlan.md): Client 경로·설정 기반 시작 씬은 일부 반영. 시작 매니페스트·실패 정책·Build/Cook/Stage/Package 및 배포 검증은 미완료.
 - [ReflectionArchiveGuidelines.md](ReflectionArchiveGuidelines.md): 독립 모듈과 엔진 연결·저장/복원 정확성.
+- [CodeRefactoringPlan.md](CodeRefactoringPlan.md): 사람 중심의 코드 응집도·가독성·일관성 개선을 위한 점진적 리팩터링 후보와 검증 원칙. 기능 개발 완료 후 마무리 단계에서 착수하도록 보류 중.
 - [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md): 공유 바인딩 규약. 실제 셰이더·백엔드와 대조한다.
 - [ImplementationLog.md](ImplementationLog.md): 작업별 구현·검증 근거. 계획의 체크 표시로 대체하지 않는다.
 - [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md): 비주얼 스크립팅과 블루프린트 개발 계획 및 런타임 게임플레이 연동.
