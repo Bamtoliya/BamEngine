@@ -8,6 +8,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <thread>
 
 namespace Engine
 {
@@ -125,15 +126,38 @@ namespace Engine
 		std::vector<uint8> pixelData(header.dataSize);
 		uint32* dst = reinterpret_cast<uint32*>(pixelData.data());
 
-		for (uint32 y = 0; y < size; ++y)
+		// CPU 멀티스레드 병렬 연산을 통한 256x256 Karis 적분 고속화 (가용 하드웨어 스레드 단위 행 분할)
+		const uint32 numThreads = std::max(1u, std::thread::hardware_concurrency());
+		std::vector<std::thread> workers;
+		workers.reserve(numThreads);
+
+		const uint32 rowsPerThread = (size + numThreads - 1) / numThreads;
+
+		for (uint32 threadIdx = 0; threadIdx < numThreads; ++threadIdx)
 		{
-			const float roughness = (static_cast<float>(y) + 0.5f) / static_cast<float>(size);
-			for (uint32 x = 0; x < size; ++x)
+			const uint32 startY = threadIdx * rowsPerThread;
+			const uint32 endY = std::min(startY + rowsPerThread, size);
+			if (startY >= endY) break;
+
+			workers.emplace_back([size, startY, endY, dst]()
 			{
-				const float NdotV = (static_cast<float>(x) + 0.5f) / static_cast<float>(size);
-				vec2 integrated = IntegrateBRDF(NdotV, roughness, 1024);
-				dst[y * size + x] = glm::packHalf2x16(integrated);
-			}
+				for (uint32 y = startY; y < endY; ++y)
+				{
+					const float roughness = (static_cast<float>(y) + 0.5f) / static_cast<float>(size);
+					for (uint32 x = 0; x < size; ++x)
+					{
+						const float NdotV = (static_cast<float>(x) + 0.5f) / static_cast<float>(size);
+						vec2 integrated = IntegrateBRDF(NdotV, roughness, 1024);
+						dst[y * size + x] = glm::packHalf2x16(integrated);
+					}
+				}
+			});
+		}
+
+		for (auto& worker : workers)
+		{
+			if (worker.joinable())
+				worker.join();
 		}
 
 		const std::wstring uri = L"Engine://Texture/DefaultBRDFLut";

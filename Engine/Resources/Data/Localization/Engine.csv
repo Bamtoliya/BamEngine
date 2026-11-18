@@ -586,6 +586,7 @@
 ,PROP_SCALE_START,Start Scale,시작 크기
 ,PROP_SEED,Random Seed,난수 시드
 ,PROP_SETTINGS,Settings,설정
+,PROP_SHADOW_AMBIENT_FLOOR,Shadow Ambient Floor,그림자 음영 최저 밝기
 ,PROP_SHADOW_BIAS,Shadow Bias,그림자 바이어스
 ,PROP_SHADOW_MAX_DISTANCE,Shadow Max Distance,최대 그림자 거리
 ,PROP_SHADOW_NORMAL_BIAS,Shadow Noraml Bias,그림자 법선 바이어스

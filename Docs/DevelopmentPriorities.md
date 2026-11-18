@@ -625,3 +625,28 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료; 2026-11-15 복합 비주얼 이펙트(후보 B) 뷰포트 스카이박스 누출 차단, 타임라인 0.1x 줌아웃/패닝, 프리뷰 모션, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 실환경 검증 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인 및 Phase 5 환경 고도화는 미검증).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
+
+### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-18 갱신)
+
+1. **후보 A (에셋 파이프라인): 썸네일 2048x2048 아틀라스 패킹 및 LIFO 업로드 스로틀링 완성**
+   - **목표**: 대규모 에셋 폴더(스폰자 1,100여 개 모델/메시 등) 열람 시 GPU 텍스처 개별 바인딩 오버헤드와 VRAM 단편화를 원천 차단하고, 프레임당 업로드 스로틀링(`MAX_UPLOADS_PER_FRAME = 8`)과 가시 영역 우선(LIFO) 로드를 통해 60FPS 스크롤 보장.
+   - **세부 내용**:
+     - `Editor/Source/AssetManager/AssetCache`: 2048x2048 해상도의 `AtlasPage`(128x128 슬롯 256개) 풀 관리, `AllocateAtlasSlot`/`FreeAtlasSlot`, `InsertAtlasToCache`.
+     - `ContentBrowserGridItem`: 개별 텍스처 바인딩 대신 아틀라스 페이지 텍스처 및 슬롯 UV0/UV1 서브 영역 샘플링 연동.
+     - `Renderer`: `m_PreRenderDelegate`를 통해 메인 렌더링 시작 직전 대기열의 GPU 업로드를 안전하게 플러시.
+   - **관련 파일**: `AssetCache.h/.cpp`, `AssetWorkerHost.h/.cpp`, `ContentBrowserGridItem.h/.cpp`, `ContentBrowserPanel.h/.cpp`, `Renderer.h/.cpp`.
+
+2. **후보 B (렌더링 안정화): 다중 광원 타일드 컬링 오버플로 검증 및 CTest 구축 (`TiledLightingCheck`)**
+   - **목표**: P2-B 및 `RenderingDevelopmentPlan` M1 선행 단계로, 특정 화면 타일에 256개 이상의 광원이 밀집되는 과부하/오버플로 환경에서 GPU 크래시 없이 전역 광원 안전 순회 폴백(`gTileLightCount >= 256u`)이 정상 작동하는지 수치 정합성 및 성능 계측 CTest를 구축.
+   - **세부 내용**:
+     - `tiledLightCullingCS.hlsl` 4방향 절두체 평면 교차 및 256개 초과 가드 시뮬레이션.
+     - 1,024개 포인트/스포트 광원 배치 스트레스 테스트 및 라이팅 합성 무결성 검증.
+   - **관련 파일**: `Engine/examples/TiledLightingCheck.cpp` (신설 예정), `Engine/CMake/Checks.cmake`, `tiledLightCullingCS.hlsl`.
+
+3. **후보 C (게임플레이/물리): 키네마틱 캐릭터 컨트롤러(KCC) 지면 감지 및 경사로 물리**
+   - **목표**: 뷰포트에서 조작 가능한 3D 플레이어블 캐릭터의 필수 물리 제어기 구축 ([KinematicCharacterControllerPlan.md](KinematicCharacterControllerPlan.md)).
+   - **세부 내용**:
+     - `KinematicCharacterControllerComponent`: 이동 속도, 점프력, 중력 스케일, 최대 등판 각도(`MaxSlopeAngle`, 예: 45도), 계단 높이(`StepOffset`, 예: 0.3m).
+     - 지면 접지 감지(Ground Snapping) 및 가파른 경사면 미끄러짐(Slope Sliding) 물리 벡터 분해.
+     - `SpringArmComponent` 및 3인칭 궤도 카메라 연동.
+   - **관련 파일**: `Engine/Source/Core/Public/Components/Physics/KinematicCharacterControllerComponent.h`, `KinematicCharacterControllerSystem.h/.cpp`.

@@ -29,6 +29,7 @@ This document tracks implementation details, architectural decisions, and techni
     - `IBLManager` 싱글톤 신설.
     - Karis 2013 중요도 샘플링 적분 공식(Hammersley 2D 저불일치 수열 + GGX 중요도 샘플링 + Smith 기하 감쇄) 기반으로 $256 \times 256$ 해상도의 `R16G16_FLOAT` Split-Sum BRDF LUT 텍스처(`Engine://Texture/DefaultBRDFLut`, 256KB)를 절차적으로 생성하고 캐싱하는 `GetDefaultBRDFLUT()` 파이프라인 구축.
     - RHI 활성 런타임에서는 `rhi->CreateTexture`로 GPU 텍스처를 생성하고, RHI가 없는 테스트 환경에서는 CPU 메모리 텍스처로 안전하게 생성되도록 이중화.
+    - `GenerateBRDFLUT`: 가용 CPU 코어 수(`std::thread::hardware_concurrency()`) 단위 행(Row) 분할 멀티스레드 병렬 연산을 적용하여 6,710만 회 적분 연산 시간 대폭 단축.
     - 프로그램 종료 시 `Free()`를 통해 GPU 리소스 및 CPU 메모리 완벽 회수.
   - `Engine/Source/Render/Atmosphere/Public/SkyAtmosphereComponent.h`:
     - `ShadowAmbientFloor = 0.15f` (범위 0.0 ~ 1.0) 프로퍼티 추가 및 리플렉션 노출.
