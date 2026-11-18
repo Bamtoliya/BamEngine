@@ -6,6 +6,7 @@
 #include "AssetPathRelocation.h"
 #include "AssetReferencePanel.h"
 #include "ResourceManager.h"
+#include "ActionTimelineAsset.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
 #include "ContentBrowserDragPayload.h"
@@ -2672,37 +2673,22 @@ void ContentBrowserPanel::CreateEmptyTimeline(const filesystem::path& path)
 	if (!CanTransferTo(path))
 		return;
 	const filesystem::path outputPath = GenerateUniqueAssetPath(path, L"NewTimeline", L".bamtimeline.json");
-	const std::string templateJson = R"({
-    "AssetHeader": {
-        "MagicNumber": 6072351289621954882,
-        "ResourceType": 16,
-        "Version": 0
-    },
-    "m_ClipName": "NewTimeline",
-    "m_Duration": 3.0,
-    "m_CameraTracks": [],
-    "m_EffectTracks": [],
-    "m_SoundTracks": [],
-    "m_AnimationTracks": []
-})";
 
-	std::ofstream file(outputPath, std::ios::out | std::ios::trunc);
-	if (file.is_open())
+	// 손으로 쓴 JSON 템플릿은 필드가 바뀌면 읽기에 실패한다(이전 템플릿은 없는 트랙 필드와 빠진 필수 필드로 열리지 않았다).
+	// 빈 에셋을 리플렉션으로 저장해 현재 구조와 항상 일치시킨다. 모델·클립은 타임라인 편집기에서 지정한다.
+	auto* asset = Engine::ActionTimelineAsset::CreateEmpty();
+	if (!asset)
+		return;
+	asset->SetDuration(3.0f);
+	const bool saved = asset->SaveToFile(Engine::WStrToStr(outputPath.wstring()));
+	Engine::ResourceManager::Get().DestroyResource(asset);
+	if (!saved)
 	{
-		file << templateJson;
-		file.close();
-		if (!file)
-		{
-			EDITOR_LOG_WARN("New asset write failed: {}", Engine::WStrToStr(outputPath.wstring()));
-			return;
-		}
-		RequestRefresh();
-		QueueCreatedAssetRename(outputPath);
+		EDITOR_LOG_WARN("Timeline creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		return;
 	}
-	else
-	{
-		EDITOR_LOG_WARN("Timeline creation failed: could not open file {}", outputPath.string());
-	}
+	RequestRefresh();
+	QueueCreatedAssetRename(outputPath);
 }
 
 void ContentBrowserPanel::CreateEmptyParticleEffect(const filesystem::path& path)

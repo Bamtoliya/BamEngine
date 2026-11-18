@@ -17,7 +17,12 @@
 #include "Skeleton.h"
 #include "CompositeVFXComponent.h" 
 #include "CompositeEffect.h"       
-#include "NameComponent.h"         
+#include "NameComponent.h"
+#include "AnimationEvaluator.h"
+#include "Animation.h"
+#include "Model.h"
+#include "ModelInstanceComponent.h"
+#include "Logger.h"
 
 namespace
 {
@@ -83,6 +88,51 @@ namespace
 	vec3 ComputeSocketWorldPos(const entt::registry& world, entt::entity entity, const std::string& boneName, const vec3& offset)
 	{
 		return ComputeSocketWorldTransform(world, entity, boneName, offset, vec3(0.0f)).position;
+	}
+
+	ResourceHandle<Animation> FindClipByName(const Model* model, const std::wstring& name)
+	{
+		if (!model) return {};
+		for (const auto& clip : model->GetAnimations())
+		{
+			if (clip.IsValid() && clip->GetName() == name) return clip;
+		}
+		return {};
+	}
+
+	// 타임라인을 작성한 클립을 찾는다. 엔티티의 연결 모델을 먼저 보고, 없으면 타임라인에 저장된 작성 모델에서 찾는다.
+	// 클립은 스켈레톤 기준이므로 같은 스켈레톤을 쓰는 다른 모델에도 적용할 수 있다.
+	ResourceHandle<Animation> ResolveTimelineClip(const entt::registry& world, entt::entity entity, const ActionTimelineAsset& asset)
+	{
+		if (asset.GetClipName().empty()) return {};
+		const std::wstring clipName = StrToWStr(asset.GetClipName());
+
+		ResourceHandle<Animation> clip;
+		if (const auto* instance = world.try_get<ModelInstanceComponent>(entity))
+			clip = FindClipByName(instance->modelHandle.Get(), clipName);
+		if (!clip.IsValid() && !asset.GetModelPath().empty())
+		{
+			const ResourceHandle<Model> model(ResourceManager::Get().LoadFile(StrToWStr(asset.GetModelPath())));
+			clip = FindClipByName(model.Get(), clipName);
+		}
+		if (!clip.IsValid())
+			BAM_LOG(Warn, "Engine", "ActionTimeline", "Timeline clip '{}' was not found (model: '{}'). The animator keeps its current clip.", asset.GetClipName(), asset.GetModelPath());
+		return clip;
+	}
+
+	// 노티파이 소켓 본이 엔티티 스켈레톤에 없으면 엔티티 원점에서 발동한다. 타임라인을 불러올 때 한 번 알린다.
+	void WarnMissingSocketBones(const entt::registry& world, entt::entity entity, const ActionTimelineAsset& asset)
+	{
+		const auto* skeleton = FindSkeletonInHierarchy(world, entity);
+		for (const auto& track : asset.GetNotifyTracks())
+		{
+			for (const auto& notify : track.Notifies)
+			{
+				if (notify.SocketBoneName.empty()) continue;
+				if (skeleton && skeleton->GetBoneMap().contains(StrToWStr(notify.SocketBoneName))) continue;
+				BAM_LOG(Warn, "Engine", "ActionTimeline", "Socket bone '{}' of notify '{}' was not found on the entity skeleton. The entity origin is used instead.", notify.SocketBoneName, notify.Name);
+			}
+		}
 	}
 }
 
@@ -181,10 +231,13 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			if (timeline.timelinePath != timeline.loadedTimelinePath)
 			{
 				timeline.loadedTimelinePath = timeline.timelinePath;
+				++timeline.playSerial; // 다른 타임라인으로 바뀌면 이전 지속형 VFX를 해제한다
 				if (!timeline.timelinePath.empty())
 				{
 					auto handle = ResourceManager::Get().LoadFile(StrToWStr(timeline.timelinePath));
 					timeline.timelineAsset = ResourceHandle<ActionTimelineAsset>(handle);
+					if (const auto* loaded = timeline.timelineAsset.Get())
+						WarnMissingSocketBones(world, entity, *loaded);
 				}
 				else
 				{
@@ -195,9 +248,17 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			auto* asset = timeline.timelineAsset.Get();
 			if (!asset || !timeline.isPlaying) continue;
 
+			// 재생 세션이 바뀌면(Play·Stop·타임라인 교체) 작성 클립을 다시 찾는다.
+			if (timeline.boundClipSerial != timeline.playSerial)
+			{
+				timeline.boundClip = ResolveTimelineClip(world, entity, *asset);
+				timeline.boundClipSerial = timeline.playSerial;
+			}
+
 			const float duration = std::max(0.05f, asset->GetDuration());
 			timeline.prevTime = timeline.currentTime;
 			timeline.currentTime += dt * timeline.playRate;
+			timeline.playElapsed += dt * timeline.playRate;
 
 			bool hasLooped = false;
 			if (timeline.currentTime >= duration)
@@ -219,6 +280,16 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			{
 				animator->currentTime = timeline.currentTime;
 				animator->isPlaying = false; // 타임라인이 시간을 주도적으로 구동하므로 Animator의 자체 dt 가산을 억제
+
+				// isPlaying이 false이면 AnimationSystem이 포즈를 계산하지 않으므로, 타임라인이 작성 클립의 포즈를 직접 계산한다.
+				// 소켓 위치도 이 행렬을 쓰므로 노티파이 검출보다 먼저 갱신한다.
+				const auto* clip = timeline.boundClip.Get();
+				const auto* skeleton = clip ? FindSkeletonInHierarchy(world, entity) : nullptr;
+				if (clip && skeleton)
+				{
+					animator->currentClip = timeline.boundClip;
+					AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, timeline.currentTime, animator->finalBoneMatrices, timeline.isLooping);
+				}
 			}
 
 			// 3. 노티파이 이벤트 구간 검출 및 트리거
@@ -291,6 +362,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 								vfxComp.effectHandle = ResourceHandle<CompositeEffect>(vfxHandle);
 								vfxComp.isPlaying = true;
 								vfxComp.isLooping = false;
+								vfxComp.playOnce = true;
+								vfxComp.holdUntilRelease = notify.Duration > 0.0f;
 								vfxComp.playRate = notify.VFXPlayRate;
 								vfxComp.Restart();
 
@@ -307,6 +380,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 								if (notify.AutoDestroy)
 								{
 									world.get_or_emplace<ActionVFXLifecycleComponent>(vfxEntity);
+								}
+
+								if (vfxComp.holdUntilRelease)
+								{
+									auto& hold = world.get_or_emplace<ActionVFXHoldComponent>(vfxEntity);
+									hold.ownerEntity = entity;
+									hold.playSerial = timeline.playSerial;
+									hold.releaseElapsed = timeline.playElapsed + notify.Duration;
 								}
 							}
 						}
@@ -340,6 +421,30 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 						}
 					}
 				}
+			}
+		}
+
+		// ── 5. 지속형 VFX 노티파이 해제 ──
+		// 소유자가 사라지거나 비활성화될 때, 타임라인을 다시 재생·정지·교체할 때, 끝 시점을 지나거나 재생이 끝났을 때 해제한다.
+		// 일시정지(Pause·Paused 플래그) 중에는 유지한다.
+		{
+			auto holdView = world.view<ActionVFXHoldComponent, CompositeVFXComponent>();
+			std::vector<entt::entity> released;
+			for (auto vfxEntity : holdView)
+			{
+				const auto& hold = holdView.get<ActionVFXHoldComponent>(vfxEntity);
+				const auto* owner = world.valid(hold.ownerEntity) ? world.try_get<ActionTimelineComponent>(hold.ownerEntity) : nullptr;
+				const auto* ownerFlag = owner ? world.try_get<FlagComponent>(hold.ownerEntity) : nullptr;
+				const bool ownerGone = !owner || (ownerFlag && (!ownerFlag->IsActiveInHierarchy() || HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Dead)));
+				const auto* ownerAsset = owner ? owner->timelineAsset.Get() : nullptr;
+				const bool ownerEnded = owner && !owner->isPlaying && ownerAsset && owner->currentTime >= std::max(0.05f, ownerAsset->GetDuration());
+				if (ownerGone || ownerEnded || owner->playSerial != hold.playSerial || owner->playElapsed >= hold.releaseElapsed)
+					released.push_back(vfxEntity);
+			}
+			for (auto vfxEntity : released)
+			{
+				world.get<CompositeVFXComponent>(vfxEntity).Release();
+				world.remove<ActionVFXHoldComponent>(vfxEntity);
 			}
 		}
 	}

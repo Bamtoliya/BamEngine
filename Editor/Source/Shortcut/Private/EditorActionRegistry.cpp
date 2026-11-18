@@ -282,14 +282,46 @@ void EditorActionRegistry::RegisterAll()
         .CategoryKey = "Shortcuts.CategoryTimeline",
         .Context = EShortcutContext::AnimationTimeline,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+        // 패널 이름(L"AnimationTimelinePanel")으로 찾지 않고 다른 Timeline.* 액션과 같이 활성 패널을 쓴다.
         .ExecuteHandler = []() {
-            auto* panel = dynamic_cast<AnimationTimelinePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Animation Timeline"));
-            if (panel && panel->IsOpen()) panel->SaveResource();
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel(); panel && panel->IsOpen()) panel->SaveResource();
         },
         .CanExecute = []() {
-            auto* panel = dynamic_cast<AnimationTimelinePanel*>(ImGuiManager::Get().GetImGuiPanel(L"Animation Timeline"));
+            const auto* panel = AnimationTimelinePanel::GetActivePanel();
             return panel && panel->IsOpen();
         }
+        });
+
+    sm.RegisterAction({
+        .Id = "AnimationTimeline.Undo",
+        .DisplayNameKey = "EditorCommon.Undo",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Z, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->Undo();
+        },
+        .CanExecute = []() {
+            const auto* panel = AnimationTimelinePanel::GetActivePanel();
+            return panel && panel->CanUndo();
+        },
+        .AllowRepeat = true
+        });
+
+    sm.RegisterAction({
+        .Id = "AnimationTimeline.Redo",
+        .DisplayNameKey = "EditorCommon.Redo",
+        .CategoryKey = "Shortcuts.CategoryTimeline",
+        .Context = EShortcutContext::AnimationTimeline,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Y, EModifierKey::Ctrl),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimationTimelinePanel::GetActivePanel()) panel->Redo();
+        },
+        .CanExecute = []() {
+            const auto* panel = AnimationTimelinePanel::GetActivePanel();
+            return panel && panel->CanRedo();
+        },
+        .AllowRepeat = true
         });
 
     // ── [Tile Palette Brush Actions] ──
@@ -588,6 +620,13 @@ void EditorActionRegistry::RegisterAll()
         if (graph && graph->CanUseCanvas() && graph->IsFocused())
         {
             graph->ResetCanvasView();
+            return;
+        }
+
+        auto* animator = AnimatorGraphPanel::GetActivePanel();
+        if (animator && animator->IsOpen() && animator->IsFocused())
+        {
+            animator->ResetCanvasView();
             return;
         }
 

@@ -77,8 +77,36 @@ void CompositeVFXSystem::SimulateSceneVFX(Scene* scene, f32 dt)
 	}
 }
 
+// 해제된 VFX: 새 방출 없이 남은 트레일 점의 나이만 늘리고, 모두 사라지면 재생을 끝낸다.
+static void UpdateTrailDrain(Engine::CompositeVFXComponent& vfxComp, Engine::f32 dt)
+{
+	const auto* effect = vfxComp.effectHandle.Get();
+	const Engine::f32 ageStep = std::max(0.0f, dt * vfxComp.playRate);
+	bool hasPoints = false;
+	for (std::size_t i = 0; i < vfxComp.trailRuntimes.size(); ++i)
+	{
+		auto& rt = vfxComp.trailRuntimes[i];
+		rt.hasHead = false;
+		rt.hasLastSpawn = false;
+		const Engine::f32 lifetime = (effect && i < effect->GetTrailTracks().size()) ? effect->GetTrailTracks()[i].lifetime : 0.0f;
+		for (auto& pt : rt.points) pt.age += ageStep;
+		std::erase_if(rt.points, [lifetime](const Engine::VFXTrailSamplePoint& pt) { return pt.age >= lifetime; });
+		hasPoints |= !rt.points.empty();
+	}
+	if (hasPoints) return;
+	vfxComp.isDraining = false;
+	vfxComp.isFinished = true;
+	vfxComp.isPlaying = false;
+}
+
 void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, CompositeVFXComponent& vfxComp, const WorldTransformComponent& transform, f32 dt)
 {
+	if (vfxComp.isDraining)
+	{
+		UpdateTrailDrain(vfxComp, dt);
+		return;
+	}
+
 	CompositeEffect* effect = vfxComp.isPlaying ? vfxComp.effectHandle.Get() : nullptr;
 	const f32 totalDuration = effect ? effect->GetTotalDuration() : 0.0f;
 	if (!std::isfinite(totalDuration) || totalDuration <= 0.0f)
@@ -90,21 +118,33 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 	const f32 playbackDelta = dt * vfxComp.playRate;
 	vfxComp.currentTime += playbackDelta;
 
-	// 1. 전체 지속 시간 초과 처리 (루프 / 정지)
+	// 1. 전체 지속 시간 초과 처리 (루프 / 지속 유지 / 종료)
 	if (vfxComp.currentTime >= totalDuration)
 	{
-		if (!vfxComp.previewSeeking && (vfxComp.isLooping || effect->IsLooping()))
+		const bool loop = !vfxComp.playOnce && (vfxComp.isLooping || effect->IsLooping());
+		if (!vfxComp.previewSeeking && loop)
 		{
 			vfxComp.currentTime = std::fmod(vfxComp.currentTime, totalDuration);
 			vfxComp.prevTime = 0.0f;
 			vfxComp.isFinished = false;
 			vfxComp.ResetRuntimes();
 		}
-		else
+		else if (!vfxComp.previewSeeking && vfxComp.holdUntilRelease)
+		{
+			// 지속형: 해제될 때까지 시간을 계속 진행한다. loop가 켜진 트랙만 활성으로 남는다.
+		}
+		else if (vfxComp.previewSeeking)
 		{
 			vfxComp.currentTime = totalDuration;
 			vfxComp.isFinished = true;
 			vfxComp.isPlaying = false;
+		}
+		else
+		{
+			// 1회 재생 종료: 남은 트레일이 수명대로 사라지도록 해제 상태로 넘긴다.
+			vfxComp.currentTime = totalDuration;
+			vfxComp.Release();
+			return;
 		}
 	}
 
@@ -547,6 +587,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+
 		CompositeEffect* effect = vfxComp.effectHandle.Get();
 		if (!effect) continue;
 
@@ -556,7 +597,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 		const auto& spriteTracks = effect->GetSpriteTracks();
 		for (const auto& track : spriteTracks)
 		{
-			if (!track.enabled || track.isMuted) continue;
+			if (!track.enabled || track.isMuted || vfxComp.isDraining) continue;
 
 			const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
 			if (trackLocalTime < 0.0f) continue;
@@ -627,7 +668,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 		const auto& meshTracks = effect->GetMeshTracks();
 		for (const auto& track : meshTracks)
 		{
-			if (!track.enabled || track.isMuted) continue;
+			if (!track.enabled || track.isMuted || vfxComp.isDraining) continue;
 
 			const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
 			if (trackLocalTime < 0.0f) continue;
@@ -713,7 +754,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 		const auto& decalTracks = effect->GetDecalTracks();
 		for (const auto& track : decalTracks)
 		{
-			if (!track.enabled || track.isMuted) continue;
+			if (!track.enabled || track.isMuted || vfxComp.isDraining) continue;
 
 			const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
 			if (trackLocalTime < 0.0f || trackLocalTime >= track.duration) continue;

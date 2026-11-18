@@ -39,6 +39,11 @@
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_NETWORK,Network,네트워크
+,CATEGORY_NOTIFY_EVENT,Event,이벤트
+,CATEGORY_NOTIFY_PARTICLE,Particle,파티클
+,CATEGORY_NOTIFY_SOCKET,Socket,소켓
+,CATEGORY_NOTIFY_SOUND,Sound,사운드
+,CATEGORY_NOTIFY_VFX,Composite VFX,복합 VFX
 ,CATEGORY_PARAMETER,Parameter,매개변수
 ,CATEGORY_PARTICLE_COLLISION,Collision & Interaction,물리 충돌 및 상호작용
 ,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
@@ -109,6 +114,10 @@
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
 ,ENUM_LIGHT_TYPE,Light Type,조명 타입
 ,ENUM_TRANSFORM_ABSOLUTE,Absolute Transform Channels,월드 기준 Transform 채널
+,Engine::EAnimNotifyType.CustomEvent,Custom Event,커스텀 이벤트
+,Engine::EAnimNotifyType.Particle,Particle,파티클
+,Engine::EAnimNotifyType.Sound,Sound,사운드
+,Engine::EAnimNotifyType.SpawnCompositeVFX,Spawn Composite VFX,복합 VFX 생성
 ,Engine::ECurveInterpMode.Constant,Constant,상수
 ,Engine::ECurveInterpMode.CubicBezier,Cubic Bezier,3차 베지어
 ,Engine::ECurveInterpMode.Linear,Linear,선형
@@ -305,12 +314,14 @@
 ,PROP_ASSETS_PPU,Assets PPU,에셋 PPU
 ,PROP_ATLAS_ENTRIES,Atlas Entries,아틀라스 항목 목록
 ,PROP_ATLAS_TEXTURE,Atlas Texture,아틀라스 텍스처
+,PROP_ATTACH_TO_SOCKET,Attach to Socket,소켓에 부착
 ,PROP_ATTACK_TIME,Attack Time,도달 시간
 ,PROP_ATTENUATION_COEFFICIENTS,Attenuation Coefficients,감쇠 계수
 ,PROP_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,PROP_AUDIO_CLIP,Audio Clip,오디오 클립
 ,PROP_AUDIO_HANDLE,Audio Clip,오디오 클립
 ,PROP_AUTO_DEACTIVATE_ON_FINISH,Auto Deactivate On Finish,완료 시 자동 비활성화
+,PROP_AUTO_DESTROY,Auto Destroy,재생 후 자동 제거
 ,PROP_AUTO_DESTROY_ON_FINISH,Auto Destroy On Finish,완료 시 자동 파괴
 ,PROP_AUTO_SYNC_ATMOSPHERE,Auto Sync Atmosphere,대기 자동 동기화
 ,PROP_AUTO_SYNC_DIRECTIONAL_LIGHT,Auto Sync Directional Light,디렉셔널 라이트 자동 동기화
@@ -387,6 +398,7 @@
 ,PROP_ENABLE_CURL_NOISE,Enable Turbulence,와류(컬 노이즈) 활성화
 ,PROP_ENABLE_TIME_CYCLE,Enable Time Cycle,시간 주기 활성화
 ,PROP_EULER_ROTATION,EulerRotation,회전(각도)
+,PROP_EVENT_TAG,Event Tag,이벤트 태그
 ,PROP_EXTERNAL_WIND,External Wind,외부 바람
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
 ,PROP_FADE_OUT_DURATION,Fade Out Duration,페이드 아웃 시간
@@ -401,6 +413,7 @@
 ,PROP_FLIPX,FlipX,X 반전
 ,PROP_FLIPY,FlipY,Y 반전
 ,PROP_FLOOR_HEIGHT,Floor Height,바닥 높이
+,PROP_FOCUS_BONE,Focus Bone,포커스 본
 ,PROP_FOG_COLOR,Fog Color,안개 색상
 ,PROP_FOG_DENSITY,Fog Density,안개 밀도
 ,PROP_FOG_END_DIST,Fog End Distance,안개 종료 거리
@@ -527,6 +540,9 @@
 ,PROP_NETWORK_ID,Network ID,네트워크 ID
 ,PROP_NORMAL,Normal,법선
 ,PROP_NORMAL_COLOR,Normal Color,기본 색
+,PROP_NOTIFY_DURATION,Duration (s),지속 시간 (초)
+,PROP_NOTIFY_TRIGGER_TIME,Trigger Time (s),발동 시간 (초)
+,PROP_NOTIFY_TYPE,Notify Type,노티파이 유형
 ,PROP_OFFSET,Offset,오프셋
 ,PROP_OFFSET_A,Offset A,오프셋 A
 ,PROP_OFFSET_B,Offset B,오프셋 B
@@ -538,6 +554,7 @@
 ,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PARENT_EMITTER_INDEX,Parent Emitter Index,부모 이미터 인덱스
+,PROP_PARTICLE_SPEED,Particle Speed,파티클 속도
 ,PROP_PARTICLE_TRACKS,Particle Tracks,파티클 트랙
 ,PROP_PASS_SHADERS,Pass Shaders,패스별 셰이더
 ,PROP_PEAK_INTENSITY,Peak Intensity,최대 강도
@@ -594,6 +611,7 @@
 ,PROP_SHADOW_RANGE,Shadow Range,그림자 범위
 ,PROP_SHADOW_SLOPE_BIAS,Shadow Slope Bias,그림자 경사 바이어스
 ,PROP_SHADOW_STRENGTH,Shadow Strength,그림자 강도
+,PROP_SHAKE_INTENSITY,Shake Intensity,흔들림 강도
 ,PROP_SHAKE_RADIUS,Shake Radius (0 = Global),셰이크 반경 (0 = 전역)
 ,PROP_SHAPE,Shape,형상
 ,PROP_SHAPE_SIZE,Shape Noise Size,뭉게구름 덩어리 크기
@@ -604,9 +622,12 @@
 ,PROP_SKELETON_HANDLE,Skeleton Handle,스켈레톤 핸들
 ,PROP_SKY_INTENSITY,Sky Intensity,하늘 강도
 ,PROP_SNAP_SUBPIXEL,Snap Subpixel,서브픽셀 스냅
+,PROP_SOCKET_BONE,Socket Bone,소켓 본
 ,PROP_SOCKET_OFFSET,Socket Offset,소켓 오프셋
+,PROP_SOCKET_ROTATION,Socket Rotation,소켓 회전
 ,PROP_SORTING_LAYER,Sorting Layer,정렬 레이어
 ,PROP_SORTING_ORDER,Sorting Order,정렬 순서
+,PROP_SOUND_PATH,Sound,사운드
 ,PROP_SOUND_TRACKS,Sound Tracks,사운드 트랙
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
@@ -650,6 +671,7 @@
 ,PROP_TAPER_RATIO,Taper Ratio,테이퍼링 비율
 ,PROP_TARGET_ARM_LENGTH,Target Arm Length,목표 암 길이
 ,PROP_TARGET_ENTITY,Target Entity,타깃 엔티티
+,PROP_TARGET_FOV,Target FOV,목표 시야각
 ,PROP_TARGET_OFFSET,Target Offset,타깃 오프셋
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
@@ -678,6 +700,7 @@
 ,PROP_VELOCITY_ITERATIONS,Velocity Iterations,속도 반복 횟수
 ,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
 ,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
+,PROP_VFX_PATH,VFX Asset,VFX 에셋
 ,PROP_VOLUME,Volume,볼륨
 ,PROP_WARMUP_TIME,Warmup Time,예열 시간
 ,PROP_WEATHER_SIZE,Weather Map Size,웨더 맵 군집 크기
@@ -730,6 +753,7 @@
 ,SHARPEN_SHARPNESS,Sharpness,선명도
 ,STRUCT_AABB,AABB,축 정렬 경계 상자(AABB)
 ,STRUCT_ACTION_TIMELINE,Action Timeline,액션 타임라인
+,STRUCT_ACTION_VFX_HOLD,Action VFX Hold,액션 VFX 유지
 ,STRUCT_ACTION_VFX_LIFECYCLE,Action VFX Lifecycle,액션 VFX 수명 주기
 ,STRUCT_ANIMATOR,Animator,애니메이터
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너

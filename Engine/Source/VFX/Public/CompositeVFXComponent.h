@@ -107,6 +107,12 @@ namespace Engine
 
 		f32 prevTime = 0.0f;
 		bool isFinished = false;
+		// 노티파이처럼 한 번만 재생해야 하는 인스턴스. 에셋의 루프 설정보다 우선한다. 런타임 전용이라 저장하지 않는다.
+		bool playOnce = false;
+		// 지속형 노티파이: 에셋 길이에서 끝내지 않고 Release()까지 유지한다. 런타임 전용.
+		bool holdUntilRelease = false;
+		// 해제됨: 새 방출을 멈추고 남은 트레일이 사라지면 isFinished가 된다. 런타임 전용.
+		bool isDraining = false;
 		bool previewSeeking = false;
 		std::optional<uint32> previewSeed;
 
@@ -153,7 +159,21 @@ namespace Engine
 			currentTime = 0.0f;
 			prevTime = 0.0f;
 			isFinished = false;
+			isDraining = false;
 			ResetRuntimes();
+		}
+
+		// 새 방출을 멈추고 잔상(트레일)만 남긴다. 파티클·조명·사운드·셰이크는 지금처럼 바로 정리한다.
+		void Release()
+		{
+			if (isFinished || isDraining) return;
+			isDraining = true;
+			holdUntilRelease = false;
+			StopSoundTracks();
+			for (auto& rt : particleRuntimes) rt.Reset();
+			hasActiveLight = false;
+			activeLightIntensity = 0.0f;
+			currentCameraShakeOffset = vec3(0.0f);
 		}
 
 		void Restart()
@@ -162,6 +182,7 @@ namespace Engine
 			prevTime = 0.0f;
 			isPlaying = true;
 			isFinished = false;
+			isDraining = false;
 			ResetRuntimes();
 		}
 

@@ -4,21 +4,12 @@ Timeline,AddAudioTrack,Add Audio Track,오디오 트랙 추가
 Timeline,AddCameraShotTrack,Add Camera Shot Track,카메라 샷 트랙 추가
 Timeline,AddEventNotify,Add Gameplay Event,게임플레이 이벤트 노티파이 추가
 Timeline,AddFXTrack,Add FX Track,이펙트 트랙 추가
-Timeline,AddParticleNotify,Add Particle Notify (FX),파티클 이펙트 노티파이 추가
 Timeline,AddSoundNotify,Add Sound Notify,사운드 노티파이 추가
 Timeline,AnimTrack,Anim Clip,애니메이션
 Timeline,AssetFile,Timeline Asset,타임라인 에셋
-Timeline,BurstCount,Burst Count,방출 입자 수
-Timeline,CameraShotDuration,Duration (s),지속 시간 (초)
-Timeline,CameraShotFocusBone,Focus Bone,포커스 본
-Timeline,CameraShotName,Shot Name,샷 이름
-Timeline,CameraShotShakeIntensity,Shake Intensity,흔들림 강도
-Timeline,CameraShotStartTime,Start Time (s),시작 시간 (초)
-Timeline,CameraShotTargetFOV,Target FOV,목표 시야각
 Timeline,DeactivateShot,Deactivate Shot,샷 비활성화
 Timeline,DeleteNotify,Delete Marker,노티파이 삭제
 Timeline,Duration,Clip Duration (sec),클립 전체 길이 (초)
-Timeline,EventTag,Event Tag,이벤트 태그
 Timeline,FrameCounter,(Frame: {} / {}),(프레임: {} / {})
 Timeline,InspectorSelectionHint,Select a marker or camera shot in the tracks to edit its properties.,트랙에서 마커나 카메라 샷을 선택하여 속성을 편집하세요.
 Timeline,LoadSuccess,Timeline asset loaded successfully.,타임라인 에셋을 성공적으로 불러왔습니다.
@@ -26,19 +17,11 @@ Timeline,Loop,Toggle Loop,루프 반복 토글
 Timeline,MarkerTimeSocket,Time: %.2fs | Socket: %s,시간: %.2f초 / 부착 본: %s
 Timeline,MuteTrack,Mute,음소거
 Timeline,NotifyInspector,Notify Properties,노티파이 속성
-Timeline,NotifyName,Notify Name,노티파이 이름
 Timeline,NotifyTrack,FX / Notifies,이펙트/노티파이
 Timeline,NotifyTriggered,Triggered: {},발동: {}
-Timeline,NotifyType,Notify Type,노티파이 유형
-Timeline,NotifyTypeCustomEvent,Custom Event,사용자 정의 이벤트
-Timeline,NotifyTypeParticle,Particle FX,파티클 효과
-Timeline,NotifyTypeSound,Sound FX,사운드 효과
-Timeline,OffsetPos,Offset Position,오프셋 위치
 Timeline,OpenInEditor,Open in Timeline Editor,타임라인 에디터에서 열기
 Timeline,OpenTimeline,Open Timeline Asset,타임라인 에셋 열기
 Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
-Timeline,ParticleColor,Particle Color,파티클 색상
-Timeline,ParticleSpeed,Particle Speed,입자 속도
 Timeline,PlaybackSpeed,Playback Speed,재생 배속
 Timeline,Pose,Pose,포즈
 Timeline,PreviewPlaceholder,3D Viewport Preview Area,3D 뷰포트 프리뷰 영역
@@ -48,28 +31,17 @@ Timeline,SaveAsTimeline,Save Timeline As...,다른 이름으로 저장...
 Timeline,SaveSuccess,Timeline asset saved successfully.,타임라인 에셋이 성공적으로 저장되었습니다.
 Timeline,SaveTimeline,Save Timeline Asset,타임라인 에셋 저장
 Timeline,SelectModel,Model...,모델 선택...
-Timeline,SelectSound,Select Sound...,사운드 선택...
 Timeline,Shot,Shot,샷
-Timeline,SocketBone,Socket Bone,부착 본(Bone)
 Timeline,Sound,Sound: %s,사운드: %s
-Timeline,SoundFile,Audio: {},오디오: {}
 Timeline,SyncEntity,Sync Entity,엔티티 동기화
 Timeline,SyncTooltip,Sync with selected entity in Scene,씬에서 선택된 엔티티와 동기화
 Timeline,TimeCounter,{:.2f}s / {:.2f}s,{:.2f}초 / {:.2f}초
 Timeline,TrackTitle,Timeline Tracks & Notifies,타임라인 트랙 및 노티파이
 Timeline,Tracks,Tracks,트랙
 Timeline,TriggerTest,Trigger Test,즉시 발동 테스트
-Timeline,TriggerTime,Trigger Time (s),발동 시간 (초)
 Timeline,UnmuteTrack,Unmute,음소거 해제
 Timeline,ZoomFactor,Zoom: {:.1f}x,확대: {:.1f}배
-Timeline,NotifyTypeSpawnCompositeVFX,Composite VFX,복합 VFX 스폰
 Timeline,VFXFile,Composite VFX File: {},복합 VFX 파일: {}
-Timeline,SelectVFX,Select VFX File,VFX 파일 선택
-Timeline,OffsetRot,Offset Rotation,오프셋 회전
-Timeline,VFXScale,VFX Scale,VFX 크기
-Timeline,AttachToSocket,Attach to Socket,소켓에 지속 부착
-Timeline,VFXPlayRate,VFX Play Rate,VFX 재생 속도
-Timeline,AutoDestroy,Auto Destroy on Finish,완료 시 자동 소멸
 Timeline,Title,Animation Timeline,애니메이션 타임라인
 Timeline,BoneHierarchy,Bone Hierarchy,본 계층
 Timeline,SearchBones,Search bones...,본 검색...
@@ -79,3 +51,16 @@ Timeline,FocusBone,Focus Bone Camera,본으로 카메라 이동
 Timeline,NoEmbeddedAnimation,No Embedded Animation (Bind Pose),내장 애니메이션 없음 (바인드 포즈)
 Timeline,DurationTooltip,Adjust timeline duration for static models,애니메이션이 없는 모델의 타임라인 지속시간을 조절합니다
 Timeline,AddTrack,Add Track,트랙 추가
+Timeline,MarkerDuration,Duration: {:.2f}s,지속 시간: {:.2f}초
+Timeline,AddEventTrack,Add Event Track,이벤트 트랙 추가
+Timeline,AddVFXNotify,Add Composite VFX Notify,복합 VFX 노티파이 추가
+Timeline,NoMatchingBones,No bones match the search.,검색어와 일치하는 본이 없습니다.
+Timeline,HistoryEditTracks,Edit Timeline,타임라인 편집
+Timeline,NoModel,No Model,모델 없음
+Timeline,NoModelHint,Select a model or drag one from the Content Browser to preview sockets and clip timing.,소켓과 클립 타이밍을 확인하려면 모델을 선택하거나 콘텐츠 브라우저에서 끌어다 놓으세요.
+Timeline,SocketNeedsModel,Select a model with a skeleton to choose a socket bone.,소켓 본을 고르려면 스켈레톤이 있는 모델을 선택하세요.
+Timeline,SocketBoneMissing,Bone '{}' is not in the current skeleton. The notify fires at the root.,현재 스켈레톤에 '{}' 본이 없습니다. 노티파이가 루트에서 발동합니다.
+Timeline,SaveWarnNoModel,Saved without a target model. Clip timing and sockets are not bound.,대상 모델 없이 저장했습니다. 클립 타이밍과 소켓이 연결되지 않습니다.
+Timeline,SaveWarnSocketsNoModel,Saved without a target model. {} notifies use socket bones that cannot be checked.,대상 모델 없이 저장했습니다. 소켓 본을 쓰는 노티파이 {}개를 확인할 수 없습니다.
+Timeline,SaveWarnNoClip,Saved without an animation clip. The runtime keeps the animator's current clip.,애니메이션 클립 없이 저장했습니다. 런타임에서는 Animator의 현재 클립이 그대로 재생됩니다.
+Timeline,SaveWarnMissingSockets,{} notifies use socket bones that are not in the model skeleton.,모델 스켈레톤에 없는 소켓 본을 쓰는 노티파이가 {}개 있습니다.

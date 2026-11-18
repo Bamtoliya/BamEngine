@@ -36,8 +36,16 @@ namespace Engine
 		// 직전 틱 시간 (구간 내 노티파이 누락 없는 정확한 검출용)
 		f32 prevTime = 0.0f;
 
+		// 지속형 노티파이 해제 판정용 (런타임 전용): 재생 세션 번호와 세션 안에서 누적한 재생 시간(루프해도 줄지 않음)
+		uint32 playSerial = 0;
+		f32 playElapsed = 0.0f;
+
 		// 런타임 캐시
 		std::string loadedTimelinePath;
+
+		// 타임라인을 작성한 클립 (런타임 전용). 재생 세션마다 에셋의 ClipName으로 다시 찾아 Animator에 건다.
+		ResourceHandle<Animation> boundClip;
+		uint32 boundClipSerial = 0xFFFFFFFFu; // 아직 찾지 않음
 
 		// ── 게임플레이 이벤트 콜백 ──
 		using ActionNotifyCallback = std::function<void(entt::entity entity, const AnimNotifyData& notify)>;
@@ -55,12 +63,14 @@ namespace Engine
 			if (!path.empty()) timelinePath = path;
 			currentTime = 0.0f;
 			prevTime = 0.0f;
+			playElapsed = 0.0f;
+			++playSerial;
 			isPlaying = true;
 		}
 
 		void Pause() { isPlaying = false; }
 		void Resume() { isPlaying = true; }
-		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; }
+		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; playElapsed = 0.0f; ++playSerial; }
 	};
 
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SOCKET_ATTACHMENT"), CATEGORY("CATEGORY_CORE"))
@@ -87,5 +97,18 @@ namespace Engine
 		REFLECT_BODY()
 		PROPERTY(EDITABLE)
 		bool autoDestroy = true;
+	};
+
+	// ── 지속형 VFX 노티파이: 소유 타임라인의 해제 시점까지 유지한다 (런타임 생성 전용) ──
+	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ACTION_VFX_HOLD"), CATEGORY("CATEGORY_RENDER"))
+		struct ActionVFXHoldComponent
+	{
+		REFLECT_BODY()
+			PROPERTY(READONLY, NOSERIALIZE)
+			entt::entity ownerEntity = entt::null;
+		PROPERTY(READONLY, NOSERIALIZE)
+			uint32 playSerial = 0;
+		PROPERTY(READONLY, NOSERIALIZE)
+			f32 releaseElapsed = 0.0f;
 	};
 }

@@ -40,6 +40,56 @@
 #include "Skeleton.h"
 #include "MaterialInterface.h"
 #include "ContentBrowserDragPayload.h"
+#include "ReflectionPropertyDrawer.h"
+#include "ReflectionRegistry.h"
+#include "ReflectionEditState.h"
+#include "AssetPathPicker.h"
+#include "NotificationManager.h"
+
+namespace
+{
+	bool IsNotifyAudioFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".wav") || name.ends_with(".mp3") || name.ends_with(".ogg");
+	}
+
+	bool IsNotifyVFXFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".bamvfx") || name.ends_with(".bamvfx.json");
+	}
+
+	const Editor::AssetPathPickerDesc NotifySoundPicker{ { ICON_FA_MUSIC, ImVec4(0.45f, 0.80f, 0.95f, 1.0f), "AUDIO" }, IsNotifyAudioFile };
+	const Editor::AssetPathPickerDesc NotifyVFXPicker{ { ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(0.95f, 0.55f, 0.25f, 1.0f), "VFX" }, IsNotifyVFXFile };
+
+	// 상단에 둘 속성과, 리플렉션 표 대신 직접 그리는 속성(본 목록·에셋 선택이 필요함).
+	constexpr std::string_view NotifyHeaderProperties[] = { "Name", "TriggerTime", "Duration", "Type" };
+	constexpr std::string_view NotifyCustomProperties[] = { "SocketBoneName", "SoundPath", "VFXPath" };
+
+	template<std::size_t N>
+	bool ContainsName(const std::string_view(&names)[N], std::string_view name)
+	{
+		return std::find(std::begin(names), std::end(names), name) != std::end(names);
+	}
+
+	struct NotifyTrackVisual
+	{
+		const char* Icon;
+		ImU32 Color;
+		Engine::EAnimNotifyType DefaultType; // 더블클릭으로 만드는 노티파이 유형
+	};
+
+	NotifyTrackVisual GetNotifyTrackVisual(const Engine::TimelineNotifyTrack& track)
+	{
+		switch (Engine::ActionTimelineAsset::ResolveTrackKind(track))
+		{
+		case Engine::ETimelineNotifyTrackKind::Audio: return { ICON_FA_MUSIC, IM_COL32(80, 200, 255, 255), Engine::EAnimNotifyType::Sound };
+		case Engine::ETimelineNotifyTrackKind::Event: return { ICON_FA_BELL, IM_COL32(200, 120, 255, 255), Engine::EAnimNotifyType::CustomEvent };
+		default: return { ICON_FA_BURST, IM_COL32(255, 175, 45, 255), Engine::EAnimNotifyType::SpawnCompositeVFX };
+		}
+	}
+}
 
 AnimationTimelinePanel::AnimationTimelinePanel()
 {
@@ -57,12 +107,12 @@ AnimationTimelinePanel::AnimationTimelinePanel()
 	// 기본 다중 트랙 프리셋 구성 (FX 트랙 1개 + 카메라 샷 트랙 1개)
 	Engine::TimelineNotifyTrack fxTrack{};
 	fxTrack.TrackName = "FX_Weapon";
+	fxTrack.Kind = Engine::ETimelineNotifyTrackKind::Effect;
 	Engine::AnimNotifyData defaultNotify{};
 	defaultNotify.Name = "Slash_Burst";
 	defaultNotify.TriggerTime = 0.40f;
 	defaultNotify.Type = Engine::EAnimNotifyType::SpawnCompositeVFX;
-	defaultNotify.AttachToSocket = true;
-	defaultNotify.SocketBoneName = "Weapon_Socket";
+	defaultNotify.AttachToSocket = true; // 소켓 본은 모델을 고른 뒤 지정한다(기본값은 루트)
 	defaultNotify.VFXScale = vec3(1.0f);
 	fxTrack.Notifies.push_back(defaultNotify);
 	m_NotifyTracks.push_back(fxTrack);
@@ -74,6 +124,9 @@ AnimationTimelinePanel::AnimationTimelinePanel()
 	camTrack.TargetFOV = 32.0f;
 	camTrack.ShakeIntensity = 0.4f;
 	m_CameraTracks.push_back(camTrack);
+
+	ResetEditHistory();
+	MarkDocumentSaved();
 }
 
 AnimationTimelinePanel::~AnimationTimelinePanel()
@@ -94,18 +147,22 @@ void AnimationTimelinePanel::StepFrame(int step)
 	m_CurrentTime = std::clamp(m_CurrentTime + static_cast<float>(step) * frameStep, 0.0f, m_Duration);
 }
 
-bool AnimationTimelinePanel::CanDeleteSelected() const
+bool AnimationTimelinePanel::IsSelectionValid() const
 {
-	if (!m_Open || m_IsDraggingItem || m_IsScrubbing || m_Selection.TrackIndex < 0) return false;
-
 	if (m_Selection.Type == ETimelineSelectionType::NotifyMarker)
 	{
-		if (m_Selection.TrackIndex >= static_cast<int>(m_NotifyTracks.size())) return false;
+		if (m_Selection.TrackIndex < 0 || m_Selection.TrackIndex >= static_cast<int>(m_NotifyTracks.size())) return false;
 		const auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
 		return m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(notifies.size());
 	}
+	if (m_Selection.Type == ETimelineSelectionType::CameraShot)
+		return m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size());
+	return false;
+}
 
-	return m_Selection.Type == ETimelineSelectionType::CameraShot && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size());
+bool AnimationTimelinePanel::CanDeleteSelected() const
+{
+	return m_Open && !m_IsDraggingItem && !m_IsScrubbing && IsSelectionValid();
 }
 
 void AnimationTimelinePanel::DeleteSelected()
@@ -126,12 +183,114 @@ void AnimationTimelinePanel::DeleteSelected()
 	m_IsDirty = true;
 }
 
+AnimationTimelinePanel::DocumentSnapshot AnimationTimelinePanel::CaptureDocument() const
+{
+	return { m_NotifyTracks, m_CameraTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration };
+}
+
+bool AnimationTimelinePanel::HasUncommittedEdit() const
+{
+	// 매 프레임 호출되므로 문서를 복사하지 않고 필드별로 비교한다.
+	const auto& committed = m_CommittedDocument;
+	return m_NotifyTracks != committed.NotifyTracks || m_CameraTracks != committed.CameraTracks ||
+		m_ModelAssetPath != committed.ModelPath || m_CurrentClipName != committed.ClipName || m_Duration != committed.Duration;
+}
+
+bool AnimationTimelinePanel::IsEditInProgress() const
+{
+	// 드래그·스크러빙·입력 중인 위젯이 있으면 조작이 끝난 뒤 한 건으로 묶는다.
+	return m_IsDraggingItem || m_IsScrubbing || ImGui::IsAnyItemActive() ||
+		Engine::InputManager::Get().IsMouseButtonPressed(Engine::EMouseButton::Left);
+}
+
+void AnimationTimelinePanel::CommitDocumentEdit()
+{
+	// 편집 지점마다 명령을 만들지 않고, 입력이 끝난 프레임에 마지막 확정 상태와 비교해 바뀐 만큼을 기록한다.
+	if (IsEditInProgress() || !HasUncommittedEdit()) return;
+
+	DocumentSnapshot before = std::move(m_CommittedDocument);
+	m_CommittedDocument = CaptureDocument();
+	DocumentSnapshot after = m_CommittedDocument;
+	m_History.Record(std::make_unique<CallbackEditorCommand>(LOCAL("Timeline.HistoryEditTracks"),
+		[this, after = std::move(after)] { ApplyDocumentSnapshot(after); return true; },
+		[this, before = std::move(before)] { ApplyDocumentSnapshot(before); return true; }));
+	m_IsDirty = !(m_CommittedDocument == m_SavedDocument);
+}
+
+void AnimationTimelinePanel::ApplyDocumentSnapshot(const DocumentSnapshot& snapshot)
+{
+	// 작성 모델이 다르면 다시 불러온다. SetTargetModel이 클립·길이를 초기화하므로 그 뒤에 저장된 값을 되돌린다.
+	if (snapshot.ModelPath != m_ModelAssetPath)
+	{
+		Engine::ResourceHandle<Engine::Model> model;
+		if (!snapshot.ModelPath.empty())
+			model = Engine::ResourceHandle<Engine::Model>(Engine::ResourceManager::Get().LoadFile(Engine::StrToWStr(snapshot.ModelPath)));
+		SetTargetModel(model);
+	}
+	m_ModelAssetPath = snapshot.ModelPath;
+
+	const int clipIndex = FindClipIndex(snapshot.ClipName);
+	if (clipIndex >= 0) SelectClip(clipIndex);
+	else m_SelectedClipIndex = -1;
+	m_CurrentClipName = snapshot.ClipName;
+	m_Duration = snapshot.Duration;
+	m_CurrentTime = std::clamp(m_CurrentTime, 0.0f, m_Duration);
+
+	m_NotifyTracks = snapshot.NotifyTracks;
+	m_CameraTracks = snapshot.CameraTracks;
+	m_CommittedDocument = snapshot;
+
+	// 되돌린 상태에 없는 항목을 가리키지 않도록 선택·이름 변경을 정리하고, 이전 상태로 만든 프리뷰 VFX를 지운다.
+	if (!IsSelectionValid()) m_Selection = {};
+	m_RenamingTrackIndex = -1;
+	m_IsDraggingItem = false;
+	ClearPreviewVFX();
+	m_IsDirty = !(snapshot == m_SavedDocument);
+}
+
+void AnimationTimelinePanel::ResetEditHistory()
+{
+	m_History.Clear();
+	m_CommittedDocument = CaptureDocument();
+}
+
+void AnimationTimelinePanel::MarkDocumentSaved()
+{
+	m_SavedDocument = CaptureDocument();
+	m_IsDirty = false;
+}
+
+bool AnimationTimelinePanel::CanUndo() const
+{
+	return m_Open && !IsEditInProgress() && (HasUncommittedEdit() || m_History.CanUndo());
+}
+
+bool AnimationTimelinePanel::CanRedo() const
+{
+	// 아직 기록하지 않은 편집이 있으면 그 편집이 다시 실행 목록을 지우므로 다시 실행할 수 없다.
+	return m_Open && !IsEditInProgress() && !HasUncommittedEdit() && m_History.CanRedo();
+}
+
+void AnimationTimelinePanel::Undo()
+{
+	if (!CanUndo()) return;
+	CommitDocumentEdit(); // 아직 기록하지 않은 편집이 있으면 먼저 한 건으로 넣어 그것부터 되돌린다.
+	(void)m_History.Undo();
+}
+
+void AnimationTimelinePanel::Redo()
+{
+	if (!CanRedo()) return;
+	(void)m_History.Redo();
+}
+
 void AnimationTimelinePanel::ClearPreviewVFX()
 {
 	auto* scene = m_PreviewWidget.GetScene();
 	if (!scene)
 	{
 		m_PreviewVFXEntities.clear();
+		m_PreviewHeldVFX.clear();
 		return;
 	}
 	auto& reg = scene->GetRegistry();
@@ -140,6 +299,34 @@ void AnimationTimelinePanel::ClearPreviewVFX()
 		if (reg.valid(e)) reg.destroy(e);
 	}
 	m_PreviewVFXEntities.clear();
+	m_PreviewHeldVFX.clear();
+}
+
+void AnimationTimelinePanel::UpdatePreviewHeldVFX(f32 dt)
+{
+	auto* scene = m_PreviewWidget.GetScene();
+	if (!scene)
+	{
+		m_PreviewHeldVFX.clear();
+		return;
+	}
+
+	auto& reg = scene->GetRegistry();
+	for (std::size_t i = 0; i < m_PreviewHeldVFX.size();)
+	{
+		auto& held = m_PreviewHeldVFX[i];
+		auto* vfx = reg.valid(held.Entity) ? reg.try_get<Engine::CompositeVFXComponent>(held.Entity) : nullptr;
+		bool expired = vfx == nullptr;
+		if (vfx)
+		{
+			const bool isTestHold = held.TestRemaining > -0.5f; // 테스트 발동은 0 이상에서 시작한다
+			if (isTestHold) held.TestRemaining -= dt;
+			expired = isTestHold ? held.TestRemaining <= 0.0f : m_CurrentTime >= held.ReleaseTime;
+			if (expired) vfx->Release();
+		}
+		if (expired) m_PreviewHeldVFX.erase(m_PreviewHeldVFX.begin() + static_cast<std::ptrdiff_t>(i));
+		else ++i;
+	}
 }
 
 void AnimationTimelinePanel::SetupPreviewModel()
@@ -173,32 +360,103 @@ void AnimationTimelinePanel::SetTargetModel(const Engine::ResourceHandle<Engine:
 	ClearPreviewVFX();
 	SetupPreviewModel();
 
-	if (!target) return;
-
-	auto anims = target->GetAnimations();
-	if (!anims.empty())
-	{
-		m_SelectedClipIndex = 0;
-		auto* clip = anims[0].Get();
-		if (clip)
-		{
-			m_CurrentClipName = Engine::WStrToStr(clip->GetName());
-			const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
-			m_Duration = clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 1.0f;
-		}
-	}
-	else
+	// 모델을 불러오지 못한 경우에는 저장된 클립 이름을 지우지 않는다(파일의 바인딩을 보존).
+	if (!target)
 	{
 		m_SelectedClipIndex = -1;
-		m_CurrentClipName = LOCAL("Timeline.NoEmbeddedAnimation");
-		if (m_Duration <= 0.0f) m_Duration = 2.0f;
+		return;
 	}
+
+	SelectClip(0); // 클립이 없는 모델이면 클립 없음으로 둔다
 
 	m_CurrentTime = 0.0f;
 	m_PrevTime = 0.0f;
 	m_TimelineZoom = 1.0f;
 	m_ViewStartTime = 0.0f;
 	m_IsPlaying = false;
+}
+
+void AnimationTimelinePanel::SelectClip(int index)
+{
+	auto* model = m_TargetModel.Get();
+	const auto anims = model ? model->GetAnimations() : std::vector<Engine::ResourceHandle<Engine::Animation>>{};
+	auto* clip = (index >= 0 && index < static_cast<int>(anims.size())) ? anims[index].Get() : nullptr;
+	if (!clip)
+	{
+		// 클립 없음: 저장값은 비우고 길이는 수동 입력값을 유지한다. 화면에는 안내 문구를 표시한다.
+		m_SelectedClipIndex = -1;
+		m_CurrentClipName.clear();
+		if (m_Duration <= 0.0f) m_Duration = 2.0f;
+		return;
+	}
+
+	m_SelectedClipIndex = index;
+	m_CurrentClipName = Engine::WStrToStr(clip->GetName());
+	const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
+	m_Duration = std::max(0.1f, clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 1.0f);
+}
+
+int AnimationTimelinePanel::FindClipIndex(const std::string& clipName) const
+{
+	auto* model = m_TargetModel.Get();
+	if (!model || clipName.empty()) return -1;
+	const auto anims = model->GetAnimations();
+	for (int i = 0; i < static_cast<int>(anims.size()); ++i)
+	{
+		if (anims[i].IsValid() && Engine::WStrToStr(anims[i]->GetName()) == clipName) return i;
+	}
+	return -1;
+}
+
+bool AnimationTimelinePanel::IsMissingSocketBone(const std::string& boneName) const
+{
+	// 스켈레톤이 없으면 확인할 수 없으므로 누락으로 보지 않는다(모델 없음 안내가 따로 표시된다).
+	return !boneName.empty() && !m_BoneNames.empty() &&
+		std::find(m_BoneNames.begin(), m_BoneNames.end(), boneName) == m_BoneNames.end();
+}
+
+void AnimationTimelinePanel::NotifySaveWarnings() const
+{
+	// 저장은 막지 않고, 런타임에서 클립·소켓이 연결되지 않는 경우를 알린다.
+	int socketNotifies = 0;
+	int missingSockets = 0;
+	for (const auto& track : m_NotifyTracks)
+	{
+		for (const auto& notify : track.Notifies)
+		{
+			if (notify.SocketBoneName.empty()) continue;
+			++socketNotifies;
+			if (IsMissingSocketBone(notify.SocketBoneName)) ++missingSockets;
+		}
+	}
+
+	std::vector<std::string> warnings;
+	if (m_ModelAssetPath.empty())
+		warnings.push_back(socketNotifies > 0 ? LOCAL_FMT("Timeline.SaveWarnSocketsNoModel", socketNotifies) : LOCAL("Timeline.SaveWarnNoModel"));
+	else if (m_CurrentClipName.empty())
+		warnings.push_back(LOCAL("Timeline.SaveWarnNoClip"));
+	if (!m_ModelAssetPath.empty() && m_BoneNames.empty() && socketNotifies > 0)
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnMissingSockets", socketNotifies));
+	else if (missingSockets > 0)
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnMissingSockets", missingSockets));
+
+	for (const auto& warning : warnings)
+		NotificationManager::Get().AddNotification(LOCAL("Timeline.Title"), warning, ELogLevel::Warn);
+}
+
+void AnimationTimelinePanel::DrawNoModelHint() const
+{
+	// 모델이 없으면 소켓과 클립 타이밍을 확인할 수 없으므로 뷰포트 가운데에 안내를 띄운다(19-6절 빈 상태).
+	const std::string hint = LOCAL("Timeline.NoModelHint");
+	const ImVec2 origin = m_PreviewWidget.GetViewportScreenPos();
+	const ImVec2 size = m_PreviewWidget.GetViewportSize();
+	const float wrapWidth = std::max(ImGui::GetFontSize() * 8.0f, size.x * 0.7f);
+	const ImVec2 textSize = ImGui::CalcTextSize(hint.c_str(), nullptr, false, wrapWidth);
+	const ImVec2 textPos(origin.x + (size.x - textSize.x) * 0.5f, origin.y + (size.y - textSize.y) * 0.5f);
+	const float pad = ImGui::GetFontSize() * 0.6f;
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	drawList->AddRectFilled(ImVec2(textPos.x - pad, textPos.y - pad), ImVec2(textPos.x + textSize.x + pad, textPos.y + textSize.y + pad), IM_COL32(0, 0, 0, 150), 4.0f);
+	drawList->AddText(nullptr, 0.0f, textPos, ImGui::GetColorU32(ImGuiCol_TextDisabled), hint.c_str(), nullptr, wrapWidth);
 }
 
 void AnimationTimelinePanel::SyncFromSelectedEntity()
@@ -255,6 +513,16 @@ bool AnimationTimelinePanel::PrepareAssetPathRelocation(AssetPathRelocation& rel
 	if ((modelChanged || notifiesChanged) && !m_CurrentAssetPath.empty() &&
 		!Engine::ActionTimelineAsset::IsProjectJsonDocument(Engine::Utf8ToPath(m_CurrentAssetPath))) return false;
 	relocation.AddUtf8(m_CurrentAssetPath);
+	// 파일 이동으로 바뀐 모델·노티파이 경로는 편집이 아니다. 이전 스냅샷에는 옮기기 전 경로가 남으므로 이력 기준점을 새로 잡고,
+	// 저장 기준점의 경로도 같이 옮겨 이동만으로 미저장 표시가 켜지지 않게 한다(파일 내용도 함께 갱신된다).
+	if (modelChanged || notifiesChanged)
+	{
+		relocation.AfterCommit([this, wasDirty = m_IsDirty]
+			{
+				ResetEditHistory();
+				if (!wasDirty) MarkDocumentSaved();
+			});
+	}
 	return true;
 }
 
@@ -263,12 +531,9 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	auto* asset = Engine::ActionTimelineAsset::CreateEmpty();
 	if (!asset) return false;
 
-	std::string modelPathStr = m_ModelAssetPath;
-	if (m_TargetModel.IsValid() && m_TargetModel.Get())
-	{
-		modelPathStr = Engine::WStrToStr(m_TargetModel->GetPath());
-	}
-	asset->SetModelPath(modelPathStr);
+	// m_ModelAssetPath는 모델을 고를 때(SetTargetModel)·파일을 열 때·경로 이동 때 함께 갱신되므로 그대로 저장한다.
+	// 저장 기준점과 같은 문자열을 써야 저장 직후 미저장 판정이 어긋나지 않는다.
+	asset->SetModelPath(m_ModelAssetPath);
 	asset->SetClipName(m_CurrentClipName);
 	asset->SetDuration(m_Duration);
 	asset->GetNotifyTracks() = m_NotifyTracks;
@@ -281,7 +546,8 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	{
 		m_CurrentAssetPath = filePath;
 		m_TargetResourcePath = Engine::Utf8ToPath(filePath);
-		m_IsDirty = false;
+		MarkDocumentSaved();
+		NotifySaveWarnings();
 	}
 	return success;
 }
@@ -306,29 +572,23 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	SetTargetModel(model);
 	m_ModelAssetPath = asset->GetModelPath();
 
+	// 저장된 클립을 고르되, 모델에서 찾지 못해도 파일의 클립 이름과 길이는 그대로 보존한다.
+	const int clipIndex = FindClipIndex(asset->GetClipName());
+	if (clipIndex >= 0) SelectClip(clipIndex);
+	else m_SelectedClipIndex = -1;
 	m_CurrentClipName = asset->GetClipName();
 	m_Duration = std::max(0.1f, asset->GetDuration());
 	m_NotifyTracks = asset->GetNotifyTracks();
 	m_CameraTracks = asset->GetCameraTracks();
 
-	if (m_TargetModel.IsValid() && m_TargetModel.Get())
-	{
-		const auto anims = m_TargetModel->GetAnimations();
-		for (size_t i = 0; i < anims.size(); ++i)
-		{
-			if (anims[i].IsValid() && Engine::WStrToStr(anims[i]->GetName()) == m_CurrentClipName)
-			{
-				m_SelectedClipIndex = static_cast<int>(i);
-				break;
-			}
-		}
-	}
-
 	Engine::ResourceManager::Get().DestroyResource(asset);
 	m_CurrentAssetPath = filePath;
 	m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 	m_Selection = {};
-	m_IsDirty = false;
+	m_RenamingTrackIndex = -1;
+	ClearPreviewVFX();
+	ResetEditHistory();
+	MarkDocumentSaved();
 	return true;
 }
 
@@ -399,7 +659,7 @@ vec3 AnimationTimelinePanel::GetSocketWorldPosition(const std::string& boneName,
 	return GetSocketWorldTransform(boneName, offset, vec3(0.0f)).position;
 }
 
-void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify)
+void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify, bool isTest)
 {
 	m_LastTriggeredNotifyName = notify.Name;
 	m_TriggerToastTimer = 1.4f;
@@ -440,6 +700,8 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify)
 				vfxComp.effectHandle = Engine::ResourceHandle<Engine::CompositeEffect>(handle);
 				vfxComp.isPlaying = true;
 				vfxComp.isLooping = false;
+				vfxComp.playOnce = true;
+				vfxComp.holdUntilRelease = notify.Duration > 0.0f;
 				vfxComp.playRate = notify.VFXPlayRate;
 				vfxComp.Restart();
 
@@ -454,6 +716,8 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify)
 				}
 
 				m_PreviewVFXEntities.push_back(e);
+				if (vfxComp.holdUntilRelease)
+					m_PreviewHeldVFX.push_back({ e, notify.TriggerTime + notify.Duration, isTest ? notify.Duration : -1.0f });
 			}
 		}
 	}
@@ -527,6 +791,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 			(void)trans.SetLocalScale(attach.scale);
 		}
 
+		UpdatePreviewHeldVFX(dt);
 		Engine::CompositeVFXSystem::SimulateSceneVFX(scene, dt);
 
 		auto it = m_PreviewVFXEntities.begin();
@@ -590,131 +855,159 @@ void AnimationTimelinePanel::DrawBoneHierarchyTree()
 {
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), ICON_FA_SITEMAP " %s", LOCAL_CSTR("Timeline.BoneHierarchy"));
 	ImGui::Separator();
-
-	static char s_BoneFilter[64] = {};
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputTextWithHint("##BoneSearch", LOCAL_CSTR("Timeline.SearchBones"), s_BoneFilter, sizeof(s_BoneFilter));
+	EditorUI::SearchBar("BoneSearch", m_BoneFilter, sizeof(m_BoneFilter), "Timeline.SearchBones");
 
 	auto* model = m_TargetModel.Get();
-	auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
-	if (!skeleton.IsValid())
+	auto skeletonHandle = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
+	const Engine::Skeleton* skeleton = skeletonHandle.IsValid() ? skeletonHandle.Get() : nullptr;
+	const Engine::uint64 signature = skeleton ? skeleton->GetSkinBindingSignature() : 0;
+	if (signature != m_CachedSkeletonSignature || (skeleton && m_BoneNames.size() != skeleton->GetBones().size()))
+		RebuildBoneCache(skeleton);
+	if (!skeleton || m_BoneNames.empty())
 	{
-		ImGui::Spacing();
-		ImGui::TextDisabled("%s", LOCAL_CSTR("Timeline.NoSkeletonAvailable"));
+		EditorUI::EmptyState("Timeline.NoSkeletonAvailable");
 		return;
 	}
 
-	const auto& bones = skeleton->GetBones();
-	if (bones.empty()) return;
-
-	std::string filterStr = s_BoneFilter;
-	std::transform(filterStr.begin(), filterStr.end(), filterStr.begin(), ::tolower);
-
-	auto drawBoneItem = [&](uint32 boneIdx, const std::string& boneNameStr)
-		{
-			bool isSelectedSocket = false;
-			if (m_Selection.Type == ETimelineSelectionType::NotifyMarker &&
-				m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
-			{
-				const auto& track = m_NotifyTracks[m_Selection.TrackIndex];
-				if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(track.Notifies.size()))
-				{
-					isSelectedSocket = (track.Notifies[m_Selection.ItemIndex].SocketBoneName == boneNameStr);
-				}
-			}
-
-			ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-			if (isSelectedSocket) nodeFlags |= ImGuiTreeNodeFlags_Selected;
-
-			std::vector<uint32> children;
-			for (size_t b = 0; b < bones.size(); ++b)
-			{
-				if (bones[b].ParentIndex == static_cast<Engine::int32>(boneIdx)) children.push_back(static_cast<uint32>(b));
-			}
-			if (children.empty()) nodeFlags |= ImGuiTreeNodeFlags_Leaf;
-
-			const bool nodeOpen = ImGui::TreeNodeEx((void*)(intptr_t)boneIdx, nodeFlags, "%s %s", ICON_FA_BONE, boneNameStr.c_str());
-
-			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-			{
-				if (m_Selection.Type == ETimelineSelectionType::NotifyMarker &&
-					m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
-				{
-					auto& track = m_NotifyTracks[m_Selection.TrackIndex];
-					if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(track.Notifies.size()))
-					{
-						track.Notifies[m_Selection.ItemIndex].SocketBoneName = boneNameStr;
-						m_IsDirty = true;
-					}
-				}
-			}
-
-			if (ImGui::IsItemHovered() && Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
-			{
-				const vec3 bPos = GetSocketWorldPosition(boneNameStr, vec3(0.0f));
-				m_PreviewWidget.FocusTarget(bPos, 1.2f);
-			}
-
-			if (ImGui::BeginPopupContextItem())
-			{
-				if (ImGui::MenuItem(LOCAL_CSTR("Timeline.SetAsSocket")))
-				{
-					if (m_Selection.Type == ETimelineSelectionType::NotifyMarker &&
-						m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_NotifyTracks.size()))
-					{
-						auto& track = m_NotifyTracks[m_Selection.TrackIndex];
-						if (m_Selection.ItemIndex >= 0 && m_Selection.ItemIndex < static_cast<int>(track.Notifies.size()))
-						{
-							track.Notifies[m_Selection.ItemIndex].SocketBoneName = boneNameStr;
-							m_IsDirty = true;
-						}
-					}
-				}
-				if (ImGui::MenuItem(LOCAL_CSTR("Timeline.FocusBone")))
-				{
-					const vec3 bPos = GetSocketWorldPosition(boneNameStr, vec3(0.0f));
-					m_PreviewWidget.FocusTarget(bPos, 1.2f);
-				}
-				ImGui::EndPopup();
-			}
-
-			return std::make_pair(nodeOpen, children);
-		};
-
-	if (!filterStr.empty())
+	// 깊은 계층에서도 이름이 잘리지 않도록 가로 스크롤을 허용하고 들여쓰기를 줄인다.
+	ImGui::BeginChild("##BoneTreeScroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
+	ImGui::PushStyleVar(ImGuiStyleVar_IndentSpacing, ImGui::GetFontSize() * 0.75f);
+	const std::string filter = Engine::ToLowerStr(m_BoneFilter);
+	if (filter.empty())
 	{
-		for (size_t i = 0; i < bones.size(); ++i)
-		{
-			std::string bName = Engine::WStrToStr(bones[i].Name);
-			std::string lowerBName = bName;
-			std::transform(lowerBName.begin(), lowerBName.end(), lowerBName.begin(), ::tolower);
-			if (lowerBName.find(filterStr) != std::string::npos)
-			{
-				auto [open, ch] = drawBoneItem(static_cast<uint32>(i), bName);
-				if (open) ImGui::TreePop();
-			}
-		}
+		for (uint32 root : m_RootBones) DrawBoneTreeNode(*skeleton, root, false);
 	}
 	else
 	{
-		std::function<void(uint32)> traverse = [&](uint32 idx)
-			{
-				auto [open, ch] = drawBoneItem(idx, Engine::WStrToStr(bones[idx].Name));
-				if (open)
-				{
-					for (uint32 c : ch) traverse(c);
-					ImGui::TreePop();
-				}
-			};
-
-		for (size_t i = 0; i < bones.size(); ++i)
+		bool found = false;
+		for (uint32 i = 0; i < static_cast<uint32>(m_BoneNames.size()); ++i)
 		{
-			if (bones[i].ParentIndex < 0 || bones[i].ParentIndex >= static_cast<Engine::int32>(bones.size()))
-			{
-				traverse(static_cast<uint32>(i));
-			}
+			if (m_BoneNamesLower[i].find(filter) == std::string::npos) continue;
+			DrawBoneTreeNode(*skeleton, i, true);
+			found = true;
 		}
+		if (!found) EditorUI::EmptyState("Timeline.NoMatchingBones");
 	}
+	ImGui::PopStyleVar();
+	ImGui::EndChild();
+}
+
+void AnimationTimelinePanel::RebuildBoneCache(const Engine::Skeleton* skeleton)
+{
+	m_BoneChildren.clear();
+	m_RootBones.clear();
+	m_BoneNames.clear();
+	m_BoneNamesLower.clear();
+	m_SelectedBoneIndex = -1;
+	m_CachedSkeletonSignature = skeleton ? skeleton->GetSkinBindingSignature() : 0;
+	if (!skeleton) return;
+
+	const auto& bones = skeleton->GetBones();
+	const auto count = static_cast<Engine::int32>(bones.size());
+	m_BoneChildren.resize(bones.size());
+	m_BoneNames.reserve(bones.size());
+	m_BoneNamesLower.reserve(bones.size());
+	for (Engine::int32 i = 0; i < count; ++i)
+	{
+		m_BoneNames.push_back(Engine::WStrToStr(bones[i].Name));
+		m_BoneNamesLower.push_back(Engine::ToLowerStr(m_BoneNames.back()));
+		const Engine::int32 parent = bones[i].ParentIndex;
+		if (parent >= 0 && parent < count && parent != i) m_BoneChildren[parent].push_back(static_cast<uint32>(i));
+		else m_RootBones.push_back(static_cast<uint32>(i));
+	}
+}
+
+void AnimationTimelinePanel::DrawBoneTreeNode(const Engine::Skeleton& skeleton, uint32 boneIndex, bool flat)
+{
+	const std::string& name = m_BoneNames[boneIndex];
+	const bool leaf = flat || m_BoneChildren[boneIndex].empty();
+	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+	if (leaf) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+	if (m_SelectedBoneIndex == static_cast<Engine::int32>(boneIndex)) flags |= ImGuiTreeNodeFlags_Selected;
+
+	const bool open = ImGui::TreeNodeEx(reinterpret_cast<void*>(static_cast<intptr_t>(boneIndex)), flags, "%s %s", ICON_FA_BONE, name.c_str());
+	// 19-5절: 단일 클릭은 선택, 더블클릭은 포커스, 우클릭은 컨텍스트 메뉴. 클릭으로 데이터를 바꾸지 않는다.
+	if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+		m_SelectedBoneIndex = static_cast<Engine::int32>(boneIndex);
+	if (ImGui::IsItemHovered())
+	{
+		if (Engine::InputManager::Get().IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
+			m_PreviewWidget.FocusTarget(GetSocketWorldPosition(name, vec3(0.0f)), 1.2f);
+		ImGui::SetTooltip("%s", BuildBonePath(skeleton, boneIndex).c_str());
+	}
+	if (ImGui::BeginPopupContextItem())
+	{
+		auto* notify = GetSelectedNotify();
+		if (ImGui::MenuItem(LOCAL_CSTR("Timeline.SetAsSocket"), nullptr, false, notify != nullptr) && notify->SocketBoneName != name)
+		{
+			notify->SocketBoneName = name;
+			m_IsDirty = true;
+		}
+		if (ImGui::MenuItem(LOCAL_CSTR("Timeline.FocusBone")))
+			m_PreviewWidget.FocusTarget(GetSocketWorldPosition(name, vec3(0.0f)), 1.2f);
+		ImGui::EndPopup();
+	}
+	if (open && !leaf)
+	{
+		for (uint32 child : m_BoneChildren[boneIndex]) DrawBoneTreeNode(skeleton, child, false);
+		ImGui::TreePop();
+	}
+}
+
+std::string AnimationTimelinePanel::BuildBonePath(const Engine::Skeleton& skeleton, uint32 boneIndex) const
+{
+	const auto& bones = skeleton.GetBones();
+	const auto count = static_cast<Engine::int32>(bones.size());
+	std::string path = m_BoneNames[boneIndex];
+	Engine::int32 parent = bones[boneIndex].ParentIndex;
+	for (int depth = 0; parent >= 0 && parent < count && depth < 128; ++depth)
+	{
+		path = m_BoneNames[parent] + " / " + path;
+		parent = bones[parent].ParentIndex;
+	}
+	return path;
+}
+
+Engine::AnimNotifyData* AnimationTimelinePanel::GetSelectedNotify()
+{
+	if (m_Selection.Type != ETimelineSelectionType::NotifyMarker) return nullptr;
+	if (m_Selection.TrackIndex < 0 || m_Selection.TrackIndex >= static_cast<int>(m_NotifyTracks.size())) return nullptr;
+	auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
+	if (m_Selection.ItemIndex < 0 || m_Selection.ItemIndex >= static_cast<int>(notifies.size())) return nullptr;
+	return &notifies[m_Selection.ItemIndex];
+}
+
+bool AnimationTimelinePanel::DrawBonePickerCombo(const char* label, std::string& boneName)
+{
+	const std::string preview = boneName.empty() ? LOCAL("Timeline.RootOrNone") : boneName;
+	if (!ImGui::BeginCombo(label, preview.c_str(), ImGuiComboFlags_HeightLarge)) return false;
+
+	const bool appearing = ImGui::IsWindowAppearing();
+	if (appearing) m_BonePickerFilter[0] = '\0';
+	EditorUI::DrawSearchBar("BonePickerSearch", m_BonePickerFilter, sizeof(m_BonePickerFilter), "Timeline.SearchBones", EditorUI::SearchBarOptions{ 0.0f, appearing });
+
+	bool changed = false;
+	const std::string filter = Engine::ToLowerStr(m_BonePickerFilter);
+	if (filter.empty() && ImGui::Selectable(LOCAL_LABEL("Timeline.RootOrNone").c_str(), boneName.empty()) && !boneName.empty())
+	{
+		boneName.clear();
+		changed = true;
+	}
+	for (uint32 i = 0; i < static_cast<uint32>(m_BoneNames.size()); ++i)
+	{
+		if (!filter.empty() && m_BoneNamesLower[i].find(filter) == std::string::npos) continue;
+		const bool selected = boneName == m_BoneNames[i];
+		ImGui::PushID(static_cast<int>(i));
+		if (ImGui::Selectable(m_BoneNames[i].c_str(), selected) && !selected)
+		{
+			boneName = m_BoneNames[i];
+			changed = true;
+		}
+		if (selected && appearing) ImGui::SetScrollHereY();
+		ImGui::PopID();
+	}
+	ImGui::EndCombo();
+	return changed;
 }
 
 void AnimationTimelinePanel::DrawCustomContent()
@@ -746,6 +1039,7 @@ void AnimationTimelinePanel::DrawCustomContent()
 	// ── 상단 중앙: 3D 오프스크린 뷰포트 영역 ──
 	ImGui::BeginChild("##ViewportRegion", ImVec2(previewWidth, upperHeight), false);
 	m_PreviewWidget.Draw(ImVec2(previewWidth, upperHeight));
+	if (!m_TargetModel.Get()) DrawNoModelHint();
 	ImGui::EndChild();
 	HandleModelDragDrop();
 
@@ -768,14 +1062,29 @@ void AnimationTimelinePanel::DrawCustomContent()
 
 	// ── 하단: 다중 트랙 타임라인 영역 ──
 	DrawTimelineTrackArea();
+
+	// 메뉴·퀵액세스·인스펙터·트랙 행에서 이번 프레임에 끝난 편집을 이력 한 건으로 확정한다.
+	CommitDocumentEdit();
 }
 
 void AnimationTimelinePanel::DrawCustomToolbar()
 {
+	auto& shortcuts = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("AnimationTimeline.Save"))) SaveTimelineFile();
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Save"))) SaveTimelineFile();
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str())) SaveTimelineFileAs();
+		ImGui::Separator();
+		// 기본 구현의 닫기를 대신하므로 직접 둔다(19-7절).
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str())) OnResourceCloseRequested();
+		ImGui::EndMenu();
+	}
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Undo").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Undo"), false, CanUndo())) Undo();
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Redo").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Redo"), false, CanRedo())) Redo();
 		ImGui::EndMenu();
 	}
 }
@@ -795,29 +1104,33 @@ void AnimationTimelinePanel::OpenTimelineFile()
 
 void AnimationTimelinePanel::SaveTimelineFile()
 {
-	if (!m_CurrentAssetPath.empty())
-	{
-		(void)SaveToFile(m_CurrentAssetPath);
-	}
-	else
-	{
-		std::wstring savePath;
-		std::vector<FileDialogFilter> filters = {
-			{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" }
-		};
-		std::wstring defaultName = Engine::StrToWStr(m_CurrentClipName) + L".bamtimeline.json";
-		if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"bamtimeline.json", EFileDialogContext::TimelineSave))
-		{
-			(void)SaveToFile(Engine::WStrToStr(savePath));
-		}
-	}
+	if (m_CurrentAssetPath.empty()) SaveTimelineFileAs();
+	else (void)SaveToFile(m_CurrentAssetPath);
+}
+
+void AnimationTimelinePanel::SaveTimelineFileAs()
+{
+	std::wstring savePath;
+	std::vector<FileDialogFilter> filters = {
+		{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" }
+	};
+	// 열린 문서가 있으면 그 파일 이름을, 없으면 클립 이름을 기본값으로 쓴다.
+	const std::string baseName = m_CurrentClipName.empty() ? std::string("NewTimeline") : m_CurrentClipName;
+	const std::wstring defaultName = m_CurrentAssetPath.empty()
+		? Engine::StrToWStr(baseName) + L".bamtimeline.json"
+		: Engine::Utf8ToPath(m_CurrentAssetPath).filename().wstring();
+	if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"bamtimeline.json", EFileDialogContext::TimelineSave))
+		(void)SaveToFile(Engine::WStrToStr(savePath));
 }
 
 void AnimationTimelinePanel::DrawCustomQuickAccess()
 {
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "Timeline.OpenTimeline")) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
-	if (toolbar.Icon("Save", ICON_FA_FLOPPY_DISK, "Timeline.SaveTimeline")) SaveTimelineFile();
+	// 저장·실행 취소·다시 실행은 등록된 액션을 실행해 툴팁에 단축키 힌트가 함께 표시된다(19-7절 3항).
+	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Save", ICON_FA_FLOPPY_DISK, "Timeline.SaveTimeline");
+	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
+	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
 
 	if (toolbar.Button("Sync", ICON_FA_ARROWS_ROTATE, "Timeline.SyncEntity"))
 	{
@@ -843,7 +1156,8 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 		if (!anims.empty())
 		{
 			toolbar.SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
-			if (ImGui::BeginCombo("##ClipSelect", m_CurrentClipName.c_str()))
+			const std::string clipPreview = m_CurrentClipName.empty() ? LOCAL("EditorCommon.None") : m_CurrentClipName;
+			if (ImGui::BeginCombo("##ClipSelect", clipPreview.c_str()))
 			{
 				for (int i = 0; i < static_cast<int>(anims.size()); ++i)
 				{
@@ -852,16 +1166,14 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 
 					const std::string clipNameStr = Engine::WStrToStr(clip->GetName());
 					const bool isSelected = (i == m_SelectedClipIndex);
-					if (ImGui::Selectable(clipNameStr.c_str(), isSelected))
+					if (ImGui::Selectable(clipNameStr.c_str(), isSelected) && !isSelected)
 					{
-						m_SelectedClipIndex = i;
-						m_CurrentClipName = clipNameStr;
-						const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
-						const f32 durationSec = clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 1.0f;
-						m_Duration = std::max(0.1f, durationSec);
+						// 클립은 저장되는 문서 바인딩이므로 편집 이력과 미저장 표시에 포함된다.
+						SelectClip(i);
 						m_CurrentTime = 0.0f;
 						m_TimelineZoom = 1.0f;
 						m_ViewStartTime = 0.0f;
+						m_IsDirty = true;
 					}
 					if (isSelected) ImGui::SetItemDefaultFocus();
 				}
@@ -955,217 +1267,126 @@ void AnimationTimelinePanel::DrawInspector()
 
 void AnimationTimelinePanel::DrawNotifyInspector(Engine::AnimNotifyData& notify)
 {
-	char nameBuf[64];
-	snprintf(nameBuf, sizeof(nameBuf), "%s", notify.Name.c_str());
-	if (ImGui::InputText(LOCAL_LABEL("Timeline.NotifyName").c_str(), nameBuf, sizeof(nameBuf)))
+	const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+	const auto object = reflection::ObjectView::From(notify);
+	const auto* type = registry.FindType(object);
+	if (!type)
 	{
-		notify.Name = nameBuf;
+		EditorUI::EmptyState("Inspector.ValueUnavailable");
+		return;
+	}
+
+	ReflectionObjectEditSettings headerSettings;
+	ReflectionObjectEditSettings detailSettings;
+	for (const auto& property : type->Properties)
+	{
+		const bool header = ContainsName(NotifyHeaderProperties, property.Name);
+		if (!header) headerSettings.HiddenProperties.insert(property.Name);
+		if (header || ContainsName(NotifyCustomProperties, property.Name)) detailSettings.HiddenProperties.insert(property.Name);
+	}
+
+	bool changed = false;
+	ImGui::PushID("NotifyHeader");
+	changed |= ReflectionPropertyDrawer::DrawPropertyTable(*type, object, &registry, &headerSettings);
+	ImGui::PopID();
+
+	if (EditorUI::BeginPropertyTable("NotifyReferences", EditorUI::InspectorPropertyTableStyle()))
+	{
+		// 소켓 본은 스켈레톤이 있어야 고를 수 있다. 현재 스켈레톤에 없는 본이면 루트에서 발동하므로 경고한다.
+		EditorUI::PropertyRow("PROP_SOCKET_BONE");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::BeginDisabled(m_BoneNames.empty());
+		changed |= DrawBonePickerCombo("##SocketBone", notify.SocketBoneName);
+		ImGui::EndDisabled();
+		if (m_BoneNames.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.SocketNeedsModel"));
+		if (IsMissingSocketBone(notify.SocketBoneName))
+		{
+			ImGui::PushTextWrapPos(0.0f);
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "%s", LOCAL_FMT("Timeline.SocketBoneMissing", notify.SocketBoneName).c_str());
+			ImGui::PopTextWrapPos();
+		}
+
+		const bool isSound = notify.Type == Engine::EAnimNotifyType::Sound;
+		if (isSound || notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX)
+		{
+			std::string& path = isSound ? notify.SoundPath : notify.VFXPath;
+			EditorUI::PropertyRow(isSound ? "PROP_SOUND_PATH" : "PROP_VFX_PATH");
+			std::string picked;
+			if (Editor::DrawInspectorAssetPathPicker(path, picked, isSound ? NotifySoundPicker : NotifyVFXPicker))
+			{
+				path = std::move(picked);
+				changed = true;
+			}
+		}
+		EditorUI::EndPropertyTable();
+	}
+
+	ImGui::PushID("NotifyDetail");
+	changed |= ReflectionPropertyDrawer::DrawPropertyTable(*type, object, &registry, &detailSettings);
+	ImGui::PopID();
+
+	if (changed)
+	{
+		// 리플렉션 RANGE는 고정값이므로 클립 길이 상한은 여기서 적용한다.
+		notify.TriggerTime = std::clamp(notify.TriggerTime, 0.0f, m_Duration);
+		notify.Duration = std::clamp(notify.Duration, 0.0f, std::max(0.0f, m_Duration - notify.TriggerTime));
 		m_IsDirty = true;
-	}
-
-	if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.TriggerTime").c_str(), &notify.TriggerTime, 0.0f, m_Duration, "%.2fs"))
-	{
-		m_IsDirty = true;
-	}
-
-	const std::string typeNames[] = {
-		LOCAL("Timeline.NotifyTypeParticle"),
-		LOCAL("Timeline.NotifyTypeSound"),
-		LOCAL("Timeline.NotifyTypeCustomEvent"),
-		LOCAL("Timeline.NotifyTypeSpawnCompositeVFX")
-	};
-	const char* typeItems[] = { typeNames[0].c_str(), typeNames[1].c_str(), typeNames[2].c_str(), typeNames[3].c_str() };
-	int currentType = static_cast<int>(notify.Type);
-	if (ImGui::Combo(LOCAL_LABEL("Timeline.NotifyType").c_str(), &currentType, typeItems, IM_ARRAYSIZE(typeItems)))
-	{
-		notify.Type = static_cast<Engine::EAnimNotifyType>(currentType);
-		m_IsDirty = true;
-	}
-
-	auto* model = m_TargetModel.Get();
-	auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
-	if (skeleton.IsValid())
-	{
-		const auto& bones = skeleton->GetBones();
-		const std::string currentBoneDisplay = notify.SocketBoneName.empty() ? LOCAL("Timeline.RootOrNone") : notify.SocketBoneName;
-
-		if (ImGui::BeginCombo(LOCAL_LABEL("Timeline.SocketBone").c_str(), currentBoneDisplay.c_str()))
-		{
-			if (ImGui::Selectable(LOCAL_LABEL("Timeline.RootOrNone").c_str(), notify.SocketBoneName.empty()))
-			{
-				notify.SocketBoneName.clear();
-				m_IsDirty = true;
-			}
-
-			for (const auto& bone : bones)
-			{
-				const std::string boneNameStr = Engine::WStrToStr(bone.Name);
-				const bool isSel = (notify.SocketBoneName == boneNameStr);
-				if (ImGui::Selectable(boneNameStr.c_str(), isSel))
-				{
-					notify.SocketBoneName = boneNameStr;
-					m_IsDirty = true;
-				}
-				if (isSel) ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		}
-	}
-
-	if (ImGui::DragFloat3(LOCAL_LABEL("Timeline.OffsetPos").c_str(), &notify.OffsetPosition.x, 0.02f, -10.0f, 10.0f, "%.2f")) m_IsDirty = true;
-
-	if (notify.Type == Engine::EAnimNotifyType::Particle)
-	{
-		ImGui::Separator();
-		if (ImGui::ColorEdit4(LOCAL_LABEL("Timeline.ParticleColor").c_str(), &notify.ParticleColor.x, ImGuiColorEditFlags_NoInputs)) m_IsDirty = true;
-		int count = static_cast<int>(notify.BurstCount);
-		if (ImGui::SliderInt(LOCAL_LABEL("Timeline.BurstCount").c_str(), &count, 5, 80))
-		{
-			notify.BurstCount = static_cast<uint32>(count);
-			m_IsDirty = true;
-		}
-		if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.ParticleSpeed").c_str(), &notify.ParticleSpeed, 0.2f, 5.0f, "%.1f")) m_IsDirty = true;
-		if (ImGui::SliderFloat(LOCAL_LABEL("PROP_SIZE").c_str(), &notify.ParticleSize, 0.02f, 0.5f, "%.2f")) m_IsDirty = true;
-	}
-	else if (notify.Type == Engine::EAnimNotifyType::Sound)
-	{
-		ImGui::Separator();
-		std::string soundName = LOCAL("EditorCommon.None");
-		if (!notify.SoundPath.empty())
-		{
-			const std::filesystem::path soundFile(Engine::StrToWStr(notify.SoundPath));
-			soundName = Engine::WStrToStr(soundFile.filename().wstring());
-		}
-		const std::string soundLabel = LOCAL_FMT("Timeline.SoundFile", soundName);
-		ImGui::TextUnformatted(soundLabel.c_str());
-
-		const std::string selectSoundLabel = std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL_LABEL("Timeline.SelectSound");
-		if (ImGui::Button(selectSoundLabel.c_str()))
-		{
-			std::wstring soundPath;
-			const std::vector<FileDialogFilter> filters = {
-				{ Engine::StrToWStr(LOCAL("FileDialog.AudioFiles")), L"*.wav;*.mp3;*.ogg" },
-				{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
-			};
-			if (FileDialogs::OpenFileDialog(soundPath, filters, L"Resources/Audio"))
-			{
-				notify.SoundPath = Engine::WStrToStr(soundPath);
-				m_IsDirty = true;
-			}
-		}
-		if (ImGui::SliderFloat(LOCAL_LABEL("PROP_VOLUME").c_str(), &notify.SoundVolume, 0.0f, 2.0f, "%.2f")) m_IsDirty = true;
-	}
-	else if (notify.Type == Engine::EAnimNotifyType::CustomEvent)
-	{
-		ImGui::Separator();
-		char tagBuf[64];
-		snprintf(tagBuf, sizeof(tagBuf), "%s", notify.EventTag.c_str());
-		if (ImGui::InputText(LOCAL_LABEL("Timeline.EventTag").c_str(), tagBuf, sizeof(tagBuf)))
-		{
-			notify.EventTag = tagBuf;
-			m_IsDirty = true;
-		}
-	}
-	else if (notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX)
-	{
-		ImGui::Separator();
-		std::string vfxName = LOCAL("EditorCommon.None");
-		if (!notify.VFXPath.empty())
-		{
-			const std::filesystem::path vfxFile(Engine::StrToWStr(notify.VFXPath));
-			vfxName = Engine::WStrToStr(vfxFile.filename().wstring());
-		}
-		const std::string vfxLabel = LOCAL_FMT("Timeline.VFXFile", vfxName);
-		ImGui::TextUnformatted(vfxLabel.c_str());
-
-		const std::string selectVFXLabel = std::string(ICON_FA_FOLDER_OPEN " ") + LOCAL_LABEL("Timeline.SelectVFX");
-		if (ImGui::Button(selectVFXLabel.c_str()))
-		{
-			std::wstring vfxPath;
-			const std::vector<FileDialogFilter> filters = {
-				{ Engine::StrToWStr(LOCAL("FileDialog.VFXFiles")), L"*.bamvfx" },
-				{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
-			};
-			if (FileDialogs::OpenFileDialog(vfxPath, filters, L"Resources/VFX"))
-			{
-				notify.VFXPath = Engine::WStrToStr(vfxPath);
-				m_IsDirty = true;
-			}
-		}
-
-		if (ImGui::Checkbox(LOCAL_LABEL("Timeline.AttachToSocket").c_str(), &notify.AttachToSocket)) m_IsDirty = true;
-		if (ImGui::DragFloat3(LOCAL_LABEL("Timeline.OffsetRot").c_str(), &notify.OffsetRotation.x, 1.0f, -180.0f, 180.0f, "%.1f deg")) m_IsDirty = true;
-		if (ImGui::DragFloat3(LOCAL_LABEL("Timeline.VFXScale").c_str(), &notify.VFXScale.x, 0.05f, 0.01f, 10.0f, "%.2f")) m_IsDirty = true;
-		if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.VFXPlayRate").c_str(), &notify.VFXPlayRate, 0.1f, 5.0f, "%.2fx")) m_IsDirty = true;
-		if (ImGui::Checkbox(LOCAL_LABEL("Timeline.AutoDestroy").c_str(), &notify.AutoDestroy)) m_IsDirty = true;
 	}
 
 	ImGui::Spacing();
-	ImGui::Separator();
-
-	const std::string triggerTestLabel = std::string(ICON_FA_PLAY " ") + LOCAL_LABEL("Timeline.TriggerTest");
-	if (ImGui::Button(triggerTestLabel.c_str()))
-	{
-		TriggerNotify(notify);
-	}
-	ImGui::SameLine();
-	const std::string deleteLabel = std::string(ICON_FA_TRASH " ") + LOCAL_LABEL("Timeline.DeleteNotify");
+	EditorUI::ToolbarLayout actions;
+	if (actions.Button("TriggerTest", ICON_FA_PLAY, "Timeline.TriggerTest")) TriggerNotify(notify, true);
 	ImGui::BeginDisabled(!CanDeleteSelected());
-	if (ImGui::Button(deleteLabel.c_str())) DeleteSelected();
+	if (actions.Button("DeleteNotify", ICON_FA_TRASH, "Timeline.DeleteNotify")) DeleteSelected();
 	ImGui::EndDisabled();
 }
 
 void AnimationTimelinePanel::DrawCameraShotInspector(Engine::TimelineCameraTrack& camShot)
 {
-	char nameBuf[64];
-	snprintf(nameBuf, sizeof(nameBuf), "%s", camShot.TrackName.c_str());
-	if (ImGui::InputText(LOCAL_LABEL("Timeline.CameraShotName").c_str(), nameBuf, sizeof(nameBuf)))
+	const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+	const auto object = reflection::ObjectView::From(camShot);
+	const auto* type = registry.FindType(object);
+	if (!type)
 	{
-		camShot.TrackName = nameBuf;
+		EditorUI::EmptyState("Inspector.ValueUnavailable");
+		return;
+	}
+
+	// 포커스 본은 본 목록 검색이 필요하므로 공용 표에서 빼고 같은 표 스타일로 직접 그린다.
+	ReflectionObjectEditSettings settings;
+	settings.HiddenProperties.insert("FocusBoneName");
+	bool changed = ReflectionPropertyDrawer::DrawPropertyTable(*type, object, &registry, &settings);
+
+	if (EditorUI::BeginPropertyTable("CameraShotReferences", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("PROP_FOCUS_BONE");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::BeginDisabled(m_BoneNames.empty());
+		changed |= DrawBonePickerCombo("##FocusBone", camShot.FocusBoneName);
+		ImGui::EndDisabled();
+		if (m_BoneNames.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.SocketNeedsModel"));
+		if (IsMissingSocketBone(camShot.FocusBoneName))
+		{
+			ImGui::PushTextWrapPos(0.0f);
+			ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "%s", LOCAL_FMT("Timeline.SocketBoneMissing", camShot.FocusBoneName).c_str());
+			ImGui::PopTextWrapPos();
+		}
+		EditorUI::EndPropertyTable();
+	}
+
+	if (changed)
+	{
+		// 리플렉션 RANGE는 고정값이므로 클립 길이 상한은 여기서 적용한다.
+		camShot.StartTime = std::clamp(camShot.StartTime, 0.0f, m_Duration);
 		m_IsDirty = true;
 	}
 
-	if (ImGui::Checkbox(LOCAL_LABEL("PROP_ENABLED").c_str(), &camShot.IsActive)) m_IsDirty = true;
-	if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotStartTime").c_str(), &camShot.StartTime, 0.0f, m_Duration, "%.2fs")) m_IsDirty = true;
-	if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotDuration").c_str(), &camShot.Duration, 0.05f, 5.0f, "%.2fs")) m_IsDirty = true;
-	if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotTargetFOV").c_str(), &camShot.TargetFOV, 15.0f, 90.0f, "%.1f deg")) m_IsDirty = true;
-	if (ImGui::SliderFloat(LOCAL_LABEL("Timeline.CameraShotShakeIntensity").c_str(), &camShot.ShakeIntensity, 0.0f, 1.5f, "%.2f")) m_IsDirty = true;
-
-	auto* model = m_TargetModel.Get();
-	auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
-	if (skeleton.IsValid())
-	{
-		const auto& bones = skeleton->GetBones();
-		const std::string currentBoneDisplay = camShot.FocusBoneName.empty() ? LOCAL("Timeline.RootOrNone") : camShot.FocusBoneName;
-
-		if (ImGui::BeginCombo(LOCAL_LABEL("Timeline.CameraShotFocusBone").c_str(), currentBoneDisplay.c_str()))
-		{
-			if (ImGui::Selectable(LOCAL_LABEL("Timeline.RootOrNone").c_str(), camShot.FocusBoneName.empty()))
-			{
-				camShot.FocusBoneName.clear();
-				m_IsDirty = true;
-			}
-
-			for (const auto& bone : bones)
-			{
-				const std::string boneNameStr = Engine::WStrToStr(bone.Name);
-				const bool isSelected = (camShot.FocusBoneName == boneNameStr);
-				if (ImGui::Selectable(boneNameStr.c_str(), isSelected))
-				{
-					camShot.FocusBoneName = boneNameStr;
-					m_IsDirty = true;
-				}
-				if (isSelected) ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-		}
-	}
-
 	ImGui::Spacing();
-	ImGui::Separator();
-	const std::string deleteLabel = std::string(ICON_FA_TRASH " ") + LOCAL_LABEL("EditorCommon.Delete");
+	EditorUI::ToolbarLayout actions;
 	ImGui::BeginDisabled(!CanDeleteSelected());
-	if (ImGui::Button(deleteLabel.c_str())) DeleteSelected();
+	if (actions.Button("DeleteCameraShot", ICON_FA_TRASH, "EditorCommon.Delete")) DeleteSelected();
 	ImGui::EndDisabled();
 }
 
@@ -1303,10 +1524,11 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 	}
 	if (ImGui::BeginPopup("##MultiTrackContextMenu"))
 	{
-		if (ImGui::MenuItem((ICON_FA_PLUS " " + LOCAL_LABEL("Timeline.AddFXTrack")).c_str()))
+		if (ImGui::MenuItem((ICON_FA_BURST " " + LOCAL_LABEL("Timeline.AddFXTrack")).c_str()))
 		{
 			Engine::TimelineNotifyTrack newTrack{};
 			newTrack.TrackName = "FX_Track_" + std::to_string(m_NotifyTracks.size() + 1);
+			newTrack.Kind = Engine::ETimelineNotifyTrackKind::Effect;   // FX 항목
 			m_NotifyTracks.push_back(newTrack);
 			m_IsDirty = true;
 		}
@@ -1314,6 +1536,15 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 		{
 			Engine::TimelineNotifyTrack newTrack{};
 			newTrack.TrackName = "Audio_Track_" + std::to_string(m_NotifyTracks.size() + 1);
+			newTrack.Kind = Engine::ETimelineNotifyTrackKind::Audio;    // 오디오 항목
+			m_NotifyTracks.push_back(newTrack);
+			m_IsDirty = true;
+		}
+		if (ImGui::MenuItem((ICON_FA_BELL " " + LOCAL_LABEL("Timeline.AddEventTrack")).c_str()))
+		{
+			Engine::TimelineNotifyTrack newTrack{};
+			newTrack.TrackName = "Event_Track_" + std::to_string(m_NotifyTracks.size() + 1);
+			newTrack.Kind = Engine::ETimelineNotifyTrackKind::Event;    // 이벤트 항목
 			m_NotifyTracks.push_back(newTrack);
 			m_IsDirty = true;
 		}
@@ -1354,8 +1585,28 @@ void AnimationTimelinePanel::DrawAnimPoseTrack(ImDrawList* drawList, const ImVec
 	const ImVec2 clipMax(std::max(clipMin.x + 1.0f, scale.ToX(m_Duration)), trackMax.y - inset);
 	EditorUI::DrawTimelineBar(*drawList, clipMin, clipMax, IM_COL32(45, 95, 160, 220), false, false);
 	const float textY = trackMin.y + (m_TrackHeight - ImGui::GetFontSize()) * 0.5f;
-	drawList->AddText(ImVec2(std::max(trackMin.x + 8.0f, clipMin.x + 12.0f), textY), IM_COL32(255, 255, 255, 255), m_CurrentClipName.c_str());
+	// 클립 이름은 저장값이고, 비어 있으면 상황에 맞는 안내 문구를 표시만 한다.
+	const std::string clipLabel = !m_CurrentClipName.empty() ? m_CurrentClipName
+		: LOCAL(m_TargetModel.Get() ? "Timeline.NoEmbeddedAnimation" : "Timeline.NoModel");
+	drawList->AddText(ImVec2(std::max(trackMin.x + 8.0f, clipMin.x + 12.0f), textY), IM_COL32(255, 255, 255, 255), clipLabel.c_str());
 	drawList->PopClipRect();
+}
+
+void AnimationTimelinePanel::AddNotifyAt(int trackIdx, Engine::EAnimNotifyType type, float time)
+{
+	auto& notifies = m_NotifyTracks[trackIdx].Notifies;
+	Engine::AnimNotifyData notify{};
+	notify.TriggerTime = std::clamp(time, 0.0f, m_Duration);
+	notify.Type = type;
+	switch (type)
+	{
+	case Engine::EAnimNotifyType::Sound: notify.Name = "Sound_Cue"; break;
+	case Engine::EAnimNotifyType::CustomEvent: notify.Name = "Gameplay_Event"; break;
+	default: notify.Name = "VFX_Slash"; notify.AttachToSocket = true; break;
+	}
+	notifies.push_back(notify);
+	m_Selection = { ETimelineSelectionType::NotifyMarker, trackIdx, static_cast<int>(notifies.size()) - 1 };
+	m_IsDirty = true;
 }
 
 void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackIdx, Engine::TimelineNotifyTrack& track, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
@@ -1374,21 +1625,10 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 	const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
 
 	// 트랙 종류 아이콘 하나만 표시한다. 음소거는 우클릭 메뉴에서 바꾸고, 음소거 상태는 흐린 색으로 나타낸다.
-	const char* trackTypeIcon = ICON_FA_BURST;
-	ImU32 trackIconColor = IM_COL32(255, 175, 45, 255);
-	if (track.TrackName.find("Audio") != std::string::npos || track.TrackName.find("Sound") != std::string::npos)
-	{
-		trackTypeIcon = ICON_FA_MUSIC;
-		trackIconColor = IM_COL32(80, 200, 255, 255);
-	}
-	else if (track.TrackName.find("Event") != std::string::npos)
-	{
-		trackTypeIcon = ICON_FA_BELL;
-		trackIconColor = IM_COL32(200, 120, 255, 255);
-	}
+	const auto trackVisual = GetNotifyTrackVisual(track);
 	const auto labelState = rowSelected ? EditorUI::TimelineLabelState::Selected
 		: (track.IsMuted ? EditorUI::TimelineLabelState::Disabled : EditorUI::TimelineLabelState::Normal);
-	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y, trackTypeIcon, trackIconColor, track.TrackName, labelState);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y, trackVisual.Icon, trackVisual.Color, track.TrackName, labelState);
 
 	if (m_RenamingTrackIndex == trackIdx)
 	{
@@ -1459,38 +1699,73 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 	{
 		m_IsDraggingItem = false;
 		m_DragTimeOffset = 0.0f;
+		m_ItemDragMode = ETimelineItemDrag::Move;
 	}
 
 	bool anyMarkerHovered = false;
+	int hoveredNotifyIndex = -1;
+	const float edgeHalfWidth = ImGui::GetFontSize() * 0.4f; // 이펙트 타임라인의 끝점 판정 폭과 같다
+	const float barInset = EditorUI::GetTimelineBarInset();
 	for (size_t nIdx = 0; nIdx < track.Notifies.size(); ++nIdx)
 	{
 		auto& notify = track.Notifies[nIdx];
+		const bool isStateNotify = notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX && notify.Duration > 0.0f;
 		const float markerX = TimeToScreenX(notify.TriggerTime, trackMin.x, timelineWidth);
-		if (markerX < trackMin.x - 15.0f || markerX > trackMin.x + timelineWidth + 15.0f) continue;
-		const bool isMarkerHovered = isTrackHovered && (std::abs(mousePos.x - markerX) <= markerHalfSize + 2.5f && std::abs(mousePos.y - centerY) <= markerHalfSize + 2.5f);
-		if (isMarkerHovered) anyMarkerHovered = true;
+		const float endX = isStateNotify ? TimeToScreenX(notify.TriggerTime + notify.Duration, trackMin.x, timelineWidth) : markerX;
+		if (endX < trackMin.x - 15.0f || markerX > trackMin.x + timelineWidth + 15.0f) continue;
+
+		// 판정 우선순위: 끝점(길이 조절) → 다이아몬드 → 막대 몸통. 몸통과 다이아몬드는 전체 이동이다.
+		const bool inBarRows = isTrackHovered && mousePos.y >= trackMin.y + barInset && mousePos.y <= trackMax.y - barInset;
+		const bool isEndHovered = isStateNotify && inBarRows && std::abs(mousePos.x - endX) <= edgeHalfWidth;
+		const bool isDiamondHovered = isTrackHovered && std::abs(mousePos.x - markerX) <= markerHalfSize + 2.5f && std::abs(mousePos.y - centerY) <= markerHalfSize + 2.5f;
+		const bool isBarHovered = isStateNotify && inBarRows && mousePos.x >= markerX && mousePos.x <= endX;
+		const bool isMarkerHovered = isEndHovered || isDiamondHovered || isBarHovered;
+		if (isMarkerHovered) { anyMarkerHovered = true; hoveredNotifyIndex = static_cast<int>(nIdx); }
 		const bool isSelected = (m_Selection.Type == ETimelineSelectionType::NotifyMarker && m_Selection.TrackIndex == trackIdx && m_Selection.ItemIndex == static_cast<int>(nIdx));
 
 		if (isMarkerHovered && isMouseClicked)
 		{
 			m_Selection = { ETimelineSelectionType::NotifyMarker, trackIdx, static_cast<int>(nIdx) };
 			m_IsDraggingItem = true;
+			m_ItemDragMode = isEndHovered ? ETimelineItemDrag::ResizeEnd : ETimelineItemDrag::Move;
 			const float clickTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
-			m_DragTimeOffset = clickTime - notify.TriggerTime;
+			m_DragTimeOffset = clickTime - (isEndHovered ? notify.TriggerTime + notify.Duration : notify.TriggerTime);
 		}
 
+		const bool isResizing = m_IsDraggingItem && isSelected && m_ItemDragMode == ETimelineItemDrag::ResizeEnd;
 		if (m_IsDraggingItem && isSelected && isMouseDown)
 		{
-			const float curMouseTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
-			notify.TriggerTime = std::clamp(curMouseTime - m_DragTimeOffset, 0.0f, m_Duration);
+			const float target = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth) - m_DragTimeOffset;
+			if (isResizing && isStateNotify)
+			{
+				const float maxDuration = std::max(EditorUI::MinimumTimelineDuration, m_Duration - notify.TriggerTime);
+				notify.Duration = std::clamp(target - notify.TriggerTime, EditorUI::MinimumTimelineDuration, maxDuration);
+			}
+			else
+			{
+				// 지속형은 끝이 클립 밖으로 나가지 않도록 길이만큼 이동 범위를 줄인다.
+				const float occupied = isStateNotify ? notify.Duration : 0.0f;
+				notify.TriggerTime = std::clamp(target, 0.0f, std::max(0.0f, m_Duration - occupied));
+			}
 			m_IsDirty = true;
 		}
+		if (isEndHovered || isResizing) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
 		ImU32 markerColor = IM_COL32(255, 160, 40, 240);
 		if (notify.Type == Engine::EAnimNotifyType::Sound) markerColor = IM_COL32(60, 200, 240, 240);
 		else if (notify.Type == Engine::EAnimNotifyType::CustomEvent) markerColor = IM_COL32(190, 100, 255, 240);
 		else if (notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX) markerColor = IM_COL32(255, 60, 140, 240);
 
+		if (isStateNotify)
+		{
+			// 유지 구간은 마커 색의 반투명 막대로 그리고, 조절 가능한 끝점에만 핸들을 표시한다.
+			const ImVec2 barMin(markerX, trackMin.y + barInset);
+			const ImVec2 barMax(std::max(markerX + 1.0f, endX), trackMax.y - barInset);
+			const ImU32 barColor = (markerColor & ~IM_COL32_A_MASK) | (static_cast<ImU32>(isSelected ? 150 : 95) << IM_COL32_A_SHIFT);
+			EditorUI::DrawTimelineBar(*drawList, barMin, barMax, barColor, isSelected, false);
+			if (isSelected || isEndHovered)
+				drawList->AddLine(ImVec2(barMax.x - 2.0f, barMin.y), ImVec2(barMax.x - 2.0f, barMax.y), IM_COL32_WHITE, 2.0f);
+		}
 		EditorUI::DrawTimelineMarker(*drawList, ImVec2(markerX, centerY), markerColor, isSelected);
 
 		if (isMarkerHovered)
@@ -1498,6 +1773,8 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 			ImGui::BeginTooltip();
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[%s]", notify.Name.c_str());
 			ImGui::Text(LOCAL_CSTR("Timeline.MarkerTimeSocket"), notify.TriggerTime, notify.SocketBoneName.empty() ? LOCAL_CSTR("Timeline.Root") : notify.SocketBoneName.c_str());
+			if (isStateNotify)
+				ImGui::TextUnformatted(LOCAL_FMT("Timeline.MarkerDuration", notify.Duration).c_str());
 			if (notify.Type == Engine::EAnimNotifyType::Sound && !notify.SoundPath.empty())
 			{
 				ImGui::TextDisabled(LOCAL_CSTR("Timeline.Sound"), Engine::WStrToStr(std::filesystem::path(Engine::StrToWStr(notify.SoundPath)).filename().wstring()).c_str());
@@ -1522,22 +1799,31 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 
 	if (isTrackHovered && !anyMarkerHovered && input.IsMouseButtonDoubleClicked(Engine::EMouseButton::Left))
 	{
-		const float clickTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
-		Engine::AnimNotifyData newMarker{};
-		const bool isSoundTrack = (track.TrackName.find("Audio") != std::string::npos || track.TrackName.find("Sound") != std::string::npos);
-		newMarker.Name = isSoundTrack ? "Sound_Cue" : "VFX_Slash";
-		newMarker.TriggerTime = clickTime;
-		newMarker.Type = isSoundTrack ? Engine::EAnimNotifyType::Sound : Engine::EAnimNotifyType::SpawnCompositeVFX;
-		newMarker.AttachToSocket = true;
-		newMarker.VFXScale = vec3(1.0f);
-		track.Notifies.push_back(newMarker);
-		m_Selection = { ETimelineSelectionType::NotifyMarker, trackIdx, static_cast<int>(track.Notifies.size()) - 1 };
-		m_IsDirty = true;
+		AddNotifyAt(trackIdx, GetNotifyTrackVisual(track).DefaultType, ScreenXToTime(mousePos.x, trackMin.x, timelineWidth));
 	}
 
+	// 19-5절: 우클릭은 컨텍스트 메뉴. 마커 위에서 열면 그 마커를 선택하고 항목 명령도 보여준다.
+	const std::string bodyPopupId = "##BodyPopup_" + std::to_string(trackIdx);
 	if (isTrackHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
 	{
-		ImGui::OpenPopup(("##BodyPopup_" + std::to_string(trackIdx)).c_str());
+		m_AddTrackTime = std::clamp(ScreenXToTime(mousePos.x, trackMin.x, timelineWidth), 0.0f, m_Duration);
+		m_NotifyContextOnItem = hoveredNotifyIndex >= 0;
+		if (m_NotifyContextOnItem) m_Selection = { ETimelineSelectionType::NotifyMarker, trackIdx, hoveredNotifyIndex };
+		ImGui::OpenPopup(bodyPopupId.c_str());
+	}
+	if (ImGui::BeginPopup(bodyPopupId.c_str()))
+	{
+		if (ImGui::MenuItem((ICON_FA_WAND_MAGIC_SPARKLES " " + LOCAL_LABEL("Timeline.AddVFXNotify")).c_str())) AddNotifyAt(trackIdx, Engine::EAnimNotifyType::SpawnCompositeVFX, m_AddTrackTime);
+		if (ImGui::MenuItem((ICON_FA_MUSIC " " + LOCAL_LABEL("Timeline.AddSoundNotify")).c_str())) AddNotifyAt(trackIdx, Engine::EAnimNotifyType::Sound, m_AddTrackTime);
+		if (ImGui::MenuItem((ICON_FA_BELL " " + LOCAL_LABEL("Timeline.AddEventNotify")).c_str())) AddNotifyAt(trackIdx, Engine::EAnimNotifyType::CustomEvent, m_AddTrackTime);
+		if (m_NotifyContextOnItem)
+		{
+			auto* selected = GetSelectedNotify();
+			ImGui::Separator();
+			if (ImGui::MenuItem((ICON_FA_PLAY " " + LOCAL_LABEL("Timeline.TriggerTest")).c_str(), nullptr, false, selected != nullptr) && selected) TriggerNotify(*selected, true);
+			if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("Timeline.DeleteNotify")).c_str(), nullptr, false, CanDeleteSelected())) DeleteSelected();
+		}
+		ImGui::EndPopup();
 	}
 }
 
