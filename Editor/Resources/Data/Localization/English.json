@@ -1182,6 +1182,7 @@
         "ResourcePicker.ClearHint": "Unbind / Clear current resource",
         "ResourcePicker.DiskFile": "{} [Disk]",
         "ResourcePicker.LoadedInMemory": "Loaded in Memory:",
+        "ResourcePicker.IndexingFiles": "Preparing the file list…",
         "ResourcePicker.None": "None (drop a resource)",
         "ResourcePicker.OpenInEditor": "Open in Editor",
         "ResourcePicker.ProjectFiles": "Project Files (On Disk):",
@@ -2098,6 +2099,17 @@
         "ContentBrowser.RenameInvalidName": "Enter a valid file name. Empty names and reserved Windows names are not allowed. Extensions are preserved.",
         "ContentBrowser.RenameNameExists": "This name is already in use. Enter another name.",
         "ContentBrowser.RenameInputHint": "Enter: confirm name. Escape or click elsewhere: keep the original name. The extension is preserved.",
-        "ContentBrowser.RenameImpactCount": "Stored references to renamed assets: {}"
+        "ContentBrowser.RenameImpactCount": "Stored references to renamed assets: {}",
+        "VFXEditor.AirMode": "Air Mode",
+        "VFXEditor.AirModeTooltip": "Air Mode: Disable floor and grid for pure emissive aerial preview",
+        "VFXEditor.EditCurveModal": "Edit Curve...",
+        "VFXEditor.CurveModalTitle": "Curve Editor - {}",
+        "VFXEditor.FitView": "Fit View",
+        "VFXEditor.CurveHintDouble": "Double-click canvas to add a key. Drag keys to move.",
+        "VFXEditor.CurvePresetEaseInOut": "Ease In-Out",
+        "PreviewViewport.BoneOverlay": "Bone Display",
+        "PreviewViewport.ShowBoneJoints": "Joints and Hierarchy Lines",
+        "PreviewViewport.ShowBoneAxes": "Local Axes (X/Y/Z)",
+        "PreviewViewport.ShowBoneNames": "Bone Names"
     }
 }

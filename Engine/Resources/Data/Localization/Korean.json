@@ -378,6 +378,7 @@
         "PROP_EMISSION_DURATION": "방출 지속 시간",
         "PROP_EMISSION_RATE": "방출률 (초당)",
         "PROP_EMISSION_START_TIME": "방출 시작 시간",
+        "PROP_EMISSIVE_INTENSITY": "발광 세기",
         "PROP_EMITTERS": "이미터 목록",
         "PROP_EMIT_DIRECTION": "방출 방향",
         "PROP_ENABLED": "활성화",

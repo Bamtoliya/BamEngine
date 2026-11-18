@@ -378,6 +378,7 @@
         "PROP_EMISSION_DURATION": "Emission Duration",
         "PROP_EMISSION_RATE": "Emission Rate",
         "PROP_EMISSION_START_TIME": "Emission Start Time",
+        "PROP_EMISSIVE_INTENSITY": "Emissive Intensity",
         "PROP_EMITTERS": "Emitters",
         "PROP_EMIT_DIRECTION": "Direction",
         "PROP_ENABLED": "Enabled",

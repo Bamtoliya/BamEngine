@@ -58,12 +58,21 @@ namespace
 		{ "VFXEditor.CurvePresetSpike", [] { return Engine::FloatCurve::CreateSpike(1.0f, 0.2f); } },
 	};
 
-	// 커브 프리셋 버튼 행. 폭이 부족하면 다음 줄로 넘긴다. 프리셋을 적용하면 true.
-	bool DrawCurvePresetRow(const char* labelKey, Engine::FloatCurve& curve, std::span<const CurvePreset> presets)
+	// ── 자유 함수: 커브 프리셋 행 (모달 호출 및 프리셋 버튼) ──
+	bool DrawCurvePresetRow(const char* labelKey, Engine::FloatCurve& curve, std::span<const CurvePreset> presets,
+		Editor::CurveEditorModal& modal, const std::function<void()>& onApplied)
 	{
 		EditorUI::PropertyRow(labelKey);
 		ImGui::PushID(labelKey);
 		bool changed = false;
+		// 1. [커브 모달 에디터 열기] 베지어 아이콘 버튼
+		if (EditorUI::SmallIconButton("EditCurve", ICON_FA_BEZIER_CURVE, "VFXEditor.EditCurveModal"))
+		{
+			const std::string title = LOCAL_FMT("VFXEditor.CurveModalTitle", LOCAL_CSTR(labelKey));
+			modal.Open(title, &curve, onApplied);
+		}
+		ImGui::SameLine();
+		// 2. 빠른 프리셋 버튼들
 		for (std::size_t i = 0; i < presets.size(); ++i)
 		{
 			const std::string label = LOCAL_LABEL(presets[i].LabelKey);
@@ -359,6 +368,43 @@ void VFXEditorPanel::SetupPreview()
 	RestartSimulation();
 }
 
+void VFXEditorPanel::ToggleAirMode()
+{
+	m_AirMode = !m_AirMode;
+	if (m_AirMode)
+	{
+		m_SavedGroundPlane = m_ShowGroundPlane;
+		m_SavedGrid = m_PreviewWidget.IsGridVisible();
+		m_ShowGroundPlane = false;
+		m_PreviewWidget.SetGridVisible(false);
+
+		// 주간 야외(Bright) 상태였다면 단일 스튜디오 그레이로 전환하여 수평선 단차를 완전 제거
+		if (m_BackgroundMode == EVFXBackgroundMode::Bright)
+		{
+			m_BackgroundMode = EVFXBackgroundMode::StudioGray;
+			ApplyBackgroundPreset();
+		}
+	}
+	else
+	{
+		m_ShowGroundPlane = m_SavedGroundPlane;
+		m_PreviewWidget.SetGridVisible(m_SavedGrid);
+	}
+
+	if (m_PreviewGroundEntity)
+	{
+		if (auto* scene = m_PreviewWidget.GetScene())
+		{
+			auto* trans = scene->GetRegistry().try_get<Engine::TransformComponent>(m_PreviewGroundEntity->GetEntityHandle());
+			if (trans)
+			{
+				const float s = m_ShowGroundPlane ? 48.0f : 0.0f;
+				(void)trans->SetLocalScale(Engine::vec3(s, 1.0f, s));
+			}
+		}
+	}
+}
+
 float VFXEditorPanel::GetTimelineDuration() const
 {
 	const auto* effect = m_EffectHandle.Get();
@@ -527,6 +573,13 @@ void VFXEditorPanel::DrawCustomContent()
 		[this] { DrawTrackList(); }, [this] { DrawViewport(); },
 		[this] { DrawInspector(); }, [this] { DrawTimeline(); },
 		[this] { DrawTransportBar(); });
+
+	// 커브 에디터 모달 팝업 렌더링 (확인 시 더티 마킹 및 타임라인 동기화)
+	if (m_CurveModal.Draw())
+	{
+		m_UntrackedDirty = true;
+		InvalidateTimelinePreview();
+	}
 }
 
 void VFXEditorPanel::DrawCustomToolbar()
@@ -597,6 +650,12 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 				}
 			}
 		}
+	}
+
+	// [공중(Air) 프리뷰 모드 토글] (비행기 아이콘: 지면/그리드 일괄 숨김 및 수평선 단차 제거)
+	if (toolbar.Icon("AirMode", ICON_FA_PLANE, "VFXEditor.AirMode", { .Active = m_AirMode }))
+	{
+		ToggleAirMode();
 	}
 
 	// [3단계 배경 프리셋 순환 버튼] (Studio Gray -> Dark -> Bright)
@@ -720,6 +779,8 @@ void VFXEditorPanel::DrawAddTrackMenuItems(Engine::CompositeEffect& effect)
 	{
 		Engine::VFXMeshTrack track;
 		track.trackName = "Mesh_" + std::to_string(effect.GetMeshTracks().size() + 1);
+		auto additiveMat = Engine::ResourceManager::Get().GetResourceHandle<Engine::MaterialInterface>(L"Engine://Material/ParticleMaterial_Additive.bammat.json");
+		if (additiveMat.IsValid()) track.materialHandle = additiveMat;
 		addTrack(ESelectedVFXTrackType::Mesh, std::move(track));
 	}
 	if (ImGui::MenuItem((std::string(ICON_FA_MUSIC " ") + LOCAL_CSTR("VFXEditor.AddSoundTrack")).c_str()))
@@ -1657,7 +1718,7 @@ bool VFXEditorPanel::DrawSelectedTrackInspector(Engine::CompositeEffect* effect)
 		if (drawReflectedTrack(track)) changed = true;
 		if (track.useIntensityCurve && EditorUI::BeginPropertyTable("LightCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets)) changed = true;
+			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 
@@ -1674,15 +1735,23 @@ bool VFXEditorPanel::DrawSelectedTrackInspector(Engine::CompositeEffect* effect)
 		if (m_SelectedTrack.index < 0 || m_SelectedTrack.index >= static_cast<int>(tracks.size())) return false;
 		auto& track = tracks[m_SelectedTrack.index];
 
-		if (drawReflectedTrack(track)) changed = true;
-		if (!track.meshHandle.IsValid()) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.QuadDefault"));
+		// 메시/텍스처 미지정 기본값 힌트는 리플렉션 상단에 배치하여 커브 영역과 분리한다
 		const auto* meshMaterial = track.materialHandle.Get();
 		const bool usesRingTexture = !track.textureHandle.IsValid() && (!meshMaterial || meshMaterial->GetTextureBindings().empty() || !meshMaterial->GetTextureBindings()[0].texture.Get());
-		if (usesRingTexture) ImGui::TextDisabled("%s", LOCAL_CSTR("VFXEditor.RingTextureDefault"));
+		if (!track.meshHandle.IsValid() || usesRingTexture)
+		{
+			if (!track.meshHandle.IsValid()) ImGui::TextDisabled(ICON_FA_CIRCLE_INFO " %s", LOCAL_CSTR("VFXEditor.QuadDefault"));
+			if (usesRingTexture) ImGui::TextDisabled(ICON_FA_CIRCLE_INFO " %s", LOCAL_CSTR("VFXEditor.RingTextureDefault"));
+			ImGui::Spacing();
+		}
+
+		if (drawReflectedTrack(track)) changed = true;
+
+		// 커브 프리셋 및 정밀 편집 모달 행
 		if ((track.useScaleCurve || track.useAlphaCurve) && EditorUI::BeginPropertyTable("MeshCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets)) changed = true;
-			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets)) changed = true;
+			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
+			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 

@@ -377,6 +377,7 @@
 ,PROP_EMISSION_DURATION,Emission Duration,방출 지속 시간
 ,PROP_EMISSION_RATE,Emission Rate,방출률 (초당)
 ,PROP_EMISSION_START_TIME,Emission Start Time,방출 시작 시간
+,PROP_EMISSIVE_INTENSITY,Emissive Intensity,발광 세기
 ,PROP_EMITTERS,Emitters,이미터 목록
 ,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화

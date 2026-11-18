@@ -1,6 +1,6 @@
 # 계층형 통합 비주얼 이펙트 시스템 및 저작 도구 개발 계획 (Composite VFX & Track-based Orchestrator Plan)
 
-- **작성일:** 2026-11-08 (최종 갱신: 2026-11-17)
+- **작성일:** 2026-11-08 (최종 갱신: 2026-11-19)
 - **상태:**
   - **Phase 1 (복합 기반 구축):** 구현 및 검증 완료 (스프라이트 플립북, 파티클, 라이트 섬광 트랙 및 VFXEditorPanel)
   - **Phase 2 (메쉬 이펙트 런타임 & 사운드 연동):** 구현 및 검증 완료 (메쉬 트랙 스케일/회전 보간, UV 스크롤/컬러 페이드 렌더링 제출, 사운드 1회 트리거)
@@ -16,11 +16,14 @@
     - `VFXMeshTrack`(스케일/알파 커브), `VFXLightTrack`(조도 커브) 런타임 샘플링 및 폭발 팽창 펀치감 실현.
     - 트랙 인스펙터 리플렉션 속성 행 및 원클릭 프리셋 지원.
     - `EffectTimelineView` 트랙 바 내부 실시간 베지어 곡선 실루엣 및 뱃지(`[Scale]`, `[Alpha]`, `[Light]`) 인라인 렌더링.
-  - **Phase 5 Step 3 차기 선택지 로드맵 (2026-11-17 수립):**
-    - 선택지 1 (추천): 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 무기/손 본 소켓 스폰 및 공격 애니메이션 노티파이 바인딩).
-    - 선택지 2: 발광성 Additive 가산 머티리얼 표준화 및 뷰포트 암실 공중(Air Mode) 프리뷰 모드.
-    - 선택지 3: 2D 커브 키프레임 직접 조작 팝업 모달 에디터.
-  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 타임라인 인라인 프리뷰 완비)
+  - **Phase 5 Step 3 2D 커브 팝업 에디터 모달 및 UI/UX 디테일 고도화 (2026-11-19):** 구현 및 검증 완료
+    - `CurveEditorModal.h`/`.cpp` 신설: 2D 베지어 캔버스, 그리드/축 눈금, 키 추가/드래그/삭제 및 프리셋 툴바 지원.
+    - `VFXEditorPanel` 조도/스케일/알파 커브 프리셋 행에 모달 열기 연동 및 타임라인 실시간 동기화.
+    - 다국어 키워드 표준화(`PROP_TIME` 등), 긴 안내문 자동 줄바꿈, 메시 기본값 힌트 분리, `EditorCommon.OK` 확인 버튼 라벨 완비.
+  - **Phase 5 Step 4 차기 선택지 로드맵:**
+    - 선택지 1: 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 무기/손 본 소켓 스폰 및 공격 애니메이션 노티파이 바인딩).
+    - 선택지 2: 발광성 순수 Additive($One/One$) 가산 머티리얼 표준화 및 뷰포트 암실 공중(Air Mode) 프리뷰 가상 라이트 보정.
+  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 인라인 프리뷰, 2D 커브 모달 에디터 완비)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
@@ -333,5 +336,40 @@ flowchart TD
 - **대체 경로**: 동적 정점 버퍼 미지원 백엔드(SDL GPU)는 세그먼트 쿼드로 그리며 정렬 모드를 무시한다. 실행 미확인.
 - **편집기**: 트랙 인스펙터 편집이 위젯 비활성 시점에 Undo 한 단위로 기록된다. 트랙 추가 메뉴 명칭을 일반 명칭으로 정리했다.
 - 상세 변경과 검증 기록은 `ImplementationLog.md`의 2026-11-17 항목을 따른다.
+
+### 9.9 공중 뷰(Air View / 허공 배경) 시 반투명·발광 이펙트의 흙갈색 탁화 및 톤매핑 왜곡 분석 (2026-11-18)
+
+- **현상 요약**:
+  - 지면(Ground Plane) 위에서는 눈부신 순백색 발광(White Bloom Glow)으로 렌더링되는 파티클/메쉬 이펙트가, 지면이 없는 공중 뷰(Air Mode)나 수평선 너머의 허공(스튜디오 그레이 배경)에서는 발광력을 잃고 짙은 흙갈색/적황색(Muddy Brown / Burnt Ochre)으로 타버리는 현상이 발생함.
+  - 이펙트의 외곽 테두리에 어두운 실루엣과 회색 플린지(Fringe)가 형성되어 자체 발광체(Emissive Light) 느낌이 완전히 상실됨.
+
+- **근본 원인 (Root Cause)**:
+  1. **디퍼드 렌더러의 버퍼 분리 및 배경 광량 부재**:
+     - 지면 위는 디퍼드 G-Buffer에 등록되어 라이팅 패스에서 태양광(Directional Light) 및 앰비언트 반사광을 받아 이미 밝은 HDR 백그라운드 버퍼 값($RGB \approx (0.8, 0.85, 0.95)$)을 보유함. 반투명 메쉬가 얹어질 때 가산 합성되어 $1.0$을 초과하는 백색 발광으로 포화됨.
+     - 반면 허공(하늘) 영역은 G-Buffer 지오메트리가 없어 라이팅 연산이 `discard`되며, 톤매핑 전 기본 배경 클리어 색상($RGB \approx (0.22, 0.22, 0.24)$ 또는 완전 암흑)만 남아 있음.
+  2. **색채학적 한계 및 ACES Filmic 톤매핑 곡선**:
+     - 주황색/황금색 계열($R:G:B \approx 5:1:0$)은 고광량(High Luminance)일 때는 하얗게 타오르는 불꽃으로 보이지만, 허공처럼 받쳐주는 광량이 없거나 감쇄 구간에서 휘도가 낮아지면(Low Luminance) 물리적으로 필연적인 '탁한 흙갈색(Muddy Brown / Olive Ochre)'으로 인지됨. (갈색은 어두운 환경에서 본 낮은 휘도의 주황색임)
+  3. **셰이더 내부의 정면 알파 감쇄 (`forwardParticlePS.hlsl`)**:
+     - 정면을 바라보는 면의 알파를 강제로 $0.55$로 깎는 수식(`facingAlpha = lerp(0.55f, 1.0f, fresnelRim)`)과 외곽 4% 페더링(`uvEdgeFade`)으로 인해, 쿼드 정면과 테두리에서 Additive 광량이 45% 이상 급감하며 흙갈색 테두리를 형성함.
+  4. **블렌드 모드 ($SrcAlpha / One$)**:
+     - 현재 `Additive` 블렌드는 $SrcColor \times SrcAlpha + DstColor$ 방식으로 동작하여, 텍스처나 트랙의 Alpha가 감소할 때 방출 광량이 비례하여 급감함.
+
+- **향후 해결 과제 (Roadmap)**:
+  1. **순수 가산 블렌드(Pure Additive, $One / One$) 머티리얼 분리**:
+     - 알파 채널에 의한 광량 감쇄 없이 방출 광량을 $100\%$ 보존하는 완전 자체 발광형 언릿 머티리얼 지원.
+  2. **공중 프리뷰 뷰포트용 가상 환경광/스카이돔 보정**:
+     - 공중 모드 활성화 시 완전한 암흑/단색 클리어 대신, 최소한의 환경 반사광(Ambient Radiance)을 공급하는 가상 라이트 또는 간이 스카이 버퍼를 제공하여 허공에서도 이펙트가 색을 유지하도록 보정.
+  3. **셰이더 발광 정규화**:
+     - `forwardParticlePS.hlsl`의 정면 알파 감쇄(`0.55`)를 완화(`0.9~1.0`)하거나 발광 파티클 전용 분기 도입.
+
+### 9.10 2D 커브 팝업 에디터 모달(CurveEditorModal) 및 저작 UX 고도화 (2026-11-19)
+
+- **구현 구조**:
+  - `Editor/Source/ImGui/Public/CurveEditorModal.h`, `Private/CurveEditorModal.cpp` 신설.
+  - 원본 커브 격리 작업본(`m_WorkingCurve`)에서 2D 베지어 곡선(64샘플), 시간/값 축 그리드, 키 더블클릭 추가, 드래그 이동(이웃 키 제약), 우클릭/상단 헤더 삭제 연동.
+  - 5대 빠른 프리셋(선형, 천천히 시작, 천천히 끝, 천천히 시작-끝, 스파이크) 및 `FitView` 화면 맞춤 제공.
+- **VFXEditorPanel 및 인스펙터 연동**:
+  - Light(조도), Mesh(스케일, 알파) 트랙의 프리셋 행 옆 베지어 버튼 연동 및 확인 시 타임라인 즉시 동기화.
+  - UI/UX 디테일 정돈: 타이틀 `###ID` 노출 제거, 다국어 표준화(`PROP_TIME` 등), `PushTextWrapPos` 안내문 자동 줄바꿈, 메시 힌트 분리, `EditorCommon.OK` 확인 버튼 라벨 교정.
 
 ---

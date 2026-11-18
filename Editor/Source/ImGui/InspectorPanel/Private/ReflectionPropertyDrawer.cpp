@@ -301,7 +301,9 @@ namespace
 	{
 		if (selected < 0)
 		{
+			ImGui::PushTextWrapPos(0.0f);
 			ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.CurveEditHint"));
+			ImGui::PopTextWrapPos();
 			return false;
 		}
 

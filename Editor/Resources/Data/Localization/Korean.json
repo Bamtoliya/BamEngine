@@ -1182,6 +1182,7 @@
         "ResourcePicker.ClearHint": "현재 리소스 연결 해제",
         "ResourcePicker.DiskFile": "{} [디스크]",
         "ResourcePicker.LoadedInMemory": "메모리에 로드된 리소스:",
+        "ResourcePicker.IndexingFiles": "파일 목록을 준비하는 중…",
         "ResourcePicker.None": "없음 (리소스를 놓으세요)",
         "ResourcePicker.OpenInEditor": "편집기에서 열기",
         "ResourcePicker.ProjectFiles": "프로젝트 파일 (디스크):",
@@ -2098,6 +2099,17 @@
         "ContentBrowser.RenameInvalidName": "올바른 파일 이름을 입력하세요. 빈 이름과 Windows 예약 이름은 사용할 수 없습니다. 확장자는 유지됩니다.",
         "ContentBrowser.RenameNameExists": "이미 사용 중인 이름입니다. 다른 이름을 입력하세요.",
         "ContentBrowser.RenameInputHint": "Enter: 이름 확정. Escape 또는 다른 곳 클릭: 기존 이름 유지. 확장자는 유지됩니다.",
-        "ContentBrowser.RenameImpactCount": "이름을 변경할 에셋을 가리키는 저장된 참조 {}건"
+        "ContentBrowser.RenameImpactCount": "이름을 변경할 에셋을 가리키는 저장된 참조 {}건",
+        "VFXEditor.AirMode": "공중 프리뷰 모드",
+        "VFXEditor.AirModeTooltip": "공중 모드: 지면과 그리드를 숨겨 수평선 단차 없이 순수 발광/공중 룩앤필을 검증합니다",
+        "VFXEditor.EditCurveModal": "커브 편집...",
+        "VFXEditor.CurveModalTitle": "커브 편집기 - {}",
+        "VFXEditor.FitView": "화면 맞춤",
+        "VFXEditor.CurveHintDouble": "빈 캔버스를 더블클릭해 키를 추가하고 드래그하여 조절합니다.",
+        "VFXEditor.CurvePresetEaseInOut": "천천히 시작-끝",
+        "PreviewViewport.BoneOverlay": "본 표시",
+        "PreviewViewport.ShowBoneJoints": "관절 점과 계층 연결선",
+        "PreviewViewport.ShowBoneAxes": "로컬 축 (X/Y/Z)",
+        "PreviewViewport.ShowBoneNames": "본 이름"
     }
 }

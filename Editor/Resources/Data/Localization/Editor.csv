@@ -2100,3 +2100,14 @@ ContentBrowser,RenameInvalidName,Enter a valid file name. Empty names and reserv
 ContentBrowser,RenameNameExists,This name is already in use. Enter another name.,이미 사용 중인 이름입니다. 다른 이름을 입력하세요.
 ContentBrowser,RenameInputHint,Enter: confirm name. Escape or click elsewhere: keep the original name. The extension is preserved.,Enter: 이름 확정. Escape 또는 다른 곳 클릭: 기존 이름 유지. 확장자는 유지됩니다.
 ContentBrowser,RenameImpactCount,Stored references to renamed assets: {},이름을 변경할 에셋을 가리키는 저장된 참조 {}건
+VFXEditor,AirMode,Air Mode,공중 프리뷰 모드
+VFXEditor,AirModeTooltip,Air Mode: Disable floor and grid for pure emissive aerial preview,공중 모드: 지면과 그리드를 숨겨 수평선 단차 없이 순수 발광/공중 룩앤필을 검증합니다
+VFXEditor,EditCurveModal,Edit Curve...,커브 편집...
+VFXEditor,CurveModalTitle,Curve Editor - {},커브 편집기 - {}
+VFXEditor,FitView,Fit View,화면 맞춤
+VFXEditor,CurveHintDouble,Double-click canvas to add a key. Drag keys to move.,빈 캔버스를 더블클릭해 키를 추가하고 드래그하여 조절합니다.
+VFXEditor,CurvePresetEaseInOut,Ease In-Out,천천히 시작-끝
+PreviewViewport,BoneOverlay,Bone Display,본 표시
+PreviewViewport,ShowBoneJoints,Joints and Hierarchy Lines,관절 점과 계층 연결선
+PreviewViewport,ShowBoneAxes,Local Axes (X/Y/Z),로컬 축 (X/Y/Z)
+PreviewViewport,ShowBoneNames,Bone Names,본 이름

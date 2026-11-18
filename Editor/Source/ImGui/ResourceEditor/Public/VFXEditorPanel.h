@@ -7,6 +7,7 @@
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
 #include "GizmoHelper.h"
+#include "CurveEditorModal.h"
 
 BEGIN(Engine)
 class Entity;
@@ -115,6 +116,8 @@ private:
 	void DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize);
 	void DrawViewportHUD(const ImVec2& viewportPos, const ImVec2& viewportSize);
 	void StepFrame(int step);
+
+	void ToggleAirMode();
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
 	bool m_UntrackedDirty = false; // 이력에 남지 않는 변경: 반복 토글, 트랙 목록 활성 체크, 새 이펙트
@@ -146,6 +149,9 @@ private:
 	EVFXBackgroundMode m_BackgroundMode = EVFXBackgroundMode::StudioGray;
 	bool m_PreviewMotion = false;
 	bool m_ShowGroundPlane = true;
+	bool m_AirMode = false;
+	bool m_SavedGroundPlane = true;
+	bool m_SavedGrid = true;
 
 	// ── Phase 5 환경 장애물 프리셋 ──
 	enum class EVFXObstaclePreset : uint8 { FloorOnly = 0, CornerWall = 1, Obstacles = 2, DummyCharacter = 3 };
@@ -159,6 +165,7 @@ private:
 	float m_LeftPaneWidth = 280.0f;
 	float m_RightPaneWidth = 360.0f;
 	float m_TimelineHeight = 180.0f;
+	Editor::CurveEditorModal m_CurveModal;
 
 	CommandHistory m_TimelineHistory;
 
