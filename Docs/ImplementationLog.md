@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 백그라운드 빌드 실행기의 Win32·SDL 헤더 의존성 수정
+
+- 후속 사용자 터미널에서 `ClientBuildJob.cpp:28/34/36`의 `CP_UTF8`·`CP_OEMCP`·`MB_ERR_INVALID_CHARS` 미선언과 `MultiByteToWideChar` 미식별, 240행의 `SDL_CleanupTLS` 미식별로 Ninja가 중단된 것을 확인했다. 이 로그의 실패 위치는 프리뷰 위젯이 아닌 백그라운드 빌드 실행기다.
+- 생성된 `unity_2_cxx.cxx`는 `ClientBuildJob.cpp`를 첫 번째로 포함한다. 해당 구현은 Win32 문자 변환과 SDL 스레드 TLS 정리를 사용하면서 `windows.h`·`SDL_thread.h`를 직접 포함하지 않았다. 설치된 SDL3의 `SDL_thread.h`에서 `SDL_CleanupTLS` 선언을 확인하고 두 헤더를 구현 파일에 추가했다. API 삭제나 SDL 버전 우회로 처리하지 않는다.
+- 변경부의 헤더·사용 위치와 공백을 정적으로 확인했다. 사용자 빌드는 실패했으며 뒤의 조건부 CTest는 실행되지 않았다. 수정 후 빌드·CTest는 AI가 실행하지 않았고 사용자 재실행이 필요하다.
+
 ### [2026-11-18] 로드된 에셋 경로 동기화 후 프리뷰 빌드 의존성 보완
 
 - `2dd05631` 이후 사용자 터미널에서 `PreviewViewportWidget.cpp:526`의 `ImGuizmo` 미선언(C2653)과 `IsOver`·`IsUsing` 미식별(C3861)로 Ninja가 중단된 것을 확인했다. 생성된 `unity_14_cxx.cxx`는 이 구현 파일을 첫 번째로 포함하며, 해당 파일은 사용 중인 `ImGuizmo.h`를 직접 포함하지 않았다. 기존 간접 포함에 의존하던 문제가 Unity 묶음 변경으로 드러난 것이다.

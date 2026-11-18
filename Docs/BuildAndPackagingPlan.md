@@ -109,6 +109,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 - `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
 - 백그라운드 빌드 실행기(`ClientBuildJob`)는 Windows 시스템 스레드 풀 상주로 인한 CRT 메모리 누수 오탐지를 방지하기 위해 `std::async` 대신 명시적인 `std::thread`와 `join()`을 사용하고, `OutputCallback`을 통해 빌드 진행 로그를 UI로 실시간 스트리밍한다. ([EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 20절 참고)
+- `ClientBuildJob.cpp`는 Win32 문자 변환에 `windows.h`, 스레드 TLS 정리에 `SDL3/SDL_thread.h`를 직접 포함한다. Unity 묶음 첫 파일이 되면 다른 구현의 include가 먼저 공급되지 않으므로 해당 선언을 간접 포함에 의존하지 않는다. 사용자 빌드에서 확인된 누락을 수정했으며 수정 후 재빌드·CTest는 재실행 전이다.
 - 시작 씬, 내보낼 상위 폴더, 패키지 폴더 이름과 프로그램 이름은 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
 - 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
 - `AnimatorComponent.controllerPath`와 컨트롤러 문서에 들어 있는 클립 참조를 같은 검사에서 따라간다. Runtime과 패키저는 동일한 컨트롤러 경로 해석을 사용한다.
