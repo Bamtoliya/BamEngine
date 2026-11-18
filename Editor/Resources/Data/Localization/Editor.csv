@@ -128,6 +128,7 @@ AssetRef,ProblemsTab,Problems,참조 문제
 AssetRef,ReferencesTab,References,참조 관계
 AssetRef,ShowReferences,Show Asset References,에셋 참조 보기
 AssetRef,ReferenceTargetRequired,Open a file's context menu in the Content Browser and choose Show Asset References.,콘텐츠 브라우저에서 파일을 우클릭하고 에셋 참조 보기를 선택하세요.
+AssetRef,ReferenceTargetMissing,Target file not found.,대상 파일을 찾을 수 없습니다.
 AssetRef,UsedBy,Used By,이 에셋을 사용하는 파일
 AssetRef,Uses,Uses,이 에셋이 참조하는 파일
 AssetRef,ReferenceCycle,(Cycle),(순환 참조)

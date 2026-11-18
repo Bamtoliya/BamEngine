@@ -62,11 +62,16 @@ namespace Editor
         Focus();
     }
 
+    void AssetReferencePanel::RequestScanRefresh()
+    {
+        if (m_HasScanned)
+            m_ScanRequested = true;
+    }
+
     void AssetReferencePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
     {
         relocation.Add(m_ReferenceTarget);
-        if (m_HasScanned)
-            relocation.AfterCommit([this]() { m_ScanRequested = true; });
+        relocation.AfterCommit([this]() { RequestScanRefresh(); });
     }
 
     void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
@@ -74,6 +79,7 @@ namespace Editor
         if (asset.empty())
         {
             m_ReferenceTarget.clear();
+            m_ReferenceTargetMissing = false;
             return;
         }
 
@@ -81,6 +87,7 @@ namespace Editor
         std::error_code error;
         const auto resolved = std::filesystem::canonical(physical, error);
         m_ReferenceTarget = error ? physical.lexically_normal() : resolved;
+        m_ReferenceTargetMissing = !std::filesystem::is_regular_file(m_ReferenceTarget, error);
     }
 
     void AssetReferencePanel::RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references)
@@ -121,6 +128,12 @@ namespace Editor
         const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_ReferenceTarget));
         ImGui::TextWrapped("%s", target.c_str());
         ImGui::Separator();
+
+        if (m_ReferenceTargetMissing)
+        {
+            EditorUI::EmptyState("AssetRef.ReferenceTargetMissing");
+            return;
+        }
 
         std::filesystem::path next;
         if (ImGui::BeginChild("AssetReferenceLists"))

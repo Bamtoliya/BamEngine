@@ -3,6 +3,7 @@
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
 #include "AssetPathRelocation.h"
+#include "AssetReferencePanel.h"
 #include "ResourceManager.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
@@ -1619,15 +1620,32 @@ void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* la
 	if (moves.empty())
 		return;
 
+	const auto refreshReferences = []()
+	{
+		auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
+		if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+			references->RequestScanRefresh();
+	};
+
 	const auto batch = std::make_shared<const vector<FileMove>>(std::move(moves));
+	const auto replay = [this, batch, refreshReferences](bool forward)
+	{
+		if (!ReplayFileMoves(*batch, forward))
+			return false;
+		refreshReferences();
+		return true;
+	};
 	auto command = std::make_unique<CallbackEditorCommand>(label,
-		[this, batch]() { return ReplayFileMoves(*batch, true); },
-		[this, batch]() { return ReplayFileMoves(*batch, false); });
+		[replay]() { return replay(true); },
+		[replay]() { return replay(false); });
 
 	if (execute)
 		m_FileHistory.Execute(std::move(command));
 	else
+	{
 		m_FileHistory.Record(std::move(command));
+		refreshReferences();
+	}
 	FinishFileHistoryOperation();
 }
 

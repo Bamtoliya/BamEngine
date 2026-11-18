@@ -17,6 +17,7 @@ public:
 
     void Draw() override;
     void ShowReferences(const std::filesystem::path& asset);
+    void RequestScanRefresh();
     void PrepareAssetPathRelocation(AssetPathRelocation& relocation);
 
 private:
@@ -52,6 +53,7 @@ private:
     bool m_SelectReferencesTab = false;
     bool m_ScanRequested = false;
     bool m_HasScanned = false;
+    bool m_ReferenceTargetMissing = false;
     int m_FilterType = 0; // 0: All, 1: Missing, 2: External, 3: InvalidExt
     char m_SearchFilter[128] = "";
     std::string m_StatusMessage;
