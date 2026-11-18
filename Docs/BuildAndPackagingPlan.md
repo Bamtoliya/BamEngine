@@ -1,6 +1,6 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-18)
 - 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
 - WebGPU 진행 상태: `Client/Web`에는 저장된 씬을 읽는 독립 프리뷰가 있다. Client의 공유 실행 계층을 플랫폼 호스트에서 분리했지만, 실제 Wasm Client·WebGPU 렌더링과 Editor 내보내기는 후속 범위다.
@@ -44,6 +44,29 @@ Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저�
 
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
+
+### 로컬 워크트리의 Windows Ninja 빌드 준비
+
+새 워크트리에는 Git이 제외하는 SDK 바이너리가 복사되지 않는다. vcpkg 설치 완료와 CMake 구성 성공만으로 빌드 준비가 끝난 것은 아니다.
+
+- `ThirdParty/FMOD/inc`와 같은 버전의 SDK에서 `ThirdParty/FMOD/lib/x64/`에 `fmodL_vc.lib`, `fmodL.dll`(Debug), `fmod_vc.lib`, `fmod.dll`(Release)을 준비한다. 기존 체크아웃에서 가져올 때도 헤더 버전을 대조한다. `.lib`·`.dll`은 `.gitignore` 제외 대상이므로 로컬에만 배치한다.
+- Ninja의 `cl.exe` 사용에는 x64 MSVC 개발 환경이 필요하다. 일반 PowerShell에서는 아래처럼 초기화한다. Visual Studio 설치 경로는 실제 설치 위치에 맞춘다.
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+Get-Command cl.exe
+```
+
+- `Projects/Reflection/dependencies/`도 Git 제외 대상이다. LLVM SDK를 별도로 준비하거나, 구성 시 기존 SDK의 `LLVM_DIR`, `Clang_DIR`, `REFLECTION_CLANG_RESOURCE_DIR`를 명시한다. 경로 준비 기준은 [Reflection·Archive 빌드 안내](ReflectionArchiveBuild.md#환경과-경로-준비)를 따른다.
+- 구성 성공 후 필요한 타깃을 빌드하고, 빌드 성공을 확인한 뒤 CTest를 실행한다. 콘텐츠 브라우저 참조 검사의 예시는 다음과 같다.
+
+```powershell
+cmake --build --preset x64-ninja-debug --target Editor AssetReferenceCheck
+if ($LASTEXITCODE -ne 0) { throw 'Editor / AssetReferenceCheck build failed' }
+ctest --test-dir out/build/x64-ninja-debug --output-on-failure --no-tests=error -R '^AssetReferenceCheck$'
+```
+
+`AssetReferenceCheck (Not Run)`과 실행 파일 누락은 테스트 본문 실패와 구분한다. 2026-11-18에는 CMake 구성이 성공했지만 FMOD import library 누락으로 Ninja가 중단되어 이 결과가 발생했다. 누락된 4개 파일을 기존 체크아웃에서 복구하고 SHA-256 일치를 확인했다. 복구 후 빌드·CTest 통과 여부는 사용자 재실행으로 확인해야 한다.
 
 ## 3. 완료 목표
 

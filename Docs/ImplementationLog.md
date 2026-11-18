@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 새 워크트리의 FMOD 빌드 의존성 복구
+
+- 사용자 터미널에서 CMake 구성 성공 후 `ThirdParty/FMOD/lib/x64/fmodL_vc.lib` 누락으로 Ninja가 중단된 것을 확인했다. 이어진 `AssetReferenceCheck`는 실행 파일이 생성되지 않아 `Not Run`이었다. 테스트 본문의 검증 실패는 아니다.
+- `.gitignore`의 `*.lib`·`*.dll` 규칙 때문에 새 워크트리에 SDK 바이너리가 없었다. 원본 체크아웃과 `fmod_common.h`의 SHA-256 일치를 확인하고, Debug·Release import library와 런타임 DLL 4개를 로컬에 복구했다. 복사본 4개의 SHA-256도 원본과 일치한다. SDK 바이너리는 커밋하지 않는다.
+- [빌드·패키징 안내](BuildAndPackagingPlan.md#로컬-워크트리의-windows-ninja-빌드-준비)에 MSVC 초기화, FMOD·LLVM 준비와 빌드 실패 시 CTest 실행 중단 절차를 기록했다. 복구 후 빌드·CTest는 AI가 실행하지 않았으며 사용자 재검증이 필요하다.
+
 ### [2026-11-18] 콘텐츠 브라우저 이동 전 참조 영향 확인
 
 - 잘라내기 붙여넣기와 폴더 드롭 이동이 공통 확인창에서 출발·목적 경로와 저장된 사용처를 보여준다. 삭제 분석과 참조 수집을 공유하며 이동은 같은 묶음 안의 참조도 포함한다. 자동 참조 갱신은 후속이다.
