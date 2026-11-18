@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 에셋 이동의 저장된 참조 갱신과 Undo/Redo
+
+- 기존 참조 수집기를 읽기·갱신에 공유한다. 프로젝트 JSON·JSON 형식 Animator 컨트롤러에서 리소스 핸들의 `AssetKey`·`AssetPath`와 Animator 컴포넌트의 `controllerPath`를 새 `Project://` URI로 갱신한다. 함께 이동하는 폴더 내부 문서도 처리하고 일반 문자열·`Null` 참조는 보존한다.
+- 이동과 문서 기록은 한 파일 이력 명령이다. 이름 충돌·파일 교체·새 참조·문서 변경을 실행 전에 확인하고, 실패하면 묶음 전체를 복원한다. Undo는 원본 바이트, Redo는 갱신한 바이트를 적용한다. 참조 문서를 모두 잠그고 예상 내용을 검사한 뒤 같은 파일 핸들에 기록해 ID를 유지한다. 기록 실패 시 원문을 복원하고, 복원도 실패하면 이력을 비우고 로그에 복구 폴더를 남긴다. 변경 전후 백업과 경로표는 `.bam/content-browser-history/`에 유지한다.
+- 미저장 문서·진행 중인 문서 작업·프리팹 모드·대상 문서를 보유한 편집기(닫힌 창 및 그래프의 두 문서 포함)·로드된 대상 리소스를 차단한다. 메모리의 옛 참조가 다시 저장되는 것을 방지하는 제한이며 실시간 리소스 재등록은 후속이다. 바이너리 내부·동적 로드·정전 복구는 지원 범위 밖이다.
+- `AssetReferenceCheck`에 폴더 내부/외부 참조와 컨트롤러 이동, 한글·공백 경로, 레거시 확장자, 일반 문자열 보존, 64비트 정수, BOM, 정확한 원문 Undo/Redo, 외부 문서 변경·파일 잠금·불완전 검사 거부를 추가했다. 기존 검사 통과는 사용자가 보고했으며 이번 확장 후 빌드·CTest·실환경 검사는 실행하지 않았다. 로캘 엄격 감사와 `git diff --check`는 통과했다.
+- 적용 범위와 실환경 점검은 [파일 작업 계획](ImGuiDevelopmentPlan.md#g-콘텐츠-브라우저-파일-작업과-계층-선택), [파일 이력](EditorUndoRedo.md#콘텐츠-브라우저-파일-이력), [UX 점검](EditorUXTestGuidelines.md#52-tier-3-대화형-ui-점검-체크리스트)에 기록했다. 기존 생성 JSON과 `Engine.csv` 변경은 이 작업에 포함하지 않는다.
+
 ### [2026-11-18] 새 워크트리의 FMOD 빌드 의존성 복구
 
 - 사용자 터미널에서 CMake 구성 성공 후 `ThirdParty/FMOD/lib/x64/fmodL_vc.lib` 누락으로 Ninja가 중단된 것을 확인했다. 이어진 `AssetReferenceCheck`는 실행 파일이 생성되지 않아 `Not Run`이었다. 테스트 본문의 검증 실패는 아니다.

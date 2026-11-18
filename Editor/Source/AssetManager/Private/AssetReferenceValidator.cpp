@@ -14,6 +14,7 @@
 #include <set>
 #include <string_view>
 #include <tuple>
+#include <Windows.h>
 
 namespace Editor
 {
@@ -58,25 +59,25 @@ namespace Editor
             return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
         }
 
-        void CollectDocumentReferences(const glz::generic_u64& value, ReferenceFields& references,
-            std::set<std::string>& controllers)
+        template<typename Value, typename Visitor>
+        void VisitDocumentReferences(Value& value, const Visitor& visit)
         {
             using Json = glz::generic_u64;
 
-            if (const auto* object = value.get_if<Json::object_t>())
+            if (auto* object = value.template get_if<Json::object_t>())
             {
                 const auto nullField = object->find("Null");
                 if (nullField != object->end())
                 {
-                    const auto* isNull = nullField->second.get_if<bool>();
+                    const auto* isNull = nullField->second.template get_if<bool>();
                     if (isNull && *isNull)
                         return;
                 }
 
-                const auto readString = [](const Json::object_t& fields, const char* key) -> const std::string*
+                const auto readString = [](const auto& fields, const char* key) -> const std::string*
                     {
                         const auto field = fields.find(key);
-                        return field == fields.end() ? nullptr : field->second.get_if<std::string>();
+                        return field == fields.end() ? nullptr : field->second.template get_if<std::string>();
                     };
 
                 const auto* assetKey = readString(*object, "AssetKey");
@@ -91,26 +92,26 @@ namespace Editor
                     reference = assetKey;
 
                 if (reference && !reference->empty())
-                    references.try_emplace(*reference, reference == assetKey ? "AssetKey" : "AssetPath");
+                    visit(*object, reference == assetKey ? "AssetKey" : "AssetPath", false);
 
                 const auto* type = readString(*object, "Type");
                 const auto data = object->find("Data");
                 if (type && *type == "Engine::AnimatorComponent" && data != object->end())
                 {
-                    if (const auto* fields = data->second.get_if<Json::object_t>())
+                    if (auto* fields = data->second.template get_if<Json::object_t>())
                     {
                         if (const auto* controller = readString(*fields, "controllerPath"); controller && !controller->empty())
-                            controllers.insert(*controller);
+                            visit(*fields, "controllerPath", true);
                     }
                 }
 
-                for (const auto& field : *object)
-                    CollectDocumentReferences(field.second, references, controllers);
+                for (auto& field : *object)
+                    VisitDocumentReferences(field.second, visit);
             }
-            else if (const auto* elements = value.get_if<Json::array_t>())
+            else if (auto* elements = value.template get_if<Json::array_t>())
             {
-                for (const auto& element : *elements)
-                    CollectDocumentReferences(element, references, controllers);
+                for (auto& element : *elements)
+                    VisitDocumentReferences(element, visit);
             }
         }
 
@@ -143,10 +144,14 @@ namespace Editor
         ReferenceFields ReadReferenceFields(const glz::generic_u64& document)
         {
             ReferenceFields references;
-            std::set<std::string> controllers;
-            CollectDocumentReferences(document, references, controllers);
-            for (const auto& controller : controllers)
-                references.insert_or_assign(controller, "controllerPath");
+            VisitDocumentReferences(document, [&references](const auto& fields, const char* key, bool controller)
+            {
+                const auto& reference = fields.at(key).get_string();
+                if (controller)
+                    references.insert_or_assign(reference, "controllerPath");
+                else
+                    references.try_emplace(reference, key);
+            });
             return references;
         }
 
@@ -531,6 +536,115 @@ namespace Editor
     AssetReferenceImpact AssetReferenceValidator::AnalyzeMove(const std::vector<std::filesystem::path>& targets)
     {
         return AnalyzeFileChange(targets, true);
+    }
+
+    bool AssetReferenceValidator::PrepareMoveReferences(const std::vector<AssetPathMove>& moves,
+        std::vector<AssetReferenceEdit>& edits)
+    {
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        edits.clear();
+        try
+        {
+            std::vector<AssetPathMove> canonicalMoves;
+            const auto remap = [&canonicalMoves](const fs::path& path)
+            {
+                for (const auto& move : canonicalMoves)
+                {
+                    auto part = path.begin();
+                    auto root = move.Before.begin();
+                    while (part != path.end() && root != move.Before.end() &&
+                        CompareStringOrdinal(part->c_str(), -1, root->c_str(), -1, TRUE) == CSTR_EQUAL)
+                    {
+                        ++part;
+                        ++root;
+                    }
+                    if (root != move.Before.end())
+                        continue;
+                    auto result = move.After;
+                    for (; part != path.end(); ++part)
+                        result /= *part;
+                    return result.lexically_normal();
+                }
+                return path;
+            };
+
+            for (const auto& move : moves)
+            {
+                const auto before = fs::canonical(move.Before);
+                const auto after = Path::Normalize(move.After);
+                if (!Path::IsProjectUri(Path::ToVirtualUri(before)) || Path::IsReadOnlyTarget(before) ||
+                    !Path::IsProjectUri(Path::ToVirtualUri(after)) || Path::IsReadOnlyTarget(after))
+                    return false;
+                canonicalMoves.push_back({ before, after });
+            }
+            // Resolve casing and relative paths once, before using component-wise prefix matching.
+            const auto scan = ScanProject();
+            if (std::ranges::any_of(scan.Issues, [](const auto& issue)
+                { return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument; }))
+                return false;
+
+            std::set<fs::path> documents;
+            for (const auto& link : scan.References)
+            {
+                if (remap(link.Target) != link.Target)
+                    documents.insert(link.Source);
+            }
+            std::vector<AssetReferenceEdit> prepared;
+            for (const auto& source : documents)
+            {
+                AssetReferenceEdit edit{ source, remap(source), {}, {} };
+                if (Path::IsReadOnlyTarget(source) || !ReadTextFile(source, edit.BeforeText))
+                    return false;
+                auto text = edit.BeforeText;
+                const bool bom = text.starts_with("\xEF\xBB\xBF");
+                if (bom)
+                    text.erase(0, 3);
+                glz::generic_u64 document;
+                if (glz::validate_json(text) || glz::read_json(document, text) || !document.is_object())
+                    return false;
+                bool changed = false;
+                VisitDocumentReferences(document, [&](auto& fields, const char* key, bool controller)
+                {
+                    const auto raw = Engine::Utf8ToPath(fields.at(key).get_string());
+                    std::error_code error;
+                    const auto resolved = fs::canonical(ResolveDocumentReference(raw, controller), error);
+                    if (error)
+                        return;
+                    const auto target = remap(resolved);
+                    if (target == resolved)
+                        return;
+                    const auto uri = Engine::WStrToStr(Path::ToVirtualUri(target));
+                    fields.at(key) = uri;
+                    if (!controller)
+                    {
+                        // Keep the serialized handle's fallback path consistent with its preferred key.
+                        for (const char* alias : { "AssetKey", "AssetPath" })
+                        {
+                            const auto field = fields.find(alias);
+                            if (field != fields.end() && field->second.template get_if<std::string>())
+                                field->second = uri;
+                        }
+                    }
+                    changed = true;
+                });
+                if (changed)
+                {
+                    if (glz::write_json(document, edit.AfterText))
+                        return false;
+                    if (bom)
+                        edit.AfterText.insert(0, "\xEF\xBB\xBF");
+                    prepared.push_back(std::move(edit));
+                }
+            }
+            edits = std::move(prepared);
+            return true;
+        }
+        catch (const std::exception& error)
+        {
+            EDITOR_LOG_WARN("Could not prepare moved references: {}", error.what());
+            return false;
+        }
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateAllResources()

@@ -997,7 +997,7 @@ void ContentBrowserPanel::PasteFiles(const filesystem::path& directory)
 	if (m_FileClipboardCut)
 		QueueFileMove(m_FileClipboardPaths, directory, true);
 	else
-		TransferFiles(m_FileClipboardPaths, directory, false);
+		TransferFiles(m_FileClipboardPaths, directory);
 }
 
 void ContentBrowserPanel::QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory,
@@ -1036,11 +1036,19 @@ void ContentBrowserPanel::QueueFileMove(const vector<filesystem::path>& paths, c
 		}
 
 		auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+		vector<AssetPathMove> pathMoves;
+		for (const auto& entry : moves)
+			pathMoves.push_back({ entry.Before, entry.After });
+		vector<AssetReferenceEdit> references;
+		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(pathMoves, references);
+		m_MoveDocumentsAvailable = CanApplyAssetMove(moves, references);
 		m_MoveSourcePaths = paths;
 		m_MoveDestination = destination;
 		m_MoveDestinationIdentity = destinationIdentity;
 		m_MoveFromClipboard = fromClipboard;
 		m_MoveImpact = std::move(impact);
+		m_MoveReferences = std::move(references);
+		m_MoveReferencesReady = referencesReady;
 		m_PendingFileMove = std::move(moves);
 	}
 	catch (const filesystem::filesystem_error& error)
@@ -1059,6 +1067,9 @@ void ContentBrowserPanel::ClearPendingFileMove()
 	m_MoveDestinationIdentity = {};
 	m_MoveFromClipboard = false;
 	m_MoveImpact = {};
+	m_MoveReferences.clear();
+	m_MoveReferencesReady = false;
+	m_MoveDocumentsAvailable = false;
 }
 
 void ContentBrowserPanel::ConfirmFileMove()
@@ -1070,18 +1081,26 @@ void ContentBrowserPanel::ConfirmFileMove()
 			throw filesystem::filesystem_error("Move destination changed after confirmation", m_MoveDestination,
 				std::make_error_code(std::errc::state_not_recoverable));
 
-		const auto failed = TransferFiles(m_MoveSourcePaths, m_MoveDestination, true, m_PendingFileMove);
-		if (m_MoveFromClipboard && m_FileClipboardCut && m_FileClipboardPaths == m_MoveSourcePaths)
+		if (!m_MoveReferencesReady)
+			throw filesystem::filesystem_error("Move reference preparation failed", m_MoveDestination,
+				std::make_error_code(std::errc::state_not_recoverable));
+		auto batch = std::make_shared<AssetMoveBatch>();
+		batch->Moves = m_PendingFileMove;
+		batch->References = m_MoveReferences;
+		if (!batch->References.empty())
+			batch->RecoveryDirectory = CreateFileHistoryBatch();
+		auto command = std::make_unique<CallbackEditorCommand>("ContentBrowser.FileMove",
+			[this, batch]() { return ReplayAssetMove(*batch, true); },
+			[this, batch]() { return ReplayAssetMove(*batch, false); });
+		const bool succeeded = m_FileHistory.Execute(std::move(command));
+		FinishFileHistoryOperation();
+		if (succeeded && m_MoveFromClipboard && m_FileClipboardCut && m_FileClipboardPaths == m_MoveSourcePaths)
 		{
-			// Preserve descendants of a failed selected folder so the same cut can be retried.
-			std::erase_if(m_FileClipboardPaths, [&failed](const auto& path)
-			{
-				return std::ranges::none_of(failed, [&path](const auto& root)
-				{
-					return ContentBrowserPathWithin(path.lexically_normal(), root.lexically_normal());
-				});
-			});
+			m_FileClipboardPaths.clear();
 		}
+		if (succeeded)
+			NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+				LOCAL_FMT("ContentBrowser.MoveFilesResult", batch->Moves.size(), batch->References.size()), ELogLevel::Info);
 	}
 	catch (const filesystem::filesystem_error& error)
 	{
@@ -1107,8 +1126,14 @@ void ContentBrowserPanel::DrawFileMoveConfirmation()
 	DrawFileMovePaths();
 	ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferencesNotice"));
 	DrawFileReferenceImpact(m_MoveImpact, "ContentBrowser.MoveImpactCount");
+	const bool documentsAvailable = m_MoveDocumentsAvailable;
+	if (!m_MoveReferencesReady)
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferenceScanFailed"));
+	if (!documentsAvailable)
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveDocumentConflict"));
 	const EditorUI::DialogAction actions[] = {
-		{ "EditorCommon.Cancel" }, { "ContentBrowser.MoveFilesTitle", CanTransferTo(m_MoveDestination) }
+		{ "EditorCommon.Cancel" },
+		{ "ContentBrowser.MoveFilesTitle", CanTransferTo(m_MoveDestination) && m_MoveReferencesReady && documentsAvailable }
 	};
 	const int action = EditorUI::DialogButtonBar("ContentBrowserMoveActions", actions, IM_ARRAYSIZE(actions));
 	if (action >= 0)
@@ -1157,7 +1182,7 @@ void ContentBrowserPanel::DrawFileMovePaths() const
 }
 
 vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesystem::path>& paths,
-	const filesystem::path& directory, bool move, const vector<FileMove>& plannedMoves)
+	const filesystem::path& directory)
 {
 	const auto destination = directory.lexically_normal();
 	vector<filesystem::path> failed;
@@ -1187,7 +1212,7 @@ vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesys
 
 			const bool isDirectory = filesystem::is_directory(source);
 			auto target = destination / source.filename();
-			if (!move && ContentBrowserPathWithin(destination, source.parent_path()) &&
+			if (ContentBrowserPathWithin(destination, source.parent_path()) &&
 				ContentBrowserPathWithin(source.parent_path(), destination))
 			{
 				auto stem = isDirectory ? source.filename() : source.stem();
@@ -1200,37 +1225,21 @@ vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesys
 				target = GenerateUniqueAssetPath(destination, stem.wstring(), extension);
 			}
 
-			CheckBrowserTransferTree(source, target, move);
-			if (move)
+			CheckBrowserTransferTree(source, target, false);
+			if (copyBatch.empty())
+				copyBatch = CreateFileHistoryBatch();
+			if (ReadBrowserFileIdentity(copyBatch).dwVolumeSerialNumber !=
+				ReadBrowserFileIdentity(destination).dwVolumeSerialNumber)
 			{
-				const auto planned = std::ranges::find(plannedMoves, source, &FileMove::Before);
-				if (planned == plannedMoves.end() || planned->After != target ||
-					!SameBrowserFile(ReadBrowserFileIdentity(source), planned->Identity))
-				{
-					throw filesystem::filesystem_error("Move source changed after confirmation", source, target,
-						std::make_error_code(std::errc::state_not_recoverable));
-				}
-				FileMove entry = *planned;
-				MoveContentBrowserEntry(source, target);
-				changes.push_back(std::move(entry));
+				throw filesystem::filesystem_error("File history on another volume", destination,
+					std::make_error_code(std::errc::cross_device_link));
 			}
-			else
-			{
-				if (copyBatch.empty())
-					copyBatch = CreateFileHistoryBatch();
-				if (ReadBrowserFileIdentity(copyBatch).dwVolumeSerialNumber !=
-					ReadBrowserFileIdentity(destination).dwVolumeSerialNumber)
-				{
-					throw filesystem::filesystem_error("File history on another volume", destination,
-						std::make_error_code(std::errc::cross_device_link));
-				}
 
-				const auto slot = copyBatch / std::to_wstring(copySlot++);
-				filesystem::create_directory(slot);
-				FileMove entry{ slot / target.filename(), target, {} };
-				entry.Identity = CopyContentBrowserEntry(source, target);
-				changes.push_back(std::move(entry));
-			}
+			const auto slot = copyBatch / std::to_wstring(copySlot++);
+			filesystem::create_directory(slot);
+			FileMove entry{ slot / target.filename(), target, {} };
+			entry.Identity = CopyContentBrowserEntry(source, target);
+			changes.push_back(std::move(entry));
 		}
 		catch (const filesystem::filesystem_error& error)
 		{
@@ -1244,10 +1253,10 @@ vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesys
 	if (succeeded > 0)
 	{
 		RequestRefresh();
-		SubmitFileMoves(std::move(changes), move ? "ContentBrowser.FileMove" : "ContentBrowser.FileCopy", false);
+		SubmitFileMoves(std::move(changes), "ContentBrowser.FileCopy", false);
 	}
 
-	const char* resultKey = move ? "ContentBrowser.MoveFilesResult" : "ContentBrowser.CopyFilesResult";
+	const char* resultKey = "ContentBrowser.CopyFilesResult";
 	NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
 		LOCAL_FMT(resultKey, succeeded, failed.size()),
 		failed.empty() ? ELogLevel::Info : ELogLevel::Warn, 5.0f);
@@ -1279,6 +1288,67 @@ filesystem::path ContentBrowserPanel::CreateFileHistoryBatch() const
 		if (filesystem::create_directory(batch))
 			return batch;
 	}
+}
+
+bool ContentBrowserPanel::CanApplyAssetMove(const vector<FileMove>& moves,
+	const vector<AssetReferenceEdit>& references) const
+{
+	vector<filesystem::path> paths;
+	paths.reserve((moves.size() + references.size()) * 2);
+	for (const auto& move : moves)
+	{
+		paths.push_back(move.Before);
+		paths.push_back(move.After);
+	}
+	for (const auto& reference : references)
+	{
+		paths.push_back(reference.BeforePath);
+		paths.push_back(reference.AfterPath);
+	}
+	return ImGuiManager::Get().CanApplyAssetFileChanges(paths);
+}
+
+bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forward)
+{
+	const auto fail = [this](const char* key)
+	{
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"), LOCAL(key), ELogLevel::Warn);
+		return false;
+	};
+	if (!CanApplyAssetMove(batch.Moves, batch.References))
+		return fail("ContentBrowser.MoveDocumentConflict");
+	if (!AssetReferenceValidator::ValidateMoveReferences(batch.References, forward))
+		return fail("ContentBrowser.MoveReferenceChanged");
+
+	// Detect documents added since confirmation or the preceding Undo/Redo, before any file changes.
+	vector<filesystem::path> sources;
+	for (const auto& move : batch.Moves)
+		sources.push_back(forward ? move.Before : move.After);
+	const auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+	if (!impact.IsComplete || std::ranges::any_of(impact.References, [&](const auto& link)
+	{
+		return std::ranges::none_of(batch.References, [&](const auto& edit)
+		{
+			std::error_code error;
+			return filesystem::equivalent(link.Source, forward ? edit.BeforePath : edit.AfterPath, error) && !error;
+		});
+	}))
+		return fail("ContentBrowser.MoveReferenceChanged");
+
+	if (!ReplayFileMoves(batch.Moves, forward))
+		return false;
+	const auto result = AssetReferenceValidator::ApplyMoveReferences(batch.References, forward, batch.RecoveryDirectory);
+	if (result == EAssetReferenceWriteResult::Success)
+		return true;
+	const bool pathsRestored = ReplayFileMoves(batch.Moves, !forward);
+	if (!pathsRestored || result == EAssetReferenceWriteResult::RollbackFailed)
+	{
+		m_FileHistoryInvalid = true;
+		EDITOR_LOG_ERROR("Asset move rollback failed. Reference backups: {}",
+			Engine::WStrToStr(batch.RecoveryDirectory.wstring()));
+		return fail("ContentBrowser.FileHistoryRollbackFailed");
+	}
+	return fail("ContentBrowser.MoveReferenceChanged");
 }
 
 bool ContentBrowserPanel::ReplayFileMoves(const vector<FileMove>& moves, bool forward)

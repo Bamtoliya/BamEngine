@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <Windows.h>
 
 namespace
 {
@@ -29,6 +30,12 @@ namespace
         file << text;
         file.close();
         return !!file;
+    }
+
+    std::string ReadFixture(const fs::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return { std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
     }
 }
 
@@ -166,4 +173,94 @@ int main()
     }
     if (Editor::AssetReferenceValidator::AnalyzeMove({ assets / "missing.png" }).IsComplete)
         return 15;
+
+    const auto destination = assets / L"옮긴 폴더";
+    fs::create_directory(destination);
+    const auto controller = assets / "Walk.bamanimator";
+    if (!WriteFixture(controller, "\xEF\xBB\xBF" R"({"Clip":{"AssetPath":"Project://Materials/벽.png"}})") ||
+        !WriteFixture(scene, R"({"Scene":{"Material":{"AssetPath":"Resources/Materials/Brick.bammat"},
+            "Components":[{"Type":"Engine::AnimatorComponent","Data":{"controllerPath":"Project://Walk.bamanimator"}}],
+            "Note":"Project://Materials/벽.png","Id":18446744073709551615,"Negative":-9223372036854775808}})"))
+        return 16;
+
+    using Validator = Editor::AssetReferenceValidator;
+    const std::vector<Editor::AssetPathMove> moves{
+        { materials, destination / "Materials" }, { controller, destination / controller.filename() }
+    };
+    std::vector<Editor::AssetReferenceEdit> edits;
+    if (!Validator::PrepareMoveReferences(moves, edits) || edits.size() != 3)
+    {
+        std::cerr << "A folder/controller move must prepare all three referencing documents.\n";
+        return 17;
+    }
+    const auto sceneBefore = ReadFixture(scene);
+    const auto materialBefore = ReadFixture(material);
+    const auto controllerBefore = ReadFixture(controller);
+    const auto recovery = root / "Recovery";
+    fs::create_directory(recovery);
+
+    // An external edit after confirmation must reject the whole operation.
+    WriteFixture(scene, "{\"external\":true}");
+    if (Validator::ValidateMoveReferences(edits, true))
+        return 18;
+    WriteFixture(scene, sceneBefore.c_str());
+    if (!Validator::ValidateMoveReferences(edits, true))
+        return 19;
+
+    for (const auto& move : moves)
+        fs::rename(move.Before, move.After);
+    if (Validator::ApplyMoveReferences(edits, true, recovery) != Editor::EAssetReferenceWriteResult::Success)
+        return 20;
+    const auto sceneAfter = ReadFixture(scene);
+    const auto materialAfter = ReadFixture(destination / "Materials/Brick.bammat.json");
+    if (sceneAfter.find("Project://Materials/벽.png") == std::string::npos ||
+        sceneAfter.find("Project://옮긴 폴더/Walk.bamanimator") == std::string::npos ||
+        sceneAfter.find("18446744073709551615") == std::string::npos ||
+        sceneAfter.find("-9223372036854775808") == std::string::npos ||
+        materialAfter.find("old.png") != std::string::npos ||
+        materialAfter.find("Project://옮긴 폴더/Materials/벽.png") == std::string::npos ||
+        !ReadFixture(destination / controller.filename()).starts_with("\xEF\xBB\xBF") ||
+        !Validator::ValidateBuildScene(scene).empty())
+    {
+        std::cerr << "Only reference fields must change; all moved dependencies must still resolve.\n";
+        return 21;
+    }
+
+    // Undo restores exact bytes, including the original legacy paths and formatting.
+    for (auto move = moves.rbegin(); move != moves.rend(); ++move)
+        fs::rename(move->After, move->Before);
+    if (Validator::ApplyMoveReferences(edits, false, recovery) != Editor::EAssetReferenceWriteResult::Success ||
+        ReadFixture(scene) != sceneBefore || ReadFixture(material) != materialBefore ||
+        ReadFixture(controller) != controllerBefore)
+        return 22;
+    for (const auto& move : moves)
+        fs::rename(move.Before, move.After);
+    if (Validator::ApplyMoveReferences(edits, true, recovery) != Editor::EAssetReferenceWriteResult::Success ||
+        ReadFixture(scene) != sceneAfter)
+        return 23;
+
+    // All documents are checked before any write; a changed last document preserves the others.
+    const auto controllerAfterPath = destination / controller.filename();
+    const auto controllerAfter = ReadFixture(controllerAfterPath);
+    for (auto move = moves.rbegin(); move != moves.rend(); ++move)
+        fs::rename(move->After, move->Before);
+    WriteFixture(controller, "{\"external\":true}");
+    if (Validator::ApplyMoveReferences(edits, false, recovery) == Editor::EAssetReferenceWriteResult::Success ||
+        ReadFixture(scene) != sceneAfter || ReadFixture(material) != materialAfter)
+        return 24;
+    WriteFixture(controller, controllerAfter.c_str());
+
+    const auto locked = CreateFileW(controller.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (locked == INVALID_HANDLE_VALUE)
+        return 26;
+    const auto lockedResult = Validator::ApplyMoveReferences(edits, false, recovery);
+    CloseHandle(locked);
+    if (lockedResult != Editor::EAssetReferenceWriteResult::Failed || ReadFixture(scene) != sceneAfter ||
+        ReadFixture(material) != materialAfter)
+        return 27;
+    if (Validator::ApplyMoveReferences(edits, false, recovery) != Editor::EAssetReferenceWriteResult::Success)
+        return 28;
+
+    if (!WriteFixture(invalid, "{") || Validator::PrepareMoveReferences({ { scene, destination / scene.filename() } }, edits))
+        return 25;
 }

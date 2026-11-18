@@ -94,8 +94,15 @@ private:
 		BY_HANDLE_FILE_INFORMATION Identity;
 	};
 
-	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory,
-		bool move, const vector<FileMove>& plannedMoves = {});
+	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory);
+	struct AssetMoveBatch
+	{
+		vector<FileMove> Moves;
+		vector<AssetReferenceEdit> References;
+		filesystem::path RecoveryDirectory;
+	};
+	bool ReplayAssetMove(const AssetMoveBatch& batch, bool forward);
+	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references) const;
 	void QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory, bool fromClipboard);
 	void DrawFileMoveConfirmation();
 	void DrawFileMovePaths() const;
@@ -123,6 +130,9 @@ private:
 	BY_HANDLE_FILE_INFORMATION m_MoveDestinationIdentity{};
 	bool m_MoveFromClipboard = false;
 	AssetReferenceImpact m_MoveImpact;
+	vector<AssetReferenceEdit> m_MoveReferences;
+	bool m_MoveReferencesReady = false;
+	bool m_MoveDocumentsAvailable = false;
 	vector<filesystem::path> m_BackFolders;
 	vector<filesystem::path> m_ForwardFolders;
 	vector<filesystem::path> m_FileClipboardPaths;

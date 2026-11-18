@@ -2086,13 +2086,13 @@ ModelImport,OverwriteMaterials,Overwrite Existing Materials,기존 머티리얼 
 Timeline,AddTrack,Add Track,트랙 추가
 EditorCommon,Cut,Cut,잘라내기
 ContentBrowser,CopyFilesResult,Copied {}. Could not copy {}.,복사 {}개 완료. 실패 {}개.
-ContentBrowser,MoveFilesResult,Moved {}. Could not move {}. Check references to moved assets.,이동 {}개 완료. 실패 {}개. 이동한 에셋의 참조를 확인하세요.
+ContentBrowser,MoveFilesResult,Moved {} entries and updated {} reference documents.,파일 {}개를 이동하고 참조 문서 {}개를 갱신했습니다.
 ContentBrowser,MoveFilesTitle,Move Files,파일 이동
 ContentBrowser,MoveFilesConfirm,Move {} selected items?,선택한 항목 {}개를 이동할까요?
 ContentBrowser,MoveSource,From,출발 경로
 ContentBrowser,MoveDestination,To,목적 경로
 ContentBrowser,MoveImpactCount,Stored references to moved assets: {},이동할 에셋을 가리키는 저장된 참조 {}건
-ContentBrowser,MoveReferencesNotice,Stored references keep their previous paths. This includes references between files moved together.,저장된 참조는 이전 경로를 가리킵니다. 함께 이동하는 파일 사이의 참조도 포함됩니다.
+ContentBrowser,MoveReferencesNotice,Stored JSON and Animator references are updated together. Undo restores both paths and document contents.,저장된 JSON과 Animator 참조를 함께 갱신합니다. 실행 취소는 파일 위치와 문서 내용을 함께 복원합니다.
 EditorCommon,File,File,파일
 EditorCommon,Path,Path,경로
 TextureEditor,NoPreviewAvailable,Preview unavailable,미리보기를 사용할 수 없습니다
@@ -2108,3 +2108,6 @@ ContentBrowser,DeleteImpactNone,No direct references found in saved project docu
 ContentBrowser,DeleteImpactIncomplete,Some paths or documents could not be checked. Other references may exist.,일부 경로나 문서를 검사하지 못했습니다. 확인되지 않은 사용처가 있을 수 있습니다.
 ContentBrowser,FileHistoryFailed,The file operation could not complete. Check the log for the affected paths.,파일 작업을 완료하지 못했습니다. 해당 경로는 로그를 확인하세요.
 ContentBrowser,FileHistoryRollbackFailed,Some files could not be restored. File history was cleared. Check the log and recovery folder.,일부 파일을 원래 위치로 돌리지 못했습니다. 파일 이력을 지웠습니다. 로그와 복구 폴더를 확인하세요.
+ContentBrowser,MoveReferenceScanFailed,References could not be prepared completely. Fix unreadable documents before moving.,참조 갱신을 준비하지 못했습니다. 읽을 수 없는 문서를 확인한 뒤 다시 이동하세요.
+ContentBrowser,MoveDocumentConflict,Save or discard edits and exit prefab mode. Release the affected scene or resources first. Closed resource editors retain their targets; switch to another resource or restart the Editor if needed.,변경사항을 저장하거나 폐기하고 프리팹 모드를 종료하세요. 대상 씬과 리소스의 사용을 해제하세요. 닫힌 리소스 편집기도 대상을 유지하므로 다른 리소스로 전환하거나 에디터를 재시작하세요.
+ContentBrowser,MoveReferenceChanged,Reference documents changed or could not be written. The move was cancelled; check the log and retry.,참조 문서가 변경되었거나 기록하지 못했습니다. 이동을 취소했습니다. 로그를 확인하고 다시 시도하세요.

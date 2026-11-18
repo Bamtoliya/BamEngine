@@ -1,5 +1,5 @@
 ﻿add_executable(AssetReferenceCheck examples/AssetReferenceCheck.cpp
-    Source/AssetManager/Private/AssetReferenceValidator.cpp)
+    Source/AssetManager/Private/AssetReferenceValidator.cpp Source/AssetManager/Private/AssetReferenceMove.cpp)
 target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public")
 target_link_libraries(AssetReferenceCheck PRIVATE BamEngine::Engine)
 set_target_properties(AssetReferenceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")

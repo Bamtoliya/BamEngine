@@ -35,6 +35,7 @@
 
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
+#include "PrefabModeManager.h"
 #include "ConfigManager.h"
 #include "PreviewViewportWidget.h"
 #include "EntityFactory.h"
@@ -1462,6 +1463,53 @@ vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() c
 			editors.push_back(editor);
 	}
 	return editors;
+}
+
+bool ImGuiManager::CanApplyAssetFileChanges(const vector<std::filesystem::path>& paths) const
+{
+	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || !CollectUnsavedResourceEditors().empty())
+		return false;
+	if (PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode())
+		return false;
+	const auto affected = [&paths](const std::filesystem::path& resource)
+	{
+		if (resource.empty())
+			return false;
+		const auto file = Engine::PlatformPath::Normalize(Engine::PlatformPath::ResolveUri(resource));
+		return std::ranges::any_of(paths, [&file](const auto& path)
+		{
+			const auto root = Engine::PlatformPath::Normalize(path);
+			const auto same = [](const auto& lhs, const auto& rhs)
+			{
+				return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
+			};
+			return std::mismatch(file.begin(), file.end(), root.begin(), root.end(), same).second == root.end();
+		});
+	};
+	const auto& documents = Application::Get().GetDocuments();
+	for (const auto id : documents.GetDocumentIds())
+	{
+		const auto* document = documents.Find(id);
+		if (document && (document->HasUnsavedChanges() || affected(document->GetPath())))
+			return false;
+	}
+	// Closed editors retain their documents too. Switching to another resource releases the conflicting target.
+	for (const auto* panel : m_ImGuiPanels)
+	{
+		const auto* editor = dynamic_cast<const ResourceEditorInterface*>(panel);
+		if (editor && std::ranges::any_of(editor->GetRetainedResourcePaths(), affected))
+			return false;
+	}
+	// A cached resource can later save its old references even after its editor was closed.
+	if (Engine::ResourceManager::IsCreated())
+	{
+		for (const auto& resource : Engine::ResourceManager::Get().GetDebugSnapshot())
+		{
+			if (affected(resource.Path))
+				return false;
+		}
+	}
+	return true;
 }
 
 void ImGuiManager::DrawResourceQuitConfirmation()

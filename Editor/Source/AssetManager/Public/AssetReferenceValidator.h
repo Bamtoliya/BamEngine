@@ -44,6 +44,22 @@ namespace Editor
         bool IsComplete = true;
     };
 
+    struct AssetPathMove
+    {
+        std::filesystem::path Before;
+        std::filesystem::path After;
+    };
+
+    struct AssetReferenceEdit
+    {
+        std::filesystem::path BeforePath;
+        std::filesystem::path AfterPath;
+        std::string BeforeText;
+        std::string AfterText;
+    };
+
+    enum class EAssetReferenceWriteResult { Success, Failed, RollbackFailed };
+
     class AssetReferenceValidator
     {
     public:
@@ -58,6 +74,13 @@ namespace Editor
         static std::vector<AssetReferenceIssue> ValidateAllResources();
         static AssetReferenceImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
         static AssetReferenceImpact AnalyzeMove(const std::vector<std::filesystem::path>& targets);
+
+        // Prepare without writing. Reject incomplete scans and edits outside the project asset root.
+        static bool PrepareMoveReferences(const std::vector<AssetPathMove>& moves, std::vector<AssetReferenceEdit>& edits);
+        static bool ValidateMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward);
+        // Call after the corresponding file moves. Hold write locks and restore all touched documents on failure.
+        static EAssetReferenceWriteResult ApplyMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward,
+            const std::filesystem::path& recoveryDirectory);
 
         // 손상/누락 경로에 대한 안전한 대체 복구 경로 탐색
         static bool TryResolveFallbackPath(const std::string& brokenPath, std::filesystem::path& outResolvedPath);

@@ -107,6 +107,10 @@ private:
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
 	virtual bool HasUnsavedResourceChanges() const override { return IsDocumentDirty(m_Logic) || IsDocumentDirty(m_Shader); }
+	std::vector<std::filesystem::path> GetRetainedResourcePaths() const override
+	{
+		return { m_Logic.FilePath, m_Shader.FilePath };
+	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	bool LoadDocument(const std::filesystem::path& path);
 	void SaveDocument(bool saveAs);

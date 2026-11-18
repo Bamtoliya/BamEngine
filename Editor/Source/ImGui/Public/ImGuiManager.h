@@ -163,6 +163,7 @@ public:
 	bool RequestCloseScene();
 	bool RequestQuit();
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
+	bool CanApplyAssetFileChanges(const vector<std::filesystem::path>& paths) const;
 	bool PreparePendingSceneSave();
 private:
 	enum class ESceneDocumentAction

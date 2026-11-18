@@ -19,6 +19,7 @@ public:
     {
         return m_TargetResourcePath;
     }
+    virtual std::vector<std::filesystem::path> GetRetainedResourcePaths() const { return { m_TargetResourcePath }; }
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 public:
 	void Draw() final;
