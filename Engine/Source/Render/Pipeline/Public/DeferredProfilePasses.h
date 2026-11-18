@@ -27,6 +27,7 @@ namespace Engine
         [[nodiscard]] RenderPassID GetPass(std::string_view type) const;
         [[nodiscard]] const std::vector<std::wstring>& GetTargets() const { return m_Targets; }
         [[nodiscard]] const std::wstring& GetColorTarget() const { return m_ColorTarget; }
+        [[nodiscard]] const std::wstring& GetSceneColorCopyTarget() const { return m_SceneColorCopyTarget; }
         [[nodiscard]] const std::array<std::wstring, 6>& GetLightingInputs() const { return m_LightingInputs; }
         [[nodiscard]] const std::wstring& GetPointShadowInput() const { return m_PointShadowInput; }
         [[nodiscard]] bool UsesScenePostProcess() const { return m_UsesScenePostProcess; }
@@ -37,6 +38,7 @@ namespace Engine
         std::array<std::wstring, 6> m_LightingInputs;
         std::wstring m_PointShadowInput;
         std::wstring m_ColorTarget;
+        std::wstring m_SceneColorCopyTarget;
         bool m_UsesScenePostProcess = false;
     };
 }

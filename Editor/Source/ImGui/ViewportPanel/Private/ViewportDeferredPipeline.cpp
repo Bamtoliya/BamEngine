@@ -1,5 +1,6 @@
 #include "ViewportDeferredPipeline.h"
 #include "RenderTargetManager.h"
+#include "RenderTargetTypes.h"
 #include "RenderPassManager.h"
 #include <algorithm>
 
@@ -66,6 +67,7 @@ void ViewportDeferredPipeline::Free()
 	m_PointShadowDepthName.clear();
 	m_DepthName.clear();
 	m_LightingColorName.clear();
+	m_SceneColorCopyName.clear();
 	m_Width = m_Height = 0;
 
 	m_SceneRenderer.Free();
@@ -102,6 +104,7 @@ Engine::RenderPipelineProfileResult ViewportDeferredPipeline::Initialize(const E
 	m_ShadowDepthName = m_LightingInputs.back();
 	m_PointShadowDepthName = m_ProfilePasses.GetPointShadowInput();
 	m_LightingColorName = m_ProfilePasses.GetColorTarget();
+	m_SceneColorCopyName = m_ProfilePasses.GetSceneColorCopyTarget();
 	m_ShadowPassID = m_ProfilePasses.GetPass("DirectionalShadow");
 	m_PointShadowPassID = m_ProfilePasses.GetPass("PointShadow");
 	m_GeometryPassID = m_ProfilePasses.GetPass("GBuffer");
@@ -128,7 +131,9 @@ void ViewportDeferredPipeline::CreateRenderTargets(uint32 width, uint32 height)
 		// 6: Depth
 		{ { width, height, 1, 1, 1, Engine::ETextureSampleCount::TextureSampleCount1, Engine::ETextureFormat::D24_UNORM_S8_UINT, Engine::ETextureDimension::Texture2D, Engine::ETextureUsage::DepthStencilTarget | Engine::ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f) }, m_Prefix + L"Depth" },
 		// 7: LightingColor (HDR 선형 부동소수점 버퍼)
-		{ { width, height, 1, 1, 1, Engine::ETextureSampleCount::TextureSampleCount1, Engine::ETextureFormat::R16G16B16A16_FLOAT, Engine::ETextureDimension::Texture2D, Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) }, m_Prefix + L"LightingColor" }
+		{ { width, height, 1, 1, 1, Engine::ETextureSampleCount::TextureSampleCount1, Engine::ETextureFormat::R16G16B16A16_FLOAT, Engine::ETextureDimension::Texture2D, Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) }, m_Prefix + L"LightingColor" },
+		// 8: SceneColorCopy (반투명 굴절용 배경 씬 복사 버퍼)
+		{ { width, height, 1, 1, 1, Engine::ETextureSampleCount::TextureSampleCount1, Engine::ETextureFormat::R16G16B16A16_FLOAT, Engine::ETextureDimension::Texture2D, Engine::ETextureUsage::RenderTarget | Engine::ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) }, m_Prefix + L"SceneColorCopy" }
 	};
 
 	m_OwnedRTNames.clear();
@@ -142,6 +147,7 @@ void ViewportDeferredPipeline::CreateRenderTargets(uint32 width, uint32 height)
 	std::copy_n(m_OwnedRTNames.begin(), m_LightingInputs.size(), m_LightingInputs.begin());
 	m_DepthName = m_OwnedRTNames[6];
 	m_LightingColorName = m_OwnedRTNames[7];
+	m_SceneColorCopyName = m_OwnedRTNames[8];
 
 	// 8: PointShadowDepth (Point Light 큐브맵 섀도우)
 	m_PointShadowDepthName = m_Prefix + L"PointShadowDepth";
@@ -207,6 +213,12 @@ void ViewportDeferredPipeline::RegisterRenderPasses()
 		vec4(0.0f, 0.0f, 0.0f, -1.0f), 120, Engine::ERenderSortType::BackToFront,
 		Engine::ERenderPassType::ForwardTransparent,
 		Engine::EBlendMode::AlphaBlend | Engine::EBlendMode::Additive | Engine::EBlendMode::NonPremultiplied | Engine::EBlendMode::Decal);
+
+	if (auto* rp = rpm.GetRenderPassByID(m_ForwardTransparentPassID))
+	{
+		rp->SetPrePassCopy(m_LightingColorName, m_SceneColorCopyName);
+		rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 0, m_SceneColorCopyName);
+	}
 }
 
 EResult ViewportDeferredPipeline::Resize(uint32 width, uint32 height)

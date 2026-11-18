@@ -132,6 +132,7 @@ public:
 	EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;	
 	EResult ReadTexturePixels(RHITexture* texture, void* dstBuffer, uint32 dstBufferSize) override;
 	EResult BlitTexture(RHITexture* src, RHITexture* dst) override;
+	EResult CopyTexture(RHITexture* src, RHITexture* dst) override;
 #pragma endregion
 
 #pragma region Compute

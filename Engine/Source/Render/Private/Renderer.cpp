@@ -218,6 +218,17 @@ EResult Renderer::Render(f32 dt)
 
 		for (const auto& job : jobs)
 		{
+			if (pass->HasPrePassCopy() && m_RHI)
+			{
+				auto& rtm = RenderTargetManager::Get();
+				auto* srcRT = rtm.GetRenderTarget(pass->GetPrePassCopySource());
+				auto* dstRT = rtm.GetRenderTarget(pass->GetPrePassCopyDest());
+				if (srcRT && dstRT && srcRT->GetTexture() && dstRT->GetTexture())
+				{
+					m_RHI->CopyTexture(srcRT->GetTexture(), dstRT->GetTexture());
+				}
+			}
+
 			const EResult beginResult = m_RHI->BeginRenderPass(pass);
 			if (IsFailure(beginResult))
 			{

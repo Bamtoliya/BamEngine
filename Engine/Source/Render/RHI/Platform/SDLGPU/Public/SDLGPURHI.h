@@ -102,6 +102,7 @@ public:
 	virtual EResult DrawIndexedInstanced(uint32 indexCountPerInstance, uint32 instanceCount, uint32 startIndexLocation = 0, int32 baseVertexLocation = 0, uint32 startInstanceLocation = 0) override { return EResult::NotImplemented; }
 	virtual EResult DrawTexture(RHITexture* texture) override;
 	virtual EResult BlitTexture(class RHITexture* src, class RHITexture* dst) override;
+	virtual EResult CopyTexture(class RHITexture* src, class RHITexture* dst) override;
 	virtual EResult ReadTexturePixel(RHITexture* texture, uint32 x, uint32 y, vec4& pixel) override;
 #pragma endregion
 

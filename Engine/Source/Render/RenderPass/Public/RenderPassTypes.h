@@ -74,5 +74,7 @@ struct RenderPassDesc
 	ERenderPassType passType = ERenderPassType::Custom;
 	EBlendMode acceptedBlendModes = EBlendMode::ALL;
 	bool isEnabled = true;
+	wstring prePassCopySrcRT = { L"" };
+	wstring prePassCopyDstRT = { L"" };
 };
 END

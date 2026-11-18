@@ -3,6 +3,7 @@
 #include "Functions.h"
 #include "RenderPassManager.h"
 #include "RenderTargetManager.h"
+#include "RenderTargetTypes.h"
 #include "Renderer.h"
 #include <algorithm>
 #include <set>
@@ -109,6 +110,7 @@ namespace Engine
             desc.stencilLoadOperation = ERenderPassLoadOperation::RPLO_Clear;
             desc.sortType = ERenderSortType::FrontToBack;
             desc.acceptedBlendModes = EBlendMode::Opaque | EBlendMode::Masked;
+            bool transparent = false;
 
             if (type == "DirectionalShadow" || type == "PointShadow")
             {
@@ -158,7 +160,7 @@ namespace Engine
             }
             else
             {
-                const bool transparent = type == "ForwardTransparent";
+                transparent = (type == "ForwardTransparent");
                 desc.passType = transparent ? ERenderPassType::ForwardTransparent : ERenderPassType::Forward;
                 desc.sortType = transparent ? ERenderSortType::BackToFront : ERenderSortType::FrontToBack;
                 desc.acceptedBlendModes = transparent
@@ -167,6 +169,14 @@ namespace Engine
                 desc.loadOperation = desc.stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;
                 desc.renderTargetNames = input("Color");
                 desc.depthStencilName = input("Depth").front();
+                if (transparent)
+                {
+                    m_SceneColorCopyTarget = name + L"_SceneColorCopy";
+                    if (!createTarget(m_SceneColorCopyTarget, ETextureFormat::R16G16B16A16_FLOAT, 0, false, vec4(0.f, 0.f, 0.f, 1.f)))
+                        return fail(index, "Could not create the SceneColorCopy target.");
+                    desc.prePassCopySrcRT = desc.renderTargetNames.front();
+                    desc.prePassCopyDstRT = m_SceneColorCopyTarget;
+                }
                 output("Color", desc.renderTargetNames);
                 output("Depth", { desc.depthStencilName });
             }
@@ -174,6 +184,11 @@ namespace Engine
             const auto id = passes.RegisterRenderPass(std::move(desc));
             if (id == INVALID_PASS_ID)
                 return fail(index, "Could not register the render pass.");
+            if (transparent && !m_SceneColorCopyTarget.empty())
+            {
+                if (auto* rp = passes.GetRenderPassByID(id))
+                    rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 0, m_SceneColorCopyTarget);
+            }
             m_Passes.emplace_back(type, id);
         }
 
@@ -198,6 +213,7 @@ namespace Engine
 
         m_Passes.clear();
         m_Targets.clear();
+        m_SceneColorCopyTarget.clear();
         m_LightingInputs = {};
         m_PointShadowInput.clear();
         m_ColorTarget.clear();

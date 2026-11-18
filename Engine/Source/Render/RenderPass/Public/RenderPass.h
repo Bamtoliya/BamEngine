@@ -91,6 +91,23 @@ public:
 	const unordered_map<uint32, wstring>& GetAllPassTextures() const { return m_PassTextures; }
 #pragma endregion
 
+#pragma region PrePass Copy
+public:
+	void SetPrePassCopy(const wstring& srcRT, const wstring& dstRT)
+	{
+		m_Desc.prePassCopySrcRT = srcRT;
+		m_Desc.prePassCopyDstRT = dstRT;
+	}
+	void ClearPrePassCopy()
+	{
+		m_Desc.prePassCopySrcRT.clear();
+		m_Desc.prePassCopyDstRT.clear();
+	}
+	bool HasPrePassCopy() const { return !m_Desc.prePassCopySrcRT.empty() && !m_Desc.prePassCopyDstRT.empty(); }
+	const wstring& GetPrePassCopySource() const { return m_Desc.prePassCopySrcRT; }
+	const wstring& GetPrePassCopyDest() const { return m_Desc.prePassCopyDstRT; }
+#pragma endregion
+
 
 #pragma region Variable
 private:

@@ -34,6 +34,7 @@ public:
 
 	// 4. 게터 (최종 조명 합성 완료 텍스처 및 주요 패스 정보)
 	[[nodiscard]] const std::wstring& GetFinalColorRTName() const { return m_LightingColorName; }
+	[[nodiscard]] const std::wstring& GetSceneColorCopyRTName() const { return m_SceneColorCopyName; }
 	[[nodiscard]] const std::wstring& GetDepthRTName() const { return m_DepthName; }
 	[[nodiscard]] const std::wstring& GetPositionRTName() const { return m_LightingInputs[4]; }
 	[[nodiscard]] const std::wstring& GetShadowDepthRTName() const { return m_ShadowDepthName; }
@@ -76,6 +77,7 @@ private:
 	std::wstring m_PointShadowDepthName;
 	std::wstring m_DepthName;
 	std::wstring m_LightingColorName;
+	std::wstring m_SceneColorCopyName;
 
 	// 렌더패스 ID
 	Engine::RenderPassID m_ShadowPassID = Engine::INVALID_PASS_ID;

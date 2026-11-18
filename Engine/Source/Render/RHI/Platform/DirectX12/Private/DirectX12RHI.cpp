@@ -789,6 +789,74 @@ EResult DirectX12RHI::BlitTexture(RHITexture* src, RHITexture* dst)
     return EResult::Success;
 }
 
+EResult DirectX12RHI::CopyTexture(RHITexture* src, RHITexture* dst)
+{
+    if (!m_CommandList || !src || !dst)
+        return EResult::InvalidArgument;
+
+    auto* dxSrc = static_cast<DirectX12Texture*>(src);
+    auto* dxDst = static_cast<DirectX12Texture*>(dst);
+    auto* srcRes = static_cast<ID3D12Resource*>(dxSrc->GetNativeHandle());
+    auto* dstRes = static_cast<ID3D12Resource*>(dxDst->GetNativeHandle());
+
+    if (!srcRes || !dstRes)
+        return EResult::Fail;
+
+    const D3D12_RESOURCE_STATES srcBefore = dxSrc->GetCurrentState();
+    const D3D12_RESOURCE_STATES dstBefore = dxDst->GetCurrentState();
+
+    D3D12_RESOURCE_BARRIER barriers[2] = {};
+    uint32 barrierCount = 0;
+
+    if (srcBefore != D3D12_RESOURCE_STATE_COPY_SOURCE)
+    {
+        barriers[barrierCount].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[barrierCount].Transition.pResource = srcRes;
+        barriers[barrierCount].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barriers[barrierCount].Transition.StateBefore = srcBefore;
+        barriers[barrierCount].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        ++barrierCount;
+    }
+
+    if (dstBefore != D3D12_RESOURCE_STATE_COPY_DEST)
+    {
+        barriers[barrierCount].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[barrierCount].Transition.pResource = dstRes;
+        barriers[barrierCount].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barriers[barrierCount].Transition.StateBefore = dstBefore;
+        barriers[barrierCount].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+        ++barrierCount;
+    }
+
+    if (barrierCount > 0)
+        m_CommandList->ResourceBarrier(barrierCount, barriers);
+
+    m_CommandList->CopyResource(dstRes, srcRes);
+
+    barrierCount = 0;
+    if (srcBefore != D3D12_RESOURCE_STATE_COPY_SOURCE)
+    {
+        barriers[barrierCount].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[barrierCount].Transition.pResource = srcRes;
+        barriers[barrierCount].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barriers[barrierCount].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+        barriers[barrierCount].Transition.StateAfter = srcBefore;
+        ++barrierCount;
+    }
+
+    barriers[barrierCount].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[barrierCount].Transition.pResource = dstRes;
+    barriers[barrierCount].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[barrierCount].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[barrierCount].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    ++barrierCount;
+
+    m_CommandList->ResourceBarrier(barrierCount, barriers);
+    dxDst->SetCurrentState(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+    return EResult::Success;
+}
+
 #pragma region Buffer
 RHIBuffer* DirectX12RHI::CreateBuffer(void* data, uint32 size, uint32 stride, ERHIBufferType type)
 {

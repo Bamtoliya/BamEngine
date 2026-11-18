@@ -1006,4 +1006,9 @@ EResult SDLGPURHI::BlitTexture(RHITexture* src, RHITexture* dst)
 	return EResult::Success;
 }
 
+EResult SDLGPURHI::CopyTexture(RHITexture* src, RHITexture* dst)
+{
+	return BlitTexture(src, dst);
+}
+
 #pragma endregion
