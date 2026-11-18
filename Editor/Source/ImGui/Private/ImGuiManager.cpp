@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
+#include "EntityClipboard.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
 #include "EditorSettingsService.h"
@@ -14,6 +16,8 @@
 #pragma endregion
 
 #include "PlatformPath.h"
+#include "GraphSystem.h"
+#include "SystemManager.h"
 #include "Functions.h"
 #include "ImGuiManager.h"
 #include "Application.h"
@@ -35,6 +39,7 @@
 
 #include "DirectX12Texture.h"
 #include "SceneDocument.h"
+#include "PrefabModeManager.h"
 #include "ConfigManager.h"
 #include "PreviewViewportWidget.h"
 #include "EntityFactory.h"
@@ -1462,6 +1467,51 @@ vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() c
 			editors.push_back(editor);
 	}
 	return editors;
+}
+
+bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) const
+{
+	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || !CollectUnsavedResourceEditors().empty())
+		return false;
+	if (PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode())
+		return false;
+	auto& documents = Application::Get().GetDocuments();
+	for (const auto id : documents.GetDocumentIds())
+	{
+		auto* document = documents.Find(id);
+		if (!document) continue;
+		if (!document->PrepareAssetPathRelocation(relocation)) return false;
+		if (dynamic_cast<SceneDocument*>(document) && relocation.Affects(document->GetPath()))
+		{
+			relocation.AfterCommit([document]() { Application::Get().RememberEditedScene(document->GetPath()); });
+		}
+	}
+	// Closed panels also retain editing state; each owner must opt in to safe synchronization.
+	for (auto* panel : m_ImGuiPanels)
+	{
+		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
+		if (editor && !editor->PrepareAssetPathRelocation(relocation)) return false;
+		if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+			references->PrepareAssetPathRelocation(relocation);
+	}
+	if (Engine::SystemManager::IsCreated())
+	{
+		if (auto* graphSystem = Engine::SystemManager::Get().GetSystem<Engine::GraphSystem>())
+		{
+			const auto affects = [&relocation](const std::filesystem::path& path) { return relocation.Affects(path); };
+			relocation.AfterCommit([graphSystem, affects]() { graphSystem->InvalidateGraphCache(affects); });
+		}
+	}
+	if (EntityClipboard::HasData())
+	{
+		relocation.AfterCommit([]()
+		{
+			EntityClipboard::Clear();
+			NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+				LOCAL("ContentBrowser.MoveEntityClipboardCleared"), ELogLevel::Info);
+		});
+	}
+	return true;
 }
 
 void ImGuiManager::DrawResourceQuitConfirmation()

@@ -21,6 +21,7 @@ class AnimatorGraphPanel : public ResourceEditorInterface
 {
 public:
 	AnimatorGraphPanel();
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	virtual ~AnimatorGraphPanel() override;
 
 	virtual void Update(f32 dt) override;

@@ -20,6 +20,11 @@ public:
     virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::PrefabEditor; }
     bool HasUnsavedResourceChanges() const override { return m_HasUnsavedChanges; }
     bool CanSaveDocument() const;
+    bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+    {
+        // A separate prefab scene can retain string references even when its window is closed.
+        return !m_PrefabScene && ResourceEditorInterface::PrepareAssetPathRelocation(relocation);
+    }
     bool SaveDocument();
 
 private:

@@ -1,6 +1,8 @@
 ﻿#include "AssetReferenceValidator.h"
 #include "PlatformPath.h"
 #include "AnimatorStateMachine.h"
+#include "GraphSystem.h"
+#include "ResourceBinaryHeader.h"
 #include "Logger.h"
 #include <algorithm>
 #include <chrono>
@@ -14,6 +16,7 @@
 #include <set>
 #include <string_view>
 #include <tuple>
+#include <Windows.h>
 
 namespace Editor
 {
@@ -46,7 +49,15 @@ namespace Editor
             return true;
         }
 
-        using ReferenceFields = std::map<std::string, const char*>;
+        enum class ReferenceKind { Handle, AnimatorController, DirectFile, Graph };
+        using ReferenceFields = std::map<std::pair<std::string, ReferenceKind>, const char*>;
+        using ReferenceJson = glz::generic_u64;
+
+        bool IsReferenceDocumentExtension(std::string_view extension)
+        {
+            return extension == ".json" || extension == ".animator" || extension == ".bamanimator" ||
+                extension == ".actiontimeline";
+        }
 
         bool ReadReferenceDocument(const std::filesystem::path& source, glz::generic_u64& document)
         {
@@ -58,25 +69,25 @@ namespace Editor
             return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
         }
 
-        void CollectDocumentReferences(const glz::generic_u64& value, ReferenceFields& references,
-            std::set<std::string>& controllers)
+        template<typename Value, typename Visitor>
+        void VisitComponentAndHandleReferences(Value& value, const Visitor& visit)
         {
             using Json = glz::generic_u64;
 
-            if (const auto* object = value.get_if<Json::object_t>())
+            if (auto* object = value.template get_if<Json::object_t>())
             {
                 const auto nullField = object->find("Null");
                 if (nullField != object->end())
                 {
-                    const auto* isNull = nullField->second.get_if<bool>();
+                    const auto* isNull = nullField->second.template get_if<bool>();
                     if (isNull && *isNull)
                         return;
                 }
 
-                const auto readString = [](const Json::object_t& fields, const char* key) -> const std::string*
+                const auto readString = [](const auto& fields, const char* key) -> const std::string*
                     {
                         const auto field = fields.find(key);
-                        return field == fields.end() ? nullptr : field->second.get_if<std::string>();
+                        return field == fields.end() ? nullptr : field->second.template get_if<std::string>();
                     };
 
                 const auto* assetKey = readString(*object, "AssetKey");
@@ -91,41 +102,96 @@ namespace Editor
                     reference = assetKey;
 
                 if (reference && !reference->empty())
-                    references.try_emplace(*reference, reference == assetKey ? "AssetKey" : "AssetPath");
+                    visit(*object, reference == assetKey ? "AssetKey" : "AssetPath", ReferenceKind::Handle);
 
                 const auto* type = readString(*object, "Type");
                 const auto data = object->find("Data");
-                if (type && *type == "Engine::AnimatorComponent" && data != object->end())
+                if (type && data != object->end())
                 {
-                    if (const auto* fields = data->second.get_if<Json::object_t>())
+                    if (auto* fields = data->second.template get_if<Json::object_t>())
                     {
-                        if (const auto* controller = readString(*fields, "controllerPath"); controller && !controller->empty())
-                            controllers.insert(*controller);
+                        const auto visitPath = [&](const char* key, ReferenceKind kind)
+                        {
+                            if (const auto* path = readString(*fields, key); path && !path->empty())
+                                visit(*fields, key, kind);
+                        };
+                        if (*type == "Engine::AnimatorComponent")
+                            visitPath("controllerPath", ReferenceKind::AnimatorController);
+                        else if (*type == "Engine::ActionTimelineComponent")
+                            visitPath("timelinePath", ReferenceKind::DirectFile);
+                        else if (*type == "Engine::PrefabInstanceComponent")
+                            visitPath("prefabAssetPath", ReferenceKind::DirectFile);
+                        else if (*type == "Engine::GraphBindingComponent")
+                            visitPath("graphFile", ReferenceKind::Graph);
                     }
                 }
 
-                for (const auto& field : *object)
-                    CollectDocumentReferences(field.second, references, controllers);
+                for (auto& field : *object)
+                    VisitComponentAndHandleReferences(field.second, visit);
             }
-            else if (const auto* elements = value.get_if<Json::array_t>())
+            else if (auto* elements = value.template get_if<Json::array_t>())
             {
-                for (const auto& element : *elements)
-                    CollectDocumentReferences(element, references, controllers);
+                for (auto& element : *elements)
+                    VisitComponentAndHandleReferences(element, visit);
             }
         }
 
-        std::filesystem::path ResolveDocumentReference(const std::filesystem::path& rawPath, bool isController)
+        template<typename Value, typename Visitor>
+        void VisitDocumentReferences(Value& value, const Visitor& visit)
+        {
+            VisitComponentAndHandleReferences(value, visit);
+            auto& root = value.get_object();
+            const auto header = root.find("AssetHeader");
+            if (header == root.end() || !header->second.is_object()) return;
+            const auto& headerFields = header->second.get_object();
+            const auto type = headerFields.find("ResourceType");
+            const auto* tag = type == headerFields.end() ? nullptr : type->second.template get_if<std::uint64_t>();
+            if (!tag || *tag != static_cast<std::uint64_t>(Engine::EResourceType::ActionTimeline)) return;
+
+            const auto visitPath = [&visit](auto& fields, const char* key)
+            {
+                const auto entry = fields.find(key);
+                if (entry == fields.end()) return;
+                const auto* path = entry->second.template get_if<std::string>();
+                if (path && !path->empty()) visit(fields, key, ReferenceKind::DirectFile);
+            };
+            visitPath(root, "m_ModelPath");
+
+            const auto tracksField = root.find("m_NotifyTracks");
+            if (tracksField == root.end()) return;
+            auto* tracks = tracksField->second.template get_if<ReferenceJson::array_t>();
+            if (!tracks) return;
+            for (auto& track : *tracks)
+            {
+                auto* fields = track.template get_if<ReferenceJson::object_t>();
+                if (!fields) continue;
+                const auto notifiesField = fields->find("Notifies");
+                if (notifiesField == fields->end()) continue;
+                auto* notifies = notifiesField->second.template get_if<ReferenceJson::array_t>();
+                if (!notifies) continue;
+                for (auto& notify : *notifies)
+                {
+                    auto* notifyFields = notify.template get_if<ReferenceJson::object_t>();
+                    if (!notifyFields) continue;
+                    visitPath(*notifyFields, "SoundPath");
+                    visitPath(*notifyFields, "VFXPath");
+                }
+            }
+        }
+
+        std::filesystem::path ResolveDocumentReference(const std::filesystem::path& rawPath, ReferenceKind kind)
         {
             using Path = Engine::PlatformPath;
+            if (kind == ReferenceKind::Graph) return Engine::GraphSystem::ResolveGraphPath(rawPath);
             const auto wide = rawPath.wstring();
             auto resolved = rawPath;
             if (!rawPath.has_root_path() || Path::IsVirtualUri(wide))
             {
-                resolved = isController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
+                resolved = kind == ReferenceKind::AnimatorController ? Engine::AnimatorStateMachine::ResolveControllerPath(rawPath)
                     : Path::ResolveUri(wide);
             }
 
-            if (!isController && resolved.extension().wstring().starts_with(L".bam"))
+            if (kind == ReferenceKind::Handle && resolved.extension().wstring().starts_with(L".bam"))
             {
                 auto jsonPath = resolved;
                 jsonPath += L".json";
@@ -136,6 +202,19 @@ namespace Editor
                     return jsonPath;
                 if (std::filesystem::is_regular_file(bevePath, error))
                     return bevePath;
+                // A legacy relative alias can resolve to a missing ProjectRoot/Resources file.
+                // Resolve the completed filename again so the Assets/Engine mounts can find it.
+                if (!std::filesystem::is_regular_file(resolved, error))
+                {
+                    for (const auto* suffix : { L".json", L".beve" })
+                    {
+                        auto candidate = rawPath;
+                        candidate += suffix;
+                        candidate = Path::ResolveUri(candidate);
+                        if (std::filesystem::is_regular_file(candidate, error))
+                            return candidate;
+                    }
+                }
             }
             return resolved;
         }
@@ -143,10 +222,11 @@ namespace Editor
         ReferenceFields ReadReferenceFields(const glz::generic_u64& document)
         {
             ReferenceFields references;
-            std::set<std::string> controllers;
-            CollectDocumentReferences(document, references, controllers);
-            for (const auto& controller : controllers)
-                references.insert_or_assign(controller, "controllerPath");
+            VisitDocumentReferences(document, [&references](const auto& fields, const char* key, ReferenceKind kind)
+            {
+                const auto& reference = fields.at(key).get_string();
+                references.try_emplace(std::pair{ reference, kind }, key);
+            });
             return references;
         }
 
@@ -192,8 +272,9 @@ namespace Editor
 
             const auto relativeSource = Path::ToProjectRelative(source);
             std::set<std::filesystem::path> targets;
-            for (const auto& [reference, property] : ReadReferenceFields(document))
+            for (const auto& [identity, property] : ReadReferenceFields(document))
             {
+                const auto& [reference, kind] = identity;
                 if (IsBuiltinResourceIdentifier(reference))
                     continue;
 
@@ -204,14 +285,13 @@ namespace Editor
 
                 const auto rawPath = Engine::Utf8ToPath(reference);
                 const bool hasUri = Path::IsVirtualUri(rawPath.wstring());
-                const bool isController = std::string_view(property) == "controllerPath";
                 if (!hasUri && rawPath.has_root_path() && !IsMountedReference(rawPath))
                 {
                     issue.IssueType = Issue::ExternalAbsolutePath;
                 }
                 else
                 {
-                    const auto resolved = ResolveDocumentReference(rawPath, isController);
+                    const auto resolved = ResolveDocumentReference(rawPath, kind);
                     std::error_code error;
                     const auto target = std::filesystem::canonical(resolved, error);
                     if (!error && std::filesystem::is_regular_file(target, error))
@@ -227,13 +307,13 @@ namespace Editor
                     else
                     {
                         const auto ext = rawPath.extension();
-                        issue.IssueType = !isController && !hasUri && (!rawPath.has_extension() ||
+                        issue.IssueType = kind == ReferenceKind::Handle && !hasUri && (!rawPath.has_extension() ||
                             ext == ".bammat" || ext == ".bammatinst") ? Issue::InvalidExtension : Issue::MissingFile;
                     }
                 }
 
                 // 기존 복구는 파일을 변경하므로 이전에 지원한 단순 레거시 참조에만 유지한다.
-                if (!hasUri && !isController && issue.IssueType != Issue::OutsideRuntimeRoots &&
+                if (!hasUri && kind == ReferenceKind::Handle && issue.IssueType != Issue::OutsideRuntimeRoots &&
                     !Path::IsReadOnlyTarget(source) && reference.find_first_of("\\\"") == std::string::npos &&
                     AssetReferenceValidator::TryResolveFallbackPath(reference, issue.SuggestedFix))
                 {
@@ -382,8 +462,9 @@ namespace Editor
                 continue;
             }
 
-            for (const auto& [reference, property] : ReadReferenceFields(document))
+            for (const auto& referenceField : ReadReferenceFields(document))
             {
+                const auto& [reference, kind] = referenceField.first;
                 if (builtInMeshes.contains(reference))
                     continue;
 
@@ -398,8 +479,7 @@ namespace Editor
                     }
                 }
 
-                const bool isController = std::string_view(property) == "controllerPath";
-                const auto resolved = ResolveDocumentReference(rawPath, isController);
+                const auto resolved = ResolveDocumentReference(rawPath, kind);
                 const auto file = fs::canonical(resolved, ec);
                 if (ec || !fs::is_regular_file(file, ec))
                 {
@@ -417,7 +497,7 @@ namespace Editor
                 if (referencedFiles)
                     referencedFiles->push_back(file);
                 const auto extension = Engine::ToLowerStr(Engine::WStrToStr(file.extension().wstring()));
-                if (isController || extension == ".json" || extension == ".animator" || extension == ".bamanimator")
+                if (kind == ReferenceKind::AnimatorController || IsReferenceDocumentExtension(extension))
                     pending.push_back(file);
             }
         }
@@ -460,8 +540,7 @@ namespace Editor
 
                 const bool isDirectory = fs::is_directory(status);
                 const auto extension = Engine::ToLowerStr(Engine::WStrToStr(entry->path().extension().wstring()));
-                const bool isDocument = fs::is_regular_file(status) &&
-                    (extension == ".json" || extension == ".animator" || extension == ".bamanimator");
+                const bool isDocument = fs::is_regular_file(status) && IsReferenceDocumentExtension(extension);
                 if (!isDirectory && !isDocument)
                     continue;
 
@@ -484,11 +563,11 @@ namespace Editor
         return scan;
     }
 
-    AssetDeletionImpact AssetReferenceValidator::AnalyzeDeletion(const std::vector<std::filesystem::path>& targets)
+    static AssetReferenceImpact AnalyzeFileChange(const std::vector<std::filesystem::path>& targets, bool includeInternal)
     {
-        AssetDeletionImpact impact;
-        std::vector<std::filesystem::path> deleted;
-        deleted.reserve(targets.size());
+        AssetReferenceImpact impact;
+        std::vector<std::filesystem::path> affected;
+        affected.reserve(targets.size());
         for (const auto& target : targets)
         {
             std::error_code error;
@@ -496,24 +575,24 @@ namespace Editor
             if (error)
                 impact.IsComplete = false;
             else
-                deleted.push_back(std::move(resolved));
+                affected.push_back(std::move(resolved));
         }
-        if (deleted.empty())
+        if (affected.empty())
             return impact;
 
-        auto scan = ScanProject();
+        auto scan = AssetReferenceValidator::ScanProject();
         impact.IsComplete = impact.IsComplete && std::ranges::none_of(scan.Issues, [](const auto& issue)
         {
             return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument;
         });
 
-        const auto isDeleted = [&deleted](const auto& path)
+        const auto isAffected = [&affected](const auto& path)
         {
-            return std::ranges::any_of(deleted, [&path](const auto& root) { return IsInAssetTree(path, root); });
+            return std::ranges::any_of(affected, [&path](const auto& root) { return IsInAssetTree(path, root); });
         };
         for (auto& link : scan.References)
         {
-            if (isDeleted(link.Target) && !isDeleted(link.Source))
+            if (isAffected(link.Target) && (includeInternal || !isAffected(link.Source)))
                 impact.References.push_back(std::move(link));
         }
         std::ranges::sort(impact.References, [](const auto& lhs, const auto& rhs)
@@ -521,6 +600,120 @@ namespace Editor
             return std::tie(lhs.Source, lhs.Target) < std::tie(rhs.Source, rhs.Target);
         });
         return impact;
+    }
+
+    AssetReferenceImpact AssetReferenceValidator::AnalyzeDeletion(const std::vector<std::filesystem::path>& targets)
+    {
+        return AnalyzeFileChange(targets, false);
+    }
+
+    AssetReferenceImpact AssetReferenceValidator::AnalyzeMove(const std::vector<std::filesystem::path>& targets)
+    {
+        return AnalyzeFileChange(targets, true);
+    }
+
+    bool AssetReferenceValidator::PrepareMoveReferences(const std::vector<AssetPathMove>& moves,
+        std::vector<AssetReferenceEdit>& edits, AssetReferenceImpact* impact)
+    {
+        namespace fs = std::filesystem;
+        using Path = Engine::PlatformPath;
+        edits.clear();
+        if (impact) *impact = { {}, false };
+        try
+        {
+            std::vector<AssetPathMove> canonicalMoves;
+            const auto remap = [&canonicalMoves](const fs::path& path)
+            {
+                return Path::RemapFilePath(path, canonicalMoves);
+            };
+
+            for (const auto& move : moves)
+            {
+                const auto before = fs::canonical(move.Before);
+                const auto after = Path::Normalize(move.After);
+                if (!Path::IsProjectUri(Path::ToVirtualUri(before)) || Path::IsReadOnlyTarget(before) ||
+                    !Path::IsProjectUri(Path::ToVirtualUri(after)) || Path::IsReadOnlyTarget(after))
+                    return false;
+                canonicalMoves.push_back({ before, after });
+            }
+            // Resolve casing and relative paths once, before using component-wise prefix matching.
+            auto scan = ScanProject();
+            const bool complete = std::ranges::none_of(scan.Issues, [](const auto& issue)
+            {
+                return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument;
+            });
+
+            std::set<fs::path> documents;
+            for (auto& link : scan.References)
+            {
+                if (remap(link.Target) == link.Target) continue;
+                documents.insert(link.Source);
+                if (impact) impact->References.push_back(std::move(link));
+            }
+            if (impact)
+            {
+                impact->IsComplete = complete;
+                std::ranges::sort(impact->References, [](const auto& lhs, const auto& rhs)
+                {
+                    return std::tie(lhs.Source, lhs.Target) < std::tie(rhs.Source, rhs.Target);
+                });
+            }
+            if (!complete) return false;
+            std::vector<AssetReferenceEdit> prepared;
+            for (const auto& source : documents)
+            {
+                AssetReferenceEdit edit{ source, remap(source), {}, {} };
+                if (Path::IsReadOnlyTarget(source) || !ReadTextFile(source, edit.BeforeText))
+                    return false;
+                auto text = edit.BeforeText;
+                const bool bom = text.starts_with("\xEF\xBB\xBF");
+                if (bom)
+                    text.erase(0, 3);
+                glz::generic_u64 document;
+                if (glz::validate_json(text) || glz::read_json(document, text) || !document.is_object())
+                    return false;
+                bool changed = false;
+                VisitDocumentReferences(document, [&](auto& fields, const char* key, ReferenceKind kind)
+                {
+                    const auto raw = Engine::Utf8ToPath(fields.at(key).get_string());
+                    std::error_code error;
+                    const auto resolved = fs::canonical(ResolveDocumentReference(raw, kind), error);
+                    if (error)
+                        return;
+                    const auto target = remap(resolved);
+                    if (target == resolved)
+                        return;
+                    const auto uri = Engine::WStrToStr(Path::ToVirtualUri(target));
+                    fields.at(key) = uri;
+                    if (kind == ReferenceKind::Handle)
+                    {
+                        // Keep the serialized handle's fallback path consistent with its preferred key.
+                        for (const char* alias : { "AssetKey", "AssetPath" })
+                        {
+                            const auto field = fields.find(alias);
+                            if (field != fields.end() && field->second.template get_if<std::string>())
+                                field->second = uri;
+                        }
+                    }
+                    changed = true;
+                });
+                if (changed)
+                {
+                    if (glz::write_json(document, edit.AfterText))
+                        return false;
+                    if (bom)
+                        edit.AfterText.insert(0, "\xEF\xBB\xBF");
+                    prepared.push_back(std::move(edit));
+                }
+            }
+            edits = std::move(prepared);
+            return true;
+        }
+        catch (const std::exception& error)
+        {
+            BAM_LOG(Warn, "Editor", "Asset", "Could not prepare moved references: {}", error.what());
+            return false;
+        }
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateAllResources()

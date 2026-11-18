@@ -6,6 +6,7 @@
 #include "TransformSystem.h"
 #include "UIInteractionStateComponent.h"
 #include "ReflectionEditState.h"
+#include "AssetPathRelocation.h"
 
 struct Editor::SceneEditSnapshot::Data
 {
@@ -403,6 +404,11 @@ void Editor::SceneEditHistory::Record(SceneEditSnapshot before, SceneEditSnapsho
         m_Error = "History.CaptureFailed";
         return;
     }
+    // Weak ownership follows command eviction/redo truncation without retaining discarded scene values.
+    std::erase_if(m_PathSnapshots, [](const auto& snapshot) { return snapshot.expired(); });
+    for (const auto& data : { before.m_Data, after.m_Data })
+        if (std::ranges::none_of(m_PathSnapshots, [&data](const auto& snapshot) { return snapshot.lock() == data; }))
+            m_PathSnapshots.push_back(data);
     if (merge && m_Pending && m_Pending->Label() == label && m_Pending->After.SameScope(before))
         m_Pending->After = std::move(after);
     else
@@ -447,8 +453,22 @@ void Editor::SceneEditHistory::Clear()
 
     m_Pending.reset();
     m_Commands.Clear();
+    m_PathSnapshots.clear();
     ++m_Revision;
     m_Error.clear();
+}
+
+bool Editor::SceneEditHistory::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+    if (!m_Enabled || m_ScopeDepth != 0 || m_Pending) return false;
+    std::unordered_set<const SceneEditSnapshot::Data*> visited;
+    for (const auto& snapshot : m_PathSnapshots)
+    {
+        const auto data = snapshot.lock();
+        if (data && visited.insert(data.get()).second && !relocation.PrepareScenePaths(data->Values))
+            return false;
+    }
+    return true;
 }
 
 void Editor::SceneEditHistory::Synchronize(Engine::Scene* scene, bool editing)

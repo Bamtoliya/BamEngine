@@ -16,6 +16,7 @@ BEGIN(Engine)
 struct ENGINE_API GraphRuntimeState
 {
 	std::wstring loadedPath;
+	std::wstring sourcePath;
 	GraphExecutor executor;
 	std::vector<GraphNodeId> startNodes;
 	std::vector<GraphNodeId> updateNodes;
@@ -56,8 +57,10 @@ public:
 	virtual void OnInitialize() override;
 	virtual void OnUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
 
-	const Graph* GetOrLoadGraph(const std::wstring& path);
+	static std::filesystem::path ResolveGraphPath(const std::filesystem::path& path);
+	const Graph* GetOrLoadGraph(const std::wstring& path, std::wstring* sourcePath = nullptr);
 	void ClearGraphCache() { m_GraphCache.clear(); }
+	void InvalidateGraphCache(const std::function<bool(const std::filesystem::path&)>& affects);
 
 	void ReloadReflectedNodes(const std::vector<class Scene*>& activeScenes);
 

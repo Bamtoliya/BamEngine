@@ -151,7 +151,7 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 	if (extension == L".json" || extension == L".beve")
 	{
 		const wstring embeddedExtension = ToLowerExt(absolutePath.stem().extension().wstring());
-		if (embeddedExtension.rfind(L".bam", 0) == 0)
+		if (embeddedExtension.rfind(L".bam", 0) == 0 || embeddedExtension == L".actiontimeline")
 			logicalExtension = embeddedExtension;
 	}
 
@@ -445,7 +445,22 @@ wstring ResourceManager::ResolveFileKey(const std::filesystem::path& filePath)
 Handle ResourceManager::FindHandleByFilePath(const std::filesystem::path& filePath)
 {
 	const auto key = ResolveFileKey(filePath);
-	return key.empty() ? Handle{} : FindHandleByKey(key);
+	if (key.empty())
+		return {};
+	const auto keyed = FindHandleByKey(key);
+	if (keyed.IsValid())
+		return keyed;
+	// A resource can have a semantic key unrelated to its backing file name.
+	const auto physical = PlatformPath::ResolveUri(filePath);
+	shared_lock lock(m_PoolMutex);
+	for (size_t index = 0; index < m_Resources.size(); ++index)
+	{
+		const auto& slot = m_Resources[index];
+		if (slot.IsActive && slot.Instance && !slot.Instance->GetPath().empty() &&
+			PlatformPath::IsSamePath(physical, PlatformPath::ResolveUri(slot.Instance->GetPath())))
+			return Handle(static_cast<uint32>(index), slot.Generation);
+	}
+	return {};
 }
 #pragma endregion
 

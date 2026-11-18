@@ -1,6 +1,6 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-14)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-18)
 - 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
 - WebGPU 진행 상태: `Client/Web`에는 저장된 씬을 읽는 독립 프리뷰가 있다. Client의 공유 실행 계층을 플랫폼 호스트에서 분리했지만, 실제 Wasm Client·WebGPU 렌더링과 Editor 내보내기는 후속 범위다.
@@ -45,6 +45,30 @@ Client 시작 매니페스트 연결, 참조 기반 최소 에셋 수집과 저�
 기존 ImplementationLog에는 다른 CWD에서 Client 초기화·지오메트리 표시를 확인한 기록이 있다.
 이번 갱신은 소스와 기존 로그의 대조이며 해당 실행이나 저장소 밖 배포를 새로 검증한 결과가 아니다.
 
+### 로컬 워크트리의 Windows Ninja 빌드 준비
+
+새 워크트리에는 Git이 제외하는 SDK 바이너리가 복사되지 않는다. vcpkg 설치 완료와 CMake 구성 성공만으로 빌드 준비가 끝난 것은 아니다.
+
+- `ThirdParty/FMOD/inc`와 같은 버전의 SDK에서 `ThirdParty/FMOD/lib/x64/`에 `fmodL_vc.lib`, `fmodL.dll`(Debug), `fmod_vc.lib`, `fmod.dll`(Release)을 준비한다. 기존 체크아웃에서 가져올 때도 헤더 버전을 대조한다. `.lib`·`.dll`은 `.gitignore` 제외 대상이므로 로컬에만 배치한다.
+- Ninja의 `cl.exe` 사용에는 x64 MSVC 개발 환경이 필요하다. 일반 PowerShell에서는 아래처럼 초기화한다. Visual Studio 설치 경로는 실제 설치 위치에 맞춘다.
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+Get-Command cl.exe
+```
+
+- `Projects/Reflection/dependencies/`도 Git 제외 대상이다. LLVM SDK를 별도로 준비하거나, 구성 시 기존 SDK의 `LLVM_DIR`, `Clang_DIR`, `REFLECTION_CLANG_RESOURCE_DIR`를 명시한다. 경로 준비 기준은 [Reflection·Archive 빌드 안내](ReflectionArchiveBuild.md#환경과-경로-준비)를 따른다.
+- 구성 성공 후 필요한 타깃을 빌드하고, 빌드 성공을 확인한 뒤 CTest를 실행한다. 콘텐츠 브라우저 참조 검사의 예시는 다음과 같다.
+- `AssetReferenceCheck`는 Editor의 Unity/PCH 없이 참조 구현을 별도 컴파일한다. 로그는 직접 포함한 `Logger.h`의 `BAM_LOG`를 사용하며 `Editor_Macros.h`의 간접 포함에 의존하지 않는다. MSVC의 C++ 예외 옵션 `/EHsc`는 `Engine`의 PUBLIC 사용 요구사항으로 선언한다. Engine 공개 헤더가 EnTT를 노출하므로 Engine·Editor·TextureConverter·Client·검사 및 Engine에 링크하는 모듈이 같은 예외 구성을 사용해야 한다. 타깃별로만 적용하면 `entt.noexcept`의 `try`/`if(true)` 차이로 LNK2038이 발생한다. 변경 후에는 같은 빌드 명령으로 Engine과 의존 타깃을 함께 다시 빌드한다.
+
+```powershell
+cmake --build --preset x64-ninja-debug --target Editor AssetReferenceCheck
+if ($LASTEXITCODE -ne 0) { throw 'Editor / AssetReferenceCheck build failed' }
+ctest --test-dir out/build/x64-ninja-debug --output-on-failure --no-tests=error -R '^AssetReferenceCheck$'
+```
+
+`AssetReferenceCheck (Not Run)`과 실행 파일 누락은 테스트 본문 실패와 구분한다. 2026-11-18에는 CMake 구성이 성공했지만 FMOD import library 누락으로 Ninja가 중단되어 이 결과가 발생했다. 누락된 4개 파일을 기존 체크아웃에서 복구하고 SHA-256 일치를 확인했다. 복구 후 빌드·CTest 통과 여부는 사용자 재실행으로 확인해야 한다.
+
 ## 3. 완료 목표
 
 Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하고,
@@ -85,6 +109,7 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 - `BuildProfilePanel`의 `Client 빌드`가 기존 CMake `x64-release` 프리셋을 사용해 별도 `x64-client-release` 폴더에서 Editor 지원을 끈 Windows Release Client와 GameModule을 빌드한다. 패널은 완료 로그를 표시하고 복사할 수 있게 한다.
 - 백그라운드 빌드 실행기(`ClientBuildJob`)는 Windows 시스템 스레드 풀 상주로 인한 CRT 메모리 누수 오탐지를 방지하기 위해 `std::async` 대신 명시적인 `std::thread`와 `join()`을 사용하고, `OutputCallback`을 통해 빌드 진행 로그를 UI로 실시간 스트리밍한다. ([EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 20절 참고)
+- `ClientBuildJob.cpp`는 Win32 문자 변환에 `windows.h`, 스레드 TLS 정리에 `SDL3/SDL_thread.h`를 직접 포함한다. Unity 묶음 첫 파일이 되면 다른 구현의 include가 먼저 공급되지 않으므로 해당 선언을 간접 포함에 의존하지 않는다. 사용자 빌드에서 확인된 누락을 수정했으며 수정 후 재빌드·CTest는 재실행 전이다.
 - 시작 씬, 내보낼 상위 폴더, 패키지 폴더 이름과 프로그램 이름은 Editor Workspace에 저장한다. `현재 씬 사용`은 편집 모드에서 저장된 현재 씬을 선택한다.
 - 선택한 시작 씬의 저장된 JSON 참조 검사는 패널에서 수행한다. 빌드가 생성하는 셰이더와 배포 대상 참조는 산출물을 기준으로 확인한다.
 - `AnimatorComponent.controllerPath`와 컨트롤러 문서에 들어 있는 클립 참조를 같은 검사에서 따라간다. Runtime과 패키저는 동일한 컨트롤러 경로 해석을 사용한다.

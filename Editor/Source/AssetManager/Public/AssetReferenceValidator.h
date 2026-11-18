@@ -3,6 +3,7 @@
 #include <vector>
 #include <filesystem>
 #include "Engine_API.h"
+#include "PlatformPath.h"
 
 namespace Editor
 {
@@ -38,11 +39,23 @@ namespace Editor
         std::vector<AssetReferenceLink> References;
     };
 
-    struct AssetDeletionImpact
+    struct AssetReferenceImpact
     {
         std::vector<AssetReferenceLink> References;
         bool IsComplete = true;
     };
+
+    using AssetPathMove = Engine::FilePathChange;
+
+    struct AssetReferenceEdit
+    {
+        std::filesystem::path BeforePath;
+        std::filesystem::path AfterPath;
+        std::string BeforeText;
+        std::string AfterText;
+    };
+
+    enum class EAssetReferenceWriteResult { Success, Failed, RollbackFailed };
 
     class AssetReferenceValidator
     {
@@ -56,7 +69,16 @@ namespace Editor
         // 프로젝트 에셋 루트에서 저장된 JSON 문서의 직접 참조와 문제를 수집한다.
         static AssetReferenceScan ScanProject();
         static std::vector<AssetReferenceIssue> ValidateAllResources();
-        static AssetDeletionImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
+        static AssetReferenceImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
+        static AssetReferenceImpact AnalyzeMove(const std::vector<std::filesystem::path>& targets);
+
+        // Prepare without writing. Reject incomplete scans and edits outside the project asset root.
+        static bool PrepareMoveReferences(const std::vector<AssetPathMove>& moves, std::vector<AssetReferenceEdit>& edits,
+            AssetReferenceImpact* impact = nullptr);
+        static bool ValidateMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward);
+        // Call after the corresponding file moves. Hold write locks and restore all touched documents on failure.
+        static EAssetReferenceWriteResult ApplyMoveReferences(const std::vector<AssetReferenceEdit>& edits, bool forward,
+            const std::filesystem::path& recoveryDirectory);
 
         // 손상/누락 경로에 대한 안전한 대체 복구 경로 탐색
         static bool TryResolveFallbackPath(const std::string& brokenPath, std::filesystem::path& outResolvedPath);

@@ -37,6 +37,34 @@ void ActionTimelineAsset::Free()
 	m_CameraTracks.clear();
 }
 
+void ActionTimelineAsset::PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,
+	const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates)
+{
+	for (auto& track : tracks)
+		for (auto& notify : track.Notifies)
+		{
+			PlatformPath::PrepareUtf8FilePathUpdate(notify.SoundPath, changes, updates, true);
+			PlatformPath::PrepareUtf8FilePathUpdate(notify.VFXPath, changes, updates, true);
+		}
+}
+
+bool ActionTimelineAsset::PrepareFilePathRelocation(const vector<FilePathChange>& changes,
+	vector<Utf8FilePathUpdate>& updates)
+{
+	const auto previousSize = updates.size();
+	PlatformPath::PrepareUtf8FilePathUpdate(m_ModelPath, changes, updates, true);
+	PrepareNotifyPathRelocation(m_NotifyTracks, changes, updates);
+	return updates.size() == previousSize || GetPath().empty() || IsProjectJsonDocument(GetPath());
+}
+
+bool ActionTimelineAsset::IsProjectJsonDocument(const std::filesystem::path& pathOrUri)
+{
+	const auto path = PlatformPath::ResolveUri(pathOrUri);
+	const auto extension = ToLowerStr(WStrToStr(path.extension().wstring()));
+	return PlatformPath::IsProjectUri(PlatformPath::ToVirtualUri(path)) &&
+		(extension == ".json" || extension == ".actiontimeline");
+}
+
 ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
 {
 	auto* asset = new ActionTimelineAsset();
@@ -50,7 +78,9 @@ ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
 
 bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 {
-	const std::filesystem::path fullPath = PlatformPath::ResolveProjectRelative(filePath);
+	const auto path = Utf8ToPath(filePath);
+	const auto fullPath = PlatformPath::IsVirtualUri(filePath)
+		? PlatformPath::ResolveUri(path) : PlatformPath::ResolveProjectRelative(path);
 	if (fullPath.has_parent_path())
 	{
 		std::filesystem::create_directories(fullPath.parent_path());
@@ -67,9 +97,10 @@ bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 
 bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 {
-	std::filesystem::path fullPath = PlatformPath::ResolveUri(filePath);
+	const auto path = Utf8ToPath(filePath);
+	std::filesystem::path fullPath = PlatformPath::ResolveUri(path);
 	if (!std::filesystem::exists(fullPath))
-		fullPath = PlatformPath::ResolveProjectRelative(filePath);
+		fullPath = PlatformPath::ResolveProjectRelative(path);
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(fullPath);
 	if (!loadRes) return false;

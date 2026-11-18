@@ -30,6 +30,10 @@ struct SpriteAutoAnimParameters
 class SpriteEditor final : public ResourceEditorInterface
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	SpriteEditor();
 	virtual ~SpriteEditor() = default;
 

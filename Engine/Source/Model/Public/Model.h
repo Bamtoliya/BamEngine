@@ -115,6 +115,10 @@ public:
 	}
 	const vec3& GetPlacementEulerDegrees() const { return m_PlacementEulerDegrees; }
 	const wstring& GetImportSourceUri() const { return m_ImportSourceUri; }
+	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>&) override
+	{
+		return !PlatformPath::IsFilePathAffected(m_ImportSourceUri, changes);
+	}
 	bool UsesMeshSubfolder() const { return m_UseMeshSubfolder; }
 	bool UsesMaterialSubfolder() const { return m_UseMaterialSubfolder; }
 	bool UsesAnimationSubfolder() const { return m_UseAnimationSubfolder; }

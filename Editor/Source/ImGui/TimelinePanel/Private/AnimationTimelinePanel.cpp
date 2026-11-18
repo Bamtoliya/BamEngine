@@ -1,5 +1,6 @@
 ﻿#include "AnimationTimelinePanel.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
 #include "TimelineView.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
@@ -165,13 +166,14 @@ void AnimationTimelinePanel::SetupPreviewModel()
 void AnimationTimelinePanel::SetTargetModel(const Engine::ResourceHandle<Engine::Model>& model)
 {
 	m_TargetModel = model;
+	auto* target = m_TargetModel.Get();
+	m_ModelAssetPath = target ? Engine::WStrToStr(target->GetPath()) : std::string{};
 	ClearPreviewVFX();
 	SetupPreviewModel();
 
-	auto* m = m_TargetModel.Get();
-	if (!m) return;
+	if (!target) return;
 
-	auto anims = m->GetAnimations();
+	auto anims = target->GetAnimations();
 	if (!anims.empty())
 	{
 		m_SelectedClipIndex = 0;
@@ -243,12 +245,23 @@ float AnimationTimelinePanel::ScreenXToTime(float screenX, float timelineMinX, f
 	return std::clamp(scale.ToTime(screenX), 0.0f, m_Duration);
 }
 
+bool AnimationTimelinePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (!PrepareTargetPathRelocation(relocation)) return false;
+	const bool modelChanged = relocation.AddUtf8(m_ModelAssetPath, true);
+	const bool notifiesChanged = relocation.AddTimelineNotifyPaths(m_NotifyTracks);
+	if ((modelChanged || notifiesChanged) && !m_CurrentAssetPath.empty() &&
+		!Engine::ActionTimelineAsset::IsProjectJsonDocument(Engine::Utf8ToPath(m_CurrentAssetPath))) return false;
+	relocation.AddUtf8(m_CurrentAssetPath);
+	return true;
+}
+
 bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 {
 	auto* asset = Engine::ActionTimelineAsset::CreateEmpty();
 	if (!asset) return false;
 
-	std::string modelPathStr = "";
+	std::string modelPathStr = m_ModelAssetPath;
 	if (m_TargetModel.IsValid() && m_TargetModel.Get())
 	{
 		modelPathStr = Engine::WStrToStr(m_TargetModel->GetPath());
@@ -265,6 +278,7 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	if (success)
 	{
 		m_CurrentAssetPath = filePath;
+		m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 		m_IsDirty = false;
 	}
 	return success;
@@ -281,15 +295,14 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 		return false;
 	}
 
+	Engine::ResourceHandle<Engine::Model> model;
 	if (!asset->GetModelPath().empty())
 	{
 		auto& rm = Engine::ResourceManager::Get();
-		const auto handle = rm.LoadFile(Engine::StrToWStr(asset->GetModelPath()));
-		if (handle.IsValid())
-		{
-			SetTargetModel(Engine::ResourceHandle<Engine::Model>(handle));
-		}
+		model = Engine::ResourceHandle<Engine::Model>(rm.LoadFile(asset->GetModelPath()));
 	}
+	SetTargetModel(model);
+	m_ModelAssetPath = asset->GetModelPath();
 
 	m_CurrentClipName = asset->GetClipName();
 	m_Duration = std::max(0.1f, asset->GetDuration());
@@ -311,6 +324,7 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 
 	Engine::ResourceManager::Get().DestroyResource(asset);
 	m_CurrentAssetPath = filePath;
+	m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 	m_Selection = {};
 	m_IsDirty = false;
 	return true;

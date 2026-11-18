@@ -20,7 +20,6 @@
 #include "ModelImportModal.h"
 #include "ContentBrowserPanel.h"
 #include "Editor_Macros.h"
-#include "ContentBrowserRename.h"
 #include "SpriteEditor.h"
 #include "TilePalettePanel.h"
 #include "InputManager.h"
@@ -447,11 +446,11 @@ float ContentBrowserGridItem::GetNameBoxHeight()
 
 bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::filesystem::directory_entry& directoryEntry,
 	ImTextureID thumbnailTexID, Engine::Handle thumbnailSpriteHandle, f32 thumbnailSize,
-	ImGuiSelectionUserData itemId, bool selected, std::filesystem::path& outRenamingPath,
-	char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
+	ImGuiSelectionUserData itemId, bool selected)
 {
 	const auto& path = directoryEntry.path();
-	const bool renaming = (outRenamingPath == path);
+	auto& currentDirectory = browser.m_CurrentDirectory;
+	const bool renaming = (browser.m_RenamingPath == path && !browser.m_RenameInTree);
 	const float nameHeight = GetNameBoxHeight();
 	const ImVec2 tileMin = ImGui::GetCursorScreenPos();
 	const ImVec2 nameMin(tileMin.x, tileMin.y + thumbnailSize);
@@ -496,10 +495,10 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 	if (visible)
 		DrawThumbnail(directoryEntry, thumbnailTexID, thumbnailSpriteHandle, thumbnailSize, tileMin);
 
-	if (outRenamingPath == path)
+	if (renaming)
 	{
 		ImGui::SetCursorScreenPos(nameMin);
-		DrawRename(path, thumbnailSize, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+		DrawRename(browser, path, thumbnailSize);
 	}
 	else if (visible)
 	{
@@ -631,17 +630,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		if (browser.m_ContextMenuPaths.size() > 1)
 		{
 			browser.SetRenameTarget({});
-			if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-			{
-				std::string clipboardText;
-				for (const auto& selectedPath : browser.m_ContextMenuPaths)
-				{
-					if (!clipboardText.empty())
-						clipboardText += '\n';
-					clipboardText += Engine::WStrToStr(selectedPath.wstring());
-				}
-				ImGui::SetClipboardText(clipboardText.c_str());
-			}
+			browser.DrawPathCopyMenu(browser.m_ContextMenuPaths);
 			ImGui::EndPopup();
 			return;
 		}
@@ -686,8 +675,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 		ACTION_MENU_ITEM((ICON_FA_PEN " " + LOCAL_LABEL("EditorCommon.Rename")).c_str(), "Edit.Rename");
 		ImGui::EndDisabled();
 
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str()))
-			ImGui::SetClipboardText(Engine::WStrToStr(path.wstring()).c_str());
+		browser.DrawPathCopyMenu({ path });
 
 		if (isReadOnly && !isDir)
 		{
@@ -754,7 +742,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				peekedType == Engine::EResourceType::Material ||
 				peekedType == Engine::EResourceType::MaterialInstance)
 			{
-				ContextMenu_Material(path);
+				ContextMenu_Material(browser, path);
 			}
 			else if (filename.ends_with(".fbx") || filename.ends_with(".obj") ||
 				filename.ends_with(".gltf") || filename.ends_with(".glb") ||
@@ -769,7 +757,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				filename.ends_with(".dds") || filename.ends_with(".bamtex") || filename.ends_with(".bamtex.json") ||
 				peekedType == Engine::EResourceType::Texture)
 			{
-				ContextMenu_Texture(path);
+				ContextMenu_Texture(browser, path);
 			}
 			else if (filename.ends_with(".bamsprite") || filename.ends_with(".bamsprite.json") ||
 				peekedType == Engine::EResourceType::Sprite)
@@ -895,11 +883,12 @@ bool ContentBrowserGridItem::DrawDragSource(ContentBrowserPanel& browser, ImGuiS
 	ImGui::EndDragDropSource();
 	return true;
 }
-void ContentBrowserGridItem::DrawRename(const std::filesystem::path& path, f32 thumbnailSize, std::filesystem::path& outRenamingPath, char* renameBuffer, size_t renameBufferSize, std::filesystem::path& currentDirectory)
+void ContentBrowserGridItem::DrawRename(ContentBrowserPanel& browser, const std::filesystem::path& path,
+	f32 thumbnailSize)
 {
-	float width = (currentDirectory == path.parent_path()) ? thumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
+	float width = (browser.GetCurrentDirectory() == path.parent_path()) ? thumbnailSize : ImGui::GetContentRegionAvail().x * 0.8f;
 	ImGui::SetNextItemWidth(width);
-	Editor::ContentBrowser::DrawRenameInput("##RenameInput", path, outRenamingPath, renameBuffer, renameBufferSize, currentDirectory);
+	browser.DrawRenameEditor("##RenameInput", path);
 }
 void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry& directoryEntry,
 	const ImVec2& boxMin, float boxWidth, float boxHeight)
@@ -940,7 +929,7 @@ void ContentBrowserGridItem::DrawNameBox(const std::filesystem::directory_entry&
 	drawList->AddText(typePos, ImGui::GetColorU32(badgeColor), typeStr.c_str());
 }
 
-void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& path)
+void ContentBrowserGridItem::ContextMenu_Material(ContentBrowserPanel& browser, const std::filesystem::path& path)
 {
 	std::string filename = path.filename().string();
 	for (auto& c : filename) c = static_cast<char>(tolower(c));
@@ -1001,7 +990,8 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 	// 2. Base Material 전용: Material Instance (.bammatinst.json) 생성
 	if (isBaseMat)
 	{
-		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("ContentBrowser.CreateMaterialInstance")).c_str()))
+		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("ContentBrowser.CreateMaterialInstance")).c_str(),
+			nullptr, false, browser.CanUseFileCommands()))
 		{
 			std::wstring baseStem = path.stem().wstring();
 			if (baseStem.ends_with(L".bammat")) baseStem = baseStem.substr(0, baseStem.length() - 7);
@@ -1045,8 +1035,8 @@ void ContentBrowserGridItem::ContextMenu_Material(const std::filesystem::path& p
 					// 2. 디스크에 .bammatinst.json 파일로 저장
 					if (rm.SaveToJsonFile(newInst, instPath.wstring()) == EResult::Success)
 					{
-						// 3. 에셋 매니저에 정식 등록 및 알림
-						rm.LoadFile(std::filesystem::relative(instPath).wstring());
+						// Defer resource registration until opening the asset so its initial name can be edited safely.
+						browser.QueueCreatedAssetRename(instPath);
 						EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
 						NotificationManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
 							instPath.filename().string(), ELogLevel::Info, 3.0f);
@@ -1226,7 +1216,7 @@ void ContentBrowserGridItem::ContextMenu_Sprite(const std::filesystem::path& pat
 	}
 }
 
-void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& path)
+void ContentBrowserGridItem::ContextMenu_Texture(ContentBrowserPanel& browser, const std::filesystem::path& path)
 {
 	ImGui::Separator();
 	if (ImGui::MenuItem((ICON_FA_CROP_SIMPLE " " + LOCAL_LABEL("ContentBrowser.OpenInSpriteEditor")).c_str()))
@@ -1278,7 +1268,8 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 				LOCAL_FMT("Notification.InactiveFile", path.filename().string()), ELogLevel::Info, 3.0f);
 		}
 	}
-	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str()))
+	if (ImGui::MenuItem((ICON_FA_IMAGE " " + LOCAL_LABEL("ContentBrowser.CreateSprite")).c_str(),
+		nullptr, false, browser.CanTransferTo(path.parent_path())))
 	{
 		// 1. 중복 없는 .bamsprite.json 경로 결정
 		std::filesystem::path spritePath = path.parent_path() / (path.stem().wstring() + L".bamsprite.json");
@@ -1309,8 +1300,7 @@ void ContentBrowserGridItem::ContextMenu_Texture(const std::filesystem::path& pa
 				// 3. 디스크에 .bamsprite.json 파일로 먼저 저장
 				if (rm.SaveToJsonFile(newSprite, spritePath.wstring()) == EResult::Success)
 				{
-					// 4. 저장된 파일을 ResourceManager에 정식 로드 등록
-					rm.LoadFile(std::filesystem::relative(spritePath).wstring());
+					browser.QueueCreatedAssetRename(spritePath);
 					EDITOR_LOG_INFO("Successfully created sprite: {}", spritePath.string());
 				}
 				rm.DestroyResource(newSprite); // 임시 객체 해제

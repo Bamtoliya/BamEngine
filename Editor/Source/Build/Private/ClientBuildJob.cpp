@@ -5,6 +5,11 @@
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_thread.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
 #include <chrono>
 #include <exception>
 #include <memory>

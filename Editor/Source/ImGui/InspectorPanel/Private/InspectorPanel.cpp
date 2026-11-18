@@ -19,6 +19,7 @@
 #include "UILayout.h"
 #include "ReflectionRegistry.h"
 #include "PrefabInstanceComponent.h"
+#include "PlatformPath.h"
 #include "PrefabModeManager.h"
 #include "AnimationEvaluator.h"
 #include "NotificationManager.h"
@@ -300,7 +301,7 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 	if (toolbar.Button("OpenPrefab", ICON_FA_FOLDER_OPEN, "Prefab.Open"))
 		PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
 	if (toolbar.Button("SelectPrefab", ICON_FA_LOCATION_ARROW, "Prefab.Select"))
-		SelectionManager::Get().SetSelectedAsset(prefabComp->prefabAssetPath);
+		SelectionManager::Get().SetSelectedAsset(Engine::PlatformPath::ResolveUri(prefabPath));
 	if (toolbar.Button("PrefabOverrides", ICON_FA_CARET_DOWN, "Prefab.Overrides"))
 		ImGui::OpenPopup("PrefabOverridesPopup");
 

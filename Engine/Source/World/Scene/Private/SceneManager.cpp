@@ -4,6 +4,7 @@
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
 #include "PrefabInstanceComponent.h"
+#include "PlatformPath.h"
 
 #pragma region Constructor&Destructor
 IMPLEMENT_SINGLETON(SceneManager)
@@ -79,13 +80,15 @@ EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath,
 {
 	if (filePath.empty())
 		return EResult::InvalidArgument;
+	if (PlatformPath::IsReadOnlyTarget(filePath))
+		return EResult::AccessDenied;
 
 	if (!m_CurrentScene)
 		return EResult::Fail;
 
 	auto result = m_CurrentScene->WritePrefabArchive(ar, rootEntity);
 	if (result)
-		result = ar.SaveToFile(std::filesystem::path(filePath));
+		result = ar.SaveToFile(PlatformPath::ResolveUri(filePath));
 
 	if (!result)
 	{
@@ -104,7 +107,8 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 	if (!m_CurrentScene)
 		return EResult::Fail;
 
-	auto result = ar.LoadFromFile(std::filesystem::path(filePath));
+	const auto physical = PlatformPath::ResolveUri(filePath);
+	auto result = ar.LoadFromFile(physical);
 	if (result)
 		result = m_CurrentScene->InstantiatePrefabArchive(ar, outRootEntity, parent);
 
@@ -118,7 +122,8 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 	if (outRootEntity)
 	{
 		auto& comp = m_CurrentScene->GetRegistry().emplace_or_replace<PrefabInstanceComponent>(outRootEntity->GetEntityHandle());
-		comp.prefabAssetPath = filePath;
+		const auto uri = PlatformPath::ToVirtualUri(physical);
+		comp.prefabAssetPath = PlatformPath::IsProjectUri(uri) ? uri : filePath;
 	}
 
 	return EResult::Success;

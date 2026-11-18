@@ -1,6 +1,7 @@
 ﻿#include "PrefabModeManager.h"
 #include "EditorUI.h"
 #include "SceneManager.h"
+#include "PlatformPath.h"
 #include "Scene.h"
 #include "Entity.h"
 #include "EntityFactory.h"
@@ -54,8 +55,10 @@ bool PrefabModeManager::SetupDefaultEnvironment(Engine::Scene* scene)
     return true;
 }
 
-bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
+bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
 {
+    if (pathOrUri.empty()) return false;
+    const auto prefabPath = Engine::PlatformPath::ResolveUri(pathOrUri);
     if (m_IsInPrefabMode)
     {
         if (m_CurrentPrefabPath == prefabPath) return true;
@@ -83,7 +86,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
         m_SavedMainScene = nullptr;
         return false;
     }
-    m_PrefabScene->SetName(StrToWStr(prefabPath.stem().string()) + L" [Prefab]");
+    m_PrefabScene->SetName(prefabPath.stem().wstring() + L" [Prefab]");
 
     archive::JsonArchive ar;
     if (!ar.LoadFromFile(prefabPath))
@@ -92,7 +95,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
         m_SavedMainScene = nullptr;
         Safe_Release(m_PrefabScene);
         m_PrefabScene = nullptr;
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiateFailed", prefabPath.stem().string()), ELogLevel::Error, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiateFailed", WStrToStr(prefabPath.stem().wstring())), ELogLevel::Error, 3.0f);
         return false;
     }
 
@@ -124,7 +127,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& prefabPath)
     m_CurrentPrefabPath = prefabPath;
     m_HasUnsavedChanges = false;
 
-    NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.EnterPrefabMode", prefabPath.stem().string()), ELogLevel::Info, 3.0f);
+    NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.EnterPrefabMode", WStrToStr(prefabPath.stem().wstring())), ELogLevel::Info, 3.0f);
     return true;
 }
 
@@ -156,12 +159,12 @@ bool PrefabModeManager::SavePrefab()
             history.MarkSaved();
 
         m_HasUnsavedChanges = false;
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", m_CurrentPrefabPath.filename().string()), ELogLevel::Info, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", WStrToStr(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Info, 3.0f);
         return true;
     }
     else
     {
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", m_CurrentPrefabPath.filename().string()), ELogLevel::Error, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", WStrToStr(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Error, 3.0f);
         return false;
     }
 }

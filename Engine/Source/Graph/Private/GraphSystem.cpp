@@ -14,6 +14,13 @@ namespace
 	float s_CurrentDeltaTime = 0.0f;
 #ifdef BAM_EDITOR
 	GraphSystem::NodeExecuteHook s_NodeExecuteHook = nullptr;
+
+	void NotifyCurrentGraphNode(GraphNodeId node)
+	{
+		if (!s_NodeExecuteHook || !s_CurrentScene || s_CurrentEntity == entt::null) return;
+		const auto* runtime = s_CurrentScene->GetRegistry().try_get<GraphRuntimeState>(s_CurrentEntity);
+		if (runtime) s_NodeExecuteHook(runtime->sourcePath, node);
+	}
 #endif
 
 	std::vector<GraphRuntimeState::ActionEventEntry> CollectActionEventEntries(const Graph& graph, const GraphRegistry& registry)
@@ -115,54 +122,53 @@ void GraphSystem::OnInitialize()
 	m_Initialized = true;
 }
 
-const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path)
+std::filesystem::path GraphSystem::ResolveGraphPath(const std::filesystem::path& path)
 {
-	if (path.empty() || !ReflectionRegistry::IsCreated()) return nullptr;
-	auto it = m_GraphCache.find(path);
-	if (it != m_GraphCache.end()) return &it->second;
-	// 레지스트리 초기화 보장
-	OnInitialize();
-	// ── 스마트 경로 탐색 (프로젝트 루트 기준 결합) ──
-	auto tryResolveFallback = [](std::filesystem::path& p) -> bool {
-		if (std::filesystem::exists(p)) return true;
-		const std::string ext = p.extension().string();
-		if (ext == ".json")
+	if (path.empty()) return {};
+	const auto findFile = [](std::filesystem::path candidate) -> std::filesystem::path
+	{
+		std::error_code error;
+		if (std::filesystem::is_regular_file(candidate, error)) return PlatformPath::Normalize(candidate);
+		if (candidate.extension() == L".json" && candidate.stem().extension() != L".bamgraph")
 		{
-			const std::string stem = p.stem().string();
-			if (!stem.ends_with(".bamgraph"))
-			{
-				const auto candidate = p.parent_path() / (stem + ".bamgraph.json");
-				if (std::filesystem::exists(candidate)) { p = candidate; return true; }
-			}
+			candidate.replace_extension(L".bamgraph.json");
+			if (std::filesystem::is_regular_file(candidate, error)) return PlatformPath::Normalize(candidate);
 		}
-		return false;
+		return {};
 	};
 
-	std::filesystem::path targetPath(path);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
-	if (!tryResolveFallback(targetPath))
-	{
-		// 1. Resources/Scripts/ 아래에서 검색
-		auto scriptsPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources/Scripts") / path);
-		if (tryResolveFallback(scriptsPath))
-			targetPath = scriptsPath;
-		// 2. Resources/ 아래에서 검색
-		else
-		{
-			auto resPath = PlatformPath::ResolveProjectRelative(std::filesystem::path(L"Resources") / path);
-			if (tryResolveFallback(resPath))
-				targetPath = resPath;
-		}
-	}
-	if (!std::filesystem::is_regular_file(targetPath))
-		targetPath = PlatformPath::ResolveUri(path);
+	if (path.is_absolute() || PlatformPath::IsVirtualUri(path.wstring()))
+		return findFile(PlatformPath::ResolveUri(path));
 
-	if (!std::filesystem::is_regular_file(targetPath))
+	for (const auto* prefix : { L"", L"Resources/Scripts", L"Resources" })
+	{
+		if (auto found = findFile(PlatformPath::ResolveProjectRelative(std::filesystem::path(prefix) / path)); !found.empty())
+			return found;
+	}
+	if (auto found = findFile(PlatformPath::ResolveUri(path)); !found.empty()) return found;
+	if (path.extension() == L".json" && path.stem().extension() != L".bamgraph")
+	{
+		auto compound = path;
+		compound.replace_extension(L".bamgraph.json");
+		return findFile(PlatformPath::ResolveUri(compound));
+	}
+	return {};
+}
+
+const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring* sourcePath)
+{
+	if (path.empty() || !ReflectionRegistry::IsCreated()) return nullptr;
+	const auto targetPath = ResolveGraphPath(path);
+	if (targetPath.empty())
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Graph file not found: '{}'", WStrToStr(path));
 		return nullptr;
 	}
+	const auto key = targetPath.wstring();
+	if (sourcePath) *sourcePath = key;
+	const auto it = m_GraphCache.find(key);
+	if (it != m_GraphCache.end()) return &it->second;
+	OnInitialize();
 	const auto& reflection = ReflectionRegistry::Get();
 	Graph loadedGraph;
 	const auto result = LoadGraphJson(targetPath, loadedGraph, m_Registry,
@@ -170,12 +176,17 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path)
 	if (!result.Succeeded())
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Failed to load graph JSON '{}': Stage {}, Error {}",
-			targetPath.string(), static_cast<int>(result.Stage), result.GraphError.Message);
+			WStrToStr(key), static_cast<int>(result.Stage), result.GraphError.Message);
 		return nullptr;
 	}
-	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}'", targetPath.string());
-	auto [insertedIt, success] = m_GraphCache.emplace(path, std::move(loadedGraph));
+	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}'", WStrToStr(key));
+	auto [insertedIt, success] = m_GraphCache.emplace(key, std::move(loadedGraph));
 	return success ? &insertedIt->second : nullptr;
+}
+
+void GraphSystem::InvalidateGraphCache(const std::function<bool(const std::filesystem::path&)>& affects)
+{
+	std::erase_if(m_GraphCache, [&affects](const auto& entry) { return affects(entry.first); });
 }
 
 void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt)
@@ -203,18 +214,16 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 			// 1. 인스턴스 초기화 또는 파일 변경 감지 시 리로드
 			if (!runtime || runtime->loadedPath != binding.graphFile)
 			{
-				const Graph* graphTemplate = GetOrLoadGraph(binding.graphFile);
+				GraphRuntimeState newState;
+				const Graph* graphTemplate = GetOrLoadGraph(binding.graphFile, &newState.sourcePath);
 				if (!graphTemplate) continue;
 
 				graphTemplate->RegisterVariableNodes(m_Registry);
 
-				GraphRuntimeState newState;
 				newState.loadedPath = binding.graphFile;
-				newState.executor.SetNodeStepCallback([path = binding.graphFile](GraphNodeId nodeId) {
 #ifdef BAM_EDITOR
-					GraphSystem::TriggerNodeExecuteHook(path, nodeId);
+				newState.executor.SetNodeStepCallback(NotifyCurrentGraphNode);
 #endif
-					});
 				const auto diag = newState.executor.Load(*graphTemplate, m_Registry, sourceRegistry);
 				if (!diag.Succeeded())
 				{
@@ -247,7 +256,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					for (GraphNodeId startEntry : runtime->startNodes)
 					{
 #ifdef BAM_EDITOR
-						if (s_NodeExecuteHook) s_NodeExecuteHook(binding.graphFile, startEntry);
+						if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, startEntry);
 #endif
 
 						if (runtime->executor.Begin(startEntry, 0.0f).Succeeded())
@@ -296,7 +305,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				for (GraphNodeId updateEntry : runtime->updateNodes)
 				{
 #ifdef BAM_EDITOR
-					if (s_NodeExecuteHook) s_NodeExecuteHook(binding.graphFile, updateEntry);
+					if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, updateEntry);
 #endif
 
 					if (runtime->executor.Begin(updateEntry, dt).Succeeded())
@@ -313,7 +322,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 								for (const auto& event : runtime->executor.GetTrace())
 								{
 									if (event.Kind == EGraphTraceKind::Enter)
-										s_NodeExecuteHook(binding.graphFile, event.Node);
+										s_NodeExecuteHook(runtime->sourcePath, event.Node);
 								}
 							}
 #endif
@@ -394,7 +403,8 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			auto& runtime = view.get<GraphRuntimeState>(entity);
 			if (binding.graphFile.empty()) continue;
 
-			const Graph* graphTemplate = GetOrLoadGraph(binding.graphFile);
+			std::wstring sourcePath;
+			const Graph* graphTemplate = GetOrLoadGraph(binding.graphFile, &sourcePath);
 			if (!graphTemplate) continue;
 
 			graphTemplate->RegisterVariableNodes(m_Registry);
@@ -405,9 +415,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 
 			runtime.executor.Clear();
 #ifdef BAM_EDITOR
-			runtime.executor.SetNodeStepCallback([path = binding.graphFile](GraphNodeId nodeId) {
-				GraphSystem::TriggerNodeExecuteHook(path, nodeId);
-				});
+			runtime.executor.SetNodeStepCallback(NotifyCurrentGraphNode);
 #endif
 
 			const auto diag = runtime.executor.Load(*graphTemplate, m_Registry, &reflection);
@@ -423,6 +431,8 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			{
 				runtime.executor.SetVariable(name, val);
 			}
+			runtime.loadedPath = binding.graphFile;
+			runtime.sourcePath = std::move(sourcePath);
 			runtime.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
 			runtime.hasStarted = wasStarted;
 			runtime.isValid = true;

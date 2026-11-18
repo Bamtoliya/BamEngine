@@ -6,6 +6,7 @@
 #include <archive/ArchiveResult.h>
 #include <reflection/ObjectView.h>
 #include "ResourceBinaryHeader.h"
+#include "PlatformPath.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -75,6 +76,12 @@ public:
 public:
 	const wstring& GetPath() const { return m_Path; }
 	void SetPath(const wstring& path) { m_Path = path; }
+	// Called under the manager lock: do not load resources or mutate state here.
+	// Append changes to stable path fields, or return false to reject the transaction before any writes.
+	virtual bool PrepareFilePathRelocation(const std::vector<FilePathChange>&, std::vector<Utf8FilePathUpdate>&)
+	{
+		return true;
+	}
 #pragma endregion
 
 #pragma region Save&Load

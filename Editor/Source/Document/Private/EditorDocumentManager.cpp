@@ -1,7 +1,13 @@
 ﻿#include "EditorDocumentManager.h"
+#include "AssetPathRelocation.h"
 
 namespace Editor
 {
+    bool IEditorDocument::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+    {
+        return !HasUnsavedChanges() && !relocation.Affects(GetPath());
+    }
+
     EditorDocumentId EditorDocumentManager::Add(std::unique_ptr<IEditorDocument> document)
     {
         if (!document || m_NextId == InvalidEditorDocumentId)

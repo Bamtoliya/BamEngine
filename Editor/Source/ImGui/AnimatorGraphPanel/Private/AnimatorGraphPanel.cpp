@@ -1,5 +1,6 @@
 ﻿#include "AnimatorGraphPanel.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
 #include "IconsFontAwesome7.h"
 #include "FileDialogs.h"
 #include "SceneManager.h"
@@ -60,7 +61,7 @@ string AnimatorGraphPanel::BuildResourceWindowTitle() const
 {
 	const auto caption = std::string(ICON_FA_DIAGRAM_PROJECT " ") + GetDisplayName();
 	if (m_CurrentFilePath.empty()) return caption + "###AnimatorGraphPanel";
-	return caption + " - " + std::filesystem::path(m_CurrentFilePath).filename().string() + "###AnimatorGraphPanel";
+	return caption + " - " + WStrToStr(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring()) + "###AnimatorGraphPanel";
 }
 
 void AnimatorGraphPanel::OnResourceWindowVisibility(bool visible)
@@ -194,7 +195,7 @@ void AnimatorGraphPanel::DrawCustomQuickAccess()
 	if (toolbar.Icon("QuickSave", ICON_FA_FLOPPY_DISK, "EditorCommon.Save")) SaveDocument(false);
 
 	const std::string fileName = m_CurrentFilePath.empty()
-		? LOCAL("AnimatorGraph.Unsaved") : std::filesystem::path(m_CurrentFilePath).filename().string();
+		? LOCAL("AnimatorGraph.Unsaved") : WStrToStr(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring());
 	const std::string status = "[" + fileName + (m_IsDirty ? " *]" : "]");
 	toolbar.Text(status.c_str());
 
@@ -227,6 +228,13 @@ bool AnimatorGraphPanel::IsSupported(const std::filesystem::path& assetPath) con
 void AnimatorGraphPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
 	LoadFromFile(assetPath);
+}
+
+bool AnimatorGraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (!PrepareTargetPathRelocation(relocation)) return false;
+	relocation.AddUtf8(m_CurrentFilePath);
+	return true;
 }
 
 bool AnimatorGraphPanel::LoadFromFile(const std::filesystem::path& path)
@@ -284,7 +292,7 @@ bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 	}
 
 	m_CurrentFilePath = targetPath;
-	m_TargetResourcePath = std::filesystem::path(targetPath);
+	m_TargetResourcePath = Engine::Utf8ToPath(targetPath);
 	m_IsDirty = false;
 	return true;
 }
@@ -1749,7 +1757,7 @@ void AnimatorGraphPanel::DrawConfirmModal()
 	{
 		const std::string docName = m_CurrentFilePath.empty()
 			? LOCAL("EditorDocument.Untitled")
-			: std::filesystem::path(m_CurrentFilePath).filename().string();
+			: WStrToStr(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring());
 
 		ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", docName).c_str());
 		ImGui::Spacing();

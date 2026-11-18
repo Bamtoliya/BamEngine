@@ -3,6 +3,7 @@
 #include "ImGuiInterface.h"
 
 BEGIN(Editor)
+class AssetPathRelocation;
 class ResourceEditorInterface : public IImGui
 {
 public:
@@ -19,10 +20,13 @@ public:
     {
         return m_TargetResourcePath;
     }
+    virtual std::vector<std::filesystem::path> GetRetainedResourcePaths() const { return { m_TargetResourcePath }; }
+    virtual bool PrepareAssetPathRelocation(AssetPathRelocation& relocation);
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 public:
 	void Draw() final;
 protected:
+    bool PrepareTargetPathRelocation(AssetPathRelocation& relocation);
     virtual ImVec2 GetInitialResourceWindowSize() const { return {}; }
     virtual ImGuiWindowFlags GetResourceWindowFlags() const { return ImGuiWindowFlags_None; }
     virtual string GetResourceWindowId() const { return WStrToStr(GetName()); }

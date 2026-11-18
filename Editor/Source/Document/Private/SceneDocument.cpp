@@ -1,6 +1,7 @@
 ﻿#include "SceneDocument.h"
 #include "Scene.h"
 #include "SceneManager.h"
+#include "AssetPathRelocation.h"
 #include <archive/JsonArchive.h>
 
 namespace
@@ -53,6 +54,17 @@ namespace Editor
     {
         return !m_ReadOnly && m_Scenes.GetCurrentScene() == m_Scene &&
             m_History.CanFinalizeEditsFor(m_Scene);
+    }
+
+    bool SceneDocument::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+    {
+        if (HasUnsavedChanges() || !CanSave())
+            return false;
+        if (!m_History.PrepareAssetPathRelocation(relocation) ||
+            !relocation.PrepareScenePaths(m_Scene->GetRegistry()))
+            return false;
+        relocation.Add(m_Path);
+        return true;
     }
 
     Engine::EResult SceneDocument::SaveTo(const std::filesystem::path& path)
