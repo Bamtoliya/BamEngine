@@ -84,6 +84,8 @@ target_compile_definitions(Engine PUBLIC ${_engine_glm_definitions})
 
 # MSVC 전용 컴파일러 옵션
 if(MSVC)
+    # Public Engine headers expose EnTT; all consumers must use the same exception configuration.
+    target_compile_options(Engine PUBLIC "$<$<COMPILE_LANGUAGE:CXX>:/EHsc>")
     target_compile_options(Engine PRIVATE
         $<$<CONFIG:Debug>:/ZI>
         $<$<CONFIG:Debug>:/FS>

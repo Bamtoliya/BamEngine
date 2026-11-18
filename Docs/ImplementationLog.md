@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] Engine 소비 타깃의 EnTT 예외 설정 통일
+
+- 후속 사용자 로그에서 `AssetReferenceCheck.exe` 링크까지 진행했으나 `Editor.exe` 링크는 `TextureConverter.lib`의 `entt.noexcept=if(true)`와 Editor의 `try` 불일치(LNK2038·LNK1319)로 실패한 것을 확인했다. 앞선 수정이 `/EHsc`를 Editor와 검사에만 적용한 것이 원인이다. 테스트 실행 결과는 이 로그에 없다.
+- 설치된 EnTT 헤더의 `__cpp_exceptions` 분기와 `detect_mismatch`, Engine의 PUBLIC EnTT 노출 및 TextureConverter의 Engine 링크를 대조했다. MSVC C++의 `/EHsc`를 Engine의 PUBLIC 사용 요구사항으로 옮겨 Engine과 모든 소비 타깃에 전파한다. Editor·AssetReferenceCheck의 개별 지정은 제거하며 EnTT 검사나 예외 복구를 비활성화하지 않는다.
+- `git diff --check`와 CMake 의존 관계를 정적으로 확인했다. 수정 후 구성·빌드·CTest는 실행하지 않았으며 사용자 재빌드가 필요하다. 기존 오브젝트와 새 예외 설정이 섞이지 않도록 의존 타깃도 함께 다시 컴파일되어야 한다.
+
 ### [2026-11-18] 에셋 참조 검사 타깃의 독립 컴파일 오류 수정
 
 - 사용자 빌드 로그에서 `AssetReferenceMove.cpp` 두 곳과 `AssetReferenceValidator.cpp` 한 곳의 `EDITOR_LOG_WARN` 미정의(C3861)를 확인했다. Editor의 Unity 간접 포함으로 가려진 매크로 의존성이 원인이며, 직접 포함한 `Logger.h`가 제공하는 `BAM_LOG(Warn, "Editor", "Asset", ...)`로 수정했다. 검사 타깃에 Editor 전체 include 경로를 추가하지 않는다.

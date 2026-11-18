@@ -4,7 +4,7 @@ target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/Ass
 target_link_libraries(AssetReferenceCheck PRIVATE BamEngine::Engine)
 set_target_properties(AssetReferenceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 if(MSVC)
-    target_compile_options(AssetReferenceCheck PRIVATE /utf-8 /EHsc)
+    target_compile_options(AssetReferenceCheck PRIVATE /utf-8)
 endif()
 if(BUILD_TESTING)
     add_test(NAME AssetReferenceCheck COMMAND AssetReferenceCheck)
