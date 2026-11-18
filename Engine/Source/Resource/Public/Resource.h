@@ -6,6 +6,7 @@
 #include <archive/ArchiveResult.h>
 #include <reflection/ObjectView.h>
 #include "ResourceBinaryHeader.h"
+#include "PlatformPath.h"
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -75,6 +76,9 @@ public:
 public:
 	const wstring& GetPath() const { return m_Path; }
 	void SetPath(const wstring& path) { m_Path = path; }
+	// Called under the manager lock: do not load resources or mutate state here.
+	// Override when the resource owns path strings in addition to its backing Path and resource handles.
+	virtual bool CanRelocateFilePaths(const std::vector<FilePathChange>& changes) const { return true; }
 #pragma endregion
 
 #pragma region Save&Load

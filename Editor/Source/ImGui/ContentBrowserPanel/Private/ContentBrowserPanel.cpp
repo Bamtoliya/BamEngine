@@ -2,6 +2,8 @@
 #include "InputManager.h"
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
+#include "AssetPathRelocation.h"
+#include "ResourceManager.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
 #include "ContentBrowserDragPayload.h"
@@ -1416,47 +1418,34 @@ filesystem::path ContentBrowserPanel::CreateFileHistoryBatch() const
 bool ContentBrowserPanel::CanApplyAssetMove(const vector<FileMove>& moves,
 	const vector<AssetReferenceEdit>& references) const
 {
-	vector<filesystem::path> paths;
-	paths.reserve((moves.size() + references.size()) * 2);
+	AssetPathRelocation relocation;
+	return PrepareAssetMove(moves, references, true, relocation);
+}
+
+bool ContentBrowserPanel::PrepareAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
+	bool forward, AssetPathRelocation& relocation) const
+{
+	vector<Engine::FilePathChange> changes;
+	vector<filesystem::path> documents;
 	for (const auto& move : moves)
-	{
-		paths.push_back(move.Before);
-		paths.push_back(move.After);
-	}
+		changes.push_back({ forward ? move.Before : move.After, forward ? move.After : move.Before });
 	for (const auto& reference : references)
 	{
-		paths.push_back(reference.BeforePath);
-		paths.push_back(reference.AfterPath);
+		documents.push_back(reference.BeforePath);
+		documents.push_back(reference.AfterPath);
 	}
-	return ImGuiManager::Get().CanApplyAssetFileChanges(paths);
+	relocation = AssetPathRelocation(std::move(changes), std::move(documents));
+	return ImGuiManager::Get().PrepareAssetFileChanges(relocation);
 }
 
 void ContentBrowserPanel::RemapBrowserPaths(const vector<FileMove>& moves, bool forward)
 {
-	const auto remap = [&moves, forward](const filesystem::path& path)
+	vector<Engine::FilePathChange> changes;
+	for (const auto& move : moves)
+		changes.push_back({ forward ? move.Before : move.After, forward ? move.After : move.Before });
+	const auto remap = [&changes](const filesystem::path& path)
 	{
-		if (path.empty())
-			return path;
-		for (const auto& move : moves)
-		{
-			const auto& source = forward ? move.Before : move.After;
-			const auto& target = forward ? move.After : move.Before;
-			auto part = path.begin();
-			auto root = source.begin();
-			while (part != path.end() && root != source.end() &&
-				CompareStringOrdinal(part->c_str(), -1, root->c_str(), -1, TRUE) == CSTR_EQUAL)
-			{
-				++part;
-				++root;
-			}
-			if (root != source.end())
-				continue;
-			auto result = target;
-			for (; part != path.end(); ++part)
-				result /= *part;
-			return result;
-		}
-		return path;
+		return Engine::PlatformPath::RemapFilePath(path, changes);
 	};
 	m_CurrentDirectory = remap(m_CurrentDirectory);
 	m_LastDirectory = remap(m_LastDirectory);
@@ -1488,7 +1477,8 @@ bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forw
 		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"), LOCAL(key), ELogLevel::Warn);
 		return false;
 	};
-	if (!CanApplyAssetMove(batch.Moves, batch.References))
+	AssetPathRelocation relocation;
+	if (!PrepareAssetMove(batch.Moves, batch.References, forward, relocation))
 		return fail("ContentBrowser.MoveDocumentConflict");
 	if (!AssetReferenceValidator::ValidateMoveReferences(batch.References, forward))
 		return fail("ContentBrowser.MoveReferenceChanged");
@@ -1508,23 +1498,30 @@ bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forw
 	}))
 		return fail("ContentBrowser.MoveReferenceChanged");
 
-	if (!ReplayFileMoves(batch.Moves, forward))
-		return false;
-	const auto result = AssetReferenceValidator::ApplyMoveReferences(batch.References, forward, batch.RecoveryDirectory);
-	if (result == EAssetReferenceWriteResult::Success)
+	bool attemptedFiles = false;
+	const bool success = Engine::ResourceManager::Get().RelocateFileResources(relocation.Changes(), [&]()
 	{
-		RemapBrowserPaths(batch.Moves, forward);
-		return true;
-	}
-	const bool pathsRestored = ReplayFileMoves(batch.Moves, !forward);
-	if (!pathsRestored || result == EAssetReferenceWriteResult::RollbackFailed)
-	{
-		m_FileHistoryInvalid = true;
-		EDITOR_LOG_ERROR("Asset move rollback failed. Reference backups: {}",
-			Engine::WStrToStr(batch.RecoveryDirectory.wstring()));
-		return fail("ContentBrowser.FileHistoryRollbackFailed");
-	}
-	return fail("ContentBrowser.MoveReferenceChanged");
+		// The ResourceManager lock is held here. Do not call resource APIs or apply editor callbacks.
+		attemptedFiles = true;
+		if (!ReplayFileMoves(batch.Moves, forward)) return false;
+		const auto result = AssetReferenceValidator::ApplyMoveReferences(batch.References, forward, batch.RecoveryDirectory);
+		if (result == EAssetReferenceWriteResult::Success) return true;
+		const bool pathsRestored = ReplayFileMoves(batch.Moves, !forward);
+		if (!pathsRestored || result == EAssetReferenceWriteResult::RollbackFailed)
+		{
+			m_FileHistoryInvalid = true;
+			EDITOR_LOG_ERROR("Asset move rollback failed. Reference backups: {}",
+				Engine::WStrToStr(batch.RecoveryDirectory.wstring()));
+			return fail("ContentBrowser.FileHistoryRollbackFailed");
+		}
+		return fail("ContentBrowser.MoveReferenceChanged");
+	});
+	if (!success)
+		return attemptedFiles ? false : fail("ContentBrowser.MoveLiveStateConflict");
+	// Resource indices now refer to the new locations and their lock has been released.
+	relocation.Apply();
+	RemapBrowserPaths(batch.Moves, forward);
+	return true;
 }
 
 bool ContentBrowserPanel::ReplayFileMoves(const vector<FileMove>& moves, bool forward)

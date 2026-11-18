@@ -112,6 +112,7 @@ public:
 		return { m_Logic.FilePath, m_Shader.FilePath };
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	bool LoadDocument(const std::filesystem::path& path);
 	void SaveDocument(bool saveAs);
 	void RequestOpenDocument(); // 미저장 변경이 있으면 교체 확인 후 열기

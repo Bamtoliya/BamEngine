@@ -42,6 +42,7 @@ class AnimationTimelinePanel final : public ResourceEditorInterface
 {
 public:
 	AnimationTimelinePanel();
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	virtual ~AnimationTimelinePanel() override;
 	virtual void Update(f32 dt) override;
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimationTimeline; }
@@ -58,7 +59,7 @@ public:
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override
 	{
 		ResourceEditorInterface::SetTargetResource(assetPath);
-		LoadFromFile(assetPath.string());
+		LoadFromFile(WStrToStr(assetPath.wstring()));
 	}
 	void SetTargetModel(const Engine::ResourceHandle<Engine::Model>& model);
 	void SyncFromSelectedEntity();

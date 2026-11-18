@@ -12,6 +12,7 @@
 #include "AssetReferenceValidator.h"
 
 BEGIN(Editor)
+class AssetPathRelocation;
 
 class ContentBrowserFileListener : public efsw::FileWatchListener
 {
@@ -113,6 +114,8 @@ private:
 	};
 	bool ReplayAssetMove(const AssetMoveBatch& batch, bool forward);
 	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references) const;
+	bool PrepareAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
+		bool forward, AssetPathRelocation& relocation) const;
 	void QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory, bool fromClipboard);
 	void QueueAssetPathChanges(const vector<AssetPathMove>& moves, bool fromClipboard, bool rename);
 	void RemapBrowserPaths(const vector<FileMove>& moves, bool forward);

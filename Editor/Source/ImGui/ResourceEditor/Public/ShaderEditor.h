@@ -6,6 +6,10 @@ BEGIN(Editor)
 class ShaderEditor final : public ResourceEditorInterface
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	ShaderEditor() { m_Name = L"Shader Editor"; m_DisplayNameKey = "ResourceEditor.ShaderTitle"; }
 	virtual ~ShaderEditor() = default;
 public:

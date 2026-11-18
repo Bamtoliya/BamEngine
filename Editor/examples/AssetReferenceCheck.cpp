@@ -1,6 +1,9 @@
 #include "AssetReferenceValidator.h"
 #include "ContentBrowserRename.h"
 #include "PlatformPath.h"
+#include "Engine_Includes.h"
+#include "ResourceManager.h"
+#include "AssetPathRelocation.h"
 
 #include <algorithm>
 #include <chrono>
@@ -38,6 +41,15 @@ namespace
         std::ifstream file(path, std::ios::binary);
         return { std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
     }
+
+    class RelocationProbe final : public Engine::Resource
+    {
+    public:
+        RelocationProbe() : Resource(Engine::EResourceType::Unknown) {}
+        void Free() override {}
+        bool CanRelocateFilePaths(const std::vector<Engine::FilePathChange>&) const override { return AllowRelocation; }
+        bool AllowRelocation = true;
+    };
 }
 
 int main()
@@ -300,4 +312,96 @@ int main()
 
     if (!WriteFixture(invalid, "{") || Validator::PrepareMoveReferences({ { scene, destination / scene.filename() } }, edits))
         return 25;
+
+    if (!Engine::ResourceManager::Create())
+        return 35;
+    struct ResourceScope { ~ResourceScope() { Engine::ResourceManager::Destroy(); } } resources;
+    auto& manager = Engine::ResourceManager::Get();
+    const auto oldKey = Engine::PlatformPath::ToVirtualUri(material);
+    const auto newKey = Engine::PlatformPath::ToVirtualUri(renamedMaterial);
+    auto* probe = new RelocationProbe();
+    probe->SetPath(oldKey);
+    probe->IncreaseVersion();
+    auto live = manager.AddResource<Engine::Resource>(oldKey, probe);
+    const auto raw = live.GetRawHandle();
+    const std::vector<Engine::FilePathChange> renamePaths{ { material, renamedMaterial } };
+    auto editorPath = material;
+    auto editorUtf8 = Engine::WStrToStr(material.wstring());
+    auto controllerUri = Engine::WStrToStr(oldKey);
+    bool applied = false;
+    Editor::AssetPathRelocation editorChanges(renamePaths, { scene });
+    editorChanges.Add(editorPath);
+    editorChanges.AddUtf8(editorUtf8);
+    editorChanges.AddUtf8(controllerUri, true);
+    editorChanges.AfterCommit([&]() { applied = true; });
+    if (editorPath != material || controllerUri != Engine::WStrToStr(oldKey) || applied ||
+        !editorChanges.Rewrites(scene) || editorChanges.Affects(materials / L"Other.bammat.json"))
+        return 41;
+
+    bool called = false;
+    if (manager.RelocateFileResources(renamePaths, [&]() { called = true; return false; }) || !called ||
+        manager.FindHandleByKey(oldKey) != raw || live.Get() != probe || probe->GetPath() != oldKey)
+        return 36;
+
+    auto collision = manager.AddResource<Engine::Resource>(newKey, new RelocationProbe());
+    called = false;
+    if (manager.RelocateFileResources(renamePaths, [&]() { called = true; return true; }) || called ||
+        manager.FindHandleByKey(oldKey) != raw)
+        return 37;
+    manager.DestroyResource(collision.GetRawHandle());
+    collision.Reset();
+
+    auto* destinationProbe = new RelocationProbe();
+    destinationProbe->SetPath(newKey);
+    auto physicalCollision = manager.AddResource<Engine::Resource>(L"CachedDestination", destinationProbe);
+    called = false;
+    if (manager.RelocateFileResources(renamePaths, [&]() { called = true; return true; }) || called)
+        return 42;
+    if (manager.RelocateFileResources({ { assets / L"Uncached.bammat.json", renamedMaterial } },
+        [&]() { called = true; return true; }) || called)
+        return 48;
+    manager.DestroyResource(physicalCollision.GetRawHandle());
+    physicalCollision.Reset();
+    probe->AllowRelocation = false;
+    if (manager.RelocateFileResources(renamePaths, [&]() { called = true; return true; }) || called)
+        return 43;
+    probe->AllowRelocation = true;
+
+    if (!manager.RelocateFileResources(renamePaths, [&]() { fs::rename(material, renamedMaterial); return true; }) ||
+        live.Get() != probe || live.GetRawHandle() != raw || manager.FindHandleByKey(newKey) != raw ||
+        manager.FindHandleByKey(oldKey).IsValid() || probe->GetPath() != newKey || probe->GetVersion() != 1)
+        return 38;
+    editorChanges.Apply();
+    if (!applied || editorPath != Engine::PlatformPath::Normalize(renamedMaterial) ||
+        editorUtf8 != Engine::WStrToStr(Engine::PlatformPath::Normalize(renamedMaterial).wstring()) ||
+        controllerUri != Engine::WStrToStr(newKey))
+        return 44;
+    if (!manager.RelocateFileResources({ { renamedMaterial, material } },
+        [&]() { fs::rename(renamedMaterial, material); return true; }) || manager.FindHandleByKey(oldKey) != raw)
+        return 39;
+
+    auto* customProbe = new RelocationProbe();
+    customProbe->SetPath(Engine::PlatformPath::ToVirtualUri(texture));
+    auto custom = manager.AddResource<Engine::Resource>(L"SemanticTextureKey", customProbe);
+    const auto newTexture = destination / texture.filename();
+    if (!manager.RelocateFileResources({ { texture, newTexture } },
+        [&]() { fs::rename(texture, newTexture); return true; }) || customProbe->GetKey() != L"SemanticTextureKey" ||
+        manager.FindHandleByFilePath(newTexture) != custom.GetRawHandle() || custom.Get() != customProbe)
+        return 40;
+
+    // Prefixes compare by component, support directory casing, and never match a sibling name.
+    const auto remapped = Engine::PlatformPath::RemapFilePath(material,
+        { { materials / L"", destination / L"Materials" } });
+    if (!Engine::PlatformPath::IsSamePath(remapped, destination / L"Materials" / material.filename()) ||
+        Engine::PlatformPath::IsFilePathAffected(assets / L"MaterialsExtra/a.png", { { materials, destination } }))
+        return 45;
+
+    // Case-only metadata changes also update the lookup hash, then reverse without replacing the object.
+    auto upperPath = material.parent_path() / L"BRICK.BAMMAT.JSON";
+    if (!manager.RelocateFileResources({ { material, upperPath } }, []() { return true; }) || live.Get() != probe ||
+        manager.FindHandleByFilePath(upperPath) != raw || manager.FindHandleByKey(oldKey).IsValid())
+        return 46;
+    if (!manager.RelocateFileResources({ { upperPath, material } }, []() { return true; }) ||
+        manager.FindHandleByKey(oldKey) != raw)
+        return 47;
 }

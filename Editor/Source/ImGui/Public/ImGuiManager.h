@@ -15,6 +15,7 @@ END
 
 BEGIN(Editor)
 class ResourceEditorInterface;
+class AssetPathRelocation;
 class PluginResourceEditor;
 struct EditorSettingsChangeResult;
 struct ImGuiManagerDesc
@@ -163,7 +164,7 @@ public:
 	bool RequestCloseScene();
 	bool RequestQuit();
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
-	bool CanApplyAssetFileChanges(const vector<std::filesystem::path>& paths) const;
+	bool PrepareAssetFileChanges(AssetPathRelocation& relocation) const;
 	bool PreparePendingSceneSave();
 private:
 	enum class ESceneDocumentAction

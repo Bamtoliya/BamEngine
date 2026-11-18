@@ -39,6 +39,10 @@ struct SelectedVFXTrack
 class VFXEditorPanel final : public ResourceEditorInterface, public IGizmoHost
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	VFXEditorPanel();
 	virtual ~VFXEditorPanel() override;
 

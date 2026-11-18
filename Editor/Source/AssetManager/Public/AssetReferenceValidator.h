@@ -3,6 +3,7 @@
 #include <vector>
 #include <filesystem>
 #include "Engine_API.h"
+#include "PlatformPath.h"
 
 namespace Editor
 {
@@ -44,11 +45,7 @@ namespace Editor
         bool IsComplete = true;
     };
 
-    struct AssetPathMove
-    {
-        std::filesystem::path Before;
-        std::filesystem::path After;
-    };
+    using AssetPathMove = Engine::FilePathChange;
 
     struct AssetReferenceEdit
     {

@@ -530,7 +530,9 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] Reflection type not found for AnimatorStateMachine");
 		return false;
 	}
-	const std::string resolvedPath = PlatformPath::ResolveProjectRelative(filePath).string();
+	const auto path = Utf8ToPath(filePath);
+	const auto resolvedPath = PlatformPath::IsVirtualUri(filePath)
+		? PlatformPath::ResolveUri(path) : PlatformPath::ResolveProjectRelative(path);
 	archive::JsonArchive ar;
 	const auto writeRes = archive_reflection::WriteObject(ar, "AnimatorController", *type, reflection::ObjectView::From(*this), &refl.GetRegistry(), &refl.GetPropertyCodecs());
 	if (!writeRes)
@@ -541,7 +543,8 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 	const auto saveRes = ar.SaveToFile(resolvedPath);
 	if (!saveRes)
 	{
-		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}", static_cast<int>(saveRes.Code), saveRes.Field, resolvedPath);
+		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}",
+			static_cast<int>(saveRes.Code), saveRes.Field, WStrToStr(resolvedPath.wstring()));
 		return false;
 	}
 	return true;

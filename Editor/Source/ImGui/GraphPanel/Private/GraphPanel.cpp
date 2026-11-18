@@ -1,5 +1,6 @@
 ﻿#include "GraphPanel.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
 #include "GraphMessageLocalization.h"
 #include "GraphSystem.h"
 #include "LocalizationManager.h"
@@ -13,6 +14,17 @@
 #include "NotificationManager.h"
 
 namespace ed = ax::NodeEditor;
+
+bool GraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	// Graph values can contain paths without resource handles; only a filename change is supported here.
+	if (relocation.Rewrites(m_Logic.FilePath) || relocation.Rewrites(m_Shader.FilePath) ||
+		!PrepareTargetPathRelocation(relocation))
+		return false;
+	relocation.Add(m_Logic.FilePath);
+	relocation.Add(m_Shader.FilePath);
+	return true;
+}
 
 #pragma region Constructor&Destructor
 GraphPanel::GraphPanel()

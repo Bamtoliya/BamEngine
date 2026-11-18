@@ -14,6 +14,10 @@ BEGIN(Editor)
 class ModelEditor final : public ResourceEditorInterface
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	ModelEditor();
 	virtual ~ModelEditor() override;
 

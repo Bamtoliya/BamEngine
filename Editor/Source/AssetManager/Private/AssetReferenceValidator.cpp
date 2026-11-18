@@ -549,24 +549,7 @@ namespace Editor
             std::vector<AssetPathMove> canonicalMoves;
             const auto remap = [&canonicalMoves](const fs::path& path)
             {
-                for (const auto& move : canonicalMoves)
-                {
-                    auto part = path.begin();
-                    auto root = move.Before.begin();
-                    while (part != path.end() && root != move.Before.end() &&
-                        CompareStringOrdinal(part->c_str(), -1, root->c_str(), -1, TRUE) == CSTR_EQUAL)
-                    {
-                        ++part;
-                        ++root;
-                    }
-                    if (root != move.Before.end())
-                        continue;
-                    auto result = move.After;
-                    for (; part != path.end(); ++part)
-                        result /= *part;
-                    return result.lexically_normal();
-                }
-                return path;
+                return Path::RemapFilePath(path, canonicalMoves);
             };
 
             for (const auto& move : moves)

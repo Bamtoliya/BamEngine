@@ -37,6 +37,18 @@ void ActionTimelineAsset::Free()
 	m_CameraTracks.clear();
 }
 
+bool ActionTimelineAsset::CanRelocateFilePaths(const vector<FilePathChange>& changes) const
+{
+	if (PlatformPath::IsFilePathAffected(Utf8ToPath(m_ModelPath), changes))
+		return false;
+	for (const auto& track : m_NotifyTracks)
+		for (const auto& notify : track.Notifies)
+			if (PlatformPath::IsFilePathAffected(Utf8ToPath(notify.SoundPath), changes) ||
+				PlatformPath::IsFilePathAffected(Utf8ToPath(notify.VFXPath), changes))
+				return false;
+	return true;
+}
+
 ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
 {
 	auto* asset = new ActionTimelineAsset();
@@ -50,7 +62,9 @@ ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
 
 bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 {
-	const std::filesystem::path fullPath = PlatformPath::ResolveProjectRelative(filePath);
+	const auto path = Utf8ToPath(filePath);
+	const auto fullPath = PlatformPath::IsVirtualUri(filePath)
+		? PlatformPath::ResolveUri(path) : PlatformPath::ResolveProjectRelative(path);
 	if (fullPath.has_parent_path())
 	{
 		std::filesystem::create_directories(fullPath.parent_path());
@@ -69,7 +83,7 @@ bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 {
 	std::filesystem::path fullPath = PlatformPath::ResolveUri(filePath);
 	if (!std::filesystem::exists(fullPath))
-		fullPath = PlatformPath::ResolveProjectRelative(filePath);
+		fullPath = PlatformPath::ResolveProjectRelative(Utf8ToPath(filePath));
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(fullPath);
 	if (!loadRes) return false;

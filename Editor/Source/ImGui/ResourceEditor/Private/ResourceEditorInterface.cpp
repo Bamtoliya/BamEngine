@@ -1,5 +1,26 @@
 ﻿#include "ResourceEditorInterface.h"
 #include "IconsFontAwesome7.h"
+#include "AssetPathRelocation.h"
+
+bool ResourceEditorInterface::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+    if (HasUnsavedResourceChanges())
+        return false;
+    for (const auto& path : GetRetainedResourcePaths())
+    {
+        if (relocation.Affects(path))
+            return false;
+    }
+    return true;
+}
+
+bool ResourceEditorInterface::PrepareTargetPathRelocation(AssetPathRelocation& relocation)
+{
+    if (HasUnsavedResourceChanges())
+        return false;
+    relocation.Add(m_TargetResourcePath);
+    return true;
+}
 
 string ResourceEditorInterface::BuildResourceWindowTitle() const
 {

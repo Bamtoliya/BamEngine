@@ -12,6 +12,10 @@ BEGIN(Editor)
 class MaterialEditor final : public ResourceEditorInterface
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	MaterialEditor();
 	virtual ~MaterialEditor() = default;
 

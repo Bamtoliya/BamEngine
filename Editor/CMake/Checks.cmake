@@ -1,5 +1,6 @@
 ﻿add_executable(AssetReferenceCheck examples/AssetReferenceCheck.cpp
     Source/AssetManager/Private/AssetReferenceValidator.cpp Source/AssetManager/Private/AssetReferenceMove.cpp
+    Source/AssetManager/Private/AssetPathRelocation.cpp
     Source/ImGui/ContentBrowserPanel/Private/ContentBrowserRenameRules.cpp)
 target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/ContentBrowserPanel/Public")
@@ -20,6 +21,7 @@ target_include_directories(TransformEditorCheck PRIVATE "${EDITOR_SOURCE_DIR}/Im
 target_link_libraries(TransformEditorCheck PRIVATE BamEngine::Engine)
 
 add_executable(TransformInheritanceCheck examples/TransformInheritanceCheck.cpp
+    Source/AssetManager/Private/AssetPathRelocation.cpp
     Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
     Source/Command/Private/CommandHistory.cpp Source/Command/Private/SceneEditHistory.cpp)
 target_include_directories(TransformInheritanceCheck PRIVATE "${EDITOR_SOURCE_DIR}/Command/Public"
@@ -31,6 +33,7 @@ target_precompile_headers(TransformInheritanceCheck PRIVATE
 set_target_properties(TransformInheritanceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(EditorHistoryCheck examples/EditorHistoryCheck.cpp
+    Source/AssetManager/Private/AssetPathRelocation.cpp
     Source/Document/Private/SceneDocument.cpp
     Source/Command/Private/CommandHistory.cpp
     Source/Command/Private/SceneEditHistory.cpp

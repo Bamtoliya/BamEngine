@@ -16,6 +16,10 @@ BEGIN(Editor)
 class ParticleEditorPanel final : public ResourceEditorInterface
 {
 public:
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
+	{
+		return PrepareTargetPathRelocation(relocation);
+	}
 	ParticleEditorPanel();
 	virtual ~ParticleEditorPanel() override;
 

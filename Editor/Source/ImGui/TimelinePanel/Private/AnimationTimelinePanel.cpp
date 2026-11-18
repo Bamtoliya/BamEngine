@@ -1,5 +1,6 @@
 ﻿#include "AnimationTimelinePanel.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
 #include "TimelineView.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
@@ -241,6 +242,19 @@ float AnimationTimelinePanel::ScreenXToTime(float screenX, float timelineMinX, f
 {
 	const auto scale = EditorUI::MakeTimelineScale(timelineMinX, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
 	return std::clamp(scale.ToTime(screenX), 0.0f, m_Duration);
+}
+
+bool AnimationTimelinePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (!PrepareTargetPathRelocation(relocation)) return false;
+	if (m_TargetModel.Get() && relocation.Affects(m_TargetModel->GetPath())) return false;
+	for (const auto& track : m_NotifyTracks)
+		for (const auto& notify : track.Notifies)
+			if (relocation.Affects(Engine::Utf8ToPath(notify.SoundPath)) ||
+				relocation.Affects(Engine::Utf8ToPath(notify.VFXPath)))
+				return false;
+	relocation.AddUtf8(m_CurrentAssetPath);
+	return true;
 }
 
 bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)

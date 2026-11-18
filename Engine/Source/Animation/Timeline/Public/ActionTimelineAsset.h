@@ -148,6 +148,7 @@ private:
 public:
 	virtual EResult Initialize(void* arg = nullptr) override;
 	virtual void Free() override;
+	bool CanRelocateFilePaths(const vector<FilePathChange>& changes) const override;
 
 	static ActionTimelineAsset* Create(void* arg = nullptr);
 

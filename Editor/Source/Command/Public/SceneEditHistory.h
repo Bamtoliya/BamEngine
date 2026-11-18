@@ -10,6 +10,7 @@ namespace Engine { class Scene; }
 
 namespace Editor
 {
+    class AssetPathRelocation;
     // In-memory values, not a file format. Component copy operations come from the common ECS registry.
     class SceneEditSnapshot
     {
@@ -22,6 +23,7 @@ namespace Editor
         bool SameScope(const SceneEditSnapshot& other) const;
         Engine::Scene* Scene() const;
     private:
+        friend class SceneEditHistory;
         struct Data;
         std::shared_ptr<Data> m_Data;
         static SceneEditSnapshot CaptureImpl(Engine::Scene& scene, std::span<const entt::entity> entities, bool whole);
@@ -49,6 +51,7 @@ namespace Editor
         bool ShortcutsAllowed() const { return m_ShortcutsAllowed; }
         const std::string& Error() const { return m_Error; }
         void ResetDocument(Engine::Scene* scene, bool editing);
+        bool PrepareAssetPathRelocation(AssetPathRelocation& relocation);
         bool HasUnsavedChanges() const;
         uint64 GetSavedStateId() const { return m_SavedStateId; }
         bool CanMarkSaved() const
@@ -67,6 +70,7 @@ namespace Editor
         // Declare commands first so they outlive the pending operation.
         CommandHistory m_Commands;
         std::shared_ptr<Change> m_Pending;
+        std::vector<std::weak_ptr<SceneEditSnapshot::Data>> m_PathSnapshots;
         Engine::Scene* m_CurrentScene = nullptr;
         bool m_Enabled = false;
         bool m_ShortcutsAllowed = false;

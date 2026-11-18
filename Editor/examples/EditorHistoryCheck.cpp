@@ -9,6 +9,9 @@
 #include <stdexcept>
 #include "EditorDocumentManager.h"
 #include "SceneDocument.h"
+#include "AssetPathRelocation.h"
+#include "AnimatorComponent.h"
+#include "ActionTimelineAsset.h"
 #include "SceneManager.h"
 #include "EditorDocumentController.h"
 #include "SplineComponent.h"
@@ -594,12 +597,26 @@ namespace
         const auto savedPath = document.GetPath();
         Check(savedPath.is_absolute() && !document.HasUnsavedChanges(), "saved document state");
 
+        const auto renamed = directory / "renamed.scene.json";
+        auto* liveScene = document.GetScene();
+        Editor::AssetPathRelocation relocation({ { savedPath, renamed } }, {});
+        Check(document.PrepareAssetPathRelocation(relocation), "clean document relocation rejected");
+        Check(document.GetPath() == savedPath && history.CanUndo(), "preparation changed document or history");
+        relocation.Apply();
+        Check(Engine::PlatformPath::IsSamePath(document.GetPath(), renamed) && document.GetScene() == liveScene &&
+            history.CanUndo() && !document.HasUnsavedChanges(), "relocation replaced scene or discarded history");
+        Editor::AssetPathRelocation reverse({ { renamed, savedPath } }, {});
+        Check(document.PrepareAssetPathRelocation(reverse), "reverse document relocation rejected");
+        reverse.Apply();
+
         {
             Editor::SceneEditScope edit(history, *document.GetScene(), "draft name");
             document.GetScene()->SetName(L"draft");
         }
 
         Check(document.HasUnsavedChanges(), "document edit not tracked");
+        Editor::AssetPathRelocation dirtyMove({ { savedPath, renamed } }, {});
+        Check(!document.PrepareAssetPathRelocation(dirtyMove), "dirty document relocation accepted");
         Check(history.Undo() && !document.HasUnsavedChanges(), "undo did not return to saved state");
         Check(history.Redo() && document.HasUnsavedChanges(), "redo did not restore dirty state");
 
@@ -655,6 +672,54 @@ namespace
         Check(document.GetScene() == scenes.GetCurrentScene() && document.CanSave(), "rebound document unavailable");
         Check(document.GetPath() == pathBeforeRebind &&
             document.HasUnsavedChanges() == dirtyBeforeRebind, "rebind changed document save state");
+
+        history.ResetDocument(document.GetScene(), true);
+        auto& animated = Add(*document.GetScene(), L"animated");
+        auto& animator = document.GetScene()->GetRegistry().emplace<Engine::AnimatorComponent>(animated.GetEntityHandle());
+        const auto animatedHandle = animated.GetEntityHandle();
+        const auto controller = directory / "before.bamanimator";
+        const auto renamedController = directory / "after.bamanimator";
+        animator.controllerPath = Engine::WStrToStr(controller.wstring());
+        animator.loadedControllerPath = animator.controllerPath;
+        animator.stateMachineAsset = std::make_shared<Engine::AnimatorStateMachine>();
+        const auto stateMachine = animator.stateMachineAsset;
+        animator.currentTime = 0.75f;
+        {
+            Editor::SceneEditScope edit(history, *document.GetScene(), "controller history");
+            document.GetScene()->SetName(L"controller history");
+        }
+        Check(history.MarkSaved() && history.CanUndo(), "controller history setup");
+        Editor::AssetPathRelocation controllerMove({ { controller, renamedController } }, { document.GetPath() });
+        Check(document.PrepareAssetPathRelocation(controllerMove), "loaded controller relocation rejected");
+        Check(animator.controllerPath == Engine::WStrToStr(controller.wstring()), "controller changed during preparation");
+        controllerMove.Apply();
+        Check(animator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)) &&
+            animator.loadedControllerPath == animator.controllerPath && animator.stateMachineAsset == stateMachine &&
+            animator.currentTime == 0.75f, "controller relocation reloaded playback or retained old paths");
+        Check(history.Undo(), "controller relocation lost scene undo");
+        const auto& restoredAnimator = document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(
+            animatedHandle);
+        Check(restoredAnimator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)),
+            "scene undo restored a stale controller path");
+        Check(history.MarkSaved(), "controller reverse baseline");
+        Editor::AssetPathRelocation controllerReverse({ { renamedController, controller } }, { document.GetPath() });
+        Check(document.PrepareAssetPathRelocation(controllerReverse), "controller reverse preparation");
+        controllerReverse.Apply();
+        Check(history.Redo(), "controller relocation lost scene redo");
+        Check(document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(animatedHandle).controllerPath ==
+            Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(controller)), "scene redo restored a stale controller path");
+
+        const auto unicodeController = directory / L"컨트롤러 이동.bamanimator.json";
+        const auto unicodeTimeline = directory / L"타임라인 이동.bamtimeline.json";
+        Check(stateMachine->SaveToFile(Engine::WStrToStr(unicodeController.wstring())) &&
+            std::filesystem::is_regular_file(unicodeController), "UTF-8 controller save path");
+        Engine::AnimatorStateMachine reloadedController;
+        Check(reloadedController.LoadFromFile(Engine::WStrToStr(unicodeController.wstring())), "UTF-8 controller load path");
+        std::unique_ptr<Engine::Resource> timeline(Engine::ActionTimelineAsset::CreateEmpty());
+        auto& timelineAsset = *static_cast<Engine::ActionTimelineAsset*>(timeline.get());
+        Check(timelineAsset.SaveToFile(Engine::WStrToStr(unicodeTimeline.wstring())) &&
+            std::filesystem::is_regular_file(unicodeTimeline), "UTF-8 timeline save path");
+        Check(timelineAsset.LoadFromFile(Engine::WStrToStr(unicodeTimeline.wstring())), "UTF-8 timeline load path");
     }
     void DocumentActionProtection()
     {

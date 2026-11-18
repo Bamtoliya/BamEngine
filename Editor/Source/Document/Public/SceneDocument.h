@@ -26,6 +26,7 @@ namespace Editor
         const std::filesystem::path& GetPath() const override { return m_Path; }
         bool HasUnsavedChanges() const override;
         bool CanSave() const override;
+        bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
         Engine::EResult SaveTo(const std::filesystem::path& path) override;
         Engine::EResult DiscardChanges() override;
 

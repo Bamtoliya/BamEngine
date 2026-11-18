@@ -446,6 +446,55 @@ namespace Engine
 #endif
     }
 
+    bool PlatformPath::IsSamePath(const std::filesystem::path& lhs, const std::filesystem::path& rhs)
+    {
+        auto left = Normalize(lhs);
+        auto right = Normalize(rhs);
+        while (!left.empty() && left != left.root_path() && left.filename().empty()) left = left.parent_path();
+        while (!right.empty() && right != right.root_path() && right.filename().empty()) right = right.parent_path();
+#if defined(_WIN32)
+        return CompareStringOrdinal(left.c_str(), -1, right.c_str(), -1, TRUE) == CSTR_EQUAL;
+#else
+        return left == right;
+#endif
+    }
+
+    bool PlatformPath::IsFilePathAffected(const std::filesystem::path& pathOrUri,
+        const std::vector<FilePathChange>& changes)
+    {
+        if (pathOrUri.empty()) return false;
+        const auto physical = Normalize(ResolveUri(pathOrUri));
+        return RemapFilePath(physical, changes) != physical;
+    }
+
+    std::filesystem::path PlatformPath::RemapFilePath(const std::filesystem::path& path,
+        const std::vector<FilePathChange>& changes)
+    {
+        if (path.empty())
+            return path;
+        const auto normalized = Normalize(path);
+        for (const auto& change : changes)
+        {
+            auto source = Normalize(change.Before);
+            while (!source.empty() && source != source.root_path() && source.filename().empty())
+                source = source.parent_path();
+            auto part = normalized.begin();
+            auto root = source.begin();
+            while (part != normalized.end() && root != source.end() && IsSamePath(*part, *root))
+            {
+                ++part;
+                ++root;
+            }
+            if (source.empty() || root != source.end())
+                continue;
+            auto result = Normalize(change.After);
+            for (; part != normalized.end(); ++part)
+                result /= *part;
+            return result;
+        }
+        return normalized;
+    }
+
     std::filesystem::path PlatformPath::Normalize(const std::filesystem::path& path)
     {
         std::wstring str = path.wstring();

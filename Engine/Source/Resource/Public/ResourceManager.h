@@ -7,6 +7,7 @@
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include <cwctype>
+#include <functional>
 
 BEGIN(Engine)
 
@@ -85,6 +86,10 @@ public:
 	Handle FindHandleByKey(const wstring& key);
 	static wstring ResolveFileKey(const std::filesystem::path& filePath);
 	Handle FindHandleByFilePath(const std::filesystem::path& filePath);
+	// Main-thread file transaction. The callback must not call ResourceManager and must undo its own failures.
+	// Prepares the full index before calling commitFiles; preserves resource objects, handles and refcounts.
+	// Call only while no worker accesses resource properties through previously obtained raw pointers.
+	bool RelocateFileResources(const vector<FilePathChange>& changes, const std::function<bool()>& commitFiles);
 #pragma endregion
 
 #pragma region Slot Management

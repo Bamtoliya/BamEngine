@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
+#include "AssetPathRelocation.h"
+#include "EntityClipboard.h"
 #include "ShortcutManager.h"
 #include <archive/JsonArchive.h>
 #include "EditorSettingsService.h"
@@ -1465,49 +1467,37 @@ vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() c
 	return editors;
 }
 
-bool ImGuiManager::CanApplyAssetFileChanges(const vector<std::filesystem::path>& paths) const
+bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) const
 {
 	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || !CollectUnsavedResourceEditors().empty())
 		return false;
 	if (PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode())
 		return false;
-	const auto affected = [&paths](const std::filesystem::path& resource)
-	{
-		if (resource.empty())
-			return false;
-		const auto file = Engine::PlatformPath::Normalize(Engine::PlatformPath::ResolveUri(resource));
-		return std::ranges::any_of(paths, [&file](const auto& path)
-		{
-			const auto root = Engine::PlatformPath::Normalize(path);
-			const auto same = [](const auto& lhs, const auto& rhs)
-			{
-				return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
-			};
-			return std::mismatch(file.begin(), file.end(), root.begin(), root.end(), same).second == root.end();
-		});
-	};
-	const auto& documents = Application::Get().GetDocuments();
+	auto& documents = Application::Get().GetDocuments();
 	for (const auto id : documents.GetDocumentIds())
 	{
-		const auto* document = documents.Find(id);
-		if (document && (document->HasUnsavedChanges() || affected(document->GetPath())))
-			return false;
-	}
-	// Closed editors retain their documents too. Switching to another resource releases the conflicting target.
-	for (const auto* panel : m_ImGuiPanels)
-	{
-		const auto* editor = dynamic_cast<const ResourceEditorInterface*>(panel);
-		if (editor && std::ranges::any_of(editor->GetRetainedResourcePaths(), affected))
-			return false;
-	}
-	// A cached resource can later save its old references even after its editor was closed.
-	if (Engine::ResourceManager::IsCreated())
-	{
-		for (const auto& resource : Engine::ResourceManager::Get().GetDebugSnapshot())
+		auto* document = documents.Find(id);
+		if (!document) continue;
+		if (!document->PrepareAssetPathRelocation(relocation)) return false;
+		if (dynamic_cast<SceneDocument*>(document) && relocation.Affects(document->GetPath()))
 		{
-			if (affected(resource.Path))
-				return false;
+			relocation.AfterCommit([document]() { Application::Get().RememberEditedScene(document->GetPath()); });
 		}
+	}
+	// Closed panels also retain editing state; each owner must opt in to safe synchronization.
+	for (auto* panel : m_ImGuiPanels)
+	{
+		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
+		if (editor && !editor->PrepareAssetPathRelocation(relocation)) return false;
+	}
+	if (EntityClipboard::HasData())
+	{
+		relocation.AfterCommit([]()
+		{
+			EntityClipboard::Clear();
+			NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+				LOCAL("ContentBrowser.MoveEntityClipboardCleared"), ELogLevel::Info);
+		});
 	}
 	return true;
 }

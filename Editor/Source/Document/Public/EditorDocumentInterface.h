@@ -6,6 +6,7 @@
 
 namespace Editor
 {
+    class AssetPathRelocation;
     using EditorDocumentId = std::uint64_t;
     inline constexpr EditorDocumentId InvalidEditorDocumentId = 0;
     struct EditorDocumentSaveInfo
@@ -25,6 +26,7 @@ namespace Editor
         virtual const std::filesystem::path& GetPath() const = 0;
         virtual bool HasUnsavedChanges() const = 0;
         virtual bool CanSave() const = 0;
+        virtual bool PrepareAssetPathRelocation(AssetPathRelocation& relocation);
 
         virtual Engine::EResult SaveTo(const std::filesystem::path& path) = 0;
         virtual Engine::EResult DiscardChanges() = 0;
