@@ -279,6 +279,7 @@ void ContentBrowserPanel::Draw()
 
 	FileConfilictPopup();
 	DrawFileDeletionConfirmation();
+	DrawFileMoveConfirmation();
 
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
@@ -333,7 +334,7 @@ void ContentBrowserPanel::Draw()
 	if (!m_PendingFileDropDirectory.empty())
 	{
 		const auto directory = std::exchange(m_PendingFileDropDirectory, filesystem::path{});
-		TransferFiles(m_DragPaths, directory, true);
+		QueueFileMove(m_DragPaths, directory, false);
 	}
 }
 void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
@@ -993,13 +994,170 @@ void ContentBrowserPanel::PasteFiles(const filesystem::path& directory)
 	if (!CanPasteFiles(directory))
 		return;
 
-	auto remaining = TransferFiles(m_FileClipboardPaths, directory, m_FileClipboardCut);
 	if (m_FileClipboardCut)
-		m_FileClipboardPaths = std::move(remaining);
+		QueueFileMove(m_FileClipboardPaths, directory, true);
+	else
+		TransferFiles(m_FileClipboardPaths, directory, false);
+}
+
+void ContentBrowserPanel::QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory,
+	bool fromClipboard)
+{
+	if (paths.empty() || !CanTransferTo(directory) ||
+		!m_PendingFileMove.empty() || !m_PendingFileDeletion.empty())
+		return;
+
+	try
+	{
+		const auto destination = directory.lexically_normal();
+		CheckContentBrowserPath(destination, m_RootPath.lexically_normal());
+		if (!filesystem::is_directory(destination))
+			throw filesystem::filesystem_error("Move destination is not a directory", destination,
+				std::make_error_code(std::errc::not_a_directory));
+		const auto destinationIdentity = ReadBrowserFileIdentity(destination);
+
+		vector<FileMove> moves;
+		vector<filesystem::path> sources;
+		moves.reserve(paths.size());
+		sources.reserve(paths.size());
+		for (const auto& path : paths)
+		{
+			const auto source = path.lexically_normal();
+			if (BrowserPathHasSelectedParent(source, paths))
+				continue;
+
+			if (!CanTransferTo(source.parent_path()) || ContentBrowserPathWithin(destination, source))
+				throw filesystem::filesystem_error("Invalid move source or destination", source, destination,
+					std::make_error_code(std::errc::invalid_argument));
+
+			CheckContentBrowserPath(source, m_RootPath.lexically_normal());
+			moves.push_back({ source, destination / source.filename(), ReadBrowserFileIdentity(source) });
+			sources.push_back(source);
+		}
+
+		auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+		m_MoveSourcePaths = paths;
+		m_MoveDestination = destination;
+		m_MoveDestinationIdentity = destinationIdentity;
+		m_MoveFromClipboard = fromClipboard;
+		m_MoveImpact = std::move(impact);
+		m_PendingFileMove = std::move(moves);
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Could not prepare file move: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
+}
+
+void ContentBrowserPanel::ClearPendingFileMove()
+{
+	m_PendingFileMove.clear();
+	m_MoveSourcePaths.clear();
+	m_MoveDestination.clear();
+	m_MoveDestinationIdentity = {};
+	m_MoveFromClipboard = false;
+	m_MoveImpact = {};
+}
+
+void ContentBrowserPanel::ConfirmFileMove()
+{
+	try
+	{
+		CheckContentBrowserPath(m_MoveDestination, m_RootPath.lexically_normal());
+		if (!SameBrowserFile(ReadBrowserFileIdentity(m_MoveDestination), m_MoveDestinationIdentity))
+			throw filesystem::filesystem_error("Move destination changed after confirmation", m_MoveDestination,
+				std::make_error_code(std::errc::state_not_recoverable));
+
+		const auto failed = TransferFiles(m_MoveSourcePaths, m_MoveDestination, true, m_PendingFileMove);
+		if (m_MoveFromClipboard && m_FileClipboardCut && m_FileClipboardPaths == m_MoveSourcePaths)
+		{
+			// Preserve descendants of a failed selected folder so the same cut can be retried.
+			std::erase_if(m_FileClipboardPaths, [&failed](const auto& path)
+			{
+				return std::ranges::none_of(failed, [&path](const auto& root)
+				{
+					return ContentBrowserPathWithin(path.lexically_normal(), root.lexically_normal());
+				});
+			});
+		}
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Could not confirm file move: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
+	ClearPendingFileMove();
+}
+
+void ContentBrowserPanel::DrawFileMoveConfirmation()
+{
+	if (m_PendingFileMove.empty())
+		return;
+
+	const auto title = LOCAL_LABEL("ContentBrowser.MoveFilesTitle");
+	if (!ImGui::IsPopupOpen(title.c_str()))
+		ImGui::OpenPopup(title.c_str());
+	if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.MoveFilesConfirm", m_PendingFileMove.size()).c_str());
+	DrawFileMovePaths();
+	ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferencesNotice"));
+	DrawFileReferenceImpact(m_MoveImpact, "ContentBrowser.MoveImpactCount");
+	const EditorUI::DialogAction actions[] = {
+		{ "EditorCommon.Cancel" }, { "ContentBrowser.MoveFilesTitle", CanTransferTo(m_MoveDestination) }
+	};
+	const int action = EditorUI::DialogButtonBar("ContentBrowserMoveActions", actions, IM_ARRAYSIZE(actions));
+	if (action >= 0)
+	{
+		ImGui::CloseCurrentPopup();
+		if (action == 1)
+			ConfirmFileMove();
+		else
+			ClearPendingFileMove();
+	}
+	ImGui::EndPopup();
+}
+
+void ContentBrowserPanel::DrawFileMovePaths() const
+{
+	const float width = std::min(ImGui::GetFontSize() * 42.0f, ImGui::GetMainViewport()->WorkSize.x * 0.85f);
+	const float height = static_cast<float>(std::min<size_t>(m_PendingFileMove.size(), 4) + 1) *
+		ImGui::GetFrameHeightWithSpacing();
+	const auto flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame;
+	if (!ImGui::BeginTable("MoveFilePaths", 2, flags, ImVec2(width, height)))
+		return;
+
+	ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.MoveSource").c_str());
+	ImGui::TableSetupColumn(LOCAL_LABEL("ContentBrowser.MoveDestination").c_str());
+	ImGui::TableHeadersRow();
+	ImGuiListClipper clipper;
+	clipper.Begin(static_cast<int>(m_PendingFileMove.size()));
+	while (clipper.Step())
+	{
+		for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			const auto source = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].Before));
+			ImGui::TextUnformatted(source.c_str());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", source.c_str());
+			ImGui::TableSetColumnIndex(1);
+			const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].After));
+			ImGui::TextUnformatted(target.c_str());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", target.c_str());
+		}
+	}
+	ImGui::EndTable();
 }
 
 vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesystem::path>& paths,
-	const filesystem::path& directory, bool move)
+	const filesystem::path& directory, bool move, const vector<FileMove>& plannedMoves)
 {
 	const auto destination = directory.lexically_normal();
 	vector<filesystem::path> failed;
@@ -1045,7 +1203,14 @@ vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesys
 			CheckBrowserTransferTree(source, target, move);
 			if (move)
 			{
-				FileMove entry{ source, target, ReadBrowserFileIdentity(source) };
+				const auto planned = std::ranges::find(plannedMoves, source, &FileMove::Before);
+				if (planned == plannedMoves.end() || planned->After != target ||
+					!SameBrowserFile(ReadBrowserFileIdentity(source), planned->Identity))
+				{
+					throw filesystem::filesystem_error("Move source changed after confirmation", source, target,
+						std::make_error_code(std::errc::state_not_recoverable));
+				}
+				FileMove entry = *planned;
 				MoveContentBrowserEntry(source, target);
 				changes.push_back(std::move(entry));
 			}
@@ -1337,7 +1502,7 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 		return;
 
 	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteFilesConfirm", m_PendingFileDeletion.size()).c_str());
-	DrawFileDeletionImpact();
+	DrawFileReferenceImpact(m_DeletionImpact, "ContentBrowser.DeleteImpactCount");
 	const EditorUI::DialogAction actions[] = {
 		{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", CanUseFileCommands(), true }
 	};
@@ -1353,20 +1518,20 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 	ImGui::EndPopup();
 }
 
-void ContentBrowserPanel::DrawFileDeletionImpact() const
+void ContentBrowserPanel::DrawFileReferenceImpact(const AssetReferenceImpact& impact, const char* countKey) const
 {
-	if (!m_DeletionImpact.IsComplete)
+	if (!impact.IsComplete)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.DeleteImpactIncomplete"));
 
-	const auto& references = m_DeletionImpact.References;
+	const auto& references = impact.References;
 	if (references.empty())
 	{
-		if (m_DeletionImpact.IsComplete)
+		if (impact.IsComplete)
 			ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.DeleteImpactNone"));
 		return;
 	}
 
-	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteImpactCount", references.size()).c_str());
+	ImGui::TextUnformatted(LOCAL_FMT(countKey, references.size()).c_str());
 	const float width = std::min(ImGui::GetFontSize() * 42.0f, ImGui::GetMainViewport()->WorkSize.x * 0.85f);
 	const float height = static_cast<float>(std::min<size_t>(references.size(), 6) + 1) * ImGui::GetFrameHeightWithSpacing();
 	const auto flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchSame;

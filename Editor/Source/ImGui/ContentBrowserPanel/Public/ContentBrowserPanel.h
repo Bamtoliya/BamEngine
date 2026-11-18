@@ -84,7 +84,6 @@ private:
 	void DrawFileClipboardMenu(const vector<filesystem::path>& paths, const filesystem::path& directory);
 	void DrawPathCopyMenu(const vector<filesystem::path>& paths);
 	void DrawFolderDropTarget(const filesystem::path& directory);
-	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory, bool move);
 	void ApplyDirectory(const filesystem::path& directory);
 	void StepFolderHistory(bool forward);
 
@@ -95,10 +94,17 @@ private:
 		BY_HANDLE_FILE_INFORMATION Identity;
 	};
 
+	vector<filesystem::path> TransferFiles(const vector<filesystem::path>& paths, const filesystem::path& directory,
+		bool move, const vector<FileMove>& plannedMoves = {});
+	void QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory, bool fromClipboard);
+	void DrawFileMoveConfirmation();
+	void DrawFileMovePaths() const;
+	void ConfirmFileMove();
+	void ClearPendingFileMove();
 	bool CanUseFileCommands() const;
 	bool CanDeleteFiles(const vector<filesystem::path>& paths) const;
 	void DrawFileDeletionConfirmation();
-	void DrawFileDeletionImpact() const;
+	void DrawFileReferenceImpact(const AssetReferenceImpact& impact, const char* countKey) const;
 	void QueueFileDeletion(const vector<filesystem::path>& paths);
 	void DeleteFiles(vector<FileMove> moves);
 	filesystem::path FileHistoryRoot() const;
@@ -110,7 +116,13 @@ private:
 	CommandHistory m_FileHistory;
 	bool m_FileHistoryInvalid = false;
 	vector<FileMove> m_PendingFileDeletion;
-	AssetDeletionImpact m_DeletionImpact;
+	AssetReferenceImpact m_DeletionImpact;
+	vector<FileMove> m_PendingFileMove;
+	vector<filesystem::path> m_MoveSourcePaths;
+	filesystem::path m_MoveDestination;
+	BY_HANDLE_FILE_INFORMATION m_MoveDestinationIdentity{};
+	bool m_MoveFromClipboard = false;
+	AssetReferenceImpact m_MoveImpact;
 	vector<filesystem::path> m_BackFolders;
 	vector<filesystem::path> m_ForwardFolders;
 	vector<filesystem::path> m_FileClipboardPaths;

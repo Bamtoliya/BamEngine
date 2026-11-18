@@ -2087,6 +2087,12 @@ Timeline,AddTrack,Add Track,트랙 추가
 EditorCommon,Cut,Cut,잘라내기
 ContentBrowser,CopyFilesResult,Copied {}. Could not copy {}.,복사 {}개 완료. 실패 {}개.
 ContentBrowser,MoveFilesResult,Moved {}. Could not move {}. Check references to moved assets.,이동 {}개 완료. 실패 {}개. 이동한 에셋의 참조를 확인하세요.
+ContentBrowser,MoveFilesTitle,Move Files,파일 이동
+ContentBrowser,MoveFilesConfirm,Move {} selected items?,선택한 항목 {}개를 이동할까요?
+ContentBrowser,MoveSource,From,출발 경로
+ContentBrowser,MoveDestination,To,목적 경로
+ContentBrowser,MoveImpactCount,Stored references to moved assets: {},이동할 에셋을 가리키는 저장된 참조 {}건
+ContentBrowser,MoveReferencesNotice,Stored references keep their previous paths. This includes references between files moved together.,저장된 참조는 이전 경로를 가리킵니다. 함께 이동하는 파일 사이의 참조도 포함됩니다.
 EditorCommon,File,File,파일
 EditorCommon,Path,Path,경로
 TextureEditor,NoPreviewAvailable,Preview unavailable,미리보기를 사용할 수 없습니다

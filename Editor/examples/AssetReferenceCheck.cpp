@@ -115,6 +115,13 @@ int main()
         return 6;
     }
 
+    const auto incompleteMove = Editor::AssetReferenceValidator::AnalyzeMove({ materials });
+    if (incompleteMove.IsComplete || incompleteMove.References.size() != 2)
+    {
+        std::cerr << "Move analysis must keep internal references and report an incomplete scan.\n";
+        return 11;
+    }
+
     if (!fs::remove(invalid))
         return 7;
     const auto textureImpact = Editor::AssetReferenceValidator::AnalyzeDeletion({ texture });
@@ -133,10 +140,30 @@ int main()
         return 9;
     }
 
+    const auto groupMove = Editor::AssetReferenceValidator::AnalyzeMove({ scene, materials, texture });
+    if (!groupMove.IsComplete || groupMove.References.size() != 2 ||
+        !std::ranges::any_of(groupMove.References, [&](const auto& link)
+            { return link.Source == fs::canonical(material) && link.Target == fs::canonical(texture); }))
+    {
+        std::cerr << "Moving a document with its dependencies must still report their stored references once.\n";
+        return 12;
+    }
+
+    const auto textureMove = Editor::AssetReferenceValidator::AnalyzeMove({ texture });
+    if (!textureMove.IsComplete || textureMove.References.size() != 1 ||
+        textureMove.References.front().Source != fs::canonical(material))
+        return 13;
+
+    const auto unusedMove = Editor::AssetReferenceValidator::AnalyzeMove({ scene });
+    if (!unusedMove.IsComplete || !unusedMove.References.empty())
+        return 14;
+
     const auto missingTarget = Editor::AssetReferenceValidator::AnalyzeDeletion({ assets / "missing.png" });
     if (missingTarget.IsComplete)
     {
         std::cerr << "A deleted selection target must not produce a complete empty result.\n";
         return 10;
     }
+    if (Editor::AssetReferenceValidator::AnalyzeMove({ assets / "missing.png" }).IsComplete)
+        return 15;
 }

@@ -484,11 +484,11 @@ namespace Editor
         return scan;
     }
 
-    AssetDeletionImpact AssetReferenceValidator::AnalyzeDeletion(const std::vector<std::filesystem::path>& targets)
+    static AssetReferenceImpact AnalyzeFileChange(const std::vector<std::filesystem::path>& targets, bool includeInternal)
     {
-        AssetDeletionImpact impact;
-        std::vector<std::filesystem::path> deleted;
-        deleted.reserve(targets.size());
+        AssetReferenceImpact impact;
+        std::vector<std::filesystem::path> affected;
+        affected.reserve(targets.size());
         for (const auto& target : targets)
         {
             std::error_code error;
@@ -496,24 +496,24 @@ namespace Editor
             if (error)
                 impact.IsComplete = false;
             else
-                deleted.push_back(std::move(resolved));
+                affected.push_back(std::move(resolved));
         }
-        if (deleted.empty())
+        if (affected.empty())
             return impact;
 
-        auto scan = ScanProject();
+        auto scan = AssetReferenceValidator::ScanProject();
         impact.IsComplete = impact.IsComplete && std::ranges::none_of(scan.Issues, [](const auto& issue)
         {
             return issue.IssueType == EAssetReferenceIssueType::UnreadableDocument;
         });
 
-        const auto isDeleted = [&deleted](const auto& path)
+        const auto isAffected = [&affected](const auto& path)
         {
-            return std::ranges::any_of(deleted, [&path](const auto& root) { return IsInAssetTree(path, root); });
+            return std::ranges::any_of(affected, [&path](const auto& root) { return IsInAssetTree(path, root); });
         };
         for (auto& link : scan.References)
         {
-            if (isDeleted(link.Target) && !isDeleted(link.Source))
+            if (isAffected(link.Target) && (includeInternal || !isAffected(link.Source)))
                 impact.References.push_back(std::move(link));
         }
         std::ranges::sort(impact.References, [](const auto& lhs, const auto& rhs)
@@ -521,6 +521,16 @@ namespace Editor
             return std::tie(lhs.Source, lhs.Target) < std::tie(rhs.Source, rhs.Target);
         });
         return impact;
+    }
+
+    AssetReferenceImpact AssetReferenceValidator::AnalyzeDeletion(const std::vector<std::filesystem::path>& targets)
+    {
+        return AnalyzeFileChange(targets, false);
+    }
+
+    AssetReferenceImpact AssetReferenceValidator::AnalyzeMove(const std::vector<std::filesystem::path>& targets)
+    {
+        return AnalyzeFileChange(targets, true);
     }
 
     std::vector<AssetReferenceIssue> AssetReferenceValidator::ValidateAllResources()
