@@ -187,7 +187,11 @@ namespace Engine
             if (transparent && !m_SceneColorCopyTarget.empty())
             {
                 if (auto* rp = passes.GetRenderPassByID(id))
+                {
                     rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 0, m_SceneColorCopyTarget);
+                    if (m_LightingInputs.size() > 4 && !m_LightingInputs[4].empty())
+                        rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, m_LightingInputs[4]);
+                }
             }
             m_Passes.emplace_back(type, id);
         }
