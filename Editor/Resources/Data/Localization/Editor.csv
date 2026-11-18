@@ -2111,6 +2111,7 @@ VFXEditor,CurveModalTitle,Curve Editor - {},커브 편집기 - {}
 VFXEditor,FitView,Fit View,화면 맞춤
 VFXEditor,CurveHintDouble,Double-click canvas to add a key. Drag keys to move.,빈 캔버스를 더블클릭해 키를 추가하고 드래그하여 조절합니다.
 VFXEditor,CurvePresetEaseInOut,Ease In-Out,천천히 시작-끝
+VFXEditor,FlattenTangents,Flatten Tangents (0.0),탄젠트 평탄화 (0.0)
 PreviewViewport,BoneOverlay,Bone Display,본 표시
 PreviewViewport,ShowBoneJoints,Joints and Hierarchy Lines,관절 점과 계층 연결선
 PreviewViewport,ShowBoneAxes,Local Axes (X/Y/Z),로컬 축 (X/Y/Z)

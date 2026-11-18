@@ -249,11 +249,11 @@ namespace Editor
 					m_SelectedKeyIndex = -1; changed = true;
 				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Cubic Bezier", nullptr, key.interpMode == Engine::ECurveInterpMode::CubicBezier)) { key.interpMode = Engine::ECurveInterpMode::CubicBezier; changed = true; }
-				if (ImGui::MenuItem("Linear", nullptr, key.interpMode == Engine::ECurveInterpMode::Linear)) { key.interpMode = Engine::ECurveInterpMode::Linear; changed = true; }
-				if (ImGui::MenuItem("Constant", nullptr, key.interpMode == Engine::ECurveInterpMode::Constant)) { key.interpMode = Engine::ECurveInterpMode::Constant; changed = true; }
+				if (ImGui::MenuItem(LOCAL_CSTR("Engine::ECurveInterpMode.CubicBezier"), nullptr, key.interpMode == Engine::ECurveInterpMode::CubicBezier)) { key.interpMode = Engine::ECurveInterpMode::CubicBezier; changed = true; }
+				if (ImGui::MenuItem(LOCAL_CSTR("Engine::ECurveInterpMode.Linear"), nullptr, key.interpMode == Engine::ECurveInterpMode::Linear)) { key.interpMode = Engine::ECurveInterpMode::Linear; changed = true; }
+				if (ImGui::MenuItem(LOCAL_CSTR("Engine::ECurveInterpMode.Constant"), nullptr, key.interpMode == Engine::ECurveInterpMode::Constant)) { key.interpMode = Engine::ECurveInterpMode::Constant; changed = true; }
 				ImGui::Separator();
-				if (ImGui::MenuItem("Flatten Tangents (0.0)")) { key.inTangent = 0.0f; key.outTangent = 0.0f; changed = true; }
+				if (ImGui::MenuItem(LOCAL_CSTR("VFXEditor.FlattenTangents"))) { key.inTangent = 0.0f; key.outTangent = 0.0f; changed = true; }
 			}
 			ImGui::EndPopup();
 		}

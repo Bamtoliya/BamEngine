@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] CurveEditorModal 로캘 엄격 감사 결함 수정 및 다국어 지원
+
+- **배경 및 문제**:
+  - `python Tools/Audit/LocalizationAuditor/audit_localization.py --strict` 실행 시, `CurveEditorModal.cpp`의 키프레임 컨텍스트 메뉴 내 4개 항목("Cubic Bezier", "Linear", "Constant", "Flatten Tangents (0.0)")이 하드코딩 리터럴로 검출되어 Tier 1 감사가 실패함.
+- **수정 내역**:
+  - `Editor/Resources/Data/Localization/Editor.csv`: `VFXEditor,FlattenTangents,Flatten Tangents (0.0),탄젠트 평탄화 (0.0)` 키 추가.
+  - `Editor/Source/ImGui/Private/CurveEditorModal.cpp`: 보간 모드 3종("Engine::ECurveInterpMode.*") 및 탄젠트 평탄화 메뉴 항목을 `LOCAL_CSTR` 매크로 호출로 일원화.
+- **검증 상태**:
+  - `audit_localization.py --strict` 재실행을 통해 하드코딩 UI 문자열 0건, 카탈로그 누락 0건으로 감사 100% 통과(Exit Code 0) 확인.
+
 ### [2026-11-19] 복합 VFX 트랙의 블렌드 모드별 제출 패스 교정
 
 - VFX 프리뷰 허공의 흙갈색 메쉬 이펙트는 배경 버퍼나 톤매핑 문제가 아니었다. 프리뷰 GeometryPass의 `acceptedBlendModes == None`을 `SubmitSceneVFX`가 "제한 없음"으로 해석해 Additive 트랙을 G-Buffer에 기록했다. 조명 패스가 이 픽셀을 법선 0·AO 0의 불투명 표면으로 칠해 배경을 덮어썼다. 같은 함수가 이 경우를 `Opaque | Masked`로 보정하고, 스프라이트·메쉬·데칼·트레일 트랙을 한 값으로 거른다.
