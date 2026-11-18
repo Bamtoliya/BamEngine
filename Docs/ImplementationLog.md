@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 계층 패널의 다중 드래그 순서 변경
+
+- 같은 부모 아래에서 형제 행의 가장자리로 드래그하면 삽입선을 표시한다. 드롭하면 선택 항목을 원래 형제 순서대로 배치한다. 행 가운데와 씬 루트 드롭은 기존 부모 변경 경로를 사용한다.
+- Scene에서 대상 부모와 형제 목록을 검증한 뒤 순서를 한 번에 교체한다. 부모와 Transform은 유지되며 순서가 실제로 바뀐 경우 씬 이력 한 건이 생긴다.
+- 로캘 엄격 감사를 통과했다. HierarchyEditorCheck에 상대 순서·잘못된 대상·삽입 영역 검사를, EditorHistoryCheck에 한 번의 Undo/Redo 검사를 추가했다. 빌드·CTest와 삽입선의 실제 편집기 검증은 사용자 실행 전이다. [대화형 점검 G](EditorUXTestGuidelines.md#52-tier-3-대화형-ui-점검-체크리스트)
+
 ### [2026-11-19] 스켈레탈 모델 인스턴스화 시 본 노드 생략 및 계층 구조 압축 최적화
 
 - **배경 및 목표**:

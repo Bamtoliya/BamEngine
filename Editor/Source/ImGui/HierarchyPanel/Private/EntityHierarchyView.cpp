@@ -7,6 +7,7 @@
 #include "LocalizationManager.h"
 #include "Functions.h"
 #include <imgui.h>
+#include <imgui_internal.h>
 #include "IconsFontAwesome7.h"
 #include <fmt/format.h>
 #include "EntityClipboard.h"
@@ -423,10 +424,25 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
     for (const auto ancestor : ancestors)
         m_Expanded.insert(GetExpandKey(world, ancestor));
     ImGui::PushID(&scene);
-    const auto acceptMove = [&](entt::entity parent)
+    const auto acceptMove = [&](entt::entity target, EntityDropPosition position, const ImRect* edge = nullptr)
     {
-        const auto* payload = ImGui::AcceptDragDropPayload(EntityPayload);
+        const auto flags = edge ? ImGuiDragDropFlags_AcceptPeekOnly : ImGuiDragDropFlags_None;
+        const auto* payload = ImGui::AcceptDragDropPayload(EntityPayload, flags);
         if (!payload) return;
+        if (!payload->IsDelivery())
+        {
+            if (edge && payload->IsPreview() && std::ranges::all_of(m_DragMembers, [&](const auto& member)
+                {
+                    return tree.Parents.contains(member.Entity) && !tree.Invalid.contains(member.Entity) &&
+                        member.Entity != target && tree.Parents.at(member.Entity) == tree.Parents.at(target);
+                }))
+            {
+                const float y = position == EntityDropPosition::Before ? edge->Min.y : edge->Max.y;
+                ImGui::GetWindowDrawList()->AddLine(ImVec2(edge->Min.x, y), ImVec2(edge->Max.x, y),
+                    ImGui::GetColorU32(ImGuiCol_DragDropTarget), 2.0f);
+            }
+            return;
+        }
         EntityDragPayload source;
         if (payload->DataSize != static_cast<int>(sizeof(source))) { action.RejectedDrop = true; return; }
         std::memcpy(&source, payload->Data, sizeof(source));
@@ -458,7 +474,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         else
             children.push_back(source.Entity);
 
-        action.Move = EntityHierarchyMove{ std::move(children), parent, source.Entity };
+        action.Move = EntityHierarchyMove{ std::move(children), target, source.Entity, position };
     };
     const auto acceptPrefab = [&](entt::entity parent)
         {
@@ -539,7 +555,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 
             ImGui::SetNextItemAllowOverlap();
             bool opened = false;
-            if (m_RenamingEntity == entity)
+            const bool renaming = m_RenamingEntity == entity;
+            if (renaming)
             {
                 // 리네임 중일 때는 아이콘만 노드로 그리고 바로 옆에 인라인 텍스트 입력창 배치
                 opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", visual.Icon);
@@ -628,9 +645,37 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     ImGui::TextUnformatted(label.c_str());
                 ImGui::EndDragDropSource();
             }
-            if (!locked && ImGui::BeginDragDropTarget())
+            const auto* drag = ImGui::GetDragDropPayload();
+            const auto parent = tree.Parents.at(entity);
+            const auto sourceParent = tree.Parents.find(m_DragAnchor);
+            const bool siblingDrop = selectableRows && !renaming && drag && drag->IsDataType(EntityPayload) &&
+                m_DragSource == &scene && parent != entt::null && entity != m_DragAnchor &&
+                sourceParent != tree.Parents.end() && sourceParent->second == parent && !tree.Invalid.contains(entity);
+            if (siblingDrop && ImGui::IsItemVisible())
             {
-                acceptMove(entity);
+                const ImRect rowBounds(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+                const float edgeHeight = rowBounds.GetHeight() * 0.25f;
+                const float top = rowBounds.Min.y + edgeHeight;
+                // Below an expanded parent the next visible rows belong to its subtree.
+                const bool hasOpenChildren = opened && !children.empty();
+                const float bottom = rowBounds.Max.y - (hasOpenChildren ? 0.0f : edgeHeight);
+                const auto acceptZone = [&](float minY, float maxY, const char* id, EntityDropPosition position)
+                {
+                    const ImRect zone(ImVec2(rowBounds.Min.x, minY), ImVec2(rowBounds.Max.x, maxY));
+                    if (ImGui::BeginDragDropTargetCustom(zone, ImGui::GetID(id)))
+                    {
+                        acceptMove(entity, position, position == EntityDropPosition::Into ? nullptr : &zone);
+                        ImGui::EndDragDropTarget();
+                    }
+                };
+                acceptZone(rowBounds.Min.y, top, "BeforeSibling", EntityDropPosition::Before);
+                acceptZone(top, bottom, "IntoEntity", EntityDropPosition::Into);
+                if (!hasOpenChildren)
+                    acceptZone(bottom, rowBounds.Max.y, "AfterSibling", EntityDropPosition::After);
+            }
+            else if (!locked && ImGui::BeginDragDropTarget())
+            {
+                acceptMove(entity, EntityDropPosition::Into);
                 acceptPrefab(entity);
                 ImGui::EndDragDropTarget();
             }
@@ -890,7 +935,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
         ImGui::PopStyleColor(2);
         if (ImGui::BeginDragDropTarget())
         {
-            acceptMove(entt::null);
+            acceptMove(entt::null, EntityDropPosition::Into);
             acceptPrefab(entt::null);
             ImGui::EndDragDropTarget();
         }

@@ -11,6 +11,7 @@
 #include <imgui.h>
 #include <iostream>
 #include <memory>
+#include <utility>
 
 namespace Editor
 {
@@ -244,6 +245,47 @@ namespace
             return Fail("A move deeper than the scene archive limit was accepted.");
         return true;
     }
+    bool CheckSiblingOrder()
+    {
+        using OrderResult = Engine::SiblingReorderResult;
+        ScenePtr scene(Engine::Scene::Create());
+        auto& parent = Add(*scene);
+        auto& first = Add(*scene, { 2.0f, 3.0f, 4.0f });
+        auto& middle = Add(*scene);
+        auto& last = Add(*scene);
+        auto& descendant = Add(*scene);
+        const auto p = parent.GetEntityHandle(), a = first.GetEntityHandle(), b = middle.GetEntityHandle();
+        const auto c = last.GetEntityHandle(), d = descendant.GetEntityHandle();
+        if (scene->ReparentEntity(first, &parent) != Result::Success ||
+            scene->ReparentEntity(middle, &parent) != Result::Success ||
+            scene->ReparentEntity(last, &parent) != Result::Success ||
+            scene->ReparentEntity(descendant, &first) != Result::Success)
+            return Fail("Could not prepare the sibling hierarchy.");
+
+        auto& world = scene->GetRegistry();
+        const auto& siblings = world.get<Engine::HierarchyComponent>(p).children;
+        const auto originalWorld = world.get<Engine::WorldTransformComponent>(a).worldMatrix;
+        const entt::entity selected[] = { c, a };
+        if (scene->ReorderSiblings(selected, b, true) != OrderResult::Success ||
+            siblings != std::vector{ b, a, c } || world.get<Engine::HierarchyComponent>(d).parent != a ||
+            !Near(world.get<Engine::WorldTransformComponent>(a).worldMatrix, originalWorld))
+            return Fail("Sibling reorder lost the original order, subtree or transform.");
+        if (Editor::GetEntityHierarchyTree(*scene).Children.at(p) != siblings)
+            return Fail("The hierarchy view did not show the new order.");
+        if (scene->ReorderSiblings(selected, b, true) != OrderResult::Unchanged ||
+            scene->ReorderSiblings(selected, a, false) != OrderResult::Unchanged)
+            return Fail("A no-op reorder was reported as an edit.");
+
+        const entt::entity mixed[] = { c, d };
+        if (scene->ReorderSiblings(mixed, b, false) != OrderResult::Invalid ||
+            scene->ReorderSiblings(selected, p, false) != OrderResult::Invalid ||
+            siblings != std::vector{ b, a, c })
+            return Fail("An invalid reorder modified the sibling order.");
+        if (scene->ReorderSiblings(selected, b, false) != OrderResult::Success ||
+            siblings != std::vector{ a, c, b })
+            return Fail("Insertion before a sibling did not preserve the selected order.");
+        return true;
+    }
     bool CheckTreeInput()
     {
         ImGui::CreateContext();
@@ -261,7 +303,7 @@ namespace
         auto& second = Add(*scene);
         const auto a = first.GetEntityHandle(), b = second.GetEntityHandle();
         Editor::EntityHierarchyView view;
-        float rowHeight = 0.0f, textHeight = 0.0f, renderedHeight = 0.0f;
+        float rowHeight = 0.0f, textHeight = 0.0f, renderedHeight = 0.0f, frameHeight = 0.0f;
         const auto frame = [&](Engine::Scene& drawn, entt::entity reveal = entt::null,
             std::span<const entt::entity> selected = {})
         {
@@ -272,6 +314,7 @@ namespace
             ImGui::SetCursorScreenPos(ImVec2(20.0f, 40.0f));
             rowHeight = ImGui::GetTextLineHeightWithSpacing();
             textHeight = ImGui::GetTextLineHeight();
+            frameHeight = ImGui::GetFrameHeight();
             const auto result = view.Draw(drawn, selected, reveal, false, {}, !selected.empty());
             renderedHeight = ImGui::GetCursorScreenPos().y - 40.0f;
             ImGui::End();
@@ -288,7 +331,7 @@ namespace
         frame(*scene);
         io.AddMouseButtonEvent(0, false);
         const auto dropped = frame(*scene);
-        if (!dropped.Move || dropped.Move->Children != std::vector{ a } || dropped.Move->Anchor != a || dropped.Move->Parent != b ||
+        if (!dropped.Move || dropped.Move->Children != std::vector{ a } || dropped.Move->Anchor != a || dropped.Move->Target != b ||
             scene->ReparentEntity(first, &second) != Result::Success)
             return Fail("Native ImGui entity drag/drop did not produce the correct move.");
         frame(*scene, a);
@@ -313,7 +356,7 @@ namespace
         frame(*scene);
         io.AddMouseButtonEvent(0, false);
         const auto rootDrop = frame(*scene);
-        if (!rootDrop.Move || rootDrop.Move->Children != std::vector{ a } || rootDrop.Move->Parent != entt::null ||
+        if (!rootDrop.Move || rootDrop.Move->Children != std::vector{ a } || rootDrop.Move->Target != entt::null ||
             scene->ReparentEntity(first) != Result::Success)
             return Fail("The root drop area failed to detach the dragged entity.");
         frame(*scene);
@@ -368,7 +411,7 @@ namespace
         io.AddMouseButtonEvent(0, false);
         const auto grouped = frame(*group, entt::null, changedSelection);
         if (!grouped.Move || grouped.Move->Children != std::vector{ roots[0], roots[1] } ||
-            grouped.Move->Anchor != roots[0] || grouped.Move->Parent != roots[2])
+            grouped.Move->Anchor != roots[0] || grouped.Move->Target != roots[2])
             return Fail("Selected entities were not frozen together at drag start.");
 
         frame(*group, entt::null, selected);
@@ -383,6 +426,43 @@ namespace
         changedId = oldId;
         if (!staleMember.RejectedDrop || staleMember.Move)
             return Fail("A group with a stale member was accepted.");
+
+        ScenePtr siblings(Engine::Scene::Create());
+        auto& parent = Add(*siblings);
+        auto& firstChild = Add(*siblings);
+        auto& secondChild = Add(*siblings);
+        auto& target = Add(*siblings);
+        if (siblings->ReparentEntity(firstChild, &parent) != Result::Success ||
+            siblings->ReparentEntity(secondChild, &parent) != Result::Success ||
+            siblings->ReparentEntity(target, &parent) != Result::Success)
+            return Fail("Could not prepare the sibling drag rows.");
+        const auto firstHandle = firstChild.GetEntityHandle();
+        const auto targetHandle = target.GetEntityHandle();
+        const std::vector siblingSelection{ firstHandle, secondChild.GetEntityHandle() };
+        const auto dropOnTarget = [&](float rowFraction)
+        {
+            frame(*siblings, firstHandle, siblingSelection);
+            io.AddMousePosEvent(90.0f, 40.0f + frameHeight * 1.5f);
+            frame(*siblings, entt::null, siblingSelection);
+            io.AddMouseButtonEvent(0, true);
+            frame(*siblings, entt::null, siblingSelection);
+            io.AddMousePosEvent(90.0f, 40.0f + frameHeight * (3.0f + rowFraction));
+            frame(*siblings, entt::null, siblingSelection);
+            frame(*siblings, entt::null, siblingSelection);
+            io.AddMouseButtonEvent(0, false);
+            return frame(*siblings, entt::null, siblingSelection);
+        };
+        using Position = Editor::EntityDropPosition;
+        const std::pair<float, Position> dropZones[] = {
+            { 0.1f, Position::Before }, { 0.5f, Position::Into }, { 0.9f, Position::After }
+        };
+        for (const auto& [fraction, position] : dropZones)
+        {
+            const auto action = dropOnTarget(fraction);
+            if (action.RejectedDrop || !action.Move || action.Move->Position != position ||
+                action.Move->Target != targetHandle || action.Move->Children != siblingSelection)
+                return Fail("Sibling drag did not distinguish insertion edges and the parent drop.");
+        }
         return true;
     }
 
@@ -442,7 +522,7 @@ int main()
 {
     if (!Engine::LocalizationManager::Create() || !Engine::ReflectionRegistry::Create() ||
         !Engine::InputManager::Create()) return 1;
-    const bool passed = CheckMoves() && CheckGroupMoves() && CheckInvalidAndDepth() && CheckTree() &&
+    const bool passed = CheckMoves() && CheckGroupMoves() && CheckInvalidAndDepth() && CheckSiblingOrder() && CheckTree() &&
         CheckNameCache() && CheckTreeInput();
     Engine::ReflectionRegistry::Destroy();
     Engine::LocalizationManager::Destroy();

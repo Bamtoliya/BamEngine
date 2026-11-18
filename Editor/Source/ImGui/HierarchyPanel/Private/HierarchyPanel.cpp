@@ -657,12 +657,37 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 	}
     if (action.RejectedDrop)
         m_HierarchyMessage = "Hierarchy.StaleEntityDrop";
-    if (action.Move)
+    if (action.Move && action.Move->Position != EntityDropPosition::Into)
+    {
+        const auto& move = *action.Move;
+        auto& history = Application::Get().GetEditHistory();
+        auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
+        if (history.Enabled() && !before)
+            m_HierarchyMessage = "History.CaptureFailed";
+        else
+        {
+            const auto result = scene->ReorderSiblings(move.Children, move.Target, move.Position == EntityDropPosition::After);
+            if (result == SiblingReorderResult::Success)
+            {
+                if (before)
+                    history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.ReorderEntities");
+                m_RevealEntity = move.Anchor;
+                auto& prefabMode = PrefabModeManager::Get();
+                if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+                    prefabMode.MarkDirty();
+            }
+            if (result == SiblingReorderResult::Invalid)
+                m_HierarchyMessage = "Hierarchy.ReorderSameParent";
+            else
+                m_HierarchyMessage.clear();
+        }
+    }
+    else if (action.Move)
     {
         auto& history = Application::Get().GetEditHistory();
         auto before = history.Enabled() ? SceneEditSnapshot::Capture(*scene) : SceneEditSnapshot{};
         const auto& move = *action.Move;
-        auto* parent = scene->FindEntity(move.Parent);
+        auto* parent = scene->FindEntity(move.Target);
         std::vector<Engine::Entity*> children;
         children.reserve(move.Children.size());
         bool editLocked = false;
@@ -673,7 +698,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
             editLocked |= child && TransformPropertyEditor::HasAnyLock(scene->GetRegistry(), entity);
         }
         const bool canCapture = !history.Enabled() || before;
-        const auto result = !editLocked && canCapture && (parent || move.Parent == entt::null) ?
+        const auto result = !editLocked && canCapture && (parent || move.Target == entt::null) ?
             scene->ReparentEntities(children, parent) : EntityReparentResult::InvalidEntity;
         switch (result)
         {

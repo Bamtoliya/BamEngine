@@ -12,7 +12,7 @@ Ctrl+Z는 Undo, Ctrl+Y와 Ctrl+Shift+Z는 Redo다.
 - Inspector의 등록 컴포넌트 속성, 리소스 핸들과 컴포넌트 추가.
   Camera 같은 컴포넌트가 함께 추가한 Transform·WorldTransform·Flag도 되돌린다.
 - Scene View의 위치·회전·크기 기즈모.
-- Hierarchy의 드래그 부모 변경·루트 분리, 씬 이름 변경.
+- Hierarchy의 드래그 부모 변경·루트 분리, 같은 부모 아래의 드래그 재정렬, 씬 이름 변경. 묶음 재정렬은 이력 한 건을 기록하며 Undo/Redo 시 형제 순서를 복원한다.
 - EntityFactory를 통한 빈 엔티티·Primitive·Sprite·Canvas·Image·Button 생성.
 - Hierarchy 엔티티 우클릭 메뉴의 엔티티와 자식 삭제.
 - UI View의 이동·크기 조절과 Canvas 디자인 해상도.

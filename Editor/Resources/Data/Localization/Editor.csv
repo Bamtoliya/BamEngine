@@ -598,6 +598,7 @@ Hierarchy,PreserveTransformFailed,Cannot preserve the world transform under this
 Hierarchy,RenameScene,Rename Scene,씬 이름 변경
 Hierarchy,RootDropHint,Drop here to move to root,여기에 놓으면 루트로 이동합니다
 Hierarchy,SceneName,Scene: {},씬: {}
+Hierarchy,ReorderSameParent,Select siblings under the same parent to reorder them.,순서를 바꾸려면 같은 부모 아래의 항목을 선택하세요.
 Hierarchy,StaleEntityDrop,This entity is no longer in the current scene.,현재 씬에 없는 엔티티입니다.
 Hierarchy,Title,Hierarchy,계층
 Hierarchy,ToggleActive,Toggle Active,활성 여부 전환

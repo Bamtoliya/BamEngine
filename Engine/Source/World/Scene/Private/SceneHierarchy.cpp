@@ -293,3 +293,39 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
     restore();
     return Result::InvalidTransform;
 }
+
+Engine::SiblingReorderResult Engine::Scene::ReorderSiblings(
+    std::span<const entt::entity> entities, entt::entity target, bool after)
+{
+    using Result = SiblingReorderResult;
+    if (entities.empty()) return Result::Unchanged;
+
+    auto& world = m_LocalRegistry;
+    const auto* targetLink = world.valid(target) ? world.try_get<HierarchyComponent>(target) : nullptr;
+    if (!targetLink || targetLink->parent == entt::null) return Result::Invalid;
+    const auto parent = targetLink->parent;
+    auto* parentLink = world.valid(parent) ? world.try_get<HierarchyComponent>(parent) : nullptr;
+    if (!parentLink || !FindEntity(parent)) return Result::Invalid;
+
+    const std::unordered_set<entt::entity> selected(entities.begin(), entities.end());
+    std::unordered_set<entt::entity> seen;
+    std::vector<entt::entity> moving;
+    std::vector<entt::entity> remaining;
+    moving.reserve(selected.size());
+    remaining.reserve(parentLink->children.size());
+    for (const auto sibling : parentLink->children)
+    {
+        const auto* link = world.valid(sibling) ? world.try_get<HierarchyComponent>(sibling) : nullptr;
+        if (sibling == parent || !link || link->parent != parent || !FindEntity(sibling) || !seen.insert(sibling).second)
+            return Result::Invalid;
+        (selected.contains(sibling) ? moving : remaining).push_back(sibling);
+    }
+    if (moving.size() != selected.size() || !seen.contains(target)) return Result::Invalid;
+    if (selected.contains(target)) return Result::Unchanged;
+
+    const auto insertion = std::ranges::find(remaining, target) + (after ? 1 : 0);
+    remaining.insert(insertion, moving.begin(), moving.end());
+    if (remaining == parentLink->children) return Result::Unchanged;
+    parentLink->children.swap(remaining);
+    return Result::Success;
+}

@@ -22,11 +22,14 @@ namespace Editor
         std::unordered_set<entt::entity> Invalid;
     };
 
+    enum class EntityDropPosition { Into, Before, After };
+
     struct EntityHierarchyMove
     {
         std::vector<entt::entity> Children;
-        entt::entity Parent = entt::null;
+        entt::entity Target = entt::null;
         entt::entity Anchor = entt::null;
+        EntityDropPosition Position = EntityDropPosition::Into;
     };
 
     struct EntityHierarchyAction

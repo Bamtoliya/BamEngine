@@ -20,6 +20,8 @@ class MaterialInterface;
 
 enum class EntityReparentResult { Success, Unchanged, InvalidEntity, InvalidHierarchy, Cycle, InvalidTransform, DepthLimit };
 
+enum class SiblingReorderResult { Success, Unchanged, Invalid };
+
 struct SceneCreateDesc
 {
 	wstring name = L"Scene";
@@ -74,6 +76,8 @@ public:
 	Entity* FindEntity(entt::entity handle);
 	Entity* FindEntityById(uint64 id);
 	[[nodiscard]] bool MoveSiblingOrder(entt::entity entity, int direction); // -1: 위로, +1: 아래로
+	// Insert siblings around a target under their existing parent in their original relative order.
+	[[nodiscard]] SiblingReorderResult ReorderSiblings(std::span<const entt::entity> entities, entt::entity target, bool after);
 	const Entity* FindEntityById(uint64 id) const;
 	template<typename T, typename... Args>
 	T& AddComponent(Entity& entity, Args&&... args)

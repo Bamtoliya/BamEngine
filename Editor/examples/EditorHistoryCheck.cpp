@@ -492,6 +492,18 @@ namespace
         Check(!history.CanUndo() && history.Redo(), "group reparent redo");
         Check(parentOf(a) == p && parentOf(b) == p && parentOf(c) == a &&
             world.get<Engine::HierarchyComponent>(p).children == std::vector{ a, b }, "group order restored");
+
+        before = Editor::SceneEditSnapshot::Capture(*scene);
+        const entt::entity selected[] = { b };
+        Check(scene->ReorderSiblings(selected, a, false) == Engine::SiblingReorderResult::Success, "sibling reorder");
+        history.Record(std::move(before), Editor::SceneEditSnapshot::Capture(*scene), "History.Command.ReorderEntities");
+        const auto orderIs = [&](const std::vector<entt::entity>& order)
+        {
+            return world.get<Engine::HierarchyComponent>(p).children == order && parentOf(c) == a;
+        };
+        Check(orderIs({ b, a }) && history.Commands().GetUndoCount() == 2, "one sibling reorder command");
+        Check(history.Undo() && orderIs({ a, b }), "sibling order undo");
+        Check(history.Redo() && orderIs({ b, a }), "sibling order redo");
     }
 
     void DuplicateHierarchyRejection()
