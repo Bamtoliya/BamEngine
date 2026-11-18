@@ -9,6 +9,7 @@
 #include "ResourceHandle.h"
 #include "ResourceManager.h"
 #include "UILayout.h"
+#include "UIRenderSystem.h"
 #include "PrefabModeManager.h"
 #include <stdexcept>
 
@@ -45,7 +46,7 @@ Entity& EntityFactory::CreateUIImageEntity(Scene* scene, Entity& parent, const w
 	rect.sizeDelta = vec2(200.0f, 120.0f);
 	world.emplace<UIRenderOrderComponent>(handle);
 	auto& image = world.emplace<UIImageComponent>(handle);
-	image.materialHandle = ResourceManager::Get().GetResourceHandle<Material>(L"Resources/Material/UIMaterial");
+	image.materialHandle = Engine::UIRenderSystem::GetDefaultMaterial();
 	world.get<HierarchyComponent>(parent.GetEntityHandle()).children.push_back(handle);
 	return entity;
 }

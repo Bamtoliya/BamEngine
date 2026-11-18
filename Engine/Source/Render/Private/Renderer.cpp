@@ -983,7 +983,8 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 		{
 			if (IsFailure(BindMeshPipeline(nullptr, material, passType, pipelineDesc)))
 			{
-				auto fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
+				auto fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Engine://Material/UIMaterial.bammat.json");
+				if (!fallbackHandle.IsValid()) fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
 				MaterialInterface* fallbackMat = fallbackHandle.Get();
 				if (fallbackMat && fallbackMat != material && IsSuccess(BindMeshPipeline(nullptr, fallbackMat, passType, pipelineDesc)))
 				{

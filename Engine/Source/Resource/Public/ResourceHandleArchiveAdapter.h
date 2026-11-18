@@ -61,6 +61,18 @@ namespace archive_resource
             if (manager.IsValid(handle)) return handle;
         }
 
+        // 가상 URI 키는 현재 프로젝트 기준으로 풀리므로 저장 당시의 AssetPath보다 먼저 쓴다.
+        // 절대 AssetPath는 다른 체크아웃이나 옮기기 전 위치의 파일을 가리킬 수 있다.
+        if (Engine::PlatformPath::IsVirtualUri(assetKey))
+        {
+            std::error_code error;
+            if (std::filesystem::is_regular_file(Engine::PlatformPath::ResolveUri(assetKey), error))
+            {
+                handle = manager.LoadFile(assetKey);
+                if (manager.IsValid(handle)) return handle;
+            }
+        }
+
         // 2. assetPath가 있으면 파일 로드 시도
         if (!assetPath.empty())
         {

@@ -13,9 +13,33 @@ Engine::UIRenderSystem* Engine::UIRenderSystem::Create(void* arg)
     return new UIRenderSystem();
 }
 
+namespace
+{
+    // 시작 매니페스트는 엔진 리소스를 Engine:// URI 키로 등록한다. Client는 UI 머티리얼을 레거시 키로도 등록하므로 둘 다 찾는다.
+    template<typename T>
+    Engine::ResourceHandle<T> FindEngineResource(const wchar_t* uri, const wchar_t* legacyKey)
+    {
+        auto& resources = Engine::ResourceManager::Get();
+        auto handle = resources.GetResourceHandle<T>(uri);
+        return handle.IsValid() ? handle : resources.GetResourceHandle<T>(legacyKey);
+    }
+}
+
+Engine::ResourceHandle<Engine::MaterialInterface> Engine::UIRenderSystem::GetDefaultMaterial()
+{
+    return FindEngineResource<MaterialInterface>(L"Engine://Material/UIMaterial.bammat.json", L"Resources/Material/UIMaterial.bammat.json");
+}
+
+Engine::ResourceHandle<Engine::Texture> Engine::UIRenderSystem::GetDefaultTexture()
+{
+    return FindEngineResource<Texture>(L"Engine://Texture/white1x1.png", L"Resources/Texture/white1x1.png");
+}
+
 void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
     auto& renderer = Renderer::Get();
+    const auto defaultUIMat = GetDefaultMaterial();
+    const auto white = GetDefaultTexture();
     std::unordered_set<RenderPassID> submitted;
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
@@ -46,7 +70,6 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                     if (!layout.visible || !image || !UILayout::IsValid(*image) || image->color.a <= 0.0f) continue;
 
                     // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
-                    auto defaultUIMat = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
                     ResourceHandle<MaterialInterface> effectiveMatHandle = image->materialHandle;
                     MaterialInterface* material = effectiveMatHandle.Get();
                     if (!material)
@@ -69,7 +92,6 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                     Sprite* sprite = image->spriteHandle.Get();
                     // Missing assigned assets must not silently turn into a different image.
                     if (image->spriteHandle.GetRawHandle().IsValid() && !sprite) continue;
-                    auto white = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
                     Texture* texture = sprite ? sprite->GetTexture() : white.Get();
                     if (!texture || !texture->GetRHITexture()) continue;
                     UIImageDrawCommand command;
