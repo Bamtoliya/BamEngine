@@ -2,6 +2,21 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 래스터 반투명 2단계: 씬 컬러 복사 및 얇은 유리 굴절/프레넬 파이프라인 구현 (Render S6-2)
+
+- 불투명 패스(`DeferredLighting` / `ForwardOpaque`) 종료 직후 톤매핑 전 HDR 장면 색상을 안전하게 읽기 위한 복사 파이프라인(`PrePassCopy`)과 얇은 유리 굴절 셰이더를 구축했다.
+- `RHI` 및 `DirectX12RHI`/`SDLGPURHI`에 `CopyTexture` 인터페이스를 구현했다. 활성 커맨드 리스트에서 D3D12 `CopyResource`를 호출하며, 소스 타깃의 원래 상태(`RENDER_TARGET`)를 복원하고 대상 텍스처(`SceneColorCopy`)를 `PIXEL_SHADER_RESOURCE` 상태로 전이하여 D3D12 Hazard 충돌을 원천 방지했다.
+- `RenderPassDesc` 및 `RenderPass`에 `PrePassCopy`(`prePassCopySrcRT`, `prePassCopyDstRT`) 메커니즘을 추가하고, `Renderer::Render`에서 패스 시작(`BeginRenderPass`) 직전에 복사를 자동 수행하도록 연동했다.
+- `DeferredProfilePasses` 및 `ViewportDeferredPipeline`의 `ForwardTransparent` 패스에 `SceneColorCopy` 타깃(`R16G16B16A16_FLOAT`)을 생성하고, 패스 텍스처 슬롯 16(`MAX_MATERIAL_TEXTURE_SLOTS + 0`, Space 3의 `t0`)에 바인딩했다.
+- 굴절 셰이더(`glassPS.hlsl`)를 신설했다. 뷰 공간 법선 기반 굴절 UV 오프셋(화면 UV 좌표계 Y축 반전 보정), 화면 경계 클램프(`clamp(refractUV, 0.001, 0.999)`), 유리 틴트 컬러, 시선 방향 법선 자동 정렬(`dot(N, V) < 0` 시 `N = -N`), Schlick Fresnel 반사율 및 가장자리 프레넬 스페큘러 하이라이트 가산 합성을 구현했다.
+- 래스터 유리 머티리얼 에셋(`GlassMaterial.bammat.json`, `AlphaBlend`, `DepthMode: ReadOnly`, `CullMode: Back`)을 신설하고 DXIL(`glassPS.cso`) 및 SPIR-V(`glassPS.spv`) 바이너리를 컴파일했다.
+- **검증**: `AssetReferenceCheck` 단위 테스트 100% 통과. 에디터 뷰포트에서 캐릭터와 불투명 배경 앞에 유리 큐브를 배치하여 다음을 실환경 검증했다:
+  1. 유리 큐브를 통과해 보이는 배경 캐릭터와 바닥이 법선 벡터에 따라 맑고 자연스럽게 굴절·왜곡되어 투과됨.
+  2. 카메라 회전 및 오브젝트 이동 시 실시간으로 복사된 씬 컬러가 정상 갱신됨.
+  3. 미바인딩 IBL 환경맵과의 lerp로 인해 수직면/가장자리가 검게 타던 문제를 프레넬 가산 하이라이트로 전환하여 해결.
+  4. 폐곡면 큐브의 내부 뒷면 중복 렌더링을 방지하기 위한 뒷면 컬링(`CullMode: Back`) 정상 동작 확인.
+- **잔여**: Windows 배포 Client 비교, 굴절 켜고 끈 조건에서의 패스별 GPU 시간 계측 기록(S1 지표), 굴절 강도 및 틴트 파라미터의 인스펙터 동적 조절 UI 노출은 후속 범위다.
+
 ### [2026-11-18] 문자열 경로 에셋용 경로 피커와 ResourcePicker 항목 공용화
 
 - `ResourcePicker.h`의 목록 항목 그리기(썸네일·이름·경로·배지·선택 표시·툴팁·우클릭 메뉴)를 `Detail::DrawPickerItem`·`PickerItemView`로, 맨 위 연결 해제 행을 `Detail::DrawPickerClearItem`으로 분리했다. 썸네일 결정(스프라이트 잘라내기 포함)은 템플릿에 남겼다. 두 함수는 header의 `inline`이라 `ReflectionInspectorCheck`의 스텁 구성을 바꾸지 않는다.

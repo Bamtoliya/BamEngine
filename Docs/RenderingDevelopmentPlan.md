@@ -219,7 +219,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 
 ### S6. 래스터 반투명 재질과 수면
 
-**상태** — 2026-11-17 1단계(정적 반투명 메시의 카메라 기준 정렬) 구현 및 Editor 실행 확인. Windows 배포 Client 비교는 미수행이다. 2~4단계는 소재가 필요한 콘텐츠에서 선택하는 P3 확장이다. [구현 기록](ImplementationLog.md)
+**상태** — 2026-11-18 1단계(정적 반투명 메시 카메라 정렬) 및 2단계(씬 컬러 복사 및 얇은 유리 굴절 셰이더) 구현 및 Editor 실행 확인 완료. Windows 배포 Client 비교는 미수행이다. 3~4단계(평평한 수면, 파도)는 소재가 필요한 콘텐츠에서 선택하는 P3 확장이다. [구현 기록](ImplementationLog.md)
 
 **출발점** — 공용 Deferred 프로필에서 `ForwardTransparent`는 `ForwardOpaque`의 HDR 색상과 깊이 타깃을 이어받는다. 반투명 VFX에는 알파 합성, G-Buffer 위치 기반 Depth Fade와 시선 각도에 따른 프레넬 림이 있다. 패스는 `BackToFront`로 설정되어 있지만, 현재 `Renderer::Render()`의 정적 메시 경로는 이 경우 머티리얼·메시 정렬을 건너뛰며 카메라 기준 거리 정렬은 확인되지 않았다. [패스 등록 코드](../Engine/Source/Render/Pipeline/Private/DeferredProfilePasses.cpp) · [정적 메시 제출 처리](../Engine/Source/Render/Private/Renderer.cpp) · [반투명 VFX 구현 기록](CompositeVisualEffectPlan.md#95-phase-5-step-1-구현-반영-내역-2026-11-16-커밋-기준)
 
