@@ -1,8 +1,7 @@
 ﻿#include "ResourcePicker.h"
 #include "AssetCache.h"
 #include "ImGuiManager.h"
-#include "ContentBrowserPanel.h"
-#include "NotificationManager.h"
+#include "AssetFileActions.h"
 
 namespace Editor::Detail
 {
@@ -29,16 +28,8 @@ namespace Editor::Detail
 		const bool openRequested = ImGui::MenuItem(LOCAL_LABEL("ResourcePicker.OpenInEditor").c_str(),
 			nullptr, false, canOpen) && manager.RequestOpenResourceEditor(effectivePath);
 
-		if (ImGui::MenuItem(LOCAL_LABEL("ResourcePicker.RevealInContentBrowser").c_str()))
-		{
-			auto* panel = manager.GetImGuiPanel(L"Content Browser");
-			auto* browser = dynamic_cast<ContentBrowserPanel*>(panel);
-			if (browser == nullptr || !browser->RequestRevealAsset(effectivePath))
-			{
-				NotificationManager::Get().AddNotification(LOCAL("ResourcePicker.RevealInContentBrowser"),
-					LOCAL("ResourcePicker.RevealFailed"), ELogLevel::Warn);
-			}
-		}
+		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.RevealInContentBrowser").c_str()))
+			AssetFileActions::RevealInContentBrowser(effectivePath);
 
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.CopyPath").c_str()))
 			ImGui::SetClipboardText(Engine::WStrToStr(effectivePath.wstring()).c_str());

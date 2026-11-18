@@ -240,6 +240,8 @@ EditorCommon,OK,OK,확인
 EditorCommon,Off,OFF,꺼짐
 EditorCommon,On,ON,켜짐
 EditorCommon,Open,Open,열기
+EditorCommon,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
+EditorCommon,RevealInContentBrowserFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
 EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
 EditorCommon,Other,Other,기타
 EditorCommon,Paste,Paste,붙여넣기
@@ -1005,6 +1007,7 @@ Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
 Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
 Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
 Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Notification,OpenAssetMissing,File not found: {},파일을 찾을 수 없습니다: {}
 Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
 Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
 Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
@@ -1587,8 +1590,6 @@ InputActions,DuplicateCategory,Category with this name already exists.,이미 �
 Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
 InputActions,MouseCaptureArea,Click here with the mouse button to bind,등록할 마우스 버튼으로 여기를 누르세요
 Viewport,RenderTargetPreviewUnsupported,This render target cannot be previewed as a 2D image.,이 렌더 타깃은 2D 이미지로 미리 볼 수 없습니다.
-ResourcePicker,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
-ResourcePicker,RevealFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
 Inspector,RefreshModelMaterials,Refresh Model Parts,원본 모델 부품 갱신
 Inspector,ModelMaterialRefreshConflict,The model parts or rig no longer match the instance. Nothing was changed.,원본 모델의 부품 또는 리그가 인스턴스와 일치하지 않아 변경하지 않았습니다.
 Inspector,ModelMaterialRefreshFailed,Could not apply the model part change.,모델 부품 변경을 적용하지 못했습니다.

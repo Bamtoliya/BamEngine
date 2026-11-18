@@ -1,4 +1,5 @@
 ﻿#include "AssetReferencePanel.h"
+#include "AssetFileActions.h"
 #include "AssetPathRelocation.h"
 #include "EditorUI.h"
 #include "Functions.h"
@@ -10,6 +11,22 @@
 
 namespace Editor
 {
+    static void DrawReferenceAssetActions(const char* popupId, const std::filesystem::path& path)
+    {
+        if (!ImGui::BeginPopupContextItem(popupId))
+            return;
+
+        const bool open = ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str());
+        const bool reveal = ImGui::MenuItem(
+            (ICON_FA_MAGNIFYING_GLASS " " + LOCAL_LABEL("EditorCommon.RevealInContentBrowser")).c_str());
+        ImGui::EndPopup();
+
+        if (open)
+            AssetFileActions::Open(path);
+        if (reveal)
+            AssetFileActions::RevealInContentBrowser(path);
+    }
+
     AssetReferencePanel::AssetReferencePanel()
     {
         m_Name = L"AssetReferenceChecker";
@@ -130,6 +147,8 @@ namespace Editor
 
         const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_ReferenceTarget));
         ImGui::TextWrapped("%s", target.c_str());
+        if (!m_ReferenceTargetMissing)
+            DrawReferenceAssetActions("ReferenceTargetActions", m_ReferenceTarget);
         ImGui::Separator();
 
         if (m_ReferenceTargetMissing)
@@ -208,7 +227,9 @@ namespace Editor
             noteKey ? "  " : "", noteKey ? LOCAL_CSTR(noteKey) : "");
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             next = path;
-        if (ImGui::IsItemHovered())
+        const bool hovered = ImGui::IsItemHovered();
+        DrawReferenceAssetActions("ReferenceRowActions", path);
+        if (hovered)
             ImGui::SetTooltip("%s", display.c_str());
 
         if (open && expandable)

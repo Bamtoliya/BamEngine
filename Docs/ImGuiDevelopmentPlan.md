@@ -39,7 +39,7 @@
   시작 알림과 설정 패널에서 저장 차단 상태를 안내한다.
 - 씬 문서 보호(`SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`)와 `HistoryPanel`(Undo/Redo 이력 및 저장 기준점 표시)이 구현되어 New/Load/Save/Close 및 종료 흐름에 연결되었다 (11절 A).
 - 프리팹 파이프라인(생성·배치, 뷰포트 격리 편집 모드 `PrefabModeManager`, 단일 원천 루트 `PrefabInstanceComponent` 및 Apply/Revert/Unpack, 저장 기준점 Undo 연동)과 엔티티 다중 복사·붙여넣기(`EntityClipboard`)가 구현 완료되었다 (10절, 17절).
-- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`OpenAssetOrFolder`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
+- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`AssetFileActions::Open`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
 - 전용 리소스/그래프 에디터로 2D `SpriteAnimationEditor`(필름스트립 타임라인·피벗 프리뷰, `ResourceHandle` 참조)와 3D `AnimatorGraphPanel`(상태 머신 캔버스·파라미터 독·트랜지션 인스펙터·활성 상태 하이라이트, 11절 H)이 구현되었으며, `GraphPanel` 상단 도구 모음이 윈도우 메뉴바(`File`, `Edit`, `View`, `Mode`, `Debug/Build`) + 1줄 퀵 액세스 툴바로 리팩터링되었다 (18절).
 - **2026-11-08~13 추가 반영(정적 기준)**: `ResourceEditorInterface` 기반 3줄 공통 헤더(12개 리소스 편집기 전환), `EditorUI` 공통 검색 바·모달 액션 바·반응형 툴바·테이블 확대, `ContentBrowser`의 `Assets/`/`Engine/Resources/` 분리 및 읽기 전용 보호·썸네일 재사용·다중 드롭, `PluginManagerPanel`/`PluginHost`, `RecoveryManager` 비정상 종료 복원 모달(`DrawRecoveryModal`), `BuildProfilePanel`의 Windows Release 패키지 내보내기 UI가 구현되었다.
 - EditorSettingsCheck의 파일 입출력·데이터 검사는 통과했다.
@@ -349,6 +349,7 @@ Visual Studio F5 수동 확인 항목:
 ### B. `AssetReferencePanel`과 에셋 검증 — 우선순위 높음
 
 - 콘텐츠 브라우저에서 파일 하나를 우클릭하고 **에셋 참조 보기**를 선택한다. 참조 관계 탭의 사용처와 의존성 트리에서 화살표로 간접 관계를 펼치고, 행을 클릭해 해당 파일을 새 조회 대상으로 삼을 수 있다. 현재 가지에 같은 파일이 반복되면 순환 참조를 표시하고 펼치기를 멈춘다. 같은 파일을 여러 가지에서 사용하면 각 위치에 표시한다. 깊이 24에 도달한 가지는 해당 행을 선택해 이어서 조회할 수 있다.
+- 참조 관계 탭에서 조회 대상 경로나 관계 행을 우클릭하면 **열기**와 **콘텐츠 브라우저에서 찾기**를 사용할 수 있다. 열기는 콘텐츠 브라우저와 같은 파일 종류 판정과 미저장 보호 경로를 사용한다. 위치 찾기는 해당 폴더를 열고 파일을 선택해 보이도록 스크롤한다. 조회 대상이나 목록의 펼침 상태를 바꾸지 않고 파일 작업을 시작할 수 있다.
 - 첫 조회나 **에셋 참조 검사**를 실행하면 즉시 디스크 상태를 읽는다. 이후 콘텐츠 브라우저 파일 작업과 Undo/Redo, 프로젝트 에셋 폴더에서 감지한 참조 문서의 변경은 재검사를 예약한다. 저장이나 파일 교체에서 발생하는 연속 이벤트가 200ms 동안 잠잠해지면, 패널이 표시되는 프레임에 한 번 다시 검사한다. 폴더 감시 신호는 에디터와 외부 편집기의 문서 저장을 같은 경로로 처리한다.
 - 폴더 감시는 참조 검사와 같은 확장자 조건을 사용한다. 파일 감시 범위 밖의 변경과 외부에서 텍스처·모델 같은 참조 대상을 직접 교체한 경우는 검사 버튼으로 반영할 수 있다.
 - 이동·이름 변경에서는 선택한 파일과 상위 폴더의 경로를 따라간다. 선택한 파일 또는 상위 폴더를 삭제하면 참조 탭에 마지막 경로와 대상 파일 누락 안내를 표시한다. 삭제 Undo는 같은 경로의 관계 트리를 복원하고 Redo는 누락 안내를 다시 표시한다. 복사본에 저장된 참조는 갱신한 사용처·의존성과 문제 목록에 반영한다.
