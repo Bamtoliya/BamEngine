@@ -233,6 +233,8 @@ EditorCommon,Delete,Delete,삭제
 EditorCommon,General,General,일반
 EditorCommon,Height,Height,높이
 EditorCommon,Name,Name,이름
+EditorCommon,NavigateBack,Go Back,뒤로
+EditorCommon,NavigateForward,Go Forward,앞으로
 EditorCommon,New,New,새로 만들기
 EditorCommon,NewFolder,New Folder,새 폴더
 EditorCommon,None,None,없음

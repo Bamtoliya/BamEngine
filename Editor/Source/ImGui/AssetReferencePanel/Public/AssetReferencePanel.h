@@ -35,11 +35,14 @@ private:
     void DrawSummaryStats();
     void DrawIssuesTable();
     void DrawReferences();
+    void DrawReferenceToolbar();
     void DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links, std::filesystem::path& next);
     void DrawReferenceChildren(const ReferenceChildren& children, const ReferenceAdjacency& links,
         ReferencePaths& ancestors, std::filesystem::path& next);
     void DrawReferenceBranch(const std::filesystem::path& path, const ReferenceAdjacency& links,
         ReferencePaths& ancestors, std::filesystem::path& next);
+    void NavigateToReference(const std::filesystem::path& asset);
+    void StepReferenceHistory(bool forward);
     void SetReferenceTarget(const std::filesystem::path& asset);
     void RebuildReferenceTrees(const std::vector<AssetReferenceLink>& references);
 
@@ -50,6 +53,8 @@ private:
 private:
     std::vector<AssetReferenceIssue> m_Issues;
     std::filesystem::path m_ReferenceTarget;
+    ReferencePaths m_BackTargets;
+    ReferencePaths m_ForwardTargets;
     ReferenceAdjacency m_Dependencies;
     ReferenceAdjacency m_Users;
     bool m_SelectReferencesTab = false;

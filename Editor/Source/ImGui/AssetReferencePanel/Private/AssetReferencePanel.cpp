@@ -6,8 +6,10 @@
 #include "PlatformPath.h"
 #include "LocalizationManager.h"
 #include "IconsFontAwesome7.h"
+#include "InputManager.h"
 #include <imgui.h>
 #include <algorithm>
+#include <utility>
 
 namespace Editor
 {
@@ -72,7 +74,7 @@ namespace Editor
 
     void AssetReferencePanel::ShowReferences(const std::filesystem::path& asset)
     {
-        SetReferenceTarget(asset);
+        NavigateToReference(asset);
         if (!m_HasScanned)
             m_ScanAfter = std::chrono::steady_clock::now();
         m_SelectReferencesTab = true;
@@ -91,7 +93,45 @@ namespace Editor
     void AssetReferencePanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
     {
         relocation.Add(m_ReferenceTarget);
+        for (auto& target : m_BackTargets)
+            relocation.Add(target);
+        for (auto& target : m_ForwardTargets)
+            relocation.Add(target);
         relocation.AfterCommit([this]() { RequestScanRefresh(); });
+    }
+
+    void AssetReferencePanel::NavigateToReference(const std::filesystem::path& asset)
+    {
+        if (asset.empty())
+            return;
+
+        auto previous = m_ReferenceTarget;
+        SetReferenceTarget(asset);
+        if (previous.empty() || Engine::PlatformPath::IsSamePath(previous, m_ReferenceTarget))
+            return;
+
+        constexpr size_t maxHistory = 64;
+        if (m_BackTargets.size() == maxHistory)
+            m_BackTargets.erase(m_BackTargets.begin());
+        m_BackTargets.push_back(std::move(previous));
+        m_ForwardTargets.clear();
+    }
+
+    void AssetReferencePanel::StepReferenceHistory(bool forward)
+    {
+        auto& from = forward ? m_ForwardTargets : m_BackTargets;
+        auto& to = forward ? m_BackTargets : m_ForwardTargets;
+        while (!from.empty())
+        {
+            auto next = std::move(from.back());
+            from.pop_back();
+            if (Engine::PlatformPath::IsSamePath(next, m_ReferenceTarget))
+                continue;
+
+            to.push_back(std::move(m_ReferenceTarget));
+            SetReferenceTarget(next);
+            return;
+        }
     }
 
     void AssetReferencePanel::SetReferenceTarget(const std::filesystem::path& asset)
@@ -134,10 +174,33 @@ namespace Editor
         prepareChildren(m_Users);
     }
 
+    void AssetReferencePanel::DrawReferenceToolbar()
+    {
+        EditorUI::ToolbarLayout toolbar;
+        EditorUI::IconButtonOptions options;
+        options.Enabled = !m_BackTargets.empty();
+        options.ShortcutHint = "X1";
+        const bool back = toolbar.Icon("ReferenceBack", ICON_FA_ARROW_LEFT, "EditorCommon.NavigateBack", options);
+        options.Enabled = !m_ForwardTargets.empty();
+        options.ShortcutHint = "X2";
+        const bool forward = toolbar.Icon("ReferenceForward", ICON_FA_ARROW_RIGHT, "EditorCommon.NavigateForward", options);
+        const bool scan = toolbar.Button("ReferenceScan", ICON_FA_MAGNIFYING_GLASS, "AssetRef.ScanAll");
+
+        const bool allowMouse = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
+            !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive() && !ImGui::GetDragDropPayload() &&
+            !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        auto& input = Engine::InputManager::Get();
+        if (back || (allowMouse && input.IsMouseButtonDown(Engine::EMouseButton::X1)))
+            StepReferenceHistory(false);
+        else if (forward || (allowMouse && input.IsMouseButtonDown(Engine::EMouseButton::X2)))
+            StepReferenceHistory(true);
+        if (scan)
+            RunValidation();
+    }
+
     void AssetReferencePanel::DrawReferences()
     {
-        if (ImGui::Button(LOCAL_LABEL("AssetRef.ScanAll").c_str()))
-            RunValidation();
+        DrawReferenceToolbar();
 
         if (m_ReferenceTarget.empty())
         {
@@ -165,8 +228,7 @@ namespace Editor
             DrawReferenceTree("AssetRef.Uses", m_Dependencies, next);
         }
         ImGui::EndChild();
-        if (!next.empty())
-            SetReferenceTarget(next);
+        NavigateToReference(next);
     }
 
     void AssetReferencePanel::DrawReferenceTree(const char* labelKey, const ReferenceAdjacency& links,
