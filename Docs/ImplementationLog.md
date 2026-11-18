@@ -2,6 +2,61 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 콘텐츠 브라우저 썸네일 아틀라스, 무대기 업로드 및 그리드 배칭 최적화 (방안 A+B+C+D)
+
+- **배경 및 목표**:
+  - 다량의 3D 썸네일이 존재하는 폴더(`sponza` 등)를 콘텐츠 브라우저에서 열어둘 때 발생하는 로딩 중 GPU Fence Stall 스터터링과 상시 ImGui 드로우콜/CPU 경로 연산 프레임 드랍을 제거함.
+- **구현 내역**:
+  - **방안 C (프레임 기록 중 무대기 업로드)**:
+    - `Engine/Source/Render/Public/Renderer.h`, `Engine/Source/Render/Private/Renderer.cpp`: `GetPreRenderDelegate()`를 신설하고 `Renderer::Render` 시작부(`m_FrameRecording == true`)에 브로드캐스트하여 GPU Fence 대기 없이 메인 커맨드 리스트로 텍스처 업로드가 기록되도록 전환.
+  - **방안 B (공용 2048×2048 썸네일 아틀라스)**:
+    - `Editor/Source/AssetManager/AssetCache/Public/AssetCache.h`, `Editor/Source/AssetManager/AssetCache/Private/AssetCache.cpp`: 페이지당 `128×128` 썸네일 256개를 수용하는 `2048×2048` 공용 아틀라스 및 하프-텍셀 인셋 UV 계산, `RHI::UploadTextureData(..., dstX, dstY)` 부분 업로드 파이프라인을 구축(`NotImplemented` 백엔드는 개별 텍스처 자동 폴백). 외부 단독 미리보기(`TextureEditor`, `ResourcePicker`)용 `GetThumbnail`은 지연 생성 방식으로 100% 호환 유지.
+  - **방안 D (LIFO 가시 영역 우선 스케줄링 & 상주 스레드 PNG 디코딩)**:
+    - `Editor/Source/AssetManager/Worker/Public/AssetWorkerHost.h`, `Editor/Source/AssetManager/Worker/Private/AssetWorkerHost.cpp`: 워커 작업 꺼내기 및 `AssetCache::FlushPendingUploads`(`MAX_UPLOADS_PER_FRAME = 8`)를 최신 요청 우선(LIFO)으로 전환하고, 워커 호스트 상주 스레드 내에서 `DecodePngToRgba` 디코딩까지 완결해 `std::async` 스레드 추가 생성 오버헤드 제거.
+  - **방안 A (타일 메타데이터 사전 캐싱 & 3-채널 DrawList 배칭)**:
+    - `Editor/Source/ImGui/ContentBrowserPanel/Public/ContentBrowserGridItem.h`, `ContentBrowserGridItem.cpp`, `ContentBrowserPanel.h`, `ContentBrowserPanel.cpp`: `RebuildGridItems`에서 `CacheKey`, `IsReadOnly`, `AssetVisualDesc`, ImGui ID를 1회 캐싱하고 축약 파일명 캐시를 도입함. `ImGui::BeginTable` 대신 `SetCursorScreenPos` 그리드 + 3-채널 `ImDrawListSplitter`(Channel 0: 배경, Channel 1: 아틀라스 썸네일 일괄 배칭, Channel 2: 아이콘/텍스트/스트립)를 적용해 대량 썸네일 표시 중 드로우콜을 대폭 축소.
+- **검증 상태**:
+  - 정적 코드 검토 완료. 지침에 따라 빌드 및 실환경 성능 계측(FPS / Draw Call)은 사용자 실행 대상으로 안내함.
+
+### [2026-11-18] 환경맵 기반 IBL 및 그림자 앰비언트 밸런싱 고도화, DefaultBRDFLUT 절차적 생성 파이프라인 구축 (S5)
+
+- **배경 및 목적**:
+  - 기존 Split-Sum PBR 큐브맵 IBL은 사용자가 `BRDFLutMap` 텍스처 에셋을 직접 지정하지 않으면 완전히 비활성화되거나 셰이더 바인딩이 누락되는 제약이 있었음.
+  - 큐브맵 환경맵(`IrradianceMap`, `PrefilteredMap`)이 없는 기본 씬에서는 칙칙한 단색 회색(`0.15`)으로 폴백되어 물리 기반 음영 및 색감이 죽는 문제가 발생함.
+  - 직사광이 차폐되는 그림자 음영부에서 앰비언트 하한값이 없어 물체 표면이 완전히 새까맣게 타는(Pitch Black) 현상 및 알베도 디테일 상실이 발생함.
+- **구현 내역**:
+  - `Engine/Source/Render/IBL/Public/IBLManager.h` & `Private/IBLManager.cpp`:
+    - `IBLManager` 싱글톤 신설.
+    - Karis 2013 중요도 샘플링 적분 공식(Hammersley 2D 저불일치 수열 + GGX 중요도 샘플링 + Smith 기하 감쇄) 기반으로 $256 \times 256$ 해상도의 `R16G16_FLOAT` Split-Sum BRDF LUT 텍스처(`Engine://Texture/DefaultBRDFLut`, 256KB)를 절차적으로 생성하고 캐싱하는 `GetDefaultBRDFLUT()` 파이프라인 구축.
+    - RHI 활성 런타임에서는 `rhi->CreateTexture`로 GPU 텍스처를 생성하고, RHI가 없는 테스트 환경에서는 CPU 메모리 텍스처로 안전하게 생성되도록 이중화.
+    - 프로그램 종료 시 `Free()`를 통해 GPU 리소스 및 CPU 메모리 완벽 회수.
+  - `Engine/Source/Render/Atmosphere/Public/SkyAtmosphereComponent.h`:
+    - `ShadowAmbientFloor = 0.15f` (범위 0.0 ~ 1.0) 프로퍼티 추가 및 리플렉션 노출.
+  - `Engine/Source/Render/Pipeline/Private/DeferredSceneRenderer.cpp`:
+    - `DeferredLightingPassData` 구조체: 미사용 `_pad`와 `_reserved` 영역을 `ShadowAmbientFloor`, `SkyZenithColor`, `SkyIntensity`로 교체 (기존 512B 상수 버퍼 크기 및 오프셋 엄격 보존).
+    - `sky.BRDFLutMap` 부재 시 `IBLManager::Get().GetDefaultBRDFLUT()` 자동 주입.
+    - `PrefilteredMap`만 지정되어도 `IrradianceMap` 대체 폴백을 적용하여 큐브맵 IBL(`HasIBLMaps = 1`) 즉시 활성화.
+    - `SkyAtmosphereComponent`의 `ZenithColor`, `SkyIntensity`, `ShadowAmbientFloor` 조명 상수 버퍼 주입.
+  - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`:
+    - `LightingPassData` 구조체 정의를 `DeferredLightingPassData`와 512B 동일하게 일치.
+  - `Engine/Resources/Shader/hlsl/lightingPS.hlsl`:
+    - `LightingPassData`에 `ShadowAmbientFloor`, `SkyZenithColor`, `SkyIntensity` 반영.
+    - `HasIBLMaps == 0`일 때 `SkyZenithColor` 기반 물리 반구형 하늘 IBL 계산 추가 ($N \cdot \text{Up}$ 기반 하늘-지면 코사인 보간).
+    - `ambientFloor = max(gLightingData.ShadowAmbientFloor, 0.02f)`를 통한 그림자 음영부 앰비언트 하한값 및 알베도 보존 수식 적용.
+  - `Engine/Source/Render/Texture/Public/Texture.h`:
+    - `GetCachedHeader()`, `GetTempData()` 인라인 접근자 추가.
+  - `Engine/examples/IBLShadingCheck.cpp` & `Engine/CMake/Checks.cmake`:
+    - 전용 CTest 단위 검증 테스트 타깃 `IBLShadingCheck` 구축.
+    - [Test 1] BRDF 수치 적분 경계 조건 및 물리적 에너지 보존 법칙($\text{scale} + \text{bias} \le 1.0001$) 검증.
+    - [Test 2] `DefaultBRDFLUT` 텍스처 규격(256x256, R16G16_FLOAT, 256KB) 및 싱글톤 캐싱 멱등성 검증.
+    - [Test 3] 반구형 하늘 IBL 상향/지평선/하향 조도 및 직사광 완전 차폐 시 앰비언트 플로어(칠흑 방지 및 알베도 보존) 검증.
+- **검증 상태**:
+  - `ctest --preset x64-ninja-debug -R IBLShadingCheck` 단위 테스트 전체 통과 (100% Pass) 확인 완료.
+  - [Test 1] BRDF 수치 적분 및 물리적 에너지 보존 법칙($\text{scale} + \text{bias} \le 1.00000$) 통과.
+  - [Test 2] `DefaultBRDFLUT` 텍스처 규격(256x256, R16G16_FLOAT, 256KB) 및 싱글톤 캐싱 멱등성 검증 통과.
+  - [Test 3] 반구형 하늘 IBL 상향/지평선/하향 조도 및 직사광 완전 차폐 시 앰비언트 플로어(칠흑 방지 및 알베도 보존) 검증 통과.
+  - 디버그 빌드 환경에서 약 43초 소요 ($256 \times 256$ 픽셀 $\times$ 1,024회 중요도 샘플링 = 총 약 6,710만 회 삼각함수 및 저불일치 수열 연산).
+
 ### [2026-11-18] 독립 워커 프로세스(`BamAssetWorker`) 기반 3D 에셋·서브메시·프리팹 썸네일 비동기 베이킹
 
 - **배경 및 목표**:

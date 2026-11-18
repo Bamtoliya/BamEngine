@@ -1,5 +1,6 @@
 ﻿#include "DeferredSceneRenderer.h"
 
+#include "IBLManager.h"
 #include "CompositeVFXSystem.h"
 #include "FogComponent.h"
 #include "LightComponent.h"
@@ -31,14 +32,21 @@ namespace
 		uint32 HasIBLMaps = 0u;
 		f32 IBLIntensity = 1.0f;
 		uint32 UseTiledCulling = 1u; // 0: 직접 광원 순회(프리뷰), 1: 타일 컬링 광원 순회(메인 씬)
-		f32 _pad = 0.0f;
-		vec4 _reserved{ 0.0f };
+		f32 ShadowAmbientFloor = 0.15f;
+		vec3 SkyZenithColor{ 0.18f, 0.42f, 0.85f };
+		f32 SkyIntensity = 1.0f;
 	};
 	static_assert(sizeof(DeferredLightingPassData) == 512);
 	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
 	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
 	static_assert(offsetof(DeferredLightingPassData, SunDirection) == 464);
 	static_assert(offsetof(DeferredLightingPassData, PlanetRadius) == 476);
+	static_assert(offsetof(DeferredLightingPassData, HasIBLMaps) == 480);
+	static_assert(offsetof(DeferredLightingPassData, IBLIntensity) == 484);
+	static_assert(offsetof(DeferredLightingPassData, UseTiledCulling) == 488);
+	static_assert(offsetof(DeferredLightingPassData, ShadowAmbientFloor) == 492);
+	static_assert(offsetof(DeferredLightingPassData, SkyZenithColor) == 496);
+	static_assert(offsetof(DeferredLightingPassData, SkyIntensity) == 508);
 }
 
 Engine::DeferredSceneRenderer::~DeferredSceneRenderer()
@@ -341,27 +349,36 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				lightingData.Shadow = lightManager.GetShadowData(0u);
 			// 메인 씬만 타일 기반 컬링을 켜고, 독립 프리뷰는 타일 컬링 없이 전체 스튜디오 광원 순회
 			lightingData.UseTiledCulling = useTiledCulling ? 1u : 0u;
-			// skyData로부터 태양 방향 및 구름 데이터 주입
+			// skyData로부터 태양 방향 및 구름, 대기 조명 데이터 주입
 			lightingData.Cloud = skyData.Cloud;
 			lightingData.SunDirection = skyData.SunDirection;
+			lightingData.SkyZenithColor = skyData.ZenithColor;
+			lightingData.SkyIntensity = skyData.SkyIntensity;
 			// 8. IBL 텍스처 바인딩 (t10, t11, t12)
 			if (sceneToQuery)
 			{
 				auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
 				for (auto [e, sky] : skyView.each())
 				{
-					if (sky.IsEnabled && sky.IrradianceMap.IsValid() && sky.PrefilteredMap.IsValid() && sky.BRDFLutMap.IsValid())
+					if (sky.IsEnabled)
 					{
-						auto* irrTex = sky.IrradianceMap.Get();
-						auto* prefTex = sky.PrefilteredMap.Get();
-						auto* lutTex = sky.BRDFLutMap.Get();
-						if (irrTex && prefTex && lutTex)
+						lightingData.IBLIntensity = sky.IBLIntensity;
+						lightingData.ShadowAmbientFloor = sky.ShadowAmbientFloor;
+
+						Texture* irrTex = sky.IrradianceMap.IsValid() ? sky.IrradianceMap.Get() : nullptr;
+						Texture* prefTex = sky.PrefilteredMap.IsValid() ? sky.PrefilteredMap.Get() : nullptr;
+						Texture* lutTex = sky.BRDFLutMap.IsValid() ? sky.BRDFLutMap.Get() : IBLManager::Get().GetDefaultBRDFLUT();
+
+						// Prefiltered 큐브맵만 있고 Irradiance가 없으면 Prefiltered로 대체
+						if (prefTex && !irrTex)
+							irrTex = prefTex;
+
+						if (irrTex && prefTex && lutTex && irrTex->GetRHITexture() && prefTex->GetRHITexture() && lutTex->GetRHITexture())
 						{
 							rhi->BindTextureSampler(irrTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 10);
 							rhi->BindTextureSampler(prefTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 11);
 							rhi->BindTextureSampler(lutTex->GetRHITexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 12);
 							lightingData.HasIBLMaps = 1u;
-							lightingData.IBLIntensity = sky.IBLIntensity;
 							break;
 						}
 					}

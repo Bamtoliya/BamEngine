@@ -269,6 +269,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - **S4**: `tiledLightCullingCS.hlsl` 4방향 절두체 평면 컬링, `DirectX12Pipeline` Compute PSO, `DirectX12RHI::Dispatch`/`ResourceBarrierUAV`, `LightManager::DispatchLightCulling`, `lightingPS.hlsl` 선별 광원 루프 순회 반영 및 라이팅 GPU 시간 77% 단축(1.10 ms -> 0.25 ms) 실측 검증 완료.
   - **S5 및 후처리/HDR 파이프라인 일원화**:
     - `lightingPS.hlsl`의 반구형 Sky IBL 및 Split-Sum PBR 큐브맵 IBL(`gLightingData.HasIBLMaps`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`), 접촉 그림자, `ShadowStrength`와 `PostProcessPipeline`(`BloomEffect`, `PostProcessMaterialEffect` 기반 8종 효과) 및 `PostProcessPanel` 반영됨.
+    - **(2026-11-18 고도화)**: Karis 2013 중요도 샘플링 기반 256x256 `R16G16_FLOAT` Split-Sum BRDF LUT 절차적 자동 생성 및 캐싱 파이프라인(`IBLManager`) 구축. 사용자 LUT 미지정 시 엔진 기본 LUT 자동 주입 및 `PrefilteredMap` 단독 지정 시 폴백 지원. 큐브맵 부재 씬에서도 `SkyAtmosphereComponent`의 `ZenithColor`, `SkyIntensity` 기반 반구형 물리 IBL 연동. 직사광 완전 차폐 시 칠흑 현상(Pitch Black)을 방지하고 알베도를 보존하는 `ShadowAmbientFloor` 앰비언트 하한 밸런싱 도입 및 `IBLShadingCheck` 단위 검증 통과.
     - **HDR 파이프라인 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정 제거, `LightingColor` 버퍼 포맷 `R16G16B16A16_FLOAT` 승격을 통한 1.0 초과 물리 광량 보존, `PostProcessPipeline`의 ACES Filmic 톤매핑 + 감마 보정 상시 가동(PostProcessComponent 부재 시에도 Default ACES 자동 폴백)을 통해 실행/씬별 과노출 및 탈색 불일치 근본 해결.
     - **공통 디퍼드 파이프라인(`ViewportDeferredPipeline`) 통합**: `SceneViewportPanel`의 수백 줄에 달하던 자체 GBuffer/Shadow/PointShadow/Lighting/Forward 렌더패스 및 커맨드를 `ViewportDeferredPipeline`으로 단일화하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성(스카이 대기, IBL, Directional/Point 그림자 100% 동등성) 확보.
   - **남은 항목**:

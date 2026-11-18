@@ -146,3 +146,15 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME MeshInstancingCheck COMMAND MeshInstancingCheck)
 endif()
+
+add_executable(IBLShadingCheck examples/IBLShadingCheck.cpp)
+target_link_libraries(IBLShadingCheck PRIVATE BamEngine::Engine)
+set_target_properties(IBLShadingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(IBLShadingCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME IBLShadingCheck COMMAND IBLShadingCheck)
+endif()

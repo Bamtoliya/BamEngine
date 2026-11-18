@@ -44,8 +44,9 @@ struct LightingPassData
     uint HasIBLMaps;
     float IBLIntensity;
     uint UseTiledCulling;
-    float _pad;
-    float4 _reserved;
+    float ShadowAmbientFloor;
+    float3 SkyZenithColor;
+    float SkyIntensity;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -767,18 +768,33 @@ float4 main(PS_INPUT input) : SV_TARGET
     }
     else if (hasSkyLight)
     {
-        // ── 2. 기존 반구형 수식 기반 SkyLight 보간 (텍스처 미지정 시 안전 폴백) ──
+        // ── 2. 기존 반구형 수식 기반 SkyLight 보간 ──
         float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
-        diffuseIBL = kd * albedo * skyDiffuseIrradiance;
-        specularIBL = skySpecularRadiance * specularBRDF;
+        diffuseIBL = kd * albedo * skyDiffuseIrradiance * gLightingData.IBLIntensity;
+        specularIBL = skySpecularRadiance * specularBRDF * gLightingData.IBLIntensity;
     }
     else
     {
-        float3 fallbackEnv = float3(0.15f, 0.15f, 0.15f);
+        // ── 3. 물리 기반 하늘 대기 반구형 IBL (텍스처 미지정 순수 SkyAtmosphere 씬 자동 연동) ──
+        float3 zenith = max(gLightingData.SkyZenithColor, float3(0.05f, 0.05f, 0.05f)) * max(gLightingData.SkyIntensity, 0.2f);
+        float3 ground = zenith * 0.25f; // 지면 반사 앰비언트 (하늘 광량의 25%)
+
+        float upWeight = saturate(normal.y * 0.5f + 0.5f);
+        float3 skyHemiDiffuse = lerp(ground, zenith, upWeight);
+        diffuseIBL = kd * albedo * skyHemiDiffuse * gLightingData.IBLIntensity;
+
+        float3 reflectDir = reflect(-viewDirection, normal);
+        float reflUpWeight = saturate(reflectDir.y * 0.5f + 0.5f);
+        float3 skyHemiSpecular = lerp(ground, zenith, reflUpWeight);
         float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
-        diffuseIBL = kd * albedo * fallbackEnv;
-        specularIBL = fallbackEnv * specularBRDF;
+        specularIBL = skyHemiSpecular * specularBRDF * gLightingData.IBLIntensity;
     }
+
+    // ── 4. 그림자 음영부 앰비언트 밸런싱 (Shadow Ambient Floor) ──
+    // 강한 직사광 차폐 시 완전히 새까맣게 타는(Pitch Black) 현상을 방지하고, 그림자 내부에서도 은은한 환경광 및 알베도 디테일 보존
+    float ambientFloor = max(gLightingData.ShadowAmbientFloor, 0.02f);
+    diffuseIBL = max(diffuseIBL, kd * albedo * ambientFloor * gLightingData.IBLIntensity);
+
     float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion;
     float3 color = ambient + directLighting + emission;
     float4 fog = CalculateFog(worldPosition, commonData.CameraPos);

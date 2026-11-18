@@ -48,6 +48,8 @@ public:
 	f32 GetWorldWidth() const { return m_RHITexture->GetWidth() / m_PixelPerUnit; }
 	f32 GetWorldHeight()const { return m_RHITexture->GetHeight() / m_PixelPerUnit; }
 	f32 GetPixelPerUnit() const { return m_PixelPerUnit; }
+	const TextureBinaryHeader& GetCachedHeader() const { return m_CachedHeader; }
+	const vector<uint8>& GetTempData() const { return m_TempData; }
 #pragma endregion
 
 #pragma region Setter

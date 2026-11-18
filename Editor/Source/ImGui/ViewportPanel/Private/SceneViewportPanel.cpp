@@ -53,8 +53,10 @@ struct LightingPassData
 	f32 PlanetRadius = 6360000.0f;
 	uint32 HasIBLMaps = 0u;
 	f32 IBLIntensity = 1.0f;
-	vec2 _iblPad{ 0.0f };
-	vec4 _reserved{ 0.0f };
+	uint32 UseTiledCulling = 1u;
+	f32 ShadowAmbientFloor = 0.15f;
+	vec3 SkyZenithColor{ 0.18f, 0.42f, 0.85f };
+	f32 SkyIntensity = 1.0f;
 };
 static_assert(sizeof(LightingPassData) == 512);
 static_assert(offsetof(LightingPassData, Shadow) == 0);

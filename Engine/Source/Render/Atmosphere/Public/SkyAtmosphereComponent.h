@@ -105,5 +105,8 @@ namespace Engine
         ResourceHandle<Texture> BRDFLutMap;
         PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_IBL_INTENSITY"))
         f32 IBLIntensity = 1.0f;
+
+        PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_IBL"), DISPLAY_NAME("PROP_SHADOW_AMBIENT_FLOOR"), RANGE(0.0f, 1.0f, 0.01f))
+        f32 ShadowAmbientFloor = 0.15f;
     };
 }
