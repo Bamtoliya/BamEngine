@@ -169,6 +169,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
      - 노멀 맵 파일명(`_Normal`, `_norm` 등) 자동 감지 시 `BC5_RG_UNORM` 및 `NormalMap` 최적 압축 자동 지정, 일반 텍스처는 `BC7_RGBA_UNORM` 및 밉맵 체인 자동 생성.
      - 텍스처 임포트 시 `.bamtex` 바이너리뿐만 아니라 표준 `.dds` 파일도 동시에 오프라인 베이킹하여 저장.
      - `DirectXTexCompressor.cpp`: `ECompressFlags::SRGB` 활성화 시 `DirectX::MakeSRGB()` 및 `BC7_RGBA_UNORM_SRGB` 정밀 포맷 동기화.
+     - `ModelImporter.cpp`: 모델 임포트 시 내장/외부 텍스처를 자동으로 `TextureImporter`와 연계하여 슬롯별(Albedo BC7 sRGB, Normal BC5, ORM BC7 Linear)로 `.bamtex` 및 `.dds`를 오프라인 베이킹하고 머티리얼이 베이킹된 에셋을 참조하도록 자동화 (`BakeTexturesToDDS` 옵션).
 
 **완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 비압축 텍스처뿐만 아니라 BC1~BC7 블록 압축 밉맵 DDS 및 `.bamtex` 텍스처가 D3D12 서브리소스 검증 오류 없이 고속 로드 및 렌더링된다. (1~3단계 런타임/오프라인 파이프라인 전체 달성)
 

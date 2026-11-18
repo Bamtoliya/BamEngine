@@ -180,6 +180,29 @@ This document tracks implementation details, architectural decisions, and techni
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
 
+### [2026-11-18] 모델 임포터 텍스처 오프라인 BC 블록 압축(BC7/BC5) 및 DDS/.bamtex 자동 베이킹 파이프라인 연계
+
+- 모델 임포트 시 내장(Embedded) 및 외부(External) 텍스처들이 비압축 `R8G8B8A8_UNORM` 원본 이미지로 유지되던 문제를 해소하기 위해, 모델 임포트 단계에서 `TextureImporter`를 연계 호출하여 자동으로 GPU 블록 압축(BC7/BC5) 및 `.dds` + `.bamtex` 오프라인 베이킹을 수행하고 머티리얼이 베이킹된 에셋을 참조하도록 파이프라인을 완성했다.
+- **모델 임포터 연계 고도화 (`ModelImporter.h`, `ModelImporter.cpp`)**:
+  - `ModelImportDesc`에 `bool BakeTexturesToDDS = true;` 옵션 추가.
+  - `ModelImporter::bindTexture` 람다 내에 자동 베이킹 분기 추가:
+    - 슬롯별 최적 압축 포맷 및 플래그 자동 매핑:
+      - 슬롯 1 (Normal): `BC5_RG_UNORM` 및 `GenerateMipMaps | HighQuality | NormalMap`
+      - 슬롯 2 (ORM / MetallicRoughness): `BC7_RGBA_UNORM` (선형) 및 `GenerateMipMaps | HighQuality`
+      - 슬롯 0 (Albedo), 슬롯 3 (Emissive) 및 기타: `BC7_RGBA_UNORM` 및 `GenerateMipMaps | HighQuality | SRGB`
+    - 내장 텍스처(FBX, GLB 등): 디스크에 원본 이미지를 추출 저장한 즉시 `TextureImporter::Import()`를 호출하여 `Textures/` 디렉터리에 `destStem.bamtex` 및 `destStem.dds`를 동시 베이킹.
+    - 외부 텍스처: 기존 비압축 원본 이미지(`.png`, `.jpg`, `.tga` 등)를 감지하고 `destStem.bamtex` 및 `destStem.dds`로 베이킹.
+    - 머티리얼 인스턴스(`.bammatinst`)가 비압축 원본 파일 대신 베이킹 완료된 `.bamtex`를 로드 및 바인딩하도록 경로를 자동 치환하여 직렬화.
+    - 이미 베이킹된 파일이 존재하고 `!settings.Overwrite`인 경우 중복 압축을 방지하여 임포트 속도 최적화.
+- **모델 임포트 모달 UI 옵션 및 로캘 연동 (`ModelImportModal.cpp`, `Editor.csv`)**:
+  - 모달 대화상자의 Meshes & Materials 설정 영역에 `ModelImport.BakeTexturesToDDS` 체크박스 및 툴팁(`ModelImport.BakeTexturesTooltip`) 추가.
+  - `Editor.csv`에 한/영 로캘 키 추가 및 `localizationcsvtojson.py`를 통해 `English.json`, `Korean.json` 동기화 완료.
+- **검증**:
+  - `audit_localization.py` 다국어 정적 감사 100% 통과 (Scanned Files: 718, Catalog Keys: 2959).
+  - C++ 문법, 소유권 안전성 및 참조 무결성 정적 검토 완료.
+- **미검증/사용자 확인 필요**:
+  - 에디터 실제 구동 후 FBX/GLTF 모델 임포트 시 `Textures/` 폴더에 `.dds` 및 `.bamtex`가 생성되고, 뷰포트에서 머티리얼이 베이킹된 텍스처로 렌더링되는지 확인 필요.
+
 ### [2026-11-18] 렌더링 S2-D 3단계: DirectXTex 기반 에디터 오프라인 BC 블록 압축 베이킹 및 CTest 프리셋 완결
 
 - 런타임 CPU 밉 체인 연산 오버헤드를 원천 제거하고 VRAM 대역폭을 최적화하기 위해, 에디터 텍스처 임포트 파이프라인에서 `DirectXTex`를 활용한 GPU 블록 압축(BC1~BC7) 및 표준 `.dds` + `.bamtex` 동시 오프라인 베이킹을 완성했다.

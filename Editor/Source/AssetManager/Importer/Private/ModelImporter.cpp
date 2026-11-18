@@ -4,6 +4,7 @@
 #include "ModelImporter.h"
 #include "ModelImportTask.h"
 #include "ModelConverter.h"
+#include "TextureImporter.h"
 #include "ResourceManager.h"
 #include "Logger.h"
 #include "PlatformPath.h"
@@ -805,6 +806,63 @@ namespace
 						{
 							BAM_LOG(Warn, "Editor", "Asset", "External texture not found: {}", info.Path);
 							return EResult::Success;
+						}
+					}
+
+					// 텍스처 베이킹 옵션(BakeTexturesToDDS) 처리: 내장 및 외부 텍스처를 BC7/BC5 .bamtex 및 .dds로 오프라인 베이킹
+					if (settings.SaveToFile && settings.BakeTexturesToDDS && !texFilePath.empty())
+					{
+						const auto ext = texFilePath.extension().string();
+						const bool isAlreadyBaked = (_stricmp(ext.c_str(), ".dds") == 0 || _stricmp(ext.c_str(), ".bamtex") == 0);
+						if (!isAlreadyBaked)
+						{
+							const auto resolvedTextureDir = Engine::PlatformPath::ResolveProjectRelative(textureDir);
+							const auto destStem = texFilePath.stem().wstring();
+							const auto bakedBamtexPath = resolvedTextureDir / (destStem + L".bamtex");
+
+							std::error_code checkEc;
+							const bool bakedExists = filesystem::exists(bakedBamtexPath, checkEc);
+							const bool needBake = !bakedExists || settings.Overwrite;
+
+							if (needBake)
+							{
+								tagTextureImportDesc texDesc{};
+								if (slot == 1) // Normal
+								{
+									texDesc.TargetFormat = Engine::ETextureFormat::BC5_RG_UNORM;
+									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::NormalMap;
+								}
+								else if (slot == 2) // ORM / MetallicRoughness
+								{
+									texDesc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality;
+								}
+								else // Albedo (0), Emissive (3), etc.
+								{
+									texDesc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::SRGB;
+								}
+
+								filesystem::create_directories(resolvedTextureDir, checkEc);
+								TextureImporter* texImporter = TextureImporter::Create();
+								if (texImporter)
+								{
+									if (texImporter->Import(texFilePath, resolvedTextureDir, &texDesc) == EResult::Success)
+									{
+										if (filesystem::exists(bakedBamtexPath, checkEc))
+										{
+											texFilePath = bakedBamtexPath;
+											wroteEmbeddedFile = true;
+										}
+									}
+									texImporter->Free();
+									delete texImporter;
+								}
+							}
+							else if (bakedExists)
+							{
+								texFilePath = bakedBamtexPath;
+							}
 						}
 					}
 

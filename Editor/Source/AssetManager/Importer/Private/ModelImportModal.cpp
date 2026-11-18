@@ -559,6 +559,11 @@ namespace Editor
 						}
 						ImGui::BeginDisabled(!importMats);
 						ImGui::Checkbox(LOCAL_LABEL("ModelImport.OverwriteMaterials").c_str(), &m_Desc.OverwriteMaterials);
+						ImGui::Checkbox(LOCAL_LABEL("ModelImport.BakeTexturesToDDS").c_str(), &m_Desc.BakeTexturesToDDS);
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::SetTooltip("%s", LOCAL_CSTR("ModelImport.BakeTexturesTooltip"));
+						}
 						ImGui::EndDisabled();
 					}
 

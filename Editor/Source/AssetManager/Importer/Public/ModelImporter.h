@@ -71,6 +71,7 @@ struct ModelImportDesc
 	bool SaveToFile = true;
 	bool Overwrite = true;
 	bool OverwriteMaterials = false;
+	bool BakeTexturesToDDS = true;
 	bool FlipPitch = false;
 	bool FlipHeading = false;
 

@@ -2037,6 +2037,8 @@
         "Timeline.NoEmbeddedAnimation": "내장 애니메이션 없음 (바인드 포즈)",
         "Timeline.DurationTooltip": "애니메이션이 없는 모델의 타임라인 지속시간을 조절합니다",
         "ModelImport.OverwriteMaterials": "기존 머티리얼 덮어쓰기",
+        "ModelImport.BakeTexturesToDDS": "텍스처 베이킹 (DDS/블록 압축)",
+        "ModelImport.BakeTexturesTooltip": "임포트 시 텍스처를 BC7/BC5로 압축하고 DDS/.bamtex 에셋으로 자동 베이킹합니다",
         "Timeline.AddTrack": "트랙 추가",
         "EditorCommon.Cut": "잘라내기",
         "ContentBrowser.CopyFilesResult": "복사 {}개 완료. 실패 {}개.",

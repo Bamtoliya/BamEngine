@@ -2037,6 +2037,8 @@
         "Timeline.NoEmbeddedAnimation": "No Embedded Animation (Bind Pose)",
         "Timeline.DurationTooltip": "Adjust timeline duration for static models",
         "ModelImport.OverwriteMaterials": "Overwrite Existing Materials",
+        "ModelImport.BakeTexturesToDDS": "Bake Textures (DDS/BC Compression)",
+        "ModelImport.BakeTexturesTooltip": "Automatically compress textures to BC7/BC5 and bake DDS/.bamtex assets on import",
         "Timeline.AddTrack": "Add Track",
         "EditorCommon.Cut": "Cut",
         "ContentBrowser.CopyFilesResult": "Copied {}. Could not copy {}.",
