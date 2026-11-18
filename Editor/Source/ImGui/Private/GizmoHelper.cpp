@@ -1,6 +1,8 @@
 ﻿#include "GizmoHelper.h"
+#include "EditorUI.h"
 #include "EditorSettingsService.h"
 #include "InputManager.h"
+#include "ShortcutManager.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
