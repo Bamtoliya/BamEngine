@@ -13,6 +13,7 @@
 #include "LocalizationManager.h"
 #include <archive/JsonArchive.h>
 #include "Application.h"
+#include "AssetCache.h"
 
 IMPLEMENT_LAZY_SINGLETON(PrefabModeManager)
 
@@ -154,6 +155,7 @@ bool PrefabModeManager::SavePrefab()
 
     if (result)
     {
+        if (AssetCache::IsCreated()) AssetCache::Get().RequestInvalidate(m_CurrentPrefabPath);
         auto& history = Application::Get().GetEditHistory();
         if (history.CanFinalizeEditsFor(m_PrefabScene))
             history.MarkSaved();

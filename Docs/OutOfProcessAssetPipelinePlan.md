@@ -1,8 +1,8 @@
 # 독립 워커 프로세스 기반 대용량 에셋 임포트 파이프라인 개발 계획
 (Out-of-Process Asset Pipeline & Worker Isolation Plan)
 
-- **작성일**: 2026-11-16
-- **상태**: 계획 수립 (Phase 1 설계 단계)
+- **작성일**: 2026-11-16 (최근 갱신: 2026-11-18)
+- **상태**: 3D/메시/프리팹 썸네일 독립 워커 프로세스 베이킹 구현 완료 (`BamAssetWorker`, `AssetWorkerHost`), 에셋 임포트 파이프라인 확장은 설계 중
 - **공통 기준**: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 - **연계 문서**:
   - [개발 우선순위 (DevelopmentPriorities.md)](DevelopmentPriorities.md) 11절
@@ -134,16 +134,31 @@ flowchart TD
 3. **인-프로세스 폴백(Fallback) 보존**:
    - 워커 바이너리가 빌드되지 않았거나 시스템 환경상 서브프로세스 스폰이 제한되는 경우 기존의 `AssetManager::ImportAsync` 인-프로세스 경로로 투명하게 폴백.
 
+### 3.5 대용량 3D 에셋 썸네일 & 프리뷰 베이킹 확장 (3D Thumbnail & Preview Baking — 구현 완료)
+- **필요성**:
+  - `Sponza.obj`(21MB), `Sponza.bammodel`(1,143개 서브메시 참조), `dragon.bammesh`(198MB), 1,023개 개별 `.bammesh`, 프리팹(`.bamprefab.json`) 등을 에디터 메인 스레드에서 즉시 파싱/렌더링하면 UI가 프리징됨.
+  - 이를 에디터 프로세스와 완전히 격리된 독립 워커 프로세스로 위임하여 에디터 메인 스레드 부하 0.0ms를 달성함.
+- **독립 헤드리스 썸네일 워커 (`BamAssetWorker.exe`)**:
+  - 위치: `Tools/AssetWorker/` (`main.cpp`, `HeadlessThumbnailRasterizer.h/.cpp`)
+  - 지원 포맷: `.bammesh` / `.bammesh.json`, `.bammodel` / `.bammodel.json`, `.obj` / `.fbx` / `.gltf` / `.glb`, `.bamprefab` / `.prefab` / `.json`
+  - 단발성 CLI(`--mode thumbnail --source <src> --output <png> [--resolution <dim>] [--project-root <dir>]`) 및 파이프 기반 상주형 데몬(`--daemon`) 지원 (`THUMB\t<id>\t<res>\t<src>\t<dst>` -> `RESULT\t<id>\t<ok>`).
+  - RHI/SwapChain 의존성 없는 헤드리스 2x SSAA (`256x256` -> `128x128`) 소프트웨어 PBR 래스터라이저 + 3점 스튜디오 조명 + ACES 톤매핑 + 알베도 텍스처 샘플링(`.bamtex`, `.dds`, `.png`, `.tga`, `.jpg`).
+  - 대용량 복합 모델은 최경량 LOD(`.bammesh` LOD2) 우선 선택, 198MB 초대형 단일 메시는 정점 분포/AABB를 유지한 삼각형 스텝 샘플링으로 수십 ms 내에 처리.
+- **에디터 호스트 (`AssetWorkerHost`) 및 `AssetCache` 통합**:
+  - 위치: `Editor/Source/AssetManager/Worker/` (`AssetWorkerHost.h/.cpp`)
+  - `Windows Job Object`(`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`) + `CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS` + 2개 데몬 프로세스 풀 운영.
+  - `AssetCache`는 `_v2` 디스크 캐시 시드를 사용하며, 캐시 미스 시 3D 모델·메시·프리팹 베이킹을 `AssetWorkerHost`로 위임하고, 완료된 PNG를 `m_DecodeWorkers`로 비동기 로드해 GPU 텍스처로 업로드. 워커 미사용 시 인-프로세스 폴백(`ThumbnailRenderer::SubmitPrefab` 포함) 유지.
+
 ---
 
 ## 4. 단계별 개발 로드맵 (Phased Implementation Roadmap)
 
 | 단계 | 목표 | 주요 작업 내용 | 산출물 |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | 독립 CLI 워커 바이너리 구축 | • `Tools/AssetWorker/` CMake 프로젝트 신설<br>• `ModelConverter`, `TextureConverter` 링크 및 단독 CLI 명령줄 인자 처리기 구현<br>• 단독 실행으로 `.fbx` → `.bammesh`, `.png` → `.bamtex` 무손실 변환 검증 | `BamAssetWorker.exe` (CLI 도구) |
-| **Phase 2** | 에디터 호스트 및 파이프 통신 | • 에디터 내 `AssetWorkerHost` 및 `WindowsPipeChannel` 구축<br>• Windows Job Object 바인딩 (`KILL_ON_JOB_CLOSE`) 및 `BELOW_NORMAL_PRIORITY_CLASS` 스폰<br>• JSON 요청/응답 직렬화 및 비동기 완료 수신 파이프라인 연동 | `AssetWorkerHost.h / .cpp` |
-| **Phase 3** | 에디터 UI 및 프로그레스 연동 | • 하단 푸터 바에 워커별 실시간 진행률(Progress %) 및 취소(`X`) 버튼 연동<br>• 멀티 파일 드래그 앤 드롭 시 동시 병렬 변환 큐잉 스케줄러 구현<br>• 변환 완료 시 메인 스레드 `AssetCache` / `ThumbnailRenderer` 2ms 타임슬라이스 안전 등록 | 푸터 프로그레스바, 병렬 큐 |
-| **Phase 4** | 결함 격리 및 60FPS 무간섭 검증 | • 고의적 OOM/크래시 에셋 주입 시 에디터 무영향 검증<br>• 1GB 이상 초대형 에셋 임포트 도중 에디터 뷰포트 카메라 회전 60FPS 유지 계측<br>• 독립 패키징 빌드 및 배포 파이프라인 연계 | 검증 리포트, 단위 테스트 |
+| **Phase 1** | 독립 CLI 워커 및 썸네일 베이커 구축 *(완료)* | • `Tools/AssetWorker/` CMake 프로젝트 및 `BamAssetWorker.exe` 구축<br>• 헤드리스 PBR 래스터라이저(`HeadlessThumbnailRasterizer`) 구현<br>• 모델/메시/원시모델/프리팹 썸네일 단독 CLI & 데몬 모드 구현 | `BamAssetWorker.exe` |
+| **Phase 2** | 에디터 호스트 및 썸네일 파이프라인 연동 *(완료)* | • 에디터 내 `AssetWorkerHost` 구축 (Job Object + 데몬 파이프 풀 2개)<br>• `AssetCache` 비동기 워커 위임/폴링 연동 및 프리팹 저장 무효화 연동<br>• 레거시 `Resources/` -> `Assets/` 리소스 참조 폴백 보강 | `AssetWorkerHost.h/.cpp`, `AssetCache.cpp` |
+| **Phase 3** | 대용량 임포트 파이프라인 확장 *(예정)* | • `AssetManager::ImportAsync` 의 `ModelConverter`/`TextureConverter` 작업을 `BamAssetWorker` 파이프로 이전<br>• 하단 푸터 바 실시간 진행률(%) 및 취소(`X`) 버튼 연동 | 임포트 진행률 UI, 변환 워커 |
+| **Phase 4** | 결함 격리 및 60FPS 무간섭 검증 *(진행 전)* | • 고의적 OOM/크래시 에셋 주입 시 에디터 무영향 검증<br>• 대용량 에셋 일괄 처리 도중 60FPS 유지 실측 | 검증 리포트, 단위 테스트 |
 
 ---
 

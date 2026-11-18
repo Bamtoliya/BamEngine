@@ -855,8 +855,7 @@ namespace
 											wroteEmbeddedFile = true;
 										}
 									}
-									texImporter->Free();
-									delete texImporter;
+									Safe_Release(texImporter);
 								}
 							}
 							else if (bakedExists)

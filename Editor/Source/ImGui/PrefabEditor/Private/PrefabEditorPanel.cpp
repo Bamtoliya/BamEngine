@@ -10,6 +10,7 @@
 #include "LocalizationManager.h"
 #include <archive/JsonArchive.h>
 #include "ShortcutManager.h"
+#include "AssetCache.h"
 
 void PrefabEditorPanel::SceneDeleter::operator()(Engine::Scene* s) const
 {
@@ -87,6 +88,7 @@ bool PrefabEditorPanel::SavePrefab(const std::filesystem::path& path)
 
     if (result)
     {
+        if (AssetCache::IsCreated()) AssetCache::Get().RequestInvalidate(path);
         m_TargetResourcePath = path;
         m_HasUnsavedChanges = false;
         NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", path.filename().string()), ELogLevel::Info, 3.0f);

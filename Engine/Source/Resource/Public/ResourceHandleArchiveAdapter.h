@@ -131,6 +131,39 @@ namespace archive_resource
             }
         }
 
+        // 4. 레거시 Resources/ -> Assets/ 경로 폴백 (과거 절대/상대 경로로 저장된 .bammodel/.bammesh 복구)
+        const auto tryResolveLegacyResourcesPath = [&](const std::wstring& rawPath) -> Engine::Handle
+            {
+                if (rawPath.empty()) return {};
+                std::wstring replaced = rawPath;
+                const auto replaceSegment = [&](const std::wstring& from, const std::wstring& to) -> bool
+                    {
+                        const size_t pos = replaced.find(from);
+                        if (pos == std::wstring::npos) return false;
+                        replaced.replace(pos, from.size(), to);
+                        return true;
+                    };
+
+                bool modified = replaceSegment(L"/Resources/", L"/Assets/") || replaceSegment(L"\\Resources\\", L"\\Assets\\");
+                if (!modified && replaced.rfind(L"Resources/", 0) == 0)
+                {
+                    replaced.replace(0, 10, L"Assets/");
+                    modified = true;
+                }
+                if (!modified) return {};
+
+                const auto candidatePath = Engine::PlatformPath::ResolveUri(replaced);
+                std::error_code error;
+                if (!std::filesystem::is_regular_file(candidatePath, error)) return {};
+
+                const auto virtualUri = Engine::PlatformPath::ToVirtualUri(candidatePath);
+                const auto loaded = manager.LoadFile(virtualUri);
+                return manager.IsValid(loaded) ? loaded : Engine::Handle{};
+            };
+
+        if (auto fallback = tryResolveLegacyResourcesPath(assetPath); manager.IsValid(fallback)) return fallback;
+        if (auto fallback = tryResolveLegacyResourcesPath(assetKey); manager.IsValid(fallback)) return fallback;
+
         return handle;
     }
 

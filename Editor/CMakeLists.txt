@@ -115,6 +115,7 @@ include(LocalizationBuild)
 
 add_dependencies(Editor GenerateLocalization)
 add_dependencies(Editor GameModule)
+add_dependencies(Editor BamAssetWorker)
 
 if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)

@@ -35,8 +35,8 @@ public:
 
 public:
 	// F12 예산 및 상한 정책 상수
-	static constexpr size_t MAX_CACHE_ENTRIES = 256;             // 최대 캐시 엔트리 수
-	static constexpr size_t MAX_CACHE_BYTES = 64 * 1024 * 1024;   // 최대 VRAM 캐시 예산 (64 MB)
+	static constexpr size_t MAX_CACHE_ENTRIES = 1024;            // 최대 캐시 엔트리 수
+	static constexpr size_t MAX_CACHE_BYTES = 128 * 1024 * 1024; // 최대 VRAM 캐시 예산 (128 MB)
 	static constexpr size_t MAX_UPLOADS_PER_FRAME = 4;           // 프레임당 최대 GPU 텍스처 생성 수
 	static constexpr int32 MAX_THUMBNAIL_DIM = 128;              // 썸네일 최대 가로/세로 해상도
 	static constexpr size_t MAX_DECODE_WORKERS = 2;
@@ -45,6 +45,8 @@ public:
 	static constexpr int32 MAX_THUMBNAIL_SOURCE_DIM = 8192;
 	static constexpr size_t MAX_PENDING_3D_REQUESTS = 32;
 	static constexpr size_t MAX_3D_REQUESTS_PER_FRAME = 1;
+	static constexpr size_t MAX_RAW_MODEL_PARSE_BYTES = 4 * 1024 * 1024;
+	static constexpr size_t MAX_COMPOSITE_MODEL_PARSE_BYTES = 64 * 1024;
 
 private:
 	struct CacheEntry
@@ -83,6 +85,7 @@ private:
 	static std::filesystem::path CalculateDiskCachePath(const std::filesystem::path& assetPath);
 	static std::optional<ThumbnailUploadTask> LoadThumbnailFromDiskCache(const std::filesystem::path& cachePath, const std::string& key);
 	static bool SaveThumbnailToDiskCache(const std::filesystem::path& cachePath, int32 width, int32 height, const uint8_t* rgbaData);
+	static bool SaveNegativeCacheToDisk(const std::filesystem::path& cachePath);
 	static void InvalidateDiskCache(const std::filesystem::path& assetPath);
 	static void PruneDiskCache(size_t maxBytes = 512 * 1024 * 1024);
 

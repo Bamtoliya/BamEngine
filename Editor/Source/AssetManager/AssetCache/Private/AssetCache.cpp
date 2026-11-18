@@ -9,6 +9,7 @@
 #include "AssetManager.h"
 #include "RHITexture.h"
 #include "ThumbnailRenderer.h"
+#include "AssetWorkerHost.h"
 #include "ResourceManager.h"
 #include "MaterialInterface.h"
 #include "Texture.h"
@@ -180,11 +181,14 @@ IMPLEMENT_SINGLETON(AssetCache)
 #pragma region Constructor&Destructor
 EResult AssetCache::Initialize(void* arg)
 {
+    if (!AssetWorkerHost::IsCreated()) (void)AssetWorkerHost::Create();
     return EResult::Success;
 }
 
 void AssetCache::Free()
 {
+    if (AssetWorkerHost::IsCreated()) AssetWorkerHost::Destroy();
+
     for (auto& worker : m_DecodeWorkers)
     {
         if (worker.Future.valid())
@@ -211,6 +215,40 @@ void AssetCache::Free()
 #pragma region Loop
 void AssetCache::Update()
 {
+    if (AssetWorkerHost::IsCreated())
+    {
+        std::error_code ec;
+        for (auto& task : AssetWorkerHost::Get().PollCompletedTasks())
+        {
+            const auto loading = m_LoadingPaths.find(task.AssetKey);
+            if (loading == m_LoadingPaths.end() || loading->second != task.RequestId) continue;
+
+            if (task.Success && std::filesystem::exists(task.OutputPngPath, ec))
+            {
+                if (m_DecodeWorkers.size() < MAX_DECODE_WORKERS * 4)
+                {
+                    try
+                    {
+                        auto future = std::async(std::launch::async, [diskCachePath = task.OutputPngPath, key = task.AssetKey]()
+                            {
+                                return AssetCache::LoadThumbnailFromDiskCache(diskCachePath, key);
+                            });
+                        m_DecodeWorkers.push_back(ThumbnailDecodeWorker{ task.AssetKey, task.RequestId, std::move(future) });
+                        continue;
+                    }
+                    catch (...) {}
+                }
+                m_LoadingPaths.erase(loading);
+            }
+            else
+            {
+                if (!task.OutputPngPath.empty()) SaveNegativeCacheToDisk(task.OutputPngPath);
+                m_LoadingPaths.erase(loading);
+                InsertToCache(task.AssetKey, nullptr, 0);
+            }
+        }
+    }
+
     CollectFinishedThumbnailWorkers();
 
     std::unordered_set<std::string> invalidations;
@@ -309,14 +347,16 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
     const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
-    const bool isModelOrMesh = ext == ".bammodel" || ext == ".bammesh" || isRawModel ||
-        filename.ends_with(".bammodel.json") || filename.ends_with(".bammesh.json");
+    const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json") || isRawModel;
+    const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
+    const bool isPrefab = ext == ".bamprefab" || ext == ".prefab" ||
+        filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
     const bool isTextureOrSprite = ext == ".bamtex" || ext == ".bamsprite" ||
         filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json");
 
-    if (isMaterial || isModelOrMesh || isTextureOrSprite)
+    if (isMaterial || isModel || isMesh || isPrefab || isTextureOrSprite)
     {
-        // [신규] 디스크 캐시가 이미 존재하면 3D 오프스크린 렌더링 큐를 100% 바이패스하고 비동기 디스크 로드
+        // [신규] 디스크 캐시가 이미 존재하면 오프스크린 렌더링 및 워커 큐를 100% 바이패스하고 비동기 디스크 로드
         const auto diskCachePath = CalculateDiskCachePath(assetPath);
         if (!diskCachePath.empty() && std::filesystem::exists(diskCachePath))
         {
@@ -339,7 +379,48 @@ RHITexture* AssetCache::GetThumbnail(const filesystem::path& assetPath, Handle* 
             }
             return nullptr;
         }
-        // 디스크 캐시가 없으면 최초 1회 3D 렌더링 대기열에 등록
+
+        // [방향 B] 3D 모델·메시·프리팹은 독립 워커 프로세스로 100% 격리 베이킹 (크기 제한 없이 무간섭 처리)
+        if ((isModel || isMesh || isPrefab) && AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().IsAvailable())
+        {
+            if (diskCachePath.empty())
+            {
+                InsertToCache(key, nullptr, 0);
+                return nullptr;
+            }
+            const Engine::uint64 requestId = ++m_NextRequestId;
+            if (AssetWorkerHost::Get().EnqueueThumbnail(key, requestId, assetPath, diskCachePath, MAX_THUMBNAIL_DIM))
+                m_LoadingPaths.emplace(key, requestId);
+            return nullptr;
+        }
+
+        // 워커 미사용 시 인-프로세스 폴백: 대용량 모델/메시 Fast Reject로 메인 스레드 프리징 방어
+        if (isRawModel || isMesh)
+        {
+            std::error_code ec;
+            const auto fileSize = std::filesystem::file_size(assetPath, ec);
+            if (!ec && fileSize > MAX_RAW_MODEL_PARSE_BYTES)
+            {
+                if (!diskCachePath.empty())
+                    SaveNegativeCacheToDisk(diskCachePath);
+                InsertToCache(key, nullptr, 0);
+                return nullptr;
+            }
+        }
+
+        if (ext == ".bammodel" || filename.ends_with(".bammodel.json"))
+        {
+            std::error_code ec;
+            const auto fileSize = std::filesystem::file_size(assetPath, ec);
+            if (!ec && fileSize > MAX_COMPOSITE_MODEL_PARSE_BYTES)
+            {
+                if (!diskCachePath.empty())
+                    SaveNegativeCacheToDisk(diskCachePath);
+                InsertToCache(key, nullptr, 0);
+                return nullptr;
+            }
+        }
+
         if (m_Pending3DQueue.size() >= MAX_PENDING_3D_REQUESTS)
             return nullptr;
         const Engine::uint64 requestId = ++m_NextRequestId;
@@ -406,6 +487,7 @@ void AssetCache::ClearCache(const filesystem::path& assetPath)
 
 void AssetCache::ClearAll()
 {
+    if (AssetWorkerHost::IsCreated()) AssetWorkerHost::Get().ClearPendingTasks();
     m_LoadingPaths.clear();
     m_Pending3DQueue = {};
     m_CurrentCapturingKey.clear();
@@ -445,7 +527,7 @@ std::filesystem::path AssetCache::CalculateDiskCachePath(const std::filesystem::
 
     // 고유 캐시 키 문자열: 상대경로 + 파일크기 + 수정시각 + 포맷버전
     const std::string seed = Engine::WStrToStr(relPath.generic_wstring()) + "_" +
-        std::to_string(fileSize) + "_" + std::to_string(timePoint) + "_v1";
+        std::to_string(fileSize) + "_" + std::to_string(timePoint) + "_v2";
 
     // 64비트 FNV-1a 해시 생성
     uint64_t hash = 14695981039346656037ull;
@@ -470,7 +552,16 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadThumbnailFromDisk
     if (!file.is_open()) return std::nullopt;
 
     const std::streamsize size = file.tellg();
-    if (size <= 0 || size > 2 * 1024 * 1024) return std::nullopt; // 캐시 PNG는 수십 KB 이내
+    if (size == 0)
+    {
+        // 네거티브 캐시 (이전 시도 실패 또는 대용량 스킵): 재시도 없이 기본 아이콘용 빈 태스크 반환
+        ThumbnailUploadTask task;
+        task.AssetPath = key;
+        task.Width = 0;
+        task.Height = 0;
+        return task;
+    }
+    if (size < 0 || size > 2 * 1024 * 1024) return std::nullopt; // 캐시 PNG는 수십 KB 이내
 
     file.seekg(0, std::ios::beg);
     std::vector<uint8_t> encodedData(static_cast<size_t>(size));
@@ -526,6 +617,19 @@ bool AssetCache::SaveThumbnailToDiskCache(const std::filesystem::path& cachePath
     }
 
     return true;
+}
+
+bool AssetCache::SaveNegativeCacheToDisk(const std::filesystem::path& cachePath)
+{
+    if (cachePath.empty()) return false;
+    const auto cacheDir = cachePath.parent_path();
+    std::error_code ec;
+    if (!std::filesystem::exists(cacheDir, ec))
+    {
+        if (!std::filesystem::create_directories(cacheDir, ec)) return false;
+    }
+    std::ofstream file(cachePath, std::ios::binary | std::ios::trunc);
+    return file.is_open();
 }
 
 void AssetCache::InvalidateDiskCache(const std::filesystem::path& assetPath)
@@ -895,7 +999,10 @@ void AssetCache::ProcessPending3DThumbnail()
                     const auto diskCachePath = CalculateDiskCachePath(Engine::Utf8ToPath(m_CurrentCapturingKey));
                     if (!diskCachePath.empty())
                     {
-                        SaveThumbnailToDiskCache(diskCachePath, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, pixels.data());
+                        std::async(std::launch::async, [diskCachePath, pixels = std::move(pixels)]()
+                            {
+                                AssetCache::SaveThumbnailToDiskCache(diskCachePath, MAX_THUMBNAIL_DIM, MAX_THUMBNAIL_DIM, pixels.data());
+                            });
                     }
                 }
             }
@@ -947,7 +1054,7 @@ void AssetCache::ProcessPending3DThumbnail()
         for (char& c : filename)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-        const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(path).wstring();
+        const std::wstring relPath = Engine::PlatformPath::ToVirtualUri(path);
 
         auto& rm = Engine::ResourceManager::Get();
         bool submitSuccess = false;
@@ -957,10 +1064,12 @@ void AssetCache::ProcessPending3DThumbnail()
         const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
         const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json") || isRawModel;
         const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
+        const bool isPrefab = ext == ".bamprefab" || ext == ".prefab" ||
+            filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
         const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
         const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
 
-        if ((isMat || isModel || isMesh) && thumbRenderer == nullptr)
+        if ((isMat || isModel || isMesh || isPrefab) && thumbRenderer == nullptr)
         {
             m_LoadingPaths.erase(key);
             InsertToCache(key, nullptr, 0);
@@ -984,6 +1093,11 @@ void AssetCache::ProcessPending3DThumbnail()
                     m_LoadingPaths.erase(key);
                     continue;
                 }
+            }
+            const auto diskCachePath = CalculateDiskCachePath(path);
+            if (!diskCachePath.empty())
+            {
+                SaveNegativeCacheToDisk(diskCachePath);
             }
             InsertToCache(key, nullptr, 0);
             m_LoadingPaths.erase(key);
@@ -1009,6 +1123,11 @@ void AssetCache::ProcessPending3DThumbnail()
                         continue;
                     }
                 }
+            }
+            const auto diskCachePath = CalculateDiskCachePath(path);
+            if (!diskCachePath.empty())
+            {
+                SaveNegativeCacheToDisk(diskCachePath);
             }
             InsertToCache(key, nullptr, 0);
             m_LoadingPaths.erase(key);
@@ -1042,78 +1161,112 @@ void AssetCache::ProcessPending3DThumbnail()
 
                 if (!modelToLoad.empty())
                 {
-                    const std::wstring modelRel = Engine::PlatformPath::ToProjectRelative(modelToLoad).wstring();
-                    auto handle = rm.GetResourceHandle<Engine::Model>(modelRel);
+                    const auto modelFileSize = std::filesystem::file_size(modelToLoad, ec);
+                    if (!ec && modelFileSize <= MAX_COMPOSITE_MODEL_PARSE_BYTES)
+                    {
+                        const std::wstring modelRel = Engine::PlatformPath::ToVirtualUri(modelToLoad);
+                        auto handle = rm.GetResourceHandle<Engine::Model>(modelRel);
+                        if (!handle.IsValid())
+                        {
+                            auto loaded = rm.LoadFile(modelRel);
+                            if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
+                        }
+                        if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
+                    }
+                    else
+                    {
+                        BAM_LOG(Info, "Editor", "Asset", "Skipped linked live 3D thumbnail for large composite model (>64KB): {}", key);
+                    }
+                }
+                else
+                {
+                    const auto fileSize = std::filesystem::file_size(path, ec);
+                    if (!ec && fileSize <= MAX_RAW_MODEL_PARSE_BYTES)
+                    {
+                        // 2. 4MB 이하의 원본 모델만 ModelConverter를 통해 가볍게 로드하여 임시 Mesh 렌더링
+                        Tools::ModelConversion::Options opt{};
+                        opt.FlipUVs = true;
+                        const auto result = Tools::ModelConversion::ConvertStaticModel(path, opt);
+                        if (result && result.Model.has_value() && !result.Model->Meshes.empty())
+                        {
+                            const auto& srcMesh = result.Model->Meshes[0];
+                            if (!srcMesh.Vertices.empty() && !srcMesh.Indices.empty())
+                            {
+                                Engine::MeshCreateDesc meshDesc{};
+                                const auto vertexCount = static_cast<Engine::uint32>(srcMesh.Vertices.size());
+
+                                std::vector<Engine::VertexPosition> pos(vertexCount);
+                                std::vector<Engine::VertexMaterial> attr(vertexCount);
+                                for (size_t vIdx = 0; vIdx < vertexCount; ++vIdx)
+                                {
+                                    pos[vIdx].position = glm::vec3(srcMesh.Vertices[vIdx].Position[0], srcMesh.Vertices[vIdx].Position[1], srcMesh.Vertices[vIdx].Position[2]);
+                                    attr[vIdx].normal = glm::vec3(srcMesh.Vertices[vIdx].Normal[0], srcMesh.Vertices[vIdx].Normal[1], srcMesh.Vertices[vIdx].Normal[2]);
+                                    attr[vIdx].texCoord = glm::vec2(srcMesh.Vertices[vIdx].TexCoord[0], srcMesh.Vertices[vIdx].TexCoord[1]);
+                                    attr[vIdx].tangent = glm::vec3(srcMesh.Vertices[vIdx].Tangent[0], srcMesh.Vertices[vIdx].Tangent[1], srcMesh.Vertices[vIdx].Tangent[2]);
+                                    attr[vIdx].binormal = glm::vec3(srcMesh.Vertices[vIdx].Bitangent[0], srcMesh.Vertices[vIdx].Bitangent[1], srcMesh.Vertices[vIdx].Bitangent[2]);
+                                }
+
+                                meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Position)] = { pos.data(), vertexCount, sizeof(Engine::VertexPosition) };
+                                meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Material)] = { attr.data(), vertexCount, sizeof(Engine::VertexMaterial) };
+                                meshDesc.IndexData = const_cast<Engine::uint32*>(srcMesh.Indices.data());
+                                meshDesc.IndexCount = static_cast<Engine::uint32>(srcMesh.Indices.size());
+                                meshDesc.IndexStride = sizeof(Engine::uint32);
+                                meshDesc.BoundingBoxMin = glm::vec3(srcMesh.BoundsMin[0], srcMesh.BoundsMin[1], srcMesh.BoundsMin[2]);
+                                meshDesc.BoundingBoxMax = glm::vec3(srcMesh.BoundsMax[0], srcMesh.BoundsMax[1], srcMesh.BoundsMax[2]);
+
+                                auto* tempMesh = Engine::Mesh::Create(&meshDesc);
+                                if (tempMesh)
+                                {
+                                    submitSuccess = thumbRenderer->SubmitMesh(tempMesh);
+                                    m_TempCaptureResources.push_back(tempMesh);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        BAM_LOG(Info, "Editor", "Asset", "Skipped live 3D thumbnail for large raw model (>4MB): {}", key);
+                    }
+                }
+            }
+            else
+            {
+                std::error_code ec;
+                const auto fileSize = std::filesystem::file_size(path, ec);
+                if (!ec && fileSize <= MAX_COMPOSITE_MODEL_PARSE_BYTES)
+                {
+                    auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
                     if (!handle.IsValid())
                     {
-                        auto loaded = rm.LoadFile(modelRel);
+                        auto loaded = rm.LoadFile(relPath);
                         if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
                     }
                     if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
                 }
                 else
                 {
-                    // 2. 임포트되지 않은 원본 모델이면 ModelConverter를 통해 가볍게 로드하여 임시 Mesh 렌더링
-                    Tools::ModelConversion::Options opt{};
-                    opt.FlipUVs = true;
-                    const auto modelData = Tools::ModelConversion::ConvertModel(path, opt);
-                    if (modelData.has_value() && !modelData->Meshes.empty())
-                    {
-                        const auto& srcMesh = modelData->Meshes[0];
-                        if (!srcMesh.Vertices.empty() && !srcMesh.Indices.empty())
-                        {
-                            Engine::MeshCreateDesc meshDesc{};
-                            const auto vertexCount = static_cast<Engine::uint32>(srcMesh.Vertices.size());
-
-                            std::vector<Engine::VertexPosition> pos(vertexCount);
-                            std::vector<Engine::VertexMaterial> attr(vertexCount);
-                            for (size_t vIdx = 0; vIdx < vertexCount; ++vIdx)
-                            {
-                                pos[vIdx].Position = glm::vec3(srcMesh.Vertices[vIdx].Position[0], srcMesh.Vertices[vIdx].Position[1], srcMesh.Vertices[vIdx].Position[2]);
-                                attr[vIdx].Normal = glm::vec3(srcMesh.Vertices[vIdx].Normal[0], srcMesh.Vertices[vIdx].Normal[1], srcMesh.Vertices[vIdx].Normal[2]);
-                                attr[vIdx].TexCoord = glm::vec2(srcMesh.Vertices[vIdx].TexCoord[0], srcMesh.Vertices[vIdx].TexCoord[1]);
-                                attr[vIdx].Tangent = glm::vec3(srcMesh.Vertices[vIdx].Tangent[0], srcMesh.Vertices[vIdx].Tangent[1], srcMesh.Vertices[vIdx].Tangent[2]);
-                                attr[vIdx].Bitangent = glm::vec3(srcMesh.Vertices[vIdx].Bitangent[0], srcMesh.Vertices[vIdx].Bitangent[1], srcMesh.Vertices[vIdx].Bitangent[2]);
-                            }
-
-                            meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Position)] = { pos.data(), vertexCount, sizeof(Engine::VertexPosition) };
-                            meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Material)] = { attr.data(), vertexCount, sizeof(Engine::VertexMaterial) };
-                            meshDesc.IndexData = srcMesh.Indices.data();
-                            meshDesc.IndexCount = static_cast<Engine::uint32>(srcMesh.Indices.size());
-                            meshDesc.IndexStride = sizeof(Engine::uint32);
-                            meshDesc.BoundingBoxMin = glm::vec3(srcMesh.BoundsMin[0], srcMesh.BoundsMin[1], srcMesh.BoundsMin[2]);
-                            meshDesc.BoundingBoxMax = glm::vec3(srcMesh.BoundsMax[0], srcMesh.BoundsMax[1], srcMesh.BoundsMax[2]);
-
-                            auto* tempMesh = Engine::Mesh::Create(&meshDesc);
-                            if (tempMesh)
-                            {
-                                submitSuccess = thumbRenderer->SubmitMesh(tempMesh);
-                                m_TempCaptureResources.push_back(tempMesh);
-                            }
-                        }
-                    }
+                    BAM_LOG(Info, "Editor", "Asset", "Skipped live 3D thumbnail for large composite model (>64KB): {}", key);
                 }
             }
-            else
-            {
-                auto handle = rm.GetResourceHandle<Engine::Model>(relPath);
-                if (!handle.IsValid())
-                {
-                    auto loaded = rm.LoadFile(relPath);
-                    if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Model>(loaded);
-                }
-                if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitModel(handle.Get());
-            }
+        }
+        else if (isPrefab)
+        {
+            submitSuccess = thumbRenderer->SubmitPrefab(path);
         }
         else if (isMesh)
         {
-            auto handle = rm.GetResourceHandle<Engine::Mesh>(relPath);
-            if (!handle.IsValid())
+            std::error_code ec;
+            const auto fileSize = std::filesystem::file_size(path, ec);
+            if (!ec && fileSize <= MAX_RAW_MODEL_PARSE_BYTES)
             {
-                auto loaded = rm.LoadFile(relPath);
-                if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
+                auto handle = rm.GetResourceHandle<Engine::Mesh>(relPath);
+                if (!handle.IsValid())
+                {
+                    auto loaded = rm.LoadFile(relPath);
+                    if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
+                }
+                if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
             }
-            if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
         }
 
         if (submitSuccess)
@@ -1125,6 +1278,11 @@ void AssetCache::ProcessPending3DThumbnail()
         }
         else
         {
+            const auto diskCachePath = CalculateDiskCachePath(path);
+            if (!diskCachePath.empty())
+            {
+                SaveNegativeCacheToDisk(diskCachePath);
+            }
             m_LoadingPaths.erase(key);
             InsertToCache(key, nullptr, 0);
         }

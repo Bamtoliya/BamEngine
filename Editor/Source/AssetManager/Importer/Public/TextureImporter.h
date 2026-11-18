@@ -16,9 +16,9 @@ class TextureImporter : public IImporter
 private:
 	using DESC = tagTextureImportDesc;
 	TextureImporter() = default;
-	virtual ~TextureImporter() = default;
 	virtual EResult Initialize(void* arg = nullptr) override { return EResult::Success; }
 public:
+	virtual ~TextureImporter() override = default;
 	static TextureImporter* Create() { return new TextureImporter(); }
 	virtual void Free() override { IImporter::Free(); }
 #pragma endregion

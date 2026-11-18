@@ -4,6 +4,8 @@
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
 #include "StaticMeshRendererComponent.h"
+#include "SkinnedMeshRendererComponent.h"
+#include "Entity.h"
 #include "LightComponent.h"
 #include "TransformSystem.h"
 #include "LightSystem.h"
@@ -18,6 +20,8 @@
 #include "PreviewCameraDefaults.h"
 #include "AnimationEvaluator.h"
 #include "MaterialInstance.h"
+#include <archive/BeveArchive.h>
+#include <archive/JsonArchive.h>
 
 namespace
 {
@@ -425,6 +429,121 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 
 			submitted = true;
 		}
+	}
+
+	return submitted;
+}
+
+bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
+{
+	std::error_code ec;
+	if (prefabPath.empty() || !std::filesystem::is_regular_file(prefabPath, ec)) return false;
+
+	RefreshStudioLights();
+
+	std::string ext = Engine::WStrToStr(prefabPath.extension().wstring());
+	for (char& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+
+	std::unique_ptr<archive::IArchive> ar;
+	if (ext == ".json" || ext == ".prefab") ar = std::make_unique<archive::JsonArchive>();
+	else ar = std::make_unique<archive::BeveArchive>();
+
+	if (!ar->LoadFromFile(prefabPath)) return false;
+
+	struct SceneDeleter { void operator()(Engine::Scene* s) const { if (s) s->Release(); } };
+	std::unique_ptr<Engine::Scene, SceneDeleter> tempScene(Engine::Scene::Create());
+	if (!tempScene) return false;
+
+	Engine::Entity* rootEntity = nullptr;
+	if (!tempScene->InstantiatePrefabArchive(*ar, rootEntity, nullptr) || !rootEntity) return false;
+
+	auto& registry = tempScene->GetRegistry();
+	if (!Engine::TransformSystem::UpdateHierarchy(registry)) return false;
+
+	Engine::BoundingBox bounds;
+	bool hasValidBounds = false;
+	const auto accumulateBounds = [&](const Engine::Mesh* mesh, const mat4& worldMatrix)
+		{
+			if (!mesh) return;
+			Engine::BoundingBox worldBounds;
+			if (!Engine::BoundingBox(mesh->GetMin(), mesh->GetMax()).TryTransformToAABB(worldMatrix, worldBounds)) return;
+			bounds.min = hasValidBounds ? glm::min(bounds.min, worldBounds.min) : worldBounds.min;
+			bounds.max = hasValidBounds ? glm::max(bounds.max, worldBounds.max) : worldBounds.max;
+			hasValidBounds = true;
+		};
+
+	for (auto e : registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>())
+	{
+		accumulateBounds(registry.get<Engine::StaticMeshRendererComponent>(e).meshHandle.Get(),
+			registry.get<Engine::WorldTransformComponent>(e).worldMatrix);
+	}
+	for (auto e : registry.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>())
+	{
+		accumulateBounds(registry.get<Engine::SkinnedMeshRendererComponent>(e).meshHandle.Get(),
+			registry.get<Engine::WorldTransformComponent>(e).worldMatrix);
+	}
+
+	if (!hasValidBounds) return false;
+
+	const auto camera = CalculateAutoFramingCamera(bounds);
+	if (!camera) return false;
+
+	auto* geomPass = Engine::RenderPassManager::Get().GetRenderPassByID(m_Pipeline.GetGeometryPassID());
+	if (geomPass == nullptr) return false;
+
+	auto* defaultMat = GetDefaultPreviewMaterial();
+	auto& rm = Engine::ResourceManager::Get();
+	auto skinMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"Resources/Material/SkinningMaterial.bammat.json");
+	if (!skinMatHandle.IsValid())
+	{
+		auto loaded = rm.LoadFile(L"Resources/Material/SkinningMaterial.bammat.json");
+		if (loaded.IsValid()) skinMatHandle = Engine::ResourceHandle<Engine::MaterialInterface>(loaded);
+	}
+
+	auto& renderer = Engine::Renderer::Get();
+	bool submitted = false;
+
+	for (auto e : registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>())
+	{
+		const auto& mr = registry.get<Engine::StaticMeshRendererComponent>(e);
+		const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
+		auto* mesh = mr.meshHandle.Get();
+		auto* mat = mr.materialHandle.Get() ? mr.materialHandle.Get() : defaultMat;
+		if (!mesh || !mat || renderer.ValidateMeshMaterial(mesh, mat, geomPass) != Engine::EResult::Success) continue;
+
+		if (!submitted) SubmitFrame(*camera);
+		Engine::StaticDrawCommand cmd{};
+		cmd.mesh = mesh;
+		cmd.material = mat;
+		cmd.worldMatrix = wt.worldMatrix;
+		cmd.pickingId = 0;
+		renderer.SubmitStatic(cmd, m_Pipeline.GetGeometryPassID());
+		submitted = true;
+	}
+
+	m_BindPoseMatrices.clear();
+	for (auto e : registry.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>())
+	{
+		const auto& smr = registry.get<Engine::SkinnedMeshRendererComponent>(e);
+		const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
+		auto* mesh = smr.meshHandle.Get();
+		auto* mat = smr.materialHandle.Get() ? smr.materialHandle.Get()
+			: (skinMatHandle.IsValid() ? skinMatHandle.Get() : defaultMat);
+		if (!mesh || !mat || renderer.ValidateMeshMaterial(mesh, mat, geomPass) != Engine::EResult::Success) continue;
+
+		if (m_BindPoseMatrices.empty() && smr.skeletonHandle.IsValid() && smr.skeletonHandle.Get())
+			Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*smr.skeletonHandle.Get(), m_BindPoseMatrices);
+
+		if (!submitted) SubmitFrame(*camera);
+		Engine::SkinnedDrawCommand cmd{};
+		cmd.mesh = mesh;
+		cmd.material = mat;
+		if (mat) mat->BuildMaterialConstants(cmd.materialConstants);
+		cmd.worldMatrix = wt.worldMatrix;
+		cmd.boneMatrices = m_BindPoseMatrices.empty() ? nullptr : &m_BindPoseMatrices;
+		cmd.pickingId = 0;
+		renderer.SubmitSkinned(cmd, m_Pipeline.GetGeometryPassID());
+		submitted = true;
 	}
 
 	return submitted;

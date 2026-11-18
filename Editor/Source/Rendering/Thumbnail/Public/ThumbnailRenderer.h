@@ -5,6 +5,7 @@
 #include "Mesh.h"
 #include "MaterialInterface.h"
 #include "ViewportDeferredPipeline.h"
+#include <filesystem>
 #include <optional>
 #include "PostProcessPipeline.h"
 
@@ -35,6 +36,9 @@ public:
 	bool SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material = nullptr);
 	// 복합 모델 1회 렌더링 제출 (다중 서브메쉬, 노드 계층, 통합 AABB 자동 프레이밍)
 	bool SubmitModel(Engine::Model* model);
+
+	// 프리팹 1회 렌더링 제출 (인-프로세스 폴백용)
+	bool SubmitPrefab(const std::filesystem::path& prefabPath);
 
 	// 최종 조명 합성이 완료된 128x128 렌더 타깃 텍스처 조회
 	[[nodiscard]] Engine::RHITexture* GetFinalTexture() const;

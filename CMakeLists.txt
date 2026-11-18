@@ -60,6 +60,7 @@ add_subdirectory(Engine)
 if(NOT EMSCRIPTEN)
     add_subdirectory(Tools/Converters/ModelConverter)
     add_subdirectory(Tools/Converters/TextureConverter)
+    add_subdirectory(Tools/AssetWorker)
 
     if(BAMENGINE_WITH_EDITOR)
         add_subdirectory(Editor)
