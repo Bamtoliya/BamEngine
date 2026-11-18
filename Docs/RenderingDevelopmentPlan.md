@@ -52,6 +52,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - `tiledLightCullingCS.hlsl`에 타일의 4방향 절두체 평면(`s_FrustumPlanes[4]`) 역투영 및 구면 교차 판정이 추가되어 전체 타일 광원 과할당 문제가 해결되었다.
   - `lightingPS.hlsl`에서 선별된 타일 광원만 순회하도록 수정되어 `tileLightCount == 0`일 때의 전체 광원 순회 버그가 해결되었으며, 라이팅 비집중 영역 응시 시 `LightingPass` GPU 시간이 1.10 ms -> 0.25 ms(77% 단축)로 감소함을 실측 확인했다.
   - `SceneViewportPanel`과 `ViewportDeferredPipeline` 모두 `DispatchLightCulling` 및 버퍼 바인딩이 일관되게 연결되었다.
+  - **(2026-11-18 검증 완결)**: 타일당 256개 초과 과부하 환경에서 조도 누락을 방지하는 전역 순회 폴백(`gTileLightGrid[tileIndex].y > 256u`), 절두체 평면 구면 교차 수치 정합성, 255/256개 경계값 패킹, 1,024개 광원 스트레스 및 Directional/Sky 광원 전역 포함 규칙을 포괄 검증하는 전용 단위 테스트 `TiledLightingCheck` CTest 등록 완료.
 - **S5 (IBL, 그림자 안정화 및 HDR·공통 디퍼드 파이프라인 일원화 — 구현 완료 및 고도화)**:
   - `lightingPS.hlsl`에 반구형 Sky Irradiance·거칠기 기반 수렴(`LIGHT_TYPE_SKY` + `EnvBRDFApprox`), 접촉 그림자 소프트닝, `ShadowStrength` 및 큐브맵 기반 Split-Sum PBR IBL(`gLightingData.HasIBLMaps != 0u`, `gIrradianceMap`, `gPrefilteredEnvMap`, `gBRDFLut`)이 반영되었다.
   - **S5 고도화 (2026-11-18)**: Karis 2013 중요도 샘플링 기반 256x256 `R16G16_FLOAT` Split-Sum BRDF LUT 절차적 자동 생성 및 캐싱 파이프라인(`IBLManager`) 구축. 사용자 LUT 미지정 시 자동 주입 및 `PrefilteredMap` 단독 지정 시 폴백 지원. 큐브맵이 없는 기본 씬에서도 `SkyAtmosphereComponent`의 `ZenithColor`, `SkyIntensity` 기반 반구형 물리 IBL 연동. 직사광 완전 차폐 시 칠흑 현상(Pitch Black)을 방지하고 알베도를 보존하는 `ShadowAmbientFloor` 앰비언트 하한 밸런싱 도입 및 `IBLShadingCheck` 단위 검증 통과. 6,710만 회 적분 연산에 가용 CPU 스레드 기반 행 분할 병렬화(`std::thread`)를 적용하여 텍스처 베이킹 및 테스트 시간을 수 초대로 고속화 완료. [구현 기록](ImplementationLog.md)
@@ -220,6 +221,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 
 **목적:** 동적 GI 전에 재질의 환경광 응답과 기본 그림자 품질을 확보하고, 다중 광원 환경에서의 그림자 농도·조도 밸런스를 개선한다.
 
+- 기본 BRDF LUT는 지연 조명 패스 제출 시 준비하고, 패스에서는 GPU 텍스처만 바인딩한다. 사용자 LUT 없이 환경맵을 사용하는 씬에서 첫 바인딩과 반복 실행, 에디터 종료를 확인한다.
 - Diffuse irradiance, roughness별 specular prefilter, BRDF LUT로 환경맵 IBL을 구성한다.
   먼저 고정 환경맵 하나로 시작하고, 동적 캡처·다수 Reflection Probe는 필요에 따라 확장한다.
 - 색 공간, 선형 HDR 조명과 노출 조건을 고정해 금속도·거칠기별 구체를 비교한다.

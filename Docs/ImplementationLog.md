@@ -2,6 +2,64 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 엔티티 삭제 시 AudioSource 즉시 정지, ActionTimeline 참조 단일화 및 리소스 편집기 미저장 확인 모달 연동
+
+- **배경 및 목표**:
+  - `AudioSourceComponent`의 `Stop()`이 요청 플래그만 변경하여 컴포넌트나 엔티티 삭제 시 FMOD 채널이 멈추지 않고 계속 재생되던 잔여 결함을 해소함.
+  - `ActionTimelineComponent`에서 `timelineAsset` 핸들과 `timelinePath`가 둘 다 직렬화 프로퍼티로 노출되어 인스펙터에 이중 표시되고 두 값이 어긋나던 문제를 `timelinePath` 단일 진실 원천(SSOT)으로 정리함.
+  - 콘텐츠 브라우저나 리소스 피커에서 미저장 변경이 있는 리소스 편집기를 열 때, 단순 토스트 알림으로 차단되던 방식을 `RunWithDiscardConfirmation`을 통한 대화형 확인 모달로 일원화함.
+- **구현 내역**:
+  - **1) `AudioSourceComponent` 소멸 시 FMOD 채널 즉시 정지 및 안전 복사/이동 시멘틱 구축**:
+    - `Engine/Source/Audio/Public/AudioSourceComponent.h`: `ENGINE_API` 명시, 생성자/소멸자, 명시적 복사/이동 생성자 및 대입 연산자 선언, `StopImmediate()` 메서드 추가.
+    - `Engine/Source/Audio/Private/AudioSourceComponent.cpp` (신설): 소멸자에서 `StopImmediate()`를 호출해 엔티티 삭제 시 즉시 `m_Channel->stop()`을 수행하도록 구현. 복사 시에는 `m_Channel = nullptr`, 이동 시에는 채널 소유권 이전 및 원본 null 초기화 적용.
+    - `Engine/Source/Audio/Private/AudioSystem.cpp`: `m_StopRequested` 처리부에서 `source.StopImmediate()`를 호출하도록 통합.
+  - **2) `ActionTimelineComponent` 이중 참조 정리 및 인스펙터 일원화**:
+    - `Engine/Source/Animation/Timeline/Public/ActionTimelineComponent.h`: `timelineAsset` 프로퍼티를 `READONLY, NOSERIALIZE`로 변경하여 씬 저장/복원 시의 중복 저장을 원천 차단하고 `timelinePath`를 단일 진실의 원천으로 고정.
+    - `Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp`: `HiddenProperties`에 `timelineAsset`과 `timelinePath`를 모두 등록하여 자동 필드 목록에서 숨기고, 하단 전용 경로 피커(`DrawInspectorAssetPathPicker`) 하나로만 선택되도록 일원화.
+  - **3) 리소스 편집기 외부 열기 시 미저장 보호 모달 연동**:
+    - `Editor/Source/ImGui/ResourceEditor/Public/ResourceEditorInterface.h`: `RunWithDiscardConfirmation` 메서드를 `public` 인터페이스로 노출.
+    - `Editor/Source/ImGui/Private/ImGuiManager.cpp`: `OpenPendingResourceEditor()`에서 `editor->HasUnsavedResourceChanges()`일 때 단순 토스트 차단 대신 에디터 창을 열고 포커스한 뒤 `editor->RunWithDiscardConfirmation([editor, path] { editor->SetTargetResource(path); })`를 호출하여 사용자가 저장/폐기를 대화형으로 선택할 수 있도록 개선.
+- **검증 상태**:
+  - 정적 코드 검토 및 변경부 정합성 확인 완료. 지침에 따라 빌드(`cmake --build`)와 단위 테스트(`ctest`)는 사용자 직접 실행 대상으로 안내함.
+
+### [2026-11-18] 다중 광원 타일드 컬링 오버플로 검증 및 전용 단위 테스트(TiledLightingCheck) 구축
+
+- **배경 및 목표**:
+  - `LightManager`의 `MAX_LIGHTS = 1024` 확장 및 `tiledLightCullingCS.hlsl` / `lightingPS.hlsl`의 타일당 256개 초과 안전 전체 순회 폴백(`A06 본체`)이 반영되었으나, 이를 회귀 방지 차원에서 엄밀히 검증하는 전용 CTest가 부재함.
+  - P2-B 렌더링 잔여 항목 해소를 위해 절두체 평면/구면 교차 판정, 255/256개 경계값 패킹, 256개 초과 오버플로 시 전역 순회 폴백의 조도 100% 보존, 1,024개 광원 스트레스 및 Directional/Sky 광원 전역 포함 규칙을 포괄 검증하는 전용 단위 테스트 `TiledLightingCheck`를 신설함.
+- **구현 내역**:
+  - `Engine/Source/Render/Light/Public/Light.h`:
+    - `constexpr uint32 MAX_SHADOW_CASCADES = 3;`에서 타입 네임스페이스 누락으로 인해 전역 스코프에 `const int uint32`가 잘못 추론되어 `ShaderReflection.h` 등 타 헤더에서 `uint32` 모호성(C2872)을 유발하던 문제를 `constexpr Engine::uint32 MAX_SHADOW_CASCADES = 3;`로 교정.
+  - `Engine/examples/TiledLightingCheck.cpp`:
+    - **[Test 1] 4방향 타일 절두체 평면 생성 및 구면 교차 판정 정합성**:
+      - 1920x1080 타일 픽셀 경계로부터 NDC min/max 역투영을 통한 4개 코너 뷰공간 방향 벡터 계산 및 Left/Right/Top/Bottom 4개 절두체 평면 법선 생성.
+      - 4개 평면 법선이 모두 타일 내부 방향을 향함(내적 > 0) 검증.
+      - 타일 중심 광원 포함, 좌/우 평면 바깥쪽으로 벗어난 광원 배제, 뷰공간 Z축 클리핑(`minTileZ` / `maxTileZ`) 배제 수치 정합성 검증.
+    - **[Test 2] 타일당 256개 이하 정상 컬링 및 그리드/인덱스 버퍼 패킹 검증**:
+      - 180개 광원 선별 시 `gridEntry.y == 180` 및 인덱스 리스트 1:1 매핑 검증.
+      - 255개, 256개 상한선 경계값에서 오버런 없이 256개 전체가 유효하게 패킹됨을 단언.
+    - **[Test 3] 타일당 256개 초과 오버플로 감지 및 전역 순회 폴백의 조도 일치성 검증**:
+      - 단일 타일에 280개 점광원이 집중되는 과밀 씬 구성.
+      - CS 누적 카운터(`s_TileLightCount = 280`) 보존 및 그리드 기록(`gridInfo.y = 280`), 인덱스 리스트는 256개로 안전 캡.
+      - PS 시뮬레이션: `tileInfo.y > 256u` 감지 시 `useTiled = false`, `loopCount = totalLights`로 안전하게 폴백 전환.
+      - Ground Truth(280개 전체 조도 합산) 대비, 256개 절삭 방식의 조도 누락 현상 확인 및 폴백 방식의 Ground Truth 조도 100% 일치($|\text{Diff}| < 10^{-4}$) 수치 검증.
+    - **[Test 4] 1,024개 대규모 광원 스트레스 및 Directional/Sky 광원 전역 포함 검증**:
+      - Directional 2개, Sky 1개, Point 800개, Spot 221개 배치.
+      - 지오메트리가 없는 공백 타일에서도 Directional/Sky 광원은 전역 광원이므로 무조건 타일에 0순위 포함(`s_TileLightCount == 3`)됨을 검증.
+      - 1920x1080 해상도(8,160개 타일) 기준 `LightManager::EnsureTileBuffers` 크기 계산 공식(Grid Buffer: 65,280B, Index Buffer: 8,355,840B) 정합성 단언.
+  - `Engine/CMake/Checks.cmake`:
+    - `TiledLightingCheck` 실행 파일 및 CTest 테스트 타깃 등록.
+  - `Docs/DevelopmentPriorities.md`:
+    - P2-B 남은 항목 해소 반영 및 11.6절 차기 우선순위 개발 로드맵 현행화.
+- **검증 상태**:
+  - `ctest --preset x64-ninja-debug -R TiledLightingCheck` 사용자 실행을 통해 [Test 1] 절두체 평면/구면 교차 수치 정합성, [Test 2] 255/256개 경계값 패킹, [Test 3] 256개 초과 시 오버플로 폴백 트리거 및 Ground Truth 조도 100% 일치, [Test 4] 1,024개 광원 스트레스 및 Directional/Sky 광원 전역 포함 규칙 전체 통과(4/4, 100% Pass) 확인 완료.
+
+### [2026-11-18] 기본 BRDF LUT 업로드와 종료 크래시 수정
+
+- 지연 조명 패스를 제출할 때 환경맵에 필요한 기본 LUT를 준비한다. 패스는 준비된 LUT를 바인딩하고 DX12의 패스 내부 업로드 제한을 유지한다. DX12 픽셀 업로드에 LUT 포맷인 `R16G16_FLOAT`를 추가했다.
+- GPU 업로드 실패 시 LUT를 캐시하지 않는다. 런타임 LUT는 ResourceManager 핸들로 보관하고 런타임 종료 시 리소스 관리자 제거 전에 핸들을 비운다. 헤드리스 IBL 검사는 CPU LUT를 별도로 소유한다.
+- 사용자 콜스택에서 패스 내부 업로드 실패와 종료 시 텍스처 재해제를 확인했다. 수정 후 Editor 빌드·CTest와 실행·종료 검증은 사용자 실행 전이다.
+
 ### [2026-11-18] DirectX12 정적 메시 버퍼 Default Heap 전환 및 MaterialInstance::Clone 구현
 
 - **배경 및 목표**:

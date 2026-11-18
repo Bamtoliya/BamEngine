@@ -1,6 +1,14 @@
 ﻿include(GNUInstallDirs)
 
-find_package(glaze CONFIG REQUIRED)
+if(NOT TARGET glaze::glaze)
+    find_package(glaze CONFIG QUIET)
+    if(NOT glaze_FOUND AND EXISTS "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/share/glaze")
+        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows")
+        find_package(glaze CONFIG REQUIRED)
+    elseif(NOT glaze_FOUND)
+        find_package(glaze CONFIG REQUIRED)
+    endif()
+endif()
 
 file(GLOB_RECURSE _archive_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 add_library(ArchiveJson STATIC ${_archive_sources})

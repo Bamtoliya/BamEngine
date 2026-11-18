@@ -158,3 +158,16 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME IBLShadingCheck COMMAND IBLShadingCheck)
 endif()
+
+add_executable(TiledLightingCheck examples/TiledLightingCheck.cpp)
+target_link_libraries(TiledLightingCheck PRIVATE BamEngine::Engine)
+set_target_properties(TiledLightingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
+if(MSVC)
+    target_compile_options(TiledLightingCheck PRIVATE /utf-8)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME TiledLightingCheck COMMAND TiledLightingCheck)
+endif()
+

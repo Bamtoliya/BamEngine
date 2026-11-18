@@ -40,7 +40,7 @@ inline Engine::uint32 PackLightFlags(Engine::uint32 flags, Engine::uint32 type, 
 	return (flags & 0x3Fu) | ((type & 0x3u) << 24u) | ((attenuationMode & 0x3u) << 26u);
 }
 
-constexpr uint32 MAX_SHADOW_CASCADES = 3;
+constexpr Engine::uint32 MAX_SHADOW_CASCADES = 3;
 
 struct LightShadowData
 {

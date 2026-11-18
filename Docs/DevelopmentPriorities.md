@@ -141,7 +141,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - **2026-11-02 최우선 잔여**: 씬에 있는 보호를 AnimatorGraphPanel의 저장/로드·New/Open/종료에도 연결한다(F01). 같은 패널을 수정할 때 로캘·InputManager 기준(F11)을 함께 적용한다.
 - **2026-11-17 반영 (빌드·실행 시나리오 사용자 확인 완료)**: AnimatorGraphPanel 내부 New/Open/Close 확인은 이미 있다. 앱 종료 경로는 씬 문서만 확인하고 있었으므로, `ImGuiManager::RequestQuit`에 모든 리소스 편집기의 미저장 변경 확인 모달을 씬 확인보다 먼저 추가했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). `GraphPanel`의 dirty 추적 부재는 잔여다.
 - **2026-11-17 GraphPanel 반영 (CTest 38/38, 열기 확인 사용자 확인)**: `Engine::Graph` 수정 카운터와 `GraphDocument::SavedRevision` 비교로 GraphPanel 미저장 판정을 연결해 창 제목 `*`·종료 확인·다른 에셋 열기 차단에 포함시켰다. 메뉴와 Ctrl+O 열기가 같은 확인(`RequestOpenDocument`)을 거친다. 잔여: 그래프 노드 위치·주석 텍스트 미저장(저장 형식 확장 필요), 콘텐츠 브라우저 경로는 모달 없이 알림 차단(편집기 공통).
-- **2026-11-17 그래프 저장 범위 확장 (사용자 확인)**: 노드 위치·주석 제목을 `GraphNode` 메타데이터로 저장하고, 2026-10-31 이전 파일이 `Variables` 필수 필드 때문에 열리지 않던 결함과 주석 그래프의 실행·셰이더 컴파일 실패를 해결했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). 잔여: 콘텐츠 브라우저 경로의 알림 차단(편집기 공통).
+- **2026-11-17 그래프 저장 범위 확장 (사용자 확인)**: 노드 위치·주석 제목을 `GraphNode` 메타데이터로 저장하고, 2026-10-31 이전 파일이 `Variables` 필수 필드 때문에 열리지 않던 결함과 주석 그래프의 실행·셰이더 컴파일 실패를 해결했다([ImplementationLog.md](ImplementationLog.md) 2026-11-17 항목). (2026-11-18) `ImGuiManager::OpenPendingResourceEditor`에 `RunWithDiscardConfirmation`을 연결해 콘텐츠 브라우저 경로의 알림 차단을 폐지하고 대화형 확인 모달로 일원화 완료.
 - 완료 기준: 취소가 씬 교체를 막고, 저장 실패 후 초안·기존 파일·변경 표시가 보존되며, `HistoryPanel`에서 현재 Undo/Redo 위치와 저장 기준점을 확인할 수 있다.
 
 ### P1-B. 설정 적용 경로와 기존 저장/복원 연결
@@ -273,8 +273,8 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     - **HDR 파이프라인 일원화**: `lightingPS.hlsl`의 내장 Reinhard/감마 보정 제거, `LightingColor` 버퍼 포맷 `R16G16B16A16_FLOAT` 승격을 통한 1.0 초과 물리 광량 보존, `PostProcessPipeline`의 ACES Filmic 톤매핑 + 감마 보정 상시 가동(PostProcessComponent 부재 시에도 Default ACES 자동 폴백)을 통해 실행/씬별 과노출 및 탈색 불일치 근본 해결.
     - **공통 디퍼드 파이프라인(`ViewportDeferredPipeline`) 통합**: `SceneViewportPanel`의 수백 줄에 달하던 자체 GBuffer/Shadow/PointShadow/Lighting/Forward 렌더패스 및 커맨드를 `ViewportDeferredPipeline`으로 단일화하여 Scene View, Game View, Material Preview 전반의 렌더링 일관성(스카이 대기, IBL, Directional/Point 그림자 100% 동등성) 확보.
   - **남은 항목**:
-    1. 타일당 최대 광원 용량 초과(Overflow) 시 대체 동작 및 다중 광원/이동 카메라 경계 조건의 추가 검증 기록.
-- 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
+    1. ~~타일당 최대 광원 용량 초과(Overflow) 시 대체 동작 및 다중 광원/이동 카메라 경계 조건의 추가 검증 기록~~ -> **(2026-11-18 해소 완료)**: 4방향 절두체 평면/구면 교차 정합성, 255/256개 경계값 패킹, 256개 초과 오버플로 시 전역 순회 폴백의 Ground Truth 100% 조도 일치성, 1,024개 광원 스트레스 및 Directional/Sky 광원 전역 포함 규칙을 포괄 검증하는 전용 단위 테스트 `TiledLightingCheck` CTest 구축 완료.
+- 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다. (S3·S4·S5 단위 검증 전체 완결)
 
 - [Render S6 1~4단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[1~4단계 구현, Editor 및 Client 검증 완료: 2026-11-18]** — 1단계 정적 반투명 메시 거리 정렬, 2단계 씬 컬러 복사 및 유리 굴절, 3단계 평평한 수면 셰이더 및 깊이 페이드, 4단계 세분화 격자 메시(`WaterGridMesh`, 64x64, 4,225 정점)와 4중 거스트너 파도 셰이더(`waveVS.hlsl`, `wavePS.hlsl`, `WaveMaterial.bammat.json`, 도함수 기반 분석적 법선/탄젠트 동기화, 파도 마루 Whitecap 거품, Depth Fade 굴절) 파이프라인을 구축하고, 스케일 확장 시 텍스처 스트레칭을 방지하는 월드 공간 XZ 정렬(World-Aligned UV)을 적용했다. Editor Game View와 독립 배포 Client(`Client.exe`) 환경에서 동일 카메라·해상도로 반투명/파도 렌더링 동등성을 검증 완료했다.
 
@@ -455,7 +455,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **애니메이션 기본 동작 — P2-D / F06 일부·F07 [완료]**:
   - 비반복 애니메이션 종료 시 clamp 적용으로 마지막 포즈 정상 보존 (`fmod(duration, duration) == 0` 리셋 버그 해결).
   - 부분 트랙 누락 채널에서 0/identity 대신 본의 원래 바인드 로컬 TRS를 분해하여 보존하도록 `SampleLocalTRS` 보완.
-  - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료. 단, 인스펙터 찾아보기는 2026-11-18까지 절대 경로를 저장했다. 현재 `controllerPath`와 `ActionTimelineComponent::timelinePath`는 경로 피커(`DrawInspectorAssetPathPicker`)로 고르며 가상 URI로 저장한다([구현 기록](ImplementationLog.md)). `ActionTimelineComponent`의 `timelineAsset` 핸들과 `timelinePath`가 따로 존재하는 이중 참조는 남아 있다.
+  - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료. 단, 인스펙터 찾아보기는 2026-11-18까지 절대 경로를 저장했다. 현재 `controllerPath`와 `ActionTimelineComponent::timelinePath`는 경로 피커(`DrawInspectorAssetPathPicker`)로 고르며 가상 URI로 저장한다([구현 기록](ImplementationLog.md)). `ActionTimelineComponent`의 `timelineAsset` 핸들을 `NOSERIALIZE` 런타임 캐시로 전환하고 인스펙터를 `timelinePath`로 일원화하여 이중 참조를 해소했다.
 - **기존 Client의 실패 보고 — P2-E / F05 일부 [정책 반영 / 실행 검증 대기]**:
   - `ConfigManager::Load` 반환 결과와 `SchemaVersion`을 검사한다. 개발 실행은 설정 파일 부재 시 경고·기본값을 사용하고 파싱 실패 시 종료한다.
   - A08 정책에 따라 패키지 마커가 있으면 `Project.json` 누락으로 실패한다. 빈 `StartupScenePath`도 `InvalidArgument`로 실패하며 실행 검증은 남아 있다.
@@ -628,25 +628,25 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 ### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-18 갱신)
 
-1. **후보 A (에셋 파이프라인): 썸네일 2048x2048 아틀라스 패킹 및 LIFO 업로드 스로틀링 완성**
-   - **목표**: 대규모 에셋 폴더(스폰자 1,100여 개 모델/메시 등) 열람 시 GPU 텍스처 개별 바인딩 오버헤드와 VRAM 단편화를 원천 차단하고, 프레임당 업로드 스로틀링(`MAX_UPLOADS_PER_FRAME = 8`)과 가시 영역 우선(LIFO) 로드를 통해 60FPS 스크롤 보장.
+1. **후보 A (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결**
+   - **목표**: 사용자 실환경 테스트(`SimpleTests` 씬)에서 확인된 물리 상호작용 및 지면 스냅 결함을 안정화하여 자연스러운 3인칭 보행 조작감 완성 ([ThirdPersonCharacterSystemPlan.md 4절](ThirdPersonCharacterSystemPlan.md#4-최종-관측-현상-및-기술적-과제-known-issues--residual-observations)).
    - **세부 내용**:
-     - `Editor/Source/AssetManager/AssetCache`: 2048x2048 해상도의 `AtlasPage`(128x128 슬롯 256개) 풀 관리, `AllocateAtlasSlot`/`FreeAtlasSlot`, `InsertAtlasToCache`.
-     - `ContentBrowserGridItem`: 개별 텍스처 바인딩 대신 아틀라스 페이지 텍스처 및 슬롯 UV0/UV1 서브 영역 샘플링 연동.
-     - `Renderer`: `m_PreRenderDelegate`를 통해 메인 렌더링 시작 직전 대기열의 GPU 업로드를 안전하게 플러시.
-   - **관련 파일**: `AssetCache.h/.cpp`, `AssetWorkerHost.h/.cpp`, `ContentBrowserGridItem.h/.cpp`, `ContentBrowserPanel.h/.cpp`, `Renderer.h/.cpp`.
+     - `KinematicCharacterSystem.cpp`: 체공 낙하(`!IsGrounded && Velocity.y < 0`) 중 `snapMargin` 최소화 및 캡슐 하단 스윕 기반 2단계 착지 확정을 통한 공중 1m 조기 순간이동 흡착 제거.
+     - 30도 경사로 보행 시 접촉 표면 법선 방향 `SkinWidth` 최소 분리 오프셋 보정 및 스윕 피부 마진 강화로 메시 파고듦 제거.
+     - 45도/60도 급경사 끝단 $\to$ 평지 진입 시 전환 프레임 수직 스냅 속도 제한(Vertical Snap Clamping) 및 법선 보간을 통한 단차 '탁' 충격 완화(Soft Landing).
+   - **관련 파일**: `Engine/Source/System/Physics/Private/KinematicCharacterSystem.cpp`, `ThirdPersonCharacterSystemPlan.md`.
 
-2. **후보 B (렌더링 안정화): 다중 광원 타일드 컬링 오버플로 검증 및 CTest 구축 (`TiledLightingCheck`)**
-   - **목표**: P2-B 및 `RenderingDevelopmentPlan` M1 선행 단계로, 특정 화면 타일에 256개 이상의 광원이 밀집되는 과부하/오버플로 환경에서 GPU 크래시 없이 전역 광원 안전 순회 폴백(`gTileLightCount >= 256u`)이 정상 작동하는지 수치 정합성 및 성능 계측 CTest를 구축.
+2. **후보 B (비주얼 이펙트 / 연출): Composite VFX Phase 5 Step 3 본 소켓 연동 & Additive 가산 머티리얼 표준화**
+   - **목표**: 상용 엔진(Niagara) 수준의 연출 완성도를 위해 캐릭터 공격 액션 타임라인과 복합 VFX를 본 소켓 단위로 연동하고, 반투명 디퍼드 탁화 현상을 원천 방지하는 발광 가산 머티리얼 표준화 ([CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)).
    - **세부 내용**:
-     - `tiledLightCullingCS.hlsl` 4방향 절두체 평면 교차 및 256개 초과 가드 시뮬레이션.
-     - 1,024개 포인트/스포트 광원 배치 스트레스 테스트 및 라이팅 합성 무결성 검증.
-   - **관련 파일**: `Engine/examples/TiledLightingCheck.cpp` (신설 예정), `Engine/CMake/Checks.cmake`, `tiledLightCullingCS.hlsl`.
+     - `ActionTimelineComponent` 노티파이 트랙에서 스켈레탈 메시의 본 소켓(무기 끝, 손목 등)을 타깃으로 하는 `CompositeVFXComponent` 실시간 스폰 및 트랜스폼 추적 연동.
+     - `ForwardTransparentPass`의 Additive 가산 블렌딩 셰이더 및 머티리얼 플래그 연동으로 칠흑 배경 결합 시 색상 탁화 방지.
+     - `VFXEditorPanel` 뷰포트 암실 공중(Air Mode) 프리뷰 토글 지원.
+   - **관련 파일**: `Engine/Source/Render/VFX/`, `Editor/Source/ImGui/ActionTimelineEditor/`, `Editor/Source/ImGui/VFXEditor/`.
 
-3. **후보 C (게임플레이/물리): 키네마틱 캐릭터 컨트롤러(KCC) 지면 감지 및 경사로 물리**
-   - **목표**: 뷰포트에서 조작 가능한 3D 플레이어블 캐릭터의 필수 물리 제어기 구축 ([KinematicCharacterControllerPlan.md](KinematicCharacterControllerPlan.md)).
+3. **후보 C (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동**
+   - **목표**: 대용량 모델(수백 MB FBX/GLTF) 및 텍스처(BC7 4K) 임포트 시 에디터 메인 스레드 60FPS 무간섭 유지 및 OOM/크래시 100% 완전 격리 ([OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md)).
    - **세부 내용**:
-     - `KinematicCharacterControllerComponent`: 이동 속도, 점프력, 중력 스케일, 최대 등판 각도(`MaxSlopeAngle`, 예: 45도), 계단 높이(`StepOffset`, 예: 0.3m).
-     - 지면 접지 감지(Ground Snapping) 및 가파른 경사면 미끄러짐(Slope Sliding) 물리 벡터 분해.
-     - `SpringArmComponent` 및 3인칭 궤도 카메라 연동.
-   - **관련 파일**: `Engine/Source/Core/Public/Components/Physics/KinematicCharacterControllerComponent.h`, `KinematicCharacterControllerSystem.h/.cpp`.
+     - `Tools/AssetWorker/`: `BamAssetWorker.exe` 파이프 데몬 프로토콜에 `IMPORT_MODEL`(Assimp + meshopt LOD) 및 `IMPORT_TEXTURE`(DirectXTex BCn 압축) 명령 확장 및 실시간 진행률(`PROGRESS`) 응답 구현.
+     - `Editor/Source/AssetManager/Worker/AssetWorkerHost.cpp`: 에셋 임포트 비동기 위임 및 하단 푸터 바(`FooterBar`) 실시간 진행률 프로그레스 바 / 취소(`[X]`) 버튼 연동.
+   - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `EditorUIFooterBar.cpp`.

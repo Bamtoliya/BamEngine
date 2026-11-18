@@ -18,6 +18,11 @@ endif()
 
 project(BamEngine)
 
+# vcpkg manifest 설치 경로 자동 감지 및 CMAKE_PREFIX_PATH 폴백 보강
+if(EXISTS "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows")
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows")
+endif()
+
 include(CTest)
 option(BAMENGINE_BUILD_REFLECTION_CHECK "Build engine and editor reflection integration checks" OFF)
 if(EMSCRIPTEN)
