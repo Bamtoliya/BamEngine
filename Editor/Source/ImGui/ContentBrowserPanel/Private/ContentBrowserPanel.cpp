@@ -2,6 +2,7 @@
 #include "InputManager.h"
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
+#include "PickerAssetCatalog.h"
 #include "AssetPathRelocation.h"
 #include "AssetReferencePanel.h"
 #include "ResourceManager.h"
@@ -38,6 +39,9 @@ void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const s
 	{
 		return;
 	}
+
+	if (action != efsw::Action::Modified)
+		Editor::Detail::InvalidatePickerAssetCatalog();
 
 	try
 	{
@@ -702,6 +706,7 @@ void ContentBrowserPanel::RefreshButton()
 {
 	if (EditorUI::IconButton("ContentRefresh", ICON_FA_ARROW_ROTATE_RIGHT, "EditorCommon.Refresh"))
 	{
+		Editor::Detail::InvalidatePickerAssetCatalog();
 		RequestRefresh();
 	}
 }

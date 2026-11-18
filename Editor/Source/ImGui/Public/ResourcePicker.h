@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ReflectionInspectorSupport.h"
+#include "PickerAssetCatalog.h"
 #include "EditorUI.h"
 #include "InputManager.h"
 #include "Functions.h"
@@ -36,19 +37,20 @@ namespace Editor
 {
 	namespace Detail
 	{
-		Engine::RHITexture* GetResourcePickerThumbnail(const std::filesystem::path& assetPath);
+		struct ResourceFieldThumbnail
+		{
+			Engine::RHITexture* Texture = nullptr;
+			ImVec2 UV0 = ImVec2(0.0f, 0.0f);
+			ImVec2 UV1 = ImVec2(1.0f, 1.0f);
+		};
+
+		ResourceFieldThumbnail GetResourcePickerThumbnail(const std::filesystem::path& assetPath);
 		ImTextureID GetResourcePickerTextureID(Engine::RHITexture* texture);
 
 		template<typename T>
-		inline bool IsResourceExtensionCompatible(std::string_view filenameOrExt)
+		inline bool IsResourceExtensionCompatible(std::string_view lowerFilename)
 		{
-			std::string lower;
-			lower.reserve(filenameOrExt.size());
-			for (char c : filenameOrExt) lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
-			auto endsWith = [&](std::string_view suffix) {
-				return lower.size() >= suffix.size() &&
-					std::string_view(lower).substr(lower.size() - suffix.size()) == suffix;
-				};
+			auto endsWith = [lowerFilename](std::string_view suffix) { return lowerFilename.ends_with(suffix); };
 			if constexpr (std::is_same_v<T, Engine::Texture>)
 			{
 				return endsWith(".png") || endsWith(".jpg") || endsWith(".jpeg") ||
@@ -157,13 +159,6 @@ namespace Editor
 				return { ICON_FA_FILE, ImVec4(0.65f, 0.65f, 0.65f, 1.0f), "ASSET" };
 		}
 
-		struct ResourceFieldThumbnail
-		{
-			Engine::RHITexture* Texture = nullptr;
-			ImVec2 UV0 = ImVec2(0.0f, 0.0f);
-			ImVec2 UV1 = ImVec2(1.0f, 1.0f);
-		};
-
 		inline ResourceFieldThumbnail GetResourceFieldThumbnail(Engine::Resource* resource)
 		{
 			ResourceFieldThumbnail result;
@@ -192,7 +187,7 @@ namespace Editor
 			{
 				const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
 				if (!path.empty())
-					result.Texture = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveUri(path));
+					result = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveUri(path));
 			}
 
 			if (result.Texture != nullptr &&
@@ -219,6 +214,17 @@ namespace Editor
 			ImVec2 UV1 = ImVec2(1.0f, 1.0f);
 			ImVec2 CropSize = ImVec2(0.0f, 0.0f); // 0보다 크면 비율을 유지해 맞춘다(스프라이트). 아니면 칸 전체를 채운다.
 		};
+
+		inline void ApplyPickerThumbnail(PickerItemView& item)
+		{
+			const auto thumbnail = GetResourcePickerThumbnail(item.ContextPath);
+			if (!thumbnail.Texture)
+				return;
+
+			item.Texture = GetResourcePickerTextureID(thumbnail.Texture);
+			item.UV0 = thumbnail.UV0;
+			item.UV1 = thumbnail.UV1;
+		}
 
 		// 클릭되면 true를 돌려준다. 컨텍스트 메뉴에서 에디터 열기를 요청하면 openEditorRequested를 켠다.
 		inline bool DrawPickerItem(const PickerItemView& item, bool isSelected, float thumbSize, float itemHeight, bool& openEditorRequested)
@@ -520,10 +526,11 @@ namespace Editor
 				std::string UniqueId;
 				bool IsEngineAsset = false;
 				Engine::Handle Handle;
-				Engine::RHITexture* DirectTexture = nullptr;
 			};
 			static std::vector<CachedAssetEntry> s_CachedLoadedEntries;
 			static std::vector<CachedAssetEntry> s_CachedDiskFiles;
+			static std::unordered_set<std::wstring> s_LoadedKeys;
+			static std::uint64_t s_DiskRevision = 0;
 			static std::vector<size_t> s_FilteredLoadedIndices;
 			static std::vector<size_t> s_FilteredDiskIndices;
 			static std::string s_LastSearchQuery;
@@ -543,19 +550,16 @@ namespace Editor
 				};
 
 			const bool isAppearing = ImGui::IsWindowAppearing();
+			const auto& fileCatalog = Detail::GetPickerAssetCatalog();
 
-			// ── 1. 팝업 진입 시 1회만 메타데이터 스캔 및 캐싱 (Zero Allocation per Frame) ──
+			// Refresh loaded resources when the popup opens. The disk catalog has its own revision.
 			if (isAppearing)
 			{
 				s_SearchBuffer[0] = '\0';
 				s_LastSearchQuery.clear();
 				s_LastCategoryScope = -1;
 				s_CachedLoadedEntries.clear();
-				s_CachedDiskFiles.clear();
-				s_FilteredLoadedIndices.clear();
-				s_FilteredDiskIndices.clear();
-
-				std::unordered_set<std::wstring> loadedNormalizedKeys;
+				s_LoadedKeys.clear();
 				for (const auto& entry : manager.GetDebugSnapshot())
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
@@ -566,7 +570,7 @@ namespace Editor
 					const auto absolutePath = Engine::PlatformPath::ResolveUri(resourcePath);
 					const auto relativePath = Engine::PlatformPath::ToProjectRelative(absolutePath);
 					const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
-					loadedNormalizedKeys.insert(normKey);
+					s_LoadedKeys.insert(normKey);
 
 					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
 					const std::filesystem::path p(normKey);
@@ -579,57 +583,39 @@ namespace Editor
 					std::string lowerSub = displaySubPath;
 					for (char& c : lowerSub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-					Engine::RHITexture* directTex = nullptr;
-					if constexpr (std::is_same_v<T, Engine::Texture>)
-					{
-						if (auto* tex = dynamic_cast<Engine::Texture*>(resource)) directTex = tex->GetRHITexture();
-					}
-
 					s_CachedLoadedEntries.push_back({
 						filename, displaySubPath, std::move(lowerName), std::move(lowerSub),
-						absolutePath, normKey, "Mem_" + Engine::WStrToStr(normKey), isEngine, handle, directTex
+						absolutePath, normKey, "Mem_" + Engine::WStrToStr(normKey), isEngine, handle
 						});
 				}
+			}
 
-				auto scanDirectoryRoot = [&](const std::filesystem::path& rootDir)
-					{
-						std::error_code ec;
-						if (rootDir.empty() || !std::filesystem::exists(rootDir, ec)) return;
+			if (s_DiskRevision != fileCatalog.Revision)
+			{
+				s_DiskRevision = fileCatalog.Revision;
+				s_LastCategoryScope = -1;
+				s_CachedDiskFiles.clear();
+				std::unordered_set<std::wstring> diskKeys;
+				for (const auto& file : fileCatalog.Files)
+				{
+					if (!Detail::IsResourceExtensionCompatible<T>(file.LowerFilename))
+						continue;
 
-						for (const auto& fileEntry : std::filesystem::recursive_directory_iterator(
-							rootDir, std::filesystem::directory_options::skip_permission_denied, ec))
-						{
-							if (!fileEntry.is_regular_file()) continue;
+					const auto relativePath = Engine::PlatformPath::ToProjectRelative(file.Path);
+					auto key = Detail::NormalizeResourceKey(relativePath.wstring());
+					if (!diskKeys.insert(key).second)
+						continue;
 
-							const auto assetPath = fileEntry.path();
-							const auto filename = Engine::WStrToStr(assetPath.filename().wstring());
-							if (!Detail::IsResourceExtensionCompatible<T>(filename)) continue;
+					const bool isEngine = Engine::PlatformPath::IsReadOnlyTarget(file.Path);
+					const std::string parentPath = Engine::WStrToStr(file.Path.parent_path().generic_wstring());
+					const std::string subPath = isEngine ? (parentPath.empty() ? "[Engine]" : "[Engine] " + parentPath) : parentPath;
+					auto lowerSubPath = subPath;
+					for (char& ch : lowerSubPath)
+						ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-							const auto relativePath = Engine::PlatformPath::ToProjectRelative(assetPath);
-							const auto normKey = Detail::NormalizeResourceKey(relativePath.wstring());
-							if (loadedNormalizedKeys.contains(normKey)) continue;
-							loadedNormalizedKeys.insert(normKey);
-
-							const bool isEngine = Engine::PlatformPath::IsReadOnlyTarget(assetPath);
-							const std::string parentPath = Engine::WStrToStr(assetPath.parent_path().generic_wstring());
-							const std::string displaySubPath = isEngine ? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath)) : parentPath;
-
-							std::string lowerName = filename;
-							for (char& c : lowerName) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-							std::string lowerSub = displaySubPath;
-							for (char& c : lowerSub) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-
-							s_CachedDiskFiles.push_back({
-								filename, displaySubPath, std::move(lowerName), std::move(lowerSub),
-								assetPath, normKey, "Disk_" + Engine::WStrToStr(assetPath.wstring()), isEngine, {}, nullptr
-								});
-						}
-					};
-
-				const auto projectAssetRoot = Engine::PlatformPath::GetProjectAssetRoot();
-				const auto engineResourceRoot = Engine::PlatformPath::GetEngineResourceRoot();
-				scanDirectoryRoot(projectAssetRoot);
-				if (engineResourceRoot != projectAssetRoot) scanDirectoryRoot(engineResourceRoot);
+					s_CachedDiskFiles.push_back({ file.Filename, subPath, file.LowerFilename, std::move(lowerSubPath),
+						file.Path, std::move(key), "Disk_" + Engine::WStrToStr(file.Path.wstring()), isEngine, {} });
+				}
 			}
 
 			// 검색 바 오른쪽에 썸네일 크기 조절 공간을 예약한다.
@@ -694,7 +680,9 @@ namespace Editor
 				}
 				for (size_t i = 0; i < s_CachedDiskFiles.size(); ++i)
 				{
-					if (passesFilter(s_CachedDiskFiles[i])) s_FilteredDiskIndices.push_back(i);
+					const auto& entry = s_CachedDiskFiles[i];
+					if (!s_LoadedKeys.contains(entry.Key) && passesFilter(entry))
+						s_FilteredDiskIndices.push_back(i);
 				}
 			}
 
@@ -711,15 +699,17 @@ namespace Editor
 			auto drawResourceItem = [&](const CachedAssetEntry& entry, bool isSelected, auto onSelect)
 				{
 					Detail::PickerItemView view{ entry.UniqueId, entry.Filename, entry.SubPath, Detail::GetResourceVisual<T>(entry.Filename), entry.FullPath };
-					if (entry.DirectTexture != nullptr)
+					if constexpr (std::is_same_v<T, Engine::Texture>)
 					{
-						view.Texture = Detail::GetResourcePickerTextureID(entry.DirectTexture);
+						if (entry.Handle.IsValid())
+						{
+							const auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(entry.Handle));
+							if (texture && texture->GetRHITexture())
+								view.Texture = Detail::GetResourcePickerTextureID(texture->GetRHITexture());
+						}
 					}
-					else if (!entry.FullPath.empty())
+					if (!view.Texture && !entry.FullPath.empty())
 					{
-						if (auto* rhiTex = Detail::GetResourcePickerThumbnail(entry.FullPath))
-							view.Texture = Detail::GetResourcePickerTextureID(rhiTex);
-
 						if constexpr (std::is_same_v<T, Engine::Sprite>)
 						{
 							Engine::Handle spHandle = entry.Handle.IsValid() ? entry.Handle : manager.FindHandleByFilePath(entry.FullPath);
@@ -742,6 +732,8 @@ namespace Editor
 								}
 							}
 						}
+						if (!view.Texture)
+							Detail::ApplyPickerThumbnail(view);
 					}
 					if (Detail::DrawPickerItem(view, isSelected, thumbSize, itemHeight, openEditorRequested))
 						onSelect();
@@ -800,7 +792,9 @@ namespace Editor
 				const std::string diskHeader = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.ProjectFiles"), s_FilteredDiskIndices.size());
 				ImGui::TextDisabled("%s", diskHeader.c_str());
 
-				if (!s_FilteredDiskIndices.empty())
+				if (!fileCatalog.IsReady)
+					EditorUI::EmptyState("ResourcePicker.IndexingFiles");
+				else if (!s_FilteredDiskIndices.empty())
 				{
 					ImGuiListClipper diskClipper;
 					diskClipper.Begin(static_cast<int>(s_FilteredDiskIndices.size()), itemStride);

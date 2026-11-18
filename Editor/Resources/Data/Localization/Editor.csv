@@ -1181,6 +1181,7 @@ ResourcePicker,Clear,Clear,연결 해제
 ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결 해제
 ResourcePicker,DiskFile,{} [Disk],{} [디스크]
 ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
+ResourcePicker,IndexingFiles,Preparing the file list…,파일 목록을 준비하는 중…
 ResourcePicker,None,None (drop a resource),없음 (리소스를 놓으세요)
 ResourcePicker,OpenInEditor,Open in Editor,편집기에서 열기
 ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):

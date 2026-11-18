@@ -20,6 +20,7 @@
 #include "SystemManager.h"
 #include "Functions.h"
 #include "ImGuiManager.h"
+#include "PickerAssetCatalog.h"
 #include "Application.h"
 #include "SceneManager.h"
 #include "SelectionManager.h"
@@ -265,6 +266,7 @@ void ImGuiManager::Free()
 
 void ImGuiManager::Update(f32 dt)
 {
+	Editor::Detail::UpdatePickerAssetCatalog();
 	m_PluginHost.Update(*this);
 	auto& settings = EditorSettingsService::Get();
 	settings.ProcessPendingViewportResolutionChange();

@@ -19,9 +19,9 @@
 
 namespace Editor::Detail
 {
-    Engine::RHITexture* GetResourcePickerThumbnail(const std::filesystem::path&)
+    ResourceFieldThumbnail GetResourcePickerThumbnail(const std::filesystem::path&)
     {
-        return nullptr;
+        return {};
     }
 
     ImTextureID GetResourcePickerTextureID(Engine::RHITexture*)

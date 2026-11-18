@@ -108,7 +108,8 @@ target_precompile_headers(HierarchyEditorCheck PRIVATE
 set_target_properties(HierarchyEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 add_executable(ReflectionInspectorCheck examples/ReflectionInspectorCheck.cpp
     Source/ImGui/InspectorPanel/Private/ReflectionPropertyDrawer.cpp
-    Source/ImGui/Private/EditorUI.cpp)
+    Source/ImGui/Private/EditorUI.cpp
+    Source/ImGui/Private/PickerAssetCatalog.cpp)
 target_include_directories(ReflectionInspectorCheck PRIVATE
     ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}"

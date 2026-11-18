@@ -5,9 +5,10 @@
 
 namespace Editor::Detail
 {
-	Engine::RHITexture* GetResourcePickerThumbnail(const std::filesystem::path& assetPath)
+	ResourceFieldThumbnail GetResourcePickerThumbnail(const std::filesystem::path& assetPath)
 	{
-		return AssetCache::Get().GetThumbnail(assetPath);
+		const auto thumbnail = AssetCache::Get().GetThumbnailView({}, assetPath);
+		return { thumbnail.Texture, thumbnail.UV0, thumbnail.UV1 };
 	}
 
 	ImTextureID GetResourcePickerTextureID(Engine::RHITexture* texture)

@@ -22,38 +22,25 @@ namespace Editor
 			return Engine::PlatformPath::IsVirtualUri(uri) ? Engine::WStrToStr(uri) : std::string{};
 		}
 
-		void CollectEntries(const AssetPathPickerDesc& desc, std::vector<PathEntry>& entries)
+		void CollectEntries(const AssetPathPickerDesc& desc, const Detail::PickerAssetCatalog& catalog,
+			std::vector<PathEntry>& entries)
 		{
 			entries.clear();
 			std::unordered_set<std::string> seen;
-			const auto scan = [&](const std::filesystem::path& root)
-				{
-					std::error_code ec;
-					if (root.empty() || !std::filesystem::exists(root, ec)) return;
+			for (const auto& file : catalog.Files)
+			{
+				if (desc.Accepts && !desc.Accepts(file.Path))
+					continue;
 
-					const auto options = std::filesystem::directory_options::skip_permission_denied;
-					for (auto it = std::filesystem::recursive_directory_iterator(root, options, ec); !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
-					{
-						if (!it->is_regular_file(ec) || (desc.Accepts && !desc.Accepts(it->path()))) continue;
+				std::string reference = ToAssetReference(file.Path);
+				if (reference.empty() || !seen.insert(reference).second)
+					continue;
 
-						std::string reference = ToAssetReference(it->path());
-						if (reference.empty() || !seen.insert(reference).second) continue;
-
-						PathEntry entry;
-						entry.Filename = Engine::WStrToStr(it->path().filename().wstring());
-						const auto separator = reference.find_last_of('/');
-						entry.SubPath = separator == std::string::npos ? std::string{} : reference.substr(0, separator);
-						entry.LowerReference = Engine::ToLowerStr(reference);
-						entry.Reference = std::move(reference);
-						entry.FullPath = it->path();
-						entries.push_back(std::move(entry));
-					}
-				};
-
-			const auto projectRoot = Engine::PlatformPath::GetProjectAssetRoot();
-			const auto engineRoot = Engine::PlatformPath::GetEngineResourceRoot();
-			scan(projectRoot);
-			if (engineRoot != projectRoot) scan(engineRoot);
+				const auto separator = reference.find_last_of('/');
+				auto subPath = separator == std::string::npos ? std::string{} : reference.substr(0, separator);
+				auto lowerReference = Engine::ToLowerStr(reference);
+				entries.push_back({ file.Filename, std::move(subPath), std::move(lowerReference), std::move(reference), file.Path });
+			}
 			std::sort(entries.begin(), entries.end(), [](const PathEntry& a, const PathEntry& b) { return a.Reference < b.Reference; });
 		}
 
@@ -147,25 +134,30 @@ namespace Editor
 		ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 280.0f), ImVec2(1600.0f, 1200.0f));
 		if (ImGui::BeginPopup("PathChoices"))
 		{
-			// 한 번에 하나의 팝업만 열리므로 목록 캐시를 공유한다. 팝업이 열릴 때 한 번만 디스크를 읽는다.
 			static std::vector<PathEntry> s_Entries;
 			static std::vector<size_t> s_Filtered;
 			static char s_SearchBuffer[128] = "";
 			static std::string s_LastQuery;
+			static std::uint64_t s_CatalogRevision = 0;
+			static decltype(desc.Accepts) s_Accepts = nullptr;
 
 			const bool appearing = ImGui::IsWindowAppearing();
-			if (appearing)
+			const auto& catalog = Detail::GetPickerAssetCatalog();
+			const bool entriesChanged = catalog.Revision != s_CatalogRevision || desc.Accepts != s_Accepts;
+			if (entriesChanged)
 			{
-				CollectEntries(desc, s_Entries);
-				s_SearchBuffer[0] = '\0';
-				s_LastQuery = "\x01";
+				CollectEntries(desc, catalog, s_Entries);
+				s_CatalogRevision = catalog.Revision;
+				s_Accepts = desc.Accepts;
 			}
+			if (appearing)
+				s_SearchBuffer[0] = '\0';
 
 			EditorUI::SearchBarOptions searchOptions;
 			searchOptions.FocusOnDraw = appearing;
 			EditorUI::DrawSearchBar("PathPickerSearch", s_SearchBuffer, sizeof(s_SearchBuffer), "ResourcePicker.SearchHint", searchOptions);
 
-			if (s_LastQuery != s_SearchBuffer)
+			if (entriesChanged || s_LastQuery != s_SearchBuffer)
 			{
 				s_LastQuery = s_SearchBuffer;
 				const std::string query = Engine::ToLowerStr(s_LastQuery);
@@ -201,7 +193,9 @@ namespace Editor
 				const std::string header = fmt::format("{} ({})", LocalizeInspectorText("ResourcePicker.ProjectFiles"), s_Filtered.size());
 				ImGui::TextDisabled("%s", header.c_str());
 
-				if (s_Filtered.empty())
+				if (!catalog.IsReady)
+					EditorUI::EmptyState("ResourcePicker.IndexingFiles");
+				else if (s_Filtered.empty())
 				{
 					EditorUI::EmptyState("ResourcePicker.NoMatchingFiles");
 				}
@@ -215,11 +209,17 @@ namespace Editor
 						{
 							const auto& entry = s_Entries[s_Filtered[i]];
 							Detail::PickerItemView view{ entry.Reference, entry.Filename, entry.SubPath, desc.Visual, entry.FullPath };
-							if (auto* texture = Detail::GetResourcePickerThumbnail(entry.FullPath))
-								view.Texture = Detail::GetResourcePickerTextureID(texture);
+							Detail::ApplyPickerThumbnail(view);
 
 							if (Detail::DrawPickerItem(view, entry.Reference == current, thumbSize, itemHeight, openEditorRequested))
 							{
+								std::error_code error;
+								if (!std::filesystem::is_regular_file(entry.FullPath, error))
+								{
+									Detail::InvalidatePickerAssetCatalog();
+									failed = true;
+									continue;
+								}
 								selected = entry.Reference;
 								picked = true;
 								failed = false;

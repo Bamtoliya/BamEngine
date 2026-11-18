@@ -39,7 +39,7 @@
   시작 알림과 설정 패널에서 저장 차단 상태를 안내한다.
 - 씬 문서 보호(`SceneDocument`, `EditorDocumentManager`, `EditorDocumentController`)와 `HistoryPanel`(Undo/Redo 이력 및 저장 기준점 표시)이 구현되어 New/Load/Save/Close 및 종료 흐름에 연결되었다 (11절 A).
 - 프리팹 파이프라인(생성·배치, 뷰포트 격리 편집 모드 `PrefabModeManager`, 단일 원천 루트 `PrefabInstanceComponent` 및 Apply/Revert/Unpack, 저장 기준점 Undo 연동)과 엔티티 다중 복사·붙여넣기(`EntityClipboard`)가 구현 완료되었다 (10절, 17절).
-- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 팝업 진입 시 1회 스캔 캐싱과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`AssetFileActions::Open`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
+- 인스펙터 리소스 피커(`ResourcePicker.h`)의 템플릿 인자 `T`별 호환 확장자 필터링 및 공유 비동기 파일 목록과, 콘텐츠 브라우저(`ContentBrowserGridItem`/`ContentBrowserPanel`)의 공통 열기(`AssetFileActions::Open`), 외부 프로그램 실행(`ShellExecuteW`), 검색 범위 토글(`현재 폴더` vs `전체 리소스 폴더`)이 구현되었다 (14절 A, B, E).
 - 전용 리소스/그래프 에디터로 2D `SpriteAnimationEditor`(필름스트립 타임라인·피벗 프리뷰, `ResourceHandle` 참조)와 3D `AnimatorGraphPanel`(상태 머신 캔버스·파라미터 독·트랜지션 인스펙터·활성 상태 하이라이트, 11절 H)이 구현되었으며, `GraphPanel` 상단 도구 모음이 윈도우 메뉴바(`File`, `Edit`, `View`, `Mode`, `Debug/Build`) + 1줄 퀵 액세스 툴바로 리팩터링되었다 (18절).
 - **2026-11-08~13 추가 반영(정적 기준)**: `ResourceEditorInterface` 기반 3줄 공통 헤더(12개 리소스 편집기 전환), `EditorUI` 공통 검색 바·모달 액션 바·반응형 툴바·테이블 확대, `ContentBrowser`의 `Assets/`/`Engine/Resources/` 분리 및 읽기 전용 보호·썸네일 재사용·다중 드롭, `PluginManagerPanel`/`PluginHost`, `RecoveryManager` 비정상 종료 복원 모달(`DrawRecoveryModal`), `BuildProfilePanel`의 Windows Release 패키지 내보내기 UI가 구현되었다.
 - EditorSettingsCheck의 파일 입출력·데이터 검사는 통과했다.
@@ -499,7 +499,8 @@ Visual Studio F5 수동 확인 항목:
   이름·프로젝트 상대 경로로 검색하고, 같은 이름의 에셋은 상대 경로로 구분한다. 검색 결과 없음도 별도 표시한다.
 - `ResourceHandle<T>`에 할당 가능한 타입으로 후보를 제한한다. 파일의 타입 판정과 실제 로드·할당 시의 호환성 검사를 함께 유지한다.
   - **핸들 타입별 호환 확장자 필터링**: `DrawInspectorResourcePicker<T>`에서 템플릿 인자 `T`(`Texture`, `Material`, `Model`, `Audio` 등)에 일치하는 확장자 파일만 디스크 목록에 노출하여 무관한 에셋 노출을 차단한다.
-  - **팝업 진입 시 1회 스캔 및 정적 캐싱**: 팝업이 열려 있는 동안 매 프레임 `recursive_directory_iterator`로 디스크 전체를 동기 순회하여 발생하는 치명적인 프레임 드랍을 방지한다. 팝업이 열리는 첫 프레임에만 1회 스캔하여 캐시 리스트를 구성하고, 팝업이 닫힐 때 해제하거나 색인 기반으로 조회한다.
+  - **비동기 파일 목록**: 에디터 갱신에서 프로젝트·엔진 파일 목록을 백그라운드로 준비한다. 리소스 피커와 경로 피커는 같은 목록을 재사용한다. 파일 추가·삭제·이동, 루트 변경 및 콘텐츠 브라우저 수동 새로 고침이 목록을 갱신한다.
+  - **썸네일 공유**: 피커의 행과 현재 값에 기존 썸네일 아틀라스의 텍스처와 UV를 사용한다. 아직 준비되지 않은 행은 아이콘으로 표시하고, 생성과 업로드는 기존 캐시 예산을 따른다.
   - 기존 드래그 앤 드롭과 연결 해제를 유지하고, 읽기 전용·다중 선택의 혼합값도 기존 Inspector 편집 경로와 일치시킨다.
 - 초기에는 로드된 리소스를 대상으로 검색·썸네일을 연결하고, 다음 단계에서 프로젝트 에셋의 메타데이터 색인으로 범위를 넓힌다.
   로드된 목록과 프로젝트 전체 목록의 지원 범위를 표시하며, 후보를 보여주기 위해 모든 리소스를 실제로 로드하지 않는다.
