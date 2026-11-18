@@ -467,6 +467,33 @@ namespace
         Check(history.Redo() && world.all_of<Engine::UIButtonComponent>(
             scene->FindEntityById(buttonId)->GetEntityHandle()), "button redo");
     }
+    void GroupReparentHistory()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        auto& first = Add(*scene, L"first");
+        auto& second = Add(*scene, L"second");
+        auto& descendant = Add(*scene, L"descendant");
+        auto& parent = Add(*scene, L"destination");
+        const auto a = first.GetEntityHandle(), b = second.GetEntityHandle(), c = descendant.GetEntityHandle();
+        const auto p = parent.GetEntityHandle();
+        auto& world = scene->GetRegistry();
+        const auto parentOf = [&](entt::entity entity) { return world.get<Engine::HierarchyComponent>(entity).parent; };
+        Check(scene->ReparentEntity(descendant, &first) == Engine::EntityReparentResult::Success, "group hierarchy setup");
+
+        Editor::SceneEditHistory history;
+        history.Synchronize(scene.get(), true);
+        auto before = Editor::SceneEditSnapshot::Capture(*scene);
+        Check(static_cast<bool>(before), "group reparent capture");
+        Engine::Entity* group[] = { &first, &descendant, &second };
+        Check(scene->ReparentEntities(group, &parent) == Engine::EntityReparentResult::Success, "group reparent");
+        history.Record(std::move(before), Editor::SceneEditSnapshot::Capture(*scene), "History.Command.Reparent");
+        Check(history.Commands().GetUndoCount() == 1 && history.Undo(), "group reparent undo");
+        Check(parentOf(a) == entt::null && parentOf(b) == entt::null && parentOf(c) == a, "group roots restored");
+        Check(!history.CanUndo() && history.Redo(), "group reparent redo");
+        Check(parentOf(a) == p && parentOf(b) == p && parentOf(c) == a &&
+            world.get<Engine::HierarchyComponent>(p).children == std::vector{ a, b }, "group order restored");
+    }
+
     void DuplicateHierarchyRejection()
     {
         ScenePtr scene(Engine::Scene::Create());
@@ -847,6 +874,7 @@ int main()
         ComponentAndGesture();
         SplinePointHistory();
         StructureAndIdentity();
+        GroupReparentHistory();
         DuplicateHierarchyRejection();
         FailureAndLifetime();
         ReferencesAndUI();

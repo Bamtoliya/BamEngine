@@ -159,6 +159,52 @@ namespace
             return Fail("A representable mirrored parent was rejected.");
         return true;
     }
+    bool CheckGroupMoves()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        auto& oldParent = Add(*scene, { 2.0f, 3.0f, 0.0f });
+        auto& target = Add(*scene, { -4.0f, 8.0f, 0.0f });
+        auto& first = Add(*scene, { 5.0f, 1.0f, 0.0f });
+        auto& second = Add(*scene, { -2.0f, 1.0f, 0.0f });
+        auto& nested = Add(*scene, { 3.0f, -2.0f, 0.0f });
+        auto& invalid = Add(*scene);
+        if (scene->ReparentEntity(first, &oldParent) != Result::Success ||
+            scene->ReparentEntity(nested, &first) != Result::Success)
+            return Fail("Could not prepare the grouped hierarchy.");
+
+        auto& world = scene->GetRegistry();
+        const auto p = oldParent.GetEntityHandle(), t = target.GetEntityHandle();
+        const auto a = first.GetEntityHandle(), b = second.GetEntityHandle(), c = nested.GetEntityHandle();
+        const auto firstWorld = world.get<Engine::WorldTransformComponent>(a).worldMatrix;
+        const auto secondWorld = world.get<Engine::WorldTransformComponent>(b).worldMatrix;
+        const auto nestedWorld = world.get<Engine::WorldTransformComponent>(c).worldMatrix;
+        const auto parentOf = [&](entt::entity entity) { return world.get<Engine::HierarchyComponent>(entity).parent; };
+        const auto childrenOf = [&](entt::entity entity) -> const auto& { return world.get<Engine::HierarchyComponent>(entity).children; };
+        world.remove<Engine::WorldTransformComponent>(invalid.GetEntityHandle());
+        Engine::Entity* invalidGroup[] = { &first, &invalid };
+        Engine::Entity* group[] = { &first, &nested, &second, &first };
+        if (scene->ReparentEntities(invalidGroup, &target) != Result::InvalidTransform ||
+            scene->ReparentEntities(group, &nested) != Result::Cycle ||
+            parentOf(a) != p || !childrenOf(t).empty() || childrenOf(p) != std::vector{ a } ||
+            !Near(firstWorld, world.get<Engine::WorldTransformComponent>(a).worldMatrix))
+            return Fail("A rejected group partially changed the original hierarchy.");
+
+        if (scene->ReparentEntities(group, &target) != Result::Success ||
+            parentOf(a) != t || parentOf(b) != t || parentOf(c) != a ||
+            !childrenOf(p).empty() || childrenOf(t) != std::vector{ a, b } ||
+            !Near(firstWorld, world.get<Engine::WorldTransformComponent>(a).worldMatrix) ||
+            !Near(secondWorld, world.get<Engine::WorldTransformComponent>(b).worldMatrix) ||
+            !Near(nestedWorld, world.get<Engine::WorldTransformComponent>(c).worldMatrix))
+            return Fail("Group reparenting changed world poses or flattened selected descendants.");
+
+        if (scene->ReparentEntities(group, &target) != Result::Unchanged ||
+            scene->ReparentEntities(group) != Result::Success ||
+            parentOf(a) != entt::null || parentOf(b) != entt::null || parentOf(c) != a ||
+            !childrenOf(t).empty())
+            return Fail("Group root drop did not detach only the selected roots.");
+        return true;
+    }
+
     bool CheckInvalidAndDepth()
     {
         ScenePtr scene(Engine::Scene::Create());
@@ -216,7 +262,8 @@ namespace
         const auto a = first.GetEntityHandle(), b = second.GetEntityHandle();
         Editor::EntityHierarchyView view;
         float rowHeight = 0.0f, textHeight = 0.0f, renderedHeight = 0.0f;
-        const auto frame = [&](Engine::Scene& drawn, entt::entity reveal = entt::null)
+        const auto frame = [&](Engine::Scene& drawn, entt::entity reveal = entt::null,
+            std::span<const entt::entity> selected = {})
         {
             ImGui::NewFrame();
             ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
@@ -225,7 +272,7 @@ namespace
             ImGui::SetCursorScreenPos(ImVec2(20.0f, 40.0f));
             rowHeight = ImGui::GetTextLineHeightWithSpacing();
             textHeight = ImGui::GetTextLineHeight();
-            const auto result = view.Draw(drawn, {}, reveal);
+            const auto result = view.Draw(drawn, selected, reveal, false, {}, !selected.empty());
             renderedHeight = ImGui::GetCursorScreenPos().y - 40.0f;
             ImGui::End();
             ImGui::Render();
@@ -241,7 +288,7 @@ namespace
         frame(*scene);
         io.AddMouseButtonEvent(0, false);
         const auto dropped = frame(*scene);
-        if (!dropped.Move || dropped.Move->Child != a || dropped.Move->Parent != b ||
+        if (!dropped.Move || dropped.Move->Children != std::vector{ a } || dropped.Move->Anchor != a || dropped.Move->Parent != b ||
             scene->ReparentEntity(first, &second) != Result::Success)
             return Fail("Native ImGui entity drag/drop did not produce the correct move.");
         frame(*scene, a);
@@ -266,7 +313,7 @@ namespace
         frame(*scene);
         io.AddMouseButtonEvent(0, false);
         const auto rootDrop = frame(*scene);
-        if (!rootDrop.Move || rootDrop.Move->Child != a || rootDrop.Move->Parent != entt::null ||
+        if (!rootDrop.Move || rootDrop.Move->Children != std::vector{ a } || rootDrop.Move->Parent != entt::null ||
             scene->ReparentEntity(first) != Result::Success)
             return Fail("The root drop area failed to detach the dragged entity.");
         frame(*scene);
@@ -296,6 +343,46 @@ namespace
             heldSource->GetRegistry().get<Engine::HierarchyComponent>(from).parent != entt::null)
             return Fail("A cross-scene drop was accepted or modified its source.");
         view.ResetDrag();
+
+        ScenePtr group(Engine::Scene::Create());
+        Add(*group);
+        Add(*group);
+        Add(*group);
+        const auto roots = Editor::GetEntityHierarchyTree(*group).Roots;
+        if (roots.size() != 3) return Fail("Could not prepare three drag rows.");
+        const entt::entity selected[] = { roots[0], roots[1] };
+        const entt::entity changedSelection[] = { roots[0] };
+        const auto startGroupDrag = [&]()
+        {
+            frame(*group, entt::null, selected);
+            io.AddMousePosEvent(75.0f, 40.0f + textHeight * 0.5f);
+            frame(*group, entt::null, selected);
+            io.AddMouseButtonEvent(0, true);
+            frame(*group, entt::null, selected);
+            io.AddMousePosEvent(75.0f, 40.0f + 2.0f * rowHeight + textHeight * 0.5f);
+            frame(*group, entt::null, selected);
+        };
+
+        startGroupDrag();
+        frame(*group, entt::null, changedSelection);
+        io.AddMouseButtonEvent(0, false);
+        const auto grouped = frame(*group, entt::null, changedSelection);
+        if (!grouped.Move || grouped.Move->Children != std::vector{ roots[0], roots[1] } ||
+            grouped.Move->Anchor != roots[0] || grouped.Move->Parent != roots[2])
+            return Fail("Selected entities were not frozen together at drag start.");
+
+        frame(*group, entt::null, selected);
+        view.ResetDrag();
+        startGroupDrag();
+        auto& changedId = group->GetRegistry().get<Engine::IDComponent>(roots[1]).id;
+        const auto oldId = changedId;
+        changedId ^= 1ull << 63;
+        frame(*group, entt::null, selected);
+        io.AddMouseButtonEvent(0, false);
+        const auto staleMember = frame(*group, entt::null, selected);
+        changedId = oldId;
+        if (!staleMember.RejectedDrop || staleMember.Move)
+            return Fail("A group with a stale member was accepted.");
         return true;
     }
 
@@ -355,7 +442,7 @@ int main()
 {
     if (!Engine::LocalizationManager::Create() || !Engine::ReflectionRegistry::Create() ||
         !Engine::InputManager::Create()) return 1;
-    const bool passed = CheckMoves() && CheckInvalidAndDepth() && CheckTree() &&
+    const bool passed = CheckMoves() && CheckGroupMoves() && CheckInvalidAndDepth() && CheckTree() &&
         CheckNameCache() && CheckTreeInput();
     Engine::ReflectionRegistry::Destroy();
     Engine::LocalizationManager::Destroy();

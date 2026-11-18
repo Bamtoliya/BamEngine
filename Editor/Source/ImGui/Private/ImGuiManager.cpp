@@ -1469,6 +1469,40 @@ vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() c
 	return editors;
 }
 
+bool ImGuiManager::CanRepairAssetReferenceSource(const std::filesystem::path& sourceFile) const
+{
+	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() ||
+		(PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode()))
+		return false;
+
+	using Path = Engine::PlatformPath;
+	const auto source = Path::Normalize(Path::GetProjectRoot() / sourceFile);
+	const auto retainsSource = [&source](const std::filesystem::path& path)
+	{
+		if (path.empty())
+			return false;
+
+		const auto resolved = Path::ResolveUri(path);
+		std::error_code error;
+		return Path::IsSamePath(source, resolved) || std::filesystem::equivalent(source, resolved, error);
+	};
+
+	auto& documents = Application::Get().GetDocuments();
+	for (const auto id : documents.GetDocumentIds())
+	{
+		const auto* document = documents.Find(id);
+		if (document && retainsSource(document->GetPath()))
+			return false;
+	}
+	for (const auto* panel : m_ImGuiPanels)
+	{
+		const auto* editor = dynamic_cast<const ResourceEditorInterface*>(panel);
+		if (editor && std::ranges::any_of(editor->GetRetainedResourcePaths(), retainsSource))
+			return false;
+	}
+	return true;
+}
+
 bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) const
 {
 	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || !CollectUnsavedResourceEditors().empty())

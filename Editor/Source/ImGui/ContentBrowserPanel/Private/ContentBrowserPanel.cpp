@@ -3,6 +3,7 @@
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
 #include "AssetPathRelocation.h"
+#include "AssetReferencePanel.h"
 #include "ResourceManager.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserTreeItem.h"
@@ -23,6 +24,7 @@
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 using namespace std;
@@ -44,16 +46,20 @@ void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const s
 		auto& cache = AssetCache::Get();
 
 		const filesystem::path filePath = directory / reinterpret_cast<const char8_t*>(filename.c_str());
+		const bool projectWatch = watchid == m_ProjectWatchId;
+		bool documentChanged = projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(filePath);
 		cache.RequestInvalidate(filePath);
 
 		if (action == efsw::Action::Moved && !oldFilename.empty())
 		{
 			const filesystem::path oldFilePath = directory / reinterpret_cast<const char8_t*>(oldFilename.c_str());
+			documentChanged |= projectWatch && AssetReferenceValidator::IsReferenceDocumentPath(oldFilePath);
 			cache.RequestInvalidate(oldFilePath);
 		}
 
-		if (m_RefreshFlag)
-			m_RefreshFlag->store(true);
+		if (documentChanged)
+			m_ReferenceDocumentsChanged.store(true);
+		m_RefreshFlag.store(true);
 	}
 	catch (const std::exception& e)
 	{
@@ -159,8 +165,9 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_NeedToExpandTree = true;
 	memset(m_SearchBuffer, 0, sizeof(m_SearchBuffer));
 	m_FileWatcher = new efsw::FileWatcher();
-	m_FileListener = new ContentBrowserFileListener(&m_NeedsCacheRefresh);
+	m_FileListener = new ContentBrowserFileListener(m_NeedsCacheRefresh, m_ReferenceDocumentsChanged);
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
+	m_FileListener->SetProjectWatchId(m_WatchID);
 	std::error_code ec;
 	if (m_EngineRootPath != m_RootPath && std::filesystem::is_directory(m_EngineRootPath, ec))
 		m_EngineWatchID = m_FileWatcher->addWatch(m_EngineRootPath.string(), m_FileListener, true);
@@ -214,9 +221,19 @@ const filesystem::path& ContentBrowserPanel::GetActiveRootForPath(const filesyst
 	return m_RootPath;
 }
 
+static void RequestAssetReferenceScanRefresh()
+{
+	auto* panel = ImGuiManager::Get().GetImGuiPanel(L"AssetReferenceChecker");
+	if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
+		references->RequestScanRefresh();
+}
+
 void ContentBrowserPanel::Update(f32 dt)
 {
-	if (m_IsImportModalActive)
+	if (m_ReferenceDocumentsChanged.exchange(false))
+		RequestAssetReferenceScanRefresh();
+
+	if (m_Open && m_IsImportModalActive)
 	{
 		m_ImportPreviewWidget.BeginFrame(dt);
 		m_ImportPreviewWidget.Submit(dt);
@@ -1155,7 +1172,10 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		}
 		AssetReferenceImpact impact;
 		vector<AssetReferenceEdit> references;
+		const auto referenceStart = std::chrono::steady_clock::now();
 		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, references, &impact);
+		AssetManager::Get().RecordAssetReferenceTiming(
+			AssetReferenceTimingKind::MovePreparation, ImGui::GetFrameCount(), referenceStart);
 		m_MoveDocumentsAvailable = CanApplyAssetMove(moves, references);
 		m_MoveSourcePaths = std::move(sources);
 		m_MoveDestination = destination;
@@ -1487,7 +1507,10 @@ bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forw
 	vector<filesystem::path> sources;
 	for (const auto& move : batch.Moves)
 		sources.push_back(forward ? move.Before : move.After);
+	const auto referenceStart = std::chrono::steady_clock::now();
 	const auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+	AssetManager::Get().RecordAssetReferenceTiming(
+		AssetReferenceTimingKind::MoveRecheck, ImGui::GetFrameCount(), referenceStart);
 	if (!impact.IsComplete || std::ranges::any_of(impact.References, [&](const auto& link)
 	{
 		return std::ranges::none_of(batch.References, [&](const auto& edit)
@@ -1620,14 +1643,24 @@ void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* la
 		return;
 
 	const auto batch = std::make_shared<const vector<FileMove>>(std::move(moves));
+	const auto replay = [this, batch](bool forward)
+	{
+		if (!ReplayFileMoves(*batch, forward))
+			return false;
+		RequestAssetReferenceScanRefresh();
+		return true;
+	};
 	auto command = std::make_unique<CallbackEditorCommand>(label,
-		[this, batch]() { return ReplayFileMoves(*batch, true); },
-		[this, batch]() { return ReplayFileMoves(*batch, false); });
+		[replay]() { return replay(true); },
+		[replay]() { return replay(false); });
 
 	if (execute)
 		m_FileHistory.Execute(std::move(command));
 	else
+	{
 		m_FileHistory.Record(std::move(command));
+		RequestAssetReferenceScanRefresh();
+	}
 	FinishFileHistoryOperation();
 }
 
@@ -1702,7 +1735,10 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 		targets.reserve(moves.size());
 		for (const auto& move : moves)
 			targets.push_back(move.Before);
+		const auto referenceStart = std::chrono::steady_clock::now();
 		m_DeletionImpact = AssetReferenceValidator::AnalyzeDeletion(targets);
+		AssetManager::Get().RecordAssetReferenceTiming(
+			AssetReferenceTimingKind::DeleteImpact, ImGui::GetFrameCount(), referenceStart);
 		m_PendingFileDeletion = std::move(moves);
 	}
 	catch (const filesystem::filesystem_error& error)

@@ -6,6 +6,7 @@
 #include "TypeIdentityInterface.h"
 #include "ReflectionRegistry.h"
 #include <archive/ArchiveResult.h>
+#include <span>
 #include "ResourceHandle.h"
 
 BEGIN(archive)
@@ -68,6 +69,8 @@ public:
 	Entity& CreateEntity();
 	[[nodiscard]] bool DestroyEntity(Entity& entity);
 	[[nodiscard]] EntityReparentResult ReparentEntity(Entity& child, Entity* parent = nullptr);
+	// Move selected roots together and preserve their world transforms. Selected descendants stay in their subtree.
+	[[nodiscard]] EntityReparentResult ReparentEntities(std::span<Entity* const> children, Entity* parent = nullptr);
 	Entity* FindEntity(entt::entity handle);
 	Entity* FindEntityById(uint64 id);
 	[[nodiscard]] bool MoveSiblingOrder(entt::entity entity, int direction); // -1: 위로, +1: 아래로

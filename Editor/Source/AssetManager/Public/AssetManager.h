@@ -5,6 +5,8 @@
 #include "ExporterInterface.h"
 #include "AssetCache.h"
 #include "AssetTaskMetrics.h"
+#include "AssetReferenceTimings.h"
+#include <chrono>
 
 BEGIN(Editor)
 class AssetManager : public Base
@@ -40,6 +42,10 @@ public:
 #pragma region Metrics
 	AssetTaskMetrics GetTaskMetrics() const;
 	size_t GetActiveTaskCount() const;
+	// These timings are recorded and read on the editor thread.
+	AssetReferenceTimings GetAssetReferenceTimings() const { return m_AssetReferenceTimings; }
+	void RecordAssetReferenceTiming(AssetReferenceTimingKind kind, int frame, std::chrono::steady_clock::time_point start);
+	void ResetAssetReferenceTimings() { m_AssetReferenceTimings = {}; }
 #pragma endregion
 
 
@@ -65,6 +71,7 @@ private:
 private:
 	mutable std::mutex m_PendingMutex;
 
+	AssetReferenceTimings m_AssetReferenceTimings;
 	Engine::uint64 m_SucceededTasks = 0;
 	Engine::uint64 m_FailedTasks = 0;
 #pragma endregion

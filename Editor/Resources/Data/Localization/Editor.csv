@@ -108,31 +108,35 @@ AnimatorGraph,TogglePreview,Toggle 3D Preview Viewport,3D 프리뷰 표시 전�
 AnimatorGraph,TransitionInspector,Transition Inspector,전이 속성 인스펙터
 AnimatorGraph,Unsaved,Unsaved Controller,저장되지 않은 컨트롤러
 AnimatorGraph,UseBlendTree,Use 1D Blend Tree,1D 블렌드 트리 사용
-AssetRef,AutoFixable,Auto-Fixable: %zu,자동 수정 가능: %zu
+AssetRef,AutoFixable,Auto-fix candidates: {},자동 복구 후보: {}
 AssetRef,BtnFix,Fix,복구
-AssetRef,External,External: %zu,외부 경로: %zu
 AssetRef,ExternalStatus,%s External,%s 외부 경로
 AssetRef,FilterAll,All,전체
+AssetRef,FilterCount,{} ({}),{} ({})
 AssetRef,FilterExternal,External,외부 경로
 AssetRef,FilterInvalid,Invalid Ext,잘못된 확장자
 AssetRef,FilterMissing,Missing,누락
 AssetRef,FixAction,Fix Action,복구 동작
 AssetRef,FixSafe,Fix Safe Issues,안전 항목 자동 복구
-AssetRef,FixedIssues,Fixed {} issues.,문제 {}개를 수정했습니다.
-AssetRef,InvalidExt,Invalid Ext: %zu,잘못된 확장자: %zu
+AssetRef,FixSafeScope,Repairs eligible issues from the full scan. The filter only changes what is shown.,전체 검사에서 복구 가능한 항목을 처리합니다. 필터는 화면에 표시할 행만 바꿉니다.
+AssetRef,FixedIssues,Repaired {} resource references.,리소스 참조 {}개를 복구했습니다.
+AssetRef,RepairBlocked,Some sources are in use. Switch away from those assets and finish play or document operations before repairing.,사용 중인 원본이 있습니다. 해당 에셋에서 전환하고 재생이나 문서 작업을 마친 뒤 복구하세요.
+AssetRef,RepairFailed,No references were repaired. Refresh the scan or check the log for file write errors.,복구한 참조가 없습니다. 다시 검사하거나 로그에서 파일 기록 오류를 확인하세요.
 AssetRef,InvalidExtensionStatus,%s InvalidExt,%s 잘못된 확장자
 AssetRef,IssueType,Issue Type,문제 유형
-AssetRef,Missing,Missing: %zu,누락: %zu
+AssetRef,IssueSearchHint,Search paths or properties...,경로나 속성명 검색...
 AssetRef,MissingStatus,%s Missing,%s 누락
 AssetRef,ProblemsTab,Problems,참조 문제
 AssetRef,ReferencesTab,References,참조 관계
 AssetRef,ShowReferences,Show Asset References,에셋 참조 보기
 AssetRef,ReferenceTargetRequired,Open a file's context menu in the Content Browser and choose Show Asset References.,콘텐츠 브라우저에서 파일을 우클릭하고 에셋 참조 보기를 선택하세요.
+AssetRef,ReferenceTargetMissing,Target file not found.,대상 파일을 찾을 수 없습니다.
 AssetRef,UsedBy,Used By,이 에셋을 사용하는 파일
 AssetRef,Uses,Uses,이 에셋이 참조하는 파일
 AssetRef,ReferenceCycle,(Cycle),(순환 참조)
 AssetRef,ReferenceDepthLimit,(Open this asset to continue),(이 에셋을 선택해 계속 보기)
 AssetRef,NoDirectReferences,No direct references found in the scanned project documents.,검사한 프로젝트 문서에서 직접 참조를 찾지 못했습니다.
+AssetRef,NoMatchingReferences,No matching asset references.,검색어와 일치하는 에셋 참조가 없습니다.
 AssetRef,UnreadableDocument,Could not read document,문서를 읽을 수 없음
 AssetRef,OutsideMounts,Outside asset roots,에셋 루트 외부
 AssetRef,ScanAll,Scan Resources,에셋 참조 검사
@@ -140,10 +144,13 @@ AssetRef,ScanCompleted,Scan completed.,검사가 완료됐습니다.
 AssetRef,ScanRequired,Click Scan to inspect resource references.,검사 버튼을 눌러 에셋 참조를 검사하십시오.
 AssetRef,SearchHint,Search path...,경로 검색...
 AssetRef,SourceAsset,Source Asset,원본 에셋
+AssetRef,SourceActionsHint,Double-click to open or locate the source. Right-click for actions.,더블클릭으로 원본을 열거나 위치를 찾으세요. 우클릭하면 파일 메뉴가 열립니다.
 AssetRef,SuggestedFix,Suggested Fix,수정 제안
 AssetRef,TargetReference,Target Reference,참조 대상
 AssetRef,Title,Asset Reference Checker,에셋 참조 검사기
-AssetRef,TotalIssues,Total Issues: %zu | ,전체 문제: %zu |
+AssetRef,VisibleIssueCount,Showing {} of {} issues,표시 {}건 / 전체 {}건
+AssetRef,NoIssues,No reference issues found.,참조 문제가 발견되지 않았습니다.
+AssetRef,NoMatchingIssues,No reference issues match the current filters.,현재 조건과 일치하는 참조 문제가 없습니다.
 AudioPreview,Playing,Playing...,재생 중...
 AudioPreview,Stopped,Stopped,정지됨
 AudioPreview,Title,Audio,오디오
@@ -232,6 +239,8 @@ EditorCommon,Delete,Delete,삭제
 EditorCommon,General,General,일반
 EditorCommon,Height,Height,높이
 EditorCommon,Name,Name,이름
+EditorCommon,NavigateBack,Go Back,뒤로
+EditorCommon,NavigateForward,Go Forward,앞으로
 EditorCommon,New,New,새로 만들기
 EditorCommon,NewFolder,New Folder,새 폴더
 EditorCommon,None,None,없음
@@ -239,6 +248,8 @@ EditorCommon,OK,OK,확인
 EditorCommon,Off,OFF,꺼짐
 EditorCommon,On,ON,켜짐
 EditorCommon,Open,Open,열기
+EditorCommon,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
+EditorCommon,RevealInContentBrowserFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
 EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
 EditorCommon,Other,Other,기타
 EditorCommon,Paste,Paste,붙여넣기
@@ -567,6 +578,7 @@ Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 
 Hierarchy,DeleteEntityAndChildren,Delete entity and children,엔티티와 자식 삭제
 Hierarchy,DeleteSelectedEntities,Delete Selected Entities,선택한 엔티티 삭제
 Hierarchy,DepthLimitReached,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
+Hierarchy,DragSelection,Move {} selected entities,선택한 엔티티 {}개 이동
 Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
 Hierarchy,Duplicate,Duplicate,복제
 Hierarchy,EditFailed,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
@@ -848,6 +860,17 @@ Metrics,PingMs,Ping: %.1f ms,지연 시간: %.1f ms
 Metrics,Poor,[ POOR ],[ 낮음 ]
 Metrics,RHIDraws,RHI draw commands — heaviest frame in last 0.5 s,RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임
 Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
+Metrics,ReferenceTimings,Asset reference timings (ms),에셋 참조 검사 시간 (ms)
+Metrics,ReferenceNoSamples,No measured reference work yet.,아직 측정된 참조 작업이 없습니다.
+Metrics,ReferenceFrameSum,Reference work on frame #{}: {:.2f} ms (peak {:.2f} ms),참조 작업 프레임 #{}: {:.2f} ms (최대 {:.2f} ms)
+Metrics,ReferenceLast,Latest,최근
+Metrics,ReferenceInitial,First reference lookup,첫 참조 조회
+Metrics,ReferenceManual,Manual reference scan,수동 참조 검사
+Metrics,ReferenceAutomatic,Automatic refresh,자동 갱신
+Metrics,ReferenceAfterRepair,Scan after repair,복구 후 검사
+Metrics,ReferenceDeleteImpact,Deletion impact scan,삭제 영향 검사
+Metrics,ReferenceMovePreparation,Move reference preparation,이동 참조 갱신 준비
+Metrics,ReferenceMoveRecheck,Move impact recheck,이동 영향 재검사
 Metrics,RefreshInterval,Refresh interval: 0.5 seconds,갱신 간격: 0.5초
 Metrics,RegisteredPasses,Registered render passes: {},등록된 렌더 패스: {}
 Metrics,RenderFailed,Render failed: partial counts,렌더링 실패: 일부 집계만 표시합니다
@@ -1006,6 +1029,7 @@ Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
 Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
 Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
 Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Notification,OpenAssetMissing,File not found: {},파일을 찾을 수 없습니다: {}
 Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
 Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
 Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
@@ -1588,8 +1612,6 @@ InputActions,DuplicateCategory,Category with this name already exists.,이미 �
 Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
 InputActions,MouseCaptureArea,Click here with the mouse button to bind,등록할 마우스 버튼으로 여기를 누르세요
 Viewport,RenderTargetPreviewUnsupported,This render target cannot be previewed as a 2D image.,이 렌더 타깃은 2D 이미지로 미리 볼 수 없습니다.
-ResourcePicker,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
-ResourcePicker,RevealFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
 Inspector,RefreshModelMaterials,Refresh Model Parts,원본 모델 부품 갱신
 Inspector,ModelMaterialRefreshConflict,The model parts or rig no longer match the instance. Nothing was changed.,원본 모델의 부품 또는 리그가 인스턴스와 일치하지 않아 변경하지 않았습니다.
 Inspector,ModelMaterialRefreshFailed,Could not apply the model part change.,모델 부품 변경을 적용하지 못했습니다.

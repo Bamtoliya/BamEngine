@@ -66,7 +66,10 @@ namespace Editor
         static std::vector<AssetReferenceIssue> ValidateBuildScene(const std::filesystem::path& scenePath,
             std::vector<std::filesystem::path>* referencedFiles = nullptr);
 
-        // 프로젝트 에셋 루트에서 저장된 JSON 문서의 직접 참조와 문제를 수집한다.
+        // 파일 존재 여부와 별개로 참조 검사에서 읽을 확장자인지 확인한다.
+        static bool IsReferenceDocumentPath(const std::filesystem::path& path);
+
+        // 프로젝트 에셋 루트에서 저장된 문서의 직접 참조와 문제를 수집한다.
         static AssetReferenceScan ScanProject();
         static std::vector<AssetReferenceIssue> ValidateAllResources();
         static AssetReferenceImpact AnalyzeDeletion(const std::vector<std::filesystem::path>& targets);
@@ -83,10 +86,13 @@ namespace Editor
         // 손상/누락 경로에 대한 안전한 대체 복구 경로 탐색
         static bool TryResolveFallbackPath(const std::string& brokenPath, std::filesystem::path& outResolvedPath);
 
-        // 단일 이슈 원자적 파일 복구 치환
+        // 검사 결과와 현재 참조가 일치할 때만 파일을 복구한다.
         static bool FixIssue(const AssetReferenceIssue& issue);
 
-        // 안전 복구 가능한 모든 이슈 일괄 치환
+        // 쓰기 성공이 확인된 리소스 핸들 수를 반환한다.
         static size_t FixAllSafeIssues(const std::vector<AssetReferenceIssue>& issues);
+
+    private:
+        static bool ApplyReferenceRepairs(const std::vector<AssetReferenceEdit>& edits);
     };
 }

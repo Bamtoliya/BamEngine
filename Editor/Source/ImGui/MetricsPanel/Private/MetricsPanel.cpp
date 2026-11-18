@@ -54,6 +54,7 @@ void MetricsPanel::DrawToolbar()
     {
         m_FrameMetrics.ResetHistory();
         m_RenderMetrics.ResetHistory();
+        m_EngineTaskMetrics.ResetReferenceHistory();
     }
 }
 

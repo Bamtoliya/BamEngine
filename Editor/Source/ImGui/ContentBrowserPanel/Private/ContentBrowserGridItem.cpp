@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "ImGuiManager.h"
+#include "AssetFileActions.h"
 #include "ContentBrowserGridItem.h"
 #include "ContentBrowserDragPayload.h"
 #include "SelectionManager.h"
@@ -341,44 +342,6 @@ namespace
 		}
 		return res ? header.ResourceType : Engine::EResourceType::Unknown;
 	}
-	bool IsSceneFile(const std::filesystem::path& path)
-	{
-		std::string ext = ToLowerAscii(path.extension().string());
-		if (ext != ".json") return false;
-		std::string stem = ToLowerAscii(path.stem().string());
-		if (stem.ends_with(".scene") || stem.ends_with(".bamscene")) return true;
-		// 다른 복합 에셋 확장자(.bammat.json 등)인 경우 불필요한 JSON 파싱 없이 즉시 제외
-		if (stem.find(".bam") != std::string::npos || stem.ends_with(".prefab") ||
-			stem.ends_with(".spriteanim") || stem.ends_with(".animator") ||
-			stem.ends_with(".graph") || stem.ends_with(".postfx"))
-		{
-			return false;
-		}
-		// 일반 .json 파일인 경우 루트의 "Scene" 키 존재 여부 확인
-		archive::JsonArchive ar;
-		if (!ar.LoadFromFile(path)) return false;
-		bool hasScene = false;
-		return ar.HasField("Scene", hasScene) && hasScene;
-	}
-	bool IsPrefabFile(const std::filesystem::path& path)
-	{
-		std::string ext = ToLowerAscii(path.extension().string());
-		if (ext == ".bamprefab" || ext == ".prefab") return true;
-		if (ext != ".json") return false;
-		std::string filename = ToLowerAscii(path.filename().string());
-		if (filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json")) return true;
-		std::string stem = ToLowerAscii(path.stem().string());
-		if (stem.find(".bam") != std::string::npos || stem.ends_with(".scene") ||
-			stem.ends_with(".spriteanim") || stem.ends_with(".animator") ||
-			stem.ends_with(".graph") || stem.ends_with(".postfx"))
-		{
-			return false;
-		}
-		archive::JsonArchive ar;
-		if (!ar.LoadFromFile(path)) return false;
-		bool hasPrefab = false;
-		return ar.HasField("Prefab", hasPrefab) && hasPrefab;
-	}
 	bool InstantiatePrefabFromFile(const std::filesystem::path& path, Engine::Entity* parent = nullptr)
 	{
 		if (!Engine::SceneManager::IsCreated()) return false;
@@ -402,41 +365,12 @@ namespace
 			return false;
 		}
 	}
-	bool OpenSceneFromFile(const std::filesystem::path& path)
-	{
-		return Editor::ImGuiManager::Get().RequestOpenScene(path);
-	}
 	void OpenAssetOrFolder(ContentBrowserPanel& browser, const std::filesystem::path& path, bool isDirectory)
 	{
 		if (isDirectory)
-		{
 			browser.NavigateTo(path);
-			return;
-		}
-		// 1. Scene JSON 파일인 경우
-		if (IsSceneFile(path))
-		{
-			OpenSceneFromFile(path);
-			return;
-		}
-		// 2. Prefab 파일인 경우
-		if (IsPrefabFile(path))
-		{
-			PrefabModeManager::Get().EnterPrefabMode(path);
-			return;
-		}
-		// 3. 일반 리소스 에디터 패널 오픈
-		Editor::SelectionManager::Get().SetSelectedAsset(path);
-		if (Editor::ImGuiManager::Get().RequestOpenResourceEditor(path))
-			return;
-		// 4. 지원하는 내부 에디터가 없는 일반 파일/소스 파일: OS 기본 연결 프로그램으로 열기
-		const std::wstring absPath = std::filesystem::absolute(path).wstring();
-		HINSTANCE result = ShellExecuteW(nullptr, L"open", absPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-		if (reinterpret_cast<INT_PTR>(result) <= 32)
-		{
-			NotificationManager::Get().AddNotification(LOCAL("EditorCommon.Open"),
-				LOCAL_FMT("Notification.OpenExternalFailed", path.filename().string()), ELogLevel::Warn, 3.0f);
-		}
+		else
+			AssetFileActions::Open(path);
 	}
 }
 float ContentBrowserGridItem::GetNameBoxHeight()
@@ -719,7 +653,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				}
 			}
 		}
-		if (!isDir && IsPrefabFile(path))
+		if (!isDir && AssetFileActions::IsPrefabFile(path))
 		{
 			ImGui::Separator();
 			if (ImGui::MenuItem((ICON_FA_PEN " " + LOCAL_LABEL("ContentBrowser.EditPrefab")).c_str()))
@@ -770,12 +704,12 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				ContextMenu_Shader(path);
 			}
 		}
-		if (!isDir && IsSceneFile(path))
+		if (!isDir && AssetFileActions::IsSceneFile(path))
 		{
 			ImGui::Separator();
 			if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("Action.File.LoadScene")).c_str()))
 			{
-				OpenSceneFromFile(path);
+				ImGuiManager::Get().RequestOpenScene(path);
 			}
 		}
 		// JSON <-> Binary 변환 메뉴 (Scene / Prefab / Graph 등 비-Resource 직렬화 포맷은 제외)
