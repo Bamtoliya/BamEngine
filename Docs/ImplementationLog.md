@@ -25,6 +25,41 @@ This document tracks implementation details, architectural decisions, and techni
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
 
+### [2026-11-18] 래스터 반투명 3단계: 평평한 수면 셰이더(Water Ripple 노멀 스크롤, Depth Fade 수심 그라데이션, 고스트 방지) 파이프라인 구현 (Render S6-3)
+
+- 유리 굴절(Render S6-2)에서 검증된 씬 컬러 복사(`SceneColorCopy`, 슬롯 16/`t0, space3`)와 `GBuffer_Position`(`Position.xyz`, 슬롯 20/`t4, space3`)을 연계하여 평평한 수면 셰이더(`waterPS.hlsl`)와 수면 머티리얼 에셋(`WaterMaterial.bammat.json`)을 구축했다.
+- **수면 셰이더 (`waterPS.hlsl`) 핵심 기능**:
+  1. **시간 기반 이중 스크롤 잔물결 (Dual Normal Scroll / Wave)**:
+     - `commonData.Time` 누적 시간을 활용하여 서로 다른 방향과 주파수를 가진 두 파동 UV를 계산.
+     - 노멀 맵 바인딩 시 접선 공간 블렌딩(`normalize(float3(n1.xy + n2.xy, n1.z * n2.z))`) 적용.
+     - 노멀 맵 미지정 시에도 수학적 사인/코사인 파동의 공간 미분($\partial h / \partial x, \partial h / \partial y$)을 통해 자연스러운 절차적 잔물결 자동 생성.
+  2. **수심 기반 색상 그라데이션 (Depth Fade / Optical Depth)**:
+     - `g_ScenePosition`(`GBuffer_Position`)을 샘플링하여 수면 픽셀과 배경 불투명 오브젝트 간의 광로 수심(`waterDepth = max(0, bgDist - waterDist)`) 계산.
+     - 수심에 따라 얕은 물(기본 에메랄드 시안)에서 깊은 물(딥 네이비 블루)로 부드러운 Beer-Lambert 흡수 모델 기반 색상 전이.
+  3. **전경 오브젝트 고스트 방지 (Ghosting Artifact Prevention)**:
+     - 굴절된 UV(`refractedUV`)에서 샘플링한 배경 위치가 수면보다 앞쪽 물체(`refrDist < waterDist`)일 경우, 굴절 오프셋을 취소하고 원본 `screenUV`를 사용하여 물체 실루엣이 물결 뒤로 번지는 결함을 차단.
+  4. **해안선/물가 거품 림 (Shoreline Foam)**:
+     - 수심 0.15m 이하 접촉 경계선에서 시간 기반 노이즈 변조 백색 거품 합성.
+  5. **프레넬 및 태양광 스페큘러 (Fresnel & Sun Sparkle)**:
+     - 물 IOR 1.333 기반 Schlick Fresnel 반사율 계산 및 하늘 반사광 합성, 상향 태양광 벡터 기반 Blinn-Phong 스페큘러 하이라이트 가산.
+- **패스 바인딩 보강**:
+  - `DeferredProfilePasses` 및 `ViewportDeferredPipeline`의 `ForwardTransparent` 패스에 `GBuffer_Position` 타깃을 슬롯 20(`MAX_MATERIAL_TEXTURE_SLOTS + 4`, Space 3의 `t4`)으로 명시 등록하여 모든 뷰포트에서 일관된 수심 샘플링 보장.
+- **수면 머티리얼 에셋 (`WaterMaterial.bammat.json`)**:
+  - `BlendMode: AlphaBlend`, `DepthMode: ReadOnly`, `CullMode: Back`, `PixelShader: waterPS` 구성.
+- **검증 및 실환경 확인 (2026-11-18, Editor 실행 확인)**:
+  1. 에디터 뷰포트에서 캐릭터가 반쯤 잠긴 상태에서 실시간 이중 스크롤 잔물결, 수심 기반 그라데이션, 태양광 스페큘러 렌더링 확인.
+  2. 3방향 비대칭 파동 벡터 합성을 통해 초기 사선 바둑판 격자 스페큘러 결함 해소.
+  3. 물속에 잠긴 캐릭터의 초록색 옷과 피부색이 맑고 자연스럽게 굴절 투과됨을 확인.
+- **확인된 기술 이슈 및 기하학적 분석 (Plane 근접 시 투명화 현상)**:
+  - **현상**: 수면 평면(Water Plane)을 다른 불투명 바닥 평면(Ground Plane)에 아주 가깝게 밀착 배치할 경우, 수면이 100% 투명해져 물의 파란 색감이 사라지고 바닥만 그대로 비치는 현상 발생.
+  - **원인 분석**:
+    1. **광학 수심 소멸 ($\Delta Z \to 0$)**: Depth Fade 수심 공식 `waterDepth = max(0, bgDist - waterDist)`에 의해 두 평면 간의 물리적 거리 간격이 0에 수렴하면 `waterDepth ≈ 0`이 됨.
+    2. **Beer-Lambert 투과 모델 특성**: `depthFactor = saturate(waterDepth / fadeDistance) = 0`이 되어 수심에 의한 빛 흡수율이 0%가 됨. 셰이더가 이를 "두께가 없는 극도로 얕은 물가 경계(Shoreline / Edge)"로 판정하여 배경 바닥면의 원래 색상을 100% 투명하게 투과시킴.
+    3. **평면 관통 시 깊이 역전**: 워터 큐브나 평면이 바닥 평면을 교차 관통할 경우, 관통 아래 구간은 카메라 시선 기준 불투명 바닥이 수면보다 앞서 가로막아 $\text{bgDist} < \text{waterDist}$ 깊이 역전이 발생함. 셰이더에 `isOccludedByForeground` 보호 분기를 두어 하얗게 타는 현상을 방어하고 배경을 패스스루하도록 안전 처리함.
+  - **향후 구조적 대안**:
+    - 머티리얼 파라미터에 최소 기본 불투명도/틴트 계수(Minimum Water Opacity, 예: 15~25% 기본 물 색상 보장)를 추가하여 수심 0에서도 은은한 물빛이 남도록 개선 검토.
+    - 레벨 디자인 시 수면 평면과 바닥면 사이에 최소 수심 간격(Off-ground clearance) 확보 가이드라인 적용.
+- **잔여**: Windows 배포 Client 검증, 4단계 파도(정점 변위 메시 애니메이션) 확장.
 
 ### [2026-11-18] 래스터 반투명 2단계: 씬 컬러 복사 및 얇은 유리 굴절/프레넬 파이프라인 구현 (Render S6-2)
 

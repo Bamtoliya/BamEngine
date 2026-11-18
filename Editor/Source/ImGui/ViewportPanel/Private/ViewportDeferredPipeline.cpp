@@ -218,6 +218,8 @@ void ViewportDeferredPipeline::RegisterRenderPasses()
 	{
 		rp->SetPrePassCopy(m_LightingColorName, m_SceneColorCopyName);
 		rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 0, m_SceneColorCopyName);
+		if (m_OwnedRTNames.size() > 4 && !m_OwnedRTNames[4].empty())
+			rp->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, m_OwnedRTNames[4]);
 	}
 }
 

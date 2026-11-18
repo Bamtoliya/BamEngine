@@ -275,7 +275,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     1. 타일당 최대 광원 용량 초과(Overflow) 시 대체 동작 및 다중 광원/이동 카메라 경계 조건의 추가 검증 기록.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
-- [Render S6 1·2단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[구현 및 Editor 확인: 2026-11-18 / Client 비교 잔여]** — 1단계 정적 반투명 메시 거리 정렬에 이어, 2단계 씬 컬러 복사(`PrePassCopy`) 및 얇은 유리 굴절/프레넬 하이라이트(`glassPS.hlsl`, `GlassMaterial.bammat.json`) 파이프라인을 구축했다. 에디터 뷰포트에서 배경 캐릭터와 바닥의 굴절 왜곡 및 투과를 실환경 확인했다. Windows 배포 Client 비교, 종류 간(정적·스킨드·스프라이트·파티클) 통합 정렬, 반투명 메시 피킹, GPU 시간 계측은 잔여다.
+- [Render S6 1~3단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[1~3단계 구현 및 Editor 확인: 2026-11-18 / Client 비교 잔여]** — 1단계 정적 반투명 메시 거리 정렬, 2단계 씬 컬러 복사 및 유리 굴절 실환경 확인에 이어, 3단계 평평한 수면 셰이더(`waterPS.hlsl`, `WaterMaterial.bammat.json`, 잔물결 노멀 스크롤, Depth Fade 수심 색상 그라데이션, 고스트 방지) 파이프라인을 구축하고 에디터 실환경에서 확인했다. 바닥 밀착 시 수심 소멸 투명화 분석 및 셰이더 안전장치 기록을 완료했다. Windows 배포 Client 비교, 4단계 파도는 잔여다.
 
 ### P2-C. 강화학습의 첫 환경
 
