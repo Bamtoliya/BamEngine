@@ -26,12 +26,11 @@ float4 main(PS_INPUT input) : SV_TARGET0
     float3 N = normalize(input.Normal);
     float NdotV = saturate(abs(dot(N, V)));
     
-    // 시선과 나란한 외곽 림(Rim)으로 갈수록 밝기를 최대 2.5배 부스팅하여 HDR 블룸 산란 유도
-    float fresnelRim = pow(1.0f - NdotV, 2.2f);
-    texColor.rgb += texColor.rgb * (fresnelRim * 2.5f);
-
-    // 정면은 0.55 투명도로 비치고 외곽은 선명하게 유지
-    float facingAlpha = lerp(0.55f, 1.0f, fresnelRim);
+    // 시선 외곽 림(Rim) 발광 부스팅
+    float fresnelRim = pow(1.0f - NdotV, 2.0f);
+    texColor.rgb += texColor.rgb * (fresnelRim * 2.0f);
+    // [개선]: 정면 알파를 0.55로 깎지 않고 원본 알파를 보존하여 허공에서도 흙갈색으로 가라앉지 않도록 방어
+    float facingAlpha = lerp(0.90f, 1.0f, fresnelRim);
     texColor.a *= facingAlpha;
 
     // 2. 쿼드 파티클의 UV 가장자리 단색 텍스처 하드 에지 방지

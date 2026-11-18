@@ -39,6 +39,7 @@
 #include "CompositeEffect.h"
 #include "Skeleton.h"
 #include "MaterialInterface.h"
+#include "ContentBrowserDragPayload.h"
 
 AnimationTimelinePanel::AnimationTimelinePanel()
 {
@@ -49,6 +50,7 @@ AnimationTimelinePanel::AnimationTimelinePanel()
 
 	// 엔진 표준 뷰포트 위젯 초기화 (그리드, 스튜디오 조명, 카메라 컨트롤러 내장)
 	m_PreviewWidget.Initialize(L"TimelinePreview", 512, 512, true);
+	m_PreviewWidget.SetHostPoseControl(true);
 	m_PreviewWidget.SetupDefaultStudioLighting();
 	m_PreviewWidget.FocusTarget(vec3(0.0f, 0.9f, 0.0f), 3.2f);
 
@@ -464,6 +466,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 	m_PreviewWidget.BeginFrame(dt);
 
 	const f32 oldTime = m_CurrentTime;
+	const bool showBindPose = m_PreviewWidget.IsBindPoseShown();
 
 	if (m_IsPlaying && !m_IsScrubbing && m_Duration > 0.0f)
 	{
@@ -471,7 +474,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 
 		for (const auto& track : m_NotifyTracks)
 		{
-			if (track.IsMuted) continue;
+			if (track.IsMuted || showBindPose) continue;
 			for (const auto& notify : track.Notifies)
 			{
 				if (oldTime < notify.TriggerTime && m_CurrentTime >= notify.TriggerTime)
@@ -491,33 +494,23 @@ void AnimationTimelinePanel::Update(f32 dt)
 	m_PrevTime = m_CurrentTime;
 	if (m_CurrentTime < oldTime) ClearPreviewVFX();
 
+	Engine::AnimatorComponent* animator = nullptr;
+	if (m_PreviewModelEntity && m_PreviewWidget.GetScene())
+		animator = m_PreviewWidget.GetRegistry().try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+
 	auto* model = m_TargetModel.Get();
 	auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
 	auto anims = model ? model->GetAnimations() : std::vector<Engine::ResourceHandle<Engine::Animation>>();
+	auto* skel = skeleton.IsValid() ? skeleton.Get() : nullptr;
+	auto* clip = (!showBindPose && m_SelectedClipIndex >= 0 && m_SelectedClipIndex < static_cast<int>(anims.size())) ? anims[m_SelectedClipIndex].Get() : nullptr;
 
-	if (skeleton.IsValid() && !anims.empty() && m_SelectedClipIndex >= 0 && m_SelectedClipIndex < static_cast<int>(anims.size()))
-	{
-		auto* clip = anims[m_SelectedClipIndex].Get();
-		auto* skel = skeleton.Get();
-		if (clip && skel)
-		{
-			Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skel, m_CurrentTime, m_BoneMatrices, m_IsLooping);
-		}
-	}
-	else if (skeleton.IsValid())
-	{
-		auto* skel = skeleton.Get();
-		if (skel) Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skel, m_BoneMatrices);
-	}
+	if (skel && clip)
+		Engine::AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skel, m_CurrentTime, m_BoneMatrices, m_IsLooping);
+	else if (skel)
+		Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skel, m_BoneMatrices);
 
-	if (m_PreviewModelEntity && m_PreviewWidget.GetScene())
-	{
-		auto& reg = m_PreviewWidget.GetRegistry();
-		if (auto* animator = reg.try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle()))
-		{
-			animator->finalBoneMatrices = m_BoneMatrices;
-		}
-	}
+	if (animator)
+		animator->finalBoneMatrices = m_BoneMatrices;
 
 	if (auto* scene = m_PreviewWidget.GetScene())
 	{
@@ -568,33 +561,29 @@ ImGuiWindowFlags AnimationTimelinePanel::GetResourceWindowFlags() const
 	return flags;
 }
 
+bool AnimationTimelinePanel::TrySetTargetModelFromPath(const std::wstring& path)
+{
+	std::wstring ext = std::filesystem::path(path).extension().wstring();
+	std::transform(ext.begin(), ext.end(), ext.begin(), ::towlower);
+	if (ext != L".bammodel" && ext != L".glb" && ext != L".gltf") return false;
+
+	auto& rm = Engine::ResourceManager::Get();
+	const auto handle = rm.LoadFile(path);
+	if (!dynamic_cast<Engine::Model*>(rm.GetResource(handle))) return false;
+
+	SetTargetModel(Engine::ResourceHandle<Engine::Model>(handle));
+	return true;
+}
+
 void AnimationTimelinePanel::HandleModelDragDrop()
 {
-	if (ImGui::BeginDragDropTarget())
+	if (!ImGui::BeginDragDropTarget()) return;
+	if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(Editor::ContentBrowser::SingleItemPayload))
 	{
-		if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("DND_ASSET_PAYLOAD"))
-		{
-			const auto* rawPath = static_cast<const wchar_t*>(payload->Data);
-			if (rawPath)
-			{
-				const std::filesystem::path p(rawPath);
-				const std::string ext = p.extension().string();
-				if (ext == ".bammodel" || ext == ".glb" || ext == ".gltf")
-				{
-					auto& rm = Engine::ResourceManager::Get();
-					const auto handle = rm.LoadFile(p.wstring());
-					if (auto* res = rm.GetResource(handle))
-					{
-						if (auto* model = dynamic_cast<Engine::Model*>(res))
-						{
-							SetTargetModel(Engine::ResourceHandle<Engine::Model>(handle));
-						}
-					}
-				}
-			}
-		}
-		ImGui::EndDragDropTarget();
+		const auto paths = Editor::ContentBrowser::DecodeDragPaths(payload->Data, payload->DataSize);
+		if (paths.size() == 1) (void)TrySetTargetModelFromPath(paths.front());
 	}
+	ImGui::EndDragDropTarget();
 }
 
 void AnimationTimelinePanel::DrawBoneHierarchyTree()
@@ -757,8 +746,8 @@ void AnimationTimelinePanel::DrawCustomContent()
 	// ── 상단 중앙: 3D 오프스크린 뷰포트 영역 ──
 	ImGui::BeginChild("##ViewportRegion", ImVec2(previewWidth, upperHeight), false);
 	m_PreviewWidget.Draw(ImVec2(previewWidth, upperHeight));
-	HandleModelDragDrop();
 	ImGui::EndChild();
+	HandleModelDragDrop();
 
 	ImGui::SameLine();
 
@@ -840,21 +829,11 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 	{
 		std::wstring selectedPath;
 		std::vector<FileDialogFilter> filters = {
-			{ Engine::StrToWStr(LOCAL("FileDialog.ModelFiles")), L"*.bammodel;*.glb" },
+			{ Engine::StrToWStr(LOCAL("FileDialog.ModelFiles")), L"*.bammodel;*.glb;*.gltf" },
 			{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
 		};
 		if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Model"))
-		{
-			auto& rm = Engine::ResourceManager::Get();
-			const auto handle = rm.LoadFile(selectedPath);
-			if (auto* res = rm.GetResource(handle))
-			{
-				if (auto* model = dynamic_cast<Engine::Model*>(res))
-				{
-					SetTargetModel(Engine::ResourceHandle<Engine::Model>(handle));
-				}
-			}
-		}
+			(void)TrySetTargetModelFromPath(selectedPath);
 	}
 
 	auto* model = m_TargetModel.Get();

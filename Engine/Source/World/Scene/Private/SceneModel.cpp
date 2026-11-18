@@ -165,7 +165,6 @@ namespace Engine
 		outRoot = nullptr;
 		if (!material.IsValid())
 			return EResult::InvalidArgument;
-
 		const auto skeleton = model.GetSkeleton();
 		const bool hasSkeleton = skeleton.IsValid();
 		const bool linked = sourceModel.IsValid();
@@ -173,56 +172,58 @@ namespace Engine
 		const auto meshes = model.GetMeshes();
 		if (nodes.empty())
 			return EResult::InvalidArgument;
-
 		std::vector<TransformComponent> localTransforms(nodes.size());
-		size_t entityCount = nodes.size() + 1;
-
 		for (size_t i = 0; i < nodes.size(); ++i)
 		{
 			const auto& node = nodes[i];
 			if (node.ParentIndex < -1 || (node.ParentIndex >= 0 && static_cast<size_t>(node.ParentIndex) >= i))
 				return EResult::InvalidArgument;
-
 			if (!TransformSystem::TryAssignLocalMatrix(localTransforms[i], glm::dmat4(node.LocalTransform)))
 			{
 				ENGINE_LOG_ERROR("Model node cannot be represented as TRS: node={}", i);
 				return EResult::NotImplemented;
 			}
-
 			for (const uint32 meshIndex : node.MeshIndices)
 			{
 				if (meshIndex >= meshes.size() || !meshes[meshIndex].IsValid())
 					return EResult::InvalidArgument;
 			}
-
-			size_t extraMeshes = node.MeshIndices.size();
-			if (!linked && extraMeshes > 0)
-				--extraMeshes;
-			if (extraMeshes > (std::numeric_limits<size_t>::max)() - entityCount)
-				return EResult::InvalidArgument;
-
-			entityCount += extraMeshes;
 		}
-
+		// 1. 전체 생성할 엔티티 수 계산:
+		// 스켈레탈 모델은 본 노드와 중간 껍데기 노드를 모두 건너뛰고, 실제 메시(Mesh) 개수만큼만 자식 엔티티를 생성함.
+		size_t entityCount = 1; // 루트 엔티티 (Fox)
+		if (hasSkeleton)
+		{
+			for (const auto& node : nodes)
+				entityCount += node.MeshIndices.size();
+		}
+		else
+		{
+			// 정적 모델은 기존 계층 유지
+			entityCount += nodes.size();
+			for (const auto& node : nodes)
+			{
+				size_t extraMeshes = node.MeshIndices.size();
+				if (!linked && extraMeshes > 0)
+					--extraMeshes;
+				entityCount += extraMeshes;
+			}
+		}
 		TransformComponent rootTransform{};
 		if (!rootTransform.SetEulerRotation(model.GetPlacementEulerDegrees()))
 			return EResult::InvalidArgument;
-
 		const uint64 savedNextId = m_NextEntityId;
 		const auto created = CreateEntities(entityCount);
 		auto& world = m_LocalRegistry;
-
 		const auto rootHandle = created.front();
 		const auto modelPath = model.GetPath().empty() ? model.GetKey() : model.GetPath();
 		InitializeModelEntity(world, rootHandle, std::filesystem::path(modelPath).stem().wstring(), rootTransform);
-
 		if (linked)
 		{
 			auto& instance = world.emplace<ModelInstanceComponent>(rootHandle);
 			instance.modelHandle = sourceModel;
 			instance.fallbackMaterial = material;
 		}
-
 		const auto animations = model.GetAnimations();
 		if (hasSkeleton || !animations.empty())
 		{
@@ -230,50 +231,79 @@ namespace Engine
 			if (!animations.empty())
 				animator.currentClip = animations.front();
 		}
-
-		size_t nextExtraEntity = nodes.size() + 1;
-		for (size_t i = 0; i < nodes.size(); ++i)
+		// 2-A. [스켈레탈 모델] 중간 껍데기 노드 없이, 모든 메시를 루트 바로 아래 직속 자식으로 생성
+		if (hasSkeleton)
 		{
-			const auto& node = nodes[i];
-			const auto entity = created[i + 1];
-			const auto parent = node.ParentIndex < 0 ? rootHandle : created[static_cast<size_t>(node.ParentIndex) + 1];
-
-			InitializeModelEntity(world, entity, node.Name, localTransforms[i]);
-			AttachModelEntity(world, entity, parent);
-			if (linked)
-				world.emplace<ModelSourceComponent>(entity).sourceNodeKey = node.SourceNodeKey;
-
-			for (size_t j = 0; j < node.MeshIndices.size(); ++j)
+			size_t meshEntityCursor = 1;
+			for (size_t i = 0; i < nodes.size(); ++i)
 			{
-				const uint32 meshIndex = node.MeshIndices[j];
-				const auto& mesh = meshes[meshIndex];
-				const auto assignedMaterial = ResolveModelMeshMaterial(model, meshIndex, material);
-				const auto lod1 = model.GetMeshLOD(meshIndex, 1);
-				const auto lod2 = model.GetMeshLOD(meshIndex, 2);
-
-				if (!linked && j == 0)
+				const auto& node = nodes[i];
+				for (size_t j = 0; j < node.MeshIndices.size(); ++j)
 				{
-					AddModelMeshRenderer(world, entity, mesh, assignedMaterial, skeleton, lod1, lod2);
-					continue;
-				}
-
-				const auto meshEntity = created[nextExtraEntity++];
-				if (linked)
-				{
-					const auto attachmentKey = j < node.MeshAttachmentKeys.size() ? node.MeshAttachmentKeys[j] : wstring{};
-					InitializeLinkedModelMesh(world, meshEntity, entity, node.SourceNodeKey, attachmentKey,
-						mesh, assignedMaterial, skeleton, lod1, lod2);
-				}
-				else
-				{
+					const uint32 meshIndex = node.MeshIndices[j];
+					const auto& mesh = meshes[meshIndex];
+					const auto assignedMaterial = ResolveModelMeshMaterial(model, meshIndex, material);
+					const auto lod1 = model.GetMeshLOD(meshIndex, 1);
+					const auto lod2 = model.GetMeshLOD(meshIndex, 2);
+					const auto meshEntity = created[meshEntityCursor++];
 					const auto name = std::filesystem::path(mesh->GetPath()).stem().wstring();
 					InitializeModelEntity(world, meshEntity, name, TransformComponent{});
-					AttachModelEntity(world, meshEntity, entity);
+					AttachModelEntity(world, meshEntity, rootHandle); // 루트의 직속 자식으로 부착!
 					AddModelMeshRenderer(world, meshEntity, mesh, assignedMaterial, skeleton, lod1, lod2);
+					if (linked)
+					{
+						auto& source = world.emplace<ModelSourceComponent>(meshEntity);
+						source.sourceNodeKey = node.SourceNodeKey;
+						source.meshAttachmentKey = j < node.MeshAttachmentKeys.size() ? node.MeshAttachmentKeys[j] : wstring{};
+						source.isMeshAttachment = true;
+						source.useModelMaterial = true;
+						source.useModelMesh = true;
+					}
 				}
 			}
 		}
-
+		// 2-B. [정적 모델] 기존 부모-자식 트랜스폼 계층 유지
+		else
+		{
+			size_t nextExtraEntity = nodes.size() + 1;
+			for (size_t i = 0; i < nodes.size(); ++i)
+			{
+				const auto& node = nodes[i];
+				const auto entity = created[i + 1];
+				const auto parent = node.ParentIndex < 0 ? rootHandle : created[static_cast<size_t>(node.ParentIndex) + 1];
+				InitializeModelEntity(world, entity, node.Name, localTransforms[i]);
+				AttachModelEntity(world, entity, parent);
+				if (linked)
+					world.emplace<ModelSourceComponent>(entity).sourceNodeKey = node.SourceNodeKey;
+				for (size_t j = 0; j < node.MeshIndices.size(); ++j)
+				{
+					const uint32 meshIndex = node.MeshIndices[j];
+					const auto& mesh = meshes[meshIndex];
+					const auto assignedMaterial = ResolveModelMeshMaterial(model, meshIndex, material);
+					const auto lod1 = model.GetMeshLOD(meshIndex, 1);
+					const auto lod2 = model.GetMeshLOD(meshIndex, 2);
+					if (!linked && j == 0)
+					{
+						AddModelMeshRenderer(world, entity, mesh, assignedMaterial, skeleton, lod1, lod2);
+						continue;
+					}
+					const auto meshEntity = created[nextExtraEntity++];
+					if (linked)
+					{
+						const auto attachmentKey = j < node.MeshAttachmentKeys.size() ? node.MeshAttachmentKeys[j] : wstring{};
+						InitializeLinkedModelMesh(world, meshEntity, entity, node.SourceNodeKey, attachmentKey,
+							mesh, assignedMaterial, skeleton, lod1, lod2);
+					}
+					else
+					{
+						const auto name = std::filesystem::path(mesh->GetPath()).stem().wstring();
+						InitializeModelEntity(world, meshEntity, name, TransformComponent{});
+						AttachModelEntity(world, meshEntity, entity);
+						AddModelMeshRenderer(world, meshEntity, mesh, assignedMaterial, skeleton, lod1, lod2);
+					}
+				}
+			}
+		}
 		auto* root = FindEntity(rootHandle);
 		if (!TransformSystem::UpdateHierarchy(world))
 		{
@@ -282,11 +312,9 @@ namespace Engine
 				ENGINE_LOG_ERROR("Model placement rollback failed.");
 				return EResult::Fail;
 			}
-
 			m_NextEntityId = savedNextId;
 			return EResult::InvalidArgument;
 		}
-
 		UpdateHierarchyFlags();
 		outRoot = root;
 		return EResult::Success;

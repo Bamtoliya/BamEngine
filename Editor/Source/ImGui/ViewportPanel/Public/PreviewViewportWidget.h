@@ -70,9 +70,16 @@ public:
 	bool CanFocusTarget() const;
 	void RefocusTarget();
 	void ToggleGrid() { m_ShowGrid = !m_ShowGrid; }
+	void SetGridVisible(bool visible) { m_ShowGrid = visible; }
 	[[nodiscard]] bool IsGridVisible() const { return m_ShowGrid; }
 	void SetBackgroundColor(const Engine::vec4& color) { m_Pipeline.SetClearColor(color); }
 	void SetStudioLightMultiplier(float multiplier) { m_StudioLightMultiplier = std::max(multiplier, 0.0f); }
+
+	// 호스트(타임라인 등)가 finalBoneMatrices를 직접 계산할 때 켠다.
+	// 위젯은 Animator를 진행하지 않고, 오버레이에 모션 재생 버튼 대신 바인드 포즈 토글을 표시한다.
+	void SetHostPoseControl(bool enabled) { m_HostPoseControl = enabled; }
+	[[nodiscard]] bool IsBindPoseShown() const { return m_HostPoseControl && m_ShowBindPose; }
+
 	[[nodiscard]] float GetStudioLightMultiplier() const { return m_StudioLightMultiplier; }
 private:
 	bool TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const;
@@ -82,7 +89,8 @@ private:
 	void DrawOverlayToolbar();
 	void DrawRenderTargetPopup();
 	void DrawPreviewLightingPopup();
-
+	void DrawBoneOverlayPopup();
+	void DrawBoneOverlay();
 private:
 	inline static std::unordered_set<PreviewViewportWidget*> s_ActiveWidgets;
 
@@ -118,6 +126,13 @@ private:
 	std::optional<std::array<float, 3>> m_PreviewLightDraft;
 	std::array<entt::entity, 3> m_StudioLights{ entt::null, entt::null, entt::null };
 	f32 m_StudioLightMultiplier = 1.0f;
+
+	// 본 포즈 제어
+	bool m_HostPoseControl = false;
+	bool m_ShowBindPose = false;
+	bool m_ShowBoneJoints = false;
+	bool m_ShowBoneAxes = false;
+	bool m_ShowBoneNames = false;
 
 	// 채널 필터링
 	std::wstring m_SelectedRTName;

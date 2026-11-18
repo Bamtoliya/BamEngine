@@ -37,6 +37,32 @@
 #include "CompositeVFXSystem.h"
 #include <vector>
 #include "ViewportImage.h"
+#include "GizmoHelper.h"
+
+namespace
+{
+	// 오버레이 툴바 버튼은 글리프 폭과 무관하게 모두 같은 정사각형 슬롯을 사용한다.
+	ImVec2 GetOverlayButtonSize()
+	{
+		constexpr const char* icons[] = { ICON_FA_LAYER_GROUP, ICON_FA_LIGHTBULB, ICON_FA_BORDER_ALL, ICON_FA_BORDER_NONE, ICON_FA_CROSSHAIRS, ICON_FA_PAUSE, ICON_FA_PLAY, ICON_FA_PERSON, ICON_FA_BONE };
+		float side = 0.0f;
+		for (const char* icon : icons)
+		{
+			const auto size = EditorUI::GetIconButtonSize(icon);
+			side = std::max(side, std::max(size.x, size.y));
+		}
+		return ImVec2(std::ceil(side), std::ceil(side));
+	}
+
+	// 줄바꿈하지 않는다. 같은 줄 배치는 호출자가 ImGui::SameLine()으로 명시한다.
+	EditorUI::IconButtonOptions MakeOverlayButtonOptions()
+	{
+		EditorUI::IconButtonOptions options;
+		options.Size = GetOverlayButtonSize();
+		options.NoWrap = true;
+		return options;
+	}
+}
 
 PreviewViewportWidget::~PreviewViewportWidget()
 {
@@ -293,26 +319,24 @@ void PreviewViewportWidget::BeginFrame(Engine::f32 dt)
 	if (!m_PreviewScene) return;
 
 	auto& reg = m_PreviewScene->GetRegistry();
-	auto animView = reg.view<Engine::AnimatorComponent>();
-
-	for (auto animEntity : animView)
+	if (!m_HostPoseControl)
 	{
-		auto& animator = animView.get<Engine::AnimatorComponent>(animEntity);
-		const auto* skeleton = FindSkeletonInHierarchy(reg, animEntity);
-		if (!skeleton) continue;
-		const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
-		if (source == Engine::EAnimatorBasePoseSource::None)
+		auto animView = reg.view<Engine::AnimatorComponent>();
+		for (auto animEntity : animView)
 		{
-			Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeleton, animator.finalBoneMatrices);
-			continue;
+			auto& animator = animView.get<Engine::AnimatorComponent>(animEntity);
+			const auto* skeleton = FindSkeletonInHierarchy(reg, animEntity);
+			if (!skeleton) continue;
+			const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
+			if (source == Engine::EAnimatorBasePoseSource::None)
+			{
+				Engine::AnimationEvaluator::EvaluateBindPoseSkinningMatrices(*skeleton, animator.finalBoneMatrices);
+				continue;
+			}
+			if (source == Engine::EAnimatorBasePoseSource::StateMachine)
+				(void)animator.runtimeState.PopTriggeredNotifies();
+			Engine::UpdateAnimatorSkinning(animator, *skeleton, dt);
 		}
-
-		if (source == Engine::EAnimatorBasePoseSource::StateMachine)
-		{
-			(void)animator.runtimeState.PopTriggeredNotifies();
-		}
-
-		Engine::UpdateAnimatorSkinning(animator, *skeleton, dt);
 	}
 
 	// 5. 씬 변환 계층과 조명 GPU 버퍼 갱신
@@ -454,41 +478,29 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const ImVec2 startCursor = ImGui::GetCursorPos();
 	const ImVec2 widgetSize(static_cast<float>(m_Width), static_cast<float>(m_Height));
 
-	// 오버레이 영역은 버튼과 같은 실측 크기로 계산한다.
+	// 오버레이 툴바는 같은 크기의 버튼을 한 줄로만 배치한다. 폭이 부족하면 줄바꿈하지 않고 툴바 영역에서 잘린다.
 	const auto& style = ImGui::GetStyle();
 	const float margin = std::min(ImGui::GetFontSize() * 0.4f, std::min(widgetSize.x, widgetSize.y) * 0.1f);
-	const char* icons[] = { ICON_FA_LAYER_GROUP, ICON_FA_LIGHTBULB, ICON_FA_BORDER_ALL,
-		ICON_FA_BORDER_NONE, ICON_FA_CROSSHAIRS, ICON_FA_PAUSE, ICON_FA_PLAY };
-	ImVec2 slot(0.0f, 0.0f);
-	for (const char* icon : icons)
-	{
-		const auto size = EditorUI::GetIconButtonSize(icon);
-		slot.x = std::max(slot.x, size.x);
-		slot.y = std::max(slot.y, size.y);
-	}
+	const ImVec2 slot = GetOverlayButtonSize();
+	const bool hasAnimator = m_PreviewScene && !m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>().empty();
+	const int buttonCount = hasAnimator ? 6 : 4;
 	const float overlayWidth = std::max(1.0f, widgetSize.x - margin * 2.0f);
 	const float overlayHeight = std::max(1.0f, widgetSize.y - margin * 2.0f);
 	const float channelWidth = std::min(overlayWidth, ChannelFilter::GetButtonsWidth());
-	const auto channelSlot = ChannelFilter::GetButtonSize();
-	const int channelsPerRow = std::clamp(static_cast<int>(channelWidth / channelSlot.x), 1, 4);
-	const int channelRows = (4 + channelsPerRow - 1) / channelsPerRow;
-	const ImVec2 channelSize(channelWidth, std::min(overlayHeight,
-		std::ceil(channelRows * channelSlot.y + (channelRows - 1) * style.ItemSpacing.y)));
+	const ImVec2 channelSize(channelWidth, std::min(overlayHeight, ChannelFilter::GetButtonSize().y));
 	const float channelX = margin + overlayWidth - channelWidth;
 	const float leftWidth = overlayWidth - channelWidth - style.ItemSpacing.x;
-	const auto fullToolbar = EditorUI::MeasureIconGrid(slot, 5, overlayWidth);
-	const bool shareRow = fullToolbar.x + style.WindowPadding.x * 2.0f <= leftWidth;
+	const float rowWidth = buttonCount * slot.x + (buttonCount - 1) * style.ItemSpacing.x + style.WindowPadding.x * 2.0f;
+	const bool shareRow = rowWidth <= leftWidth;
 	const float toolbarOffset = shareRow ? 0.0f : channelSize.y + style.ItemSpacing.y;
-	const float toolbarWidth = shareRow ? leftWidth : overlayWidth;
-	const auto grid = EditorUI::MeasureIconGrid(slot, 5, toolbarWidth - style.WindowPadding.x * 2.0f);
 	const bool showToolbar = toolbarOffset < overlayHeight;
-	const ImVec2 toolbarSize(std::min(toolbarWidth, grid.x + style.WindowPadding.x * 2.0f),
-		std::min(overlayHeight - toolbarOffset, grid.y + style.WindowPadding.y * 2.0f));
+	const ImVec2 toolbarSize(std::min(rowWidth, overlayWidth), std::min(overlayHeight - toolbarOffset, slot.y + style.WindowPadding.y * 2.0f));
 
 	// 1. 뷰포트 렌더타깃 이미지 먼저 렌더링
 	ImGui::SetCursorPos(startCursor);
 	DrawViewportImage(image, widgetSize);
 	m_ViewportScreenPos = ImGui::GetItemRectMin();
+	DrawBoneOverlay();
 
 	using Engine::EMouseButton;
 	auto& input = Engine::InputManager::Get();
@@ -589,19 +601,20 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.12f, 0.12f, 0.12f, 0.75f));
 
 	DrawRenderTargetPopup();
-	EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_LIGHTBULB).x);
+	ImGui::SameLine();
 	DrawPreviewLightingPopup();
 
-	EditorUI::IconButtonOptions options;
-	options.SameLine = true;
+	auto options = MakeOverlayButtonOptions();
 	options.Active = m_ShowGrid;
 	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleGrid");
-	if (EditorUI::IconButton("Grid", m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE,
-		"PreviewViewport.GridToggle", options)) ToggleGrid();
+	ImGui::SameLine();
+	if (EditorUI::IconButton("Grid", m_ShowGrid ? ICON_FA_BORDER_ALL : ICON_FA_BORDER_NONE, "PreviewViewport.GridToggle", options))
+		ToggleGrid();
 
 	options.Active = false;
 	options.Enabled = CanFocusTarget();
 	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
+	ImGui::SameLine();
 	if (EditorUI::IconButton("Focus", ICON_FA_CROSSHAIRS, "PreviewViewport.Focus", options))
 	{
 		s_ShortcutTarget = this;
@@ -613,13 +626,24 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 		auto animView = m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>();
 		if (!animView.empty())
 		{
-			auto& anim = animView.get<Engine::AnimatorComponent>(animView.front());
 			options.Enabled = true;
-			options.Active = anim.isPlaying;
 			options.ShortcutHint = nullptr;
-			if (EditorUI::IconButton("PlayMotion", anim.isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY,
-				anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion", options))
-				anim.isPlaying = !anim.isPlaying;
+			ImGui::SameLine();
+			if (m_HostPoseControl)
+			{
+				options.Active = m_ShowBindPose;
+				if (EditorUI::IconButton("BindPose", ICON_FA_PERSON, "PreviewViewport.ShowBindPose", options))
+					m_ShowBindPose = !m_ShowBindPose;
+			}
+			else
+			{
+				auto& anim = animView.get<Engine::AnimatorComponent>(animView.front());
+				options.Active = anim.isPlaying;
+				if (EditorUI::IconButton("PlayMotion", anim.isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY, anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion", options))
+					anim.isPlaying = !anim.isPlaying;
+			}
+			ImGui::SameLine();
+			DrawBoneOverlayPopup();
 		}
 	}
 
@@ -658,8 +682,7 @@ void PreviewViewportWidget::RefocusTarget()
 
 void PreviewViewportWidget::DrawRenderTargetPopup()
 {
-	if (EditorUI::IconButton("PreviewRenderTargets", ICON_FA_LAYER_GROUP, "Viewport.RenderTargetsMenu"))
-		ImGui::OpenPopup("##PreviewRenderTargets");
+	if (EditorUI::IconButton("PreviewRenderTargets", ICON_FA_LAYER_GROUP, "Viewport.RenderTargetsMenu", MakeOverlayButtonOptions()))
 
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RenderTargetsMenu"));
@@ -696,11 +719,7 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 	constexpr const char* popupId = "##PreviewLightingPopup";
 	auto& settings = EditorSettingsService::Get();
 
-	if (EditorUI::IconButton("PreviewLighting", ICON_FA_LIGHTBULB, "Settings.PreviewLighting"))
-	{
-		m_PreviewLightDraft = settings.GetPreferences().PreviewLightIntensity;
-		ImGui::OpenPopup(popupId);
-	}
+	if (EditorUI::IconButton("PreviewLighting", ICON_FA_LIGHTBULB, "Settings.PreviewLighting", MakeOverlayButtonOptions()))
 
 	if (ImGui::IsItemHovered())
 		ImGui::SetTooltip("%s", LOCAL_CSTR("Settings.PreviewLighting"));
@@ -747,6 +766,94 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 
 	if (!ImGui::IsPopupOpen(popupId))
 		m_PreviewLightDraft.reset();
+}
+
+void PreviewViewportWidget::DrawBoneOverlayPopup()
+{
+	constexpr const char* popupId = "##PreviewBoneOverlayPopup";
+	auto options = MakeOverlayButtonOptions();
+	options.Active = m_ShowBoneJoints || m_ShowBoneAxes || m_ShowBoneNames;
+	if (EditorUI::IconButton("BoneOverlay", ICON_FA_BONE, "PreviewViewport.BoneOverlay", options))
+		ImGui::OpenPopup(popupId);
+
+	if (!ImGui::BeginPopup(popupId)) return;
+	ImGui::Checkbox(LOCAL_LABEL("PreviewViewport.ShowBoneJoints").c_str(), &m_ShowBoneJoints);
+	ImGui::Checkbox(LOCAL_LABEL("PreviewViewport.ShowBoneAxes").c_str(), &m_ShowBoneAxes);
+	ImGui::Checkbox(LOCAL_LABEL("PreviewViewport.ShowBoneNames").c_str(), &m_ShowBoneNames);
+	ImGui::EndPopup();
+}
+
+void PreviewViewportWidget::DrawBoneOverlay()
+{
+	if (!m_PreviewScene || !m_CameraController) return;
+	if (!m_ShowBoneJoints && !m_ShowBoneAxes && !m_ShowBoneNames) return;
+	const auto camera = m_CameraController->GetCameraBuffer();
+	if (!camera) return;
+
+	const ImVec2 origin = m_ViewportScreenPos;
+	const ImVec2 size = GetViewportSize();
+	const Engine::mat4& viewProj = camera->viewProjMatrix;
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	drawList->PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true);
+
+	constexpr ImU32 axisColors[] = { IM_COL32(230, 60, 60, 255), IM_COL32(60, 200, 60, 255), IM_COL32(70, 120, 240, 255) };
+	auto& reg = m_PreviewScene->GetRegistry();
+	auto animView = reg.view<Engine::AnimatorComponent>();
+	for (auto entity : animView)
+	{
+		const auto& animator = animView.get<Engine::AnimatorComponent>(entity);
+		const auto* skeleton = FindSkeletonInHierarchy(reg, entity);
+		if (!skeleton) continue;
+		const auto& bones = skeleton->GetBones();
+		if (bones.empty() || animator.finalBoneMatrices.size() < bones.size()) continue;
+
+		Engine::mat4 entityWorld(1.0f);
+		if (const auto* wt = reg.try_get<Engine::WorldTransformComponent>(entity)) entityWorld = wt->worldMatrix;
+
+		// 스키닝 행렬(global * offset)에서 오프셋을 되돌려 본의 월드 행렬을 구한다. 타임라인 소켓 계산과 같은 규칙이다.
+		std::vector<Engine::mat4> boneWorld(bones.size());
+		for (std::size_t i = 0; i < bones.size(); ++i)
+			boneWorld[i] = entityWorld * animator.finalBoneMatrices[i] * glm::inverse(bones[i].OffsetMatrix);
+
+		for (std::size_t i = 0; i < bones.size(); ++i)
+		{
+			const Engine::vec3 pos = Engine::vec3(boneWorld[i][3]);
+			ImVec2 screenPos{};
+			if (!GizmoHelper::WorldToScreen(pos, viewProj, origin, size, screenPos)) continue;
+
+			if (m_ShowBoneJoints)
+			{
+				const Engine::int32 parent = bones[i].ParentIndex;
+				ImVec2 parentPos{};
+				if (parent >= 0 && parent < static_cast<Engine::int32>(bones.size()) && GizmoHelper::WorldToScreen(Engine::vec3(boneWorld[parent][3]), viewProj, origin, size, parentPos))
+					drawList->AddLine(parentPos, screenPos, IM_COL32(255, 210, 80, 200), 1.5f);
+				drawList->AddCircleFilled(screenPos, 3.5f, IM_COL32(255, 230, 120, 255));
+			}
+
+			if (m_ShowBoneAxes)
+			{
+				// 카메라 거리에 비례한 길이로 원근을 유지하면서 화면상 크기를 일정하게 둔다.
+				const float axisLength = glm::distance(camera->cameraPosition, pos) * 0.05f;
+				for (int axis = 0; axis < 3; ++axis)
+				{
+					const Engine::vec3 dir = Engine::vec3(boneWorld[i][axis]);
+					if (glm::length(dir) < 1e-6f) continue;
+					ImVec2 axisEnd{};
+					if (GizmoHelper::WorldToScreen(pos + glm::normalize(dir) * axisLength, viewProj, origin, size, axisEnd))
+						drawList->AddLine(screenPos, axisEnd, axisColors[axis], 2.0f);
+				}
+			}
+
+			if (m_ShowBoneNames)
+			{
+				const std::string name = Engine::WStrToStr(bones[i].Name);
+				const ImVec2 textPos(screenPos.x + 5.0f, screenPos.y - ImGui::GetFontSize() - 2.0f);
+				drawList->AddText(ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), IM_COL32(0, 0, 0, 200), name.c_str());
+				drawList->AddText(textPos, IM_COL32(255, 255, 255, 230), name.c_str());
+			}
+		}
+	}
+	drawList->PopClipRect();
 }
 
 void PreviewViewportWidget::ApplyGlobalCameraPreferences(float speed, float fov)

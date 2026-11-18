@@ -2,11 +2,61 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] 스켈레탈 모델 인스턴스화 시 본 노드 생략 및 계층 구조 압축 최적화
+
+- **배경 및 목표**:
+  - 스켈레탈 메시 모델(`.bammodel`)을 씬에 추가할 때, GPU 스키닝에 직접 쓰이지 않는 수십 개의 뼈대(Bone) 노드 및 렌더러가 없는 중간 껍데기 노드(`fox` 등)가 씬 엔티티로 생성되어 계층 패널이 불필요하게 3단계로 복잡해지던 구조를 개선함.
+- **구현 내역**:
+  - `Engine/Source/World/Scene/Private/SceneModel.cpp` (`Scene::InstantiateModelInternal`):
+    - `hasSkeleton == true`인 스켈레탈 모델은 메시가 달리지 않은 뼈대 노드 및 중간 껍데기 노드의 엔티티 생성을 생략하고, 실제 메시(`node.MeshIndices`) 개수만큼만 자식 엔티티를 생성하도록 변경.
+    - 생성된 메시 엔티티(`SkinnedMeshRendererComponent`)들을 최상위 모델 루트 엔티티(`rootHandle`)의 직속 자식으로 부착하여 `[루트 모델] -> [메시]` 2단계 구조로 계층을 단순화.
+    - 정적 모델(`hasSkeleton == false`)은 기존 부모-자식 트랜스폼 계층을 유지하도록 분기 격리.
+- **검증 상태**:
+  - 에디터 실행 후 `Fox` 모델 배치 시 본 노드 생략 및 직속 메시 자식 배치 확인.
+  - `AnimatorComponent` 클립 재생 시 정상 스키닝 동작 확인.
+
+### [2026-11-19] VFX 에디터 2D 커브 팝업 에디터(CurveEditorModal) 구축 및 UI/UX 디테일 개선 (Phase 5 Step 3)
+
+- **배경 및 목표**:
+  - `FloatCurve` 기반의 정밀한 완급 조절(조도/스케일/알파)을 위해, 좁은 인스펙터 인라인 위젯을 넘어 넓은 작업 캔버스에서 3차 베지어 키프레임을 직접 조작할 수 있는 전용 팝업 모달 에디터(`CurveEditorModal`)를 구축함.
+- **구현 내역**:
+  - **1) `CurveEditorModal` 전용 모달 창 신설 (`Editor/Source/ImGui/Public/CurveEditorModal.h`, `Private/CurveEditorModal.cpp`)**:
+    - `Open(title, targetCurve, onApplied)`을 통한 원본 커브 격리 작업본(`m_WorkingCurve`) 편집 및 [확인] 시에만 안전 반영.
+    - 베지어 곡선(64샘플) 렌더링, 시간/값 축 그리드 라인 및 수치 가이드 표시.
+    - 캔버스 더블클릭 시 키 추가, 마우스 좌클릭 드래그 시 이웃 키 시간 경계 제약 이동, 상단 헤더 우측 삭제 버튼 연동.
+    - 선형, 천천히 시작, 천천히 끝, 천천히 시작-끝, 스파이크 등 5대 프리셋 즉시 적용 및 `FitView` 화면 맞춤 지원.
+  - **2) `VFXEditorPanel` 연동 (`Editor/Source/ImGui/ResourceEditor/Private/VFXEditorPanel.cpp`, `Public/VFXEditorPanel.h`)**:
+    - `DrawCurvePresetRow` 자유 함수에 모달 인스턴스 및 콜백을 전달하여 Light(조도), Mesh(스케일, 알파) 트랙 프리셋 행 옆에 베지어 아이콘 버튼 배치.
+    - 모달 편집 확인 시 `m_UntrackedDirty = true;` 및 `InvalidateTimelinePreview()`로 타임라인 인라인 프리뷰 즉시 동기화.
+  - **3) UI/UX 디테일 및 로컬라이제이션 결함 해소**:
+    - 모달 타이틀에서 ImGui ID(`###`) 토큰 파싱 제거 및 순수 로컬 텍스트 전달.
+    - 키 속성(`PROP_TIME`, `PROP_VALUE`, `PROP_IN_TANGENT`, `PROP_OUT_TANGENT`, `PROP_INTERP_MODE`) 및 보간 모드(`상수`, `선형`, `3차 베지어`) 다국어 표준화.
+    - 인스펙터 인라인 커브 안내 문구에 `PushTextWrapPos(0.0f)`를 적용하여 우측 잘림 방지 (`ReflectionPropertyDrawer.cpp`).
+    - `(사각 평면 기본값)` 등 메시/텍스처 힌트를 리플렉션 상단으로 이동하여 커브와 프리셋 버튼 사이의 시각적 분단 해소.
+    - 모달 하단 확인 버튼 로캘 키를 `EditorCommon.OK`로 교정하여 "확인" 정상 출력.
+- **검증 상태**:
+  - Ninja Debug 빌드 통과 및 VFX 에디터 내 조도/스케일/알파 커브 모달 열기, 키 조작, 프리셋 적용, 취소/확인 동작 실환경 검증 완료.
+
 ### [2026-11-18] 리소스 피커 열기와 썸네일 표시 비용 개선
 
 - 리소스 필드 및 리소스·경로 피커가 캐시의 아틀라스 텍스처와 UV를 재사용한다. 스프라이트의 원본 UV를 보존하고 화면에 보이는 행만 썸네일을 요청한다.
 - 프로젝트·엔진 파일 목록은 에디터 갱신에서 비동기로 준비한다. 팝업을 다시 열면 메모리 목록을 사용한다. 기존 감시자의 추가·삭제·이동 이벤트를 묶어 새 목록을 받고, 콘텐츠 브라우저 새로 고침으로도 갱신한다.
 - Git 공백 검사를 통과했다. 메인 체크아웃 로캘 엄격 감사에는 이 변경과 별개로 `CurveEditorModal.cpp`의 키 누락 1건과 하드코딩 문구 4건이 남아 있다. 빌드·CTest와 팝업 실환경 프레임 간격 비교는 사용자 실행 전이다. [에디터 UX 점검 기준](EditorUXTestGuidelines.md#46-반응성-및-프레임-비용-예산-imgui-계획-14-d)
+
+### [2026-11-18] VFX 에디터 공중 뷰(Air View) 반투명 이펙트 흙갈색 탁화 원인 분석 및 문서화
+
+- **배경 및 현상**:
+  - VFX 에디터에서 지면이 없는 공중 뷰(Air Mode)나 수평선 너머 허공 배경에서 메쉬/파티클 이펙트가 발광력을 잃고 짙은 흙갈색으로 탁해지며 테두리에 어두운 실루엣이 발생하는 현상 확인 (`media_1795011805149_a346ad22.png`, `media_1795011822925_82faa14e.jpg`).
+  - 지면 위에서는 정상적으로 백색 발광(White Glow)하던 이펙트가 허공에서 급격히 죽어버리는 디퍼드-포워드 합성 불일치 결함.
+- **원인 분석**:
+  1. **디퍼드 배경 버퍼의 기하 및 반사광 부재**: 지면은 G-Buffer에서 직접광/반사광을 받아 밝은 HDR 백그라운드($RGB \approx (0.8, 0.85, 0.95)$)를 형성해 가산 합성 시 $1.0$을 초과하는 백색 발광이 발생하나, 허공은 기하가 없어 라이팅 연산이 `discard`되어 기본 클리어 색상($RGB \approx (0.22, 0.22, 0.24)$)만 존재함.
+  2. **ACES Filmic 톤매핑 시 저휘도 주황색의 갈색화**: 주황/황금색 계열($R:G:B \approx 5:1:0$)은 휘도가 낮아지면 물리적으로 필연적인 '탁한 흙갈색(Muddy Brown / Olive Ochre)'으로 인지됨.
+  3. **셰이더 내부 정면 알파 감쇄 및 블렌딩 결함**: `forwardParticlePS.hlsl`의 정면 투명도 감쇄(`facingAlpha = lerp(0.55f, 1.0f, fresnelRim)`) 및 외곽 페더링(`uvEdgeFade`)으로 인해 쿼드 정면과 테두리에서 Additive 광량이 45% 이상 급감함.
+- **해결 방안 및 로드맵 수립**:
+  - 알파 채널에 의한 광량 감쇄 없이 방출 광량을 100% 보존하는 순수 가산 블렌드(Pure Additive, $One / One$) 머티리얼 분리.
+  - 공중 프리뷰 모드 활성화 시 완전 암흑 대신 최소 환경 반사광(Ambient Radiance)을 제공하는 가상 스카이 버퍼 보정.
+  - `forwardParticlePS.hlsl` 정면 알파 감쇄(`0.55`) 완화 또는 발광 파티클 전용 분기 도입.
+- **기록 위치**: [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md) 9.9절에 상세 원인 분석 및 향후 로드맵 문서화 반영 완료.
 
 ### [2026-11-18] 엔티티 삭제 시 AudioSource 즉시 정지, ActionTimeline 참조 단일화 및 리소스 편집기 미저장 확인 모달 연동
 

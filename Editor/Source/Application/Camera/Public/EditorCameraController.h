@@ -47,8 +47,8 @@ public:
 
     Engine::f32 GetCameraSpeed() const { return m_CameraSpeed; }
     void SetCameraSpeed(Engine::f32 speed) { m_CameraSpeed = std::clamp(speed, 1.0f, 500.0f); }
-    void IncreaseCameraSpeed(Engine::f32 step = 10.0f) { SetCameraSpeed(m_CameraSpeed + step); }
-    void DecreaseCameraSpeed(Engine::f32 step = 10.0f) { SetCameraSpeed(m_CameraSpeed - step); }
+    void IncreaseCameraSpeed(Engine::f32 factor = 1.25f) { SetCameraSpeed(m_CameraSpeed * factor); }
+    void DecreaseCameraSpeed(Engine::f32 factor = 1.25f) { SetCameraSpeed(m_CameraSpeed / factor); }
     void SetZoomSpeed3D(Engine::f32 speed) { m_ZoomSpeed3D = speed; }
     void SetZoomSpeed2D(Engine::f32 speed) { m_ZoomSpeed2D = speed; }
     void SetFOVZoom(bool zoomType) { m_IsFOVZoom = zoomType; }

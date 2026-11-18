@@ -107,6 +107,7 @@ private:
 	void DrawTransportBar();
 	void DrawBoneHierarchyTree();
 	void HandleModelDragDrop();
+	bool TrySetTargetModelFromPath(const std::wstring& path);
 	void SetupPreviewModel();
 
 private:

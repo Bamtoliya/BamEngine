@@ -35,6 +35,14 @@
 
 BEGIN(Editor)
 
+// 속도 단축키 대상: 호버·포커스된 프리뷰 위젯이 우선이고, 없으면 포커스된 씬 뷰포트만 대상으로 한다.
+static EditorCameraController* FindShortcutCameraController()
+{
+    if (auto* preview = PreviewViewportWidget::GetShortcutTarget()) return preview->GetCameraController();
+    auto* vp = SceneViewportPanel::GetActiveSceneViewport();
+    return (vp && vp->IsFocused()) ? vp->GetCameraController() : nullptr;
+}
+
 void EditorActionRegistry::RegisterAll()
 {
     auto& sm = ShortcutManager::Get();
@@ -664,42 +672,28 @@ void EditorActionRegistry::RegisterAll()
     .Id = "Viewport.CameraSpeedIncrease",
     .DisplayNameKey = "Action.Viewport.CameraSpeedIncrease",
     .CategoryKey = "Shortcuts.CategoryViewport",
-    .Context = EShortcutContext::Viewport,
+    .Context = EShortcutContext::Global,
     .DefaultChord = ShortcutChord(Engine::EKeyCode::Equals),
     .ExecuteHandler = []() {
-        auto* controller = []() -> EditorCameraController* {
-            if (auto* preview = PreviewViewportWidget::GetShortcutTarget()) return preview->GetCameraController();
-            if (auto* vp = SceneViewportPanel::GetActiveSceneViewport()) return vp->GetCameraController();
-            return nullptr;
-        }();
-        if (controller)
-        {
-            controller->IncreaseCameraSpeed();
-            NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
-                LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
-        }
-    }
+        auto* controller = FindShortcutCameraController();
+        controller->IncreaseCameraSpeed();
+        NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"), LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
+    },
+    .CanExecute = []() { return FindShortcutCameraController() != nullptr; }
         });
 
     sm.RegisterAction({
         .Id = "Viewport.CameraSpeedDecrease",
         .DisplayNameKey = "Action.Viewport.CameraSpeedDecrease",
         .CategoryKey = "Shortcuts.CategoryViewport",
-        .Context = EShortcutContext::Viewport,
+        .Context = EShortcutContext::Global,
         .DefaultChord = ShortcutChord(Engine::EKeyCode::Minus),
         .ExecuteHandler = []() {
-            auto* controller = []() -> EditorCameraController* {
-                if (auto* preview = PreviewViewportWidget::GetShortcutTarget()) return preview->GetCameraController();
-                if (auto* vp = SceneViewportPanel::GetActiveSceneViewport()) return vp->GetCameraController();
-                return nullptr;
-            }();
-            if (controller)
-            {
-                controller->DecreaseCameraSpeed();
-                NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"),
-                    LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
-            }
-        }
+            auto* controller = FindShortcutCameraController();
+            controller->DecreaseCameraSpeed();
+            NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"), LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
+        },
+        .CanExecute = []() { return FindShortcutCameraController() != nullptr; }
         });
 
     // =========================================================================================

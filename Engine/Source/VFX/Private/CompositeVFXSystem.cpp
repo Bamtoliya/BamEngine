@@ -680,7 +680,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 				cmd.mesh = mesh;
 				cmd.texture = texture;
 				cmd.material = material;
-				cmd.color = currentColor;
+				cmd.color = vec4(vec3(currentColor) * track.emissiveIntensity, currentColor.a);
 				cmd.uvTransform = vec4(currentUVOffset.x, currentUVOffset.y, 1.0f, 1.0f);
 				cmd.pickingId = pickingId;
 				cmd.worldMatrix = finalWorld;
