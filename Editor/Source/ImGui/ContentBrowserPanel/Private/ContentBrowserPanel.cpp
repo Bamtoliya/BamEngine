@@ -24,6 +24,7 @@
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 using namespace std;
@@ -1171,7 +1172,10 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		}
 		AssetReferenceImpact impact;
 		vector<AssetReferenceEdit> references;
+		const auto referenceStart = std::chrono::steady_clock::now();
 		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, references, &impact);
+		AssetManager::Get().RecordAssetReferenceTiming(
+			AssetReferenceTimingKind::MovePreparation, ImGui::GetFrameCount(), referenceStart);
 		m_MoveDocumentsAvailable = CanApplyAssetMove(moves, references);
 		m_MoveSourcePaths = std::move(sources);
 		m_MoveDestination = destination;
@@ -1503,7 +1507,10 @@ bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forw
 	vector<filesystem::path> sources;
 	for (const auto& move : batch.Moves)
 		sources.push_back(forward ? move.Before : move.After);
+	const auto referenceStart = std::chrono::steady_clock::now();
 	const auto impact = AssetReferenceValidator::AnalyzeMove(sources);
+	AssetManager::Get().RecordAssetReferenceTiming(
+		AssetReferenceTimingKind::MoveRecheck, ImGui::GetFrameCount(), referenceStart);
 	if (!impact.IsComplete || std::ranges::any_of(impact.References, [&](const auto& link)
 	{
 		return std::ranges::none_of(batch.References, [&](const auto& edit)
@@ -1728,7 +1735,10 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 		targets.reserve(moves.size());
 		for (const auto& move : moves)
 			targets.push_back(move.Before);
+		const auto referenceStart = std::chrono::steady_clock::now();
 		m_DeletionImpact = AssetReferenceValidator::AnalyzeDeletion(targets);
+		AssetManager::Get().RecordAssetReferenceTiming(
+			AssetReferenceTimingKind::DeleteImpact, ImGui::GetFrameCount(), referenceStart);
 		m_PendingFileDeletion = std::move(moves);
 	}
 	catch (const filesystem::filesystem_error& error)

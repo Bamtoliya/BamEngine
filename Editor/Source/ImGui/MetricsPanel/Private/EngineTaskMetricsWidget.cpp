@@ -5,9 +5,17 @@
 
 void EngineTaskMetricsWidget::Update()
 {
-    m_AssetTaskMetrics = AssetManager::Get().GetTaskMetrics();
+    auto& assets = AssetManager::Get();
+    m_AssetTaskMetrics = assets.GetTaskMetrics();
+    m_ReferenceTimings = assets.GetAssetReferenceTimings();
     m_ActiveSceneCount = Engine::SceneManager::Get().GetActiveScenes().size();
     m_RegisteredPassCount = Engine::RenderPassManager::Get().GetAllRenderPasses().size();
+}
+
+void EngineTaskMetricsWidget::ResetReferenceHistory()
+{
+    AssetManager::Get().ResetAssetReferenceTimings();
+    m_ReferenceTimings = {};
 }
 
 void EngineTaskMetricsWidget::DrawDetails() const
@@ -15,6 +23,8 @@ void EngineTaskMetricsWidget::DrawDetails() const
     DrawEngineStatus();
     ImGui::Separator();
     DrawAssetTaskMetrics();
+    ImGui::Separator();
+    DrawReferenceTimings();
 }
 
 bool EngineTaskMetricsWidget::DrawCard(f32 cardWidth, bool isSelected) const
@@ -70,4 +80,56 @@ void EngineTaskMetricsWidget::DrawAssetTaskMetrics() const
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.TaskHint"));
     ImGui::PopTextWrapPos();
+}
+
+void EngineTaskMetricsWidget::DrawReferenceTimings() const
+{
+    ImGui::TextUnformatted(LOCAL_CSTR("Metrics.ReferenceTimings"));
+    if (m_ReferenceTimings.LastFrame < 0)
+    {
+        ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.ReferenceNoSamples"));
+        return;
+    }
+
+    const auto frame = LOCAL_FMT("Metrics.ReferenceFrameSum", m_ReferenceTimings.LastFrame,
+        m_ReferenceTimings.LastFrameMs, m_ReferenceTimings.PeakFrameMs);
+    ImGui::TextWrapped("%s", frame.c_str());
+
+    constexpr const char* labels[] = {
+        "Metrics.ReferenceInitial", "Metrics.ReferenceManual", "Metrics.ReferenceAutomatic",
+        "Metrics.ReferenceAfterRepair", "Metrics.ReferenceDeleteImpact", "Metrics.ReferenceMovePreparation",
+        "Metrics.ReferenceMoveRecheck"
+    };
+    static_assert(IM_ARRAYSIZE(labels) == AssetReferenceTimings::KindCount);
+
+    const auto flags = ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
+    if (!ImGui::BeginTable("AssetReferenceTimings", 5, flags))
+        return;
+
+    ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Type").c_str(), ImGuiTableColumnFlags_WidthStretch, 2.0f);
+    ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Count").c_str());
+    ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.ReferenceLast").c_str());
+    ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Average").c_str());
+    ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Maximum").c_str());
+    ImGui::TableHeadersRow();
+
+    for (std::size_t index = 0; index < m_ReferenceTimings.ByKind.size(); ++index)
+    {
+        const auto& timing = m_ReferenceTimings.ByKind[index];
+        if (timing.Samples == 0)
+            continue;
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextWrapped("%s", LOCAL_CSTR(labels[index]));
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%llu", static_cast<unsigned long long>(timing.Samples));
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("%.2f", timing.LastMs);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%.2f", timing.AverageMs());
+        ImGui::TableSetColumnIndex(4);
+        ImGui::Text("%.2f", timing.PeakMs);
+    }
+    ImGui::EndTable();
 }

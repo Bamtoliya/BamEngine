@@ -11,6 +11,7 @@
 BEGIN(Editor)
 
 class AssetPathRelocation;
+enum class AssetReferenceTimingKind;
 
 class AssetReferencePanel final : public IImGui
 {
@@ -50,7 +51,7 @@ private:
     void UpdateReferenceMatches();
     void CollectReferenceMatches(const ReferenceAdjacency& links, std::wstring_view query, ReferencePaths& matches) const;
 
-    void RunValidation();
+    void RunValidation(AssetReferenceTimingKind kind);
     void FixSelectedIssue(size_t index);
     void FixAllSafe();
     void ReportRepairResult(size_t count);

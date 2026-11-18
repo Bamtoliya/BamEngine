@@ -1,5 +1,6 @@
 ﻿#include "AssetReferencePanel.h"
 #include "AssetFileActions.h"
+#include "AssetManager.h"
 #include "AssetPathRelocation.h"
 #include "EditorUI.h"
 #include "Functions.h"
@@ -85,7 +86,7 @@ namespace Editor
         if (BeginPanelWindow(title.c_str(), m_Open))
         {
             if (m_ScanAfter && std::chrono::steady_clock::now() >= *m_ScanAfter)
-                RunValidation();
+                RunValidation(m_HasScanned ? AssetReferenceTimingKind::Automatic : AssetReferenceTimingKind::Initial);
 
             if (ImGui::BeginTabBar("AssetReferenceViews"))
             {
@@ -280,7 +281,7 @@ namespace Editor
         else if (forward || (allowMouse && input.IsMouseButtonDown(Engine::EMouseButton::X2)))
             StepReferenceHistory(true);
         if (scan)
-            RunValidation();
+            RunValidation(AssetReferenceTimingKind::Manual);
     }
 
     void AssetReferencePanel::DrawReferences()
@@ -444,7 +445,7 @@ namespace Editor
     {
         if (ImGui::Button(LOCAL_CSTR("AssetRef.ScanAll")))
         {
-            RunValidation();
+            RunValidation(AssetReferenceTimingKind::Manual);
         }
 
         ImGui::SameLine();
@@ -602,8 +603,9 @@ namespace Editor
             FixSelectedIssue(*requestedRepair);
     }
 
-    void AssetReferencePanel::RunValidation()
+    void AssetReferencePanel::RunValidation(AssetReferenceTimingKind kind)
     {
+        const auto start = std::chrono::steady_clock::now();
         auto scan = AssetReferenceValidator::ScanProject();
         m_Issues.swap(scan.Issues);
         RebuildReferenceTrees(scan.References);
@@ -611,6 +613,7 @@ namespace Editor
         m_HasScanned = true;
         m_ScanAfter.reset();
         m_StatusMessage = "AssetRef.ScanCompleted";
+        AssetManager::Get().RecordAssetReferenceTiming(kind, ImGui::GetFrameCount(), start);
     }
 
     void AssetReferencePanel::FixSelectedIssue(size_t index)
@@ -653,7 +656,7 @@ namespace Editor
 
     void AssetReferencePanel::ReportRepairResult(size_t count)
     {
-        RunValidation();
+        RunValidation(AssetReferenceTimingKind::AfterRepair);
         if (count == 0)
         {
             NotificationManager::Get().AddNotification(LOCAL("AssetRef.Title"), LOCAL("AssetRef.RepairFailed"),

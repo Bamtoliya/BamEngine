@@ -1,4 +1,5 @@
 #include "AssetReferenceValidator.h"
+#include "AssetReferenceTimings.h"
 #include "ContentBrowserRename.h"
 #include "PlatformPath.h"
 #include "Engine_Includes.h"
@@ -59,6 +60,25 @@ namespace
                 << ", source=" << Engine::WStrToStr(issue.SourceFile.wstring())
                 << ", target=" << issue.TargetReference << '\n';
         return issues.empty();
+    }
+
+    bool CheckReferenceTimings()
+    {
+        using enum Editor::AssetReferenceTimingKind;
+        Editor::AssetReferenceTimings timings;
+        timings.Record(MovePreparation, 8, 3.0);
+        timings.Record(MoveRecheck, 8, 2.0);
+        if (timings.LastFrame != 8 || timings.LastFrameMs != 5.0 || timings.PeakFrameMs != 5.0)
+            return false;
+
+        timings.Record(MovePreparation, 9, 1.0);
+        const auto& preparation = timings.ByKind[static_cast<std::size_t>(MovePreparation)];
+        if (preparation.Samples != 2 || preparation.LastMs != 1.0 || preparation.AverageMs() != 2.0 ||
+            preparation.PeakMs != 3.0 || timings.LastFrameMs != 1.0 || timings.PeakFrameMs != 5.0)
+            return false;
+
+        timings = {};
+        return timings.LastFrame == -1 && timings.PeakFrameMs == 0.0 && preparation.Samples == 0;
     }
 
     bool CheckReferenceRepair(const fs::path& assets)
@@ -315,6 +335,7 @@ namespace
 
 int RunAssetReferenceChecks()
 {
+    if (!CheckReferenceTimings()) return 57;
     using Editor::AssetReferenceValidator;
     if (!AssetReferenceValidator::IsReferenceDocumentPath(L"씬.BAMSCENE.JSON") ||
         !AssetReferenceValidator::IsReferenceDocumentPath(L"Controller.ANIMATOR") ||
