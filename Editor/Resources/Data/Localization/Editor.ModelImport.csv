@@ -1,0 +1,45 @@
+Group,Key,English,Korean
+ModelImport,AlbedoReferences,Albedo Textures,Albedo 텍스처
+ModelImport,AnimationAndRig,Animation & Rigging,애니메이션 및 릭
+ModelImport,FlipUVs,Flip UVs (V-Axis),UV V축 반전
+ModelImport,FlipWinding,Flip Winding Order,면 와인딩 순서 반전
+ModelImport,ImportAnimations,Import Animations,애니메이션 임포트
+ModelImport,ImportBtn,Import,임포트
+ModelImport,ImportMaterials,Import Materials,머티리얼 임포트
+ModelImport,ImportMeshes,Import Meshes,메시 임포트
+ModelImport,ImportSkeleton,Import Skeleton,스켈레톤 임포트
+ModelImport,LeftHanded,Convert to Left-Handed,왼손 좌표계 변환
+ModelImport,MeshesAndMaterials,Meshes & Materials,메시 및 머티리얼
+ModelImport,ModalTitle,Model Import Options,모델 임포트 옵션
+ModelImport,Pitch180,Pitch 180°,상하 반전 (Pitch 180°)
+ModelImport,PreviewFailed,Preview unavailable. Check the console for details.,프리뷰를 표시할 수 없습니다. 콘솔에서 원인을 확인하세요.
+ModelImport,PreviewPending,Preparing preview...,프리뷰 준비 중...
+ModelImport,Reset,Reset,초기화
+ModelImport,Rotation,Rotation Offset (Pitch/Yaw/Roll),회전 오프셋 (X/Y/Z)
+ModelImport,Scale,Uniform Scale,스케일 배율
+ModelImport,Scale1,1.0x,1.0배
+ModelImport,Scale100,100x,100배
+ModelImport,ScalePoint01,0.01x,0.01배
+ModelImport,TextureEmbeddedLocation,Embedded in the model,모델 파일 내부 이미지
+ModelImport,TextureInfoEmpty,No texture details available,표시할 텍스처 정보가 없습니다
+ModelImport,TextureLoadFailed,Loading failed,불러오기 실패
+ModelImport,TextureLoaded,Loaded successfully,불러오기 성공
+ModelImport,TextureMaterialFallback,Material {},머티리얼 {}
+ModelImport,TextureMaterialsDisabled,Material import is disabled,머티리얼 임포트가 꺼져 있습니다
+ModelImport,TextureMissing,File not found - using base color,파일을 찾지 못해 기본색 사용
+ModelImport,TextureNone,None,없음
+ModelImport,TextureNotProcessed,Not processed,처리 전
+ModelImport,TextureReference,Source reference,원본 참조
+ModelImport,TextureResolved,Resolved file,찾은 파일
+ModelImport,TextureStatus,Last load result,마지막 로드 결과
+ModelImport,TextureUnused,No texture reference,텍스처 참조 없음
+ModelImport,Transform,Transform & Coordinates,변환 및 좌표계
+ModelImport,Yaw180,Yaw 180°,헤딩 반전 (Yaw 180°)
+ModelImport,LODOptions,Mesh LOD Auto Generation,메시 LOD 자동 생성
+ModelImport,GenerateLODs,Enable Auto LOD Generation,LOD 자동 생성 활성화
+ModelImport,LOD1Reduction,LOD 1 Target Ratio,LOD 1 목표 삼각형 비율
+ModelImport,LOD2Reduction,LOD 2 Target Ratio,LOD 2 목표 삼각형 비율
+ModelImport,TargetError,Max Geometric Error,최대 기하 오차 허용치
+ModelImport,OverwriteMaterials,Overwrite Existing Materials,기존 머티리얼 덮어쓰기
+ModelImport,BakeTexturesToDDS,Bake Textures (DDS/BC Compression),텍스처 베이킹 (DDS/블록 압축)
+ModelImport,BakeTexturesTooltip,Automatically compress textures to BC7/BC5 and bake DDS/.bamtex assets on import,임포트 시 텍스처를 BC7/BC5로 압축하고 DDS/.bamtex 에셋으로 자동 베이킹합니다

@@ -425,16 +425,18 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   창 제목·버튼·메뉴·콤보 항목·툴팁·알림·오류 안내와 리플렉션 표시 이름·분류·설명을 포함한다.
   배열·조건식·변수를 거쳐 UI에 전달되는 문구도 같은 기준을 적용한다.
 - 먼저 기존 키를 찾아 재사용한다. 새 키는 의미와 기능을 식별할 수 있는 안정적인 이름으로 만들고,
-  항상 원본인 `Resources/Data/Localization/Engine.csv` 또는 `Editor.csv`에 영어·한국어 번역을 함께 등록한다.
+  원본 CSV에 영어·한국어 번역을 함께 등록한다. 엔진의 원본은 `Engine/Resources/Data/Localization/Engine.csv`에 두고,
+  에디터의 원본은 `Editor/Resources/Data/Localization/Editor.<Group>.csv`에 둔다.
   생성 파일인 번역본 JSON(`Korean.json`, `English.json`)은 절대 직접 수정하지 않으며, 기존 변환·빌드 경로(`GenerateLocalization`)로 자동 생성되도록 한다.
 - 키 소유자는 표시하는 패널 이름보다 기능의 의미를 기준으로 정한다. 에디터 공통 명령·어휘는 `EditorCommon`, 메뉴는 `EditorMenu`,
   단축키 설정 전용 명령 이름은 `Action`, 특정 패널의 설명·상태·오류는 해당 기능 그룹에 둔다.
   같은 영어·한국어 문구라는 이유만으로 전이 시간과 프레임 지속 시간, 조명과 밝은 테마처럼 다른 의미를 합치지 않는다.
   다른 패널의 키를 임의로 빌려 쓰지 않으며, 공통 로그 수준·네트워크 표시에는 `LogLevel`·`NetworkDisplay`를 사용한다.
-- `Editor.csv`의 모든 행은 Group을 명시하고 Key에는 그룹 뒤의 이름만 적는다.
-  예를 들어 `ModelImport,Pitch180`과 `Action,Viewport.Focus`는 각각 `ModelImport.Pitch180`과 `Action.Viewport.Focus`가 된다.
+- 에디터 CSV 하나는 하나의 Group을 담는다. 각 행에 파일명과 일치하는 Group을 명시하고 Key에는 그룹 뒤의 이름만 적는다.
+  `Editor.ModelImport.csv`의 `ModelImport,Pitch180`과 `Editor.Action.csv`의 `Action,Viewport.Focus`는 각각
+  `ModelImport.Pitch180`과 `Action.Viewport.Focus`가 된다.
   빈 Group의 이전 행 상속에 의존하지 않는다. 이 표기 기준을 Engine의 기존 루트·리플렉션 키에 일괄 적용하지 않는다.
-- 엔진 메타데이터·열거형 표시·엔진 진단 문구는 `Engine.csv`, 에디터 표시와 편집 명령은 `Editor.csv`가 소유한다.
+- 엔진 메타데이터·열거형 표시·엔진 진단 문구는 `Engine.csv`, 에디터 표시와 편집 명령은 해당 Group의 에디터 CSV가 소유한다.
   사전 간 이동만 필요한 경우 최종 키와 번역을 유지한다. `Viewport.Focus` 같은 액션 ID와 `Action.Viewport.Focus` 같은 표시 키는 구분한다.
 - Editor의 표시에는 기존 LOCAL·LOCAL_LABEL·LOCAL_FMT 경로를 활용한다.
   번역된 표시 이름과 내부 ID를 구분하여 언어 변경으로 선택·편집 상태가 초기화되지 않게 한다.
@@ -448,6 +450,17 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
 - 사용자 작성 이름·콘텐츠, 경로, 직렬화 키와 코드·리소스 식별자는 원래 의미를 보존한다.
   개발자 전용 로그·외부 도구 오류 원문·규격 기호는 유지할 수 있으며,
   이를 둘러싼 사용자 안내 문구에는 로캘 키를 적용한다.
+
+#### 에디터 CSV 추가·이동 절차
+
+1. 최종 키의 첫 번째 접두사로 파일을 찾는다. `VFXEditor.FlattenTangents`는 `Editor.VFXEditor.csv`에서 관리한다.
+   기능 소유 그룹의 파일이 있으면 해당 파일에 행을 추가한다. 새 그룹의 파일은 UTF-8로 저장하고 첫 줄에 `Group,Key,English,Korean`을 적는다.
+2. 각 행에는 명시적 `Group`, 그룹을 뺀 `Key`, 영어와 한국어 번역을 적는다. 셀 안의 쉼표나 줄바꿈은 큰따옴표로 감싸고,
+   셀 내용에 큰따옴표가 있으면 `""`로 적는다. 서식 인자가 있는 문구는 두 언어에서 인자를 확인한다.
+3. 파일 분리나 이동에서는 최종 키와 두 언어의 값을 바꾸지 않는다. 대상 파일에 옮긴 행은 같은 변경에서 원본에서 제거한다.
+   모든 행의 이동이 끝나면 기존 CSV 파일을 제거한다. 변환기는 같은 폴더의 모든 CSV를 읽으므로 기존 파일을 복사본으로 남겨 두면 키가 중복된다.
+4. [로캘 검증 절차](EditorUXTestGuidelines.md#원본-이동과-분할-검증)에 따라 JSON을 재생성하고 엄격 감사를 한다.
+   순수 이동은 언어별 JSON의 키와 값을 비교한다. 문구를 함께 고쳤다면 차이를 확인하고 이유를 변경 기록에 남긴다.
 
 ### InputManager와 UI 문맥의 역할
 
@@ -474,7 +487,7 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   일치하는 로컬 액션의 `CanExecute`가 false여도 Global 액션으로 넘어가지 않는다. 예를 들어 프리팹 저장 불가 상태에서 씬이 대신 저장되어서는 안 된다.
 - 그래프의 노드 에디터 라이브러리 기본 단축키는 `EnableShortcuts(false)`로 차단한다. 라이브러리의 Delete·F·Space 처리에 의존하지 않고 등록 액션과 메뉴를 연결한다.
   화면 맞춤은 공통 `Viewport.Focus`가 현재 프리뷰·그래프·UI 캔버스·씬 문맥으로 전달한다.
-- 패널 단위의 임시 하드코딩 키 처리는 허용되지 않으며, 단축키 추가·수정 시에는 `EditorActionRegistry.cpp` 등록과 `Editor.csv` 로캘 키 연동을 기본으로 함께 진행한다.
+- 패널 단위의 임시 하드코딩 키 처리는 허용되지 않으며, 단축키 추가·수정 시에는 `EditorActionRegistry.cpp` 등록과 `Editor.Action.csv` 로캘 키 연동을 기본으로 함께 진행한다.
 - 키 바인딩 수집, 텍스트 편집 취소, 진행 중 드래그 취소와 카메라의 연속 이동·보조 키는 명령 단축키와 구분한다.
   이 상태 처리는 InputManager의 샘플을 사용하고 해당 UI의 활성·포커스·호버 문맥으로 제한한다. ImGui의 텍스트 입력·팝업 처리 자체는 기존 위젯 경로를 유지한다.
   `WantTextInput`·창 포커스·항목 활성 상태는 UI 문맥이며, 상대 마우스 전환 시 ImGui 포인터를 숨기는 상태 쓰기는 입력 조회가 아니다.

@@ -1,0 +1,16 @@
+Group,Key,English,Korean
+ResourceType,Animation,Animation,애니메이션
+ResourceType,AudioClip,AudioClip,오디오 클립
+ResourceType,Material,Material,머티리얼
+ResourceType,MaterialInstance,MaterialInstance,머티리얼 인스턴스
+ResourceType,Mesh,Mesh,메시
+ResourceType,Model,Model,모델
+ResourceType,Prefab,Prefab,프리팹
+ResourceType,Save,Save,저장 데이터
+ResourceType,Scene,Scene,씬
+ResourceType,Script,Script,스크립트
+ResourceType,Shader,Shader,셰이더
+ResourceType,Skeleton,Skeleton,스켈레톤
+ResourceType,Sprite,Sprite,스프라이트
+ResourceType,Texture,Texture,텍스처
+ResourceType,Unknown,Unknown,알 수 없음

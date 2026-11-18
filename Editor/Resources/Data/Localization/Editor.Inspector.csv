@@ -1,0 +1,72 @@
+Group,Key,English,Korean
+Inspector,ActiveStateTooltip,Active State,활성 상태
+Inspector,AddComponent,Add Component,컴포넌트 추가
+Inspector,AddValue,Add value,값 추가
+Inspector,AxisReset,Reset {} to {:.3f},{}축을 {:.3f}(으)로 초기화
+Inspector,AxisResetHint,Axis button / middle click: reset,축 버튼 / 가운데 클릭: 초기화
+Inspector,CanvasInvalidated,The edit would invalidate the canvas layout.,이 편집은 캔버스 레이아웃을 무효화하므로 적용할 수 없습니다.
+Inspector,CommonComponents,Common Components,공통 컴포넌트
+Inspector,Components,Components,컴포넌트
+Inspector,EditSettings,Edit settings,편집 설정
+Inspector,ElapsedSeconds,(%.2fs),(%.2f초)
+Inspector,ElementCount,{} elements,요소 {}개
+Inspector,EntityUnavailable,Entity is no longer available.,엔티티를 더 이상 사용할 수 없습니다.
+Inspector,FastWheelHint,Shift + wheel: x10,Shift + 휠: 10배 간격으로 변경
+Inspector,InvalidValue,Invalid value was rejected.,유효하지 않은 값은 반영하지 않았습니다.
+Inspector,LayoutRejected,Invalid UI layout values were rejected.,잘못된 UI 레이아웃 값은 반영하지 않았습니다.
+Inspector,LocalFlagsHint,Edits local flags. Parent hierarchy may still disable or hide an entity.,자체 상태를 편집합니다. 부모 계층에 의해 비활성화되거나 숨겨질 수 있습니다.
+Inspector,LockAxis,Lock {},{}축 잠금
+Inspector,LockProperty,Lock property,속성 편집 잠금
+Inspector,LockedTooltip,Locked to current entity,현재 엔티티에 고정
+Inspector,MixedFlagsHint,Values differ. Click to turn this option on for all selected entities.,값이 서로 다릅니다. 클릭하면 선택된 모든 엔티티에서 이 항목을 켭니다.
+Inspector,MixedValues,Multiple values,서로 다른 값
+Inspector,MoveDown,Move Down,아래로 이동
+Inspector,MoveUp,Move Up,위로 이동
+Inspector,MultiEditUnavailable,Bulk editing is unavailable because its history could not be captured.,편집 이력을 구성할 수 없어 일괄 편집을 사용할 수 없습니다.
+Inspector,MultiFloatHint,Press Enter to apply this value to all selected entities. Registered ranges are enforced.,Enter로 선택 대상 전체에 값을 적용합니다. 등록된 범위 밖의 값은 범위에 맞춰 보정합니다.
+Inspector,MultiFloatValidationRequired,Bulk numeric editing requires component validation and is not available here yet.,이 컴포넌트의 숫자 일괄 편집은 별도 검증 연결이 필요하여 아직 지원하지 않습니다.
+Inspector,MultiPositionHint,Press Enter to set only this axis. Position uses parent space or world space when position inheritance is disabled.,Enter로 편집한 축만 적용합니다. 위치는 부모 기준이며 위치 독립 설정이면 월드 기준입니다.
+Inspector,MultiPropertyWriteFailed,Could not apply this property to every selected entity.,선택 대상 전체에 이 속성을 적용하지 못했습니다.
+Inspector,MultiRotationHint,Press Enter to set one Euler angle in degrees. The entered angle and other Euler axis values are preserved.,Enter로 도 단위 Euler 각도를 설정합니다. 입력한 누적 각도와 나머지 축 값은 유지합니다.
+Inspector,MultiScaleHint,Press Enter to set only this scale axis. Zero and negative values are allowed when the hierarchy remains valid.,Enter로 편집한 크기 축만 적용합니다. 계층이 유효하면 0과 음수도 사용할 수 있습니다.
+Inspector,MultiTransformPolicyHint,Use matching inheritance and snap settings. Unlock the edited axis on every selected entity.,선택 대상의 해당 변환 상속 설정과 스냅 설정을 맞추고 모든 대상에서 편집할 축의 잠금을 해제하세요.
+Inspector,MultiTransformRejected,Transform edit rejected. Previous values were preserved.,변환을 적용할 수 없어 이전 값을 유지합니다.
+Inspector,MultipleSelection,{} entities selected,{}개 엔티티 선택
+Inspector,NoCommonComponents,No common components to display.,표시할 공통 컴포넌트가 없습니다.
+Inspector,NoReflectedComponents,No reflected components.,리플렉션에 등록된 컴포넌트가 없습니다.
+Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
+Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
+Inspector,ReflectionUnavailable,Component reflection is unavailable.,컴포넌트 리플렉션을 사용할 수 없습니다.
+Inspector,RegistrationUnavailable,Component registration is unavailable.,컴포넌트 등록 정보를 사용할 수 없습니다.
+Inspector,RemoveComponent,Remove Component,컴포넌트 제거
+Inspector,ResetToDefault,Reset to Default,기본값으로 재설정
+Inspector,RotationRejected,Invalid rotation input was rejected.,잘못된 회전 입력은 반영하지 않았습니다.
+Inspector,RotationRestored,Invalid rotation was restored.,잘못된 회전값을 이전 값으로 복원했습니다.
+Inspector,SearchEntity,Search entity...,엔티티 검색...
+Inspector,SizeUnavailable,Size unavailable,크기를 읽을 수 없습니다.
+Inspector,Snap,Snap,스냅
+Inspector,SnapStep,Snap step,스냅 간격
+Inspector,Title,Inspector,인스펙터
+Inspector,TransformLockAll,Lock Transform Editing,Transform 편집 전체 잠금
+Inspector,TransformLockPosition,Lock Position,위치 잠금
+Inspector,TransformLockRotation,Lock Rotation,회전 잠금
+Inspector,TransformLockScale,Lock Scale,크기 잠금
+Inspector,TransformRejected,Transform change rejected. Current pose was preserved.,Transform 변경을 적용할 수 없어 현재 자세를 유지합니다.
+Inspector,TransformUnlockBeforeReparent,Unlock the transform before changing its parent.,부모를 변경하려면 Transform 편집 잠금을 해제하세요.
+Inspector,UnknownProperty,Unknown property,알 수 없는 속성
+Inspector,UnlockAxis,Unlock {},{}축 잠금 해제
+Inspector,UnlockProperty,Unlock property,속성 편집 잠금 해제
+Inspector,UnlockedTooltip,Unlocked (follows selection),고정 해제 (선택 대상 추적)
+Inspector,UnsupportedType,Unsupported type,지원하지 않는 자료형
+Inspector,ValuePreviewUnavailable,Value preview unavailable,값 미리보기를 사용할 수 없습니다
+Inspector,ValueUnavailable,Value unavailable,값을 읽을 수 없습니다.
+Inspector,WheelHint,Wheel: change value,휠: 값 변경
+Inspector,WriteFailed,Write failed: {},쓰기 실패: {}
+Inspector,RefreshModelMaterials,Refresh Model Parts,원본 모델 부품 갱신
+Inspector,ModelMaterialRefreshConflict,The model parts or rig no longer match the instance. Nothing was changed.,원본 모델의 부품 또는 리그가 인스턴스와 일치하지 않아 변경하지 않았습니다.
+Inspector,ModelMaterialRefreshFailed,Could not apply the model part change.,모델 부품 변경을 적용하지 못했습니다.
+Inspector,UseModelMaterial,Use Model Material,원본 머티리얼 사용
+Inspector,UseModelMesh,Use Model Mesh,원본 메시 사용
+Inspector,SkinnedPartMeshRejected,The mesh could not be applied to this part. Select a mesh bound to the current rig.,이 부품에 메시를 적용하지 못했습니다. 현재 리그에 바인딩된 메시를 선택하세요.
+Inspector,CurveKeys,Keys ({}),키 {}개
+Inspector,CurveEditHint,Click a key to select and drag to move. Double-click adds a key. Right-click deletes it.,키를 클릭해 선택하고 끌어서 이동합니다. 더블클릭으로 키를 추가하고 우클릭으로 삭제합니다.

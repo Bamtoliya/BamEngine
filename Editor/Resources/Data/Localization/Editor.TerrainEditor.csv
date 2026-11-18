@@ -1,0 +1,22 @@
+Group,Key,English,Korean
+TerrainEditor,BrushMode,Brush Mode,브러시 모드
+TerrainEditor,DefaultName,Terrain,지형
+TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
+TerrainEditor,Falloff,Falloff,감쇠
+TerrainEditor,Flatten,Flatten,평탄화
+TerrainEditor,HeightmapFile,Heightmap File,하이트맵 파일
+TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
+TerrainEditor,Lower,Lower,내리기
+TerrainEditor,NoScene,No active scene.,활성 씬이 없습니다.
+TerrainEditor,NoSelection,No terrain selected. Select a Terrain entity in Hierarchy.,계층 패널에서 지형 엔티티를 선택하세요.
+TerrainEditor,Radius,Radius,반경
+TerrainEditor,Raise,Raise,올리기
+TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
+TerrainEditor,Sculpt,Sculpt,조각
+TerrainEditor,SculptOff,Sculpting: OFF (Click to Enable),지형 조형: 꺼짐 (클릭하여 켜기)
+TerrainEditor,SculptOn,Sculpting: ON (Click to Disable),지형 조형: 켜짐 (클릭하여 끄기)
+TerrainEditor,Smooth,Smooth,부드럽게
+TerrainEditor,Strength,Strength,강도
+TerrainEditor,Target,Target: {},대상: {}
+TerrainEditor,TargetHeight,Target Height,목표 높이
+TerrainEditor,Title,Terrain Editor,지형 편집기

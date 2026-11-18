@@ -1,0 +1,55 @@
+Group,Key,English,Korean
+PostProcess,Active,Active,활성
+PostProcess,AppliedToScene,Post-processing settings applied to the scene. Save the scene to write them to disk.,후처리 설정을 씬에 반영했습니다. 씬을 저장하면 파일에 기록됩니다.
+PostProcess,ApplyFailed,Could not apply post-processing settings. Previous runtime settings were preserved.,후처리 설정을 적용하지 못했습니다. 이전 실행 설정을 유지합니다.
+PostProcess,ApplyToScene,Apply to Scene,씬에 적용
+PostProcess,ApplyToSceneHint,In Edit mode changes apply to the active volume as you edit. Save the scene to keep them.,편집 모드에서는 변경값이 활성 볼륨에 즉시 반영됩니다. 씬을 저장하면 변경값이 유지됩니다.
+PostProcess,Brightness,Brightness,밝기
+PostProcess,ColorAdjustments,Color Adjustments,색상 조정
+PostProcess,ConfirmDelete,Delete preset '{}'?,정말 '{}' 프리셋을 삭제하시겠습니까?
+PostProcess,Contrast,Contrast,대비
+PostProcess,DeletePreset,Delete Preset,프리셋 삭제
+PostProcess,Effects,Effects,효과
+PostProcess,EnterPresetName,Enter Preset Name:,프리셋 이름 입력:
+PostProcess,Intensity,Intensity,강도
+PostProcess,InvalidPresetName,Enter a file name without folder paths or invalid characters.,폴더 경로와 사용할 수 없는 문자를 제외한 파일 이름을 입력하세요.
+PostProcess,Label,Label,라벨
+PostProcess,MenuTitle,Post FX,후처리
+PostProcess,MoveEffectDown,Move Effect Down,효과를 아래로 이동
+PostProcess,MoveEffectUp,Move Effect Up,효과를 위로 이동
+PostProcess,Name,Name,이름
+PostProcess,NoActiveComponent,No enabled PostProcessComponent in the current scene.,현재 씬에 활성화된 후처리 컴포넌트가 없습니다.
+PostProcess,CreateVolume,Create Post-Process Volume,후처리 볼륨 생성
+PostProcess,VolumeCreated,Post-process volume created in the scene.,씬에 후처리 볼륨을 생성했습니다.
+PostProcess,NoEffects,No post-processing effects registered.,등록된 후처리 효과가 없습니다.
+PostProcess,NoParameters,No configurable parameters.,설정 가능한 파라미터가 없습니다.
+PostProcess,NoViewport,No active viewport with post-processing pipeline found.,후처리 파이프라인이 있는 활성 뷰포트를 찾을 수 없습니다.
+PostProcess,OpenPanel,Open Post-Process Panel...,후처리 패널 열기...
+PostProcess,Preset,Preset,프리셋
+PostProcess,PresetDeleteFailed,Could not delete preset: {},프리셋을 삭제하지 못했습니다: {}
+PostProcess,PresetListFailed,Could not refresh the preset list. Previous entries were kept.,프리셋 목록을 새로고침하지 못했습니다. 이전 목록을 유지합니다.
+PostProcess,PresetLoadFailed,Could not load preset: {},프리셋을 불러오지 못했습니다: {}
+PostProcess,PresetSaveFailed,Could not save preset: {},프리셋을 저장하지 못했습니다: {}
+PostProcess,PresetSaved,Saved preset: {},프리셋을 저장했습니다: {}
+PostProcess,PreviewPreset,Preview Preset,미리보기 프리셋
+PostProcess,Reset,Reset,초기화
+PostProcess,ResetPipeline,Reset All to Default,기본값으로 전체 초기화
+PostProcess,RestoreFailed,Could not restore post-processing settings. Rendering continues without post-processing.,후처리 설정을 복원하지 못했습니다. 후처리 없이 렌더링합니다.
+PostProcess,RestoreSceneSettings,Restore Scene Settings,씬 설정으로 되돌리기
+PostProcess,RestoreUnavailable,The scene or active post-processing target changed or is unavailable.,씬이나 활성 후처리 대상이 변경됐거나 존재하지 않아 복원하지 못했습니다.
+PostProcess,Roundness,Roundness,원형도
+PostProcess,Saturation,Saturation,채도
+PostProcess,SavePresetTitle,Save Preset,프리셋 저장
+PostProcess,SceneApplyFailed,Could not capture post-processing settings. The scene was not changed.,후처리 설정을 수집하지 못했습니다. 씬 데이터는 변경하지 않았습니다.
+PostProcess,SceneRestored,Preview restored to the current scene settings.,미리보기를 현재 씬 설정으로 되돌렸습니다.
+PostProcess,SceneSourceDefault,Scene settings: Defaults,씬 설정: 기본값
+PostProcess,SceneSourceInline,Scene settings: Custom values,씬 설정: 직접 편집값
+PostProcess,SceneSourcePreset,Scene settings: Preset '{}',씬 설정: 프리셋 '{}'
+PostProcess,SelectEffectPrompt,Select an effect from the pipeline list to edit parameters.,파라미터를 편집하려면 파이프라인 목록에서 효과를 선택하십시오.
+PostProcess,SelectPresetPrompt,Select Preset...,프리셋 선택...
+PostProcess,Smoothness,Smoothness,부드러움
+PostProcess,ToneMapping,Tone Mapping (ACES),톤 매핑 (ACES)
+PostProcess,Unsupported,Unsupported,미지원
+PostProcess,Value,Value,값
+PostProcess,Viewport,Viewport,뷰포트
+PostProcess,Vignette,Vignette,비네팅

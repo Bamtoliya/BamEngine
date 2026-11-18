@@ -1,0 +1,27 @@
+Group,Key,English,Korean
+NetworkProfiler,ClientConnected,[ Client Connected ],[ 클라이언트 연결됨 ]
+NetworkProfiler,ClientID,Client ID,클라이언트 ID
+NetworkProfiler,Connect,Connect,서버 접속
+NetworkProfiler,Connected,Connected,연결됨
+NetworkProfiler,ConnectedClients,Connected Clients:,연결된 클라이언트:
+NetworkProfiler,Disconnect,Disconnect / Stop,접속 해제 / 중지
+NetworkProfiler,HostServer,Host Server,서버 호스팅
+NetworkProfiler,IPAddress,IP,IP 주소
+NetworkProfiler,InboundKbS,Inbound: %.2f KB/s,수신: %.2f KB/s
+NetworkProfiler,InboundLabel,Inbound,수신
+NetworkProfiler,LatencyLabel,Latency (RTT),지연 시간 (RTT)
+NetworkProfiler,LatencyRttMs,Latency (RTT): %.1f ms,왕복 지연: %.1f ms
+NetworkProfiler,NetworkTraffic,Network Traffic:,네트워크 트래픽:
+NetworkProfiler,OutboundKbS,Outbound: %.2f KB/s,송신: %.2f KB/s
+NetworkProfiler,OutboundLabel,Outbound,송신
+NetworkProfiler,Ping,Ping,핑
+NetworkProfiler,PingRtt,Ping (RTT),왕복 지연
+NetworkProfiler,Port,Port,포트
+NetworkProfiler,RemoteAddress,Remote Address,원격 주소
+NetworkProfiler,ServerRunning,[ Server Running ],[ 서버 실행 중 ]
+NetworkProfiler,ServerRunningLabel,Server Running,서버 실행 중
+NetworkProfiler,SessionMode,Session Mode:,세션 모드:
+NetworkProfiler,Standalone,[ Standalone ],[ 독립 실행 ]
+NetworkProfiler,State,State,상태
+NetworkProfiler,SystemUnavailable,NetworkSystem is not registered in SystemManager.,시스템 관리자에 네트워크 시스템이 등록되지 않았습니다.
+NetworkProfiler,Title,Network Profiler,네트워크 프로파일러

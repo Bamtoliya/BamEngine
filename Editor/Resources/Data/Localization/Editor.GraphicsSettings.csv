@@ -1,0 +1,30 @@
+Group,Key,English,Korean
+GraphicsSettings,ApplyUIScale,Apply UI Scale,UI 배율 적용
+GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
+GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
+GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
+GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
+GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
+GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
+GraphicsSettings,TargetViewport,Target Viewport,대상 뷰포트
+GraphicsSettings,Title,Graphics Settings,그래픽 설정
+GraphicsSettings,VSync,VSync,VSync
+GraphicsSettings,VSyncHint,Applies to the shared editor and PIE output. The FPS limit is separate.,에디터와 PIE가 공유하는 화면 출력에 적용됩니다. 목표 FPS 제한은 별도입니다.
+GraphicsSettings,VSyncPending,Applying VSync...,VSync를 적용하고 있습니다...
+GraphicsSettings,VSyncPreferenceMismatch,The current output differs from the VSync preference.,현재 출력 상태가 VSync 설정값과 다릅니다.
+GraphicsSettings,VSyncRequestRejected,The VSync change cannot be requested right now.,현재 VSync 변경을 요청할 수 없습니다.
+GraphicsSettings,VSyncSaved,VSync applied and saved.,VSync를 적용하고 저장했습니다.
+GraphicsSettings,VSyncUnsupported,The selected VSync setting is not supported.,선택한 VSync 설정을 지원하지 않습니다.
+GraphicsSettings,ViewportApplied,Current Settings,현재 적용값
+GraphicsSettings,ViewportAspectValue,Aspect ratio: {},종횡비: {}
+GraphicsSettings,ViewportCustom,Custom,사용자 지정
+GraphicsSettings,ViewportDraft,Draft Settings,편집값
+GraphicsSettings,ViewportMode,Resolution Mode,해상도 모드
+GraphicsSettings,ViewportModeValue,Resolution mode: {},해상도 모드: {}
+GraphicsSettings,ViewportPending,Applying viewport settings...,뷰포트 설정을 적용하고 있습니다...
+GraphicsSettings,ViewportPreset,Preset,프리셋
+GraphicsSettings,ViewportReferenceSize,Reference resolution: {} x {},기준 해상도: {} x {}
+GraphicsSettings,ViewportRequestRejected,The viewport change cannot be requested right now.,현재 뷰포트 변경을 요청할 수 없습니다.
+GraphicsSettings,ViewportRestoreFailed,Viewport render targets could not be restored.,뷰포트 렌더 타깃을 복구하지 못했습니다.
+GraphicsSettings,ViewportSaved,Viewport settings applied and saved.,뷰포트 설정을 적용하고 저장했습니다.
+GraphicsSettings,ViewportTitle,Viewport Resolution,뷰포트 해상도

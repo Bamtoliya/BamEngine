@@ -1,0 +1,7 @@
+Group,Key,English,Korean
+LogLevel,Error,Error,오류
+LogLevel,Fatal,Fatal,치명적 오류
+LogLevel,Info,Info,정보
+LogLevel,Trace,Trace,추적
+LogLevel,Unknown,Unknown,알 수 없음
+LogLevel,Warn,Warn,경고

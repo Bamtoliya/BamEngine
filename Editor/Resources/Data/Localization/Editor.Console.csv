@@ -1,0 +1,15 @@
+Group,Key,English,Korean
+Console,AllSources,All sources,모든 발생 주체
+Console,AutoScrollOff,Auto-scroll: OFF,자동 스크롤: 꺼짐
+Console,AutoScrollOn,Auto-scroll: ON,자동 스크롤: 켜짐
+Console,ClearHistory,Clear console history,콘솔 기록 지우기
+Console,ColCategory,Category,카테고리
+Console,ColMessage,Message,메시지
+Console,ColSource,Source,소스
+Console,ColTimeLevel,Time / Level,시간 / 레벨
+Console,CollapseDuplicates,Collapse duplicates,중복 묶기
+Console,CopyHint,Right-click to copy message,우클릭하면 메시지를 복사합니다.
+Console,EmptySource,Unspecified source,발생 주체 미지정
+Console,Levels,Levels ({}/{}),로그 수준 ({}/{})
+Console,Status,Rows: {}   Stored logs: {}   Dropped: {}   Expired: {},표시 행: {}   보관 로그: {}   수집 누락: {}   오래된 항목 제거: {}
+Console,Title,Console,콘솔

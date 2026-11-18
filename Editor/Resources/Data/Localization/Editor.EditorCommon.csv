@@ -1,0 +1,54 @@
+Group,Key,English,Korean
+EditorCommon,All,All,전체
+EditorCommon,Apply,Apply,적용
+EditorCommon,Cancel,Cancel,취소
+EditorCommon,Clear,Clear,지우기
+EditorCommon,Close,Close,닫기
+EditorCommon,Copy,Copy,복사
+EditorCommon,CopyPath,Copy Path,경로 복사
+EditorCommon,CopyUri,Copy URI,URI 복사
+EditorCommon,Create,Create,생성
+EditorCommon,Delete,Delete,삭제
+EditorCommon,General,General,일반
+EditorCommon,Height,Height,높이
+EditorCommon,Name,Name,이름
+EditorCommon,NavigateBack,Go Back,뒤로
+EditorCommon,NavigateForward,Go Forward,앞으로
+EditorCommon,New,New,새로 만들기
+EditorCommon,NewFolder,New Folder,새 폴더
+EditorCommon,None,None,없음
+EditorCommon,OK,OK,확인
+EditorCommon,Off,OFF,꺼짐
+EditorCommon,On,ON,켜짐
+EditorCommon,Open,Open,열기
+EditorCommon,RevealInContentBrowser,Show in Content Browser,콘텐츠 브라우저에서 찾기
+EditorCommon,RevealInContentBrowserFailed,This asset could not be located in the Content Browser.,콘텐츠 브라우저에서 이 에셋을 찾을 수 없습니다.
+EditorCommon,OpenWithDefaultProgram,Open with Default Program,기본 프로그램으로 열기
+EditorCommon,Other,Other,기타
+EditorCommon,Paste,Paste,붙여넣기
+EditorCommon,PasteAsChild,Paste As Child,자식으로 붙여넣기
+EditorCommon,Pause,Pause,일시정지
+EditorCommon,Play,Play,재생
+EditorCommon,Property,Property,속성
+EditorCommon,Redo,Redo,다시 실행
+EditorCommon,Refresh,Refresh,새로고침
+EditorCommon,Rename,Rename,이름 변경
+EditorCommon,Reset,Reset,초기화
+EditorCommon,Resume,Resume,재개
+EditorCommon,Save,Save,저장
+EditorCommon,SaveAs,Save As...,다른 이름으로 저장...
+EditorCommon,Search,Search...,검색...
+EditorCommon,ShowInExplorer,Show in Explorer,탐색기에서 보기
+EditorCommon,Stop,Stop,정지
+EditorCommon,Type,Type,타입
+EditorCommon,Undo,Undo,실행 취소
+EditorCommon,Unknown,Unknown,알 수 없음
+EditorCommon,Value,Value,값
+EditorCommon,Width,Width,너비
+EditorCommon,MoveUp,Move Up,위로 이동
+EditorCommon,MoveDown,Move Down,아래로 이동
+EditorCommon,Add,Add,추가
+EditorCommon,DimensionSeparator,x,×
+EditorCommon,Cut,Cut,잘라내기
+EditorCommon,File,File,파일
+EditorCommon,Path,Path,경로

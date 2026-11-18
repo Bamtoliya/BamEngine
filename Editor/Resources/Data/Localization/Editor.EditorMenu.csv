@@ -1,0 +1,12 @@
+Group,Key,English,Korean
+EditorMenu,Edit,Edit,편집
+EditorMenu,File,File,파일
+EditorMenu,Help,Help,도움
+EditorMenu,View,View,보기
+EditorMenu,Window,Window,창
+EditorMenu,PanelViewports,Viewports,뷰포트
+EditorMenu,PanelSceneEditing,Scene Editing,씬 편집
+EditorMenu,PanelAssets,Assets,에셋
+EditorMenu,PanelGraphAnimation,Graphs & Animation,그래프·애니메이션
+EditorMenu,PanelDiagnostics,Diagnostics,진단
+EditorMenu,Plugins,Plugins,플러그인

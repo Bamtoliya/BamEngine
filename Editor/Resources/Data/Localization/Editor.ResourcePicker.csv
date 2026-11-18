@@ -1,0 +1,17 @@
+Group,Key,English,Korean
+ResourcePicker,Clear,Clear,연결 해제
+ResourcePicker,ClearHint,Unbind / Clear current resource,현재 리소스 연결 해제
+ResourcePicker,DiskFile,{} [Disk],{} [디스크]
+ResourcePicker,LoadedInMemory,Loaded in Memory:,메모리에 로드된 리소스:
+ResourcePicker,IndexingFiles,Preparing the file list…,파일 목록을 준비하는 중…
+ResourcePicker,None,None (drop a resource),없음 (리소스를 놓으세요)
+ResourcePicker,OpenInEditor,Open in Editor,편집기에서 열기
+ResourcePicker,ProjectFiles,Project Files (On Disk):,프로젝트 파일 (디스크):
+ResourcePicker,Rejected,Resource type mismatch or load failed.,리소스 종류가 다르거나 불러오지 못했습니다.
+ResourcePicker,ScopeAll,All,전체
+ResourcePicker,ScopeProject,Project,프로젝트
+ResourcePicker,ScopeEngine,Engine Built-in,엔진 내장
+ResourcePicker,SearchHint,Search resources...,리소스 검색...
+ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
+ResourcePicker,OutsideRoots,The file must be inside the project or engine resource folders.,파일이 프로젝트 또는 엔진 리소스 폴더 안에 있어야 합니다.
+ResourcePicker,NoMatchingFiles,No matching files.,일치하는 파일이 없습니다.

@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] 에디터 로캘 CSV를 그룹별로 분리
+
+- 단일 `Editor.csv`의 2,116개 항목을 기존 `Group` 기준으로 `Editor.<Group>.csv` 62개에 옮겼다. 원본에 다시 남아 있던 2,110개 행도 분할 파일에 모두 포함된 것을 확인한 뒤 `Editor.csv`를 제거했다. 편집기 코드는 기존 로캘 키와 언어별 JSON 경로를 사용한다.
+- `EditorDocument.TemplateBasicDesc`와 `SpriteEditor.RowHelp`에서 번역 열에 따옴표가 빠져 문장 속 쉼표가 열 구분자로 처리됐다. 두 언어의 원본 문장을 각 셀에 복원했다.
+- CSV 변환기는 파일명 순서로 원본을 읽는다. 로캘 감사기는 모든 에디터 CSV의 열 개수와 Group 규칙을 검사하며, 오류에 파일과 행 번호를 표시한다. 분할 파일의 잘못된 열 개수와 Group을 재현하는 회귀 테스트를 추가했다.
+- 영어·한국어 JSON을 변환기로 재생성했다. 정적 비교에서 기존 키 2,116개가 모두 보존됐고, 두 복원 항목을 제외한 번역 값은 일치했다. 빌드 타깃 `GenerateLocalization`, `AuditLocalization`, CTest `LocalizationAuditUtility`, 에디터에서의 언어 전환은 사용자 실행 확인을 남겨 두었다.
+- CSV 파일명과 열 규격, 원본 행 제거, 생성 JSON 비교 및 엄격 감사 기준을 추가했다. [로캘 원본 작성 지침](EngineEditorClientGuidelines.md#에디터-csv-추가이동-절차), [원본 이동 검증](EditorUXTestGuidelines.md#원본-이동과-분할-검증)
+
 ### [2026-11-19] CurveEditorModal 로캘 엄격 감사 결함 수정 및 다국어 지원
 
 - **배경 및 문제**:

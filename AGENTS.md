@@ -221,7 +221,7 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
 ### 로캘 키 원본 수정 원칙 (CSV 사용)
 
 - 로캘 키를 추가·수정할 때는 **생성 파일인 번역본 JSON(`Korean.json`, `English.json` 등)을 직접 수정하지 않는다.**
-- 항상 원본 데이터인 **CSV 파일(`Resources/Data/Localization/Editor.csv`, `Engine.csv`)을 수정**한다.
+- 항상 원본 데이터인 **CSV 파일을 수정**한다. 엔진과 에디터 원본의 경로는 `Docs/EngineEditorClientGuidelines.md`의 14절을 따른다.
 - JSON 번역본은 CSV로부터 변환 도구(`GenerateLocalization` 등)나 빌드 파이프라인을 거쳐 자동으로 생성·동기화되어야 한다.
 - 코드 변경 제안 및 리뷰 시에도 JSON 파일 수정을 제안하지 않고, CSV 행(Row) 추가·변경으로만 제안한다.
 

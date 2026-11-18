@@ -18,11 +18,25 @@
 
 | 계층 | 검증 방식 | 주요 검증 대상 | 관련 타깃 / 도구 |
 | :--- | :--- | :--- | :--- |
-| **Tier 1. 정적·데이터 무결성 감사** | 빌드 파이프라인 / 스크립트 검사 | - `Editor.csv` / `Engine.csv` 누락 키, 빈 번역, 중복 키, `Editor.csv` 명시적 Group 규칙<br>- `ImGui::*` / `AddNotification` / `AddText` 내 하드코딩 UI 문자열<br>- `ImGui::IsKey*`, `IsMouse*`, `GetMousePos*`, `io.Key*`/`Mouse*` 등 원시 입력 직접 조회<br>- 리터럴 액션 ID 미등록 여부 및 `IImGui` 파생 패널의 `m_DisplayNameKey`/`GetDisplayName` 누락 여부 | `GenerateLocalization`, `AuditLocalization` (`Tools/Audit/LocalizationAuditor/audit_localization.py --strict`), `LocalizationAuditUtility` (CTest) |
+| **Tier 1. 정적·데이터 무결성 감사** | 빌드 파이프라인 / 스크립트 검사 | - `Editor.<Group>.csv` / `Engine.csv` 누락 키, 빈 번역, 중복 키<br>- 에디터 CSV의 열 개수, 명시적 Group, 파일명과 Group 일치, 중복 Group 접두사<br>- `ImGui::*` / `AddNotification` / `AddText` 내 하드코딩 UI 문자열<br>- `ImGui::IsKey*`, `IsMouse*`, `GetMousePos*`, `io.Key*`/`Mouse*` 등 원시 입력 직접 조회<br>- 리터럴 액션 ID 미등록 여부 및 `IImGui` 파생 패널의 `m_DisplayNameKey`/`GetDisplayName` 누락 여부 | `GenerateLocalization`, `AuditLocalization` (`Tools/Audit/LocalizationAuditor/audit_localization.py --strict`), `LocalizationAuditUtility` (CTest) |
 | **Tier 2. 헤드리스 UI·상호작용 자동 검사** | 창·GPU 없이 `ImGui::CreateContext()`와 합성 입력(`io.AddMouse*`, `AddKeyEvent`, `InputManager`)으로 실행 (CTest) | - 배율별(`0.75x`~`2.0x`) 및 한·영 전환 후 메뉴바 첫 클릭·드래그 영역 분리<br>- 단축키 문맥 우선순위, 비활성 로컬 명령의 `Global` 폴백 차단, 텍스트 입력/키 캡처 억제, 동적 `GetShortcutHint()`<br>- 무입력 `Draw` 불변성, 언어 전환 후 카테고리 상태 유지, 드래그 앤 드롭 타입 안전성, 읽기 전용 차단<br>- 계층 트리 클릭·드래그 부모 변경·교차 씬 드롭 차단, `StateId` 기반 Undo 기준점·미저장 보호 | `MainMenuBarLayoutCheck`, `ShortcutManagerCheck`, `ReflectionInspectorCheck`, `HierarchyEditorCheck`, `EditorHistoryCheck`, `CanvasViewCheck`, `GraphMessageLocalizationCheck` |
 | **Tier 3. 실환경 대화형·GPU·OS 통합 검증** | 실제 `Editor` 실행 후 시각·조작·OS 연동 수동 검증 | - SDL3 네이티브 창 드래그, 최소화/최대화/복원, 다중 모니터 DPI 이동, OS 파일 다이얼로그<br>- 3D 뷰포트/프리뷰어 렌더링(`ViewportDeferredPipeline`, G-Buffer 채널 뷰, `EditorCameraController`, `ImGuizmo`)<br>- 오버레이 클릭 관통 방지, 비동기 썸네일 업로드 예산 및 대량 폴더 프레임 시간<br>- PIE(`F5`/`Shift+F5`) 시점 분리 및 재실행 시 `Workspace.json` / `EditorPreferences.json` / `EditorStyle.json` 복원 | 5절 실환경 회귀 점검 시트 |
 
-> 참고: `GenerateLocalization`의 원본 카탈로그는 [Editor.csv](../Editor/Resources/Data/Localization/Editor.csv)와 [Engine.csv](../Engine/Resources/Data/Localization/Engine.csv)이며, 번역본 JSON(`English.json`, `Korean.json`)은 직접 수정하지 않고 빌드 단계에서 동기화한다.
+> `GenerateLocalization`은 [에디터 로캘 폴더](../Editor/Resources/Data/Localization)의 그룹별 CSV와 [Engine.csv](../Engine/Resources/Data/Localization/Engine.csv)를 읽어 번역본 JSON(`English.json`, `Korean.json`)을 동기화한다.
+
+#### 원본 이동과 분할 검증
+
+에디터 원본만 변경했다면 저장소 루트에서 아래 명령으로 에디터 JSON을 재생성하고 전체 로캘을 감사할 수 있다.
+
+```powershell
+python Tools/Codegen/CSVToJsonConverter/localizationcsvtojson.py --input Editor/Resources/Data/Localization --strict
+python Tools/Audit/LocalizationAuditor/audit_localization.py --strict
+```
+
+- 변환과 엄격 감사의 종료 코드가 모두 `0`이고, 누락 키·빈 번역·중복 키·에디터 CSV 형식 오류가 없어야 한다.
+- 파일 분리 전후의 두 JSON을 파싱해 최종 키 집합과 번역 값을 비교한다. 키의 출력 순서는 달라질 수 있다.
+  번역 수정이 포함되면 값이 바뀐 키가 의도한 항목과 일치해야 한다.
+- 감사기를 바꿨다면 `LocalizationAuditUtility`도 실행한다. 키나 표시 문구의 실제 사용을 확인하려면 대상 화면에서 영어·한국어 전환을 점검한다.
 
 ---
 

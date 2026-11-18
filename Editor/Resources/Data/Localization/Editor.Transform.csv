@@ -1,0 +1,6 @@
+Group,Key,English,Korean
+Transform,EulerRotation,Euler Rotation,회전(각도)
+Transform,Hirarchy_AddGameObject,Add GameObject,게임 오브젝트 추가+
+Transform,Position,Position,위치
+Transform,Rotation,Rotation,회전
+Transform,Scale,Scale,크기

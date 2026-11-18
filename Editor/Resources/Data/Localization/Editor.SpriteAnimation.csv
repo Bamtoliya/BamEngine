@@ -1,0 +1,22 @@
+Group,Key,English,Korean
+SpriteAnimation,AddFrame,Add Frame,프레임 추가
+SpriteAnimation,EmptyFramesHint,No frames in animation. Click 'Add Frame' above.,애니메이션에 프레임이 없습니다. 위의 프레임 추가 버튼을 누르세요.
+SpriteAnimation,Fps,FPS,FPS
+SpriteAnimation,Frame,Frame: %d / %d,프레임: %d / %d
+SpriteAnimation,FrameDuration,Duration,프레임 지속 시간
+SpriteAnimation,FrameLabel,Frame #{},프레임 #{}
+SpriteAnimation,Loop,Loop,반복
+SpriteAnimation,MissingRendererWarning,Requires SpriteRenderer component to preview.,미리보기를 위해 SpriteRenderer 컴포넌트가 필요합니다.
+SpriteAnimation,NoFrames,No Frames,프레임 없음
+SpriteAnimation,Once,Once,한 번
+SpriteAnimation,Pause,Pause,일시정지
+SpriteAnimation,PingPong,PingPong,왕복
+SpriteAnimation,PlayMode,Mode,재생 방식
+SpriteAnimation,Preview,Preview,미리보기
+SpriteAnimation,Previewing,Previewing...,미리보기 중...
+SpriteAnimation,Reset,Reset,초기화
+SpriteAnimation,ResetView,Reset View,보기 초기화
+SpriteAnimation,Stop,Stop,정지
+SpriteAnimation,Stopped,Stopped,정지됨
+SpriteAnimation,Timeline,Timeline,타임라인
+SpriteAnimation,Zoom,Zoom: %.0f%%,확대: %.0f%%

@@ -1,0 +1,4 @@
+Group,Key,English,Korean
+NetworkDisplay,ClientConnected,Client Connected,클라이언트 연결됨
+NetworkDisplay,DedicatedServer,Dedicated Server,전용 서버
+NetworkDisplay,Standalone,Standalone,독립 실행

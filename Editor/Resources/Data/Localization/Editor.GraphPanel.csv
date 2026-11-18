@@ -1,0 +1,176 @@
+Group,Key,English,Korean
+GraphPanel,AddNode,Add node,노드 추가
+GraphPanel,AddReroute,Add Reroute Node,리루트 노드 추가
+GraphPanel,AddVariable,Add Variable,변수 추가
+GraphPanel,AddVariableGet,+Get,+읽기
+GraphPanel,AddVariableSet,+Set,+쓰기
+GraphPanel,Alignment,Alignment,정렬
+GraphPanel,ArchiveErrorDetail,Archive error {0} / Field: {1},아카이브 오류 {0} / 필드: {1}
+GraphPanel,BreakAllPinLinks,Break All Pin Links,모든 핀 연결 해제
+GraphPanel,BreakLink,Break Link,연결 해제
+GraphPanel,BreakPinLinks,Break Links to {},{} 핀의 연결 해제
+GraphPanel,BuildTarget,Target: {},대상: {}
+GraphPanel,Canvas,Canvas,캔버스
+GraphPanel,CheckDxil,Check DXIL,DXIL 검사
+GraphPanel,CheckMaterialDxil,Check Material DXIL,머티리얼 DXIL 검사
+GraphPanel,CheckSpirv,Check SPIR-V,SPIR-V 검사
+GraphPanel,CompileAll,Compile All,모두 컴파일
+GraphPanel,Completed,Completed,실행 완료
+GraphPanel,ConfirmOpen,Replace Current Graph,현재 그래프 교체
+GraphPanel,ConnectFrom,Connect from output,출력 핀에서 연결
+GraphPanel,ConnectTo,Connect to input,입력 핀으로 연결
+GraphPanel,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
+GraphPanel,Connection,Connection,연결
+GraphPanel,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
+GraphPanel,CreateCommentBox,Create Comment Box (Group),코멘트 상자 생성 (그룹)
+GraphPanel,CreateRuntimeMaterial,Create Session Material,세션 머티리얼 생성
+GraphPanel,CreateVariable,Create Variable,변수 생성
+GraphPanel,DebugEntity,Debug: Entity #{},디버그: 엔티티 #{}
+GraphPanel,DebugEntityHint,Select an active actor to visualize live execution wire flow and watch pin values.,실행 중인 액터를 선택하면 연결선의 실행 흐름과 핀 값을 관찰할 수 있습니다.
+GraphPanel,DebugNamedEntity,Debug: {} (#{}),디버그: {} (#{})
+GraphPanel,DebugNone,Debug: [None],디버그: [없음]
+GraphPanel,Delete,Delete,삭제
+GraphPanel,Disconnect,Disconnect,연결 해제
+GraphPanel,Empty,Add a node from the toolbar or the right-click menu.,상단 버튼이나 우클릭 메뉴에서 노드를 추가하세요.
+GraphPanel,EntityLabel,Entity #{},엔티티 #{}
+GraphPanel,EventDelta,Update delta (seconds),Update 시간 간격(초)
+GraphPanel,ExecutionTrace,Execution trace,실행 추적
+GraphPanel,Failed,Failed,실행 실패
+GraphPanel,FileDomainMismatch,The file domain differs from the current tab. Select the matching domain tab and try again.,파일의 도메인이 현재 탭과 다릅니다. 해당 도메인 탭을 선택한 뒤 다시 불러오세요.
+GraphPanel,FileFailed,Graph file operation failed at stage: {0}. Hover for details.,그래프 파일 처리 실패: {0}. 마우스를 올리면 상세 내용을 확인할 수 있습니다.
+GraphPanel,FilePath,File: {0},파일: {0}
+GraphPanel,FileStageDeserialize,Deserialization,역직렬화
+GraphPanel,FileStageRead,File reading,파일 읽기
+GraphPanel,FileStageReplace,Destination file replacement,대상 파일 교체
+GraphPanel,FileStageSerialize,Serialization,직렬화
+GraphPanel,FileStageUnknown,Unknown,알 수 없음
+GraphPanel,FileStageValidate,Graph validation,그래프 검증
+GraphPanel,FileStageWrite,Temporary file writing,임시 파일 쓰기
+GraphPanel,FollowTrace,Follow latest trace,최신 흐름 따라가기
+GraphPanel,GenerateHlsl,Generate HLSL,HLSL 생성
+GraphPanel,GeneratedHlsl,Generated HLSL,HLSL 생성 결과
+GraphPanel,GraphErrorDetail,Graph error {0} / Node: {1} / Pin: {2} / {3},그래프 오류 {0} / 노드: {1} / 핀: {2} / {3}
+GraphPanel,IdExhausted,Node editor ID space is exhausted.,노드 편집기의 ID 공간이 소진되었습니다.
+GraphPanel,Idle,Idle,실행 전
+GraphPanel,LastObserved,Last observed value,마지막 관측값
+GraphPanel,Logic,Logic,로직
+GraphPanel,MaterialShaderBuild,Material Shader,머티리얼 셰이더
+GraphPanel,MaterialShaderFailed,Material shader compilation failed. Any previous successful result is retained.,머티리얼 셰이더 컴파일에 실패했습니다. 이전 성공 결과가 있으면 유지합니다.
+GraphPanel,MaterialShaderOld,This is the last successful material result. Run the check again to validate the current state.,마지막으로 성공한 머티리얼 결과입니다. 현재 상태를 확인하려면 다시 검사하세요.
+GraphPanel,MaterialShaderReady,Material shader compilation passed.,머티리얼 셰이더 컴파일을 통과했습니다.
+GraphPanel,MaterialShaderScope,Unlit GBuffer shader for a material geometry pass.,머티리얼 지오메트리 패스용 Unlit GBuffer 셰이더입니다.
+GraphPanel,MenuBuild,Build,빌드
+GraphPanel,MenuMaterial,Material,머티리얼
+GraphPanel,MenuMore,More...,더 보기...
+GraphPanel,MenuMoreTooltip,Additional actions and overflow tools,추가 작업 및 오버플로우 도구
+GraphPanel,MultipleSelection,Multiple items selected. Delete removes all selected items.,여러 항목을 선택했습니다. 삭제하면 선택한 항목을 모두 제거합니다.
+GraphPanel,NoEntry,Add a Start or Update event.,Start 또는 Update 이벤트를 추가하세요.
+GraphPanel,NoFile,No file path selected.,저장 경로가 지정되지 않았습니다.
+GraphPanel,NoMatchingNodes,No compatible nodes match the search.,조건에 맞는 노드가 없습니다.
+GraphPanel,NoObservedValue,Not observed,관측값 없음
+GraphPanel,NoVariables,No variables defined.,정의된 변수가 없습니다.
+GraphPanel,ObjectLinkOnly,Requires a matching object output connection.,일치하는 객체 타입의 출력 핀을 연결해야 합니다.
+GraphPanel,Open,Open...,불러오기...
+GraphPanel,Pause,Pause,일시정지
+GraphPanel,Paused,Paused,일시정지
+GraphPanel,PieBadge,[PIE],[PIE]
+GraphPanel,PieEntitySelectHint,Select an active entity in the scene to observe its live execution wire pulse and values.,씬에서 활성 엔티티를 선택하여 실시간 실행 와이어 흐름과 핀 값을 관찰합니다.
+GraphPanel,PieHeader,PIE Live Watch,PIE 관찰
+GraphPanel,PieNoBinding,No entity has GraphBindingComponent.,GraphBindingComponent를 가진 엔티티가 없습니다.
+GraphPanel,PieNotRunning,PIE not running,PIE 미실행
+GraphPanel,PieObserving,Observing: {},관찰 중: {}
+GraphPanel,PieTargetEntity,Target Entity,관찰 대상 엔티티
+GraphPanel,PinSummary,Pin: {} ({}),핀: {} ({})
+GraphPanel,PreviewHeader,Preview,실행 미리보기
+GraphPanel,PreviewHint,Local execution preview inside panel. Does not affect scene entities.,패널 내부 미리보기 실행입니다. 씬 엔티티에 영향을 주지 않습니다.
+GraphPanel,PreviewScope,Logic preview uses an execution snapshot. Editing resets it. Click a trace to pause and inspect.,로직 복사본을 실행합니다. 편집하면 실행 상태가 초기화됩니다. 기록을 클릭하면 일시정지하고 위치와 값을 확인할 수 있습니다.
+GraphPanel,PreviewShader,Preview Shader,셰이더 미리보기
+GraphPanel,PromoteVariable,Promote to Variable,변수로 승격
+GraphPanel,Properties,Properties,속성
+GraphPanel,ReflectionConflict,Reflection source conflict: {}::{},리플렉션 소스 충돌: {}::{}
+GraphPanel,RemainingBudget,Remaining budget,남은 실행 예산
+GraphPanel,RemoveBreakpoint,Remove Breakpoint,중단점 제거
+GraphPanel,ReplaceCurrent,Continue,계속
+GraphPanel,ReplaceWarning,The current graph will be replaced. Unsaved changes will be lost.,현재 그래프를 교체합니다. 저장하지 않은 변경 내용은 사라집니다.
+GraphPanel,RequiredValue,Required input - set a value or connect a pin.,필수 입력 - 값을 지정하거나 핀을 연결하세요.
+GraphPanel,ResetInstance,Reset instance,실행 상태 초기화
+GraphPanel,ResetValue,Reset to definition,정의의 기본값으로 복원
+GraphPanel,ResetView,Reset view,화면 초기화
+GraphPanel,Result,Last result,마지막 결과
+GraphPanel,Run,Run / Resume,실행 / 계속
+GraphPanel,Running,Running,실행 중
+GraphPanel,RuntimeMaterialCollision,The generated resource key is already in use.,생성할 리소스 키가 이미 사용 중입니다.
+GraphPanel,RuntimeMaterialDependencies,A required mesh or shader or texture or sampler is unavailable.,필요한 메시 또는 셰이더 또는 텍스처 또는 샘플러를 사용할 수 없습니다.
+GraphPanel,RuntimeMaterialFailed,Material creation failed. Any previous material is retained.,머티리얼 생성에 실패했습니다. 이전 머티리얼이 있으면 유지합니다.
+GraphPanel,RuntimeMaterialKey,Created material: {0},생성된 머티리얼: {0}
+GraphPanel,RuntimeMaterialOld,This is an earlier result. Create another material and select its new entry to apply the current graph.,이전 생성 결과입니다. 현재 그래프를 적용하려면 머티리얼을 다시 생성하고 새 항목을 선택하세요.
+GraphPanel,RuntimeMaterialPassMissing,An active GBuffer geometry pass is required. Open a scene viewport and check its camera.,활성 GBuffer 지오메트리 패스가 필요합니다. 씬 뷰포트를 열고 카메라를 확인하세요.
+GraphPanel,RuntimeMaterialPipelineFailed,Material pipeline validation failed. Check the engine log.,머티리얼 파이프라인 검사에 실패했습니다. 엔진 로그를 확인하세요.
+GraphPanel,RuntimeMaterialReady,The session material is ready. Assign it in the Inspector.,세션 머티리얼을 생성했습니다. Inspector에서 할당하세요.
+GraphPanel,RuntimeMaterialResourceFailed,Could not create resources matching the compiled material shader.,컴파일된 머티리얼 셰이더와 일치하는 리소스를 생성하지 못했습니다.
+GraphPanel,RuntimeMaterialScope,Session only. Assign this material in the Inspector; it cannot be restored after restarting.,세션용입니다. Inspector에서 할당할 수 있으며 재시작 후에는 복원되지 않습니다.
+GraphPanel,RuntimeMaterialUnavailable,Material creation requires DirectX12 and initialized rendering resources.,머티리얼 생성에는 DirectX12와 초기화된 렌더링 리소스가 필요합니다.
+GraphPanel,Save,Save,저장
+GraphPanel,SaveAs,Save As...,다른 이름으로 저장...
+GraphPanel,SaveScope,Save includes nodes and connections and input values. Node layout is not saved.,노드·연결·입력값을 저장합니다. 노드 배치는 저장하지 않습니다.
+GraphPanel,SearchNodes,Search nodes or categories...,노드 이름·분류 검색...
+GraphPanel,SelectHint,Select a node or connection to edit it.,편집할 노드나 연결을 선택하세요.
+GraphPanel,SessionOnly,Session only - Logic preview is available. Saving is not available.,현재 세션에서 로직 실행을 미리 볼 수 있습니다. 저장은 아직 지원하지 않습니다.
+GraphPanel,Shader,Shader,셰이더
+GraphPanel,ShaderArtifact,Output: {0},출력 파일: {0}
+GraphPanel,ShaderBadge,[Shader],[셰이더]
+GraphPanel,ShaderBuild,Shader Build,셰이더 생성·컴파일
+GraphPanel,ShaderChanged,The graph changed. Regenerate or compile to update the result.,그래프가 변경되었습니다. 다시 생성하거나 컴파일하세요.
+GraphPanel,ShaderCompileAndPreview,Compile & Preview,컴파일 및 미리보기
+GraphPanel,ShaderCompileFailed,The compilation check failed. See the details below.,컴파일 검사에 실패했습니다. 아래 상세 내용을 확인하세요.
+GraphPanel,ShaderCompileOnly,Compile to check the shader or build a DirectX12 color preview.,셰이더를 컴파일 검사하거나 DirectX12 색상 미리보기를 생성하세요.
+GraphPanel,ShaderCompilePassed,The compilation check passed.,컴파일 검사를 통과했습니다.
+GraphPanel,ShaderGenerationFailed,Shader generation failed. See the graph diagnostic.,셰이더 생성에 실패했습니다. 그래프 진단을 확인하세요.
+GraphPanel,ShaderIdle,Generate HLSL or run a compilation check.,HLSL을 생성하거나 컴파일 검사를 실행하세요.
+GraphPanel,ShaderLastGood,Last successful compilation: {0} / {1} bytes,마지막 성공 결과: {0} / {1}바이트
+GraphPanel,ShaderOldSource,This source is from an earlier graph state.,현재 표시된 소스는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,ShaderPreviewDrawFailed,Could not render or display the shader preview.,셰이더 미리보기를 렌더링하거나 표시하지 못했습니다.
+GraphPanel,ShaderPreviewFailed,Could not replace the preview. Any previous preview is retained.,미리보기를 교체하지 못했습니다. 이전 미리보기가 있으면 유지합니다.
+GraphPanel,ShaderPreviewOld,This preview was built from an earlier graph state.,이 미리보기는 이전 그래프 상태에서 생성되었습니다.
+GraphPanel,ShaderPreviewPassFailed,Could not create the preview render pass.,미리보기 렌더 패스를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewPipelineFailed,Could not create the preview pipeline. Check the engine log.,미리보기 파이프라인을 생성하지 못했습니다. 엔진 로그를 확인하세요.
+GraphPanel,ShaderPreviewReady,The GPU preview is ready.,GPU 미리보기를 생성했습니다.
+GraphPanel,ShaderPreviewShaderFailed,Could not create the GPU pixel shader.,GPU 픽셀 셰이더를 생성하지 못했습니다.
+GraphPanel,ShaderPreviewTargetFailed,Could not create a unique preview render target.,미리보기 전용 렌더 타깃을 생성하지 못했습니다.
+GraphPanel,ShaderPreviewTitle,Shader Preview,셰이더 미리보기
+GraphPanel,ShaderPreviewUnavailable,Shader preview currently requires an active DirectX12 renderer.,현재 셰이더 미리보기에는 활성 DirectX12 렌더러가 필요합니다.
+GraphPanel,ShaderPreviewVertexMissing,The fullscreen vertex shader is unavailable.,전체 화면 정점 셰이더를 사용할 수 없습니다.
+GraphPanel,ShaderSourceReady,HLSL source was generated.,HLSL 소스를 생성했습니다.
+GraphPanel,SourceRequired,A connection candidate requires a source pin.,연결 후보에는 시작 핀이 필요합니다.
+GraphPanel,SourceUnavailable,Source pin is unavailable.,연결 시작 핀을 사용할 수 없습니다.
+GraphPanel,Step,Step,한 단계
+GraphPanel,StepInterval,Task interval (seconds),작업 간격(초)
+GraphPanel,Stop,Stop,중지
+GraphPanel,Stopped,Stopped,중지됨
+GraphPanel,SystemErrorDetail,System error {0}: {1},시스템 오류 {0}: {1}
+GraphPanel,TaskBudget,Tasks per event,이벤트당 실행 예산
+GraphPanel,Title,Graph,그래프
+GraphPanel,TraceEnter,Enter,진입
+GraphPanel,TraceError,Error,오류
+GraphPanel,TraceIteration,Iteration,반복
+GraphPanel,TraceLeave,Leave,복귀
+GraphPanel,TraceLink,Link,연결 통과
+GraphPanel,TraceValue,Value,값
+GraphPanel,UnregisteredNode,The node type is not registered.,등록되지 않은 노드 유형입니다.
+GraphPanel,UseValue,Use value,값 지정
+GraphPanel,Valid,No structural errors. Execution is not checked.,구조 오류가 없습니다. 실행 여부는 검사하지 않습니다.
+GraphPanel,Validate,Validate,검사
+GraphPanel,Validation,Validation,검사 결과
+GraphPanel,Variables,Variables,변수
+GraphPanel,WireCurved,Wire: All Curved,와이어: 모두 곡선
+GraphPanel,WireCurvedHint,All wires use Bezier curves. Click to switch styles.,모든 연결선을 베지어 곡선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireElectronic,Wire: Electronic,와이어: 혼합
+GraphPanel,WireElectronicHint,Execution wires are straight and data wires are curved. Click to switch styles.,실행선은 직선이고 데이터선은 곡선입니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireStraight,Wire: All Straight,와이어: 모두 직선
+GraphPanel,WireStraightHint,All execution and data wires are straight. Click to switch styles.,실행선과 데이터선을 모두 직선으로 표시합니다. 클릭하면 표시 방식을 전환합니다.
+GraphPanel,WireStyle,Wire Style,와이어 스타일
+GraphPanel,WireStyleCurved,All Curved,모두 곡선
+GraphPanel,WireStyleElectronic,Electronic (Hybrid),전자 노드 (하이브리드)
+GraphPanel,WireStyleStraight,All Straight,모두 직선
+GraphPanel,WireStyleTooltip,Select wire connection rendering style,와이어 연결 렌더링 스타일을 선택합니다.
+GraphPanel,LoadFailed,Cannot open {} (stage {}: {}),{}을(를) 열 수 없습니다 (단계 {}: {})

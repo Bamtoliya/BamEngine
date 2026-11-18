@@ -1,0 +1,27 @@
+Group,Key,English,Korean
+EditorSettings,ApplyFailed,Could not apply the settings. Check the log.,설정을 적용하지 못했습니다. 로그를 확인하세요.
+EditorSettings,KeepWindowChange,Keep Changes,변경 유지
+EditorSettings,PathUnavailable,Storage path unavailable,저장 경로를 사용할 수 없습니다
+EditorSettings,PreferencesSaveBlocked,User preference saving is blocked. Changes apply only to this session.,개인 설정 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,PreferencesStartupFallback,User preferences could not be restored. Started with defaults; preference saving is blocked.,개인 설정을 복원하지 못해 기본값으로 시작했습니다. 개인 설정 파일 저장이 차단됩니다.
+EditorSettings,SaveFailed,Applied for this session. Saving failed. Check the log.,현재 세션에 적용했습니다. 저장에 실패했습니다. 로그를 확인하세요.
+EditorSettings,Saved,Settings applied and saved.,설정을 적용하고 저장했습니다.
+EditorSettings,SessionOnly,Applied for this session. File saving is unavailable.,현재 세션에 적용했습니다. 설정 파일을 저장할 수 없습니다.
+EditorSettings,SettingsFilePath,Settings file: {},설정 파일: {}
+EditorSettings,SettingsRecoveryHint,Close the editor and inspect the file or path. Back up existing files before making changes and restart after recovery.,에디터를 종료한 뒤 파일과 경로를 확인하세요. 기존 파일은 수정 전에 백업하고 복구 후 다시 실행하세요.
+EditorSettings,Title,Editor Settings,에디터 설정
+EditorSettings,WindowApplied,Requested window state and output buffer size verified.,요청한 창 상태와 출력 버퍼 크기를 확인했습니다.
+EditorSettings,WindowApplyTimedOut,The requested window state or output buffer size was not observed in time.,제한 시간 안에 요청한 창 상태 또는 출력 버퍼 크기를 확인하지 못했습니다.
+EditorSettings,WindowApplying,Waiting for the window change...,창 변경이 완료되기를 기다리는 중입니다.
+EditorSettings,WindowCaptureBlocked,Apply and confirm usable window settings to resume automatic window capture.,사용 가능한 창 설정을 다시 적용하고 유지 여부를 확정하면 자동 캡처가 재개됩니다.
+EditorSettings,WindowConfirmMessage,Keep these window settings? Reverting in {} seconds.,이 창 설정을 유지하시겠습니까? {}초 뒤 이전 설정으로 되돌립니다.
+EditorSettings,WindowConfirmTitle,Keep Window Settings,창 설정 유지
+EditorSettings,WindowConfirmationTimedOut,No confirmation was received in time. Previous settings were restored.,확인 시간이 지나 이전 창 설정으로 복원했습니다.
+EditorSettings,WindowConfirmed,Window settings confirmed and saved.,창 설정을 확정하고 저장했습니다.
+EditorSettings,WindowRequestFailed,Window change request processing failed. Check the log.,창 변경 요청 처리에 실패했습니다. 로그를 확인하세요.
+EditorSettings,WindowRequestRejected,Invalid window settings or another request is pending.,창 설정 값이 잘못되었거나 다른 요청을 처리 중입니다.
+EditorSettings,WindowRequestSubmitted,Window change request submitted. Completion has not been confirmed.,창 변경 요청을 전달했습니다. 아직 적용 완료를 확인하지 않았습니다.
+EditorSettings,WindowRestoreFailed,Could not restore the previous window settings. Automatic window capture is suspended.,이전 창 설정을 복원하지 못했습니다. 창 상태 자동 캡처를 중단했습니다.
+EditorSettings,WindowReverted,Restored the previous window settings.,이전 창 설정으로 복원했습니다.
+EditorSettings,WorkspaceSaveBlocked,Workspace saving is blocked. Changes apply only to this session.,작업 공간 파일 저장이 차단돼 있습니다. 변경값은 현재 실행에만 적용됩니다.
+EditorSettings,WorkspaceStartupFallback,The workspace could not be restored. Started with defaults; workspace saving is blocked.,작업 공간을 복원하지 못해 기본값으로 시작했습니다. 작업 공간 파일 저장이 차단됩니다.

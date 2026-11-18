@@ -1,0 +1,112 @@
+Group,Key,English,Korean
+VFXEditor,Title,Composite VFX Editor,통합 비주얼 이펙트 에디터
+VFXEditor,Tracks,VFX Tracks,VFX 트랙
+VFXEditor,AddTrack,Add Track,트랙 추가
+VFXEditor,CreateNewEffect,Create New Effect,새 이펙트 생성
+VFXEditor,NoEffectLoaded,No Composite Effect loaded.,로드된 복합 이펙트가 없습니다.
+VFXEditor,NoTracks,No tracks in this effect.,이펙트에 등록된 트랙이 없습니다.
+VFXEditor,AddPrompt,Click '+ Add Track' above to add:,상단의 '+ 트랙 추가'를 눌러 트랙을 추가하세요:
+VFXEditor,AddSpriteTrack,Sprite Track,스프라이트 트랙
+VFXEditor,AddParticleTrack,Particle Track,파티클 트랙
+VFXEditor,AddLightTrack,Light Track,라이트 트랙
+VFXEditor,AddMeshTrack,Mesh Track,메쉬 트랙
+VFXEditor,AddSoundTrack,Sound Track,사운드 트랙
+VFXEditor,AddTrailTrack,Trail Track,트레일 트랙
+VFXEditor,AddDecalTrack,Decal Track,데칼 트랙
+VFXEditor,TrackInspector,Track Inspector,트랙 인스펙터
+VFXEditor,SelectTrackPrompt,Select a track to inspect.,편집할 트랙을 선택하세요.
+VFXEditor,PropTrackName,Track Name,트랙 이름
+VFXEditor,PropEnabled,Enabled,활성화
+VFXEditor,PropMuted,Muted,음소거
+VFXEditor,PropStartTime,Start Time,시작 시간
+VFXEditor,PropDuration,Duration,지속 시간
+VFXEditor,PropPlaySpeed,Play Speed,재생 배속
+VFXEditor,PropLoop,Loop,반복 재생
+VFXEditor,PropAnimation,Sprite Animation,스프라이트 애니메이션
+VFXEditor,PropMaterial,Material,머티리얼
+VFXEditor,PropBillboard,Billboard Mode,빌보드 모드
+VFXEditor,PropPosition,Position,위치
+VFXEditor,PropRotation,Rotation,회전
+VFXEditor,PropScale,Scale,크기
+VFXEditor,PropColorTint,Color Tint,색상 틴트
+VFXEditor,PropSortingOrder,Sorting Order,정렬 순서
+VFXEditor,PropEffect,Particle Effect,파티클 이펙트
+VFXEditor,PropLightColor,Light Color,조명 색상
+VFXEditor,PropPeakIntensity,Peak Intensity,최대 강도
+VFXEditor,PropRadius,Radius,조명 반경
+VFXEditor,PropAttackTime,Attack Time,어택 시간
+VFXEditor,PropDecayTime,Decay Time,디케이 시간
+VFXEditor,PropMesh,Mesh,메쉬
+VFXEditor,PropScaleStart,Scale Start,시작 크기
+VFXEditor,PropScaleEnd,Scale End,종료 크기
+VFXEditor,PropColorStart,Color Start,시작 색상
+VFXEditor,PropColorEnd,Color End,종료 색상
+VFXEditor,PropUVScroll,UV Scroll,UV 스크롤
+VFXEditor,PropAudioClip,Audio Clip,오디오 클립
+VFXEditor,PropVolume,Volume,음량
+VFXEditor,PropPitch,Pitch,피치
+VFXEditor,Play,Play,재생
+VFXEditor,Pause,Pause,일시정지
+VFXEditor,Restart,Restart,처음부터 재생
+VFXEditor,Speed,Speed,재생 배속
+VFXEditor,DurationTotal,Duration,전체 재생 시간
+VFXEditor,AutoDuration,Auto Dur,길이 자동 계산
+VFXEditor,TimelineUnavailable,Timeline unavailable - No Effect loaded.,타임라인을 사용할 수 없음 - 로드된 이펙트가 없습니다.
+VFXEditor,SaveSuccess,Effect saved successfully.,이펙트를 저장했습니다.
+VFXEditor,AddCameraShakeTrack,Camera Shake Track,카메라 셰이크 트랙
+VFXEditor,PropTrailWidth,Trail Width,트레일 폭
+VFXEditor,PropLifetime,Lifetime,수명
+VFXEditor,PropMinVertexDistance,Min Vertex Dist,최소 정점 거리
+VFXEditor,PropTaperRatio,Taper Ratio,테이퍼링 비율
+VFXEditor,PropOffsetA,Offset A (Tip),오프셋 A (칼끝)
+VFXEditor,PropOffsetB,Offset B (Base),오프셋 B (칼자루)
+VFXEditor,PropSize,Size,크기
+VFXEditor,PropFadeStartTime,Fade Start,페이드 시작
+VFXEditor,PropAmplitude,Amplitude,진폭
+VFXEditor,PropFrequency,Frequency,주파수
+VFXEditor,PropTexture,Texture,텍스처
+VFXEditor,PropShakeRadius,Shake Radius,감쇠 반경
+VFXEditor,PropSoundDuration,Sound Duration (0 = Effect End),사운드 지속 시간 (0 = 이펙트 종료)
+VFXEditor,PropFadeOutDuration,Fade Out Duration,페이드 아웃 시간
+VFXEditor,PreviewMotion,Preview Motion (Orbit),프리뷰 모션 (궤도 비행)
+VFXEditor,GroundPlane,Toggle Ground Plane,지면 평면 표시 토글
+VFXEditor,BackgroundStudio,Background: Studio Neutral Gray (18%),배경: 스튜디오 뉴트럴 그레이 (18%)
+VFXEditor,BackgroundDark,Background: Dark (Bloom / Emissive Check),배경: 암실 (블룸 / 발광 피크 검증)
+VFXEditor,BackgroundBright,Background: Bright (Smoke Silhouette Check),배경: 밝은 낮 (연기 실루엣 검증)
+VFXEditor,QuadDefault,(Quad Default),(사각 평면 기본값)
+VFXEditor,DeleteTrack,Delete Track,트랙 삭제
+VFXEditor,SearchTracks,Search tracks...,트랙 검색...
+VFXEditor,ObstaclePreset,Obstacle Preset (Floor / Wall / Obstacles / Dummy),장애물 프리셋 (Floor / Wall / Obstacles / Dummy)
+VFXEditor,PresetFloorOnly,Floor Only,바닥만 (Floor Only)
+VFXEditor,PresetCornerWall,Corner Wall,코너 벽면 (Corner Wall)
+VFXEditor,PresetObstacles,Center Obstacles (Sphere & Box),중앙 장애물 (Sphere & Box)
+VFXEditor,PresetDummy,Dummy Mannequin,인간형 더미 (Dummy Mannequin)
+VFXEditor,EnvironmentForces,Environment Force Simulator (Wind & Gravity),환경 외력 시뮬레이터 (바람 및 중력)
+VFXEditor,GravityMultiplier,Gravity Multiplier,중력 배율
+VFXEditor,WindXZ,Wind (X: Right / Z: Forward),바람 (X: 우측 / Z: 전방)
+VFXEditor,HUDPlaying,Playing,재생 중
+VFXEditor,HUDPaused,Paused,일시정지
+VFXEditor,HUDFrame,Frame,프레임
+VFXEditor,HUDWind,Wind,바람
+VFXEditor,HUDGravity,Gravity,중력
+VFXEditor,HUDStepHint,Step,프레임 스텝
+VFXEditor,PropUseScaleCurve,Scale Curve,스케일 커브
+VFXEditor,PropUseAlphaCurve,Alpha Curve,알파 커브
+VFXEditor,PropUseIntensityCurve,Intensity Curve,조도 커브
+VFXEditor,IntensityCurvePreset,Intensity Curve Preset,조도 커브 프리셋
+VFXEditor,ScaleCurvePreset,Scale Curve Preset,스케일 커브 프리셋
+VFXEditor,AlphaCurvePreset,Alpha Curve Preset,알파 커브 프리셋
+VFXEditor,CurvePresetSpike,Spike,스파이크
+VFXEditor,CurvePresetEaseIn,Ease In,천천히 시작
+VFXEditor,CurvePresetEaseOut,Ease Out,천천히 끝
+VFXEditor,CurvePresetLinear,Linear,선형
+VFXEditor,RingTextureDefault,(Ring texture default),(링 텍스처 기본값)
+VFXEditor,EditTrackProperties,Edit Track Properties,트랙 속성 편집
+VFXEditor,AirMode,Air Mode,공중 프리뷰 모드
+VFXEditor,AirModeTooltip,Air Mode: Disable floor and grid for pure emissive aerial preview,공중 모드: 지면과 그리드를 숨겨 수평선 단차 없이 순수 발광/공중 룩앤필을 검증합니다
+VFXEditor,EditCurveModal,Edit Curve...,커브 편집...
+VFXEditor,CurveModalTitle,Curve Editor - {},커브 편집기 - {}
+VFXEditor,FitView,Fit View,화면 맞춤
+VFXEditor,CurveHintDouble,Double-click canvas to add a key. Drag keys to move.,빈 캔버스를 더블클릭해 키를 추가하고 드래그하여 조절합니다.
+VFXEditor,CurvePresetEaseInOut,Ease In-Out,천천히 시작-끝
+VFXEditor,FlattenTangents,Flatten Tangents (0.0),탄젠트 평탄화 (0.0)

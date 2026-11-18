@@ -1,0 +1,60 @@
+Group,Key,English,Korean
+Notification,BakeFailed,Bake Failed,바이너리 변환 실패
+Notification,BakeSucceeded,Bake to Binary Success,바이너리 변환 성공
+Notification,BaseMaterialNotFound,Base Material Not Found,기본 머티리얼을 찾을 수 없습니다
+Notification,BinaryLoadFailed,Failed to load binary resource: {},바이너리 리소스를 불러오지 못했습니다: {}
+Notification,BinarySaveFailed,Failed to save binary resource: {},바이너리 리소스를 저장하지 못했습니다: {}
+Notification,CompileFailed,GameModule compilation failed! Check console log.,GameModule 컴파일 실패! 콘솔 로그를 확인하세요.
+Notification,CompileSuccess,GameModule compilation succeeded!,GameModule 컴파일 완료 및 핫로드 준비 완료!
+Notification,CompilingModule,Compiling GameModule in background...,GameModule 컴파일을 시작합니다...
+Notification,CreatedFile,{} created.,{} 파일을 생성했습니다.
+Notification,EnterPrefabMode,Entered Prefab Mode: {},프리팹 편집 모드 진입: {}
+Notification,EntitiesCopied,Copied {} entities,엔티티 {}개 복사됨
+Notification,EntitiesPasteFailed,Failed to paste entities,엔티티 붙여넣기 실패
+Notification,EntitiesPasted,Pasted {} entities,엔티티 {}개 붙여넣기 완료
+Notification,ExportFailed,Export Failed,내보내기 실패
+Notification,ExportSucceeded,Export to JSON Success,JSON 내보내기 성공
+Notification,HistoryTitle,Notification History,알림 히스토리
+Notification,HistoryTooltip,View notification history,알림 히스토리 확인
+Notification,InactiveFile,{} is not currently active in memory.,{} 파일이 현재 메모리에 로드되어 있지 않습니다.
+Notification,InstanceCreated,Instance Created,인스턴스를 생성했습니다
+Notification,JsonLoadFailed,Failed to load JSON resource: {},JSON 리소스를 불러오지 못했습니다: {}
+Notification,JsonSaveFailed,Failed to save JSON resource: {},JSON 리소스를 저장하지 못했습니다: {}
+Notification,LoadResourceFailed,Resource load failed,리소스 불러오기 실패
+Notification,LoadResourceSucceeded,Resource loaded,리소스 불러오기 완료
+Notification,LocalizationReloaded,Localization Hot-Reloaded,번역 데이터 핫 리로드 완료
+Notification,MaterialHotReloaded,Material Hot-Swapped,머티리얼 핫 리로드 완료
+Notification,MaterialNotLoaded,Material Not Loaded,메모리에 로드된 머티리얼이 없습니다
+Notification,MaterialReloaded,Material Reloaded,머티리얼을 다시 불러왔습니다
+Notification,MeshHotReloaded,Mesh Hot-Swapped,메시 핫 리로드 완료
+Notification,MeshNotLoaded,Mesh Not Loaded,메모리에 로드된 메시가 없습니다
+Notification,MeshReloaded,Mesh Reloaded,메시를 다시 불러왔습니다
+Notification,ModelReimported,Model Reimported,모델을 다시 임포트했습니다
+Notification,NoHistory,No notification history.,지나간 알림이 없습니다.
+Notification,OpenBaseMaterial,Open Base Material,기본 머티리얼 열기
+Notification,OpenAssetMissing,File not found: {},파일을 찾을 수 없습니다: {}
+Notification,OpenExternalFailed,Failed to open file with default program: {},기본 프로그램으로 파일을 열지 못했습니다: {}
+Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
+Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
+Notification,PrefabInstantiated,Prefab instantiated: {},프리팹 인스턴스화 완료: {}
+Notification,PrefabReverted,Prefab reverted to original asset.,프리팹을 원본 상태로 복원했습니다.
+Notification,PrefabSaveFailed,Failed to save prefab: {},프리팹 저장 실패: {}
+Notification,PrefabSaved,Prefab saved: {},프리팹 저장 완료: {}
+Notification,PrefabUnpacked,Prefab unpacked successfully.,프리팹 연결을 해제했습니다.
+Notification,ReimportFailed,Reimport Failed,다시 임포트하지 못했습니다
+Notification,ReimportFailedFile,Failed to reimport {}.,{} 파일을 다시 임포트하지 못했습니다.
+Notification,ReimportedFile,{} reimported successfully.,{} 파일을 다시 임포트했습니다.
+Notification,ReloadedFile,{} reloaded.,{} 파일을 다시 불러왔습니다.
+Notification,ResourceLoadFailed,Failed to load resource: {},리소스를 불러오지 못했습니다: {}
+Notification,ResourceLoadSucceeded,Loaded resource: {},리소스를 불러왔습니다: {}
+Notification,SaveFailed,Save failed: {},저장 실패: {}
+Notification,Saved,Saved: {},저장됨: {}
+Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
+Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
+Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완료
+Notification,TextureNotLoaded,Texture Not Loaded,메모리에 로드된 텍스처가 없습니다
+Notification,TextureReloaded,Texture Reloaded,텍스처를 다시 불러왔습니다
+Notification,TotalCount,Total Notifications,전체 알림
+Notification,CompilingNamedModule,Building {0}...,{0} 빌드 중...
+Notification,NamedModuleBuildFailed,{0} build failed. See the console.,{0} 빌드 실패. 콘솔을 확인하세요.
+Notification,NamedModuleBuildSucceeded,{0} build succeeded.,{0} 빌드 성공.

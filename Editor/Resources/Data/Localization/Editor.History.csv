@@ -1,0 +1,36 @@
+Group,Key,English,Korean
+History,ActionShortcut,{} ({}),{} ({})
+History,AllChangesSaved,[All Changes Saved],[모든 변경 사항 저장됨]
+History,CaptureFailed,History cleared because the change could not be captured.,변경을 기록할 수 없어 이전 이력을 비웠습니다.
+History,Clear,Clear History,이력 비우기
+History,Cleared,Command history cleared.,명령 이력을 비웠습니다.
+History,Command.AddComponent,Add component,컴포넌트 추가
+History,Command.CanvasResolution,Canvas resolution,캔버스 해상도
+History,Command.CreateEntity,Create entity,엔티티 생성
+History,Command.PlaceAssets,Place assets,에셋 일괄 배치
+History,Command.DeleteEntity,Delete entity,엔티티 삭제
+History,Command.EditProperties,Properties,속성 편집
+History,Command.EditProperty,Edit Property,속성 편집
+History,Command.InstantiatePrefab,Instantiate Prefab,프리팹 배치
+History,Command.MoveSplinePoint,Move Spline Point,스플라인 제어점 이동
+History,Command.PasteEntities,Paste Entities,엔티티 붙여넣기
+History,Command.RenameScene,Rename scene,씬 이름 변경
+History,Command.ReorderEntities,Reorder Entities,엔티티 순서 변경
+History,Command.Reparent,Change parent,부모 변경
+History,Command.Transform,Transform,변환
+History,Command.UIRenderOrder,UI render order,UI 렌더 순서
+History,Command.UITransform,UI transform,UI 변환
+History,Command.UnpackPrefab,Unpack Prefab,프리팹 연결 해제
+History,CommandAction,Command Action,명령
+History,Current,>> Current,>> 현재
+History,InitialState,[Initial State],[초기 상태]
+History,ReplayFailed,The target or hierarchy changed. History position was preserved.,대상이나 계층이 바뀌어 복원하지 못했습니다. 이력 위치는 유지합니다.
+History,SavedColumn,Saved,저장 여부
+History,SavedMarker,[Saved],[저장됨]
+History,Status,Status,상태
+History,Title,History,편집 이력
+History,Unnamed,Unnamed Command,이름 없는 명령
+History,UnsavedChanges,[Unsaved Changes],[저장되지 않은 변경 사항]
+History,Command.RotateSplinePoint,Rotate Spline Point,스플라인 제어점 회전
+History,Command.EditAutotileRule,Edit autotile rule,자동 타일 규칙 편집
+History,Command.PaintTilemap,Paint tilemap,타일맵 칠하기

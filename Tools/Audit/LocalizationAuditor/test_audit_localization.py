@@ -1,8 +1,10 @@
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
-from audit_localization import (duplicate_catalog_keys, find_hardcoded_ui, find_imgui_input_reads,
+from audit_localization import (audit_project, duplicate_catalog_keys, find_hardcoded_ui, find_imgui_input_reads,
     find_unregistered_actions, load_csv_catalog, nonlocal_key_positions, RE_CPP_TOKEN, strip_comments,
     editor_catalog_layout_issues, find_panel_display_name_issues)
 
@@ -102,6 +104,22 @@ class LocalizationAuditTests(unittest.TestCase):
                 ',Hint,Hint,힌트\nAction,Viewport.Focus,Focus,포커스\n', encoding='utf-8')
             issues = list(editor_catalog_layout_issues(path))
         self.assertEqual([line for line, _, _ in issues], [2, 4, 5])
+
+    def test_split_editor_catalogs_report_layout_issues_by_filename(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            catalog_dir = root / 'Editor' / 'Resources' / 'Data' / 'Localization'
+            catalog_dir.mkdir(parents=True)
+            (catalog_dir / 'Editor.GraphPanel.csv').write_text(
+                'Group,Key,English,Korean\nGraphPanel,Hint,One, Two,하나\n', encoding='utf-8')
+            (catalog_dir / 'Editor.SpriteEditor.csv').write_text(
+                'Group,Key,English,Korean\nInspector,Title,Title,제목\n', encoding='utf-8')
+            report = StringIO()
+            with redirect_stdout(report):
+                result = audit_project(root, strict=True)
+        self.assertEqual(result, 1)
+        self.assertIn('Editor.GraphPanel.csv:2 [Hint] -> Expected the same number of columns', report.getvalue())
+        self.assertIn('Editor.SpriteEditor.csv:2 [Title] -> Expected Group SpriteEditor', report.getvalue())
 
     def test_action_identifier_is_not_a_locale_reference_during_rename(self):
         source = '''sm.RegisterAction({ .Id = "Viewport.Focus", .DisplayNameKey = "Action.Viewport.Focus" });

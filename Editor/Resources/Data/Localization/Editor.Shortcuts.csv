@@ -1,0 +1,19 @@
+Group,Key,English,Korean
+Shortcuts,CategoryBuild,Build & Hot Reload,빌드 및 핫 리로드
+Shortcuts,CategoryGraph,Graph Editor,그래프 에디터
+Shortcuts,CategoryPIE,Play & Simulation,재생 및 시뮬레이션
+Shortcuts,CategoryTimeline,Timeline,타임라인
+Shortcuts,CategoryViewport,Viewport,뷰포트
+Shortcuts,ColAction,Action,명령
+Shortcuts,ColCategory,Category,분류
+Shortcuts,ColReset,Reset,복원
+Shortcuts,ColShortcut,Shortcut,단축키
+Shortcuts,Conflict,Conflict: {} is already assigned to {},단축키 충돌: {}은(는) 이미 {}에 지정되어 있습니다
+Shortcuts,ConflictWarning,Shortcut conflict: {},단축키 충돌: {}
+Shortcuts,PressKey,Press any key...,키 입력 대기 중...
+Shortcuts,Reset,Reset,초기화
+Shortcuts,ResetAll,Reset All to Default,모두 기본값으로 복원
+Shortcuts,Search,Search Shortcuts...,단축키 검색...
+Shortcuts,Title,Keyboard Shortcuts,단축키 설정
+Shortcuts,CategoryEditor,Resource Editor,리소스 에디터
+Shortcuts,CategoryTilemap,Tilemap Editor,타일맵 에디터

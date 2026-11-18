@@ -1,0 +1,4 @@
+Group,Key,English,Korean
+TextureEditor,Dimensions,Dimensions,해상도
+TextureEditor,NoPreviewAvailable,Preview unavailable,미리보기를 사용할 수 없습니다
+TextureEditor,DimensionValue,%u × %u,%u × %u

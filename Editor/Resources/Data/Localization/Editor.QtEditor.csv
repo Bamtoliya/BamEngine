@@ -1,0 +1,4 @@
+Group,Key,English,Korean
+QtEditor,ScenePending,Scene binding pending,씬 연결 대기 중
+QtEditor,SelectionPending,Selection binding pending,선택 대상 연결 대기 중
+QtEditor,ViewportPending,Engine viewport integration pending,엔진 뷰포트 연결 대기 중

@@ -1,0 +1,17 @@
+Group,Key,English,Korean
+FileDialog,ActionTimelineFiles,Action Timeline Asset (*.actiontimeline.json),액션 타임라인 에셋 (*.actiontimeline.json)
+FileDialog,AllFiles,All Files (*.*),모든 파일 (*.*)
+FileDialog,AnimatorFiles,Animator Controller Files (*.animator),애니메이터 컨트롤러 파일 (*.animator)
+FileDialog,AssetFiles,Asset Files,에셋 파일
+FileDialog,AudioFiles,"Audio Files (*.wav, *.mp3, *.ogg)","오디오 파일 (*.wav, *.mp3, *.ogg)"
+FileDialog,EditorSceneFiles,Scene Files (*.bamscene.json;*.json),씬 파일 (*.bamscene.json;*.json)
+FileDialog,FontFiles,Font Files (*.ttf;*.otf),글꼴 파일 (*.ttf;*.otf)
+FileDialog,GraphFiles,Graph Files (*.json),그래프 파일 (*.json)
+FileDialog,ImageFiles,Image Files,이미지 파일
+FileDialog,JsonFiles,JSON Files (*.json),JSON 파일 (*.json)
+FileDialog,ModelFiles,"Model Files (*.bammodel, *.glb)","모델 파일 (*.bammodel, *.glb)"
+FileDialog,PngFiles,PNG Images (*.png),PNG 이미지 (*.png)
+FileDialog,PrefabFiles,Prefab Files (*.bamprefab.json),프리팹 파일 (*.bamprefab.json)
+FileDialog,ResourceFiles,Resource Files,리소스 파일
+FileDialog,SceneFiles,Scene Files (*.json),씬 파일 (*.json)
+FileDialog,VFXFiles,Composite VFX Files (*.bamvfx),복합 VFX 파일 (*.bamvfx)

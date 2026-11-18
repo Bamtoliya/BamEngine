@@ -1,0 +1,27 @@
+Group,Key,English,Korean
+TextureInspector,AutoSprite,Auto-Generate Sprite (.bamsprite),스프라이트 자동 생성 (.bamsprite)
+TextureInspector,BC4,BC4 (Grayscale),BC4 (회색조)
+TextureInspector,BC5,BC5 (Normal),BC5 (노멀)
+TextureInspector,BC7,BC7 (High Quality),BC7 (고품질)
+TextureInspector,CompressionFlags,Compression Flags:,압축 옵션:
+TextureInspector,Dimension,Dimension: {},차원: {}
+TextureInspector,FileName,File Name: {},파일 이름: {}
+TextureInspector,FlipY,Flip Y Axis,Y축 뒤집기
+TextureInspector,GenerateMipMaps,Generate MipMaps,밉맵 생성
+TextureInspector,HighQuality,High Quality (Parallel),고품질 (병렬)
+TextureInspector,Import,Import / Re-Compress,임포트 / 다시 압축
+TextureInspector,ImportResult,Import Result,임포트 결과
+TextureInspector,ImportSettings,Import Settings,임포트 설정
+TextureInspector,Importing,Importing... Please wait,임포트 중... 잠시 기다려 주세요
+TextureInspector,MetadataFailed,Failed to load metadata!,메타데이터를 불러오지 못했습니다.
+TextureInspector,MipLevels,Mip Levels: {},밉 레벨: {}
+TextureInspector,NormalMap,Normal Map Mode,노멀 맵 모드
+TextureInspector,PremultiplyAlpha,Premultiply Alpha,알파 미리 곱하기
+TextureInspector,Resolution,Resolution: {} x {},해상도: {} x {}
+TextureInspector,SRGB,SRGB Color Space,sRGB 색 공간
+TextureInspector,SpriteConverted,Texture & Sprite have been successfully converted asynchronously!,텍스처와 스프라이트의 비동기 변환이 완료되었습니다.
+TextureInspector,SpriteGeneration,Sprite Generation,스프라이트 생성
+TextureInspector,TargetFormat,Target Format,대상 포맷
+TextureInspector,TextureConverted,Texture has been successfully converted to .bamtex asynchronously!,텍스처를 .bamtex로 비동기 변환했습니다.
+TextureInspector,Title,Texture Inspector,텍스처 인스펙터
+TextureInspector,UseGPU,Use GPU Compression,GPU 압축 사용

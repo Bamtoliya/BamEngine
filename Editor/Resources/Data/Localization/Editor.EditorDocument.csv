@@ -1,0 +1,28 @@
+Group,Key,English,Korean
+EditorDocument,ConfirmTitle,Unsaved Changes,미저장 변경
+EditorDocument,CreateNewScene,Create New Scene,새 씬 생성하기
+EditorDocument,NewSceneDialogTitle,New Scene,새 씬 만들기
+EditorDocument,NewSceneTemplatePrompt,Select a template for the new scene:,새 씬의 템플릿을 선택하십시오:
+EditorDocument,TemplateBasic,Basic (3D),기본 (3D)
+EditorDocument,TemplateBasicDesc,"Includes Main Camera, Directional Light, Post-Process Volume, and Ground Plane.","메인 카메라, 방향성 라이트, 후처리 볼륨, 바닥 평면이 기본 배치됩니다."
+EditorDocument,TemplateEmpty,Empty Scene,빈 씬
+EditorDocument,TemplateEmptyDesc,A completely empty scene with no entities.,오브젝트가 없는 완전히 비어있는 씬입니다.
+EditorDocument,Discard,Discard,버리기
+EditorDocument,Modified,Unsaved changes,미저장 변경 있음
+EditorDocument,NoSceneLoaded,No Scene Loaded,로드된 씬이 없습니다.
+EditorDocument,OperationBusy,Another document operation is in progress.,다른 문서 작업을 처리 중입니다.
+EditorDocument,OperationFailed,Could not complete the document operation. Check the log.,문서 작업을 완료하지 못했습니다. 로그를 확인하세요.
+EditorDocument,Processing,Preparing the document operation...,문서 작업을 준비하고 있습니다...
+EditorDocument,Save,Save,저장
+EditorDocument,SaveAs,Save As...,다른 이름으로 저장...
+EditorDocument,SaveFailed,Could not save the document. Check the log.,문서를 저장하지 못했습니다. 로그를 확인하세요.
+EditorDocument,SaveUnavailable,The document cannot be saved right now.,현재 문서를 저장할 수 없습니다.
+EditorDocument,Saved,Saved: {},저장했습니다: {}
+EditorDocument,SceneActionUnavailable,Stop play mode before changing the scene.,씬을 변경하려면 플레이 모드를 종료하세요.
+EditorDocument,SceneClosed,Closed the scene.,씬을 닫았습니다.
+EditorDocument,SceneCreated,Created a new scene.,새 씬을 생성했습니다.
+EditorDocument,SceneOpened,Opened scene: {},씬을 열었습니다: {}
+EditorDocument,Title,Documents,문서
+EditorDocument,UnsavedMessage,Save changes to {} before continuing?,계속하기 전에 {}의 변경 사항을 저장하시겠습니까?
+EditorDocument,Untitled,Untitled document,이름 없는 문서
+EditorDocument,Create,Create,만들기

@@ -1,0 +1,81 @@
+Group,Key,English,Korean
+AnimatorGraph,BlendTree1D,Blend Tree 1D,1D 블렌드 트리
+AnimatorGraph,CancelEsc,Cancel (ESC),취소 (ESC)
+AnimatorGraph,Clip,Clip,클립
+AnimatorGraph,CondEqual,Equal (==),같음 (==)
+AnimatorGraph,CondGreater,Greater (>),보다 큼 (>)
+AnimatorGraph,CondIfFalse,IfFalse,거짓일 때 (False)
+AnimatorGraph,CondIfTrue,IfTrue,참일 때 (True)
+AnimatorGraph,CondLess,Less (<),보다 작음 (<)
+AnimatorGraph,CondNotEqual,NotEqual (!=),같지 않음 (!=)
+AnimatorGraph,Conditions,Conditions,전이 조건식
+AnimatorGraph,CreateState,Create State,새 상태 노드 생성
+AnimatorGraph,Duration,Duration,전이 지속 시간
+AnimatorGraph,Entry,ENTRY ->,진입 (ENTRY) ->
+AnimatorGraph,ExitTime,Exit Time,종료 시점 비율
+AnimatorGraph,HasExitTime,Has Exit Time,종료 시간 전이 사용
+AnimatorGraph,MakeTransition,Make Transition,전이 연결선 만들기
+AnimatorGraph,NoMotion,No Motion,동작 없음
+AnimatorGraph,NoNodeSelected,No node selected.,선택된 노드가 없습니다.
+AnimatorGraph,NodeInspector,Node Inspector,노드 인스펙터
+AnimatorGraph,Notifies,Animation Notifies,애니메이션 알림 (Notifies)
+AnimatorGraph,NotifyName,Notify Name,알림 이름
+AnimatorGraph,NotifyPayload,Payload / Parameter,전달 데이터 / 파라미터
+AnimatorGraph,NotifyTime,Trigger Time (s),발동 시간 (초)
+AnimatorGraph,ParamBool,Bool,불리언 (Bool)
+AnimatorGraph,ParamFloat,Float,실수 (Float)
+AnimatorGraph,ParamInt,Int,정수 (Int)
+AnimatorGraph,Parameter,Parameter,매개변수
+AnimatorGraph,ResetView,Reset Canvas View,캔버스 뷰 초기화
+AnimatorGraph,Samples,Samples,샘플 수
+AnimatorGraph,SelectTargetToConnect,Click target node to connect transition,연결할 대상 노드를 클릭하세요
+AnimatorGraph,SetDefaultState,Default Entry State,기본 진입 상태로 설정
+AnimatorGraph,Title,Animator Graph,애니메이터 그래프
+AnimatorGraph,TogglePreview,Toggle 3D Preview Viewport,3D 프리뷰 표시 전환
+AnimatorGraph,TransitionInspector,Transition Inspector,전이 속성 인스펙터
+AnimatorGraph,Unsaved,Unsaved Controller,저장되지 않은 컨트롤러
+AnimatorGraph,UseBlendTree,Use 1D Blend Tree,1D 블렌드 트리 사용
+AnimatorGraph,DefaultParameters,Default Parameters,기본 파라미터
+AnimatorGraph,PreviewParameters,Preview Parameters,프리뷰 파라미터
+AnimatorGraph,PreviewUnavailable,Preview controls are unavailable.,프리뷰를 제어할 수 없습니다.
+AnimatorGraph,PreviewModel,Preview Model,프리뷰 모델
+AnimatorGraph,PreviewModelChangeFailed,Could not change the preview model. Check the log.,프리뷰 모델을 변경하지 못했습니다. 로그를 확인하세요.
+AnimatorGraph,ParameterNameInvalid,Enter a nonempty and unique parameter name.,이름을 입력하세요. 다른 파라미터와 중복될 수 없습니다.
+AnimatorGraph,MotionType,Motion Type,동작 유형
+AnimatorGraph,BlendTree2D,2D Blend Tree,2D 블렌드 트리
+AnimatorGraph,Blend2DParameterX,X Parameter,X 파라미터
+AnimatorGraph,Blend2DParameterY,Y Parameter,Y 파라미터
+AnimatorGraph,Blend2DRangeX,X Range (Min / Max),X 범위 (최소 / 최대)
+AnimatorGraph,Blend2DRangeY,Y Range (Min / Max),Y 범위 (최소 / 최대)
+AnimatorGraph,Blend2DCorner,X {:.2f} / Y {:.2f},X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DAxesRequired,Assign a Float parameter to each axis.,각 축에 실수 파라미터를 지정하세요.
+AnimatorGraph,Blend2DRangeInvalid,Each axis needs a finite minimum below its maximum.,각 축의 최소·최대는 유한한 값이어야 하며 최소가 최대보다 작아야 합니다.
+AnimatorGraph,Blend2DCornersIncomplete,Assign all four clips to preview the entire range.,전체 범위를 재생하려면 네 모서리에 클립을 지정하세요.
+AnimatorGraph,ConditionLogic,Condition Logic,조건 결합 방식
+AnimatorGraph,ConditionAll,All Conditions (AND),모두 만족 (AND)
+AnimatorGraph,ConditionAny,Any Condition (OR),하나 이상 만족 (OR)
+AnimatorGraph,AddConditionGroup,Add Condition Group,조건 그룹 추가
+AnimatorGraph,GroupLogic,Group Logic,그룹 결합 방식
+AnimatorGraph,ConditionGroupTitle,Condition Group {},조건 그룹 {}
+AnimatorGraph,EmptyConditionGroup,Add a condition to activate this group.,그룹을 활성화하려면 조건을 추가하세요.
+AnimatorGraph,Blend2DPreviewTitle,2D Blend Preview,2D 블렌드 미리보기
+AnimatorGraph,Blend2DTarget,Target (ring) X {:.2f} / Y {:.2f},목표 (테두리) X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DSampled,Smoothed (dot) X {:.2f} / Y {:.2f},보간값 (점) X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DWeights,00 {:.0f}%  10 {:.0f}%  01 {:.0f}%  11 {:.0f}%,00 {:.0f}%  10 {:.0f}%  01 {:.0f}%  11 {:.0f}%
+AnimatorGraph,Blend2DDragHint,Drag the plot to adjust the preview input.,그래프를 드래그해 프리뷰 입력을 조절하세요.
+AnimatorGraph,Blend2DDragSharedAxis,Assign different parameters to X and Y to drag the plot.,그래프를 드래그하려면 X와 Y에 서로 다른 파라미터를 지정하세요.
+AnimatorGraph,PreviewRestart,Restart Preview,프리뷰 다시 시작
+AnimatorGraph,PreviewRestartNeedsEntry,Set a default entry state to restart the preview.,프리뷰를 다시 시작하려면 기본 진입 상태를 지정하세요.
+AnimatorGraph,PreviewCurrentState,Current state {},현재 상태 {}
+AnimatorGraph,PreviewTransitionStatus,Transition {} → {} ({:.0f}%),전이 {} → {} ({:.0f}%)
+AnimatorGraph,PreviewPlaybackPaused,Preview paused (bind pose),프리뷰 일시정지 (바인드 포즈)
+AnimatorGraph,PreviewStateMissing,No active preview state.,활성 프리뷰 상태가 없습니다.
+AnimatorGraph,AnyState,Any State,모든 상태
+AnimatorGraph,MakeAnyStateTransition,Add Transition from Any State,모든 상태에서 전이 추가
+AnimatorGraph,AnyStateNeedsCondition,Add a condition to enable this transition.,이 전이를 활성화하려면 조건을 추가하세요.
+AnimatorGraph,StateNameInvalid,Enter a nonempty and unique state name.,상태 이름을 입력하세요. 다른 상태와 중복될 수 없습니다.
+AnimatorGraph,MotionConfiguration,Motion Configuration,모션 설정
+AnimatorGraph,StateProperties,State Properties,상태 속성
+AnimatorGraph,Threshold,Threshold,임계값
+AnimatorGraph,Transitions,Transitions,전이 목록
+AnimatorGraph,SearchParameters,Search parameters...,파라미터 검색...

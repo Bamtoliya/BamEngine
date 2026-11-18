@@ -39,7 +39,7 @@ def main():
     if os.path.isfile(input_path):
         csv_files = [input_path]
     elif os.path.isdir(input_path):
-        csv_files = glob.glob(os.path.join(input_path, '*.csv'))
+        csv_files = sorted(glob.glob(os.path.join(input_path, '*.csv')))
     
     if not csv_files:
         print(f"[Warning] No CSV files found in {input_path}")

@@ -1,0 +1,17 @@
+Group,Key,English,Korean
+ResourceInspector,Auto,Auto,자동 갱신
+ResourceInspector,CopyKey,Copy Key,키 복사
+ResourceInspector,EmptyKey,(empty key),(빈 키)
+ResourceInspector,Key,Key,키
+ResourceInspector,KeyCaption,Key:,키:
+ResourceInspector,NoPath,(no path recorded),(기록된 경로 없음)
+ResourceInspector,None,(none),(없음)
+ResourceInspector,Path,Path,경로
+ResourceInspector,PathCaption,Path:,경로:
+ResourceInspector,RefreshHint,Refresh every 0.5 seconds,0.5초마다 갱신합니다
+ResourceInspector,Refs,Refs,참조 수
+ResourceInspector,Search,"Search type, key or path...",종류·키·경로 검색...
+ResourceInspector,Showing,Showing {} / {} registered resources,등록된 리소스 {} / {}개 표시
+ResourceInspector,Slot,Slot: {} / Generation: {},슬롯: {} / 세대: {}
+ResourceInspector,Title,Resource Manager,리소스 매니저
+ResourceInspector,Type,Type,종류

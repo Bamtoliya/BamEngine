@@ -1,0 +1,54 @@
+Group,Key,English,Korean
+MaterialEditor,AddBinding,Add Binding,바인딩 추가
+MaterialEditor,AddBindingAtSlot,{} (Slot {}),{} (슬롯 {})
+MaterialEditor,AddParam,Add Param,파라미터 추가
+MaterialEditor,AddPassShader,Add Pass Shader,패스 셰이더 추가
+MaterialEditor,BaseBinding,{} (Base),{} (원본)
+MaterialEditor,BaseMaterial,Base Material: {},기본 머티리얼: {}
+MaterialEditor,BaseMaterialMissing,Base material is missing. Select a base material below.,원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.
+MaterialEditor,BaseMaterialSlot,Base Material,원본 머티리얼
+MaterialEditor,BlendMode,Blend Mode,블렌드 모드
+MaterialEditor,ColorType,{} (Color),{} (색상)
+MaterialEditor,CullMode,Cull Mode,컬링 모드
+MaterialEditor,DefaultPS,Default PS,기본 픽셀 셰이더
+MaterialEditor,DefaultShaders,--- Default Shaders ---,--- 기본 셰이더 ---
+MaterialEditor,DefaultVS,Default VS,기본 정점 셰이더
+MaterialEditor,DepthCompareOp,Depth Compare Op,깊이 비교 연산
+MaterialEditor,DepthMode,Depth Mode,깊이 모드
+MaterialEditor,DropShader,(Drop Shader),(셰이더 드래그 & 드롭)
+MaterialEditor,DropTexture,(Drop texture here),(여기에 텍스처 드래그 & 드롭)
+MaterialEditor,EmptyResourceKey,(Empty),(빈 키)
+MaterialEditor,FillMode,Fill Mode,채우기 모드
+MaterialEditor,InheritedFromBase,Inherited from Base Material,원본 머티리얼에서 상속됨
+MaterialEditor,LoadFailed,Failed to load material resource: {},머티리얼 리소스를 로드할 수 없습니다: {}
+MaterialEditor,Modified,Modified,수정됨
+MaterialEditor,Name,Name,이름
+MaterialEditor,NoResource,(None),(없음)
+MaterialEditor,OverriddenInInstance,Overridden in Instance,인스턴스에서 재정의됨
+MaterialEditor,ParamNameHint,Param Name,파라미터 이름
+MaterialEditor,Parameters,Parameters,매개변수
+MaterialEditor,PassSpecificShaders,--- Pass Specific Shaders ---,--- 패스별 셰이더 ---
+MaterialEditor,PassType,Pass Type,패스 종류
+MaterialEditor,PipelineSettings,Pipeline Settings,파이프라인 설정
+MaterialEditor,PixelShader,Pixel Shader,픽셀 셰이더
+MaterialEditor,Preview,Preview,미리보기
+MaterialEditor,Retry,Retry,다시 시도
+MaterialEditor,Revert,Revert,되돌리기
+MaterialEditor,Save,Save,저장
+MaterialEditor,ShaderSettings,Shader Settings,셰이더 설정
+MaterialEditor,Slot,Slot,슬롯
+MaterialEditor,SlotNameHint,Slot Name,슬롯 이름
+MaterialEditor,TextureBindings,Texture Bindings,텍스처 바인딩
+MaterialEditor,TextureDragDrop,Texture (Drag & Drop),텍스처 (드래그 & 드롭)
+MaterialEditor,TextureRegister,t%u,t%u
+MaterialEditor,UnsupportedType,Unsupported Type,지원되지 않는 타입
+MaterialEditor,Value,Value,값
+MaterialEditor,VertexShader,Vertex Shader,정점 셰이더
+MaterialEditor,Cube,Cube,큐브 (Cube)
+MaterialEditor,Plane,Plane,평면 (Plane)
+MaterialEditor,PreviewMesh,Preview Mesh,프리뷰 메시
+MaterialEditor,ResetCamera,Reset Camera,카메라 초기화
+MaterialEditor,Sphere,Sphere,구체 (Sphere)
+MaterialEditor,ToggleGrid,Toggle Grid,그리드 표시 전환
+MaterialEditor,ViewMenu,View,보기
+MaterialEditor,SearchParameters,Search parameters...,파라미터 검색...

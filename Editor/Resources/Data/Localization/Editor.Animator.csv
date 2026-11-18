@@ -1,0 +1,18 @@
+Group,Key,English,Korean
+Animator,ControllerPath,Controller Path,컨트롤러 경로
+Animator,CurrentState,Current State,현재 상태
+Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
+Animator,New,New Controller,새 컨트롤러
+Animator,NoClipAssigned,No animation clip assigned.,할당된 애니메이션 클립이 없습니다.
+Animator,Open,Open Controller,컨트롤러 열기
+Animator,Parameters,Parameters,매개변수
+Animator,Pause,Pause,일시정지
+Animator,Preview,Preview,미리보기
+Animator,Previewing,Previewing,미리보기 재생 중
+Animator,Reset,Reset,초기화
+Animator,Save,Save Controller,컨트롤러 저장
+Animator,StateMachine,State Machine,상태 머신
+Animator,Stop,Stop,정지
+Animator,Stopped,Stopped,정지됨
+Animator,Timeline,Timeline,타임라인
+Animator,Trigger,Trigger,트리거

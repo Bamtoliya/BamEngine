@@ -1,0 +1,104 @@
+Group,Key,English,Korean
+Viewport,AddButton,Add Button,버튼 추가
+Viewport,AddImage,Add Image,이미지 추가
+Viewport,AllRenderTargets,All RenderTargets,모든 렌더 타깃
+Viewport,Anchors,Anchors,앵커
+Viewport,AspectRatio,Aspect Ratio,종횡비
+Viewport,BringToFront,Bring to Front,맨 앞으로
+Viewport,BypassSnap,Hold Alt to bypass snapping.,Alt를 누르면 스냅을 일시 해제합니다.
+Viewport,CameraFOV,FOV,시야각 (FOV)
+Viewport,CameraMenu,Camera,카메라
+Viewport,CameraOptics,Camera Optics,카메라 광학
+Viewport,CameraOrthographicSize,Size,직교 크기
+Viewport,CameraPosition,Position,위치
+Viewport,CameraResetOrigin,Reset to Origin,원점으로 리셋
+Viewport,CameraRotation,Rotation,회전
+Viewport,CameraSpeed,Move Speed,이동 속도
+Viewport,CameraTopView,Top View,상단 뷰 (Top)
+Viewport,CameraTransform,Camera Transform,카메라 트랜스폼
+Viewport,Canvas,Canvas,캔버스
+Viewport,CanvasOrderHint,Canvas order within this scene.,이 씬 안에서의 캔버스 표시 순서입니다.
+Viewport,CanvasSize,Canvas {:.0f} x {:.0f} | {:.0f}%,캔버스 {:.0f} x {:.0f} | {:.0f}%
+Viewport,CanvasUnavailable,Canvas layout is invalid or awaiting render.,캔버스 레이아웃이 올바르지 않거나 렌더링을 기다리고 있습니다.
+Viewport,Channels,Channels,채널
+Viewport,CreateCanvasHint,Create a Canvas from the Canvas menu in an open scene.,열린 씬에서 캔버스 메뉴를 통해 캔버스를 생성하세요.
+Viewport,Custom,Custom...,사용자 지정...
+Viewport,DebugMenu,Debug,디버그
+Viewport,DecreaseZ,Z -1,Z 순서 -1
+Viewport,ElementOrderHint,Higher Z renders later among siblings. Children stay with their parent.,형제 중 Z 값이 클수록 나중에 그려집니다. 자식은 부모와 함께 표시됩니다.
+Viewport,FinalOutput,FinalRT,최종 출력
+Viewport,Fit,Fit,화면에 맞춤
+Viewport,FreeAspect,Free,자유 비율
+Viewport,FreePanelSize,Free (Panel Size),패널 크기에 맞춤
+Viewport,GPUId,GPU ID,GPU ID
+Viewport,GameTitle,Game,게임
+Viewport,GizmoMenu,Gizmo,기즈모
+Viewport,Grid,Grid,격자
+Viewport,GridStep,Grid step (px),격자 간격 (px)
+Viewport,IncreaseZ,Z +1,Z 순서 +1
+Viewport,Interact,Interact,상호작용
+Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
+Viewport,Local,Local,로컬
+Viewport,NewCanvas,New Canvas,새 캔버스
+Viewport,NewName,New Viewport,새 뷰포트
+Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
+Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"
+Viewport,Order,Order,표시 순서
+Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.
+Viewport,Picking,Picking,선택 판정
+Viewport,Pixel,Pixel,픽셀
+Viewport,PointerCancel,Cancel,취소
+Viewport,PointerClick,Click,클릭
+Viewport,PointerDown,Down,누름
+Viewport,PointerEnter,Enter,진입
+Viewport,PointerEvent,{} | Entity {},{} | 엔티티 {}
+Viewport,PointerExit,Exit,벗어남
+Viewport,PointerUp,Up,놓음
+Viewport,RayBounds,Ray bounds (broad phase),광선과 경계 검사 (넓은 단계)
+Viewport,RayBoundsHint,Tests mesh bounds. Triangle surfaces and sprite transparency are not tested.,메시 경계를 검사합니다. 삼각형 표면과 스프라이트 투명도는 검사하지 않습니다.
+Viewport,Realtime,Realtime,실시간
+Viewport,RealtimeTooltip,Toggle Realtime Preview,실시간 프리뷰 토글
+Viewport,RenderPassesMenu,Passes,패스
+Viewport,RenderSize,Render: {} x {},렌더링: {} x {}
+Viewport,RenderTargetsMenu,Render Target,렌더 타겟
+Viewport,RenderTargetsUnavailable,Render targets are unavailable. Change the resolution to retry.,렌더 타깃을 준비하지 못했습니다. 해상도를 변경해 다시 시도하세요.
+Viewport,Resolution,Resolution,해상도
+Viewport,Resolution4K,3840 x 2160 (4K UHD),3840 x 2160 (4K UHD)
+Viewport,ResolutionFHD,1920 x 1080 (FHD),1920 x 1080 (FHD)
+Viewport,ResolutionHD,1280 x 720 (HD),1280 x 720 (HD)
+Viewport,ResolutionIPhone,1170 x 2532 (iPhone 14),1170 x 2532 (iPhone 14)
+Viewport,ResolutionPortrait,1080 x 1920 (Portrait FHD),1080 x 1920 (세로 FHD)
+Viewport,ResolutionQHD,2560 x 1440 (QHD),2560 x 1440 (QHD)
+Viewport,ResolutionSD,854 x 480 (SD),854 x 480 (SD)
+Viewport,SafeArea,Safe area (5% guide),안전 영역 (5% 가이드)
+Viewport,Scale,Scale: {:.0f}%,배율: {:.0f}%
+Viewport,Scene,Scene,씬
+Viewport,SceneTitle,Scene View,씬 뷰
+Viewport,SelectionLocked,Selection Locked,선택 잠김
+Viewport,SendToBack,Send to Back,맨 뒤로
+Viewport,ShowBounds,Show Bounds,경계 표시
+Viewport,ShowCollider,Show Collider,콜라이더 표시
+Viewport,ShowGrid,Show Grid,격자 표시
+Viewport,Snap,Snap,스냅
+Viewport,SnapRotation,Snap Rotation,회전 스냅 간격
+Viewport,SnapScale,Snap Scale,크기 스냅 간격
+Viewport,SnapToGrid,Snap to Grid,격자에 맞추기
+Viewport,SnapTranslation,Snap Translation,이동 스냅 간격
+Viewport,TransformRejected,Transform edit rejected: the result cannot be represented by local TRS.,변환 편집을 거부했습니다. 결과를 로컬 이동·회전·크기로 표현할 수 없습니다.
+Viewport,UITitle,UI View,UI 뷰
+Viewport,View,View,보기
+Viewport,ViewerTitle,{} Viewer,{} 뷰어
+Viewport,World,World,월드
+Viewport,ZIndex,Z-Index,Z 순서
+Viewport,RenderTargetPreviewUnsupported,This render target cannot be previewed as a 2D image.,이 렌더 타깃은 2D 이미지로 미리 볼 수 없습니다.
+Viewport,Orthographic,Orthographic View,직교 뷰
+Viewport,Perspective,Perspective View,원근 뷰
+Viewport,ChannelR,Red Channel,빨강 채널
+Viewport,ChannelG,Green Channel,초록 채널
+Viewport,ChannelB,Blue Channel,파랑 채널
+Viewport,ChannelA,Alpha Channel,알파 채널
+Viewport,PixelPerfectTargetTooLarge,Enlarge Game View or lower the render resolution for 1:1 display.,1:1 표시를 위해 게임 뷰를 넓히거나 렌더 해상도를 낮추세요.
+Viewport,PixelPerfectView,Pixel Perfect View (1:1),픽셀 퍼펙트 뷰 (1:1)
+Viewport,Pivot,Pivot,피벗
+Viewport,Center,Center,중심점
+Viewport,CameraSpeedValue,Move Speed: {:.1f},이동 속도: {:.1f}

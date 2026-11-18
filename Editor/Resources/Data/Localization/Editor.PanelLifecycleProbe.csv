@@ -1,0 +1,8 @@
+Group,Key,English,Korean
+PanelLifecycleProbe,Title,Panel lifecycle probe,패널 수명 진단
+PanelLifecycleProbe,Frame,ImGui frame {0},ImGui 프레임 {0}
+PanelLifecycleProbe,Register,Load DLL,DLL 로드
+PanelLifecycleProbe,Remove,Unload DLL,DLL 언로드
+PanelLifecycleProbe,DrawCount,DLL draw calls {0},DLL 그리기 호출 {0}회
+PanelLifecycleProbe,Reload,Reload DLL,DLL 다시 로드
+PanelLifecycleProbe,SecondTitle,Second panel probe,두 번째 패널 진단

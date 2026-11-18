@@ -188,10 +188,14 @@ def editor_catalog_layout_issues(file_path):
     """Editor rows explicitly own their namespace; Engine root/metadata keys keep their existing contract."""
     if not file_path.is_file():
         return
+    expected_group = file_path.stem[len('Editor.'):] if file_path.stem.startswith('Editor.') else None
     with file_path.open(encoding='utf-8-sig', newline='') as stream:
         reader = csv.DictReader(stream)
         for row in reader:
             key = (row.get('Key') or '').strip()
+            if None in row or any(value is None for value in row.values()):
+                yield reader.line_num, key, 'Expected the same number of columns as the header'
+                continue
             if not key:
                 continue
             group = (row.get('Group') or '').strip()
@@ -199,6 +203,8 @@ def editor_catalog_layout_issues(file_path):
                 yield reader.line_num, key, 'Editor keys require an explicit Group'
             elif key.startswith(group + '.'):
                 yield reader.line_num, key, 'Key repeats its Group prefix'
+            elif expected_group and group != expected_group:
+                yield reader.line_num, key, f'Expected Group {expected_group}, found {group}'
 
 
 def find_unregistered_actions(sources):
@@ -264,14 +270,10 @@ def is_dynamic_prefix_matched(prefix: str, catalog: dict) -> bool:
     return False
 
 def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = False):
-    loc_dirs = [
-        root_dir / "Engine" / "Resources" / "Data" / "Localization",
-        root_dir / "Editor" / "Resources" / "Data" / "Localization"
-    ]
-    catalog_paths = []
-    for d in loc_dirs:
-        if d.exists():
-            catalog_paths.extend(sorted(d.glob('*.csv')))
+    engine_loc_dir = root_dir / "Engine" / "Resources" / "Data" / "Localization"
+    editor_loc_dir = root_dir / "Editor" / "Resources" / "Data" / "Localization"
+    editor_catalog_paths = sorted(editor_loc_dir.glob('*.csv'))
+    catalog_paths = sorted(engine_loc_dir.glob('*.csv')) + editor_catalog_paths
     if not catalog_paths:
         legacy_dir = root_dir / "Resources" / "Data" / "Localization"
         if legacy_dir.exists():
@@ -285,10 +287,13 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
     catalog_groups = {key.split('.', 1)[0] for key in combined_catalog if '.' in key}
     duplicates = duplicate_catalog_keys(catalog_paths)
 
-    editor_csv_path = root_dir / "Editor" / "Resources" / "Data" / "Localization" / "Editor.csv"
-    if not editor_csv_path.exists():
-        editor_csv_path = root_dir / "Engine" / "Resources" / "Data" / "Localization" / "Editor.csv"
-    editor_layout_issues = list(editor_catalog_layout_issues(editor_csv_path)) if editor_csv_path.exists() else []
+    if not editor_catalog_paths:
+        editor_catalog_paths = [engine_loc_dir / 'Editor.csv']
+    editor_layout_issues = [
+        (path.name, line, key, reason)
+        for path in editor_catalog_paths
+        for line, key, reason in editor_catalog_layout_issues(path)
+    ]
 
     missing_keys = []
     hardcoded_ui = []
@@ -424,10 +429,10 @@ def audit_project(root_dir: Path, check_orphans: bool = False, strict: bool = Fa
 
     if editor_layout_issues:
         print(f'[!] EDITOR CATALOG LAYOUT ({len(editor_layout_issues)} locations):')
-        for line, key, reason in editor_layout_issues:
-            print(f'    - Editor.csv:{line} [{key}] -> {reason}')
+        for filename, line, key, reason in editor_layout_issues:
+            print(f'    - {filename}:{line} [{key}] -> {reason}')
     else:
-        print('[V] Editor Catalog Groups: Explicit, without repeated prefixes')
+        print('[V] Editor Catalog Layout: Valid')
 
     if panel_display_name_issues:
         print(f'[!] UNLOCALIZED PANEL DISPLAY NAMES ({len(panel_display_name_issues)} locations):')

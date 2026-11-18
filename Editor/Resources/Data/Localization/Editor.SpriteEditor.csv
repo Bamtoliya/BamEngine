@@ -1,0 +1,53 @@
+Group,Key,English,Korean
+SpriteEditor,SliceModalTitle,Slice Sprite Sheet,스프라이트 시트 슬라이스
+SpriteEditor,SliceMethod,Slice Method,슬라이스 방식
+SpriteEditor,GridByCellSize,Grid By Cell Size,셀 크기 기준 그리드
+SpriteEditor,GridByCellCount,Grid By Cell Count,행/열 개수 기준 그리드
+SpriteEditor,Automatic,Automatic (Alpha),알파 채널 자동 검출
+SpriteEditor,CellSize,Cell Size (px),셀 크기 (픽셀)
+SpriteEditor,CellCount,Cell Count (Cols x Rows),행/열 개수 (열 x 행)
+SpriteEditor,Offset,Offset (px),오프셋 (픽셀)
+SpriteEditor,Padding,Padding (px),패딩 (픽셀)
+SpriteEditor,DefaultPivot,Default Pivot,기본 피벗
+SpriteEditor,ExecuteSlice,Slice,슬라이스 실행
+SpriteEditor,ApplySlices,Apply Slices,슬라이스 적용 및 저장
+SpriteEditor,CreateAnimModalTitle,Create Sprite Animation,스프라이트 애니메이션 생성
+SpriteEditor,AnimModeSingle,Single Animation Clip,단일 애니메이션 클립
+SpriteEditor,AnimModeRow,Row-by-Row Multi Clips,행 단위 분할 클립
+SpriteEditor,ClipName,Clip Name,클립 이름
+SpriteEditor,RowNames,Row Action Names,행별 액션 이름 목록
+SpriteEditor,GenerateAnim,Generate Animations,애니메이션 일괄 생성
+SpriteEditor,SelectedSlice,Selected Slice Properties,선택된 슬라이스 속성
+SpriteEditor,SliceList,Slices List,슬라이스 목록
+SpriteEditor,DeleteSlice,Delete Slice,슬라이스 삭제
+SpriteEditor,Border,9-Slice Border (L/R/T/B),9-Slice 보더 (좌/우/상/하)
+SpriteEditor,FitView,Fit View,화면 맞춤
+SpriteEditor,OneToOne,1:1 Zoom,1:1 배율
+SpriteEditor,ClearSlices,Clear All Slices,모든 슬라이스 초기화
+SpriteEditor,SliceCountFormat,%zu Slices,%zu개 슬라이스
+SpriteEditor,NoSlices,No slices defined. Click 'Slice...' to partition texture.,정의된 슬라이스가 없습니다. 'Slice...'를 눌러 텍스처를 분할하세요.
+SpriteEditor,GenerateAnimSuccess,Successfully created animation clips!,스프라이트 애니메이션 클립이 성공적으로 생성되었습니다!
+SpriteEditor,NoTextureLoaded,No valid texture loaded.,유효한 텍스처가 로드되지 않았습니다.
+SpriteEditor,PivotLabel,Pivot,피벗
+SpriteEditor,NoSliceSelected,No slice selected.,선택된 슬라이스가 없습니다.
+SpriteEditor,IndexHeader,#,#
+SpriteEditor,NameHeader,Name,이름
+SpriteEditor,SizeHeader,Size,크기
+SpriteEditor,AutoDesc,Automatic alpha cluster detection.,알파 채널 연결 요소를 탐색하여 바운딩 박스를 자동 검출합니다.
+SpriteEditor,AlphaThreshold,Alpha Threshold,알파 임계값
+SpriteEditor,MinPixelArea,Min Pixel Area (px),최소 픽셀 면적 (픽셀)
+SpriteEditor,RowHelp,"Comma separated: Idle, Walk, Attack, Die","쉼표로 구분하여 액션 이름 입력 (예: Idle, Walk, Attack, Die)"
+SpriteEditor,FpsLabel,FPS,FPS
+SpriteEditor,PlayModeLabel,Play Mode,재생 모드
+SpriteEditor,PivotCenter,Center,중앙
+SpriteEditor,PivotBottom,Bottom,하단
+SpriteEditor,PivotTop,Top,상단
+SpriteEditor,PivotLeft,Left,좌측
+SpriteEditor,PivotRight,Right,우측
+SpriteEditor,XYLabel,X / Y,X / Y
+SpriteEditor,WHLabel,W / H,너비 / 높이
+SpriteEditor,ResolutionFormat,(%ux%u),(%ux%u)
+SpriteEditor,SizeFormat,%.0fx%.0f,%.0fx%.0f
+SpriteEditor,OpenTexture,Open Texture...,텍스처 열기...
+SpriteEditor,PixelsPerUnit,Pixels Per Unit,단위당 픽셀 (PPU)
+SpriteEditor,SearchSlices,Search slices...,슬라이스 검색...

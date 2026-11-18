@@ -1,0 +1,113 @@
+Group,Key,English,Korean
+Metrics,ActiveScenes,Active scenes: {},활성 씬: {}
+Metrics,ActiveSlots,Active: %llu / %llu slots,활성 슬롯: %llu / %llu
+Metrics,AllocatedDescriptors,Allocated Descriptors: {},할당된 디스크립터: {}
+Metrics,AssetTasks,Asset tasks,에셋 작업
+Metrics,Average,Average,평균
+Metrics,AverageFPS,Average FPS: {:.1f},평균 FPS: {:.1f}
+Metrics,Busy,[ BUSY ],[ 처리 중 ]
+Metrics,CPUTime,CPU (ms),CPU (ms)
+Metrics,CloseDetail,Close Detail,상세 닫기
+Metrics,CloseDetailX,[ Close Detail X ],[ 상세 닫기 X ]
+Metrics,Completed,Completed: {},완료: {}
+Metrics,ComputeShader,Compute Shader: {},컴퓨트 셰이더: {}
+Metrics,Count,Count,개수
+Metrics,CurrentFrame,Current frame,현재 프레임
+Metrics,DXRRaytracing,DXR Raytracing: {},DXR 레이 트레이싱: {}
+Metrics,DedicatedVRAM,Dedicated VRAM: {} MB,전용 VRAM: {} MB
+Metrics,DescriptorIndexing,Descriptor Indexing (Bindless): {},디스크립터 인덱싱 (바인드리스): {}
+Metrics,DetailMemory,Detailed Resource Memory Inspection,리소스 메모리 상세
+Metrics,DetailNetwork,Detailed Network Session Inspection,네트워크 세션 상세
+Metrics,DetailPerformance,Detailed Performance Inspection,상세 성능 검사
+Metrics,DetailRendering,Detailed GPU Rendering & Passes,GPU 렌더링 및 패스 상세
+Metrics,DetailTasks,Detailed Engine & Task Queue Inspection,엔진 및 작업 큐 상세
+Metrics,DrawBreakdown,Non-indexed: {} / Indexed: {},인덱스 미사용: {} / 인덱스 사용: {}
+Metrics,DrawCalls,Draw calls: {},그리기 호출: {}
+Metrics,DrawHint,Counts engine RHI draws. Excludes direct ImGui backend draws and texture blits.,엔진의 RHI 그리기를 집계합니다. ImGui 백엔드의 직접 그리기와 텍스처 블릿은 제외합니다.
+Metrics,Draws,Draws: %llu,그리기 호출: %llu
+Metrics,EngineState,Engine state,엔진 상태
+Metrics,FPSCap,FPS cap: {}  ({:.3f} ms),FPS 제한: {}  ({:.3f} ms)
+Metrics,FPSUnlimited,FPS cap: Unlimited,FPS 제한: 무제한
+Metrics,Fail,[ FAIL ],[ 실패 ]
+Metrics,Failed,Failed: {},실패: {}
+Metrics,Fps,%.1f FPS,%.1f FPS
+Metrics,FrameInterval,Frame interval (ms),프레임 간격 (ms)
+Metrics,FrameMsAvg,Frame: %.2f ms (Avg: %.2f),프레임: %.2f ms (평균: %.2f)
+Metrics,FrameTimeHint,Includes frame limiting and waits. This is not CPU or GPU execution time.,프레임 제한과 대기 시간을 포함합니다. CPU나 GPU 실행 시간이 아닙니다.
+Metrics,GPUTime,GPU (ms),GPU (ms)
+Metrics,Good,[ GOOD ],[ 양호 ]
+Metrics,GpuRendering,GPU RENDERING,GPU 렌더링
+Metrics,GpuTimeMsVerts,GPU Time: %.2f ms | Verts: %llu,GPU 시간: %.2f ms / 정점: %llu
+Metrics,HardwareCapabilities,Hardware Capabilities:,하드웨어 지원 기능:
+Metrics,Healthy,[ HEALTHY ],[ 정상 ]
+Metrics,HostingOnPort,Hosting on Port: %u,호스팅 포트: %u
+Metrics,Idle,[ IDLE ],[ 대기 ]
+Metrics,Indices,Submitted indices: {},제출한 인덱스: {}
+Metrics,IndirectDraw,Indirect Draw: {},간접 그리기: {}
+Metrics,Maximum,Maximum,최대
+Metrics,MemoryCache,MEMORY & CACHE,메모리 및 캐시
+Metrics,MeshShader,Mesh Shader: {},메시 셰이더: {}
+Metrics,Minimum,Minimum,최소
+Metrics,ModeStandalone,Mode: Standalone,모드: 독립 실행
+Metrics,ModelsTextures,Models: %llu | Textures: %llu,모델: %llu / 텍스처: %llu
+Metrics,Network,NETWORK,네트워크
+Metrics,NetworkDriverStatus,Network Driver Status: %s,네트워크 드라이버 상태: %s
+Metrics,NetworkSystemUnavailable,NetworkSystem is not registered.,네트워크 시스템이 등록되지 않았습니다.
+Metrics,NoCapture,No completed capture.,완료된 수집 결과가 없습니다.
+Metrics,NoSamples,No frame samples.,수집한 프레임이 없습니다.
+Metrics,NotSupported,Not Supported,미지원
+Metrics,Offline,[ OFFLINE ],[ 오프라인 ]
+Metrics,Ok,[ OK ],[ 정상 ]
+Metrics,Online,[ ONLINE ],[ 온라인 ]
+Metrics,Outstanding,Outstanding: {},미수집·실행 중: {}
+Metrics,PassesScenes,Passes: %zu | Scenes: %zu,패스: %zu / 씬: %zu
+Metrics,PauseCapture,Pause capture,수집 일시정지
+Metrics,PauseHint,Freeze metrics only; the engine keeps running.,통계 수집만 멈춥니다. 엔진은 계속 실행됩니다.
+Metrics,Performance,PERFORMANCE,성능
+Metrics,PingMs,Ping: %.1f ms,지연 시간: %.1f ms
+Metrics,Poor,[ POOR ],[ 낮음 ]
+Metrics,RHIDraws,RHI draw commands — heaviest frame in last 0.5 s,RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임
+Metrics,RecentFrames,Recent {} frames,최근 {}개 프레임
+Metrics,ReferenceTimings,Asset reference timings (ms),에셋 참조 검사 시간 (ms)
+Metrics,ReferenceNoSamples,No measured reference work yet.,아직 측정된 참조 작업이 없습니다.
+Metrics,ReferenceFrameSum,Reference work on frame #{}: {:.2f} ms (peak {:.2f} ms),참조 작업 프레임 #{}: {:.2f} ms (최대 {:.2f} ms)
+Metrics,ReferenceScanLatest,{} on frame #{} · {} directories · {} documents · {} links · {} issues,{} 프레임 #{} · 폴더 {}개 · 문서 {}개 · 참조 링크 {}개 · 문제 {}건
+Metrics,ReferenceScanPhases,Traversal {:.2f} ms · Read and parse {:.2f} ms · Resolve references {:.2f} ms · Refresh view {:.2f} ms,경로 순회 {:.2f} ms · 읽기 및 파싱 {:.2f} ms · 참조 확인 {:.2f} ms · 화면 갱신 {:.2f} ms
+Metrics,ReferenceLast,Latest,최근
+Metrics,ReferenceInitial,First reference lookup,첫 참조 조회
+Metrics,ReferenceManual,Manual reference scan,수동 참조 검사
+Metrics,ReferenceAutomatic,Automatic full scan,자동 전체 검사
+Metrics,ReferenceIncremental,Changed document scan,변경 문서 검사
+Metrics,ReferenceAfterRepair,Scan after repair,복구 후 검사
+Metrics,ReferenceDeleteImpact,Deletion impact scan,삭제 영향 검사
+Metrics,ReferenceMovePreparation,Move reference preparation,이동 참조 갱신 준비
+Metrics,ReferenceMoveRecheck,Move impact recheck,이동 영향 재검사
+Metrics,RefreshInterval,Refresh interval: 0.5 seconds,갱신 간격: 0.5초
+Metrics,RegisteredPasses,Registered render passes: {},등록된 렌더 패스: {}
+Metrics,RenderFailed,Render failed: partial counts,렌더링 실패: 일부 집계만 표시합니다
+Metrics,RenderPass,Render Pass,렌더 패스
+Metrics,RenderTimes,Render Times:,렌더링 시간:
+Metrics,ResetHistory,Reset history,기록 초기화
+Metrics,ResourceSummary,Loaded: {}   Slots: {}   Reusable: {},로딩됨: {}   슬롯: {}   재사용 가능: {}
+Metrics,Resources,Resources,리소스
+Metrics,ServerPort,Server: Port %u,서버: 포트 %u
+Metrics,SmoothedRttMs,Smoothed RTT: %.2f ms,평활 왕복 지연: %.2f ms
+Metrics,StatusConnected,Status: Connected,상태: 연결됨
+Metrics,Succeeded,Succeeded: {},성공: {}
+Metrics,Supported,Supported,지원
+Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)
+Metrics,SupportedTier1_0Plus,Supported (Tier 1.0+),지원 (Tier 1.0 이상)
+Metrics,SupportedTier3,Supported (Tier 3),지원 (Tier 3)
+Metrics,TaskHint,Outstanding includes running tasks and results not yet collected. Counts cover registered async tasks.,미수집·실행 중에는 실행 중인 작업과 아직 수집하지 않은 결과가 포함됩니다. 등록된 비동기 작업을 집계합니다.
+Metrics,TasksActiveDone,Tasks: %llu Active / %llu Done,작업: %llu개 진행 / %llu개 완료
+Metrics,TasksEngine,TASKS & ENGINE,작업 및 엔진
+Metrics,Tier1Or2,Tier 1/2,Tier 1/2
+Metrics,Title,Engine Metrics,엔진 통계
+Metrics,TotalCPUSubmit,Total CPU Submit: {:.2f} ms,CPU 전체 제출 시간: {:.2f} ms
+Metrics,TotalGPUExecute,Total GPU Execute: {:.2f} ms,GPU 전체 실행 시간: {:.2f} ms
+Metrics,TrafficKbS,Traffic: 0.0 KB/s,트래픽: 0.0 KB/s
+Metrics,Type,Type,종류
+Metrics,VRAMDescriptors,VRAM & Descriptors:,VRAM 및 디스크립터:
+Metrics,Vertices,Submitted vertices (non-indexed): {},제출한 정점 (인덱스 미사용): {}
+Metrics,ViewDetails,View Details ->,상세 보기 →
+Metrics,Warn,[ WARN ],[ 주의 ]

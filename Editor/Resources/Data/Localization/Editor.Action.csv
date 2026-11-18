@@ -1,0 +1,62 @@
+Group,Key,English,Korean
+Action,Animator.SaveAs,Save Controller As...,다른 이름으로 컨트롤러 저장...
+Action,Build.CompileModule,Compile Game Module,게임 모듈 컴파일
+Action,Build.ReloadModule,Reload Game Module,게임 모듈 핫 리로드
+Action,Build.ReloadShaders,Recompile Shaders,셰이더 전체 재컴파일
+Action,Edit.Delete,Delete,삭제
+Action,Edit.Deselect,Deselect All,선택 해제
+Action,Edit.Duplicate,Duplicate,복제
+Action,Edit.Rename,Rename,이름 변경
+Action,Editor.OpenSettings,Preferences / Settings,환경설정
+Action,File.CloseScene,Close Scene,씬 닫기
+Action,File.Exit,Exit,에디터 종료
+Action,File.ImportAsset,Import Asset...,에셋 가져오기...
+Action,File.LoadScene,Load Scene,씬 불러오기
+Action,File.NewScene,New Scene,새 씬
+Action,File.SaveScene,Save Scene,씬 저장하기
+Action,File.SaveSceneAs,Save Scene As...,다른 이름으로 씬 저장...
+Action,Graph.AddNode,Add Node,노드 추가
+Action,Graph.AlignBottom,Align Bottom,아래쪽 정렬
+Action,Graph.AlignLeft,Align Left,왼쪽 정렬
+Action,Graph.AlignRight,Align Right,오른쪽 정렬
+Action,Graph.AlignTop,Align Top,위쪽 정렬
+Action,Graph.CreateComment,Create Comment Box,코멘트 박스 생성
+Action,Graph.Delete,Delete Elements,선택 항목 삭제
+Action,Graph.DistributeHoriz,Distribute Horizontally,가로 균등 분배
+Action,Graph.DistributeVert,Distribute Vertically,세로 균등 분배
+Action,Graph.Duplicate,Duplicate Nodes,노드 복제
+Action,Graph.Open,Open Graph,그래프 열기
+Action,Graph.Pause,Pause Graph,그래프 일시정지
+Action,Graph.Run,Run Graph,그래프 실행
+Action,Graph.SaveAs,Save Graph As...,다른 이름으로 그래프 저장...
+Action,Graph.Step,Step Execution,단계별 실행
+Action,Graph.Stop,Stop Execution,실행 중지
+Action,Graph.ToggleBreakpoint,Toggle Breakpoint,중단점 설정/해제
+Action,Graph.Validate,Validate Graph,그래프 검증
+Action,PIE.PauseResume,Pause / Resume,일시정지 / 재개
+Action,PIE.Play,Play,재생
+Action,PIE.Stop,Stop,정지
+Action,Timeline.DeleteSelected,Delete Selected Item,선택 항목 삭제
+Action,Timeline.FirstFrame,First Frame,첫 프레임
+Action,Timeline.LastFrame,Last Frame,마지막 프레임
+Action,Timeline.NextFrame,Next Frame,다음 프레임
+Action,Timeline.PlayPause,Play / Pause,재생 / 일시정지
+Action,Timeline.PrevFrame,Previous Frame,이전 프레임
+Action,Timeline.ToggleLoop,Toggle Loop,루프 토글
+Action,Timeline.ZoomReset,Reset Zoom,줌 초기화
+Action,Viewport.Focus,Focus Target,대상 포커스
+Action,Viewport.GizmoRotate,Rotate,회전 기즈모
+Action,Viewport.GizmoScale,Scale,스케일 기즈모
+Action,Viewport.GizmoSelect,Select Mode,선택 모드
+Action,Viewport.GizmoTranslate,Translate,이동 기즈모
+Action,Viewport.ToggleCoord,Toggle Local / World,로컬 / 월드 좌표계 전환
+Action,Viewport.ToggleGrid,Toggle Grid,그리드 표시 토글
+Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
+Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
+Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
+Action,Window.CloseFocusedPanel,Close Focused Panel,포커스된 패널 닫기
+Action,Viewport.CameraSpeedIncrease,Increase Camera Speed,카메라 속도 증가
+Action,Viewport.CameraSpeedDecrease,Decrease Camera Speed,카메라 속도 감소
+Action,Viewport.TogglePivot,Toggle Pivot / Center,피벗 / 중심점 모드 전환
+Action,Timeline.StepPrev,Step Previous Frame,1프레임 이전
+Action,Timeline.StepNext,Step Next Frame,1프레임 다음

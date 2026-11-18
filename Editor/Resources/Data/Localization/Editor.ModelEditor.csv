@@ -1,0 +1,52 @@
+Group,Key,English,Korean
+ModelEditor,EditModeOnly,Material assignments can be edited and saved after stopping PIE.,PIE를 종료하면 머티리얼 연결을 편집하고 저장할 수 있습니다.
+ModelEditor,MaterialSlot,Material Slot {},머티리얼 슬롯 {}
+ModelEditor,NoModel,Open an imported .bammodel resource. If loading failed check the log.,임포트된 .bammodel 리소스를 여세요. 로드 실패 시 로그를 확인하세요.
+ModelEditor,NoSlots,No material slots. Older models may need to be imported again.,머티리얼 슬롯이 없습니다. 이전 모델은 다시 임포트해야 할 수 있습니다.
+ModelEditor,PendingSave,Material assignments changed. Save the model to keep them.,머티리얼 연결이 변경됐습니다. 유지하려면 모델을 저장하세요.
+ModelEditor,RetryLoad,Retry Loading Model,모델 다시 불러오기
+ModelEditor,SaveFailed,Failed to save the model. Check the log.,모델 저장에 실패했습니다. 로그를 확인하세요.
+ModelEditor,Saved,Model saved.,모델을 저장했습니다.
+ModelEditor,Animations,Embedded Animations,내장 애니메이션
+ModelEditor,BoneCount,Bones,본 수
+ModelEditor,Focus,Focus (F),모델에 포커스 (F)
+ModelEditor,HasSkeleton,Yes,있음
+ModelEditor,MaterialSlots,Material Slots,머티리얼 슬롯
+ModelEditor,MeshCount,Meshes,메시 수
+ModelEditor,ModelInfo,Model Information,모델 정보
+ModelEditor,NodeCount,Nodes,노드 수
+ModelEditor,NoSkeleton,None (Static Mesh),없음 (스태틱 메시)
+ModelEditor,Placement,Scene Placement,씬 배치
+ModelEditor,SkeletonInfo,Skeleton,스켈레톤
+ModelEditor,ToggleGrid,Toggle Grid (G),그리드 표시 전환 (G)
+ModelEditor,ClipName,Clip Name,클립 이름
+ModelEditor,Duration,Duration,재생 시간
+ModelEditor,EmbeddedClips,Embedded Clips,내장 클립 목록
+ModelEditor,LoopAnimation,Loop,반복 재생
+ModelEditor,PauseClip,Pause,일시정지
+ModelEditor,PlayClip,Play,재생
+ModelEditor,PlayRate,Speed,배속
+ModelEditor,SelectClip,Select Clip,클립 선택
+ModelEditor,StopAndReset,Stop (T-Pose),정지 (T-포즈)
+ModelEditor,SecondsFormat,{:.2f}s,{:.2f}초
+ModelEditor,LODHeader,Mesh LOD (Level of Detail),메시 LOD (Level of Detail)
+ModelEditor,LODAuto,Auto (Distance),Auto (자동 거리)
+ModelEditor,LOD0,LOD 0 (Original),LOD 0 (원본)
+ModelEditor,LOD1,LOD 1,LOD 1
+ModelEditor,LOD2,LOD 2,LOD 2
+ModelEditor,SelectLOD,Select Preview LOD,프리뷰 LOD 선택
+ModelEditor,NoLODsAvailable,No LOD meshes available for this model.,이 모델에 등록된 파생 LOD가 없습니다.
+ModelEditor,LODLevel,LOD,LOD
+ModelEditor,Triangles,Triangles,삼각형 수
+ModelEditor,Vertices,Vertices,정점 수
+ModelEditor,Reduction,Ratio,비율
+ModelEditor,Action,Action,동작
+ModelEditor,ViewLOD,View,보기
+ModelEditor,ResetAutoLOD,Restore Auto LOD,Auto 모드로 복원
+ModelEditor,LOD0Label,LOD 0,LOD 0
+ModelEditor,LOD1Label,LOD 1,LOD 1
+ModelEditor,LOD2Label,LOD 2,LOD 2
+ModelEditor,TotalModel,Total Combined,전체 모델 합산
+ModelEditor,PartBreakdown,Per-Part LOD Details,파츠별 LOD 상세
+ModelEditor,PartName,Part Name,파츠 이름
+ModelEditor,SearchSlots,Search material slots...,머티리얼 슬롯 검색...

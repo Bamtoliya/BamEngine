@@ -1,0 +1,28 @@
+Group,Key,English,Korean
+ToolBar,ApplyFPS,Apply FPS,FPS 적용
+ToolBar,ApplyResolution,Apply Resolution,해상도 적용
+ToolBar,AutoCompile,Auto-Compile,자동 컴파일
+ToolBar,AutoCompileTooltip,Automatically trigger background build on C++ source save.,C++ 소스 파일 저장 시 자동으로 백그라운드 빌드를 수행합니다.
+ToolBar,AutoReload,Auto,자동
+ToolBar,AutoReloadTooltip,Automatically reload when GameModule.dll is compiled,GameModule.dll 컴파일 시 자동 다시 로드
+ToolBar,DisplaySettings,Display Settings,화면 설정
+ToolBar,Fullscreen,Fullscreen,전체 화면
+ToolBar,ModuleCompile,Compile,컴파일
+ToolBar,ModuleCompileTooltip,Build GameModule C++ source in the background.,GameModule C++ 소스를 백그라운드에서 빌드합니다.
+ToolBar,ModuleCompiling,Compiling...,컴파일 중...
+ToolBar,ModuleReload,Hot Reload,핫 리로드
+ToolBar,NewViewportPanel,New Viewport Panel,새 뷰포트 패널
+ToolBar,Panels,Panels,패널
+ToolBar,PauseTooltip,"Pause: 게임 정지, 에디터 조작 가능","일시정지: 게임 정지, 에디터 조작 가능"
+ToolBar,PlayTooltip,Play (Enter PIE),재생 (PIE 시작)
+ToolBar,ReloadModuleTooltip,Reload GameModule DLL (Version: {}),GameModule DLL 다시 로드 (버전: {})
+ToolBar,ResumeTooltip,Resume: 게임 로직 재개,계속: 게임 로직 재개
+ToolBar,ShaderReload,Shader Reload,셰이더 리로드
+ToolBar,ShaderReloadTooltip,Recompile & Hot-Swap All Shaders,모든 셰이더 재컴파일 및 핫스왑
+ToolBar,StopTooltip,Stop (restore scene),중지 (씬 복원)
+ToolBar,TargetFPS,Target FPS,목표 프레임 속도
+ToolBar,TargetFPSHint,0 disables the FPS limit. Range: 0-1000.,0은 FPS 제한을 해제합니다. 입력 범위: 0~1000.
+ToolBar,UIScale,UI Scale,UI 배율
+ToolBar,WindowMinimize,Minimize Window,창 최소화
+ToolBar,WindowMaximize,Maximize Window,창 최대화
+ToolBar,WindowRestore,Restore Window,창 크기 복원

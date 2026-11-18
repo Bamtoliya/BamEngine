@@ -1,0 +1,58 @@
+Group,Key,English,Korean
+Hierarchy,Action,Action: {},작업 대상: {}
+Hierarchy,Active,Is Active,활성화
+Hierarchy,3DObjects,3D Object,3D 오브젝트
+Hierarchy,Cube,Cube,큐브
+Hierarchy,Sphere,Sphere,스피어
+Hierarchy,Cylinder,Cylinder,실린더
+Hierarchy,Quad,Quad,평면 (Quad)
+Hierarchy,Plane,Plane,평면 (Plane)
+Hierarchy,WaterSurface,Water Surface (Wave),파도 수면 (Wave)
+Hierarchy,Lights,Light,라이트
+Hierarchy,2DObjects,2D Object,2D 오브젝트
+Hierarchy,Sprite,Sprite,스프라이트
+Hierarchy,UI,UI,UI
+Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
+Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
+Hierarchy,AddEntity,Add Entity,엔티티 추가
+Hierarchy,AddEntityTooltip,Create Entity,엔티티 생성
+Hierarchy,AddLight,Add Light Entity,라이트 엔티티 추가
+Hierarchy,AddPointLight,Point Light,포인트 라이트
+Hierarchy,AddPrimitive,Add Primitive Entity,기본 도형 엔티티 추가
+Hierarchy,AddSkyLight,Sky Light,스카이 라이트
+Hierarchy,AddSpotLight,Spot Light,스포트 라이트
+Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
+Hierarchy,AddTerrain,Terrain,터레인
+Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
+Hierarchy,CycleRejected,An entity cannot be parented to itself or its descendants.,자신이나 자손을 부모로 지정할 수 없습니다.
+Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 의해 비활성화됨
+Hierarchy,DeleteEntityAndChildren,Delete entity and children,엔티티와 자식 삭제
+Hierarchy,DeleteSelectedEntities,Delete Selected Entities,선택한 엔티티 삭제
+Hierarchy,DepthLimitReached,The hierarchy would exceed its depth limit.,계층의 최대 깊이를 초과합니다.
+Hierarchy,DragSelection,Move {} selected entities,선택한 엔티티 {}개 이동
+Hierarchy,DropPrefabRoot,Drop here to add a prefab at the scene root,여기에 놓으면 씬 루트에 프리팹을 추가합니다
+Hierarchy,Duplicate,Duplicate,복제
+Hierarchy,EditFailed,The hierarchy is invalid; no changes were made.,계층 관계가 올바르지 않아 변경하지 않았습니다.
+Hierarchy,Empty,No entities.,엔티티가 없습니다.
+Hierarchy,EntityFallback,Entity {},엔티티 {}
+Hierarchy,FocusSelected,Focus Selected,선택 오브젝트로 포커스
+Hierarchy,HiddenByParent,Hidden by parent hierarchy.,부모 계층에 의해 숨겨짐
+Hierarchy,InvalidLinks,Invalid hierarchy links; shown without repair.,잘못된 계층 관계가 있습니다. 원본을 유지한 채 표시합니다.
+Hierarchy,Light,Light,라이트
+Hierarchy,MoveDown,Move Down,아래로 이동
+Hierarchy,MoveToRoot,Move to Root,루트로 이동
+Hierarchy,MoveUp,Move Up,위로 이동
+Hierarchy,NoMatchingEntities,No matching entities found.,일치하는 엔티티가 없습니다.
+Hierarchy,OpenInUIEditor,Open in UI Editor,UI 편집 패널에서 열기
+Hierarchy,PrefabRootDeleteBlocked,Root entity of a prefab instance cannot be deleted directly.,프리팹 인스턴스의 루트 엔티티는 직접 삭제할 수 없습니다.
+Hierarchy,PreserveTransformFailed,Cannot preserve the world transform under this parent.,이 부모에서는 현재 월드 변환을 유지할 수 없습니다.
+Hierarchy,RenameScene,Rename Scene,씬 이름 변경
+Hierarchy,RootDropHint,Drop here to move to root,여기에 놓으면 루트로 이동합니다
+Hierarchy,SceneName,Scene: {},씬: {}
+Hierarchy,ReorderSameParent,Select siblings under the same parent to reorder them.,순서를 바꾸려면 같은 부모 아래의 항목을 선택하세요.
+Hierarchy,StaleEntityDrop,This entity is no longer in the current scene.,현재 씬에 없는 엔티티입니다.
+Hierarchy,Title,Hierarchy,계층
+Hierarchy,ToggleActive,Toggle Active,활성 여부 전환
+Hierarchy,ToggleVisibility,Toggle Visibility,표시 여부 전환
+Hierarchy,Visible,Visible,표시
+Hierarchy,CreateEmpty,Create Empty,빈 엔티티 생성

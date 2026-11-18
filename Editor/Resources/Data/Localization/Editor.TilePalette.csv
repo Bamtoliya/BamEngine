@@ -1,0 +1,17 @@
+Group,Key,English,Korean
+TilePalette,Title,Tile Palette,타일 팔레트
+TilePalette,PaintTool,Paint (B),페인트 브러시 (B)
+TilePalette,EraseTool,Erase (E),지우개 (E)
+TilePalette,BoxTool,Box Fill (U),사각형 채우기 (U)
+TilePalette,PickerTool,Pick (I),스포이트 (I)
+TilePalette,SelectTexture,Select Palette Texture,팔레트 텍스처 선택
+TilePalette,NoSprites,No tiles in palette. Drag texture or sprites here.,팔레트에 타일이 없습니다. 텍스처나 스프라이트를 드래그하세요.
+TilePalette,ActiveBrush,Active Brush:,선택된 브러시:
+TilePalette,ThumbnailSize,Thumbnail Size,썸네일 크기
+TilePalette,AddedTiles,Added {0} tiles to palette,팔레트에 {0}개 타일을 추가했습니다
+TilePalette,Autotile,Autotile,자동 타일
+TilePalette,AutotileSelectTilemap,Select a tilemap to edit its road rules.,도로 규칙을 편집할 타일맵을 선택하세요.
+TilePalette,AutotileMask,Connection mask,연결 마스크
+TilePalette,AutotileLegend,N 1 / E 2 / S 4 / W 8. Assign mask 0 before painting.,북 1 / 동 2 / 남 4 / 서 8. 칠하기 전에 0번에 스프라이트를 지정하세요.
+TilePalette,AutotileUnassigned,Unassigned,미지정
+TilePalette,AutotileAssign,Assign selected sprite,선택 스프라이트 지정

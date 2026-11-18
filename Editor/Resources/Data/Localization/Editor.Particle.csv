@@ -1,0 +1,7 @@
+Group,Key,English,Korean
+Particle,ActiveCount,Active Particles,활성 파티클 수
+Particle,BurstNow,Burst Now,즉시 버스트
+Particle,Pause,Pause,일시정지
+Particle,Play,Play,재생
+Particle,Reset,Reset,초기화
+Particle,Stop,Stop,정지

@@ -1,0 +1,92 @@
+Group,Key,English,Korean
+Settings,AssetDirectory,Asset Directory,에셋 디렉터리
+Settings,AutoSaveEnabled,Enable Auto-save,자동 저장 활성화
+Settings,AutoSaveInterval,Interval (Minutes),저장 주기 (분)
+Settings,BrowseFolder,Browse...,폴더 찾아보기...
+Settings,BrowseScene,Browse...,씬 찾아보기...
+Settings,Btn.Apply,Apply,적용
+Settings,Btn.Discard,Discard Changes,변경 취소
+Settings,Btn.ResetDefaults,Reset to Defaults,기본값으로 복원
+Settings,CameraFOV,Field of View (FOV),카메라 화각 (FOV)
+Settings,CameraMovement,Camera Movement,카메라 조작
+Settings,CategoryEditor,Editor Environment,에디터 환경
+Settings,CategoryGeneral,General,일반
+Settings,CategoryGraphic,Graphic & Display,그래픽 및 화면
+Settings,CategoryProjectSettings,Project Settings,프로젝트 설정
+Settings,CategoryShortcuts,Shortcuts,단축키
+Settings,CategoryTheme,Theme & Style,테마 및 스타일
+Settings,CategoryWorkspace,Workspace,작업 공간
+Settings,CustomFont,Custom Font,사용자 지정 폰트
+Settings,DockLayoutHelp,Default Docking Layout state is tracked in Workspace.json.,기본 도킹 배치는 Workspace.json에 저장됩니다.
+Settings,FontBrowse,Browse...,찾아보기...
+Settings,FontReset,Reset Font,기본 폰트로 복원
+Settings,FontSize,Font Size,폰트 크기
+Settings,GizmoSnapping,Gizmo Snapping,기즈모 스냅
+Settings,GroupEditor,Editor & Workspace,에디터 및 작업 공간
+Settings,GroupProject,Project,프로젝트
+Settings,GroupSystem,System & Display,시스템 및 화면
+Settings,Language,Language,언어
+Settings,LanguageEnglish,English,English
+Settings,LanguageKorean,Korean,한국어
+Settings,Logging,Logging,로깅
+Settings,MinimumLogLevel,Minimum Log Level,최소 로그 수준
+Settings,ProjectMetadata,Project Metadata,프로젝트 메타데이터
+Settings,ProjectName,Project Name,프로젝트 이름
+Settings,ProjectRoot,Project Root,프로젝트 루트
+Settings,ResetCustomStyle,Reset to Default Style,기본 스타일로 복원
+Settings,ResetDefaults,Reset to Defaults,기본값 복원
+Settings,SaveCustomStyle,Save Custom Style,커스텀 스타일 저장
+Settings,SectionAppearance,Appearance & Scaling,디스플레이 배율
+Settings,SectionAutoSave,Auto-save,자동 저장
+Settings,SectionContentBrowser,Content Browser,콘텐츠 브라우저
+Settings,SectionDisplayResolution,Window & Resolution,창 및 디스플레이
+Settings,SectionDockingLayout,Docking & Layout,도킹 및 레이아웃
+Settings,SectionFont,Font & Typography,폰트 및 타이포그래피
+Settings,SectionFrameSync,Framerate & Sync,프레임 레이트 및 동기화
+Settings,SectionLanguage,Language & Localization,언어 및 로캘
+Settings,SectionLayoutPresets,Layout & Presets,레이아웃 및 프리셋
+Settings,SectionViewportResolution,Viewport Resolution,뷰포트 해상도
+Settings,ShaderDirectory,Shader Source Directory,셰이더 소스 경로
+Settings,StartupScene,Startup Scene,시작 씬
+Settings,StyleEditor,Style Customizer,스타일 상세 편집
+Settings,StyleHelp,Edit the draft and click Apply to save. Discard restores the applied values.,초안을 편집한 뒤 적용을 눌러 저장하세요. 변경 취소는 적용된 값으로 복원합니다.
+Settings,StyleSavedNotification,Custom style saved successfully.,커스텀 스타일이 성공적으로 저장되었습니다.
+Settings,Theme,Theme Preset,테마 프리셋
+Settings,ThemeBamEngine,BamEngine Dark (Default),BamEngine 다크 (기본)
+Settings,ThemeClassic,Classic,클래식
+Settings,ThemeCustom,Custom (User Saved),사용자 정의 (Custom)
+Settings,ThemeLight,Light,라이트
+Settings,ThumbnailSize,Thumbnail Size,썸네일 크기
+Settings,Title,Settings,설정
+Settings,UnlimitedFPS,Unlimited,무제한
+Settings,PreviewLighting,Preview Lighting,프리뷰 조명
+Settings,PreviewKeyLight,Key Light,주광
+Settings,PreviewFillLight,Fill Light,보조광
+Settings,PreviewRimLight,Rim Light,역광
+Settings,StyleApplyPresetFirst,Apply the selected preset before editing its style.,선택한 프리셋을 먼저 적용한 뒤 상세 스타일을 편집하세요.
+Settings,StyleSaveFailed,Could not save the style. Your draft is preserved.,스타일을 저장하지 못했습니다. 편집 초안은 유지됩니다.
+Settings,StyleWindowRounding,Window rounding,창 모서리
+Settings,StyleChildRounding,Child rounding,하위 영역 모서리
+Settings,StyleFrameRounding,Frame rounding,입력 프레임 모서리
+Settings,StylePopupRounding,Popup rounding,팝업 모서리
+Settings,StyleScrollbarRounding,Scrollbar rounding,스크롤바 모서리
+Settings,StyleGrabRounding,Grab rounding,슬라이더 손잡이 모서리
+Settings,StyleTabRounding,Tab rounding,탭 모서리
+Settings,StyleWindowBorder,Window border,창 테두리 두께
+Settings,StyleFrameBorder,Frame border,입력 프레임 테두리 두께
+Settings,StylePopupBorder,Popup border,팝업 테두리 두께
+Settings,StyleScrollbarSize,Scrollbar size,스크롤바 크기
+Settings,StyleGrabMinSize,Minimum grab size,최소 손잡이 크기
+Settings,StyleWindowPadding,Window padding X/Y,창 안쪽 여백 X/Y
+Settings,StyleFramePadding,Frame padding X/Y,입력 프레임 여백 X/Y
+Settings,StyleItemSpacing,Item spacing X/Y,위젯 간격 X/Y
+Settings,StyleColors,Colors,색상
+Settings,DiskCache,Disk Cache,디스크 캐시
+Settings,DiskCacheThumbnails,Thumbnail Cache,썸네일 캐시
+Settings,DiskCacheShaders,Shader & PSO Cache,셰이더 및 PSO 캐시
+Settings,DiskCacheDDC,Derived Data Cache (DDC),에셋 파생 데이터 (DDC)
+Settings,DiskCacheTerrain,Terrain Grid Cache,지형 그리드 캐시
+Settings,DiskCacheTotal,Total Cache Size,총 디스크 캐시 용량
+Settings,ClearAllDiskCaches,Clear All Disk Caches,전체 디스크 캐시 비우기
+Settings,ClearDiskCacheSuccess,Disk cache cleared successfully.,디스크 캐시가 성공적으로 삭제되었습니다.
+Settings,DiskCacheSizeAndFiles,%s (%u files),%s (파일 %u개)
