@@ -275,7 +275,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     1. 타일당 최대 광원 용량 초과(Overflow) 시 대체 동작 및 다중 광원/이동 카메라 경계 조건의 추가 검증 기록.
 - 완료 기준: 작은/큰 씬에서 고정 비용과 이득을 S1 계측 수치로 구분하고, 미지원·용량 초과의 정확한 대체 동작과 IBL/그림자 품질을 확인한다.
 
-- [Render S6 1~3단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[1~3단계 구현 및 Editor 확인: 2026-11-18 / Client 비교 잔여]** — 1단계 정적 반투명 메시 거리 정렬, 2단계 씬 컬러 복사 및 유리 굴절 실환경 확인에 이어, 3단계 평평한 수면 셰이더(`waterPS.hlsl`, `WaterMaterial.bammat.json`, 잔물결 노멀 스크롤, Depth Fade 수심 색상 그라데이션, 고스트 방지) 파이프라인을 구축하고 에디터 실환경에서 확인했다. 바닥 밀착 시 수심 소멸 투명화 분석 및 셰이더 안전장치 기록을 완료했다. Windows 배포 Client 비교, 4단계 파도는 잔여다.
+- [Render S6 1~4단계](RenderingDevelopmentPlan.md#s6-래스터-반투명-재질과-수면) **[1~4단계 구현, Editor 및 Client 검증 완료: 2026-11-18]** — 1단계 정적 반투명 메시 거리 정렬, 2단계 씬 컬러 복사 및 유리 굴절, 3단계 평평한 수면 셰이더 및 깊이 페이드, 4단계 세분화 격자 메시(`WaterGridMesh`, 64x64, 4,225 정점)와 4중 거스트너 파도 셰이더(`waveVS.hlsl`, `wavePS.hlsl`, `WaveMaterial.bammat.json`, 도함수 기반 분석적 법선/탄젠트 동기화, 파도 마루 Whitecap 거품, Depth Fade 굴절) 파이프라인을 구축하고, 스케일 확장 시 텍스처 스트레칭을 방지하는 월드 공간 XZ 정렬(World-Aligned UV)을 적용했다. Editor Game View와 독립 배포 Client(`Client.exe`) 환경에서 동일 카메라·해상도로 반투명/파도 렌더링 동등성을 검증 완료했다.
 
 ### P2-C. 강화학습의 첫 환경
 

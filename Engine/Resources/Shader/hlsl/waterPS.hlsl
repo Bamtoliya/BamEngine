@@ -44,13 +44,13 @@ float4 main(PS_INPUT input) : SV_TARGET
     g_SceneColor.GetDimensions(width, height);
     float2 screenUV = input.Position.xy / float2(width, height);
 
-    // 2. 시간 기반 유기적 잔물결 계산 (3방향 비대칭 파동 합성)
+    // 2. 시간 기반 유기적 잔물결 계산 (월드 공간 XZ 기준 타일링)
     float time = commonData.Time;
     float waveSpeed = 0.5f;
-    float waveScale = 2.0f;
-
-    float2 uv1 = input.TexCoord * waveScale;
-    float2 uv2 = input.TexCoord * (waveScale * 1.4f);
+    float waveScale = 0.75f; // 1m당 약 0.75회 반복되는 물리적 파동 스케일
+    float2 worldUV = input.WorldPos.xz;
+    float2 uv1 = worldUV * waveScale;
+    float2 uv2 = worldUV * (waveScale * 1.4f);
 
     float3 N = normalize(input.Normal);
     float3 T = normalize(input.Tangent - dot(input.Tangent, N) * N);
@@ -143,13 +143,14 @@ float4 main(PS_INPUT input) : SV_TARGET
     // 얕은 물에서는 씬 컬러의 디테일과 고유 색상을 온전히 유지하고, 깊어질수록 deepColor로 흡수
     float3 waterBodyColor = lerp(sceneColor * shallowTint, deepColor, depthFactor);
 
+    // 7. 파도 및 해안선 거품 노이즈 (월드 좌표 기준)
     // 7. 해안선 접촉 거품 (상향 수면 윗면에서만 얇게 발생)
     float isTopSurface = saturate((N.y - 0.4f) * 2.5f);
     float foamDist = 0.04f; // 4cm 초미세 림 거품
     if (isTopSurface > 0.05f && waterDepth < foamDist && waterDepth > 0.001f)
     {
         float foamT = saturate(1.0f - waterDepth / foamDist);
-        float foamNoise = saturate(sin(uv1.x * 20.0f + uv1.y * 20.0f + time * 2.0f) * 0.5f + 0.5f);
+        float foamNoise = saturate(sin(worldUV.x * 6.0f + time * 3.0f) * sin(worldUV.y * 6.0f - time * 2.5f) * 0.5f + 0.5f);
         float3 foamColor = float3(0.92f, 0.96f, 1.0f);
         waterBodyColor = lerp(waterBodyColor, foamColor, foamT * foamNoise * 0.4f * isTopSurface);
     }

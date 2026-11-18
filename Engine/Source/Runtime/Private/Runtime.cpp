@@ -88,9 +88,9 @@ void Runtime::Free()
 	Safe_Destroy(m_TimeManager);
 	Safe_Destroy(m_InputManager);
 	Safe_Destroy(m_LocalizationManager);
-	Safe_Destroy(m_AudioManager);
 	// ── 5. 리소스 (RHI 리소스: Mesh, Texture, Shader) ──
 	Safe_Destroy(m_ResourceManager);
+	Safe_Destroy(m_AudioManager);
 	// ── 6. 렌더링 인프라 (RHI 리소스) ──
 	Safe_Destroy(m_LightManager);
 	Safe_Destroy(m_SamplerManager);

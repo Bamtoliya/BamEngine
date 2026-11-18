@@ -6,6 +6,7 @@
 #include "NotificationManager.h"
 #include <windows.h>
 #include "PlatformPath.h"
+#include "Functions.h"
 
 namespace
 {
@@ -81,14 +82,27 @@ namespace
 		void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename,
 			efsw::Action action, std::string oldFilename) override
 		{
-			if (action == efsw::Actions::Modified || action == efsw::Actions::Add)
+			if (action != efsw::Actions::Modified && action != efsw::Actions::Add && action != efsw::Actions::Moved)
+				return;
+
+			try
 			{
-				std::filesystem::path fullPath = std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str());
-				std::string ext = ToLowerCopy(fullPath.extension().string());
+				const auto fullPath = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
+				const std::string ext = ToLowerCopy(fullPath.extension().string());
 				if (ext == ".hlsl" || ext == ".hlsli")
 				{
+					EDITOR_LOG_INFO("[Shader Hot Reload] Detected file change: {} (action: {})",
+						fullPath.filename().string(), static_cast<int>(action));
 					m_Manager->NotifyFileModified(fullPath);
 				}
+			}
+			catch (const std::exception& error)
+			{
+				EDITOR_LOG_WARN("[Shader Hot Reload] Ignored file event: {}, {}", filename, error.what());
+			}
+			catch (...)
+			{
+				EDITOR_LOG_WARN("[Shader Hot Reload] Ignored file event: {}", filename);
 			}
 		}
 	private:
@@ -98,24 +112,20 @@ namespace
 
 void ShaderHotReloadManager::RegisterDefaultCandidates()
 {
-	// 1. 엔진 시스템 빌트인 셰이더 경로 (Engine://Shader/hlsl)
-	AddWatchPath(L"Engine://Shader/hlsl");
+	// 1. 엔진 시스템 빌트인 셰이더 루트 (Engine://Shader -> Engine/Resources/Shader)
+	AddWatchPath(L"Engine://Shader");
 
-	// 2. 사용자 프로젝트 애셋 셰이더 경로 (Project://Shader/hlsl 또는 Project://Shader)
-	AddWatchPath(L"Project://Shader/hlsl");
+	// 2. 사용자 프로젝트 애셋 셰이더 루트 (Project://Shader)
 	AddWatchPath(L"Project://Shader");
 
 	// 3. 환경 변수 기반 셰이더 경로 등록 (예: BAM_SHADER_PATH="C:/CustomShaders;D:/Plugins/Shader")
 	AddWatchPathsFromEnvironment("BAM_SHADER_PATH");
 
-	// 4. 모든 연결된 Git 워크트리의 셰이더 경로 자동 감시 등록
+	// 4. 모든 연결된 Git 워크트리의 셰이더 루트 자동 감시 등록 (recursive로 하위 hlsl 등 일괄 감시)
 	for (const auto& root : Engine::PlatformPath::GetWorktreeRoots())
 	{
-		AddWatchPath(root / "Engine/Resources/Shader/hlsl");
 		AddWatchPath(root / "Engine/Resources/Shader");
-		AddWatchPath(root / "Assets/Shader/hlsl");
 		AddWatchPath(root / "Assets/Shader");
-		AddWatchPath(root / "Resources/Shader/hlsl");
 		AddWatchPath(root / "Resources/Shader");
 	}
 }
@@ -136,11 +146,12 @@ void ShaderHotReloadManager::OnWatchPathAdded(const std::filesystem::path& resol
 {
 	if (!m_FileWatcher || !m_FileListener) return;
 
-	const efsw::WatchID watchId = m_FileWatcher->addWatch(resolvedPath.string(), m_FileListener, true);
+	const auto watchStr = Engine::WStrToStr(resolvedPath.wstring());
+	const efsw::WatchID watchId = m_FileWatcher->addWatch(watchStr, m_FileListener, true);
 	if (watchId > 0)
 	{
 		m_WatchIdMap[resolvedPath] = watchId;
-		EDITOR_LOG_INFO("[Shader Hot Reload] Watching directory: {}", resolvedPath.string());
+		EDITOR_LOG_INFO("[Shader Hot Reload] Watching directory: {}", watchStr);
 	}
 }
 
@@ -259,7 +270,8 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		? Engine::Renderer::Get().GetRHIType()
 		: Engine::ERHIType::DirectX12;
 
-	const Engine::ShaderCompileResult result = Engine::ShaderCompiler::Compile(hlslPath, shaderType, rhiType);
+	const Engine::ShaderCompileResult result = Engine::ShaderCompiler::Compile(
+		hlslPath, shaderType, rhiType, "main", true);
 	if (!result.Success)
 	{
 		EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to compile '{}':\n{}",

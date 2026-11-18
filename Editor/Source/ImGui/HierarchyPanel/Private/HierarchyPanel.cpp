@@ -325,6 +325,10 @@ void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
 			EntityFactory::CreatePrimitiveEntity(scene, L"Cylinder", L"CylinderMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Quad").c_str()))
 			EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Plane").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Plane", L"PlaneMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.WaterSurface").c_str()))
+			EntityFactory::CreatePrimitiveEntity(scene, L"Water Surface", L"WaterGridMesh", L"Engine://Material/WaveMaterial.bammat.json");
 		ImGui::EndMenu();
 	}
 

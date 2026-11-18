@@ -55,14 +55,18 @@ namespace
 		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename,
 			efsw::Action action, std::string) override
 		{
-			if (action != efsw::Actions::Modified && action != efsw::Actions::Add)
+			if (action != efsw::Actions::Modified && action != efsw::Actions::Add && action != efsw::Actions::Moved)
 				return;
 
 			try
 			{
 				const auto path = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
 				if (ClassifyAssetReload(path) != EAssetReloadKind::Unsupported)
+				{
+					EDITOR_LOG_INFO("[Asset Hot Reload] Detected file change: {} (action: {})",
+						filename, static_cast<int>(action));
 					m_Manager->NotifyFileModified(path);
+				}
 			}
 			catch (const std::exception& error)
 			{

@@ -3,6 +3,7 @@
 #include "ModuleHotReloadManager.h"
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
+#include "Functions.h"
 #include <mutex>
 #include <windows.h>
 
@@ -16,12 +17,27 @@ public:
     void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename,
         efsw::Action action, std::string oldFilename) override
     {
-        const std::filesystem::path fullPath = std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str());
-        const auto ext = fullPath.extension().string();
-        if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".inl" || filename == "CMakeLists.txt")
+        if (action != efsw::Actions::Modified && action != efsw::Actions::Add && action != efsw::Actions::Moved)
+            return;
+
+        try
         {
-            EDITOR_LOG_INFO("[ModuleBuildManager] Source modified detected: {}", filename);
-            if (m_Manager) m_Manager->NotifyFileModified(fullPath);
+            const auto fullPath = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
+            const auto ext = fullPath.extension().string();
+            if (ext == ".cpp" || ext == ".h" || ext == ".hpp" || ext == ".inl" || filename == "CMakeLists.txt")
+            {
+                EDITOR_LOG_INFO("[ModuleBuildManager] Source modified detected: {} (action: {})",
+                    filename, static_cast<int>(action));
+                if (m_Manager) m_Manager->NotifyFileModified(fullPath);
+            }
+        }
+        catch (const std::exception& error)
+        {
+            EDITOR_LOG_WARN("[ModuleBuildManager] Ignored file event: {}, {}", filename, error.what());
+        }
+        catch (...)
+        {
+            EDITOR_LOG_WARN("[ModuleBuildManager] Ignored file event: {}", filename);
         }
     }
 

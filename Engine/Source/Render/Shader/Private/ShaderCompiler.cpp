@@ -129,7 +129,8 @@ ShaderCompileResult ShaderCompiler::Compile(
     const std::filesystem::path& hlslPath,
     EShaderType shaderType,
     ERHIType rhiType,
-    const std::string& entryPoint)
+    const std::string& entryPoint,
+    bool forceRecompile)
 {
     ShaderCompileResult result;
     std::error_code ec;
@@ -162,7 +163,7 @@ ShaderCompileResult ShaderCompiler::Compile(
         ? (hlslPath.parent_path().parent_path() / "bin" / "wgsl" / (stem + ".wgsl"))
         : outPath;
     // ── [신규] 타임스탬프 디스크 캐시 적중 검사 (Up-to-Date 시 dxc.exe 실행 100% 바이패스) ──
-    if (IsUpToDate(hlslPath, finalTargetOutPath))
+    if (!forceRecompile && IsUpToDate(hlslPath, finalTargetOutPath))
     {
         if (ReadCompiledFile(finalTargetOutPath, result.Bytecode, result.ErrorMessage))
         {

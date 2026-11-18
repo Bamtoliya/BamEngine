@@ -27,7 +27,7 @@ namespace Editor
         {
             static const std::unordered_set<std::string> builtins = {
                 "FullscreenQuad", "FullscreenQuadVS", "LightingPS", "DefaultPS", "DefaultVS",
-                "SphereMesh", "QuadMesh", "CubeMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "__SkyMesh_Sphere__", "MaterialPreviewPS",
+                "SphereMesh", "QuadMesh", "CubeMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "WaterGridMesh", "__SkyMesh_Sphere__", "MaterialPreviewPS",
                 "ShadowDepthPS", "ShadowDepthVS", "ShadowDepthSkinningVS", "GBufferPS", "GBufferVS",
                 "GBufferSkinningVS", "SkyPS", "SkyVS", "TerrainPS", "TerrainVS", "UIPS", "UIVS"
             };
@@ -410,7 +410,7 @@ namespace Editor
         using Issue = EAssetReferenceIssueType;
 
         static const std::set<std::string> builtInMeshes = {
-            "QuadMesh", "CubeMesh", "SphereMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh"
+            "QuadMesh", "CubeMesh", "SphereMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "WaterGridMesh"
         };
 
         std::vector<AssetReferenceIssue> issues;

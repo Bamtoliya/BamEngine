@@ -544,6 +544,8 @@ Hierarchy,Cube,Cube,큐브
 Hierarchy,Sphere,Sphere,스피어
 Hierarchy,Cylinder,Cylinder,실린더
 Hierarchy,Quad,Quad,평면 (Quad)
+Hierarchy,Plane,Plane,평면 (Plane)
+Hierarchy,WaterSurface,Water Surface (Wave),파도 수면 (Wave)
 Hierarchy,Lights,Light,라이트
 Hierarchy,2DObjects,2D Object,2D 오브젝트
 Hierarchy,Sprite,Sprite,스프라이트

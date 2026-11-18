@@ -1,5 +1,6 @@
 ﻿#include "ModuleHotReloadManager.h"
 #include "PIEManager.h"
+#include "Functions.h"
 
 // efsw 파일 이벤트 리스너
 class ModuleHotReloadFileListener final : public efsw::FileWatchListener
@@ -12,10 +13,23 @@ public:
     void handleFileAction(efsw::WatchID watchid, const std::string& dir, const std::string& filename,
         efsw::Action action, std::string oldFilename) override
     {
-        if (filename == m_TargetFilename && (action == efsw::Action::Modified || action == efsw::Action::Add))
+        if (filename == m_TargetFilename && (action == efsw::Action::Modified || action == efsw::Action::Add || action == efsw::Action::Moved))
         {
-            if (m_Manager) 
-                m_Manager->NotifyFileModified(std::filesystem::path(reinterpret_cast<const char8_t*>(dir.c_str())) / reinterpret_cast<const char8_t*>(filename.c_str()));
+            try
+            {
+                const auto fullPath = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
+                EDITOR_LOG_INFO("[HotReload] Detected module change: {} (action: {})", filename, static_cast<int>(action));
+                if (m_Manager) 
+                    m_Manager->NotifyFileModified(fullPath);
+            }
+            catch (const std::exception& error)
+            {
+                EDITOR_LOG_WARN("[HotReload] Ignored module file event: {}, {}", filename, error.what());
+            }
+            catch (...)
+            {
+                EDITOR_LOG_WARN("[HotReload] Ignored module file event: {}", filename);
+            }
         }
     }
 
@@ -76,10 +90,11 @@ void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
 
     m_FileWatcher = new efsw::FileWatcher();
     m_FileListener = new ModuleHotReloadFileListener(this, m_WatchedFileName);
-    m_WatchID = m_FileWatcher->addWatch(watchDir.string(), m_FileListener, false);
+    const auto watchStr = Engine::WStrToStr(watchDir.wstring());
+    m_WatchID = m_FileWatcher->addWatch(watchStr, m_FileListener, false);
     m_FileWatcher->watch();
 
-    EDITOR_LOG_INFO("[HotReload] Watching for changes: {}", dllPath.string());
+    EDITOR_LOG_INFO("[HotReload] Watching for changes: {}", watchStr);
 }
 
 void ModuleHotReloadManager::StopWatching()

@@ -1,6 +1,9 @@
 ﻿#include "InputManager.h"
 #include "EditorUI.h"
+#pragma push_macro("COLOR")
+#undef COLOR
 #include "ImGuizmo.h"
+#pragma pop_macro("COLOR")
 #include <cmath>
 #include "PreviewViewportWidget.h"
 #include "EditorCameraController.h"

@@ -404,5 +404,80 @@ namespace Engine
             resourceManager.AddResource<Mesh>(L"CapsuleMesh", Mesh::Create(&capDesc));
         }
 #pragma endregion
+
+#pragma region WaterGrid
+        {
+            // 10m x 10m horizontal grid mesh with 64x64 subdivisions (4,225 vertices, 8,192 triangles)
+            // Designed for vertex-displaced water waves (Gerstner waves) with smooth silhouette curvature.
+            const uint32 subdivisions = 64;
+            const float size = 10.0f;
+            const float halfSize = size * 0.5f;
+            const float step = size / static_cast<float>(subdivisions);
+
+            vector<VertexPosition> positions;
+            vector<VertexMaterial> materials;
+            vector<uint32> indices;
+
+            const uint32 vertexCount = (subdivisions + 1) * (subdivisions + 1);
+            positions.reserve(vertexCount);
+            materials.reserve(vertexCount);
+            indices.reserve(subdivisions * subdivisions * 6);
+
+            for (uint32 z = 0; z <= subdivisions; ++z)
+            {
+                float posZ = -halfSize + static_cast<float>(z) * step;
+                float v = static_cast<float>(z) / static_cast<float>(subdivisions);
+
+                for (uint32 x = 0; x <= subdivisions; ++x)
+                {
+                    float posX = -halfSize + static_cast<float>(x) * step;
+                    float u = static_cast<float>(x) / static_cast<float>(subdivisions);
+
+                    positions.push_back({ { posX, 0.0f, posZ } });
+
+                    VertexMaterial mat{};
+                    mat.normal = vec3(0.0f, 1.0f, 0.0f);
+                    mat.texCoord = vec2(u, v);
+                    mat.tangent = vec3(1.0f, 0.0f, 0.0f);
+                    mat.binormal = vec3(0.0f, 0.0f, 1.0f);
+                    mat.color = vec4(1.0f);
+                    materials.push_back(mat);
+                }
+            }
+
+            const uint32 rowStride = subdivisions + 1;
+            for (uint32 z = 0; z < subdivisions; ++z)
+            {
+                for (uint32 x = 0; x < subdivisions; ++x)
+                {
+                    uint32 topLeft     = (z + 1) * rowStride + x;
+                    uint32 topRight    = (z + 1) * rowStride + (x + 1);
+                    uint32 bottomRight = z * rowStride + (x + 1);
+                    uint32 bottomLeft  = z * rowStride + x;
+
+                    // CW triangles facing +Y (Engine clockwise standard):
+                    indices.push_back(topLeft);
+                    indices.push_back(topRight);
+                    indices.push_back(bottomRight);
+
+                    indices.push_back(topLeft);
+                    indices.push_back(bottomRight);
+                    indices.push_back(bottomLeft);
+                }
+            }
+
+            MeshCreateDesc gridDesc = {};
+            gridDesc.Streams[(uint32)EMeshStream::Position] = { positions.data(), static_cast<uint32>(positions.size()), sizeof(VertexPosition) };
+            gridDesc.Streams[(uint32)EMeshStream::Material] = { materials.data(), static_cast<uint32>(materials.size()), sizeof(VertexMaterial) };
+            gridDesc.IndexData = indices.data();
+            gridDesc.IndexCount = static_cast<uint32>(indices.size());
+            gridDesc.IndexStride = sizeof(uint32);
+            // Conservative Y bounding range [-1.5f, 1.5f] to account for wave displacement preventing culling pop-in
+            gridDesc.BoundingBoxMin = vec3(-halfSize, -1.5f, -halfSize);
+            gridDesc.BoundingBoxMax = vec3(halfSize, 1.5f, halfSize);
+
+            resourceManager.AddResource<Mesh>(L"WaterGridMesh", Mesh::Create(&gridDesc));
+        }
+#pragma endregion
     }
 }

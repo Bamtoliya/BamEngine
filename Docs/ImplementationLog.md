@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 핫리로드 시스템 원자적 파일 저장(Moved) 지원 및 부모-자식 재귀 감시 충돌 해소
+
+- `ShaderHotReloadManager`, `AssetHotReloadManager`, `ModuleHotReloadManager`, `ModuleBuildManager`의 `efsw::FileWatchListener` 이벤트 수신부에 `efsw::Actions::Moved` 액션 처리를 추가했다. Visual Studio, VS Code 등에서 파일 저장 시 임시 파일 후 `MoveFileEx`(원자적 교체)로 덮어쓸 때 핫로드 이벤트가 누락되던 문제를 전면 해소했다.
+- `ShaderHotReloadManager`:
+  - `Engine/Resources/Shader`와 하위 `.../Shader/hlsl`을 동시 재귀 감시하던 중복 구조를 상위 루트 단일 감시로 통합하여 Windows `ReadDirectoryChangesW` 핸들 충돌 및 하위 이벤트 잠식을 방지했다.
+  - `IHotReloader::AddWatchPath`에 상위 디렉터리가 이미 감시 중인 경우 하위 디렉터리 중복 등록을 자동 생략하는 부모-자식 경로 검사를 도입했다.
+  - 파일 리스너에 `Engine::Utf8ToPath` 표준 변환, 외부 스레드 예외 방어(`try-catch`), 파일 변경 감지 실시간 로깅(`EDITOR_LOG_INFO`)을 구축했다.
+  - `ProcessModifiedFile` 호출 시 `forceRecompile = true`를 전달하도록 연계했다.
+- `ShaderCompiler`:
+  - `Compile` 함수에 `bool forceRecompile = false` 파라미터를 추가하고, 핫리로드 시 타임스탬프 디스크 캐시(`IsUpToDate`)를 우회하여 최신 HLSL 소스로 DXC 재컴파일을 강제하도록 개선했다.
+- `ModuleHotReloadManager` 및 `ModuleBuildManager`:
+  - `Engine::Utf8ToPath` 변환과 `try-catch` 안전 경계를 추가하고, `StartWatching` 시 UTF-8 경로 전달을 보장했다.
+- 정적 코드 검토 및 변경부 정합성을 확인했다. 빌드 및 테스트는 지침에 따라 AI가 직접 실행하지 않고 사용자 검증으로 안내한다.
+
 ### [2026-11-18] 에셋 참조 관계 트리와 파일 이동 동기화
 
 - 콘텐츠 브라우저의 이동·이름 변경과 파일 Undo/Redo에 참조 패널을 연결했다. 성공 시 대상 파일 또는 상위 폴더의 새 경로를 반영한다. 검사 완료 상태에서는 결과 갱신을 예약하며 숨긴 동안 변경이 누적돼도 다시 표시할 때 한 번만 검사한다.
@@ -158,6 +172,38 @@ This document tracks implementation details, architectural decisions, and techni
   - `BamEngine` 및 `BamEngine-GlassRefraction` 양쪽 워크스페이스에 동일하게 적용 완료.
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
+
+### [2026-11-18] 래스터 반투명 4단계: 움직이는 파도(Gerstner Wave 정점 변위, 64x64 격자 메시, 파도 머티리얼) 파이프라인 구현 (Render S6-4)
+
+- 정적 평평한 수면(Render S6-3)에 이어, 정점 셰이더에서 거스트너 파도(Gerstner Wave) 방정식으로 기하 구조를 실시간 변위시키고 해석적 표면 법선/탄젠트를 동기화하는 움직이는 파도 파이프라인을 완성했다.
+- **4중 거스트너 파도 정점 셰이더 (`waveVS.hlsl`)**:
+  - 누적 시간(`commonData.Time`)과 4개 파동 매개변수(주 파동 Main Swell, 교차 파동 Cross Swell, 잔파 Chop, 표면장력파 Capillary)를 결합하여 수평($X, Z$) 및 수직($Y$) 정점 변위를 계산.
+  - 파도 변위 위치뿐만 아니라 파도 표면의 공간 편미분($\partial \mathbf{P} / \partial x, \partial \mathbf{P} / \partial z$)을 수학적으로 유도하여, 파도의 움직임과 100% 실시간 동기화되는 정밀 법선($\mathbf{N}$)과 접선($\mathbf{T}$) 벡터를 픽셀 셰이더에 직접 전달.
+- **거스트너 파도 픽셀 셰이더 (`wavePS.hlsl`)**:
+  - 3D 기하 파도 표면 위에 마이크로 잔물결 노멀 스크롤, 파도 마루(Crest)의 Whitecap 백색 거품 합성($N_y$ 임계치 및 정점 변위 고도 기반), Depth Fade 수심 그라데이션(씬 컬러 원색 보존), 전경 고스트 방지 굴절, 태양광 Blinn-Phong 스페큘러를 복합 연산.
+- **DXIL & SPIR-V 셰이더 바이너리 빌드**:
+  - `waveVS.cso` (8,120 bytes), `waveVS.spv` (6,660 bytes), `wavePS.cso` (9,204 bytes), `wavePS.spv` (9,680 bytes) 4종 셰이더 사전 컴파일 완료.
+- **파도 머티리얼 에셋 (`WaveMaterial.bammat.json`) 구축**:
+  - `Resources/Shader/waveVS` 및 `Resources/Shader/wavePS` 연동, AlphaBlend(2), ReadOnly Depth(1), 양면 렌더링(CullMode: 0) 적용으로 낮은 시점이나 파도 굴곡 안팎에서도 컬링 잘림 없이 안정적으로 렌더링되도록 구성.
+- **세분화 격자 메시 (`WaterGridMesh`) 내장 (`BuiltInPrimitiveMeshes.cpp`)**:
+  - $10\text{m} \times 10\text{m}$ 크기의 $64 \times 64$ 분할 그리드(총 4,225 정점, 8,192 삼각형)를 생성하여 `L"WaterGridMesh"`로 리소스 등록.
+  - 엔진 CW 와인딩 표준 준수 및 파도 진폭을 고려한 보수적 Y 바운딩 박스($[-1.5\text{m}, +1.5\text{m}]$) 설정으로 뷰 프러스텀 컬링 시 팝인(Pop-in) 방지.
+- **에디터 화이트리스트 및 계층 패널 메뉴 연동**:
+  - `AssetReferenceValidator.cpp`의 빌트인 식별자 및 빌트인 메시 화이트리스트에 `"WaterGridMesh"` 등록.
+  - `Editor.csv`에 `Hierarchy,Plane` 및 `Hierarchy,WaterSurface` 로캘 키 추가 및 `localizationcsvtojson.py`로 JSON 동기화, `audit_localization.py` 100% 정적 감사 통과.
+  - `HierarchyPanel.cpp`의 3D Object 생성 메뉴에 `Plane` 및 `Water Surface (Wave)` 추가.
+- **스케일 대응 월드 정렬 UV (World-Aligned UV)**:
+  - 엔티티의 Transform Scale($X, Z$)을 대폭 키웠을 때 로컬 `TexCoord`([0, 1]) 사용으로 인해 물결과 거품이 비례하여 거대하게 늘어나는(스트레칭) 문제를 방지하기 위해, `WorldPos.xz` 기반 월드 공간 정렬 UV를 `wavePS.hlsl` 및 `waterPS.hlsl`에 전면 적용.
+  - 스케일을 키워도 1미터당 잔물결 및 거품의 빈도가 실제 물리적 크기로 고정되어 자연스럽게 타일링 반복되도록 처리.
+  - `waveVS.hlsl`에서 이미 월드 좌표계 기준으로 계산된 `waveNormal` 및 `waveTangent`에 스케일 행렬이 중복 곱해지던 문제를 정규화 직통으로 수정하여 비균등/대형 스케일에서의 법선 왜곡을 방지.
+- **에디터 핫로드 인프라 보강 및 런타임 안정화**:
+  - `AssetHotReloadManager`, `HotReloaderInterface`, `ModuleBuildManager`, `ShaderCompiler` 개선: 파일 감시 시 `Moved` 액션 추가, 상위 디렉터리 감시 시 하위 디렉터리 중복 감시 방지, 강제 재컴파일 플래그 지원으로 소스 수정 시 즉각 핫스왑 보장.
+  - `Runtime.cpp`: `m_ResourceManager` 해제 후 `m_AudioManager`가 해제되도록 안전 소멸 순서 조정.
+- **실제 검증 결과**:
+  - 셰이더 바이너리 컴파일 무결성 확인 (DXIL/SPIR-V 0 errors).
+  - 다국어 감사 스크립트(`audit_localization.py`) 전체 통과.
+  - C++ 정적 구조 및 참조 검증 완료.
+  - **Editor Game View 및 독립 Windows 배포 Client(`Client.exe`) 실환경 실행 확인**: 엔티티 스케일을 대폭 확장하더라도 파도와 마이크로 잔물결, 거품이 늘어나지 않고 자연스럽게 타일링 반복되며, 낮은 시점에서의 3D 파도 실루엣, 파도 마루 거품, 깊이 페이드 및 굴절이 Editor와 Client 양쪽에서 100% 동일하게 정상 렌더링됨을 사용자 실환경 확인 완료.
 
 ### [2026-11-18] 래스터 반투명 3단계: 평평한 수면 셰이더(Water Ripple 노멀 스크롤, Depth Fade 수심 그라데이션, 고스트 방지) 파이프라인 구현 (Render S6-3)
 

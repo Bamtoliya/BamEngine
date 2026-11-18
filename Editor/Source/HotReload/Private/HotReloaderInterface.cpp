@@ -54,7 +54,13 @@ bool IHotReloader::AddWatchPath(const std::filesystem::path& pathOrUri)
     // 중복 등록 방지
     for (const auto& existing : m_WatchPaths)
     {
-        if (Engine::PlatformPath::Normalize(existing) == normPath)
+        const auto existingNorm = Engine::PlatformPath::Normalize(existing);
+        if (existingNorm == normPath)
+            return false;
+
+        // 이미 상위 디렉터리가 감시 중이면 하위 디렉터리 중복 감시 생략 (재귀 감시 충돌 방지)
+        const auto rel = normPath.lexically_relative(existingNorm);
+        if (!rel.empty() && !rel.native().starts_with(L"..") && rel != L".")
             return false;
     }
 

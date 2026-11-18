@@ -23,7 +23,8 @@ public:
         const std::filesystem::path& hlslPath,
         EShaderType shaderType,
         ERHIType rhiType = ERHIType::DirectX12,
-        const std::string& entryPoint = "main");
+        const std::string& entryPoint = "main",
+        bool forceRecompile = false);
 
     // dxc.exe 컴파일러 실행 파일 경로 탐색
     static std::filesystem::path FindDxcPath();
