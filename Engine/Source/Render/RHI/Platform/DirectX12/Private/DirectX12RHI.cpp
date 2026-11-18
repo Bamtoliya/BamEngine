@@ -962,7 +962,11 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     const bool is3D = (desc.dimension == ETextureDimension::Texture3D);
     const uint32 depth = is3D ? desc.depth : 1;
 
-    const bool isSupportedFormat = (desc.format == ETextureFormat::R8G8B8A8_UNORM || desc.format == ETextureFormat::R32_FLOAT);
+    const bool isBlockCompressed = IsBlockCompressed(desc.format);
+    const bool isSupportedFormat = (desc.format == ETextureFormat::R8G8B8A8_UNORM ||
+                                    desc.format == ETextureFormat::R8G8B8A8_UNORM_SRGB ||
+                                    desc.format == ETextureFormat::R32_FLOAT ||
+                                    isBlockCompressed);
     if (!isSupportedFormat ||
         (desc.dimension != ETextureDimension::Texture2D && !is3D) ||
         desc.mipLevels == 0 ||
@@ -975,13 +979,13 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         return EResult::InvalidArgument;
     }
 
-    if (is3D && desc.mipLevels != 1)
+    if (is3D && (desc.mipLevels != 1 || isBlockCompressed))
     {
         return EResult::InvalidArgument;
     }
 
-    // 부분 업로드는 단일 밉(mipLevels == 1)일 때만 지원
-    if ((dstX != 0 || dstY != 0) && desc.mipLevels > 1)
+    // 부분 업로드는 단일 밉(mipLevels == 1)이며 비압축 포맷일 때만 지원
+    if ((dstX != 0 || dstY != 0) && (desc.mipLevels > 1 || isBlockCompressed))
     {
         return EResult::InvalidArgument;
     }
@@ -1023,7 +1027,7 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         return EResult::InvalidArgument;
     }
 
-    const UINT bytesPerPixel = (desc.format == ETextureFormat::R32_FLOAT) ? 4 : 4;
+    const UINT bytesPerPixel = isBlockCompressed ? 0 : GetUncompressedBytesPerPixel(desc.format);
     const UINT numSubresources = desc.mipLevels;
 
     D3D12_RESOURCE_DESC copyDesc = resourceDesc;
@@ -1048,8 +1052,23 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     if (desc.mipLevels == 1)
     {
-        const UINT64 sourceRowBytes = UINT64(desc.width) * bytesPerPixel;
-        if (numRows[0] != desc.height ||
+        UINT64 sourceRowBytes = 0;
+        UINT expectedRows = 0;
+        if (isBlockCompressed)
+        {
+            const UINT blockW = (desc.width + 3) / 4;
+            const UINT blockH = (desc.height + 3) / 4;
+            const UINT blockSize = GetBlockCompressedBlockSize(desc.format);
+            sourceRowBytes = UINT64(blockW) * blockSize;
+            expectedRows = blockH;
+        }
+        else
+        {
+            sourceRowBytes = UINT64(desc.width) * bytesPerPixel;
+            expectedRows = desc.height;
+        }
+
+        if (numRows[0] != expectedRows ||
             rowSizesInBytes[0] != sourceRowBytes ||
             footprints[0].Footprint.Depth != depth)
         {
@@ -1105,12 +1124,27 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
         const UINT curW = (std::max)(1u, desc.width >> mip);
         const UINT curH = (std::max)(1u, desc.height >> mip);
         const UINT curDepth = is3D ? (std::max)(1u, depth >> mip) : 1;
-        const UINT64 sourceRowBytes = UINT64(curW) * bytesPerPixel;
         const auto& fp = footprints[mip];
+
+        UINT64 sourceRowBytes = 0;
+        UINT64 sourceRowCount = 0;
+        if (isBlockCompressed)
+        {
+            const UINT blockW = (curW + 3) / 4;
+            const UINT blockH = (curH + 3) / 4;
+            const UINT blockSize = GetBlockCompressedBlockSize(desc.format);
+            sourceRowBytes = UINT64(blockW) * blockSize;
+            sourceRowCount = blockH;
+        }
+        else
+        {
+            sourceRowBytes = UINT64(curW) * bytesPerPixel;
+            sourceRowCount = curH;
+        }
 
         auto* dstSub = mappedBase + fp.Offset;
         const SIZE_T slicePitchDst = SIZE_T(fp.Footprint.RowPitch) * fp.Footprint.Height;
-        const SIZE_T slicePitchSrc = SIZE_T(sourceRowBytes) * curH;
+        const SIZE_T slicePitchSrc = SIZE_T(sourceRowBytes) * sourceRowCount;
 
         for (UINT z = 0; z < curDepth; ++z)
         {

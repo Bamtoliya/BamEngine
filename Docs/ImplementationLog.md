@@ -180,6 +180,28 @@ This document tracks implementation details, architectural decisions, and techni
 - **미검증/사용자 확인 필요**:
   - 에디터 실제 구동 후 `BamEngine-GlassRefraction` 워크트리의 `waterPS.hlsl`, `WaterMaterial.bammat.json`, `Engine.csv` 등을 수정했을 때 에디터에서 핫로드 알림 및 뷰포트 갱신이 실시간으로 발동하는지 사용자가 실환경 확인 필요.
 
+### [2026-11-18] 렌더링 S2-D 2단계: GPU 블록 압축(BC1~BC7) 및 고속 DirectDraw Surface(`.dds`) 컨테이너 로더 구축 완결
+
+- 비압축 텍스처(R8G8B8A8, 32bpp)의 높은 VRAM 대역폭 점유와 런타임 CPU 밉맵 연산 오버헤드를 해소하기 위해, GPU 하드웨어 블록 압축(BC1~BC7) 포맷 지원 및 사전 베이킹된 밉맵 체인을 CPU 재연산 없이 GPU로 직접 업로드하는 고속 `.dds` 파이프라인을 완성했다.
+- **RHI 블록 압축 규격 및 D3D12 업로드 연동 (`RHITextureTypes.h`, `DirectX12Types.h`, `DirectX12RHI.cpp`)**:
+  - `RHITextureTypes.h`: `IsBlockCompressed()`, `GetBlockCompressedBlockSize()`(BC1/BC4 8바이트, BC2/BC3/BC5/BC6H/BC7 16바이트), `GetUncompressedBytesPerPixel()` 헬퍼 함수 추가.
+  - `DirectX12Types.h`: `BC1_RGBA_UNORM_SRGB`, `BC2`, `BC3`, `BC7_RGBA_UNORM_SRGB`의 `DXGI_FORMAT_*_SRGB` 포맷 매핑 교정.
+  - `DirectX12RHI::UploadTextureData`: 4x4 블록 압축 단위의 행 피치(`rowPitch = (width + 3) / 4 * blockSize`) 및 슬라이스 바이트 크기 계산 로직 완비로 BC 포맷 텍스처의 D3D12 다중 서브리소스 DMA 업로드 지원.
+- **고속 DirectDraw Surface 로더 신설 (`DDSLoader.h/.cpp`)**:
+  - 표준 매직(`0x20534444`, "DDS "), `DDS_HEADER` 및 `DDS_HEADER_DXT10` 파서 구축.
+  - DX10 헤더(`DXGI_FORMAT_BC7_UNORM`, `BC5_UNORM`, `BC1~BC3`, `RGBA8` 등) 및 레거시 FourCC(`DXT1`, `DXT3`, `DXT5`, `ATI1/BC4U`, `ATI2/BC5U`)를 모두 해석하여 CPU 디코딩 없이 밉 슬라이스 원본 메모리 블록을 RHI에 직접 공급.
+- **엔진 텍스처 및 리소스 매니저 연동 (`Texture.h/.cpp`, `ResourceManager.cpp`)**:
+  - `TextureBinaryHeader`: `ValidateTextureHeader`에서 `IsBlockCompressed` 포맷 허용 및 블록 단위 전체 밉 바이트 합산 검증 로직 추가.
+  - `Texture::InitializeFromDDSMemory`, `Texture::CreateFromDDSMemory` 신설 및 `Initialize`, `Reload`에서 `.dds` 파일 및 `DDS ` 매직 자동 분기/핫스왑 처리.
+  - `ResourceManager`: `Texture` 지원 확장자 목록에 `L".dds"` 추가 등록.
+- **단위 테스트 및 검증 (`TextureMipmapCheck.cpp`)**:
+  - `TextureMipmapCheck`에 256x128 9레벨 Mipmap BC7 DDS 바이너리 파싱 및 블록 크기/페이로드 정합성 검증 추가. 비압축 RGBA8(174,764 바이트) 대비 BC7 압축 적용 시 약 75% 메모리 절감 검증 완결.
+- **검증**:
+  - C++ 정적 구조 및 참조 검증 완료.
+  - `audit_localization.py` 다국어 정적 감사 100% 통과.
+- **미검증/사용자 확인 필요**:
+  - 에디터 및 Client 빌드 후 `TextureMipmapCheck` 단위 테스트 및 실제 `.dds` 텍스처 렌더링 확인 필요.
+
 ### [2026-11-18] 래스터 반투명 4단계: 움직이는 파도(Gerstner Wave 정점 변위, 64x64 격자 메시, 파도 머티리얼) 파이프라인 구현 (Render S6-4)
 
 - 정적 평평한 수면(Render S6-3)에 이어, 정점 셰이더에서 거스트너 파도(Gerstner Wave) 방정식으로 기하 구조를 실시간 변위시키고 해석적 표면 법선/탄젠트를 동기화하는 움직이는 파도 파이프라인을 완성했다.

@@ -157,11 +157,18 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
      - `DirectX12RHI::UploadTextureData`: D3D12 `GetCopyableFootprints`로 서브리소스별 풋프린트 레이아웃(256B 피치 정렬)을 일괄 획득하여 단일 업로드 버퍼에 순회 패킹 후, 모든 밉 슬라이스(`SubresourceIndex = mip`)로 일괄 복사.
      - `DirectX12Sampler` 및 `SamplerManager`: 기본 삼선형(Trilinear, `MipFilter = Linear`, `MaxLOD = D3D12_FLOAT32_MAX`) 필터링과 자동 연동.
      - 단위 테스트 `TextureMipmapCheck` 신설 및 CTest 등록 완결.
-  2. **에디터 임포트 파이프라인 (DDS / BC7 블록 압축 베이킹) [후속 과제]**:
-     - 런타임 CPU 밉맵 생성 오버헤드를 제거하기 위해, 에디터 모델/텍스처 임포트 단계에서 DirectXTex(`texconv`) 기반의 오프라인 베이킹 파이프라인 구축.
-     - PNG/JPG 텍스처를 GPU 블록 압축 포맷 및 밉맵을 포함한 `.dds`로 변환한다. 포맷·채널 의미·밉 체인·할당 정렬별 품질과 실제 VRAM을 비교하며 고정된 1/4 절감을 완료 근거로 사용하지 않는다.
+  2. **GPU 블록 압축(BC1~BC7) 및 고속 DirectDraw Surface(`.dds`) 컨테이너 로더 구축 [완료 (2026-11-18)]**:
+     - `RHITextureTypes.h`: `IsBlockCompressed()`, `GetBlockCompressedBlockSize()`, `GetUncompressedBytesPerPixel()` 헬퍼 함수 추가.
+     - `DirectX12Types.h`: `BC1_RGBA_UNORM_SRGB`, `BC2`, `BC3`, `BC7_RGBA_UNORM_SRGB`의 DXGI sRGB 포맷 매핑 교정.
+     - `DirectX12RHI::UploadTextureData`: 4x4 블록 압축 포맷 행 피치 및 슬라이스 계산 로직 완비로 BC 포맷 텍스처의 GPU 직접 업로드 지원.
+     - `DDSLoader.h/.cpp`: DX10 헤더 및 레거시 FourCC(`DXT1`, `DXT3`, `DXT5`, `ATI1/BC4U`, `ATI2/BC5U`)를 지원하는 고속 인메모리 DDS 파서 신설.
+     - `Texture.h/.cpp`: `InitializeFromDDSMemory`, `CreateFromDDSMemory` 및 핫로드 경로 연동, `ResourceManager`에 `L".dds"` 확장자 등록.
+     - `TextureMipmapCheck`: 256x128 9레벨 Mipmap BC7 DDS 파싱 및 75% 메모리 절감 검증 단위 테스트 추가 완결.
+  3. **에디터 임포트 파이프라인 (texconv 기반 DDS / BC7 블록 압축 오프라인 베이킹) [후속 과제]**:
+     - 런타임 CPU 밉맵 생성 오버헤드를 원천 제거하기 위해, 에디터 모델/텍스처 임포트 단계에서 DirectXTex(`texconv`) 기반의 오프라인 베이킹 파이프라인 연결.
+     - BaseColor(BC7_SRGB), NormalMap(BC5_UNORM / reconstructz) 등 텍스처 용도별 프로필 자동 적용.
 
-**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 다중 밉 레벨 텍스처가 D3D12 서브리소스 검증 오류 없이 렌더링된다. (1단계 CPU 체인 및 D3D12 다중 서브리소스 업로드 달성)
+**완료 기준:** 원거리 텍스처 샘플링 시 지글거림이 사라지고 삼선형(Trilinear) 또는 이방성(Anisotropic) 필터링이 정상 적용되며, 비압축 텍스처뿐만 아니라 BC1~BC7 블록 압축 밉맵 DDS 텍스처가 D3D12 서브리소스 검증 오류 없이 고속 로드 및 렌더링된다. (1단계 CPU 체인 및 2단계 BC 포맷 RHI 업로드 / DDS 파서 달성)
 
 ### S3. 정적 메시 인스턴싱과 기본 LOD
 

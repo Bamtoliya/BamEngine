@@ -161,4 +161,112 @@ enum class ETextureSampleCount : uint8
 	TextureSampleCount8 = 8,
 };
 
+constexpr bool IsBlockCompressed(ETextureFormat format) noexcept
+{
+	switch (format)
+	{
+	case ETextureFormat::BC1_RGBA_UNORM:
+	case ETextureFormat::BC1_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC2_RGBA_UNORM:
+	case ETextureFormat::BC2_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC3_RGBA_UNORM:
+	case ETextureFormat::BC3_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC4_R_UNORM:
+	case ETextureFormat::BC5_RG_UNORM:
+	case ETextureFormat::BC6H_RGB_FLOAT:
+	case ETextureFormat::BC6H_RGB_UFLOAT:
+	case ETextureFormat::BC7_RGBA_UNORM:
+	case ETextureFormat::BC7_RGBA_UNORM_SRGB:
+		return true;
+	default:
+		return false;
+	}
+}
+
+constexpr uint32 GetBlockCompressedBlockSize(ETextureFormat format) noexcept
+{
+	switch (format)
+	{
+	case ETextureFormat::BC1_RGBA_UNORM:
+	case ETextureFormat::BC1_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC4_R_UNORM:
+		return 8;
+	case ETextureFormat::BC2_RGBA_UNORM:
+	case ETextureFormat::BC2_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC3_RGBA_UNORM:
+	case ETextureFormat::BC3_RGBA_UNORM_SRGB:
+	case ETextureFormat::BC5_RG_UNORM:
+	case ETextureFormat::BC6H_RGB_FLOAT:
+	case ETextureFormat::BC6H_RGB_UFLOAT:
+	case ETextureFormat::BC7_RGBA_UNORM:
+	case ETextureFormat::BC7_RGBA_UNORM_SRGB:
+		return 16;
+	default:
+		return 0;
+	}
+}
+
+constexpr uint32 GetUncompressedBytesPerPixel(ETextureFormat format) noexcept
+{
+	switch (format)
+	{
+	case ETextureFormat::R8_UNORM:
+	case ETextureFormat::R8_UINT:
+	case ETextureFormat::R8_SNORM:
+	case ETextureFormat::R8_INT:
+	case ETextureFormat::A8_UNORM:
+		return 1;
+	case ETextureFormat::R8G8_UNORM:
+	case ETextureFormat::R8G8_UINT:
+	case ETextureFormat::R8G8_SNORM:
+	case ETextureFormat::R8G8_INT:
+	case ETextureFormat::R16_UNORM:
+	case ETextureFormat::R16_FLOAT:
+	case ETextureFormat::R16_UINT:
+	case ETextureFormat::R16_SNORM:
+	case ETextureFormat::R16_INT:
+	case ETextureFormat::D16_UNORM:
+	case ETextureFormat::B5G6R5_UNORM:
+	case ETextureFormat::B5G5R5A1_UNORM:
+	case ETextureFormat::B4G4R4A4_UNORM:
+		return 2;
+	case ETextureFormat::R8G8B8A8_UNORM:
+	case ETextureFormat::R8G8B8A8_UNORM_SRGB:
+	case ETextureFormat::B8G8R8A8_UNORM:
+	case ETextureFormat::B8G8R8A8_UNORM_SRGB:
+	case ETextureFormat::R8G8B8A8_UINT:
+	case ETextureFormat::R8G8B8A8_SNORM:
+	case ETextureFormat::R8G8B8A8_INT:
+	case ETextureFormat::R16G16_UNORM:
+	case ETextureFormat::R16G16_FLOAT:
+	case ETextureFormat::R16G16_UINT:
+	case ETextureFormat::R16G16_SNORM:
+	case ETextureFormat::R16G16_INT:
+	case ETextureFormat::R32_FLOAT:
+	case ETextureFormat::R32_UINT:
+	case ETextureFormat::R32_INT:
+	case ETextureFormat::D24_UNORM_S8_UINT:
+	case ETextureFormat::D32_FLOAT:
+	case ETextureFormat::R10G10B10A2_UNORM:
+	case ETextureFormat::R11G11B10_UFLOAT:
+		return 4;
+	case ETextureFormat::R16G16B16A16_UNORM:
+	case ETextureFormat::R16G16B16A16_FLOAT:
+	case ETextureFormat::R16G16B16A16_UINT:
+	case ETextureFormat::R16G16B16A16_SNORM:
+	case ETextureFormat::R16G16B16A16_INT:
+	case ETextureFormat::R32G32_FLOAT:
+	case ETextureFormat::R32G32_UINT:
+	case ETextureFormat::R32G32_INT:
+	case ETextureFormat::D32_FLOAT_S8_UINT:
+		return 8;
+	case ETextureFormat::R32G32B32A32_FLOAT:
+	case ETextureFormat::R32G32B32A32_UINT:
+	case ETextureFormat::R32G32B32A32_INT:
+		return 16;
+	default:
+		return 4;
+	}
+}
+
 END

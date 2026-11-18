@@ -24,6 +24,7 @@ private:
 	Texture() : Resource(EResourceType::Texture) {}
 	EResult Initialize(void* arg = nullptr) override;
 	EResult InitializeFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
+	EResult InitializeFromDDSMemory(const vector<uint8>& ddsData);
 public:
 	virtual ~Texture() = default;
 public:
@@ -32,6 +33,7 @@ public:
 	static Texture* Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	static Texture* CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key = L"");
 	static Texture* CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key = L"", bool generateMips = true);
+	static Texture* CreateFromDDSMemory(const vector<uint8>& ddsData, const wstring& key = L"");
 	virtual void Free() override;
 #pragma endregion
 

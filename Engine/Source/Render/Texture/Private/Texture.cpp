@@ -11,6 +11,7 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb_image_resize2.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
+#include "DDSLoader.h"
 
 ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
 {
@@ -31,7 +32,8 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 	const bool isValid3D = (header.dimension == ETextureDimension::Texture3D && header.depth >= 1);
 	if ((!isValid2D && !isValid3D) || header.mipLevels < 1 || header.arraySize != 1)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.Layout" };
-	if (header.format != ETextureFormat::R8G8B8A8_UNORM)
+	const bool isBC = IsBlockCompressed(header.format);
+	if (header.format != ETextureFormat::R8G8B8A8_UNORM && header.format != ETextureFormat::R8G8B8A8_UNORM_SRGB && !isBC)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.format" };
 	if (header.width == 0 || header.height == 0 || header.depth == 0)
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.Size" };
@@ -43,11 +45,27 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 	{
 		uint32 curW = header.width;
 		uint32 curH = header.height;
-		for (uint32 m = 0; m < header.mipLevels; ++m)
+		if (isBC)
 		{
-			totalBytes += static_cast<uint64>(curW) * 4 * curH;
-			curW = (std::max)(1u, curW >> 1);
-			curH = (std::max)(1u, curH >> 1);
+			const uint32 blockSize = GetBlockCompressedBlockSize(header.format);
+			for (uint32 m = 0; m < header.mipLevels; ++m)
+			{
+				const uint32 blockW = (curW + 3) / 4;
+				const uint32 blockH = (curH + 3) / 4;
+				totalBytes += static_cast<uint64>(blockW) * blockH * blockSize;
+				curW = (std::max)(1u, curW >> 1);
+				curH = (std::max)(1u, curH >> 1);
+			}
+		}
+		else
+		{
+			const uint32 bpp = GetUncompressedBytesPerPixel(header.format);
+			for (uint32 m = 0; m < header.mipLevels; ++m)
+			{
+				totalBytes += static_cast<uint64>(curW) * bpp * curH;
+				curW = (std::max)(1u, curW >> 1);
+				curH = (std::max)(1u, curH >> 1);
+			}
 		}
 	}
 	else
@@ -109,6 +127,9 @@ EResult Texture::Initialize(void* arg)
 	vector<uint8> buffer(static_cast<size_t>(size));
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
+
+	if (fullPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0))
+		return InitializeFromDDSMemory(buffer);
 
 	return InitializeFromEncodedMemory(buffer, desc->generateMips);
 }
@@ -210,6 +231,72 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 	m_CachedHeader = header;
 	m_TempData = std::move(pixelData);
 	return EResult::Success;
+}
+
+EResult Texture::InitializeFromDDSMemory(const vector<uint8>& ddsData)
+{
+	if (ddsData.empty())
+		return EResult::InvalidArgument;
+
+	DDSLoadInfo info{};
+	if (!DDSLoader::ParseDDS(ddsData.data(), ddsData.size(), info))
+		return EResult::InvalidArgument;
+
+	TextureBinaryHeader header{};
+	header.width = info.width;
+	header.height = info.height;
+	header.depth = info.depth;
+	header.mipLevels = info.mipLevels;
+	header.arraySize = info.arraySize;
+	header.format = info.format;
+	header.dimension = info.dimension;
+	header.dataSize = static_cast<uint32>(info.pixelDataSize);
+
+	uint32 byteCount = 0;
+	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount))
+		return EResult::InvalidArgument;
+
+	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHITexture* texture = nullptr;
+	if (rhi)
+	{
+		RHITextureDesc textureDesc{};
+		textureDesc.width = header.width;
+		textureDesc.height = header.height;
+		textureDesc.depth = header.depth;
+		textureDesc.mipLevels = header.mipLevels;
+		textureDesc.arraySize = header.arraySize;
+		textureDesc.format = header.format;
+		textureDesc.dimension = header.dimension;
+		textureDesc.usage = ETextureUsage::Sampler;
+		textureDesc.data = const_cast<uint8*>(info.pixelData);
+		textureDesc.dataSize = header.dataSize;
+
+		texture = rhi->CreateTexture(textureDesc);
+		if (!texture) return EResult::Fail;
+	}
+
+	Safe_Release(m_RHITexture);
+	m_RHITexture = texture;
+	m_CachedHeader = header;
+	m_TempData.assign(info.pixelData, info.pixelData + info.pixelDataSize);
+	return EResult::Success;
+}
+
+Texture* Texture::CreateFromDDSMemory(const vector<uint8>& ddsData, const wstring& key)
+{
+	Texture* instance = new Texture();
+	if (IsFailure(instance->InitializeFromDDSMemory(ddsData)))
+	{
+		delete instance;
+		return nullptr;
+	}
+	if (!key.empty())
+	{
+		instance->m_Key = NormalizePath(key);
+		instance->m_Path = NormalizePath(key);
+	}
+	return instance;
 }
 
 Texture* Texture::Create(void* arg)
@@ -499,7 +586,11 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
-	const EResult result = ReloadFromEncodedMemory(buffer);
+	const bool isDDS = (targetPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0));
+	const EResult result = isDDS ? InitializeFromDDSMemory(buffer) : ReloadFromEncodedMemory(buffer);
+	if (isDDS && result == EResult::Success)
+		IncreaseVersion();
+
 	if (IsFailure(result))
 	{
 		ENGINE_LOG_ERROR("[Texture Hot Reload] Image decode or GPU upload failed: {}", path);

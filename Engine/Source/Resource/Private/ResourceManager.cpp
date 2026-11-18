@@ -189,7 +189,7 @@ void ResourceManager::RegisterExplicitLoader()
 			m_LoaderRegistry[extension] = loader;
 	};
 
-	registerSimpleLoader.operator() < Texture, TextureCreateDesc > ({ L".png", L".jpg", L".bmp", L".tga", L".jpeg", L".bamtex" });
+	registerSimpleLoader.operator() < Texture, TextureCreateDesc > ({ L".png", L".jpg", L".bmp", L".tga", L".jpeg", L".bamtex", L".dds" });
 	registerSimpleLoader.operator() < Sprite, SpriteCreateDesc > ({ L".bamsprite" });
 	registerSimpleLoader.operator() < Material, MaterialDesc > ({ L".bammat" });
 	registerSimpleLoader.operator() < MaterialInstance, MaterialInstanceDesc > ({ L".bammatinst" });

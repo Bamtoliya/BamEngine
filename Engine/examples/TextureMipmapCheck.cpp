@@ -7,6 +7,7 @@
 
 #include "Texture.h"
 #include "TextureBinaryHeader.h"
+#include "DDSLoader.h"
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb_image_resize2.h>
 
@@ -161,6 +162,74 @@ void CheckHeaderValidationAndDataSize()
 	          << " (Overhead: " << (float)expectedBytes / (256 * 128 * 4) << "x)" << std::endl;
 }
 
+void CheckDDSLoader()
+{
+	std::cout << "[Test 4] DDSLoader Parsing & Block Compression Verification" << std::endl;
+
+	// 인메모리 BC7 256x128 9-level Mipmap DDS 바이너리 생성 및 파싱 검증
+	const uint32 width = 256;
+	const uint32 height = 128;
+	const uint32 mipLevels = 9;
+
+	// BC7은 4x4 블록당 16바이트
+	uint32 expectedPayloadBytes = 0;
+	uint32 curW = width;
+	uint32 curH = height;
+	for (uint32 m = 0; m < mipLevels; ++m)
+	{
+		uint32 bw = (curW + 3) / 4;
+		uint32 bh = (curH + 3) / 4;
+		expectedPayloadBytes += bw * bh * 16;
+		curW = (std::max)(1u, curW >> 1);
+		curH = (std::max)(1u, curH >> 1);
+	}
+
+	std::vector<uint8_t> ddsBuffer(148 + expectedPayloadBytes, 0);
+
+	// 1. Magic ("DDS ")
+	uint32 magic = 0x20534444;
+	std::memcpy(ddsBuffer.data(), &magic, 4);
+
+	// 2. DDS_HEADER
+	uint32* header = reinterpret_cast<uint32*>(ddsBuffer.data() + 4);
+	header[0] = 124; // dwSize
+	header[1] = 0x1 | 0x2 | 0x4 | 0x1000 | 0x20000; // DDSD_CAPS | DDSD_HEIGHT | DDSD_WIDTH | DDSD_PIXELFORMAT | DDSD_MIPMAPCOUNT
+	header[2] = height; // dwHeight
+	header[3] = width;  // dwWidth
+	header[4] = 0;
+	header[5] = 1;      // dwDepth
+	header[6] = mipLevels; // dwMipMapCount
+
+	// ddspf (offset 4 + 76 = 80 in ddsBuffer)
+	header[18] = 32; // ddspf.dwSize
+	header[19] = 0x4; // ddspf.dwFlags (DDPF_FOURCC)
+	header[20] = 0x30315844; // ddspf.dwFourCC ("DX10")
+
+	// 3. DDS_HEADER_DXT10 (offset 128 in ddsBuffer)
+	uint32* dxt10 = reinterpret_cast<uint32*>(ddsBuffer.data() + 128);
+	dxt10[0] = 98; // dxgiFormat: DXGI_FORMAT_BC7_UNORM
+	dxt10[1] = 3;  // resourceDimension: D3D10_RESOURCE_DIMENSION_TEXTURE2D
+	dxt10[2] = 0;
+	dxt10[3] = 1;  // arraySize
+	dxt10[4] = 0;
+
+	// 파싱 실행
+	DDSLoadInfo info{};
+	bool parseResult = DDSLoader::ParseDDS(ddsBuffer.data(), ddsBuffer.size(), info);
+	assert(parseResult == true);
+	assert(info.width == width);
+	assert(info.height == height);
+	assert(info.mipLevels == mipLevels);
+	assert(info.format == ETextureFormat::BC7_RGBA_UNORM);
+	assert(info.pixelDataSize == expectedPayloadBytes);
+	assert(IsBlockCompressed(info.format) == true);
+	assert(GetBlockCompressedBlockSize(info.format) == 16);
+
+	std::cout << "  -> BC7 DDS (256x128, 9 Mips) parsed successfully. Payload size: "
+	          << info.pixelDataSize << " bytes (Uncompressed RGBA would be 174,764 bytes - "
+	          << (100.0f - (float)info.pixelDataSize / 174764.0f * 100.0f) << "% saved)." << std::endl;
+}
+
 int main()
 {
 	std::cout << "=== Running TextureMipmapCheck ===" << std::endl;
@@ -168,6 +237,7 @@ int main()
 	CheckMipLevelsCalculation();
 	CheckMipChainDownsampling();
 	CheckHeaderValidationAndDataSize();
+	CheckDDSLoader();
 
 	std::cout << "=== TextureMipmapCheck PASSED ===" << std::endl;
 	return 0;
