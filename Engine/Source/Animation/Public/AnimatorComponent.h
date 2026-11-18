@@ -147,6 +147,15 @@ namespace Engine
 			return true;
 		}
 
+		// 컨트롤러 연결을 해제하고 상태 머신 바인딩을 비운다.
+		void ClearController()
+		{
+			controllerPath.clear();
+			loadedControllerPath.clear();
+			stateMachineAsset.reset();
+			runtimeState.BindStateMachine(nullptr);
+		}
+
 		void SetFloat(const std::string& name, float value) { runtimeState.SetFloat(name, value); }
 		void SetInt(const std::string& name, int32 value) { runtimeState.SetInt(name, value); }
 		void SetBool(const std::string& name, bool value) { runtimeState.SetBool(name, value); }

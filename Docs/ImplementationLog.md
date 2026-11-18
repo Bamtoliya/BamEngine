@@ -2,13 +2,22 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 문자열 경로 에셋용 경로 피커와 ResourcePicker 항목 공용화
+
+- `ResourcePicker.h`의 목록 항목 그리기(썸네일·이름·경로·배지·선택 표시·툴팁·우클릭 메뉴)를 `Detail::DrawPickerItem`·`PickerItemView`로, 맨 위 연결 해제 행을 `Detail::DrawPickerClearItem`으로 분리했다. 썸네일 결정(스프라이트 잘라내기 포함)은 템플릿에 남겼다. 두 함수는 header의 `inline`이라 `ReflectionInspectorCheck`의 스텁 구성을 바꾸지 않는다.
+- `DrawInspectorAssetPathPicker`(`AssetPathPicker.h/.cpp`)를 추가했다. 문자열 경로로 참조하는 에셋을 ResourcePicker와 같은 필드·팝업으로 고른다. Project·Engine 루트를 팝업이 열릴 때 한 번 스캔하고, 검색·연결 해제·빈 결과 안내·콘텐츠 브라우저 드롭·더블클릭 열기를 지원한다. 결과는 항상 가상 URI이며, 루트 밖 파일은 `ResourcePicker.OutsideRoots` 알림으로 거부한다. 반영 여부는 호출부가 정한다. 범위 탭과 썸네일 크기 슬라이더는 넣지 않았다.
+- Animator 컨트롤러와 ActionTimeline 경로의 직접 입력칸·찾아보기 버튼을 피커로 교체했다. 컨트롤러는 로드에 성공했을 때만 저장하고 실패하면 알림을 띄운다. 연결 해제는 새 `AnimatorComponent::ClearController()`를 쓰며, `AnimationSystem`의 같은 해제 코드도 이 함수로 바꿨다. ActionTimeline은 리플렉션 표에 중복 표시되던 `timelinePath` 텍스트 칸을 숨겼고, 찾아보기가 절대 경로를 저장하던 문제가 해결됐다.
+- 로캘은 `ResourcePicker.OutsideRoots`·`ResourcePicker.NoMatchingFiles`를 추가하고 쓰지 않게 된 `Animator.ControllerOutsideProject`를 제거했다. 빌드가 JSON을 다시 생성했다.
+- **검증**: `audit_localization.py --strict` 통과. Debug 전체 빌드에서 컴파일·링크 경고와 오류가 없었다. CTest 39/39 통과(`ReflectionInspectorCheck` 포함). 사용자가 에디터에서 다음을 확인했다. 텍스처·머티리얼·스프라이트 피커의 표시와 동작이 이전과 같음, 연결 해제 행, 컨트롤러 목록·검색·URI 표시·연결 해제·드롭·잘못된 종류 거부·빈 결과 안내, ActionTimeline 텍스트 칸 숨김과 피커 선택 후 재생·편집기 열기, 저장 후 씬 참조 검사 0건.
+- **잔여**: `ActionTimelineComponent`에는 `timelineAsset` 핸들(ResourcePicker)과 `timelinePath`가 함께 있다. `ActionTimelineSystem`은 경로가 바뀔 때만 핸들을 다시 로드하므로, 핸들만 바꾸면 두 값이 어긋날 수 있다. 피커 필드 영역 그리기는 ResourcePicker와 같은 메트릭으로 따로 작성했다. `ActionTimelineSystem.cpp`의 기존 `C4834` 경고 10건은 이번 범위 밖이다.
+
 ### [2026-11-18] Animator 컨트롤러 경로를 가상 URI로 저장
 
 - 인스펙터 Animator의 찾아보기 버튼이 파일 대화상자의 절대 경로를 `controllerPath`에 그대로 저장했다. 이 씬은 패키징 참조 검사에서 `ExternalAbsolutePath`로 실패한다. Windows 기준선 검증 중 `RaytracingScene3`가 원본 체크아웃의 컨트롤러를 절대 경로로 가리켜 내보내기가 막힌 것으로 확인했다.
 - 찾아보기 결과와 콘텐츠 브라우저 드롭(`CONTENT_BROWSER_ITEM`)을 `PlatformPath::ToVirtualUri`로 `Project://`·`Engine://`·`Editor://` URI로 바꿔 `LoadController`에 넘긴다. 마운트 루트 밖의 파일은 `Animator.ControllerOutsideProject` 알림과 함께 거부하고 기존 경로를 유지한다. 로드에 실패하면 경로를 덮어쓰지 않는다. 드롭은 `.animator`·`.animator.json`·`.bamanimator`·`.bamanimator.json`만 받는다. 직접 입력칸은 그대로다.
 - 로캘은 `Editor.csv`에 한 행을 추가했고 빌드가 JSON을 다시 생성했다.
-- **검증**: Debug Editor 빌드에서 컴파일 경고·오류가 없었다. 루트 밖 컨트롤러를 골랐을 때 경고 알림이 번역된 문장으로 표시되는 것을 사용자가 확인했다. 찾아보기·드롭 결과의 URI 표시, 비컨트롤러 드롭 무시, 저장 후 씬 참조 검사 0건은 커밋 시점에 확인 결과를 받지 못했다.
-- **잔여**: `ActionTimelineComponent::timelinePath` 찾아보기(`InspectorPanel.cpp`)도 절대 경로를 저장한다. 두 필드를 ResourcePicker와 같은 형태의 경로 피커로 바꾸는 작업을 이어서 진행한다.
+- **검증**: Debug Editor 빌드에서 컴파일 경고·오류가 없었다. 루트 밖 컨트롤러를 골랐을 때 경고 알림이 번역된 문장으로 표시되는 것을 사용자가 확인했다. 찾아보기·드롭 결과의 URI 표시, 비컨트롤러 드롭 무시, 저장 후 씬 참조 검사 0건은 커밋 시점에 확인 결과를 받지 못했다. 이 UI는 바로 다음 작업에서 경로 피커로 교체됐고, 해당 동작은 피커에서 확인했다(위 항목).
+- **후속**: `ActionTimelineComponent::timelinePath`의 같은 문제와 함께 경로 피커로 해결했다(위 항목).
 
 ### [2026-11-17] 에디터 UI·인스펙터·리소스 에디터 로캘 및 입력(InputManager) 표준화
 

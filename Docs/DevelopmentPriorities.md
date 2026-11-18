@@ -454,7 +454,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - **애니메이션 기본 동작 — P2-D / F06 일부·F07 [완료]**:
   - 비반복 애니메이션 종료 시 clamp 적용으로 마지막 포즈 정상 보존 (`fmod(duration, duration) == 0` 리셋 버그 해결).
   - 부분 트랙 누락 채널에서 0/identity 대신 본의 원래 바인드 로컬 TRS를 분해하여 보존하도록 `SampleLocalTRS` 보완.
-  - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료. 단, 인스펙터 찾아보기는 2026-11-18까지 절대 경로를 저장했다. 현재는 찾아보기·드롭 결과를 가상 URI로 저장한다([구현 기록](ImplementationLog.md)). `ActionTimelineComponent::timelinePath`의 찾아보기는 아직 절대 경로를 저장한다.
+  - ASM `isLooping` 제어, `Stop()` 시간 리셋 및 `controllerPath` 상대 경로 정규화 완료. 단, 인스펙터 찾아보기는 2026-11-18까지 절대 경로를 저장했다. 현재 `controllerPath`와 `ActionTimelineComponent::timelinePath`는 경로 피커(`DrawInspectorAssetPathPicker`)로 고르며 가상 URI로 저장한다([구현 기록](ImplementationLog.md)). `ActionTimelineComponent`의 `timelineAsset` 핸들과 `timelinePath`가 따로 존재하는 이중 참조는 남아 있다.
 - **기존 Client의 실패 보고 — P2-E / F05 일부 [정책 반영 / 실행 검증 대기]**:
   - `ConfigManager::Load` 반환 결과와 `SchemaVersion`을 검사한다. 개발 실행은 설정 파일 부재 시 경고·기본값을 사용하고 파싱 실패 시 종료한다.
   - A08 정책에 따라 패키지 마커가 있으면 `Project.json` 누락으로 실패한다. 빈 `StartupScenePath`도 `InvalidArgument`로 실패하며 실행 검증은 남아 있다.

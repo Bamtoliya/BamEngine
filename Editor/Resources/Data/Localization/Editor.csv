@@ -56,7 +56,6 @@ Action,Viewport.ToggleLock,Toggle Selection Lock,선택 잠금 토글
 Action,Viewport.ToggleRealtime,Toggle Realtime,실시간 프리뷰 토글
 Action,Viewport.ToggleSnap,Toggle Grid Snap,그리드 스냅 토글
 Animator,ControllerPath,Controller Path,컨트롤러 경로
-Animator,ControllerOutsideProject,The controller must be inside the project or engine resource folders.,컨트롤러는 프로젝트 또는 엔진 리소스 폴더 안에 있어야 합니다.
 Animator,CurrentState,Current State,현재 상태
 Animator,MissingRendererWarning,Requires SkinnedMeshRendererComponent with Skeleton to animate.,스켈레톤이 포함된 SkinnedMeshRendererComponent가 필요합니다.
 Animator,New,New Controller,새 컨트롤러
@@ -1162,6 +1161,8 @@ ResourcePicker,ScopeProject,Project,프로젝트
 ResourcePicker,ScopeEngine,Engine Built-in,엔진 내장
 ResourcePicker,SearchHint,Search resources...,리소스 검색...
 ResourcePicker,ThumbnailSizeHint,Thumbnail Size ({}px ~ {}px),썸네일 크기 ({}px ~ {}px)
+ResourcePicker,OutsideRoots,The file must be inside the project or engine resource folders.,파일이 프로젝트 또는 엔진 리소스 폴더 안에 있어야 합니다.
+ResourcePicker,NoMatchingFiles,No matching files.,일치하는 파일이 없습니다.
 ResourceType,Animation,Animation,애니메이션
 ResourceType,AudioClip,AudioClip,오디오 클립
 ResourceType,Material,Material,머티리얼
