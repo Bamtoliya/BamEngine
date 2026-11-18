@@ -43,8 +43,10 @@
 ,CATEGORY_PARTICLE_COLLISION,Collision & Interaction,물리 충돌 및 상호작용
 ,CATEGORY_PARTICLE_COLOR,Color & Alpha,색상 및 알파
 ,CATEGORY_PARTICLE_EMISSION,Emission,방출
+,CATEGORY_PARTICLE_FORCES,Forces & Turbulence,환경 외력 및 난류
 ,CATEGORY_PARTICLE_MOTION,Lifetime & Dynamics,수명 및 역학
 ,CATEGORY_PARTICLE_SIZE,Size & Rotation,크기 및 회전
+,CATEGORY_PARTICLE_TRIGGER,Trigger Chaining,발동 조건
 ,CATEGORY_PHYSICS,Physics,물리
 ,CATEGORY_PHYSICS_2D,Physics 2D,2D 물리
 ,CATEGORY_PHYSICS_3D,Physics 3D,3D 물리
@@ -110,6 +112,18 @@
 ,Engine::ECurveInterpMode.Constant,Constant,상수
 ,Engine::ECurveInterpMode.CubicBezier,Cubic Bezier,3차 베지어
 ,Engine::ECurveInterpMode.Linear,Linear,선형
+,Engine::EParticleCollisionMode.FloorPlane,Floor Plane,가상 바닥면
+,Engine::EParticleCollisionMode.None,None,없음
+,Engine::EParticleCollisionMode.PhysicsRaycast,Physics Raycast,물리 레이캐스트
+,Engine::EParticleCollisionResponse.Bounce,Bounce,바운스 (튕김)
+,Engine::EParticleCollisionResponse.DieOnContact,Die on Contact,접촉 시 즉시 소멸
+,Engine::EParticleCollisionResponse.Slide,Slide,미끄러짐
+,Engine::EParticleCollisionResponse.Stop,Stop,정지
+,Engine::EParticleEmitterTrigger.Continuous,Continuous (Rate/Burst),연속 방출 (비율/버스트)
+,Engine::EParticleEmitterTrigger.OnParentCollision,On Parent Collision,부모 파티클 충돌 시
+,Engine::EParticleEmitterTrigger.OnParentDeath,On Parent Death,부모 파티클 소멸 시
+,Engine::EParticleSimulationSpace.Local,Local,로컬
+,Engine::EParticleSimulationSpace.World,World,월드
 ,Engine::ESplineMeshBuildStatus.DeformationFailed,Mesh deformation failed,메시 변형 실패
 ,Engine::ESplineMeshBuildStatus.FoldedSection,The deformed section folds or collapses,굽이 안쪽에서 변형 단면이 접히거나 붕괴함
 ,Engine::ESplineMeshBuildStatus.InvalidPath,Invalid spline path,유효하지 않은 스플라인 경로

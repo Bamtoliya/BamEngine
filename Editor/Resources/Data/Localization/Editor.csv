@@ -1683,60 +1683,8 @@ TilePalette,ThumbnailSize,Thumbnail Size,썸네일 크기
 TilePalette,AddedTiles,Added {0} tiles to palette,팔레트에 {0}개 타일을 추가했습니다
 ContentBrowser,OpenInSpriteEditor,Open in Sprite Editor,스프라이트 에디터에서 열기
 ContentBrowser,AddToTilePalette,Add to Tile Palette,타일 팔레트에 추가
-ParticleEditor,CategoryIdentification,Identification & Trigger,식별 및 발동 조건
-ParticleEditor,CategoryLifetime,Lifetime & Velocity,수명 및 속도
-ParticleEditor,CategoryForces,Forces & Turbulence,환경 외력 및 난류
-ParticleEditor,CategoryCollision,Physics Collision,물리 충돌
-ParticleEditor,CategorySizeRotation,Size & Rotation,크기 및 회전
-ParticleEditor,CategoryColorMaterial,Color & Material,색상 및 머티리얼
-ParticleEditor,PropName,Name,이름
-ParticleEditor,PropTriggerMode,Trigger Mode,발동 모드
-ParticleEditor,PropParentEmitter,Parent Emitter,부모 이미터
-ParticleEditor,PropTriggerBurstCount,Trigger Burst Count,발동 생성 개수
-ParticleEditor,PropAlignToSurfaceNormal,Align Normal,표면 법선 정렬
-ParticleEditor,PropInheritParentVelocity,Inherit Velocity,부모 속도 상속
-ParticleEditor,PropInheritRatio,Inherit Ratio,상속 비율
-ParticleEditor,PropEmissionRate,Emission Rate,방출률
-ParticleEditor,PropBurstCount,Burst Count,버스트 개수
-ParticleEditor,PropBurstInterval,Burst Interval,버스트 주기
-ParticleEditor,PropMaxParticles,Max Particles,최대 파티클 수
-ParticleEditor,PropLifetimeRange,Lifetime (Min/Max),수명 범위 (최소/최대)
-ParticleEditor,PropSpeedRange,Speed (Min/Max),속도 범위 (최소/최대)
-ParticleEditor,PropDirection,Direction,방출 방향
-ParticleEditor,PropSpreadAngle,Spread Angle,확산 각도
-ParticleEditor,PropGravity,Gravity,중력
-ParticleEditor,PropBuoyancy,Buoyancy,부력
-ParticleEditor,PropDrag,Drag,공기 저항
-ParticleEditor,PropWind,Wind,바람
-ParticleEditor,PropEnableCurlNoise,Curl Noise (Turbulence),컬 노이즈 (난류)
-ParticleEditor,PropNoiseStrength,Noise Strength,노이즈 강도
-ParticleEditor,PropNoiseFrequency,Noise Frequency,노이즈 주파수
-ParticleEditor,PropNoiseSpeed,Noise Speed,노이즈 스크롤 속도
-ParticleEditor,PropCollisionMode,Collision Mode,충돌 모드
-ParticleEditor,PropCollisionResponse,Response,충돌 반응
-ParticleEditor,PropRestitution,Restitution (Bounce),반발 계수 (탄성)
-ParticleEditor,PropMinBounceSpeed,Min Bounce Speed,최소 바운스 속도
-ParticleEditor,PropFriction,Friction,마찰력
-ParticleEditor,PropFloorHeight,Floor Height,가상 바닥 높이
-ParticleEditor,PropCollisionRadius,Collision Radius,충돌 반경
-ParticleEditor,PropSizeStart,Size Start,시작 크기
-ParticleEditor,PropSizeEnd,Size End,종료 크기
-ParticleEditor,PropRotationSpeedRange,Rot Speed (Min/Max),회전 속도 (최소/최대)
-ParticleEditor,PropColorStart,Color Start,시작 색상
-ParticleEditor,PropColorEnd,Color End,종료 색상
-ParticleEditor,PropTexture,Texture,텍스처
-ParticleEditor,PropMaterial,Material,머티리얼
-ParticleEditor,PropAlignToSurfaceDisk,Flat Ring Align,바닥 링 평면 정렬
-ParticleEditor,TriggerContinuous,Continuous (Rate/Burst),연속 방출 (비율/버스트)
 ParticleEditor,TriggerOnCollision,On Parent Collision,부모 파티클 충돌 시
 ParticleEditor,TriggerOnDeath,On Parent Death,부모 파티클 소멸 시
-ParticleEditor,CollisionNone,None,없음
-ParticleEditor,CollisionFloorPlane,Floor Plane,가상 바닥면
-ParticleEditor,CollisionPhysicsRaycast,Physics Raycast,물리 레이캐스트
-ParticleEditor,ResponseBounce,Bounce,바운스 (튕김)
-ParticleEditor,ResponseSlide,Slide,미끄러짐
-ParticleEditor,ResponseDie,Die on Contact,접촉 시 즉시 소멸
-ParticleEditor,ResponseStop,Stop,정지
 ParticleEditor,TooltipPlay,Play,재생
 ParticleEditor,TooltipPause,Pause,일시정지
 ParticleEditor,TooltipRestart,Restart Simulation,시뮬레이션 재시작

@@ -12,6 +12,9 @@
 #include "ParticleSystem.h"
 #include "PostProcessPipeline.h"
 #include "FileDialogs.h"
+#include "ReflectionPropertyDrawer.h"
+#include "ReflectionRegistry.h"
+#include "ReflectionEditState.h"
 #include <algorithm>
 #include <cmath>
 #include <fmt/format.h>
@@ -155,6 +158,8 @@ void ParticleEditorPanel::PushSnapshot(const std::string& label)
 
 void ParticleEditorPanel::Undo()
 {
+	// 아직 확정하지 않은 인스펙터 편집을 먼저 이력에 넣어야 그 편집부터 되돌린다.
+	if (m_HasPreEditSnapshot) PushSnapshot(LOCAL("History.Command.EditProperty"));
 	if (!m_History.Undo()) return;
 	if (const auto* effect = m_EffectHandle.Get())
 		m_SelectedEmitterIndex = effect->GetEmitterCount() > 0 ?
@@ -163,6 +168,7 @@ void ParticleEditorPanel::Undo()
 
 void ParticleEditorPanel::Redo()
 {
+	if (m_HasPreEditSnapshot) PushSnapshot(LOCAL("History.Command.EditProperty"));
 	if (!m_History.Redo()) return;
 	if (const auto* effect = m_EffectHandle.Get())
 		m_SelectedEmitterIndex = effect->GetEmitterCount() > 0 ?
@@ -342,6 +348,7 @@ void ParticleEditorPanel::SaveEffect()
 {
 	auto* effect = m_EffectHandle.Get();
 	if (!effect) return;
+	if (m_HasPreEditSnapshot) PushSnapshot(LOCAL("History.Command.EditProperty"));
 
 	if (m_TargetResourcePath.empty())
 	{
@@ -568,6 +575,7 @@ void ParticleEditorPanel::DeleteSelectedEmitter()
 {
 	auto* effect = m_EffectHandle.Get();
 	if (!effect || !effect->GetEmitter(m_SelectedEmitterIndex)) return;
+	if (m_HasPreEditSnapshot) PushSnapshot(LOCAL("History.Command.EditProperty"));
 	const int index = m_SelectedEmitterIndex;
 	auto before = CaptureSnapshot();
 	effect->RemoveEmitter(index);
@@ -668,7 +676,7 @@ bool ParticleEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction acti
 	using enum EditorUI::TimelineAction;
 	const auto* effect = m_EffectHandle.Get();
 	if (!m_Open || !effect || m_Timeline.Drag) return false;
-	if (action == Undo) return m_History.CanUndo();
+	if (action == Undo) return m_HasPreEditSnapshot || m_History.CanUndo();
 	if (action == Redo) return m_History.CanRedo();
 	if (action == Delete) return effect->GetEmitter(m_SelectedEmitterIndex) != nullptr;
 	return true;
@@ -706,475 +714,88 @@ void ParticleEditorPanel::DrawViewport()
 
 void ParticleEditorPanel::DrawEmitterInspector()
 {
+	// 입력이 끝나면 이번 편집 세션을 이력 한 건으로 확정한다.
+	if (m_HasPreEditSnapshot && !ImGui::IsAnyItemActive())
+		PushSnapshot(LOCAL("History.Command.EditProperty"));
+
 	auto* effect = m_EffectHandle.Get();
-	if (!effect)
+	auto* emitter = effect ? effect->GetEmitter(m_SelectedEmitterIndex) : nullptr;
+	if (!emitter)
 	{
-		ImGui::TextDisabled("%s", LOCAL_CSTR("ParticleEditor.NoEmitterSelected"));
+		EditorUI::EmptyState("ParticleEditor.NoEmitterSelected");
 		return;
 	}
 
-	auto* emitter = effect->GetEmitter(m_SelectedEmitterIndex);
-	if (!emitter)
+	const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+	const auto object = reflection::ObjectView::From(*emitter);
+	const auto* type = registry.FindType(object);
+	if (!type)
 	{
-		ImGui::TextDisabled("%s", LOCAL_CSTR("ParticleEditor.NoEmitterSelected"));
+		EditorUI::EmptyState("Inspector.ValueUnavailable");
 		return;
 	}
 
 	ImGui::PushID(m_SelectedEmitterIndex);
-
 	ImGui::Text(ICON_FA_SLIDERS " %s [%s]", LOCAL_CSTR("CATEGORY_RENDER"), emitter->name.c_str());
 	ImGui::Separator();
 
-	auto DrawRow = [this, effect](const char* labelKey, auto drawWidget)
+	// 그리기 전 상태. 이번 프레임에 처음 바뀌면 편집 세션의 시작 상태가 된다.
+	auto before = CaptureSnapshot();
+	bool changed = false;
+
+	// 단일 EDITCONDITION으로 표현할 수 없는 복합 조건과, 이름 목록이 필요한 부모 이미터는 공용 표에서 뺀다.
+	const bool continuous = emitter->triggerMode == Engine::EParticleEmitterTrigger::Continuous;
+	ReflectionObjectEditSettings settings;
+	auto& hidden = settings.HiddenProperties;
+	hidden.insert("parentEmitterIndex");
+	if (continuous) hidden.insert("inheritVelocityRatio");
+	if (emitter->burstCount == 0) hidden.insert("burstInterval");
+	if (emitter->collisionMode == Engine::EParticleCollisionMode::None)
 	{
-		EditorUI::PropertyRow(labelKey);
+		hidden.insert("restitution");
+		hidden.insert("minBounceSpeed");
+	}
+
+	if (!continuous && EditorUI::BeginPropertyTable("ParticleParentEmitter", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("PROP_PARENT_EMITTER_INDEX");
 		ImGui::SetNextItemWidth(-FLT_MIN);
-
-		drawWidget();
-
-		if (ImGui::IsItemActivated())
+		const int parent = emitter->parentEmitterIndex;
+		const std::string none = LOCAL("EditorCommon.None");
+		const auto* parentEmitter = parent != m_SelectedEmitterIndex ? effect->GetEmitter(parent) : nullptr;
+		const std::string preview = parentEmitter ? fmt::format("{}: {}", parent, parentEmitter->name) : none;
+		if (ImGui::BeginCombo("##ParentEmitter", preview.c_str()))
 		{
-			m_PreEditSnapshot = CaptureSnapshot();
+			if (ImGui::Selectable(none.c_str(), parentEmitter == nullptr) && parent != -1)
+			{
+				emitter->parentEmitterIndex = -1;
+				changed = true;
+			}
+			for (int i = 0; i < effect->GetEmitterCount(); ++i)
+			{
+				if (i == m_SelectedEmitterIndex) continue; // 자기 자신은 부모가 될 수 없다
+				const std::string label = fmt::format("{}: {}###ParentEmitter{}", i, effect->GetEmitter(i)->name, i);
+				if (ImGui::Selectable(label.c_str(), parent == i) && parent != i)
+				{
+					emitter->parentEmitterIndex = i;
+					changed = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		EditorUI::EndPropertyTable();
+	}
+
+	changed |= ReflectionPropertyDrawer::DrawPropertyTable(*type, object, &registry, &settings);
+
+	if (changed)
+	{
+		if (!m_HasPreEditSnapshot)
+		{
+			m_PreEditSnapshot = std::move(before);
 			m_HasPreEditSnapshot = true;
 		}
-		if (ImGui::IsItemDeactivatedAfterEdit() && m_HasPreEditSnapshot)
-		{
-			auto postSnapshot = CaptureSnapshot();
-			auto cmd = std::make_unique<ParticleEffectCommand>(
-				effect, std::move(m_PreEditSnapshot), std::move(postSnapshot),
-				"Edit " + std::string(labelKey),
-				[this]() { SetupPreview(); m_IsDirty = true; });
-			m_History.Record(std::move(cmd));
-			m_HasPreEditSnapshot = false;
-			m_IsDirty = true;
-		}
-	};
-
-	constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg;
-
-	// 1. 식별 및 트리거
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategoryIdentification"), ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		if (ImGui::BeginTable("##TableIdentification", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropName", [&]() {
-				char nameBuf[64];
-				strncpy_s(nameBuf, emitter->name.c_str(), sizeof(nameBuf));
-				if (ImGui::InputText("##Name", nameBuf, sizeof(nameBuf)))
-				{
-					emitter->name = nameBuf;
-					m_IsDirty = true;
-				}
-			});
-
-			DrawRow("ParticleEditor.PropTriggerMode", [&]() {
-				int trig = static_cast<int>(emitter->triggerMode);
-				const std::string triggerModes[] = {
-					LOCAL("ParticleEditor.TriggerContinuous"),
-					LOCAL("ParticleEditor.TriggerOnCollision"),
-					LOCAL("ParticleEditor.TriggerOnDeath")
-				};
-				const char* triggerCstrs[] = { triggerModes[0].c_str(), triggerModes[1].c_str(), triggerModes[2].c_str() };
-				if (ImGui::Combo("##TriggerMode", &trig, triggerCstrs, IM_ARRAYSIZE(triggerCstrs)))
-				{
-					auto beforeSnap = CaptureSnapshot();
-					emitter->triggerMode = static_cast<Engine::EParticleEmitterTrigger>(trig);
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Change Trigger Mode",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-			});
-
-			if (emitter->triggerMode != Engine::EParticleEmitterTrigger::Continuous)
-			{
-				DrawRow("ParticleEditor.PropParentEmitter", [&]() {
-					int pIdx = emitter->parentEmitterIndex;
-					std::vector<std::string> parentNames;
-					for (int i = 0; i < effect->GetEmitterCount(); ++i)
-					{
-						if (i == m_SelectedEmitterIndex)
-							parentNames.push_back(std::to_string(i) + ": (Self - Invalid)");
-						else
-							parentNames.push_back(std::to_string(i) + ": " + effect->GetEmitter(i)->name);
-					}
-
-					std::vector<const char*> parentCstrs;
-					for (const auto& s : parentNames) parentCstrs.push_back(s.c_str());
-
-					if (ImGui::Combo("##ParentEmitter", &pIdx, parentCstrs.data(), static_cast<int>(parentCstrs.size())))
-					{
-						auto beforeSnap = CaptureSnapshot();
-						emitter->parentEmitterIndex = pIdx;
-						auto afterSnap = CaptureSnapshot();
-						auto cmd = std::make_unique<ParticleEffectCommand>(
-							effect, std::move(beforeSnap), std::move(afterSnap), "Change Parent Emitter",
-							[this]() { SetupPreview(); m_IsDirty = true; });
-						m_History.Record(std::move(cmd));
-						m_IsDirty = true;
-					}
-				});
-
-				DrawRow("ParticleEditor.PropTriggerBurstCount", [&]() {
-					int burst = static_cast<int>(emitter->triggerBurstCount);
-					if (ImGui::SliderInt("##TriggerBurstCount", &burst, 1, 100))
-					{
-						emitter->triggerBurstCount = static_cast<uint32>(burst);
-						m_IsDirty = true;
-					}
-				});
-
-				DrawRow("ParticleEditor.PropAlignToSurfaceNormal", [&]() {
-					if (ImGui::Checkbox("##AlignNormal", &emitter->alignToSurfaceNormal))
-					{
-						auto beforeSnap = CaptureSnapshot();
-						auto afterSnap = CaptureSnapshot();
-						auto cmd = std::make_unique<ParticleEffectCommand>(
-							effect, std::move(beforeSnap), std::move(afterSnap), "Toggle Align Normal",
-							[this]() { SetupPreview(); m_IsDirty = true; });
-						m_History.Record(std::move(cmd));
-						m_IsDirty = true;
-					}
-				});
-
-				DrawRow("ParticleEditor.PropInheritParentVelocity", [&]() {
-					if (ImGui::Checkbox("##InheritVelocity", &emitter->inheritParentVelocity))
-					{
-						auto beforeSnap = CaptureSnapshot();
-						auto afterSnap = CaptureSnapshot();
-						auto cmd = std::make_unique<ParticleEffectCommand>(
-							effect, std::move(beforeSnap), std::move(afterSnap), "Toggle Inherit Velocity",
-							[this]() { SetupPreview(); m_IsDirty = true; });
-						m_History.Record(std::move(cmd));
-						m_IsDirty = true;
-					}
-				});
-
-				if (emitter->inheritParentVelocity)
-				{
-					DrawRow("ParticleEditor.PropInheritRatio", [&]() {
-						if (ImGui::SliderFloat("##InheritRatio", &emitter->inheritVelocityRatio, 0.0f, 1.0f, "%.2f"))
-							m_IsDirty = true;
-					});
-				}
-			}
-			else
-			{
-				DrawRow("ParticleEditor.PropEmissionRate", [&]() {
-					if (ImGui::DragFloat("##EmissionRate", &emitter->emissionRate, 1.0f, 0.0f, 2000.0f, "%.1f /s"))
-						m_IsDirty = true;
-				});
-
-				DrawRow("ParticleEditor.PropBurstCount", [&]() {
-					int bCount = static_cast<int>(emitter->burstCount);
-					if (ImGui::DragInt("##BurstCount", &bCount, 1, 0, 500))
-					{
-						emitter->burstCount = static_cast<uint32>(bCount);
-						m_IsDirty = true;
-					}
-				});
-
-				if (emitter->burstCount > 0)
-				{
-					DrawRow("ParticleEditor.PropBurstInterval", [&]() {
-						if (ImGui::DragFloat("##BurstInterval", &emitter->burstInterval, 0.05f, 0.1f, 10.0f, "%.2fs"))
-							m_IsDirty = true;
-					});
-				}
-			}
-
-			DrawRow("ParticleEditor.PropMaxParticles", [&]() {
-				int maxP = static_cast<int>(emitter->maxParticles);
-				if (ImGui::DragInt("##MaxParticles", &maxP, 10, 10, 5000))
-				{
-					emitter->maxParticles = static_cast<uint32>(maxP);
-					m_IsDirty = true;
-				}
-			});
-
-			ImGui::EndTable();
-		}
-	}
-
-	// 2. 수명 및 속도
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategoryLifetime"), ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		if (ImGui::BeginTable("##TableLifetime", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropLifetimeRange", [&]() {
-				if (ImGui::DragFloatRange2("##Lifetime", &emitter->lifetimeMin, &emitter->lifetimeMax, 0.05f, 0.01f, 30.0f, "%.2fs"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropSpeedRange", [&]() {
-				if (ImGui::DragFloatRange2("##Speed", &emitter->speedMin, &emitter->speedMax, 0.1f, 0.0f, 100.0f, "%.1f m/s"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropDirection", [&]() {
-				if (ImGui::DragFloat3("##Direction", &emitter->direction.x, 0.05f, -1.0f, 1.0f, "%.2f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropSpreadAngle", [&]() {
-				if (ImGui::SliderFloat("##SpreadAngle", &emitter->spreadAngleDegrees, 0.0f, 180.0f, "%.1f deg"))
-					m_IsDirty = true;
-			});
-
-			ImGui::EndTable();
-		}
-	}
-
-	// 3. 환경 외력 및 난류
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategoryForces")))
-	{
-		if (ImGui::BeginTable("##TableForces", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropGravity", [&]() {
-				if (ImGui::DragFloat3("##Gravity", &emitter->gravity.x, 0.1f, -50.0f, 50.0f, "%.1f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropBuoyancy", [&]() {
-				if (ImGui::DragFloat("##Buoyancy", &emitter->buoyancy, 0.1f, -50.0f, 50.0f, "%.1f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropDrag", [&]() {
-				if (ImGui::SliderFloat("##Drag", &emitter->drag, 0.0f, 5.0f, "%.2f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropWind", [&]() {
-				if (ImGui::DragFloat3("##Wind", &emitter->wind.x, 0.1f, -50.0f, 50.0f, "%.1f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropEnableCurlNoise", [&]() {
-				if (ImGui::Checkbox("##EnableCurlNoise", &emitter->enableCurlNoise))
-				{
-					auto beforeSnap = CaptureSnapshot();
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Toggle Curl Noise",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-			});
-
-			if (emitter->enableCurlNoise)
-			{
-				DrawRow("ParticleEditor.PropNoiseStrength", [&]() {
-					if (ImGui::SliderFloat("##NoiseStrength", &emitter->curlNoiseStrength, 0.0f, 10.0f, "%.2f"))
-						m_IsDirty = true;
-				});
-
-				DrawRow("ParticleEditor.PropNoiseFrequency", [&]() {
-					if (ImGui::SliderFloat("##NoiseFrequency", &emitter->curlNoiseFrequency, 0.01f, 5.0f, "%.2f"))
-						m_IsDirty = true;
-				});
-
-				DrawRow("ParticleEditor.PropNoiseSpeed", [&]() {
-					if (ImGui::SliderFloat("##NoiseSpeed", &emitter->curlNoiseScrollSpeed, 0.0f, 5.0f, "%.2f"))
-						m_IsDirty = true;
-				});
-			}
-
-			ImGui::EndTable();
-		}
-	}
-
-	// 4. 물리 충돌 (Collision)
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategoryCollision")))
-	{
-		if (ImGui::BeginTable("##TableCollision", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropCollisionMode", [&]() {
-				int cMode = static_cast<int>(emitter->collisionMode);
-				const std::string colModes[] = {
-					LOCAL("ParticleEditor.CollisionNone"),
-					LOCAL("ParticleEditor.CollisionFloorPlane"),
-					LOCAL("ParticleEditor.CollisionPhysicsRaycast")
-				};
-				const char* colModeCstrs[] = { colModes[0].c_str(), colModes[1].c_str(), colModes[2].c_str() };
-				if (ImGui::Combo("##CollisionMode", &cMode, colModeCstrs, IM_ARRAYSIZE(colModeCstrs)))
-				{
-					auto beforeSnap = CaptureSnapshot();
-					emitter->collisionMode = static_cast<Engine::EParticleCollisionMode>(cMode);
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Change Collision Mode",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-			});
-
-			if (emitter->collisionMode != Engine::EParticleCollisionMode::None)
-			{
-				DrawRow("ParticleEditor.PropCollisionResponse", [&]() {
-					int cResp = static_cast<int>(emitter->collisionResponse);
-					const std::string colResponses[] = {
-						LOCAL("ParticleEditor.ResponseBounce"),
-						LOCAL("ParticleEditor.ResponseSlide"),
-						LOCAL("ParticleEditor.ResponseDie"),
-						LOCAL("ParticleEditor.ResponseStop")
-					};
-					const char* colRespCstrs[] = { colResponses[0].c_str(), colResponses[1].c_str(), colResponses[2].c_str(), colResponses[3].c_str() };
-					if (ImGui::Combo("##CollisionResponse", &cResp, colRespCstrs, IM_ARRAYSIZE(colRespCstrs)))
-					{
-						auto beforeSnap = CaptureSnapshot();
-						emitter->collisionResponse = static_cast<Engine::EParticleCollisionResponse>(cResp);
-						auto afterSnap = CaptureSnapshot();
-						auto cmd = std::make_unique<ParticleEffectCommand>(
-							effect, std::move(beforeSnap), std::move(afterSnap), "Change Collision Response",
-							[this]() { SetupPreview(); m_IsDirty = true; });
-						m_History.Record(std::move(cmd));
-						m_IsDirty = true;
-					}
-				});
-
-				if (emitter->collisionResponse == Engine::EParticleCollisionResponse::Bounce)
-				{
-					DrawRow("ParticleEditor.PropRestitution", [&]() {
-						if (ImGui::SliderFloat("##Restitution", &emitter->restitution, 0.0f, 1.0f, "%.2f"))
-							m_IsDirty = true;
-					});
-
-					DrawRow("ParticleEditor.PropMinBounceSpeed", [&]() {
-						if (ImGui::SliderFloat("##MinBounceSpeed", &emitter->minBounceSpeed, 0.0f, 2.0f, "%.2f"))
-							m_IsDirty = true;
-					});
-				}
-
-				DrawRow("ParticleEditor.PropFriction", [&]() {
-					if (ImGui::SliderFloat("##Friction", &emitter->friction, 0.0f, 1.0f, "%.2f"))
-						m_IsDirty = true;
-				});
-
-				if (emitter->collisionMode == Engine::EParticleCollisionMode::FloorPlane)
-				{
-					DrawRow("ParticleEditor.PropFloorHeight", [&]() {
-						if (ImGui::DragFloat("##FloorHeight", &emitter->floorHeight, 0.05f, -100.0f, 100.0f, "%.2f m"))
-							m_IsDirty = true;
-					});
-				}
-
-				DrawRow("ParticleEditor.PropCollisionRadius", [&]() {
-					if (ImGui::DragFloat("##CollisionRadius", &emitter->collisionRadius, 0.01f, 0.001f, 2.0f, "%.3f m"))
-						m_IsDirty = true;
-				});
-			}
-
-			ImGui::EndTable();
-		}
-	}
-
-	// 5. 크기 및 회전
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategorySizeRotation")))
-	{
-		if (ImGui::BeginTable("##TableSizeRotation", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropSizeStart", [&]() {
-				if (ImGui::DragFloat2("##SizeStart", &emitter->sizeStart.x, 0.02f, 0.01f, 20.0f, "%.2f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropSizeEnd", [&]() {
-				if (ImGui::DragFloat2("##SizeEnd", &emitter->sizeEnd.x, 0.02f, 0.01f, 20.0f, "%.2f"))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropRotationSpeedRange", [&]() {
-				if (ImGui::DragFloatRange2("##RotationSpeed", &emitter->rotationSpeedMin, &emitter->rotationSpeedMax, 0.1f, -20.0f, 20.0f, "%.1f rad/s"))
-					m_IsDirty = true;
-			});
-
-			ImGui::EndTable();
-		}
-	}
-
-	// 6. 색상 및 머티리얼
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("ParticleEditor.CategoryColorMaterial"), ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		if (ImGui::BeginTable("##TableColorMaterial", 2, tableFlags))
-		{
-			ImGui::TableSetupColumn("##Label", ImGuiTableColumnFlags_WidthFixed, 140.0f);
-			ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-
-			DrawRow("ParticleEditor.PropColorStart", [&]() {
-				if (ImGui::ColorEdit4("##ColorStart", &emitter->colorStart.x, ImGuiColorEditFlags_Float))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropColorEnd", [&]() {
-				if (ImGui::ColorEdit4("##ColorEnd", &emitter->colorEnd.x, ImGuiColorEditFlags_Float))
-					m_IsDirty = true;
-			});
-
-			DrawRow("ParticleEditor.PropTexture", [&]() {
-				ImGui::PushID("TexturePicker");
-				auto beforeSnap = CaptureSnapshot();
-				if (Editor::DrawInspectorResourcePicker(emitter->textureHandle, true, true))
-				{
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Change Texture",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-				ImGui::PopID();
-			});
-
-			DrawRow("ParticleEditor.PropMaterial", [&]() {
-				ImGui::PushID("MaterialPicker");
-				auto beforeSnap = CaptureSnapshot();
-				if (Editor::DrawInspectorResourcePicker(emitter->materialHandle, true, true))
-				{
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Change Material",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-				ImGui::PopID();
-			});
-
-			DrawRow("ParticleEditor.PropAlignToSurfaceDisk", [&]() {
-				if (ImGui::Checkbox("##AlignToSurfaceDisk", &emitter->alignToSurfaceDisk))
-				{
-					auto beforeSnap = CaptureSnapshot();
-					auto afterSnap = CaptureSnapshot();
-					auto cmd = std::make_unique<ParticleEffectCommand>(
-						effect, std::move(beforeSnap), std::move(afterSnap), "Toggle Surface Disk Align",
-						[this]() { SetupPreview(); m_IsDirty = true; });
-					m_History.Record(std::move(cmd));
-					m_IsDirty = true;
-				}
-			});
-
-			ImGui::EndTable();
-		}
+		m_IsDirty = true;
 	}
 
 	ImGui::PopID();
