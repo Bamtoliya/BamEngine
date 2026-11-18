@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-18] 에셋 참조 검사 사용자 재검증 결과
+
+- 사용자가 `f1ffddb4` 수정 후 `AssetReferenceCheck` 통과를 보고했다. 수정 전 같은 작업에서 `TransformInheritanceCheck`·`EditorHistoryCheck`가 통과한 터미널 결과와 구분해 기록한다. 최신 전체 CTest 또는 Release 통과로 확장하지 않는다.
+- 로드된 에셋의 이동·이름 변경, 열린/닫힌 편집기의 저장 경로, 파일 Undo/Redo 뒤의 씬 Undo/Redo, 한글 경로 및 실패/취소 시 보존은 실제 Editor에서 확인이 남아 있다.
+- 다음 구현 후보는 액션 타임라인의 명시적인 모델·사운드·VFX 및 씬 타임라인 경로 참조를 기존 수집/갱신 경로에 연결하는 것이다. 현재 해당 문자열이 영향을 받으면 보호를 위해 이동을 거부한다. 실제 UI 회귀 확인 후 타임라인부터 작은 범위로 확장하며, 프리팹·그래프·셰이더 내부 경로를 동시에 해제하지 않는다. 이 후보는 아직 구현하지 않았다.
+
 ### [2026-11-18] 에셋 참조 검사 실패의 레거시 경로 해석 순서 수정
 
 - 최신 사용자 터미널에서 Editor 링크 완료와 CTest 세 검사 실행을 확인했다. `TransformInheritanceCheck`·`EditorHistoryCheck`는 통과했고 `AssetReferenceCheck`는 이동 후 참조 검사(반환 코드 21의 공통 메시지)에서 실패했다. 이 메시지는 여러 조건이 공유하므로 기존 로그만으로 실패한 세부 조건을 직접 식별할 수 없었다.
