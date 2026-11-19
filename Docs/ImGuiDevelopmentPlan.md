@@ -1141,6 +1141,8 @@ BamEngine의 우선 기준은 작은 게임의 제작·저장·실행·배포 �
 
 소스 연결 확인을 완료했다. 사용자 실행 검증은 [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md) 5.2절을 따른다.
 
+편집기 창을 먼저 표시하고 문서 읽기와 프리뷰 생성을 분할하는 후속 작업은 [리소스 편집기 비동기 열기 계획](ResourceEditorAsyncOpenPlan.md)에 정리했다.
+
 
 ### 뷰포트 우측 토글 복원 (2026-11-09)
 
