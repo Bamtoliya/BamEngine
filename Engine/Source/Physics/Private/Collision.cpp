@@ -1971,7 +1971,9 @@ static void ClosestPointSegmentAABB3D(const glm::dvec3& pA, const glm::dvec3& pB
 			left = m1;
 	}
 
-	const double bestT = (left + right) * 0.5;
+	double bestT = (left + right) * 0.5;
+	if (distSqAtT(0.0) < distSqAtT(bestT)) bestT = 0.0;
+	if (distSqAtT(1.0) < distSqAtT(bestT)) bestT = 1.0;
 	outSegPoint = pA + (pB - pA) * bestT;
 	outBoxPoint = glm::clamp(outSegPoint, bMin, bMax);
 }
@@ -1999,6 +2001,7 @@ bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box, HitRe
 		return false;
 
 	const double dist = std::sqrt(distSq);
+	double depth = r - dist;
 	glm::dvec3 normal(0.0, 1.0, 0.0);
 	if (dist > 1.0e-6)
 	{
@@ -2008,51 +2011,89 @@ bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box, HitRe
 	{
 		const glm::dvec3 bMin(box.min);
 		const glm::dvec3 bMax(box.max);
-		double minPen = segPt.x - bMin.x;
-		normal = glm::dvec3(-1.0, 0.0, 0.0);
-		if (bMax.x - segPt.x < minPen) { minPen = bMax.x - segPt.x; normal = glm::dvec3(1.0, 0.0, 0.0); }
-		if (segPt.y - bMin.y < minPen) { minPen = segPt.y - bMin.y; normal = glm::dvec3(0.0, -1.0, 0.0); }
-		if (bMax.y - segPt.y < minPen) { minPen = bMax.y - segPt.y; normal = glm::dvec3(0.0, 1.0, 0.0); }
-		if (segPt.z - bMin.z < minPen) { minPen = segPt.z - bMin.z; normal = glm::dvec3(0.0, 0.0, -1.0); }
-		if (bMax.z - segPt.z < minPen) { minPen = bMax.z - segPt.z; normal = glm::dvec3(0.0, 0.0, 1.0); }
+		const glm::dvec3 towardMin = glm::max(glm::dvec3(capsule.pointA), glm::dvec3(capsule.pointB)) - bMin;
+		const glm::dvec3 towardMax = bMax - glm::min(glm::dvec3(capsule.pointA), glm::dvec3(capsule.pointB));
+		int faceAxis = 0;
+		double faceSign = -1.0;
+		double faceDepth = towardMin.x;
+		for (int axis = 0; axis < 3; ++axis)
+		{
+			const bool useMin = towardMin[axis] <= towardMax[axis];
+			const double candidate = useMin ? towardMin[axis] : towardMax[axis];
+			if (candidate >= faceDepth) continue;
+			faceAxis = axis;
+			faceSign = useMin ? -1.0 : 1.0;
+			faceDepth = candidate;
+		}
+		normal = glm::dvec3(0.0);
+		normal[faceAxis] = faceSign;
+		boxPt[faceAxis] = faceSign < 0.0 ? bMin[faceAxis] : bMax[faceAxis];
+		depth = r + faceDepth;
 	}
 
 	outHitResult.point = vec3(boxPt);
 	outHitResult.normal = vec3(normal);
-	outHitResult.denetrationDepth = static_cast<f32>(r - dist);
-	outHitResult.distance = static_cast<f32>(dist);
+	outHitResult.denetrationDepth = static_cast<f32>(depth);
 	outHitResult.hasHit = true;
 	return true;
+}
+
+namespace
+{
+	struct CapsuleBoxFrame
+	{
+		mat3 Axes{};
+		vec3 Origin{};
+		BoundingBox Bounds;
+
+		Capsule ToLocal(const Capsule& capsule) const
+		{
+			const mat3 localAxes = glm::transpose(Axes);
+			return Capsule(localAxes * (capsule.pointA - Origin), localAxes * (capsule.pointB - Origin), capsule.radius);
+		}
+	};
+
+	bool MakeCapsuleBoxFrame(const BoundingBox& box, const mat4& matrix, CapsuleBoxFrame& frame)
+	{
+		if (!box.IsValid() || !IsFinite(vec3(matrix[3]))) return false;
+		if (matrix[0][3] != 0.0f || matrix[1][3] != 0.0f || matrix[2][3] != 0.0f || matrix[3][3] != 1.0f)
+			return false;
+		vec3 scale;
+		for (int i = 0; i < 3; ++i)
+		{
+			const vec3 axis(matrix[i]);
+			scale[i] = glm::length(axis);
+			if (scale[i] <= 1.0e-6f || !std::isfinite(scale[i])) return false;
+			frame.Axes[i] = axis / scale[i];
+		}
+
+		// 직교 축에는 박스 크기에만 배율을 적용해 캡슐의 반지름을 월드 단위로 유지한다.
+		if (std::abs(glm::dot(frame.Axes[0], frame.Axes[1])) <= 1.0e-5f &&
+			std::abs(glm::dot(frame.Axes[0], frame.Axes[2])) <= 1.0e-5f &&
+			std::abs(glm::dot(frame.Axes[1], frame.Axes[2])) <= 1.0e-5f)
+		{
+			frame.Origin = vec3(matrix[3]);
+			frame.Bounds = BoundingBox(box.min * scale, box.max * scale);
+			return frame.Bounds.IsValid();
+		}
+
+		// 전단된 박스는 직교 축으로 표현할 수 없어 보수적인 월드 AABB를 사용한다.
+		frame.Axes = mat3(1.0f);
+		frame.Origin = vec3(0.0f);
+		return box.TryTransformToAABB(matrix, frame.Bounds);
+	}
 }
 
 bool Collision::Intersects(const Capsule& capsule, const BoundingBox& box, const mat4& worldMatrixBox, HitResult& outHitResult)
 {
 	outHitResult.Reset();
-	if (!capsule.IsValid() || !box.IsValid())
+	CapsuleBoxFrame frame;
+	if (!capsule.IsValid() || !MakeCapsuleBoxFrame(box, worldMatrixBox, frame) ||
+		!Intersects(frame.ToLocal(capsule), frame.Bounds, outHitResult))
 		return false;
 
-	const mat4 invMat = glm::inverse(worldMatrixBox);
-	const vec3 localPointA = vec3(invMat * vec4(capsule.pointA, 1.0f));
-	const vec3 localPointB = vec3(invMat * vec4(capsule.pointB, 1.0f));
-	const f32 scale = glm::length(vec3(worldMatrixBox[0]));
-	const f32 localRadius = scale > 1.0e-6f ? capsule.radius / scale : capsule.radius;
-
-	const Capsule localCap(localPointA, localPointB, localRadius);
-	HitResult localHit{};
-	if (!Intersects(localCap, box, localHit))
-		return false;
-
-	const vec3 worldPt = vec3(worldMatrixBox * vec4(localHit.point, 1.0f));
-	const mat3 normMat = glm::transpose(glm::inverse(mat3(worldMatrixBox)));
-	vec3 worldNorm = normMat * localHit.normal;
-	const f32 nLen = glm::length(worldNorm);
-	worldNorm = nLen > 1.0e-6f ? worldNorm / nLen : vec3(0.0f, 1.0f, 0.0f);
-
-	outHitResult.point = worldPt;
-	outHitResult.normal = worldNorm;
-	outHitResult.denetrationDepth = localHit.denetrationDepth * scale;
-	outHitResult.distance = localHit.distance * scale;
-	outHitResult.hasHit = true;
+	outHitResult.point = frame.Origin + frame.Axes * outHitResult.point;
+	outHitResult.normal = frame.Axes * outHitResult.normal;
 	return true;
 }
 
@@ -2269,7 +2310,6 @@ bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distanc
 	{
 		outHitResult = initialHit;
 		outHitResult.distance = 0.0f;
-		outHitResult.normal = -unitDir;
 		return true;
 	}
 
@@ -2307,53 +2347,17 @@ bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distanc
 	return true;
 }
 
-bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle, const mat4& worldMatrixObstacle, HitResult& outHitResult)
+bool Collision::Sweep(const Capsule& capsule, const vec3& direction, f32 distance, const BoundingBox& obstacle,
+	const mat4& worldMatrixObstacle, HitResult& outHitResult)
 {
 	outHitResult.Reset();
-	if (!capsule.IsValid() || !obstacle.IsValid() || distance <= 0.0f)
+	CapsuleBoxFrame frame;
+	if (!capsule.IsValid() || !MakeCapsuleBoxFrame(obstacle, worldMatrixObstacle, frame) ||
+		!Sweep(frame.ToLocal(capsule), glm::transpose(frame.Axes) * direction, distance, frame.Bounds, outHitResult))
 		return false;
 
-	const vec3 unitDir = glm::normalize(direction);
-	HitResult initialHit{};
-	if (Intersects(capsule, obstacle, worldMatrixObstacle, initialHit))
-	{
-		outHitResult = initialHit;
-		outHitResult.distance = 0.0f;
-		outHitResult.normal = -unitDir;
-		return true;
-	}
-
-	double left = 0.0;
-	double right = distance;
-	bool everHit = false;
-
-	for (int iter = 0; iter < 12; ++iter)
-	{
-		const double mid = (left + right) * 0.5;
-		const vec3 offset = unitDir * static_cast<f32>(mid);
-		const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
-		HitResult temp{};
-		if (Intersects(moved, obstacle, worldMatrixObstacle, temp))
-		{
-			right = mid;
-			everHit = true;
-		}
-		else
-		{
-			left = mid;
-		}
-	}
-
-	if (!everHit)
-		return false;
-
-	const f32 hitDist = static_cast<f32>(right);
-	const vec3 offset = unitDir * hitDist;
-	const Capsule moved(capsule.pointA + offset, capsule.pointB + offset, capsule.radius);
-	if (!Intersects(moved, obstacle, worldMatrixObstacle, outHitResult))
-		return false;
-
-	outHitResult.distance = hitDist;
+	outHitResult.point = frame.Origin + frame.Axes * outHitResult.point;
+	outHitResult.normal = frame.Axes * outHitResult.normal;
 	return true;
 }
 

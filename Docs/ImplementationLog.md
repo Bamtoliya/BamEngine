@@ -5,7 +5,7 @@ This document tracks implementation details, architectural decisions, and techni
 ### [2026-11-19] KCC 램프 미끄러짐에서 메시 바닥 관통 차단
 
 - 사용자 재확인에서 램프에 점프해 닿은 뒤 계속 낙하하는 현상이 남았다. 급경사 미끄러짐은 이동 단계에서 대각선 하강을 적용하며 공중 수직 착지 검사를 건너뛴다. 이동 전후의 높이 구간을 도착 XZ에서 검사해 평지 지지면을 만나면 그 위치에서 하강을 멈추고 접지 상태를 갱신한다.
-- 60° 경사로에 낙하한 뒤 메시 바닥으로 미끄러지는 회귀 검사를 추가했다. 정적 검토를 수행했으며 빌드·CTest·실환경 결과는 사용자 확인 대기다. [급경사 전환 확인](ThirdPersonCharacterSystemPlan.md#급경사-미끄러짐에서-평지로-전환)
+- 60° 경사로에 낙하한 뒤 메시 바닥으로 미끄러지는 회귀 검사를 30Hz·60Hz·120Hz에 추가했다. 2026-11-19 사용자 실환경 재확인에서 램프에 점프해 접촉한 뒤 평지에 착지하는 동작이 의도대로 동작했다고 보고했다. `KinematicCharacterCheck`와 `CollisionGeometryCheck`의 CTest 결과는 확인되지 않았다. [급경사 전환 확인](ThirdPersonCharacterSystemPlan.md#급경사-미끄러짐에서-평지로-전환)
 
 ### [2026-11-19] KCC 램프 정지와 공중 충돌의 수직 이동 분리
 

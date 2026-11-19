@@ -95,7 +95,7 @@ namespace Engine
         vec3 GroundNormal = vec3(0.0f, 1.0f, 0.0f);
         f32 GroundAngle = 0.0f;
 
-        // 무빙 플랫폼(Moving Platform) 연동 런타임 상태
+        // 접촉 중인 지지면. 무빙 플랫폼 위치·회전은 걸을 수 있는 면에 접지했을 때만 상속한다.
         entt::entity GroundEntity = entt::null;
         vec3 LastGroundPos = vec3(0.0f);
         quat LastGroundRot = quat(1.0f, 0.0f, 0.0f, 0.0f);

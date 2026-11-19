@@ -40,6 +40,7 @@ foreach(check_target IN ITEMS
     TerrainDataCheck
     Physics2DCheck
     CollisionGeometryCheck
+    KinematicCharacterCheck
     SplineCurveCheck
     BuiltInMeshWindingCheck
 )

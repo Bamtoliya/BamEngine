@@ -1,5 +1,6 @@
 ﻿#include "Engine_Includes.h"
 #include "Collision.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace
 {
@@ -114,6 +115,31 @@ namespace
 
         if (Collision::Intersects(moved, centered))
             return Fail("Capsule correction did not separate the shapes.");
+
+        return 0;
+    }
+
+    int CheckScaledCapsuleBox()
+    {
+        const BoundingBox box(vec3(-0.5f), vec3(0.5f));
+        const mat4 rotation = glm::rotate(mat4(1.0f), glm::radians(30.0f), vec3(1.0f, 0.0f, 0.0f));
+        const mat4 matrix = glm::scale(rotation, vec3(2.5f, 0.2f, 4.0f));
+        const vec3 normal(rotation[1]);
+        const vec3 top = normal * 0.1f;
+        const vec3 bottomCenter = top + normal * 0.43f;
+        const Capsule overlapping(bottomCenter, bottomCenter + vec3(0.0f, 1.0f, 0.0f), 0.5f);
+
+        HitResult hit{};
+        if (!Collision::Intersects(overlapping, box, matrix, hit) ||
+            !Near(hit.denetrationDepth, 0.07f) || !Near(glm::dot(hit.normal, normal), 1.0f))
+            return Fail("Non-uniform box scale changed capsule penetration or contact normal.");
+
+        const vec3 offset = normal * 0.3f;
+        const Capsule separated(overlapping.pointA + offset, overlapping.pointB + offset, overlapping.radius);
+        if (Collision::Intersects(separated, box, matrix, hit) ||
+            !Collision::Sweep(separated, -normal, 0.4f, box, matrix, hit) ||
+            glm::abs(hit.distance - 0.23f) > 0.001f || !Near(glm::dot(hit.normal, normal), 1.0f))
+            return Fail("Non-uniform box scale changed the swept capsule contact distance.");
 
         return 0;
     }
@@ -663,6 +689,8 @@ int main()
         return result;
 
     if (const int result = CheckCapsule3DContacts(); result != 0)
+        return result;
+    if (const int result = CheckScaledCapsuleBox(); result != 0)
         return result;
 
     if (const int result = CheckCapsuleCircleContacts(); result != 0)
