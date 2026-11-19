@@ -168,4 +168,7 @@ namespace Tools::ModelConversion
     };
 
     [[nodiscard]] Result ConvertStaticModel(const std::filesystem::path& path, const Options& options = {});
+    [[nodiscard]] Result ConvertModelToSnapshot(const std::filesystem::path& sourcePath,
+        const std::filesystem::path& snapshotPath, const Options& options);
+    [[nodiscard]] Result ReadModelSnapshot(const std::filesystem::path& snapshotPath);
 }

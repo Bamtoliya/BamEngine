@@ -175,6 +175,31 @@ bool ShortcutManager::CanExecuteAction(const std::string& actionId) const
     const auto* action = FindAction(actionId);
     return action && (!action->CanExecute || action->CanExecute());
 }
+
+bool ShortcutManager::TryTriggerAction(const std::string& actionId)
+{
+    if (IsCapturing() || m_SuppressProcessOnce)
+        return false;
+
+    const auto* action = FindAction(actionId);
+    if (!action || !action->ExecuteHandler)
+        return false;
+
+    auto it = m_ActiveBindings.find(actionId);
+    if (it == m_ActiveBindings.end() || !it->second.IsValid())
+        return false;
+
+    auto& input = Engine::InputManager::Get();
+    if (it->second.Evaluate(input, action->AllowRepeat))
+    {
+        if (!action->CanExecute || action->CanExecute())
+        {
+            action->ExecuteHandler();
+            return true;
+        }
+    }
+    return false;
+}
 const char* ShortcutManager::GetShortcutHint(const std::string& actionId) const
 {
     auto it = m_ActiveBindings.find(actionId);

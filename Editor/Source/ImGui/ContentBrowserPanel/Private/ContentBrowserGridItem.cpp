@@ -1149,11 +1149,13 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 		if (!ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
 			return;
 
-		auto& rm = Engine::ResourceManager::Get();
-		const auto* model = dynamic_cast<Engine::Model*>(rm.GetResource(rm.LoadFile(path.wstring())));
 		auto modelStem = path.stem();
 		if (filename.ends_with(".bammodel.json"))
 			modelStem.replace_extension();
+
+		auto& rm = Engine::ResourceManager::Get();
+		const Engine::Handle loadedHandle = rm.FindHandleByFilePath(path);
+		const auto* model = loadedHandle.IsValid() ? dynamic_cast<Engine::Model*>(rm.GetResource(loadedHandle)) : nullptr;
 
 		std::filesystem::path source;
 		std::error_code ec;
@@ -1161,7 +1163,9 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 		{
 			source = Engine::PlatformPath::ResolveUri(model->GetImportSourceUri());
 		}
-		else if (model && model->GetImportSourceUri().empty())
+
+		// 메모리에 로드되지 않았거나 SourceUri가 비어 있으면 같은 폴더의 동명 원본을 먼저 즉시 탐색 (LoadFile 블로킹 방지)
+		if (source.empty())
 		{
 			for (const auto* ext : { L".glb", L".gltf", L".fbx", L".obj" })
 			{
@@ -1173,6 +1177,14 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 					break;
 				}
 			}
+		}
+
+		// 다른 폴더의 원본을 참조하는 경우에만 폴백으로 모델 파일을 로드해 ImportSourceUri 확인
+		if (source.empty() && !model)
+		{
+			model = dynamic_cast<Engine::Model*>(rm.GetResource(rm.LoadFile(path.wstring())));
+			if (model && Engine::PlatformPath::IsProjectUri(model->GetImportSourceUri()))
+				source = Engine::PlatformPath::ResolveUri(model->GetImportSourceUri());
 		}
 
 		if (source.empty() || source.stem() != modelStem || !std::filesystem::is_regular_file(source, ec))

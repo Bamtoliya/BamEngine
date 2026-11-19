@@ -7,18 +7,21 @@
 #include "ResourceHandle.h"
 #include "Mesh.h"
 #include "Material.h"
+#include "Model.h"
+#include <atomic>
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 BEGIN(Engine)
 class Entity;
-class Model;
 class MaterialInterface;
-struct ModelCreateDesc;
 END
 
 BEGIN(Editor)
 struct PreparedModelData;
+class ModelImportTask;
+
 class ModelImportModal final : public IImGui
 {
 public:
@@ -36,14 +39,16 @@ public:
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Hidden; }
-private:
-	EResult OnInitialize(void* arg) override;
-	void LoadPreviewModel(bool focusCamera);
-	bool UpdatePreviewTransform();
-	void ClearPreview();
-	bool CreatePreviewMaterials(const PreparedModelData& data, Engine::ModelCreateDesc& desc, const Engine::ResourceHandle<Engine::Material>& baseMaterial);
 
 private:
+	struct AsyncPreviewState
+	{
+		std::unique_ptr<ModelImportTask> Task;
+		std::atomic<EResult> Result{ Engine::EResult::Fail };
+		std::atomic<bool> Completed{ false };
+		bool FocusCamera = true;
+	};
+
 	struct AlbedoPreviewInfo
 	{
 		std::string MaterialName;
@@ -53,6 +58,16 @@ private:
 		bool Embedded = false;
 	};
 
+private:
+	EResult OnInitialize(void* arg) override;
+	void StartAsyncPreviewPrepare(bool focusCamera);
+	bool BeginPreviewBuild(std::unique_ptr<ModelImportTask> completedTask, bool focusCamera);
+	void StepPreviewBuild();
+	bool BuildSinglePreviewMaterial(const PreparedModelData& data, size_t materialIndex);
+	bool UpdatePreviewTransform();
+	void ClearPreview();
+
+	void DrawPreviewPane();
 	void DrawTransformOptions();
 	void DrawTextureReferences();
 	void DrawAlbedoThumbnail(size_t materialIndex, float maxEdge);
@@ -63,11 +78,21 @@ private:
 	bool m_OpenRequested = false;
 	bool m_PreviewReloadRequested = false;
 	bool m_PreviewReady = false;
+	bool m_PreviewBuilding = false;
+	bool m_PendingFocusCamera = true;
 	bool m_CloseRequested = false;
 	bool m_ImportRequested = false;
 	std::filesystem::path m_SourcePath;
 	std::filesystem::path m_DestDir;
 	ModelImportDesc m_Desc;
+
+	std::shared_ptr<AsyncPreviewState> m_AsyncPreview;
+	std::unique_ptr<ModelImportTask> m_BuildingTask;
+	Engine::ModelCreateDesc m_BuildingModelDesc;
+	Engine::ResourceHandle<Engine::Material> m_BuildingBaseMaterial;
+	size_t m_NextBuildMeshIndex = 0;
+	size_t m_NextBuildMaterialIndex = 0;
+	float m_PreviewProgress = 0.0f;
 
 	PreviewViewportWidget m_PreviewWidget;
 	Engine::Entity* m_PreviewEntity = nullptr;

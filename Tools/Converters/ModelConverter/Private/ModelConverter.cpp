@@ -21,7 +21,7 @@ namespace Tools::ModelConversion
     namespace
     {
         constexpr uint32_t MODEL_DDC_MAGIC = 0x43444D42; // "BMDC"
-        constexpr uint32_t MODEL_DDC_VERSION = 2;
+        constexpr uint32_t MODEL_DDC_VERSION = 3;
 
         void WriteString(std::ostream& os, const std::string& str)
         {
@@ -74,7 +74,7 @@ namespace Tools::ModelConversion
             for (const auto& lod : mesh.LODs) WriteMesh(os, lod);
         }
 
-        bool ReadMesh(std::istream& is, MeshData& mesh)
+        bool ReadMesh(std::istream& is, MeshData& mesh, bool allowLODs = true)
         {
             if (!ReadString(is, mesh.Name)) return false;
             is.read(reinterpret_cast<char*>(&mesh.MaterialIndex), sizeof(mesh.MaterialIndex));
@@ -85,11 +85,11 @@ namespace Tools::ModelConversion
 
             uint32_t lodCount = 0;
             is.read(reinterpret_cast<char*>(&lodCount), sizeof(lodCount));
-            if (!is || lodCount > 16) return false;
+            if (!is || lodCount > (allowLODs ? 16u : 0u)) return false;
             mesh.LODs.resize(lodCount);
             for (uint32_t i = 0; i < lodCount; ++i)
             {
-                if (!ReadMesh(is, mesh.LODs[i])) return false;
+                if (!ReadMesh(is, mesh.LODs[i], false)) return false;
             }
             return is.good();
         }
@@ -100,7 +100,7 @@ namespace Tools::ModelConversion
             if (!std::filesystem::exists(sourcePath, ec)) return {};
 
             Tools::Ddc::DdcHasher hasher;
-            const std::string u8Path = sourcePath.string();
+            const auto u8Path = sourcePath.u8string();
             hasher.Combine(u8Path.data(), u8Path.size());
             hasher.CombineFileMetadata(sourcePath);
             hasher.CombinePod(options.FlipUVs);
@@ -113,17 +113,14 @@ namespace Tools::ModelConversion
             hasher.CombinePod(options.LODCount);
             hasher.CombinePod(options.TargetError);
             for (float rate : options.LODReductionRates) hasher.CombinePod(rate);
-            hasher.CombineString("model_ddc_v2");
+            hasher.CombineString("model_ddc_v3");
 
             return hasher.ResolvePath(Tools::Ddc::FindDdcDirectory("models"));
         }
 
-        bool TryLoadModelFromDdc(const std::filesystem::path& ddcPath, ModelData& model)
+        bool ReadModelData(const std::filesystem::path& path, ModelData& model)
         {
-            std::error_code ec;
-            if (ddcPath.empty() || !std::filesystem::exists(ddcPath, ec)) return false;
-
-            std::ifstream file(ddcPath, std::ios::binary);
+            std::ifstream file(path, std::ios::binary);
             if (!file.is_open()) return false;
 
             uint32_t magic = 0, version = 0;
@@ -133,7 +130,7 @@ namespace Tools::ModelConversion
 
             std::string sourcePathStr;
             if (!ReadString(file, sourcePathStr)) return false;
-            model.SourcePath = sourcePathStr;
+            model.SourcePath = std::filesystem::path(std::u8string(sourcePathStr.begin(), sourcePathStr.end()));
             file.read(reinterpret_cast<char*>(&model.MaterialCount), sizeof(model.MaterialCount));
 
             // 1. Materials
@@ -214,18 +211,15 @@ namespace Tools::ModelConversion
             return file.good();
         }
 
-        void SaveModelToDdc(const std::filesystem::path& ddcPath, const ModelData& model)
+        bool WriteModelData(const std::filesystem::path& path, const ModelData& model)
         {
-            if (ddcPath.empty()) return;
-
-            std::error_code ec;
-            const auto tmpPath = ddcPath.string() + ".tmp";
-            std::ofstream file(tmpPath, std::ios::binary | std::ios::trunc);
-            if (!file.is_open()) return;
+            std::ofstream file(path, std::ios::binary | std::ios::trunc);
+            if (!file.is_open()) return false;
 
             file.write(reinterpret_cast<const char*>(&MODEL_DDC_MAGIC), sizeof(MODEL_DDC_MAGIC));
             file.write(reinterpret_cast<const char*>(&MODEL_DDC_VERSION), sizeof(MODEL_DDC_VERSION));
-            WriteString(file, model.SourcePath.string());
+            const auto utf8Path = model.SourcePath.u8string();
+            WriteString(file, std::string(utf8Path.begin(), utf8Path.end()));
             file.write(reinterpret_cast<const char*>(&model.MaterialCount), sizeof(model.MaterialCount));
 
             // 1. Materials
@@ -296,7 +290,18 @@ namespace Tools::ModelConversion
             }
 
             file.close();
-            std::filesystem::rename(tmpPath, ddcPath, ec);
+            return file.good();
+        }
+
+        void SaveModelToDdc(const std::filesystem::path& ddcPath, const ModelData& model)
+        {
+            auto tmpPath = ddcPath;
+            tmpPath += ".tmp";
+            if (WriteModelData(tmpPath, model))
+            {
+                std::error_code ec;
+                std::filesystem::rename(tmpPath, ddcPath, ec);
+            }
         }
 
         Result Fail(Error code, std::string message)
@@ -454,7 +459,7 @@ namespace Tools::ModelConversion
             }
         }
 
-    Result ConvertStaticModel(const std::filesystem::path& path, const Options& options)
+    static Result ConvertModel(const std::filesystem::path& path, const Options& options, bool writeCache)
     {
         if (!std::isfinite(options.UniformScale) || options.UniformScale <= 0.0f)
             return Fail(Error::InvalidData, "Import scale must be finite and positive.");
@@ -467,7 +472,7 @@ namespace Tools::ModelConversion
         if (!ddcPath.empty())
         {
             ModelData cachedModel;
-            if (TryLoadModelFromDdc(ddcPath, cachedModel))
+            if (ReadModelData(ddcPath, cachedModel))
                 return { Error::None, {}, std::move(cachedModel) };
         }
         unsigned int flags = aiProcess_Triangulate | aiProcess_GenSmoothNormals |
@@ -911,10 +916,32 @@ namespace Tools::ModelConversion
         }
 
         // ── DDC 캐시 저장 (원자적 쓰기) ──
-        if (!ddcPath.empty())
+        if (writeCache && !ddcPath.empty())
         {
             SaveModelToDdc(ddcPath, model);
         }
+        return { Error::None, {}, std::move(model) };
+    }
+
+    Result ConvertStaticModel(const std::filesystem::path& path, const Options& options)
+    {
+        return ConvertModel(path, options, true);
+    }
+
+    Result ConvertModelToSnapshot(const std::filesystem::path& sourcePath,
+        const std::filesystem::path& snapshotPath, const Options& options)
+    {
+        auto result = ConvertModel(sourcePath, options, false);
+        if (result && !WriteModelData(snapshotPath, *result.Model))
+            return Fail(Error::InternalError, "Could not write model worker snapshot.");
+        return result;
+    }
+
+    Result ReadModelSnapshot(const std::filesystem::path& snapshotPath)
+    {
+        ModelData model;
+        if (!ReadModelData(snapshotPath, model) || model.Meshes.empty() || model.Nodes.empty())
+            return Fail(Error::InvalidData, "Could not read model worker snapshot.");
         return { Error::None, {}, std::move(model) };
     }
 }

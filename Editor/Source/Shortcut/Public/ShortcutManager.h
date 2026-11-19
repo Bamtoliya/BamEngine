@@ -42,6 +42,7 @@ public:
     // 액션 실행 및 가능 여부 (UI 클릭 시 호출)
     bool ExecuteAction(const std::string& actionId);
     bool CanExecuteAction(const std::string& actionId) const;
+    bool TryTriggerAction(const std::string& actionId);
 
     // 단축키 힌트 문자열 반환 (ImGui가 소비할 수 있도록 C 문자열 포인터 캐시 제공)
     const char* GetShortcutHint(const std::string& actionId) const;

@@ -11,6 +11,9 @@
 #include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
+#include <cmath>
+#include <thread>
 #include "ModelImportTask.h"
 #include "Model.h"
 #include "TransformSystem.h"
@@ -36,6 +39,7 @@ namespace Editor
 
 	void ModelImportModal::Free()
 	{
+		m_AsyncPreview.reset();
 		ClearPreview();
 		m_PreviewWidget.Free();
 		if (s_Instance == this) s_Instance = nullptr;
@@ -53,6 +57,8 @@ namespace Editor
 		m_Desc.Overwrite = true;
 
 		m_PreviewReady = false;
+		m_PreviewBuilding = false;
+		m_PreviewProgress = 0.0f;
 		m_PreviewReloadRequested = true;
 		m_CloseRequested = false;
 		m_ImportRequested = false;
@@ -63,6 +69,13 @@ namespace Editor
 	void ModelImportModal::ClearPreview()
 	{
 		m_PreviewReady = false;
+		m_PreviewBuilding = false;
+		m_PreviewProgress = 0.0f;
+		m_BuildingTask.reset();
+		m_BuildingModelDesc = {};
+		m_BuildingBaseMaterial = {};
+		m_NextBuildMeshIndex = 0;
+		m_NextBuildMaterialIndex = 0;
 
 		if (m_PreviewEntity)
 		{
@@ -82,7 +95,6 @@ namespace Editor
 			if (handle.IsValid())
 				(void)manager.DestroyResource(handle.GetRawHandle());
 		}
-
 		m_TempMaterials.clear();
 
 		for (auto& handle : m_TempTextures)
@@ -90,7 +102,6 @@ namespace Editor
 			if (handle.IsValid())
 				(void)manager.DestroyResource(handle.GetRawHandle());
 		}
-
 		m_TempTextures.clear();
 
 		for (auto& handle : m_TempMeshes)
@@ -98,186 +109,19 @@ namespace Editor
 			if (handle.IsValid())
 				(void)manager.DestroyResource(handle.GetRawHandle());
 		}
-
 		m_TempMeshes.clear();
 	}
 
-	bool ModelImportModal::CreatePreviewMaterials(const PreparedModelData& data, Engine::ModelCreateDesc& desc, const Engine::ResourceHandle<Engine::Material>& baseMaterial)
-	{
-		if (!HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials) || data.Materials.empty())
-			return true;
-
-		if (!baseMaterial.IsValid() || !baseMaterial.Get())
-			return false;
-
-		desc.MeshMaterialIndices.reserve(data.Meshes.size());
-
-		m_AlbedoPreviewInfo.resize(data.Materials.size());
-
-		for (size_t i = 0; i < data.Materials.size(); ++i)
-		{
-			const auto& source = data.Materials[i];
-			auto& info = m_AlbedoPreviewInfo[i];
-
-			info.MaterialName = source.Name;
-			info.Reference = source.BaseColorTexture.Path;
-			info.Embedded = source.BaseColorTexture.IsEmbedded;
-		}
-
-		for (const auto& mesh : data.Meshes)
-		{
-			if (mesh.MaterialIndex >= data.Materials.size())
-			{
-				BAM_LOG(Error, "Editor", "Asset", "Preview mesh references an invalid material index.");
-				return false;
-			}
-
-			desc.MeshMaterialIndices.push_back(mesh.MaterialIndex);
-		}
-
-		desc.Materials.reserve(data.Materials.size());
-		m_TempMaterials.reserve(data.Materials.size());
-		m_TempTextures.reserve(data.Materials.size());
-
-		const std::wstring keyPrefix = L"__ModelImportPreview_" +
-			std::to_wstring(reinterpret_cast<std::uintptr_t>(this));
-
-		auto& manager = Engine::ResourceManager::Get();
-
-		for (size_t i = 0; i < data.Materials.size(); ++i)
-		{
-			const auto& source = data.Materials[i];
-
-			for (const float channel : source.BaseColorFactor)
-			{
-				if (!std::isfinite(channel))
-				{
-					BAM_LOG(Error, "Editor", "Asset", "Preview material contains a non-finite base color.");
-					return false;
-				}
-			}
-
-			if (!std::isfinite(source.RoughnessFactor) || !std::isfinite(source.MetallicFactor))
-			{
-				BAM_LOG(Error, "Editor", "Asset", "Preview material contains non-finite PBR factors.");
-				return false;
-			}
-
-			auto* instance = Engine::MaterialInstance::Create(baseMaterial);
-			if (!instance) return false;
-
-			const auto& color = source.BaseColorFactor;
-			instance->SetFloat4("BaseColor", Engine::vec4(color[0], color[1], color[2], color[3]));
-			instance->SetFloat("Roughness", source.RoughnessFactor);
-			instance->SetFloat("Metallic", source.MetallicFactor);
-
-			const std::wstring key = keyPrefix + L"_Material_" + std::to_wstring(i);
-			auto handle = manager.AddResource<Engine::MaterialInstance>(key, instance);
-
-			if (!handle.IsValid() || handle.Get() != instance)
-			{
-				BAM_LOG(Error, "Editor", "Asset", "Preview material registration failed.");
-				return false;
-			}
-
-			m_TempMaterials.push_back(handle);
-			desc.Materials.emplace_back(handle);
-
-			auto& textureInfo = m_AlbedoPreviewInfo[i];
-			textureInfo.StatusKey = "ModelImport.TextureLoadFailed";
-
-			const auto& albedo = source.BaseColorTexture;
-			if (albedo.IsEmbedded)
-			{
-				if (albedo.EmbeddedData.empty())
-				{
-					BAM_LOG(Error, "Editor", "Asset", "Embedded albedo has no supported encoded image data.");
-					return false;
-				}
-
-				const std::wstring textureKey = keyPrefix + L"_Albedo_" + std::to_wstring(i);
-				auto* texture = Engine::Texture::CreateFromEncodedMemory(albedo.EmbeddedData, textureKey);
-
-				if (!texture)
-				{
-					BAM_LOG(Error, "Editor", "Asset", "Embedded albedo preview creation failed.");
-					return false;
-				}
-
-				auto textureHandle = manager.AddResource<Engine::Texture>(textureKey, texture);
-				if (!textureHandle.IsValid() || textureHandle.Get() != texture)
-				{
-					BAM_LOG(Error, "Editor", "Asset", "Embedded albedo preview registration failed.");
-					return false;
-				}
-
-				m_TempTextures.push_back(textureHandle);
-				instance->SetTextureBySlot(0, textureHandle);
-			}
-			else if (!albedo.Path.empty())
-			{
-				const auto texturePath = ModelImporter::ResolveExternalTexturePath(
-					data.SourcePath, m_DestDir, albedo.Path);
-
-				if (texturePath.empty())
-				{
-					BAM_LOG(Warn, "Editor", "Asset", "External albedo not found; using base color: {}", albedo.Path);
-				}
-				else
-				{
-					try
-					{
-						textureInfo.ResolvedPath = Engine::WStrToStr(texturePath.wstring());
-						const auto rawHandle = manager.LoadFile(texturePath.wstring());
-						auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(rawHandle));
-
-						if (!texture || !texture->GetRHITexture())
-						{
-							BAM_LOG(Error, "Editor", "Asset", "External albedo preview loading failed: {}",
-								Engine::WStrToStr(texturePath.wstring()));
-							return false;
-						}
-
-						const Engine::ResourceHandle<Engine::Texture> textureHandle(rawHandle);
-						instance->SetTextureBySlot(0, textureHandle);
-					}
-					catch (const std::filesystem::filesystem_error& exception)
-					{
-						BAM_LOG(Error, "Editor", "Asset", "External albedo loading failed: {}", exception.what());
-						return false;
-					}
-				}
-			}
-
-			if (albedo.IsEmbedded || !textureInfo.ResolvedPath.empty())
-				textureInfo.StatusKey = "ModelImport.TextureLoaded";
-			else if (albedo.Path.empty())
-				textureInfo.StatusKey = "ModelImport.TextureUnused";
-			else
-				textureInfo.StatusKey = "ModelImport.TextureMissing";
-		}
-
-		return true;
-	}
-
-	void ModelImportModal::LoadPreviewModel(bool focusCamera)
+	void ModelImportModal::StartAsyncPreviewPrepare(bool focusCamera)
 	{
 		m_AlbedoPreviewInfo.clear();
 		ClearPreview();
-
-		auto* scene = m_PreviewWidget.GetScene();
-		if (!scene || m_PreviewEntity) return;
-
-		const auto fail = [this](const char* stage)
-			{
-				BAM_LOG(Error, "Editor", "Asset", "Model import preview failed: {}", stage);
-				ClearPreview();
-			};
 
 		ModelImportRequest request;
 		request.SourcePath = m_SourcePath;
 		request.Settings = m_Desc;
 		request.Settings.SaveToFile = false;
+		request.Settings.GenerateLODs = false; // 프리뷰는 LOD0만 사용하여 파싱 속도 극대화
 		request.Settings.ImportOptions = EModelImportOption::Meshes;
 		if (HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials))
 			request.Settings.ImportOptions |= EModelImportOption::Materials;
@@ -286,36 +130,45 @@ namespace Editor
 		request.Settings.FlipPitch = false;
 		request.Settings.FlipHeading = false;
 
-		ModelImportTask task(std::move(request));
-		if (task.Prepare() != EResult::Success)
-		{
-			fail(task.GetErrorMessage().c_str());
-			return;
-		}
+		auto state = std::make_shared<AsyncPreviewState>();
+		state->Task = std::make_unique<ModelImportTask>(std::move(request));
+		state->FocusCamera = focusCamera;
+		m_AsyncPreview = state;
+		m_PreviewProgress = 0.05f;
 
-		auto* prepared = task.GetPreparedModel();
+		std::thread([state]()
+			{
+				const EResult res = state->Task->Prepare();
+				state->Result.store(res, std::memory_order_relaxed);
+				state->Completed.store(true, std::memory_order_release);
+			}).detach();
+	}
+
+	bool ModelImportModal::BeginPreviewBuild(std::unique_ptr<ModelImportTask> completedTask, bool focusCamera)
+	{
+		auto* scene = m_PreviewWidget.GetScene();
+		if (!scene || !completedTask) return false;
+
+		auto* prepared = completedTask->GetPreparedModel();
 		if (!prepared || prepared->Nodes.empty() || prepared->Meshes.empty())
 		{
-			fail("prepared model is empty");
-			return;
+			BAM_LOG(Error, "Editor", "Asset", "Model import preview failed: prepared model is empty");
+			return false;
 		}
 
 		auto& manager = Engine::ResourceManager::Get();
 		const auto materialRaw = manager.LoadFile(L"Resources/Material/DefaultMaterial.bammat.json");
-
 		if (!dynamic_cast<Engine::Material*>(manager.GetResource(materialRaw)))
 		{
-			fail("default material is unavailable or has an invalid type");
-			return;
+			BAM_LOG(Error, "Editor", "Asset", "Model import preview failed: default material is unavailable");
+			return false;
 		}
 
-		const Engine::ResourceHandle<Engine::Material> baseMaterial(materialRaw);
-		const Engine::ResourceHandle<Engine::MaterialInterface> material(baseMaterial);
-
-		Engine::ModelCreateDesc modelDesc;
-		modelDesc.Key = L"__ModelImportPreview";
-		modelDesc.Nodes.reserve(prepared->Nodes.size());
-		modelDesc.Meshes.reserve(prepared->Meshes.size());
+		m_BuildingBaseMaterial = Engine::ResourceHandle<Engine::Material>(materialRaw);
+		m_BuildingModelDesc = {};
+		m_BuildingModelDesc.Key = L"__ModelImportPreview";
+		m_BuildingModelDesc.Nodes.reserve(prepared->Nodes.size());
+		m_BuildingModelDesc.Meshes.reserve(prepared->Meshes.size());
 		m_TempMeshes.reserve(prepared->Meshes.size());
 
 		for (const auto& source : prepared->Nodes)
@@ -331,30 +184,169 @@ namespace Editor
 					node.LocalTransform[column][row] = source.LocalTransform[column * 4 + row];
 			}
 
-			modelDesc.Nodes.push_back(std::move(node));
+			m_BuildingModelDesc.Nodes.push_back(std::move(node));
 		}
 
-		const std::wstring keyPrefix = L"__ModelImportPreview_" +
-			std::to_wstring(reinterpret_cast<std::uintptr_t>(this));
-
-		for (size_t i = 0; i < prepared->Meshes.size(); ++i)
+		if (HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials) && !prepared->Materials.empty())
 		{
-			auto& source = prepared->Meshes[i];
+			m_AlbedoPreviewInfo.resize(prepared->Materials.size());
+			for (size_t i = 0; i < prepared->Materials.size(); ++i)
+			{
+				const auto& source = prepared->Materials[i];
+				auto& info = m_AlbedoPreviewInfo[i];
+				info.MaterialName = source.Name;
+				info.Reference = source.BaseColorTexture.Path;
+				info.Embedded = source.BaseColorTexture.IsEmbedded;
+			}
+
+			m_BuildingModelDesc.MeshMaterialIndices.reserve(prepared->Meshes.size());
+			for (const auto& mesh : prepared->Meshes)
+			{
+				if (mesh.MaterialIndex >= prepared->Materials.size())
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Preview mesh references an invalid material index.");
+					ClearPreview();
+					return false;
+				}
+				m_BuildingModelDesc.MeshMaterialIndices.push_back(mesh.MaterialIndex);
+			}
+
+			m_BuildingModelDesc.Materials.reserve(prepared->Materials.size());
+			m_TempMaterials.reserve(prepared->Materials.size());
+			m_TempTextures.reserve(prepared->Materials.size());
+		}
+
+		m_BuildingTask = std::move(completedTask);
+		m_PendingFocusCamera = focusCamera;
+		m_NextBuildMeshIndex = 0;
+		m_NextBuildMaterialIndex = 0;
+		m_PreviewBuilding = true;
+		m_PreviewProgress = 0.25f;
+		return true;
+	}
+
+	bool ModelImportModal::BuildSinglePreviewMaterial(const PreparedModelData& data, size_t materialIndex)
+	{
+		const auto& source = data.Materials[materialIndex];
+		for (const float channel : source.BaseColorFactor)
+		{
+			if (!std::isfinite(channel)) return false;
+		}
+		if (!std::isfinite(source.RoughnessFactor) || !std::isfinite(source.MetallicFactor))
+			return false;
+
+		auto* instance = Engine::MaterialInstance::Create(m_BuildingBaseMaterial);
+		if (!instance) return false;
+
+		const auto& color = source.BaseColorFactor;
+		instance->SetFloat4("BaseColor", Engine::vec4(color[0], color[1], color[2], color[3]));
+		instance->SetFloat("Roughness", source.RoughnessFactor);
+		instance->SetFloat("Metallic", source.MetallicFactor);
+
+		const std::wstring keyPrefix = L"__ModelImportPreview_" + std::to_wstring(reinterpret_cast<std::uintptr_t>(this));
+		auto& manager = Engine::ResourceManager::Get();
+
+		const std::wstring key = keyPrefix + L"_Material_" + std::to_wstring(materialIndex);
+		auto handle = manager.AddResource<Engine::MaterialInstance>(key, instance);
+		if (!handle.IsValid() || handle.Get() != instance)
+			return false;
+
+		m_TempMaterials.push_back(handle);
+		m_BuildingModelDesc.Materials.emplace_back(handle);
+
+		auto& textureInfo = m_AlbedoPreviewInfo[materialIndex];
+		textureInfo.StatusKey = "ModelImport.TextureLoadFailed";
+
+		const auto& albedo = source.BaseColorTexture;
+		if (albedo.IsEmbedded)
+		{
+			if (albedo.EmbeddedData.empty()) return false;
+			const std::wstring textureKey = keyPrefix + L"_Albedo_" + std::to_wstring(materialIndex);
+			auto* texture = Engine::Texture::CreateFromEncodedMemory(albedo.EmbeddedData, textureKey);
+			if (!texture) return false;
+
+			auto textureHandle = manager.AddResource<Engine::Texture>(textureKey, texture);
+			if (!textureHandle.IsValid() || textureHandle.Get() != texture) return false;
+
+			m_TempTextures.push_back(textureHandle);
+			instance->SetTextureBySlot(0, textureHandle);
+		}
+		else if (!albedo.Path.empty())
+		{
+			const auto texturePath = ModelImporter::ResolveExternalTexturePath(data.SourcePath, m_DestDir, albedo.Path);
+			if (!texturePath.empty())
+			{
+				try
+				{
+					textureInfo.ResolvedPath = Engine::WStrToStr(texturePath.wstring());
+					const auto rawHandle = manager.LoadFile(texturePath.wstring());
+					auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(rawHandle));
+					if (texture && texture->GetRHITexture())
+					{
+						const Engine::ResourceHandle<Engine::Texture> textureHandle(rawHandle);
+						instance->SetTextureBySlot(0, textureHandle);
+					}
+					else
+					{
+						textureInfo.ResolvedPath.clear();
+					}
+				}
+				catch (const std::filesystem::filesystem_error&)
+				{
+					textureInfo.ResolvedPath.clear();
+				}
+			}
+		}
+
+		if (albedo.IsEmbedded || !textureInfo.ResolvedPath.empty())
+			textureInfo.StatusKey = "ModelImport.TextureLoaded";
+		else if (albedo.Path.empty())
+			textureInfo.StatusKey = "ModelImport.TextureUnused";
+		else
+			textureInfo.StatusKey = "ModelImport.TextureMissing";
+
+		return true;
+	}
+
+	void ModelImportModal::StepPreviewBuild()
+	{
+		if (!m_PreviewBuilding || !m_BuildingTask) return;
+
+		auto* prepared = m_BuildingTask->GetPreparedModel();
+		auto* scene = m_PreviewWidget.GetScene();
+		if (!prepared || !scene)
+		{
+			ClearPreview();
+			return;
+		}
+
+		const bool buildMaterials = HasFlag(m_Desc.ImportOptions, EModelImportOption::Materials) && !prepared->Materials.empty();
+		const size_t totalMeshes = prepared->Meshes.size();
+		const size_t totalMaterials = buildMaterials ? prepared->Materials.size() : 0;
+		const size_t totalSteps = std::max<size_t>(1, totalMeshes + totalMaterials);
+
+		const std::wstring keyPrefix = L"__ModelImportPreview_" + std::to_wstring(reinterpret_cast<std::uintptr_t>(this));
+		auto& manager = Engine::ResourceManager::Get();
+
+		// 프레임당 최대 4.0ms 타임 버짓 내에서만 GPU 버퍼 및 텍스처 생성 (메인 스레드 60FPS 유지)
+		const auto startTime = std::chrono::steady_clock::now();
+		constexpr double kFrameBudgetMs = 4.0;
+
+		while (m_NextBuildMeshIndex < totalMeshes)
+		{
+			auto& source = prepared->Meshes[m_NextBuildMeshIndex];
 			if (source.Positions.empty() || source.Indices.empty())
 			{
-				fail("prepared mesh is empty");
+				ClearPreview();
 				return;
 			}
 
 			const auto vertexCount = static_cast<Engine::uint32>(source.Positions.size());
-
 			Engine::MeshCreateDesc meshDesc{};
-			auto& positionStream = meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Position)];
-			positionStream = { source.Positions.data(), vertexCount, sizeof(Engine::VertexPosition) };
-
-			auto& materialStream = meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Material)];
-			materialStream = { source.Attributes.data(), vertexCount, sizeof(Engine::VertexMaterial) };
-
+			meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Position)] =
+			{ source.Positions.data(), vertexCount, sizeof(Engine::VertexPosition) };
+			meshDesc.Streams[static_cast<Engine::uint32>(Engine::EMeshStream::Material)] =
+			{ source.Attributes.data(), vertexCount, sizeof(Engine::VertexMaterial) };
 			meshDesc.IndexData = source.Indices.data();
 			meshDesc.IndexCount = static_cast<Engine::uint32>(source.Indices.size());
 			meshDesc.IndexStride = sizeof(Engine::uint32);
@@ -364,29 +356,48 @@ namespace Editor
 			auto* mesh = Engine::Mesh::Create(&meshDesc);
 			if (!mesh)
 			{
-				fail("mesh creation failed");
+				ClearPreview();
 				return;
 			}
 
-			const std::wstring key = keyPrefix + L"_Mesh_" + std::to_wstring(i);
+			const std::wstring key = keyPrefix + L"_Mesh_" + std::to_wstring(m_NextBuildMeshIndex);
 			auto handle = manager.AddResource<Engine::Mesh>(key, mesh);
-
 			if (!handle.IsValid() || handle.Get() != mesh)
 			{
-				fail("temporary mesh registration failed");
+				ClearPreview();
 				return;
 			}
 
 			m_TempMeshes.push_back(handle);
-			modelDesc.Meshes.push_back(std::move(handle));
+			m_BuildingModelDesc.Meshes.push_back(std::move(handle));
+			++m_NextBuildMeshIndex;
+
+			const double elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
+			if (elapsedMs >= kFrameBudgetMs)
+				break;
 		}
 
-		if (!CreatePreviewMaterials(*prepared, modelDesc, baseMaterial))
+		while (m_NextBuildMeshIndex >= totalMeshes && m_NextBuildMaterialIndex < totalMaterials)
 		{
-			fail("preview material creation failed");
-			return;
+			if (!BuildSinglePreviewMaterial(*prepared, m_NextBuildMaterialIndex))
+			{
+				ClearPreview();
+				return;
+			}
+			++m_NextBuildMaterialIndex;
+
+			const double elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
+			if (elapsedMs >= kFrameBudgetMs)
+				break;
 		}
 
+		const size_t doneSteps = m_NextBuildMeshIndex + m_NextBuildMaterialIndex;
+		m_PreviewProgress = 0.25f + 0.70f * (static_cast<float>(doneSteps) / static_cast<float>(totalSteps));
+
+		if (m_NextBuildMeshIndex < totalMeshes || m_NextBuildMaterialIndex < totalMaterials)
+			return;
+
+		// 모든 메시와 머티리얼 준비 완료 -> 프리뷰 엔티티 인스턴스화
 		const auto releaseResource = [](Engine::Resource* resource)
 			{
 				if (!resource) return;
@@ -394,33 +405,30 @@ namespace Editor
 				delete resource;
 			};
 
-		std::unique_ptr<Engine::Resource, decltype(releaseResource)> model(Engine::Model::Create(&modelDesc), releaseResource);
+		std::unique_ptr<Engine::Resource, decltype(releaseResource)> model(
+			Engine::Model::Create(&m_BuildingModelDesc), releaseResource);
+		const Engine::ResourceHandle<Engine::MaterialInterface> defaultMat(m_BuildingBaseMaterial);
+
+		m_BuildingTask.reset();
+		m_BuildingModelDesc = {};
+		m_PreviewBuilding = false;
 
 		if (!model)
 		{
-			fail("temporary model creation failed");
+			ClearPreview();
 			return;
 		}
 
 		const auto& previewModel = *static_cast<Engine::Model*>(model.get());
-		if (scene->InstantiateModel(previewModel, material, m_PreviewEntity) != EResult::Success)
+		if (scene->InstantiateModel(previewModel, defaultMat, m_PreviewEntity) != EResult::Success ||
+			!UpdatePreviewTransform() ||
+			!m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, m_PendingFocusCamera))
 		{
-			fail("model hierarchy placement failed");
+			ClearPreview();
 			return;
 		}
 
-		if (!UpdatePreviewTransform())
-		{
-			fail("preview transform application failed");
-			return;
-		}
-
-		if (!m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, focusCamera))
-		{
-			fail("preview model framing failed");
-			return;
-		}
-
+		m_PreviewProgress = 1.0f;
 		m_PreviewReady = true;
 	}
 
@@ -457,6 +465,7 @@ namespace Editor
 
 		if (m_CloseRequested)
 		{
+			m_AsyncPreview.reset();
 			ClearPreview();
 			if (m_PreviewEntity) return;
 			m_AlbedoPreviewInfo.clear();
@@ -474,17 +483,75 @@ namespace Editor
 			return;
 		}
 
-		if (m_PreviewReloadRequested)
+		// 첫 프레임에 모달 팝업이 먼저 열리도록 m_OpenRequested가 소비된 뒤 백그라운드 로딩 시작
+		if (m_PreviewReloadRequested && !m_OpenRequested)
 		{
 			m_PreviewReloadRequested = false;
 			const bool focusCamera = m_PreviewEntity == nullptr;
-			LoadPreviewModel(focusCamera);
+			StartAsyncPreviewPrepare(focusCamera);
+		}
+
+		if (m_AsyncPreview && m_AsyncPreview->Completed.load(std::memory_order_acquire))
+		{
+			auto completed = std::move(m_AsyncPreview);
+			if (completed->Result.load(std::memory_order_relaxed) == EResult::Success)
+			{
+				BeginPreviewBuild(std::move(completed->Task), completed->FocusCamera);
+			}
+			else
+			{
+				BAM_LOG(Error, "Editor", "Asset", "Model import preview failed: {}",
+					completed->Task ? completed->Task->GetErrorMessage() : "unknown error");
+				ClearPreview();
+			}
+		}
+
+		if (m_PreviewBuilding)
+		{
+			StepPreviewBuild();
 		}
 
 		if (!m_PreviewReady) return;
 
 		m_PreviewWidget.BeginFrame(dt);
 		m_PreviewWidget.Submit(dt);
+	}
+
+	void ModelImportModal::DrawPreviewPane()
+	{
+		if (m_PreviewReady)
+		{
+			m_PreviewWidget.Draw();
+			return;
+		}
+
+		const ImVec2 avail = ImGui::GetContentRegionAvail();
+		const ImVec2 origin = ImGui::GetCursorScreenPos();
+		ImGui::GetWindowDrawList()->AddRectFilled(
+			origin, ImVec2(origin.x + avail.x, origin.y + avail.y), IM_COL32(22, 24, 28, 255), 4.0f);
+
+		const bool isLoading = m_PreviewReloadRequested || (m_AsyncPreview != nullptr) || m_PreviewBuilding;
+		if (!isLoading)
+		{
+			EditorUI::EmptyState("ModelImport.PreviewFailed");
+			return;
+		}
+
+		const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 280.0f);
+		const char* pendingText = LOCAL_CSTR("ModelImport.PreviewPending");
+		const ImVec2 textSize = ImGui::CalcTextSize(pendingText);
+		const float blockHeight = textSize.y + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+		ImGui::SetCursorPosY(std::max(12.0f, (avail.y - blockHeight) * 0.5f));
+		ImGui::SetCursorPosX(std::max(12.0f, (avail.x - textSize.x) * 0.5f));
+		ImGui::TextDisabled("%s", pendingText);
+
+		ImGui::Spacing();
+		ImGui::SetCursorPosX(std::max(12.0f, (avail.x - barWidth) * 0.5f));
+		const float displayProgress = m_PreviewBuilding
+			? m_PreviewProgress
+			: 0.08f + 0.15f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f));
+		ImGui::ProgressBar(displayProgress, ImVec2(barWidth, 0.0f));
 	}
 
 	void ModelImportModal::Draw()
@@ -506,8 +573,7 @@ namespace Editor
 		bool popupOpen = true;
 		if (ImGui::BeginPopupModal(modalTitle.c_str(), &popupOpen, ImGuiWindowFlags_NoScrollbar))
 		{
-			const bool canImport = m_PreviewReady && !m_PreviewReloadRequested &&
-				HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
+			const bool canImport = HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
 			EditorUI::DialogAction actions[] = {
 				{ "EditorCommon.Cancel" }, { "ModelImport.ImportBtn", canImport }
 			};
@@ -517,7 +583,7 @@ namespace Editor
 			const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 			Editor::DrawSidebarLayout("##ImportPreviewPane", "##ImportModalSplitter", "##ImportOptionsPane",
 				m_SplitterWidth, height, 280.0f, 360.0f,
-				[this] { m_PreviewWidget.Draw(); },
+				[this] { DrawPreviewPane(); },
 				[this]
 				{
 					const std::string sourceName = Engine::WStrToStr(m_SourcePath.filename().wstring());
@@ -611,8 +677,7 @@ namespace Editor
 			ImGui::Separator();
 			ImGui::Spacing();
 
-			actions[1].Enabled = m_PreviewReady && !m_PreviewReloadRequested &&
-				HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
+			actions[1].Enabled = HasFlag(m_Desc.ImportOptions, EModelImportOption::Meshes);
 			const int action = EditorUI::DialogButtonBar("ModelImportActions", actions, IM_ARRAYSIZE(actions));
 			if (action >= 0)
 			{
@@ -692,16 +757,16 @@ namespace Editor
 		ImGui::Spacing();
 		ImGui::Separator();
 		const auto drawPostProcessOption = [this](const char* labelKey, EModelPostProcessFlag flag)
-		{
-			bool enabled = HasFlag(m_Desc.PostProcessFlags, flag);
-			if (!ImGui::Checkbox(LOCAL_LABEL(labelKey).c_str(), &enabled))
-				return false;
+			{
+				bool enabled = HasFlag(m_Desc.PostProcessFlags, flag);
+				if (!ImGui::Checkbox(LOCAL_LABEL(labelKey).c_str(), &enabled))
+					return false;
 
-			if (enabled) m_Desc.PostProcessFlags |= flag;
-			else m_Desc.PostProcessFlags &= ~flag;
-			m_PreviewReloadRequested = true;
-			return true;
-		};
+				if (enabled) m_Desc.PostProcessFlags |= flag;
+				else m_Desc.PostProcessFlags &= ~flag;
+				m_PreviewReloadRequested = true;
+				return true;
+			};
 		if (drawPostProcessOption("ModelImport.LeftHanded", EModelPostProcessFlag::MakeLeftHanded))
 		{
 			if (HasFlag(m_Desc.PostProcessFlags, EModelPostProcessFlag::MakeLeftHanded))
@@ -719,7 +784,7 @@ namespace Editor
 			ImGuiTreeNodeFlags_DefaultOpen))
 			return;
 
-		if (m_PreviewReloadRequested)
+		if (m_PreviewReloadRequested || m_AsyncPreview || m_PreviewBuilding)
 		{
 			ImGui::TextWrapped("%s", LOCAL_CSTR("ModelImport.PreviewPending"));
 			return;

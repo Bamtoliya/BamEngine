@@ -48,6 +48,7 @@ namespace Editor
         explicit ModelImportTask(ModelImportRequest request);
 
         EResult Prepare() override;
+        EResult PrepareFromSnapshot(const filesystem::path& snapshotPath);
 
         // Prepare 실행 완료를 동기화한 뒤에만 접근합니다.
         const ModelImportRequest& GetRequest() const { return m_Request; }
@@ -64,6 +65,8 @@ namespace Editor
         const std::string& GetErrorMessage() const { return m_ErrorMessage; }
 
     private:
+        EResult Prepare(const filesystem::path& snapshotPath);
+
         ModelImportRequest m_Request;
         std::optional<PreparedModelData> m_PreparedModel;
         Tools::ModelConversion::Error m_ErrorCode = Tools::ModelConversion::Error::None;

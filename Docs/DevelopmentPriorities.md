@@ -645,6 +645,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - **관련 파일**: `Engine/Source/Render/VFX/`, `Editor/Source/ImGui/ActionTimelineEditor/`, `Editor/Source/ImGui/VFXEditor/`.
 
 3. **후보 C (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동**
+   - **2026-11-19 상태** 모델 변환·결과 수신과 푸터 단계 표시·취소를 코드에 반영했다. 한글 경로 자동 검사와 대형 모델 실측을 마친 뒤 텍스처 이관을 진행한다. [모델 임포트 1차 검증](OutOfProcessAssetPipelinePlan.md#모델-임포트-1차-검증)
    - **목표**: 대용량 모델(수백 MB FBX/GLTF) 및 텍스처(BC7 4K) 임포트 시 에디터 메인 스레드 60FPS 무간섭 유지 및 OOM/크래시 100% 완전 격리 ([OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md)).
    - **세부 내용**:
      - `Tools/AssetWorker/`: `BamAssetWorker.exe` 파이프 데몬 프로토콜에 `IMPORT_MODEL`(Assimp + meshopt LOD) 및 `IMPORT_TEXTURE`(DirectXTex BCn 압축) 명령 확장 및 실시간 진행률(`PROGRESS`) 응답 구현.

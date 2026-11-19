@@ -1,4 +1,4 @@
-#include <Windows.h>
+﻿#include <Windows.h>
 #include <shellapi.h>
 #include <fcntl.h>
 #include <io.h>
@@ -11,13 +11,64 @@
 #include "PlatformPath.h"
 #include "ReflectionRegistry.h"
 #include "ResourceManager.h"
+#include "ModelConverter.h"
 
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <locale>
+#include <sstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+namespace
+{
+    bool HandleImportModel(uint64_t requestId, const std::string& source, const std::string& snapshot,
+        const std::string& optionFields)
+    {
+        try
+        {
+            Tools::ModelConversion::Options options;
+            std::istringstream fields(optionFields);
+            fields.imbue(std::locale::classic());
+            if (!(fields >> options.FlipUVs >> options.ConvertToLeftHanded >> options.UniformScale
+                >> options.FlipWindingOrder >> options.FlipPitch >> options.FlipHeading
+                >> options.GenerateLODs >> options.LODCount >> options.TargetError))
+                return false;
+
+            options.LODReductionRates.clear();
+            while (fields >> std::ws && fields.peek() != std::char_traits<char>::eof())
+            {
+                float rate = 0.0f;
+                if (!(fields >> rate) || !std::isfinite(rate) || options.LODReductionRates.size() == 16)
+                    return false;
+                options.LODReductionRates.push_back(rate);
+            }
+            if (!std::isfinite(options.TargetError))
+                return false;
+
+            std::cout << "PROGRESS\t" << requestId << "\t1\n" << std::flush;
+            const auto result = Tools::ModelConversion::ConvertModelToSnapshot(
+                Engine::Utf8ToPath(source), Engine::Utf8ToPath(snapshot), options);
+            if (!result)
+            {
+                std::cerr << result.Message << '\n';
+                return false;
+            }
+
+            std::cout << "PROGRESS\t" << requestId << "\t2\n" << std::flush;
+            return true;
+        }
+        catch (const std::exception& exception)
+        {
+            std::cerr << exception.what() << '\n';
+            return false;
+        }
+    }
+}
 
 namespace
 {
@@ -63,6 +114,16 @@ namespace
                 const std::filesystem::path outputPath = Engine::Utf8ToPath(fields[4]);
                 const bool ok = Tools::AssetWorker::HeadlessThumbnailRasterizer::BakeThumbnail(sourcePath, outputPath, resolution);
 
+                std::cout << "RESULT\t" << requestId << "\t" << (ok ? 1 : 0) << "\n" << std::flush;
+            }
+            else if (fields.size() == 2 && fields[0] == "MODEL_WORKER_VERSION" && fields[1] == "1")
+            {
+                std::cout << "MODEL_WORKER_VERSION\t1\n" << std::flush;
+            }
+            else if (fields.size() == 5 && fields[0] == "IMPORT_MODEL")
+            {
+                const uint64_t requestId = std::strtoull(fields[1].c_str(), nullptr, 10);
+                const bool ok = HandleImportModel(requestId, fields[2], fields[3], fields[4]);
                 std::cout << "RESULT\t" << requestId << "\t" << (ok ? 1 : 0) << "\n" << std::flush;
             }
         }

@@ -1,8 +1,8 @@
 # 독립 워커 프로세스 기반 대용량 에셋 임포트 파이프라인 개발 계획
 (Out-of-Process Asset Pipeline & Worker Isolation Plan)
 
-- **작성일**: 2026-11-16 (최근 갱신: 2026-11-18)
-- **상태**: 3D/메시/프리팹 썸네일 독립 워커 프로세스 베이킹 구현 완료 (`BamAssetWorker`, `AssetWorkerHost`), 에셋 임포트 파이프라인 확장은 설계 중
+- **작성일** 2026-11-16, 최근 갱신 2026-11-19
+- **상태** 3D 썸네일 베이킹에 이어 모델 임포트 변환을 워커에 연결했다. 빌드·실환경·성능 검증은 사용자 실행 대기이며 텍스처 워커는 후속이다.
 - **공통 기준**: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 - **연계 문서**:
   - [개발 우선순위 (DevelopmentPriorities.md)](DevelopmentPriorities.md) 11절
@@ -153,18 +153,35 @@ flowchart TD
 
 ---
 
+### 3.6 모델 임포트 워커 1차 구현
+
+- 최종 임포트의 `AssetManager::ImportAsync`가 모델 요청을 검증하고 기존 변환 옵션을 워커에 보낸다. 워커는 `MODEL_WORKER_VERSION`으로 프로토콜 호환을 확인한 뒤 `IMPORT_MODEL`로 Assimp 파싱과 LOD 생성을 수행한다. 경로는 UTF-8로 전달한다.
+- 워커는 모델 DDC와 같은 바이너리 형식으로 요청별 임시 파일을 기록한 뒤 성공을 반환한다. 에디터 백그라운드에서 결과를 읽고 기존 `ModelImporter::FinalizeStep`으로 GPU 리소스 등록, 원본 URI 보존, 재임포트 및 저장을 진행한다. 워커는 기존 모델 DDC를 읽을 수 있고 임시 결과만 쓴다. 모델 소스 경로를 UTF-8로 저장하기 위해 DDC 형식을 3으로 올렸다.
+- 임포트 변환은 한 번에 하나씩 처리한다. 다른 워커는 썸네일을 처리할 수 있다. 하단 푸터는 변환 단계를 표시하고 현재 요청만 취소한다. 워커 시작·버전 확인·임시 경로 준비에 실패하면 기존 인프로세스 준비를 사용한다. 요청을 보낸 뒤 변환 실패, 3분 응답 지연 또는 취소가 발생하면 에디터가 결과 게시를 시작하지 않는다.
+- 모델 프리뷰는 에디터 백그라운드 스레드에서 원본을 파싱하고 메인 스레드에서 메시·머티리얼 생성을 여러 프레임에 나누어 처리한다. 재임포트 원본 탐색은 로드된 모델의 원본 URI와 같은 폴더의 동명 원본을 우선하고, 필요한 경우 모델 에셋을 읽는다. 텍스처 임포트는 기존 인프로세스 경로에서 진행한다.
+
 ## 4. 단계별 개발 로드맵 (Phased Implementation Roadmap)
 
 | 단계 | 목표 | 주요 작업 내용 | 산출물 |
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | 독립 CLI 워커 및 썸네일 베이커 구축 *(완료)* | • `Tools/AssetWorker/` CMake 프로젝트 및 `BamAssetWorker.exe` 구축<br>• 헤드리스 PBR 래스터라이저(`HeadlessThumbnailRasterizer`) 구현<br>• 모델/메시/원시모델/프리팹 썸네일 단독 CLI & 데몬 모드 구현 | `BamAssetWorker.exe` |
 | **Phase 2** | 에디터 호스트 및 썸네일 파이프라인 연동 *(완료)* | • 에디터 내 `AssetWorkerHost` 구축 (Job Object + 데몬 파이프 풀 2개)<br>• `AssetCache` 비동기 워커 위임/폴링 연동 및 프리팹 저장 무효화 연동<br>• 레거시 `Resources/` -> `Assets/` 리소스 참조 폴백 보강 | `AssetWorkerHost.h/.cpp`, `AssetCache.cpp` |
-| **Phase 3** | 대용량 임포트 파이프라인 확장 *(예정)* | • `AssetManager::ImportAsync` 의 `ModelConverter`/`TextureConverter` 작업을 `BamAssetWorker` 파이프로 이전<br>• 하단 푸터 바 실시간 진행률(%) 및 취소(`X`) 버튼 연동 | 임포트 진행률 UI, 변환 워커 |
+| **Phase 3** | 모델 변환 워커 정적 반영 · 텍스처 예정 | • 모델 변환 및 임시 결과 수신 경로와 푸터의 단계 표시·취소 연결<br>• 모델의 런타임 검증 후 텍스처 변환 이관 | 모델 임포트 워커, `AssetWorkerModelCheck` |
 | **Phase 4** | 결함 격리 및 60FPS 무간섭 검증 *(진행 전)* | • 고의적 OOM/크래시 에셋 주입 시 에디터 무영향 검증<br>• 대용량 에셋 일괄 처리 도중 60FPS 유지 실측 | 검증 리포트, 단위 테스트 |
 
 ---
 
 ## 5. 검증 기준 (Pass/Fail Criteria)
+
+### 모델 임포트 1차 검증
+
+- `AssetWorkerModelCheck`에서 버전 응답, 한글·공백 경로의 OBJ 변환, 성공 시 임시 결과 생성, 원본 누락 시 실패 응답을 확인한다.
+- 에디터에서 스킨드 모델과 큰 정적 모델을 각각 임포트한다. 배율·축 보정·LOD 설정, 본·클립, 하위 폴더와 원본 URI, 머티리얼 덮어쓰기 옵션이 기존 경로와 일치하는지 확인한다.
+- 변환 진행 중 푸터의 취소를 눌러 변환 결과가 게시되지 않고 기존 파일이 유지되는지 확인한다. 대기 중인 모델 요청과 썸네일 작업이 이어지는지, 재요청이 성공하는지도 확인한다.
+- 같은 모델과 옵션으로 워커 사용·미사용 조건의 프레임 간격을 비교한다. 프리뷰 준비, 변환, 에디터의 GPU 등록·저장 구간을 함께 기록한다.
+- 2026-11-19 정적 확인에서 워커 명령과 에디터 호출 경로, 푸터의 로캘 키를 대조했다. 워커 빌드, `AssetWorkerModelCheck` 실행, 대형 모델 실측 결과는 확인되지 않았다.
+
+### 전체 목표
 
 1. **프레임 무간섭 불변성 (Pass)**:
    - 500MB 이상의 대형 FBX 및 8K 텍스처를 임포트하는 동안, 에디터 3D 뷰포트 조작 시 프레임 드랍이 16.6ms(60FPS) 이하로 유지되어야 함 (`Stuttering 0건`).

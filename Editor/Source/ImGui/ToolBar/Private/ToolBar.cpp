@@ -30,6 +30,7 @@
 #include "ModuleBuildManager.h"
 #include "CrashHandler.h"
 #include <cmath>
+#include "AssetWorkerHost.h"
 
 
 namespace
@@ -596,22 +597,62 @@ void ToolBar::DrawFooterControls()
 	const float totalWidth = btnWidth * 6.0f + pairGap * 2.0f + groupGap * 3.0f;
 	const float startX = std::max(padX, ImGui::GetWindowWidth() - totalWidth - padX);
 	// ── 2. 좌측: 백그라운드 비동기 작업 진행률 표시 (텍스트 영역을 startX 앞까지 엄격히 제한) ──
-	size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
-	if (activeTasks > 0)
+	AssetWorkerHost::ActiveImportStatus workerStatus;
+	const bool hasWorkerImport = AssetWorkerHost::IsCreated() &&
+		AssetWorkerHost::Get().GetActiveImportStatus(workerStatus);
+	const size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
+
+	if (hasWorkerImport || activeTasks > 0)
 	{
 		ImGui::SetCursorPos(ImVec2(padX, padY));
 		const float maxTextWidth = std::max(10.0f, startX - padX - 8.0f);
-		// 우측 버튼 영역 침범 방지 클리핑
 		const ImVec2 clipMin = ImGui::GetCursorScreenPos();
 		const ImVec2 clipMax(clipMin.x + maxTextWidth, clipMin.y + ImGui::GetFrameHeight());
 		ImGui::PushClipRect(clipMin, clipMax, true);
-		const std::string text = ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks);
-		ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", text.c_str());
-		ImGui::PopClipRect();
-		if (ImGui::IsItemHovered())
+
+		if (hasWorkerImport)
 		{
-			ImGui::SetTooltip("%s", text.c_str());
+			EditorUI::IconButtonOptions cancelOptions;
+			cancelOptions.Compact = true;
+			cancelOptions.NoWrap = true;
+			const auto cancelSize = EditorUI::GetIconButtonSize(ICON_FA_XMARK, true);
+			constexpr float gap = 6.0f;
+			const float detailsWidth = maxTextWidth - cancelSize.x - gap;
+			if (maxTextWidth >= cancelSize.x &&
+				EditorUI::IconButton("CancelWorkerImport", ICON_FA_XMARK, "EditorCommon.Cancel", cancelOptions))
+			{
+				AssetWorkerHost::Get().CancelActiveImport(workerStatus.RequestId);
+			}
+
+			if (detailsWidth >= ImGui::GetFontSize() * 3.0f)
+			{
+				ImGui::SameLine(0.0f, gap);
+				const float barWidth = std::min(80.0f, detailsWidth);
+				ImGui::ProgressBar(workerStatus.Progress, ImVec2(barWidth, btnHeight), "");
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s\n%s", workerStatus.AssetName.c_str(), LOCAL_CSTR(workerStatus.StepKey));
+
+				if (detailsWidth > barWidth + gap)
+				{
+					ImGui::SameLine(0.0f, gap);
+					const std::string label = ICON_FA_ARROW_ROTATE_RIGHT " " + workerStatus.AssetName;
+					ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", label.c_str());
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s\n%s", workerStatus.AssetName.c_str(), LOCAL_CSTR(workerStatus.StepKey));
+				}
+			}
 		}
+		else
+		{
+			const std::string text = ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks);
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", text.c_str());
+			if (ImGui::IsItemHovered())
+			{
+				ImGui::SetTooltip("%s", text.c_str());
+			}
+		}
+
+		ImGui::PopClipRect();
 	}
 	// ── 3. 우측 컨트롤 렌더링: Y 좌표를 padY로 강제 고정하여 세로 클리핑 완벽 차단! ──
 	ImGui::SetCursorPos(ImVec2(startX, padY));

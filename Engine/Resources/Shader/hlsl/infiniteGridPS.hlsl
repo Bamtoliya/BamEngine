@@ -58,9 +58,12 @@ PS_OUTPUT main(PS_INPUT input)
     float4 grid1 = Grid3D(fragmentPosition, 1.0f, 1.0f, false);
     float4 grid10 = Grid3D(fragmentPosition, 0.1f, 2.5f, true);
     float4 grid100 = Grid3D(fragmentPosition, 0.01f, 5.0f, true);
-    float4 color = grid1 + grid10 + grid100;
-    color.a = max(grid1.a, max(grid10.a, grid100.a));
-    color.a *= max(0.0f, 1.0f - length(fragmentPosition - commonData.CameraPos) / 150.0f);
+    float4 grid1000 = Grid3D(fragmentPosition, 0.001f, 8.0f, true);
+    float4 color = grid1 + grid10 + grid100 + grid1000;
+    color.a = max(max(grid1.a, grid10.a), max(grid100.a, grid1000.a));
+
+    float fadeDistance = max(150.0f, max(abs(commonData.CameraPos.y) * 10.0f, length(commonData.CameraPos) * 2.5f));
+    color.a *= max(0.0f, 1.0f - length(fragmentPosition - commonData.CameraPos) / fadeDistance);
     if (color.a <= 0.0f) discard;
 
     PS_OUTPUT output;

@@ -1,4 +1,4 @@
-#include "AssetWorkerHost.h"
+﻿#include "AssetWorkerHost.h"
 #include "Functions.h"
 #include "PlatformPath.h"
 #include <stb_image.h>
@@ -8,8 +8,12 @@
 #endif
 #include <Windows.h>
 
-#include <cstdlib>
+#include <algorithm>
+#include <chrono>
 #include <fstream>
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <memory>
 #include <sstream>
 
@@ -53,12 +57,51 @@ namespace
         return value;
     }
 
+    struct ModelSnapshotFile
+    {
+        std::filesystem::path Path;
+
+        ModelSnapshotFile()
+        {
+            wchar_t tempDirectory[MAX_PATH]{};
+            wchar_t tempFile[MAX_PATH]{};
+            const DWORD length = GetTempPathW(MAX_PATH, tempDirectory);
+            if (length > 0 && length < MAX_PATH && GetTempFileNameW(tempDirectory, L"BAM", 0, tempFile))
+                Path = tempFile;
+        }
+
+        ~ModelSnapshotFile()
+        {
+            if (Path.empty()) return;
+            std::error_code error;
+            std::filesystem::remove(Path, error);
+        }
+    };
+
+    std::string BuildModelCommand(Engine::uint64 id, const std::filesystem::path& source,
+        const std::filesystem::path& snapshot, const Tools::ModelConversion::Options& options)
+    {
+        std::ostringstream stream;
+        stream.imbue(std::locale::classic());
+        stream << "IMPORT_MODEL\t" << id << '\t' << Engine::WStrToStr(source.wstring())
+            << '\t' << Engine::WStrToStr(snapshot.wstring()) << '\t'
+            << std::setprecision(std::numeric_limits<float>::max_digits10)
+            << options.FlipUVs << ' ' << options.ConvertToLeftHanded << ' ' << options.UniformScale << ' '
+            << options.FlipWindingOrder << ' ' << options.FlipPitch << ' ' << options.FlipHeading << ' '
+            << options.GenerateLODs << ' ' << options.LODCount << ' ' << options.TargetError;
+        for (float rate : options.LODReductionRates)
+            stream << ' ' << rate;
+        stream << '\n';
+        return stream.str();
+    }
+
     struct WorkerPipeProcess
     {
         HANDLE Process = nullptr;
         HANDLE Thread = nullptr;
         HANDLE StdInWrite = nullptr;
         HANDLE StdOutRead = nullptr;
+        bool ModelImportSupported = false;
         std::string ReadBuffer;
 
         ~WorkerPipeProcess()
@@ -79,11 +122,15 @@ namespace
             if (Process)
             {
                 if (!sendQuit || WaitForSingleObject(Process, 250) != WAIT_OBJECT_0)
-                    TerminateProcess(Process, 0);
+                {
+                    if (TerminateProcess(Process, 1))
+                        WaitForSingleObject(Process, 1000);
+                }
                 CloseHandle(Process);
                 Process = nullptr;
             }
             if (Thread) { CloseHandle(Thread); Thread = nullptr; }
+            ModelImportSupported = false;
             ReadBuffer.clear();
         }
 
@@ -107,7 +154,8 @@ namespace
         return true;
     }
 
-    bool ReadLineFromPipe(WorkerPipeProcess& proc, std::string& outLine)
+    bool ReadLineFromPipe(WorkerPipeProcess& proc, std::string& outLine,
+        std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max())
     {
         outLine.clear();
         for (;;)
@@ -121,9 +169,23 @@ namespace
                 return true;
             }
 
+            if (std::chrono::steady_clock::now() >= deadline || proc.ReadBuffer.size() >= 64 * 1024)
+                return false;
+
+            DWORD available = 0;
+            if (!PeekNamedPipe(proc.StdOutRead, nullptr, 0, nullptr, &available, nullptr))
+                return false;
+            if (available == 0)
+            {
+                if (WaitForSingleObject(proc.Process, 10) != WAIT_TIMEOUT)
+                    return false;
+                continue;
+            }
+
             char buf[512];
             DWORD bytesRead = 0;
-            if (!ReadFile(proc.StdOutRead, buf, sizeof(buf), &bytesRead, nullptr) || bytesRead == 0)
+            if (!ReadFile(proc.StdOutRead, buf, (std::min)(available, static_cast<DWORD>(sizeof(buf))), &bytesRead, nullptr) ||
+                bytesRead == 0)
                 return false;
             proc.ReadBuffer.append(buf, bytesRead);
         }
@@ -132,6 +194,9 @@ namespace
     bool SpawnWorkerProcess(const std::filesystem::path& exePath, const std::filesystem::path& projectRoot,
         HANDLE jobObject, WorkerPipeProcess& outProc)
     {
+        // Serialize the lifetime of the inheritable pipe ends across worker launches.
+        static std::mutex spawnMutex;
+        std::lock_guard spawnLock(spawnMutex);
         outProc.Close();
 
         SECURITY_ATTRIBUTES sa{};
@@ -262,6 +327,7 @@ void AssetWorkerHost::Free()
         std::lock_guard lock(m_QueueMutex);
         m_StopRequested = true;
         m_PendingQueue.clear();
+        m_PendingImports.clear();
     }
     m_QueueCv.notify_all();
 
@@ -323,6 +389,38 @@ std::vector<AssetWorkerHost::CompletedThumbnailTask> AssetWorkerHost::PollComple
     return tasks;
 }
 
+bool AssetWorkerHost::EnqueueImportModel(const std::filesystem::path& sourcePath,
+    Tools::ModelConversion::Options options, ModelImportCompletion complete)
+{
+    if (!m_Available || sourcePath.empty() || !complete) return false;
+    if (sourcePath.native().find_first_of(L"\t\r\n") != std::wstring::npos) return false;
+
+    std::lock_guard lock(m_QueueMutex);
+    if (m_StopRequested || m_PendingImports.size() >= MAX_QUEUE_SIZE) return false;
+
+    m_PendingImports.push_back({ m_NextImportRequestId++, sourcePath, std::move(options), std::move(complete) });
+    m_QueueCv.notify_one();
+    return true;
+}
+
+bool AssetWorkerHost::GetActiveImportStatus(ActiveImportStatus& outStatus)
+{
+    std::lock_guard lock(m_ImportStatusMutex);
+    if (!m_ActiveImportProcess || m_ImportCancelled) return false;
+    outStatus = m_ActiveImportStatus;
+    return true;
+}
+
+void AssetWorkerHost::CancelActiveImport(Engine::uint64 requestId)
+{
+    std::lock_guard lock(m_ImportStatusMutex);
+    if (!m_ActiveImportProcess || m_ActiveImportStatus.RequestId != requestId)
+        return;
+
+    if (TerminateProcess(static_cast<HANDLE>(m_ActiveImportProcess), 1))
+        m_ImportCancelled = true;
+}
+
 void AssetWorkerHost::ClearPendingTasks()
 {
     std::lock_guard lock(m_QueueMutex);
@@ -339,51 +437,180 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
             if (workerIndex < m_ActiveProcesses.size()) m_ActiveProcesses[workerIndex] = h;
         };
 
-    for (;;)
+    const auto processImport = [&](const PendingImportTask& task)
     {
-        PendingThumbnailTask task;
+        using Clock = std::chrono::steady_clock;
+        using Result = ModelImportResult;
+        if (!proc.ModelImportSupported)
         {
-            std::unique_lock lock(m_QueueMutex);
-            m_QueueCv.wait(lock, [&]() { return m_StopRequested || !m_PendingQueue.empty(); });
-            if (m_StopRequested) break;
-            task = std::move(m_PendingQueue.back());
-            m_PendingQueue.pop_back();
+            std::string response;
+            const auto deadline = Clock::now() + std::chrono::seconds(2);
+            if (WriteAllToPipe(proc.StdInWrite, "MODEL_WORKER_VERSION\t1\n"))
+            {
+                while (ReadLineFromPipe(proc, response, deadline))
+                {
+                    if (response == "MODEL_WORKER_VERSION\t1")
+                    {
+                        proc.ModelImportSupported = true;
+                        break;
+                    }
+                }
+            }
+            if (!proc.ModelImportSupported)
+            {
+                setActiveHandle(nullptr);
+                proc.Close();
+                task.Complete(Result::Unavailable, {});
+                return;
+            }
         }
 
-        if (!proc.IsAlive())
+        ModelSnapshotFile snapshot;
+        if (snapshot.Path.empty() || snapshot.Path.native().find_first_of(L"\t\r\n") != std::wstring::npos)
         {
-            if (!SpawnWorkerProcess(m_WorkerExePath, m_ProjectRoot, static_cast<HANDLE>(m_JobObject), proc))
+            task.Complete(Result::Unavailable, {});
+            return;
+        }
+
+        const std::string command = BuildModelCommand(task.RequestId, task.SourcePath, snapshot.Path, task.Options);
+        {
+            std::lock_guard lock(m_ImportStatusMutex);
+            m_ActiveImportStatus = {
+                task.RequestId, Engine::WStrToStr(task.SourcePath.filename().wstring()), 0.05f, "ModelImport.WorkerStarting"
+            };
+            m_ActiveImportProcess = proc.Process;
+            m_ImportCancelled = false;
+        }
+
+        bool gotResult = false;
+        bool success = false;
+        std::string line;
+        if (WriteAllToPipe(proc.StdInWrite, command))
+        {
+            constexpr auto timeout = std::chrono::minutes(3);
+            auto deadline = Clock::now() + timeout;
+            while (Clock::now() < deadline && ReadLineFromPipe(proc, line, deadline))
             {
-                std::lock_guard lock(m_CompletedMutex);
-                m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), 0, 0, {}, false });
-                continue;
+                std::istringstream response(line);
+                std::string type;
+                Engine::uint64 requestId = 0;
+                int value = 0;
+                if (!(response >> type >> requestId >> value) || requestId != task.RequestId)
+                    continue;
+
+                if (type == "RESULT")
+                {
+                    success = value == 1;
+                    gotResult = true;
+                    break;
+                }
+                if (type == "PROGRESS" && (value == 1 || value == 2))
+                {
+                    deadline = Clock::now() + timeout;
+                    std::lock_guard lock(m_ImportStatusMutex);
+                    m_ActiveImportStatus.Progress = value == 1 ? 0.15f : 0.9f;
+                    m_ActiveImportStatus.StepKey = value == 1
+                        ? "ModelImport.WorkerConverting" : "ModelImport.WorkerReceiving";
+                }
             }
+        }
+
+        bool cancelled;
+        {
+            std::lock_guard lock(m_ImportStatusMutex);
+            cancelled = m_ImportCancelled;
+            m_ActiveImportProcess = nullptr;
+            m_ActiveImportStatus = {};
+        }
+
+        if (!gotResult || cancelled)
+        {
+            setActiveHandle(nullptr);
+            proc.Close();
+        }
+
+        if (cancelled)
+            task.Complete(Result::Cancelled, {});
+        else if (success)
+            task.Complete(Result::SnapshotReady, snapshot.Path);
+        else
+        {
+            BAM_LOG(Error, "Editor", "Asset", "Model worker failed, disconnected, or timed out: {}",
+                Engine::WStrToStr(task.SourcePath.wstring()));
+            task.Complete(Result::Failed, {});
+        }
+    };
+
+    for (;;)
+    {
+        bool isImportTask = false;
+        PendingImportTask importTask;
+        PendingThumbnailTask thumbTask;
+
+        {
+            std::unique_lock lock(m_QueueMutex);
+            m_QueueCv.wait(lock, [&]() {
+                return m_StopRequested || (!m_ImportInProgress && !m_PendingImports.empty()) || !m_PendingQueue.empty();
+            });
+            if (m_StopRequested) break;
+
+            if (!m_ImportInProgress && !m_PendingImports.empty())
+            {
+                isImportTask = m_ImportInProgress = true;
+                importTask = std::move(m_PendingImports.front());
+                m_PendingImports.pop_front();
+            }
+            else
+            {
+                thumbTask = std::move(m_PendingQueue.back());
+                m_PendingQueue.pop_back();
+            }
+        }
+
+        if (!proc.IsAlive() &&
+            SpawnWorkerProcess(m_WorkerExePath, m_ProjectRoot, static_cast<HANDLE>(m_JobObject), proc))
+        {
+            std::lock_guard lock(m_QueueMutex);
+            if (m_StopRequested) break;
             setActiveHandle(proc.Process);
         }
 
-        const std::string srcUtf8 = SanitizeField(Engine::WStrToStr(task.SourcePath.wstring()));
-        const std::string dstUtf8 = SanitizeField(Engine::WStrToStr(task.OutputPngPath.wstring()));
-        const std::string cmd = "THUMB\t" + std::to_string(task.RequestId) + "\t" + std::to_string(task.Resolution) +
-            "\t" + srcUtf8 + "\t" + dstUtf8 + "\n";
+        if (isImportTask)
+        {
+            if (proc.IsAlive())
+                processImport(importTask);
+            else
+                importTask.Complete(ModelImportResult::Unavailable, {});
+
+            {
+                std::lock_guard lock(m_QueueMutex);
+                m_ImportInProgress = false;
+            }
+            m_QueueCv.notify_one();
+            continue;
+        }
 
         bool success = false;
         bool gotResult = false;
-        if (WriteAllToPipe(proc.StdInWrite, cmd))
+        if (proc.IsAlive())
         {
-            std::string line;
-            while (ReadLineFromPipe(proc, line))
+            const std::string srcUtf8 = SanitizeField(Engine::WStrToStr(thumbTask.SourcePath.wstring()));
+            const std::string dstUtf8 = SanitizeField(Engine::WStrToStr(thumbTask.OutputPngPath.wstring()));
+            const std::string cmd = "THUMB\t" + std::to_string(thumbTask.RequestId) + "\t" + std::to_string(thumbTask.Resolution) +
+                "\t" + srcUtf8 + "\t" + dstUtf8 + "\n";
+
+            if (WriteAllToPipe(proc.StdInWrite, cmd))
             {
-                if (line.rfind("RESULT\t", 0) == 0)
+                std::string line;
+                while (ReadLineFromPipe(proc, line))
                 {
-                    std::stringstream ss(line);
-                    std::string tag, idStr, okStr;
-                    std::getline(ss, tag, '\t');
-                    std::getline(ss, idStr, '\t');
-                    std::getline(ss, okStr, '\t');
-                    const Engine::uint64 respId = std::strtoull(idStr.c_str(), nullptr, 10);
-                    if (respId == task.RequestId)
+                    std::istringstream response(line);
+                    std::string type;
+                    Engine::uint64 requestId = 0;
+                    int value = 0;
+                    if ((response >> type >> requestId >> value) && type == "RESULT" && requestId == thumbTask.RequestId)
                     {
-                        success = (okStr == "1");
+                        success = value == 1;
                         gotResult = true;
                         break;
                     }
@@ -395,27 +622,15 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                 proc.Close();
             }
         }
-        else
-        {
-            setActiveHandle(nullptr);
-            proc.Close();
-        }
 
-        int32 width = 0;
-        int32 height = 0;
+        int32 width = 0, height = 0;
         std::vector<uint8_t> rgbaData;
-        if (success && !DecodePngToRgba(task.OutputPngPath, width, height, rgbaData))
-        {
+        if (success && !DecodePngToRgba(thumbTask.OutputPngPath, width, height, rgbaData))
             success = false;
-            width = 0;
-            height = 0;
-            rgbaData.clear();
-        }
 
-        {
-            std::lock_guard lock(m_CompletedMutex);
-            m_CompletedTasks.push_back({ std::move(task.AssetKey), task.RequestId, std::move(task.OutputPngPath), width, height, std::move(rgbaData), success });
-        }
+        std::lock_guard lock(m_CompletedMutex);
+        m_CompletedTasks.push_back({ std::move(thumbTask.AssetKey), thumbTask.RequestId, std::move(thumbTask.OutputPngPath),
+            width, height, std::move(rgbaData), success });
     }
 
     setActiveHandle(nullptr);

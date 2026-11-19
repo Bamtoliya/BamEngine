@@ -9,6 +9,16 @@ namespace Editor
 
     EResult ModelImportTask::Prepare()
     {
+        return Prepare({});
+    }
+
+    EResult ModelImportTask::PrepareFromSnapshot(const filesystem::path& snapshotPath)
+    {
+        return Prepare(snapshotPath);
+    }
+
+    EResult ModelImportTask::Prepare(const filesystem::path& snapshotPath)
+    {
         if (m_PrepareStarted)
             return EResult::AlreadyInitialized;
 
@@ -23,11 +33,11 @@ namespace Editor
                 return EResult::Fail;
             };
 
-        const auto options = ModelImporter::MakeConversionOptions(m_Request.Settings);
-
         try
         {
-            auto converted = Tools::ModelConversion::ConvertStaticModel(m_Request.SourcePath, options);
+            auto converted = snapshotPath.empty()
+                ? Tools::ModelConversion::ConvertStaticModel(m_Request.SourcePath, ModelImporter::MakeConversionOptions(m_Request.Settings))
+                : Tools::ModelConversion::ReadModelSnapshot(snapshotPath);
             if (!converted)
                 return fail(converted.Code, std::move(converted.Message));
 

@@ -4,6 +4,7 @@
 #include "Logger.h"
 #include "ModelImportTask.h"
 #include "ThumbnailRenderer.h"
+#include "AssetWorkerHost.h"
 
 #pragma region Importer
 #include "SpriteImporter.h"
@@ -69,6 +70,9 @@ EResult AssetManager::Initialize(void* arg)
 }
 void AssetManager::Free()
 {
+	// Stop worker-backed promises before waiting on the import jobs that use them.
+	if (AssetWorkerHost::IsCreated()) AssetWorkerHost::Destroy();
+
 	for (auto& task : m_ActiveTasks)
 	{
 		if (task.Future.valid())
@@ -265,7 +269,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 			if (result != EResult::Success)
 			{
 				BAM_LOG(Error, "Editor", "Asset", "Model import request failed: source={}, result={}",
-					sourcePath.string(), ResultToString(result));
+					Engine::WStrToStr(sourcePath.wstring()), ResultToString(result));
 				pending.Future = readyFuture(result);
 			}
 			else
@@ -275,7 +279,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 						if (prepareResult != EResult::Success)
 						{
 							BAM_LOG(Error, "Editor", "Asset", "Model preparation failed: source={}, code={}, error={}",
-								task->GetRequest().SourcePath.string(),
+								Engine::WStrToStr(task->GetRequest().SourcePath.wstring()),
 								static_cast<int>(task->GetErrorCode()), task->GetErrorMessage());
 							return prepareResult;
 						}
@@ -283,7 +287,31 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 						return importer->FinalizeStep(*task);
 					};
 
-				pending.Future = std::async(std::launch::async, [task]() -> EResult
+				const auto& request = task->GetRequest();
+				auto promise = std::make_shared<std::promise<EResult>>();
+				const bool queued = AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().EnqueueImportModel(
+					request.SourcePath, ModelImporter::MakeConversionOptions(request.Settings),
+					[task, promise](AssetWorkerHost::ModelImportResult result, const filesystem::path& snapshot)
+					{
+						using Result = AssetWorkerHost::ModelImportResult;
+						try
+						{
+							EResult prepared = EResult::Fail;
+							if (result == Result::SnapshotReady)
+								prepared = task->PrepareFromSnapshot(snapshot);
+							else if (result == Result::Unavailable)
+								prepared = task->Prepare();
+							else if (result == Result::Cancelled)
+								BAM_LOG(Info, "Editor", "Asset", "Model worker import cancelled.");
+							promise->set_value(prepared);
+						}
+						catch (...)
+						{
+							promise->set_exception(std::current_exception());
+						}
+					});
+
+				pending.Future = queued ? promise->get_future() : std::async(std::launch::async, [task]()
 					{
 						return task->Prepare();
 					});

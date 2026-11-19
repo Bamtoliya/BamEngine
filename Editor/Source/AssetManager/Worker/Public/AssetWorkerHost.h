@@ -1,7 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "ModelConverter.h"
 #include <condition_variable>
+#include <functional>
 #include <deque>
 #include <filesystem>
 #include <mutex>
@@ -27,6 +29,24 @@ public:
         bool Success = false;
     };
 
+    struct ActiveImportStatus
+    {
+        Engine::uint64 RequestId = 0;
+        std::string AssetName;
+        float Progress = 0.0f;
+        const char* StepKey = "ModelImport.WorkerStarting";
+    };
+
+    enum class ModelImportResult
+    {
+        SnapshotReady,
+        Unavailable,
+        Failed,
+        Cancelled
+    };
+
+    using ModelImportCompletion = std::function<void(ModelImportResult, const std::filesystem::path&)>;
+
 private:
     struct PendingThumbnailTask
     {
@@ -35,6 +55,14 @@ private:
         std::filesystem::path SourcePath;
         std::filesystem::path OutputPngPath;
         int32 Resolution = 128;
+    };
+
+    struct PendingImportTask
+    {
+        Engine::uint64 RequestId = 0;
+        std::filesystem::path SourcePath;
+        Tools::ModelConversion::Options Options;
+        ModelImportCompletion Complete;
     };
 
 private:
@@ -53,6 +81,12 @@ public:
     [[nodiscard]] std::vector<CompletedThumbnailTask> PollCompletedTasks();
     void ClearPendingTasks();
 
+    // The snapshot is available during the worker-thread completion callback.
+    bool EnqueueImportModel(const std::filesystem::path& sourcePath, Tools::ModelConversion::Options options,
+        ModelImportCompletion complete);
+    bool GetActiveImportStatus(ActiveImportStatus& outStatus);
+    void CancelActiveImport(Engine::uint64 requestId);
+
 private:
     void WorkerThreadLoop(size_t workerIndex);
 
@@ -68,10 +102,18 @@ private:
     std::mutex m_QueueMutex;
     std::condition_variable m_QueueCv;
     std::deque<PendingThumbnailTask> m_PendingQueue;
+    std::deque<PendingImportTask> m_PendingImports;
+    Engine::uint64 m_NextImportRequestId = 1;
+    bool m_ImportInProgress = false;
     bool m_StopRequested = false;
 
     std::mutex m_CompletedMutex;
     std::vector<CompletedThumbnailTask> m_CompletedTasks;
+
+    std::mutex m_ImportStatusMutex;
+    ActiveImportStatus m_ActiveImportStatus;
+    void* m_ActiveImportProcess = nullptr;
+    bool m_ImportCancelled = false;
 
     std::mutex m_ActiveProcessMutex;
     std::vector<void*> m_ActiveProcesses;

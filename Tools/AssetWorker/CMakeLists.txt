@@ -33,3 +33,10 @@ set_target_properties(BamAssetWorker PROPERTIES
 if(MSVC)
     target_compile_options(BamAssetWorker PRIVATE /utf-8 /Zc:preprocessor /MP /EHsc)
 endif()
+
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME AssetWorkerModelCheck
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/ModelWorkerCheck.py" $<TARGET_FILE:BamAssetWorker>)
+    set_tests_properties(AssetWorkerModelCheck PROPERTIES TIMEOUT 45)
+endif()
