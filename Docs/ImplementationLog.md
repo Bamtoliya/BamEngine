@@ -7,6 +7,11 @@ This document tracks implementation details, architectural decisions, and techni
 - [Client 에셋 팩 계획](ClientAssetCookingAndPackingPlan.md)에 선택 수집, 유형별 쿠킹·기존 BEVE 재사용, Windows 팩 형식·마운트, 기존 내보내기에서 게시하기까지의 단계와 검증 기준을 기록했다.
 - 현재 폴더 복사, Archive의 바이트 디코딩, 디스크 파일을 전제로 한 Client 로드 경로를 코드에서 대조했다. 팩 구현·빌드·실환경 검증·성능 비교는 이후 단계에 둔다.
 
+### [2026-11-19] 모델 임포트·재임포트·에셋 이동 흐름 점검
+
+- [에셋 흐름 개선 계획](AssetReimportRelocationWorkflowPlan.md)에 선택 모델 경로의 재임포트 전달, 생성물 묶음 복구, 저장된 바이너리 참조 검사와 임포트·이동 충돌 방지를 정리했다.
+- 임포트 확정, 이동 확인 및 파일 이력, 모델 DDC·리소스 키의 코드와 기존 검사 기준을 대조했다. 기능 변경과 빌드·CTest·실환경 및 성능 검증은 이후 단계에 둔다.
+
 ### [2026-11-19] 프리팹 제작·배치·씬 저장 흐름 점검
 
 - [프리팹 흐름 개선 계획](PrefabSceneWorkflowPlan.md)에 생성·배치·원본 편집·씬 재열기의 동작과 인스턴스 보존 계약을 기록했다. `Revert All`의 삭제된 객체 접근, 엔티티 참조의 핸들 직렬화, 원본 덮어쓰기와 Undo/Redo의 개선 순서를 정리했다.
