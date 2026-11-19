@@ -124,11 +124,23 @@ python Tools/Audit/LocalizationAuditor/audit_localization.py --strict
 
 ```powershell
 cmake --preset x64-debug -DBUILD_TESTING=ON
-cmake --build out/build/x64-debug --config Debug --target Editor AuditLocalization ReflectionInspectorCheck MainMenuBarLayoutCheck ShortcutManagerCheck HierarchyEditorCheck EditorHistoryCheck CanvasViewCheck GraphMessageLocalizationCheck
-ctest --test-dir out/build/x64-debug -C Debug --output-on-failure -R "LocalizationAuditUtility|MainMenuBarLayoutCheck|ShortcutManagerCheck|ReflectionInspectorCheck|HierarchyEditorCheck|EditorHistoryCheck|CanvasViewCheck|GraphMessageLocalizationCheck"
+cmake --build out/build/x64-debug --config Debug --target Editor AuditLocalization ReflectionInspectorCheck MainMenuBarLayoutCheck ShortcutManagerCheck HierarchyEditorCheck EditorHistoryCheck CanvasViewCheck GraphMessageLocalizationCheck AssetReferenceCheck BamAssetWorker
+ctest --test-dir out/build/x64-debug -C Debug --output-on-failure -R "LocalizationAuditUtility|MainMenuBarLayoutCheck|ShortcutManagerCheck|ReflectionInspectorCheck|HierarchyEditorCheck|EditorHistoryCheck|CanvasViewCheck|GraphMessageLocalizationCheck|AssetReferenceCheck|AssetWorkerModelCheck"
 ```
 
 ### 5.2 Tier 3 대화형 UI 점검 체크리스트
+
+**리소스 문서 닫기와 편집 이력**
+
+- [ ] Animator Graph에서 상태 추가·이름 변경·전이 연결·Blend Tree 샘플·노티파이 편집 및 노드 드래그를 수행한다. 편집 메뉴, 퀵액세스, Ctrl+Z·Ctrl+Y로 차례로 복원한다. 저장 후 Undo에는 `*`가 생기며 Redo에는 해제된다. 저장한 상태·Entry·Any State 배치는 재열기 후 보존되고, 이전 버전 파일은 기본 배치로 열린다.
+- [ ] Logic/Shader 각각에서 다른 내용을 편집한 뒤 활성 도메인을 전환해 독립 이력을 확인한다. 그래프 변수 추가를 Undo하면 노드 팔레트에서도 항목이 사라진다. Material 파라미터, Model 머티리얼 슬롯, Sprite 슬라이스, 독립 Prefab의 하위 엔티티, Sprite Animation 프레임·FPS·재생 모드도 메뉴·버튼·단축키 및 저장 기준점을 같은 기준으로 확인한다.
+- [ ] VFX 커브 모달에서 변경 후 확인, 변경 없이 확인, 취소를 각각 실행한다. 변경을 확인했을 때만 Undo 한 건이 추가된다. Sprite Animation DLL을 재로드하면 편집 내용과 미저장 표시가 유지되고 이력이 새로 시작하는지 확인한다.
+- [ ] 머티리얼·모델·스프라이트·Sprite Animation·파티클·VFX·Graph·Animator Graph·독립 Prefab Editor·애니메이션 타임라인에서 저장할 값을 수정한다. 제목 표시줄 X, 파일 → 닫기, Ctrl+W, 창 메뉴 체크 해제를 번갈아 사용한다. 취소하면 같은 문서·초안·이력을 보존한다. 버리기 후 같은 패널을 창 메뉴에서 열면 파일명과 프리뷰가 비어 있고, 에셋을 다시 열면 저장된 값이 표시된다.
+- [ ] 미저장 독립 프리팹을 수정한 뒤 Content Browser에서 다른 프리팹을 연다. 버리기를 한 번 확정해 전환한다. 기존 에셋 열기·Sprite 전용 우클릭 열기·저장 실패에서 동일한 확인 흐름과 대상 유지 여부를 본다. 파일 대화상자를 취소하거나 대상 로드가 실패하면 기존 초안이 유지되는지 확인한다.
+- [ ] 파티클·VFX·애니메이션 타임라인에서 메뉴, 퀵액세스, 키보드가 같은 Undo/Redo 이력을 실행하고 단축키 변경 시 힌트가 갱신된다. 편집 → Undo 때 별표가 해제되고 저장 → Undo → Redo 때 저장 기준점으로 복귀한다. VFX 루프·트랙 활성화와 파티클 이미터 추가·활성화·지속 시간도 확인한다. 열린 파티클·VFX 파일을 다른 이름으로 저장한 뒤 원본을 다시 열어 원본의 저장 값이 유지되는지 확인한다. 복사본은 별도 이력으로 시작한다.
+- [ ] Logic·Shader를 각각 수정한 뒤 Graph를 닫고 저장을 선택한다. 두 파일을 다시 열어 변경을 확인한다. 한 파일의 저장 대화상자 취소·쓰기 실패 중 편집기가 열린 상태인지 확인한다.
+- [ ] 메인 씬을 수정한 뒤 저장된 프리팹 모드에서 앱 종료를 요청한다. 메인 씬의 별도 확인이 나오는지 확인한다. 리소스 폐기 후 메인 씬 종료를 취소하면 폐기한 리소스를 앱 종료에서 다시 묻지 않는다. 통합 설정에서 프로젝트 설정 쓰기 실패 시 초안과 별표가 보존되고, 닫기 취소 후 수정값이 유지되어야 한다.
+
 
 - **A. 타이틀바 · 주 메뉴 · 하단 푸터 바**
   - [ ] 주 메뉴 폭을 줄였을 때 메뉴 접힘과 창 제어 3버튼(최소화·최대화·닫기)의 축약 메뉴가 겹치지 않고, 제목 표시줄 빈 영역 드래그·더블클릭 최대화가 정확히 동작한다.
@@ -207,6 +219,10 @@ ctest --test-dir out/build/x64-debug -C Debug --output-on-failure -R "Localizati
   - [ ] 같은 부모 아래에서 1번과 3번 행을 선택한다. 2번 행 위쪽 또는 아래쪽 삽입선에 드롭하면 1번과 3번의 상대 순서와 각자의 자식·Transform이 유지된다. Ctrl+Z/Ctrl+Y 한 번씩으로 순서가 바뀌는지 확인한다.
   - [ ] 다른 부모의 항목을 섞어 선택한 뒤 드래그를 시작한 행과 같은 부모의 형제 행 가장자리에 드롭하면 트리와 이력이 그대로다. 순서가 같은 위치에 뒀을 때도 새 이력이 생기지 않는다. 펼쳐진 형제 뒤에는 다음 형제 위쪽에서 삽입하거나 행을 접은 뒤 삽입한다. 행 가운데 드롭과 씬 루트 드롭은 기존처럼 부모를 바꾼다.
   - [ ] 다른 씬으로 넘어간 드래그와 드래그 도중 사라진 엔티티는 묶음 전체를 거부한다. 인스펙터의 엔티티 참조 필드는 드래그를 시작한 엔티티를 사용한다.
+
+- **H. 프리뷰 오버레이와 모델 임포트 푸터**
+  - [ ] 모델·VFX 프리뷰에서 렌더 타깃 목록을 열어 중간 타깃과 최종 출력을 바꾼다. 조명 팝업은 현재 저장값으로 열리고 변경은 현재 프리뷰에 표시된다. 취소·바깥 클릭·툴바가 가려질 정도의 축소 뒤에는 저장값으로 돌아오며, 적용하면 다른 프리뷰에도 반영된다.
+  - [ ] 한글·공백이 있는 긴 파일명의 대형 모델 임포트에서 푸터의 단계 표시와 취소 버튼을 확인한다. 좁은 폭에서 파일명이 잘려도 공간이 허용되는 동안 취소 버튼은 클릭할 수 있다. 취소 후 출력과 이후 작업을 [모델 임포트 1차 검증](OutOfProcessAssetPipelinePlan.md#모델-임포트-1차-검증)에 따라 확인한다.
 
 ---
 

@@ -43,6 +43,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md): 독립 워커 프로세스 기반 대용량 에셋 임포트 파이프라인, Job Object 수명주기 및 60FPS 무간섭 격리 계획.
 - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md): 에셋 파이프라인 및 렌더링 최적화 조치 계획서 (와인딩 반전, 프리뷰 카메라 동결, 콘텐츠 브라우저 스터터링, 스폰자 드로우콜 병목).
 - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md): 썸네일 디스크 캐시 및 엔진 전반(셰이더, DDC, 지형/물리) 디스크 영속성 통합 개발 계획.
+- [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md): 머티리얼-셰이더 그래프 통합, 원클릭 진입 및 실시간 3D 프리뷰(PBR Live Hot-Reload) 개발 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
