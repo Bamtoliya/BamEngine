@@ -1,4 +1,5 @@
 ﻿#include "GraphPanel.h"
+#include "NodeEditorUI.h"
 #include "ShortcutManager.h"
 #include "GraphMessageLocalization.h"
 #include "InputManager.h"
@@ -21,25 +22,7 @@ ed::EditorContext* GraphPanel::CreateEditorContext()
 	ed::Config config;
 	config.SettingsName = nullptr;  // 노드 위치·그룹 크기는 그래프 파일이 기준이다. 편집용 ID 기준의 imgui.ini 상태가 다른 그래프에 적용되지 않게 한다.
 	config.NavigateButtonIndex = 2; // 휠 클릭 드래그로 화면 이동. 우클릭은 컨텍스트 메뉴 전용이다.
-	auto* context = ed::CreateEditor(&config);
-
-	// ── 언리얼 블루프린트 글로벌 테마 설정 (GetStyle은 현재 편집기 대상이므로 잠시 전환) ──
-	auto* previous = ed::GetCurrentEditor();
-	ed::SetCurrentEditor(context);
-	auto& style = ed::GetStyle();
-	style.NodeRounding = 6.0f;
-	style.NodeBorderWidth = 1.2f;
-	style.NodePadding = ImVec4(10.0f, 6.0f, 10.0f, 8.0f);
-	style.Colors[ed::StyleColor_NodeBg] = ImVec4(0.09f, 0.09f, 0.11f, 0.95f);
-	style.Colors[ed::StyleColor_NodeBorder] = ImVec4(0.24f, 0.25f, 0.28f, 1.0f);
-	style.Colors[ed::StyleColor_HovNodeBorder] = ImVec4(0.95f, 0.70f, 0.20f, 1.0f);
-	style.Colors[ed::StyleColor_SelNodeBorder] = ImVec4(1.0f, 0.85f, 0.30f, 1.0f);
-	style.Colors[ed::StyleColor_Flow] = ImVec4(1.0f, 0.95f, 0.35f, 1.0f);
-	style.Colors[ed::StyleColor_FlowMarker] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-	style.FlowSpeed = 160.0f;
-	style.FlowMarkerDistance = 28.0f;
-	ed::SetCurrentEditor(previous);
-	return context;
+	return NodeEditorUI::CreateDefaultEditor(&config);
 }
 
 void GraphPanel::ActivateDocument()
@@ -467,14 +450,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	else if (execInputs.empty() && execOutputs.empty()) headerColor = IM_COL32(40, 135, 65, 240);
 
 	// 데이터 핀은 행을 그린 뒤 노드 테두리 위에 원으로 선언한다. 테두리 좌표는 노드 내용을 다 그린 뒤에야 확정된다.
-	struct BorderPin
-	{
-		int Id = 0;
-		ed::PinKind Kind = ed::PinKind::Input;
-		float CenterY = 0.0f;
-		ImU32 Color = 0;
-	};
-	std::vector<BorderPin> borderPins;
+	std::vector<NodeEditorUI::BorderPin> borderPins;
 
 	ed::BeginNode(found->second.Id);
 	ImGui::PushID(static_cast<int>(node.Id));
@@ -576,28 +552,11 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	}
 	ImGui::EndGroup(); // 노드 전체 그룹 닫기
 
-	// 데이터 핀: 원의 중심을 노드 테두리에 두어 반쯤 걸치게 한다. 테두리 = 내용 영역 + 노드 안쪽 여백.
+	// 외곽 테두리 핀 렌더링 (EndNode 전에 선언해야 함)
 	if (!borderPins.empty())
 	{
-		const auto& style = ed::GetStyle();
-		const float leftX = ImGui::GetItemRectMin().x - style.NodePadding.x;
-		const float rightX = ImGui::GetItemRectMax().x + style.NodePadding.z;
-		const float radius = ImGui::GetFontSize() * 0.3f;
-		const float hitExtent = radius + 3.0f; // 원보다 조금 넓게 잡아 마우스로 쉽게 집히게 한다
-		auto* drawList = ImGui::GetWindowDrawList();
-
-		// 링크 직선 스타일은 BeginPin 시점의 값이 핀에 저장되므로 지연 선언에도 다시 적용한다.
 		if (dataStraight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
-		for (const auto& pin : borderPins)
-		{
-			const ImVec2 center(pin.Kind == ed::PinKind::Input ? leftX : rightX, pin.CenterY);
-			ed::BeginPin(pin.Id, pin.Kind);
-			ed::PinRect(ImVec2(center.x - hitExtent, center.y - hitExtent), ImVec2(center.x + hitExtent, center.y + hitExtent));
-			ed::PinPivotRect(center, center);
-			ed::EndPin();
-			drawList->AddCircleFilled(center, radius, pin.Color);
-			drawList->AddCircle(center, radius, IM_COL32(20, 20, 24, 255), 0, 1.5f); // 노드 테두리선과 구분되는 외곽선
-		}
+		NodeEditorUI::DrawNodeBorderPins(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), borderPins);
 		if (dataStraight) ed::PopStyleVar();
 	}
 
@@ -607,21 +566,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 	// ── 헤더 배경 ──
 	if (ImGui::IsItemVisible())
 	{
-		const ImVec2 nodeMin = ImGui::GetItemRectMin();
-		const ImVec2 nodeMax = ImGui::GetItemRectMax();
-		const auto& style = ed::GetStyle();
-		const float halfBorder = style.NodeBorderWidth * 0.5f;
-
-		auto* drawList = ed::GetNodeBackgroundDrawList(found->second.Id);
-		drawList->AddRectFilled(
-			ImVec2(nodeMin.x + halfBorder, nodeMin.y + halfBorder),
-			ImVec2(nodeMax.x - halfBorder, headerBottom),
-			headerColor, style.NodeRounding, ImDrawFlags_RoundCornersTop);
-
-		drawList->AddLine(
-			ImVec2(nodeMin.x + halfBorder, headerBottom),
-			ImVec2(nodeMax.x - halfBorder, headerBottom),
-			IM_COL32(255, 255, 255, 35), 1.0f);
+		NodeEditorUI::DrawNodeHeader(found->second.Id, ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), headerBottom, headerColor);
 	}
 }
 
@@ -709,7 +654,7 @@ void GraphPanel::DrawLinks()
 		const bool isExec = pin && (pin->Type == Engine::EGraphPinType::Execution);
 		const float thickness = isExec ? 2.8f : 1.8f;
 
-		ed::Link(found->second, fromPin, toPin, ImGui::ColorConvertU32ToFloat4(color), thickness);
+		NodeEditorUI::DrawLink(found->second, fromPin, toPin, ImGui::ColorConvertU32ToFloat4(color), thickness);
 	}
 }
 
