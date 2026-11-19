@@ -1,5 +1,7 @@
 project(BamAssetWorker LANGUAGES CXX)
 
+find_package(directxtex CONFIG REQUIRED)
+
 add_executable(BamAssetWorker
     main.cpp
     HeadlessThumbnailRasterizer.h
@@ -19,7 +21,7 @@ target_include_directories(BamAssetWorker PRIVATE
 target_link_libraries(BamAssetWorker PRIVATE
     BamEngine::Engine
     BamTools::ModelConverter
-    TextureConverter
+    Microsoft::DirectXTex
 )
 
 set_target_properties(BamAssetWorker PROPERTIES

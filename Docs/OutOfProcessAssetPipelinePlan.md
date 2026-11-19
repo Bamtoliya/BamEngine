@@ -140,6 +140,7 @@ flowchart TD
   - 이를 에디터 프로세스와 완전히 격리된 독립 워커 프로세스로 위임하여 에디터 메인 스레드 부하 0.0ms를 달성함.
 - **독립 헤드리스 썸네일 워커 (`BamAssetWorker.exe`)**:
   - 위치: `Tools/AssetWorker/` (`main.cpp`, `HeadlessThumbnailRasterizer.h/.cpp`)
+  - 빌드 의존성: DDS 및 압축 텍스처를 읽는 `HeadlessThumbnailRasterizer`가 DirectXTex를 직접 호출하므로 `BamAssetWorker`에 `Microsoft::DirectXTex`를 직접 링크한다.
   - 지원 포맷: `.bammesh` / `.bammesh.json`, `.bammodel` / `.bammodel.json`, `.obj` / `.fbx` / `.gltf` / `.glb`, `.bamprefab` / `.prefab` / `.json`
   - 단발성 CLI(`--mode thumbnail --source <src> --output <png> [--resolution <dim>] [--project-root <dir>]`) 및 파이프 기반 상주형 데몬(`--daemon`) 지원 (`THUMB\t<id>\t<res>\t<src>\t<dst>` -> `RESULT\t<id>\t<ok>`).
   - RHI/SwapChain 의존성 없는 헤드리스 2x SSAA (`256x256` -> `128x128`) 소프트웨어 PBR 래스터라이저 + 3점 스튜디오 조명 + ACES 톤매핑 + 알베도 텍스처 샘플링(`.bamtex`, `.dds`, `.png`, `.tga`, `.jpg`).

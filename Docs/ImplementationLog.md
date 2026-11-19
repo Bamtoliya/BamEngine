@@ -2,6 +2,11 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] BamAssetWorker의 DirectXTex 직접 링크
+
+- Ninja Debug에서 `HeadlessThumbnailRasterizer.cpp`의 DirectXTex 심볼 6개가 링크되지 않았다. 워커에서 `TextureConverter` 의존성을 제거하면서 전이 링크가 빠졌다. DDS 및 압축 텍스처를 직접 읽는 `BamAssetWorker`에 `Microsoft::DirectXTex`를 직접 연결했다.
+- 수정 이후 생성된 Ninja 링크 규칙에서 Debug `DirectXTex.lib`를 확인했다. Ninja 로그와 `BamAssetWorker.exe` 타임스탬프로 워커 링크 완료를 확인했다. CTest와 썸네일 실행은 검증 기록이 없다.
+
 ### [2026-11-19] 액션 타임라인 작성 모델·클립 바인딩과 런타임 포즈
 
 - 문제: 런타임 `ActionTimelineSystem`은 에셋의 `m_ModelPath`·`m_ClipName`을 읽지 않았다. Animator에 시간만 넣고 클립을 지정하지 않아, 작성한 클립이 아닌 Animator의 현재 클립(모델 생성 시 첫 클립) 기준으로 재생될 수 있었다. 또 `animator.isPlaying = false`로 두면 `AnimationSystem`이 포즈 계산을 건너뛰므로, 타임라인 재생 중 캐릭터 포즈가 갱신되지 않는 것으로 코드상 판단했다(실행 확인 전).
