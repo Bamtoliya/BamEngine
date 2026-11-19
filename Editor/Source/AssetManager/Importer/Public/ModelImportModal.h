@@ -39,6 +39,8 @@ public:
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Hidden; }
+	// 닫힌 뒤에도 진행 중인 프리뷰 파싱이 끝나면 결과를 해제하기 위해 갱신을 유지한다
+	bool ShouldUpdateWhenClosed() const override { return m_AsyncPreview != nullptr; }
 
 private:
 	struct AsyncPreviewState
@@ -46,8 +48,12 @@ private:
 		std::unique_ptr<ModelImportTask> Task;
 		std::atomic<EResult> Result{ Engine::EResult::Fail };
 		std::atomic<bool> Completed{ false };
+		// 모달 닫기·설정 변경으로 결과가 필요 없어졌음을 작업 스레드에 알린다
+		std::atomic<bool> Cancelled{ false };
 		bool FocusCamera = true;
 	};
+
+	void CancelAsyncPreview();
 
 	struct AlbedoPreviewInfo
 	{

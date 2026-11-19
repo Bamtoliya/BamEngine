@@ -85,3 +85,7 @@ AnimatorGraph,NoTransitions,No transitions connected to this state.,연결된 �
 AnimatorGraph,Outgoing,Out,출력
 AnimatorGraph,Incoming,In,입력
 AnimatorGraph,TransitionDirection,Direction,전이 방향
+AnimatorGraph,LiveActiveState,Active,실행 중
+AnimatorGraph,DefaultEntryHint,Default Entry,기본 진입
+AnimatorGraph,GlobalTransitions,Global Transitions,전역 전이
+AnimatorGraph,AnyShort,Any,전역

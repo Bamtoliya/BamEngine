@@ -871,7 +871,7 @@ void AnimatorGraphPanel::DrawCanvas()
 			LOCAL_CSTR("AnimatorGraph.Entry"), 130.0f);
 
 		ImGui::Spacing();
-		ImGui::TextDisabled("Default Entry");
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.DefaultEntryHint"));
 		const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
 
 		ImGui::EndGroup();
@@ -900,7 +900,7 @@ void AnimatorGraphPanel::DrawCanvas()
 			LOCAL_CSTR("AnimatorGraph.AnyState"), 130.0f);
 
 		ImGui::Spacing();
-		ImGui::TextDisabled("Global Transitions");
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.GlobalTransitions"));
 		const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
 
 		ImGui::EndGroup();
@@ -1927,13 +1927,13 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 					if (isOutgoing)
 						ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), ICON_FA_ARROW_RIGHT " %s", LOCAL_CSTR("AnimatorGraph.Outgoing"));
 					else if (tr.fromAnyState)
-						ImGui::TextColored(ImVec4(0.75f, 0.5f, 0.95f, 1.0f), ICON_FA_BOLT " [Any]");
+						ImGui::TextColored(ImVec4(0.75f, 0.5f, 0.95f, 1.0f), ICON_FA_BOLT " %s", LOCAL_CSTR("AnimatorGraph.AnyShort"));
 					else
 						ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), ICON_FA_ARROW_LEFT " %s", LOCAL_CSTR("AnimatorGraph.Incoming"));
 
 					// Column 1: 상대 상태 명칭 (클릭 시 전이 선택)
 					ImGui::TableSetColumnIndex(1);
-					const std::string peerStateName = isOutgoing ? tr.targetState : (tr.fromAnyState ? "[Any State]" : tr.sourceState);
+					const std::string peerStateName = isOutgoing ? tr.targetState : (tr.fromAnyState ? LOCAL("AnimatorGraph.AnyState") : tr.sourceState);
 					if (ImGui::Selectable(peerStateName.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
 					{
 						m_SelectedTransitionIndex = static_cast<int>(i);

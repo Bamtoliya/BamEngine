@@ -37,6 +37,7 @@ struct EditorAction
     bool AllowRepeat = false;
     bool WhileHeld = false;
     std::wstring PanelScope;
+    bool AllowInModalPreview = false; // 모달 팝업 안의 프리뷰 뷰포트가 대상일 때도 실행 허용
 };
 
 END

@@ -90,6 +90,24 @@ int main()
     if (!Check(!manager.GetShortcutHint("Test.Graph"), "Unbound commands must not advertise a shortcut.")) return 12;
     manager.ResetAllBindings();
     if (!Check(manager.GetActiveChord("Test.Graph") == deleteChord, "Reset must restore the default chord.")) return 13;
-    std::cout << "Shortcut context priority, disabled-local isolation, suppression, rebinding and hint checks passed.\n";
+
+    // 모달 프리뷰 경로는 AllowInModalPreview 액션만 실행하고, 키 캡처 중에는 실행하지 않는다
+    int modalAllowedCount = 0, modalBlockedCount = 0;
+    manager.RegisterAction({ .Id = "Test.ModalAllowed", .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::G), .ExecuteHandler = [&]() { ++modalAllowedCount; },
+        .AllowInModalPreview = true });
+    manager.RegisterAction({ .Id = "Test.ModalBlocked", .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::H), .ExecuteHandler = [&]() { ++modalBlockedCount; } });
+    Tap(input, SDL_SCANCODE_G);
+    manager.SetCapturing(true);
+    manager.ProcessModalPreviewShortcuts();
+    manager.SetCapturing(false);
+    if (!Check(modalAllowedCount == 0, "Key capture must block modal preview shortcuts.")) return 14;
+    manager.ProcessModalPreviewShortcuts();
+    if (!Check(modalAllowedCount == 1, "Actions allowed in modal previews must run through the central path.")) return 15;
+    Tap(input, SDL_SCANCODE_H);
+    manager.ProcessModalPreviewShortcuts();
+    if (!Check(modalBlockedCount == 0, "Actions without modal permission must stay blocked while a popup is open.")) return 16;
+    std::cout << "Shortcut context priority, disabled-local isolation, suppression, rebinding, hint and modal preview checks passed.\n";
     return 0;
 }

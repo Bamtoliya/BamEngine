@@ -39,6 +39,7 @@ namespace Editor
 
 	void ModelImportModal::Free()
 	{
+		CancelAsyncPreview();
 		m_AsyncPreview.reset();
 		ClearPreview();
 		m_PreviewWidget.Free();
@@ -139,9 +140,23 @@ namespace Editor
 		std::thread([state]()
 			{
 				const EResult res = state->Task->Prepare();
+				// 폐기된 요청의 파싱 결과는 메인 스레드가 수거할 때까지 붙잡지 않고 작업 스레드에서 바로 해제한다
+				if (state->Cancelled.load(std::memory_order_acquire))
+					state->Task.reset();
 				state->Result.store(res, std::memory_order_relaxed);
 				state->Completed.store(true, std::memory_order_release);
 			}).detach();
+	}
+
+	void ModelImportModal::CancelAsyncPreview()
+	{
+		if (!m_AsyncPreview) return;
+
+		// 완료된 결과는 즉시 해제하고, 진행 중이면 취소 표시만 남겨 완료 시점에 버린다
+		if (m_AsyncPreview->Completed.load(std::memory_order_acquire))
+			m_AsyncPreview.reset();
+		else
+			m_AsyncPreview->Cancelled.store(true, std::memory_order_release);
 	}
 
 	bool ModelImportModal::BeginPreviewBuild(std::unique_ptr<ModelImportTask> completedTask, bool focusCamera)
@@ -461,11 +476,17 @@ namespace Editor
 
 	void ModelImportModal::Update(f32 dt)
 	{
-		if (!m_Open) return;
+		if (!m_Open)
+		{
+			// 닫힌 뒤 끝난 프리뷰 파싱은 결과를 버리고 상태를 해제한다
+			if (m_AsyncPreview && m_AsyncPreview->Completed.load(std::memory_order_acquire))
+				m_AsyncPreview.reset();
+			return;
+		}
 
 		if (m_CloseRequested)
 		{
-			m_AsyncPreview.reset();
+			CancelAsyncPreview();
 			ClearPreview();
 			if (m_PreviewEntity) return;
 			m_AlbedoPreviewInfo.clear();
@@ -484,7 +505,8 @@ namespace Editor
 		}
 
 		// 첫 프레임에 모달 팝업이 먼저 열리도록 m_OpenRequested가 소비된 뒤 백그라운드 로딩 시작
-		if (m_PreviewReloadRequested && !m_OpenRequested)
+		// 원본 파싱은 한 번에 하나만 실행한다. 진행 중에 설정이 바뀌면 완료를 기다렸다가 새 설정으로 다시 시작한다.
+		if (m_PreviewReloadRequested && !m_OpenRequested && !m_AsyncPreview)
 		{
 			m_PreviewReloadRequested = false;
 			const bool focusCamera = m_PreviewEntity == nullptr;
@@ -494,7 +516,11 @@ namespace Editor
 		if (m_AsyncPreview && m_AsyncPreview->Completed.load(std::memory_order_acquire))
 		{
 			auto completed = std::move(m_AsyncPreview);
-			if (completed->Result.load(std::memory_order_relaxed) == EResult::Success)
+			if (m_PreviewReloadRequested || completed->Cancelled.load(std::memory_order_acquire))
+			{
+				// 파싱 도중 설정이 바뀌었거나 닫힌 요청의 결과다. 버리고 다음 프레임에 새 설정으로 시작한다.
+			}
+			else if (completed->Result.load(std::memory_order_relaxed) == EResult::Success)
 			{
 				BeginPreviewBuild(std::move(completed->Task), completed->FocusCamera);
 			}

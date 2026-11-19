@@ -176,30 +176,26 @@ bool ShortcutManager::CanExecuteAction(const std::string& actionId) const
     return action && (!action->CanExecute || action->CanExecute());
 }
 
-bool ShortcutManager::TryTriggerAction(const std::string& actionId)
+void ShortcutManager::ProcessModalPreviewShortcuts()
 {
-    if (IsCapturing() || m_SuppressProcessOnce)
-        return false;
-
-    const auto* action = FindAction(actionId);
-    if (!action || !action->ExecuteHandler)
-        return false;
-
-    auto it = m_ActiveBindings.find(actionId);
-    if (it == m_ActiveBindings.end() || !it->second.IsValid())
-        return false;
+    if (IsCapturing())
+        return;
 
     auto& input = Engine::InputManager::Get();
-    if (it->second.Evaluate(input, action->AllowRepeat))
+    for (const auto& [id, chord] : m_ActiveBindings)
     {
+        const auto* action = FindAction(id);
+        if (!action || !action->AllowInModalPreview || !chord.IsValid()) continue;
+        if (!chord.Evaluate(input, action->AllowRepeat)) continue;
+
         if (!action->CanExecute || action->CanExecute())
         {
-            action->ExecuteHandler();
-            return true;
+            if (action->ExecuteHandler) action->ExecuteHandler();
+            return;
         }
     }
-    return false;
 }
+
 const char* ShortcutManager::GetShortcutHint(const std::string& actionId) const
 {
     auto it = m_ActiveBindings.find(actionId);

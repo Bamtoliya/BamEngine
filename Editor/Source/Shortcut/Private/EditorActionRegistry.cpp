@@ -700,7 +700,8 @@ void EditorActionRegistry::RegisterAll()
 
         auto& history = Application::Get().GetEditHistory();
         return history.ShortcutsAllowed() && !SelectionManager::Get().GetSelectedEntities().empty();
-    }
+    },
+    .AllowInModalPreview = true
         });
 
     sm.RegisterAction({
@@ -746,7 +747,8 @@ void EditorActionRegistry::RegisterAll()
             }
             if (auto* vp = SceneViewportPanel::GetActiveSceneViewport())
                 vp->ToggleGrid();
-        }
+        },
+        .AllowInModalPreview = true
     });
 
     sm.RegisterAction({
@@ -760,7 +762,8 @@ void EditorActionRegistry::RegisterAll()
         controller->IncreaseCameraSpeed();
         NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"), LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
     },
-    .CanExecute = []() { return FindShortcutCameraController() != nullptr; }
+    .CanExecute = []() { return FindShortcutCameraController() != nullptr; },
+    .AllowInModalPreview = true
         });
 
     sm.RegisterAction({
@@ -774,7 +777,8 @@ void EditorActionRegistry::RegisterAll()
             controller->DecreaseCameraSpeed();
             NotificationManager::Get().AddNotification(LOCAL("Viewport.CameraMenu"), LOCAL_FMT("Viewport.CameraSpeedValue", controller->GetCameraSpeed()));
         },
-        .CanExecute = []() { return FindShortcutCameraController() != nullptr; }
+        .CanExecute = []() { return FindShortcutCameraController() != nullptr; },
+        .AllowInModalPreview = true
         });
 
     // =========================================================================================

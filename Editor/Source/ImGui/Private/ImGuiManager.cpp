@@ -387,9 +387,9 @@ void ImGuiManager::Draw()
 		history.Flush();
 
 		const bool hasPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-		const bool suppressed = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() ||
-			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing() ||
-			hasPopup;
+		const bool blockedByEditorState = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() ||
+			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing();
+		const bool suppressed = blockedByEditorState || hasPopup;
 		EShortcutContext activeContext = EShortcutContext::Global;
 		std::wstring_view activePanel;
 		const auto* navWindow = ImGui::GetCurrentContext()->NavWindow;
@@ -412,15 +412,9 @@ void ImGuiManager::Draw()
 			history.AllowShortcuts(activeContext == EShortcutContext::Hierarchy);
 		ShortcutManager::Get().ProcessShortcuts(activeContext, suppressed, activePanel);
 
-		// 모달 팝업 상태이더라도 텍스트 입력 중이 아니고 프리뷰 뷰포트 위젯이 활성화(호버/포커스)되어 있으면 뷰포트 탐색 단축키 허용
-		if (hasPopup && !ImGui::GetIO().WantTextInput && PreviewViewportWidget::GetShortcutTarget())
-		{
-			for (const char* actionId : { "Viewport.Focus", "Viewport.ToggleGrid", "Viewport.CameraSpeedIncrease", "Viewport.CameraSpeedDecrease" })
-			{
-				if (ShortcutManager::Get().TryTriggerAction(actionId))
-					break;
-			}
-		}
+		// 모달 팝업 안의 프리뷰 뷰포트가 호버·포커스되어 있으면, 액션 정의에서 허용한 프리뷰 단축키만 중앙 경로로 평가한다
+		if (hasPopup && !blockedByEditorState && PreviewViewportWidget::GetShortcutTarget())
+			ShortcutManager::Get().ProcessModalPreviewShortcuts();
 
 		if (const auto result = m_DocumentController->ProcessPendingSave())
 		{
