@@ -10,6 +10,8 @@
 #include "TransformSystem.h"
 #include "SelectionManager.h"
 #include "NotificationManager.h"
+#include "ImGuiManager.h"
+#include <utility>
 #include "LocalizationManager.h"
 #include <archive/JsonArchive.h>
 #include "Application.h"
@@ -232,6 +234,13 @@ void PrefabModeManager::DrawMenuBarUI()
 
 }
 
+bool PrefabModeManager::ResolvePrefabModeBeforeQuit()
+{
+    if (ExitPrefabMode(false)) return true;
+    m_QuitAfterExit = m_ShowExitConfirmModal;
+    return false;
+}
+
 void PrefabModeManager::DrawExitConfirmModal()
 {
     const std::string exitPopupTitle = LOCAL("PrefabEditor.ExitConfirmTitle") + "###PrefabExitConfirmPopup";
@@ -250,27 +259,19 @@ void PrefabModeManager::DrawExitConfirmModal()
             { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "PrefabEditor.Save" }
         };
         const int action = EditorUI::DialogButtonBar("PrefabCloseActions", actions, IM_ARRAYSIZE(actions));
-        if (action == 2 && SavePrefab())
+        bool continueQuit = false;
+        if ((action == 2 && SavePrefab() && ExitPrefabMode(true)) ||
+            (action == 1 && ExitPrefabMode(true)))
         {
+            continueQuit = std::exchange(m_QuitAfterExit, false);
             ImGui::CloseCurrentPopup();
-            ExitPrefabMode(true);
-        }
-        if (action == 1)
-        {
-            m_HasUnsavedChanges = false;
-            ImGui::CloseCurrentPopup();
-            ExitPrefabMode(true);
         }
         if (action == 0)
         {
+            m_QuitAfterExit = false;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
+        if (continueQuit) ImGuiManager::Get().RequestQuit();
     }
-}
-
-void PrefabModeManager::DrawViewportBanner()
-{
-    // 모달 팝업 상태 유지
-    DrawExitConfirmModal();
 }

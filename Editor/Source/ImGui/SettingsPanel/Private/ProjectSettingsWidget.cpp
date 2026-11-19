@@ -2,6 +2,7 @@
 #include "EditorSettingsService.h"
 #include "FileDialogs.h"
 #include "Functions.h"
+#include "ImGuiManager.h"
 #include "LocalizationManager.h"
 #include "EditorUI.h"
 
@@ -25,8 +26,10 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.AssetDirectory = m_DraftAssetDirectory;
     project.ShaderSourceDirectory = m_DraftShaderSourceDirectory;
 
-    settings.SaveProjectSettings(project);
-    m_Dirty = false;
+    const auto result = settings.SaveProjectSettings(project);
+    if (result == EEditorSettingsSaveStatus::Saved)
+        m_Dirty = false;
+    ImGuiManager::Get().NotifySettingsChange({ result == EEditorSettingsSaveStatus::Saved, result });
 }
 
 void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)

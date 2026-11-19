@@ -41,6 +41,8 @@
     bam_add_resource_panel_plugin(EditorSpriteAnimationTools "${CMAKE_CURRENT_SOURCE_DIR}/SpriteAnimationTools"
         SpriteAnimationTools/Private/SpriteAnimationTools.cpp
     )
+    target_sources(EditorSpriteAnimationTools PRIVATE "${EDITOR_SOURCE_DIR}/Command/Private/CommandHistory.cpp")
+    target_include_directories(EditorSpriteAnimationTools PRIVATE "${EDITOR_SOURCE_DIR}/Command/Public")
 
     set(plugin_catalog_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     if(CMAKE_CONFIGURATION_TYPES)

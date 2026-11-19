@@ -1,9 +1,11 @@
 ﻿#pragma once
 
 #include "ResourceEditorInterface.h"
+#include "ResourceDocumentHistory.h"
 #include "EntityHierarchyView.h"
 #include <memory>
 #include <filesystem>
+#include <optional>
 
 namespace Engine { class Scene; class Entity; }
 
@@ -18,7 +20,7 @@ public:
     virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
     virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
     virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::PrefabEditor; }
-    bool HasUnsavedResourceChanges() const override { return m_HasUnsavedChanges; }
+    bool HasUnsavedResourceChanges() const override { return m_History.IsDirty(); }
     bool CanSaveDocument() const;
     bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
     {
@@ -28,9 +30,11 @@ public:
     bool SaveDocument();
 
 private:
-    void LoadPrefab();
+    void LoadPrefab(const std::filesystem::path& path);
     bool SavePrefab(const std::filesystem::path& path);
     void CloseSession();
+    void ReleaseResourceDocument() override { CloseSession(); }
+    const char* GetSaveActionId() const override { return "Prefab.Save"; }
 
     void DrawCustomQuickAccess() override;
     void DrawCustomContent() override;
@@ -39,7 +43,6 @@ private:
     string GetResourceWindowId() const override { return "PrefabEditorPanel"; }
     void DrawPrefabHierarchy();
     void DrawPrefabInspector();
-    void DrawCloseConfirmModal();
 
 private:
     struct SceneDeleter { void operator()(Engine::Scene* s) const; };
@@ -48,9 +51,14 @@ private:
     entt::entity m_SelectedEntity = entt::null;
     EntityHierarchyView m_HierarchyView;
 
-    bool m_HasUnsavedChanges = false;
-    bool m_ShowCloseConfirmModal = false;
-    std::filesystem::path m_PendingOpenPath;
+    ResourceDocumentHistory<std::string> m_History;
+    bool CommitDocumentEdit();
+    std::optional<std::string> CaptureDocument() const;
+    bool ApplyDocumentSnapshot(const std::string& snapshot);
+    bool CanUndoDocument() const override;
+    bool CanRedoDocument() const override;
+    void UndoDocument() override;
+    void RedoDocument() override;
     char m_SearchFilter[128] = "";
 };
 

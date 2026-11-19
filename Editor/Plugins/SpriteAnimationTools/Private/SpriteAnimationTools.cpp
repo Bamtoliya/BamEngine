@@ -4,9 +4,12 @@
 #include "ImGuiSplitter.h"
 #include "InputManager.h"
 #include "SpriteAnimation.h"
+#include "ResourceDocumentHistory.h"
 #include "Texture.h"
 #include "RHITexture.h"
 #include "ResourceManager.h"
+#include "PlatformPath.h"
+#include <utility>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -16,6 +19,8 @@ namespace
 	using Editor::ResourcePanelPluginHost;
 
 	constexpr char SpriteAnimationSaveAction[] = "SpriteAnimation.Save";
+	constexpr char SpriteAnimationUndoAction[] = "SpriteAnimation.Undo";
+	constexpr char SpriteAnimationRedoAction[] = "SpriteAnimation.Redo";
 
 	struct SpriteAnimationToolsState
 	{
@@ -29,10 +34,18 @@ namespace
 		float FilmstripHeight = 110.0f;
 	};
 
+	struct SpriteAnimationDocument
+	{
+		std::vector<Engine::SpriteKeyFrame> Frames;
+		float FPS = 12.0f;
+		Engine::ESpriteAnimationPlayMode PlayMode{};
+	};
+
 	struct SpriteAnimationSession
 	{
 		SpriteAnimationToolsState State;
 		Engine::ResourceHandle<Engine::SpriteAnimation> Animation;
+		Editor::ResourceDocumentHistory<SpriteAnimationDocument> History;
 	};
 
 	struct SpriteAnimationSnapshot
@@ -42,6 +55,34 @@ namespace
 	};
 
 	static_assert(std::is_trivially_copyable_v<SpriteAnimationSnapshot>);
+
+	SpriteAnimationDocument CaptureSpriteAnimation(const Engine::SpriteAnimation& animation)
+	{
+		return { animation.GetFrames(), animation.GetFPS(), animation.GetPlayMode() };
+	}
+
+	bool HasSpriteAnimationChanges(const SpriteAnimationSession& session)
+	{
+		// A DLL reload keeps the draft but releases commands that point into the old module.
+		return session.State.IsDirty || session.History.IsDirty();
+	}
+
+	bool CommitSpriteAnimationEdit(SpriteAnimationSession& session)
+	{
+		if (!session.History.HasPendingEdit()) return true;
+		auto* animation = session.Animation.Get();
+		return animation && session.History.Record(CaptureSpriteAnimation(*animation), [&session](const auto& snapshot) {
+			auto* target = session.Animation.Get();
+			if (!target) return false;
+			target->GetFrames() = snapshot.Frames;
+			target->SetFPS(snapshot.FPS);
+			target->SetPlayMode(snapshot.PlayMode);
+			target->IncreaseVersion();
+			session.State.CurrentTime = 0.0f;
+			session.State.CurrentFrameIndex = 0;
+			return true;
+		}, LOCAL("History.Command.EditProperty"));
+	}
 
 	bool SupportsSpriteAnimation(const wchar_t* path)
 	{
@@ -63,37 +104,82 @@ namespace
 				session->Animation = Engine::ResourceHandle<Engine::SpriteAnimation>(state.Animation);
 				if (!session->Animation.IsValid())
 					return nullptr;
+				if (auto* animation = session->Animation.Get())
+					session->History.Reset(CaptureSpriteAnimation(*animation));
 			}
 		}
 		return session.release();
 	}
 
-	void OpenSpriteAnimation(void* instance, const wchar_t* path)
+	void CloseSpriteAnimation(void* instance)
 	{
 		auto& session = *static_cast<SpriteAnimationSession*>(instance);
+		const auto canvasWidth = session.State.CanvasWidth;
+		const auto filmstripHeight = session.State.FilmstripHeight;
+		session.Animation.Reset();
+		session.History.Clear();
+		session.State = {};
+		session.State.CanvasWidth = canvasWidth;
+		session.State.FilmstripHeight = filmstripHeight;
+	}
+
+	bool DiscardSpriteAnimation(void* instance, const wchar_t* path);
+
+	bool OpenSpriteAnimation(void* instance, const wchar_t* path, const wchar_t* previousPath)
+	{
 		auto& manager = Engine::ResourceManager::Get();
 		const auto normalized = Engine::NormalizePath(path);
-		session.Animation = manager.GetResourceHandle<Engine::SpriteAnimation>(normalized);
-		if (!session.Animation.IsValid() && std::filesystem::exists(path))
+		auto candidate = manager.GetResourceHandle<Engine::SpriteAnimation>(normalized);
+		if (!candidate.IsValid())
+			candidate = Engine::ResourceHandle<Engine::SpriteAnimation>(manager.LoadFile(normalized));
+		if (!candidate.IsValid())
 		{
-			if (auto* animation = Engine::SpriteAnimation::Create())
+			auto* animation = Engine::SpriteAnimation::Create();
+			if (!animation) return false;
+			if (!animation->LoadFromFile(normalized))
 			{
-				animation->LoadFromFile(normalized);
-				session.Animation = manager.AddResource<Engine::SpriteAnimation>(normalized, animation);
+				manager.DestroyResource(animation);
+				return false;
 			}
+			candidate = manager.AddResource<Engine::SpriteAnimation>(normalized, animation);
 		}
 
-		session.State.CurrentTime = 0.0f;
-		session.State.CurrentFrameIndex = 0;
-		session.State.IsPlaying = true;
-		session.State.IsDirty = false;
+		auto& session = *static_cast<SpriteAnimationSession*>(instance);
+		if (!candidate.Get() || (HasSpriteAnimationChanges(session) && !DiscardSpriteAnimation(instance, previousPath))) return false;
+		CloseSpriteAnimation(instance);
+		session.Animation = std::move(candidate);
+		session.History.Reset(CaptureSpriteAnimation(*session.Animation.Get()));
+		return true;
+	}
+
+	bool DiscardSpriteAnimation(void* instance, const wchar_t* path)
+	{
+		auto& session = *static_cast<SpriteAnimationSession*>(instance);
+		auto* animation = session.Animation.Get();
+		if (!animation) return false;
+		auto* saved = Engine::SpriteAnimation::Create();
+		if (!saved) return false;
+
+		const auto target = Engine::PlatformPath::ResolveProjectRelative(path);
+		const bool restored = saved->LoadFromFile(target.wstring()) || saved->Reload(target) == Engine::EResult::Success;
+		if (restored)
+		{
+			animation->GetFrames().swap(saved->GetFrames());
+			animation->SetFPS(saved->GetFPS());
+			animation->SetPlayMode(saved->GetPlayMode());
+			session.History.Reset(CaptureSpriteAnimation(*animation));
+			animation->IncreaseVersion();
+			session.State.IsDirty = false;
+		}
+		Engine::ResourceManager::Get().DestroyResource(saved);
+		return restored;
 	}
 
 	class SpriteAnimationPanelUi
 	{
 	public:
 		SpriteAnimationPanelUi(SpriteAnimationSession& session, const ResourcePanelPluginHost& host)
-			: m_State(session.State), m_Animation(session.Animation.Get()), m_Host(host) {}
+			: m_Session(session), m_State(session.State), m_Animation(session.Animation.Get()), m_Host(host) {}
 
 		void DrawCustomToolbar();
 		void DrawCustomQuickAccess();
@@ -105,7 +191,9 @@ namespace
 		void DrawFramesList(f32 availWidth, f32 availHeight);
 		void DrawFilmstrip(f32 height);
 
+		SpriteAnimationSession& m_Session;
 		SpriteAnimationToolsState& m_State;
+
 		Engine::SpriteAnimation* m_Animation;
 		const ResourcePanelPluginHost& m_Host;
 	};
@@ -163,6 +251,13 @@ namespace
 		if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 		{
 			m_Host.DrawActionMenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), SpriteAnimationSaveAction);
+			m_Host.DrawCloseMenuItem(m_Host.Panel);
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+		{
+			m_Host.DrawActionMenuItem(LOCAL_LABEL("EditorCommon.Undo").c_str(), SpriteAnimationUndoAction);
+			m_Host.DrawActionMenuItem(LOCAL_LABEL("EditorCommon.Redo").c_str(), SpriteAnimationRedoAction);
 			ImGui::EndMenu();
 		}
 	}
@@ -175,9 +270,19 @@ namespace
 		EditorUI::ToolbarLayout toolbar;
 		EditorUI::IconButtonOptions saveOptions;
 		saveOptions.Enabled = m_Host.CanExecuteAction(SpriteAnimationSaveAction);
+		saveOptions.Active = HasSpriteAnimationChanges(m_Session);
 		saveOptions.ShortcutHint = m_Host.GetShortcutHint(SpriteAnimationSaveAction);
 		if (toolbar.Icon("SaveBtn", ICON_FA_FLOPPY_DISK, "EditorCommon.Save", saveOptions))
 			m_Host.ExecuteAction(SpriteAnimationSaveAction);
+
+		const auto drawHistoryAction = [&](const char* id, const char* icon, const char* label) {
+			const EditorUI::IconButtonOptions options{
+				.Enabled = m_Host.CanExecuteAction(id), .ShortcutHint = m_Host.GetShortcutHint(id)
+			};
+			if (toolbar.Icon(id, icon, label, options)) m_Host.ExecuteAction(id);
+		};
+		drawHistoryAction(SpriteAnimationUndoAction, ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
+		drawHistoryAction(SpriteAnimationRedoAction, ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
 
 		const char* playIcon = m_State.IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY;
 		if (toolbar.Icon("PlayPause", playIcon, m_State.IsPlaying ? "EditorCommon.Pause" : "EditorCommon.Play"))
@@ -217,7 +322,7 @@ namespace
 		if (ImGui::DragFloat("##Fps", &fps, 0.5f, 1.0f, 60.0f, "%.1f"))
 		{
 			anim->SetFPS(fps);
-			m_State.IsDirty = true;
+			m_Session.History.MarkEdited();
 		}
 
 		toolbar.Text(LOCAL_CSTR("SpriteAnimation.PlayMode"));
@@ -228,7 +333,7 @@ namespace
 		if (ImGui::Combo("##PlayMode", &playMode, modeNames, IM_ARRAYSIZE(modeNames)))
 		{
 			anim->SetPlayMode(static_cast<Engine::ESpriteAnimationPlayMode>(playMode));
-			m_State.IsDirty = true;
+			m_Session.History.MarkEdited();
 		}
 
 		if (toolbar.Button("ResetView", ICON_FA_MAXIMIZE, "SpriteAnimation.ResetView"))
@@ -336,7 +441,7 @@ namespace
 		if (ImGui::Button((std::string(ICON_FA_PLUS " ") + LOCAL_LABEL("SpriteAnimation.AddFrame")).c_str(), ImVec2(-1.0f, 26.0f)))
 		{
 			anim->AddFrame(Engine::ResourceHandle<Engine::Sprite>(), 1.0f);
-			m_State.IsDirty = true;
+			m_Session.History.MarkEdited();
 		}
 
 		auto& frames = anim->GetFrames();
@@ -359,26 +464,26 @@ namespace
 			if (EditorUI::SmallIconButton("MoveUp", ICON_FA_ARROW_UP, "EditorCommon.MoveUp", i > 0))
 			{
 				anim->SwapFrames(i, i - 1);
-				m_State.IsDirty = true;
+				m_Session.History.MarkEdited();
 			}
 			EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_ARROW_UP, true).x);
 			if (EditorUI::SmallIconButton("MoveDown", ICON_FA_ARROW_DOWN, "EditorCommon.MoveDown", i + 1 < static_cast<int32>(frames.size())))
 			{
 				anim->SwapFrames(i, i + 1);
-				m_State.IsDirty = true;
+				m_Session.History.MarkEdited();
 			}
 			EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_ARROW_UP, true).x);
 			if (EditorUI::SmallIconButton("Remove", ICON_FA_XMARK, "EditorCommon.Delete", true))
 			{
 				anim->RemoveFrame(i);
-				m_State.IsDirty = true;
+				m_Session.History.MarkEdited();
 				ImGui::PopID();
 				break;
 			}
 
 			ImGui::SetNextItemWidth(90.0f);
 			if (ImGui::DragFloat(LOCAL_LABEL("SpriteAnimation.FrameDuration").c_str(), &frames[i].frameDuration, 0.1f, 0.1f, 10.0f, "%.1fx"))
-				m_State.IsDirty = true;
+				m_Session.History.MarkEdited();
 
 			ImGui::Separator();
 			ImGui::PopID();
@@ -471,20 +576,36 @@ namespace
 		.Destroy = [](void* session) { delete static_cast<SpriteAnimationSession*>(session); },
 		.Capture = [](const void* instance, void* output) {
 			const auto& session = *static_cast<const SpriteAnimationSession*>(instance);
-			const SpriteAnimationSnapshot snapshot{ session.State, session.Animation.GetRawHandle() };
+			SpriteAnimationSnapshot snapshot{ session.State, session.Animation.GetRawHandle() };
+			snapshot.State.IsDirty = HasSpriteAnimationChanges(session);
 			std::memcpy(output, &snapshot, sizeof(snapshot));
 		},
 		.Open = OpenSpriteAnimation,
-		.IsDirty = [](const void* session) { return static_cast<const SpriteAnimationSession*>(session)->State.IsDirty; },
+		.Discard = DiscardSpriteAnimation,
+		.Close = CloseSpriteAnimation,
+		.IsDirty = [](const void* session) { return HasSpriteAnimationChanges(*static_cast<const SpriteAnimationSession*>(session)); },
 		.CanSave = [](const void* session) { return static_cast<const SpriteAnimationSession*>(session)->Animation.Get() != nullptr; },
 		.Save = [](void* instance, const wchar_t* path) {
 			auto& session = *static_cast<SpriteAnimationSession*>(instance);
 			auto* animation = session.Animation.Get();
-			if (!animation || !animation->SaveToFile(path))
+			if (!animation || !CommitSpriteAnimationEdit(session) || !animation->SaveToFile(path))
 				return false;
 			session.State.IsDirty = false;
+			session.History.MarkSaved();
 			return true;
 		},
+		.CanUndo = [](const void* instance) {
+			const auto& history = static_cast<const SpriteAnimationSession*>(instance)->History;
+			return history.CanUndo() && (!history.HasPendingEdit() || !ImGui::IsAnyItemActive());
+		},
+		.CanRedo = [](const void* instance) {
+			return static_cast<const SpriteAnimationSession*>(instance)->History.CanRedo();
+		},
+		.Undo = [](void* instance) {
+			auto& session = *static_cast<SpriteAnimationSession*>(instance);
+			if (CommitSpriteAnimationEdit(session)) session.History.Undo();
+		},
+		.Redo = [](void* instance) { static_cast<SpriteAnimationSession*>(instance)->History.Redo(); },
 		.Update = UpdateSpriteAnimation,
 		.DrawToolbar = [](void* session, const ResourcePanelPluginHost& host) {
 			BindSpriteAnimationImGui(host);
@@ -496,7 +617,9 @@ namespace
 		},
 		.DrawContent = [](void* session, const ResourcePanelPluginHost& host) {
 			BindSpriteAnimationImGui(host);
-			SpriteAnimationPanelUi(*static_cast<SpriteAnimationSession*>(session), host).DrawCustomContent();
+			auto& active = *static_cast<SpriteAnimationSession*>(session);
+			SpriteAnimationPanelUi(active, host).DrawCustomContent();
+			if (!ImGui::IsAnyItemActive()) CommitSpriteAnimationEdit(active);
 		},
 		.SaveWorkspace = [](const void* session, void* workspace, void (*set)(void*, const char*, float)) {
 			const auto& state = static_cast<const SpriteAnimationSession*>(session)->State;
@@ -511,7 +634,7 @@ namespace
 	};
 }
 
-extern "C" __declspec(dllexport) const Editor::ResourcePanelPluginApi* BamGetResourcePanelPluginV1()
+extern "C" __declspec(dllexport) const Editor::ResourcePanelPluginApi* BamGetResourcePanelPluginV3()
 {
 	return &SpriteAnimationApi;
 }

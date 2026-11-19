@@ -347,6 +347,7 @@ void ImGuiManager::Draw()
 	history.Synchronize(SceneManager::Get().GetCurrentScene(), PIEManager::Get().CanEdit());
 	SynchronizeSceneDocumentAccess();
 	history.BeginFrame();
+	if (PrefabModeManager::IsCreated()) PrefabModeManager::Get().DrawExitConfirmModal();
 	DrawResourceQuitConfirmation();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
@@ -738,7 +739,8 @@ void ImGuiManager::OpenPendingResourceEditor()
 	const auto& target = editor->GetTargetResource();
 	std::error_code error;
 	const auto current = Engine::PlatformPath::ResolveProjectRelative(target);
-	const bool sameTarget = !target.empty() && (current == path || std::filesystem::equivalent(current, path, error));
+	const bool sameTarget = editor->FocusRetainedResource(path) ||
+		(!target.empty() && (current == path || std::filesystem::equivalent(current, path, error)));
 
 	if (!sameTarget)
 	{
@@ -829,7 +831,7 @@ EResult ImGuiManager::CreateResourceEditors()
 {
 	const auto initializeClosed = [](IImGui* panel)
 	{
-		panel->Close();
+		panel->IImGui::SetOpen(false);
 		return InitializePanel(panel);
 	};
 
@@ -1427,6 +1429,17 @@ bool ImGuiManager::RequestQuit()
 {
 	if (m_DocumentController->IsBusy() || m_ResourceQuitConfirmPending)
 		return false;
+	for (auto* panel : m_ImGuiPanels)
+	{
+		if (const auto* editor = dynamic_cast<const ResourceEditorInterface*>(panel);
+			editor && editor->m_PendingDiscardAction)
+			return false;
+	}
+	if (auto* settings = dynamic_cast<UnifiedSettingsPanel*>(GetImGuiPanel(L"UnifiedSettings"));
+		settings && !settings->ResolveDraftBeforeQuit())
+		return true;
+	if (PrefabModeManager::IsCreated() && !PrefabModeManager::Get().ResolvePrefabModeBeforeQuit())
+		return true;
 
 	// 리소스 편집기는 EditorDocumentManager에 등록되지 않으므로 씬 문서 확인보다 먼저 따로 확인한다.
 	if (!CollectUnsavedResourceEditors().empty())
@@ -1619,8 +1632,7 @@ void ImGuiManager::DrawResourceQuitConfirmation()
 	}
 	else if (action == 1)
 	{
-		// 미저장 리소스 편집 내용은 버리기로 확인했으므로 씬 문서 확인 단계로 넘어간다.
-		// 씬 단계에서 취소하면 종료되지 않으며 리소스 편집 상태도 그대로 남는다.
+		// 확정한 폐기는 씬 확인과 별도로 완료한다.
 		m_ResourceQuitConfirmPending = false;
 		continueQuit = true;
 		ImGui::CloseCurrentPopup();
@@ -1635,7 +1647,10 @@ void ImGuiManager::DrawResourceQuitConfirmation()
 	}
 
 	if (continueQuit)
-		ContinueQuitRequest();
+	{
+		for (auto* editor : editors) editor->CloseResourceDocument();
+		if (CollectUnsavedResourceEditors().empty()) ContinueQuitRequest();
+	}
 }
 
 bool ImGuiManager::PreparePendingSceneSave()

@@ -4,6 +4,7 @@
 #include "ModuleBuildManager.h"
 #include "NotificationManager.h"
 #include "ShortcutManager.h"
+#include "EditorActionRegistry.h"
 #include <utility>
 
 BEGIN(Editor)
@@ -68,10 +69,11 @@ void PluginResourceEditor::Reload()
 	if (!api || api->ApiSize != sizeof(ResourcePanelPluginApi) || api->HostSize != sizeof(ResourcePanelPluginHost) ||
 		api->StateSize == 0 || api->StateSize > 1024 * 1024 || !api->PanelName || !*api->PanelName || !api->TitleKey ||
 		!api->DescriptionKey || !api->SaveActionId || !api->Supports || !api->Create || !api->Destroy || !api->Capture ||
-		!api->Open || !api->IsDirty || !api->CanSave || !api->Save || !api->Update || !api->DrawToolbar ||
+		!api->Open || !api->Discard || !api->Close || !api->IsDirty || !api->CanSave || !api->Save ||
+		!api->CanUndo || !api->CanRedo || !api->Undo || !api->Redo || !api->Update || !api->DrawToolbar ||
 		!api->DrawQuickAccess || !api->DrawContent || !api->SaveWorkspace || !api->RestoreWorkspace)
 	{
-		EDITOR_LOG_ERROR("Editor plugin {} has an invalid V1 resource panel contract", m_Target);
+		EDITOR_LOG_ERROR("Editor plugin {} has an invalid V3 resource panel contract", m_Target);
 		return;
 	}
 
@@ -141,6 +143,13 @@ void PluginResourceEditor::RegisterSaveAction()
 	});
 	if (!m_ActionRegistered)
 		EDITOR_LOG_ERROR("Editor plugin {} declares a duplicate save action: {}", m_Target, m_SaveActionId);
+	else
+	{
+		const std::string_view saveId = m_SaveActionId;
+		const auto prefix = saveId.ends_with(".Save") ? saveId.substr(0, saveId.size() - 5) : saveId;
+		EditorActionRegistry::RegisterDocumentHistory(prefix, m_DisplayNameKey.c_str(), EShortcutContext::PluginResource,
+			[target = m_Target] { return ImGuiManager::Get().GetPluginResourceEditor(target); }, m_Name);
+	}
 }
 
 bool PluginResourceEditor::CanSave() const
@@ -171,11 +180,44 @@ bool PluginResourceEditor::HasUnsavedResourceChanges() const
 	return m_Api && m_Api->IsDirty(m_Session);
 }
 
+bool PluginResourceEditor::CanUndoDocument() const
+{
+	return m_Api && m_Api->CanUndo(m_Session);
+}
+
+bool PluginResourceEditor::CanRedoDocument() const
+{
+	return m_Api && m_Api->CanRedo(m_Session);
+}
+
+void PluginResourceEditor::UndoDocument()
+{
+	if (CanUndoDocument()) m_Api->Undo(m_Session);
+}
+
+void PluginResourceEditor::RedoDocument()
+{
+	if (CanRedoDocument()) m_Api->Redo(m_Session);
+}
+
 void PluginResourceEditor::SetTargetResource(const std::filesystem::path& path)
 {
-	ResourceEditorInterface::SetTargetResource(path);
-	if (m_Api)
-		m_Api->Open(m_Session, path.wstring().c_str());
+	if (!m_Api) return;
+	if (m_Api->Open(m_Session, path.wstring().c_str(), m_TargetResourcePath.wstring().c_str()))
+		ResourceEditorInterface::SetTargetResource(path);
+	else
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+}
+
+bool PluginResourceEditor::RestoreSavedResource()
+{
+	return m_Api && m_Api->Discard(m_Session, m_TargetResourcePath.wstring().c_str());
+}
+
+void PluginResourceEditor::ReleaseResourceDocument()
+{
+	if (m_Api) m_Api->Close(m_Session);
 }
 
 std::string PluginResourceEditor::GetDescription() const
@@ -198,8 +240,16 @@ ImVec2 PluginResourceEditor::GetInitialResourceWindowSize() const
 
 void PluginResourceEditor::DrawCustomToolbar()
 {
-	if (m_Api)
-		m_Api->DrawToolbar(m_Session, MakeResourcePluginHost());
+	if (!m_Api)
+	{
+		ResourceEditorInterface::DrawCustomToolbar();
+		return;
+	}
+
+	auto host = MakeResourcePluginHost();
+	host.Panel = this;
+	host.DrawCloseMenuItem = [](void* panel) { static_cast<PluginResourceEditor*>(panel)->DrawCloseMenuItem(); };
+	m_Api->DrawToolbar(m_Session, host);
 }
 
 void PluginResourceEditor::DrawCustomQuickAccess()

@@ -1,4 +1,6 @@
 ﻿#include "ParticleEditorPanel.h"
+#include <utility>
+#include "EffectDocumentFile.h"
 #include "EditorUI.h"
 #include "Functions.h"
 #include "ResourcePicker.h"
@@ -86,6 +88,7 @@ ParticleEditorPanel::ParticleEditorPanel()
 
 ParticleEditorPanel::~ParticleEditorPanel()
 {
+	ReleaseResourceDocument();
 	m_PreviewWidget.Free();
 }
 
@@ -96,26 +99,54 @@ bool ParticleEditorPanel::IsSupported(const std::filesystem::path& assetPath) co
 
 void ParticleEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
-	ResourceEditorInterface::SetTargetResource(assetPath);
-	m_IsDirty = false;
-	m_SelectedEmitterIndex = 0;
+	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+	auto& manager = Engine::ResourceManager::Get();
+	auto candidate = manager.GetResourceHandle<Engine::ParticleEffect>(path);
+	if (!candidate.IsValid())
+		candidate = Engine::ResourceHandle<Engine::ParticleEffect>(manager.LoadFile(path));
+	if (!candidate.Get() || !RestoreSavedChanges()) return;
+
+	ReleaseResourceDocument();
+	m_TargetResourcePath = assetPath;
+	m_EffectHandle = std::move(candidate);
+	m_SelectedEmitterIndex = m_EffectHandle.Get()->GetEmitterCount() > 0 ? 0 : -1;
+	SetupPreview();
+}
+
+static void ApplySavedParticleEffect(Engine::ParticleEffect& effect, Engine::ParticleEffect& saved)
+{
+	effect.GetEmitters().swap(saved.GetEmitters());
+	effect.SetPlaybackDuration(saved.GetPlaybackDuration());
+	effect.IncreaseVersion();
+}
+
+bool ParticleEditorPanel::RestoreSavedResource()
+{
+	if (m_TargetResourcePath.empty()) return true;
+	auto* effect = m_EffectHandle.Get();
+	auto saved = MakeEffectDocument<Engine::ParticleEffect>();
+	if (!effect || !saved || !LoadEffectDocument(*saved, m_TargetResourcePath)) return false;
+
+	ApplySavedParticleEffect(*effect, *saved);
+	return true;
+}
+
+void ParticleEditorPanel::ReleaseResourceDocument()
+{
 	m_History.Clear();
+	m_SavedStateId = m_History.GetCurrentStateId();
+	m_PreEditSnapshot.clear();
+	m_HasPreEditSnapshot = false;
+	m_SelectedEmitterIndex = -1;
+	const auto handle = m_EffectHandle.GetRawHandle();
+	m_EffectHandle.Reset();
+	SetupPreview();
+	if (std::exchange(m_OwnsTemporaryEffect, false)) Engine::ResourceManager::Get().ReleaseResource(handle);
+	RestartSimulation();
 	m_Timeline.Drag.reset();
 	m_Timeline.Fit();
-	m_HasPreEditSnapshot = false;
-
-	const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
-	auto& rm = Engine::ResourceManager::Get();
-
-	m_EffectHandle = rm.GetResourceHandle<Engine::ParticleEffect>(relPath);
-	if (!m_EffectHandle.IsValid())
-	{
-		auto handle = rm.LoadFile(relPath);
-		if (handle.IsValid())
-			m_EffectHandle = Engine::ResourceHandle<Engine::ParticleEffect>(handle);
-	}
-
-	SetupPreview();
+	m_TimelineSeek.reset();
+	m_StatusMessage.clear();
 }
 
 void ParticleEditorPanel::CaptureState(EditorWorkspace& workspace) const
@@ -150,10 +181,9 @@ void ParticleEditorPanel::PushSnapshot(const std::string& label)
 	auto after = CaptureSnapshot();
 	auto cmd = std::make_unique<ParticleEffectCommand>(
 		effect, std::move(m_PreEditSnapshot), std::move(after), label,
-		[this]() { SetupPreview(); m_IsDirty = true; });
+		[this]() { SetupPreview(); });
 	m_History.Record(std::move(cmd));
 	m_HasPreEditSnapshot = false;
-	m_IsDirty = true;
 }
 
 void ParticleEditorPanel::Undo()
@@ -179,6 +209,11 @@ void ParticleEditorPanel::NewEffect()
 {
 	auto newEffect = Engine::ParticleEffect::Create();
 	if (!newEffect) return;
+	if (!RestoreSavedChanges())
+	{
+		Engine::ResourceManager::Get().DestroyResource(newEffect);
+		return;
+	}
 
 	Engine::ParticleEmitterData defEmitter;
 	defEmitter.name = LOCAL("ParticleEditor.NewEmitterName");
@@ -195,15 +230,13 @@ void ParticleEditorPanel::NewEffect()
 	defEmitter.sizeEnd = Engine::vec2(0.1f, 0.1f);
 	newEffect->AddEmitter(defEmitter);
 
-	m_TargetResourcePath = "Resources/Effect/NewEffect.bameffect.json";
-	const std::wstring relKey = L"Resources/Effect/NewEffect.bameffect.json";
-	m_EffectHandle = Engine::ResourceManager::Get().AddResource<Engine::ParticleEffect>(relKey, newEffect);
+	ReleaseResourceDocument();
+	m_TargetResourcePath.clear();
+	static uint64 nextDraft = 0;
+	const auto key = L"EditorParticleDraft_" + std::to_wstring(++nextDraft);
+	m_EffectHandle = Engine::ResourceManager::Get().AddResource<Engine::ParticleEffect>(key, newEffect);
+	m_OwnsTemporaryEffect = true;
 	m_SelectedEmitterIndex = 0;
-	m_IsDirty = true;
-	m_History.Clear();
-	m_Timeline.Drag.reset();
-	m_Timeline.Fit();
-	m_HasPreEditSnapshot = false;
 	SetupPreview();
 }
 
@@ -221,8 +254,7 @@ void ParticleEditorPanel::SaveEffectAs()
 	std::wstring savePath;
 	if (FileDialogs::SaveFileDialog(savePath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json" } }, L"NewEffect.bameffect.json", L"bameffect.json", EFileDialogContext::ParticleSave))
 	{
-		m_TargetResourcePath = std::filesystem::path(savePath);
-		SaveEffect();
+		SaveEffectTo(std::filesystem::path(savePath));
 	}
 }
 
@@ -341,31 +373,43 @@ void ParticleEditorPanel::InvalidateTimelinePreview()
 {
 	m_FixedPreview = false;
 	ScrubTime(m_TimelineSeek.value_or(m_SimulatedTime));
-	m_IsDirty = true;
 }
 
 void ParticleEditorPanel::SaveEffect()
+{
+	if (m_TargetResourcePath.empty()) SaveEffectAs();
+	else SaveEffectTo(m_TargetResourcePath);
+}
+
+void ParticleEditorPanel::SaveEffectTo(const std::filesystem::path& path)
 {
 	auto* effect = m_EffectHandle.Get();
 	if (!effect) return;
 	if (m_HasPreEditSnapshot) PushSnapshot(LOCAL("History.Command.EditProperty"));
 
-	if (m_TargetResourcePath.empty())
+	const bool copyToNewDocument = !m_OwnsTemporaryEffect && !m_TargetResourcePath.empty() &&
+		!IsSameEffectDocument(m_TargetResourcePath, path);
+	if (copyToNewDocument)
 	{
-		SaveEffectAs();
-		return;
+		auto copy = SaveEffectDocumentCopy(*effect, m_TargetResourcePath, path, ApplySavedParticleEffect);
+		if (!copy.Get())
+		{
+			m_StatusMessage = LOCAL("ResourceEditor.SaveFailed");
+			return;
+		}
+		ReleaseResourceDocument();
+		m_EffectHandle = std::move(copy);
+		m_SelectedEmitterIndex = m_EffectHandle.Get()->GetEmitterCount() > 0 ? 0 : -1;
+		SetupPreview();
 	}
-
-	auto fullPath = Engine::PlatformPath::ResolveProjectRelative(m_TargetResourcePath);
-	if (effect->SaveToFile(fullPath.wstring()))
-	{
-		m_IsDirty = false;
-		m_StatusMessage = LOCAL("ResourceEditor.SaveSuccess");
-	}
-	else
+	else if (!effect->SaveToFile(Engine::PlatformPath::ResolveProjectRelative(path).wstring()))
 	{
 		m_StatusMessage = LOCAL("ResourceEditor.SaveFailed");
+		return;
 	}
+	m_TargetResourcePath = path;
+	m_SavedStateId = m_History.GetCurrentStateId();
+	m_StatusMessage = LOCAL("ResourceEditor.SaveSuccess");
 }
 
 void ParticleEditorPanel::DrawCustomContent()
@@ -386,19 +430,16 @@ void ParticleEditorPanel::DrawCustomToolbar()
 		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuOpen")))
 			RunWithDiscardConfirmation([this] { OpenEffect(); });
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Save"), false, hasResource && m_IsDirty))
-			SaveEffect();
+		DrawSaveMenuItem();
 		if (ImGui::MenuItem(LOCAL_CSTR("ParticleEditor.MenuSaveAs"), nullptr, false, hasResource))
 			SaveEffectAs();
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuUndo").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Undo"), false, m_History.CanUndo()))
-			Undo();
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuRedo").c_str(), ShortcutManager::Get().GetShortcutHint("ParticleTimeline.Redo"), false, m_History.CanRedo()))
-			Redo();
+		DrawHistoryMenuItems("ParticleTimeline");
 		ImGui::EndMenu();
 	}
 }
@@ -415,9 +456,8 @@ void ParticleEditorPanel::DrawCustomQuickAccess()
 	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen"))
 		RunWithDiscardConfirmation([this] { OpenEffect(); });
 
-	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Save", ICON_FA_FLOPPY_DISK, "EditorCommon.Save");
-	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
-	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "ParticleTimeline");
 	EditorUI::DrawTimelineTransport(toolbar, "ParticleTimeline", m_IsPlaying, m_IsLooping);
 	ImGui::BeginDisabled(!hasResource);
 	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
@@ -480,10 +520,9 @@ void ParticleEditorPanel::DrawEmitterList()
 		auto afterSnap = CaptureSnapshot();
 		auto cmd = std::make_unique<ParticleEffectCommand>(
 			effect, std::move(beforeSnap), std::move(afterSnap), "Add Emitter",
-			[this]() { SetupPreview(); m_IsDirty = true; });
+			[this]() { SetupPreview(); });
 		m_History.Record(std::move(cmd));
 
-		m_IsDirty = true;
 		SetupPreview();
 	}
 	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipAddEmitter"));
@@ -521,9 +560,8 @@ void ParticleEditorPanel::DrawEmitterList()
 				auto afterSnap = CaptureSnapshot();
 				auto cmd = std::make_unique<ParticleEffectCommand>(
 					effect, std::move(beforeSnap), std::move(afterSnap), "Toggle Emitter",
-					[this]() { SetupPreview(); m_IsDirty = true; });
+					[this]() { SetupPreview(); });
 				m_History.Record(std::move(cmd));
-				m_IsDirty = true;
 			}
 
 			// 컬럼 1: 이미터 이름 및 선택 (텍스트가 길어도 컬럼 2로 넘치지 않음)
@@ -677,7 +715,7 @@ bool ParticleEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction acti
 	const auto* effect = m_EffectHandle.Get();
 	if (!m_Open || !effect || m_Timeline.Drag) return false;
 	if (action == Undo) return m_HasPreEditSnapshot || m_History.CanUndo();
-	if (action == Redo) return m_History.CanRedo();
+	if (action == Redo) return !m_HasPreEditSnapshot && m_History.CanRedo();
 	if (action == Delete) return effect->GetEmitter(m_SelectedEmitterIndex) != nullptr;
 	return true;
 }
@@ -795,7 +833,6 @@ void ParticleEditorPanel::DrawEmitterInspector()
 			m_PreEditSnapshot = std::move(before);
 			m_HasPreEditSnapshot = true;
 		}
-		m_IsDirty = true;
 	}
 
 	ImGui::PopID();

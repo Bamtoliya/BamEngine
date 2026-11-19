@@ -239,9 +239,11 @@ EEditorSettingsSaveStatus EditorSettingsService::SaveProjectSettings(const Engin
 {
     if (m_ProjectRoot.empty())
         return EEditorSettingsSaveStatus::Failed;
-    m_ProjectSettings = settings;
     const std::filesystem::path projectPath = m_ProjectRoot / "Config" / "Project.json";
-    return WriteEditorSettingsFile(m_ProjectSettings, projectPath, m_SettingsRegistry, true, "ProjectSettings");
+    const auto result = WriteEditorSettingsFile(settings, projectPath, m_SettingsRegistry, true, "ProjectSettings");
+    if (result == EEditorSettingsSaveStatus::Saved)
+        m_ProjectSettings = settings;
+    return result;
 }
 
 void EditorSettingsService::CaptureWindowState(const EditorApplicationState& state)

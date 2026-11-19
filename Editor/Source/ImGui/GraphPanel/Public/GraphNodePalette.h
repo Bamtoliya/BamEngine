@@ -49,6 +49,13 @@ inline std::vector<GraphNodeCandidate> FindGraphNodeCandidates(const Engine::Gra
 	if (source.Node != 0 && !sourcePin) return candidates;
 	for (const auto& type : registry.GetTypes(graph.GetDomain()))
 	{
+		// Variable node definitions can outlive a document's current variable list.
+		constexpr std::string_view getPrefix = "Variable.Get.";
+		constexpr std::string_view setPrefix = "Variable.Set.";
+		if ((type.starts_with(getPrefix) && !graph.FindVariable(type.substr(getPrefix.size()))) ||
+			(type.starts_with(setPrefix) && !graph.FindVariable(type.substr(setPrefix.size()))))
+			continue;
+
 		if (!sourcePin)
 		{
 			candidates.push_back({ type, {} });

@@ -115,9 +115,16 @@ namespace Editor
 			}
 			else if (actionIdx == 1) // 확인
 			{
-				if (m_TargetCurve) *m_TargetCurve = m_WorkingCurve;
-				if (m_OnApplied) m_OnApplied();
-				applied = true;
+				applied = m_TargetCurve && !std::ranges::equal(m_TargetCurve->keys, m_WorkingCurve.keys,
+					[](const Engine::CurveKey& lhs, const Engine::CurveKey& rhs) {
+						return lhs.time == rhs.time && lhs.value == rhs.value && lhs.inTangent == rhs.inTangent &&
+							lhs.outTangent == rhs.outTangent && lhs.interpMode == rhs.interpMode;
+					});
+				if (applied)
+				{
+					*m_TargetCurve = m_WorkingCurve;
+					if (m_OnApplied) m_OnApplied();
+				}
 				m_IsOpen = false;
 				ImGui::CloseCurrentPopup();
 			}

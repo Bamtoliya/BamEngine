@@ -30,10 +30,10 @@ public:
 	virtual void ProcessEvent(const SDL_Event* event) {}
 public:
 	bool IsOpen() const { return m_Open; }
-	void SetOpen(bool open) { m_Open = open; }
-	void ToggleOpen() { m_Open = !m_Open; }
+	virtual void SetOpen(bool open) { m_Open = open; }
+	void ToggleOpen() { SetOpen(!m_Open); }
 	void Open() { m_Open = true; }
-	void Close() { m_Open = false; }
+	void Close() { SetOpen(false); }
 	void Focus() { m_Open = true; m_FocusRequested = true; }
 	bool IsFocused() const { return m_Focused; }
 	virtual EShortcutContext GetShortcutContext() const { return EShortcutContext::Global; }

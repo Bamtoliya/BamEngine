@@ -121,6 +121,8 @@ private:
 
 private:
 	void DrawCustomQuickAccess() override;
+	void ReleaseResourceDocument() override;
+	const char* GetSaveActionId() const override { return "AnimationTimeline.Save"; }
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1060.0f, 660.0f); }
 	void DrawCustomToolbar() override;

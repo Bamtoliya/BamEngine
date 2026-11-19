@@ -4,6 +4,7 @@
 #include "Material.h"
 #include "MaterialInstance.h"
 #include "ResourceManager.h"
+#include "AssetPathRelocation.h"
 #include "PlatformPath.h"
 #include "Functions.h"
 #include "ImGuiManager.h"
@@ -11,6 +12,8 @@
 #include "LocalizationManager.h"
 #include "ResourcePicker.h"
 #include "AssetCache.h"
+#include "NotificationManager.h"
+#include <archive/JsonArchive.h>
 
 namespace
 {
@@ -56,24 +59,51 @@ bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 
 void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
+	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+	auto& manager = Engine::ResourceManager::Get();
+	auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
+	if (!candidate.IsValid())
+		candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
+	if (!candidate.Get() || !RestoreSavedChanges()) return;
+
 	m_TargetResourcePath = assetPath;
-	m_IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath);
-	m_Material = nullptr;
-	m_MaterialHandle = {};
-	m_IsDirty = false;
-
-	const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
-	auto& rm = Engine::ResourceManager::Get();
-
-	m_MaterialHandle = rm.GetResourceHandle<Engine::MaterialInterface>(relPath);
-	if (!m_MaterialHandle.IsValid())
-	{
-		auto handle = rm.LoadFile(relPath);
-		if (handle.IsValid())
-			m_MaterialHandle = Engine::ResourceHandle<Engine::MaterialInterface>(handle);
-	}
-
+	m_IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(assetPath);
+	m_PreviewRenderer.ReleaseMaterial();
+	m_MaterialHandle = std::move(candidate);
 	m_Material = m_MaterialHandle.Get();
+	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
+	else m_History.Clear();
+}
+
+bool MaterialEditor::CanSaveDocument() const
+{
+	return m_Open && m_Material && !m_IsReadOnly;
+}
+
+bool MaterialEditor::RestoreSavedResource()
+{
+	if (!m_Material) return false;
+	archive::JsonArchive draft;
+	if (!m_Material->WriteArchive(draft)) return false;
+	if (m_Material->Reload(m_TargetResourcePath) != EResult::Success)
+	{
+		if (const auto restored = m_Material->ReadArchive(draft); !restored)
+			EDITOR_LOG_ERROR("Could not restore the material draft: {}", restored.Field);
+		return false;
+	}
+	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
+	else m_History.Clear();
+	if (AssetCache::IsCreated()) AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
+	return true;
+}
+
+void MaterialEditor::ReleaseResourceDocument()
+{
+	m_PreviewRenderer.ReleaseMaterial();
+	m_Material = nullptr;
+	m_MaterialHandle.Reset();
+	m_History.Clear();
+	m_IsReadOnly = false;
 }
 
 void MaterialEditor::Update(f32 dt)
@@ -144,10 +174,12 @@ void MaterialEditor::DrawCustomContent()
 		DrawParameters();
 	}
 	ImGui::EndChild();
+	if (!IsHistoryGestureActive()) CommitDocumentEdit();
 }
 
 void MaterialEditor::SaveTarget()
 {
+	if (!CommitDocumentEdit()) return;
 	if (!m_Material || m_IsReadOnly)
 		return;
 
@@ -160,49 +192,104 @@ void MaterialEditor::SaveTarget()
 	if (result != EResult::Success)
 	{
 		EDITOR_LOG_ERROR("Failed to save material: {}", path);
+		NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL_FMT("Notification.SaveFailed", path), ELogLevel::Error);
 		return;
 	}
 
-	m_IsDirty = false;
+	m_History.MarkSaved();
 	if (AssetCache::IsCreated())
 		AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
 	EDITOR_LOG_INFO("Material saved: {}", path);
 }
 
+std::optional<std::string> MaterialEditor::CaptureDocument() const
+{
+	archive::JsonArchive ar;
+	std::string snapshot;
+	if (!m_Material || !m_Material->WriteArchive(ar) || !ar.ToJson(snapshot)) return std::nullopt;
+	return snapshot;
+}
+
+bool MaterialEditor::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (!PrepareTargetPathRelocation(relocation)) return false;
+	if (m_Material)
+	{
+		// Captured material archives contain resource paths. Establish a new baseline after those paths can change.
+		relocation.AfterCommit([this] {
+			if (auto snapshot = CaptureDocument()) m_History.Reset(std::move(*snapshot));
+			else m_History.Clear();
+		});
+	}
+	return true;
+}
+
+bool MaterialEditor::CommitDocumentEdit()
+{
+	if (!m_History.HasPendingEdit()) return true;
+	auto snapshot = CaptureDocument();
+	return snapshot && m_History.Record(std::move(*snapshot),
+		[this](const auto& value) { return ApplyDocumentSnapshot(value); }, LOCAL("History.Command.EditProperty"));
+}
+
+bool MaterialEditor::ApplyDocumentSnapshot(const std::string& snapshot)
+{
+	if (!m_Material) return false;
+	archive::JsonArchive ar;
+	archive::JsonArchive previous;
+	if (!ar.Parse(snapshot) || !m_Material->WriteArchive(previous)) return false;
+	if (!m_Material->ReadArchive(ar))
+	{
+		(void)m_Material->ReadArchive(previous);
+		return false;
+	}
+	m_Material->IncreaseVersion();
+	m_PreviewDirtyTimer = 0.5f;
+	return true;
+}
+
+bool MaterialEditor::CanUndoDocument() const
+{
+	return CanSaveDocument() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
+}
+
+bool MaterialEditor::CanRedoDocument() const
+{
+	return CanSaveDocument() && m_History.CanRedo();
+}
+
+void MaterialEditor::UndoDocument()
+{
+	if (CanUndoDocument() && CommitDocumentEdit()) m_History.Undo();
+}
+
+void MaterialEditor::RedoDocument()
+{
+	if (CanRedoDocument()) m_History.Redo();
+}
+
 void MaterialEditor::DrawCustomToolbar()
 {
-	if (!m_Material) return;
-	auto& sm = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
-		ImGui::BeginDisabled(m_IsReadOnly);
-		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("MaterialEditor.Save")))
-			SaveTarget();
-
-		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str()))
-		{
-			if (m_Material->Reload(m_TargetResourcePath) == EResult::Success)
-			{
-				m_IsDirty = false;
-				if (AssetCache::IsCreated())
-					AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
-				EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
-			}
-		}
-		ImGui::EndDisabled();
-
+		DrawSaveMenuItem();
+		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str(), nullptr, false, CanSaveDocument() && HasUnsavedResourceChanges()))
+			RunWithDiscardConfirmation([this] { RestoreSavedChanges(); }, false);
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("MaterialEditor.ViewMenu").c_str()))
 	{
-		
-		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL("MaterialEditor.ResetCamera")).c_str(), sm.GetShortcutHint("Viewport.Focus")))
+		const auto& shortcuts = ShortcutManager::Get();
+		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL("MaterialEditor.ResetCamera")).c_str(),
+			shortcuts.GetShortcutHint("Viewport.Focus")))
 		{
 			m_PreviewRenderer.GetWidget().FocusTarget(Engine::vec3(0.0f, 0.0f, 0.0f), 3.0f);
 		}
 
-		if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("MaterialEditor.ToggleGrid")).c_str(), sm.GetShortcutHint("Viewport.ToggleGrid"), m_PreviewRenderer.GetWidget().IsGridVisible()))
+		if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("MaterialEditor.ToggleGrid")).c_str(),
+			shortcuts.GetShortcutHint("Viewport.ToggleGrid"), m_PreviewRenderer.GetWidget().IsGridVisible()))
 		{
 			m_PreviewRenderer.GetWidget().ToggleGrid();
 		}
@@ -222,6 +309,12 @@ void MaterialEditor::DrawCustomToolbar()
 
 		ImGui::EndMenu();
 	}
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+	{
+		DrawHistoryMenuItems("MaterialEditor");
+		ImGui::EndMenu();
+	}
 }
 
 void MaterialEditor::DrawCustomQuickAccess()
@@ -230,21 +323,10 @@ void MaterialEditor::DrawCustomQuickAccess()
 
 	EditorUI::ToolbarLayout toolbar;
 
-	EditorUI::IconButtonOptions editOptions;
-	editOptions.Enabled = !m_IsReadOnly;
-	if (toolbar.Icon("SaveMaterial", ICON_FA_FLOPPY_DISK, "EditorCommon.Save", editOptions))
-		SaveTarget();
-
-	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert", editOptions))
-	{
-		if (m_Material && m_Material->Reload(m_TargetResourcePath) == EResult::Success)
-		{
-			m_IsDirty = false;
-			if (AssetCache::IsCreated())
-				AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
-			EDITOR_LOG_INFO("Material reverted: {}", m_TargetResourcePath.string());
-		}
-	}
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "MaterialEditor");
+	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert", { .Enabled = CanSaveDocument() && HasUnsavedResourceChanges() }))
+		RunWithDiscardConfirmation([this] { RestoreSavedChanges(); }, false);
 
 	if (toolbar.Icon("FocusMaterial", ICON_FA_CROSSHAIRS, "MaterialEditor.ResetCamera"))
 	{
@@ -261,7 +343,7 @@ void MaterialEditor::DrawCustomQuickAccess()
 	// 파일 상태 배지
 	const std::string fileName = m_TargetResourcePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
-	toolbar.Text(("[" + fileName + (m_IsDirty ? " *]" : "]")).c_str());
+	toolbar.Text(("[" + fileName + (HasUnsavedResourceChanges() ? " *]" : "]")).c_str());
 
 	if (m_IsReadOnly)
 	{
@@ -297,7 +379,7 @@ void MaterialEditor::DrawPipelineSettings()
 		if (Editor::DrawInspectorResourcePicker(baseHandle, !m_IsReadOnly) && !m_IsReadOnly)
 		{
 			inst->SetBaseMaterial(baseHandle);
-			m_IsDirty = true;
+			m_History.MarkEdited();
 		}
 		ImGui::PopID();
 		ImGui::Separator();
@@ -316,7 +398,7 @@ void MaterialEditor::DrawPipelineSettings()
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.BlendMode").c_str(), &blendIdx, blendModes))
 	{
 		m_Material->SetBlendMode(blendValues[blendIdx]);
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// Cull Mode
@@ -325,7 +407,7 @@ void MaterialEditor::DrawPipelineSettings()
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.CullMode").c_str(), &cullIdx, cullModes))
 	{
 		m_Material->SetCullMode(static_cast<Engine::ECullMode>(cullIdx));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// Fill Mode
@@ -334,7 +416,7 @@ void MaterialEditor::DrawPipelineSettings()
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.FillMode").c_str(), &fillIdx, fillModes))
 	{
 		m_Material->SetFillMode(static_cast<Engine::EFillMode>(fillIdx));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// Depth Mode
@@ -343,7 +425,7 @@ void MaterialEditor::DrawPipelineSettings()
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.DepthMode").c_str(), &depthIdx, depthModes))
 	{
 		m_Material->SetDepthMode(static_cast<Engine::EDepthMode>(depthIdx));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// Depth Compare Op
@@ -352,7 +434,7 @@ void MaterialEditor::DrawPipelineSettings()
 	if (LocalizedCombo(LOCAL_LABEL("MaterialEditor.DepthCompareOp").c_str(), &opIdx, compareOps))
 	{
 		m_Material->SetDepthCompareOp(static_cast<Engine::ECompareOp>(opIdx));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	ImGui::EndDisabled();
@@ -377,7 +459,7 @@ void MaterialEditor::DrawShaderSettings()
 			if (Editor::DrawInspectorResourcePicker(currentShader, !m_IsReadOnly) && !m_IsReadOnly)
 			{
 				onAssign(currentShader);
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 			ImGui::PopID();
 		};
@@ -443,7 +525,7 @@ void MaterialEditor::DrawShaderSettings()
 	if (passToRemove >= 0)
 	{
 		m_Material->RemovePassShader(static_cast<Engine::ERenderPassType>(passToRemove));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// 새 패스 셰이더 추가
@@ -459,7 +541,7 @@ void MaterialEditor::DrawShaderSettings()
 		{
 			// 빈 핸들 대신 기존 기본 셰이더를 초기값으로 복사하여 크래시 방지
 			m_Material->SetPassShader(passType, m_Material->GetVertexShaderHandle(), m_Material->GetPixelShaderHandle());
-			m_IsDirty = true;
+			m_History.MarkEdited();
 		}
 	}
 	ImGui::PopID();
@@ -596,13 +678,13 @@ void MaterialEditor::DrawTextureBindings()
 					if (row.slot > 0 && ImGui::SmallButton("-"))
 					{
 						m_Material->SetTextureBinding(row.name, row.slot - 1, row.texture);
-						m_IsDirty = true;
+						m_History.MarkEdited();
 					}
 					ImGui::SameLine();
 					if (ImGui::SmallButton("+"))
 					{
 						m_Material->SetTextureBinding(row.name, row.slot + 1, row.texture);
-						m_IsDirty = true;
+						m_History.MarkEdited();
 					}
 				}
 			}
@@ -651,7 +733,7 @@ void MaterialEditor::DrawTextureBindings()
 			if (Editor::DrawInspectorResourcePicker(texHandle, !m_IsReadOnly, false) && !m_IsReadOnly)
 			{
 				m_Material->SetTextureBinding(row.name, row.slot, texHandle);
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 
 			// Column 4: Action (인스턴스 오버라이드 해제 또는 삭제)
@@ -683,7 +765,7 @@ void MaterialEditor::DrawTextureBindings()
 	if (slotToRemove >= 0)
 	{
 		m_Material->RemoveTextureBindingBySlot(static_cast<uint32>(slotToRemove));
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 
 	// 4. 새 슬롯 원클릭 추가 (다음 빈 슬롯 자동 계산)
@@ -699,7 +781,7 @@ void MaterialEditor::DrawTextureBindings()
 	{
 		std::string finalName = "Texture_" + std::to_string(nextAvailableSlot);
 		m_Material->SetTextureBinding(finalName, nextAvailableSlot, {});
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 	ImGui::PopID();
 
@@ -746,7 +828,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::DragFloat("##val", &val, 0.01f))
 				{
 					m_Material->SetFloat(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -756,7 +838,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::DragFloat2("##val", &val.x, 0.01f))
 				{
 					m_Material->SetFloat2(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -766,7 +848,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::ColorEdit3("##val", &val.x))
 				{
 					m_Material->SetFloat3(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -776,7 +858,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::ColorEdit4("##val", &val.x))
 				{
 					m_Material->SetFloat4(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -786,7 +868,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::DragInt("##val", &val))
 				{
 					m_Material->SetInt(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -796,7 +878,7 @@ void MaterialEditor::DrawParameters()
 				if (ImGui::Checkbox("##val", &val))
 				{
 					m_Material->SetBool(name, val);
-					m_IsDirty = true;
+					m_History.MarkEdited();
 				}
 				break;
 			}
@@ -814,7 +896,7 @@ void MaterialEditor::DrawParameters()
 	if (!paramToRemove.empty())
 	{
 		m_Material->RemoveParameter(paramToRemove);
-		m_IsDirty = true;
+		m_History.MarkEdited();
 	}
 	// 2. 새 파라미터 추가 바 반응형 배치 (도킹 폭 260px 잘림 방지)
 	ImGui::Spacing();
@@ -846,7 +928,7 @@ void MaterialEditor::DrawParameters()
 		case 4: m_Material->SetInt(m_NewParamName, 0); break;
 		case 5: m_Material->SetBool(m_NewParamName, false); break;
 		}
-		m_IsDirty = true;
+		m_History.MarkEdited();
 		m_NewParamName[0] = '\0';
 	}
 	ImGui::EndDisabled();

@@ -96,7 +96,7 @@ AnimationTimelinePanel::AnimationTimelinePanel()
 	s_ActivePanel = this;
 	m_Name = L"AnimationTimelinePanel";
 	m_DisplayNameKey = "Timeline.Title";
-	Close();
+	IImGui::SetOpen(false);
 
 	// 엔진 표준 뷰포트 위젯 초기화 (그리드, 스튜디오 조명, 카메라 컨트롤러 내장)
 	m_PreviewWidget.Initialize(L"TimelinePreview", 512, 512, true);
@@ -284,6 +284,24 @@ void AnimationTimelinePanel::Redo()
 {
 	if (!CanRedo()) return;
 	(void)m_History.Redo();
+}
+
+void AnimationTimelinePanel::ReleaseResourceDocument()
+{
+	SetTargetModel({});
+	m_NotifyTracks.clear();
+	m_CameraTracks.clear();
+	m_CurrentClipName.clear();
+	m_CurrentAssetPath.clear();
+	m_Selection = {};
+	m_IsDraggingItem = false;
+	m_IsPlaying = false;
+	m_CurrentTime = m_PrevTime = 0.0f;
+	m_Duration = 2.0f;
+	m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime;
+	ResetZoom();
+	ResetEditHistory();
+	MarkDocumentSaved();
 }
 
 void AnimationTimelinePanel::ClearPreviewVFX()
@@ -1073,22 +1091,20 @@ void AnimationTimelinePanel::DrawCustomContent()
 
 void AnimationTimelinePanel::DrawCustomToolbar()
 {
-	auto& shortcuts = ShortcutManager::Get();
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Open").c_str())) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Save"))) SaveTimelineFile();
+		DrawSaveMenuItem();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str())) SaveTimelineFileAs();
 		ImGui::Separator();
 		// 기본 구현의 닫기를 대신하므로 직접 둔다(19-7절).
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str())) OnResourceCloseRequested();
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Undo").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Undo"), false, CanUndo())) Undo();
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Redo").c_str(), shortcuts.GetShortcutHint("AnimationTimeline.Redo"), false, CanRedo())) Redo();
+		DrawHistoryMenuItems("AnimationTimeline");
 		ImGui::EndMenu();
 	}
 }
@@ -1132,9 +1148,8 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "Timeline.OpenTimeline")) RunWithDiscardConfirmation([this] { OpenTimelineFile(); });
 	// 저장·실행 취소·다시 실행은 등록된 액션을 실행해 툴팁에 단축키 힌트가 함께 표시된다(19-7절 3항).
-	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Save", ICON_FA_FLOPPY_DISK, "Timeline.SaveTimeline");
-	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
-	EditorUI::DrawTimelineAction(toolbar, "AnimationTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "AnimationTimeline");
 
 	if (toolbar.Button("Sync", ICON_FA_ARROWS_ROTATE, "Timeline.SyncEntity"))
 	{

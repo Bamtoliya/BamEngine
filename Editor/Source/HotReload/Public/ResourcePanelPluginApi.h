@@ -20,6 +20,8 @@ namespace Editor
 		const char* (*GetShortcutHint)(const char*);
 		bool (*CanExecuteAction)(const char*);
 		bool (*ExecuteAction)(const char*);
+		void* Panel;
+		void (*DrawCloseMenuItem)(void* panel);
 	};
 
 	struct ResourcePanelPluginApi
@@ -37,10 +39,16 @@ namespace Editor
 		void* (*Create)(const void* state);
 		void (*Destroy)(void* session);
 		void (*Capture)(const void* session, void* state);
-		void (*Open)(void* session, const wchar_t* path);
+		bool (*Open)(void* session, const wchar_t* path, const wchar_t* previousPath);
+		bool (*Discard)(void* session, const wchar_t* path);
+		void (*Close)(void* session);
 		bool (*IsDirty)(const void* session);
 		bool (*CanSave)(const void* session);
 		bool (*Save)(void* session, const wchar_t* path);
+		bool (*CanUndo)(const void* session);
+		bool (*CanRedo)(const void* session);
+		void (*Undo)(void* session);
+		void (*Redo)(void* session);
 		void (*Update)(void* session, float dt);
 		void (*DrawToolbar)(void* session, const ResourcePanelPluginHost&);
 		void (*DrawQuickAccess)(void* session, const ResourcePanelPluginHost&);
@@ -50,5 +58,5 @@ namespace Editor
 	};
 
 	using GetResourcePanelPluginApi = const ResourcePanelPluginApi* (*)();
-	inline constexpr char ResourcePanelPluginEntry[] = "BamGetResourcePanelPluginV1";
+	inline constexpr char ResourcePanelPluginEntry[] = "BamGetResourcePanelPluginV3";
 }

@@ -1,4 +1,6 @@
 ﻿#include "VFXEditorPanel.h"
+#include <utility>
+#include "EffectDocumentFile.h"
 #include "EditorUI.h"
 #include "ResourcePicker.h"
 #include "IconsFontAwesome7.h"
@@ -60,7 +62,7 @@ namespace
 
 	// ── 자유 함수: 커브 프리셋 행 (모달 호출 및 프리셋 버튼) ──
 	bool DrawCurvePresetRow(const char* labelKey, Engine::FloatCurve& curve, std::span<const CurvePreset> presets,
-		Editor::CurveEditorModal& modal, const std::function<void()>& onApplied)
+		Editor::CurveEditorModal& modal, const std::function<std::function<void()>()>& captureEdit)
 	{
 		EditorUI::PropertyRow(labelKey);
 		ImGui::PushID(labelKey);
@@ -69,7 +71,7 @@ namespace
 		if (EditorUI::SmallIconButton("EditCurve", ICON_FA_BEZIER_CURVE, "VFXEditor.EditCurveModal"))
 		{
 			const std::string title = LOCAL_FMT("VFXEditor.CurveModalTitle", LOCAL_CSTR(labelKey));
-			modal.Open(title, &curve, onApplied);
+			modal.Open(title, &curve, captureEdit());
 		}
 		ImGui::SameLine();
 		// 2. 빠른 프리셋 버튼들
@@ -163,6 +165,7 @@ VFXEditorPanel::VFXEditorPanel()
 
 VFXEditorPanel::~VFXEditorPanel()
 {
+	ReleaseResourceDocument();
 	m_PreviewWidget.Free();
 }
 
@@ -175,50 +178,78 @@ bool VFXEditorPanel::IsSupported(const std::filesystem::path& assetPath) const
 
 void VFXEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
-	ResourceEditorInterface::SetTargetResource(assetPath);
-	m_SelectedTrack.Clear();
+	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+	auto& manager = Engine::ResourceManager::Get();
+	auto candidate = manager.GetResourceHandle<Engine::CompositeEffect>(path);
+	if (!candidate.IsValid())
+		candidate = Engine::ResourceHandle<Engine::CompositeEffect>(manager.LoadFile(path));
+	if (!candidate.Get())
+	{
+		auto* effect = Engine::CompositeEffect::Create();
+		if (!effect) return;
+		const auto resolved = Engine::PlatformPath::ResolveProjectRelative(assetPath);
+		if (!effect->LoadFromFile(resolved.wstring()))
+		{
+			manager.DestroyResource(effect);
+			return;
+		}
+		candidate = manager.AddResource<Engine::CompositeEffect>(path, effect);
+	}
+	if (!candidate.Get() || !RestoreSavedChanges()) return;
+
+	ReleaseResourceDocument();
+	m_TargetResourcePath = assetPath;
+	m_EffectHandle = std::move(candidate);
+	m_IsLooping = m_EffectHandle.Get()->IsLooping();
+	SetupPreview();
+}
+
+static void ApplySavedCompositeEffect(Engine::CompositeEffect& effect, Engine::CompositeEffect& saved)
+{
+	effect.GetSpriteTracks().swap(saved.GetSpriteTracks());
+	effect.GetParticleTracks().swap(saved.GetParticleTracks());
+	effect.GetLightTracks().swap(saved.GetLightTracks());
+	effect.GetMeshTracks().swap(saved.GetMeshTracks());
+	effect.GetSoundTracks().swap(saved.GetSoundTracks());
+	effect.GetTrailTracks().swap(saved.GetTrailTracks());
+	effect.GetDecalTracks().swap(saved.GetDecalTracks());
+	effect.GetCameraShakeTracks().swap(saved.GetCameraShakeTracks());
+	effect.SetTotalDuration(saved.GetTotalDuration());
+	effect.SetLooping(saved.IsLooping());
+	effect.IncreaseVersion();
+}
+
+bool VFXEditorPanel::RestoreSavedResource()
+{
+	if (m_TargetResourcePath.empty()) return true;
+	auto* effect = m_EffectHandle.Get();
+	auto saved = MakeEffectDocument<Engine::CompositeEffect>();
+	if (!effect || !saved || !LoadEffectDocument(*saved, m_TargetResourcePath)) return false;
+
+	ApplySavedCompositeEffect(*effect, *saved);
+	return true;
+}
+
+void VFXEditorPanel::ReleaseResourceDocument()
+{
+	StopPreviewSounds();
+	auto* scene = m_PreviewWidget.GetScene();
+	if (scene && m_PreviewEntity) (void)scene->DestroyEntity(*m_PreviewEntity);
+	m_PreviewEntity = nullptr;
+	m_InspectorEdit.reset();
+	m_CurveModal = {};
 	m_TimelineHistory.Clear();
 	MarkSaved();
+	m_SelectedTrack.Clear();
+	m_IsLooping = false;
+	m_CurrentTime = 0.0f;
+	const auto handle = m_EffectHandle.GetRawHandle();
+	m_EffectHandle.Reset();
+	if (std::exchange(m_OwnsTemporaryEffect, false)) Engine::ResourceManager::Get().ReleaseResource(handle);
 	m_Timeline.Drag.reset();
 	m_Timeline.Fit();
-
-	const std::wstring relPath = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
-	auto& rm = Engine::ResourceManager::Get();
-
-	m_EffectHandle = rm.GetResourceHandle<Engine::CompositeEffect>(relPath);
-	if (!m_EffectHandle.IsValid())
-	{
-		auto handle = rm.LoadFile(relPath);
-		if (handle.IsValid())
-			m_EffectHandle = Engine::ResourceHandle<Engine::CompositeEffect>(handle);
-	}
-
-	if (!m_EffectHandle.IsValid() && std::filesystem::exists(assetPath))
-	{
-		auto* directEffect = Engine::CompositeEffect::Create();
-		if (directEffect)
-		{
-			if (directEffect->LoadFromFile(assetPath.wstring()))
-			{
-				m_EffectHandle = rm.AddResource<Engine::CompositeEffect>(relPath, directEffect);
-			}
-			else
-			{
-				rm.DestroyResource(directEffect);
-			}
-		}
-	}
-
-	if (!m_EffectHandle.IsValid())
-	{
-		NewEffect();
-		m_TargetResourcePath = assetPath;
-	}
-	else
-	{
-		m_IsLooping = m_EffectHandle.Get()->IsLooping();
-		SetupPreview();
-	}
+	m_TimelineSeek.reset();
+	m_StatusMessage.clear();
 }
 
 void VFXEditorPanel::CaptureState(EditorWorkspace& workspace) const
@@ -517,15 +548,18 @@ void VFXEditorPanel::NewEffect()
 	desc.isLooping = false;
 	auto* newEffect = Engine::CompositeEffect::Create(&desc);
 	if (!newEffect) return;
+	if (!RestoreSavedChanges())
+	{
+		Engine::ResourceManager::Get().DestroyResource(newEffect);
+		return;
+	}
 
-	std::wstring tempKey = L"NewEffect_" + std::to_wstring(Engine::TimeManager::Get().GetTotalTime());
-	m_EffectHandle = Engine::ResourceManager::Get().AddResource<Engine::CompositeEffect>(tempKey, newEffect);
+	ReleaseResourceDocument();
 	m_TargetResourcePath.clear();
-	m_TimelineHistory.Clear();
-	m_Timeline.Drag.reset();
-	m_Timeline.Fit();
-	m_IsLooping = false;
-	m_SelectedTrack.Clear();
+	static uint64 nextDraft = 0;
+	const auto key = L"EditorVfxDraft_" + std::to_wstring(++nextDraft);
+	m_EffectHandle = Engine::ResourceManager::Get().AddResource<Engine::CompositeEffect>(key, newEffect);
+	m_OwnsTemporaryEffect = true;
 	m_UntrackedDirty = true;
 	SetupPreview();
 }
@@ -541,20 +575,39 @@ void VFXEditorPanel::OpenEffect()
 
 void VFXEditorPanel::SaveEffect()
 {
-	if (m_InspectorEdit) CommitInspectorEdit(); // 저장 직전 편집을 이력에 먼저 확정해야 저장 기준점이 맞는다
+	if (m_TargetResourcePath.empty()) SaveEffectAs();
+	else SaveEffectTo(m_TargetResourcePath);
+}
 
-	if (m_TargetResourcePath.empty())
+void VFXEditorPanel::SaveEffectTo(const std::filesystem::path& path)
+{
+	auto* effect = m_EffectHandle.Get();
+	if (!effect) return;
+	if (m_InspectorEdit) CommitInspectorEdit();
+
+	const bool copyToNewDocument = !m_OwnsTemporaryEffect && !m_TargetResourcePath.empty() &&
+		!IsSameEffectDocument(m_TargetResourcePath, path);
+	if (copyToNewDocument)
 	{
-		SaveEffectAs();
+		auto copy = SaveEffectDocumentCopy(*effect, m_TargetResourcePath, path, ApplySavedCompositeEffect);
+		if (!copy.Get())
+		{
+			m_StatusMessage = LOCAL("ResourceEditor.SaveFailed");
+			return;
+		}
+		ReleaseResourceDocument();
+		m_EffectHandle = std::move(copy);
+		m_IsLooping = m_EffectHandle.Get()->IsLooping();
+		SetupPreview();
+	}
+	else if (!effect->SaveToFile(Engine::PlatformPath::ResolveProjectRelative(path).wstring()))
+	{
+		m_StatusMessage = LOCAL("ResourceEditor.SaveFailed");
 		return;
 	}
-
-	auto* effect = m_EffectHandle.Get();
-	if (effect && effect->SaveToFile(m_TargetResourcePath.wstring()))
-	{
-		MarkSaved();
-		m_StatusMessage = "Effect saved successfully.";
-	}
+	m_TargetResourcePath = path;
+	MarkSaved();
+	m_StatusMessage = LOCAL("ResourceEditor.SaveSuccess");
 }
 
 void VFXEditorPanel::SaveEffectAs()
@@ -562,8 +615,7 @@ void VFXEditorPanel::SaveEffectAs()
 	std::wstring savePath;
 	if (FileDialogs::SaveFileDialog(savePath, { { L"Visual Effect (*.bamvfx.json)", L"*.bamvfx.json" } }, L"NewEffect.bamvfx.json", L"bamvfx.json", EFileDialogContext::General))
 	{
-		m_TargetResourcePath = std::filesystem::path(savePath);
-		SaveEffect();
+		SaveEffectTo(std::filesystem::path(savePath));
 	}
 }
 
@@ -574,12 +626,8 @@ void VFXEditorPanel::DrawCustomContent()
 		[this] { DrawInspector(); }, [this] { DrawTimeline(); },
 		[this] { DrawTransportBar(); });
 
-	// 커브 에디터 모달 팝업 렌더링 (확인 시 더티 마킹 및 타임라인 동기화)
-	if (m_CurveModal.Draw())
-	{
-		m_UntrackedDirty = true;
-		InvalidateTimelinePreview();
-	}
+	// The modal callback records the edit only when Apply changes the curve.
+	m_CurveModal.Draw();
 }
 
 void VFXEditorPanel::DrawCustomToolbar()
@@ -590,21 +638,16 @@ void VFXEditorPanel::DrawCustomToolbar()
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuNew").c_str(), nullptr)) RunWithDiscardConfirmation([this] { NewEffect(); });
 		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuOpen").c_str(), nullptr)) RunWithDiscardConfirmation([this] { OpenEffect(); });
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Save").c_str(), ShortcutManager::Get().GetShortcutHint("CompositeTimeline.Save"), false, hasResource)) SaveEffect();
+		DrawSaveMenuItem();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str(), nullptr, false, hasResource)) SaveEffectAs();
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str(), nullptr)) OnResourceCloseRequested();
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.Edit")))
 	{
-		using enum EditorUI::TimelineAction;
-		auto& shortcuts = ShortcutManager::Get();
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Undo").c_str(), shortcuts.GetShortcutHint("CompositeTimeline.Undo"), false, CanExecuteTimelineAction(Undo)))
-			ExecuteTimelineAction(Undo);
-		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Redo").c_str(), shortcuts.GetShortcutHint("CompositeTimeline.Redo"), false, CanExecuteTimelineAction(Redo)))
-			ExecuteTimelineAction(Redo);
+		DrawHistoryMenuItems("CompositeTimeline");
 		ImGui::EndMenu();
 	}
 }
@@ -617,9 +660,8 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew")) RunWithDiscardConfirmation([this] { NewEffect(); });
 	if (toolbar.Icon("Open", ICON_FA_FOLDER_OPEN, "ParticleEditor.MenuOpen")) RunWithDiscardConfirmation([this] { OpenEffect(); });
-	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Save", ICON_FA_FLOPPY_DISK, "EditorCommon.Save");
-	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
-	EditorUI::DrawTimelineAction(toolbar, "CompositeTimeline", "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "CompositeTimeline");
 	// 프리뷰 모션 토글 (트레일 / 이동 궤적 확인용)
 	if (toolbar.Icon("PreviewMotion", ICON_FA_WIND, "VFXEditor.PreviewMotion", { .Active = m_PreviewMotion }))
 	{
@@ -720,6 +762,7 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 		}
 		ImGui::EndPopup();
 	}
+	if (!m_StatusMessage.empty()) toolbar.Text(m_StatusMessage.c_str());
 }
 
 void VFXEditorPanel::DrawAddTrackMenuItems(Engine::CompositeEffect& effect)
@@ -882,7 +925,23 @@ void VFXEditorPanel::DrawTrackList()
 					continue;
 
 				ImGui::PushID(static_cast<int>(i));
-				if (ImGui::Checkbox("##Enabled", &track.enabled)) { m_UntrackedDirty = true; InvalidateTimelinePreview(); }
+				const bool previous = track.enabled;
+				bool enabled = previous;
+				if (ImGui::Checkbox("##Enabled", &enabled))
+				{
+					if (m_InspectorEdit) CommitInspectorEdit();
+					const SelectedVFXTrack selection{ type, static_cast<int>(i) };
+					const auto apply = [this, handle = m_EffectHandle, selection](bool value) {
+						auto* target = handle.Get();
+						if (!target || !VisitVFXTrack(*target, selection,
+							[value](auto& list, std::size_t index) { list[index].enabled = value; }))
+							return false;
+						InvalidateTimelinePreview();
+						return true;
+					};
+					m_TimelineHistory.Execute(std::make_unique<CallbackEditorCommand>(LOCAL("VFXEditor.PropEnabled"),
+						[apply, enabled] { return apply(enabled); }, [apply, previous] { return apply(previous); }));
+				}
 				ImGui::SameLine();
 				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::ColorConvertU32ToFloat4(style.Color));
 				const auto label = std::string(style.Icon) + " " + track.trackName + "###Track";
@@ -1320,6 +1379,23 @@ void VFXEditorPanel::SelectTrack(SelectedVFXTrack selection)
 	});
 }
 
+std::function<void()> VFXEditorPanel::CaptureCurveHistory()
+{
+	CommitInspectorEdit();
+	auto* effect = m_EffectHandle.Get();
+	if (!effect) return {};
+	const auto selection = m_SelectedTrack;
+	std::any before;
+	VisitVFXTrack(*effect, selection, [&](auto& tracks, std::size_t index) { before = tracks[index]; });
+	if (!before.has_value()) return {};
+
+	return [this, effect, selection, before = std::move(before)]() mutable {
+		if (m_EffectHandle.Get() != effect) return;
+		m_InspectorEdit = VFXInspectorEdit{ effect, selection, std::move(before) };
+		CommitInspectorEdit();
+	};
+}
+
 void VFXEditorPanel::CommitInspectorEdit()
 {
 	if (!m_InspectorEdit) return;
@@ -1594,9 +1670,9 @@ bool VFXEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction action) c
 {
 	using enum EditorUI::TimelineAction;
 	auto* effect = m_EffectHandle.Get();
-	if (!m_Open || !effect || m_Timeline.Drag) return false;
+	if (!m_Open || !effect || m_Timeline.Drag || m_CurveModal.IsOpen()) return false;
 	if (action == Undo) return m_InspectorEdit.has_value() || m_TimelineHistory.CanUndo();
-	if (action == Redo) return m_TimelineHistory.CanRedo();
+	if (action == Redo) return !m_InspectorEdit && m_TimelineHistory.CanRedo();
 	if (action == Delete) return VisitVFXTrack(*effect, m_SelectedTrack, [](auto&, std::size_t) {});
 	return true;
 }
@@ -1605,7 +1681,7 @@ void VFXEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
 {
 	using enum EditorUI::TimelineAction;
 	if (!CanExecuteTimelineAction(action)) return;
-	if ((action == Undo || action == Redo) && m_InspectorEdit) CommitInspectorEdit();
+	if ((action == Undo || action == Loop) && m_InspectorEdit) CommitInspectorEdit();
 	const float time = m_TimelineSeek.value_or(m_CurrentTime);
 	switch (action)
 	{
@@ -1619,10 +1695,19 @@ void VFXEditorPanel::ExecuteTimelineAction(EditorUI::TimelineAction action)
 	case First: ScrubTime(0.0f); break;
 	case Last: ScrubTime(GetTimelineDuration()); break;
 	case Loop:
-		m_IsLooping = !m_IsLooping;
-		m_EffectHandle.Get()->SetLooping(m_IsLooping);
-		m_UntrackedDirty = true;
+	{
+		auto* effect = m_EffectHandle.Get();
+		const bool previous = effect->IsLooping();
+		const auto apply = [this, effect](bool value) {
+			effect->SetLooping(value);
+			m_IsLooping = value;
+			InvalidateTimelinePreview();
+			return true;
+		};
+		m_TimelineHistory.Execute(std::make_unique<CallbackEditorCommand>(LOCAL("Action.Timeline.ToggleLoop"),
+			[apply, previous] { return apply(!previous); }, [apply, previous] { return apply(previous); }));
 		break;
+	}
 	case Fit: m_Timeline.Fit(); break;
 	case Delete: DeleteSelectedTrack(); break;
 	case Undo: m_TimelineHistory.Undo(); break;
@@ -1718,7 +1803,7 @@ bool VFXEditorPanel::DrawSelectedTrackInspector(Engine::CompositeEffect* effect)
 		if (drawReflectedTrack(track)) changed = true;
 		if (track.useIntensityCurve && EditorUI::BeginPropertyTable("LightCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
+			if (DrawCurvePresetRow("VFXEditor.IntensityCurvePreset", track.intensityCurve, IntensityCurvePresets, m_CurveModal, [this] { return CaptureCurveHistory(); })) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 
@@ -1750,8 +1835,8 @@ bool VFXEditorPanel::DrawSelectedTrackInspector(Engine::CompositeEffect* effect)
 		// 커브 프리셋 및 정밀 편집 모달 행
 		if ((track.useScaleCurve || track.useAlphaCurve) && EditorUI::BeginPropertyTable("MeshCurvePresetTable", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
-			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets, m_CurveModal, [this] { InvalidateTimelinePreview(); })) changed = true;
+			if (track.useScaleCurve && DrawCurvePresetRow("VFXEditor.ScaleCurvePreset", track.scaleCurve, ScaleCurvePresets, m_CurveModal, [this] { return CaptureCurveHistory(); })) changed = true;
+			if (track.useAlphaCurve && DrawCurvePresetRow("VFXEditor.AlphaCurvePreset", track.alphaCurve, AlphaCurvePresets, m_CurveModal, [this] { return CaptureCurveHistory(); })) changed = true;
 			EditorUI::EndPropertyTable();
 		}
 

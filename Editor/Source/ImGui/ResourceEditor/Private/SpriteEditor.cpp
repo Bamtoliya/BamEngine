@@ -49,12 +49,6 @@ bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
 		ext == L".png" || ext == L".jpg" || ext == L".jpeg" || ext == L".tga";
 }
 
-void SpriteEditor::SetTargetResource(const std::filesystem::path& assetPath)
-{
-	ResourceEditorInterface::SetTargetResource(assetPath);
-	LoadTextureAndSlices(assetPath);
-}
-
 void SpriteEditor::OpenTextureDialog()
 {
 	std::wstring selectedPath;
@@ -63,12 +57,22 @@ void SpriteEditor::OpenTextureDialog()
 		SetTargetResource(selectedPath);
 }
 
-void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
+void SpriteEditor::ReleaseResourceDocument()
 {
+	m_TextureHandle.Reset();
 	m_Slices.clear();
 	m_SelectedSliceIndex = -1;
-	m_IsDirty = false;
-	m_TextureHandle = {};
+	m_History.Clear();
+	m_ShowSliceModal = false;
+	m_ShowCreateAnimModal = false;
+	m_Zoom = 1.0f;
+	m_PanOffset = {};
+}
+
+void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
+{
+	ResourceHandle<Engine::Texture> textureHandle;
+	std::vector<SpriteSliceInfo> slices;
 
 	auto& rm = Engine::ResourceManager::Get();
 	const std::wstring normPath = Engine::NormalizePath(path.wstring());
@@ -89,8 +93,8 @@ void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
 		if (spriteHandle.IsValid() && spriteHandle.Get())
 		{
 			auto* sprite = spriteHandle.Get();
-			m_TextureHandle = sprite->GetTextureHandle();
-			if (!m_TextureHandle.IsValid() || !m_TextureHandle.Get())
+			textureHandle = sprite->GetTextureHandle();
+			if (!textureHandle.IsValid() || !textureHandle.Get())
 			{
 				std::filesystem::path parentDir = path.parent_path();
 				for (const auto* texExt : { L".png", L".jpg", L".jpeg", L".tga", L".bmp", L".dds" })
@@ -99,8 +103,8 @@ void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
 					if (std::filesystem::exists(cand))
 					{
 						auto rawTex = rm.LoadFile(cand.wstring());
-						m_TextureHandle = static_cast<ResourceHandle<Engine::Texture>>(rawTex);
-						if (m_TextureHandle.IsValid()) break;
+						textureHandle = static_cast<ResourceHandle<Engine::Texture>>(rawTex);
+						if (textureHandle.IsValid()) break;
 					}
 				}
 			}
@@ -112,25 +116,24 @@ void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
 			info.region = sprite->GetRegion();
 			info.pivot = sprite->GetPivot();
 			info.border = sprite->GetBorder();
-			m_Slices.push_back(info);
-			m_SelectedSliceIndex = 0;
+			slices.push_back(info);
 		}
 	}
 	else
 	{
 		// 2. 텍스처 에셋(.png, .jpg, .bamtex 등)을 직접 연 경우 - LoadFile로 이미지 디코드 및 RHI 텍스처 생성
 		auto raw = rm.LoadFile(normPath);
-		m_TextureHandle = static_cast<ResourceHandle<Engine::Texture>>(raw);
-		if (!m_TextureHandle.IsValid())
+		textureHandle = static_cast<ResourceHandle<Engine::Texture>>(raw);
+		if (!textureHandle.IsValid())
 		{
-			m_TextureHandle = rm.GetResourceHandle<Engine::Texture>(normPath);
+			textureHandle = rm.GetResourceHandle<Engine::Texture>(normPath);
 		}
 	}
 
 	// 텍스처가 유효한 경우, 기존 슬라이스 스캔 또는 기본 전체 슬라이스 등록
-	if (m_TextureHandle.IsValid() && m_TextureHandle.Get() && m_Slices.empty())
+	if (textureHandle.IsValid() && textureHandle.Get() && slices.empty())
 	{
-		auto* texture = m_TextureHandle.Get();
+		auto* texture = textureHandle.Get();
 		auto* rhiTexture = texture->GetRHITexture();
 		const float texW = rhiTexture ? static_cast<float>(rhiTexture->GetWidth()) : 0.0f;
 		const float texH = rhiTexture ? static_cast<float>(rhiTexture->GetHeight()) : 0.0f;
@@ -166,24 +169,37 @@ void SpriteEditor::LoadTextureAndSlices(const std::filesystem::path& path)
 						slice.region = sp->GetRegion();
 						slice.pivot = sp->GetPivot();
 						slice.border = sp->GetBorder();
-						m_Slices.push_back(slice);
+						slices.push_back(slice);
 					}
 				}
 			}
 		}
 
 		// B. 스캔된 기존 슬라이스가 없으면 기본 1개 전체 영역 슬라이스 생성
-		if (m_Slices.empty())
+		if (slices.empty())
 		{
 			SpriteSliceInfo defaultSlice;
 			defaultSlice.name = Engine::WStrToStr(path.stem().wstring()) + "_0";
 			defaultSlice.region = { 0.0f, 0.0f, texW, texH };
 			defaultSlice.pivot = { 0.5f, 0.5f };
 			defaultSlice.border = { 0.0f, 0.0f, 0.0f, 0.0f };
-			m_Slices.push_back(defaultSlice);
+			slices.push_back(defaultSlice);
 		}
-		m_SelectedSliceIndex = 0;
 	}
+
+	if (slices.empty() && !textureHandle.Get())
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+		return;
+	}
+
+	ReleaseResourceDocument();
+	m_TargetResourcePath = path;
+	m_TextureHandle = std::move(textureHandle);
+	m_Slices = std::move(slices);
+	m_History.Reset(m_Slices);
+	m_SelectedSliceIndex = m_Slices.empty() ? -1 : 0;
 }
 
 void SpriteEditor::FitView(float canvasW, float canvasH, float texW, float texH)
@@ -218,6 +234,40 @@ void SpriteEditor::DrawCustomContent()
 	// 팝업 모달
 	DrawSliceModal();
 	DrawCreateAnimationModal();
+	if (!IsHistoryGestureActive()) CommitDocumentEdit();
+}
+
+bool SpriteEditor::CommitDocumentEdit()
+{
+	return m_History.Record(m_Slices, [this](const auto& value) { return ApplyDocumentSnapshot(value); },
+		LOCAL("History.Command.EditProperty"));
+}
+
+bool SpriteEditor::ApplyDocumentSnapshot(const std::vector<SpriteSliceInfo>& snapshot)
+{
+	m_Slices = snapshot;
+	m_SelectedSliceIndex = m_Slices.empty() ? -1 : std::clamp(m_SelectedSliceIndex, 0, static_cast<int>(m_Slices.size()) - 1);
+	return true;
+}
+
+bool SpriteEditor::CanUndoDocument() const
+{
+	return m_TextureHandle.Get() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
+}
+
+bool SpriteEditor::CanRedoDocument() const
+{
+	return m_TextureHandle.Get() && m_History.CanRedo();
+}
+
+void SpriteEditor::UndoDocument()
+{
+	if (CanUndoDocument() && CommitDocumentEdit()) m_History.Undo();
+}
+
+void SpriteEditor::RedoDocument()
+{
+	if (CanRedoDocument()) m_History.Redo();
 }
 
 void SpriteEditor::DrawCustomToolbar()
@@ -227,15 +277,9 @@ void SpriteEditor::DrawCustomToolbar()
 		if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str()))
 			RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("SpriteEditor.ApplySlices"), nullptr, false, !m_Slices.empty()))
-		{
-			ApplySlices();
-		}
+		DrawSaveMenuItem();
 		ImGui::Separator();
-		if (ImGui::MenuItem(LOCAL_CSTR("EditorCommon.Close")))
-		{
-			m_Open = false;
-		}
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 
@@ -249,7 +293,7 @@ void SpriteEditor::DrawCustomToolbar()
 		{
 			m_Slices.clear();
 			m_SelectedSliceIndex = -1;
-			m_IsDirty = true;
+			m_History.MarkEdited();
 		}
 		ImGui::EndMenu();
 	}
@@ -262,6 +306,12 @@ void SpriteEditor::DrawCustomToolbar()
 		}
 		ImGui::EndMenu();
 	}
+
+	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+	{
+		DrawHistoryMenuItems("SpriteEditor");
+		ImGui::EndMenu();
+	}
 }
 
 void SpriteEditor::DrawCustomQuickAccess()
@@ -270,12 +320,8 @@ void SpriteEditor::DrawCustomQuickAccess()
 	if (toolbar.Button("SpriteEditor.OpenTexture", ICON_FA_FOLDER_OPEN, "SpriteEditor.OpenTexture"))
 		RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 
-	ImGui::BeginDisabled(m_Slices.empty());
-	if (toolbar.Button("SpriteEditor.ApplySlices", ICON_FA_FLOPPY_DISK, "SpriteEditor.ApplySlices"))
-	{
-		ApplySlices();
-	}
-	ImGui::EndDisabled();
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "SpriteEditor");
 
 	if (toolbar.Button("SpriteEditor.SliceModalTitle", ICON_FA_SCISSORS, "SpriteEditor.SliceModalTitle"))
 	{
@@ -528,7 +574,7 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 			if (ImGui::InputText(LOCAL_CSTR("SpriteEditor.ClipName"), nameBuf, sizeof(nameBuf)))
 			{
 				slice.name = nameBuf;
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 
 			// 영역 편집 (X, Y, W, H)
@@ -537,38 +583,38 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 			{
 				slice.region.left = rectVal[0];
 				slice.region.top = rectVal[1];
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 			if (ImGui::DragFloat2(LOCAL_CSTR("SpriteEditor.WHLabel"), &rectVal[2], 1.0f, 1.0f, 8192.0f, "%.0f px"))
 			{
 				slice.region.width = rectVal[2];
 				slice.region.height = rectVal[3];
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 
 			// 피벗 편집 (X, Y)
 			if (ImGui::SliderFloat2(LOCAL_CSTR("SpriteEditor.PivotLabel"), &slice.pivot.x, 0.0f, 1.0f, "%.2f"))
 			{
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 
 			// 피벗 퀵 프리셋 버튼
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotCenter"))) { slice.pivot = { 0.5f, 0.5f }; m_IsDirty = true; }
+			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotCenter"))) { slice.pivot = { 0.5f, 0.5f }; m_History.MarkEdited(); }
 			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotBottom"))) { slice.pivot = { 0.5f, 0.0f }; m_IsDirty = true; }
+			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotBottom"))) { slice.pivot = { 0.5f, 0.0f }; m_History.MarkEdited(); }
 			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotTop"))) { slice.pivot = { 0.5f, 1.0f }; m_IsDirty = true; }
+			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotTop"))) { slice.pivot = { 0.5f, 1.0f }; m_History.MarkEdited(); }
 			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotLeft"))) { slice.pivot = { 0.0f, 0.5f }; m_IsDirty = true; }
+			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotLeft"))) { slice.pivot = { 0.0f, 0.5f }; m_History.MarkEdited(); }
 			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotRight"))) { slice.pivot = { 1.0f, 0.5f }; m_IsDirty = true; }
+			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotRight"))) { slice.pivot = { 1.0f, 0.5f }; m_History.MarkEdited(); }
 
 			// 9-Slice 보더 (Left, Right, Top, Bottom)
 			float borderVal[4] = { slice.border.x, slice.border.y, slice.border.z, slice.border.w };
 			if (ImGui::DragFloat4(LOCAL_CSTR("SpriteEditor.Border"), borderVal, 1.0f, 0.0f, 512.0f, "%.0f px"))
 			{
 				slice.border = { borderVal[0], borderVal[1], borderVal[2], borderVal[3] };
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 
 			ImGui::Spacing();
@@ -577,7 +623,7 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 				m_Slices.erase(m_Slices.begin() + m_SelectedSliceIndex);
 				if (m_SelectedSliceIndex >= static_cast<int>(m_Slices.size()))
 					m_SelectedSliceIndex = static_cast<int>(m_Slices.size()) - 1;
-				m_IsDirty = true;
+				m_History.MarkEdited();
 			}
 		}
 		else
@@ -827,7 +873,7 @@ void SpriteEditor::ExecuteSlice(const SpriteSliceParameters& params)
 	}
 
 	m_SelectedSliceIndex = m_Slices.empty() ? -1 : 0;
-	m_IsDirty = true;
+	m_History.MarkEdited();
 }
 
 void SpriteEditor::ApplySlices()
@@ -841,6 +887,7 @@ void SpriteEditor::ApplySlices()
 
 std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSlices()
 {
+	if (!CommitDocumentEdit()) return std::nullopt;
 	if (m_Slices.empty() || !m_TextureHandle.IsValid())
 	{
 		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
@@ -959,7 +1006,7 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 		savedSprites.emplace_back(handle);
 	}
 
-	m_IsDirty = false;
+	m_History.MarkSaved();
 	return savedSprites;
 }
 

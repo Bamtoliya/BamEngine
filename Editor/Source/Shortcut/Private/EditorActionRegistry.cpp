@@ -22,6 +22,7 @@
 #include "VFXEditorPanel.h"
 #include "UnifiedSettingsPanel.h"
 #include "PrefabEditorPanel.h"
+#include "SpriteEditor.h"
 #include "PluginResourceEditor.h"
 #include "ContentBrowserPanel.h"
 #include "PreviewViewportWidget.h"
@@ -43,9 +44,56 @@ static EditorCameraController* FindShortcutCameraController()
     return (vp && vp->IsFocused()) ? vp->GetCameraController() : nullptr;
 }
 
+void EditorActionRegistry::RegisterDocumentHistory(std::string_view prefix, const char* categoryKey,
+    EShortcutContext context, std::function<ResourceEditorInterface*()> findPanel, std::wstring_view panelScope)
+{
+    auto& shortcuts = ShortcutManager::Get();
+    const auto registerAction = [&](const char* suffix, const char* key, Engine::EKeyCode chord,
+        bool (ResourceEditorInterface::*canRun)() const, void (ResourceEditorInterface::*run)()) {
+        shortcuts.RegisterAction({
+            .Id = std::string(prefix) + suffix,
+            .DisplayNameKey = key,
+            .CategoryKey = categoryKey,
+            .Context = context,
+            .DefaultChord = ShortcutChord(chord, EModifierKey::Ctrl),
+            .ExecuteHandler = [findPanel, run] {
+                if (auto* panel = findPanel()) (panel->*run)();
+            },
+            .CanExecute = [findPanel, canRun] {
+                const auto* panel = findPanel();
+                return panel && panel->IsOpen() && (panel->*canRun)();
+            },
+            .PanelScope = std::wstring(panelScope)
+        });
+    };
+    registerAction(".Undo", "EditorCommon.Undo", Engine::EKeyCode::Z,
+        &ResourceEditorInterface::CanUndoDocument, &ResourceEditorInterface::UndoDocument);
+    registerAction(".Redo", "EditorCommon.Redo", Engine::EKeyCode::Y,
+        &ResourceEditorInterface::CanRedoDocument, &ResourceEditorInterface::RedoDocument);
+}
+
 void EditorActionRegistry::RegisterAll()
 {
     auto& sm = ShortcutManager::Get();
+
+    RegisterDocumentHistory("Animator", "AnimatorGraph.Title", EShortcutContext::AnimatorGraph, [] {
+        return AnimatorGraphPanel::GetActivePanel();
+    });
+    RegisterDocumentHistory("Graph", "GraphPanel.Title", EShortcutContext::GraphEditor, [] {
+        return GraphPanel::GetActiveGraphPanel();
+    });
+    RegisterDocumentHistory("ModelEditor", "ResourceEditor.ModelTitle", EShortcutContext::ModelEditor, [] {
+        return dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
+    });
+    RegisterDocumentHistory("MaterialEditor", "ResourceEditor.MaterialTitle", EShortcutContext::MaterialEditor, [] {
+        return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
+    });
+    RegisterDocumentHistory("SpriteEditor", "ResourceEditor.SpriteTitle", EShortcutContext::SpriteEditor, [] {
+        return dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor"));
+    });
+    RegisterDocumentHistory("Prefab", "ResourceEditor.PrefabTitle", EShortcutContext::PrefabEditor, [] {
+        return dynamic_cast<PrefabEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
+    });
 
     // =========================================================================================
     // [Edit Actions] (Global Context)
@@ -243,38 +291,32 @@ void EditorActionRegistry::RegisterAll()
         }
     });
 
-    // ── [Resource Editor Save Actions] ──
-    sm.RegisterAction({
-        .Id = "ModelEditor.Save",
-        .DisplayNameKey = "EditorCommon.Save",
-        .CategoryKey = "Shortcuts.CategoryEditor",
-        .Context = EShortcutContext::Global,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
-        .ExecuteHandler = []() {
-            auto* panel = dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
-            if (panel && panel->IsOpen() && panel->IsFocused()) panel->SaveResource();
-        },
-        .CanExecute = []() {
-            auto* panel = dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
-            return panel && panel->IsOpen() && panel->IsFocused() && PIEManager::Get().IsEditing();
-        }
+    // Resource saves use the same handler and predicate from the panel UI and the shortcut.
+    const auto registerResourceSave = [&sm](const char* id, EShortcutContext context, auto findPanel) {
+        sm.RegisterAction({
+            .Id = id,
+            .DisplayNameKey = "EditorCommon.Save",
+            .CategoryKey = "Shortcuts.CategoryEditor",
+            .Context = context,
+            .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
+            .ExecuteHandler = [findPanel] {
+                if (auto* panel = findPanel()) panel->SaveResource();
+            },
+            .CanExecute = [findPanel] {
+                const auto* panel = findPanel();
+                return panel && panel->CanSaveDocument();
+            }
         });
-
-    sm.RegisterAction({
-        .Id = "MaterialEditor.Save",
-        .DisplayNameKey = "EditorCommon.Save",
-        .CategoryKey = "Shortcuts.CategoryEditor",
-        .Context = EShortcutContext::Global,
-        .DefaultChord = ShortcutChord(Engine::EKeyCode::S, EModifierKey::Ctrl),
-        .ExecuteHandler = []() {
-            auto* panel = dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
-            if (panel && panel->IsOpen() && panel->IsFocused()) panel->SaveResource();
-        },
-        .CanExecute = []() {
-            auto* panel = dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
-            return panel && panel->IsOpen() && panel->IsFocused();
-        }
-        });
+    };
+    registerResourceSave("ModelEditor.Save", EShortcutContext::ModelEditor, [] {
+        return dynamic_cast<ModelEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Model Editor"));
+    });
+    registerResourceSave("MaterialEditor.Save", EShortcutContext::MaterialEditor, [] {
+        return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
+    });
+    registerResourceSave("SpriteEditor.Save", EShortcutContext::SpriteEditor, [] {
+        return dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor"));
+    });
 
     sm.RegisterAction({
         .Id = "AnimationTimeline.Save",
@@ -922,6 +964,10 @@ void EditorActionRegistry::RegisterAll()
         .ExecuteHandler = []() {
             if (auto* panel = AnimatorGraphPanel::GetActivePanel())
                 panel->SaveDocument(false);
+        },
+        .CanExecute = [] {
+            const auto* panel = AnimatorGraphPanel::GetActivePanel();
+            return panel && panel->CanSaveDocument();
         }
         });
 
@@ -951,6 +997,10 @@ void EditorActionRegistry::RegisterAll()
         .ExecuteHandler = []() {
             if (auto* gp = GraphPanel::GetActiveGraphPanel())
                 gp->SaveDocument(false);
+        },
+        .CanExecute = [] {
+            const auto* panel = GraphPanel::GetActiveGraphPanel();
+            return panel && panel->IsOpen();
         }
         });
 

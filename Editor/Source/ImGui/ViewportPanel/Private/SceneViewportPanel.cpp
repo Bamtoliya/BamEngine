@@ -584,7 +584,6 @@ void SceneViewportPanel::DrawCustomViewport()
 		GizmoHelper::SetActiveHost(this);
 	}
 	Application::Get().GetEditHistory().AllowShortcuts(m_Focused);
-	PrefabModeManager::Get().DrawViewportBanner();
 	BaseViewportPanel::DrawCustomViewport();
 	if (m_ImageSize.x <= 0.f || m_ImageSize.y <= 0.f)
 		return;

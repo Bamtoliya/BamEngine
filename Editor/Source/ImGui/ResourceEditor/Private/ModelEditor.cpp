@@ -17,6 +17,7 @@
 #include "ResourcePicker.h"
 #include "PIEManager.h"
 #include "IconsFontAwesome7.h"
+#include "NotificationManager.h"
 #include "AnimatorComponent.h"
 #include "StaticMeshRendererComponent.h"
 #include "SkinnedMeshRendererComponent.h"
@@ -51,7 +52,7 @@ bool ModelEditor::IsSupported(const std::filesystem::path& assetPath) const
 
 void ModelEditor::Update(f32 dt)
 {
-	if (!m_Open || !m_ModelHandle.IsValid())
+	if (!m_Open)
 		return;
 
 	m_PreviewWidget.BeginFrame(dt);
@@ -115,25 +116,72 @@ void ModelEditor::SetupPreviewModel()
 	}
 }
 
+bool ModelEditor::CommitDocumentEdit()
+{
+	if (!m_History.HasPendingEdit()) return true;
+	auto* model = m_ModelHandle.Get();
+	return model && m_History.Record(model->GetMaterials(),
+		[this](const auto& snapshot) { return ApplyDocumentSnapshot(snapshot); }, LOCAL("History.Command.EditProperty"));
+}
+
+bool ModelEditor::ApplyDocumentSnapshot(const ModelEditor::MaterialSlots& snapshot)
+{
+	auto* model = m_ModelHandle.Get();
+	if (!model || model->GetMaterials().size() != snapshot.size()) return false;
+	for (const auto& material : snapshot)
+	{
+		if (material.GetRawHandle().IsValid() && !material.Get()) return false;
+	}
+	for (std::size_t i = 0; i < snapshot.size(); ++i)
+	{
+		if (model->SetMaterial(static_cast<uint32>(i), snapshot[i]) != EResult::Success) return false;
+	}
+	SetupPreviewModel();
+	return true;
+}
+
+bool ModelEditor::CanUndoDocument() const
+{
+	return CanSaveDocument() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
+}
+
+bool ModelEditor::CanRedoDocument() const
+{
+	return CanSaveDocument() && m_History.CanRedo();
+}
+
+void ModelEditor::UndoDocument()
+{
+	if (CanUndoDocument() && CommitDocumentEdit()) m_History.Undo();
+}
+
+void ModelEditor::RedoDocument()
+{
+	if (CanRedoDocument()) m_History.Redo();
+}
+
 void ModelEditor::DrawCustomToolbar()
 {
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
-		const bool canEdit = PIEManager::Get().IsEditing() && m_ModelHandle.IsValid();
-		ImGui::BeginDisabled(!canEdit);
-		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem((ICON_FA_FLOPPY_DISK " " + LOCAL_LABEL("EditorCommon.Save")).c_str(), sm.GetShortcutHint("ModelEditor.Save")))
-			SaveModel();
-		ImGui::EndDisabled();
-
-		if (ImGui::MenuItem((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("ModelEditor.RetryLoad")).c_str()))
-			SetTargetResource(m_TargetResourcePath);
+		DrawSaveMenuItem();
+		if (ImGui::MenuItem((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("ModelEditor.RetryLoad")).c_str(),
+			nullptr, false, !m_TargetResourcePath.empty()))
+		{
+			RunWithDiscardConfirmation([this] {
+				if (!HasUnsavedResourceChanges()) SetTargetResource(m_TargetResourcePath);
+				else if (RestoreSavedChanges()) SetupPreviewModel();
+			}, false);
+		}
+		DrawCloseMenuItem();
 
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
+		DrawHistoryMenuItems("ModelEditor");
+		ImGui::Separator();
 		auto& history = Application::Get().GetEditHistory();
 		const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene() && m_ModelHandle.IsValid();
 		ImGui::BeginDisabled(!canPlace);
@@ -164,12 +212,8 @@ void ModelEditor::DrawCustomToolbar()
 void ModelEditor::DrawCustomQuickAccess()
 {
 	EditorUI::ToolbarLayout toolbar;
-	const bool canEdit = PIEManager::Get().IsEditing() && m_ModelHandle.IsValid();
-
-	ImGui::BeginDisabled(!canEdit);
-	if (toolbar.Icon("SaveModel", ICON_FA_FLOPPY_DISK, "EditorCommon.Save"))
-		SaveModel();
-	ImGui::EndDisabled();
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "ModelEditor");
 
 	EditorUI::IconButtonOptions focusOptions;
 	focusOptions.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
@@ -269,7 +313,7 @@ void ModelEditor::DrawCustomQuickAccess()
 	// 파일 상태 배지
 	const std::string fileName = m_TargetResourcePath.empty()
 		? LOCAL("AnimatorGraph.Unsaved") : m_TargetResourcePath.filename().string();
-	toolbar.Text(("[" + fileName + (m_IsDirty ? " *]" : "]")).c_str());
+	toolbar.Text(("[" + fileName + (HasUnsavedResourceChanges() ? " *]" : "]")).c_str());
 }
 
 void ModelEditor::SetForcedLOD(int lod)
@@ -672,9 +716,6 @@ void ModelEditor::DrawAnimations(Engine::Model& model)
 void ModelEditor::DrawCustomContent()
 {
 	auto& history = Application::Get().GetEditHistory();
-	history.AllowShortcuts(m_Focused);
-
-
 	const float height = ImGui::GetContentRegionAvail().y;
 	const auto previewFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 	Editor::DrawSidebarLayout("##ModelViewportPane", "##ModelSplitter", "##ModelDetailsPane",
@@ -720,6 +761,7 @@ void ModelEditor::DrawCustomContent()
 					SetTargetResource(m_TargetResourcePath);
 			}
 		}, previewFlags, /*reserveHalfForContent=*/false);
+	if (!IsHistoryGestureActive()) CommitDocumentEdit();
 }
 
 void ModelEditor::InstantiateModel()
@@ -762,21 +804,38 @@ void ModelEditor::InstantiateModel()
 
 void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
-	ResourceEditorInterface::SetTargetResource(assetPath);
-	m_ModelHandle.Reset();
-	m_StatusKey.clear();
-	m_IsDirty = false;
-
-	if (!IsImportedModelFile(assetPath))
-		return;
-
+	if (!IsImportedModelFile(assetPath)) return;
 	auto& manager = ResourceManager::Get();
 	const auto handle = manager.LoadFile(assetPath.wstring());
-	if (dynamic_cast<Model*>(manager.GetResource(handle)) != nullptr)
-	{
-		m_ModelHandle = ResourceHandle<Model>(handle);
-		SetupPreviewModel();
-	}
+	if (!dynamic_cast<Model*>(manager.GetResource(handle)) || !RestoreSavedChanges()) return;
+
+	ResourceEditorInterface::SetTargetResource(assetPath);
+	m_ModelHandle = ResourceHandle<Model>(handle);
+	m_StatusKey.clear();
+	m_History.Reset(m_ModelHandle.Get()->GetMaterials());
+	SetupPreviewModel();
+}
+
+bool ModelEditor::CanSaveDocument() const
+{
+	return m_Open && m_ModelHandle.Get() && PIEManager::Get().IsEditing();
+}
+
+bool ModelEditor::RestoreSavedResource()
+{
+	auto* model = m_ModelHandle.Get();
+	if (!model || model->Reload(m_TargetResourcePath) != EResult::Success) return false;
+	m_StatusKey.clear();
+	m_History.Reset(model->GetMaterials());
+	return true;
+}
+
+void ModelEditor::ReleaseResourceDocument()
+{
+	m_ModelHandle.Reset();
+	SetupPreviewModel();
+	m_StatusKey.clear();
+	m_History.Clear();
 }
 
 void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
@@ -823,7 +882,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 
 			if (result == EResult::Success)
 			{
-				m_IsDirty = true;
+				m_History.MarkEdited();
 				SetupPreviewModel();
 			}
 		}
@@ -835,7 +894,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 void ModelEditor::SaveModel()
 {
 	auto* model = m_ModelHandle.Get();
-	if (!model || !PIEManager::Get().IsEditing())
+	if (!model || !PIEManager::Get().IsEditing() || !CommitDocumentEdit())
 		return;
 
 	auto& manager = ResourceManager::Get();
@@ -845,13 +904,14 @@ void ModelEditor::SaveModel()
 	if (result != EResult::Success)
 	{
 		m_StatusKey = "ModelEditor.SaveFailed";
+		NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL(m_StatusKey), ELogLevel::Error);
 		EDITOR_LOG_ERROR("Model save failed: path={}, result={}",
 			m_TargetResourcePath.string(), ResultToString(result));
 		return;
 	}
 
 	m_StatusKey = "ModelEditor.Saved";
-	m_IsDirty = false;
+	m_History.MarkSaved();
 }
 
 void ModelEditor::CaptureState(EditorWorkspace& workspace) const

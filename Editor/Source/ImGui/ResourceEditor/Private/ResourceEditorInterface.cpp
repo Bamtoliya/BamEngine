@@ -1,6 +1,44 @@
 ﻿#include "ResourceEditorInterface.h"
 #include "IconsFontAwesome7.h"
 #include "AssetPathRelocation.h"
+#include "NotificationManager.h"
+#include "InputManager.h"
+#include "TimelineView.h"
+#include <utility>
+
+void ResourceEditorInterface::SetOpen(bool open)
+{
+    if (open) IImGui::SetOpen(true);
+    else if (m_Open) RequestResourceClose();
+}
+
+void ResourceEditorInterface::RequestResourceClose()
+{
+    if (m_PendingDiscardAction || m_ConfirmedResourceAction) return;
+    if (HasUnsavedResourceChanges())
+        RunWithDiscardConfirmation([this] { CloseResourceDocument(); }, true);
+    else
+        m_ConfirmedResourceAction = [this] { CloseResourceDocument(); };
+}
+
+bool ResourceEditorInterface::RestoreSavedChanges()
+{
+    if (!HasUnsavedResourceChanges() || RestoreSavedResource()) return true;
+    NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("ResourceEditor.DiscardFailed"), ELogLevel::Error);
+    return false;
+}
+
+void ResourceEditorInterface::CloseResourceDocument()
+{
+    if (!RestoreSavedChanges()) return;
+    ReleaseResourceDocument();
+    m_PendingDiscardAction = {};
+    m_ConfirmedResourceAction = {};
+    m_TargetResourcePath.clear();
+    m_Open = false;
+    m_Focused = false;
+    m_Hovered = false;
+}
 
 bool ResourceEditorInterface::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
 {
@@ -50,7 +88,7 @@ void ResourceEditorInterface::Draw()
 
     bool open = m_Open;
     const bool visible = BeginPanelWindow(title.c_str(), open, flags);
-    if (!open) OnResourceCloseRequested();
+    if (!open) RequestResourceClose();
 
     if (visible)
     {
@@ -61,10 +99,10 @@ void ResourceEditorInterface::Draw()
     if (visible)
     {
         DrawResourceFrame();
-        DrawDiscardConfirmation();
     }
+    DrawDiscardConfirmation();
     ImGui::End();
-    AfterResourceWindow();
+    if (auto action = std::exchange(m_ConfirmedResourceAction, {})) action();
 }
 
 void ResourceEditorInterface::DrawResourceFrame()
@@ -94,8 +132,36 @@ void ResourceEditorInterface::DrawCustomToolbar()
 {
     if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
     {
-        if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str())) OnResourceCloseRequested();
+        DrawCloseMenuItem();
         ImGui::EndMenu();
+    }
+}
+
+void ResourceEditorInterface::DrawCloseMenuItem()
+{
+    const auto* hint = ShortcutManager::Get().GetShortcutHint("Window.CloseFocusedPanel");
+    if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.Close").c_str(), hint)) RequestResourceClose();
+}
+
+void ResourceEditorInterface::DrawSaveMenuItem()
+{
+    if (const auto* action = GetSaveActionId())
+    {
+        ACTION_MENU_ITEM(LOCAL_LABEL("EditorCommon.Save").c_str(), action);
+    }
+}
+
+void ResourceEditorInterface::DrawSaveButton(EditorUI::ToolbarLayout& toolbar)
+{
+    if (const auto* action = GetSaveActionId())
+    {
+        auto& shortcuts = ShortcutManager::Get();
+        EditorUI::IconButtonOptions options;
+        options.Enabled = shortcuts.CanExecuteAction(action);
+        options.Active = HasUnsavedResourceChanges();
+        options.ShortcutHint = shortcuts.GetShortcutHint(action);
+        if (toolbar.Icon("ResourceSave", ICON_FA_FLOPPY_DISK, "EditorCommon.Save", options))
+            shortcuts.ExecuteAction(action);
     }
 }
 
@@ -107,9 +173,27 @@ void ResourceEditorInterface::DrawCopyResourcePath()
         ImGui::SetClipboardText(WStrToStr(m_TargetResourcePath.wstring()).c_str());
 }
 
-void ResourceEditorInterface::RunWithDiscardConfirmation(std::function<void()> action)
+void ResourceEditorInterface::DrawHistoryMenuItems(std::string_view actionPrefix)
 {
-    if (!action) return;
+    const auto prefix = std::string(actionPrefix);
+    ACTION_MENU_ITEM(LOCAL_LABEL("EditorCommon.Undo").c_str(), prefix + ".Undo");
+    ACTION_MENU_ITEM(LOCAL_LABEL("EditorCommon.Redo").c_str(), prefix + ".Redo");
+}
+
+void ResourceEditorInterface::DrawHistoryButtons(EditorUI::ToolbarLayout& toolbar, std::string_view actionPrefix)
+{
+    EditorUI::DrawTimelineAction(toolbar, actionPrefix, "Undo", ICON_FA_ROTATE_LEFT, "EditorCommon.Undo");
+    EditorUI::DrawTimelineAction(toolbar, actionPrefix, "Redo", ICON_FA_ROTATE_RIGHT, "EditorCommon.Redo");
+}
+
+bool ResourceEditorInterface::IsHistoryGestureActive()
+{
+    return ImGui::IsAnyItemActive() || Engine::InputManager::Get().IsMouseButtonPressed(Engine::EMouseButton::Left);
+}
+
+void ResourceEditorInterface::RunWithDiscardConfirmation(std::function<void()> action, bool offerSave)
+{
+    if (!action || m_PendingDiscardAction || m_ConfirmedResourceAction) return;
     if (!HasUnsavedResourceChanges())
     {
         action();
@@ -117,6 +201,13 @@ void ResourceEditorInterface::RunWithDiscardConfirmation(std::function<void()> a
     }
     // 메뉴 안에서는 OpenPopup의 ID 범위가 달라지므로 여기서는 보관만 하고 창 범위에서 모달을 연다.
     m_PendingDiscardAction = std::move(action);
+    m_OfferSave = offerSave;
+}
+
+bool ResourceEditorInterface::SavePendingResourceChanges()
+{
+    const auto* action = GetSaveActionId();
+    return action && ShortcutManager::Get().ExecuteAction(action) && !HasUnsavedResourceChanges();
 }
 
 void ResourceEditorInterface::DrawDiscardConfirmation()
@@ -131,18 +222,24 @@ void ResourceEditorInterface::DrawDiscardConfirmation()
     ImGui::TextUnformatted(LOCAL_FMT("ResourceEditor.DiscardMessage", targetName).c_str());
     ImGui::Spacing();
 
-    const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "ResourceEditor.DiscardContinue", true, true } };
-    const int choice = EditorUI::DialogButtonBar("ResourceDiscardActions", actions, IM_ARRAYSIZE(actions));
+    const auto* saveAction = m_OfferSave ? GetSaveActionId() : nullptr;
+    const bool canSave = saveAction && ShortcutManager::Get().CanExecuteAction(saveAction);
+    const EditorUI::DialogAction actions[] = {
+        { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "EditorCommon.Save", canSave }
+    };
+    const int choice = EditorUI::DialogButtonBar("ResourceDiscardActions", actions, saveAction ? IM_ARRAYSIZE(actions) : 2);
 
-    std::function<void()> confirmed;
-    if (choice == 0 || choice == 1)
+    if (choice >= 0)
     {
-        if (choice == 1) confirmed = std::move(m_PendingDiscardAction);
+        if (choice == 1) m_ConfirmedResourceAction = std::move(m_PendingDiscardAction);
+        if (choice == 2)
+        {
+            m_ConfirmedResourceAction = [this, action = std::move(m_PendingDiscardAction)] {
+                if (SavePendingResourceChanges()) action();
+            };
+        }
         m_PendingDiscardAction = nullptr;
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
-
-    // 파일 대화상자처럼 블로킹하는 동작은 모달 범위를 벗어난 뒤 실행한다.
-    if (confirmed) confirmed();
 }

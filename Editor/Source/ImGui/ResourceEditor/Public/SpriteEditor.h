@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ResourceEditorInterface.h"
+#include "ResourceDocumentHistory.h"
 #include "ResourceHandle.h"
 #include "Texture.h"
 #include "Sprite.h"
@@ -40,10 +41,15 @@ public:
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
-	virtual bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	virtual bool HasUnsavedResourceChanges() const override { return m_History.IsDirty(); }
+	void SaveResource() override { ApplySlices(); }
+	bool CanSaveDocument() const { return m_Open && m_TextureHandle.IsValid() && !m_Slices.empty(); }
+	EShortcutContext GetShortcutContext() const override { return EShortcutContext::SpriteEditor; }
 
 private:
 	void DrawCustomToolbar() override;
+	void ReleaseResourceDocument() override;
+	const char* GetSaveActionId() const override { return "SpriteEditor.Save"; }
 	void DrawCustomQuickAccess() override;
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(900.0f, 650.0f); }
@@ -56,7 +62,6 @@ private:
 	void ApplySlices();
 	std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SaveSlices();
 	bool GenerateAnimation(const SpriteAutoAnimParameters& params);
-	void LoadTextureAndSlices(const std::filesystem::path& path);
 	void OpenTextureDialog(); // 파일 대화상자로 텍스처를 골라 현재 문서를 교체한다. 확인은 호출부가 RunWithDiscardConfirmation으로 처리한다.
 	void FitView(float canvasW, float canvasH, float texW, float texH);
 
@@ -71,7 +76,13 @@ private:
 	float m_SidebarWidth = 280.0f;
 
 	// 변경 사항 플래그
-	bool m_IsDirty = false;
+	ResourceDocumentHistory<std::vector<SpriteSliceInfo>> m_History;
+	bool CommitDocumentEdit();
+	bool ApplyDocumentSnapshot(const std::vector<SpriteSliceInfo>& snapshot);
+	bool CanUndoDocument() const override;
+	bool CanRedoDocument() const override;
+	void UndoDocument() override;
+	void RedoDocument() override;
 
 	// 모달 팝업 상태
 	bool m_ShowSliceModal = false;

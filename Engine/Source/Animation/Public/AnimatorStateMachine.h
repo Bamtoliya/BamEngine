@@ -7,6 +7,7 @@
 #include "BlendTree1D.h"
 #include "BlendTree2D.h"
 #include "ReflectionMacro.h"
+#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -221,6 +222,9 @@ public:
 
 	PROPERTY(EDITABLE)
 		std::unordered_map<std::string, AnimatorParameter> defaultParameters;
+
+	PROPERTY(ALLOW_MISSING)
+	std::unordered_map<std::string, std::array<float, 2>> editorNodePositions;
 
 	const AnimState* FindState(const std::string& name) const;
 	std::vector<const AnimTransition*> GetTransitionsFrom(const std::string& stateName) const;

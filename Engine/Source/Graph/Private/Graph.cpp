@@ -296,7 +296,13 @@ GraphDiagnostic Graph::ImportData(const GraphRegistry& registry, const GraphData
 	candidate.m_Links = data.Links;
 	candidate.m_Variables = data.Variables;
 
-	for (const auto& diagnostic : candidate.Validate(registry))
+	const auto diagnostics = [&] {
+		if (candidate.m_Variables.empty()) return candidate.Validate(registry);
+		auto documentRegistry = registry;
+		candidate.RegisterVariableNodes(documentRegistry);
+		return candidate.Validate(documentRegistry);
+	}();
+	for (const auto& diagnostic : diagnostics)
 	{
 		if (diagnostic.Code != EGraphError::MissingRequiredInput)
 			return diagnostic;
@@ -335,7 +341,7 @@ void Graph::RegisterVariableNodes(GraphRegistry& registry) const
 		getDef.DisplayName = "Get " + var.Name;
 		getDef.Category = "Variables";
 		getDef.Pins.push_back({ "value", EGraphPinDirection::Output, var.Type, {} });
-		(void)registry.Register(getDef);
+		(void)registry.RegisterOrUpdate(std::move(getDef));
 
 		// 2. Set 노드: 실행 노드, 입력 핀 (exec, value), 출력 핀 (then, outValue)
 		GraphNodeDefinition setDef;
@@ -347,7 +353,7 @@ void Graph::RegisterVariableNodes(GraphRegistry& registry) const
 		setDef.Pins.push_back({ "value", EGraphPinDirection::Input, var.Type, var.DefaultValue });
 		setDef.Pins.push_back({ "then", EGraphPinDirection::Output, EGraphPinType::Execution, {} });
 		setDef.Pins.push_back({ "outValue", EGraphPinDirection::Output, var.Type, {} });
-		(void)registry.Register(setDef);
+		(void)registry.RegisterOrUpdate(std::move(setDef));
 	}
 }
 

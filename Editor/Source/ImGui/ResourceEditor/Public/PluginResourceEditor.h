@@ -13,6 +13,10 @@ public:
 	void Free() override;
 	bool IsSupported(const std::filesystem::path& path) const override;
 	bool HasUnsavedResourceChanges() const override;
+	bool CanUndoDocument() const override;
+	bool CanRedoDocument() const override;
+	void UndoDocument() override;
+	void RedoDocument() override;
 	void SetTargetResource(const std::filesystem::path& path) override;
 	void CaptureState(EditorWorkspace& workspace) const override;
 	void RestoreState(const EditorWorkspace& workspace) override;
@@ -35,6 +39,9 @@ private:
 	void Save();
 	ImVec2 GetInitialResourceWindowSize() const override;
 	void DrawCustomToolbar() override;
+	void ReleaseResourceDocument() override;
+	bool RestoreSavedResource() override;
+	const char* GetSaveActionId() const override { return m_SaveActionId.empty() ? nullptr : m_SaveActionId.c_str(); }
 	void DrawCustomQuickAccess() override;
 	void DrawCustomContent() override;
 

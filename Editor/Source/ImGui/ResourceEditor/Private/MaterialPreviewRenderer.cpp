@@ -41,6 +41,13 @@ namespace Editor
 		m_MeshEntity = entt::null;
 	}
 
+	void MaterialPreviewRenderer::ReleaseMaterial()
+	{
+		if (m_MeshEntity == entt::null) return;
+		if (auto* mesh = m_Widget.GetRegistry().try_get<Engine::StaticMeshRendererComponent>(m_MeshEntity))
+			mesh->materialHandle.Reset();
+	}
+
 	void MaterialPreviewRenderer::UpdatePreviewMesh(Engine::MaterialInterface* material)
 	{
 		if (m_MeshEntity == entt::null) return;

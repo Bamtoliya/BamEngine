@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ResourceEditorInterface.h"
+#include "ResourceDocumentHistory.h"
 #include "Graph.h"
 #include "GraphNodePalette.h"
 #include "GraphReflection.h"
@@ -87,7 +88,7 @@ private:
 		std::vector<Engine::GraphLinkId> SelectedLinks;
 		std::vector<Engine::GraphDiagnostic> Diagnostics;
 		std::uint64_t NextId = 1;
-		std::uint64_t SavedRevision = 0;
+		std::uint64_t RecordedRevision = 0;
 		Engine::GraphNodeId PendingSelection = 0;
 		bool ResetContext = false;
 		bool RestoreSelection = false;
@@ -101,6 +102,10 @@ private:
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1000.0f, 650.0f); }
 	void OnResourceWindowVisibility(bool visible) override;
+	void ReleaseResourceDocument() override;
+	bool SavePendingResourceChanges() override;
+	bool FocusRetainedResource(const std::filesystem::path& path) override;
+	const char* GetSaveActionId() const override { return "Graph.Save"; }
 	string GetResourceWindowId() const override { return "GraphPanel"; }
 	void DrawResourceFrame() override;
 	void DrawFileToolbar(EditorUI::ToolbarLayout& toolbar);
@@ -114,11 +119,21 @@ public:
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	bool LoadDocument(const std::filesystem::path& path);
-	void SaveDocument(bool saveAs);
+	bool SaveDocument(bool saveAs);
 	void RequestOpenDocument(); // 미저장 변경이 있으면 교체 확인 후 열기
 private:
-	void OpenDocument(); // 확인 없이 파일 대화상자를 연다. RequestOpenDocument와 확인 모달만 호출한다.
-	static bool IsDocumentDirty(const GraphDocument& document) { return document.Data.GetRevision() != document.SavedRevision; }
+	void OpenDocument(); // 확인 없이 파일 대화상자를 연다. RequestOpenDocument의 확인 후 호출한다.
+	bool IsDocumentDirty(const GraphDocument& document) const;
+	ResourceDocumentHistory<Engine::Graph>& GetHistory(Engine::EGraphDomain domain);
+	const ResourceDocumentHistory<Engine::Graph>& GetHistory(Engine::EGraphDomain domain) const;
+	bool CommitDocumentEdit(GraphDocument& document);
+	bool ApplyDocumentSnapshot(const Engine::Graph& graph);
+	bool InitializeDocumentCanvas(GraphDocument& document);
+	void ReplaceDocument(GraphDocument&& candidate);
+	bool CanUndoDocument() const override;
+	bool CanRedoDocument() const override;
+	void UndoDocument() override;
+	void RedoDocument() override;
 	void ReportLoadFailure(const std::filesystem::path& path, const Engine::GraphFileResult& result);
 	Engine::GraphDiagnostic BuildDocumentViews(GraphDocument& document);
 	void DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar);
@@ -204,10 +219,11 @@ private:
 	Engine::GraphRegistry m_Registry;
 	GraphDocument m_Logic{ Engine::EGraphDomain::Logic };
 	GraphDocument m_Shader{ Engine::EGraphDomain::Shader };
+	ResourceDocumentHistory<Engine::Graph> m_LogicHistory;
+	ResourceDocumentHistory<Engine::Graph> m_ShaderHistory;
 	Engine::EGraphDomain m_Domain = Engine::EGraphDomain::Logic;
 	Engine::GraphDiagnostic m_LastDiagnostic;
 	bool m_Ready = false;
-	bool m_ConfirmOpenRequested = false;
 	Engine::GraphExecutor m_Executor;
 	reflection::Registry m_ExecutionReflection;
 	Engine::GraphNodeId m_TraceNode = 0;

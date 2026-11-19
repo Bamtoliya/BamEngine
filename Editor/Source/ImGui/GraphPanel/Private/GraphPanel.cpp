@@ -64,6 +64,8 @@ bool GraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
 GraphPanel::GraphPanel()
 {
 	m_Name = L"Graph"; m_DisplayNameKey = "GraphPanel.Title";
+	m_LogicHistory.Reset(m_Logic.Data);
+	m_ShaderHistory.Reset(m_Shader.Data);
 	m_LastDiagnostic = m_Registry.RegisterBuiltins();
 
 	m_Ready = m_LastDiagnostic.Succeeded();
@@ -150,6 +152,33 @@ void GraphPanel::OnResourceWindowVisibility(bool visible)
 		ed::SetCurrentEditor(previousContext);
 }
 
+void GraphPanel::ReleaseResourceDocument()
+{
+	auto* current = ed::GetCurrentEditor();
+	auto* previous = (current == m_Logic.Context || current == m_Shader.Context) ? nullptr : current;
+	SuspendDocument();
+	InvalidateExecution();
+	if (s_ActiveGraphPanel == this) s_ActiveGraphPanel = nullptr;
+	for (auto* document : { &m_Logic, &m_Shader })
+	{
+		if (document->Context) ed::DestroyEditor(document->Context);
+	}
+	m_Logic = GraphDocument(EGraphDomain::Logic);
+	m_Shader = GraphDocument(EGraphDomain::Shader);
+	m_LogicHistory.Reset(m_Logic.Data);
+	m_ShaderHistory.Reset(m_Shader.Data);
+	ed::SetCurrentEditor(previous);
+	m_DebugEntity = entt::null;
+	m_LinkPulseTimers.clear();
+	m_LastDebugTraceSequence = 0;
+	m_HitBreakpointNode = 0;
+	m_EditingCommentNode = 0;
+	m_Domain = EGraphDomain::Logic;
+	m_LastDiagnostic = {};
+	m_NodeCandidates.clear();
+	m_NodeSearch[0] = '\0';
+}
+
 void GraphPanel::DrawResourceFrame()
 {
 	auto* previousContext = ed::GetCurrentEditor();
@@ -161,7 +190,75 @@ void GraphPanel::DrawResourceFrame()
 	}
 	if (m_Ready) ActivateDocument();
 	ResourceEditorInterface::DrawResourceFrame();
+	if (!IsHistoryGestureActive())
+	{
+		CommitDocumentEdit(m_Logic);
+		CommitDocumentEdit(m_Shader);
+	}
 	ed::SetCurrentEditor(previousDocument ? previousDocument->Context : previousContext);
+}
+
+ResourceDocumentHistory<Engine::Graph>& GraphPanel::GetHistory(Engine::EGraphDomain domain)
+{
+	return domain == EGraphDomain::Logic ? m_LogicHistory : m_ShaderHistory;
+}
+
+const ResourceDocumentHistory<Engine::Graph>& GraphPanel::GetHistory(Engine::EGraphDomain domain) const
+{
+	return domain == EGraphDomain::Logic ? m_LogicHistory : m_ShaderHistory;
+}
+
+bool GraphPanel::IsDocumentDirty(const GraphDocument& document) const
+{
+	return document.Data.GetRevision() != document.RecordedRevision || GetHistory(document.Data.GetDomain()).IsDirty();
+}
+
+bool GraphPanel::CommitDocumentEdit(GraphDocument& document)
+{
+	if (document.RecordedRevision == document.Data.GetRevision()) return true;
+	auto& history = GetHistory(document.Data.GetDomain());
+	history.MarkEdited();
+	if (!history.Record(document.Data, [this](const auto& graph) { return ApplyDocumentSnapshot(graph); },
+		LOCAL("History.Command.EditProperty")))
+		return false;
+	document.RecordedRevision = document.Data.GetRevision();
+	return true;
+}
+
+bool GraphPanel::ApplyDocumentSnapshot(const Engine::Graph& graph)
+{
+	auto& document = GetDocument();
+	if (graph.GetDomain() != document.Data.GetDomain()) return false;
+	GraphDocument candidate(graph.GetDomain());
+	candidate.Data = graph;
+	candidate.FilePath = document.FilePath;
+	candidate.FileResult = document.FileResult;
+	if (!InitializeDocumentCanvas(candidate)) return false;
+	ReplaceDocument(std::move(candidate));
+	return true;
+}
+
+bool GraphPanel::CanUndoDocument() const
+{
+	const auto& document = GetDocument();
+	if (document.RecordedRevision != document.Data.GetRevision()) return !IsHistoryGestureActive();
+	return GetHistory(m_Domain).CanUndo();
+}
+
+bool GraphPanel::CanRedoDocument() const
+{
+	const auto& document = GetDocument();
+	return document.RecordedRevision == document.Data.GetRevision() && GetHistory(m_Domain).CanRedo();
+}
+
+void GraphPanel::UndoDocument()
+{
+	if (CanUndoDocument() && CommitDocumentEdit(GetDocument())) GetHistory(m_Domain).Undo();
+}
+
+void GraphPanel::RedoDocument()
+{
+	if (CanRedoDocument()) GetHistory(m_Domain).Redo();
 }
 
 void GraphPanel::DrawCustomContent()
@@ -220,15 +317,17 @@ void GraphPanel::DrawCustomToolbar()
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Open").c_str(), sm.GetShortcutHint("Graph.Open")))
 			RequestOpenDocument();
-		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.Save").c_str(), sm.GetShortcutHint("Graph.Save")))
-			SaveDocument(false);
+		DrawSaveMenuItem();
 		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.SaveAs").c_str(), sm.GetShortcutHint("Graph.SaveAs")))
 			SaveDocument(true);
+		DrawCloseMenuItem();
 		ImGui::EndMenu();
 	}
 	// 2. [편집 (Edit)] 메뉴
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
+		DrawHistoryMenuItems("Graph");
+		ImGui::Separator();
 		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.AddNode").c_str(), "Graph.AddNode");
 		ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Delete").c_str(), "Graph.Delete");
 		ImGui::Separator();
@@ -320,7 +419,7 @@ void GraphPanel::DrawCustomQuickAccess()
 	DrawFileToolbar(toolbar);
 }
 
-void GraphPanel::SaveDocument(bool saveAs)
+bool GraphPanel::SaveDocument(bool saveAs)
 {
 	auto& document = GetDocument();
 	auto path = document.FilePath;
@@ -337,7 +436,7 @@ void GraphPanel::SaveDocument(bool saveAs)
 		};
 
 		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"bamgraph.json", EFileDialogContext::GraphSave))
-			return;
+			return false;
 		path = std::filesystem::path(selectedPath);
 	}
 
@@ -347,9 +446,10 @@ void GraphPanel::SaveDocument(bool saveAs)
 			EGraphFileStage::Serialize,
 			{ archive::ArchiveErrorCode::UnsupportedType, "ReflectionRegistry" }
 		};
-		return;
+		return false;
 	}
 
+	if (!CommitDocumentEdit(document)) return false;
 	const auto& reflection = ReflectionRegistry::Get();
 	document.FileResult = SaveGraphJson(path, document.Data, m_Registry,
 		reflection.GetRegistry(), reflection.GetPropertyCodecs());
@@ -357,8 +457,41 @@ void GraphPanel::SaveDocument(bool saveAs)
 	if (document.FileResult.Succeeded())
 	{
 		document.FilePath = std::move(path);
-		document.SavedRevision = document.Data.GetRevision();
+		GetHistory(document.Data.GetDomain()).MarkSaved();
 	}
+	return document.FileResult.Succeeded();
+}
+
+bool GraphPanel::SavePendingResourceChanges()
+{
+	const auto previousDomain = m_Domain;
+	for (const auto domain : { EGraphDomain::Logic, EGraphDomain::Shader })
+	{
+		m_Domain = domain;
+		if (IsDocumentDirty(GetDocument()) && !SaveDocument(false))
+		{
+			m_Domain = previousDomain;
+			return false;
+		}
+	}
+	m_Domain = previousDomain;
+	return true;
+}
+
+bool GraphPanel::FocusRetainedResource(const std::filesystem::path& path)
+{
+	for (const auto domain : { EGraphDomain::Logic, EGraphDomain::Shader })
+	{
+		const auto& document = domain == EGraphDomain::Logic ? m_Logic : m_Shader;
+		if (document.FilePath.empty()) continue;
+		std::error_code error;
+		const auto retained = Engine::PlatformPath::ResolveProjectRelative(document.FilePath);
+		if (retained != path && !std::filesystem::equivalent(retained, path, error)) continue;
+		m_Domain = domain;
+		m_TargetResourcePath = document.FilePath;
+		return true;
+	}
+	return false;
 }
 
 bool GraphPanel::IsSupported(const std::filesystem::path& assetPath) const
@@ -411,27 +544,52 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 		return false;
 	}
 
-	// 로드된 그래프 파일의 변수 노드 스키마 등록
-	candidate.Data.RegisterVariableNodes(m_Registry);
-
-	if (candidate.Data.GetDomain() != m_Domain)
+	if (!InitializeDocumentCanvas(candidate))
 	{
-		m_Domain = candidate.Data.GetDomain();
+		GetDocument().FileResult = candidate.FileResult;
+		ReportLoadFailure(path, candidate.FileResult);
+		return false;
 	}
 
+	m_Domain = candidate.Data.GetDomain();
+	ReplaceDocument(std::move(candidate));
+	GetHistory(m_Domain).Reset(GetDocument().Data);
+	m_TargetResourcePath = path;
+	m_LastDiagnostic = {};
+	m_AddPosition = ImVec2(40.0f, 40.0f);
+	m_DragPin = 0;
+	m_AddSource = {};
+	m_NodeCandidates.clear();
+	m_NodeSearch[0] = '\0';
+	m_NodeMenuActive = false;
+	m_FocusNodeSearch = false;
+	m_OpenNodePopup = false;
+	return true;
+}
+
+bool GraphPanel::InitializeDocumentCanvas(GraphDocument& candidate)
+{
+	auto previousRegistry = m_Registry;
+	candidate.Data.RegisterVariableNodes(m_Registry);
 	const auto views = BuildDocumentViews(candidate);
 	if (!views.Succeeded())
 	{
-		auto& document = GetDocument();
-		document.FileResult = { EGraphFileStage::Validate, {}, views };
-		ReportLoadFailure(path, document.FileResult);
+		m_Registry = std::move(previousRegistry);
+		candidate.FileResult = { EGraphFileStage::Validate, {}, views };
 		return false;
 	}
 
 	candidate.Diagnostics = candidate.Data.Validate(m_Registry);
-
-	auto* freshContext = CreateEditorContext();
-	ed::SetCurrentEditor(freshContext);
+	auto* previous = ed::GetCurrentEditor();
+	candidate.Context = CreateEditorContext();
+	if (!candidate.Context)
+	{
+		m_Registry = std::move(previousRegistry);
+		candidate.FileResult = { EGraphFileStage::Validate, {}, { EGraphError::InvalidDocument, 0, {}, 0, "EditorDocument.OperationFailed" } };
+		return false;
+	}
+	ed::SetCurrentEditor(candidate.Context);
+	ed::EnableShortcuts(false);
 
 	// 저장된 위치를 복원한다. 위치가 없는 예전 노드는 격자에 배치하고 그 위치를 문서에도 기록해, 저장 기준에 포함시킨다(열자마자 미저장이 되지 않도록).
 	std::vector<std::pair<GraphNodeId, ImVec2>> layout;
@@ -462,36 +620,34 @@ bool GraphPanel::LoadDocument(const std::filesystem::path& path)
 		ed::SetGroupSize(candidate.Nodes.at(node.Id).Id, groupSize);
 	}
 
+	ed::SetCurrentEditor(previous);
+	return true;
+}
+
+void GraphPanel::ReplaceDocument(GraphDocument&& candidate)
+{
+	auto& document = GetDocument();
+	const bool wasCurrent = document.Context && ed::GetCurrentEditor() == document.Context;
 	if (m_Domain == EGraphDomain::Logic)
 	{
 		InvalidateExecution();
 		m_EntryNode = 0;
 	}
-
-	auto& document = GetDocument();
-	candidate.SavedRevision = candidate.Data.GetRevision(); // 방금 읽은 내용이 저장 기준이다
+	candidate.RecordedRevision = candidate.Data.GetRevision();
 	std::swap(document, candidate);
-	document.Context = freshContext;
+	if (wasCurrent) ed::SetCurrentEditor(document.Context);
 	if (candidate.Context) ed::DestroyEditor(candidate.Context);
-
-	m_TargetResourcePath = path;
 	m_LastDiagnostic = {};
-	m_AddPosition = ImVec2(40.0f, 40.0f);
 	m_DragPin = 0;
 	m_AddSource = {};
+	m_EditingCommentNode = 0;
 	m_NodeCandidates.clear();
-	m_NodeSearch[0] = '\0';
-	m_NodeMenuActive = false;
-	m_FocusNodeSearch = false;
-	m_OpenNodePopup = false;
-	return true;
 }
 
 void GraphPanel::RequestOpenDocument()
 {
-	// 어느 도메인이든 미저장이면 확인한다. 열 파일의 도메인에 따라 현재 화면이 아닌 쪽 문서가 교체될 수 있다.
-	if (HasUnsavedResourceChanges()) m_ConfirmOpenRequested = true;
-	else OpenDocument();
+	// 열린 파일의 도메인에 해당하는 문서만 교체한다.
+	RunWithDiscardConfirmation([this] { OpenDocument(); });
 }
 
 void GraphPanel::OpenDocument()
@@ -562,37 +718,8 @@ GraphDiagnostic GraphPanel::BuildDocumentViews(GraphDocument& document)
 
 void GraphPanel::DrawFileToolbar(EditorUI::ToolbarLayout& toolbar)
 {
-	bool openRequested = false;
-	if (m_ConfirmOpenRequested)
-	{
-		ImGui::OpenPopup(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str());
-		m_ConfirmOpenRequested = false;
-	}
-	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(320.0f, 0.0f), ImGuiCond_Appearing);
-	if (ImGui::BeginPopupModal(LOCAL_LABEL("GraphPanel.ConfirmOpen").c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-	{
-		ImGui::PushTextWrapPos(300.0f);
-		ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.ReplaceWarning"));
-		ImGui::PopTextWrapPos();
-		ImGui::Spacing();
-		ImGui::Separator();
-		ImGui::Spacing();
-		const EditorUI::DialogAction actions[] = {
-			{ "EditorCommon.Cancel" }, { "GraphPanel.ReplaceCurrent", true, true }
-		};
-		const int action = EditorUI::DialogButtonBar("ReplaceGraphActions", actions, IM_ARRAYSIZE(actions));
-		if (action == 1)
-		{
-			ImGui::CloseCurrentPopup();
-			openRequested = true;
-		}
-		if (action == 0)
-			ImGui::CloseCurrentPopup();
-		ImGui::EndPopup();
-	}
-	if (openRequested) OpenDocument();
+	DrawSaveButton(toolbar);
+	DrawHistoryButtons(toolbar, "Graph");
 	const auto& document = GetDocument();
 	const std::string filenameText = document.FilePath.empty()
 		? LOCAL("GraphPanel.NoFile")

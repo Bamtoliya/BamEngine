@@ -105,6 +105,50 @@ void UnifiedSettingsPanel::ApplySettings()
     m_InputActions.Apply(settings);
 }
 
+void UnifiedSettingsPanel::SetOpen(bool open)
+{
+    if (!open && m_Open && IsAnyDirty())
+        m_ClosePending = true;
+    else
+        IImGui::SetOpen(open);
+}
+
+bool UnifiedSettingsPanel::ResolveDraftBeforeQuit()
+{
+    if (!m_DraftsInitialized || !IsAnyDirty()) return true;
+    Focus();
+    m_ClosePending = true;
+    m_QuitAfterClose = true;
+    return false;
+}
+
+void UnifiedSettingsPanel::DrawCloseConfirmation()
+{
+    if (!m_ClosePending) return;
+
+    const auto title = LOCAL("EditorDocument.ConfirmTitle") + "###CloseSettings";
+    if (!ImGui::IsPopupOpen(title.c_str())) ImGui::OpenPopup(title.c_str());
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+    ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", GetDisplayName()).c_str());
+    const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true } };
+    const int choice = EditorUI::DialogButtonBar("CloseSettingsActions", actions, IM_ARRAYSIZE(actions));
+    const bool continueQuit = choice == 1 && m_QuitAfterClose;
+    if (choice >= 0)
+    {
+        m_ClosePending = false;
+        m_QuitAfterClose = false;
+        if (choice == 1)
+        {
+            ResetDrafts();
+            IImGui::SetOpen(false);
+        }
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+    if (continueQuit) ImGuiManager::Get().RequestQuit();
+}
+
 void UnifiedSettingsPanel::Draw()
 {
     m_Graphics.DrawWindowConfirmation(EditorSettingsService::Get());
@@ -129,9 +173,13 @@ void UnifiedSettingsPanel::Draw()
     const ImGuiWindowFlags windowFlags = IsAnyDirty() ? ImGuiWindowFlags_UnsavedDocument : ImGuiWindowFlags_None;
 
 
-    if (!BeginPanelWindow(windowTitle.c_str(), m_Open, windowFlags) || !m_Open)
+    bool open = m_Open;
+    const bool visible = BeginPanelWindow(windowTitle.c_str(), open, windowFlags);
+    if (!open) SetOpen(false);
+    if (!visible || !m_Open || m_ClosePending)
     {
         m_InputActions.CancelCapture();
+        DrawCloseConfirmation();
         ImGui::End();
         return;
     }

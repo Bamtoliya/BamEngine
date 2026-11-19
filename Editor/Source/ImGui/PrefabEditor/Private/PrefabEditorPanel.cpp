@@ -42,15 +42,7 @@ bool PrefabEditorPanel::IsSupported(const std::filesystem::path& assetPath) cons
 
 void PrefabEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
-    if (m_HasUnsavedChanges && m_TargetResourcePath != assetPath)
-    {
-        m_PendingOpenPath = assetPath;
-        m_ShowCloseConfirmModal = true;
-        return;
-    }
-
-    m_TargetResourcePath = assetPath;
-    LoadPrefab();
+    LoadPrefab(assetPath);
 }
 
 void PrefabEditorPanel::CloseSession()
@@ -58,29 +50,32 @@ void PrefabEditorPanel::CloseSession()
     m_SelectedEntity = entt::null;
     m_RootEntity = nullptr;
     m_PrefabScene.reset();
-    m_HasUnsavedChanges = false;
+    m_History.Clear();
 }
 
-void PrefabEditorPanel::LoadPrefab()
+void PrefabEditorPanel::LoadPrefab(const std::filesystem::path& path)
 {
-    CloseSession();
-    if (m_TargetResourcePath.empty() || !std::filesystem::exists(m_TargetResourcePath)) return;
-
-    m_PrefabScene.reset(Engine::Scene::Create());
-    if (!m_PrefabScene) return;
-
     archive::JsonArchive ar;
-    if (ar.LoadFromFile(m_TargetResourcePath))
+    std::unique_ptr<Engine::Scene, SceneDeleter> scene(Engine::Scene::Create());
+    Engine::Entity* root = nullptr;
+    if (!scene || !ar.LoadFromFile(path) || !scene->InstantiatePrefabArchive(ar, root, nullptr) || !root)
     {
-        const auto res = m_PrefabScene->InstantiatePrefabArchive(ar, m_RootEntity, nullptr);
-        (void)res;
-        if (m_RootEntity) m_SelectedEntity = m_RootEntity->GetEntityHandle();
+        NotificationManager::Get().AddNotification(GetDisplayName(),
+            LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+        return;
     }
+
+    CloseSession();
+    m_TargetResourcePath = path;
+    m_PrefabScene = std::move(scene);
+    m_RootEntity = root;
+    m_SelectedEntity = m_RootEntity->GetEntityHandle();
+    if (auto snapshot = CaptureDocument()) m_History.Reset(std::move(*snapshot));
 }
 
 bool PrefabEditorPanel::SavePrefab(const std::filesystem::path& path)
 {
-    if (!m_PrefabScene || !m_RootEntity) return false;
+    if (!m_PrefabScene || !m_RootEntity || !CommitDocumentEdit()) return false;
 
     archive::JsonArchive ar;
     auto result = m_PrefabScene->WritePrefabArchive(ar, *m_RootEntity);
@@ -90,7 +85,7 @@ bool PrefabEditorPanel::SavePrefab(const std::filesystem::path& path)
     {
         if (AssetCache::IsCreated()) AssetCache::Get().RequestInvalidate(path);
         m_TargetResourcePath = path;
-        m_HasUnsavedChanges = false;
+        m_History.MarkSaved();
         NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", path.filename().string()), ELogLevel::Info, 3.0f);
         return true;
     }
@@ -103,8 +98,7 @@ bool PrefabEditorPanel::SavePrefab(const std::filesystem::path& path)
 
 bool PrefabEditorPanel::CanSaveDocument() const
 {
-    return m_Open && m_PrefabScene && m_RootEntity && !m_TargetResourcePath.empty() &&
-        !m_ShowCloseConfirmModal && m_PendingOpenPath.empty();
+    return m_Open && m_PrefabScene && m_RootEntity && !m_TargetResourcePath.empty();
 }
 
 bool PrefabEditorPanel::SaveDocument()
@@ -133,15 +127,64 @@ void PrefabEditorPanel::DrawCustomContent()
     {
         ImGui::TextDisabled("%s", LOCAL_CSTR("PrefabEditor.NoPrefabLoaded"));
     }
+    if (!IsHistoryGestureActive()) CommitDocumentEdit();
+}
 
-    DrawCloseConfirmModal();
+std::optional<std::string> PrefabEditorPanel::CaptureDocument() const
+{
+    archive::JsonArchive ar;
+    std::string snapshot;
+    if (!m_PrefabScene || !m_RootEntity || !m_PrefabScene->WritePrefabArchive(ar, *m_RootEntity) || !ar.ToJson(snapshot))
+        return std::nullopt;
+    return snapshot;
+}
+
+bool PrefabEditorPanel::CommitDocumentEdit()
+{
+    if (!m_History.HasPendingEdit()) return true;
+    auto snapshot = CaptureDocument();
+    return snapshot && m_History.Record(std::move(*snapshot),
+        [this](const auto& value) { return ApplyDocumentSnapshot(value); }, LOCAL("History.Command.EditProperty"));
+}
+
+bool PrefabEditorPanel::ApplyDocumentSnapshot(const std::string& snapshot)
+{
+    archive::JsonArchive ar;
+    std::unique_ptr<Engine::Scene, SceneDeleter> scene(Engine::Scene::Create());
+    Engine::Entity* root = nullptr;
+    if (!scene || !ar.Parse(snapshot) || !scene->InstantiatePrefabArchive(ar, root, nullptr) || !root) return false;
+
+    m_PrefabScene = std::move(scene);
+    m_RootEntity = root;
+    m_SelectedEntity = root->GetEntityHandle();
+    return true;
+}
+
+bool PrefabEditorPanel::CanUndoDocument() const
+{
+    return m_PrefabScene && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
+}
+
+bool PrefabEditorPanel::CanRedoDocument() const
+{
+    return m_PrefabScene && m_History.CanRedo();
+}
+
+void PrefabEditorPanel::UndoDocument()
+{
+    if (CanUndoDocument() && CommitDocumentEdit()) m_History.Undo();
+}
+
+void PrefabEditorPanel::RedoDocument()
+{
+    if (CanRedoDocument()) m_History.Redo();
 }
 
 void PrefabEditorPanel::DrawCustomToolbar()
 {
     if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
     {
-        ACTION_MENU_ITEM(LOCAL_LABEL("PrefabEditor.Save").c_str(), "Prefab.Save");
+        DrawSaveMenuItem();
 
         if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.SaveAs").c_str(), nullptr, false, m_RootEntity != nullptr))
         {
@@ -153,9 +196,16 @@ void PrefabEditorPanel::DrawCustomToolbar()
                 SavePrefab(std::filesystem::path(outPath));
         }
 
-        if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.Revert").c_str(), nullptr, false, m_HasUnsavedChanges))
-            LoadPrefab();
+        if (ImGui::MenuItem(LOCAL_LABEL("PrefabEditor.Revert").c_str(), nullptr, false, HasUnsavedResourceChanges()))
+            RunWithDiscardConfirmation([this] { LoadPrefab(m_TargetResourcePath); }, false);
 
+        DrawCloseMenuItem();
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+    {
+        DrawHistoryMenuItems("Prefab");
         ImGui::EndMenu();
     }
 }
@@ -163,13 +213,10 @@ void PrefabEditorPanel::DrawCustomToolbar()
 void PrefabEditorPanel::DrawCustomQuickAccess()
 {
     EditorUI::ToolbarLayout toolbar;
-    ImGui::BeginDisabled(!CanSaveDocument());
-    if (toolbar.Button("PrefabEditor.Save", ICON_FA_FLOPPY_DISK, "PrefabEditor.Save"))
-        SaveDocument();
-    ImGui::EndDisabled();
-
-    if (toolbar.Button("PrefabEditor.Revert", ICON_FA_ROTATE_LEFT, "PrefabEditor.Revert"))
-        LoadPrefab();
+    DrawSaveButton(toolbar);
+    DrawHistoryButtons(toolbar, "Prefab");
+    if (toolbar.Icon("PrefabEditor.Revert", ICON_FA_ROTATE_LEFT, "PrefabEditor.Revert", { .Enabled = HasUnsavedResourceChanges() }))
+        RunWithDiscardConfirmation([this] { LoadPrefab(m_TargetResourcePath); }, false);
 
     toolbar.Text(m_TargetResourcePath.string().c_str());
 }
@@ -197,7 +244,7 @@ void PrefabEditorPanel::DrawPrefabHierarchy()
         if (entity && delHandle != m_RootEntity->GetEntityHandle())
         {
             if (m_SelectedEntity == delHandle) m_SelectedEntity = m_RootEntity->GetEntityHandle();
-            if (m_PrefabScene->DestroyEntity(*entity)) m_HasUnsavedChanges = true;
+            if (m_PrefabScene->DestroyEntity(*entity)) m_History.MarkEdited();
         }
     }
 }
@@ -224,7 +271,7 @@ void PrefabEditorPanel::DrawPrefabInspector()
         if (ImGui::InputText(LOCAL_CSTR("PROP_NAME"), nameBuf, sizeof(nameBuf)))
         {
             nameComp->name = StrToWStr(nameBuf);
-            m_HasUnsavedChanges = true;
+            m_History.MarkEdited();
         }
     }
 
@@ -242,7 +289,7 @@ void PrefabEditorPanel::DrawPrefabInspector()
             {
                 (void)tr->SynchronizeRotation();
                 Engine::TransformSystem::UpdateHierarchy(registry);
-                m_HasUnsavedChanges = true;
+                m_History.MarkEdited();
             }
         }
     }
@@ -261,49 +308,8 @@ void PrefabEditorPanel::DrawPrefabInspector()
             auto object = entry.Edit(registry, m_SelectedEntity);
             if (ReflectionPropertyDrawer::DrawObject(*entry.ReflectionType, object, &Engine::ReflectionRegistry::Get().GetRegistry()))
             {
-                m_HasUnsavedChanges = true;
+                m_History.MarkEdited();
             }
         }
-    }
-}
-
-void PrefabEditorPanel::DrawCloseConfirmModal()
-{
-    const std::string popupTitle = LOCAL("PrefabEditor.CloseConfirmTitle") + "###PrefabCloseConfirmPopup";
-    if (m_ShowCloseConfirmModal)
-    {
-        ImGui::OpenPopup(popupTitle.c_str());
-        m_ShowCloseConfirmModal = false;
-    }
-
-    if (ImGui::BeginPopupModal(popupTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::TextUnformatted(LOCAL_CSTR("PrefabEditor.UnsavedChangesPrompt"));
-        ImGui::Spacing();
-
-        const EditorUI::DialogAction actions[] = {
-            { "EditorCommon.Cancel" }, { "EditorDocument.Discard", true, true }, { "PrefabEditor.Save" }
-        };
-        const int action = EditorUI::DialogButtonBar("PrefabCloseActions", actions, IM_ARRAYSIZE(actions));
-        if (action == 2 && SavePrefab(m_TargetResourcePath))
-        {
-            ImGui::CloseCurrentPopup();
-            if (!m_PendingOpenPath.empty()) { SetTargetResource(m_PendingOpenPath); m_PendingOpenPath.clear(); }
-        }
-
-        if (action == 1)
-        {
-            m_HasUnsavedChanges = false;
-            ImGui::CloseCurrentPopup();
-            if (!m_PendingOpenPath.empty()) { SetTargetResource(m_PendingOpenPath); m_PendingOpenPath.clear(); }
-        }
-
-        if (action == 0)
-        {
-            m_PendingOpenPath.clear();
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
     }
 }

@@ -32,12 +32,12 @@ public:
     bool EnterPrefabMode(const std::filesystem::path& prefabPath);
     bool SavePrefab();
     bool ExitPrefabMode(bool discardChanges = false);
+    bool ResolvePrefabModeBeforeQuit();
 
     // 헤더바(MenuBar) 내부 좌측 UI 및 종료 확인 모달
     void DrawMenuBarUI();
     void DrawExitConfirmModal();
 
-    void DrawViewportBanner();
 
 private:
     bool SetupDefaultEnvironment(Engine::Scene* scene);
@@ -49,6 +49,7 @@ private:
     Engine::Scene* m_PrefabScene = nullptr;
     Engine::Entity* m_PrefabRootEntity = nullptr;
     bool m_HasUnsavedChanges = false;
+    bool m_QuitAfterExit = false;
     bool m_ShowExitConfirmModal = false;
     bool m_MainSceneHadUnsavedChanges = false;
     std::vector<Engine::Entity*> m_SavedSelection;

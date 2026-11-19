@@ -27,6 +27,8 @@ public:
 
     void Update(f32 dt) override;
     void Draw() override;
+    void SetOpen(bool open) override;
+    bool ResolveDraftBeforeQuit();
     bool ShouldUpdateWhenClosed() const override { return true; }
     void SetActiveCategory(EUnifiedSettingsCategory category) { m_ActiveCategory = category; }
     void OpenWithCategory(EUnifiedSettingsCategory category) { m_ActiveCategory = category; m_Open = true; }
@@ -42,6 +44,7 @@ private:
     void DrawSidebar();
     void DrawContentArea();
     void DrawFooter();
+    void DrawCloseConfirmation();
     void DrawSettingsStorageStatus() const;
 
 private:
@@ -50,6 +53,8 @@ private:
     ImGuiTextFilter m_SearchFilter;
     float m_SidebarWidth = 250.0f;
     bool m_DraftsInitialized = false;
+    bool m_ClosePending = false;
+    bool m_QuitAfterClose = false;
 
     GeneralSettingsWidget m_General;
     ThemeSettingsWidget m_Theme;

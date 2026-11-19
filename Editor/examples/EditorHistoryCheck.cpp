@@ -1,4 +1,5 @@
 ﻿#include "SceneEditHistory.h"
+#include "ResourceDocumentHistory.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
@@ -36,6 +37,41 @@ namespace
         bool Execute() override { if (Fail) return false; ++Value; return true; }
         bool Undo() override { if (Fail) return false; --Value; return true; }
     };
+    void ResourceHistoryPreservesSavePoint()
+    {
+        Editor::ResourceDocumentHistory<int> history;
+        int value = 10;
+        bool canApply = true;
+        const auto apply = [&](int next) {
+            if (!canApply) return false;
+            value = next;
+            return true;
+        };
+
+        history.Reset(value);
+        Check(!history.IsDirty() && !history.CanUndo(), "resource load baseline");
+        value = 20;
+        history.MarkEdited();
+        value = 30;
+        history.MarkEdited();
+        Check(history.IsDirty() && history.CanUndo() && !history.CanRedo(), "resource pending edit");
+        Check(history.Record(value, apply), "resource commit gesture");
+        Check(history.Undo() && value == 10 && !history.IsDirty(), "resource undo to initial baseline");
+        Check(history.Redo() && value == 30 && history.IsDirty(), "resource redo gesture");
+        history.MarkSaved();
+        canApply = false;
+        Check(!history.Undo() && value == 30 && !history.IsDirty(), "resource failed restore preserves save point");
+        canApply = true;
+        Check(history.Undo() && value == 10 && history.IsDirty(), "resource undo after save");
+        Check(history.Redo() && value == 30 && !history.IsDirty(), "resource redo returns to save point");
+        Check(history.Undo(), "resource undo before branch");
+        value = 40;
+        history.MarkEdited();
+        Check(history.Record(value, apply) && history.IsDirty() && !history.CanRedo(), "resource branch");
+        history.Reset(100);
+        Check(!history.IsDirty() && !history.CanUndo() && !history.CanRedo(), "resource switches document");
+    }
+
     void HistoryOwnership()
     {
         int value = 0, alive = 0;
@@ -880,6 +916,7 @@ int main()
     {
         Check(Engine::ReflectionRegistry::Create() != nullptr, "reflection init");
         HistoryOwnership();
+        ResourceHistoryPreservesSavePoint();
         DocumentOwnership();
         HistoryStateIdentity();
         SceneDocumentState();

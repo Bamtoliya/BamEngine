@@ -24,6 +24,7 @@ public:
 
 	void Initialize(uint32 width = 512, uint32 height = 512);
 	void Free();
+	void ReleaseMaterial();
 
 	// 매 프레임 프리뷰 씬 업데이트 및 파이프라인 제출
 	void Submit(Engine::MaterialInterface* material, f32 dt);

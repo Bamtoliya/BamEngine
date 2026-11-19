@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include "ResourceEditorInterface.h"
+#include "ResourceDocumentHistory.h"
+#include <optional>
 #include "MaterialInterface.h"
 #include "MaterialPreviewRenderer.h"
 
@@ -12,17 +14,16 @@ BEGIN(Editor)
 class MaterialEditor final : public ResourceEditorInterface
 {
 public:
-	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
-	{
-		return PrepareTargetPathRelocation(relocation);
-	}
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	MaterialEditor();
 	virtual ~MaterialEditor() = default;
 
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
-	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	bool HasUnsavedResourceChanges() const override { return m_History.IsDirty(); }
 	virtual void SaveResource() { SaveTarget(); }
+	bool CanSaveDocument() const;
+	EShortcutContext GetShortcutContext() const override { return EShortcutContext::MaterialEditor; }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual void Update(f32 dt) override; // 렌더 패스 실행 전 커맨드 사전 제출용
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
@@ -30,6 +31,9 @@ public:
 
 private:
 	void DrawCustomToolbar() override;
+	void ReleaseResourceDocument() override;
+	bool RestoreSavedResource() override;
+	const char* GetSaveActionId() const override { return "MaterialEditor.Save"; }
 	void DrawCustomQuickAccess() override;
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1000.0f, 650.0f); }
@@ -43,7 +47,14 @@ private:
 private:
 	Engine::ResourceHandle<Engine::MaterialInterface> m_MaterialHandle;
 	Engine::MaterialInterface* m_Material = nullptr;
-	bool m_IsDirty = false;
+	ResourceDocumentHistory<std::string> m_History;
+	bool CommitDocumentEdit();
+	std::optional<std::string> CaptureDocument() const;
+	bool ApplyDocumentSnapshot(const std::string& snapshot);
+	bool CanUndoDocument() const override;
+	bool CanRedoDocument() const override;
+	void UndoDocument() override;
+	void RedoDocument() override;
 	bool m_IsReadOnly = false;
 	// 새 파라미터 추가용 입력 버퍼
 	char m_NewParamName[128] = "";

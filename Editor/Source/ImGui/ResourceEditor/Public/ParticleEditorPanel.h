@@ -25,7 +25,11 @@ public:
 
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
-	bool HasUnsavedResourceChanges() const override { return m_IsDirty; }
+	bool HasUnsavedResourceChanges() const override
+	{
+		return (m_OwnsTemporaryEffect && m_TargetResourcePath.empty()) || m_HasPreEditSnapshot ||
+			m_History.GetCurrentStateId() != m_SavedStateId;
+	}
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	EShortcutContext GetShortcutContext() const override { return EShortcutContext::ParticleTimeline; }
 	bool CanExecuteTimelineAction(EditorUI::TimelineAction action) const;
@@ -40,6 +44,9 @@ private:
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1280.0f, 760.0f); }
 	void DrawCustomToolbar() override;
+	void ReleaseResourceDocument() override;
+	bool RestoreSavedResource() override;
+	const char* GetSaveActionId() const override { return "ParticleTimeline.Save"; }
 	ImGuiWindowFlags GetResourceWindowFlags() const override { return ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse; }
 	void OnResourceWindowVisibility(bool visible) override { if (!visible) m_Timeline.Drag.reset(); }
 	float GetTimelineDuration() const;
@@ -55,6 +62,7 @@ private:
 	void OpenEffect();
 	void SaveEffect();
 	void SaveEffectAs();
+	void SaveEffectTo(const std::filesystem::path& path);
 	void RestartSimulation();
 	void InvalidateTimelinePreview();
 
@@ -67,7 +75,8 @@ private:
 
 private:
 	Engine::ResourceHandle<Engine::ParticleEffect> m_EffectHandle;
-	bool m_IsDirty = false;
+	bool m_OwnsTemporaryEffect = false;
+	uint64 m_SavedStateId = 0;
 	string m_StatusMessage;
 	int m_SelectedEmitterIndex = 0;
 	char m_EmitterSearch[64] = {};

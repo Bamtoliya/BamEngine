@@ -49,7 +49,7 @@ public:
 
 public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
-	bool HasUnsavedResourceChanges() const override { return m_UntrackedDirty || m_TimelineHistory.GetCurrentStateId() != m_SavedStateId; }
+	bool HasUnsavedResourceChanges() const override { return m_InspectorEdit.has_value() || m_UntrackedDirty || m_TimelineHistory.GetCurrentStateId() != m_SavedStateId; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
 	EShortcutContext GetShortcutContext() const override
 	{
@@ -67,6 +67,9 @@ private:
 	void DrawCustomContent() override;
 	ImVec2 GetInitialResourceWindowSize() const override { return ImVec2(1280.0f, 760.0f); }
 	void DrawCustomToolbar() override;
+	void ReleaseResourceDocument() override;
+	bool RestoreSavedResource() override;
+	const char* GetSaveActionId() const override { return "CompositeTimeline.Save"; }
 	ImGuiWindowFlags GetResourceWindowFlags() const override
 	{
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
@@ -93,6 +96,7 @@ private:
 	void DrawInspector();
 	bool DrawSelectedTrackInspector(Engine::CompositeEffect* effect); // 이번 프레임에 값이 바뀌면 true
 	void CommitInspectorEdit();
+	std::function<void()> CaptureCurveHistory();
 	void DrawTransportBar();
 	void DrawTimeline();
 	void SelectTrack(SelectedVFXTrack selection);
@@ -105,6 +109,7 @@ private:
 	void OpenEffect();
 	void SaveEffect();
 	void SaveEffectAs();
+	void SaveEffectTo(const std::filesystem::path& path);
 	void RestartSimulation();
 	void InvalidateTimelinePreview();
 	void MarkSaved(); // 현재 문서 상태를 저장 기준점으로 기록한다 (저장 성공·로드 시)
@@ -120,6 +125,7 @@ private:
 	void ToggleAirMode();
 private:
 	Engine::ResourceHandle<Engine::CompositeEffect> m_EffectHandle;
+	bool m_OwnsTemporaryEffect = false;
 	bool m_UntrackedDirty = false; // 이력에 남지 않는 변경: 반복 토글, 트랙 목록 활성 체크, 새 이펙트
 	uint64 m_SavedStateId = 0;     // 저장·로드 시점의 m_TimelineHistory 상태 ID
 	std::string m_StatusMessage;

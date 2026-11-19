@@ -21,5 +21,5 @@ ResourceEditor,Target,Target: {},대상: {}
 ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
 ResourceEditor,CompositeVFXTitle,Composite VFX Editor,통합 비주얼 이펙트 에디터
 ResourceEditor,DiscardTitle,Unsaved Changes,저장하지 않은 변경
-ResourceEditor,DiscardMessage,{} has unsaved changes. Continue without saving?,{}에 저장하지 않은 변경 내용이 있습니다. 저장하지 않고 계속할까요?
-ResourceEditor,DiscardContinue,Continue Without Saving,저장하지 않고 계속
+ResourceEditor,DiscardMessage,{} has unsaved changes.,{}에 저장하지 않은 변경 내용이 있습니다.
+ResourceEditor,DiscardFailed,Could not restore the saved asset. The document remains open.,저장된 에셋을 복원하지 못했습니다. 문서를 열린 상태로 유지합니다.

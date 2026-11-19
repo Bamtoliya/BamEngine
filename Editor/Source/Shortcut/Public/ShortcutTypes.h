@@ -19,6 +19,9 @@ enum class EShortcutContext : uint8
     UIViewport,
     ParticleTimeline,
     CompositeTimeline,
+    ModelEditor,
+    MaterialEditor,
+    SpriteEditor,
     Count
 };
 
