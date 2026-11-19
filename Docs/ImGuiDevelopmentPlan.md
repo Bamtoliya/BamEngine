@@ -255,6 +255,8 @@
 
 ## 10. 프리팹 관련 패널과 작업 흐름
 
+현재 코드 기준으로 인스턴스 저장 방식과 `Apply All`·`Revert All`·`Unpack`을 다시 점검했다. 객체 수명, 엔티티 참조, 원본 덮어쓰기와 씬 재열기의 개선 순서는 [프리팹 제작·배치·씬 저장 흐름 개선 계획](PrefabSceneWorkflowPlan.md)을 따른다. 아래 완료 표시는 당시의 기록이다.
+
 ### 초기 조사에서 확인한 기반과 부족한 연결
 
 - `SceneManager::SavePrefab()`과 `InstantiatePrefab()`이 있고, `Scene`에는 프리팹 Archive 저장·복원 코드가 있다.
