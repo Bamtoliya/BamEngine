@@ -5,6 +5,7 @@
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [VisualScriptingBlueprintPlan.md](VisualScriptingBlueprintPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (P2-D 및 P3/P4 애니메이션 및 콘텐츠 확장)
+- 액션 타임라인 연계와 이동 상태 복귀 검증 · [애니메이션 제작·실행 파이프라인 개선 계획](AnimationPipelineIntegrationPlan.md)
 - 근거: [코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) F01·F06·F07·F11 및 [구현 기록](ImplementationLog.md).
 
 ---

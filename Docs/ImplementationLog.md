@@ -7,6 +7,11 @@ This document tracks implementation details, architectural decisions, and techni
 - [Client 에셋 팩 계획](ClientAssetCookingAndPackingPlan.md)에 선택 수집, 유형별 쿠킹·기존 BEVE 재사용, Windows 팩 형식·마운트, 기존 내보내기에서 게시하기까지의 단계와 검증 기준을 기록했다.
 - 현재 폴더 복사, Archive의 바이트 디코딩, 디스크 파일을 전제로 한 Client 로드 경로를 코드에서 대조했다. 팩 구현·빌드·실환경 검증·성능 비교는 이후 단계에 둔다.
 
+### [2026-11-19] 애니메이션 제작·실행 파이프라인 개선 계획
+
+- [개선 계획](AnimationPipelineIntegrationPlan.md)에 모델 임포트, Animator Graph, VFX, Notify, Action Timeline의 연결을 기록했다. 편집 씬 격리와 Animator 복원, 프리뷰 발동 규칙 일치, 모델·클립 참조 정리, 입력 기반 공격 샘플의 PIE·독립 Client 검증 순서를 정리했다.
+- 현재 소스, `BaselineVerification`의 재생 설정, 저장된 타임라인의 모델 경로와 기존 PIE 이벤트 검증 기록을 대조했다. 개선 코드 적용과 빌드·CTest·실환경 검증은 이후 단계에 둔다.
+
 ### [2026-11-19] 리소스 편집기 비동기 열기 계획
 
 - [리소스 편집기 비동기 열기 계획](ResourceEditorAsyncOpenPlan.md)에 기존 도킹 창의 로딩 표시, 모델 편집기부터 적용하는 순서, 여러 패널이 공유하는 프레임 예산과 검증 기준을 기록했다.

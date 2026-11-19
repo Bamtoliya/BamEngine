@@ -1,7 +1,7 @@
 # 애니메이션·이펙트·노티파이 통합 타임라인 에디터 개발 계획 (Animation & FX Timeline Editor Plan)
 
-- 작성일: 2026-11-03 (갱신일: 2026-11-04)
-- 상태: Phase 1 ~ Phase 5 구현 완료 / 검증 완료
+- 작성일: 2026-11-03 (갱신일: 2026-11-19)
+- 상태: Phase 1~5 기본 기능 구현. 확인한 동작과 미검증 항목은 8.5~11절에 기록한다. 편집 씬 격리, Animator 복원, 프리뷰 발동 규칙과 독립 Client 통합 검증은 [파이프라인 개선 계획](AnimationPipelineIntegrationPlan.md)을 따른다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 연계 계획: [AnimatorGraphPlan.md](AnimatorGraphPlan.md) (Phase 5 AnimNotify 및 독립 프리뷰), [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 4절(파티클 시스템), [DevelopmentPriorities.md](DevelopmentPriorities.md) (P3/P4)
 
@@ -155,18 +155,11 @@ flowchart TD
 
 ---
 
-### Phase 5. 런타임 액션 타임라인 재생 시스템 (Action Timeline Runtime System) - [완료]
-- **목적:** 에디터에서 저작한 `.actiontimeline.json` 에셋을 인게임(PIE 또는 런타임) 게임플레이 엔티티에서 실시간 재생.
-- **세부 내용:**
-  - `ActionTimelineComponent`: 엔티티 부착용 ECS 컴포넌트 (`timelinePath`, `playRate`, `isLooping`, `isPlaying`, `currentTime`, 콜백 델리게이트).
-  - `ActionTimelineSystem`: 매 프레임 `dt`에 따라 타임라인 진행 및 인게임 연동.
-    - `AnimatorComponent` 클립 및 재생 시간 강제 동기화.
-    - 본 소켓 기반 3D 월드 좌표 산출 (`ComputeSocketWorldPos`).
-    - `prevTime` ~ `currentTime` 구간 내 노티파이 누락 없는 검출 및 3D 사운드(`AudioManager`), 파티클 버스트(`ParticleEmitterComponent`) 트리거.
-    - 카메라 샷 연출: 메인 카메라(`CameraComponent`)의 목표 FOV 스무스 줌인, `ShakeIntensity` 화면 흔들림 오프셋 적용, 샷 종료 후 원래 FOV로 자연스러운 복원.
-  - `Systems.h`, `Application.cpp`, `Client/Main.cpp`에 런타임 시스템 등록 완료.
-  - 로캘 원본 CSV(`Engine.csv`, `Editor.csv`) 및 JSON 번역 파일 완벽 동기화.
-- **완료 검증:** 인게임 엔티티에서 타임라인 재생 시 지정된 프레임에 정확히 사운드가 출력되고 본 소켓 위치에서 파티클이 발생하며, 카메라 샷 연출이 종료 후 원래 화각으로 깔끔히 복원됨.
+### Phase 5. 런타임 액션 타임라인 재생 시스템 (기본 구현)
+
+- `ActionTimelineComponent`가 에셋 경로와 재생 상태를 관리한다. `ActionTimelineSystem`은 재생 시간을 진행하고 작성 클립이 있을 때 Animator 포즈를 구동한다. Editor와 Client가 이 시스템을 등록한다. [시스템 구현](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp) · [Client 등록](../Client/Source/Execution/Private/ClientGameRuntime.cpp)
+- 런타임은 사운드 `PlayOneShot`, 본 소켓 기반 Composite VFX 생성, Gameplay의 `CustomEvent` 발행을 처리한다. 직접 `Particle` Notify는 좌표 계산까지 구현돼 있다. 카메라 샷의 기본 동작은 목표 FOV 보간까지이며, 본 포커스·셰이크·종료 시 FOV 복원은 후속이다.
+- 8.5절은 PIE의 이벤트 수신과 모듈 핫리로드 검증 결과를 기록한다. 편집 씬 격리, 패널과 런타임의 발동 일치, 참조 검증과 Client 실행의 완료 기준은 [파이프라인 개선 계획](AnimationPipelineIntegrationPlan.md)에 둔다.
 
 ---
 
@@ -174,7 +167,7 @@ flowchart TD
 
 1. **파티클 시스템 기초 (P3, 완료):** 단일 CPU 이미터, 빌보드 렌더러, 파티클 수명/적분 코어 완료.
 2. **Phase 1 ~ Phase 4 (에디터 통합 저작 도구, 완료):** 비-PIE 실시간 프리뷰 루프, 다중 트랙 GUI, 스플리터, 마커 드래그, 단축키, 에셋 브라우저 연동 완료.
-3. **Phase 5 (인게임 런타임 재생 시스템, 완료):** 액션 타임라인 컴포넌트, 런타임 시스템, 소켓 파티클, 3D 사운드, 카메라 샷 줌인/복원/셰이크 완료.
+3. **Phase 5 (인게임 런타임 재생 시스템, 기본 구현):** 액션 클립 구동, 소켓 Composite VFX, 사운드, C++ 이벤트 발행과 카메라 FOV 보간을 연결했다. 기존 확인 범위와 후속 검증은 Phase 5 및 8.5~11절에 기록한다.
 
 ## 5. 이펙트 편집기와 공통 UI (2026-11-09)
 
