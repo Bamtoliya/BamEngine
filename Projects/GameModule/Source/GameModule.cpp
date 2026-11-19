@@ -8,6 +8,7 @@
 #include "SkyAtmosphereSystem.h"
 #include "GameGameplayLibrary.h"
 #include "ReflectionRegistry.h"
+#include "ActionTimelineEvents.h"
 #include "GameModule.gen.h"
 
 class GameModule final : public Engine::IModule
@@ -38,10 +39,21 @@ public:
 		SkyAtmosphereSystem::InitializeResources();
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering Systems...");
 		Engine::SystemManager::Get().AddSystem<SkyAtmosphereSystem>();
+
+		// 3. 액션 타임라인 이벤트 노티파이 구독 (OnUnload에서 해제하므로 핫리로드 후에도 구독은 하나다)
+		m_ActionEventHandle = Engine::ActionTimelineEvents::Subscribe([](const Engine::ActionTimelineEvent& event) { OnActionTimelineEvent(event); });
+		BAM_LOG(Info, "GameModule", "ActionEvent", "[GameModule] Subscribed to action timeline events (subscribers: {})", Engine::ActionTimelineEvents::GetSubscriberCount());
 	}
 
 	void OnUnload() override
 	{
+		// 언로드되는 코드를 가리키는 핸들러가 남지 않도록 가장 먼저 해제한다.
+		if (m_ActionEventHandle != 0)
+		{
+			Engine::ActionTimelineEvents::Unsubscribe(m_ActionEventHandle);
+			m_ActionEventHandle = 0;
+		}
+
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering Systems...");
 		if (Engine::SystemManager::IsCreated())
 		{
@@ -76,6 +88,13 @@ public:
 	}
 
 private:
+	// 이벤트 노티파이 수신 예제: 타임라인이 지정 시점을 지날 때 한 번 호출된다. 게임 규칙(공격 판정 등)은 EventTag로 나눠 연결한다.
+	static void OnActionTimelineEvent(const Engine::ActionTimelineEvent& event)
+	{
+		BAM_LOG(Info, "GameModule", "ActionEvent", "Action event '{}' (notify '{}', {:.2f}s) on entity {}",
+			event.eventTag, event.notifyName, event.triggerTime, entt::to_integral(event.entity));
+	}
+
 	void RunGameplayScoreExample()
 	{
 		if (!Engine::ModuleManager::IsCreated())
@@ -110,6 +129,7 @@ private:
 	}
 
 	bool m_OwnsScoreModule = false;
+	Engine::DelegateHandle m_ActionEventHandle = 0;
 };
 
 IMPLEMENT_MODULE(GameModule)

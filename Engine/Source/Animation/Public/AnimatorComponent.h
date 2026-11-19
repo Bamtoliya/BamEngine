@@ -69,6 +69,19 @@ namespace Engine
 
 		std::vector<BoneLocalPose> localBonePose;
 
+		// 외부 구동(액션 타임라인)이 끝난 뒤, 그 마지막 포즈에서 현재 애니메이션으로 섞어 넘어간다 (런타임 전용).
+		std::vector<BoneLocalPose> blendFromPose;
+		f32 blendFromDuration = 0.0f;
+		f32 blendFromElapsed = 0.0f;
+		void BeginBlendFromPose(const std::vector<BoneLocalPose>& pose, float duration)
+		{
+			blendFromPose.clear();
+			if (duration <= 0.0f || pose.empty()) return;
+			blendFromPose = pose;
+			blendFromDuration = duration;
+			blendFromElapsed = 0.0f;
+		}
+
 		// 애니메이션 상태 머신 런타임 인스턴스 (비직렬화)
 		AnimatorRuntimeState runtimeState;
 		std::shared_ptr<AnimatorStateMachine> stateMachineAsset;

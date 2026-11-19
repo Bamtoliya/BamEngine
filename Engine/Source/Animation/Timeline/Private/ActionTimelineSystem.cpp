@@ -23,6 +23,8 @@
 #include "Model.h"
 #include "ModelInstanceComponent.h"
 #include "Logger.h"
+#include "ActionTimelineEvents.h"
+#include "SystemManager.h"
 
 namespace
 {
@@ -50,8 +52,10 @@ namespace
 			return result;
 		}
 
-		const auto* animator = world.try_get<AnimatorComponent>(entity);
-		const auto* skeleton = FindSkeletonInHierarchy(world, entity);
+		// 본 행렬은 Animator 엔티티(모델 루트) 공간이다. 대상 엔티티의 자식에 모델을 둔 구성도 있으므로 자식 계층까지 찾는다.
+		const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
+		const auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
+		const auto* skeleton = animator ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
 		if (!animator || !skeleton || animator->finalBoneMatrices.empty())
 		{
 			const mat4 finalMat = entityWorldMat * offsetMat;
@@ -71,7 +75,10 @@ namespace
 			{
 				mat4 invOffset = glm::inverse(bones[boneIdx].OffsetMatrix);
 				mat4 combined = animator->finalBoneMatrices[boneIdx] * invOffset;
-				mat4 finalMat = entityWorldMat * combined * offsetMat;
+				// 스킨드 렌더링과 같이 Animator 엔티티의 월드 행렬을 곱한다. 같은 엔티티 구성이면 entityWorldMat과 같다.
+				const auto* animatorWorld = world.try_get<WorldTransformComponent>(animatorEntity);
+				const mat4 animatorWorldMat = animatorWorld ? animatorWorld->worldMatrix : entityWorldMat;
+				mat4 finalMat = animatorWorldMat * combined * offsetMat;
 				result.position = vec3(finalMat[3]);
 				result.rotation = glm::quat_cast(finalMat);
 				return result;
@@ -100,15 +107,15 @@ namespace
 		return {};
 	}
 
-	// 타임라인을 작성한 클립을 찾는다. 엔티티의 연결 모델을 먼저 보고, 없으면 타임라인에 저장된 작성 모델에서 찾는다.
+	// 타임라인을 작성한 클립을 찾는다. Animator 엔티티(모델 루트)의 연결 모델을 먼저 보고, 없으면 타임라인에 저장된 작성 모델에서 찾는다.
 	// 클립은 스켈레톤 기준이므로 같은 스켈레톤을 쓰는 다른 모델에도 적용할 수 있다.
-	ResourceHandle<Animation> ResolveTimelineClip(const entt::registry& world, entt::entity entity, const ActionTimelineAsset& asset)
+	ResourceHandle<Animation> ResolveTimelineClip(const entt::registry& world, entt::entity animatorEntity, const ActionTimelineAsset& asset)
 	{
 		if (asset.GetClipName().empty()) return {};
 		const std::wstring clipName = StrToWStr(asset.GetClipName());
 
 		ResourceHandle<Animation> clip;
-		if (const auto* instance = world.try_get<ModelInstanceComponent>(entity))
+		if (const auto* instance = animatorEntity != entt::null ? world.try_get<ModelInstanceComponent>(animatorEntity) : nullptr)
 			clip = FindClipByName(instance->modelHandle.Get(), clipName);
 		if (!clip.IsValid() && !asset.GetModelPath().empty())
 		{
@@ -123,7 +130,9 @@ namespace
 	// 노티파이 소켓 본이 엔티티 스켈레톤에 없으면 엔티티 원점에서 발동한다. 타임라인을 불러올 때 한 번 알린다.
 	void WarnMissingSocketBones(const entt::registry& world, entt::entity entity, const ActionTimelineAsset& asset)
 	{
-		const auto* skeleton = FindSkeletonInHierarchy(world, entity);
+		// 소켓 계산과 같은 스켈레톤(Animator 엔티티 계층)으로 판정한다. Animator가 없으면 모든 소켓이 원점으로 대체된다.
+		const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
+		const auto* skeleton = animatorEntity != entt::null ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
 		for (const auto& track : asset.GetNotifyTracks())
 		{
 			for (const auto& notify : track.Notifies)
@@ -133,6 +142,34 @@ namespace
 				BAM_LOG(Warn, "Engine", "ActionTimeline", "Socket bone '{}' of notify '{}' was not found on the entity skeleton. The entity origin is used instead.", notify.SocketBoneName, notify.Name);
 			}
 		}
+	}
+
+	// 타임라인이 Animator를 넘겨받는다. 같은 Animator를 이미 넘겨받았으면(재생 중 다시 Play) 처음 보관한 상태를 유지한다.
+	void BeginAnimatorOverride(ActionTimelineComponent& timeline, entt::entity animatorEntity, const AnimatorComponent& animator)
+	{
+		timeline.animatorOverrideSerial = timeline.playSerial;
+		if (timeline.animatorOverrideEntity == animatorEntity) return;
+		timeline.animatorOverrideEntity = animatorEntity;
+		timeline.savedAnimatorClip = animator.currentClip;
+		timeline.savedAnimatorTime = animator.currentTime;
+		timeline.savedAnimatorPlaying = animator.isPlaying;
+	}
+
+	// 넘겨받은 Animator를 보관한 상태로 되돌리고, 타임라인의 마지막 포즈에서 원래 애니메이션으로 섞어 넘어간다.
+	// 원래 정지 상태였으면 AnimationSystem이 돌지 않으므로 섞지 않는다. Animator가 이미 제거되었으면 표시만 지운다.
+	void EndAnimatorOverride(entt::registry& world, ActionTimelineComponent& timeline, float blendOutTime)
+	{
+		const entt::entity animatorEntity = timeline.animatorOverrideEntity;
+		if (animatorEntity == entt::null) return;
+		timeline.animatorOverrideEntity = entt::null;
+		if (auto* animator = world.valid(animatorEntity) ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr)
+		{
+			if (timeline.savedAnimatorPlaying) animator->BeginBlendFromPose(animator->localBonePose, blendOutTime);
+			animator->currentClip = timeline.savedAnimatorClip;
+			animator->currentTime = timeline.savedAnimatorTime;
+			animator->isPlaying = timeline.savedAnimatorPlaying;
+		}
+		timeline.savedAnimatorClip = {};
 	}
 }
 
@@ -152,10 +189,16 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 	(void)registry;
 	if (!std::isfinite(dt) || dt <= 0.0f) return;
 
+	// 게임플레이 이벤트는 게임 실행(Gameplay 페이즈 포함)에서만 발행한다. 에디터 실시간 프리뷰(Presentation만)에서는 보내지 않는다.
+	const bool publishGameplayEvents = (SystemManager::Get().GetUpdatePhaseMask() & static_cast<uint8>(ESystemPhase::Gameplay)) != 0;
+
 	for (Scene* scene : activeScenes)
 	{
 		if (!scene || !scene->IsActive() || scene->IsPaused()) continue;
 		auto& world = scene->GetRegistry();
+
+		// 타임라인 순회 중에는 모으기만 하고, 씬의 갱신이 끝난 뒤 같은 프레임에 발행한다(핸들러가 엔티티를 바꿔도 순회가 깨지지 않게).
+		std::vector<ActionTimelineEvent> pendingEvents;
 
 		// ── 0. 소켓 부착(AttachToSocket) 엔티티 위치 및 회전 실시간 동기화 ──
 		{
@@ -246,16 +289,26 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 
 			auto* asset = timeline.timelineAsset.Get();
+
+			// 세션이 끝났으면 Animator를 타임라인 이전 상태로 되돌린다. 일시정지(같은 세션, 끝나기 전)는 마지막 포즈를 유지한다.
+			if (timeline.animatorOverrideEntity != entt::null)
+			{
+				const bool sessionChanged = timeline.animatorOverrideSerial != timeline.playSerial;
+				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
+				if (!asset || (!timeline.isPlaying && (sessionChanged || finished))) EndAnimatorOverride(world, timeline, asset ? asset->GetBlendOutTime() : 0.0f);
+			}
 			if (!asset || !timeline.isPlaying) continue;
 
 			// 재생 세션이 바뀌면(Play·Stop·타임라인 교체) 작성 클립을 다시 찾는다.
 			if (timeline.boundClipSerial != timeline.playSerial)
 			{
-				timeline.boundClip = ResolveTimelineClip(world, entity, *asset);
+				timeline.boundClip = ResolveTimelineClip(world, FindAnimatorEntityInHierarchy(world, entity), *asset);
 				timeline.boundClipSerial = timeline.playSerial;
 			}
 
 			const float duration = std::max(0.05f, asset->GetDuration());
+			// 세션 첫 틱만 시작 시점(0)을 포함한다. 이후에는 지난 틱에서 처리한 시점(prevTime)을 다시 발동하지 않는다.
+			const bool isFirstTick = timeline.playElapsed <= 0.0f;
 			timeline.prevTime = timeline.currentTime;
 			timeline.currentTime += dt * timeline.playRate;
 			timeline.playElapsed += dt * timeline.playRate;
@@ -275,21 +328,27 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				}
 			}
 
-			// 2. AnimatorComponent 동기화
-			if (auto* animator = world.try_get<AnimatorComponent>(entity))
+			// 2. Animator 구동: 작성 클립이 있을 때만 넘겨받는다. 클립이 없는 타임라인(사운드·카메라 전용)은 Animator를 건드리지 않는다.
+			// Animator는 자신 또는 자식 모델 루트에서 찾는다.
+			const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
+			auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
+			const auto* clip = timeline.boundClip.Get();
+			const auto* skeleton = (animator && clip) ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+			if (animator && clip && skeleton)
 			{
+				// 계층이 바뀌어 다른 Animator를 찾았으면 이전 Animator를 먼저 되돌린다.
+				if (timeline.animatorOverrideEntity != animatorEntity) EndAnimatorOverride(world, timeline, asset->GetBlendOutTime());
+				BeginAnimatorOverride(timeline, animatorEntity, *animator);
+				animator->isPlaying = false; // 타임라인이 시간을 구동하므로 AnimationSystem의 자체 진행을 멈춘다
+				animator->currentClip = timeline.boundClip;
 				animator->currentTime = timeline.currentTime;
-				animator->isPlaying = false; // 타임라인이 시간을 주도적으로 구동하므로 Animator의 자체 dt 가산을 억제
-
-				// isPlaying이 false이면 AnimationSystem이 포즈를 계산하지 않으므로, 타임라인이 작성 클립의 포즈를 직접 계산한다.
-				// 소켓 위치도 이 행렬을 쓰므로 노티파이 검출보다 먼저 갱신한다.
-				const auto* clip = timeline.boundClip.Get();
-				const auto* skeleton = clip ? FindSkeletonInHierarchy(world, entity) : nullptr;
-				if (clip && skeleton)
-				{
-					animator->currentClip = timeline.boundClip;
-					AnimationEvaluator::EvaluateSkinningMatrices(*clip, *skeleton, timeline.currentTime, animator->finalBoneMatrices, timeline.isLooping);
-				}
+				// isPlaying이 false이면 AnimationSystem이 포즈를 계산하지 않으므로 여기서 계산한다. 소켓 위치도 이 행렬을 쓰므로 노티파이 검출보다 먼저 갱신한다.
+				AnimationEvaluator::EvaluateLocalPose(*clip, *skeleton, timeline.currentTime, animator->localBonePose, timeline.isLooping);
+				AnimationEvaluator::BuildSkinningMatrices(*skeleton, animator->localBonePose, animator->finalBoneMatrices);
+			}
+			else
+			{
+				EndAnimatorOverride(world, timeline, asset->GetBlendOutTime());
 			}
 
 			// 3. 노티파이 이벤트 구간 검출 및 트리거
@@ -299,21 +358,21 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				if (track.IsMuted) continue;
 				for (const auto& notify : track.Notifies)
 				{
+					// 구간 (from, to]을 지났는지 본다. 경계 시점이 두 틱에 걸쳐 두 번 발동하지 않도록 아래쪽 끝은 첫 틱(또는 루프 후 0)만 포함한다.
 					const float t = notify.TriggerTime;
-					bool triggered = false;
-					if (hasLooped)
-					{
-						triggered = (t >= timeline.prevTime && t <= duration) || (t >= 0.0f && t <= timeline.currentTime);
-					}
-					else
-					{
-						triggered = (t >= timeline.prevTime && t <= timeline.currentTime);
-					}
+					const auto crossed = [t](float from, float to, bool includeFrom) { return (includeFrom ? t >= from : t > from) && t <= to; };
+					const bool triggered = hasLooped
+						? (crossed(timeline.prevTime, duration, isFirstTick) || crossed(0.0f, timeline.currentTime, true))
+						: crossed(timeline.prevTime, timeline.currentTime, isFirstTick);
 
 					if (triggered)
 					{
 						// (1) 등록된 C++ / 스크립트 게임플레이 콜백 실행
 						for (const auto& cb : timeline.notifyCallbacks) { if (cb) cb(entity, notify); }
+
+						// (1-1) 이벤트 노티파이: 씬 갱신이 끝난 뒤 ActionTimelineEvents 구독자에게 발행한다.
+						if (notify.Type == EAnimNotifyType::CustomEvent && publishGameplayEvents)
+							pendingEvents.push_back({ scene, entity, notify.EventTag, notify.Name, notify.TriggerTime });
 
 						// (2) 소리 노티파이 (Audio FX)
 						if (notify.Type == EAnimNotifyType::Sound && !notify.SoundPath.empty())
@@ -446,6 +505,13 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				world.get<CompositeVFXComponent>(vfxEntity).Release();
 				world.remove<ActionVFXHoldComponent>(vfxEntity);
 			}
+		}
+
+		// ── 6. 이벤트 노티파이 발행 ──
+		// 앞선 핸들러가 소유 엔티티를 지웠을 수 있으므로 발행 직전에 확인한다.
+		for (const auto& event : pendingEvents)
+		{
+			if (world.valid(event.entity)) ActionTimelineEvents::Publish(event);
 		}
 	}
 }

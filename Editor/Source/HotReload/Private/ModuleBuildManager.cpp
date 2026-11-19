@@ -6,8 +6,57 @@
 #include "Functions.h"
 #include <mutex>
 #include <windows.h>
+#include <fstream>
+#include <algorithm>
 
 BEGIN(Editor)
+
+namespace
+{
+    // Ninja 빌드의 cl.exe는 INCLUDE·LIB 환경 변수로 표준 헤더와 라이브러리를 찾는다.
+    bool HasMsvcEnvironment()
+    {
+        return GetEnvironmentVariableW(L"INCLUDE", nullptr, 0) > 0;
+    }
+
+    std::wstring GetCommandProcessorPath()
+    {
+        wchar_t buffer[MAX_PATH]{};
+        const DWORD length = GetEnvironmentVariableW(L"ComSpec", buffer, MAX_PATH);
+        return (length > 0 && length < MAX_PATH) ? std::wstring(buffer) : std::wstring(L"C:\\Windows\\System32\\cmd.exe");
+    }
+
+    // 빌드 트리를 구성한 컴파일러(CMakeCache의 CMAKE_CXX_COMPILER)에서 VS 설치 경로와 MSVC 도구 버전을 읽어
+    // 같은 도구 집합의 개발자 환경 명령을 만든다. 찾지 못하면 빈 문자열을 돌려준다.
+    std::wstring FindDevEnvironmentCommand(const std::filesystem::path& buildDir)
+    {
+        std::ifstream cache(buildDir / "CMakeCache.txt");
+        std::string compiler;
+        for (std::string line; std::getline(cache, line);)
+        {
+            const size_t equal = line.find('=');
+            if (line.starts_with("CMAKE_CXX_COMPILER:") && equal != std::string::npos)
+            {
+                compiler = line.substr(equal + 1);
+                break;
+            }
+        }
+
+        std::ranges::replace(compiler, '\\', '/');
+        const std::string marker = "/VC/Tools/MSVC/";
+        const size_t markerPos = compiler.find(marker);
+        const size_t versionBegin = markerPos == std::string::npos ? std::string::npos : markerPos + marker.size();
+        const size_t versionEnd = versionBegin == std::string::npos ? std::string::npos : compiler.find('/', versionBegin);
+        if (versionEnd == std::string::npos) return {};
+
+        const auto devCmd = Engine::Utf8ToPath(compiler.substr(0, markerPos)) / "Common7" / "Tools" / "VsDevCmd.bat";
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(devCmd, ec)) return {};
+
+        const std::string toolsVersion = compiler.substr(versionBegin, versionEnd - versionBegin);
+        return L"\"" + devCmd.wstring() + L"\" -arch=amd64 -host_arch=amd64 -vcvars_ver=" + StrToWStr(toolsVersion) + L" -no_logo";
+    }
+}
 
 class ModuleSourceFileListener final : public efsw::FileWatchListener
 {
@@ -184,15 +233,20 @@ void ModuleBuildManager::ExecuteBuildAsync()
 #endif
     if (m_TargetName == L"GameModule")
     {
-        const auto binDir = m_BuildDir / "bin" / config;
+        // 디버거가 잡고 있는 PDB 때문에 링크가 막히지 않도록 이전 PDB 이름을 바꾼다.
+        // 다중 구성(Visual Studio)은 bin/<Config>, 단일 구성(Ninja)은 bin에 출력한다.
         std::error_code ec;
-        const auto pdbPath = binDir / "GameModule.pdb";
-        if (std::filesystem::exists(pdbPath, ec))
+        for (const auto& binDir : { m_BuildDir / "bin" / config, m_BuildDir / "bin" })
         {
+            const auto pdbPath = binDir / "GameModule.pdb";
+            if (!std::filesystem::exists(pdbPath, ec)) continue;
             const auto oldPdb = binDir / (L"GameModule_old_" + std::to_wstring(GetTickCount64()) + L".pdb");
             std::filesystem::rename(pdbPath, oldPdb, ec);
+            break;
         }
     }
+
+    std::wstring application = BAM_EDITOR_CMAKE_COMMAND;
     std::wstring cmd = L"\"";
     cmd += BAM_EDITOR_CMAKE_COMMAND;
     cmd += L"\" --build \"" + m_BuildDir.wstring() + L"\" --target " + m_TargetName + L" --config " + config;
@@ -200,6 +254,22 @@ void ModuleBuildManager::ExecuteBuildAsync()
 #if defined(BAM_EDITOR_MSBUILD)
     // The loaded host already has the dependencies for a plugin-only build.
     cmd += L" -- /p:BuildProjectReferences=false /m";
+#else
+    // VS에서 실행한 에디터에는 MSVC 환경 변수가 없다. 빌드 트리와 같은 도구 집합의 개발자 환경을 먼저 적용한다.
+    if (!HasMsvcEnvironment())
+    {
+        const std::wstring devEnv = FindDevEnvironmentCommand(m_BuildDir);
+        if (devEnv.empty())
+        {
+            m_PendingBuildOutput = "MSVC environment (INCLUDE) is missing and VsDevCmd.bat could not be found from CMakeCache.txt. "
+                "Start the editor from a Developer PowerShell or build the module in Visual Studio.";
+            m_PendingBuildSuccess = false;
+            m_HasNewResult = true;
+            return;
+        }
+        application = GetCommandProcessorPath();
+        cmd = L"\"" + application + L"\" /d /s /c \"" + devEnv + L" && " + cmd + L"\"";
+    }
 #endif
 
     SECURITY_ATTRIBUTES sa{};
@@ -227,7 +297,7 @@ void ModuleBuildManager::ExecuteBuildAsync()
     cmdBuffer.push_back(L'\0');
 
     std::string capturedOutput;
-    const BOOL success = CreateProcessW(BAM_EDITOR_CMAKE_COMMAND, cmdBuffer.data(), nullptr, nullptr, TRUE,
+    const BOOL success = CreateProcessW(application.c_str(), cmdBuffer.data(), nullptr, nullptr, TRUE,
         CREATE_NO_WINDOW, nullptr, m_ProjectRoot.c_str(), &si, &pi);
 
     CloseHandle(hWritePipe);

@@ -190,6 +190,10 @@ public:
 
 	float GetDuration() const { return m_Duration; }
 	void SetDuration(float duration) { m_Duration = duration; }
+	// 타임라인이 끝난 뒤 원래 애니메이션으로 섞어 넘어가는 시간(초). 0이면 바로 바뀐다. 값이 없던 이전 파일은 기본값을 쓴다.
+	static constexpr float DefaultBlendOutTime = 0.2f;
+	float GetBlendOutTime() const { return m_BlendOutTime; }
+	void SetBlendOutTime(float time) { m_BlendOutTime = std::max(0.0f, time); }
 
 	const std::vector<TimelineNotifyTrack>& GetNotifyTracks() const { return m_NotifyTracks; }
 	std::vector<TimelineNotifyTrack>& GetNotifyTracks() { return m_NotifyTracks; }
@@ -206,6 +210,9 @@ private:
 
 	PROPERTY(EDITABLE)
 		float m_Duration = 1.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		float m_BlendOutTime = DefaultBlendOutTime;
 
 	PROPERTY(EDITABLE)
 		std::vector<TimelineNotifyTrack> m_NotifyTracks;

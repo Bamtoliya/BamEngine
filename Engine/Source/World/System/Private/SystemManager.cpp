@@ -37,6 +37,7 @@ void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*>& 
 
 void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt, uint8 phaseMask)
 {
+	m_UpdatePhaseMask = phaseMask;
 	for (ISystem* system : m_Systems)
 	{
 		if (system->IsActive() && (system->GetExecutionPhases() & phaseMask))

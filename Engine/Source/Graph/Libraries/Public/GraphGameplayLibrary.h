@@ -12,6 +12,8 @@
 #include "Logger.h"
 #include "SpriteAnimationComponent.h"
 #include "CharacterControllerComponent.h"
+#include "AnimatorComponent.h"
+#include "AnimationSceneQuery.h"
 
 
 namespace Engine::GraphGameplay
@@ -294,69 +296,58 @@ namespace Engine::GraphGameplay
 	}
 
 	// ── 3D 애니메이터 노드 (3D Skeletal Animation) ──
+	namespace Detail
+	{
+		// 그래프가 붙은 엔티티부터 자식 계층까지 Animator를 찾는다.
+		// 캐릭터 루트(이동·그래프)의 자식으로 모델을 둔 구성에서도 모델 루트의 Animator를 제어할 수 있다.
+		inline AnimatorComponent* FindGraphAnimator()
+		{
+			Scene* scene = GraphSystem::GetCurrentScene();
+			const entt::entity entity = GraphSystem::GetCurrentEntity();
+			if (!scene || entity == entt::null) return nullptr;
+			auto& world = scene->GetRegistry();
+			const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
+			return animatorEntity != entt::null ? &world.get<AnimatorComponent>(animatorEntity) : nullptr;
+		}
+	}
+
 	FUNCTION(GRAPH_CALLABLE("Animator.Play"), DISPLAY_NAME("Play 3D Animation"), CATEGORY("Animation"))
 		inline void Play3DAnimation()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->Play();
+		if (auto* anim = Detail::FindGraphAnimator()) anim->Play();
 	}
 	FUNCTION(GRAPH_CALLABLE("Animator.Pause"), DISPLAY_NAME("Pause 3D Animation"), CATEGORY("Animation"))
 		inline void Pause3DAnimation()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->Pause();
+		if (auto* anim = Detail::FindGraphAnimator()) anim->Pause();
 	}
 	FUNCTION(GRAPH_CALLABLE("Animator.Stop"), DISPLAY_NAME("Stop 3D Animation"), CATEGORY("Animation"))
 		inline void Stop3DAnimation()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->Stop();
+		if (auto* anim = Detail::FindGraphAnimator()) anim->Stop();
 	}
 	FUNCTION(GRAPH_CALLABLE("Animator.SetPlayRate"), DISPLAY_NAME("Set 3D Animation Play Rate"), CATEGORY("Animation"),
 		GRAPH_PIN_DEFAULT("rate", 1.0f))
 		inline void Set3DAnimationPlayRate(float rate)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->playRate = rate;
+		if (auto* anim = Detail::FindGraphAnimator()) anim->playRate = rate;
 	}
 	FUNCTION(GRAPH_CALLABLE("Animator.SetTime"), DISPLAY_NAME("Set 3D Animation Time"), CATEGORY("Animation"),
 		GRAPH_PIN_DEFAULT("time", 0.0f))
 		inline void Set3DAnimationTime(float time)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetTime(time);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetTime(time);
 	}
 	FUNCTION(GRAPH_PURE("Animator.IsPlaying"), DISPLAY_NAME("Is 3D Animation Playing"), CATEGORY("Animation"))
 		inline bool Is3DAnimationPlaying()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return false;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		const auto* anim = Detail::FindGraphAnimator();
 		return anim ? anim->isPlaying : false;
 	}
 	FUNCTION(GRAPH_PURE("Animator.GetCurrentTime"), DISPLAY_NAME("Get 3D Animation Time"), CATEGORY("Animation"))
 		inline float Get3DAnimationCurrentTime()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return 0.0f;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		const auto* anim = Detail::FindGraphAnimator();
 		return anim ? anim->currentTime : 0.0f;
 	}
 
@@ -365,92 +356,55 @@ namespace Engine::GraphGameplay
 		GRAPH_PIN_DEFAULT("value", 0.0f))
 		inline void SetAnimatorFloat(std::string name, float value)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetFloat(name, value);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetFloat(name, value);
 	}
-
 	FUNCTION(GRAPH_CALLABLE("Animator.SetInt"), DISPLAY_NAME("NODE_ANIMATOR_SET_INT"), CATEGORY("Animation"),
 		GRAPH_PIN_DEFAULT("value", 0))
 		inline void SetAnimatorInt(std::string name, std::int64_t value)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetInt(name, static_cast<int32>(value));
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetInt(name, static_cast<int32>(value));
 	}
-
 	FUNCTION(GRAPH_CALLABLE("Animator.SetBool"), DISPLAY_NAME("NODE_ANIMATOR_SET_BOOL"), CATEGORY("Animation"),
 		GRAPH_PIN_DEFAULT("value", false))
 		inline void SetAnimatorBool(std::string name, bool value)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetBool(name, value);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetBool(name, value);
 	}
-
 	FUNCTION(GRAPH_CALLABLE("Animator.SetTrigger"), DISPLAY_NAME("NODE_ANIMATOR_SET_TRIGGER"), CATEGORY("Animation"))
 		inline void SetAnimatorTrigger(std::string name)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetTrigger(name);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetTrigger(name);
 	}
-
 	FUNCTION(GRAPH_PURE("Animator.GetFloat"), DISPLAY_NAME("NODE_ANIMATOR_GET_FLOAT"), CATEGORY("Animation"))
 		inline float GetAnimatorFloat(std::string name)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return 0.0f;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		const auto* anim = Detail::FindGraphAnimator();
 		return anim ? anim->runtimeState.GetFloat(name) : 0.0f;
 	}
-
 	FUNCTION(GRAPH_PURE("Animator.GetBool"), DISPLAY_NAME("NODE_ANIMATOR_GET_BOOL"), CATEGORY("Animation"))
 		inline bool GetAnimatorBool(std::string name)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return false;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		const auto* anim = Detail::FindGraphAnimator();
 		return anim ? anim->runtimeState.GetBool(name) : false;
 	}
+
 	// ── 3D Animator 레이어 제어 노드 ──
 	FUNCTION(GRAPH_CALLABLE("Animator.SetLayerWeight"), DISPLAY_NAME("NODE_ANIMATOR_SET_LAYER_WEIGHT"), CATEGORY("Animation"),
 		GRAPH_PIN_DEFAULT("weight", 1.0f))
 		inline void SetAnimatorLayerWeight(std::string layerName, float weight)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->SetLayerWeight(layerName, weight);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->SetLayerWeight(layerName, weight);
 	}
 	FUNCTION(GRAPH_PURE("Animator.GetLayerWeight"), DISPLAY_NAME("NODE_ANIMATOR_GET_LAYER_WEIGHT"), CATEGORY("Animation"))
 		inline float GetAnimatorLayerWeight(std::string layerName)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return 0.0f;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
+		const auto* anim = Detail::FindGraphAnimator();
 		return anim ? anim->GetLayerWeight(layerName) : 0.0f;
 	}
 	FUNCTION(GRAPH_CALLABLE("Animator.StopLayer"), DISPLAY_NAME("NODE_ANIMATOR_STOP_LAYER"), CATEGORY("Animation"))
 		inline void StopAnimatorLayer(std::string layerName)
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<AnimatorComponent>(entity);
-		if (anim) anim->StopLayer(layerName);
+		if (auto* anim = Detail::FindGraphAnimator()) anim->StopLayer(layerName);
 	}
 
 	// ── 캐릭터 컨트롤러 노드 (CharacterController) ──

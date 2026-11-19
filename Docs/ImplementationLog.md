@@ -2,6 +2,27 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] 액션 타임라인 이벤트 노티파이 C++ 모듈 수신과 모듈 자동 빌드 환경
+
+- 문제: 이벤트 노티파이(`CustomEvent`, `EventTag`)는 배치할 수 있었지만 받는 쪽이 없었다. `ActionTimelineComponent::notifyCallbacks`는 해제 수단이 없어 핫리로드되는 모듈에서 쓰면 언로드된 코드를 가리킬 수 있었다.
+- 구독 창구: `ActionTimelineEvents::Subscribe/Unsubscribe/Publish/GetSubscriberCount`를 추가했다. 리스너 목록은 엔진 `.cpp`가 소유한다. 범용 `EventBus`는 헤더 템플릿이라 모듈이 구독하면 저장소가 모듈 DLL에서 만들어지므로 이 경로에 쓰지 않았다.
+- 발행: `ActionTimelineSystem`이 씬별 타임라인 순회 중 이벤트를 모으고, 지속형 VFX 해제까지 마친 뒤 같은 프레임에 발행한다. 발행 직전에 소유 엔티티를 확인한다. `SystemManager::GetUpdatePhaseMask()`에 Gameplay 페이즈가 있을 때만 발행해, 편집 모드 실시간 프리뷰(Presentation만)에서는 나가지 않는다.
+- 이중 발동: 노티파이 검출 구간을 `[이전, 현재]`에서 `(이전, 현재]`로 바꿨다. 경계 시점이 두 틱에 걸치거나 일시정지 후 재개하면 같은 노티파이가 두 번 발동할 수 있었다(모든 유형 공통). 세션 첫 틱과 루프한 틱만 0을 포함한다.
+- GameModule: `OnLoad`에서 구독하고 구독자 수를 로그로 남기며, `OnUnload` 첫 단계에서 해제한다. 수신 예제는 이벤트마다 로그 한 줄을 남긴다.
+- 모듈 자동 빌드: VS에서 실행한 에디터에는 MSVC 환경 변수가 없어, Ninja 빌드 트리에서 에디터의 GameModule 자동 빌드가 표준 헤더(`<cstdint>` 등)를 찾지 못하고 항상 실패했다. `INCLUDE`가 없으면 `CMakeCache.txt`의 `CMAKE_CXX_COMPILER` 경로에서 VS 설치 경로와 MSVC 버전을 읽어 `VsDevCmd.bat -vcvars_ver=<버전>`을 같은 명령에서 먼저 실행한다. 이 PC처럼 도구 집합이 여럿(14.44·14.51) 설치된 경우에도 빌드 트리와 같은 버전을 쓴다. 이전 PDB 이름 변경이 `bin/<Config>`만 보던 것을 Ninja 출력(`bin`)까지 찾도록 고쳤다.
+- 검증(사용자 실행, `x64-ninja-debug`, `BaselineVerification` 씬 Rogue): PIE에서 0.40초 이벤트가 일회·루프 모두 시점당 한 줄, 편집 모드 실시간 프리뷰에서는 로그 없음, VS에서 실행한 에디터의 자동 빌드 성공과 핫리로드 두 번 뒤 `subscribers: 1` 및 최신 코드 로그 한 줄을 확인했다. 일시정지 후 재개 경계, Client 실행, CTest는 확인하지 않았다. AI는 빌드·실행을 하지 않았다.
+- 남은 일: 그래프 `On Action Event(Tag)` 노드, 그래프에서 타임라인 재생 노드, 에디터 테스트 발동의 구독자 전달, `AnimatorComponent` 노티파이 이관과 `notifyCallbacks` 제거. [타임라인 계획 8.5절](AnimationTimelineEditorPlan.md#85-1단계-c-게임-모듈-수신-2026-11-19)
+
+### [2026-11-19] 액션 타임라인의 Animator 넘겨받기·복원·블렌드 아웃과 계층 탐색
+
+- 문제: 타임라인은 재생 중 `animator.isPlaying = false`로 바꾼 뒤 되돌리지 않아, 비루프 타임라인이 끝나면 캐릭터가 마지막 포즈로 멈추고 상태 머신도 돌지 않았다. 클립이 없는 타임라인(카메라·사운드)도 Animator를 멈췄다. 타임라인·그래프 `Animator.*` 노드는 자기 엔티티에서만 Animator를 찾아, 루트(이동·스크립트)의 자식에 모델을 둔 구성에서 동작하지 않았다.
+- 넘겨받기·복원: 작성 클립과 스켈레톤이 있을 때만 넘겨받고, 처음 넘겨받을 때 원래 클립·시간·재생 상태와 Animator 엔티티를 보관한다. `Stop()`, 비루프 종료, 에셋 해제, 새 세션에 클립 없음일 때 그 Animator를 되돌리고, `Pause()`는 마지막 포즈를 유지한다.
+- 블렌드 아웃: 타임라인 포즈를 Animator의 `localBonePose`에 계산해 두고 복원 시 `BeginBlendFromPose`로 넘긴다. `UpdateAnimatorSkinning`이 기본 포즈 직후(레이어 합성 전) smoothstep으로 섞는다. 시간은 에셋 `m_BlendOutTime`(`ALLOW_MISSING`, 기본 0.2초)이며 타임라인 패널 트랜스포트 바에서 편집하고 편집 이력·저장 기준점에 포함된다(로캘 `Timeline.BlendOut*`).
+- 계층 탐색: `AnimationSceneQuery::FindAnimatorEntityInHierarchy`(자신 → 자식 깊이 우선)를 추가해 타임라인 구동·복원·클립 찾기·소켓 본 경고, 그래프 `Animator.*` 노드 16개, 캐릭터 이동 시스템의 파라미터 주입이 함께 쓴다. 소켓 위치는 스킨드 렌더링과 같이 Animator 엔티티의 월드 행렬로 계산한다.
+- 커밋 범위: 문서를 닫을 때 블렌드 아웃을 기본값으로 되돌리는 한 줄은 같은 작업 트리의 다른 작업이 추가 중인 `ReleaseResourceDocument`에 있어 이 커밋에 넣지 않았다. `KinematicCharacterSystem.cpp`도 이 작업의 탐색 교체만 골라 커밋했다.
+- 검증: 이 작업을 포함한 `x64-ninja-debug` 빌드는 사용자 환경에서 통과했다. 블렌드 아웃의 실제 전환, 자식 모델 구성의 구동·소켓·복원, 그래프 노드의 자식 탐색은 PIE에서 확인하지 않았다. CTest는 실행 기록이 없다.
+- 남은 일: 블렌드 인, Animator 덮어쓰기 슬롯 구조(필요해질 때), 작성 모델 경로의 가상 경로 저장, 편집 모드 실시간 프리뷰에서 VFX 노티파이가 편집 씬에 엔티티를 만드는 문제. [타임라인 계획 11절](AnimationTimelineEditorPlan.md#11-animator-넘겨받기복원과-계층-탐색-2026-11-19)
+
 ### [2026-11-19] BamAssetWorker의 DirectXTex 직접 링크
 
 - Ninja Debug에서 `HeadlessThumbnailRasterizer.cpp`의 DirectXTex 심볼 6개가 링크되지 않았다. 워커에서 `TextureConverter` 의존성을 제거하면서 전이 링크가 빠졌다. DDS 및 압축 텍스처를 직접 읽는 `BamAssetWorker`에 `Microsoft::DirectXTex`를 직접 연결했다.

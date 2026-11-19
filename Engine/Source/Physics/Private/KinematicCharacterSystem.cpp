@@ -14,6 +14,7 @@
 #include <glm/gtx/norm.hpp>
 #include <algorithm>
 #include "AnimatorComponent.h"
+#include "AnimationSceneQuery.h"
 
 namespace
 {
@@ -27,19 +28,6 @@ namespace
         }
         return hitPoint.y - footOffset;
     }
-
-    AnimatorComponent* FindAnimatorInHierarchy(entt::registry& world, entt::entity root)
-{
-    const auto* hierarchy = world.try_get<HierarchyComponent>(root);
-    if (!hierarchy) return nullptr;
-    for (entt::entity child : hierarchy->children)
-    {
-        if (!world.valid(child)) continue;
-        if (auto* anim = world.try_get<AnimatorComponent>(child)) return anim;
-        if (auto* childAnim = FindAnimatorInHierarchy(world, child)) return childAnim;
-    }
-    return nullptr;
-}
 }
 
 EResult KinematicCharacterSystem::Initialize(void* arg)
@@ -840,11 +828,9 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
         }
         if (!animator)
         {
-            animator = world.try_get<AnimatorComponent>(entity);
-        }
-        if (!animator)
-        {
-            animator = FindAnimatorInHierarchy(world, entity);
+            // 자기 자신, 없으면 자식 계층(모델 루트)에서 찾는다.
+            const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
+            if (animatorEntity != entt::null) animator = &world.get<AnimatorComponent>(animatorEntity);
         }
 
         if (animator)

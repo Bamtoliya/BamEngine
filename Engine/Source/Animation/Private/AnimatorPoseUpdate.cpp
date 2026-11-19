@@ -18,6 +18,22 @@ namespace Engine
                 isPlaying = false;
             }
         }
+
+        // 이전 포즈에서 현재 기본 포즈로 섞는다. 섞기가 끝나거나 본 수가 다르면(스켈레톤 교체) 이전 포즈를 버린다.
+        void ApplyBlendFromPose(AnimatorComponent& animator, float dt)
+        {
+            auto& from = animator.blendFromPose;
+            auto& localPose = animator.localBonePose;
+            if (from.empty()) return;
+
+            animator.blendFromElapsed += dt;
+            const float t = animator.blendFromElapsed / animator.blendFromDuration;
+            if (t >= 1.0f || from.size() != localPose.size()) { from.clear(); return; }
+
+            const float alpha = t * t * (3.0f - 2.0f * t); // smoothstep: 시작과 끝을 부드럽게
+            for (size_t i = 0; i < localPose.size(); ++i)
+                localPose[i] = AnimationEvaluator::BlendBoneLocalPose(from[i], localPose[i], alpha);
+        }
     }
 
     EAnimatorBasePoseSource UpdateAnimatorBasePose(AnimatorComponent& animator, const Skeleton& skeleton, float dt)
@@ -47,6 +63,7 @@ namespace Engine
     {
         auto& localPose = animator.localBonePose;
         if (localPose.empty()) return;
+        ApplyBlendFromPose(animator, dt);
 
         for (auto& layer : animator.layers)
         {

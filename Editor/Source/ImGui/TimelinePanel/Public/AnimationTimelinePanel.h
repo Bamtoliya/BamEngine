@@ -90,7 +90,7 @@ public:
 	void Redo();
 
 private:
-	// 이력과 저장 기준점의 단위는 저장되는 문서 내용 전체다(트랙, 작성 모델, 클립, 길이).
+	// 이력과 저장 기준점의 단위는 저장되는 문서 내용 전체다(트랙, 작성 모델, 클립, 길이, 블렌드 아웃).
 	struct DocumentSnapshot
 	{
 		std::vector<Engine::TimelineNotifyTrack> NotifyTracks;
@@ -98,6 +98,7 @@ private:
 		std::string ModelPath;
 		std::string ClipName;
 		float Duration = 0.0f;
+		float BlendOutTime = 0.0f;
 		bool operator==(const DocumentSnapshot& other) const = default;
 	};
 	DocumentSnapshot CaptureDocument() const;
@@ -166,6 +167,7 @@ private:
 	bool m_IsScrubbing = false;
 	f32 m_CurrentTime = 0.0f;
 	f32 m_Duration = 2.0f;
+	f32 m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime; // 저장되는 문서 값. 런타임 종료 시 원래 애니메이션으로 섞는 시간
 	f32 m_FPS = 30.0f;
 	f32 m_PlaybackSpeed = 1.0f;
 	f32 m_PrevTime = 0.0f;

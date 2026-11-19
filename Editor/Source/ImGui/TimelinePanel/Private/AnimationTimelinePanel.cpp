@@ -185,7 +185,7 @@ void AnimationTimelinePanel::DeleteSelected()
 
 AnimationTimelinePanel::DocumentSnapshot AnimationTimelinePanel::CaptureDocument() const
 {
-	return { m_NotifyTracks, m_CameraTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration };
+	return { m_NotifyTracks, m_CameraTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration, m_BlendOutTime };
 }
 
 bool AnimationTimelinePanel::HasUncommittedEdit() const
@@ -193,7 +193,8 @@ bool AnimationTimelinePanel::HasUncommittedEdit() const
 	// 매 프레임 호출되므로 문서를 복사하지 않고 필드별로 비교한다.
 	const auto& committed = m_CommittedDocument;
 	return m_NotifyTracks != committed.NotifyTracks || m_CameraTracks != committed.CameraTracks ||
-		m_ModelAssetPath != committed.ModelPath || m_CurrentClipName != committed.ClipName || m_Duration != committed.Duration;
+		m_ModelAssetPath != committed.ModelPath || m_CurrentClipName != committed.ClipName || m_Duration != committed.Duration ||
+		m_BlendOutTime != committed.BlendOutTime;
 }
 
 bool AnimationTimelinePanel::IsEditInProgress() const
@@ -234,6 +235,7 @@ void AnimationTimelinePanel::ApplyDocumentSnapshot(const DocumentSnapshot& snaps
 	else m_SelectedClipIndex = -1;
 	m_CurrentClipName = snapshot.ClipName;
 	m_Duration = snapshot.Duration;
+	m_BlendOutTime = snapshot.BlendOutTime;
 	m_CurrentTime = std::clamp(m_CurrentTime, 0.0f, m_Duration);
 
 	m_NotifyTracks = snapshot.NotifyTracks;
@@ -536,6 +538,7 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	asset->SetModelPath(m_ModelAssetPath);
 	asset->SetClipName(m_CurrentClipName);
 	asset->SetDuration(m_Duration);
+	asset->SetBlendOutTime(m_BlendOutTime);
 	asset->GetNotifyTracks() = m_NotifyTracks;
 	asset->GetCameraTracks() = m_CameraTracks;
 
@@ -578,6 +581,7 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	else m_SelectedClipIndex = -1;
 	m_CurrentClipName = asset->GetClipName();
 	m_Duration = std::max(0.1f, asset->GetDuration());
+	m_BlendOutTime = asset->GetBlendOutTime();
 	m_NotifyTracks = asset->GetNotifyTracks();
 	m_CameraTracks = asset->GetCameraTracks();
 
@@ -1229,6 +1233,16 @@ void AnimationTimelinePanel::DrawTransportBar()
 		}
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.DurationTooltip"));
 	}
+
+	// 런타임에서 타임라인이 끝난 뒤 원래 애니메이션으로 섞어 넘어가는 시간. 편집 이력·저장 기준점은 문서 스냅샷 비교로 처리된다.
+	toolbar.Text(LOCAL_CSTR("Timeline.BlendOut"), false);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 4.8f);
+	if (ImGui::DragFloat("##BlendOutTime", &m_BlendOutTime, 0.01f, 0.0f, 2.0f, "%.2fs", ImGuiSliderFlags_AlwaysClamp))
+	{
+		m_BlendOutTime = std::max(0.0f, m_BlendOutTime);
+		m_IsDirty = true;
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.BlendOutTooltip"));
 }
 
 void AnimationTimelinePanel::DrawInspector()

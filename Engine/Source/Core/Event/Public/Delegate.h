@@ -102,6 +102,11 @@ public:
 		return !m_Listeners.empty();
 	}
 
+	size_t GetListenerCount() const
+	{
+		return m_Listeners.size();
+	}
+
 private:
 	vector<Listener> m_Listeners;
 	DelegateHandle m_CurrentHandle = 0;

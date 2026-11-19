@@ -47,7 +47,16 @@ namespace Engine
 		ResourceHandle<Animation> boundClip;
 		uint32 boundClipSerial = 0xFFFFFFFFu; // 아직 찾지 않음
 
-		// ── 게임플레이 이벤트 콜백 ──
+		// 타임라인이 Animator를 넘겨받기 전 상태 (런타임 전용). 세션이 끝나면(Stop·교체·비루프 종료) 되돌린다.
+		// animatorOverrideEntity: 넘겨받은 Animator 엔티티(자신 또는 자식 모델 루트). null이면 넘겨받지 않은 상태다.
+		entt::entity animatorOverrideEntity = entt::null;
+		uint32 animatorOverrideSerial = 0;
+		ResourceHandle<Animation> savedAnimatorClip;
+		f32 savedAnimatorTime = 0.0f;
+		bool savedAnimatorPlaying = false;
+
+		// ── 게임플레이 이벤트 콜백 (사용 중단 예정) ──
+		// 해제 수단이 없어 핫리로드되는 모듈에서 쓰면 안전하지 않다. 이벤트 노티파이는 ActionTimelineEvents로 구독한다.
 		using ActionNotifyCallback = std::function<void(entt::entity entity, const AnimNotifyData& notify)>;
 		std::vector<ActionNotifyCallback> notifyCallbacks;
 
