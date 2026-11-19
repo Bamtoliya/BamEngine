@@ -7,6 +7,11 @@ This document tracks implementation details, architectural decisions, and techni
 - [Client 에셋 팩 계획](ClientAssetCookingAndPackingPlan.md)에 선택 수집, 유형별 쿠킹·기존 BEVE 재사용, Windows 팩 형식·마운트, 기존 내보내기에서 게시하기까지의 단계와 검증 기준을 기록했다.
 - 현재 폴더 복사, Archive의 바이트 디코딩, 디스크 파일을 전제로 한 Client 로드 경로를 코드에서 대조했다. 팩 구현·빌드·실환경 검증·성능 비교는 이후 단계에 둔다.
 
+### [2026-11-19] PIE 첫 실행 지연과 Windows Client 배포 흐름 점검
+
+- [PIE·Windows Client 흐름 개선 계획](PIEWindowsClientWorkflowPlan.md)에 Play 중 동기 씬 저장, Game View 첫 제출의 지연 후보, 프레임 계측 순서와 동일 씬의 Windows 배포 비교 절차를 기록했다.
+- 현재 호출 경로와 이전 Game View·Client 검증 기록, 로컬 로그를 대조했다. 프리징 원인은 실측 대기이며 개선 코드, 빌드·CTest와 패키지 실행은 이후 단계에 둔다.
+
 ### [2026-11-19] 모델 임포트·재임포트·에셋 이동 흐름 점검
 
 - [에셋 흐름 개선 계획](AssetReimportRelocationWorkflowPlan.md)에 선택 모델 경로의 재임포트 전달, 생성물 묶음 복구, 저장된 바이너리 참조 검사와 임포트·이동 충돌 방지를 정리했다.

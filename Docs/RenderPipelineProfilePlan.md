@@ -82,6 +82,8 @@ cmake --build out/build/x64-debug --config Debug --target Editor
 
 ## 3단계 수동 검증
 
+프로필 비교에 입력·오디오·UI와 첫 PIE 지연 계측을 더한 검증 절차는 [PIE·Windows Client 흐름 개선 계획](PIEWindowsClientWorkflowPlan.md)에 정리했다.
+
 1. 2단계 명령으로 Editor를 빌드하고 이 워크트리의 로컬 `Assets/Scenes/RaytracingScene3.bamscene.json`을 연다. 빌드 및 패키징 패널에서 **현재 씬 사용 → 씬 참조 검사**를 실행한다. 기본 Deferred 프로필 경로가 표시되고 참조 문제가 0건인지 확인한다.
 2. 프로그램 이름과 패키지 폴더 이름을 입력하고 **빌드 및 내보내기**를 실행한다. 배포본 `Config/Project.json`의 프로필 URI와 해당 JSON, `Engine/Resources/Shader/bin/dxil`의 셰이더를 확인한다. 게시 로그에 `Render profile:`, `Exported package:`, `Executable:`이 남아야 한다. 동일 경로에 다시 내보낼 때 취소하면 배포본이 유지되고, 덮어쓰면 새 배포본과 이전 패키지 백업이 생기는지 확인한다.
 3. 배포 폴더를 저장소 외부에서 열고 패널에 표시된 실행 파일을 실행한다. 창 제목과 `Logs/Client.log`의 프로필 로드 성공을 확인한다. 같은 카메라·해상도로 PIE Game View와 Client의 기본 도형, G-Buffer 머티리얼, 방향광과 점광원 그림자, 투명 오브젝트, ACES와 게임 UI를 비교한다. Client 창 리사이즈와 Gameplay 입력도 확인한다.

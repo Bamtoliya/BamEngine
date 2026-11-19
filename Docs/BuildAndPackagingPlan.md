@@ -120,6 +120,8 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 4단계: Stage와 Package
 
+같은 저장 씬을 PIE와 Windows 배포본에서 비교하는 절차와 첫 PIE 지연 계측은 [PIE·Windows Client 흐름 개선 계획](PIEWindowsClientWorkflowPlan.md)을 따른다.
+
 - `빌드 및 내보내기`는 Windows x64 Release 빌드 성공 후 사용자가 정한 폴더를 게시한다. 기본값은 `BamEngine-Windows-x64`와 `Client.exe`다. 프로그램 이름에는 확장자를 붙이지 않으며 같은 값을 배포 설정의 `WindowTitle`에 기록한다. 패널에서 최종 실행 파일 경로를 확인하고 성공 후 배포 폴더를 열 수 있다.
 - 기존 BamEngine Client 폴더에는 전체 경로를 보여주는 **취소 / 덮어쓰기** 확인을 표시한다. 스테이징 검증이 끝나면 승인 시점의 폴더가 그대로인지 확인한 뒤 이전 패키지를 형제 백업 폴더로 옮기고 새 패키지를 게시한다. 게시 실패 시 복원하며, 복원 실패 또는 성공 후 이전 패키지의 위치는 로그에 남긴다. 기존 배포본은 백업에 보관한다.
 - 대상이 일반 폴더가 아니거나 프로젝트 루트 또는 에셋·엔진 리소스·빌드 입력과 겹치면 내보내기를 거부한다. 이 기능이 만든 패키지는 `.bam-client-package` 마커로, 이전 기본 패키지는 `Client.exe`, `Engine.dll`, `Config/Project.json` 조합으로 식별한다.
