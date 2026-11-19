@@ -29,6 +29,11 @@ This document tracks implementation details, architectural decisions, and techni
 - 검증: 이 작업을 포함한 `x64-ninja-debug` 빌드는 사용자 환경에서 통과했다. 블렌드 아웃의 실제 전환, 자식 모델 구성의 구동·소켓·복원, 그래프 노드의 자식 탐색은 PIE에서 확인하지 않았다. CTest는 실행 기록이 없다.
 - 남은 일: 블렌드 인, Animator 덮어쓰기 슬롯 구조(필요해질 때), 작성 모델 경로의 가상 경로 저장, 편집 모드 실시간 프리뷰에서 VFX 노티파이가 편집 씬에 엔티티를 만드는 문제. [타임라인 계획 11절](AnimationTimelineEditorPlan.md#11-animator-넘겨받기복원과-계층-탐색-2026-11-19)
 
+### [2026-11-19] Inspector 컴포넌트 추가 검색
+
+- `컴포넌트 추가` 팝업에 공통 검색창을 넣고 현재 언어의 표시 이름과 등록 타입 이름의 부분 일치를 지원했다. 카테고리와 검색 결과가 추가 가능 여부, 중복 추가 방지, 씬 편집 이력·프리팹 변경 처리 경로를 공유한다.
+- 정적 검증에서 공통 검색 위젯과 기존 편집 이력 연결을 검토했고, 검색 힌트와 빈 결과 안내의 한·영 CSV 항목이 각각 한 번씩 정의된 것을 확인했다. 빌드와 에디터에서의 검색·Undo/Redo 동작 확인은 남아 있다. [에디터 UX 확인 항목](EditorUXTestGuidelines.md)
+
 ### [2026-11-19] BamAssetWorker의 DirectXTex 직접 링크
 
 - Ninja Debug에서 `HeadlessThumbnailRasterizer.cpp`의 DirectXTex 심볼 6개가 링크되지 않았다. 워커에서 `TextureConverter` 의존성을 제거하면서 전이 링크가 빠졌다. DDS 및 압축 텍스처를 직접 읽는 `BamAssetWorker`에 `Microsoft::DirectXTex`를 직접 연결했다.

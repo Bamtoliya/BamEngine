@@ -32,6 +32,8 @@
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
 #include "AssetPathPicker.h"
+#include <algorithm>
+#include <cfloat>
 
 namespace
 {
@@ -1631,6 +1633,7 @@ void InspectorPanel::DrawAddComponentButton(Engine::Entity& entity)
 	const ImVec2 buttonSize(ImGui::GetContentRegionAvail().x, 0.0f);
 	if (ImGui::Button(LOCAL("Inspector.AddComponent").c_str(), buttonSize))
 	{
+		m_AddComponentSearch[0] = '\0';
 		ImGui::OpenPopup("EntityAddComponentPopup");
 	}
 
@@ -1639,73 +1642,109 @@ void InspectorPanel::DrawAddComponentButton(Engine::Entity& entity)
 
 void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
 {
-	Engine::Scene* scene = entity.GetScene();
+	auto* scene = entity.GetScene();
+	const auto handle = entity.GetEntityHandle();
 
-	if (scene == nullptr || !scene->GetRegistry().valid(entity.GetEntityHandle()))
+	if (!scene || !scene->GetRegistry().valid(handle))
 		return;
 
+	const float popupWidth = ImGui::GetFontSize() * 24.0f;
+	ImGui::SetNextWindowSizeConstraints(ImVec2(popupWidth, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
 	if (!ImGui::BeginPopup("EntityAddComponentPopup"))
 		return;
 
-    if (!Engine::ReflectionRegistry::IsCreated())
-    {
-        ImGui::TextDisabled("%s", (LOCAL("Inspector.RegistrationUnavailable")).c_str());
-        ImGui::EndPopup();
-        return;
-    }
+	if (!Engine::ReflectionRegistry::IsCreated())
+	{
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Inspector.RegistrationUnavailable"));
+		ImGui::EndPopup();
+		return;
+	}
 
-    const auto entries = Engine::ReflectionRegistry::Get().GetComponentEntries();
-    const auto isVisible = [](const auto& entry)
-    {
-        return entry.UserAddable && (entry.ReflectionType == nullptr ||
-            ReflectionPropertyDrawer::IsVisible(*entry.ReflectionType));
-    };
-    std::vector<std::string_view> categories;
-    for (const auto& entry : entries)
-    {
-        if (isVisible(entry) && std::ranges::find(categories, entry.Category) == categories.end())
-            categories.push_back(entry.Category);
-    }
+	EditorUI::SearchBarOptions searchOptions;
+	searchOptions.FocusOnDraw = ImGui::IsWindowAppearing();
+	EditorUI::DrawSearchBar("ComponentSearch", m_AddComponentSearch, sizeof(m_AddComponentSearch),
+		"Inspector.SearchComponents", searchOptions);
+	ImGui::Separator();
 
-    for (const auto category : categories)
-    {
-        ImGui::PushID(std::string(category).c_str());
-        const std::string label = LocalizeInspectorText(std::string(category));
-        if (!ImGui::BeginMenu(label.c_str()))
-        {
-            ImGui::PopID();
-            continue;
-        }
-        for (const auto& entry : entries)
-        {
-            if (!isVisible(entry) || entry.Category != category)
-                continue;
-            auto& world = scene->GetRegistry();
-            const auto handle = entity.GetEntityHandle();
-            const bool exists = entry.Has(world, handle);
-            const std::string entryLabel = LocalizeInspectorText(entry.Name);
-            ImGui::PushID(std::string(entry.StorageTypeName).c_str());
-            if (ImGui::MenuItem(entryLabel.c_str(), nullptr, exists, !exists))
-            {
-                auto& history = Application::Get().GetEditHistory();
-                const std::array targets{ handle };
-                auto before = SceneEditSnapshot::Capture(*scene, targets);
-				if (before && entry.TryAdd(world, handle))
+	auto& world = scene->GetRegistry();
+	const auto entries = Engine::ReflectionRegistry::Get().GetComponentEntries();
+	const auto isVisible = [](const Engine::ComponentReflectionEntry& entry) {
+		return entry.UserAddable && (!entry.ReflectionType || ReflectionPropertyDrawer::IsVisible(*entry.ReflectionType));
+	};
+	const auto drawEntry = [&](const Engine::ComponentReflectionEntry& entry) {
+		const bool exists = entry.Has(world, handle);
+		const auto label = LocalizeInspectorText(entry.Name) + "###Component";
+		ImGui::PushID(std::string(entry.StorageTypeName).c_str());
+		if (ImGui::MenuItem(label.c_str(), nullptr, exists, !exists))
+		{
+			auto& history = Application::Get().GetEditHistory();
+			const std::array targets{ handle };
+			auto before = SceneEditSnapshot::Capture(*scene, targets);
+			if (before && entry.TryAdd(world, handle))
+			{
+				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets),
+					"History.Command.AddComponent");
+
+				auto& prefabMode = PrefabModeManager::Get();
+				if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+					prefabMode.MarkDirty();
+
+				ImGui::CloseCurrentPopup();
+			}
+		}
+		ImGui::PopID();
+	};
+
+	const auto query = Engine::ToLowerStr(m_AddComponentSearch);
+	if (!query.empty())
+	{
+		std::vector<const Engine::ComponentReflectionEntry*> matches;
+		for (const auto& entry : entries)
+		{
+			if (!isVisible(entry))
+				continue;
+			const auto name = Engine::ToLowerStr(LocalizeInspectorText(entry.Name));
+			const auto type = Engine::ToLowerStr(std::string(entry.StorageTypeName));
+			if (name.find(query) != std::string::npos || type.find(query) != std::string::npos)
+				matches.push_back(&entry);
+		}
+
+		const float rows = std::clamp(static_cast<float>(matches.size()), 3.0f, 12.0f);
+		const float height = rows * ImGui::GetTextLineHeightWithSpacing();
+		if (ImGui::BeginChild("ComponentSearchResults", ImVec2(0.0f, height)))
+		{
+			if (matches.empty())
+				EditorUI::EmptyState("Inspector.NoMatchingComponents");
+			for (const auto* entry : matches)
+				drawEntry(*entry);
+		}
+		ImGui::EndChild();
+	}
+	else
+	{
+		std::vector<std::string_view> categories;
+		for (const auto& entry : entries)
+		{
+			if (isVisible(entry) && std::ranges::find(categories, entry.Category) == categories.end())
+				categories.push_back(entry.Category);
+		}
+
+		for (const auto category : categories)
+		{
+			ImGui::PushID(std::string(category).c_str());
+			const auto label = LocalizeInspectorText(std::string(category)) + "###Category";
+			if (ImGui::BeginMenu(label.c_str()))
+			{
+				for (const auto& entry : entries)
 				{
-					history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets), "History.Command.AddComponent");
-
-					auto& prefabMode = PrefabModeManager::Get();
-					if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
-						prefabMode.MarkDirty();
-
-					ImGui::CloseCurrentPopup();
+					if (isVisible(entry) && entry.Category == category)
+						drawEntry(entry);
 				}
-            }
-            ImGui::PopID();
-        }
-        ImGui::EndMenu();
-        ImGui::PopID();
-    }
+				ImGui::EndMenu();
+			}
+			ImGui::PopID();
+		}
+	}
 
 	ImGui::EndPopup();
 }

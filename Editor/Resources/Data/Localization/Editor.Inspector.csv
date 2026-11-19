@@ -33,6 +33,7 @@ Inspector,MultiTransformPolicyHint,Use matching inheritance and snap settings. U
 Inspector,MultiTransformRejected,Transform edit rejected. Previous values were preserved.,변환을 적용할 수 없어 이전 값을 유지합니다.
 Inspector,MultipleSelection,{} entities selected,{}개 엔티티 선택
 Inspector,NoCommonComponents,No common components to display.,표시할 공통 컴포넌트가 없습니다.
+Inspector,NoMatchingComponents,No matching components.,일치하는 컴포넌트가 없습니다.
 Inspector,NoReflectedComponents,No reflected components.,리플렉션에 등록된 컴포넌트가 없습니다.
 Inspector,NoScene,Entity has no Scene.,엔티티에 씬이 없습니다.
 Inspector,NoSelection,No Entity selected.,선택된 엔티티가 없습니다.
@@ -42,6 +43,7 @@ Inspector,RemoveComponent,Remove Component,컴포넌트 제거
 Inspector,ResetToDefault,Reset to Default,기본값으로 재설정
 Inspector,RotationRejected,Invalid rotation input was rejected.,잘못된 회전 입력은 반영하지 않았습니다.
 Inspector,RotationRestored,Invalid rotation was restored.,잘못된 회전값을 이전 값으로 복원했습니다.
+Inspector,SearchComponents,Search components...,컴포넌트 검색...
 Inspector,SearchEntity,Search entity...,엔티티 검색...
 Inspector,SizeUnavailable,Size unavailable,크기를 읽을 수 없습니다.
 Inspector,Snap,Snap,스냅

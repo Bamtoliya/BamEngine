@@ -39,6 +39,7 @@ private:
 
 private:
     uint32 m_PanelId = 0;
+    char m_AddComponentSearch[128] = {};
     bool m_IsLocked = false;
     uint64 m_LockedEntityId = 0;
     uint64 m_CurrentDisplayId = 0;
