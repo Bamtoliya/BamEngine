@@ -134,6 +134,8 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 ### 5단계: 선택적 쿠킹과 증분 스테이징
 
+선택 수집 이후의 타입별 바이너리화, 데이터 팩 작성, Client 마운트와 검증은 [Client 리소스 쿠킹·바이너리화·팩 배포 계획](ClientAssetCookingAndPackingPlan.md)을 따른다.
+
 **상태:** Windows x64 Release 폴더 내보내기에 배포 목록 비교 로그를 추가했다. 선택적 수집과 증분 스테이징은 후속 작업이다. 현재 `ClientPackage.cpp`는 고정된 DLL 목록을 복사하고 `Assets/`와 `Engine/Resources/`에서 허용 확장자의 파일을 모두 순회한다. `AssetReferenceValidator`는 시작 씬에서 JSON과 Animator 컨트롤러 참조를 따라가지만, 바이너리 에셋 내부와 런타임 코드의 동적 로드까지 수집하지는 못한다. [패키저](../Editor/Source/Build/Private/ClientPackage.cpp) · [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
 
 #### 5.1 배포에 필요한 항목 수집

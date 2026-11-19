@@ -2,6 +2,11 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] Client 리소스 쿠킹·바이너리화·팩 배포 계획
+
+- [Client 에셋 팩 계획](ClientAssetCookingAndPackingPlan.md)에 선택 수집, 유형별 쿠킹·기존 BEVE 재사용, Windows 팩 형식·마운트, 기존 내보내기에서 게시하기까지의 단계와 검증 기준을 기록했다.
+- 현재 폴더 복사, Archive의 바이트 디코딩, 디스크 파일을 전제로 한 Client 로드 경로를 코드에서 대조했다. 팩 구현·빌드·실환경 검증·성능 비교는 이후 단계에 둔다.
+
 ### [2026-11-19] 리소스 편집기 비동기 열기 계획
 
 - [리소스 편집기 비동기 열기 계획](ResourceEditorAsyncOpenPlan.md)에 기존 도킹 창의 로딩 표시, 모델 편집기부터 적용하는 순서, 여러 패널이 공유하는 프레임 예산과 검증 기준을 기록했다.
