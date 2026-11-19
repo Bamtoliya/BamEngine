@@ -44,6 +44,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [AssetPipelineAndRenderingOptimizationPlan.md](AssetPipelineAndRenderingOptimizationPlan.md): 에셋 파이프라인 및 렌더링 최적화 조치 계획서 (와인딩 반전, 프리뷰 카메라 동결, 콘텐츠 브라우저 스터터링, 스폰자 드로우콜 병목).
 - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md): 썸네일 디스크 캐시 및 엔진 전반(셰이더, DDC, 지형/물리) 디스크 영속성 통합 개발 계획.
 - [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md): 머티리얼-셰이더 그래프 통합, 원클릭 진입 및 실시간 3D 프리뷰(PBR Live Hot-Reload) 개발 계획.
+- [ResourceEditorAsyncOpenPlan.md](ResourceEditorAsyncOpenPlan.md): 리소스 편집기 창 우선 표시, 백그라운드 문서 준비, 패널 공유 프레임 예산과 요청 수명 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -624,26 +625,31 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 ### 11.5 상태·검증 기록 규칙
 
 - 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료; 2026-11-15 복합 비주얼 이펙트(후보 B) 뷰포트 스카이박스 누출 차단, 타임라인 0.1x 줌아웃/패닝, 프리뷰 모션, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 실환경 검증 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인 및 Phase 5 환경 고도화는 미검증).
+- 2026-11-19 `x64-ninja-debug`(Ninja 단일 구성) 모두 빌드 후 CTest 44개 전체 통과를 사용자가 확인했다. 이전 38/38 기록 이후 검사 실행 파일을 빌드하지 않아 숨어 있던 `HierarchyEditorCheck`·`AssetReferenceCheck` 빌드 오류와 `SceneArchiveCheck`(링크 스켈레탈 모델 갱신)·`KinematicCharacterCheck`(계단 판정)·`AssetReferenceCheck`(타임라인 트랙 종류) 실패를 함께 수정했다. 기능 커밋 전에는 Editor 대상만이 아니라 모두 빌드로 검사 실행 파일까지 갱신한다.
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
 
-### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-18 갱신)
+### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-19 갱신)
+
+2026-11-19 기준 커밋 `3170bc23`~`064e6be2`에 세 후보의 코드 변경이 반영되었다. 이후 `x64-ninja-debug` 모두 빌드와 전체 CTest(44개)에서 드러난 검사 빌드 오류 2건·실패 3건을 수정했고 사용자 실행에서 통과를 확인했다([ImplementationLog](ImplementationLog.md) 2026-11-19 재점검 후속 항목). 실환경 확인은 남아 있으므로 새 기능을 고르기 전에 각 후보의 확인 대기 항목을 먼저 닫는다.
 
 1. **후보 A (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결**
+   - **2026-11-19 상태**: 공중 착지 거리 제한, 오르막 접지 유지, 60° 미끄러짐을 코드와 `KinematicCharacterCheck`에 반영했다(`f1b843be`). CTest와 `SimpleTests` 확인 대기다. [조기 착지 회귀 확인](ThirdPersonCharacterSystemPlan.md#조기-착지-회귀-확인) · [경사 회귀 확인](ThirdPersonCharacterSystemPlan.md#경사-보행과-미끄러짐-회귀-확인)
    - **목표**: 사용자 실환경 테스트(`SimpleTests` 씬)에서 확인된 물리 상호작용 및 지면 스냅 결함을 안정화하여 자연스러운 3인칭 보행 조작감 완성 ([ThirdPersonCharacterSystemPlan.md 4절](ThirdPersonCharacterSystemPlan.md#4-최종-관측-현상-및-기술적-과제-known-issues--residual-observations)).
    - **세부 내용**:
      - `KinematicCharacterSystem.cpp`: 체공 낙하(`!IsGrounded && Velocity.y < 0`) 중 `snapMargin` 최소화 및 캡슐 하단 스윕 기반 2단계 착지 확정을 통한 공중 1m 조기 순간이동 흡착 제거.
      - 30도 경사로 보행 시 접촉 표면 법선 방향 `SkinWidth` 최소 분리 오프셋 보정 및 스윕 피부 마진 강화로 메시 파고듦 제거.
      - 45도/60도 급경사 끝단 $\to$ 평지 진입 시 전환 프레임 수직 스냅 속도 제한(Vertical Snap Clamping) 및 법선 보간을 통한 단차 '탁' 충격 완화(Soft Landing).
-   - **관련 파일**: `Engine/Source/System/Physics/Private/KinematicCharacterSystem.cpp`, `ThirdPersonCharacterSystemPlan.md`.
+   - **관련 파일**: `Engine/Source/Physics/Private/KinematicCharacterSystem.cpp`, `Engine/Source/Physics/Private/Collision.cpp`, `Engine/examples/KinematicCharacterCheck.cpp`, `ThirdPersonCharacterSystemPlan.md`.
 
 2. **후보 B (비주얼 이펙트 / 연출): Composite VFX Phase 5 Step 3 본 소켓 연동 & Additive 가산 머티리얼 표준화**
+   - **2026-11-19 상태**: 액션 타임라인의 `SpawnCompositeVFX` 노티파이와 소켓 부착은 구현되어 있다([ImplementationLog](ImplementationLog.md) 2026-11-19 지속형 VFX 노티파이 항목). 허공 배경의 흙갈색은 트랙 블렌드 모드별 제출 패스 교정(`8cb8813d`, [9.11절](CompositeVisualEffectPlan.md#911-트랙-블렌드-모드별-제출-패스-교정-2026-11-19))으로 원인을 해소했다. 남은 범위는 Additive 머티리얼 표준화와 지면을 끈 공중 프리뷰 토글이다. 공중 모드의 가상 환경광 보정은 결함을 가리므로 진행하지 않는다([9.9절 정정](CompositeVisualEffectPlan.md#99-공중-뷰air-view--허공-배경-시-반투명발광-이펙트의-흙갈색-탁화-및-톤매핑-왜곡-분석-2026-11-18)).
    - **목표**: 상용 엔진(Niagara) 수준의 연출 완성도를 위해 캐릭터 공격 액션 타임라인과 복합 VFX를 본 소켓 단위로 연동하고, 반투명 디퍼드 탁화 현상을 원천 방지하는 발광 가산 머티리얼 표준화 ([CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)).
    - **세부 내용**:
      - `ActionTimelineComponent` 노티파이 트랙에서 스켈레탈 메시의 본 소켓(무기 끝, 손목 등)을 타깃으로 하는 `CompositeVFXComponent` 실시간 스폰 및 트랜스폼 추적 연동.
      - `ForwardTransparentPass`의 Additive 가산 블렌딩 셰이더 및 머티리얼 플래그 연동으로 칠흑 배경 결합 시 색상 탁화 방지.
      - `VFXEditorPanel` 뷰포트 암실 공중(Air Mode) 프리뷰 토글 지원.
-   - **관련 파일**: `Engine/Source/Render/VFX/`, `Editor/Source/ImGui/ActionTimelineEditor/`, `Editor/Source/ImGui/VFXEditor/`.
+   - **관련 파일**: `Engine/Source/VFX/`, `Engine/Source/Animation/Timeline/`, `Editor/Source/ImGui/TimelinePanel/`, `Editor/Source/ImGui/ResourceEditor/Private/VFXEditorPanel.cpp`.
 
 3. **후보 C (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동**
    - **2026-11-19 상태** 모델 변환·결과 수신과 푸터 단계 표시·취소를 코드에 반영했다. 한글 경로 자동 검사와 대형 모델 실측을 마친 뒤 텍스처 이관을 진행한다. [모델 임포트 1차 검증](OutOfProcessAssetPipelinePlan.md#모델-임포트-1차-검증)
@@ -651,4 +657,4 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - **세부 내용**:
      - `Tools/AssetWorker/`: `BamAssetWorker.exe` 파이프 데몬 프로토콜에 `IMPORT_MODEL`(Assimp + meshopt LOD) 및 `IMPORT_TEXTURE`(DirectXTex BCn 압축) 명령 확장 및 실시간 진행률(`PROGRESS`) 응답 구현.
      - `Editor/Source/AssetManager/Worker/AssetWorkerHost.cpp`: 에셋 임포트 비동기 위임 및 하단 푸터 바(`FooterBar`) 실시간 진행률 프로그레스 바 / 취소(`[X]`) 버튼 연동.
-   - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `EditorUIFooterBar.cpp`.
+   - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `ToolBar.cpp`(하단 푸터 바 `DrawFooterControls`).
