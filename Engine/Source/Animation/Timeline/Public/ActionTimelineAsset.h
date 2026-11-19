@@ -201,6 +201,10 @@ public:
 	const std::vector<TimelineCameraTrack>& GetCameraTracks() const { return m_CameraTracks; }
 	std::vector<TimelineCameraTrack>& GetCameraTracks() { return m_CameraTracks; }
 
+protected:
+	// 공용 리소스 로드·핫 리로드·LoadFromFile이 모두 ReadArchive를 거치므로, 이전 파일의 트랙 종류 판정을 여기서 한 번 수행한다.
+	EResult OnPostLoad() override;
+
 private:
 	PROPERTY(EDITABLE)
 		std::string m_ModelPath;

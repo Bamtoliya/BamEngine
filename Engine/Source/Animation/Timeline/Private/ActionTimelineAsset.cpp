@@ -115,13 +115,16 @@ bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 	const auto loadRes = ar.LoadFromFile(fullPath);
 	if (!loadRes) return false;
 
-	// Resource 베이스 클래스의 리플렉션 역직렬화 자동 수행 (this 객체에 직접 복원)
+	// Resource 베이스 클래스의 리플렉션 역직렬화 자동 수행 (this 객체에 직접 복원). 트랙 종류 판정은 OnPostLoad에서 수행된다.
 	const auto readRes = ReadArchive(ar);
-	if (!readRes) return false;
+	return static_cast<bool>(readRes);
+}
 
+EResult ActionTimelineAsset::OnPostLoad()
+{
 	// 이전 파일의 트랙 종류를 한 번 판정한다. 이후 저장하면 판정값이 기록되어 이름을 바꿔도 종류가 유지된다.
 	for (auto& track : m_NotifyTracks) track.Kind = ResolveTrackKind(track);
-	return true;
+	return EResult::Success;
 }
 
 END

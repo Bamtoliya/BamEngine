@@ -7,7 +7,12 @@
 #include "LocalizationManager.h"
 #include "Functions.h"
 #include <imgui.h>
+// 검사 대상(HierarchyEditorCheck)의 PCH는 Engine_Includes.h만 포함하므로 디버그 new 매크로가 살아 있다.
+// imgui_internal.h의 placement new(IM_PLACEMENT_NEW)가 매크로로 치환되지 않도록 포함 구간에서만 해제한다.
+#pragma push_macro("new")
+#undef new
 #include <imgui_internal.h>
+#pragma pop_macro("new")
 #include "IconsFontAwesome7.h"
 #include <fmt/format.h>
 #include "EntityClipboard.h"

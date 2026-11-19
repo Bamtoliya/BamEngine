@@ -152,6 +152,16 @@ namespace
         controller.AutoUpdateAnimator = false;
 
         bool descending = false;
+        // 실패 단계와 위치를 남겨 어느 조건에서 멈췄는지 실행 결과만으로 구분한다.
+        const auto report = [&](const char* reason, f32 elapsed, int tread = -1)
+        {
+            const auto& p = transform.position;
+            std::cerr << "  stairs " << (descending ? "descending" : "ascending") << ": " << reason;
+            if (tread >= 0) std::cerr << " tread=" << tread << " top=" << 0.2f * (tread + 1);
+            std::cerr << " t=" << elapsed << " pos=(" << p.x << ", " << p.y << ", " << p.z << ") grounded=" << controller.IsGrounded
+                << " radius=" << controller.Radius << '\n';
+            return false;
+        };
         for (f32 elapsed = 0.0f; elapsed < 5.0f; elapsed += dt)
         {
             controller.Move(vec3(0.0f, 0.0f, descending ? -1.0f : 1.0f));
@@ -159,26 +169,38 @@ namespace
             const auto& position = transform.position;
             if (descending)
             {
-                const f32 footprint = controller.Radius - 0.05f;
+                // 캡슐(수직 선분 + 반지름)과 디딤판 단면(z·y 사각형)의 최단 거리로 관통을 판정한다.
+                // 모서리를 넘어가는 하단 구는 발 높이가 디딤판 윗면보다 낮아도 디딤판과 닿지 않으므로 높이만으로 판정하지 않는다.
+                const auto capsule = controller.GetWorldCapsule(position);
+                const f32 segmentMin = glm::min(capsule.pointA.y, capsule.pointB.y);
+                const f32 segmentMax = glm::max(capsule.pointA.y, capsule.pointB.y);
+                const f32 contactLimit = controller.Radius - 0.01f;
                 for (int i = 0; i < 4; ++i)
                 {
                     const f32 nearZ = 1.9f + 1.2f * i;
                     const f32 farZ = nearZ + (i == 3 ? 2.4f : 1.2f);
-                    if (position.z + footprint > nearZ && position.z - footprint < farZ &&
-                        position.y < 0.2f * (i + 1) - 0.01f)
-                        return false;
+                    const f32 bottom = 0.2f * i;
+                    const f32 top = bottom + 0.2f;
+                    const f32 dz = glm::max(glm::max(nearZ - capsule.pointA.z, 0.0f), capsule.pointA.z - farZ);
+                    const f32 dy = glm::max(glm::max(bottom - segmentMax, 0.0f), segmentMin - top);
+                    if (dz * dz + dy * dy < contactLimit * contactLimit)
+                        return report("capsule penetrates a tread", elapsed, i);
                 }
                 if (position.z <= 1.0f)
-                    return controller.IsGrounded && glm::abs(position.y) <= 0.01f;
+                {
+                    if (!controller.IsGrounded || glm::abs(position.y) > 0.01f)
+                        return report("did not settle on the floor", elapsed);
+                    return true;
+                }
             }
             else if (position.z >= 6.6f)
             {
                 if (!controller.IsGrounded || glm::abs(position.y - 0.8f) > 0.01f)
-                    return false;
+                    return report("reached the top tread without standing on it", elapsed);
                 descending = true;
             }
         }
-        return false;
+        return report("timed out", 5.0f);
     }
 
     bool CheckRampEntryStop(KinematicCharacterSystem& system, const MeshShape& floorShape, f32 dt)

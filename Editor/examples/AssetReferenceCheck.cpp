@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string_view>
 #include <Windows.h>
 
 namespace
@@ -38,7 +39,8 @@ namespace
         }
     };
 
-    bool WriteFixture(const fs::path& path, const char* text)
+    // 문자열 리터럴과 std::string을 모두 받도록 string_view를 사용한다
+    bool WriteFixture(const fs::path& path, std::string_view text)
     {
         std::ofstream file(path, std::ios::binary);
         file << text;
@@ -260,6 +262,65 @@ namespace
             replay(true) && runtime.loadedPath == Path::ToVirtualUri(movedGraph);
     }
 
+    // 파일에서 다시 읽은 노티파이 트랙과 메모리의 트랙이 다를 때, 다른 필드만 출력한다.
+    void ReportNotifyDifferences(const std::vector<Engine::TimelineNotifyTrack>& file,
+        const std::vector<Engine::TimelineNotifyTrack>& memory)
+    {
+        std::cerr << "    tracks file=" << file.size() << " memory=" << memory.size() << '\n';
+        const auto print = [](const char* field, const auto& lhs, const auto& rhs)
+        {
+            if (lhs == rhs) return;
+            std::cerr << "    " << field << ": file=";
+            if constexpr (requires { lhs.x; })
+            {
+                for (int i = 0; i < static_cast<int>(std::remove_cvref_t<decltype(lhs)>::length()); ++i)
+                    std::cerr << (i ? "," : "") << lhs[i];
+                std::cerr << " memory=";
+                for (int i = 0; i < static_cast<int>(std::remove_cvref_t<decltype(rhs)>::length()); ++i)
+                    std::cerr << (i ? "," : "") << rhs[i];
+            }
+            else if constexpr (std::is_enum_v<std::remove_cvref_t<decltype(lhs)>>)
+                std::cerr << static_cast<int>(lhs) << " memory=" << static_cast<int>(rhs);
+            else
+                std::cerr << lhs << " memory=" << rhs;
+            std::cerr << '\n';
+        };
+        for (size_t t = 0; t < (std::min)(file.size(), memory.size()); ++t)
+        {
+            const auto& a = file[t];
+            const auto& b = memory[t];
+            print("TrackName", a.TrackName, b.TrackName);
+            print("Kind", a.Kind, b.Kind);
+            print("IsMuted", a.IsMuted, b.IsMuted);
+            std::cerr << "    track " << t << " notifies file=" << a.Notifies.size() << " memory=" << b.Notifies.size() << '\n';
+            for (size_t n = 0; n < (std::min)(a.Notifies.size(), b.Notifies.size()); ++n)
+            {
+                const auto& x = a.Notifies[n];
+                const auto& y = b.Notifies[n];
+                print("Name", x.Name, y.Name);
+                print("TriggerTime", x.TriggerTime, y.TriggerTime);
+                print("Duration", x.Duration, y.Duration);
+                print("Type", x.Type, y.Type);
+                print("SocketBoneName", x.SocketBoneName, y.SocketBoneName);
+                print("OffsetPosition", x.OffsetPosition, y.OffsetPosition);
+                print("OffsetRotation", x.OffsetRotation, y.OffsetRotation);
+                print("ParticleColor", x.ParticleColor, y.ParticleColor);
+                print("ParticleSize", x.ParticleSize, y.ParticleSize);
+                print("ParticleSpeed", x.ParticleSpeed, y.ParticleSpeed);
+                print("ParticleLifetime", x.ParticleLifetime, y.ParticleLifetime);
+                print("BurstCount", x.BurstCount, y.BurstCount);
+                print("SoundPath", x.SoundPath, y.SoundPath);
+                print("SoundVolume", x.SoundVolume, y.SoundVolume);
+                print("EventTag", x.EventTag, y.EventTag);
+                print("VFXPath", x.VFXPath, y.VFXPath);
+                print("VFXScale", x.VFXScale, y.VFXScale);
+                print("AttachToSocket", x.AttachToSocket, y.AttachToSocket);
+                print("VFXPlayRate", x.VFXPlayRate, y.VFXPlayRate);
+                print("AutoDestroy", x.AutoDestroy, y.AutoDestroy);
+            }
+        }
+    }
+
     bool CheckTimelineRelocation(const fs::path& assets, const fs::path& recovery)
     {
         using Validator = Editor::AssetReferenceValidator;
@@ -275,11 +336,13 @@ namespace
         fs::create_directory(folder);
         fs::create_directory(recovery);
         const auto uri = [](const fs::path& path) { return Engine::WStrToStr(Path::ToVirtualUri(path)); };
+        // 실패 단계를 남겨 실행 결과만으로 원인을 구분한다.
+        const auto fail = [](const char* step) { std::cerr << "  timeline relocation: " << step << '\n'; return false; };
 
         if (!WriteFixture(scenario, R"({"Scene":{"Components":[
             {"Type":"Engine::ActionTimelineComponent","Data":{"timelinePath":"Resources/TimelineDependencies/Attack.actiontimeline.json"}},
             {"Type":"Custom::Component","Data":{"timelinePath":"Project://TimelineDependencies/Attack.actiontimeline.json"}}
-            ]}})") || !WriteFixture(model, "") || !WriteFixture(sound, "") || !WriteFixture(vfx, "")) return false;
+            ]}})") || !WriteFixture(model, "") || !WriteFixture(sound, "") || !WriteFixture(vfx, "")) return fail("fixture write");
 
         std::unique_ptr<Engine::Resource> fixture(Engine::ActionTimelineAsset::CreateEmpty());
         auto& source = static_cast<Engine::ActionTimelineAsset&>(*fixture);
@@ -288,18 +351,27 @@ namespace
         notify.SoundPath = uri(sound);
         notify.VFXPath = uri(vfx);
         notify.EventTag = uri(sound);
-        if (!source.SaveToFile(uri(timeline))) return false;
+        if (!source.SaveToFile(uri(timeline))) return fail("timeline save");
 
         auto handle = Engine::ResourceHandle<Engine::ActionTimelineAsset>(manager.LoadFile(uri(timeline)));
         auto* loaded = handle.Get();
-        if (!loaded) return false;
+        if (!loaded) return fail("timeline load through ResourceManager");
         const auto originalTimeline = ReadFixture(timeline);
         const auto originalScene = ReadFixture(scenario);
         const std::vector<Editor::AssetPathMove> changes{ { folder, target } };
         std::vector<Editor::AssetReferenceEdit> edits;
         const auto impact = Validator::AnalyzeMove({ folder });
-        if (!impact.IsComplete || impact.References.size() != 4 || !ExpectValidBuildScene(scenario) ||
-            !Validator::PrepareMoveReferences(changes, edits) || edits.size() != 2) return false;
+        if (!impact.IsComplete || impact.References.size() != 4)
+        {
+            std::cerr << "  timeline relocation: complete=" << impact.IsComplete << " references=" << impact.References.size() << " (expected 4)\n";
+            return false;
+        }
+        if (!ExpectValidBuildScene(scenario)) return fail("scene build validation before move");
+        if (!Validator::PrepareMoveReferences(changes, edits) || edits.size() != 2)
+        {
+            std::cerr << "  timeline relocation: prepared edits=" << edits.size() << " (expected 2)\n";
+            return false;
+        }
 
         const auto checkPaths = [&](const fs::path& directory)
         {
@@ -309,8 +381,10 @@ namespace
                 movedNotify.EventTag == uri(sound);
         };
         bool attempted = false;
-        if (manager.RelocateFileResources(changes, [&]() { attempted = true; return false; }) || !attempted ||
-            !checkPaths(folder) || ReadFixture(timeline) != originalTimeline) return false;
+        if (manager.RelocateFileResources(changes, [&]() { attempted = true; return false; }) || !attempted)
+            return fail("failed file move must be rejected after the move callback runs");
+        if (!checkPaths(folder)) return fail("paths changed after a rejected move");
+        if (ReadFixture(timeline) != originalTimeline) return fail("timeline file changed after a rejected move");
 
         const auto replay = [&](bool forward)
         {
@@ -326,18 +400,31 @@ namespace
             });
         };
         const auto movedTimeline = target / timeline.filename();
-        if (!replay(true) || !ExpectValidBuildScene(scenario) || !checkPaths(target) ||
-            manager.FindHandleByFilePath(movedTimeline) != handle.GetRawHandle()) return false;
-        if (!source.LoadFromFile(uri(movedTimeline)) || source.GetModelPath() != loaded->GetModelPath() ||
-            source.GetNotifyTracks() != loaded->GetNotifyTracks()) return false;
+        if (!replay(true)) return fail("first forward move");
+        if (!ExpectValidBuildScene(scenario)) return fail("scene build validation after move");
+        if (!checkPaths(target)) return fail("in-memory timeline paths after move");
+        if (manager.FindHandleByFilePath(movedTimeline) != handle.GetRawHandle()) return fail("handle lookup by moved path");
+        if (!source.LoadFromFile(uri(movedTimeline))) return fail("reload moved timeline file");
+        if (source.GetModelPath() != loaded->GetModelPath()) return fail("moved file model path differs from memory");
+        if (source.GetNotifyTracks() != loaded->GetNotifyTracks())
+        {
+            ReportNotifyDifferences(source.GetNotifyTracks(), loaded->GetNotifyTracks());
+            return fail("moved file notify tracks differ from memory");
+        }
         const auto movedScene = ReadFixture(scenario);
         const auto movedContents = ReadFixture(movedTimeline);
-        if (movedScene.find(uri(timeline)) == std::string::npos ||
-            movedScene.find(uri(movedTimeline)) == std::string::npos) return false;
+        if (movedScene.find(uri(timeline)) == std::string::npos) return fail("scene no longer contains the original timeline URI");
+        if (movedScene.find(uri(movedTimeline)) == std::string::npos) return fail("scene does not contain the moved timeline URI");
 
-        return replay(false) && checkPaths(folder) && ReadFixture(scenario) == originalScene &&
-            ReadFixture(timeline) == originalTimeline && replay(true) && checkPaths(target) &&
-            ReadFixture(scenario) == movedScene && ReadFixture(movedTimeline) == movedContents;
+        if (!replay(false)) return fail("move back");
+        if (!checkPaths(folder)) return fail("in-memory timeline paths after moving back");
+        if (ReadFixture(scenario) != originalScene) return fail("scene text after moving back");
+        if (ReadFixture(timeline) != originalTimeline) return fail("timeline text after moving back");
+        if (!replay(true)) return fail("second forward move");
+        if (!checkPaths(target)) return fail("in-memory timeline paths after second move");
+        if (ReadFixture(scenario) != movedScene) return fail("scene text after second move");
+        if (ReadFixture(movedTimeline) != movedContents) return fail("timeline text after second move");
+        return true;
     }
 }
 

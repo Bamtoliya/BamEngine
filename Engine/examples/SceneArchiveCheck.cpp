@@ -1171,15 +1171,13 @@ namespace
         const auto findBodyMesh = [](const Engine::Entity& root) -> entt::entity
             {
                 const auto& world = root.GetScene()->GetRegistry();
+                // 스켈레탈 모델은 노드 엔티티 없이 메시를 루트의 직속 자식으로 배치한다.
+                // 갱신(RefreshLinkedModelParts) 뒤에도 노드가 다시 생기지 않아야 하므로 자식 수를 1개로 고정해 검사한다.
                 const auto* rootLink = world.try_get<Engine::HierarchyComponent>(root.GetEntityHandle());
                 if (!rootLink || rootLink->children.size() != 1 || !world.valid(rootLink->children[0]))
                     return entt::null;
 
-                const auto* nodeLink = world.try_get<Engine::HierarchyComponent>(rootLink->children[0]);
-                if (!nodeLink || nodeLink->children.size() != 1 || !world.valid(nodeLink->children[0]))
-                    return entt::null;
-
-                const auto mesh = nodeLink->children[0];
+                const auto mesh = rootLink->children[0];
                 const auto* source = world.try_get<Engine::ModelSourceComponent>(mesh);
                 return source && source->isMeshAttachment && source->sourceNodeKey == L"4:Body" &&
                     source->meshAttachmentKey == L"BodyMesh" && world.all_of<Engine::SkinnedMeshRendererComponent>(mesh)
@@ -1650,19 +1648,13 @@ namespace
             const auto* link = reg.try_get<Engine::HierarchyComponent>(rootEntity);
             if (!link) return entt::null;
 
-            for (auto nodeEntity : link->children)
+            // 스켈레탈 모델의 파트 메시는 루트의 직속 자식이다(중간 노드 엔티티 없음).
+            for (auto meshEntity : link->children)
             {
-                if (!reg.valid(nodeEntity)) continue;
-                const auto* nodeLink = reg.try_get<Engine::HierarchyComponent>(nodeEntity);
-                if (!nodeLink) continue;
-
-                for (auto meshEntity : nodeLink->children)
-                {
-                    if (!reg.valid(meshEntity)) continue;
-                    const auto* src = reg.try_get<Engine::ModelSourceComponent>(meshEntity);
-                    if (src && src->isMeshAttachment && src->sourceNodeKey == nodeKey && src->meshAttachmentKey == partKey)
-                        return meshEntity;
-                }
+                if (!reg.valid(meshEntity)) continue;
+                const auto* src = reg.try_get<Engine::ModelSourceComponent>(meshEntity);
+                if (src && src->isMeshAttachment && src->sourceNodeKey == nodeKey && src->meshAttachmentKey == partKey)
+                    return meshEntity;
             }
             return entt::null;
         };

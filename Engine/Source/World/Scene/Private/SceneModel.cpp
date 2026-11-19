@@ -549,6 +549,15 @@ namespace Engine
 					continue;
 				}
 
+				// 스켈레탈 모델은 배치 시 노드 엔티티 없이 메시를 루트에 직접 붙인다(InstantiateModelInternal 2-A).
+				// 갱신도 같은 배치를 유지하도록 없는 노드를 만들지 않고 루트를 대상으로 삼는다.
+				// 이전 배치 방식으로 저장된 씬에 남아 있는 노드 엔티티는 위에서 그대로 사용한다.
+				if (skeleton.IsValid())
+				{
+					nodeTargets[i] = { rootHandle, rootHandle };
+					continue;
+				}
+
 				const auto ancestor = node.ParentIndex < 0
 					? rootHandle : nodeTargets[static_cast<size_t>(node.ParentIndex)].existingAncestor;
 				if (ancestor == entt::null ||
