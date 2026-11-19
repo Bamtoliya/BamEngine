@@ -28,7 +28,6 @@
 #include <imgui_internal.h>
 #include "FileDialogs.h"
 #include "ActionTimelineComponent.h"
-#include "AnimationTimelinePanel.h"
 #include "SplineComponent.h"
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
@@ -1444,16 +1443,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			elapsedText.appendf(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
 			playbackToolbar.Text(elapsedText.c_str());
 
-			// 3. 에디터 타임라인 패널 원클릭 편집 연동 버튼
-			ImGui::Spacing();
-			if (ImGui::Button((std::string(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " ") + LOCAL("Timeline.OpenInEditor")).c_str()))
-			{
-				if (auto* timelinePanel = AnimationTimelinePanel::GetActivePanel())
-				{
-					timelinePanel->Open();
-					if (!timeline.timelinePath.empty()) timelinePanel->LoadFromFile(timeline.timelinePath);
-				}
-			}
+			// 타임라인 편집기는 경로 필드 더블클릭으로 연다(미저장 확인을 거치는 공용 리소스 편집기 경로).
 			}
 		}
 		else if (object.Is<Engine::SplineComponent>())

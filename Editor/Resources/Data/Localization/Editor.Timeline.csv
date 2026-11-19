@@ -19,7 +19,6 @@ Timeline,MuteTrack,Mute,음소거
 Timeline,NotifyInspector,Notify Properties,노티파이 속성
 Timeline,NotifyTrack,FX / Notifies,이펙트/노티파이
 Timeline,NotifyTriggered,Triggered: {},발동: {}
-Timeline,OpenInEditor,Open in Timeline Editor,타임라인 에디터에서 열기
 Timeline,OpenTimeline,Open Timeline Asset,타임라인 에셋 열기
 Timeline,PanelTitle,Animation Timeline,애니메이션 타임라인
 Timeline,PlaybackSpeed,Playback Speed,재생 배속

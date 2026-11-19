@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] 인스펙터의 타임라인 열기 버튼 제거
+
+- 문제: 인스펙터 `ActionTimelineComponent`의 "타임라인 에디터에서 열기" 버튼이 `AnimationTimelinePanel::LoadFromFile`을 직접 불렀다. 패널에 미저장 편집이 있어도 확인 없이 다른 파일로 바뀌어 편집 내용을 잃을 수 있었다(코드 판독, 실행 미확인). 같은 일을 경로 필드 더블클릭(공용 리소스 편집기 경로, 미저장 확인 포함)이 이미 하고 있었다.
+- 변경: 버튼과 더 쓰지 않는 `AnimationTimelinePanel.h` include, `Timeline.OpenInEditor` 로캘 행을 제거했다. 타임라인은 경로 필드 더블클릭이나 콘텐츠 브라우저 더블클릭으로 연다(19절 더블클릭 규칙). [타임라인 계획 10절](AnimationTimelineEditorPlan.md#10-작성-모델클립-바인딩-2026-11-19)
+- 검증: 정적 검토만 했다. 빌드(제거한 include에 기대던 전이 포함 여부 포함), 더블클릭 열기와 미저장 확인 창, 로캘 엄격 감사는 사용자 확인이 필요하다. AI는 빌드·실행을 하지 않았다.
+
 ### [2026-11-19] 액션 타임라인 이벤트 노티파이 C++ 모듈 수신과 모듈 자동 빌드 환경
 
 - 문제: 이벤트 노티파이(`CustomEvent`, `EventTag`)는 배치할 수 있었지만 받는 쪽이 없었다. `ActionTimelineComponent::notifyCallbacks`는 해제 수단이 없어 핫리로드되는 모듈에서 쓰면 언로드된 코드를 가리킬 수 있었다.
