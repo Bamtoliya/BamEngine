@@ -125,9 +125,24 @@ flowchart TD
 - **2026-11-05 구현:**
   - 독립 3D 모델 프리뷰와 2D 블렌드 그래프 조작, 기본 상태 재시작, 현재 상태 및 전이 목적지·진행률 표시.
   - 조건 그룹의 AND·OR 설정, 목적지 상태에서 `Any State` 전이 추가, 상태 이름 중복 방지와 이름 확정 시 전이 참조 갱신.
-- **후속 계획 과제 (사용자 확정):**
-  - **캔버스 UI 토대 일원화 (`imgui-node-editor` 전환):** 현재의 자체 `ImDrawList` 수동 렌더링을 `GraphPanel`과 동일한 `imgui-node-editor` 프레임워크로 마이그레이션.
-    - 데이터 모델(`AnimatorStateMachine`)은 독립적으로 보존하면서, 무한 줌/패닝, 다중 노드 마퀴(Marquee) 선택, 박스 드래그, 정렬 단축키 등 블루프린트와 일관된 조작감 제공.
+- **2026-11-19 구현 완료 (캔버스 UI 토대 일원화 — `imgui-node-editor` 전환):**
+  - 자체 `ImDrawList` 수동 캔버스를 `GraphPanel`과 동일한 `imgui-node-editor`(`ax::NodeEditor`) 프레임워크로 완전 마이그레이션.
+  - 데이터 모델(`AnimatorStateMachine`)의 직렬화 구조를 100% 보존하면서 Entry, Any State, 일반 상태 노드 및 전이 와이어를 정식 노드/핀/링크로 렌더링.
+  - 휠 드래그 패닝, 무한 마우스 휠 줌, 다중 노드 마퀴(Marquee) 박스 선택, 핀 드래그앤드롭 트랜지션 연결, 컨텍스트 메뉴 및 `F` 키 전체 보기(`ResetCanvasView`) 지원.
+  - 런타임 활성 상태 하이라이트 및 트랜지션 진행 시 `ed::Flow` 와이어 흐름 피드백 제공.
+- **2026-11-19 편집 이력:** 상태·전이·파라미터·블렌드 트리·노티파이·노드 위치는 컨트롤러 스냅샷으로 복원한다. 노드 위치는 선택적 `editorNodePositions` 필드로 저장한다. 기존 컨트롤러는 기본 노드 배치로 열린다. 편집 메뉴, 퀵액세스와 Ctrl+Z·Ctrl+Y는 동일한 문서 액션을 실행한다.
+- **2026-11-19 노드 에디터 UX/UI 안정화 및 표준 표 일원화 (완료):**
+  - **공통 컴포넌트 (`NodeEditorUI`):** 모든 노드 에디터 패널의 헤더·핀·테마·와이어 렌더링을 일원화하는 공통 컴포넌트 신설.
+  - **양측 핀 및 스마트 라우팅:** Entry/AnyState 좌우 듀얼 출력 핀 및 상태 노드 4-Way 핀(LeftIn/RightIn/LeftOut/RightOut)을 도입하여 상호 전이 시 X자 교차 및 노드 관통을 차단하고 바깥쪽 우회 곡선 강제. 핀 테두리 50% 걸침 정렬 복원.
+  - **가로 스크롤 결함 해결:** 3단 레이아웃 `overhead` 계산 시 4개 `ItemSpacing` 정확 반영 및 윈도우 스크롤 플래그 차단으로 가로 스크롤바 원천 제거.
+  - **인스펙터 표준 표 일원화:** 상태 기본 속성, 모션 설정(1D/2D 블렌드 트리, 클립), 전이 속성 인스펙터를 `EditorUI::BeginPropertyTable` 기반 표준 표로 개편(`LabelWidth = 9em`, `Label | 선택지`).
+  - **전이 리스트 뷰 개편:** 전이 목록을 방향(`Out`/`In`/`[Any]`), 상대 상태, 지속 시간, 삭제(`휴지통`) 및 상단 `+` 버튼을 갖춘 정돈된 테이블 뷰로 개편.
+  - **로캘 키 보강:** `AnimatorGraph.TransitionDirection`, `SourceState`, `TargetState`, `NoTransitions`, `Outgoing`, `Incoming` 추가 등록.
+- **후속 개발 로드맵 (Next Milestones):**
+  1. *[단기]* 트랜지션 전이 조건(`Conditions`) 편집 UI의 표(`EditorUI::BeginPropertyTable`) 규격 정돈 및 파라미터 타입별 위젯 자동 전환.
+  2. *[단기]* 캔버스 와이어(전이선) 우클릭 컨텍스트 메뉴(`전이 삭제`, `반대 방향 전이 생성`) 추가.
+  3. *[중기]* PIE 실행 중 씬에서 캐릭터 선택 시 `AnimatorGraphPanel` 실시간 상태 동기화 및 전이 흐름(`ed::Flow`) 디버깅.
+  4. *[장기]* 다중 애니메이션 레이어(`AnimatorLayer`) 저작 탭 및 서브 상태 머신 지원.
 
 ---
 

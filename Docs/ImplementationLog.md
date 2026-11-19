@@ -2,11 +2,84 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-19] KCC 램프 미끄러짐에서 메시 바닥 관통 차단
+
+- 사용자 재확인에서 램프에 점프해 닿은 뒤 계속 낙하하는 현상이 남았다. 급경사 미끄러짐은 이동 단계에서 대각선 하강을 적용하며 공중 수직 착지 검사를 건너뛴다. 이동 전후의 높이 구간을 도착 XZ에서 검사해 평지 지지면을 만나면 그 위치에서 하강을 멈추고 접지 상태를 갱신한다.
+- 60° 경사로에 낙하한 뒤 메시 바닥으로 미끄러지는 회귀 검사를 추가했다. 정적 검토를 수행했으며 빌드·CTest·실환경 결과는 사용자 확인 대기다. [급경사 전환 확인](ThirdPersonCharacterSystemPlan.md#급경사-미끄러짐에서-평지로-전환)
+
+### [2026-11-19] KCC 램프 정지와 공중 충돌의 수직 이동 분리
+
+- 사용자가 램프에서 키를 뗀 뒤 계속 올라가는 현상과 점프 중 램프에 닿으면 바닥을 통과하는 현상을 보고했다. 걸을 수 있는 경사에서는 입력 해제 시 속도를 0으로 만들고, 계단 보정에 현재 이동 입력을 요구한다. 급경사에서 이미 가진 오르막 속도도 제거한다.
+- 공중 충돌이 벽 법선으로 인해 높이를 바꾸지 않도록 수평 이동으로 제한했다. 지지할 수 없는 스윕 접촉은 최단 거리 후보에서 제외하고, 가까운 레이 히트가 지지면으로 부적합하면 뒤쪽의 바닥까지 검사한다.
+- 램프 진입 후 정지, 공중 측면 충돌 높이, 아랫면에 가려진 착지 회귀 검사를 추가했다. 수정 후 빌드·CTest·실환경 확인은 사용자 실행 대기다. [램프 회귀 확인](ThirdPersonCharacterSystemPlan.md#램프-진입-정지와-점프-충돌-회귀-확인)
+
+### [2026-11-19] 비균일 스케일 계단·램프의 KCC 침투 수정
+
+- 사용자가 계단 왕복과 램프에서 몸이 점차 파고든다고 보고했다. 변환 행렬의 스케일을 회전으로 해석하던 축 정렬 검사를 바로잡고, 직교 박스 축에서 캡슐의 월드 반지름을 보존하도록 교차·스윕을 정리했다. 캡슐 끝점도 최근접점 후보에 포함하며, 겹침 결과의 침투 깊이를 이동 거리로 덮어쓰던 부분을 수정했다.
+- 지지면 스윕은 음수 낙하 거리를 보존하고 발밑의 높은 지지면을 먼저 선택한다. 계단 오르기도 같은 판정을 사용하고, 경사 이동 스윕의 인위적인 캡슐 상승을 제거했다.
+- 경사 박스 형상 검사와 `SimpleTests`의 배율·높이를 사용한 계단 왕복 검사를 추가했다. 빌드·CTest·실환경 결과는 사용자 확인 대기다. [계단·램프 회귀 확인](ThirdPersonCharacterSystemPlan.md#계단램프-침투-회귀-확인)
+
 ### [2026-11-19] 인스펙터의 타임라인 열기 버튼 제거
 
 - 문제: 인스펙터 `ActionTimelineComponent`의 "타임라인 에디터에서 열기" 버튼이 `AnimationTimelinePanel::LoadFromFile`을 직접 불렀다. 패널에 미저장 편집이 있어도 확인 없이 다른 파일로 바뀌어 편집 내용을 잃을 수 있었다(코드 판독, 실행 미확인). 같은 일을 경로 필드 더블클릭(공용 리소스 편집기 경로, 미저장 확인 포함)이 이미 하고 있었다.
 - 변경: 버튼과 더 쓰지 않는 `AnimationTimelinePanel.h` include, `Timeline.OpenInEditor` 로캘 행을 제거했다. 타임라인은 경로 필드 더블클릭이나 콘텐츠 브라우저 더블클릭으로 연다(19절 더블클릭 규칙). [타임라인 계획 10절](AnimationTimelineEditorPlan.md#10-작성-모델클립-바인딩-2026-11-19)
 - 검증: 정적 검토만 했다. 빌드(제거한 include에 기대던 전이 포함 여부 포함), 더블클릭 열기와 미저장 확인 창, 로캘 엄격 감사는 사용자 확인이 필요하다. AI는 빌드·실행을 하지 않았다.
+
+### [2026-11-19] 애니메이터 패널 가로 스크롤 결함 해결 및 EditorUI::BeginPropertyTable 기반 속성 표 전면 일원화
+
+- **가로(좌우) 스크롤바 결함 해결**:
+  - `AnimatorGraphPanel.h`: `GetResourceWindowFlags()`에서 `ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse`를 반환하도록 오버라이드하여 최외곽 메인 창의 불필요한 스크롤바 원천 차단.
+  - `AnimatorGraphPanel.cpp`: `DrawCustomContent()`의 3단 패널(좌/중/우) 너비 계산 시, 2개의 스플리터 사이에 존재하는 4개의 `ItemSpacing.x`를 정확히 반영하도록 `overhead = (splitterThickness * 2.0f) + (spacingX * 4.0f)`로 수정하여 가용 너비 초과(16px 누수)로 인한 가로 스크롤 발생 결함 완벽 해결.
+- **속성 표 전면 일원화 (`EditorUI::BeginPropertyTable`)**:
+  - 상태 인스펙터(`DrawStateInspector`):
+    - 상태 기본 속성(`StatePropertiesTable`)과 모션 설정(`MotionConfigTable`), 2D 블렌드 트리 매개변수(`Blend2DParamsTable`)를 `EditorUI::BeginPropertyTable(..., EditorUI::InspectorPropertyTableStyle())` 및 `EditorUI::PropertyRow()` 기반으로 전면 교체.
+  - 전이 인스펙터(`DrawTransitionInspector`):
+    - 출발 상태(`SourceState`), 대상 상태(`TargetState`), 지속 시간(`Duration`), 종료 시간 여부(`HasExitTime`), 종료 시간(`ExitTime`)을 에디터 표준 속성 표(`EditorUI::BeginPropertyTable`)로 일원화.
+  - 모든 인스펙터의 라벨 열 너비(`9em`), 정렬, 폰트 패딩(`AlignTextToFramePadding()`), 구분선, 오버플로 툴팁이 에디터 전역 표준 스타일과 100% 동일하게 통일됨.
+- **로캘 키 보강 및 누락 키 해결**:
+  - `PROP_TYPE` 누락 키를 정식 로캘 키 `AnimatorGraph.TransitionDirection`("전이 방향")으로 교체 등록.
+  - `AnimatorGraph.SourceState`, `TargetState`, `NoTransitions`, `Outgoing`, `Incoming` 추가 등록.
+- **프리뷰 위젯 레이아웃 및 팝업 안정화**:
+  - `PreviewViewportWidget.cpp`: `Draw()` 종료부 `ImGui::Dummy(widgetSize)` 복원으로 프리뷰 위젯과 파라미터 창 겹침 결함 해결.
+- **검증 상태**: 정적 분석 완료. AGENTS.md 제2절에 따라 빌드는 사용자 직접 실행 안내.
+
+- **매개변수 및 모션 속성 행 통일 (Label | 선택지)**:
+  - `AnimatorGraphPanel.cpp`의 `DrawStateInspector`:
+    - 기존에 콤보박스 오른쪽에 라벨이 노출되거나 중복되던 `값 | 이름` 형태를 해소.
+    - `drawFloatParameterCombo`를 도입하고 모션 유형(MotionType), 애니메이션 클립(AnimationClip), 1D 블렌드 트리 매개변수(`Parameter`), 2D 블렌드 트리 X/Y축 매개변수(`Blend2DParameterX`, `Blend2DParameterY`) 모두를 2컬럼 테이블(`ImGuiTableFlags_BordersInnerV`)의 `Label(Column 0) | 선택지/위젯(Column 1)`으로 일관되게 정돈.
+- **전이 목록(Transitions) 리스트 뷰 개편**:
+  - 기존의 단조로운 텍스트 나열 방식에서 정돈된 4컬럼 테이블(`유형`, `상대 상태`, `시간`, `삭제`) 리스트 뷰로 전면 개편.
+  - 전이 방향에 따라 초록색 `-> Out (출력)`, 파란색 `<- In (입력)`, 보라색 `[Any]` 아이콘 및 색상 구분 표시.
+  - 행 전체 클릭(`SpanAllColumns`)으로 전이 선택 및 캔버스 강조 연동.
+  - 헤더 `+` 아이콘 버튼으로 `전이 만들기(Make Transition)` 모드 진입 지원 및 행 우측 개별 휴지통 아이콘으로 간편 삭제 지원.
+  - 전이가 없을 시 `연결된 전이가 없습니다.`의 정확한 Empty State 안내 표시.
+  - `Editor.AnimatorGraph.csv`: `AnimatorGraph.NoTransitions`, `AnimatorGraph.Outgoing`, `AnimatorGraph.Incoming` 추가.
+- **로캘 키 보강 및 누락 키 해결**:
+  - `PROP_TYPE` 누락 키를 정식 로캘 키 `AnimatorGraph.TransitionDirection`("전이 방향")으로 교체 등록.
+  - `AnimatorGraph.SourceState`, `TargetState`, `NoTransitions`, `Outgoing`, `Incoming` 추가 등록.
+- **프리뷰 위젯 레이아웃 및 팝업 안정화**:
+  - `PreviewViewportWidget.cpp`: `Draw()` 종료부 `ImGui::Dummy(widgetSize)` 복원으로 프리뷰 위젯과 파라미터 창 겹침 결함 해결.
+- **검증 상태**: 정적 분석 완료. AGENTS.md 제2절에 따라 빌드는 사용자 직접 실행 안내.
+
+- **핀 위치 조정**:
+  - `NodeEditorUI.cpp`: 사용자의 피드백에 따라 핀이 완전히 밖으로 돌출되는 대신, 핀 중심이 노드 테두리 선에 정확히 위치하여 테두리에 50%(반만) 걸치도록 `borderOffset = 0.0f`로 정렬 복원 (`leftX = nodeMin.x - style.NodePadding.x`, `rightX = nodeMax.x + style.NodePadding.z`).
+  - 와이어 외곽 우회 탄젠트(`StyleVar_TargetDirection`/`SourceDirection`)는 그대로 유지되어 와이어의 노드 몸통 관통은 방지됨.
+- **이미 연결된 노드를 다른 곳으로 잇는 방안 구현 (트랜지션 재연결)**:
+  - `AnimatorGraphPanel.cpp`의 `DrawTransitionInspector`:
+    - 캔버스에서 연결된 와이어(트랜지션)를 클릭했을 때, 인스펙터에 `Source State` 및 `Target State` 콤보박스를 제공하여 다른 상태 노드로 즉시 대상/출발지를 변경할 수 있도록 구현.
+  - `Editor.AnimatorGraph.csv`: `AnimatorGraph.SourceState`, `AnimatorGraph.TargetState` 로캘 원본 추가.
+- **로캘 키 보강 및 누락 키 해결**:
+  - `PROP_TYPE` 누락 키를 정식 로캘 키 `AnimatorGraph.TransitionDirection`("전이 방향")으로 교체 등록.
+  - `AnimatorGraph.SourceState`, `TargetState`, `NoTransitions`, `Outgoing`, `Incoming` 추가 등록.
+- **프리뷰 위젯 레이아웃 및 팝업 안정화**:
+  - `PreviewViewportWidget.cpp`: `Draw()` 종료부 `ImGui::Dummy(widgetSize)` 복원으로 프리뷰 위젯과 파라미터 창 겹침 결함 해결.
+- **검증 상태**: 정적 분석 완료. AGENTS.md 제2절에 따라 빌드는 사용자 직접 실행 안내.
+
+### [2026-11-19] KCC 오르막 접지 유지와 급경사 미끄러짐
+
+- 사용자는 평지 점프를 예비 확인했고, 오르막 접지 이탈과 급경사 미끄러짐이 남았다고 보고했다. 지지면 법선 방향 속도로 이탈을 판단하고, 경사 제한 각도에는 부동소수점 허용 오차를 적용했다.
+- 급경사에서는 입력과 중력을 합친 속도를 접선에 투영한다. 이전에 닿았던 경사면에만 접촉 유지 여유를 적용한다. 공중 착지는 프레임 낙하 거리로 제한한다.
+- `KinematicCharacterCheck`에 30°·45° 보행과 60° 미끄러짐을 추가했다. 수정 후 빌드·CTest·`SimpleTests` 실행은 사용자 확인 대기다. [경사 회귀 확인](ThirdPersonCharacterSystemPlan.md#경사-보행과-미끄러짐-회귀-확인)
 
 ### [2026-11-19] 액션 타임라인 이벤트 노티파이 C++ 모듈 수신과 모듈 자동 빌드 환경
 
@@ -34,10 +107,136 @@ This document tracks implementation details, architectural decisions, and techni
 - `컴포넌트 추가` 팝업에 공통 검색창을 넣고 현재 언어의 표시 이름과 등록 타입 이름의 부분 일치를 지원했다. 카테고리와 검색 결과가 추가 가능 여부, 중복 추가 방지, 씬 편집 이력·프리팹 변경 처리 경로를 공유한다.
 - 정적 검증에서 공통 검색 위젯과 기존 편집 이력 연결을 검토했고, 검색 힌트와 빈 결과 안내의 한·영 CSV 항목이 각각 한 번씩 정의된 것을 확인했다. 빌드와 에디터에서의 검색·Undo/Redo 동작 확인은 남아 있다. [에디터 UX 확인 항목](EditorUXTestGuidelines.md)
 
-### [2026-11-19] BamAssetWorker의 DirectXTex 직접 링크
+### [2026-11-19] Entry 및 Any State 노드 양측(좌/우) 출력 핀 확장 및 스마트 라우팅
+
+- **Entry 및 Any State 노드 듀얼 출력 핀 체계**:
+  - `Entry` 노드(ID: 1): 좌측 출력 핀(`ID: 11`), 우측 출력 핀(`ID: 10`) 배치 (에메랄드 그린 색상).
+  - `Any State` 노드(ID: 2): 좌측 출력 핀(`ID: 21`), 우측 출력 핀(`ID: 20`) 배치 (연보라 색상).
+  - 일반 상태 노드가 Entry/AnyState 노드의 왼쪽 또는 오른쪽에 위치하더라도, 와이어가 노드를 가로지르거나 돌아가지 않고 가장 가까운 방향의 핀에서 자연스럽게 나가도록 양측 배치 완료.
+- **스마트 최단거리 전이 링크 라우팅 (`DrawTransitions`)**:
+  - `Entry -> DefaultState`: DefaultState 노드가 Entry 노드보다 왼쪽에 있으면 `Entry LeftOut(11) -> def RightIn`, 오른쪽에 있으면 `Entry RightOut(10) -> def LeftIn`으로 자동 연결.
+  - `Any State -> TargetState`: TargetState 노드가 Any State 노드보다 왼쪽에 있으면 `AnyState LeftOut(21) -> target RightIn`, 오른쪽에 있으면 `AnyState RightOut(20) -> target LeftIn`으로 자동 연결.
+- **신규 링크 생성 인터랙션 확장**:
+  - `ed::BeginCreate()`에서 사용자가 Entry 노드나 Any State 노드의 좌측 핀(`11`, `21`)과 우측 핀(`10`, `20`) 어느 쪽에서든 선을 뽑아 대상 노드에 연결할 수 있도록 `isOutputPin` 조건 확장.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] AnimatorGraphPanel 캔버스·파라미터 영역 미표시 결함 수정 및 레이아웃 안정화
+
+- **상태 머신 문서 생명주기 보장 (`m_StateMachine` 복구)**:
+  - `ReleaseResourceDocument()`에서 `m_StateMachine.reset()` 호출 후 새 문서가 재지정되지 않아, 창을 닫았다가 다시 열거나 기본 상태일 때 `m_StateMachine == nullptr`로 인해 `DrawParametersTab()`, `DrawCanvas()`, `DrawSelectionInspector()`가 모두 조기 리턴되어 화면에 파라미터와 노드가 전혀 표시되지 않던 결함 수정.
+  - `DrawCustomContent()` 시작부에서 `!m_StateMachine` 감지 시 `ExecuteNew()`를 자동 실행하고, `ReleaseResourceDocument()`에서도 `ExecuteNew()`로 깨끗한 기본 FSM(`Idle`)을 항시 대기하도록 보장.
+- **노드 에디터 캔버스 뷰포트 내비게이션 시점 보정 (`ed::NavigateToContent`)**:
+  - `DrawCanvas()`에서 `ed::Begin()` 직후 노드가 렌더링되기도 전에 `ed::NavigateToContent(0.0f)`가 호출되어 노드 바운딩 박스가 0x0인 상태에서 카메라 뷰포트 줌/위치가 엉뚱한 좌표로 튕겨 노드가 화면 밖으로 사라지던 결함 수정.
+  - `m_NeedNavigateToContent`를 노드와 링크가 전부 `ed::EndNode()` 된 직후(`DrawTransitions()` 뒤)로 이동하여, 정확한 전체 노드 바운딩 박스를 기준으로 캔버스 화면 중앙 정렬을 수행하도록 생명주기 정상화.
+- **`LeftPane` 및 3단 분할 레이아웃 클램핑 방어**:
+  - `DrawCustomContent()`에서 창 너비가 작을 때 `canvasWidth`가 음수가 되거나 창 밖으로 삐져나가지 않도록 `m_LeftPaneWidth`와 `m_InspectorWidth`를 `std::clamp`로 제한.
+  - 프리뷰 뷰포트 높이를 가용 높이의 35%(최대 180px)로 안정적으로 제한하여, 아래의 파라미터 탭(검색 바, 기본 파라미터 목록)이 항상 눈에 훤히 보이도록 보정.
+- **`DrawTransitions()` 노드 위치 `FLT_MAX` 방어**:
+  - 초기화 프레임에서 `ed::GetNodePosition`이 `FLT_MAX`를 반환할 때 발생할 수 있는 대소 비교 왜곡을 안전하게 가드.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] 머티리얼-셰이더 그래프 통합 및 실시간 3D 프리뷰 개발 계획 수립
+
+- **계획 문서 신설 및 우선순위 등록**:
+  - `Docs/MaterialShaderGraphIntegrationPlan.md`: 언리얼 엔진(Material Editor) 및 유니티(Shader Graph) 수준의 실시간 3D 시각 저작 파이프라인 구축을 위한 4단계 점진적 개발 계획 수립 완료.
+  - `Docs/DevelopmentPriorities.md`: 1절 기준 문서 목록에 `MaterialShaderGraphIntegrationPlan.md` 연결 완료.
+- **핵심 아키텍처 및 4단계 로드맵**:
+  - **Phase 1 (머티리얼-그래프 에셋 바인딩 및 원클릭 진입)**: `MaterialInterface`에 `m_ShaderGraphPath` 속성 추가 및 직렬화 지원, `MaterialEditor` 상단 툴바 및 셰이더 설정 영역에 [Open Shader Graph] / [Create New Graph] 버튼 배치, `ImGuiManager`를 통한 포커스 및 타겟 바인딩.
+  - **Phase 2 (GraphPanel 내 3D 머티리얼 프리뷰 통합)**: `GraphPanel`의 셰이더 도메인에 기존 2D 쿼드 대신 `MaterialPreviewRenderer`를 결합하여, 그래프 패널 단독으로도 3D 구체(Sphere)/큐브/평면 메쉬를 마우스로 자유 회전하며 PBR 셰이딩 반응을 실시간 관찰할 수 있도록 지원.
+  - **Phase 3 (노드 편집 실시간 핫 컴파일 & 머티리얼 핫스왑)**: 노드/핀 수정 카운터(Revision) 기반 디바운스(0.25초) 자동 컴파일, `ShaderGraphCompiler::GenerateGBufferMaterialHlsl` 및 DXIL 메모리 컴파일, 성공 시 프리뷰 머티리얼 픽셀 셰이더 즉시 핫스왑(`PreviewMaterial->SetPixelShaderHandle`), 실패 시 `LastGood` 바이트코드 안전 유지.
+  - **Phase 4 (노출 파라미터 ↔ 머티리얼 프로퍼티 양방향 연동)**: 그래프 내 파라미터 노드(`IsParameter`)와 머티리얼의 상수 버퍼(`MaterialConstants`) 및 텍스처 슬롯 자동 매핑.
+- **로캘 키 및 UI/UX 통일성**:
+  - `Docs/EngineEditorClientGuidelines.md` 14·19절 준수. 원본 CSV(`Editor.MaterialEditor.csv`, `Editor.GraphPanel.csv`)에 등록할 키 및 UI 패턴 정의.
+- **검증 상태**: 설계 및 문서화 완료. 코드 구현 및 빌드/테스트는 사용자 확인 후 Phase 1부터 순차 진행 예정.
+
+### [2026-11-19] AnimatorGraphPanel 상태 노드 양방향 4-Way 핀 확장 및 스마트 교차 방지 전이 라우팅
+
+- **양방향 전이 시 X자 교차(꼬임) 결함 근본 해소**:
+  - 단방향 DAG(데이터 플로우)와 달리 순환 전이가 빈번한 상태 머신(FSM)의 특성을 반영하여, 노드 좌측(In 1개)/우측(Out 1개) 고정 구조로 인해 발생하던 와이어 X자 꼬임 문제를 해결.
+  - `NodeEditorUI::BorderPin`: `BorderSide(Left, Right)` 열거형을 추가하여 좌/우 어느 변에든 In과 Out 핀을 자유롭게 배치할 수 있도록 확장 (기존 호출부의 기본 생성자 하위 호환성 100% 보존).
+- **상태 노드 4-Way 핀 레이아웃 체계**:
+  - 각 상태 노드 `i`마다 상단 In 핀 라인과 하단 Out 핀 라인(최소 18px 간격 보장)을 수평 정렬 배치:
+    - `Pin_LeftIn`: `1000 + i*4 + 0` (좌측 상단, Input, 하늘색)
+    - `Pin_RightIn`: `1000 + i*4 + 1` (우측 상단, Input, 하늘색)
+    - `Pin_LeftOut`: `1000 + i*4 + 2` (좌측 하단, Output, 황금빛 주황색)
+    - `Pin_RightOut`: `1000 + i*4 + 3` (우측 하단, Output, 황금빛 주황색)
+  - 사용자가 노드의 좌측이나 우측 어느 쪽으로든 신호를 보내고 받을 수 있도록 자유도 극대화.
+- **스마트 교차 방지 전이 라우팅 (Smart Transition Routing)**:
+  - `DrawTransitions()`에서 노드 간 전이 링크 생성 시 자동 기하학적 핀 매핑:
+    - **상호 전이 (양방향 전이, A <-> B)**: 인덱스 순서에 따라 한 방향은 우측 루프(`RightOut -> RightIn`), 반대 방향은 좌측 루프(`LeftOut -> LeftIn`)로 분리 렌더링. 이를 통해 가운데서 선이 교차하던 현상을 원천 제거하고 유려한 타원형 듀얼 루프로 표현.
+    - **단방향 전이**: 노드의 상대 수평 위치에 따라 최단/자연스러운 핀(`RightOut -> LeftIn` 또는 `LeftOut -> RightIn`)으로 자동 라우팅.
+    - **자체 전이 (Self Transition)**: 우측 루프(`RightOut -> RightIn`)로 자가 복귀 곡선 렌더링.
+    - **Entry / AnyState**: 노드 상대 위치에 맞춰 좌측 In 또는 우측 In으로 최적 연결.
+- **신규 링크 인터랙션 허용성 확장**:
+  - `ed::BeginCreate()`에서 사용자가 좌측 Out 핀이든 우측 Out 핀이든 드래그하여 대상 노드의 좌측 In 또는 우측 In 핀에 드롭했을 때 모두 정상적인 `AnimTransition`으로 연결되도록 핀 마스크 모듈로 연산(`(id - 1000) % 4`) 적용.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] KCC 공중 착지 거리 제한
+
+- 정점에서 속도가 작아지면 긴 지면 탐색 레이만으로 접지 상태가 켜져 실제 낙하 스윕을 건너뛰었다. 공중 착지는 프레임의 수직 이동 거리로 제한했다. 박스·구·캡슐은 스윕 거리, 메시·지형은 캡슐과 지지면의 접촉 높이를 사용한다. 위치와 접지 상태를 같은 프레임에 반영하고 선택한 접촉의 엔티티를 지지 대상으로 기록한다.
+- 접지 중 계단 하강에는 기존 스냅 마진을 적용한다. `KinematicCharacterCheck`에 박스·메시 평지 점프, 박스 가장자리, 스냅과 낙하 거리 경계를 추가했다.
+- 정적 검토를 수행했다. 빌드·CTest·`SimpleTests` 실행 결과는 사용자 확인 대기다. [3인칭 회귀 확인](ThirdPersonCharacterSystemPlan.md#조기-착지-회귀-확인)
+
+### [2026-11-19] 프리뷰 위젯 레이아웃 겹침 수정 및 에디터 그래프 UI 공통 컴포넌트(NodeEditorUI) 일원화
+
+- **프리뷰 위젯 레이아웃 겹침 버그 해소**:
+  - `PreviewViewportWidget.cpp`: `Draw()` 종료 시점에서 `ImGui::SetCursorPos(startCursor)`로 되돌아간 후 `Dummy(widgetSize)`가 주석 처리되어 있어 커서 위치가 위젯 시작 좌표로 남아있던 결함 수정. `ImGui::Dummy(widgetSize)`를 복원하여 위젯 높이만큼 레이아웃 커서가 전진하도록 보정, 애니메이터 그래프 패널 등에서 프리뷰 위젯과 파라미터 창/검색 바가 겹치던 UI 깨짐을 근본 해결.
+- **에디터 그래프 UI 공통 컴포넌트 (`NodeEditorUI`) 구축**:
+  - `Editor/Source/ImGui/Public/NodeEditorUI.h` / `Editor/Source/ImGui/Private/NodeEditorUI.cpp`: 비주얼 스크립팅/셰이더 그래프(`GraphPanel`)와 애니메이터 상태 머신(`AnimatorGraphPanel`) 등 노드 에디터를 사용하는 모든 에디터 패널이 일관된 노드/핀/와이어 비주얼과 조작감을 공유할 수 있도록 공통 유틸리티 모듈 신설.
+  - **테마 & 컨텍스트 일원화**: `ApplyDefaultTheme(ed::Style&)` 및 `CreateDefaultEditor()`를 통해 언리얼 블루프린트 스타일의 통일된 노드 라운딩(6px), 테두리(1.2px), 다크 배경 및 휠 클릭 패닝(`NavigateButtonIndex = 2`), ini 오염 방지(`SettingsName = nullptr`) 표준화.
+  - **노드 헤더 시각 규격 통일**: `BeginNodeHeader()` 및 `DrawNodeHeader()`로 최소 가로폭(130~160px)을 보장하고, 상단 둥근 사각형 채우기(`ImDrawFlags_RoundCornersTop`)와 하단 1px 은은한 구분선(`IM_COL32(255, 255, 255, 35)`)을 일원화하여 패널별 자의적인 노드 렌더링 파편화 방지.
+  - **핀(Pin) 시각 규격 통일**: 텍스트 인라인 화살표 문자를 완전히 제거하고, 1번 사진(Logic 그래프)과 동일하게 노드 좌/우 외곽 테두리선 위에 반쯤 걸쳐지는 원형 핀(`DrawNodeBorderPins`, `DrawCirclePin`)으로 일원화. 입력(In: 밝은 하늘색)과 출력(Out: 황금빛 주황색, Entry: 에메랄드 그린, AnyState: 연보라) 핀이 노드 외곽 테두리에 정확히 앵커링되도록 개선.
+  - **와이어/링크 규격 및 Flow 효과**: `DrawLink()`를 통해 실행선(2.8f), 일반 전이선(2.0f), 선택선(3.5f)의 두께 및 색상 규칙 일원화 및 실시간 와이어 흐름(`ed::Flow`) 효과 통합 제공.
+- **패널 전면 적용**: `AnimatorGraphPanel.cpp`와 `GraphPanelNodeEditor.cpp` 양쪽 모두 `NodeEditorUI`의 `CreateDefaultEditor()`, `DrawNodeHeader()`, `DrawNodeBorderPins()`, `DrawLink()`를 공유하도록 전면 리팩토링 완료.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
 
 - Ninja Debug에서 `HeadlessThumbnailRasterizer.cpp`의 DirectXTex 심볼 6개가 링크되지 않았다. 워커에서 `TextureConverter` 의존성을 제거하면서 전이 링크가 빠졌다. DDS 및 압축 텍스처를 직접 읽는 `BamAssetWorker`에 `Microsoft::DirectXTex`를 직접 연결했다.
 - 수정 이후 생성된 Ninja 링크 규칙에서 Debug `DirectXTex.lib`를 확인했다. Ninja 로그와 `BamAssetWorker.exe` 타임스탬프로 워커 링크 완료를 확인했다. CTest와 썸네일 실행은 검증 기록이 없다.
+
+### [2026-11-19] AnimatorGraphPanel 캔버스 imgui-node-editor 마이그레이션
+
+- **캔버스 프레임워크 일원화 (`imgui-node-editor`)**:
+  - `AnimatorGraphPanel.h` / `AnimatorGraphPanel.cpp`: 자체 `ImDrawList` 수동 렌더링(스크롤, 마우스 드래그 오프셋, 수동 베지어 곡선 및 히트테스트)을 `GraphPanel`(비주얼 스크립팅/셰이더 그래프)과 동일한 `ax::NodeEditor` 프레임워크로 완전 전환.
+  - 데이터 모델(`AnimatorStateMachine`)의 직렬화 구조(`states`, `transitions`, `defaultParameters`, `defaultState`)는 100% 불변으로 유지하면서 렌더링 계층만 표준 노드/핀/링크 시스템으로 연결.
+- **노드 및 핀/링크 ID 체계**:
+  - `Entry` 노드(ID: 1, Output Pin: 10, 진한 녹색 헤더), `Any State` 노드(ID: 2, Output Pin: 20, 보라색 헤더), 일반 상태 노드(ID: 100 + i, Input Pin: 1000 + i*2, Output Pin: 1000 + i*2 + 1).
+  - Entry -> DefaultState 링크(ID: 1, 에메랄드 그린 와이어), 일반/AnyState 전이 링크(ID: 100 + k).
+- **인터랙션 및 UX 고도화**:
+  - 휠 드래그 패닝, 마우스 휠 무한 줌, 다중 노드 마퀴(Marquee) 박스 드래그 선택 및 그룹 이동.
+  - 핀 드래그앤드롭을 통한 직관적 와이어 연결:
+    - Entry 출력 핀을 상태 노드에 연결 시 `defaultState` 자동 변경.
+    - Any State 출력 핀을 상태 노드에 연결 시 `fromAnyState = true` 전이 자동 생성.
+    - 상태 노드 출력 핀을 다른 상태 노드 입력 핀에 연결 시 일반 전이 자동 생성 및 인스펙터 즉시 선택.
+  - 노드 에디터 다중 노드/링크 일괄 삭제 지원 (`DeleteSelection`).
+  - 우클릭 컨텍스트 메뉴: `ed::End()` 호출 이후 컨텍스트 메뉴를 처리하도록 구조화하고, `GraphPanelNodeEditor`와 동일하게 `ed::End()` 외부에서의 잘못된 `ed::Suspend()` / `ed::Resume()` 호출을 완전히 제거하여 패널 오픈 및 캔버스 우클릭 시 크래시 방지. 우클릭 시점의 마우스 캔버스 좌표(`m_ContextMenuPosition`)를 기록하여 정확한 위치에 상태 노드 생성 지원.
+  - `F` 키 포커스 연동: `ResetCanvasView()`를 `public`으로 선언하여 `EditorActionRegistry`의 `Viewport.Focus`에서 `AnimatorGraphPanel` 활성 시 `ed::NavigateToContent(0.5f)`를 호출해 전체 노드 자동 줌 맞춤.
+  - 런타임 디버깅 시 전이가 진행 중일 때 `ed::Flow(LinkId)`를 통한 실시간 와이어 흐름 비주얼 피드백 제공.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] 모델 임포트 변환 워커 연결과 에디터 회귀 점검
+
+- `BamAssetWorker`에서 모델 변환과 LOD 생성을 수행하고, 임시 결과를 에디터의 기존 `ModelImportTask`와 `FinalizeStep`에 넘겼다. 푸터의 단계 문구는 `Editor.ModelImport.csv`에 추가했다. 취소와 시간 초과는 결과 게시 전에 종료하며 워커 가용성·프로토콜 문제는 기존 경로를 사용한다.
+- 프리뷰 툴바의 렌더 타깃·조명 팝업 연결을 정리했다. 조명 임시 값은 팝업이 열린 뒤 생성하며 출력이나 툴바가 표시되지 않을 때 폐기한다.
+- 참조 검사 증분 병합과 형제 순서 변경의 호출 흐름 및 기존 회귀 시나리오를 정적으로 대조했다. `AssetWorkerModelCheck`에 워커 성공 시 결과 파일 생성과 원본 누락 실패를 확인하는 사례를 추가했다.
+- 변경 범위의 Git 공백 검사, 워커 IPC 옵션 순서, 신규 CSV 번역 항목, Python 검사 파일의 구문을 정적으로 확인했다. 작업 트리 전체 로캘 엄격 감사는 별도 변경 중인 단축키 문맥과 애니메이션 타임라인 항목으로 누락 10건을 보고했다.
+- 빌드·CTest·실환경 조작·성능 측정은 실행 대기다. [워커 검증 절차](OutOfProcessAssetPipelinePlan.md#모델-임포트-1차-검증)와 [에디터 UX 검증](EditorUXTestGuidelines.md#52-tier-3-대화형-ui-점검-체크리스트)에 확인할 조건을 기록했다.
+
+### [2026-11-19] 모델 임포트 모달 비동기화 및 프리뷰 뷰포트 조작계(그리드/단축키/속도) 개선
+
+- **모델 재임포트 메인 스레드 프리징 해소**:
+  - `ContentBrowserGridItem.cpp`: `.bammodel` 재임포트 시 원본 경로를 찾기 위해 `rm.LoadFile`로 전체 모델/서브메시/머티리얼을 동기 로드하던 경로를 차단하고, 캐시된 핸들 확인 및 동일 폴더 동명 원본(`.glb`, `.fbx`, `.obj` 등)을 즉시 탐색하도록 수정.
+  - `ModelImportModal.h` / `ModelImportModal.cpp`: 메인 스레드에서 즉시 모달 창을 열고, 백그라운드 워커 스레드(`std::thread` + `AsyncPreviewState`)를 통해 Assimp 원본 파싱을 비동기 수행. 프리뷰 로딩 상태를 직관적인 프로그레스 바(`DrawPreviewPane`)로 표시. 파싱 완료 후 프레임당 4ms 타임 버짓으로 GPU 리소스를 분할 빌드(`StepPreviewBuild`)하여 UI 끊김 현상 제거.
+- **대형 모델 무한 그리드 표시 개선**:
+  - `infiniteGridPS.hlsl`: 기존 고정 150.0m 페이드 거리로 인해 반경 수천 미터의 대형 모델(스폰자 등)에서 그리드가 `color.a <= 0`으로 discard되던 문제를 해결. 카메라 고도 및 원점 거리 비례 적응형 페이드 거리(`fadeDistance = max(150.0f, max(abs(CameraPos.y) * 10.0f, length(CameraPos) * 2.5f))`) 적용 및 원거리 대단위 그리드(`0.001f`, 1000m) 추가로 모든 스케일에서 바닥 그리드 시인성 확보.
+- **모달 팝업 상태 프리뷰 뷰포트 단축키 연동**:
+  - `ShortcutManager.h` / `ShortcutManager.cpp`: 단축키 바인딩 및 실행 조건을 평가하여 안전하게 즉각 실행하는 `TryTriggerAction(actionId)` 인터페이스 구현.
+  - `ImGuiManager.cpp`: 기존 `ImGui::IsPopupOpen` 시 전체 단축키를 억제하던 제약을 완화하여, 모달 팝업 상태이더라도 텍스트 입력 중이 아니고 프리뷰 뷰포트가 활성화(호버/포커스)된 경우 뷰포트 필수 액션 4종(`Viewport.Focus`, `Viewport.ToggleGrid`, `Viewport.CameraSpeedIncrease`, `Viewport.CameraSpeedDecrease`)의 단축키 입력을 통과 및 실행하도록 연동.
+- **카메라 이동/줌 속도 스케일링 확장**:
+  - `EditorCameraController.h`: `SetCameraSpeed` 속도 제한 상한을 500.0f에서 10,000.0f로 확장 (`std::clamp(speed, 0.1f, 10000.0f)`).
+  - `PreviewViewportWidget.cpp`: `FrameModelBounds` 성공 시 산출된 프레이밍 거리(`Distance`)에 비례하여 기본 이동 속도(`Distance * 0.25f`) 및 3D 줌 속도(`Distance * 0.05f`)를 적응형으로 자동 보정하여 대형 모델에서도 카메라 조작 및 줌 반응성이 즉각 체감되도록 개선.
+- **도구 및 컴파일 오류 수정**:
+  - `Tools/AssetWorker/main.cpp`: `CompressTexture` 및 `GetRawCompressedData` 호출부에서 `uint32_t` 플래그를 `ECompressFlags`로 명시적 형변환(C2664) 적용.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자가 직접 실행하도록 안내함.
 
 ### [2026-11-19] 액션 타임라인 작성 모델·클립 바인딩과 런타임 포즈
 
@@ -6275,3 +6474,20 @@ Use this as the primary execution list until a playable 2D vertical slice is com
   - 2) $30^\circ$ 완만한 경사로 보행 시 발바닥이 경사면 안쪽으로 미세하게 파고드는 현상.
   - 3) $45^\circ, 60^\circ$ 가파른 경사로 끝단에서 평지로 착지할 때 판자 두께 단차 및 급격한 수직 안착으로 인해 '탁' 하고 뚝 떨어지듯 바닥에 붙는 부자연스러움 관측.
   - 후속 물리 튜닝 및 착지 완충(Soft Landing) 계획을 문서에 반영했다.
+
+### [2026-11-19] 리소스 편집기 문서 닫기와 편집 액션 통일
+
+- 제목 표시줄 X, 파일 메뉴, Ctrl+W, 창 메뉴 체크 해제가 공통 닫기 요청을 사용한다. 버리기·저장 확정 시 경로, 편집 세션, 프리뷰 참조와 이력을 해제한다. 동일 문서 열기는 기존 세션에 포커스를 주고, 독립 프리팹 교체는 확인을 한 번만 요청한다.
+- 파티클 Dirty를 저장 상태 ID에 연결하고, VFX 루프·트랙 활성화를 Undo/Redo에 기록했다. 내장 편집기의 저장, 기존 이력 지원 편집기의 Undo/Redo는 메뉴·퀵액세스·단축키에서 중앙 액션을 공유한다. 읽기 전용 도구 및 이력 미지원 편집기의 기능 범위는 패널 현황 문서에 기록했다.
+- 종료는 통합 설정과 프리팹 모드를 처리한 뒤 메인 씬을 확인한다. 리소스 폐기 확인을 확정하면 메인 씬 종료 취소 후에도 해당 세션을 다시 묻지 않는다. 프로젝트 설정 쓰기 실패에서 Dirty를 보존한다.
+- 열린 파티클·VFX를 다른 파일로 저장하면 새 파일 세션으로 전환하고 원래 공유 에셋을 원본 파일 상태로 복원한다. 기존 파일에서 만든 복사본은 새 이력으로 시작한다.
+- Sprite Animation 플러그인은 리소스 V2 계약으로 열기 결과·폐기 복원·닫기를 제공한다. Editor와 Sprite Animation DLL을 함께 빌드해야 한다.
+- 호출 경로, 로캘 CSV와 diff를 정적으로 확인했다. 사용자 Ninja Debug 빌드에서 Prefab 퀵액세스 버튼 인자, Material 미리보기 메뉴의 단축키 조회 변수, VFX 트랙 이력 콜백의 접근 대상에서 컴파일 오류가 발생했다. 세 원인을 수정했다. 수정 후 빌드·CTest·실환경 검증은 사용자 실행 전이다. [실환경 체크리스트](EditorUXTestGuidelines.md#52-tier-3-대화형-ui-점검-체크리스트)
+
+### [2026-11-19] 편집 가능한 리소스의 문서 Undo/Redo 연동
+
+- Animator Graph, Graph, Material, Model, Sprite, 독립 Prefab Editor와 Sprite Animation 플러그인에 문서 이력을 추가했다. 편집 메뉴·퀵액세스·Ctrl+Z·Ctrl+Y는 같은 로컬 문서 액션을 사용한다. Texture와 Shader는 조회 도구다.
+- Animator Graph는 상태 머신과 노드 배치를 복원한다. `editorNodePositions`는 선택적으로 저장하며 이전 파일은 기본 배치를 사용한다. Graph의 Logic·Shader는 이력과 저장 기준점을 따로 사용한다.
+- Material과 독립 Prefab은 메모리의 아카이브로 복원한다. Model·Sprite·Sprite Animation은 각 문서의 편집 데이터를 복사해 이력에 보관한다. Material의 파일 경로가 외부에서 변경될 수 있는 에셋 이동이 확정되면 이력을 다시 시작한다. Sprite Animation ABI V3의 DLL 리로드는 초안과 Dirty를 보존하고 이력을 초기화한다.
+- 파티클·VFX·애니메이션 타임라인은 공통 이력 UI를 사용한다. VFX 커브 편집도 실제 값이 바뀐 확인 동작을 이력 한 건으로 기록한다.
+- 공통 이력의 편집 묶음·저장 기준점·Redo 분기·실패한 복원에 대한 `EditorHistoryCheck` 사례를 추가했다. 정적 검사만 수행했으며 빌드·CTest·실환경 검증은 사용자 실행 전이다.

@@ -140,6 +140,7 @@ void PreviewViewportWidget::Free()
 	m_PostProcessChain.Free();
 	m_ChannelFilter.Free();
 	m_SelectedRTName.clear();
+	m_PreviewLightDraft.reset();
 	m_Pipeline.Free();
 
 	Engine::Safe_Release(m_CameraController);
@@ -272,6 +273,10 @@ bool PreviewViewportWidget::FrameModelBounds(const Engine::BoundingBox& bounds)
 	camera->NearPlane = framing->NearPlane;
 	camera->FarPlane = framing->FarPlane;
 	ApplyFocus(framing->Center, framing->Distance);
+
+	const float recommendedSpeed = std::clamp(framing->Distance * 0.25f, 1.0f, 5000.0f);
+	m_CameraController->SetCameraSpeed(recommendedSpeed);
+	m_CameraController->SetZoomSpeed3D(std::clamp(framing->Distance * 0.05f, 0.5f, 500.0f));
 	return true;
 }
 
@@ -460,6 +465,9 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	}
 
 	const auto image = ResolveViewportImage(m_DisplayRTName);
+	if (image.Status != EViewportImageStatus::Ready)
+		m_PreviewLightDraft.reset();
+
 	if (image.Status == EViewportImageStatus::Unsupported)
 	{
 		m_SelectedRTName.clear();
@@ -580,7 +588,13 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 		ImGui::SetCursorPos(ImVec2(startCursor.x + margin, startCursor.y + margin + toolbarOffset));
 		if (ImGui::BeginChild("##OverlayToolbarChild", toolbarSize, ImGuiChildFlags_AlwaysUseWindowPadding, toolbarFlags))
 			DrawOverlayToolbar();
+		else
+			m_PreviewLightDraft.reset();
 		ImGui::EndChild();
+	}
+	else
+	{
+		m_PreviewLightDraft.reset();
 	}
 
 	ImGui::SetCursorPos(ImVec2(startCursor.x + channelX, startCursor.y + margin));
@@ -589,7 +603,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	ImGui::EndChild();
 
 	ImGui::SetCursorPos(startCursor);
-	//ImGui::Dummy(widgetSize);
+	ImGui::Dummy(widgetSize);
 }
 
 void PreviewViewportWidget::DrawOverlayToolbar()
@@ -683,9 +697,7 @@ void PreviewViewportWidget::RefocusTarget()
 void PreviewViewportWidget::DrawRenderTargetPopup()
 {
 	if (EditorUI::IconButton("PreviewRenderTargets", ICON_FA_LAYER_GROUP, "Viewport.RenderTargetsMenu", MakeOverlayButtonOptions()))
-
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.RenderTargetsMenu"));
+		ImGui::OpenPopup("##PreviewRenderTargets");
 
 	if (!ImGui::BeginPopup("##PreviewRenderTargets"))
 		return;
@@ -720,9 +732,7 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 	auto& settings = EditorSettingsService::Get();
 
 	if (EditorUI::IconButton("PreviewLighting", ICON_FA_LIGHTBULB, "Settings.PreviewLighting", MakeOverlayButtonOptions()))
-
-	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("%s", LOCAL_CSTR("Settings.PreviewLighting"));
+		ImGui::OpenPopup(popupId);
 
 	if (!ImGui::BeginPopup(popupId))
 	{
@@ -730,6 +740,8 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 		return;
 	}
 
+	if (!m_PreviewLightDraft)
+		m_PreviewLightDraft = settings.GetPreferences().PreviewLightIntensity;
 	auto& draft = *m_PreviewLightDraft;
 	constexpr const char* keys[] = {
 		"Settings.PreviewKeyLight", "Settings.PreviewFillLight", "Settings.PreviewRimLight"

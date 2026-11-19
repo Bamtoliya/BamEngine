@@ -11,7 +11,7 @@ AnimatorGraph,CondNotEqual,NotEqual (!=),같지 않음 (!=)
 AnimatorGraph,Conditions,Conditions,전이 조건식
 AnimatorGraph,CreateState,Create State,새 상태 노드 생성
 AnimatorGraph,Duration,Duration,전이 지속 시간
-AnimatorGraph,Entry,ENTRY ->,진입 (ENTRY) ->
+AnimatorGraph,Entry,Entry,진입 (ENTRY)
 AnimatorGraph,ExitTime,Exit Time,종료 시점 비율
 AnimatorGraph,HasExitTime,Has Exit Time,종료 시간 전이 사용
 AnimatorGraph,MakeTransition,Make Transition,전이 연결선 만들기
@@ -79,3 +79,9 @@ AnimatorGraph,StateProperties,State Properties,상태 속성
 AnimatorGraph,Threshold,Threshold,임계값
 AnimatorGraph,Transitions,Transitions,전이 목록
 AnimatorGraph,SearchParameters,Search parameters...,파라미터 검색...
+AnimatorGraph,TargetState,Target State,대상 상태
+AnimatorGraph,SourceState,Source State,출발 상태
+AnimatorGraph,NoTransitions,No transitions connected to this state.,연결된 전이가 없습니다.
+AnimatorGraph,Outgoing,Out,출력
+AnimatorGraph,Incoming,In,입력
+AnimatorGraph,TransitionDirection,Direction,전이 방향
