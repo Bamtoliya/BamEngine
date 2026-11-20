@@ -579,6 +579,7 @@
         "PROP_PREFILTERED_MAP": "Prefiltered Environment Map",
         "PROP_PRESET_NAME": "Preset Name",
         "PROP_PRESS_COLOR": "Press Color",
+        "PROP_PRIMARY_PASS_TYPE": "Primary Pass Type",
         "PROP_PRIORITY": "Priority",
         "PROP_PROBE_RADIUS": "Probe Radius",
         "PROP_RADIUS": "Radius",

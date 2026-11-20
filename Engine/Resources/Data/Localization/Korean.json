@@ -579,6 +579,7 @@
         "PROP_PREFILTERED_MAP": "사전 필터링 환경 맵",
         "PROP_PRESET_NAME": "프리셋 이름",
         "PROP_PRESS_COLOR": "Press 색",
+        "PROP_PRIMARY_PASS_TYPE": "기본 렌더 패스",
         "PROP_PRIORITY": "우선순위",
         "PROP_PROBE_RADIUS": "프로브 반지름",
         "PROP_RADIUS": "반지름",
