@@ -591,7 +591,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 2 [완료]: 마스터-디테일 2열 레이아웃(좌측 270px 목록 + 필터 + 상태 뱃지, 우측 상세 인스펙터 및 제어 툴바) 구축.
   - Phase 3 [완료]: `HotReloadManager` 4대 엔진 매니저(`ModuleHotReloadManager`, `ModuleBuildManager`, `ShaderHotReloadManager`, `AssetHotReloadManager`) 및 에디터 패널 플러그인 연동 (`Reload`, `Rebuild & Reload`, `Load / Unload`, `Auto-Reload`).
   - Phase 4 [완료]: 비동기 컴파일 콘솔 전문 스트리밍, 에러/경고 하이라이트 및 `[Retry Compile]` 에러 복구 파이프라인, 메뉴바(`Edit -> Plugins`, `Window -> Panels -> Diagnostics -> Plugin Manager`) 및 로캘 키 40여 종 연동 완료.
-  - 공용 패널과 Builtin·Custom 수동 활성화 구현을 반영했다. [설치형 실행 확인](EditorPluginArchitecturePlan.md#사용자-실행-검증) 뒤 생성 템플릿과 설치형 배포를 진행한다. Client 작업은 빌드·패키징 단계에서 재개한다.
+  - 공용 패널과 Builtin·Custom 수동 활성화, V2 패널 템플릿 생성은 코드에 반영했다. 생성 패널의 독립 빌드·설치형 활성화는 [실행 확인](EditorPluginArchitecturePlan.md#사용자-실행-검증)이 필요하다. DLL이 없는 사용자 소스 패키지의 관리자 내 구성·빌드·게시·로드는 [별도 계획](EditorPluginArchitecturePlan.md#사용자-소스-패키지-빌드로드-계획)이며 미구현이다. Client 작업은 빌드·패키징 단계에서 재개한다.
 - **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 완료 / Phase 5 Step 1~3·블렌드 패스 교정·Air Mode 반영 / Step 4 통합·검증 잔여: 2026-11-20]**:
   - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드, 트레일, 데칼, 카메라 셰이크를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
   - Phase 1 [완료]: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 스프라이트 플립북·파티클·라이트 섬광 연동, `VFXEditorPanel` 저작 도구 구축 완료.
