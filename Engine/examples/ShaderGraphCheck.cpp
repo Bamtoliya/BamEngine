@@ -133,11 +133,13 @@ int main()
 		std::string gbufferSource;
 		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(matGraph, registry, gbufferSource));
 		Expect(gbufferSource.find("SHADING_MODEL_DEFAULT_LIT") != std::string::npos, "Missing DEFAULT_LIT shading model.");
-		Expect(gbufferSource.find("float4(1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f, 1.00000000e+00f)") != std::string::npos, "Default baseColor was incorrect.");
-		Expect(gbufferSource.find("2.00000003e-01f") != std::string::npos, "Default roughness was incorrect.");
-		Expect(gbufferSource.find("0.00000000e+00f") != std::string::npos, "Default metallic was incorrect.");
-		Expect(gbufferSource.find("5.00000000e-01f") != std::string::npos, "Default cavity was incorrect.");
-		Expect(gbufferSource.find("1.00000000e+00f") != std::string::npos, "Default ao was incorrect.");
+		Expect(gbufferSource.find("ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);") != std::string::npos,
+			"Missing gMaterial ConstantBuffer declaration.");
+		Expect(gbufferSource.find("gMaterial.baseColor") != std::string::npos, "Default baseColor Fast-Path was incorrect.");
+		Expect(gbufferSource.find("gMaterial.roughness") != std::string::npos, "Default roughness Fast-Path was incorrect.");
+		Expect(gbufferSource.find("gMaterial.metallic") != std::string::npos, "Default metallic Fast-Path was incorrect.");
+		Expect(gbufferSource.find("gMaterial.cavity") != std::string::npos, "Default cavity Fast-Path was incorrect.");
+		Expect(gbufferSource.find("gMaterial.ao") != std::string::npos, "Default ao Fast-Path was incorrect.");
 		const auto makeEmissive = Add(matGraph, registry, "Math.MakeFloat3");
 		const auto floatX = Add(matGraph, registry, "Core.Float");
 		const auto floatY = Add(matGraph, registry, "Core.Float");

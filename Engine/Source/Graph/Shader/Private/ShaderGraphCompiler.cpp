@@ -359,36 +359,69 @@ PS_OUTPUT main(PS_INPUT input)
 		std::string baseColor;
 		std::vector<GraphPinReference> callStack;
 
-		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, baseColor);
+		const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
 		if (!diagnostic.Succeeded()) return diagnostic;
 
-		std::string roughness = "2.00000000e-01f";
-		std::string metallic = "0.00000000e+00f";
-		std::string cavity = "5.00000000e-01f";
-		std::string ao = "1.00000000e+00f";
-		std::string emissive = "float3(0.00000000e+00f, 0.00000000e+00f, 0.00000000e+00f)";
+		const auto links = graph.GetLinks();
+		const auto hasInputLink = [&](const std::string& pinName)
+			{
+				return std::any_of(links.begin(), links.end(), [&](const GraphLink& link)
+					{
+						return link.To.Node == outputNode->Id && link.To.Pin == pinName;
+					});
+			};
+
+		// 1. BaseColor: 링크가 있으면 노드 표현식 해결, 없으면 Fast-Path GPU 상수버퍼(gMaterial.baseColor) 참조
+		if (hasInputLink("baseColor"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, baseColor);
+			if (!result.Succeeded()) return result;
+		}
+		else
+		{
+			baseColor = "gMaterial.baseColor";
+		}
+
+		// 2. PBR 파라미터: 링크가 있으면 노드 표현식 해결, 없으면 gMaterial 상수버퍼 참조 (Fast-Path)
+		std::string roughness = "gMaterial.roughness";
+		std::string metallic = "gMaterial.metallic";
+		std::string cavity = "gMaterial.cavity";
+		std::string ao = "gMaterial.ao";
+		std::string emissive = "gMaterial.emissiveColor";
 
 		if (outputNode->Type == "Shader.MaterialOutput")
 		{
-			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
-			if (!result.Succeeded()) return result;
-
-			result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
-			if (!result.Succeeded()) return result;
-
-			result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
-			if (!result.Succeeded()) return result;
-
-			result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
-			if (!result.Succeeded()) return result;
-
-			result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
-			if (!result.Succeeded()) return result;
+			if (hasInputLink("roughness"))
+			{
+				auto result = ResolveInputExpression(
+					graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
+				if (!result.Succeeded()) return result;
+			}
+			if (hasInputLink("metallic"))
+			{
+				auto result = ResolveInputExpression(
+					graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
+				if (!result.Succeeded()) return result;
+			}
+			if (hasInputLink("cavity"))
+			{
+				auto result = ResolveInputExpression(
+					graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
+				if (!result.Succeeded()) return result;
+			}
+			if (hasInputLink("ao"))
+			{
+				auto result = ResolveInputExpression(
+					graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
+				if (!result.Succeeded()) return result;
+			}
+			if (hasInputLink("emissive"))
+			{
+				auto result = ResolveInputExpression(
+					graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
+				if (!result.Succeeded()) return result;
+			}
 		}
 
 		std::string source = R"(#include "shading_flags.hlsli"
@@ -412,6 +445,20 @@ struct PS_OUTPUT
 	float4 Emission : SV_TARGET3;
 	float4 Position : SV_TARGET4;
 };
+
+// ── 머티리얼 상수 버퍼 (Space 3, b0 / RHI Slot 2) ──
+struct MaterialConstants
+{
+	uint   materialFlags;
+	float  roughness;
+	float  metallic;
+	float  cavity;
+	float4 baseColor;
+	float3 emissiveColor;
+	float  ao;
+};
+
+ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);
 
 PS_OUTPUT main(PS_INPUT input)
 {

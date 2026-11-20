@@ -248,30 +248,55 @@ void MaterialInterface::ResetAllParameters()
 
 void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants) const
 {
-    const auto findParameter = [this](const string& name) -> const MaterialParameter*
+    // 대소문자 구분 없이 파라미터를 찾는 헬퍼 람다
+    const auto findParamCaseInsensitive = [this](const string& name) -> const MaterialParameter*
         {
-            const auto it = m_Parameters.find(name);
-            return it != m_Parameters.end() ? &it->second : nullptr;
+            const std::string targetLower = Engine::ToLowerStr(name);
+            for (const auto& [key, param] : m_Parameters)
+            {
+                if (Engine::ToLowerStr(key) == targetLower)
+                    return &param;
+            }
+            return nullptr;
         };
 
-    if (const auto* baseColor = findParameter("BaseColor"); baseColor && baseColor->data.size() >= sizeof(vec4))
-        outConstants.baseColor = *reinterpret_cast<const vec4*>(baseColor->data.data());
-    else
-        outConstants.baseColor = GetParameter<vec4>("Color", outConstants.baseColor);
+    // 1. BaseColor (baseColor, BaseColor, Color 지원)
+    if (const auto* baseColor = findParamCaseInsensitive("BaseColor"))
+    {
+        if (baseColor->data.size() >= sizeof(vec4))
+            outConstants.baseColor = *reinterpret_cast<const vec4*>(baseColor->data.data());
+    }
+    else if (const auto* color = findParamCaseInsensitive("Color"))
+    {
+        if (color->data.size() >= sizeof(vec4))
+            outConstants.baseColor = *reinterpret_cast<const vec4*>(color->data.data());
+    }
 
-    outConstants.roughness = GetParameter<float>("Roughness", outConstants.roughness);
-    outConstants.metallic = GetParameter<float>("Metallic", outConstants.metallic);
-    outConstants.cavity = GetParameter<float>("Cavity", outConstants.cavity);
-    outConstants.ao = GetParameter<float>("AO", outConstants.ao);
+    // 2. Roughness, Metallic, Cavity, AO (소문자/대문자 모두 지원)
+    if (const auto* p = findParamCaseInsensitive("Roughness"); p && p->data.size() >= sizeof(float))
+        outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
 
-    const auto* emissive = findParameter("EmissiveColor");
-    if (!emissive) emissive = findParameter("Emission");
-    if (!emissive) return;
+    if (const auto* p = findParamCaseInsensitive("Metallic"); p && p->data.size() >= sizeof(float))
+        outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
 
-    if (emissive->data.size() >= sizeof(vec4))
-        outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(emissive->data.data()));
-    else if (emissive->data.size() >= sizeof(vec3))
-        outConstants.emissiveColor = *reinterpret_cast<const vec3*>(emissive->data.data());
+    if (const auto* p = findParamCaseInsensitive("Cavity"); p && p->data.size() >= sizeof(float))
+        outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
+
+    if (const auto* p = findParamCaseInsensitive("AO"); p && p->data.size() >= sizeof(float))
+        outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
+
+    // 3. Emissive (EmissiveColor, Emission, Emissive 지원)
+    const auto* emissive = findParamCaseInsensitive("EmissiveColor");
+    if (!emissive) emissive = findParamCaseInsensitive("Emission");
+    if (!emissive) emissive = findParamCaseInsensitive("Emissive");
+
+    if (emissive)
+    {
+        if (emissive->data.size() >= sizeof(vec4))
+            outConstants.emissiveColor = vec3(*reinterpret_cast<const vec4*>(emissive->data.data()));
+        else if (emissive->data.size() >= sizeof(vec3))
+            outConstants.emissiveColor = *reinterpret_cast<const vec3*>(emissive->data.data());
+    }
 }
 
 #pragma endregion

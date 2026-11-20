@@ -204,6 +204,10 @@ private:
 	void CompileMaterialShader();
 	void CreateRuntimeMaterial();
 
+	// 그래프 ↔ 머티리얼 파라미터 양방향 동기화
+	void SyncParametersFromGraph();
+	void SyncGraphFromParameter(const std::string& name, const void* data, Engine::EMaterialParameterType type);
+
 	// 문서 히스토리 (Undo / Redo)
 	bool CommitDocumentEdit();
 	std::optional<std::string> CaptureDocument() const;

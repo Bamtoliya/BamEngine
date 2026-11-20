@@ -2,6 +2,50 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### BamAssetWorker 텍스처 변환 접근 위반 대응
+
+- 사용자가 `AssetWorkerTextureCheck` 실행 중 첫 요청의 `PROGRESS 3` 뒤 종료 코드 `0xC0000005`를 보고했다. 이는 DDS 변환 호출 중 또는 그 이후 `PROGRESS 4` 전 발생한 접근 위반이다.
+- 호출별 COM 해제 후 DirectXTex의 캐시된 WIC 팩터리가 무효화될 가능성에 대응해 `DirectXTexCompressor`가 프로세스의 MTA 사용을 유지하도록 변경했다. 변환 스레드는 별도로 MTA를 초기화하며, 이미 STA인 스레드 등 MTA 초기화 실패 시 로그를 남기고 변환을 실패 처리한다. 이 동작은 워커와 인프로세스 폴백에 공통 적용된다.
+- 저장소 vcpkg 기준선의 [DirectXTex 포트](https://github.com/microsoft/vcpkg/blob/6d7bf7ef2193e2d1c5798a5ff8811d533104c861/ports/directxtex/portfile.cmake)는 `oct2025`를 지정한다. 해당 [소스](https://github.com/microsoft/DirectXTex/blob/oct2025/DirectXTex/DirectXTexUtil.cpp)의 `GetWICFactory`는 전역 팩터리를 재사용한다. 실제 설치된 라이브러리가 이 기준선과 일치하는지는 확인하지 못했다.
+- 동일 데몬의 같은 원본 반복 변환, 다른 원본 변환 및 누락 원본 실패를 검사하도록 `TextureWorkerCheck.py`를 확장했다.
+- **검증 상태**: 사용자가 수정 후 테스트 통과를 보고했다. 개별 테스트와 빌드 출력은 제공되지 않았다. COM/WIC 수명 문제는 추정 원인이며 크래시 덤프로 확인되지 않았다. STA, 에디터 폴백과 종료 시나리오는 실행 검증 대기다.
+
+### [2026-11-20] 머티리얼 파라미터 하드코딩 탈피 및 범용 동적 버퍼 레이아웃(Dynamic ConstantBuffer Layout) 아키텍처 설계
+
+- **배경 및 문제 의식**:
+  - 기존 1단계 Fast-Path 프로토타입에서 사용한 48바이트 정적 `MaterialConstants` 구조체(`baseColor`, `roughness`, `metallic`, `cavity`, `ao`, `emissiveColor`)는 툰 셰이딩, 유리 굴절, 이펙트 및 아티스트 커스텀 파라미터(디졸브, UV 스케일, 물결 속도 등)를 수용할 수 없고, C++ 구조체·HLSL 코드·복사 헬퍼 3곳에 하드코딩 결합을 유발하는 구조적 한계가 확인됨.
+- **상용 엔진 표준 동적 버퍼 레이아웃 설계 ([MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md) 2.3절)**:
+  - **그래프 주도 파라미터 노출 (Exposed Parameters)**: 마스터 노드 핀뿐만 아니라 그래프 전역의 파라미터 노드(`Shader.Parameter.*`) 및 블랙보드 변수를 파라미터로 자동 수집.
+  - **컴파일러의 cbuffer 자동 조립 & 오프셋 계산**: `ShaderGraphCompiler`가 16바이트 정렬 규칙(std140 패킹)을 준수하여 HLSL `cbuffer MaterialConstants` 코드를 동적 조립하고, 파라미터 메타데이터 테이블(`MaterialBufferLayout`: 이름, 타입, 오프셋, 바이트 크기)을 생성.
+  - **원시 바이트 블롭(Raw Byte Blob) 런타임 저장소**: `MaterialInterface`가 고정 C++ 구조체 대신 `std::vector<uint8_t> m_ConstantBufferData`를 소유하고, `SetFloat(name, val)` 호출 시 레이아웃 맵에서 오프셋을 찾아 바이트 단위 `memcpy` 수행 후 RHI에 바인딩. C++ 컴파일 타임 구조체 의존성을 완전히 제거.
+- **단계적 진화 로드맵 수립**:
+  - Phase 1 (현 단계): 48바이트 기본 PBR Fast-Path(60fps 실시간 반응) 및 마스터 노드-머티리얼 양방향 동기화 검증 완료.
+  - Phase 2 (차기 과제): 셰이더 그래프 동적 cbuffer 생성기 도입 및 `MaterialBufferLayout` 오프셋 메타데이터 구축.
+  - Phase 3 (완전 범용화): C++ 구조체 제거, `std::vector<uint8_t>` 바이트 블롭 전환 및 SPIRV-Cross / D3D12 리플렉션 연동.
+
+### [2026-11-20] BamAssetWorker 모델 텍스처 베이킹 경로 연결
+
+- `ModelImporter::FinalizeOneStep`가 머티리얼 커밋 전 내장/외부 텍스처 요청을 수집하고 `AssetWorkerHost::EnqueueImportTexture`로 순차 처리한다. 완료 전 모델 자원 등록·커밋을 보류한다.
+- 기존 텍스처 파일명·폴더·BC5 Normal / BC7 ORM / BC7 sRGB 설정을 보존한다. 내장 텍스처 원본은 한 번 추출하며, 기존처럼 베이킹 실패·취소 시 원본 경로로 머티리얼 바인딩을 계속한다. 워커 미사용 시 `TextureImporter` 인프로세스 폴백을 사용한다.
+- 사용자가 제공한 Editor Unity 빌드 오류에서 `AssetWorkerHost.cpp`의 `MoveFile` 헬퍼가 Windows `MoveFileW`로 매크로 확장되어 `ClientPackage.cpp` 호출과 충돌하는 원인을 확인했다. 헬퍼를 `MoveTextureOutputFile`로 이름 변경했으며, 재빌드는 대기 중이다.
+- **검증 상태**: 코드와 관련 문서 반영. `git diff --check` 통과. 저장소 지침에 따라 빌드와 테스트는 실행하지 않았다. 실행 확인 명령: `cmake --build --preset x64-ninja-debug --target Editor BamAssetWorker AssetWorkerSnapshotCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetWorker(Model|Texture)Check$" --output-on-failure`.
+- **미검증**: 워커 IPC를 포함한 모델 임포트의 내장/외부 텍스처, 대체 원본 경로, 기존 산출물 보존, 취소·폴백, 재임포트 및 대형 에셋 프레임 영향.
+
+### [2026-11-20] BamAssetWorker 독립 텍스처 임포트 코드 연결
+
+- **워커 프로토콜/변환**: `BamAssetWorker`에 `TEXTURE_WORKER_VERSION` 및 `IMPORT_TEXTURE`를 추가했다. DirectXTex 변환은 `.bamtex`와 `.dds` staging 파일을 생성하고, 요청의 포맷·압축 플래그를 전달한다. WIC를 사용하는 `DirectXTexCompressor`는 호출 스레드의 COM 초기화 상태를 처리한다.
+- **에디터 연결**: `AssetWorkerHost`가 독립 텍스처 임포트를 직렬화해 실행하고, 진행률·취소·3분 제한·워커 사용 불가 폴백을 제공한다. 두 staging 결과가 성공한 후 기존 파일을 백업하고 새 결과를 교체하며 실패 시 복구를 시도한다. `AssetManager::ImportAsync`는 이미지 확장자 임포트를 워커에 연결하고, `TextureImporter`의 압축 실패를 성공으로 처리하지 않는다.
+- **검사/로캘/문서**: `AssetWorkerTextureCheck.py`가 4x4 PNG → BC7 변환의 `.bamtex` 및 DDS 출력과 누락 원본 실패를 검사하도록 추가했다. 푸터 진행 상태 키는 `Editor.ModelImport.csv`에 추가했으며, 세부 범위와 잔여 모델 내장 텍스처 경로는 `OutOfProcessAssetPipelinePlan.md`에 기록했다.
+- **검증 상태**: 빌드·테스트는 프로젝트 지침에 따라 실행하지 않았다. 사용자 실행 명령: `cmake --build --preset x64-ninja-debug --target BamAssetWorker AssetWorkerSnapshotCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetWorker(Model|Texture)Check$" --output-on-failure`.
+- **미검증/잔여**: `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, 에디터의 출력 교체/취소/폴백, 대형 텍스처 성능은 미검증이다. 모델 임포트 중 내장/외부 텍스처 베이킹은 아직 `ModelImporter` 최종화에서 인프로세스로 수행된다.
+
+### [2026-11-20] BamAssetWorker 모델 snapshot 소비 검증 보강
+
+- `Tools/AssetWorker/ModelSnapshotCheck.cpp` 테스트 실행 파일을 추가해 워커가 생성한 snapshot을 `ModelConversion::ReadModelSnapshot`으로 읽을 수 있는지 검사하도록 했다. `AssetWorkerModelCheck.py`는 UTF-8 모델 경로 변환 후 이 검증기를 실행하며, `Tools/AssetWorker/CMakeLists.txt`에서 테스트 타깃을 연결한다.
+- `OutOfProcessAssetPipelinePlan.md`의 IPC 계약을 현재 탭 구분 프로토콜과 일치시키고, 고정 워커 수·폴백 경계·검증 대기 상태를 갱신했다.
+- **검증 상태**: 빌드와 CTest는 실행하지 않았다. 사용자 확인 명령: `cmake --build --preset x64-ninja-debug --target BamAssetWorker AssetWorkerSnapshotCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetWorkerModelCheck$" --output-on-failure`.
+- **미검증**: 새 테스트 타깃의 컴파일 및 snapshot 역직렬화 실행, 대형 모델 에디터 임포트·취소·폴백·성능. 텍스처 워커 이관은 모델 경로 검증 후속 단계다.
+
 ### [2026-11-20] 프로젝트 점검, SceneArchiveCheck 외부 엔티티 참조 검증 핫픽스 및 CTest 44개 전체 통과
 
 - **`SceneArchiveCheck` 외부 엔티티 참조 검증 핫픽스 (`Engine/examples/SceneArchiveCheck.cpp`)**:

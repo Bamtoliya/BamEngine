@@ -5,14 +5,17 @@
 
 ## 1. 개요 및 핵심 쟁점
 
-본 문서는 BamEngine의 머티리얼 시스템과 셰이더 그래프 에디터의 고도화를 위해 제기된 3가지 핵심 질문에 대한 심층 조사 결과 및 구조적 설계안을 정의한다.
+본 문서는 BamEngine의 머티리얼 시스템과 셰이더 그래프 에디터의 고도화를 위해 제기된 4가지 핵심 질문에 대한 심층 조사 결과 및 구조적 설계안을 정의한다.
 
 1. **파라미터 및 텍스처의 동기화 모델 (Synchronization & Source of Truth)**:
    - 마테리얼 속성 패널에서 추가/수정한 파라미터 및 텍스처와 셰이더 그래프의 노드/블랙보드 간의 관계는 어떠해야 하는가?
    - 누가 인터페이스의 진실의 원천(Source of Truth)이며, 실시간 변경(Hot-Reload)은 어떻게 보장되는가?
-2. **다중 그래프 패널의 UI/UX 및 기능 공통화 (Common Graph Framework)**:
+2. **고정 PBR 구조체 하드코딩 탈피 및 범용 동적 버퍼 레이아웃 (Dynamic ConstantBuffer Layout)**:
+   - `baseColor`, `roughness` 등 특정 PBR 변수명에 묶인 48바이트 고정 구조체(`MaterialConstants`)를 어떻게 탈피할 것인가?
+   - 커스텀 파라미터(디졸브, UV 스케일, 물결 속도 등)를 임의로 추가해도 C++ 코드 수정 없이 실시간 바인딩되는 범용 아키텍처는 무엇인가?
+3. **다중 그래프 패널의 UI/UX 및 기능 공통화 (Common Graph Framework)**:
    - `GraphPanel`(로직 그래프), `MaterialEditorCanvas`(셰이더 그래프), `AnimatorGraphPanel`(애니메이션 FSM) 등 여러 패널에 분산된 노드 에디터 기능을 어떻게 통합·재사용할 것인가?
-3. **셰이더/머티리얼 그래프에서의 VS(정점 셰이더) 및 PS(픽셀 셰이더) 통합 작성**:
+4. **셰이더/머티리얼 그래프에서의 VS(정점 셰이더) 및 PS(픽셀 셰이더) 통합 작성**:
    - 머티리얼 그래프에서 정점 셰이더(World Position Offset, Custom UV 등)와 픽셀 셰이더(PBR 서피스 셰이딩)를 둘 다 작성할 수 있어야 하는가?
    - 단일 그래프에서 두 셰이더 스테이지를 어떻게 통합하고 컴파일러에서 분할 생성할 것인가?
 
@@ -76,6 +79,125 @@ sequenceDiagram
   1. 셰이더 그래프의 **블랙보드(Blackboard / Variable List)**에 해당 변수 선언이 자동으로 추가된다.
   2. 셰이더 그래프 캔버스 우클릭 메뉴의 `변수(Variables)` 항목에 방금 추가한 파라미터가 등록되어 노드로 꺼내 쓸 수 있다.
   3. 아직 그래프 노드에 연결되지 않은 파라미터는 머티리얼 인스펙터에서 `[미연결 파라미터]` 배지를 표시하여 혼선을 방지한다.
+
+---
+
+### 2.3 고정 파이프라인(PBR Constants) 탈피 및 범용 동적 버퍼 레이아웃 (Dynamic ConstantBuffer Layout) 설계
+
+#### A. 문제 정의: 왜 정적 구조체 하드코딩이 한계에 부딪히는가?
+현재 BamEngine의 1단계 Fast-Path 구현은 다음과 같은 고정 결합도를 가진다:
+1. **C++ 정적 구조체 종속**: `MaterialConstants`가 `baseColor`, `roughness`, `metallic`, `cavity`, `ao`, `emissiveColor`로 고정된 48바이트 구조체로 정의되어 있다.
+2. **커스텀 파라미터 확장 불가**: 아티스트나 프로그래머가 셰이더 그래프에서 물결 속도(`WaveSpeed`), 투명도(`Opacity`), 디졸브 진행도(`DissolveProgress`), UV 타일링(`Tiling`) 등 사용자 정의 파라미터를 추가해도 C++의 `MaterialConstants`에 자리가 없어 GPU로 실시간 전달할 수 없다.
+3. **삼중 하드코딩 결합**: C++ 구조체 선언, HLSL `cbuffer MaterialConstants` 코드, C++ 파라미터 복사 람다(`ApplyParameterConstants`) 3곳에 특정 변수명이 중복 하드코딩되어 있어, 툰 셰이딩(Toon)이나 굴절(Glass), 파티클 이펙트 등 다른 셰이딩 모델로 전환할 때마다 엔진 핵심 코드를 뜯어고쳐야 한다.
+
+#### B. 상용 엔진(Unreal, Unity)의 범용 아키텍처: 동적 상수 버퍼 레이아웃
+현대 상용 엔진은 C++ 컴파일 타임 구조체에 의존하지 않고, **동적 버퍼 레이아웃(Dynamic Buffer Layout)과 원시 바이트 블롭(Raw Byte Blob)**을 기반으로 동작한다.
+
+```mermaid
+flowchart TD
+    subgraph ShaderGraph [1. 셰이더 그래프]
+        P1[Shader.Parameter.Color: 'BaseColor']
+        P2[Shader.Parameter.Float: 'DissolveProgress']
+        P3[Shader.Parameter.Float2: 'UVTiling']
+    end
+
+    subgraph Compiler [2. ShaderGraphCompiler]
+        Collect[노출된 파라미터 수집 & HLSL 16바이트 패킹 계산]
+        HLSL[HLSL cbuffer MaterialConstants 동적 코드 생성]
+        Layout[MaterialParameterLayout 메타데이터 테이블 생성]
+    end
+
+    subgraph Runtime [3. MaterialInterface / 런타임]
+        Blob["원시 바이트 버퍼 (std::vector<uint8_t> m_ConstantBufferData)"]
+        Set["SetFloat('DissolveProgress', 0.5f) -> Offset(20)에 4바이트 memcpy"]
+        RHI["RHI::BindConstantBuffer(data, size, slot)"]
+    end
+
+    ShaderGraph --> Collect
+    Collect --> HLSL
+    Collect --> Layout
+    Layout --> Runtime
+    Runtime --> RHI
+```
+
+#### C. 세부 아키텍처 명세
+
+##### 1. 파라미터 레이아웃 메타데이터 (`MaterialParameterLayout`)
+컴파일러가 그래프의 파라미터들을 분석하여 HLSL의 16바이트 정렬 규칙(std140 패킹)에 맞게 오프셋을 배치하고 메타데이터 테이블을 생성한다.
+
+```cpp
+struct MaterialParameterEntry
+{
+    std::string Name;                 // 파라미터 고유명 (예: "DissolveProgress")
+    EMaterialParameterType Type;      // Float, Float2, Float3, Float4, Int, Bool 등
+    uint32_t Offset;                  // cbuffer 내 바이트 오프셋 (16바이트 패킹 준수)
+    uint32_t Size;                    // 크기 (예: Float = 4바이트)
+};
+
+struct MaterialBufferLayout
+{
+    std::vector<MaterialParameterEntry> Entries;
+    uint32_t TotalBufferSize = 0;     // 16바이트 배수로 올림된 총 버퍼 크기
+    
+    const MaterialParameterEntry* Find(const std::string& name) const;
+};
+```
+
+##### 2. 컴파일러의 HLSL `cbuffer` 자동 조립
+`ShaderGraphCompiler`는 고정된 HLSL 문자열 대신, 수집된 레이아웃을 기반으로 HLSL 상수 버퍼 문자열을 동적으로 조립한다.
+
+```hlsl
+// [ShaderGraphCompiler가 동적 생성한 HLSL]
+cbuffer MaterialConstants : register(b0, space3)
+{
+    float4 BaseColor;        // offset 0,  size 16
+    float  Roughness;        // offset 16, size 4
+    float  Metallic;         // offset 20, size 4
+    float  DissolveProgress; // offset 24, size 4
+    float  WaveSpeed;        // offset 28, size 4
+    float2 UVTiling;         // offset 32, size 8
+    float2 _pad0;            // offset 40, size 8 (16바이트 정렬 패딩)
+};
+```
+
+##### 3. 머티리얼 인터페이스의 바이트 블롭(Byte Blob) 저장소
+`MaterialInterface`는 고정 구조체(`MaterialConstants`) 대신 동적 메모리 블록을 소유한다.
+
+```cpp
+class MaterialInterface
+{
+public:
+    void SetFloat(const std::string& name, float value)
+    {
+        if (const auto* entry = m_Layout.Find(name); entry && entry->Type == EMaterialParameterType::Float)
+        {
+            std::memcpy(m_ConstantBufferData.data() + entry->Offset, &value, sizeof(float));
+            IncreaseVersion();
+            m_IsGpuBufferDirty = true;
+        }
+    }
+
+    void UpdateGpuConstantBuffer(RHICommandList* rhi, uint32_t slot) const
+    {
+        if (!m_ConstantBufferData.empty())
+        {
+            rhi->BindConstantBuffer(m_ConstantBufferData.data(), static_cast<uint32_t>(m_ConstantBufferData.size()), slot);
+        }
+    }
+
+private:
+    MaterialBufferLayout m_Layout;
+    std::vector<uint8_t> m_ConstantBufferData; // GPU로 전송할 순수 메모리 블록
+};
+```
+
+#### D. 단계별 진화 로드맵
+
+| 단계 | 명칭 | 구현 범위 | 효과 및 검증 기준 |
+| :--- | :--- | :--- | :--- |
+| **Phase 1 (현 단계)** | **기본 PBR Fast-Path 안정화** | 48바이트 고정 PBR 구조체(`MaterialConstants`) 기반 Fast-Path 실시간 파라미터 반응(60fps) 및 마스터 노드 양방향 동기화 | 셰이더 재컴파일 없이 파라미터 조작 즉시 3D 프리뷰 반응 확인 |
+| **Phase 2 (차기 과제)** | **동적 cbuffer 코드 생성 및 레이아웃 도입** | `ShaderGraphCompiler`에서 그래프 파라미터 기반 `cbuffer` 동적 생성, `MaterialBufferLayout` 오프셋 메타데이터 테이블 구축 | 사용자 정의 파라미터(디졸브, UV 스케일 등) 임의 추가 시 HLSL에 자동 반영 |
+| **Phase 3 (완전 범용화)** | **바이트 블롭 전환 및 셰이더 리플렉션 연동** | C++ `MaterialConstants` 구조체 제거, `std::vector<uint8_t>` 바이트 블롭 저장소 전환, `SPIRV-Cross` / D3D12 리플렉션 교차 검증 | 모든 커스텀 머티리얼 및 셰이딩 모델(Toon, Glass 등)에서 C++ 코드 수정 없는 100% 범용화 |
 
 ---
 

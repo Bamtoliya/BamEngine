@@ -638,8 +638,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - **기준 문서**: [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md)
    - **목표**: 상용 엔진(UE/Unity) 수준의 0초 실시간 파라미터 튜닝 피드백 및 정점 변위(WPO)/Custom UV를 지원하는 통합 셰이더 컴파일 파이프라인 구축.
    - **세부 내용**:
-     - 머티리얼 인스펙터 슬라이더/컬러 조절 시 셰이더 재컴파일 없이 GPU 상수 버퍼(`MaterialConstants : register(b2)`) 메모리만 즉시 갱신하는 60fps 무지연 Fast-Path 구현.
-     - 셰이더 그래프 블랙보드(Variable Pool) ↔ 머티리얼 파라미터 맵 간 자동 동기화.
+     - 머티리얼 인스펙터 슬라이더/컬러 조절 시 셰이더 재컴파일 없이 GPU 상수 버퍼(`MaterialConstants : register(b0, space3)`) 메모리만 즉시 갱신하는 60fps 무지연 Fast-Path 구현.
+     - 셰이더 그래프 마스터 노드 핀 ↔ 머티리얼 파라미터 맵 간 양방향 실시간 동기화.
+     - **범용 동적 버퍼 레이아웃(Dynamic ConstantBuffer Layout)**: 48바이트 정적 PBR 구조체(`baseColor`, `roughness` 등) 하드코딩 종속을 탈피하고, 그래프의 임의 커스텀 파라미터(디졸브, UV 스케일 등)를 수집하여 HLSL `cbuffer` 동적 생성 및 원시 바이트 블롭(`std::vector<uint8_t>`) 기반 런타임 저장소로 고도화하는 아키텍처 수립.
      - `Shader.MaterialOutput` 단일 마스터 노드에 정점 입력 핀(WPO, Normal, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`를 동시 분할 생성.
    - **관련 파일**: `MaterialEditor.cpp`, `MaterialEditorCanvas.cpp`, `MaterialEditorShader.cpp`, `ShaderGraphCompiler.cpp`, `MaterialInterface.cpp`, `MaterialConstants.h`.
 
@@ -677,3 +678,5 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - `Tools/AssetWorker/`: `BamAssetWorker.exe` 파이프 데몬 프로토콜에 `IMPORT_MODEL`(Assimp + meshopt LOD) 및 `IMPORT_TEXTURE`(DirectXTex BCn 압축) 명령 확장 및 실시간 진행률(`PROGRESS`) 응답 구현.
      - `Editor/Source/AssetManager/Worker/AssetWorkerHost.cpp`: 에셋 임포트 비동기 위임 및 하단 푸터 바(`FooterBar`) 실시간 진행률 프로그레스 바 / 취소(`[X]`) 버튼 연동.
    - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `ToolBar.cpp`.
+   - **2026-11-20 코드 반영**: `AssetWorkerSnapshotCheck`가 모델 snapshot을 `ReadModelSnapshot`으로 실제 소비하며, 독립 이미지 임포트와 모델 임포트의 내장/외부 텍스처 베이킹을 `IMPORT_TEXTURE`로 위임한다. `.bamtex`/`.dds`는 staging 후 함께 교체하고, 텍스처 진행률·취소·워커 사용 불가 시 인프로세스 폴백 및 슬롯별 압축 설정을 연결했다. 모델은 텍스처 작업 완료 후 커밋하며, 베이킹 실패·취소는 기존처럼 원본 텍스처를 사용한다. `AssetWorkerTextureCheck`가 PNG → BC7 및 실패 산출물 부재를 검사하도록 추가됐다.
+   - **미검증/잔여**: 저장소 지침에 따라 AI는 빌드·테스트를 실행하지 않았다. 사용자 실행 대기: `cmake --build --preset x64-ninja-debug --target Editor BamAssetWorker AssetWorkerSnapshotCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetWorker(Model|Texture)Check$" --output-on-failure`. 모델의 내장/외부 텍스처 임포트, 출력 보존, 취소·폴백, 에디터 커밋 및 대형 에셋 프레임 실측은 실행 검증이 남아 있다.

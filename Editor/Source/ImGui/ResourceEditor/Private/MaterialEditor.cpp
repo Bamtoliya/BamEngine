@@ -838,7 +838,7 @@ void MaterialEditor::DrawParameters()
 		}
 	}
 
-	// 상단 컨트롤 행 2: 표준 검색 바 (아이콘 + 클리어 버튼 내장, 8px 오버플로우 방지)
+	// 상단 컨트롤 행 2: 표준 검색 바
 	EditorUI::DrawSearchBar("MaterialParamSearch", m_ParameterSearch, sizeof(m_ParameterSearch), "MaterialEditor.SearchParameters");
 	ImGui::Spacing();
 
@@ -849,8 +849,8 @@ void MaterialEditor::DrawParameters()
 	{
 		if (ImGui::BeginTable("##ParamsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
-			ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthStretch, 0.42f);
-			ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Value"), ImGuiTableColumnFlags_WidthStretch, 0.58f);
+			ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Name"), ImGuiTableColumnFlags_WidthStretch, 0.40f);
+			ImGui::TableSetupColumn(LOCAL_CSTR("MaterialEditor.Value"), ImGuiTableColumnFlags_WidthStretch, 0.60f);
 			ImGui::TableSetupColumn("##DelParam", ImGuiTableColumnFlags_WidthFixed, 28.0f);
 			ImGui::TableHeadersRow();
 
@@ -870,26 +870,32 @@ void MaterialEditor::DrawParameters()
 
 				ImGui::TableSetColumnIndex(1);
 				ImGui::SetNextItemWidth(-FLT_MIN);
+
+				const std::string lower = Engine::ToLowerStr(name);
+				const bool isColorParam = param.isColor || lower.find("color") != std::string::npos || lower.find("tint") != std::string::npos;
+
 				switch (param.type)
 				{
 				case Engine::EMaterialParameterType::Float:
 				{
 					float val = param.data.size() >= sizeof(float) ? *reinterpret_cast<const float*>(param.data.data()) : 0.0f;
-					if (ImGui::DragFloat("##val", &val, 0.01f))
+					// PBR 주요 파라미터(roughness, metallic, ao 등)는 0~1 슬라이더로 인스펙터 스타일 렌더링
+					bool changed = false;
+					if (lower == "roughness" || lower == "metallic" || lower == "ao" || lower == "cavity" || (param.minValue < param.maxValue))
+					{
+						const float minV = (param.minValue < param.maxValue) ? param.minValue : 0.0f;
+						const float maxV = (param.minValue < param.maxValue) ? param.maxValue : 1.0f;
+						changed = ImGui::SliderFloat("##val", &val, minV, maxV, "%.2f");
+					}
+					else
+					{
+						changed = ImGui::DragFloat("##val", &val, 0.01f);
+					}
+
+					if (changed)
 					{
 						m_Material->SetFloat(name, val);
-						m_Material->IncreaseVersion();
-						m_History.MarkEdited();
-						m_PreviewDirtyTimer = 0.2f;
-					}
-					break;
-				}
-				case Engine::EMaterialParameterType::Float2:
-				{
-					Engine::vec2 val = param.data.size() >= sizeof(Engine::vec2) ? *reinterpret_cast<const Engine::vec2*>(param.data.data()) : Engine::vec2(0.0f);
-					if (ImGui::DragFloat2("##val", &val.x, 0.01f))
-					{
-						m_Material->SetFloat2(name, val);
+						SyncGraphFromParameter(name, &val, Engine::EMaterialParameterType::Float);
 						m_Material->IncreaseVersion();
 						m_History.MarkEdited();
 						m_PreviewDirtyTimer = 0.2f;
@@ -899,21 +905,63 @@ void MaterialEditor::DrawParameters()
 				case Engine::EMaterialParameterType::Float3:
 				{
 					Engine::vec3 val = param.data.size() >= sizeof(Engine::vec3) ? *reinterpret_cast<const Engine::vec3*>(param.data.data()) : Engine::vec3(0.0f);
-					if (ImGui::ColorEdit3("##val", &val.x))
+					if (isColorParam)
 					{
-						m_Material->SetFloat3(name, val);
-						m_Material->IncreaseVersion();
-						m_History.MarkEdited();
-						m_PreviewDirtyTimer = 0.2f;
+						if (ImGui::ColorEdit3("##val", &val.x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_Float))
+						{
+							m_Material->SetFloat3(name, val);
+							SyncGraphFromParameter(name, &val, Engine::EMaterialParameterType::Float3);
+							m_Material->IncreaseVersion();
+							m_History.MarkEdited();
+							m_PreviewDirtyTimer = 0.2f;
+						}
+					}
+					else
+					{
+						if (ImGui::DragFloat3("##val", &val.x, 0.01f))
+						{
+							m_Material->SetFloat3(name, val);
+							SyncGraphFromParameter(name, &val, Engine::EMaterialParameterType::Float3);
+							m_Material->IncreaseVersion();
+							m_History.MarkEdited();
+							m_PreviewDirtyTimer = 0.2f;
+						}
 					}
 					break;
 				}
 				case Engine::EMaterialParameterType::Float4:
 				{
 					Engine::vec4 val = param.data.size() >= sizeof(Engine::vec4) ? *reinterpret_cast<const Engine::vec4*>(param.data.data()) : Engine::vec4(0.0f);
-					if (ImGui::ColorEdit4("##val", &val.x))
+					if (isColorParam)
 					{
-						m_Material->SetFloat4(name, val);
+						if (ImGui::ColorEdit4("##val", &val.x, ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_Float))
+						{
+							m_Material->SetFloat4(name, val);
+							SyncGraphFromParameter(name, &val, Engine::EMaterialParameterType::Float4);
+							m_Material->IncreaseVersion();
+							m_History.MarkEdited();
+							m_PreviewDirtyTimer = 0.2f;
+						}
+					}
+					else
+					{
+						if (ImGui::DragFloat4("##val", &val.x, 0.01f))
+						{
+							m_Material->SetFloat4(name, val);
+							SyncGraphFromParameter(name, &val, Engine::EMaterialParameterType::Float4);
+							m_Material->IncreaseVersion();
+							m_History.MarkEdited();
+							m_PreviewDirtyTimer = 0.2f;
+						}
+					}
+					break;
+				}
+				case Engine::EMaterialParameterType::Float2:
+				{
+					Engine::vec2 val = param.data.size() >= sizeof(Engine::vec2) ? *reinterpret_cast<const Engine::vec2*>(param.data.data()) : Engine::vec2(0.0f);
+					if (ImGui::DragFloat2("##val", &val.x, 0.01f))
+					{
+						m_Material->SetFloat2(name, val);
 						m_Material->IncreaseVersion();
 						m_History.MarkEdited();
 						m_PreviewDirtyTimer = 0.2f;
@@ -952,7 +1000,6 @@ void MaterialEditor::DrawParameters()
 				ImGui::TableSetColumnIndex(2);
 				EditorUI::IconButtonOptions delOpt;
 				delOpt.Compact = true;
-				delOpt.NoWrap = true;
 				if (EditorUI::IconButton("DelParam", ICON_FA_TRASH, "MaterialEditor.DeleteParam", delOpt))
 				{
 					paramToRemove = name;
@@ -960,7 +1007,6 @@ void MaterialEditor::DrawParameters()
 
 				ImGui::PopID();
 			}
-			ImGui::EndTable();
 
 			if (!paramToRemove.empty())
 			{
@@ -969,6 +1015,8 @@ void MaterialEditor::DrawParameters()
 				m_History.MarkEdited();
 				m_PreviewDirtyTimer = 0.2f;
 			}
+
+			ImGui::EndTable();
 		}
 	}
 
@@ -1456,7 +1504,8 @@ bool MaterialEditor::LoadShaderGraph(const std::filesystem::path& path)
 	m_ShaderGraphHistory.Reset(m_ShaderGraph.Data);
 	m_GraphReady = true;
 	m_NeedsNavigateToContent = true;
-
+	// ── 그래프 로드 성공 시 노드 핀 값들을 머티리얼 파라미터로 자동 동기화 ──
+	SyncParametersFromGraph();
 	InvalidateShaderBuild();
 	GenerateShaderSource();
 	return true;
@@ -1606,6 +1655,14 @@ bool MaterialEditor::CommitShaderGraphEdit()
 	{
 		m_LiveCompileCooldown = 0.25f;
 	}
+
+	// ── 그래프 노드 핀 값 변경 시 머티리얼 파라미터 및 3D 프리뷰 즉시 동기화 ──
+	SyncParametersFromGraph();
+	if (m_Material)
+	{
+		m_Material->IncreaseVersion();
+		m_PreviewDirtyTimer = 0.2f;
+	}
 	return true;
 }
 
@@ -1650,3 +1707,111 @@ void MaterialEditor::RestoreState(const EditorWorkspace& workspace)
 void MaterialEditor::AlignNodes(int alignment) { AlignSelectedNodes(alignment); }
 void MaterialEditor::DuplicateSelectedNodes() { DuplicateSelection(); }
 void MaterialEditor::CreateCommentBox() { CreateCommentBoxFromSelection(); }
+
+void MaterialEditor::SyncParametersFromGraph()
+{
+	if (!m_Material || m_IsReadOnly || !m_GraphReady) return;
+
+	// 마스터 노드(Shader.MaterialOutput) 탐색
+	const Engine::GraphNode* masterNode = nullptr;
+	for (const auto& node : m_ShaderGraph.Data.GetNodes())
+	{
+		if (node.Type == "Shader.MaterialOutput")
+		{
+			masterNode = &node;
+			break;
+		}
+	}
+	if (!masterNode) return;
+
+	const auto* schema = m_GraphRegistry.Find(masterNode->Type);
+	if (!schema) return;
+
+	const auto links = m_ShaderGraph.Data.GetLinks();
+	const auto hasLink = [&](const std::string& pin) {
+		return std::any_of(links.begin(), links.end(), [&](const Engine::GraphLink& link) {
+			return link.To.Node == masterNode->Id && link.To.Pin == pin;
+			});
+		};
+
+	// 마스터 노드의 입력 핀 순회 (링크가 연결되지 않은 핀의 값을 머티리얼 파라미터로 동기화)
+	for (const auto& pin : schema->Pins)
+	{
+		if (pin.Direction != Engine::EGraphPinDirection::Input) continue;
+		if (hasLink(pin.Key)) continue; // 노드 링크 연결이 있으면 그래프 연산식이 우선
+
+		const auto it = masterNode->InputValues.find(pin.Key);
+		const Engine::GraphValue& graphVal = (it != masterNode->InputValues.end()) ? it->second : pin.DefaultValue;
+
+		if (std::holds_alternative<float>(graphVal))
+		{
+			m_Material->SetFloat(pin.Key, std::get<float>(graphVal));
+		}
+		else if (std::holds_alternative<std::array<float, 3>>(graphVal))
+		{
+			const auto arr = std::get<std::array<float, 3>>(graphVal);
+			m_Material->SetFloat3(pin.Key, Engine::vec3(arr[0], arr[1], arr[2]));
+		}
+		else if (std::holds_alternative<std::array<float, 4>>(graphVal))
+		{
+			const auto arr = std::get<std::array<float, 4>>(graphVal);
+			m_Material->SetFloat4(pin.Key, Engine::vec4(arr[0], arr[1], arr[2], arr[3]));
+		}
+	}
+
+	// 기본 PBR 핀이 누락되어 있다면 표준 기본값 채움
+	const auto& curParams = m_Material->GetParameters();
+	const auto hasParam = [&](const std::string& name) {
+		const std::string lower = Engine::ToLowerStr(name);
+		return std::any_of(curParams.begin(), curParams.end(), [&](const auto& pair) {
+			return Engine::ToLowerStr(pair.first) == lower;
+			});
+		};
+	if (!hasParam("baseColor")) m_Material->SetFloat4("baseColor", Engine::vec4(1.0f));
+	if (!hasParam("roughness")) m_Material->SetFloat("roughness", 0.5f);
+	if (!hasParam("metallic")) m_Material->SetFloat("metallic", 0.0f);
+	if (!hasParam("emissive")) m_Material->SetFloat3("emissive", Engine::vec3(0.0f));
+}
+
+void MaterialEditor::SyncGraphFromParameter(const std::string& name, const void* data, Engine::EMaterialParameterType type)
+{
+	if (!m_GraphReady || !data) return;
+
+	for (const auto& node : m_ShaderGraph.Data.GetNodes())
+	{
+		if (node.Type == "Shader.MaterialOutput")
+		{
+			const std::string lower = Engine::ToLowerStr(name);
+			const auto* schema = m_GraphRegistry.Find(node.Type);
+			if (!schema) break;
+
+			for (const auto& pin : schema->Pins)
+			{
+				if (pin.Direction != Engine::EGraphPinDirection::Input) continue;
+				if (Engine::ToLowerStr(pin.Key) == lower)
+				{
+					Engine::GraphValue nextVal;
+					if (type == Engine::EMaterialParameterType::Float)
+					{
+						nextVal = *reinterpret_cast<const float*>(data);
+					}
+					else if (type == Engine::EMaterialParameterType::Float3)
+					{
+						const auto v = *reinterpret_cast<const Engine::vec3*>(data);
+						nextVal = std::array<float, 3>{ v.x, v.y, v.z };
+					}
+					else if (type == Engine::EMaterialParameterType::Float4)
+					{
+						const auto v = *reinterpret_cast<const Engine::vec4*>(data);
+						nextVal = std::array<float, 4>{ v.x, v.y, v.z, v.w };
+					}
+
+					// 공식 API인 SetInputValue를 통해 안전하게 핀 값 수정
+					(void)m_ShaderGraph.Data.SetInputValue(m_GraphRegistry, { node.Id, pin.Key }, std::move(nextVal));
+					break;
+				}
+			}
+			break;
+		}
+	}
+}
