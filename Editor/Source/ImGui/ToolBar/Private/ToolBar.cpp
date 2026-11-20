@@ -212,9 +212,16 @@ void ToolBar::ImportAsset()
 		character = static_cast<wchar_t>(std::towlower(character));
 
 	const bool isModel = extension == L".fbx" || extension == L".obj" || extension == L".gltf" || extension == L".glb";
+	const bool isTexture = extension == L".png" || extension == L".jpg" || extension == L".jpeg" ||
+		extension == L".tga" || extension == L".bmp";
 	const filesystem::path destination = isModel ? sourcePath.parent_path() : sourcePath;
 
 	if (isModel)
+	{
+		AssetManager::Get().ImportAsync(sourcePath, destination);
+		return;
+	}
+	if (isTexture)
 	{
 		AssetManager::Get().ImportAsync(sourcePath, destination);
 		return;

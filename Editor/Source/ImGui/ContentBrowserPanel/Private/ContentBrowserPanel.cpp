@@ -2388,6 +2388,8 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 				character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
 
 			const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf" || extension == ".glb";
+			const bool isTexture = extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+				extension == ".tga" || extension == ".bmp";
 			if (isModel)
 			{
 				if (auto* modal = ModelImportModal::Get())
@@ -2435,7 +2437,10 @@ void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 			}
 			else
 			{
-				AssetManager::Get().Import(sourcePath, destinationPath);
+				if (isTexture)
+					AssetManager::Get().ImportAsync(sourcePath, destinationPath);
+				else
+					AssetManager::Get().Import(sourcePath, destinationPath);
 			}
 		}
 	}

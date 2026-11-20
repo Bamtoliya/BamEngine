@@ -6,6 +6,8 @@
 #include "ThumbnailRenderer.h"
 #include "AssetWorkerHost.h"
 
+#include <memory>
+
 #pragma region Importer
 #include "SpriteImporter.h"
 #include "TextureImporter.h"
@@ -185,7 +187,23 @@ void AssetManager::Update(f32 dt)
 			BAM_LOG(Error, "Editor", "Asset", "Async task failed: {}", ResultToString(*completedResult));
 		}
 
+		auto finished = std::move(it->Finished);
 		it = m_ActiveTasks.erase(it);
+		if (finished)
+		{
+			try
+			{
+				finished(*completedResult);
+			}
+			catch (const std::exception& exception)
+			{
+				BAM_LOG(Error, "Editor", "Asset", "Async completion callback failed: {}", exception.what());
+			}
+			catch (...)
+			{
+				BAM_LOG(Error, "Editor", "Asset", "Async completion callback failed with an unknown exception.");
+			}
+		}
 	}
 
 	// 작업 목록을 순회한 뒤 알립니다.
@@ -227,7 +245,8 @@ EResult AssetManager::Import(const filesystem::path& sourcePath, const filesyste
 	return EResult::Fail;
 }
 
-void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg)
+void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg,
+	std::function<void(EResult)> finished)
 {
 	std::string extension = sourcePath.extension().string();
 	for (char& character : extension)
@@ -242,10 +261,13 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 		};
 
 	AsyncTask pending;
+	pending.Finished = std::move(finished);
 
 	try
 	{
 		const bool isModel = extension == ".fbx" || extension == ".obj" || extension == ".gltf" || extension == ".glb";
+		const bool isTexture = extension == ".png" || extension == ".jpg" || extension == ".jpeg" ||
+			extension == ".tga" || extension == ".bmp";
 		if (isModel)
 		{
 			const auto found = m_Importers.find(extension);
@@ -314,6 +336,67 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 				pending.Future = queued ? promise->get_future() : std::async(std::launch::async, [task]()
 					{
 						return task->Prepare();
+					});
+			}
+		}
+		else if (isTexture)
+		{
+			const auto found = m_Importers.find(extension);
+			auto* importer = found != m_Importers.end() ?
+				dynamic_cast<TextureImporter*>(found->second) : nullptr;
+			if (!importer)
+			{
+				pending.Future = readyFuture(EResult::NotImplemented);
+			}
+			else
+			{
+				const tagTextureImportDesc options = arg
+					? *static_cast<tagTextureImportDesc*>(arg)
+					: TextureImporter::GetDefaultImportDesc(sourcePath);
+				filesystem::path outputPath = TextureImporter::ResolveOutputPath(sourcePath, destDir);
+				if (outputPath.empty())
+				{
+					pending.Future = readyFuture(EResult::Fail);
+					std::lock_guard lock(m_PendingMutex);
+					m_PendingTasks.push_back(std::move(pending));
+					return;
+				}
+				filesystem::path finalBamtexPath = outputPath;
+				finalBamtexPath.replace_extension(".bamtex");
+				filesystem::path finalDdsPath = outputPath;
+				finalDdsPath.replace_extension(".dds");
+
+				auto promise = std::make_shared<std::promise<EResult>>();
+				auto future = promise->get_future();
+				const bool queued = AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().EnqueueImportTexture(
+					sourcePath, finalBamtexPath, finalDdsPath, options.TargetFormat, options.CompressFlags,
+					[importer, promise, sourcePath, destDir, options](AssetWorkerHost::TextureImportResult result)
+					{
+						try
+						{
+							EResult importResult = EResult::Fail;
+							if (result == AssetWorkerHost::TextureImportResult::OutputReady)
+								importResult = EResult::Success;
+							else if (result == AssetWorkerHost::TextureImportResult::Unavailable)
+							{
+								auto fallbackOptions = options;
+								importResult = importer->Import(sourcePath, destDir, &fallbackOptions);
+							}
+							else if (result == AssetWorkerHost::TextureImportResult::Cancelled)
+								BAM_LOG(Info, "Editor", "Asset", "Texture worker import cancelled.");
+							promise->set_value(importResult);
+						}
+						catch (...)
+						{
+							promise->set_exception(std::current_exception());
+						}
+					});
+
+				pending.Future = queued ? std::move(future) : std::async(std::launch::async,
+					[importer, sourcePath, destDir, options]()
+					{
+						auto fallbackOptions = options;
+						return importer->Import(sourcePath, destDir, &fallbackOptions);
 					});
 			}
 		}

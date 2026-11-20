@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ImporterInterface.h"
+#include "TextureCompressorInterface.h"
 
 namespace Tools::ModelConversion
 {
@@ -72,6 +73,7 @@ struct ModelImportDesc
 	bool Overwrite = true;
 	bool OverwriteMaterials = false;
 	bool BakeTexturesToDDS = true;
+	ETextureCompressionMode TextureCompression = ETextureCompressionMode::CpuStandard;
 	bool FlipPitch = false;
 	bool FlipHeading = false;
 

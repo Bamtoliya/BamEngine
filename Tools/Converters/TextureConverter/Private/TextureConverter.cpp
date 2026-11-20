@@ -14,7 +14,7 @@ void TextureConverter::Convert(const std::wstring& inputFilePath, const std::wst
 	}
 
 	// 2. 압축 실행
-	bool bSuccess = compressor->CompressTexture(inputFilePath, outputFilePath);
+	bool bSuccess = compressor->CompressTexture(inputFilePath, outputFilePath, format, flags);
 
 	if (bSuccess) std::wcout << L"Conversion Success: " << outputFilePath << L"\n";
 	else std::wcerr << L"Conversion Failed: " << inputFilePath << L"\n";

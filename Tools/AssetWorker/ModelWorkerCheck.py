@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 
 def main():
     worker = Path(sys.argv[1]).resolve()
+    snapshot_check = Path(sys.argv[2]).resolve()
     with TemporaryDirectory(prefix="BamAssetWorkerModel-") as directory:
         root = Path(directory)
         source = root / "한글 모델.obj"
@@ -38,6 +39,19 @@ def main():
         with snapshot.open("rb") as stream:
             if stream.read(4) != b"BMDC":
                 raise RuntimeError("Worker snapshot header is missing.")
+
+        validation = subprocess.run(
+            [str(snapshot_check), str(snapshot)],
+            cwd=root,
+            capture_output=True,
+            timeout=30,
+        )
+        if validation.returncode != 0:
+            raise RuntimeError(
+                f"Worker snapshot could not be consumed: {validation.returncode}\n"
+                f"{validation.stdout.decode(errors='replace')}\n"
+                f"{validation.stderr.decode(errors='replace')}"
+            )
 
 
 if __name__ == "__main__":

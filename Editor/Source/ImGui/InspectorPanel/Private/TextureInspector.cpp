@@ -6,14 +6,16 @@
 #include "TextureImporter.h"
 #include "TextureCompressorInterface.h"
 #include "AssetManager.h"
-#include "EditorSettingsService.h"
 
 static Engine::ETextureFormat s_TargetFormat = Engine::ETextureFormat::BC1_RGBA_UNORM;
 static uint32 s_CompressFlagsValue = static_cast<uint32>(ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality);
 static bool s_AutoGenerateSprite = true;
+static ETextureCompressionMode s_CompressionMode = ETextureCompressionMode::CpuStandard;
 
 static bool s_IsImporting = false;       // 비동기 작업 진행 중 여부
 static bool s_ShowSuccessPopup = false;  // 작업 완료 팝업 트리거
+static bool s_ImportSucceeded = false;
+static bool s_ImportedSprite = false;
 
 bool TextureInspector::IsSupported(const std::filesystem::path& assetPath)
 {
@@ -112,7 +114,16 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
 
     DrawFlag("TextureInspector.GenerateMipMaps", ECompressFlags::GenerateMipMaps);
     DrawFlag("TextureInspector.HighQuality", ECompressFlags::HighQuality);
-    DrawFlag("TextureInspector.UseGPU", ECompressFlags::UseGPU);
+    const string modeLabels[] = {
+        LOCAL("TextureInspector.CompressionCpuStandard"), LOCAL("TextureInspector.CompressionCpuFast"),
+        LOCAL("TextureInspector.CompressionGpu")
+    };
+    const char* modes[] = { modeLabels[0].c_str(), modeLabels[1].c_str(), modeLabels[2].c_str() };
+    int mode = static_cast<int>(s_CompressionMode);
+    if (ImGui::Combo(LOCAL_LABEL("TextureInspector.CompressionMode").c_str(), &mode, modes, IM_ARRAYSIZE(modes)))
+        s_CompressionMode = static_cast<ETextureCompressionMode>(mode);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", LOCAL_CSTR("TextureInspector.CompressionModeTooltip"));
     DrawFlag("TextureInspector.SRGB", ECompressFlags::SRGB);
     DrawFlag("TextureInspector.FlipY", ECompressFlags::FilpY);
     DrawFlag("TextureInspector.PremultiplyAlpha", ECompressFlags::PremultiplyAlpha);
@@ -135,50 +146,49 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
         ImGui::Button(LOCAL_LABEL("TextureInspector.Importing").c_str(), ImVec2(-1, 30));
         ImGui::EndDisabled();
 
-        // AssetManager의 Update() 루프에서 작업 완료 시 m_ActiveTasks를 지우므로,
-        // 카운트가 0이 되면 작업이 끝난 것으로 간주하고 팝업을 띄웁니다.
-        if (AssetManager::Get().GetActiveTaskCount() == 0)
-        {
-            s_IsImporting = false;
-            s_ShowSuccessPopup = true;
-        }
     }
     else
     {
+        ImGui::BeginDisabled(ext == L".dds");
         if (ImGui::Button(LOCAL_LABEL("TextureInspector.Import").c_str(), ImVec2(-1, 30)))
         {
-            s_IsImporting = true;
-
-            // [핵심 변경점] 절대 경로를 프로젝트 루트 기준의 '상대 경로'로 변환합니다.
-            // (std::filesystem::current_path()가 엔진의 작업 디렉토리 즉, 프로젝트 루트라고 가정)
-            const auto projectRoot = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetProjectRoot() : Engine::PlatformPath::GetExecutableDirectory();
-            std::filesystem::path relSourcePath = std::filesystem::relative(assetPath, projectRoot);
-            std::filesystem::path relDestDir = relSourcePath;
+            std::error_code error;
+            const std::filesystem::path sourcePath = std::filesystem::absolute(assetPath, error);
+            if (error || sourcePath.empty())
+            {
+                BAM_LOG(Error, "Editor", "Asset", "Failed to resolve texture import path: {}", error.message());
+                s_ImportSucceeded = false;
+                s_ShowSuccessPopup = true;
+                ImGui::EndDisabled();
+                return true;
+            }
+            const std::filesystem::path destDir = sourcePath.parent_path();
 
             bool autoGenSprite = s_AutoGenerateSprite;
+            s_IsImporting = true;
 
             tagTextureImportDesc desc = {};
-            desc.CompressFlags = static_cast<ECompressFlags>(s_CompressFlagsValue);
             desc.TargetFormat = s_TargetFormat;
+            desc.CompressFlags = ApplyTextureCompressionMode(
+                static_cast<ECompressFlags>(s_CompressFlagsValue), s_CompressionMode, desc.TargetFormat);
 
-            // 이제 AssetManager와 Importer들은 모두 '상대 경로'만을 가지고 작업하게 됩니다.
-            AssetManager::Get().ExecuteAsync([relSourcePath, relDestDir, autoGenSprite, desc]() -> EResult
+            AssetManager::Get().ImportAsync(sourcePath, destDir, &desc,
+                [sourcePath, autoGenSprite](EResult result)
                 {
-                    std::filesystem::path outputPath = relSourcePath;
+                    s_IsImporting = false;
+                    s_ImportSucceeded = false;
+                    s_ImportedSprite = autoGenSprite;
+                    s_ShowSuccessPopup = true;
+                    std::filesystem::path outputPath = sourcePath;
                     outputPath.replace_extension(".bamtex");
-
-                    // 1. 텍스처 임포트 (.bamtex 생성)
-                    EResult result = AssetManager::Get().Import(relSourcePath, relDestDir, (void*)&desc);
-
-                    // 2. 스프라이트 임포트 연쇄 호출 (.bamsprite 생성)
                     if (result == EResult::Success && autoGenSprite)
-                    {
-                        result = AssetManager::Get().Import(outputPath, relDestDir, nullptr);
-                    }
-
-                    return result;
+                        result = AssetManager::Get().Import(outputPath, outputPath, nullptr);
+                    s_ImportSucceeded = result == EResult::Success;
                 });
         }
+        ImGui::EndDisabled();
+        if (ext == L".dds" && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s", LOCAL_CSTR("TextureInspector.DdsImportUnsupported"));
     }
 
     // 팝업 오픈 트리거 (비동기 작업이 끝났을 때 1프레임 동안 호출)
@@ -192,7 +202,9 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
     if (ImGui::BeginPopupModal(LOCAL_LABEL("TextureInspector.ImportResult").c_str(), NULL,
         ImGuiWindowFlags_AlwaysAutoResize))
     {
-        if (s_AutoGenerateSprite)
+        if (!s_ImportSucceeded)
+            ImGui::TextWrapped("%s", LOCAL_CSTR("TextureInspector.ImportFailed"));
+        else if (s_ImportedSprite)
             ImGui::Text("%s", LOCAL_CSTR("TextureInspector.SpriteConverted"));
         else
             ImGui::Text("%s", LOCAL_CSTR("TextureInspector.TextureConverted"));

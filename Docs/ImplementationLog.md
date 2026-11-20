@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 텍스처·스프라이트 편집기 통합 계획
+
+- [통합 계획](TextureSpriteEditorIntegrationPlan.md)에 하나의 작업창으로 정보·변환과 스프라이트 편집을 연결하는 제안, 독립적인 저장·이력 경계, 안전성 및 검증 기준을 기록했다. 씬 엔티티 인스펙터는 대상이 아니다.
+- `TextureInspector`의 UI 코드는 현재 등록·호출 경로가 확인되지 않았음을 `ImGuiDevelopmentPlan.md`에 명시했다. 통합 편집기 구현과 UI·GPU 실환경 검증은 아직 수행하지 않았다.
+
+### [2026-11-20] BC7 압축 방식 선택
+
+- 미연결 텍스처 인스펙터의 UI 코드와 모델 텍스처 베이킹에 CPU 표준·CPU 빠른 BC7·D3D11 GPU BC7 선택을 추가했다. 텍스처 인스펙터는 현재 접근 가능한 UI가 아니다. 노멀맵 BC5 등 다른 형식은 CPU 표준을 사용한다. 빠른 압축은 품질 저하 가능성이 있다.
+- 텍스처 워커 프로토콜을 버전 2로 갱신하고 실제 backend와 GPU 폴백 HRESULT를 전달한다. 방식별 캐시 키를 분리하고 CPU 폴백 결과는 GPU 캐시에 기록하지 않는다. 텍스처 인스펙터, 이미지 드롭 및 툴바의 이미지 변환은 비동기 경로를 사용한다.
+- 인프로세스 폴백도 두 산출물을 staging 후 교체한다. DDS 원본은 변환을 비활성화했고, 인스펙터는 요청별 완료 결과를 표시한다. UI 문구는 CSV 원본에 추가했다.
+- **검증 상태**: 사용자가 Debug 빌드 후 `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `LocalizationAuditUtility` 3개 통과를 보고했다. AI는 빌드·테스트·로캘 생성·에디터 실행을 직접 수행하지 않았다. 실제 GPU 사용, 출력 복구·취소, 모델 UI 경로, 속도·화질과 UI 반응성은 실환경 확인이 필요하다.
+- **기존 CPU 시간 관찰**: 별도 원본 경로를 사용한 비교에서 파일 시각 기준 Debug 약 4분 55초, Release 약 24초였다. 정확한 스톱워치·종료 코드는 없으므로 참고치이며 GPU 또는 압축 방식별 성능 검증 결과가 아니다.
+
 ### [2026-11-20] 머티리얼 PrimaryPassType 도입·동적 cbuffer 레이아웃(Phase 2)·통합 Undo/Redo 구현
 
 - **후보 2 — 머티리얼 기본 렌더 패스(`PrimaryPassType`) 및 Fallback 정합성**:

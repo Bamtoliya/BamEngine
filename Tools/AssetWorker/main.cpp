@@ -12,6 +12,7 @@
 #include "ReflectionRegistry.h"
 #include "ResourceManager.h"
 #include "ModelConverter.h"
+#include "TextureCompressorInterface.h"
 
 #include <cmath>
 #include <cstdint>
@@ -19,7 +20,7 @@
 #include <filesystem>
 #include <iostream>
 #include <locale>
-#include <sstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -61,6 +62,88 @@ namespace
 
             std::cout << "PROGRESS\t" << requestId << "\t2\n" << std::flush;
             return true;
+        }
+        catch (const std::exception& exception)
+        {
+            std::cerr << exception.what() << '\n';
+            return false;
+        }
+    }
+
+    bool HandleImportTexture(uint64_t requestId, const std::string& source, const std::string& finalBamtex,
+        const std::string& finalDds, const std::string& stagedBamtex, const std::string& stagedDds,
+        const std::string& formatField, const std::string& flagsField)
+    {
+        try
+        {
+            if (source.empty() || finalBamtex.empty() || finalDds.empty() || stagedBamtex.empty() || stagedDds.empty())
+                return false;
+
+            size_t parsed = 0;
+            const auto formatValue = std::stoul(formatField, &parsed);
+            if (parsed != formatField.size() || formatValue > UINT8_MAX)
+                return false;
+
+            const auto flagsValue = std::stoul(flagsField, &parsed);
+            if (parsed != flagsField.size() || flagsValue > 0xffu)
+                return false;
+
+            const auto format = static_cast<Engine::ETextureFormat>(formatValue);
+            switch (format)
+            {
+            case Engine::ETextureFormat::R8G8B8A8_UNORM:
+            case Engine::ETextureFormat::BC1_RGBA_UNORM:
+            case Engine::ETextureFormat::BC2_RGBA_UNORM:
+            case Engine::ETextureFormat::BC3_RGBA_UNORM:
+            case Engine::ETextureFormat::BC4_R_UNORM:
+            case Engine::ETextureFormat::BC5_RG_UNORM:
+            case Engine::ETextureFormat::BC7_RGBA_UNORM:
+                break;
+            default:
+                return false;
+            }
+
+            const auto flags = static_cast<ECompressFlags>(flagsValue);
+            const auto sourcePath = Engine::Utf8ToPath(source);
+            const auto finalBamtexPath = Engine::Utf8ToPath(finalBamtex);
+            const auto finalDdsPath = Engine::Utf8ToPath(finalDds);
+            const auto stagedBamtexPath = Engine::Utf8ToPath(stagedBamtex);
+            const auto stagedDdsPath = Engine::Utf8ToPath(stagedDds);
+
+            std::unique_ptr<Tools::TextureCompressorInterface> compressor(Tools::TextureCompressorFactory::Create());
+            if (!compressor)
+                return false;
+
+            std::cout << "PROGRESS\t" << requestId << "\t1\n" << std::flush;
+            std::vector<uint8> compressedData;
+            Engine::TextureBinaryHeader header{};
+            TextureCompressionResult compressionResult{};
+            if (!compressor->GetRawCompressedData(sourcePath.wstring(), compressedData, header, format, flags, &compressionResult))
+                return false;
+
+            std::cout << "BACKEND\t" << requestId << "\t" << static_cast<unsigned>(compressionResult.Backend)
+                << "\t" << compressionResult.GpuError << "\n" << std::flush;
+            std::cout << "PROGRESS\t" << requestId << "\t2\n" << std::flush;
+            const auto destroyTexture = [](Engine::Texture* value)
+            {
+                if (value) Engine::ResourceManager::Get().DestroyResource(value);
+            };
+            std::unique_ptr<Engine::Texture, decltype(destroyTexture)> texture(
+                Engine::Texture::Create(header, compressedData, finalBamtexPath.wstring()), destroyTexture);
+            if (!texture)
+                return false;
+
+            const EResult saveResult = Engine::ResourceManager::Get().SaveToBinaryFile(texture.get(), stagedBamtexPath.wstring());
+            if (saveResult != EResult::Success)
+                return false;
+
+            std::cout << "PROGRESS\t" << requestId << "\t3\n" << std::flush;
+            if (!compressor->SaveCompressedDataToDDS(stagedDdsPath.wstring(), compressedData, header))
+                return false;
+
+            std::cout << "PROGRESS\t" << requestId << "\t4\n" << std::flush;
+            return std::filesystem::exists(stagedBamtexPath) && std::filesystem::exists(stagedDdsPath)
+                && !finalBamtexPath.empty() && !finalDdsPath.empty();
         }
         catch (const std::exception& exception)
         {
@@ -124,6 +207,17 @@ namespace
             {
                 const uint64_t requestId = std::strtoull(fields[1].c_str(), nullptr, 10);
                 const bool ok = HandleImportModel(requestId, fields[2], fields[3], fields[4]);
+                std::cout << "RESULT\t" << requestId << "\t" << (ok ? 1 : 0) << "\n" << std::flush;
+            }
+            else if (fields.size() == 2 && fields[0] == "TEXTURE_WORKER_VERSION" && fields[1] == "2")
+            {
+                std::cout << "TEXTURE_WORKER_VERSION\t2\n" << std::flush;
+            }
+            else if (fields.size() == 9 && fields[0] == "IMPORT_TEXTURE")
+            {
+                const uint64_t requestId = std::strtoull(fields[1].c_str(), nullptr, 10);
+                const bool ok = HandleImportTexture(requestId, fields[2], fields[3], fields[4],
+                    fields[5], fields[6], fields[7], fields[8]);
                 std::cout << "RESULT\t" << requestId << "\t" << (ok ? 1 : 0) << "\n" << std::flush;
             }
         }

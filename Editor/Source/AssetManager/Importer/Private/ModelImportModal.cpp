@@ -656,6 +656,18 @@ namespace Editor
 						{
 							ImGui::SetTooltip("%s", LOCAL_CSTR("ModelImport.BakeTexturesTooltip"));
 						}
+						ImGui::BeginDisabled(!m_Desc.BakeTexturesToDDS);
+						const std::string modeLabels[] = {
+							LOCAL("ModelImport.CompressionCpuStandard"), LOCAL("ModelImport.CompressionCpuFast"),
+							LOCAL("ModelImport.CompressionGpu")
+						};
+						const char* modes[] = { modeLabels[0].c_str(), modeLabels[1].c_str(), modeLabels[2].c_str() };
+						int mode = static_cast<int>(m_Desc.TextureCompression);
+						if (ImGui::Combo(LOCAL_LABEL("ModelImport.TextureCompression").c_str(), &mode, modes, IM_ARRAYSIZE(modes)))
+							m_Desc.TextureCompression = static_cast<ETextureCompressionMode>(mode);
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("%s", LOCAL_CSTR("ModelImport.TextureCompressionTooltip"));
+						ImGui::EndDisabled();
 						ImGui::EndDisabled();
 					}
 

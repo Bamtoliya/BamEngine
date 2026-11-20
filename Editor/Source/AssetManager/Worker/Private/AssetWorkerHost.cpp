@@ -134,10 +134,15 @@ namespace
 
     bool MoveTextureOutputFile(const std::filesystem::path& from, const std::filesystem::path& to, DWORD flags)
     {
-        return MoveFileExW(from.c_str(), to.c_str(), flags) != FALSE;
+        if (MoveFileExW(from.c_str(), to.c_str(), flags))
+            return true;
+        const DWORD error = GetLastError();
+        BAM_LOG(Error, "Editor", "Asset", "Texture output move failed: from={}, to={}, error={}",
+            Engine::WStrToStr(from.wstring()), Engine::WStrToStr(to.wstring()), error);
+        return false;
     }
 
-    bool CommitTextureOutputs(const std::filesystem::path& stagedBamtexPath,
+    bool CommitTextureOutputsImpl(const std::filesystem::path& stagedBamtexPath,
         const std::filesystem::path& stagedDdsPath, const std::filesystem::path& finalBamtexPath,
         const std::filesystem::path& finalDdsPath)
     {
@@ -420,6 +425,18 @@ namespace
         outProc.StdOutRead = parentOutRead;
         return true;
     }
+}
+
+bool AssetWorkerHost::CreateTextureStagingPath(const std::filesystem::path& targetPath, std::filesystem::path& outPath)
+{
+    return CreateSiblingTempFile(targetPath, outPath);
+}
+
+bool AssetWorkerHost::CommitTextureOutputs(const std::filesystem::path& stagedBamtexPath,
+    const std::filesystem::path& stagedDdsPath, const std::filesystem::path& finalBamtexPath,
+    const std::filesystem::path& finalDdsPath)
+{
+    return CommitTextureOutputsImpl(stagedBamtexPath, stagedDdsPath, finalBamtexPath, finalDdsPath);
 }
 
 EResult AssetWorkerHost::Initialize(void* arg)
@@ -729,11 +746,11 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         {
             std::string response;
             const auto deadline = Clock::now() + std::chrono::seconds(2);
-            if (WriteAllToPipe(proc.StdInWrite, "TEXTURE_WORKER_VERSION\t1\n"))
+            if (WriteAllToPipe(proc.StdInWrite, "TEXTURE_WORKER_VERSION\t2\n"))
             {
                 while (ReadLineFromPipe(proc, response, deadline))
                 {
-                    if (response == "TEXTURE_WORKER_VERSION\t1")
+                    if (response == "TEXTURE_WORKER_VERSION\t2")
                     {
                         proc.TextureImportSupported = true;
                         break;
@@ -771,10 +788,14 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         bool gotResult = false;
         bool success = false;
         std::string line;
-        if (WriteAllToPipe(proc.StdInWrite, command))
+        const auto startedAt = Clock::now();
+        auto lastProgressAt = startedAt;
+        int lastProgress = 0;
+        constexpr auto timeout = std::chrono::hours(1);
+        auto deadline = startedAt + timeout;
+        const bool commandSent = WriteAllToPipe(proc.StdInWrite, command);
+        if (commandSent)
         {
-            constexpr auto timeout = std::chrono::minutes(3);
-            auto deadline = Clock::now() + timeout;
             while (Clock::now() < deadline && ReadLineFromPipe(proc, line, deadline))
             {
                 std::istringstream response(line);
@@ -790,9 +811,36 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                     gotResult = true;
                     break;
                 }
+                if (type == "BACKEND")
+                {
+                    uint32_t gpuError = 0;
+                    if (!(response >> gpuError))
+                    {
+                        BAM_LOG(Warn, "Editor", "Asset", "Texture worker omitted backend diagnostics.");
+                        continue;
+                    }
+                    switch (static_cast<ETextureCompressionBackend>(value))
+                    {
+                    case ETextureCompressionBackend::Cpu: BAM_LOG(Info, "Editor", "Asset", "Texture backend: CPU."); break;
+                    case ETextureCompressionBackend::CpuFast: BAM_LOG(Info, "Editor", "Asset", "Texture backend: CPU fast BC7."); break;
+                    case ETextureCompressionBackend::Gpu: BAM_LOG(Info, "Editor", "Asset", "Texture backend: GPU BC7."); break;
+                    case ETextureCompressionBackend::CpuFallback: BAM_LOG(Warn, "Editor", "Asset", "Texture GPU compression fell back to CPU: HRESULT={}.", gpuError); break;
+                    case ETextureCompressionBackend::CachedCpu: BAM_LOG(Info, "Editor", "Asset", "Texture backend: cached CPU."); break;
+                    case ETextureCompressionBackend::CachedCpuFast: BAM_LOG(Info, "Editor", "Asset", "Texture backend: cached CPU fast BC7."); break;
+                    case ETextureCompressionBackend::CachedGpu: BAM_LOG(Info, "Editor", "Asset", "Texture backend: cached GPU BC7."); break;
+                    default: BAM_LOG(Warn, "Editor", "Asset", "Texture worker reported unknown backend: {}.", value); break;
+                    }
+                    continue;
+                }
                 if (type == "PROGRESS" && value >= 1 && value <= 4)
                 {
-                    deadline = Clock::now() + timeout;
+                    const auto now = Clock::now();
+                    const auto stageMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastProgressAt).count();
+                    BAM_LOG(Info, "Editor", "Asset", "Texture worker progress: source={}, stage={}, previous_stage_ms={}",
+                        Engine::WStrToStr(task.SourcePath.wstring()), value, stageMs);
+                    lastProgress = value;
+                    lastProgressAt = now;
+                    deadline = lastProgressAt + timeout;
                     std::lock_guard lock(m_ImportStatusMutex);
                     m_ActiveImportStatus.Progress = value == 1 ? 0.15f : value == 2 ? 0.45f : value == 3 ? 0.7f : 0.9f;
                     m_ActiveImportStatus.StepKey = value == 1 ? "ModelImport.TextureWorkerCompressing"
@@ -802,6 +850,12 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                 }
             }
         }
+
+        const auto finishedAt = Clock::now();
+        DWORD workerExitCode = STILL_ACTIVE;
+        const bool workerExited = proc.Process && WaitForSingleObject(proc.Process, 0) == WAIT_OBJECT_0;
+        if (workerExited && !GetExitCodeProcess(proc.Process, &workerExitCode))
+            workerExitCode = STILL_ACTIVE;
 
         bool cancelled;
         {
@@ -819,13 +873,33 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
 
         if (cancelled)
             task.Complete(Result::Cancelled);
-        else if (success && CommitTextureOutputs(outputs.BamtexPath, outputs.DdsPath,
-            task.FinalBamtexPath, task.FinalDdsPath))
-            task.Complete(Result::OutputReady);
         else
         {
-            BAM_LOG(Error, "Editor", "Asset", "Texture worker failed, disconnected, timed out, or could not commit outputs: {}",
-                Engine::WStrToStr(task.SourcePath.wstring()));
+            const auto source = Engine::WStrToStr(task.SourcePath.wstring());
+            const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(finishedAt - startedAt).count();
+            const auto stageMs = std::chrono::duration_cast<std::chrono::milliseconds>(finishedAt - lastProgressAt).count();
+            if (!commandSent)
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker command write failed: {}", source);
+            else if (!gotResult && finishedAt >= deadline)
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker timed out: source={}, stage={}, stage_ms={}, total_ms={}",
+                    source, lastProgress, stageMs, elapsedMs);
+            else if (!gotResult && workerExited)
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker exited: source={}, exit_code={}, stage={}, total_ms={}",
+                    source, workerExitCode, lastProgress, elapsedMs);
+            else if (!gotResult)
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker disconnected: source={}, stage={}, total_ms={}",
+                    source, lastProgress, elapsedMs);
+            else if (!success)
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker reported conversion failure: source={}, stage={}, total_ms={}",
+                    source, lastProgress, elapsedMs);
+            else if (!CommitTextureOutputs(outputs.BamtexPath, outputs.DdsPath, task.FinalBamtexPath, task.FinalDdsPath))
+                BAM_LOG(Error, "Editor", "Asset", "Texture worker output commit failed: source={}, total_ms={}", source, elapsedMs);
+            else
+            {
+                BAM_LOG(Info, "Editor", "Asset", "Texture worker completed: source={}, total_ms={}", source, elapsedMs);
+                task.Complete(Result::OutputReady);
+                return;
+            }
             task.Complete(Result::Failed);
         }
     };

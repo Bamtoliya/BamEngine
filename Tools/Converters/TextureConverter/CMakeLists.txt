@@ -15,6 +15,8 @@ target_include_directories(TextureConverter PUBLIC "Public")
 target_link_libraries(TextureConverter PUBLIC 
 	Engine
 	Microsoft::DirectXTex
+	d3d11
+	ole32
 )
 
 set_target_properties(TextureConverter PROPERTIES FOLDER "Tools")

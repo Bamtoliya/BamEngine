@@ -2,6 +2,7 @@
 
 #include "Editor_Includes.h"
 #include "ModelConverter.h"
+#include "TextureCompressorInterface.h"
 #include <condition_variable>
 #include <functional>
 #include <deque>
@@ -47,6 +48,16 @@ public:
 
     using ModelImportCompletion = std::function<void(ModelImportResult, const std::filesystem::path&)>;
 
+    enum class TextureImportResult
+    {
+        OutputReady,
+        Unavailable,
+        Failed,
+        Cancelled
+    };
+
+    using TextureImportCompletion = std::function<void(TextureImportResult)>;
+
 private:
     struct PendingThumbnailTask
     {
@@ -63,6 +74,17 @@ private:
         std::filesystem::path SourcePath;
         Tools::ModelConversion::Options Options;
         ModelImportCompletion Complete;
+    };
+
+    struct PendingTextureImportTask
+    {
+        Engine::uint64 RequestId = 0;
+        std::filesystem::path SourcePath;
+        std::filesystem::path FinalBamtexPath;
+        std::filesystem::path FinalDdsPath;
+        Engine::ETextureFormat TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+        ECompressFlags CompressFlags = ECompressFlags::None;
+        TextureImportCompletion Complete;
     };
 
 private:
@@ -84,6 +106,12 @@ public:
     // The snapshot is available during the worker-thread completion callback.
     bool EnqueueImportModel(const std::filesystem::path& sourcePath, Tools::ModelConversion::Options options,
         ModelImportCompletion complete);
+    bool EnqueueImportTexture(const std::filesystem::path& sourcePath, const std::filesystem::path& finalBamtexPath,
+        const std::filesystem::path& finalDdsPath, Engine::ETextureFormat targetFormat, ECompressFlags compressFlags,
+        TextureImportCompletion complete);
+    static bool CreateTextureStagingPath(const std::filesystem::path& targetPath, std::filesystem::path& outPath);
+    static bool CommitTextureOutputs(const std::filesystem::path& stagedBamtexPath, const std::filesystem::path& stagedDdsPath,
+        const std::filesystem::path& finalBamtexPath, const std::filesystem::path& finalDdsPath);
     bool GetActiveImportStatus(ActiveImportStatus& outStatus);
     void CancelActiveImport(Engine::uint64 requestId);
 
@@ -103,6 +131,7 @@ private:
     std::condition_variable m_QueueCv;
     std::deque<PendingThumbnailTask> m_PendingQueue;
     std::deque<PendingImportTask> m_PendingImports;
+    std::deque<PendingTextureImportTask> m_PendingTextureImports;
     Engine::uint64 m_NextImportRequestId = 1;
     bool m_ImportInProgress = false;
     bool m_StopRequested = false;

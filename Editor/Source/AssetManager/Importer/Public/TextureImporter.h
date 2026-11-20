@@ -25,6 +25,8 @@ public:
 
 public:
 	virtual EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr) override;
+	static tagTextureImportDesc GetDefaultImportDesc(const filesystem::path& sourcePath);
+	static filesystem::path ResolveOutputPath(const filesystem::path& sourcePath, const filesystem::path& destination);
 
 #pragma region Member Variables
 private:

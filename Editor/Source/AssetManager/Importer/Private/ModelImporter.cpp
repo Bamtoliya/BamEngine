@@ -5,6 +5,7 @@
 #include "ModelImportTask.h"
 #include "ModelConverter.h"
 #include "TextureImporter.h"
+#include "AssetWorkerHost.h"
 #include "ResourceManager.h"
 #include "Logger.h"
 #include "PlatformPath.h"
@@ -174,6 +175,26 @@ namespace Editor
 		bool MeshCommitComplete = false;
 		double SnapshotMs = 0.0;
 		std::future<SavedMesh> Saving;
+		struct TextureBakeRequest
+		{
+			filesystem::path SourcePath;
+			filesystem::path BamtexPath;
+			filesystem::path DdsPath;
+			tagTextureImportDesc Options;
+		};
+		struct TextureBake
+		{
+			filesystem::path BamtexPath;
+			std::future<EResult> Future;
+		};
+		std::vector<TextureBakeRequest> PendingTextureBakes;
+		size_t NextTextureBake = 0;
+		std::optional<TextureBake> ActiveTextureBake;
+		filesystem::path TextureOutputDirectory;
+		unordered_map<wstring, bool> TextureBakeResults;
+		unordered_map<wstring, bool> EmbeddedTextureFilesWritten;
+		bool TextureBakesScheduled = false;
+		bool TextureBakesComplete = false;
 
 		std::vector<Bone> SkeletonBones;
 		uint64 SkinBindingSignature = 0;
@@ -344,6 +365,275 @@ namespace
 
 		staged.Owned = false;
 		return EResult::Success;
+	}
+
+	EResult ImportTextureFallback(const filesystem::path& sourcePath, const filesystem::path& outputDir,
+		tagTextureImportDesc options)
+	{
+		struct ImporterDeleter
+		{
+			void operator()(TextureImporter* importer) const
+			{
+				if (importer)
+					Safe_Release(importer);
+			}
+		};
+		std::unique_ptr<TextureImporter, ImporterDeleter> importer(TextureImporter::Create());
+		if (!importer)
+			return EResult::Fail;
+
+		return importer->Import(sourcePath, outputDir, &options);
+	}
+
+	tagTextureImportDesc MakeModelTextureImportDesc(uint32 slot, ETextureCompressionMode mode)
+	{
+		tagTextureImportDesc desc{};
+		if (slot == 1)
+		{
+			desc.TargetFormat = Engine::ETextureFormat::BC5_RG_UNORM;
+			desc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::NormalMap;
+		}
+		else if (slot == 2)
+		{
+			desc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+			desc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality;
+		}
+		else
+		{
+			desc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
+			desc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::SRGB;
+		}
+		desc.CompressFlags = ApplyTextureCompressionMode(desc.CompressFlags, mode, desc.TargetFormat);
+		return desc;
+	}
+
+	bool StartNextModelTextureBake(ModelFinalizeState& state)
+	{
+		if (state.NextTextureBake >= state.PendingTextureBakes.size())
+			return false;
+
+		const auto& request = state.PendingTextureBakes[state.NextTextureBake++];
+		const auto& outputDir = state.TextureOutputDirectory;
+		auto promise = std::make_shared<std::promise<EResult>>();
+		auto future = promise->get_future();
+		const bool queued = AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().EnqueueImportTexture(
+			request.SourcePath, request.BamtexPath, request.DdsPath, request.Options.TargetFormat,
+			request.Options.CompressFlags,
+			[promise, sourcePath = request.SourcePath, outputDir, options = request.Options]
+			(AssetWorkerHost::TextureImportResult result)
+			{
+				try
+				{
+					EResult importResult = EResult::Fail;
+					if (result == AssetWorkerHost::TextureImportResult::OutputReady)
+						importResult = EResult::Success;
+					else if (result == AssetWorkerHost::TextureImportResult::Unavailable)
+						importResult = ImportTextureFallback(sourcePath, outputDir, options);
+					else if (result == AssetWorkerHost::TextureImportResult::Cancelled)
+						BAM_LOG(Info, "Editor", "Asset", "Model texture worker import cancelled: {}",
+							WStrToStr(sourcePath.wstring()));
+					promise->set_value(importResult);
+				}
+				catch (...)
+				{
+					promise->set_exception(std::current_exception());
+				}
+			});
+
+		if (queued)
+		{
+			state.ActiveTextureBake.emplace(ModelFinalizeState::TextureBake{ request.BamtexPath, std::move(future) });
+		}
+		else
+		{
+			state.ActiveTextureBake.emplace(ModelFinalizeState::TextureBake{ request.BamtexPath,
+				std::async(std::launch::async, [request, outputDir]()
+				{
+					return ImportTextureFallback(request.SourcePath, outputDir, request.Options);
+				}) });
+		}
+		return true;
+	}
+
+	EResult ScheduleModelTextureBakes(ModelFinalizeState& state, const PreparedModelData& data,
+		const filesystem::path& outputDir)
+	{
+		state.TextureBakesScheduled = true;
+		const auto& settings = state.Settings;
+		if (!settings.SaveToFile || !settings.BakeTexturesToDDS ||
+			!HasFlag(settings.ImportOptions, EModelImportOption::Materials) || data.Materials.empty())
+		{
+			state.TextureBakesComplete = true;
+			return EResult::Success;
+		}
+
+		auto& manager = ResourceManager::Get();
+		auto nameCounts = state.NameCounts;
+		const wstring sourceStem = data.SourcePath.stem().wstring();
+		if (HasFlag(settings.ImportOptions, EModelImportOption::Skeleton) && !data.Bones.empty())
+			MakeUniqueStem(sourceStem, L"Skeleton", L"Skeleton", 0, nameCounts);
+
+		if (HasFlag(settings.ImportOptions, EModelImportOption::Animations))
+		{
+			for (uint32 animIdx = 0; animIdx < static_cast<uint32>(data.Animations.size()); ++animIdx)
+				MakeUniqueStem(sourceStem, StrToWStr(data.Animations[animIdx].Name), L"Anim", animIdx, nameCounts);
+		}
+
+		const auto materialDir = state.ModelDesc.UseMaterialSubfolder ? outputDir / L"Materials" : outputDir;
+		const auto textureDir = state.ModelDesc.UseTextureSubfolder ? outputDir / L"Textures" : outputDir;
+		const auto resolvedTextureDir = Engine::PlatformPath::ResolveProjectRelative(textureDir);
+		state.TextureOutputDirectory = resolvedTextureDir;
+		unordered_map<wstring, size_t> requestByOutput;
+
+		for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
+		{
+			const auto& srcMat = data.Materials[matIdx];
+			const wstring matStem = MakeUniqueStem(sourceStem, StrToWStr(srcMat.Name), L"Mat",
+				static_cast<uint32>(matIdx), nameCounts);
+			const wstring matKey = NormalizePath((materialDir / (matStem + L".bammatinst")).wstring());
+			if (const EResult result = ValidateImportOutput(manager, matKey, settings.SaveToFile, settings.Overwrite);
+				result != EResult::Success)
+			{
+				return result;
+			}
+
+			if (settings.Overwrite && !settings.OverwriteMaterials)
+			{
+				auto existingHandle = manager.FindHandleByKey(matKey);
+				bool hasExistingMaterial = manager.IsValid(existingHandle);
+				if (!hasExistingMaterial)
+				{
+					std::error_code ec;
+					hasExistingMaterial = filesystem::exists(Engine::PlatformPath::ResolveUri(matKey), ec);
+					if (ec)
+					{
+						BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", WStrToStr(matKey), ec.message());
+						return EResult::Fail;
+					}
+				}
+				if (hasExistingMaterial)
+					continue;
+			}
+
+			const Tools::ModelConversion::TextureBindingInfo* bindings[] = {
+				&srcMat.BaseColorTexture, &srcMat.NormalTexture,
+				&srcMat.MetallicRoughnessTexture, &srcMat.EmissiveTexture
+			};
+			for (uint32 slot = 0; slot < 4; ++slot)
+			{
+				const auto& info = *bindings[slot];
+				if (info.Path.empty() && info.EmbeddedData.empty())
+					continue;
+
+				const bool embedded = info.IsEmbedded && !info.EmbeddedData.empty();
+				filesystem::path sourcePath;
+				if (embedded)
+				{
+					static constexpr const wchar_t* slotNames[] = { L"Albedo", L"Normal", L"ORM", L"Emissive" };
+					sourcePath = Engine::PlatformPath::ResolveProjectRelative(
+						textureDir / (matStem + L"_" + slotNames[slot] + L".png"));
+
+					std::error_code ec;
+					const bool exists = filesystem::exists(sourcePath, ec);
+					const bool shouldWrite = !exists || settings.Overwrite;
+					const EResult saveResult = ec ? EResult::Fail
+						: (shouldWrite ? SaveEmbeddedTexture(sourcePath, info.EmbeddedData) : EResult::Success);
+					if (saveResult != EResult::Success)
+					{
+						BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
+							WStrToStr(sourcePath.wstring()), ResultToString(saveResult));
+						return saveResult;
+					}
+					state.EmbeddedTextureFilesWritten[sourcePath.wstring()] = shouldWrite;
+				}
+				else
+				{
+					sourcePath = ModelImporter::ResolveExternalTexturePath(data.SourcePath, outputDir, info.Path);
+					if (sourcePath.empty())
+						continue;
+				}
+
+				const auto extension = sourcePath.extension().string();
+				if (_stricmp(extension.c_str(), ".dds") == 0 || _stricmp(extension.c_str(), ".bamtex") == 0)
+					continue;
+
+				filesystem::path bamtexPath = resolvedTextureDir / sourcePath.filename();
+				bamtexPath.replace_extension(".bamtex");
+				std::error_code ec;
+				const bool bakedExists = filesystem::exists(bamtexPath, ec);
+				if (ec)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Failed to inspect baked texture: path={}, error={}",
+						WStrToStr(bamtexPath.wstring()), ec.message());
+					return EResult::Fail;
+				}
+				if (bakedExists && !settings.Overwrite)
+					continue;
+
+				filesystem::create_directories(resolvedTextureDir, ec);
+				if (ec)
+				{
+					BAM_LOG(Error, "Editor", "Asset", "Failed to create texture output directory: path={}, error={}",
+						WStrToStr(resolvedTextureDir.wstring()), ec.message());
+					return EResult::Fail;
+				}
+
+				filesystem::path ddsPath = bamtexPath;
+				ddsPath.replace_extension(".dds");
+				ModelFinalizeState::TextureBakeRequest request{
+					sourcePath, bamtexPath, ddsPath, MakeModelTextureImportDesc(slot, settings.TextureCompression) };
+				const wstring outputKey = bamtexPath.wstring();
+				const auto found = requestByOutput.find(outputKey);
+				if (found == requestByOutput.end())
+				{
+					requestByOutput.emplace(outputKey, state.PendingTextureBakes.size());
+					state.PendingTextureBakes.push_back(std::move(request));
+				}
+				else
+				{
+					state.PendingTextureBakes[found->second] = std::move(request);
+				}
+			}
+		}
+
+		state.TextureBakesComplete = !StartNextModelTextureBake(state);
+		return EResult::Success;
+	}
+
+	bool PollModelTextureBakes(ModelFinalizeState& state)
+	{
+		if (!state.ActiveTextureBake ||
+			state.ActiveTextureBake->Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+			return false;
+
+		auto& bake = *state.ActiveTextureBake;
+		EResult result = EResult::Fail;
+		try
+		{
+			result = bake.Future.get();
+		}
+		catch (const std::exception& exception)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Model texture bake failed: path={}, error={}",
+				WStrToStr(bake.BamtexPath.wstring()), exception.what());
+		}
+		catch (...)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Model texture bake failed: path={}",
+				WStrToStr(bake.BamtexPath.wstring()));
+		}
+
+		const bool succeeded = result == EResult::Success;
+		state.TextureBakeResults[bake.BamtexPath.wstring()] = succeeded;
+		if (!succeeded)
+		{
+			BAM_LOG(Warn, "Editor", "Asset", "Model texture bake failed; using source texture: {}",
+				WStrToStr(bake.BamtexPath.wstring()));
+		}
+
+		state.ActiveTextureBake.reset();
+		state.TextureBakesComplete = !StartNextModelTextureBake(state);
+		return state.TextureBakesComplete;
 	}
 
 	bool BackupMeshOutput(ModelFinalizeState::SavedMesh& saved, std::error_code& ec)
@@ -785,19 +1075,27 @@ namespace
 							return EResult::Success;
 						}
 
-						std::error_code ec;
-						const bool exists = filesystem::exists(texFilePath, ec);
-						const bool shouldWrite = !exists || settings.Overwrite;
-						const auto result = ec ? EResult::Fail
-							: (shouldWrite ? SaveEmbeddedTexture(texFilePath, info.EmbeddedData) : EResult::Success);
-
-						if (result != EResult::Success)
+						const auto prewritten = state.EmbeddedTextureFilesWritten.find(texFilePath.wstring());
+						if (prewritten != state.EmbeddedTextureFilesWritten.end())
 						{
-							BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
-								WStrToStr(texFilePath.wstring()), ResultToString(result));
-							return result;
+							wroteEmbeddedFile = prewritten->second;
 						}
-						wroteEmbeddedFile = shouldWrite;
+						else
+						{
+							std::error_code ec;
+							const bool exists = filesystem::exists(texFilePath, ec);
+							const bool shouldWrite = !exists || settings.Overwrite;
+							const auto result = ec ? EResult::Fail
+								: (shouldWrite ? SaveEmbeddedTexture(texFilePath, info.EmbeddedData) : EResult::Success);
+
+							if (result != EResult::Success)
+							{
+								BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
+									WStrToStr(texFilePath.wstring()), ResultToString(result));
+								return result;
+							}
+							wroteEmbeddedFile = shouldWrite;
+						}
 					}
 					else
 					{
@@ -809,7 +1107,6 @@ namespace
 						}
 					}
 
-					// 텍스처 베이킹 옵션(BakeTexturesToDDS) 처리: 내장 및 외부 텍스처를 BC7/BC5 .bamtex 및 .dds로 오프라인 베이킹
 					if (settings.SaveToFile && settings.BakeTexturesToDDS && !texFilePath.empty())
 					{
 						const auto ext = texFilePath.extension().string();
@@ -817,45 +1114,39 @@ namespace
 						if (!isAlreadyBaked)
 						{
 							const auto resolvedTextureDir = Engine::PlatformPath::ResolveProjectRelative(textureDir);
-							const auto destStem = texFilePath.stem().wstring();
-							const auto bakedBamtexPath = resolvedTextureDir / (destStem + L".bamtex");
+							filesystem::path bakedBamtexPath = resolvedTextureDir / texFilePath.filename();
+							bakedBamtexPath.replace_extension(".bamtex");
 
 							std::error_code checkEc;
 							const bool bakedExists = filesystem::exists(bakedBamtexPath, checkEc);
+							if (checkEc)
+							{
+								BAM_LOG(Error, "Editor", "Asset", "Failed to inspect baked texture: path={}, error={}",
+									WStrToStr(bakedBamtexPath.wstring()), checkEc.message());
+								return EResult::Fail;
+							}
 							const bool needBake = !bakedExists || settings.Overwrite;
 
 							if (needBake)
 							{
-								tagTextureImportDesc texDesc{};
-								if (slot == 1) // Normal
+								const auto result = state.TextureBakeResults.find(bakedBamtexPath.wstring());
+								if (result == state.TextureBakeResults.end())
 								{
-									texDesc.TargetFormat = Engine::ETextureFormat::BC5_RG_UNORM;
-									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::NormalMap;
+									BAM_LOG(Error, "Editor", "Asset", "Missing model texture bake result: {}",
+										WStrToStr(bakedBamtexPath.wstring()));
+									return EResult::Fail;
 								}
-								else if (slot == 2) // ORM / MetallicRoughness
+								if (result->second)
 								{
-									texDesc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
-									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality;
-								}
-								else // Albedo (0), Emissive (3), etc.
-								{
-									texDesc.TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
-									texDesc.CompressFlags = ECompressFlags::GenerateMipMaps | ECompressFlags::HighQuality | ECompressFlags::SRGB;
-								}
-
-								filesystem::create_directories(resolvedTextureDir, checkEc);
-								TextureImporter* texImporter = TextureImporter::Create();
-								if (texImporter)
-								{
-									if (texImporter->Import(texFilePath, resolvedTextureDir, &texDesc) == EResult::Success)
+									if (!filesystem::exists(bakedBamtexPath, checkEc) || checkEc)
 									{
-										if (filesystem::exists(bakedBamtexPath, checkEc))
-										{
-											texFilePath = bakedBamtexPath;
-											wroteEmbeddedFile = true;
-										}
+										BAM_LOG(Error, "Editor", "Asset", "Baked texture output is missing: path={}, error={}",
+											WStrToStr(bakedBamtexPath.wstring()), checkEc.message());
+										return EResult::Fail;
 									}
-									Safe_Release(texImporter);
+
+									texFilePath = bakedBamtexPath;
+									wroteEmbeddedFile = true;
 								}
 							}
 							else if (bakedExists)
@@ -1607,6 +1898,18 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 
 			return std::nullopt;
 		}
+
+		if (!state->TextureBakesScheduled)
+		{
+			if (const EResult result = ScheduleModelTextureBakes(*state, data, outputDir);
+				result != EResult::Success)
+			{
+				return finish(result);
+			}
+		}
+
+		if (!state->TextureBakesComplete && !PollModelTextureBakes(*state))
+			return std::nullopt;
 
 		const auto commitStart = Clock::now();
 		const EResult commitResult = CommitPreparedModel(*state, data, outputDir);

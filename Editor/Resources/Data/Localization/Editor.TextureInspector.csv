@@ -25,3 +25,10 @@ TextureInspector,TargetFormat,Target Format,대상 포맷
 TextureInspector,TextureConverted,Texture has been successfully converted to .bamtex asynchronously!,텍스처를 .bamtex로 비동기 변환했습니다.
 TextureInspector,Title,Texture Inspector,텍스처 인스펙터
 TextureInspector,UseGPU,Use GPU Compression,GPU 압축 사용
+TextureInspector,CompressionMode,Compression mode,압축 방식
+TextureInspector,CompressionCpuStandard,CPU standard,CPU 표준
+TextureInspector,CompressionCpuFast,CPU fast BC7,CPU 빠른 BC7
+TextureInspector,CompressionGpu,GPU BC7,GPU BC7
+TextureInspector,CompressionModeTooltip,Fast BC7 may reduce quality. GPU supports BC7 only and falls back to CPU if unavailable. Other formats use CPU.,빠른 BC7은 화질이 낮아질 수 있습니다. GPU는 BC7만 지원하며 사용할 수 없으면 CPU로 대체합니다. 다른 포맷은 CPU를 사용합니다.
+TextureInspector,ImportFailed,Texture or sprite conversion failed. Check the console for details.,텍스처 또는 스프라이트 변환에 실패했습니다. 콘솔에서 원인을 확인하세요.
+TextureInspector,DdsImportUnsupported,DDS source conversion is not supported.,DDS 원본 변환은 지원하지 않습니다.

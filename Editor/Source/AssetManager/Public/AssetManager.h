@@ -31,7 +31,8 @@ public:
 public:
 	void ExecuteAsync(std::function<EResult()> task);
 	EResult Import(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
-	void ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
+	void ImportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr,
+		std::function<void(EResult)> finished = {});
 	EResult Export(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
 	void ExportAsync(const filesystem::path& sourcePath, const filesystem::path& destDir = {}, void* arg = nullptr);
 public:
@@ -62,6 +63,7 @@ private:
 		std::future<EResult> Future;
 		std::function<std::optional<EResult>(EResult)> Complete;
 		std::optional<EResult> PreparedResult;
+		std::function<void(EResult)> Finished;
 	};
 
 	vector<AsyncTask> m_PendingTasks;

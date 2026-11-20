@@ -4,7 +4,7 @@
 - 상태는 단계별 로드맵을 따른다. Phase 5는 아틀라스 배치 계산과 CPU 버킷 기반이 있으며, 실제 렌더 제출 연결과 성능 검증을 계획한다.
 - 선행 조건: `Sprite`, `SpriteAnimation`, `SpriteRendererComponent`, `SpriteAnimationSystem` 기본 구조 기구축 완료
 - 대상 모듈은 `Engine/Source/Sprite`, `Engine/Source/Tilemap`, `Engine/Source/Render`, `Editor/Source/ImGui/ResourceEditor`, `Editor/Source/ImGui/TilemapEditor`다.
-- 연관 문서: [EngineDevelopmentPlan.md 14절 L](EngineDevelopmentPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md), [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
+- 연관 문서: [EngineDevelopmentPlan.md 14절 L](EngineDevelopmentPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md), [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [텍스처·스프라이트 편집기 통합 계획](TextureSpriteEditorIntegrationPlan.md)
 
 ---
 
