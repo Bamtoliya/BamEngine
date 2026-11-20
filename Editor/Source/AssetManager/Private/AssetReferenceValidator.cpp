@@ -235,6 +235,15 @@ namespace Editor
             return !relative.empty() && !relative.has_root_path() && *relative.begin() != "..";
         }
 
+        bool IsEmptyDirectory(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            if (!std::filesystem::is_directory(path, error) || error)
+                return false;
+            const std::filesystem::directory_iterator entries(path, error);
+            return !error && entries == std::filesystem::directory_iterator{};
+        }
+
         bool IsMountedReference(const std::filesystem::path& file)
         {
             using Path = Engine::PlatformPath;
@@ -824,6 +833,9 @@ namespace Editor
         }
         if (affected.empty())
             return impact;
+        if (includeInternal && impact.IsComplete &&
+            std::ranges::all_of(affected, IsEmptyDirectory))
+            return impact;
 
         auto scan = AssetReferenceValidator::ScanProject();
         impact.IsComplete = impact.IsComplete && std::ranges::none_of(scan.Issues, [](const auto& issue)
@@ -881,6 +893,14 @@ namespace Editor
                     return false;
                 canonicalMoves.push_back({ before, after });
             }
+            const bool movesOnlyEmptyDirectories = !canonicalMoves.empty() &&
+                std::ranges::all_of(canonicalMoves, [](const auto& move) { return IsEmptyDirectory(move.Before); });
+            if (movesOnlyEmptyDirectories)
+            {
+                if (impact) impact->IsComplete = true;
+                return true;
+            }
+
             // Resolve casing and relative paths once, before using component-wise prefix matching.
             auto scan = ScanProject();
             const bool complete = std::ranges::none_of(scan.Issues, [](const auto& issue)

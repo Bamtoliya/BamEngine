@@ -45,6 +45,34 @@ This document tracks implementation details, architectural decisions, and techni
 - **검증 상태**: `ShaderGraphCheck`에 미연결/연결 WPO 생성 검증을 추가하여 `x64-ninja-debug` 빌드 및 `ShaderGraphCheck` CTest 통과 사용자 확인.
 - **미검증**: 에디터 실환경 3D 프리뷰에서 `worldPositionOffset` 노드 연결 시 실제 정점 변위 렌더링 동작.
 
+### [2026-11-20] 콘텐츠 브라우저 삭제 영향 검사 hitch 완화
+
+- **원인**: `QueueFileDeletion()`이 삭제 확인창을 준비하기 전에 `AnalyzeDeletion()`을 동기 호출했다. 이 함수는 빈 폴더 삭제를 포함해 프로젝트 에셋 트리를 순회하고 저장된 참조 문서를 읽으므로 UI 스레드를 막을 수 있었다.
+- **변경**: 참조 영향 분석을 명시적으로 소유한 worker thread에서 실행하고, 확인창에 준비 상태와 취소를 먼저 표시한다. 검사 중 삭제 확정 및 다른 파일 명령을 막고, 취소·패널 종료 후 늦게 도착한 결과는 폐기한다. 취소는 삭제 요청을 취소하지만 이미 진행 중인 읽기 전용 스캔은 완료될 수 있다. 빈 폴더도 기존 참조 영향 결과 의미를 보존하도록 검사하며, 스캔만 UI 프레임에서 분리한다.
+- **수명·계측·회귀**: 경로 루트를 worker 시작 전에 초기화하고, `std::jthread`를 완료 처리 또는 패널 종료 시 join한다. 삭제 영향 분석 시간은 `DeleteImpact` 작업 통계에 남기되 완료 프레임 합계에는 넣지 않으며, `AssetReferenceCheck`에 해당 계측 회귀를 추가했다.
+- **로캘·UX**: 준비 상태 문구를 `Editor.ContentBrowser.csv`에 추가하고 삭제 취소·늦은 완료·기존 참조 영향과 Undo/Redo 확인 기준을 갱신했다. 생성 JSON은 직접 수정하지 않았으며 `GenerateLocalization`으로 동기화해야 한다.
+- **검증 상태**: 수정 파일의 `git diff --check`를 통과했다. 저장소의 학습 중심 작업 지침에 따라 빌드·CTest·실제 Editor 검증과 로캘 생성은 실행하지 않았다. 사용자 실행 명령:
+
+```powershell
+cmake --build --preset x64-debug --config Debug --target Editor AssetReferenceCheck AuditLocalization GenerateLocalization
+ctest --preset x64-debug --output-on-failure -R "AssetReferenceCheck|LocalizationAuditUtility"
+```
+
+- **범위 구분**: 삭제 후 콘텐츠 브라우저는 현재 디렉터리 목록을 다시 열거하며, Asset Reference Checker가 이미 열린 경우 별도의 자동 전체 검사를 예약할 수 있다. 이들은 확인창 전 삭제 영향 스캔과 다른 경로다. 실제 에디터에서 어느 단계에 남은 프레임 hitch가 있는지 확인하지 않았으므로, 이번 변경은 관측된 UI 스레드 스캔만 옮기고 이 경로들은 UX 점검에서 분리해 측정한다.
+
+### [2026-11-20] 콘텐츠 브라우저 이름 변경 참조 준비 hitch 완화
+
+- **원인**: `QueueAssetPathChanges()`가 `PrepareMoveReferences()`를 UI 스레드에서 호출하고, 이 함수는 이동 대상과 무관하게 프로젝트의 저장 문서를 전체 순회했다. 준비가 끝나야 모달 상태가 만들어져 큰 프로젝트에서는 확인창 전에 프레임 hitch가 발생할 수 있었다.
+- **변경**: 실제로 비어 있는 디렉터리 이동은 `PrepareMoveReferences()` 및 실행 직전 `AnalyzeMove()`에서 전체 프로젝트 스캔을 생략한다. 콘텐츠 브라우저는 빈 폴더의 빠른 경로에서도 열린 문서·프리팹 모드 보호를 유지한다. 그 밖의 이동 준비는 worker에서 실행하고 준비 중 모달에 상태와 취소를 표시하며, 취소되거나 브라우저가 닫힌 뒤 도착한 결과는 적용하지 않는다. 기존 실행 직전·Undo/Redo 참조 재검사는 유지한다.
+- **계측 및 회귀 사례**: 비동기 준비 시간은 작업별 시간 통계에 기록하되 완료 프레임 합계에는 더하지 않는다. `AssetReferenceCheck`에 다른 문서가 읽을 수 없는 상태에서도 빈 폴더 준비와 재검사가 완전한 무참조 결과를 반환하는 사례를 추가했다. 참조 타이밍 검사에는 백그라운드 시간과 프레임 합계 분리를 추가했다.
+- **로캘·UX 문서**: 준비 상태 문구를 `Editor.ContentBrowser.csv`에 추가하고 `ImGuiDevelopmentPlan.md`와 `EditorUXTestGuidelines.md`에 빈 폴더, 참조가 있는 작업, 취소·늦은 완료 검증 기준을 기록했다. 생성 JSON은 직접 편집하지 않았으며 기존 `GenerateLocalization` 경로로 동기화해야 한다.
+- **검증 상태**: 저장소의 학습 중심 작업 지침에 따라 빌드·테스트와 로캘 생성은 실행하지 않았다. 아래 명령으로 사용자가 검증해야 하며, 특히 실제 Editor에서 비어 있지 않은 폴더의 스캔 반응성, 빈 폴더 보호 차단, 취소 후 결과 폐기를 확인해야 한다.
+
+```powershell
+cmake --build --preset x64-debug --config Debug --target Editor AssetReferenceCheck AuditLocalization
+ctest --preset x64-debug --output-on-failure -R "AssetReferenceCheck|LocalizationAuditUtility"
+```
+
 ### BamAssetWorker 텍스처 변환 접근 위반 대응
 
 - 사용자가 `AssetWorkerTextureCheck` 실행 중 첫 요청의 `PROGRESS 3` 뒤 종료 코드 `0xC0000005`를 보고했다. 이는 DDS 변환 호출 중 또는 그 이후 `PROGRESS 4` 전 발생한 접근 위반이다.

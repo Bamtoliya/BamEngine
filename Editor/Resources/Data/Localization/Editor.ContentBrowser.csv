@@ -75,9 +75,12 @@ ContentBrowser,DeleteFilesConfirm,Delete {} selected items?,선택한 항목 {}�
 ContentBrowser,DeleteImpactCount,References from files that will remain: {},삭제 후에도 남는 파일의 참조 {}건
 ContentBrowser,DeleteImpactNone,No direct references found in saved project documents.,저장된 프로젝트 문서에서 직접 사용처를 찾지 못했습니다.
 ContentBrowser,DeleteImpactIncomplete,Some paths or documents could not be checked. Other references may exist.,일부 경로나 문서를 검사하지 못했습니다. 확인되지 않은 사용처가 있을 수 있습니다.
+ContentBrowser,DeleteImpactScanFailed,Saved references could not be checked. The deletion was not started; check the log.,저장된 참조를 확인하지 못해 삭제를 시작하지 않았습니다. 로그를 확인하세요.
+ContentBrowser,DeleteReferenceScanPending,Checking saved references. You can cancel this deletion while the check finishes in the background.,저장된 참조를 확인하고 있습니다. 검사는 백그라운드에서 계속되며 삭제는 취소할 수 있습니다.
 ContentBrowser,FileHistoryFailed,The file operation could not complete. Check the log for the affected paths.,파일 작업을 완료하지 못했습니다. 해당 경로는 로그를 확인하세요.
 ContentBrowser,FileHistoryRollbackFailed,Some files could not be restored. File history was cleared. Check the log and recovery folder.,일부 파일을 원래 위치로 돌리지 못했습니다. 파일 이력을 지웠습니다. 로그와 복구 폴더를 확인하세요.
 ContentBrowser,MoveReferenceScanFailed,References could not be prepared completely. Fix unreadable documents before moving.,참조 갱신을 준비하지 못했습니다. 읽을 수 없는 문서를 확인한 뒤 다시 이동하세요.
+ContentBrowser,MoveReferenceScanPending,Checking saved references. You can cancel this move while the check finishes in the background.,저장된 참조를 확인하고 있습니다. 검사는 백그라운드에서 계속되며 이동은 취소할 수 있습니다.
 ContentBrowser,MoveDocumentConflict,Save or discard edits and finish document operations. Exit prefab mode or release unsupported editors before retrying.,변경사항을 저장하거나 폐기하고 문서 작업을 마치세요. 프리팹 모드를 종료하거나 경로 동기화를 지원하지 않는 편집기를 해제한 뒤 다시 시도하세요.
 ContentBrowser,MoveLiveStateConflict,A loaded resource retains an unsupported path or conflicts with the destination. The files were not moved.,로드된 리소스에 자동 갱신을 지원하지 않는 경로가 있거나 목적지 캐시와 충돌합니다. 파일을 이동하지 않았습니다.
 ContentBrowser,MoveEntityClipboardCleared,Entity copy data was cleared after the asset path change. Copy entities again before pasting.,에셋 경로 변경으로 엔티티 복사 내용을 비웠습니다. 붙여넣기 전에 엔티티를 다시 복사하세요.

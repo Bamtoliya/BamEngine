@@ -254,8 +254,19 @@ static void RequestAssetReferenceScanRefresh(AssetReferenceChanges changes = { t
 		references->RequestScanRefresh(std::move(changes));
 }
 
+static void PrimeAssetReferencePathRoots()
+{
+	static_cast<void>(Engine::PlatformPath::GetProjectRoot());
+	static_cast<void>(Engine::PlatformPath::GetProjectAssetRoot());
+	static_cast<void>(Engine::PlatformPath::GetEngineResourceRoot());
+	static_cast<void>(Engine::PlatformPath::GetEditorResourceRoot());
+}
+
 void ContentBrowserPanel::Update(f32 dt)
 {
+	ProcessMovePreparation();
+	ProcessDeletionPreparation();
+
 	if (m_FileListener && m_FileListener->HasReferenceChanges())
 		RequestAssetReferenceScanRefresh(m_FileListener->TakeReferenceChanges());
 
@@ -263,6 +274,52 @@ void ContentBrowserPanel::Update(f32 dt)
 	{
 		m_ImportPreviewWidget.BeginFrame(dt);
 		m_ImportPreviewWidget.Submit(dt);
+	}
+}
+
+void ContentBrowserPanel::ProcessMovePreparation()
+{
+	if (!m_MovePreparationPending)
+		return;
+	if (!m_Open)
+		m_MovePreparationCancelled = true;
+	if (!m_MovePreparation.valid() ||
+		m_MovePreparation.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+		return;
+
+	m_MovePreparationPending = false;
+	try
+	{
+		auto result = m_MovePreparation.get();
+		AssetManager::Get().RecordBackgroundAssetReferenceTiming(
+			AssetReferenceTimingKind::MovePreparation, result.ElapsedMs);
+		if (m_MovePreparationCancelled)
+		{
+			m_MovePreparationCancelled = false;
+			ClearPendingFileMove();
+			return;
+		}
+
+		m_MoveImpact = std::move(result.Impact);
+		m_MoveReferences = std::move(result.References);
+		m_MoveReferencesReady = result.ReferencesReady;
+		m_MoveDocumentsAvailable = m_MoveReferencesReady && CanApplyAssetMove(m_PendingFileMove, m_MoveReferences);
+		if (m_PendingRename && m_MoveReferencesReady && m_MoveDocumentsAvailable && m_MoveImpact.References.empty())
+			ConfirmFileMove();
+	}
+	catch (const std::exception& error)
+	{
+		if (m_MovePreparationCancelled)
+		{
+			m_MovePreparationCancelled = false;
+			ClearPendingFileMove();
+			return;
+		}
+
+		EDITOR_LOG_WARN("Could not prepare asset move references: {}", error.what());
+		m_MoveReferencesReady = false;
+		m_MoveImpact.IsComplete = false;
+		m_MoveDocumentsAvailable = false;
 	}
 }
 
@@ -404,6 +461,51 @@ void ContentBrowserPanel::ProcessEvent(const SDL_Event* event)
 }
 void ContentBrowserPanel::Free()
 {
+	m_DeletionPreparationCancelled = true;
+	if (m_DeletionPreparation.valid())
+	{
+		m_DeletionPreparation.wait();
+		if (m_DeletionPreparationWorker.joinable())
+			m_DeletionPreparationWorker.join();
+		try
+		{
+			auto result = m_DeletionPreparation.get();
+			if (result.Error)
+				std::rethrow_exception(result.Error);
+		}
+		catch (const std::exception& error)
+		{
+			EDITOR_LOG_WARN("Could not finish deletion impact analysis during shutdown: {}", error.what());
+		}
+		catch (...)
+		{
+			EDITOR_LOG_WARN("Could not finish deletion impact analysis during shutdown: unknown worker exception");
+		}
+	}
+	else if (m_DeletionPreparationWorker.joinable())
+		m_DeletionPreparationWorker.join();
+	m_DeletionPreparationPending = false;
+	m_DeletionPreparationCancelled = false;
+	m_PendingFileDeletion.clear();
+	m_DeletionImpact = {};
+
+	m_MovePreparationCancelled = true;
+	if (m_MovePreparation.valid())
+	{
+		m_MovePreparation.wait();
+		try
+		{
+			m_MovePreparation.get();
+		}
+		catch (const std::exception& error)
+		{
+			EDITOR_LOG_WARN("Could not finish asset move preparation during shutdown: {}", error.what());
+		}
+	}
+	m_MovePreparationPending = false;
+	m_MovePreparationCancelled = false;
+	ClearPendingFileMove();
+
 	// 감시 스레드가 종료될 때까지 리스너와 패널 상태를 유지합니다.
 	Safe_Delete(m_FileWatcher);
 	m_WatchID = 0;
@@ -420,7 +522,8 @@ void ContentBrowserPanel::Free()
 bool ContentBrowserPanel::CanRenameTarget() const
 {
 	if (!m_Open || !PIEManager::Get().IsEditing() || m_RenameTargetPath.empty() || !m_RenamingPath.empty() ||
-		!m_PendingFileMove.empty() || !m_PendingFileDeletion.empty())
+		!m_PendingFileMove.empty() || !m_PendingFileDeletion.empty() || m_MovePreparationPending ||
+		m_DeletionPreparationPending)
 		return false;
 
 	if (Engine::PlatformPath::IsReadOnlyTarget(m_RenameTargetPath))
@@ -1164,7 +1267,8 @@ void ContentBrowserPanel::PasteFiles(const filesystem::path& directory)
 void ContentBrowserPanel::QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory,
 	bool fromClipboard)
 {
-	if (paths.empty() || !m_PendingFileMove.empty() || !m_PendingFileDeletion.empty())
+	if (paths.empty() || !m_PendingFileMove.empty() || !m_PendingFileDeletion.empty() ||
+		m_DeletionPreparationPending)
 		return;
 	vector<AssetPathMove> moves;
 	for (const auto& path : paths)
@@ -1180,7 +1284,8 @@ void ContentBrowserPanel::QueueFileMove(const vector<filesystem::path>& paths, c
 
 void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& paths, bool fromClipboard, bool rename)
 {
-	if (paths.empty() || !m_PendingFileMove.empty() || !m_PendingFileDeletion.empty())
+	if (paths.empty() || !m_PendingFileMove.empty() || !m_PendingFileDeletion.empty() ||
+		m_MovePreparationPending || m_MovePreparation.valid() || m_DeletionPreparationPending)
 		return;
 	try
 	{
@@ -1194,6 +1299,14 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		const auto destinationIdentity = ReadBrowserFileIdentity(destination);
 		vector<FileMove> moves;
 		vector<filesystem::path> sources;
+		const bool onlyEmptyDirectories = std::ranges::all_of(paths, [](const auto& change)
+		{
+			std::error_code error;
+			if (!filesystem::is_directory(change.Before, error) || error)
+				return false;
+			const filesystem::directory_iterator entries(change.Before, error);
+			return !error && entries == filesystem::directory_iterator{};
+		});
 		for (const auto& change : paths)
 		{
 			const auto source = change.Before.lexically_normal();
@@ -1222,9 +1335,51 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		m_MoveReferences = std::move(references);
 		m_MoveReferencesReady = referencesReady;
 		m_PendingFileMove = std::move(moves);
-		if (rename && referencesReady && m_MoveDocumentsAvailable && m_MoveImpact.References.empty())
-			ConfirmFileMove();
+		m_MoveImpact = {};
+		m_MoveReferences.clear();
+		m_MoveReferencesReady = false;
+		m_MoveDocumentsAvailable = false;
+		m_MovePreparationCancelled = false;
+
+		if (onlyEmptyDirectories)
+		{
+			const auto referenceStart = std::chrono::steady_clock::now();
+			m_MoveReferencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, m_MoveReferences, &m_MoveImpact);
+			AssetManager::Get().RecordAssetReferenceTiming(
+				AssetReferenceTimingKind::MovePreparation, ImGui::GetFrameCount(), referenceStart);
+			m_MoveDocumentsAvailable = m_MoveReferencesReady &&
+				CanApplyAssetMove(m_PendingFileMove, m_MoveReferences);
+			if (rename && m_MoveReferencesReady && m_MoveDocumentsAvailable && m_MoveImpact.References.empty())
+				ConfirmFileMove();
+			return;
+		}
+
+		// Resolve lazy path roots on the editor thread before using them on a worker.
+		PrimeAssetReferencePathRoots();
+		m_MovePreparationPending = true;
+		m_MovePreparation = std::async(std::launch::async, [paths]
+		{
+			MovePreparationResult result;
+			const auto started = std::chrono::steady_clock::now();
+			result.ReferencesReady = AssetReferenceValidator::PrepareMoveReferences(
+				paths, result.References, &result.Impact);
+			result.ElapsedMs = std::chrono::duration<double, std::milli>(
+	catch (const std::exception& error)
+	{
+		m_MovePreparationPending = false;
+		m_MoveReferencesReady = false;
+		m_MoveImpact.IsComplete = false;
+		m_MoveDocumentsAvailable = false;
+		EDITOR_LOG_WARN("Could not start asset move preparation: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.MoveReferenceScanFailed"), ELogLevel::Warn);
 	}
+				std::chrono::steady_clock::now() - started).count();
+			return result;
+		});
+	}
+	if (m_MovePreparationPending)
+		m_MovePreparationCancelled = true;
 	catch (const filesystem::filesystem_error& error)
 	{
 		EDITOR_LOG_WARN("Could not prepare file move: {}", error.what());
@@ -1241,6 +1396,8 @@ void ContentBrowserPanel::ClearPendingFileMove()
 	m_MoveDestinationIdentity = {};
 	m_MoveFromClipboard = false;
 	m_PendingRename = false;
+		if (m_MovePreparationPending)
+			return;
 	m_MoveImpact = {};
 	m_MoveReferences.clear();
 	m_MoveReferencesReady = false;
@@ -1304,17 +1461,24 @@ void ContentBrowserPanel::DrawFileMoveConfirmation()
 	ImGui::TextUnformatted(LOCAL_FMT(m_PendingRename ? "ContentBrowser.RenameFilesConfirm" : "ContentBrowser.MoveFilesConfirm",
 		m_PendingFileMove.size()).c_str());
 	DrawFileMovePaths();
-	ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferencesNotice"));
-	DrawFileReferenceImpact(m_MoveImpact,
-		m_PendingRename ? "ContentBrowser.RenameImpactCount" : "ContentBrowser.MoveImpactCount");
+	if (m_MovePreparationPending)
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferenceScanPending"));
+	else
+	{
+		if (!m_MoveReferences.empty())
+			ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferencesNotice"));
+		DrawFileReferenceImpact(m_MoveImpact,
+			m_PendingRename ? "ContentBrowser.RenameImpactCount" : "ContentBrowser.MoveImpactCount");
+	}
 	const bool documentsAvailable = m_MoveDocumentsAvailable;
-	if (!m_MoveReferencesReady)
+	if (!m_MovePreparationPending && !m_MoveReferencesReady)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferenceScanFailed"));
-	if (!documentsAvailable)
+	if (!m_MovePreparationPending && !documentsAvailable)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveDocumentConflict"));
 	const EditorUI::DialogAction actions[] = {
 		{ "EditorCommon.Cancel" },
-		{ titleKey, CanTransferTo(m_MoveDestination) && m_MoveReferencesReady && documentsAvailable }
+		{ titleKey, !m_MovePreparationPending && CanTransferTo(m_MoveDestination) &&
+			m_MoveReferencesReady && documentsAvailable }
 	};
 	const int action = EditorUI::DialogButtonBar("ContentBrowserMoveActions", actions, IM_ARRAYSIZE(actions));
 	if (action >= 0)
@@ -1702,7 +1866,8 @@ void ContentBrowserPanel::SubmitFileMoves(vector<FileMove> moves, const char* la
 
 bool ContentBrowserPanel::CanUseFileCommands() const
 {
-	return m_Open && m_RenamingPath.empty() && PIEManager::Get().IsEditing();
+	return m_Open && m_RenamingPath.empty() && !m_MovePreparationPending &&
+		!m_DeletionPreparationPending && PIEManager::Get().IsEditing();
 }
 
 bool ContentBrowserPanel::CanUndoFileEdit() const
@@ -1743,6 +1908,14 @@ bool ContentBrowserPanel::CanDeleteSelectedFiles() const
 }
 
 void ContentBrowserPanel::DeleteSelectedFiles()
+	const auto resetPreparation = [this]
+	{
+		m_DeletionPreparationPending = false;
+		m_DeletionPreparationCancelled = false;
+		m_DeletionPreparation = {};
+		m_PendingFileDeletion.clear();
+		m_DeletionImpact = {};
+	};
 {
 	if (m_CurrentDirectory == m_LastWatchedDirectory)
 		QueueFileDeletion(GetSelectedFilePaths());
@@ -1750,7 +1923,7 @@ void ContentBrowserPanel::DeleteSelectedFiles()
 
 void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& paths)
 {
-	if (!CanDeleteFiles(paths))
+	if (!CanDeleteFiles(paths) || m_DeletionPreparationPending || m_DeletionPreparation.valid())
 		return;
 
 	try
@@ -1768,14 +1941,116 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 		}
 
 		vector<filesystem::path> targets;
+		std::promise<DeletionPreparationResult> completion;
+		m_DeletionPreparation = completion.get_future();
+		m_DeletionPreparationPending = true;
+		m_DeletionPreparationWorker = std::jthread(
+			[targets = std::move(targets), completion = std::move(completion)]() mutable
+		{
+			using Clock = std::chrono::steady_clock;
+			using Milliseconds = std::chrono::duration<double, std::milli>;
+			const auto started = Clock::now();
+			DeletionPreparationResult result;
+			try
+			{
+				result.Impact = AssetReferenceValidator::AnalyzeDeletion(targets);
+			}
+			catch (...)
+			{
+				result.Error = std::current_exception();
+				result.Impact.IsComplete = false;
+			}
+			result.ElapsedMs = Milliseconds(Clock::now() - started).count();
+			completion.set_value(std::move(result));
+		});
 		targets.reserve(moves.size());
 		for (const auto& move : moves)
 			targets.push_back(move.Before);
-		const auto referenceStart = std::chrono::steady_clock::now();
-		m_DeletionImpact = AssetReferenceValidator::AnalyzeDeletion(targets);
-		AssetManager::Get().RecordAssetReferenceTiming(
-			AssetReferenceTimingKind::DeleteImpact, ImGui::GetFrameCount(), referenceStart);
+
+		PrimeAssetReferencePathRoots();
+		m_DeletionImpact = {};
+		m_DeletionPreparationCancelled = false;
 		m_PendingFileDeletion = std::move(moves);
+	catch (const std::exception& error)
+	{
+		resetPreparation();
+		EDITOR_LOG_WARN("Could not start file deletion impact analysis: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.DeleteImpactScanFailed"), ELogLevel::Warn);
+	}
+}
+
+void ContentBrowserPanel::ProcessDeletionPreparation()
+{
+	if (!m_DeletionPreparationPending)
+		return;
+	if (!m_Open)
+	{
+		m_DeletionPreparationCancelled = true;
+		m_PendingFileDeletion.clear();
+		m_DeletionImpact = {};
+	}
+	if (!m_DeletionPreparation.valid() ||
+		m_DeletionPreparation.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+		return;
+
+	if (m_DeletionPreparationWorker.joinable())
+		m_DeletionPreparationWorker.join();
+	m_DeletionPreparationPending = false;
+	try
+	{
+		auto result = m_DeletionPreparation.get();
+		AssetManager::Get().RecordBackgroundAssetReferenceTiming(
+			AssetReferenceTimingKind::DeleteImpact, result.ElapsedMs);
+		const bool cancelled = std::exchange(m_DeletionPreparationCancelled, false);
+		if (cancelled)
+		{
+			m_PendingFileDeletion.clear();
+			m_DeletionImpact = {};
+			return;
+		}
+
+		if (result.Error)
+		{
+			try
+			{
+				std::rethrow_exception(result.Error);
+			}
+			catch (const std::exception& error)
+			{
+				EDITOR_LOG_WARN("Could not analyze file deletion impact: {}", error.what());
+			}
+			catch (...)
+			{
+				EDITOR_LOG_WARN("Could not analyze file deletion impact: unknown worker exception");
+			}
+			m_PendingFileDeletion.clear();
+			m_DeletionImpact = {};
+			NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+				LOCAL("ContentBrowser.DeleteImpactScanFailed"), ELogLevel::Warn);
+			return;
+		}
+
+		m_DeletionImpact = std::move(result.Impact);
+	}
+	catch (const std::exception& error)
+	{
+		m_DeletionPreparationCancelled = false;
+		m_PendingFileDeletion.clear();
+		m_DeletionImpact = {};
+		EDITOR_LOG_WARN("Could not collect file deletion impact analysis: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.DeleteImpactScanFailed"), ELogLevel::Warn);
+	}
+	catch (...)
+	{
+		m_DeletionPreparationCancelled = false;
+		m_PendingFileDeletion.clear();
+		m_DeletionImpact = {};
+		EDITOR_LOG_WARN("Could not collect file deletion impact analysis: unknown worker exception");
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.DeleteImpactScanFailed"), ELogLevel::Warn);
+	}
 	}
 	catch (const filesystem::filesystem_error& error)
 	{
@@ -1818,11 +2093,16 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 		return;
 
 	ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DeleteFilesConfirm", m_PendingFileDeletion.size()).c_str());
-	DrawFileReferenceImpact(m_DeletionImpact, "ContentBrowser.DeleteImpactCount");
+	if (m_DeletionPreparationPending)
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.DeleteReferenceScanPending"));
+	else
+		DrawFileReferenceImpact(m_DeletionImpact, "ContentBrowser.DeleteImpactCount");
 	const EditorUI::DialogAction actions[] = {
 		{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", CanUseFileCommands(), true }
 	};
 	const int action = EditorUI::DialogButtonBar("ContentBrowserDeleteActions", actions, IM_ARRAYSIZE(actions));
+		else
+			m_DeletionPreparationCancelled = m_DeletionPreparationPending;
 	if (action >= 0)
 	{
 		auto moves = std::exchange(m_PendingFileDeletion, vector<FileMove>{});

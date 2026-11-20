@@ -83,12 +83,24 @@ namespace
             preparation.PeakMs != 3.0 || timings.LastFrameMs != 1.0 || timings.PeakFrameMs != 5.0)
             return false;
 
+        timings.RecordBackground(MovePreparation, 15.0);
+        if (preparation.Samples != 3 || preparation.LastMs != 15.0 || timings.LastFrame != 9 ||
+            timings.LastFrameMs != 1.0 || timings.PeakFrameMs != 5.0)
+            return false;
+
+        timings.RecordBackground(DeleteImpact, 20.0);
+        const auto& deletion = timings.ByKind[static_cast<std::size_t>(DeleteImpact)];
+        if (deletion.Samples != 1 || deletion.LastMs != 20.0 || timings.LastFrame != 9 ||
+            timings.LastFrameMs != 1.0 || timings.PeakFrameMs != 5.0)
+            return false;
+
         const auto& latest = timings.LastScan;
         if (latest.Kind != Automatic || latest.Frame != 7 || latest.Documents != 12 || latest.ReadParseMs != 0.5)
             return false;
 
         timings = {};
-        return timings.LastFrame == -1 && timings.PeakFrameMs == 0.0 && preparation.Samples == 0 && latest.Frame == -1;
+        return timings.LastFrame == -1 && timings.PeakFrameMs == 0.0 && preparation.Samples == 0 &&
+            deletion.Samples == 0 && latest.Frame == -1;
     }
 
     bool CheckReferenceRepair(const fs::path& assets)
@@ -633,6 +645,32 @@ int RunAssetReferenceChecks()
     if (Editor::AssetReferenceValidator::PrepareMoveReferences({ { materials, assets / L"MovedMaterials" } },
         discardedEdits, &incompletePlan) || incompletePlan.IsComplete || incompletePlan.References.size() != 2 ||
         !discardedEdits.empty()) return 53;
+
+    const auto emptyFolder = assets / L"EmptyFolderMove";
+    if (!fs::create_directory(emptyFolder))
+        return 74;
+    const auto emptyFolderDeletion = Editor::AssetReferenceValidator::AnalyzeDeletion({ emptyFolder });
+    if (emptyFolderDeletion.IsComplete || !emptyFolderDeletion.References.empty())
+    {
+        std::cerr << "Empty folder deletion must preserve the project scan's incomplete status.\n";
+        return 74;
+    }
+
+    Editor::AssetReferenceImpact emptyFolderImpact;
+    std::vector<Editor::AssetReferenceEdit> emptyFolderEdits;
+    if (!Editor::AssetReferenceValidator::PrepareMoveReferences(
+        { { emptyFolder, assets / L"RenamedEmptyFolder" } }, emptyFolderEdits, &emptyFolderImpact) ||
+        !emptyFolderImpact.IsComplete || !emptyFolderImpact.References.empty() || !emptyFolderEdits.empty())
+    {
+        std::cerr << "An empty folder move must not depend on unrelated unreadable project documents.\n";
+        return 74;
+    }
+    const auto emptyFolderRecheck = Editor::AssetReferenceValidator::AnalyzeMove({ emptyFolder });
+    if (!emptyFolderRecheck.IsComplete || !emptyFolderRecheck.References.empty())
+    {
+        std::cerr << "An empty folder move recheck must not scan unrelated project documents.\n";
+        return 74;
+    }
 
     if (!fs::remove(invalid))
         return 7;

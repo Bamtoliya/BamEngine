@@ -47,6 +47,10 @@ public:
 	AssetReferenceTimings GetAssetReferenceTimings() const { return m_AssetReferenceTimings; }
 	void RecordAssetReferenceTiming(AssetReferenceTimingKind kind, int frame,
 		std::chrono::steady_clock::time_point start, const AssetReferenceScanTiming* scan = nullptr);
+	void RecordBackgroundAssetReferenceTiming(AssetReferenceTimingKind kind, double elapsedMs)
+	{
+		m_AssetReferenceTimings.RecordBackground(kind, elapsedMs);
+	}
 	void ResetAssetReferenceTimings() { m_AssetReferenceTimings = {}; }
 #pragma endregion
 

@@ -47,7 +47,7 @@ namespace Editor
         double RefreshViewMs = 0.0;
     };
 
-    // Synchronous editor operations. Record only non-overlapping scopes on the editor thread.
+    // Record samples on the editor thread; only synchronous work contributes to per-frame totals.
     struct AssetReferenceTimings
     {
         static constexpr std::size_t KindCount = static_cast<std::size_t>(AssetReferenceTimingKind::Count);
@@ -58,7 +58,7 @@ namespace Editor
         AssetReferenceScanTiming LastScan;
 
         void Record(AssetReferenceTimingKind kind, int frame, double elapsedMs,
-            const AssetReferenceScanTiming* scan = nullptr)
+            const AssetReferenceScanTiming* scan = nullptr, bool includeFrame = true)
         {
             const auto index = static_cast<std::size_t>(kind);
             if (index >= ByKind.size())
@@ -77,6 +77,9 @@ namespace Editor
                 LastScan.Frame = frame;
             }
 
+            if (!includeFrame)
+                return;
+
             if (LastFrame != frame)
             {
                 LastFrame = frame;
@@ -84,6 +87,11 @@ namespace Editor
             }
             LastFrameMs += elapsedMs;
             PeakFrameMs = (std::max)(PeakFrameMs, LastFrameMs);
+        }
+
+        void RecordBackground(AssetReferenceTimingKind kind, double elapsedMs)
+        {
+            Record(kind, -1, elapsedMs, nullptr, false);
         }
     };
 }

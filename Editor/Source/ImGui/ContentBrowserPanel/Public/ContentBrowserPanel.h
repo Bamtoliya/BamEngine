@@ -4,7 +4,10 @@
 #include "ImGuiInterface.h"
 #include <efsw/efsw.hpp>
 #include <atomic>
+#include <exception>
+#include <future>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
@@ -49,7 +52,11 @@ public:
 	ContentBrowserPanel() = default;
 	virtual ~ContentBrowserPanel() = default;
 	virtual void Update(f32 dt) override;
-	bool ShouldUpdateWhenClosed() const override { return m_FileListener && m_FileListener->HasReferenceChanges(); }
+	bool ShouldUpdateWhenClosed() const override
+	{
+		return m_MovePreparationPending || m_DeletionPreparationPending ||
+			(m_FileListener && m_FileListener->HasReferenceChanges());
+	}
 	virtual void Draw() override;
 	virtual void ProcessEvent(const SDL_Event* event) override;
 	virtual void Free() override;
@@ -126,6 +133,19 @@ private:
 		vector<AssetReferenceEdit> References;
 		filesystem::path RecoveryDirectory;
 	};
+	struct MovePreparationResult
+	{
+		bool ReferencesReady = false;
+		double ElapsedMs = 0.0;
+		AssetReferenceImpact Impact;
+		vector<AssetReferenceEdit> References;
+	};
+	struct DeletionPreparationResult
+	{
+		double ElapsedMs = 0.0;
+		AssetReferenceImpact Impact;
+		std::exception_ptr Error;
+	};
 	bool ReplayAssetMove(const AssetMoveBatch& batch, bool forward);
 	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references) const;
 	bool PrepareAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
@@ -137,11 +157,13 @@ private:
 	void DrawFileMovePaths() const;
 	void ConfirmFileMove();
 	void ClearPendingFileMove();
+	void ProcessMovePreparation();
 	bool CanUseFileCommands() const;
 	bool CanDeleteFiles(const vector<filesystem::path>& paths) const;
 	void DrawFileDeletionConfirmation();
 	void DrawFileReferenceImpact(const AssetReferenceImpact& impact, const char* countKey) const;
 	void QueueFileDeletion(const vector<filesystem::path>& paths);
+	void ProcessDeletionPreparation();
 	void DeleteFiles(vector<FileMove> moves);
 	filesystem::path FileHistoryRoot() const;
 	filesystem::path CreateFileHistoryBatch() const;
@@ -153,6 +175,10 @@ private:
 	bool m_FileHistoryInvalid = false;
 	vector<FileMove> m_PendingFileDeletion;
 	AssetReferenceImpact m_DeletionImpact;
+	std::future<DeletionPreparationResult> m_DeletionPreparation;
+	std::jthread m_DeletionPreparationWorker;
+	bool m_DeletionPreparationPending = false;
+	bool m_DeletionPreparationCancelled = false;
 	vector<FileMove> m_PendingFileMove;
 	vector<filesystem::path> m_MoveSourcePaths;
 	filesystem::path m_MoveDestination;
@@ -163,6 +189,9 @@ private:
 	vector<AssetReferenceEdit> m_MoveReferences;
 	bool m_MoveReferencesReady = false;
 	bool m_MoveDocumentsAvailable = false;
+	std::future<MovePreparationResult> m_MovePreparation;
+	bool m_MovePreparationPending = false;
+	bool m_MovePreparationCancelled = false;
 	vector<filesystem::path> m_BackFolders;
 	vector<filesystem::path> m_ForwardFolders;
 	vector<filesystem::path> m_FileClipboardPaths;
