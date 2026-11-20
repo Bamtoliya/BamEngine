@@ -4,3 +4,15 @@ EffectTimeline,Properties,Properties,속성
 EffectTimeline,EditRange,Edit Timeline Range,타임라인 구간 편집
 EffectTimeline,OpenEmission,Emission has no fixed end,방출 종료 미지정
 EffectTimeline,Emitter,Emitter,이미터
+EffectTimeline,EmissionWindow,"Bar: emission window; diamonds: boundaries","막대: 방출 구간; 다이아몬드: 구간 경계"
+EffectTimeline,EventWindow,"Bar: event-acceptance window; diamonds: boundaries, not event times","막대: 이벤트 수신 구간; 다이아몬드: 이벤트 시각이 아닌 구간 경계"
+EffectTimeline,OpenEmitterWindow,Emitter window has no fixed end.,이미터 구간의 종료가 지정되지 않았습니다.
+EffectTimeline,EmissionRange,Configured window: {:.2f}–{:.2f} s,설정 구간: {:.2f}–{:.2f}초
+EffectTimeline,EmissionLimit,Effect emission limit: {:.2f} s,이펙트 방출 제한: {:.2f}초
+EffectTimeline,LifetimeRange,Particle lifetime setting: {:.2f}–{:.2f} s,입자 수명 설정: {:.2f}–{:.2f}초
+EffectTimeline,TailEstimate,Shaded tail: possible survival until about {:.2f} s,옅은 꼬리: 약 {:.2f}초까지 생존 가능
+EffectTimeline,PreviewTruncated,Hatched tail is beyond preview end and will not be simulated.,빗금 친 꼬리는 프리뷰 종료 이후이므로 시뮬레이션되지 않습니다.
+EffectTimeline,EmissionOutsideLimit,The effect emission limit is before this window; no particles can spawn.,이펙트 방출 제한이 이 구간보다 앞서 입자가 생성되지 않습니다.
+EffectTimeline,InvalidLifetime,Cannot estimate the tail because the lifetime is invalid.,수명 값이 유효하지 않아 잔존 구간을 추정할 수 없습니다.
+EffectTimeline,EmitterDisabled,Emitter is disabled; no particles can spawn.,이미터가 비활성화되어 입자가 생성되지 않습니다.
+EffectTimeline,TriggerUnsupported,This trigger is not implemented for particle spawning.,이 트리거는 파티클 생성에 구현되어 있지 않습니다.

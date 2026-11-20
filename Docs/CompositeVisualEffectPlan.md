@@ -1,6 +1,6 @@
 # 계층형 통합 비주얼 이펙트 시스템 및 저작 도구 개발 계획 (Composite VFX & Track-based Orchestrator Plan)
 
-- **작성일:** 2026-11-08 (최종 갱신: 2026-11-19)
+- **작성일:** 2026-11-08 (최종 갱신: 2026-11-20)
 - **상태:**
   - **Phase 1 (복합 기반 구축):** 구현 및 검증 완료 (스프라이트 플립북, 파티클, 라이트 섬광 트랙 및 VFXEditorPanel)
   - **Phase 2 (메쉬 이펙트 런타임 & 사운드 연동):** 구현 및 검증 완료 (메쉬 트랙 스케일/회전 보간, UV 스크롤/컬러 페이드 렌더링 제출, 사운드 1회 트리거)
@@ -10,7 +10,7 @@
   - **Phase 5 Step 1 환경 융합 & 렌더링 아티팩트 해결 (2026-11-16):**
     - 바닥 지면 `PlaneMesh`(48m 수평 평면) 전환 (단면 잘림·조명 소실 해결). 바닥이 뒤집혀 보인 근본 원인(와인딩 기준 공존)은 엔진 전체 CW 표준화(`4abab951`)로 해소했다.
     - `forwardParticlePS` Depth Fade 정규화(15cm) 및 프레넬(Fresnel) 림 페이드 적용 (배경 경계 이원화 해소)
-    - 반투명 알파 블렌딩과 디퍼드 배경 버퍼 암흑 결합에 의한 흙갈색 탁화 원인 규명 및 Additive 가산 블렌드 연동 로드맵 수립
+    - 반투명 알파 블렌딩과 디퍼드 배경 버퍼 암흑 결합에 의한 흙갈색 탁화 원인 규명 및 Additive 가산 블렌드 연동 로드맵 수립 (2026-11-19 정정: 직접 원인은 9.11절 프리뷰 Geometry 패스 블렌드 필터 누락으로 규명·해소)
   - **Phase 5 Step 2 완급 조절 커브 & 타임라인 인라인 프리뷰 (2026-11-17):** 구현 및 검증 완료
     - `FloatCurve` 엔진 코어 (`Engine/Source/Core/Geometry/Public/FloatCurve.h`, `FloatCurve.cpp`) 구축 (3차 에르미트/베지어 스플라인, 직렬화, EaseOut/EaseIn/Spike 프리셋).
     - `VFXMeshTrack`(스케일/알파 커브), `VFXLightTrack`(조도 커브) 런타임 샘플링 및 폭발 팽창 펀치감 실현.
@@ -20,16 +20,20 @@
     - `CurveEditorModal.h`/`.cpp` 신설: 2D 베지어 캔버스, 그리드/축 눈금, 키 추가/드래그/삭제 및 프리셋 툴바 지원.
     - `VFXEditorPanel` 조도/스케일/알파 커브 프리셋 행에 모달 열기 연동 및 타임라인 실시간 동기화.
     - 다국어 키워드 표준화(`PROP_TIME` 등), 긴 안내문 자동 줄바꿈, 메시 기본값 힌트 분리, `EditorCommon.OK` 확인 버튼 라벨 완비.
-  - **Phase 5 Step 4 차기 선택지 로드맵:**
-    - 선택지 1: 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 무기/손 본 소켓 스폰 및 공격 애니메이션 노티파이 바인딩).
-    - 선택지 2: 발광성 순수 Additive($One/One$) 가산 머티리얼 표준화 및 뷰포트 암실 공중(Air Mode) 프리뷰 가상 라이트 보정.
-  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 인라인 프리뷰, 2D 커브 모달 에디터 완비)
+  - **2026-11-19 추가 반영 (코드 반영 / 일부 실환경 확인):** `CompositeVFXSystem` Geometry/ForwardTransparent 블렌드 패스 교정(9.11절, 프리뷰·씬 확인 완료), `VFXEditorPanel::ToggleAirMode()` 공중 프리뷰 토글, `forwardParticlePS.hlsl` 정면 알파 완화(`0.90`), `ActionTimelineSystem`/`AnimationTimelinePanel`의 `SpawnCompositeVFX` 본 소켓 스폰·추적·지속형 해제 기본 구현([AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md) 8~11절).
+  - **Phase 5 Step 4 잔여 범위 (2026-11-20 동기화):**
+    - 2026-11-20 코드 반영: [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 2~4절의 편집 씬 격리, Animator 복원 수명, 공용 Notify 시간 판정, URI 정규화와 참조 진단을 구현했다. 헤드리스 회귀 검사도 추가했으나 빌드·CTest·로캘 생성은 아직 실행하지 않았다.
+    - 필수 수동 통합: 같은 계획의 5절 체크리스트에 따라 패널·편집 씬 격리·복원 수명·Notify 경계·PIE·독립 Windows Release Client를 검증해야 한다. 코드 반영만으로 Phase 5 Step 4 완료로 판정하지 않는다.
+    - 선택적 렌더링·UX 마감: 실제 요구 확인 시 순수 `One/One` Additive 블렌드 모드 분리(`RHIBlendTypes.h`), `ParticleSystem`/`CompositeVFXSystem` 대상 패스 수집 중복 정리, Game View·Client·CTest 및 Step 1 기즈모/외력/Depth Fade 실행 검증 기록. *(※ 9.9절의 공중 모드 가상 환경광 보정은 2026-11-19 정정에 따라 철회됨.)*
+  - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 인라인 프리뷰, 2D 커브 모달 에디터, 패스 교정·Air Mode·소켓 스폰 기본 구현 완료 / 통합·검증 잔여)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
-- **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
+- **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
 
 ---
 
 ## 1. 목적과 현황 (Motivation & Current Status)
+
+> 지속형 액션 VFX의 일시정지·재개와 파티클 잔존 수명 처리 변경은 [타임라인 계획 9절](AnimationTimelineEditorPlan.md)을 따른다. 코드 반영 후 빌드와 실환경 검증은 아직 수행하지 않았다.
 
 ### 1.1 배경 및 목적
 하나의 스킬이나 폭발 연출(예: 파이어볼, 검기 슬래시, 마법진 소환)은 단일 파티클 입자만으로 완성되지 않으며, **2D 스프라이트 플립북, 3D 파티클, 3D 메쉬 이펙트(마법진, 충격파 링), 트레일/리본(무기 궤적), 조명 섬광(Light Flash), 사운드(SFX), 데칼(Decal)**이 단일 타임라인 시간축에서 정밀하게 동기화되어야 합니다.
@@ -319,15 +323,15 @@ flowchart TD
    - 트랙 사각 바 내부 공간에 24~32개 세그먼트로 실시간 베지어 곡선 실루엣(사다리꼴 반투명 음영 + 선명한 화이트 라인) 및 라벨(`Scale`, `Light`, `Alpha`) 인라인 렌더링.
    - 트랙의 시작/종료 시각 이동 및 리사이즈 시 커브 미니어처가 완벽하게 실시간 스케일링 동기화됨을 검증.
 
-### 9.7 Phase 5 Step 3 차기 선택지 로드맵
-- **[선택지 1] 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 소켓 스폰) ⭐**:
+### 9.7 Phase 5 Step 3 차기 선택지 로드맵 (2026-11-17 기록 — 2026-11-20 상태 병기)
+- **[선택지 1] 액션 타임라인 ↔ 복합 VFX 연동 (캐릭터 소켓 스폰) ⭐ [기본 구현 완료(2026-11-19) / 통합·안정화는 AnimationPipelineIntegrationPlan.md 2~5절]**:
   - `ActionTimelineComponent` / `AnimNotify`에 `SpawnCompositeVFX` 노티파이 지원.
   - 캐릭터 스켈레톤의 무기/손 본 소켓(`Hand_R`, `Weapon_Socket`) 트랜스폼 추적 및 이펙트 동기화 스폰.
   - 캐릭터 공격 애니메이션 타이밍에 맞춰 검기/충격파/섬광이 터지는 실전 전투 연출 완성.
-- **[선택지 2] 발광성 Additive 가산 머티리얼 표준화 & 공중(Air) 프리뷰 모드**:
+- **[선택지 2] 발광성 Additive 가산 머티리얼 표준화 & 공중(Air) 프리뷰 모드 [블렌드 패스 교정(9.11절) 및 ToggleAirMode 구현 완료 / 순수 One/One만 선택 잔여]**:
   - 돔 메쉬 및 충격파 링 전용 Additive 머티리얼 셰이더 표준화 (디퍼드 배경 암흑과의 결합으로 인한 흙갈색 탁화 원천 해소).
   - 지면 슬래브를 끄고 완전한 18% 암실에서 발광체 본연의 화사한 룩앤필을 검증하는 '공중(Air) 프리뷰 모드' 토글 추가.
-- **[선택지 3] 2D 커브 팝업 에디터 모달 (키프레임 직접 조작)**:
+- **[선택지 3] 2D 커브 팝업 에디터 모달 (키프레임 직접 조작) [Phase 5 Step 3 완료(2026-11-19, 9.10절)]**:
   - 프리셋 버튼을 넘어 그래프 상에서 마우스 더블클릭/드래그로 키프레임을 추가/이동하고 탄젠트를 조작하는 팝업 모달 위젯.
 
 ### 9.8 트레일 연속 스트립 렌더링 및 트랙 인스펙터 Undo (2026-11-17)
@@ -358,11 +362,11 @@ flowchart TD
 - **2026-11-19 정정**: 위 1번은 실제 원인이 아니었다. VFX 프리뷰의 허공 배경은 배경 프리셋 클리어 색(StudioGray `(0.18, 0.18, 0.19)`)이며, Additive 합성은 배경보다 어두워질 수 없다. 배경보다 어두운 흙갈색은 G-Buffer에 잘못 기록된 트랙을 조명 패스가 불투명 표면으로 칠한 결과다(9.11절). 아래 로드맵 2번(공중 모드 가상 환경광)은 이 결함을 가릴 뿐이므로 진행하지 않는다. 3번의 정면 알파 완화(`0.90`)는 반영되어 있다.
 
 - **향후 해결 과제 (Roadmap)**:
-  1. **순수 가산 블렌드(Pure Additive, $One / One$) 머티리얼 분리**:
-     - 알파 채널에 의한 광량 감쇄 없이 방출 광량을 $100\%$ 보존하는 완전 자체 발광형 언릿 머티리얼 지원.
-  2. **공중 프리뷰 뷰포트용 가상 환경광/스카이돔 보정**:
-     - 공중 모드 활성화 시 완전한 암흑/단색 클리어 대신, 최소한의 환경 반사광(Ambient Radiance)을 공급하는 가상 라이트 또는 간이 스카이 버퍼를 제공하여 허공에서도 이펙트가 색을 유지하도록 보정.
-  3. **셰이더 발광 정규화**:
+  1. **순수 가산 블렌드(Pure Additive, $One / One$) 머티리얼 분리** `[미구현 / 선택 과제]`:
+     - 알파 채널에 의한 광량 감쇄 없이 방출 광량을 $100\%$ 보존하는 완전 자체 발광형 언릿 머티리얼 지원. *(※ 허공 흙갈색 탁화 결함 자체는 9.11절 패스 교정으로 이미 해소됨.)*
+  2. ~~**공중 프리뷰 뷰포트용 가상 환경광/스카이돔 보정**:~~ `[2026-11-19 정정으로 철회 — 9.11절 패스 교정으로 원인 해소, 공중 프리뷰 토글(ToggleAirMode)은 구현 완료]`
+     - ~~공중 모드 활성화 시 완전한 암흑/단색 클리어 대신, 최소한의 환경 반사광(Ambient Radiance)을 공급하는 가상 라이트 또는 간이 스카이 버퍼를 제공하여 허공에서도 이펙트가 색을 유지하도록 보정.~~
+  3. **셰이더 발광 정규화** `[부분 반영: forwardParticlePS.hlsl 정면 알파 0.55 → 0.90 완화 완료]`:
      - `forwardParticlePS.hlsl`의 정면 알파 감쇄(`0.55`)를 완화(`0.9~1.0`)하거나 발광 파티클 전용 분기 도입.
 
 ### 9.10 2D 커브 팝업 에디터 모달(CurveEditorModal) 및 저작 UX 고도화 (2026-11-19)

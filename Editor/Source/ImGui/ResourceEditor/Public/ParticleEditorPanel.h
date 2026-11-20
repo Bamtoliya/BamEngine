@@ -53,6 +53,7 @@ private:
 	void DrawEmitterList();
 	void DrawViewport();
 	void DrawEmitterInspector();
+	void DrawTransportBar();
 	void DrawTimeline();
 	void ScrubTime(f32 targetTime);
 	void DeleteSelectedEmitter();

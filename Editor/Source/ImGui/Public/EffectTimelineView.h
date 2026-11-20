@@ -18,6 +18,16 @@ namespace EditorUI
     enum class TimelineAction { PlayPause, Previous, Next, First, Last, Loop, Fit, Delete, Undo, Redo, Save };
     enum class TimelineRowKind { Interval, Marker, OpenEnd };
 
+    struct ParticleTimelineTiming
+    {
+        float LifetimeMin;
+        float LifetimeMax;
+        float EmissionLimit;
+        bool EventDriven;
+        bool Enabled;
+        bool Supported;
+    };
+
     struct TimelineRow
     {
         std::uint64_t Id;
@@ -31,6 +41,7 @@ namespace EditorUI
         const Engine::FloatCurve* Curve = nullptr;
         const char* CurveLabel = nullptr;
         bool Disabled = false;
+        std::optional<ParticleTimelineTiming> ParticleTiming;
     };
 
     enum class TimelineDragMode { Seek, Move, Start, End, Duration };

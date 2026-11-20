@@ -416,7 +416,8 @@ void ParticleEditorPanel::DrawCustomContent()
 {
 	EditorUI::DrawEffectEditorLayout(m_LeftPaneWidth, m_RightPaneWidth, m_TimelineHeight,
 		[this] { DrawEmitterList(); }, [this] { DrawViewport(); },
-		[this] { DrawEmitterInspector(); }, [this] { DrawTimeline(); });
+		[this] { DrawEmitterInspector(); }, [this] { DrawTimeline(); },
+		[this] { DrawTransportBar(); });
 }
 
 void ParticleEditorPanel::DrawCustomToolbar()
@@ -446,10 +447,7 @@ void ParticleEditorPanel::DrawCustomToolbar()
 
 void ParticleEditorPanel::DrawCustomQuickAccess()
 {
-	const bool hasResource = m_EffectHandle.IsValid() && (m_EffectHandle.Get() != nullptr);
-
 	EditorUI::ToolbarLayout toolbar;
-	// ── 파일 조작 ──
 	if (toolbar.Icon("New", ICON_FA_FILE, "ParticleEditor.MenuNew"))
 		RunWithDiscardConfirmation([this] { NewEffect(); });
 
@@ -458,36 +456,71 @@ void ParticleEditorPanel::DrawCustomQuickAccess()
 
 	DrawSaveButton(toolbar);
 	DrawHistoryButtons(toolbar, "ParticleTimeline");
-	EditorUI::DrawTimelineTransport(toolbar, "ParticleTimeline", m_IsPlaying, m_IsLooping);
-	ImGui::BeginDisabled(!hasResource);
-	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
-	ImGui::SliderFloat("##PlayRate", &m_PlayRate, 0.1f, 3.0f, "%.1fx");
-	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipPlayRate"));
-
-	ImGui::EndDisabled();
 
 	if (toolbar.Icon("Focus", ICON_FA_CROSSHAIRS, "ParticleEditor.TooltipFocus"))
 		m_PreviewWidget.FocusTarget(Engine::vec3(0.0f, 1.0f, 0.0f), 4.5f);
-
-	// ── 통계 출력 ──
-	uint32 totalActiveParticles = 0;
-	auto* scene = m_PreviewWidget.GetScene();
-	if (m_PreviewEntity && scene && hasResource)
-	{
-		auto& comp = scene->GetComponent<Engine::ParticleEffectComponent>(*m_PreviewEntity);
-		for (const auto& inst : comp.instances)
-			totalActiveParticles += static_cast<uint32>(inst.particles.size());
-	}
-
-	const std::string statsText = fmt::format(fmt::runtime(LOCAL("ParticleEditor.StatsFormat")), totalActiveParticles, m_SimulatedTime);
-	toolbar.Text(statsText.c_str());
-	toolbar.Text(LOCAL_FMT("Timeline.TimeCounter", m_TimelineSeek.value_or(m_SimulatedTime), GetTimelineDuration()).c_str());
 
 	if (!m_StatusMessage.empty())
 	{
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 1.0f, 0.4f, 1.0f));
 		toolbar.Text(m_StatusMessage.c_str(), false);
 		ImGui::PopStyleColor();
+	}
+}
+
+void ParticleEditorPanel::DrawTransportBar()
+{
+	const auto* effect = m_EffectHandle.Get();
+	EditorUI::ToolbarLayout toolbar;
+
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "FirstFrame", ICON_FA_BACKWARD_FAST, "Action.Timeline.FirstFrame");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "PrevFrame", ICON_FA_BACKWARD_STEP, "Action.Timeline.PrevFrame");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "PlayPause", m_IsPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY, "Action.Timeline.PlayPause");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "NextFrame", ICON_FA_FORWARD_STEP, "Action.Timeline.NextFrame");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "LastFrame", ICON_FA_FORWARD_FAST, "Action.Timeline.LastFrame");
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "ToggleLoop", ICON_FA_REPEAT, "Action.Timeline.ToggleLoop", m_IsLooping);
+
+	if (effect)
+	{
+		const float currentTime = m_TimelineSeek.value_or(m_SimulatedTime);
+		const float duration = GetTimelineDuration();
+		const int currentFrame = static_cast<int>(currentTime * EditorUI::EffectTimelineFPS);
+		const int totalFrames = static_cast<int>(duration * EditorUI::EffectTimelineFPS);
+
+		const std::string timeLabel = LOCAL_FMT("Timeline.TimeCounter", currentTime, duration);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.3f, 0.9f, 0.5f, 1.0f));
+		toolbar.Text(timeLabel.c_str(), false);
+		ImGui::PopStyleColor();
+
+		const std::string frameLabel = LOCAL_FMT("Timeline.FrameCounter", currentFrame, totalFrames);
+		toolbar.Text(frameLabel.c_str(), false);
+	}
+
+	ImGui::BeginDisabled(!effect);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 4.5f);
+	if (ImGui::SliderFloat("##TransportPlayRate", &m_PlayRate, 0.1f, 3.0f, "%.1fx"))
+		m_PlayRate = std::clamp(m_PlayRate, 0.1f, 3.0f);
+	if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+		ImGui::SetTooltip("%s", LOCAL_CSTR("ParticleEditor.TooltipPlayRate"));
+	ImGui::EndDisabled();
+
+	const std::string zoomLabel = LOCAL_FMT("Timeline.ZoomFactor", m_Timeline.Zoom);
+	toolbar.Text(zoomLabel.c_str(), false);
+	EditorUI::DrawTimelineAction(toolbar, "ParticleTimeline", "ZoomReset", ICON_FA_MAXIMIZE, "Action.Timeline.ZoomReset");
+
+	uint32 totalActiveParticles = 0;
+	auto* scene = m_PreviewWidget.GetScene();
+	if (m_PreviewEntity && scene && effect)
+	{
+		auto& comp = scene->GetComponent<Engine::ParticleEffectComponent>(*m_PreviewEntity);
+		for (const auto& inst : comp.instances)
+			totalActiveParticles += static_cast<uint32>(inst.particles.size());
+	}
+
+	if (effect)
+	{
+		const std::string activeCountLabel = fmt::format("{}: {}", LOCAL("Particle.ActiveCount"), totalActiveParticles);
+		toolbar.Text(activeCountLabel.c_str(), false);
 	}
 }
 
@@ -654,6 +687,10 @@ void ParticleEditorPanel::DrawTimeline()
 			continuous ? IM_COL32(230, 130, 40, 220) : IM_COL32(130, 118, 235, 220), start, end,
 			m_SelectedEmitterIndex == static_cast<int>(i),
 			bounded ? EditorUI::TimelineRowKind::Interval : EditorUI::TimelineRowKind::OpenEnd });
+		rows.back().ParticleTiming = EditorUI::ParticleTimelineTiming{
+			emitter.lifetimeMin, emitter.lifetimeMax, effect->GetPlaybackDuration(), !continuous, emitter.enabled,
+			emitter.triggerMode == Engine::EParticleEmitterTrigger::Continuous ||
+				emitter.triggerMode == Engine::EParticleEmitterTrigger::OnParentCollision };
 	}
 	const auto result = EditorUI::DrawEffectTimeline(m_Timeline, rows, duration,
 		m_TimelineSeek.value_or(m_SimulatedTime), minDuration);

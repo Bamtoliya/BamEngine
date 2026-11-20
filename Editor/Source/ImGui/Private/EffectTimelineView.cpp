@@ -10,17 +10,50 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fmt/format.h>
 
 // 공통 타임라인 기본 기능(시간 축, 눈금자, 그리드, 행 배경, 막대)은 TimelineView.cpp에 있다.
 namespace EditorUI
 {
+    namespace
+    {
+        struct ParticleTail
+        {
+            float Start;
+            float End;
+        };
+
+        std::optional<ParticleTail> GetParticleTail(const TimelineRow& row, const TimelineEdit* edit)
+        {
+            if (!row.ParticleTiming) return std::nullopt;
+            const auto& timing = *row.ParticleTiming;
+            if (!timing.Enabled || !timing.Supported) return std::nullopt;
+            if (!std::isfinite(timing.LifetimeMin) || !std::isfinite(timing.LifetimeMax)) return std::nullopt;
+
+            const float start = edit ? edit->Start : row.Start;
+            const bool bounded = row.Kind != TimelineRowKind::OpenEnd || (edit && edit->Mode == TimelineDragMode::End);
+            if (!bounded && timing.EmissionLimit <= 0.0f) return std::nullopt;
+            float end = bounded ? (edit ? edit->End : row.End) : timing.EmissionLimit;
+            if (timing.EmissionLimit > 0.0f) end = std::min(end, timing.EmissionLimit);
+            if (end <= start) return std::nullopt;
+            const float tailEnd = end + std::max(0.001f, std::max(timing.LifetimeMin, timing.LifetimeMax));
+            if (!std::isfinite(tailEnd)) return std::nullopt;
+            return ParticleTail{ end, tailEnd };
+        }
+    }
+
     TimelineInteraction DrawEffectTimeline(EffectTimelineState& state, std::span<const TimelineRow> rows,
         float duration, float playhead, float minimumDuration, const char* addTrackTooltipKey)
     {
         TimelineInteraction result;
         duration = std::max(duration, MinimumTimelineDuration);
         minimumDuration = std::max(minimumDuration, MinimumTimelineDuration);
-        const float viewDuration = std::max(duration, minimumDuration);
+        float viewDuration = std::max(duration, minimumDuration);
+        for (const auto& row : rows)
+        {
+            if (const auto tail = GetParticleTail(row, nullptr))
+                viewDuration = std::max(viewDuration, tail->End);
+        }
 
         const auto origin = ImGui::GetCursorScreenPos();
         const auto avail = ImGui::GetContentRegionAvail();
@@ -141,8 +174,15 @@ namespace EditorUI
                     const float x1 = scale.ToX(row.End);
                     const bool overBar = mouse.x >= scale.Left && mouse.x >= x0 - edge &&
                         mouse.x <= std::max(x0 + edge, x1) + edge;
-                    if (mouse.x < scale.Left || overBar) result.Selection = row.Id;
-                    if (overBar)
+                    const auto tail = GetParticleTail(row, nullptr);
+                    const float tailTop = rowsOrigin.y + (index + 0.5f) * rowHeight +
+                        (rowHeight * 0.5f - GetTimelineBarInset()) * 0.25f;
+                    const bool overTail = tail && mouse.x >= scale.Left && mouse.x >= scale.ToX(tail->Start) &&
+                        mouse.x <= scale.ToX(tail->End) && mouse.y >= tailTop && mouse.y <= rowsOrigin.y +
+                        (index + 1.0f) * rowHeight - GetTimelineBarInset();
+                    const bool overHandle = std::abs(mouse.x - x0) <= edge || std::abs(mouse.x - x1) <= edge;
+                    if (mouse.x < scale.Left || overBar || overTail) result.Selection = row.Id;
+                    if (overBar && (!overTail || overHandle))
                     {
                         auto mode = TimelineDragMode::Move;
                         if (row.Kind != TimelineRowKind::Marker)
@@ -244,7 +284,36 @@ namespace EditorUI
                     const float inset = GetTimelineBarInset();
                     const ImVec2 min(x0, y + inset);
                     const ImVec2 max(std::max(x0 + 1.0f, x1), y + rowHeight - inset);
-                    DrawTimelineBar(*rowsDraw, min, max, row.Color, row.Selected, row.Selected || edit);
+                    DrawTimelineBar(*rowsDraw, min, max, row.Color, row.Selected, !row.ParticleTiming && (row.Selected || edit));
+
+                    if (row.ParticleTiming)
+                    {
+                        if (const auto tail = GetParticleTail(row, edit))
+                        {
+                            const float tailStart = scale.ToX(tail->Start);
+                            const float tailEnd = scale.ToX(tail->End);
+                            const float cutoff = scale.ToX(duration);
+                            const float tailTop = mid + (max.y - mid) * 0.25f;
+                            const ImVec4 color = ImGui::ColorConvertU32ToFloat4(row.Color);
+                            const ImU32 tailColor = ImGui::ColorConvertFloat4ToU32(ImVec4(color.x, color.y, color.z, 0.4f));
+                            rowsDraw->AddRectFilled(ImVec2(tailStart, tailTop), ImVec2(tailEnd, max.y), tailColor);
+                            if (tail->End > duration)
+                            {
+                                const float clippedStart = std::max(tailStart, cutoff);
+                                rowsDraw->AddRectFilled(ImVec2(clippedStart, tailTop), ImVec2(tailEnd, max.y), IM_COL32(145, 55, 45, 130));
+                                const float visibleStart = std::max(clippedStart, scale.Left);
+                                const float visibleEnd = std::min(tailEnd, right);
+                                const float spacing = std::max(4.0f, ImGui::GetFontSize() * 0.45f);
+                                for (float x = visibleStart; x < visibleEnd; x += spacing)
+                                    rowsDraw->AddLine(ImVec2(x, tailTop), ImVec2(std::min(x + spacing * 0.5f, visibleEnd), max.y), IM_COL32(255, 215, 160, 180));
+                                if (cutoff >= scale.Left && cutoff <= right)
+                                    rowsDraw->AddLine(ImVec2(cutoff, y + inset), ImVec2(cutoff, max.y), IM_COL32(255, 150, 100, 255), 2.0f);
+                            }
+                        }
+                        DrawTimelineMarker(*rowsDraw, ImVec2(x0, mid), row.Color, row.Selected);
+                        if (row.Kind != TimelineRowKind::OpenEnd || (edit && edit->Mode == TimelineDragMode::End))
+                            DrawTimelineMarker(*rowsDraw, ImVec2(x1, mid), row.Color, row.Selected);
+                    }
 
                     // ── [인라인 커브 미니어처 렌더링] ──
                     if (row.Curve && !row.Curve->IsEmpty() && (max.x - min.x) > 12.0f)
@@ -282,14 +351,50 @@ namespace EditorUI
                 rowsDraw->PopClipRect();
                 if (rowsHovered && mouse.y >= std::max(y, rulerY) && mouse.y < std::min(y + rowHeight, rowsBottomY))
                 {
-                    if (mouse.x < scale.Left)
+                    const auto tail = GetParticleTail(row, edit);
+                    const bool overParticle = row.ParticleTiming && (mouse.x < scale.Left ||
+                        (mouse.x >= scale.Left && mouse.x >= x0 - edge &&
+                         mouse.x <= std::max(x1 + edge, tail ? scale.ToX(tail->End) : x1)));
+                    if (overParticle && !state.Drag)
+                    {
+                        const auto& timing = *row.ParticleTiming;
+                        ImGui::BeginTooltip();
+                        ImGui::TextUnformatted(row.Label.data(), row.Label.data() + row.Label.size());
+                        if (timing.EventDriven)
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.EventWindow"));
+                        else
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.EmissionWindow"));
+                        if (row.Kind == TimelineRowKind::OpenEnd)
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.OpenEmitterWindow"));
+                        else
+                            ImGui::TextUnformatted(LOCAL_FMT("EffectTimeline.EmissionRange", row.Start, row.End).c_str());
+                        if (timing.EmissionLimit > 0.0f)
+                            ImGui::TextUnformatted(LOCAL_FMT("EffectTimeline.EmissionLimit", timing.EmissionLimit).c_str());
+                        ImGui::TextUnformatted(LOCAL_FMT("EffectTimeline.LifetimeRange", timing.LifetimeMin, timing.LifetimeMax).c_str());
+                        if (tail)
+                        {
+                            ImGui::TextUnformatted(LOCAL_FMT("EffectTimeline.TailEstimate", tail->End).c_str());
+                            if (tail->End > duration)
+                                ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.PreviewTruncated"));
+                        }
+                        else if (!timing.Enabled)
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.EmitterDisabled"));
+                        else if (!timing.Supported)
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.TriggerUnsupported"));
+                        else if (timing.EmissionLimit > 0.0f && row.Start >= timing.EmissionLimit)
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.EmissionOutsideLimit"));
+                        else if (!std::isfinite(timing.LifetimeMin) || !std::isfinite(timing.LifetimeMax))
+                            ImGui::TextUnformatted(LOCAL_CSTR("EffectTimeline.InvalidLifetime"));
+                        ImGui::EndTooltip();
+                    }
+                    else if (mouse.x < scale.Left && !row.ParticleTiming)
                     {
                         if (row.Kind == TimelineRowKind::OpenEnd)
                             ImGui::SetTooltip("%.*s\n%s", static_cast<int>(row.Label.size()), row.Label.data(),
                                 LOCAL_CSTR("EffectTimeline.OpenEmission"));
                         else ImGui::SetTooltip("%.*s", static_cast<int>(row.Label.size()), row.Label.data());
                     }
-                    else if (row.Kind != TimelineRowKind::Marker &&
+                    if (mouse.x >= scale.Left && row.Kind != TimelineRowKind::Marker &&
                         (std::abs(mouse.x - x0) <= edge || std::abs(mouse.x - x1) <= edge))
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
                 }
