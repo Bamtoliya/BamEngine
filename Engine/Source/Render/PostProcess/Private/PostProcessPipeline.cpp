@@ -32,6 +32,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/ToneMappingMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_ToneMappingPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -60,6 +61,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/ColorAdjustmentsMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_ColorAdjustmentsPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -89,6 +91,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/VignetteMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_VignettePS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -118,6 +121,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/ChromaticAberrationMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_ChromaticAberrationPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -146,6 +150,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/FilmGrainMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_FilmGrainPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -175,6 +180,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/LensDistortionMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_LensDistortionPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 
@@ -204,6 +210,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		desc.Key = L"Resources/Material/SharpenMaterial";
 		desc.VertexShaderHandle = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS");
 		desc.PixelShaderHandle = rm.GetResourceHandle<Shader>(L"PostProcess_SharpenPS");
+		desc.PrimaryPassType = ERenderPassType::PostProcess;
 		desc.CullMode = ECullMode::None;
 		desc.DepthMode = EDepthMode::None;
 

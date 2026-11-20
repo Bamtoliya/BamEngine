@@ -4,6 +4,17 @@
 #include "ResourceManager.h"
 #include "Renderer.h"
 
+const MaterialParameterEntry* MaterialBufferLayout::Find(const string& name) const
+{
+	const string targetLower = Engine::ToLowerStr(name);
+	for (const auto& entry : Entries)
+	{
+		if (Engine::ToLowerStr(entry.Name) == targetLower)
+			return &entry;
+	}
+	return nullptr;
+}
+
 #pragma region Cosntructor&Destructor
 void MaterialInterface::Free()
 {
@@ -12,6 +23,7 @@ void MaterialInterface::Free()
 	m_TextureSlotToIndex.clear();
 	m_Parameters.clear();
 	m_ShaderGraphPath.clear();
+	m_BufferLayout.Clear();
 }
 
 EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
@@ -70,6 +82,42 @@ int32 MaterialInterface::FindTextureBindingIndexBySlot(uint32 slot) const
 EResult MaterialInterface::OnPostLoad()
 {
     RebuildTextureBindingCache();
+
+    // 레거시 에셋(.bammat.json) 하위 호환: m_PrimaryPassType 필드가 없어 기본값(Geometry)으로 로드된
+    // 특수 패스 머티리얼(UI, PostProcess, 반투명 ForwardTransparent)의 주 패스를 안전하게 보정한다.
+    if (m_PrimaryPassType == ERenderPassType::Geometry)
+    {
+        auto shaderKeyLower = [](const ResourceHandle<Shader>& handle) -> string
+        {
+            if (auto* s = handle.Get())
+                return Engine::ToLowerStr(Engine::WStrToStr(s->GetKey()));
+            return {};
+        };
+
+        const string psKey = shaderKeyLower(m_PixelShaderHandle);
+        const string vsKey = shaderKeyLower(m_VertexShaderHandle);
+
+        if (psKey.find("uips") != string::npos || vsKey.find("uivs") != string::npos)
+        {
+            m_PrimaryPassType = ERenderPassType::UI;
+        }
+        else if (psKey.find("postprocess") != string::npos || vsKey.find("fullscreenquad") != string::npos)
+        {
+            m_PrimaryPassType = ERenderPassType::PostProcess;
+        }
+        else if (m_BlendMode == EBlendMode::Forward || psKey.find("skyps") != string::npos || vsKey.find("skyvs") != string::npos)
+        {
+            m_PrimaryPassType = ERenderPassType::Forward;
+        }
+        else if (m_BlendMode == EBlendMode::AlphaBlend || m_BlendMode == EBlendMode::Additive ||
+                 m_BlendMode == EBlendMode::NonPremultiplied || m_BlendMode == EBlendMode::Decal)
+        {
+            const bool isGBufferPs = (psKey.find("gbuffer") != string::npos);
+            if (!isGBufferPs)
+                m_PrimaryPassType = ERenderPassType::ForwardTransparent;
+        }
+    }
+
     return EResult::Success;
 }
 #pragma endregion
@@ -299,6 +347,54 @@ void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants)
     }
 }
 
+void MaterialInterface::ApplyCustomParametersToBlob(vector<uint8>& outBlob, const MaterialBufferLayout& layout) const
+{
+    if (!layout.HasCustomParameters()) return;
+
+    const auto findParamCaseInsensitive = [this](const string& name) -> const MaterialParameter*
+    {
+        const std::string targetLower = Engine::ToLowerStr(name);
+        for (const auto& [key, param] : m_Parameters)
+        {
+            if (Engine::ToLowerStr(key) == targetLower)
+                return &param;
+        }
+        return nullptr;
+    };
+
+    for (const auto& entry : layout.Entries)
+    {
+        if (entry.Offset + entry.Size > outBlob.size()) continue;
+
+        const auto* param = findParamCaseInsensitive(entry.Name);
+        if (!param || param->data.empty()) continue;
+
+        if (entry.Type == EMaterialParameterType::Bool && entry.Size == sizeof(uint32))
+        {
+            const uint32 boolVal = (param->data[0] != 0) ? 1u : 0u;
+            memcpy(outBlob.data() + entry.Offset, &boolVal, sizeof(uint32));
+        }
+        else
+        {
+            const size_t copySize = (std::min)(static_cast<size_t>(entry.Size), param->data.size());
+            memcpy(outBlob.data() + entry.Offset, param->data.data(), copySize);
+        }
+    }
+}
+
+void MaterialInterface::BuildConstantBufferBlob(vector<uint8>& outBlob) const
+{
+    const size_t totalSize = (std::max)(sizeof(MaterialConstants), static_cast<size_t>(m_BufferLayout.TotalBufferSize));
+    const size_t alignedSize = (totalSize + 15u) & ~static_cast<size_t>(15u);
+    outBlob.assign(alignedSize, 0u);
+
+    MaterialConstants baseConstants;
+    BuildMaterialConstants(baseConstants);
+    memcpy(outBlob.data(), &baseConstants, sizeof(MaterialConstants));
+
+    ApplyCustomParametersToBlob(outBlob, m_BufferLayout);
+}
+
 #pragma endregion
 
 #pragma region Texture Binding Interface
@@ -524,7 +620,6 @@ void MaterialInterface::ClearTextureBindings()
 #pragma endregion
 
 #pragma region Shader
-// MaterialInterface.cpp 수정 제안
 Shader* MaterialInterface::GetVertexShader(ERenderPassType passType) const
 {
     for (const auto& binding : m_PassShaders)
@@ -532,7 +627,9 @@ Shader* MaterialInterface::GetVertexShader(ERenderPassType passType) const
         if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
             return binding.vertexShader.Get();
     }
-    return m_VertexShaderHandle.Get();
+    if (passType == m_PrimaryPassType || m_PrimaryPassType == ERenderPassType::Custom)
+        return m_VertexShaderHandle.Get();
+    return nullptr;
 }
 
 Shader* MaterialInterface::GetPixelShader(ERenderPassType passType) const
@@ -542,7 +639,9 @@ Shader* MaterialInterface::GetPixelShader(ERenderPassType passType) const
         if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
             return binding.pixelShader.Get();
     }
-    return m_PixelShaderHandle.Get();
+    if (passType == m_PrimaryPassType || m_PrimaryPassType == ERenderPassType::Custom)
+        return m_PixelShaderHandle.Get();
+    return nullptr;
 }
 
 void MaterialInterface::SetPassShader(ERenderPassType passType, const ResourceHandle<Shader>& vs, const ResourceHandle<Shader>& ps)
@@ -640,9 +739,9 @@ EResult MaterialInterface::Bind(uint32 slot)
             rhi->BindTexture(nullptr, s);
     }
 
-    // 3. 머티리얼 상수 버퍼(MaterialConstants) 바인딩 (slot = 2 -> b0, space3)
-    MaterialConstants constants;
-    BuildMaterialConstants(constants);
-    return rhi->BindConstantBuffer(&constants, sizeof(MaterialConstants), slot);
+    // 3. 머티리얼 상수 버퍼(동적 바이트 블롭 또는 48바이트 기본 MaterialConstants) 바인딩 (slot = 2 -> b0, space3)
+    vector<uint8> constantBlob;
+    BuildConstantBufferBlob(constantBlob);
+    return rhi->BindConstantBuffer(constantBlob.data(), static_cast<uint32>(constantBlob.size()), slot);
 }
 #pragma endregion

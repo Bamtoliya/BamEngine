@@ -84,7 +84,7 @@ bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 
 bool MaterialEditor::HasUnsavedResourceChanges() const
 {
-	return m_History.IsDirty() || m_ShaderGraphHistory.IsDirty();
+	return m_History.IsDirty();
 }
 
 bool MaterialEditor::CanSaveDocument() const
@@ -107,16 +107,16 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	m_MaterialHandle = std::move(candidate);
 	m_Material = m_MaterialHandle.Get();
 
-	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
-	else m_History.Clear();
-
 	// 이전 문서의 그래프 상태를 비우고, 연결된 그래프가 있을 때만 읽는다.
 	// 여는 것만으로 그래프 파일을 만들거나 머티리얼의 셰이더를 바꾸지 않는다.
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	m_LiveCompileCooldown = 0.0f;
 	TryLoadLinkedShaderGraph();
+
+	// 머티리얼 + 연결된 셰이더 그래프 초기 상태를 단일 기준 스냅샷으로 등록한다.
+	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
+	else m_History.Clear();
 }
 
 void MaterialEditor::Update(f32 dt)
@@ -149,10 +149,10 @@ void MaterialEditor::ReleaseResourceDocument()
 	m_PreviewRenderer.ReleaseMaterial();
 	m_Material = nullptr;
 	m_MaterialHandle.Reset();
+	m_LiveVertexShader.Reset();
 	m_LivePixelShader.Reset();
 	m_History.Clear();
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	m_LiveCompileCooldown = 0.0f;
 	m_SelectedNode = 0;
@@ -172,13 +172,13 @@ bool MaterialEditor::RestoreSavedResource()
 			EDITOR_LOG_ERROR("Could not restore the material draft: {}", restored.Field);
 		return false;
 	}
-	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
-	// 저장된 상태로 되돌렸으므로 그래프도 저장된 연결 기준으로 다시 읽는다.
+	// 저장된 상태로 되돌렸으므로 그래프도 저장된 연결 기준으로 다시 읽은 뒤 통합 기준 스냅샷을 재설정한다.
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	m_LiveCompileCooldown = 0.0f;
 	TryLoadLinkedShaderGraph();
+	if (auto initial = CaptureDocument()) m_History.Reset(std::move(*initial));
+	else m_History.Clear();
 	return true;
 }
 
@@ -389,6 +389,62 @@ void MaterialEditor::DrawPipelineSettings()
 
 	if (EditorUI::BeginPropertyTable("##PipelineSettingsTable", tableStyle))
 	{
+		// 0. 기본 렌더 패스 (Primary Pass Type)
+		constexpr Engine::ERenderPassType primaryPassValues[] = {
+			Engine::ERenderPassType::Geometry,
+			Engine::ERenderPassType::ForwardTransparent,
+			Engine::ERenderPassType::Forward,
+			Engine::ERenderPassType::UI,
+			Engine::ERenderPassType::PostProcess,
+			Engine::ERenderPassType::Custom
+		};
+		constexpr const char* const primaryPassKeys[] = {
+			"MaterialOption.Geometry",
+			"MaterialOption.ForwardTransparent",
+			"MaterialOption.Forward",
+			"MaterialOption.UI",
+			"MaterialOption.PostProcess",
+			"MaterialOption.Custom"
+		};
+		int primaryPassIdx = -1;
+		for (int i = 0; i < static_cast<int>(IM_ARRAYSIZE(primaryPassValues)); ++i)
+		{
+			if (primaryPassValues[i] == m_Material->GetPrimaryPassType())
+			{
+				primaryPassIdx = i;
+				break;
+			}
+		}
+		EditorUI::PropertyRow("MaterialEditor.PrimaryPassType");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (LocalizedCombo("###PrimaryPassType", &primaryPassIdx, primaryPassKeys) && primaryPassIdx >= 0)
+		{
+			const auto nextPass = primaryPassValues[primaryPassIdx];
+			m_Material->SetPrimaryPassType(nextPass);
+
+			// PrimaryPassType과 BlendMode의 모순을 방지하기 위한 권장 프리셋 자동 보정
+			const auto curBlend = m_Material->GetBlendMode();
+			if (nextPass == Engine::ERenderPassType::ForwardTransparent &&
+				(curBlend == Engine::EBlendMode::Opaque || curBlend == Engine::EBlendMode::Masked))
+			{
+				m_Material->SetBlendMode(Engine::EBlendMode::AlphaBlend);
+			}
+			else if ((nextPass == Engine::ERenderPassType::Geometry || nextPass == Engine::ERenderPassType::Forward) &&
+				(curBlend == Engine::EBlendMode::AlphaBlend || curBlend == Engine::EBlendMode::Additive || curBlend == Engine::EBlendMode::NonPremultiplied))
+			{
+				m_Material->SetBlendMode(Engine::EBlendMode::Opaque);
+			}
+
+			m_Material->IncreaseVersion();
+			m_History.MarkEdited();
+			m_PreviewDirtyTimer = 0.2f;
+			if (m_GraphReady && HasLinkedShaderGraph())
+			{
+				InvalidateShaderBuild();
+				if (m_AutoCompileEnabled) m_LiveCompileCooldown = 0.05f;
+			}
+		}
+
 		// 1. 블렌드 모드 (EBlendMode: 비트마스크 열거형 매핑)
 		constexpr Engine::EBlendMode blendValues[] = {
 			Engine::EBlendMode::Opaque,
@@ -641,11 +697,16 @@ void MaterialEditor::DrawShaderSettings()
 			ImGui::AlignTextToFramePadding();
 			ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "[%s]", pName);
 
-			const float btnSize = 24.0f;
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const float btnWidth = (std::max)(ImGui::GetFrameHeight(),
+				ImGui::CalcTextSize(ICON_FA_TRASH).x + style.FramePadding.x * 2.0f);
+			// 스플리터 핸들(SplitterThickness) 및 우측 스크롤바와 겹치지 않고 좌우 스크롤을 유발하지 않도록 여유 마진 확보
+			const float rightMargin = Editor::SplitterThickness + style.ItemInnerSpacing.x;
 			ImGui::SameLine();
 			const float remaining = ImGui::GetContentRegionAvail().x;
-			if (remaining > btnSize)
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + remaining - btnSize);
+			const float offsetX = remaining - btnWidth - rightMargin;
+			if (offsetX > 0.0f)
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
 
 			EditorUI::IconButtonOptions delOpt;
 			delOpt.Compact = true;
@@ -1373,7 +1434,6 @@ bool MaterialEditor::LinkShaderGraph(const std::string& graphUri)
 
 	const auto targetPath = ResolveShaderGraphPath(graphUri);
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	if (!std::filesystem::exists(targetPath) || !LoadShaderGraph(targetPath))
 	{
@@ -1395,7 +1455,6 @@ void MaterialEditor::UnlinkShaderGraph()
 	m_Material->SetShaderGraphPath("");
 	m_History.MarkEdited();
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	m_LiveCompileCooldown = 0.0f;
 	m_SelectedNode = 0;
@@ -1445,7 +1504,6 @@ void MaterialEditor::CreateShaderGraphForMaterial()
 	m_Material->SetShaderGraphPath(PlatformPath::ToProjectRelative(targetPath).string());
 	m_History.MarkEdited();
 	m_ShaderGraph = {};
-	m_ShaderGraphHistory.Clear();
 	m_GraphReady = false;
 	TryLoadLinkedShaderGraph();
 }
@@ -1499,9 +1557,9 @@ bool MaterialEditor::LoadShaderGraph(const std::filesystem::path& path)
 	}
 
 	m_ShaderGraph.Data = std::move(candidate);
+	m_ShaderGraph.Data.RegisterVariableNodes(m_GraphRegistry);
 	m_ShaderGraph.FilePath = path;
 	m_ShaderGraph.LoadedPath = path;
-	m_ShaderGraphHistory.Reset(m_ShaderGraph.Data);
 	m_GraphReady = true;
 	m_NeedsNavigateToContent = true;
 	// ── 그래프 로드 성공 시 노드 핀 값들을 머티리얼 파라미터로 자동 동기화 ──
@@ -1521,12 +1579,7 @@ bool MaterialEditor::SaveShaderGraph()
 	const auto result = Engine::SaveGraphJson(m_ShaderGraph.FilePath, m_ShaderGraph.Data, m_GraphRegistry,
 		reflection.GetRegistry(), reflection.GetPropertyCodecs());
 
-	if (result.Succeeded())
-	{
-		m_ShaderGraphHistory.MarkSaved();
-		return true;
-	}
-	return false;
+	return result.Succeeded();
 }
 
 std::filesystem::path MaterialEditor::GenerateDefaultShaderGraphPath() const
@@ -1588,18 +1641,30 @@ void MaterialEditor::SaveTarget()
 		return;
 	}
 
-	SaveShaderGraph();
+	if (!SaveShaderGraph())
+	{
+		EDITOR_LOG_ERROR("Failed to save linked shader graph: {}", m_ShaderGraph.FilePath.string());
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL_FMT("Notification.SaveFailed", m_ShaderGraph.FilePath.string()), ELogLevel::Error);
+		return;
+	}
 	m_History.MarkSaved();
 	if (AssetCache::IsCreated())
 		AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
 	EDITOR_LOG_INFO("Material saved: {}", path);
 }
 
-std::optional<std::string> MaterialEditor::CaptureDocument() const
+std::optional<MaterialEditor::DocumentSnapshot> MaterialEditor::CaptureDocument() const
 {
 	archive::JsonArchive ar;
-	std::string snapshot;
-	if (!m_Material || !m_Material->WriteArchive(ar) || !ar.ToJson(snapshot)) return std::nullopt;
+	DocumentSnapshot snapshot;
+	if (!m_Material || !m_Material->WriteArchive(ar) || !ar.ToJson(snapshot.MaterialJson)) return std::nullopt;
+	snapshot.HasGraph = m_GraphReady;
+	if (m_GraphReady)
+	{
+		snapshot.GraphFilePath = m_ShaderGraph.FilePath;
+		snapshot.GraphData = m_ShaderGraph.Data;
+	}
 	return snapshot;
 }
 
@@ -1624,31 +1689,55 @@ bool MaterialEditor::CommitDocumentEdit()
 		[this](const auto& value) { return ApplyDocumentSnapshot(value); }, LOCAL("History.Command.EditProperty"));
 }
 
-bool MaterialEditor::ApplyDocumentSnapshot(const std::string& snapshot)
+bool MaterialEditor::ApplyDocumentSnapshot(const DocumentSnapshot& snapshot)
 {
 	if (!m_Material) return false;
 	archive::JsonArchive ar;
 	archive::JsonArchive previous;
-	if (!ar.Parse(snapshot) || !m_Material->WriteArchive(previous)) return false;
+	if (!ar.Parse(snapshot.MaterialJson) || !m_Material->WriteArchive(previous)) return false;
 	if (!m_Material->ReadArchive(ar))
 	{
 		(void)m_Material->ReadArchive(previous);
 		return false;
 	}
+
+	if (snapshot.HasGraph)
+	{
+		m_ShaderGraph.Data = snapshot.GraphData;
+		m_ShaderGraph.Data.RegisterVariableNodes(m_GraphRegistry);
+		m_ShaderGraph.FilePath = snapshot.GraphFilePath;
+		m_ShaderGraph.LoadedPath = snapshot.GraphFilePath;
+		m_GraphReady = true;
+		InvalidateShaderBuild();
+		if (m_AutoCompileEnabled) m_LiveCompileCooldown = 0.05f;
+	}
+	else
+	{
+		m_ShaderGraph = {};
+		m_GraphReady = false;
+		m_LiveCompileCooldown = 0.0f;
+	}
+
+	m_SelectedNode = 0;
+	m_SelectedLink = 0;
+	m_SelectedNodes.clear();
+	m_SelectedLinks.clear();
 	m_Material->IncreaseVersion();
-	m_PreviewDirtyTimer = 0.5f;
+	m_PreviewDirtyTimer = 0.2f;
 	return true;
 }
 
 bool MaterialEditor::CommitShaderGraphEdit()
 {
 	InvalidateShaderBuild();
-	m_ShaderGraphHistory.Record(m_ShaderGraph.Data,
-		[this](const auto& graph) {
-			m_ShaderGraph.Data = graph;
-			InvalidateShaderBuild();
-			return true;
-		}, LOCAL("History.Command.EditProperty"));
+
+	// 그래프 변경을 머티리얼 파라미터에 먼저 반영한 뒤 단일 통합 스냅샷으로 기록한다.
+	SyncParametersFromGraph();
+	if (m_Material)
+	{
+		m_Material->IncreaseVersion();
+		m_PreviewDirtyTimer = 0.2f;
+	}
 
 	// 자동 컴파일 활성화 시 0.25초 쿨다운 시작
 	if (m_AutoCompileEnabled)
@@ -1656,36 +1745,34 @@ bool MaterialEditor::CommitShaderGraphEdit()
 		m_LiveCompileCooldown = 0.25f;
 	}
 
-	// ── 그래프 노드 핀 값 변경 시 머티리얼 파라미터 및 3D 프리뷰 즉시 동기화 ──
-	SyncParametersFromGraph();
-	if (m_Material)
-	{
-		m_Material->IncreaseVersion();
-		m_PreviewDirtyTimer = 0.2f;
-	}
+	m_History.MarkEdited();
+	// 슬라이더/드래그 중에는 제스처 종료 시 DrawCustomContent()에서 1회로 묶어 기록하고,
+	// 노드 추가/삭제/연결 같은 단발성 액션은 즉시 통합 스냅샷을 기록한다.
+	if (!IsHistoryGestureActive())
+		return CommitDocumentEdit();
 	return true;
 }
 
 bool MaterialEditor::CanUndoDocument() const
 {
-	return CanSaveDocument() && (m_History.CanUndo() || m_ShaderGraphHistory.CanUndo());
+	return CanSaveDocument() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
 }
 
 bool MaterialEditor::CanRedoDocument() const
 {
-	return CanSaveDocument() && (m_History.CanRedo() || m_ShaderGraphHistory.CanRedo());
+	return CanSaveDocument() && m_History.CanRedo();
 }
 
 void MaterialEditor::UndoDocument()
 {
-	if (m_ShaderGraphHistory.CanUndo()) m_ShaderGraphHistory.Undo();
-	else if (m_History.CanUndo()) m_History.Undo();
+	if (CanUndoDocument() && CommitDocumentEdit())
+		m_History.Undo();
 }
 
 void MaterialEditor::RedoDocument()
 {
-	if (m_ShaderGraphHistory.CanRedo()) m_ShaderGraphHistory.Redo();
-	else if (m_History.CanRedo()) m_History.Redo();
+	if (CanRedoDocument())
+		m_History.Redo();
 }
 
 void MaterialEditor::CaptureState(EditorWorkspace& workspace) const
@@ -1767,6 +1854,35 @@ void MaterialEditor::SyncParametersFromGraph()
 			return Engine::ToLowerStr(pair.first) == lower;
 			});
 		};
+
+	// 그래프에 선언된 사용자 정의 변수(GraphVariable)도 머티리얼 파라미터로 자동 노출
+	for (const auto& var : m_ShaderGraph.Data.GetVariables())
+	{
+		if (hasParam(var.Name)) continue;
+
+		if (var.Type == Engine::EGraphPinType::Float && std::holds_alternative<float>(var.DefaultValue))
+			m_Material->AddFloat(var.Name, std::get<float>(var.DefaultValue));
+		else if (var.Type == Engine::EGraphPinType::Float2 && std::holds_alternative<std::array<float, 2>>(var.DefaultValue))
+		{
+			const auto arr = std::get<std::array<float, 2>>(var.DefaultValue);
+			m_Material->AddFloat2(var.Name, Engine::vec2(arr[0], arr[1]));
+		}
+		else if (var.Type == Engine::EGraphPinType::Float3 && std::holds_alternative<std::array<float, 3>>(var.DefaultValue))
+		{
+			const auto arr = std::get<std::array<float, 3>>(var.DefaultValue);
+			m_Material->AddFloat3(var.Name, Engine::vec3(arr[0], arr[1], arr[2]));
+		}
+		else if (var.Type == Engine::EGraphPinType::Float4 && std::holds_alternative<std::array<float, 4>>(var.DefaultValue))
+		{
+			const auto arr = std::get<std::array<float, 4>>(var.DefaultValue);
+			m_Material->AddFloat4(var.Name, Engine::vec4(arr[0], arr[1], arr[2], arr[3]));
+		}
+		else if (var.Type == Engine::EGraphPinType::Int && std::holds_alternative<std::int64_t>(var.DefaultValue))
+			m_Material->AddInt(var.Name, static_cast<int32>(std::get<std::int64_t>(var.DefaultValue)));
+		else if (var.Type == Engine::EGraphPinType::Bool && std::holds_alternative<bool>(var.DefaultValue))
+			m_Material->AddBool(var.Name, std::get<bool>(var.DefaultValue));
+	}
+
 	if (!hasParam("baseColor")) m_Material->SetFloat4("baseColor", Engine::vec4(1.0f));
 	if (!hasParam("roughness")) m_Material->SetFloat("roughness", 0.5f);
 	if (!hasParam("metallic")) m_Material->SetFloat("metallic", 0.0f);

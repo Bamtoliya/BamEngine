@@ -70,6 +70,7 @@ void Renderer::Free()
 	m_DefaultGBufferSkinningVS = {};
 	m_DefaultShadowDepthVS = {};
 	m_DefaultShadowDepthSkinningVS = {};
+	m_DefaultShadowDepthPS = {};
 
 	m_RenderPassManager = nullptr;
 
@@ -1292,6 +1293,16 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	if (!m_RHI || !material) return EResult::InvalidArgument;
 	Shader* vs = ResolveVertexShader(mesh, material, passType);
 	Shader* ps = material->GetPixelShader(passType);
+
+	// 타 패스(Shadow 등)에 머티리얼 전용 오버라이드가 없어 nullptr를 반환한 경우, 렌더러 기본 섀도우 셰이더로 안전 폴백
+	if (passType == ERenderPassType::Shadow && (!vs || !ps))
+	{
+		EnsureDefaultShaders();
+		const bool isSkinned = mesh && mesh->IsSkinned();
+		if (!vs) vs = isSkinned ? m_DefaultShadowDepthSkinningVS.Get() : m_DefaultShadowDepthVS.Get();
+		if (!ps) ps = m_DefaultShadowDepthPS.Get();
+	}
+
 	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader()) return EResult::InvalidArgument;
 	if (vs->GetShaderType() != EShaderType::Vertex || ps->GetShaderType() != EShaderType::Fragment)
 	{
@@ -1457,6 +1468,7 @@ void Renderer::EnsureDefaultShaders()
 	m_DefaultVS = getOrLoad(L"Resources/Shader/DefaultVS");
 	m_DefaultShadowDepthVS = getOrLoad(L"Resources/Shader/ShadowDepthVS");
 	m_DefaultShadowDepthSkinningVS = getOrLoad(L"Resources/Shader/ShadowDepthSkinningVS");
+	m_DefaultShadowDepthPS = getOrLoad(L"Resources/Shader/ShadowDepthPS");
 }
 Shader* Renderer::ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType)
 {

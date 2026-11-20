@@ -86,6 +86,29 @@ void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) c
 	ApplyParameterConstants(outConstants);
 }
 
+void MaterialInstance::BuildConstantBufferBlob(vector<uint8>& outBlob) const
+{
+	Material* baseMat = GetBaseMaterial();
+	const MaterialBufferLayout& effectiveLayout = GetBufferLayout().HasCustomParameters()
+		? GetBufferLayout()
+		: (baseMat ? baseMat->GetBufferLayout() : GetBufferLayout());
+
+	const size_t totalSize = (std::max)(sizeof(MaterialConstants), static_cast<size_t>(effectiveLayout.TotalBufferSize));
+	const size_t alignedSize = (totalSize + 15u) & ~static_cast<size_t>(15u);
+	outBlob.assign(alignedSize, 0u);
+
+	MaterialConstants baseConstants;
+	BuildMaterialConstants(baseConstants);
+	memcpy(outBlob.data(), &baseConstants, sizeof(MaterialConstants));
+
+	if (baseMat && effectiveLayout.HasCustomParameters())
+		baseMat->BuildConstantBufferBlob(outBlob);
+
+	// 48바이트 헤더는 인스턴스 오버라이드가 반영된 baseConstants로 확정
+	memcpy(outBlob.data(), &baseConstants, sizeof(MaterialConstants));
+	ApplyCustomParametersToBlob(outBlob, effectiveLayout);
+}
+
 EResult MaterialInstance::Bind(uint32 slot)
 {
 	if (!m_BaseMaterialHandle) return EResult::Fail;
@@ -150,10 +173,10 @@ EResult MaterialInstance::Bind(uint32 slot)
 			rhi->BindTexture(nullptr, s);
 	}
 
-	// 4단계: 머티리얼 상수 버퍼 바인딩
-	MaterialConstants constants;
-	BuildMaterialConstants(constants);
-	return rhi->BindConstantBuffer(&constants, sizeof(MaterialConstants), slot);
+	// 4단계: 머티리얼 상수 버퍼 바인딩 (동적 바이트 블롭 지원)
+	vector<uint8> constantBlob;
+	BuildConstantBufferBlob(constantBlob);
+	return rhi->BindConstantBuffer(constantBlob.data(), static_cast<uint32>(constantBlob.size()), slot);
 }
 
 void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
@@ -164,14 +187,16 @@ void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 #pragma region Shader
 Shader* MaterialInstance::GetVertexShader(ERenderPassType passType) const
 {
-	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_VertexShaderHandle))
+	const ERenderPassType primaryPass = GetPrimaryPassType();
+	if (HasPassShader(passType) || ((passType == primaryPass || primaryPass == ERenderPassType::Custom) && m_VertexShaderHandle))
 		return MaterialInterface::GetVertexShader(passType);
 	Material* baseMat = GetBaseMaterial();
 	return baseMat ? baseMat->GetVertexShader(passType) : nullptr;
 }
 Shader* MaterialInstance::GetPixelShader(ERenderPassType passType) const
 {
-	if (HasPassShader(passType) || (passType == ERenderPassType::Geometry && m_PixelShaderHandle))
+	const ERenderPassType primaryPass = GetPrimaryPassType();
+	if (HasPassShader(passType) || ((passType == primaryPass || primaryPass == ERenderPassType::Custom) && m_PixelShaderHandle))
 		return MaterialInterface::GetPixelShader(passType);
 	Material* baseMat = GetBaseMaterial();
 	return baseMat ? baseMat->GetPixelShader(passType) : nullptr;
@@ -194,6 +219,12 @@ string MaterialInstance::GetShaderGraphPath() const
 }
 #pragma endregion
 #pragma region Pipeline
+ERenderPassType MaterialInstance::GetPrimaryPassType() const
+{
+	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::PrimaryPassType)) return m_PrimaryPassType;
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetPrimaryPassType() : ERenderPassType::Geometry;
+}
 EBlendMode MaterialInstance::GetBlendMode() const
 {
 	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode)) return m_BlendMode;
@@ -230,6 +261,12 @@ EFrontFace MaterialInstance::GetFrontFace() const
 	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::FrontFace)) return m_FrontFace;
 	Material* baseMat = GetBaseMaterial();
 	return baseMat ? baseMat->GetFrontFace() : EFrontFace::Clockwise;
+}
+
+void MaterialInstance::SetPrimaryPassType(ERenderPassType passType)
+{
+	m_PrimaryPassType = passType;
+	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::PrimaryPassType);
 }
 
 void MaterialInstance::SetBlendMode(EBlendMode mode)

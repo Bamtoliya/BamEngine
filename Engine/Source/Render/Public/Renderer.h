@@ -154,6 +154,7 @@ private:
 	ResourceHandle<Shader> m_DefaultVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthSkinningVS;
+	ResourceHandle<Shader> m_DefaultShadowDepthPS;
 #pragma endregion
 };
 END

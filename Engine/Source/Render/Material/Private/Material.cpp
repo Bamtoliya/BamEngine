@@ -20,6 +20,7 @@ EResult Material::Initialize(void* arg)
 		SetPassShader(passDesc.PassType, passDesc.VertexShaderHandle, passDesc.PixelShaderHandle);
 	}
 
+	m_PrimaryPassType = desc->PrimaryPassType;
 	m_BlendMode = desc->BlendMode;
 	m_CullMode = desc->CullMode;
 	m_FillMode = desc->FillMode;

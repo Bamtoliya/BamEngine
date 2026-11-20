@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Graph.h"
+#include "MaterialInterface.h"
 #include <string>
 
 namespace Engine
@@ -8,6 +9,7 @@ namespace Engine
 	class ENGINE_API ShaderGraphCompiler final
 	{
 	public:
+		[[nodiscard]] static MaterialBufferLayout BuildMaterialBufferLayout(const Graph& graph);
 
 		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialVS(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
@@ -19,6 +21,9 @@ namespace Engine
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
 
 		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialHlsl(
+			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
+
+		[[nodiscard]] static GraphDiagnostic GenerateForwardTransparentMaterialHlsl(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
 	};
 }

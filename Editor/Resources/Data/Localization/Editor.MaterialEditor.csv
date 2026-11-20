@@ -29,6 +29,7 @@ MaterialEditor,ParamNameHint,Param Name,파라미터 이름
 MaterialEditor,Parameters,Parameters,매개변수
 MaterialEditor,PassSpecificShaders,--- Pass Specific Shaders ---,--- 패스별 셰이더 ---
 MaterialEditor,PassType,Pass Type,패스 종류
+MaterialEditor,PrimaryPassType,Primary Pass Type,기본 렌더 패스
 MaterialEditor,PipelineSettings,Pipeline Settings,파이프라인 설정
 MaterialEditor,PixelShader,Pixel Shader,픽셀 셰이더
 MaterialEditor,Preview,Preview,미리보기

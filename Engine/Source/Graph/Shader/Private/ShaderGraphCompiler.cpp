@@ -1,6 +1,7 @@
 ﻿#include "ShaderGraphCompiler.h"
 #include "GraphValue.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -19,6 +20,11 @@ namespace
 		return literal.str();
 	}
 
+	std::string FormatFloat2(const std::array<float, 2>& value)
+	{
+		return "float2(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ")";
+	}
+
 	std::string FormatFloat3(const std::array<float, 3>& value)
 	{
 		return "float3(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ", " + FormatFloat(value[2]) + ")";
@@ -30,12 +36,84 @@ namespace
 			FormatFloat(value[2]) + ", " + FormatFloat(value[3]) + ")";
 	}
 
+	std::string SanitizeCustomMemberName(const std::string& rawName)
+	{
+		std::string out = "custom_";
+		out.reserve(out.size() + rawName.size());
+		for (unsigned char ch : rawName)
+		{
+			if (std::isalnum(ch) || ch == '_')
+				out.push_back(static_cast<char>(ch));
+			else
+				out.push_back('_');
+		}
+		return out;
+	}
+
+	const char* HlslTypeForParameter(EMaterialParameterType type)
+	{
+		switch (type)
+		{
+		case EMaterialParameterType::Float: return "float";
+		case EMaterialParameterType::Float2: return "float2";
+		case EMaterialParameterType::Float3: return "float3";
+		case EMaterialParameterType::Float4: return "float4";
+		case EMaterialParameterType::Int: return "int";
+		case EMaterialParameterType::Bool: return "uint";
+		default: return "float";
+		}
+	}
+
+	std::string BuildMaterialConstantsHlsl(const MaterialBufferLayout& layout)
+	{
+		std::ostringstream out;
+		out << "// ── 머티리얼 상수 버퍼 (Space 3, b0 / RHI Slot 2) ──\n";
+		out << "struct MaterialConstants\n";
+		out << "{\n";
+		out << "uint   materialFlags;\n";
+		out << "float  roughness;\n";
+		out << "float  metallic;\n";
+		out << "float  cavity;\n";
+		out << "float4 baseColor;\n";
+		out << "float3 emissiveColor;\n";
+		out << "float  ao;\n";
+
+		uint32 cursor = sizeof(MaterialConstants);
+		uint32 padIndex = 0;
+
+		for (const auto& entry : layout.Entries)
+		{
+			// 명시적 4바이트 패딩 삽입으로 C++ 레이아웃 오프셋과 HLSL 실제 오프셋 100% 일치 보장
+			while (cursor < entry.Offset)
+			{
+				out << "float  _pad" << padIndex++ << ";\n";
+				cursor += 4u;
+			}
+			out << HlslTypeForParameter(entry.Type) << " " << SanitizeCustomMemberName(entry.Name) << ";\n";
+			cursor = entry.Offset + entry.Size;
+		}
+
+		while (cursor < layout.TotalBufferSize)
+		{
+			out << "float  _pad" << padIndex++ << ";\n";
+			cursor += 4u;
+		}
+
+		out << "};\n\n";
+		out << "ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);\n";
+		return out.str();
+	}
+
 	bool IsSupportedShaderNode(const std::string& type)
 	{
+		if (type.rfind("Variable.Get.", 0) == 0 && type.size() > 13)
+			return true;
+
 		static const std::unordered_set<std::string> supported{
 			"Shader.ColorOutput", "Shader.MaterialOutput",
-			"Core.Float", "Core.Float3", "Core.Float4",
-			"Core.Reroute.Float", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
+			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
+			"Core.Reroute.Float", "Core.Reroute.Float2", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
+			"Math.AddFloat", "Math.MultiplyFloat",
 			"Math.MakeFloat3", "Math.BreakFloat3",
 			"Math.MakeFloat4", "Math.BreakFloat4"
 		};
@@ -116,6 +194,11 @@ namespace
 			outExpression = FormatFloat(std::get<float>(value));
 			return {};
 		}
+		if (expectedType == EGraphPinType::Float2)
+		{
+			outExpression = FormatFloat2(std::get<std::array<float, 2>>(value));
+			return {};
+		}
 		if (expectedType == EGraphPinType::Float3)
 		{
 			outExpression = FormatFloat3(std::get<std::array<float, 3>>(value));
@@ -124,6 +207,16 @@ namespace
 		if (expectedType == EGraphPinType::Float4)
 		{
 			outExpression = FormatFloat4(std::get<std::array<float, 4>>(value));
+			return {};
+		}
+		if (expectedType == EGraphPinType::Int)
+		{
+			outExpression = std::to_string(std::get<std::int64_t>(value));
+			return {};
+		}
+		if (expectedType == EGraphPinType::Bool)
+		{
+			outExpression = std::get<bool>(value) ? "1u" : "0u";
 			return {};
 		}
 
@@ -144,18 +237,45 @@ namespace
 			return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
 		const auto& type = producer->Type;
-		if (type == "Core.Float" || type == "Core.Float3" || type == "Core.Float4")
+		if (type.rfind("Variable.Get.", 0) == 0 && type.size() > 13)
+		{
+			if (outputPin.Pin != "value")
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			const std::string varName = type.substr(13);
+			if (!graph.FindVariable(varName))
+				return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
+			outExpression = "gMaterial." + SanitizeCustomMemberName(varName);
+			return {};
+		}
+
+		if (type == "Core.Float" || type == "Core.Float2" || type == "Core.Float3" || type == "Core.Float4")
 		{
 			if (outputPin.Pin != "result")
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 			return ResolveInputExpression(graph, registry, { outputPin.Node, "value" }, expectedType, callStack, outExpression);
 		}
 
-		if (type == "Core.Reroute.Float" || type == "Core.Reroute.Float3" || type == "Core.Reroute.Float4")
+		if (type == "Core.Reroute.Float" || type == "Core.Reroute.Float2" || type == "Core.Reroute.Float3" || type == "Core.Reroute.Float4")
 		{
 			if (outputPin.Pin != "Out")
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 			return ResolveInputExpression(graph, registry, { outputPin.Node, "In" }, expectedType, callStack, outExpression);
+		}
+
+		if (type == "Math.AddFloat" || type == "Math.MultiplyFloat")
+		{
+			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string a, b;
+			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "a" }, EGraphPinType::Float, callStack, a);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "b" }, EGraphPinType::Float, callStack, b);
+			if (!res.Succeeded()) return res;
+
+			const char* op = (type == "Math.AddFloat") ? " + " : " * ";
+			outExpression = "(" + a + op + b + ")";
+			return {};
 		}
 
 		if (type == "Math.MakeFloat3")
@@ -284,12 +404,50 @@ namespace
 	}
 }
 
+MaterialBufferLayout ShaderGraphCompiler::BuildMaterialBufferLayout(const Graph& graph)
+{
+	MaterialBufferLayout layout;
+	layout.TotalBufferSize = sizeof(MaterialConstants);
+	uint32 cursor = sizeof(MaterialConstants);
+
+	for (const auto& var : graph.GetVariables())
+	{
+		EMaterialParameterType paramType = EMaterialParameterType::Float;
+		uint32 size = 0;
+
+		switch (var.Type)
+		{
+		case EGraphPinType::Float:  paramType = EMaterialParameterType::Float;  size = 4u;  break;
+		case EGraphPinType::Float2: paramType = EMaterialParameterType::Float2; size = 8u;  break;
+		case EGraphPinType::Float3: paramType = EMaterialParameterType::Float3; size = 12u; break;
+		case EGraphPinType::Float4: paramType = EMaterialParameterType::Float4; size = 16u; break;
+		case EGraphPinType::Int:    paramType = EMaterialParameterType::Int;    size = 4u;  break;
+		case EGraphPinType::Bool:   paramType = EMaterialParameterType::Bool;   size = 4u;  break;
+		default: continue;
+		}
+
+		// HLSL cbuffer 패킹 규칙: 4바이트 정렬 후 16바이트 경계를 넘치면 다음 16바이트 경계로 점프
+		uint32 offset = (cursor + 3u) & ~3u;
+		if ((offset / 16u) != ((offset + size - 1u) / 16u))
+			offset = (offset + 15u) & ~15u;
+
+		layout.Entries.push_back({ var.Name, paramType, offset, size });
+		cursor = offset + size;
+	}
+
+	layout.TotalBufferSize = (cursor + 15u) & ~15u;
+	return layout;
+}
+
 GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 {
 	const GraphNode* outputNode = nullptr;
 	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
 	if (!diagnostic.Succeeded()) return diagnostic;
+
+	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
+	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
 
 	std::vector<GraphPinReference> callStack;
 	std::string wpoExpression = "float3(0.0f, 0.0f, 0.0f)";
@@ -311,6 +469,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 
 	std::string source = R"(#include "common.hlsli"
 
+)" + materialConstantsBlock + R"(
 struct VS_INPUT
 {
 float3 Position : POSITION;
@@ -514,6 +673,9 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 		}
 	}
 
+	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
+	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
+
 	std::string source = R"(#include "shading_flags.hlsli"
 
 struct PS_INPUT
@@ -536,20 +698,7 @@ float4 Emission : SV_TARGET3;
 float4 Position : SV_TARGET4;
 };
 
-// ── 머티리얼 상수 버퍼 (Space 3, b0 / RHI Slot 2) ──
-struct MaterialConstants
-{
-uint   materialFlags;
-float  roughness;
-float  metallic;
-float  cavity;
-float4 baseColor;
-float3 emissiveColor;
-float  ao;
-};
-
-ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);
-
+)" + materialConstantsBlock + R"(
 PS_OUTPUT main(PS_INPUT input)
 {
 PS_OUTPUT output;
@@ -571,6 +720,90 @@ output.PBR = float4(roughness, metallic, cavity, ao);
 output.Emission = float4(emission, 1.0f);
 output.Position = float4(input.WorldPos, input.PickingId);
 return output;
+}
+)";
+
+	outSource.swap(source);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const GraphNode* outputNode = nullptr;
+	std::string baseColor;
+	std::vector<GraphPinReference> callStack;
+
+	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	const auto links = graph.GetLinks();
+	const auto hasInputLink = [&](const std::string& pinName)
+	{
+		return std::any_of(links.begin(), links.end(), [&](const GraphLink& link)
+		{
+			return link.To.Node == outputNode->Id && link.To.Pin == pinName;
+		});
+	};
+
+	const char* colorPin = outputNode->Type == "Shader.MaterialOutput" ? "baseColor" : "color";
+	if (hasInputLink(colorPin))
+	{
+		auto result = ResolveInputExpression(
+			graph, registry, { outputNode->Id, colorPin }, EGraphPinType::Float4, callStack, baseColor);
+		if (!result.Succeeded()) return result;
+	}
+	else
+	{
+		baseColor = "gMaterial.baseColor";
+	}
+
+	std::string emissive = "gMaterial.emissiveColor";
+	std::string ao = "gMaterial.ao";
+	if (outputNode->Type == "Shader.MaterialOutput")
+	{
+		if (hasInputLink("emissive"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
+			if (!result.Succeeded()) return result;
+		}
+		if (hasInputLink("ao"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
+			if (!result.Succeeded()) return result;
+		}
+	}
+
+	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
+	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
+
+	std::string source = R"(struct PS_INPUT
+{
+float4 Position : SV_POSITION;
+float3 WorldPos : WORLD_POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float4 Color : COLOR0;
+nointerpolation float PickingId : TEXCOORD5;
+};
+
+)" + materialConstantsBlock + R"(
+float4 main(PS_INPUT input) : SV_TARGET0
+{
+float4 diffuse = ()" + baseColor + R"() * input.Color;
+float alpha = saturate(diffuse.a);
+if (alpha < 0.001f) discard;
+
+float3 N = normalize(input.Normal);
+float3 L = normalize(float3(0.45f, 0.80f, 0.38f));
+float ndl = saturate(dot(N, L));
+float hemi = 0.35f + 0.65f * (N.y * 0.5f + 0.5f);
+float aoVal = clamp()" + ao + R"(, 0.0f, 1.0f);
+float3 litColor = diffuse.rgb * ((0.35f * hemi + 0.75f * ndl) * aoVal) + ()" + emissive + R"();
+return float4(litColor, alpha);
 }
 )";
 

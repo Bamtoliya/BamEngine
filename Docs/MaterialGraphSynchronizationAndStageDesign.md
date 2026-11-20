@@ -195,9 +195,9 @@ private:
 
 | 단계 | 명칭 | 구현 범위 | 효과 및 검증 기준 |
 | :--- | :--- | :--- | :--- |
-| **Phase 1 (현 단계)** | **기본 PBR Fast-Path 안정화** | 48바이트 고정 PBR 구조체(`MaterialConstants`) 기반 Fast-Path 실시간 파라미터 반응(60fps) 및 마스터 노드 양방향 동기화 | 셰이더 재컴파일 없이 파라미터 조작 즉시 3D 프리뷰 반응 확인 |
-| **Phase 2 (차기 과제)** | **동적 cbuffer 코드 생성 및 레이아웃 도입** | `ShaderGraphCompiler`에서 그래프 파라미터 기반 `cbuffer` 동적 생성, `MaterialBufferLayout` 오프셋 메타데이터 테이블 구축 | 사용자 정의 파라미터(디졸브, UV 스케일 등) 임의 추가 시 HLSL에 자동 반영 |
-| **Phase 3 (완전 범용화)** | **바이트 블롭 전환 및 셰이더 리플렉션 연동** | C++ `MaterialConstants` 구조체 제거, `std::vector<uint8_t>` 바이트 블롭 저장소 전환, `SPIRV-Cross` / D3D12 리플렉션 교차 검증 | 모든 커스텀 머티리얼 및 셰이딩 모델(Toon, Glass 등)에서 C++ 코드 수정 없는 100% 범용화 |
+| **Phase 1 (완료)** | **기본 PBR Fast-Path 안정화** | 48바이트 고정 PBR 구조체(`MaterialConstants`) 기반 Fast-Path 실시간 파라미터 반응(60fps) 및 마스터 노드 양방향 동기화 | 셰이더 재컴파일 없이 파라미터 조작 즉시 3D 프리뷰 반응 확인 |
+| **Phase 2 (구현 완료: 2026-11-20)** | **동적 cbuffer 코드 생성 및 레이아웃·바이트 블롭 도입** | `ShaderGraphCompiler::BuildMaterialBufferLayout` 기반 16바이트 패킹 오프셋 계산 및 `Variable.Get.*` 동적 `cbuffer` VS/PS 생성, `MaterialInterface`/`MaterialInstance`의 `BuildConstantBufferBlob(vector<uint8>)` 원시 바이트 블롭 GPU 바인딩 | `ShaderGraphCheck` 16바이트 경계 점프(80B)·바이트 블롭 검증 통과 및 에디터 실환경 확인 |
+| **Phase 3 (후속 과제)** | **완전 범용화 및 셰이더 리플렉션 연동** | 고정 48바이트 헤더 완전 분리 및 `SPIRV-Cross` / D3D12 리플렉션 교차 검증 | 모든 커스텀 머티리얼 및 셰이딩 모델(Toon, Glass 등)에서 C++ 코드 수정 없는 100% 범용화 |
 
 ---
 

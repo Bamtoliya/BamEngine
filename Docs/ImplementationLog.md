@@ -2,6 +2,26 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 머티리얼 PrimaryPassType 도입·동적 cbuffer 레이아웃(Phase 2)·통합 Undo/Redo 구현
+
+- **후보 2 — 머티리얼 기본 렌더 패스(`PrimaryPassType`) 및 Fallback 정합성**:
+  - `MaterialInterface.h/.cpp`, `Material.cpp`, `MaterialInstance.h/.cpp`: `m_PrimaryPassType` (`ERenderPassType::Geometry` 기본값) 속성·리플렉션(`PROP_PRIMARY_PASS_TYPE`)·`MaterialDesc::PrimaryPassType`·`EPipelineOverrideFlag::PrimaryPassType` 추가. `GetVertexShader`/`GetPixelShader`에서 `m_PassShaders` 최우선 → `passType == m_PrimaryPassType || Custom` 시 기본 셰이더 → 그 외 `nullptr` 반환으로 정합화.
+  - `MaterialInterface::OnPostLoad()`: 레거시 `.bammat.json`의 `UI`, `PostProcess`, `Forward`(`SkyPS`), 반투명/Decal `ForwardTransparent` 주 패스 자동 보정 추가.
+  - `PostProcessPipeline.cpp`: 코드 생성 7종 포스트프로세스 머티리얼(`ToneMapping`, `ColorAdjustments`, `Vignette`, `ChromaticAberration`, `FilmGrain`, `LensDistortion`, `Sharpen`)에 `desc.PrimaryPassType = ERenderPassType::PostProcess` 지정(Display RT 미갱신/그리드 잔상 회귀 해결).
+  - `Renderer.h/.cpp`: `m_DefaultShadowDepthPS` 추가 및 `PrepareMeshPipelineDesc()`에서 `Shadow` 패스 오버라이드 미지정 머티리얼의 안전한 기본 섀도우 셰이더 폴백 보장.
+  - `MaterialEditor.cpp`, `MaterialEditorShader.cpp`, `Editor.MaterialEditor.csv`, `Engine.csv`: `[파이프라인 설정]` 최상단에 `기본 렌더 패스` 콤보·`BlendMode` 권장 프리셋 자동 보정 연동 및 `ForwardTransparent` 시 `GenerateForwardTransparentMaterialHlsl()`(단일 `SV_TARGET0` 출력) 분기 컴파일·주 패스 바인딩 적용.
+- **후보 1 심화 (Phase 2) — 동적 상수 버퍼 레이아웃 & 원시 바이트 블롭**:
+  - `MaterialInterface.h/.cpp`, `MaterialInstance.cpp`: `MaterialParameterEntry`, `ENGINE_API MaterialBufferLayout`, `BuildConstantBufferBlob(vector<uint8>&)` 구현. 앞 48바이트 표준 PBR 헤더 하위 호환 유지 + 48바이트 이후 커스텀 파라미터 오프셋 `memcpy` 후 `rhi->BindConstantBuffer` 전송.
+  - `Graph.cpp`, `ShaderGraphCompiler.h/.cpp`: `Shader` 도메인에서 `Variable.Get.*` 노드만 등록하도록 `RegisterVariableNodes` 보완. `BuildMaterialBufferLayout()` 16바이트 경계 패킹 + 명시적 `_padN` 동적 `MaterialConstants` HLSL 조립(`VS`, `GBuffer PS`, `ForwardTransparent PS` 공유), `Variable.Get.<Name>` → `gMaterial.custom_<Name>` 및 `Math.AddFloat`/`Math.MultiplyFloat` 지원.
+  - `MaterialEditor.cpp`, `MaterialEditorShader.cpp`: `SyncParametersFromGraph()`에 `GraphVariable` 자동 노출 추가 및 `LiveHotReloadShader()`에서 `SetBufferLayout()` 동기화.
+- **머티리얼 에디터 UI/UX 개선 및 단일 통합 Undo/Redo (방안 A)**:
+  - `MaterialEditor.h/.cpp`: 분리되어 있던 `m_History`와 `m_ShaderGraphHistory`를 단일 `ResourceDocumentHistory<DocumentSnapshot>`(머티리얼 JSON + 셰이더 그래프 동시 캡처)로 통합하여 파이프라인·파라미터·텍스처·그래프·노드 속성 편집의 시간 순서 Undo/Redo, 양방향 동기화 원자 복원, 드래그 제스처 통합 및 복원 시 자동 재컴파일/프리뷰 갱신 보장.
+  - `MaterialEditor.cpp`: 패스별 셰이더 삭제(휴지통) 버튼의 실제 폭 계산 및 `Editor::SplitterThickness + ItemInnerSpacing.x` 우측 여유 마진 적용으로 스플리터/스크롤바 겹침 및 좌우 스크롤 유발 해소.
+- **검증 상태**:
+  - `ShaderGraphCheck.cpp`에 동적 16바이트 패킹(80B)·`Variable.Get.*` VS/PS·`ForwardTransparent` 단일 `SV_TARGET0`·`PrimaryPassType` Fallback·`BuildConstantBufferBlob` 바이트 검증을 추가했으며, 사용자가 `x64-ninja-debug` 빌드(`Editor`, `ShaderGraphCheck`) 및 에디터 실환경(뷰포트 렌더링 복구, 패스별 삭제 버튼, 단일 통합 Undo/Redo) 정상 동작을 확인.
+- **미검증**:
+  - 전체 44개 CTest 최종 회귀 실행 및 `x64-release` 빌드, 에디터 실환경에서 `GraphVariable` 커스텀 변수를 이용한 실시간 Fast-Path 60fps 프리뷰 조절.
+
 ### [2026-11-20] 셰이더 그래프 단일 마스터 노드 기반 VS/PS 듀얼 통합 컴파일 구현
 
 - **마스터 노드 및 컴파일러 확장 (`GraphRegistry.cpp`, `ShaderGraphCompiler.h/.cpp`)**:

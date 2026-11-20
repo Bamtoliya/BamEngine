@@ -1,7 +1,7 @@
 # 머티리얼 기본 렌더 패스(Primary Pass Type) 도입 및 셰이더 파이프라인 정합성 설계
 
 - 작성일: 2026-11-20
-- 상태: 설계 확정 (Design Approved), 구현 준비
+- 상태: 구현 완료 및 에디터 실환경 확인 (2026-11-20) — `PrimaryPassType` 데이터 모델·리플렉션·레거시 보정·Shadow 폴백·`ForwardTransparent` PS 생성·에디터 UI 연동 완료
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md) 14·19절, [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - 선행 문서: [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md), [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
 - 관련 소스:

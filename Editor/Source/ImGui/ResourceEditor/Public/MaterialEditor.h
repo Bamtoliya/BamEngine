@@ -48,6 +48,15 @@ public:
 		std::filesystem::path RuntimeMaterialArtifact;
 	};
 
+	// 머티리얼 속성(파이프라인/셰이더/텍스처/파라미터)과 셰이더 그래프를 단일 타임라인으로 묶는 통합 스냅샷
+	struct DocumentSnapshot
+	{
+		std::string MaterialJson;
+		bool HasGraph = false;
+		std::filesystem::path GraphFilePath;
+		Engine::Graph GraphData{ Engine::EGraphDomain::Shader };
+	};
+
 	struct ShaderGraphDocument
 	{
 		Engine::Graph Data{ Engine::EGraphDomain::Shader };
@@ -210,8 +219,8 @@ private:
 
 	// 문서 히스토리 (Undo / Redo)
 	bool CommitDocumentEdit();
-	std::optional<std::string> CaptureDocument() const;
-	bool ApplyDocumentSnapshot(const std::string& snapshot);
+	std::optional<DocumentSnapshot> CaptureDocument() const;
+	bool ApplyDocumentSnapshot(const DocumentSnapshot& snapshot);
 	bool CommitShaderGraphEdit();
 	bool CanUndoDocument() const override;
 	bool CanRedoDocument() const override;
@@ -222,7 +231,7 @@ private:
 	// 머티리얼 리소스
 	Engine::ResourceHandle<Engine::MaterialInterface> m_MaterialHandle;
 	Engine::MaterialInterface* m_Material = nullptr;
-	ResourceDocumentHistory<std::string> m_History;
+	ResourceDocumentHistory<DocumentSnapshot> m_History;
 	bool m_IsReadOnly = false;
 
 	// 새 파라미터 / 텍스처 / 패스 입력 버퍼
@@ -248,7 +257,6 @@ private:
 	// 셰이더 그래프 자체 소유 상태
 	Engine::GraphRegistry m_GraphRegistry;
 	ShaderGraphDocument m_ShaderGraph;
-	ResourceDocumentHistory<Engine::Graph> m_ShaderGraphHistory;
 	Engine::GraphDiagnostic m_LastGraphDiagnostic;
 	bool m_GraphReady = false;
 

@@ -131,12 +131,37 @@ struct MaterialParameter
 	bool operator==(const MaterialParameter& other) const = default;
 };
 
+// HLSL 16바이트 패킹 규칙에 맞춘 동적 상수 버퍼 파라미터 엔트리
+struct MaterialParameterEntry
+{
+	string Name;
+	EMaterialParameterType Type = EMaterialParameterType::Float;
+	uint32 Offset = 0;
+	uint32 Size = 0;
+};
+
+// 셰이더 그래프에서 산출되는 동적 상수 버퍼 레이아웃 (앞 48바이트는 표준 MaterialConstants 유지)
+struct ENGINE_API MaterialBufferLayout
+{
+	vector<MaterialParameterEntry> Entries;
+	uint32 TotalBufferSize = sizeof(MaterialConstants);
+
+	const MaterialParameterEntry* Find(const string& name) const;
+	bool HasCustomParameters() const { return !Entries.empty(); }
+	void Clear()
+	{
+		Entries.clear();
+		TotalBufferSize = sizeof(MaterialConstants);
+	}
+};
+
 
 struct MaterialDesc : public ResourceCreateDesc
 {
 	ResourceHandle<Shader> VertexShaderHandle;
 	ResourceHandle<Shader> PixelShaderHandle;
 	vector<MaterialPassShaderDesc> PassShaders = {};
+	ERenderPassType PrimaryPassType = ERenderPassType::Geometry;
 	EBlendMode BlendMode = EBlendMode::Opaque;
 	ECullMode CullMode = ECullMode::Back;
 	EFillMode FillMode = EFillMode::Solid;
@@ -194,6 +219,10 @@ public:
 
 public:
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const;
+	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const;
+
+	void SetBufferLayout(const MaterialBufferLayout& layout) { m_BufferLayout = layout; }
+	const MaterialBufferLayout& GetBufferLayout() const { return m_BufferLayout; }
 
 	template<typename T>
 	T GetParameter(const string& name, const T& defaultValue = T{}) const
@@ -212,6 +241,7 @@ public:
 
 protected:
 	void ApplyParameterConstants(MaterialConstants& outConstants) const;
+	void ApplyCustomParametersToBlob(vector<uint8>& outBlob, const MaterialBufferLayout& layout) const;
 
 private:
 	// 다음 파라미터가 배치될 최적의 정렬 오프셋을 계산하는 내부 헬퍼
@@ -250,6 +280,7 @@ public:
 #pragma region Pipeline
 public:
 	virtual BlendState GetBlendState();
+	virtual ERenderPassType GetPrimaryPassType() const { return m_PrimaryPassType; }
 	virtual EBlendMode GetBlendMode() const { return m_BlendMode; }
 	virtual ECullMode GetCullMode() const { return m_CullMode; }
 	virtual EFrontFace GetFrontFace() const { return m_FrontFace; }
@@ -257,6 +288,7 @@ public:
 	virtual EDepthMode GetDepthMode() const { return m_DepthMode; }
 	virtual ECompareOp GetDepthCompareOp() const { return m_DepthCompareOp; }
 public:
+	virtual void SetPrimaryPassType(ERenderPassType passType) { m_PrimaryPassType = passType; }
 	virtual void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; }
 	virtual void SetCullMode(ECullMode mode) { m_CullMode = mode; }
 	virtual void SetFrontFace(EFrontFace mode) { m_FrontFace = mode; }
@@ -294,6 +326,8 @@ protected:
 
 #pragma region Variable
 protected:
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_PRIMARY_PASS_TYPE"))
+	ERenderPassType m_PrimaryPassType = { ERenderPassType::Geometry };
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_BLEND_MODE"))
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_CULL_MODE"))
@@ -328,6 +362,7 @@ protected:
 private:
 	unordered_map<string, uint32> m_TextureNameToIndex = {};
 	unordered_map<uint32, uint32> m_TextureSlotToIndex = {};
+	MaterialBufferLayout m_BufferLayout = {};
 #pragma endregion
 };
 END

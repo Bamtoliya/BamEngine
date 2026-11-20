@@ -343,17 +343,20 @@ void Graph::RegisterVariableNodes(GraphRegistry& registry) const
 		getDef.Pins.push_back({ "value", EGraphPinDirection::Output, var.Type, {} });
 		(void)registry.RegisterOrUpdate(std::move(getDef));
 
-		// 2. Set 노드: 실행 노드, 입력 핀 (exec, value), 출력 핀 (then, outValue)
-		GraphNodeDefinition setDef;
-		setDef.Type = setName;
-		setDef.Domains = { m_Domain };
-		setDef.DisplayName = "Set " + var.Name;
-		setDef.Category = "Variables";
-		setDef.Pins.push_back({ "exec", EGraphPinDirection::Input, EGraphPinType::Execution, {} });
-		setDef.Pins.push_back({ "value", EGraphPinDirection::Input, var.Type, var.DefaultValue });
-		setDef.Pins.push_back({ "then", EGraphPinDirection::Output, EGraphPinType::Execution, {} });
-		setDef.Pins.push_back({ "outValue", EGraphPinDirection::Output, var.Type, {} });
-		(void)registry.RegisterOrUpdate(std::move(setDef));
+		// 2. Set 노드: Logic 도메인 전용 실행 노드 (Shader 도메인은 Execution 핀 불가)
+		if (m_Domain == EGraphDomain::Logic)
+		{
+			GraphNodeDefinition setDef;
+			setDef.Type = setName;
+			setDef.Domains = { m_Domain };
+			setDef.DisplayName = "Set " + var.Name;
+			setDef.Category = "Variables";
+			setDef.Pins.push_back({ "exec", EGraphPinDirection::Input, EGraphPinType::Execution, {} });
+			setDef.Pins.push_back({ "value", EGraphPinDirection::Input, var.Type, var.DefaultValue });
+			setDef.Pins.push_back({ "then", EGraphPinDirection::Output, EGraphPinType::Execution, {} });
+			setDef.Pins.push_back({ "outValue", EGraphPinDirection::Output, var.Type, {} });
+			(void)registry.RegisterOrUpdate(std::move(setDef));
+		}
 	}
 }
 

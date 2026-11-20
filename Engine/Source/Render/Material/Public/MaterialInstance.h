@@ -20,6 +20,7 @@ enum class EPipelineOverrideFlag : uint8
 	DepthMode = 1 << 3,
 	DepthCompareOp = 1 << 4,
 	FrontFace = 1 << 5,
+	PrimaryPassType = 1 << 6,
 	Count
 };
 
@@ -45,6 +46,7 @@ public:
 
 #pragma region Bind
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const override;
+	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const override;
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion
 
@@ -58,6 +60,7 @@ public:
 
 #pragma region Pipeline
 public:
+	virtual ERenderPassType GetPrimaryPassType() const override;
 	virtual EBlendMode GetBlendMode() const override;
 	virtual ECullMode GetCullMode() const override;
 	virtual EFillMode GetFillMode() const override;
@@ -65,6 +68,7 @@ public:
 	virtual ECompareOp GetDepthCompareOp() const override;
 	virtual EFrontFace GetFrontFace() const override;
 public:
+	virtual void SetPrimaryPassType(ERenderPassType passType) override;
 	virtual void SetBlendMode(EBlendMode mode) override;
 	virtual void SetCullMode(ECullMode mode) override;
 	virtual void SetFillMode(EFillMode mode) override;
@@ -72,6 +76,7 @@ public:
 	virtual void SetDepthCompareOp(ECompareOp op) override;
 	virtual void SetFrontFace(EFrontFace mode) override;
 public:
+	void ClearPrimaryPassTypeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::PrimaryPassType); }
 	void ClearBlendModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode); }
 	void ClearCullModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode); }
 	void ClearFillModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode); }

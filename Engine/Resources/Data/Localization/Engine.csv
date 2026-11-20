@@ -578,6 +578,7 @@
 ,PROP_PREFILTERED_MAP,Prefiltered Environment Map,사전 필터링 환경 맵
 ,PROP_PRESET_NAME,Preset Name,프리셋 이름
 ,PROP_PRESS_COLOR,Press Color,Press 색
+,PROP_PRIMARY_PASS_TYPE,Primary Pass Type,기본 렌더 패스
 ,PROP_PRIORITY,Priority,우선순위
 ,PROP_PROBE_RADIUS,Probe Radius,프로브 반지름
 ,PROP_RADIUS,Radius,반지름

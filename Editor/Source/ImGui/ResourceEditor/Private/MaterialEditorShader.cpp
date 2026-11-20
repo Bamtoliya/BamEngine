@@ -140,7 +140,10 @@ namespace Editor
 			return;
 		}
 
-		m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs);
+		const auto primaryPass = m_Material ? m_Material->GetPrimaryPassType() : Engine::ERenderPassType::Geometry;
+		m_LastGraphDiagnostic = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
+			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs)
+			: Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs);
 		build.Details.clear();
 
 		if (!m_LastGraphDiagnostic.Succeeded())
@@ -215,8 +218,11 @@ namespace Editor
 			return;
 		}
 
+		const auto primaryPass = m_Material->GetPrimaryPassType();
 		std::string candidatePsHlsl;
-		auto diagPs = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl);
+		auto diagPs = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
+			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl)
+			: Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl);
 		if (!diagPs.Succeeded())
 		{
 			build.StatusKey = "MaterialEditor.CompileFailed";
@@ -320,9 +326,12 @@ namespace Editor
 				m_LiveVertexShader = vsHandle;
 				m_LivePixelShader = psHandle;
 
+				// 동적 상수 버퍼 레이아웃 동기화
+				m_Material->SetBufferLayout(Engine::ShaderGraphCompiler::BuildMaterialBufferLayout(m_ShaderGraph.Data));
+
 				m_Material->SetVertexShaderHandle(m_LiveVertexShader);
 				m_Material->SetPixelShaderHandle(m_LivePixelShader);
-				m_Material->SetPassShader(Engine::ERenderPassType::Geometry, m_LiveVertexShader, m_LivePixelShader);
+				m_Material->SetPassShader(primaryPass, m_LiveVertexShader, m_LivePixelShader);
 
 				m_Material->IncreaseVersion();
 				m_PreviewDirtyTimer = 0.5f;
