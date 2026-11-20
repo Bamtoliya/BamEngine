@@ -150,6 +150,8 @@ private:
 private:
 	ResourceHandle<Shader> m_DefaultGBufferVS;
 	ResourceHandle<Shader> m_DefaultGBufferSkinningVS;
+	ResourceHandle<Shader> m_DefaultGBufferPS;
+	ResourceHandle<Shader> m_DefaultVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthSkinningVS;
 #pragma endregion

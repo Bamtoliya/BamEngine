@@ -1293,6 +1293,67 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	Shader* vs = ResolveVertexShader(mesh, material, passType);
 	Shader* ps = material->GetPixelShader(passType);
 	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader()) return EResult::InvalidArgument;
+	if (vs->GetShaderType() != EShaderType::Vertex || ps->GetShaderType() != EShaderType::Fragment)
+	{
+		static std::unordered_set<std::string> s_LoggedTypeMismatches;
+		const std::string errKey = fmt::format("{}_{}", vs ? WStrToStr(vs->GetKey()) : "null", ps ? WStrToStr(ps->GetKey()) : "null");
+		if (s_LoggedTypeMismatches.insert(errKey).second)
+		{
+			BAM_LOG(Error, "Renderer", "PrepareMeshPipelineDesc",
+				"Shader stage type mismatch! VS '{}' (type={}) must be Vertex, PS '{}' (type={}) must be Fragment. Skipping pipeline creation.",
+				vs ? WStrToStr(vs->GetKey()) : "null", static_cast<int>(vs ? vs->GetShaderType() : EShaderType::Unknown),
+				ps ? WStrToStr(ps->GetKey()) : "null", static_cast<int>(ps ? ps->GetShaderType() : EShaderType::Unknown));
+		}
+		return EResult::InvalidArgument;
+	}
+
+	// ── VS와 PS의 시그니처 링키지(호환성) 검증 및 자동 보정 ──
+	const std::string vsKeyStr = ToLowerStr(WStrToStr(vs->GetKey()));
+	const std::string psKeyStr = ToLowerStr(WStrToStr(ps->GetKey()));
+
+	const bool isGBufferPS = (psKeyStr.find("gbuffer") != std::string::npos ||
+	                          psKeyStr.find("graphmaterial") != std::string::npos ||
+	                          psKeyStr.find("livepixelshader") != std::string::npos ||
+	                          psKeyStr.find("materialoutput") != std::string::npos);
+	const bool isGBufferVS = (vsKeyStr.find("gbuffer") != std::string::npos ||
+	                          vsKeyStr.find("skinning") != std::string::npos);
+
+	// GBuffer 픽셀 셰이더인데 정점 셰이더가 GBuffer용(WorldPos, PickingId 출력)이 아닌 경우 (예: DefaultVS)
+	if (isGBufferPS && !isGBufferVS)
+	{
+		EnsureDefaultShaders();
+		const bool isSkinned = mesh && mesh->IsSkinned();
+		Shader* fallbackVS = isSkinned ? m_DefaultGBufferSkinningVS.Get() : m_DefaultGBufferVS.Get();
+		if (fallbackVS && fallbackVS->GetRHIShader())
+		{
+			static std::unordered_set<std::string> s_LoggedFixes;
+			if (s_LoggedFixes.insert(vsKeyStr + "->" + psKeyStr).second)
+			{
+				BAM_LOG(Warn, "Renderer", "PrepareMeshPipelineDesc",
+					"Incompatible shader pair: VS '{}' lacks required outputs for GBuffer PS '{}'. Automatically substituting with GBufferVS.",
+					WStrToStr(vs->GetKey()), WStrToStr(ps->GetKey()));
+			}
+			vs = fallbackVS;
+		}
+		else
+		{
+			return EResult::InvalidArgument;
+		}
+	}
+	// 포워드/레거시 픽셀 셰이더(DefaultPS)인데 정점 셰이더가 GBufferVS인 경우 (BINORMAL 부재 등)
+	else if (!isGBufferPS && isGBufferVS && (psKeyStr.find("defaultps") != std::string::npos))
+	{
+		EnsureDefaultShaders();
+		Shader* fallbackVS = m_DefaultVS.Get();
+		if (fallbackVS && fallbackVS->GetRHIShader())
+		{
+			vs = fallbackVS;
+		}
+		else
+		{
+			return EResult::InvalidArgument;
+		}
+	}
 	desc.pipelineType = EPipelineType::Graphics;
 	desc.topology = mesh ? mesh->GetTopology() : ETopology::TriangleList;
 	if (mesh)
@@ -1392,6 +1453,8 @@ void Renderer::EnsureDefaultShaders()
 		};
 	m_DefaultGBufferVS = getOrLoad(L"Resources/Shader/GBufferVS");
 	m_DefaultGBufferSkinningVS = getOrLoad(L"Resources/Shader/GBufferSkinningVS");
+	m_DefaultGBufferPS = getOrLoad(L"Resources/Shader/GBufferPS");
+	m_DefaultVS = getOrLoad(L"Resources/Shader/DefaultVS");
 	m_DefaultShadowDepthVS = getOrLoad(L"Resources/Shader/ShadowDepthVS");
 	m_DefaultShadowDepthSkinningVS = getOrLoad(L"Resources/Shader/ShadowDepthSkinningVS");
 }

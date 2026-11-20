@@ -4,6 +4,45 @@
 #include "Logger.h"
 #include <directx/d3d12sdklayers.h>
 
+#if defined(_MSC_VER)
+#include <excpt.h>
+
+// MSVC C2712 방지를 위해 C++ 언와인딩 객체가 없는 독립 헬퍼로 SEH 격리
+static HRESULT SafeCreateGraphicsPipelineState(ID3D12Device* device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc, ID3D12PipelineState** outPipeline)
+{
+	__try
+	{
+		return device->CreateGraphicsPipelineState(desc, IID_PPV_ARGS(outPipeline));
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		return E_FAIL;
+	}
+}
+
+static HRESULT SafeLoadGraphicsPipeline(ID3D12PipelineLibrary* library, LPCWSTR name, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc, ID3D12PipelineState** outPipeline)
+{
+	__try
+	{
+		return library->LoadGraphicsPipeline(name, desc, IID_PPV_ARGS(outPipeline));
+	}
+	__except (EXCEPTION_EXECUTE_HANDLER)
+	{
+		return E_FAIL;
+	}
+}
+#else
+static HRESULT SafeCreateGraphicsPipelineState(ID3D12Device* device, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc, ID3D12PipelineState** outPipeline)
+{
+	return device->CreateGraphicsPipelineState(desc, IID_PPV_ARGS(outPipeline));
+}
+
+static HRESULT SafeLoadGraphicsPipeline(ID3D12PipelineLibrary* library, LPCWSTR name, const D3D12_GRAPHICS_PIPELINE_STATE_DESC* desc, ID3D12PipelineState** outPipeline)
+{
+	return library->LoadGraphicsPipeline(name, desc, IID_PPV_ARGS(outPipeline));
+}
+#endif
+
 namespace
 {
 	std::wstring GeneratePipelineKey(const RHIPipelineDesc& desc)
@@ -241,11 +280,11 @@ EResult DirectX12Pipeline::CreatePipelineState()
 	HRESULT hr = E_FAIL;
 	// 1. 라이브러리에 저장된 적이 있는 이름일 때만 안전하게 Load 시도 (드라이버 제거 방지)
 	if (pLibrary && dxRHI->ContainsPipeline(psoName))
-		hr = pLibrary->LoadGraphicsPipeline(psoName.c_str(), &psoDesc, IID_PPV_ARGS(&newPipeline));
-	// 2. 캐시 미적중 시 드라이버 컴파일 및 라이브러리 등록
+		hr = SafeLoadGraphicsPipeline(pLibrary, psoName.c_str(), &psoDesc, newPipeline.GetAddressOf());
+	// 2. 캐시 미적중 시 드라이버 컴파일 및 라이브러리 등록 (SEH 격리로 D3D12 SDKLayers 크래시 원천 차단)
 	if (FAILED(hr))
 	{
-		hr = dxDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&newPipeline));
+		hr = SafeCreateGraphicsPipelineState(dxDevice, &psoDesc, newPipeline.GetAddressOf());
 		if (FAILED(hr))
 		{
 			ENGINE_LOG_ERROR("CreateGraphicsPipelineState failed: HRESULT=0x{:08X}, VS bytes={}, PS bytes={}, RTs={}",
