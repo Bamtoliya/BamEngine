@@ -22,6 +22,7 @@
 #include "StaticMeshRendererComponent.h"
 #include "SkinnedMeshRendererComponent.h"
 #include "LODGroupComponent.h" 
+#include <chrono>
 
 ModelEditor::ModelEditor()
 {
@@ -805,15 +806,24 @@ void ModelEditor::InstantiateModel()
 void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
 	if (!IsImportedModelFile(assetPath)) return;
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto loadStart = Clock::now();
 	auto& manager = ResourceManager::Get();
 	const auto handle = manager.LoadFile(assetPath.wstring());
+	const auto loadEnd = Clock::now();
 	if (!dynamic_cast<Model*>(manager.GetResource(handle)) || !RestoreSavedChanges()) return;
 
 	ResourceEditorInterface::SetTargetResource(assetPath);
 	m_ModelHandle = ResourceHandle<Model>(handle);
 	m_StatusKey.clear();
 	m_History.Reset(m_ModelHandle.Get()->GetMaterials());
+	const auto previewStart = Clock::now();
 	SetupPreviewModel();
+	const auto previewEnd = Clock::now();
+	EDITOR_LOG_INFO("[ResourceOpenTiming] Model {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms",
+		WStrToStr(assetPath.wstring()), Milliseconds(loadEnd - loadStart).count(),
+		Milliseconds(previewEnd - previewStart).count(), Milliseconds(previewEnd - loadStart).count());
 }
 
 bool ModelEditor::CanSaveDocument() const

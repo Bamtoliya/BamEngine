@@ -10,6 +10,7 @@
 
 #pragma region Third Library
 #include <algorithm>
+#include <chrono>
 #include <fmt/core.h>
 #include <fstream>
 #include <utility>
@@ -749,6 +750,14 @@ void ImGuiManager::OpenPendingResourceEditor()
 
 	if (!sameTarget)
 	{
+		const auto openTarget = [editor, path] {
+			const auto started = std::chrono::steady_clock::now();
+			editor->SetTargetResource(path);
+			const auto elapsed = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - started).count();
+			EDITOR_LOG_INFO("[ResourceOpenTiming] Editor {}: path={}, attempt={:.2f}ms",
+				WStrToStr(editor->GetName()), WStrToStr(path.wstring()), elapsed);
+		};
 		if (editor->HasUnsavedResourceChanges())
 		{
 			editor->Open();
@@ -756,13 +765,11 @@ void ImGuiManager::OpenPendingResourceEditor()
 			if (auto* window = ImGui::FindWindowByID(editor->m_PanelWindowId))
 				ImGui::FocusWindow(window, ImGuiFocusRequestFlags_UnlessBelowModal);
 
-			editor->RunWithDiscardConfirmation([editor, path] {
-				editor->SetTargetResource(path);
-			});
+			editor->RunWithDiscardConfirmation(openTarget);
 			return;
 		}
 
-		editor->SetTargetResource(path);
+		openTarget();
 	}
 
 	editor->Focus();
