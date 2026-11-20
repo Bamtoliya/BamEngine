@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <fstream>
 #include <algorithm>
+#include <string_view>
 
 BEGIN(Editor)
 
@@ -26,8 +27,7 @@ namespace
         return (length > 0 && length < MAX_PATH) ? std::wstring(buffer) : std::wstring(L"C:\\Windows\\System32\\cmd.exe");
     }
 
-    // 빌드 트리를 구성한 컴파일러(CMakeCache의 CMAKE_CXX_COMPILER)에서 VS 설치 경로와 MSVC 도구 버전을 읽어
-    // 같은 도구 집합의 개발자 환경 명령을 만든다. 찾지 못하면 빈 문자열을 돌려준다.
+    // CMake가 실제로 선택한 컴파일러에서 VS 설치 경로와 도구 버전을 찾는다.
     std::wstring FindDevEnvironmentCommand(const std::filesystem::path& buildDir)
     {
         std::ifstream cache(buildDir / "CMakeCache.txt");
@@ -42,6 +42,21 @@ namespace
             }
         }
 
+        if (compiler.find_first_of("/\\") == std::string::npos)
+        {
+            const auto compilerFile = buildDir / "CMakeFiles" / BAM_EDITOR_CMAKE_VERSION / "CMakeCXXCompiler.cmake";
+            std::ifstream configuredCompiler(compilerFile);
+            constexpr std::string_view prefix = "set(CMAKE_CXX_COMPILER \"";
+            for (std::string line; std::getline(configuredCompiler, line);)
+            {
+                if (!line.starts_with(prefix)) continue;
+                const auto end = line.find('"', prefix.size());
+                if (end != std::string::npos)
+                    compiler = line.substr(prefix.size(), end - prefix.size());
+                break;
+            }
+        }
+
         std::ranges::replace(compiler, '\\', '/');
         const std::string marker = "/VC/Tools/MSVC/";
         const size_t markerPos = compiler.find(marker);
@@ -49,12 +64,29 @@ namespace
         const size_t versionEnd = versionBegin == std::string::npos ? std::string::npos : compiler.find('/', versionBegin);
         if (versionEnd == std::string::npos) return {};
 
+        const std::string binMarker = "/bin/Host";
+        const size_t hostBegin = compiler.find(binMarker, versionEnd);
+        const size_t hostEnd = hostBegin == std::string::npos ? std::string::npos : compiler.find('/', hostBegin + binMarker.size());
+        const size_t archEnd = hostEnd == std::string::npos ? std::string::npos : compiler.find('/', hostEnd + 1);
+        if (archEnd == std::string::npos) return {};
+        const auto devArch = [](std::string_view arch) -> std::wstring
+        {
+            if (arch == "x64") return L"amd64";
+            if (arch == "x86") return L"x86";
+            if (arch == "arm64") return L"arm64";
+            return {};
+        };
+        const auto hostArch = devArch(std::string_view(compiler).substr(hostBegin + binMarker.size(), hostEnd - hostBegin - binMarker.size()));
+        const auto targetArch = devArch(std::string_view(compiler).substr(hostEnd + 1, archEnd - hostEnd - 1));
+        if (hostArch.empty() || targetArch.empty()) return {};
+
         const auto devCmd = Engine::Utf8ToPath(compiler.substr(0, markerPos)) / "Common7" / "Tools" / "VsDevCmd.bat";
         std::error_code ec;
         if (!std::filesystem::is_regular_file(devCmd, ec)) return {};
 
         const std::string toolsVersion = compiler.substr(versionBegin, versionEnd - versionBegin);
-        return L"\"" + devCmd.wstring() + L"\" -arch=amd64 -host_arch=amd64 -vcvars_ver=" + StrToWStr(toolsVersion) + L" -no_logo";
+        return L"call \"" + devCmd.wstring() + L"\" -arch=" + targetArch + L" -host_arch=" + hostArch +
+            L" -vcvars_ver=" + StrToWStr(toolsVersion) + L" -no_logo";
     }
 }
 
@@ -261,7 +293,7 @@ void ModuleBuildManager::ExecuteBuildAsync()
         const std::wstring devEnv = FindDevEnvironmentCommand(m_BuildDir);
         if (devEnv.empty())
         {
-            m_PendingBuildOutput = "MSVC environment (INCLUDE) is missing and VsDevCmd.bat could not be found from CMakeCache.txt. "
+            m_PendingBuildOutput = "MSVC environment (INCLUDE) is missing and the configured compiler or VsDevCmd.bat could not be found in the build tree. "
                 "Start the editor from a Developer PowerShell or build the module in Visual Studio.";
             m_PendingBuildSuccess = false;
             m_HasNewResult = true;

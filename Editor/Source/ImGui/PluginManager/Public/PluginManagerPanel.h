@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #include "ImGuiInterface.h"
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -10,8 +12,7 @@ enum class EPluginCategory : uint8
 {
 	All,
 	GameLogic,
-	EditorTools,
-	Experimental
+	EditorTools
 };
 
 enum class EPluginStatus : uint8
@@ -27,15 +28,12 @@ struct PluginModuleItem
 	std::string Id;
 	std::string DisplayName;
 	std::string Version;
-	std::string Author;
-	std::string Description;
 	const char* Icon = nullptr;
 	EPluginCategory Category = EPluginCategory::GameLogic;
 	bool IsGameModule = false;
 	bool IsShaderModule = false;
 	bool IsAssetModule = false;
 	bool IsResourcePlugin = false;
-	std::wstring AssociatedPanelName;
 	std::optional<std::size_t> HostIndex;
 };
 
@@ -46,15 +44,19 @@ public:
 	virtual ~PluginManagerPanel() = default;
 
 	void Draw() override;
+	void CaptureState(EditorWorkspace& workspace) const override;
+	void RestoreState(const EditorWorkspace& workspace) override;
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
 protected:
 	EResult OnInitialize(void* arg) override;
 
 private:
 	void InitModuleList();
-	void DrawMasterList();
+	void RefreshPackages();
+	void DrawMasterList(float width);
 	void DrawDetailView();
 	void DrawApprovalDialog();
+	void DrawCreatePluginDialog();
 	void DrawHeaderToolbar(const PluginModuleItem& item);
 	void DrawMetadataTable(const PluginModuleItem& item);
 	void DrawProvidedFeatures(const PluginModuleItem& item);
@@ -68,6 +70,14 @@ private:
 	EPluginCategory m_FilterCategory = EPluginCategory::All;
 	char m_SearchFilter[128] = "";
 	bool m_AutoScrollLog = true;
+	float m_PreferredSidebarWidth = 270.0f;
+	char m_NewPluginId[49] = "";
+	char m_NewPluginName[128] = "";
+	char m_NewPluginVersion[33] = "1.0.0";
+	int m_NewPanelWidth = 640;
+	int m_NewPanelHeight = 480;
+	const char* m_CreateErrorKey = nullptr;
+	std::filesystem::path m_PartialPluginDirectory;
 };
 
 END

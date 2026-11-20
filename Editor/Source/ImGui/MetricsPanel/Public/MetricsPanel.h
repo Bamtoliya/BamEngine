@@ -1,9 +1,11 @@
 ﻿#pragma once
 
-#include "ImGuiInterface.h"
+#include "Editor_Includes.h"
 #include "MetricsWidgets.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 BEGIN(Editor)
 
@@ -17,17 +19,17 @@ enum class EMetricsDomain : std::uint8_t
     Network = 5
 };
 
-class MetricsPanel : public IImGui
+class MetricsPanel
 {
 public:
-    MetricsPanel();
-    ~MetricsPanel() override = default;
+    MetricsPanel() = default;
 
-    void Draw() override;
-    void Update(f32 dt) override;
-    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
+    std::vector<std::byte> CapturePluginState() const;
+    bool RestorePluginState(const void* state, std::size_t stateSize);
+    void Draw(const PanelHostServicesV2& host);
+    void Update(float dt);
 private:
-    void DrawToolbar();
+    void DrawToolbar(const PanelHostServicesV2& host);
     void DrawDashboardCards();
     void DrawDetailedInspectionView();
 

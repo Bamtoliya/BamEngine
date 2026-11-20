@@ -1,6 +1,31 @@
 Group,Key,English,Korean
 PluginManager,Title,Plugins & Modules,플러그인 및 모듈 관리자
 PluginManager,SearchPlaceholder,Search plugins...,플러그인 검색...
+PluginManager,RefreshPackages,Refresh Packages,패키지 새로고침
+PluginManager,PackageInformation,Package Information,패키지 안내
+PluginManager,AddPackageHelp,"Place each plugin.json and its DLL in a separate folder under {} then refresh.","{} 아래에 플러그인별 폴더를 만들고 plugin.json과 DLL을 넣은 뒤 새로고침하세요."
+PluginManager,ProjectDirectoryUnavailable,The project plugin directory is unavailable.,프로젝트 플러그인 폴더를 사용할 수 없습니다.
+PluginManager,SdkCompatibility,Editor SDK compatibility: {},에디터 SDK 호환 식별자: {}
+PluginManager,SdkUnavailable,Installed panel plugins are unsupported by this editor build.,이 에디터 빌드는 설치형 패널 플러그인을 지원하지 않습니다.
+PluginManager,NewPanelPlugin,New Panel Plugin,새 패널 플러그인
+PluginManager,CreatePanelTitle,Create Panel Plugin,패널 플러그인 만들기
+PluginManager,CreatePanelDescription,"Creates an Editor panel source and package. Build it separately before loading.","에디터 패널 소스와 패키지를 만듭니다. 로드하기 전에 별도로 빌드하세요."
+PluginManager,NewIdentifier,Identifier,식별자
+PluginManager,NewDisplayName,Display Name,표시 이름
+PluginManager,NewVersion,Version,버전
+PluginManager,NewWidth,Initial Width,초기 너비
+PluginManager,NewHeight,Initial Height,초기 높이
+PluginManager,CreatePanelDirectory,Destination: {},생성 위치: {}
+PluginManager,CreatePanelAction,Create,만들기
+PluginManager,CreateInvalidId,"Use 1–48 ASCII letters, digits or underscores and start with a letter.","식별자는 영문자로 시작하며 영문자·숫자·밑줄 1~48자만 사용할 수 있습니다."
+PluginManager,CreateInvalidName,Enter a display name without control characters or ##.,제어 문자나 ##이 없는 표시 이름을 입력하세요.
+PluginManager,CreateInvalidVersion,Use 1–32 ASCII letters or digits and . + - for the version.,버전에는 영문자·숫자와 . + -를 사용하여 1~32자로 입력하세요.
+PluginManager,CreateInvalidSize,Width must be 240–4096 and height 160–4096.,너비는 240~4096이고 높이는 160~4096이어야 합니다.
+PluginManager,CreateUnsupported,This requires a supported Editor build and the engine source tree.,지원되는 에디터 빌드와 엔진 소스 트리가 필요합니다.
+PluginManager,CreateDuplicateId,The plugin identifier already exists.,이미 존재하는 플러그인 식별자입니다.
+PluginManager,CreateDirectoryExists,The destination folder already exists. Nothing was overwritten.,대상 폴더가 이미 있습니다. 덮어쓰지 않았습니다.
+PluginManager,CreateFileError,Could not create the plugin files. Check the editor log and folder permissions.,플러그인 파일을 만들지 못했습니다. 에디터 로그와 폴더 권한을 확인하세요.
+PluginManager,CreatePanelPartial,Incomplete files may remain at: {},다음 위치에 미완성 파일이 남아 있을 수 있습니다: {}
 PluginManager,CategoryAll,All,전체
 PluginManager,CategoryGameLogic,Game Logic,게임 로직
 PluginManager,CategoryEditorTools,Editor Tools,에디터 도구
@@ -26,6 +51,8 @@ PluginManager,OpenPanel,Open Panel,패널 열기
 PluginManager,ClosePanel,Close Panel,패널 닫기
 PluginManager,MetadataHeader,Module Information,모듈 정보
 PluginManager,PropIdentifier,Identifier,식별자
+PluginManager,PropPackageDirectory,Package Directory,패키지 폴더
+PluginManager,OpenFolderFailed,Could not open the package directory: {},패키지 폴더를 열지 못했습니다: {}
 PluginManager,PropOriginalDll,Original DLL Path,원본 DLL 경로
 PluginManager,PropShadowDll,Shadow DLL Path,섀도우 DLL 경로
 PluginManager,PropSourceDir,Source Directory,소스 코드 디렉터리
@@ -58,6 +85,7 @@ PluginManager,PackageInvalidManifest,The package manifest is invalid or unreadab
 PluginManager,PackageIncompatibleSdk,The package SDK does not match this Editor build.,패키지 SDK가 현재 에디터 빌드와 호환되지 않습니다.
 PluginManager,PackageUnsupportedModules,The package must declare one Editor module.,패키지에 에디터 모듈이 하나 있어야 합니다.
 PluginManager,PackageMissingBinary,The package DLL is missing.,패키지 DLL을 찾을 수 없습니다.
+PluginManager,PackageMissing,The package is no longer available. Unload it or restore it and refresh.,패키지를 찾을 수 없습니다. 언로드하거나 복원한 뒤 새로고침하세요.
 PluginManager,PackageUnsafePath,The package DLL path is invalid or outside the package.,DLL 경로가 잘못됐거나 패키지 폴더 밖을 가리킵니다.
 PluginManager,PackageDuplicateId,The package ID conflicts with another package.,패키지 ID가 다른 패키지와 충돌합니다.
 PluginManager,ApprovePluginTitle,Approve Plugin,플러그인 승인

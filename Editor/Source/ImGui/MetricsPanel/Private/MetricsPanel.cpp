@@ -1,49 +1,67 @@
 ﻿#include "MetricsPanel.h"
 #include "TimeManager.h"
+#include <cstring>
 
-MetricsPanel::MetricsPanel()
+namespace
 {
-    m_Name = L"Metrics";
-    m_DisplayNameKey = "Metrics.Title";
+    struct MetricsPanelPluginState
+    {
+        std::uint8_t SelectedDomain;
+        std::uint8_t Paused;
+    };
 }
 
-void MetricsPanel::Update(f32 dt)
+std::vector<std::byte> MetricsPanel::CapturePluginState() const
+{
+    const MetricsPanelPluginState state{ static_cast<std::uint8_t>(m_SelectedDomain),
+        static_cast<std::uint8_t>(m_Paused) };
+    std::vector<std::byte> bytes(sizeof(state));
+    std::memcpy(bytes.data(), &state, sizeof(state));
+    return bytes;
+}
+
+bool MetricsPanel::RestorePluginState(const void* state, std::size_t stateSize)
+{
+    if (!state || stateSize != sizeof(MetricsPanelPluginState))
+        return false;
+
+    MetricsPanelPluginState snapshot{};
+    std::memcpy(&snapshot, state, sizeof(snapshot));
+    if (snapshot.SelectedDomain > static_cast<std::uint8_t>(EMetricsDomain::Network) || snapshot.Paused > 1)
+        return false;
+
+    m_SelectedDomain = static_cast<EMetricsDomain>(snapshot.SelectedDomain);
+    m_Paused = snapshot.Paused != 0;
+    return true;
+}
+
+void MetricsPanel::Update(float dt)
 {
     if (m_Paused)
         return;
 
-    m_EngineTaskMetrics.Update();
     m_ResourceMetrics.Update(dt);
     m_RenderMetrics.Update(dt);
     m_FrameMetrics.Update(dt, Engine::TimeManager::Get().GetTargetFPS());
 }
 
-void MetricsPanel::Draw()
+void MetricsPanel::Draw(const PanelHostServicesV2& host)
 {
-    if (!m_Open)
-        return;
+    if (!m_Paused)
+        m_EngineTaskMetrics.Update(host);
+    DrawToolbar(host);
+    ImGui::Separator();
+    DrawDashboardCards();
 
-    const std::string windowTitle = LOCAL("Metrics.Title") + "###EngineMetricsPanel";
-    if (BeginPanelWindow(windowTitle.c_str(), m_Open))
+    if (m_SelectedDomain != EMetricsDomain::None)
     {
-        m_Focused = ImGui::IsWindowFocused();
-        m_Hovered = ImGui::IsWindowHovered();
-
-        DrawToolbar();
+        ImGui::Spacing();
         ImGui::Separator();
-        DrawDashboardCards();
-
-        if (m_SelectedDomain != EMetricsDomain::None)
-        {
-            ImGui::Spacing();
-            ImGui::Separator();
-            DrawDetailedInspectionView();
-        }
+        DrawDetailedInspectionView();
     }
-    ImGui::End();
 }
 
-void MetricsPanel::DrawToolbar()
+void MetricsPanel::DrawToolbar(const PanelHostServicesV2& host)
 {
     ImGui::Checkbox(LOCAL_LABEL("Metrics.PauseCapture").c_str(), &m_Paused);
     if (ImGui::IsItemHovered())
@@ -54,7 +72,7 @@ void MetricsPanel::DrawToolbar()
     {
         m_FrameMetrics.ResetHistory();
         m_RenderMetrics.ResetHistory();
-        m_EngineTaskMetrics.ResetReferenceHistory();
+        m_EngineTaskMetrics.ResetReferenceHistory(host);
     }
 }
 

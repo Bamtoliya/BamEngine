@@ -23,6 +23,7 @@ namespace Editor
         UnsupportedEditorModules,
         IncompatibleSdk,
         MissingBinary,
+        MissingPackage,
         UnsafeBinaryPath,
         DuplicatePackageId
     };

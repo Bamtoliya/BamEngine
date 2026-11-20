@@ -802,8 +802,6 @@ EResult ImGuiManager::CreateDefaultPanels()
 	if (!InitializePanel(new InspectorPanel()) ||
 		!InitializePanel(new HierarchyPanel()) ||
 		!InitializePanel(new ContentBrowserPanel()) ||
-		!InitializePanel(new ConsolePanel()) ||
-		!InitializePanel(new MetricsPanel()) ||
 		!InitializePanel(new GraphPanel()) ||
 		!InitializePanel(new ResourceManagerInspector()) ||
 		!InitializePanel(new TerrainEditor()) ||
@@ -814,7 +812,6 @@ EResult ImGuiManager::CreateDefaultPanels()
 		!InitializePanel(new BuildProfilePanel()) ||
 		!InitializePanel(new AssetReferencePanel()) ||
 		!InitializePanel(new AnimationTimelinePanel()) ||
-		!InitializePanel(new NetworkProfilerPanel()) ||
 		!InitializePanel(new TilePalettePanel()) ||
 		!InitializePanel(new ModelImportModal()))
 		return EResult::Fail;
@@ -825,6 +822,7 @@ EResult ImGuiManager::CreateDefaultPanels()
 	const auto& settings = EditorSettingsService::Get();
 	m_PluginHost.Initialize(Engine::PlatformPath::GetExecutableDirectory(), settings.GetProjectRoot(),
 		settings.GetPreferencesPath());
+	m_PluginHost.Update(*this);
 
 	if (!InitializePanel(new PluginManagerPanel()))
 		return EResult::Fail;

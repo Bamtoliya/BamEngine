@@ -1,21 +1,23 @@
 ﻿#pragma once
 
-#include "ImGuiInterface.h"
+#include "Editor_Includes.h"
 #include "LogEntry.h"
+#include <imgui.h>
+#include <cstddef>
+#include <vector>
 
 #define MAX_CONSOLE_ITEMS 1000
 
 BEGIN(Editor)
-class ConsolePanel : public IImGui
+class ConsolePanel
 {
 public:
-	ConsolePanel() { m_Name = L"Console"; m_DisplayNameKey = "Console.Title"; };
-	virtual ~ConsolePanel() = default;
-	virtual void Draw() override;
-	virtual void Update(f32 dt) override;
-	virtual void CaptureState(EditorWorkspace& workspace) const override;
-	virtual void RestoreState(const EditorWorkspace& workspace) override;
-	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
+	void Draw(bool isRightMouseButtonDown);
+	void Update(float dt);
+	std::vector<std::byte> CapturePluginState() const;
+	bool RestorePluginState(const void* state, std::size_t stateSize);
+	float GetDetailViewHeight() const { return m_DetailViewHeight; }
+	void SetDetailViewHeight(float height) { m_DetailViewHeight = height; }
 private:
 	struct ConsoleItem
 	{
@@ -67,6 +69,7 @@ private:
 	bool m_AutoScroll = true;
 	bool m_ScrollToBottom = false;
 	bool m_HasNewEntries = false;
+	bool m_IsRightMouseButtonDown = false;
 
 	array<bool, 5> m_ShowLevels{ true, true, true, true, true };
 	uint64 m_DroppedCount = 0;

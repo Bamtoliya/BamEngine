@@ -50,6 +50,8 @@ namespace Editor
         const PluginCatalogEntry& GetEntry(std::size_t index) const { return m_Entries.at(index).Catalog; }
         PluginHostStatus GetStatus(std::size_t index) const;
         std::vector<PluginHostPanel> GetPanels(std::size_t index) const;
+        std::filesystem::path GetProjectPluginDirectory() const;
+        void RefreshInstalledPackages();
 
         void Request(std::size_t index, EPluginHostAction action);
         void FocusPanel(std::size_t index, const std::wstring& panelId, ImGuiManager& gui) const;

@@ -26,6 +26,12 @@ namespace Editor
             // 첫 번째 Probe 창이 저장한 기존 도킹 키를 유지한다.
             if (panelId == L"Editor.BuiltIn.PanelLifecycleProbe")
                 return "PanelLifecycleProbe.Title";
+            if (panelId == L"Console")
+                return "ConsolePanel";
+            if (panelId == L"Metrics")
+                return "EngineMetricsPanel";
+            if (panelId == L"Network Profiler")
+                return "UI_NETWORK_PROFILER_PANEL";
 
             return Engine::WStrToStr(panelId);
         }
@@ -45,6 +51,8 @@ namespace Editor
         for (auto& item : catalog)
         {
             Entry entry;
+            if (item.Development && item.Development->AutoLoad)
+                entry.PendingAction = EPluginHostAction::Load;
             entry.Catalog = std::move(item);
             m_Entries.push_back(std::move(entry));
         }
@@ -77,6 +85,51 @@ namespace Editor
             panels.push_back({ panel.Id, panel.TitleKey });
 
         return panels;
+    }
+
+    std::filesystem::path PluginHost::GetProjectPluginDirectory() const
+    {
+        return m_ProjectRoot.empty() ? std::filesystem::path{} : m_ProjectRoot / "Plugins";
+    }
+
+    void PluginHost::RefreshInstalledPackages()
+    {
+        if (m_ApprovalPrompt)
+            return;
+
+        const auto packages = DiscoverPluginPackages(m_ExecutableDirectory, m_ProjectRoot);
+        auto catalog = BuildPluginCatalog(m_ExecutableDirectory, packages, PluginSdkCompatibility);
+        for (auto& entry : m_Entries)
+        {
+            if (entry.Catalog.Origin == EPluginOrigin::Development)
+                continue;
+
+            entry.Catalog.Status = EPluginCatalogStatus::MissingPackage;
+            if (entry.PendingAction && *entry.PendingAction != EPluginHostAction::Unload)
+                entry.PendingAction.reset();
+        }
+
+        for (auto& item : catalog)
+        {
+            if (item.Origin == EPluginOrigin::Development)
+                continue;
+
+            const auto existing = std::find_if(m_Entries.begin(), m_Entries.end(), [&item](const Entry& entry)
+            {
+                return entry.Catalog.Origin == item.Origin && entry.Catalog.PackageDirectory == item.PackageDirectory;
+            });
+            if (existing != m_Entries.end())
+            {
+                existing->Catalog = std::move(item);
+                existing->LastActionFailed = false;
+            }
+            else
+            {
+                Entry entry;
+                entry.Catalog = std::move(item);
+                m_Entries.push_back(std::move(entry));
+            }
+        }
     }
 
     void PluginHost::Request(std::size_t index, EPluginHostAction action)

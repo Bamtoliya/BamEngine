@@ -1,9 +1,11 @@
 ﻿#pragma once
 
-#include "ImGuiInterface.h"
+#include "Editor_Includes.h"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Engine
 {
@@ -12,15 +14,15 @@ namespace Engine
 
 BEGIN(Editor)
 
-class NetworkProfilerPanel : public IImGui
+class NetworkProfilerPanel
 {
 public:
-    NetworkProfilerPanel();
-    virtual ~NetworkProfilerPanel() override = default;
+    NetworkProfilerPanel() = default;
 
-    virtual void Draw() override;
-    virtual void Update(f32 dt) override;
-    EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Diagnostics; }
+    std::vector<std::byte> CapturePluginState() const;
+    bool RestorePluginState(const void* state, std::size_t stateSize);
+    void Draw();
+    void Update(float dt);
 private:
     void DrawSessionControl(Engine::NetworkSystem* netSystem);
     void DrawTrafficMetrics(Engine::NetworkSystem* netSystem);
@@ -28,6 +30,8 @@ private:
     void DrawConnectedClientsTable(Engine::NetworkSystem* netSystem);
 
 private:
+    struct PluginState;
+
     static constexpr std::size_t MaxPingHistory = 120;
     std::array<float, MaxPingHistory> m_PingHistory{};
     std::size_t m_PingHistoryIndex = 0;

@@ -1,16 +1,15 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
-#include "AssetTaskMetrics.h"
-#include "AssetReferenceTimings.h"
+#include "EditorPanelPluginApi.h"
 
 BEGIN(Editor)
 
 class EngineTaskMetricsWidget
 {
 public:
-    void Update();
-    void ResetReferenceHistory();
+    void Update(const PanelHostServicesV2& host);
+    void ResetReferenceHistory(const PanelHostServicesV2& host);
     [[nodiscard]] bool DrawCard(f32 cardWidth, bool isSelected) const;
     void DrawDetails() const;
 
@@ -19,10 +18,7 @@ private:
     void DrawAssetTaskMetrics() const;
     void DrawReferenceTimings() const;
 
-    size_t m_ActiveSceneCount = 0;
-    size_t m_RegisteredPassCount = 0;
-    AssetTaskMetrics m_AssetTaskMetrics{};
-    AssetReferenceTimings m_ReferenceTimings{};
+    PluginEngineTaskMetricsV2 m_Metrics{};
 };
 
 END

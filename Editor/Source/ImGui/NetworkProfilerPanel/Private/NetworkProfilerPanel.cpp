@@ -4,19 +4,65 @@
 #include "SystemManager.h"
 #include "LocalizationManager.h"
 #include <imgui.h>
+#include <cstring>
 #include <format>
 #include <numeric>
 
 BEGIN(Editor)
-
-NetworkProfilerPanel::NetworkProfilerPanel()
+struct NetworkProfilerPanel::PluginState
 {
-    m_Name = L"Network Profiler";
-    m_DisplayNameKey = "NetworkProfiler.Title";
-    m_PingHistory.fill(0.0f);
+    std::array<float, MaxPingHistory> PingHistory;
+    std::size_t PingHistoryIndex;
+    char ServerAddressBuffer[64];
+    int ServerPort;
+    float StatAccumulator;
+    std::uint64_t PrevBytesSent;
+    std::uint64_t PrevBytesReceived;
+    float BytesSentPerSec;
+    float BytesReceivedPerSec;
+};
+
+std::vector<std::byte> NetworkProfilerPanel::CapturePluginState() const
+{
+    PluginState state{};
+    state.PingHistory = m_PingHistory;
+    state.PingHistoryIndex = m_PingHistoryIndex;
+    std::memcpy(state.ServerAddressBuffer, m_ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
+    state.ServerPort = m_ServerPort;
+    state.StatAccumulator = m_StatAccumulator;
+    state.PrevBytesSent = m_PrevBytesSent;
+    state.PrevBytesReceived = m_PrevBytesReceived;
+    state.BytesSentPerSec = m_BytesSentPerSec;
+    state.BytesReceivedPerSec = m_BytesReceivedPerSec;
+    std::vector<std::byte> bytes(sizeof(state));
+    std::memcpy(bytes.data(), &state, sizeof(state));
+    return bytes;
 }
 
-void NetworkProfilerPanel::Update(f32 dt)
+bool NetworkProfilerPanel::RestorePluginState(const void* state, std::size_t stateSize)
+{
+    if (!state || stateSize != sizeof(PluginState))
+        return false;
+
+    PluginState snapshot{};
+    std::memcpy(&snapshot, state, sizeof(snapshot));
+    if (snapshot.PingHistoryIndex >= MaxPingHistory ||
+        std::memchr(snapshot.ServerAddressBuffer, '\0', sizeof(snapshot.ServerAddressBuffer)) == nullptr)
+        return false;
+
+    m_PingHistory = snapshot.PingHistory;
+    m_PingHistoryIndex = snapshot.PingHistoryIndex;
+    std::memcpy(m_ServerAddressBuffer, snapshot.ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
+    m_ServerPort = snapshot.ServerPort;
+    m_StatAccumulator = snapshot.StatAccumulator;
+    m_PrevBytesSent = snapshot.PrevBytesSent;
+    m_PrevBytesReceived = snapshot.PrevBytesReceived;
+    m_BytesSentPerSec = snapshot.BytesSentPerSec;
+    m_BytesReceivedPerSec = snapshot.BytesReceivedPerSec;
+    return true;
+}
+
+void NetworkProfilerPanel::Update(float dt)
 {
     m_StatAccumulator += dt;
     if (m_StatAccumulator >= 1.0f)
@@ -56,23 +102,12 @@ void NetworkProfilerPanel::Update(f32 dt)
 
 void NetworkProfilerPanel::Draw()
 {
-    if (!m_Open) return;
-
-    ImGui::SetNextWindowSize(ImVec2(520, 480), ImGuiCond_FirstUseEver);
-    const std::string windowTitle = LOCAL("NetworkProfiler.Title") + "###UI_NETWORK_PROFILER_PANEL";
-    if (!BeginPanelWindow(windowTitle.c_str(), m_Open))
-    {
-        ImGui::End();
-        return;
-    }
-
     auto* sysMgr = &Engine::SystemManager::Get();
     auto* netSystem = sysMgr ? sysMgr->GetSystem<Engine::NetworkSystem>() : nullptr;
 
     if (!netSystem)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), LOCAL_CSTR("NetworkProfiler.SystemUnavailable"));
-        ImGui::End();
         return;
     }
 
@@ -93,7 +128,6 @@ void NetworkProfilerPanel::Draw()
         ImGui::Separator();
     }
 
-    ImGui::End();
 }
 
 void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)

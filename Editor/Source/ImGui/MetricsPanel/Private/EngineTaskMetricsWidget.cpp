@@ -1,21 +1,20 @@
 ﻿#include "EngineTaskMetricsWidget.h"
-#include "AssetManager.h"
-#include "RenderPassManager.h"
-#include "SceneManager.h"
 
-void EngineTaskMetricsWidget::Update()
+void EngineTaskMetricsWidget::Update(const PanelHostServicesV2& host)
 {
-    auto& assets = AssetManager::Get();
-    m_AssetTaskMetrics = assets.GetTaskMetrics();
-    m_ReferenceTimings = assets.GetAssetReferenceTimings();
-    m_ActiveSceneCount = Engine::SceneManager::Get().GetActiveScenes().size();
-    m_RegisteredPassCount = Engine::RenderPassManager::Get().GetAllRenderPasses().size();
+    m_Metrics.Size = sizeof(PluginEngineTaskMetricsV2);
+    host.GetEngineTaskMetrics(&m_Metrics);
 }
 
-void EngineTaskMetricsWidget::ResetReferenceHistory()
+void EngineTaskMetricsWidget::ResetReferenceHistory(const PanelHostServicesV2& host)
 {
-    AssetManager::Get().ResetAssetReferenceTimings();
-    m_ReferenceTimings = {};
+    host.ResetAssetReferenceTimings();
+    m_Metrics.LastFrame = -1;
+    m_Metrics.LastFrameMs = 0.0;
+    m_Metrics.PeakFrameMs = 0.0;
+    m_Metrics.LastScan.Frame = -1;
+    for (auto& timing : m_Metrics.ByKind)
+        timing = {};
 }
 
 void EngineTaskMetricsWidget::DrawDetails() const
@@ -34,11 +33,12 @@ bool EngineTaskMetricsWidget::DrawCard(f32 cardWidth, bool isSelected) const
 
     ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.TasksEngine"));
     ImGui::SameLine(cardWidth - 75.0f);
-    if (m_AssetTaskMetrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.Busy"));
+    if (m_Metrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.Busy"));
     else ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), LOCAL_CSTR("Metrics.Idle"));
 
-    ImGui::Text(LOCAL_CSTR("Metrics.PassesScenes"), m_RegisteredPassCount, m_ActiveSceneCount);
-    ImGui::TextDisabled(LOCAL_CSTR("Metrics.TasksActiveDone"), m_AssetTaskMetrics.Outstanding, m_AssetTaskMetrics.GetCompleted());
+    ImGui::Text(LOCAL_CSTR("Metrics.PassesScenes"), m_Metrics.RegisteredPassCount, m_Metrics.ActiveSceneCount);
+    ImGui::TextDisabled(LOCAL_CSTR("Metrics.TasksActiveDone"), m_Metrics.Outstanding,
+        m_Metrics.Succeeded + m_Metrics.Failed);
 
     ImGui::Spacing();
     const auto detailLabel = LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details";
@@ -52,29 +52,29 @@ bool EngineTaskMetricsWidget::DrawCard(f32 cardWidth, bool isSelected) const
 void EngineTaskMetricsWidget::DrawEngineStatus() const
 {
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.EngineState"));
-    const auto text = LOCAL_FMT("Metrics.ActiveScenes", m_ActiveSceneCount);
+    const auto text = LOCAL_FMT("Metrics.ActiveScenes", m_Metrics.ActiveSceneCount);
     ImGui::TextUnformatted(text.c_str());
-    const auto text2 = LOCAL_FMT("Metrics.RegisteredPasses", m_RegisteredPassCount);
+    const auto text2 = LOCAL_FMT("Metrics.RegisteredPasses", m_Metrics.RegisteredPassCount);
     ImGui::TextUnformatted(text2.c_str());
 }
 
 void EngineTaskMetricsWidget::DrawAssetTaskMetrics() const
 {
-    const auto outstanding = LOCAL_FMT("Metrics.Outstanding", m_AssetTaskMetrics.Outstanding);
-    const auto completed = LOCAL_FMT("Metrics.Completed", m_AssetTaskMetrics.GetCompleted());
-    const auto succeeded = LOCAL_FMT("Metrics.Succeeded", m_AssetTaskMetrics.Succeeded);
-    const auto failed = LOCAL_FMT("Metrics.Failed", m_AssetTaskMetrics.Failed);
+    const auto outstanding = LOCAL_FMT("Metrics.Outstanding", m_Metrics.Outstanding);
+    const auto completed = LOCAL_FMT("Metrics.Completed", m_Metrics.Succeeded + m_Metrics.Failed);
+    const auto succeeded = LOCAL_FMT("Metrics.Succeeded", m_Metrics.Succeeded);
+    const auto failed = LOCAL_FMT("Metrics.Failed", m_Metrics.Failed);
 
     ImGui::TextUnformatted(outstanding.c_str());
     ImGui::TextUnformatted(completed.c_str());
     ImGui::TextUnformatted(succeeded.c_str());
 
-    if (m_AssetTaskMetrics.Failed > 0)
+    if (m_Metrics.Failed > 0)
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
 
     ImGui::TextUnformatted(failed.c_str());
 
-    if (m_AssetTaskMetrics.Failed > 0)
+    if (m_Metrics.Failed > 0)
         ImGui::PopStyleColor();
 
     ImGui::PushTextWrapPos(0.0f);
@@ -85,14 +85,14 @@ void EngineTaskMetricsWidget::DrawAssetTaskMetrics() const
 void EngineTaskMetricsWidget::DrawReferenceTimings() const
 {
     ImGui::TextUnformatted(LOCAL_CSTR("Metrics.ReferenceTimings"));
-    if (m_ReferenceTimings.LastFrame < 0)
+    if (m_Metrics.LastFrame < 0)
     {
         ImGui::TextDisabled("%s", LOCAL_CSTR("Metrics.ReferenceNoSamples"));
         return;
     }
 
-    const auto frame = LOCAL_FMT("Metrics.ReferenceFrameSum", m_ReferenceTimings.LastFrame,
-        m_ReferenceTimings.LastFrameMs, m_ReferenceTimings.PeakFrameMs);
+    const auto frame = LOCAL_FMT("Metrics.ReferenceFrameSum", m_Metrics.LastFrame,
+        m_Metrics.LastFrameMs, m_Metrics.PeakFrameMs);
     ImGui::TextWrapped("%s", frame.c_str());
 
     constexpr const char* labels[] = {
@@ -100,9 +100,9 @@ void EngineTaskMetricsWidget::DrawReferenceTimings() const
         "Metrics.ReferenceAfterRepair", "Metrics.ReferenceDeleteImpact", "Metrics.ReferenceMovePreparation",
         "Metrics.ReferenceMoveRecheck", "Metrics.ReferenceIncremental"
     };
-    static_assert(IM_ARRAYSIZE(labels) == AssetReferenceTimings::KindCount);
+    static_assert(IM_ARRAYSIZE(labels) == PluginReferenceTimingKindCountV2);
 
-    const auto& scan = m_ReferenceTimings.LastScan;
+    const auto& scan = m_Metrics.LastScan;
     if (scan.Frame >= 0)
     {
         const auto latest = LOCAL_FMT("Metrics.ReferenceScanLatest", LOCAL(labels[static_cast<std::size_t>(scan.Kind)]),
@@ -124,9 +124,9 @@ void EngineTaskMetricsWidget::DrawReferenceTimings() const
     ImGui::TableSetupColumn(LOCAL_LABEL("Metrics.Maximum").c_str());
     ImGui::TableHeadersRow();
 
-    for (std::size_t index = 0; index < m_ReferenceTimings.ByKind.size(); ++index)
+    for (std::size_t index = 0; index < PluginReferenceTimingKindCountV2; ++index)
     {
-        const auto& timing = m_ReferenceTimings.ByKind[index];
+        const auto& timing = m_Metrics.ByKind[index];
         if (timing.Samples == 0)
             continue;
 
@@ -138,7 +138,7 @@ void EngineTaskMetricsWidget::DrawReferenceTimings() const
         ImGui::TableSetColumnIndex(2);
         ImGui::Text("%.2f", timing.LastMs);
         ImGui::TableSetColumnIndex(3);
-        ImGui::Text("%.2f", timing.AverageMs());
+        ImGui::Text("%.2f", timing.TotalMs / static_cast<double>(timing.Samples));
         ImGui::TableSetColumnIndex(4);
         ImGui::Text("%.2f", timing.PeakMs);
     }

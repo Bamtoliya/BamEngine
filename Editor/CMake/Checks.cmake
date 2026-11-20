@@ -13,6 +13,24 @@ if(BUILD_TESTING)
     add_test(NAME AssetReferenceCheck COMMAND AssetReferenceCheck)
 endif()
 
+if(WIN32)
+    add_executable(PanelPluginGeneratorCheck examples/PanelPluginGeneratorCheck.cpp
+        Source/Plugin/Private/PanelPluginGenerator.cpp Source/Plugin/Private/PluginDiscovery.cpp)
+    target_include_directories(PanelPluginGeneratorCheck PRIVATE ${EDITOR_PUBLIC_INCLUDE_DIRS}
+        "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
+    target_link_libraries(PanelPluginGeneratorCheck PRIVATE BamEngine::Engine)
+    target_precompile_headers(PanelPluginGeneratorCheck PRIVATE
+        "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
+    target_compile_definitions(PanelPluginGeneratorCheck PRIVATE NOMINMAX)
+    set_target_properties(PanelPluginGeneratorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+    if(MSVC)
+        target_compile_options(PanelPluginGeneratorCheck PRIVATE /utf-8)
+    endif()
+    if(BUILD_TESTING)
+        add_test(NAME PanelPluginGeneratorCheck COMMAND PanelPluginGeneratorCheck)
+    endif()
+endif()
+
 add_executable(TransformEditorCheck
     examples/TransformEditorCheck.cpp Source/ImGui/InspectorPanel/Private/TransformPropertyEditor.cpp
 )

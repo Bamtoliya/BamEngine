@@ -1,0 +1,1 @@
+{"manifestVersion":1,"id":"user.panel.Test","name":"TestPanel","version":"1.0.0","modules":[{"id":"UserPanel_Test","environment":"Editor","apiVersion":1,"sdkCompatibility":"bam-panel-v1-win64-msvc-1951-debug","binary":"Binaries/Win64/UserPanel_Test.dll"}],"contentRoot":""}

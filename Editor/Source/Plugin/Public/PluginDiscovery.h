@@ -11,6 +11,7 @@ namespace Editor
     {
         std::string Target;
         std::filesystem::path SourceDirectory; // 프로젝트 루트 기준 상대 경로
+        bool AutoLoad = false;
     };
 
     struct PluginManifestModule

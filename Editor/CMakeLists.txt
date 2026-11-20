@@ -18,6 +18,7 @@ set(EDITOR_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
 file(GLOB_RECURSE EDITOR_HEADERS CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.h")
 file(GLOB_RECURSE EDITOR_SOURCES CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.cpp")
 file(GLOB_RECURSE EDITOR_INLINE CONFIGURE_DEPENDS "${EDITOR_SOURCE_DIR}/*.inl")
+list(FILTER EDITOR_SOURCES EXCLUDE REGEX ".*/ImGui/(ConsolePanel|MetricsPanel|NetworkProfilerPanel)/Private/.*\\.cpp$")
 
 # 소스 목록 취합 및 IDE 트리 구조 생성
 list(APPEND EDITOR_SOURCES ${EDITOR_INLINE})
@@ -48,6 +49,7 @@ target_compile_definitions(Editor PRIVATE NOMINMAX)
 
 if(WIN32)
     target_compile_definitions(Editor PRIVATE "BAM_EDITOR_CMAKE_COMMAND=L\"${CMAKE_COMMAND}\"")
+    target_compile_definitions(Editor PRIVATE "BAM_EDITOR_CMAKE_VERSION=\"${CMAKE_VERSION}\"")
     target_link_libraries(Editor PRIVATE bcrypt)
     if(CMAKE_GENERATOR MATCHES "^Visual Studio")
         target_compile_definitions(Editor PRIVATE BAM_EDITOR_MSBUILD)

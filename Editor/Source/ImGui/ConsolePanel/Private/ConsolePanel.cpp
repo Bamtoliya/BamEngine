@@ -1,40 +1,88 @@
 ﻿#include "ConsolePanel.h"
 #include "EditorUI.h"
-#include "InputManager.h"
-#include "EditorSettings.h"
+#include "ImGuiSplitter.h"
+#include <cmath>
+#include <cstring>
+#include <type_traits>
 
-#pragma region Loop
-void ConsolePanel::Draw()
+namespace
 {
-    if (!m_Open)
-        return;
-
-    const string windowTitle = LOCAL("Console.Title") + "###ConsolePanel";
-    const auto windowFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    if (BeginPanelWindow(windowTitle.c_str(), m_Open, windowFlags))
+    template <typename T>
+    void AppendValue(std::vector<std::byte>& output, const T& value)
     {
-
-        m_Focused = ImGui::IsWindowFocused();
-        m_Hovered = ImGui::IsWindowHovered();
-
-        DrawOptions();
-
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
-        DrawSourceFilter();
-        ImGui::SameLine();
-        DrawSearch();
-
-        RebuildVisibleRows();
-        DrawStatus();
-
-        ImGui::Separator();
-        DrawLog();
+        static_assert(std::is_trivially_copyable_v<T>);
+        const auto offset = output.size();
+        output.resize(offset + sizeof(T));
+        std::memcpy(output.data() + offset, &value, sizeof(T));
     }
 
-    ImGui::End();
+    void AppendString(std::vector<std::byte>& output, const std::string& value)
+    {
+        const auto length = static_cast<std::uint32_t>(value.size());
+        AppendValue(output, length);
+        const auto offset = output.size();
+        output.resize(offset + length);
+        if (length > 0)
+            std::memcpy(output.data() + offset, value.data(), length);
+    }
+
+    class StateReader
+    {
+    public:
+        StateReader(const void* data, std::size_t size)
+            : m_Data(static_cast<const std::byte*>(data)), m_Size(size)
+        {
+        }
+
+        template <typename T>
+        bool Read(T& value)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+            if (m_Size - m_Offset < sizeof(T))
+                return false;
+            std::memcpy(&value, m_Data + m_Offset, sizeof(T));
+            m_Offset += sizeof(T);
+            return true;
+        }
+
+        bool ReadString(std::string& value)
+        {
+            std::uint32_t length = 0;
+            if (!Read(length) || length > m_Size - m_Offset)
+                return false;
+            value.assign(reinterpret_cast<const char*>(m_Data + m_Offset), length);
+            m_Offset += length;
+            return true;
+        }
+
+        bool IsAtEnd() const { return m_Offset == m_Size; }
+
+    private:
+        const std::byte* m_Data;
+        std::size_t m_Size;
+        std::size_t m_Offset = 0;
+    };
 }
 
-void ConsolePanel::Update(Engine::f32 /*dt*/)
+#pragma region Loop
+void ConsolePanel::Draw(bool isRightMouseButtonDown)
+{
+    m_IsRightMouseButtonDown = isRightMouseButtonDown;  
+    DrawOptions();
+
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
+    DrawSourceFilter();
+    ImGui::SameLine();
+    DrawSearch();
+
+    RebuildVisibleRows();
+    DrawStatus();
+
+    ImGui::Separator();
+    DrawLog();
+}
+
+void ConsolePanel::Update(float /*dt*/)
 {
     auto batch = Engine::Logger::DrainPendingEntries();
     m_DroppedCount += batch.DroppedCount;
@@ -419,7 +467,7 @@ void ConsolePanel::DrawLog()
             ImGui::TextWrapped("%s", selected.Entry.Message.c_str());
             ImGui::PopStyleColor();
 
-            if (ImGui::IsWindowHovered() && InputManager::Get().IsMouseButtonDown(EMouseButton::Right))
+            if (ImGui::IsWindowHovered() && m_IsRightMouseButtonDown)
                 ImGui::SetClipboardText(selected.Entry.Message.c_str());
         }
         ImGui::EndChild();
@@ -473,7 +521,7 @@ void ConsolePanel::DrawLogItem(const ConsoleRow& row, float rowHeight)
     // 마우스 호버 시 툴팁 및 우클릭 복사
     if (isHovered)
     {
-        if (InputManager::Get().IsMouseButtonDown(EMouseButton::Right))
+        if (m_IsRightMouseButtonDown)
             ImGui::SetClipboardText(entry.Message.c_str());
         ImGui::BeginTooltip();
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 45.0f);
@@ -641,14 +689,131 @@ ImVec4 ConsolePanel::LevelColor(Engine::ELogLevel level)
     return ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void ConsolePanel::CaptureState(EditorWorkspace& workspace) const
+std::vector<std::byte> ConsolePanel::CapturePluginState() const
 {
-    IImGui::CaptureState(workspace);
-    workspace.SetSplitter("Console.DetailHeight", m_DetailViewHeight);
+    std::vector<std::byte> state;
+    const auto itemCount = static_cast<std::uint32_t>(m_Items.size());
+    const auto collapseDuplicates = static_cast<std::uint8_t>(m_CollapseDuplicates);
+    const auto autoScroll = static_cast<std::uint8_t>(m_AutoScroll);
+    const auto hasSourceFilter = static_cast<std::uint8_t>(m_SourceFilter.has_value());
+    const auto selectedRowIndex = static_cast<std::int32_t>(m_SelectedRowIndex);
+    const std::string filterText = m_Filter.InputBuf;
+
+    AppendValue(state, itemCount);
+    AppendValue(state, m_DroppedCount);
+    AppendValue(state, m_EvictedCount);
+    AppendValue(state, collapseDuplicates);
+    AppendValue(state, autoScroll);
+    for (const bool showLevel : m_ShowLevels)
+        AppendValue(state, static_cast<std::uint8_t>(showLevel));
+    AppendValue(state, hasSourceFilter);
+    AppendString(state, m_SourceFilter.value_or(std::string{}));
+    AppendValue(state, selectedRowIndex);
+    AppendValue(state, m_DetailViewHeight);
+    AppendString(state, filterText);
+
+    for (const auto& item : m_Items)
+    {
+        const auto timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            item.Entry.Timestamp.time_since_epoch()).count();
+        const auto level = static_cast<std::uint8_t>(item.Entry.Level);
+        const auto line = static_cast<std::uint32_t>(item.Entry.Line);
+        AppendValue(state, timestamp);
+        AppendValue(state, level);
+        AppendValue(state, line);
+        AppendString(state, item.Entry.Source);
+        AppendString(state, item.Entry.Category);
+        AppendString(state, item.Entry.Message);
+        AppendString(state, item.Entry.FileName);
+    }
+
+    return state;
 }
 
-void ConsolePanel::RestoreState(const EditorWorkspace& workspace)
+bool ConsolePanel::RestorePluginState(const void* state, std::size_t stateSize)
 {
-    IImGui::RestoreState(workspace);
-    m_DetailViewHeight = workspace.GetSplitter("Console.DetailHeight", 160.0f);
+    if (!state || stateSize == 0)
+        return false;
+
+    StateReader reader(state, stateSize);
+    std::uint32_t itemCount = 0;
+    std::uint64_t droppedCount = 0;
+    std::uint64_t evictedCount = 0;
+    std::uint8_t collapseDuplicates = 0;
+    std::uint8_t autoScroll = 0;
+    std::array<std::uint8_t, 5> showLevels{};
+    std::uint8_t hasSourceFilter = 0;
+    std::string sourceFilter;
+    std::int32_t selectedRowIndex = -1;
+    float detailViewHeight = 160.0f;
+    std::string filterText;
+
+    if (!reader.Read(itemCount) || itemCount > MAX_CONSOLE_ITEMS || !reader.Read(droppedCount) ||
+        !reader.Read(evictedCount) || !reader.Read(collapseDuplicates) || collapseDuplicates > 1 ||
+        !reader.Read(autoScroll) || autoScroll > 1)
+    {
+        return false;
+    }
+    for (auto& showLevel : showLevels)
+    {
+        if (!reader.Read(showLevel) || showLevel > 1)
+            return false;
+    }
+    if (!reader.Read(hasSourceFilter) || hasSourceFilter > 1 || !reader.ReadString(sourceFilter) ||
+        !reader.Read(selectedRowIndex) || !reader.Read(detailViewHeight) || !std::isfinite(detailViewHeight) ||
+        !reader.ReadString(filterText) || filterText.size() >= sizeof(m_Filter.InputBuf))
+    {
+        return false;
+    }
+
+    std::deque<ConsoleItem> items;
+    for (std::uint32_t i = 0; i < itemCount; ++i)
+    {
+        std::int64_t timestamp = 0;
+        std::uint8_t level = 0;
+        std::uint32_t line = 0;
+        ConsoleItem item;
+        if (!reader.Read(timestamp) || !reader.Read(level) ||
+            level > static_cast<std::uint8_t>(Engine::ELogLevel::Fatal) || !reader.Read(line) ||
+            !reader.ReadString(item.Entry.Source) || !reader.ReadString(item.Entry.Category) ||
+            !reader.ReadString(item.Entry.Message) || !reader.ReadString(item.Entry.FileName))
+        {
+            return false;
+        }
+
+        item.Entry.Timestamp = std::chrono::system_clock::time_point(std::chrono::duration_cast<
+            std::chrono::system_clock::duration>(std::chrono::nanoseconds(timestamp)));
+        item.Entry.Level = static_cast<Engine::ELogLevel>(level);
+        item.Entry.Line = line;
+        item.DisplayText = BuildDisplayText(item.Entry);
+        item.SingleLineMessage = item.Entry.Message;
+        for (char& ch : item.SingleLineMessage)
+        {
+            if (ch == '\n' || ch == '\r' || ch == '\t')
+                ch = ' ';
+        }
+        item.TimeString = FormatTime(item.Entry.Timestamp);
+        items.push_back(std::move(item));
+    }
+
+    if (!reader.IsAtEnd())
+        return false;
+
+    m_Items = std::move(items);
+    m_DroppedCount = droppedCount;
+    m_EvictedCount = evictedCount;
+    m_CollapseDuplicates = collapseDuplicates != 0;
+    m_AutoScroll = autoScroll != 0;
+    for (std::size_t i = 0; i < showLevels.size(); ++i)
+        m_ShowLevels[i] = showLevels[i] != 0;
+    m_SourceFilter = hasSourceFilter ? std::optional<std::string>(std::move(sourceFilter)) : std::nullopt;
+    m_SelectedRowIndex = selectedRowIndex >= 0 && selectedRowIndex < static_cast<std::int32_t>(m_Items.size())
+        ? selectedRowIndex : -1;
+    m_DetailViewHeight = detailViewHeight;
+    std::memcpy(m_Filter.InputBuf, filterText.c_str(), filterText.size() + 1);
+    m_Filter.Build();
+    m_ScrollToBottom = false;
+    m_HasNewEntries = false;
+    RebuildVisibleRows();
+    return true;
 }

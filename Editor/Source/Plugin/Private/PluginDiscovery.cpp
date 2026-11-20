@@ -53,7 +53,28 @@ namespace Editor
             }
 
             auto target = line.substr(0, separator);
-            const std::string_view sourceText = std::string_view(line).substr(separator + 1);
+            const auto autoLoadSeparator = line.find('|', separator + 1);
+            if (autoLoadSeparator != std::string::npos && line.find('|', autoLoadSeparator + 1) != std::string::npos)
+            {
+                EDITOR_LOG_WARN("Invalid editor plugin development entry: {}", line);
+                continue;
+            }
+
+            const auto sourceEnd = autoLoadSeparator == std::string::npos ? line.size() : autoLoadSeparator;
+            const std::string_view sourceText = std::string_view(line).substr(separator + 1, sourceEnd - separator - 1);
+            bool autoLoad = false;
+            if (autoLoadSeparator != std::string::npos)
+            {
+                const std::string_view option = std::string_view(line).substr(autoLoadSeparator + 1);
+                if (option == "auto")
+                    autoLoad = true;
+                else if (option != "manual")
+                {
+                    EDITOR_LOG_WARN("Invalid editor plugin activation option: {}", line);
+                    continue;
+                }
+            }
+
             if (target.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-") !=
                 std::string::npos || !HasMetadataValue(sourceText))
             {
@@ -78,7 +99,7 @@ namespace Editor
                     continue;
                 }
 
-                entries.push_back({ std::move(target), std::move(source) });
+                entries.push_back({ std::move(target), std::move(source), autoLoad });
             }
             catch (const std::system_error& error)
             {
