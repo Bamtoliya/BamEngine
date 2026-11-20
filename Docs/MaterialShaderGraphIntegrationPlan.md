@@ -1,7 +1,7 @@
 # 머티리얼-셰이더 그래프 통합 및 실시간 3D 프리뷰 개발 계획
 
 - 작성일: 2026-11-19
-- 상태: Phase 1~3 및 Step 1~2(언리얼 스타일 머티리얼 에디터 탭 통합 및 단일 3D 프리뷰어 연동) 구현 완료, 빌드 및 실환경 검증 대기
+- 상태: Phase 1~3 및 Step 1~2 구현 완료, Phase 4 중 Custom UV0/1 경로 구현, 이번 변경의 빌드·셰이더 검사·실환경 검증 대기
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (머티리얼 및 셰이더 그래프 저작 파이프라인 고도화)
@@ -122,13 +122,14 @@ flowchart TD
 
 ---
 
-### Phase 4. 노출 파라미터 ↔ 머티리얼 프로퍼티 양방향 연동 & VS/PS 통합 [설계 완료]
+### Phase 4. 노출 파라미터 ↔ 머티리얼 프로퍼티 양방향 연동 & VS/PS 통합 [설계 완료 / 부분 구현]
 - **목적:** 셰이더 노드 중 외부에 노출할 파라미터를 지정하고, 머티리얼 인스펙터 슬라이더와 양방향 동기화하며, 단일 머티리얼 그래프에서 정점(VS, WPO 등) 및 픽셀(PS, PBR) 셰이더를 통합 제어한다.
 - **세부 설계 사양 문서:** [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md)
 - **주요 내용:**
   - **양방향 동기화 모델:** 셰이더 그래프를 인터페이스(Layout/SSOT)로 두고, 머티리얼은 런타임 값 오버라이드로 분리. 머티리얼 인스펙터의 파라미터 값 변경 시 셰이더 재컴파일 없이 GPU 상수 버퍼(`MaterialConstants`)만 즉시 갱신하는 Fast-Path 구현.
   - **다중 그래프 패널 공통화:** `GraphPanel`, `MaterialEditorCanvas`, `AnimatorGraphPanel`의 툴바, 줌/팬 네비게이션, 노드 정렬, 단축키 공통 레이어(`Editor::GraphCommon`) 도입.
   - **VS/PS 통합 컴파일:** 단일 마스터 노드에 버텍스 입력 핀(World Position Offset, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`로 분할 생성하여 한 번에 빌드/바인딩.
+  - **2026-11-21 Custom UV0/1 반영:** 각각의 메시 UV와 Float2 연산을 `customUV0/1`에 연결해 VS에서 변환하고, 미연결 시 해당 메시 UV를 각각 `TEXCOORD0/1`로 전달한다. Assimp의 UV1을 임포트하며 채널이 없거나 과거 메시·v3 스냅샷인 경우 UV0으로 대체한다. 과거 에셋의 실제 UV1은 재임포트해야 한다. GBuffer·ForwardTransparent 그래프 PS의 diffuse 슬롯 0은 계속 UV0을 사용한다. `ShaderGraphCheck`에 두 좌표의 폴백·변환과 인터페이스 검사를 추가했다. 범용 Texture Sample 노드는 미구현이며, 변경 후 빌드·CTest·Editor 프리뷰는 사용자 확인이 필요하다.
 
 ---
 

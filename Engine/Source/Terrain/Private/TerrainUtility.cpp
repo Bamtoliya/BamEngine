@@ -53,7 +53,7 @@ namespace
 	}
 	// ── 2. TerrainGridMeshLayout 이후에 DDC 캐시 헬퍼 선언 ──
 	constexpr uint32_t TERRAIN_GRID_MAGIC = 0x43475442; // "BTGC" (Bam Terrain Grid Cache)
-	constexpr uint32_t TERRAIN_GRID_VERSION = 1;
+	constexpr uint32_t TERRAIN_GRID_VERSION = 2;
 	std::filesystem::path GetTerrainGridCachePath(float width, float length,
 		uint32 segmentsX, uint32 segmentsZ, bool reverseWinding)
 	{
@@ -75,7 +75,7 @@ namespace
 		hashCombine(&segmentsZ, sizeof(segmentsZ));
 		const uint8_t rw = reverseWinding ? 1 : 0;
 		hashCombine(&rw, sizeof(rw));
-		const char versionTag[] = "terrain_grid_v1";
+		const char versionTag[] = "terrain_grid_v2";
 		hashCombine(versionTag, sizeof(versionTag) - 1);
 
 		char buf[32];
@@ -184,6 +184,7 @@ Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 segmentsX
 
 				auto& material = materials[vertexIndex];
 				material.texCoord = vec2(u, v);
+				material.texCoord1 = material.texCoord;
 				material.normal = vec3(0.0f, 1.0f, 0.0f);
 				material.tangent = vec3(1.0f, 0.0f, 0.0f);
 				material.binormal = vec3(0.0f, 0.0f, 1.0f);

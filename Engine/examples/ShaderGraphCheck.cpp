@@ -1,5 +1,7 @@
 ﻿#include "ShaderGraphCompiler.h"
 #include "MaterialInterface.h"
+#include "Vertex.h"
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <locale>
@@ -177,6 +179,20 @@ int main()
 		Expect(vsSource.find("float3 worldPosOffset = float3(0.0f, 0.0f, 0.0f);") != std::string::npos &&
 			vsSource.find("worldPosition.xyz += worldPosOffset;") != std::string::npos,
 			"Default worldPositionOffset expression was incorrect.");
+		Graph uvFallbackGraph{ EGraphDomain::Shader };
+		Add(uvFallbackGraph, registry, "Shader.MaterialOutput");
+		const auto fallbackReconciliation = uvFallbackGraph.Reconcile(registry);
+		Expect(fallbackReconciliation.InjectedDefaults > 0, "Graph schema defaults were not reconciled.");
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(uvFallbackGraph, registry, vsSource));
+		Expect(vsSource.find("output.TexCoord = input.TexCoord;") != std::string::npos,
+			"Unconnected customUV0 must preserve the mesh UV after schema defaults are reconciled.");
+		Expect(vsSource.find("output.TexCoord1 = input.TexCoord1;") != std::string::npos,
+			"Unconnected customUV1 must preserve mesh UV1 after schema defaults are reconciled.");
+		const auto& vertexElements = VertexMaterial::Layout.elements;
+		Expect(std::any_of(vertexElements.begin(), vertexElements.end(), [](const auto& element) {
+			return element.semanticName == "TEXCOORD" && element.semanticIndex == 1 &&
+				element.offset == offsetof(VertexMaterial, texCoord1);
+		}), "Material vertex layout must expose a distinct mesh UV1.");
 
 		const auto wpoConst = Add(matGraph, registry, "Core.Float3");
 		Accept(matGraph.SetInputValue(registry, { wpoConst, "value" }, std::array<float, 3>{ 0.0f, 1.0f, 0.0f }));
@@ -184,6 +200,48 @@ int main()
 		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(matGraph, registry, vsSource));
 		Expect(vsSource.find("float3(0.00000000e+00f, 1.00000000e+00f, 0.00000000e+00f)") != std::string::npos,
 			"Connected worldPositionOffset expression was incorrect.");
+
+		const auto meshUv = Add(matGraph, registry, "Shader.TexCoord0");
+		const auto uvScale = Add(matGraph, registry, "Math.MultiplyFloat2");
+		const auto uvOffset = Add(matGraph, registry, "Math.AddFloat2");
+		Accept(matGraph.SetInputValue(registry, { uvScale, "b" }, std::array<float, 2>{ 2.0f, 3.0f }));
+		Accept(matGraph.SetInputValue(registry, { uvOffset, "b" }, std::array<float, 2>{ 0.25f, 0.5f }));
+		Accept(matGraph.Connect(registry, { meshUv, "uv" }, { uvScale, "a" }));
+		Accept(matGraph.Connect(registry, { uvScale, "result" }, { uvOffset, "a" }));
+		Accept(matGraph.Connect(registry, { uvOffset, "result" }, { matOutput, "customUV0" }));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(matGraph, registry, vsSource));
+		Expect(vsSource.find(
+			"output.TexCoord = ((input.TexCoord * float2(2.00000000e+00f, 3.00000000e+00f)) + "
+			"float2(2.50000000e-01f, 5.00000000e-01f));") != std::string::npos,
+			"Vertex-stage UV scale and offset were not forwarded through TEXCOORD0.");
+
+		std::string matPsSource;
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(matGraph, registry, matPsSource));
+		Expect(matPsSource.find("Texture2D diffuseMap : register(t0, space1);") != std::string::npos &&
+			matPsSource.find("diffuseMap.Sample(materialSampler, input.TexCoord)") != std::string::npos,
+			"Generated GBuffer PS must sample the material diffuse texture using interpolated UV0.");
+		std::string transparentPsSource;
+		Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(matGraph, registry, transparentPsSource));
+		Expect(transparentPsSource.find("diffuseMap.Sample(materialSampler, input.TexCoord)") != std::string::npos,
+			"Generated ForwardTransparent PS must sample the material diffuse texture using interpolated UV0.");
+		const auto meshUv1 = Add(matGraph, registry, "Shader.TexCoord1");
+		const auto uv1Scale = Add(matGraph, registry, "Math.MultiplyFloat2");
+		Accept(matGraph.SetInputValue(registry, { uv1Scale, "b" }, std::array<float, 2>{ 4.0f, 5.0f }));
+		Accept(matGraph.Connect(registry, { meshUv1, "uv" }, { uv1Scale, "a" }));
+		Accept(matGraph.Connect(registry, { uv1Scale, "result" }, { matOutput, "customUV1" }));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(matGraph, registry, vsSource));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(matGraph, registry, matPsSource));
+		Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(matGraph, registry, transparentPsSource));
+		Expect(vsSource.find("output.TexCoord1 = (input.TexCoord1 * float2(4.00000000e+00f, 5.00000000e+00f));") != std::string::npos,
+			"Connected customUV1 must transform mesh UV1.");
+		Expect(vsSource.find("output.TexCoord = ((input.TexCoord *") != std::string::npos,
+			"Custom UV1 must not replace the custom UV0 expression.");
+		for (const auto* shader : { &vsSource, &matPsSource, &transparentPsSource })
+			Expect(shader->find("float2 TexCoord1 : TEXCOORD1;") != std::string::npos,
+				"Generated material stages must declare the TEXCOORD1 interface.");
+		const auto firstUv1 = vsSource.find("float2 TexCoord1 : TEXCOORD1;");
+		Expect(vsSource.find("float2 TexCoord1 : TEXCOORD1;", firstUv1 + 1) != std::string::npos,
+			"Generated vertex shader must expose UV1 in both input and output.");
 
 		// ── 5. 동적 MaterialBufferLayout (16바이트 패킹) 및 커스텀 파라미터(Variable.Get.*) 검증 ──
 		Graph dynGraph{ EGraphDomain::Shader };
@@ -203,8 +261,14 @@ int main()
 		Expect(eTint && eTint->Offset == 64 && eTint->Size == 12, "TintRgb 16-byte boundary jump offset mismatch.");
 
 		const auto getDissolve = Add(dynGraph, registry, "Variable.Get.DissolveProgress");
+		const auto getTiling = Add(dynGraph, registry, "Variable.Get.UVTiling");
 		const auto getTint = Add(dynGraph, registry, "Variable.Get.TintRgb");
+		const auto dynMeshUv = Add(dynGraph, registry, "Shader.TexCoord0");
+		const auto dynUvScale = Add(dynGraph, registry, "Math.MultiplyFloat2");
 		Accept(dynGraph.Connect(registry, { getDissolve, "value" }, { dynOutput, "roughness" }));
+		Accept(dynGraph.Connect(registry, { dynMeshUv, "uv" }, { dynUvScale, "a" }));
+		Accept(dynGraph.Connect(registry, { getTiling, "value" }, { dynUvScale, "b" }));
+		Accept(dynGraph.Connect(registry, { dynUvScale, "result" }, { dynOutput, "customUV0" }));
 		Accept(dynGraph.Connect(registry, { getTint, "value" }, { dynOutput, "worldPositionOffset" }));
 
 		std::string dynPsSource;
@@ -217,9 +281,10 @@ int main()
 		Expect(dynPsSource.find("float  _pad0;") != std::string::npos, "Missing explicit 16-byte alignment padding in PS cbuffer.");
 		Expect(dynPsSource.find("gMaterial.custom_DissolveProgress") != std::string::npos, "Variable.Get.DissolveProgress PS reference missing.");
 		Expect(dynVsSource.find("gMaterial.custom_TintRgb") != std::string::npos, "Variable.Get.TintRgb VS reference missing.");
+		Expect(dynVsSource.find("output.TexCoord = (input.TexCoord * gMaterial.custom_UVTiling);") != std::string::npos,
+			"Variable.Get.UVTiling must be available to the custom UV vertex stage.");
 
 		// ── 6. ForwardTransparent 단일 렌더 타깃 PS 생성 검증 ──
-		std::string transparentPsSource;
 		Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(dynGraph, registry, transparentPsSource));
 		Expect(transparentPsSource.find("float4 main(PS_INPUT input) : SV_TARGET0") != std::string::npos,
 			"ForwardTransparent PS must output single SV_TARGET0.");

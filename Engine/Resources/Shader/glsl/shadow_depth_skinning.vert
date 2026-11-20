@@ -3,8 +3,8 @@
 #include "common.glsl"
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 6) in uvec4 inBoneIDs;
-layout(location = 7) in vec4  inWeights;
+layout(location = 7) in uvec4 inBoneIDs;
+layout(location = 8) in vec4  inWeights;
 
 layout(set = 1, binding = 1) uniform UBO {
     mat4 worldMatrix;

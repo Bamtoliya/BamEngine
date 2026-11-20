@@ -188,6 +188,14 @@
 ,Graph data domain does not match this graph.,Graph data domain does not match this graph.,그래프 데이터의 도메인이 현재 그래프와 일치하지 않습니다.
 ,Graph file not found: '{}',Graph file not found: '{}',그래프 파일을 찾을 수 없습니다: '{}'
 ,"Graph parameters require unique, non-empty names.","Graph parameters require unique, non-empty names.",그래프 매개변수에는 비어 있지 않은 고유 이름이 필요합니다.
+,Graph.Node.AddFloat2,Add (Float2),더하기 (Float2)
+,Graph.Node.MultiplyFloat2,Multiply (Float2),곱하기 (Float2)
+,Graph.Node.TexCoord0,Texture Coordinate 0,텍스처 좌표 0
+,Graph.Node.TexCoord1,Texture Coordinate 1,텍스처 좌표 1
+,Graph.PinName.CustomUV0,Custom UV0 (mesh UV when unconnected),사용자 UV0 (미연결 시 메시 UV)
+,Graph.PinName.CustomUV1,Custom UV1 (mesh UV1 when unconnected),사용자 UV1 (미연결 시 메시 UV1)
+,Graph.PinName.UV0,UV0,UV0
+,Graph.PinName.UV1,UV1,UV1
 ,Input,Input,입력
 ,Input pin is missing.,Input pin is missing.,입력 핀이 없습니다.
 ,Input requires a finite value or connection.,Input requires a finite value or connection.,입력에 유한한 값 또는 연결이 필요합니다.

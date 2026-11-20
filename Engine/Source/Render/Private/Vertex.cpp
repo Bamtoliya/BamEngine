@@ -19,7 +19,8 @@ const InputLayoutDesc VertexMaterial::Layout =
 		{ "TEXCOORD",	0, 1, EVertexElementFormat::Float2, offsetof(VertexMaterial, texCoord) },
 		{ "TANGENT",	0, 2, EVertexElementFormat::Float3, offsetof(VertexMaterial, tangent) },
 		{ "BINORMAL",	0, 3, EVertexElementFormat::Float3, offsetof(VertexMaterial, binormal) },
-		{ "COLOR",		0, 4, EVertexElementFormat::Float4, offsetof(VertexMaterial, color) }
+		{ "COLOR",		0, 4, EVertexElementFormat::Float4, offsetof(VertexMaterial, color) },
+		{ "TEXCOORD",	1, 5, EVertexElementFormat::Float2, offsetof(VertexMaterial, texCoord1) }
 	},
 	sizeof(VertexMaterial),
 	EVertexInputRate::PerVertex,

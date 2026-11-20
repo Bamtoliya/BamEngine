@@ -19,6 +19,7 @@ namespace Tools::ModelConversion
         std::array<float, 4> Color{ 1.f, 1.f, 1.f, 1.f };
         std::array<std::uint32_t, 4> BoneIndices{ 0, 0, 0, 0 };
         std::array<float, 4> BoneWeights{ 0.f, 0.f, 0.f, 0.f };
+        std::array<float, 2> TexCoord1{};
     };
 
     struct TextureBindingInfo

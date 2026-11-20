@@ -118,6 +118,7 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 	using Type = EGraphPinType;
 	const std::vector<EGraphDomain> common{ EGraphDomain::Logic, EGraphDomain::Shader };
 	const std::vector<EGraphDomain> logic{ EGraphDomain::Logic };
+	const std::vector<EGraphDomain> shader{ EGraphDomain::Shader };
 	std::vector<GraphNodeDefinition> definitions{
 		{ "Core.Bool", common, {
 			{ "value", Direction::Input, Type::Bool, false }, { "result", Direction::Output, Type::Bool, {} } } },
@@ -252,9 +253,23 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "y", Direction::Output, Type::Float, {} },
 			{ "z", Direction::Output, Type::Float, {} },
 			{ "w", Direction::Output, Type::Float, {} } } },
+		{ "Math.AddFloat2", shader, {
+			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Math.MultiplyFloat2", shader, {
+			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Shader.TexCoord0", shader, {
+			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV0" } } },
+		{ "Shader.TexCoord1", shader, {
+			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV1" } } },
 		{ "Shader.MaterialOutput", { EGraphDomain::Shader }, {
 			// [VS Stage Input]
 			{ "worldPositionOffset", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } },
+			{ "customUV0", Direction::Input, Type::Float2, std::array<float, 2>{ 0.0f, 0.0f }, {}, "Graph.PinName.CustomUV0" },
+			{ "customUV1", Direction::Input, Type::Float2, std::array<float, 2>{ 0.0f, 0.0f }, {}, "Graph.PinName.CustomUV1" },
 			// [PS Stage Inputs]
 			{ "baseColor", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
 			{ "roughness", Direction::Input, Type::Float, 0.2f },
@@ -285,6 +300,10 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			definition.Category = "Organization";
 			for (auto& pin : definition.Pins) pin.LiteralOnly = true; // 연결 불가, 값만 저장
 		}
+		if (definition.Type == "Math.AddFloat2") definition.DisplayName = "Graph.Node.AddFloat2";
+		if (definition.Type == "Math.MultiplyFloat2") definition.DisplayName = "Graph.Node.MultiplyFloat2";
+		if (definition.Type == "Shader.TexCoord0") definition.DisplayName = "Graph.Node.TexCoord0";
+		if (definition.Type == "Shader.TexCoord1") definition.DisplayName = "Graph.Node.TexCoord1";
 	}
 	for (auto& definition : definitions)
 	{

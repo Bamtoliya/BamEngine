@@ -9,8 +9,8 @@ layout(location = 3) in vec3 inTangent;
 layout(location = 4) in vec3 inBitangent;
 layout(location = 5) in vec4 inColor;
 
-layout(location = 6) in uvec4 inBoneIDs;
-layout(location = 7) in vec4 inWeights;
+layout(location = 7) in uvec4 inBoneIDs;
+layout(location = 8) in vec4 inWeights;
 
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec3 fragNormal;

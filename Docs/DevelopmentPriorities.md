@@ -634,7 +634,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 2026-11-20 기준 커밋선(`fcda4887` $\to$ `1cd11857` $\to$ `11abec04` $\to$ `c2058594`)에 머티리얼 에디터 3-Pane 레이아웃 전면 개편, 셰이더 그래프 직접 소유권 전환, 프리팹 Revert All 외부 참조 검증 및 신규 심층 설계 2건이 반영되었다. 이후 `SceneArchiveCheck` 핫픽스를 거쳐 `x64-ninja-debug` 빌드 및 CTest 전체(44개) 통과를 확인했다([ImplementationLog](ImplementationLog.md) 2026-11-20 항목). 머티리얼 시스템 고도화 및 기존 작업 연속성에 맞춰 차기 개발 후보군을 5개 영역으로 공식 재편성한다.
 
-1. **후보 1 (머티리얼 / 셰이더 파이프라인): 머티리얼-셰이더 그래프 양방향 파라미터 동기화(Fast-Path) 및 VS/PS 통합 컴파일 (Phase 4)**
+1. **후보 1 (머티리얼 / 셰이더 파이프라인): 그래프 파라미터 동기화 및 VS/PS 기능 마감 (Phase 4 일부 구현, 2026-11-21)**
    - **기준 문서**: [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md)
    - **목표**: 상용 엔진(UE/Unity) 수준의 0초 실시간 파라미터 튜닝 피드백 및 정점 변위(WPO)/Custom UV를 지원하는 통합 셰이더 컴파일 파이프라인 구축.
    - **세부 내용**:
@@ -643,8 +643,9 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - **범용 동적 버퍼 레이아웃(Dynamic ConstantBuffer Layout)**: 48바이트 정적 PBR 구조체(`baseColor`, `roughness` 등) 하드코딩 종속을 탈피하고, 그래프의 임의 커스텀 파라미터(디졸브, UV 스케일 등)를 수집하여 HLSL `cbuffer` 동적 생성 및 원시 바이트 블롭(`std::vector<uint8_t>`) 기반 런타임 저장소로 고도화하는 아키텍처 수립.
      - `Shader.MaterialOutput` 단일 마스터 노드에 정점 입력 핀(WPO, Normal, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`를 동시 분할 생성.
    - **관련 파일**: `MaterialEditor.cpp`, `MaterialEditorCanvas.cpp`, `MaterialEditorShader.cpp`, `ShaderGraphCompiler.cpp`, `MaterialInterface.cpp`, `MaterialConstants.h`.
+   - **구현 반영:** 동적 cbuffer·GraphVariable 노출·WPO VS/PS 생성은 구현됐다. `Custom UV0/1`의 메시 UV 기반 연산과 폴백, 별도 보간 경로와 diffuse 슬롯 0의 UV0 샘플링을 코드와 `ShaderGraphCheck`에 반영했다. 이번 변경의 빌드·CTest·Editor 검증은 사용자 실행 대기이며, 범용 Texture Sample은 후속 범위다.
 
-2. **후보 2 (렌더 패스 정합성): 머티리얼 기본 렌더 패스(Primary Pass Type) 도입 및 Fallback 정합성 (Phase 5)**
+2. **후보 2 (렌더 패스 정합성): 머티리얼 기본 렌더 패스(Primary Pass Type) 및 Fallback 정합성 [구현 완료: 2026-11-20]**
    - **기준 문서**: [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md)
    - **목표**: 머티리얼 기본 셰이더의 암묵적 GBuffer 고정 구조를 해소하고, `ForwardTransparent`(반투명), `UI`, `PostProcess` 등 주 렌더 패스를 머티리얼이 직접 결정할 수 있도록 확장.
    - **세부 내용**:

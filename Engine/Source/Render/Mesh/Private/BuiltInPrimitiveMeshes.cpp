@@ -84,6 +84,7 @@ namespace Engine
                 VertexMaterial mat;
                 mat.normal = v.normal;
                 mat.texCoord = v.texCoord;
+                mat.texCoord1 = mat.texCoord;
                 mat.tangent = v.tangent;
                 mat.binormal = glm::cross(v.normal, v.tangent); // 자동 계산
                 mat.color = vec4(1.0f);
@@ -147,6 +148,7 @@ namespace Engine
                     VertexMaterial mat{};
                     mat.normal = normal;
                     mat.texCoord = uv;
+                    mat.texCoord1 = mat.texCoord;
                     mat.tangent = tangent;
                     mat.binormal = binormal;
                     mat.color = vec4(1.0f);
@@ -438,6 +440,7 @@ namespace Engine
                     VertexMaterial mat{};
                     mat.normal = vec3(0.0f, 1.0f, 0.0f);
                     mat.texCoord = vec2(u, v);
+                    mat.texCoord1 = mat.texCoord;
                     mat.tangent = vec3(1.0f, 0.0f, 0.0f);
                     mat.binormal = vec3(0.0f, 0.0f, 1.0f);
                     mat.color = vec4(1.0f);

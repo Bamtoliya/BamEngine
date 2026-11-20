@@ -1388,6 +1388,7 @@ void AssetCache::ProcessPending3DThumbnail()
                                     pos[vIdx].position = glm::vec3(srcMesh.Vertices[vIdx].Position[0], srcMesh.Vertices[vIdx].Position[1], srcMesh.Vertices[vIdx].Position[2]);
                                     attr[vIdx].normal = glm::vec3(srcMesh.Vertices[vIdx].Normal[0], srcMesh.Vertices[vIdx].Normal[1], srcMesh.Vertices[vIdx].Normal[2]);
                                     attr[vIdx].texCoord = glm::vec2(srcMesh.Vertices[vIdx].TexCoord[0], srcMesh.Vertices[vIdx].TexCoord[1]);
+                                    attr[vIdx].texCoord1 = glm::vec2(srcMesh.Vertices[vIdx].TexCoord1[0], srcMesh.Vertices[vIdx].TexCoord1[1]);
                                     attr[vIdx].tangent = glm::vec3(srcMesh.Vertices[vIdx].Tangent[0], srcMesh.Vertices[vIdx].Tangent[1], srcMesh.Vertices[vIdx].Tangent[2]);
                                     attr[vIdx].binormal = glm::vec3(srcMesh.Vertices[vIdx].Bitangent[0], srcMesh.Vertices[vIdx].Bitangent[1], srcMesh.Vertices[vIdx].Bitangent[2]);
                                 }

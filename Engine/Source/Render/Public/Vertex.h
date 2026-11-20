@@ -137,9 +137,11 @@ namespace Engine
 		glm::vec3 binormal = {};
 		PROPERTY()
 		glm::vec4 color = { 1.f, 1.f, 1.f, 1.f };
+		PROPERTY()
+		glm::vec2 texCoord1 = {};
 		VertexMaterial() = default;
 		VertexMaterial(const glm::vec3& nor, const glm::vec2& uv, const glm::vec3& tan, const glm::vec3& binor, const glm::vec4& col)
-			: normal(nor), texCoord(uv), tangent(tan), binormal(binor), color(col) {
+			: normal(nor), texCoord(uv), tangent(tan), binormal(binor), color(col), texCoord1(uv) {
 		}
 		static const InputLayoutDesc Layout;
 	};

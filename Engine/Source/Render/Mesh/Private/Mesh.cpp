@@ -4,6 +4,19 @@
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
 
+namespace
+{
+	struct LegacyVertexMaterial
+	{
+		glm::vec3 normal;
+		glm::vec2 texCoord;
+		glm::vec3 tangent;
+		glm::vec3 binormal;
+		glm::vec4 color;
+	};
+	static_assert(sizeof(VertexMaterial) > sizeof(LegacyVertexMaterial));
+}
+
 #pragma region Constructor&Destructor
 EResult Mesh::Initialize(void* arg)
 {
@@ -449,6 +462,24 @@ EResult Mesh::OnPostLoad()
 		const uint64 expectedBytes = static_cast<uint64>(count) * stride;
 		if (expectedBytes > std::numeric_limits<uint32>::max() || m_RawData[i].size() != expectedBytes)
 			return EResult::Fail;
+	}
+
+	const uint32 materialSlot = static_cast<uint32>(EMeshStream::Material);
+	const uint32 materialCount = m_StreamCounts[materialSlot];
+	if (materialCount > 0 && m_StreamStrides[materialSlot] == sizeof(LegacyVertexMaterial))
+	{
+		if (materialCount > std::numeric_limits<uint32>::max() / sizeof(VertexMaterial))
+			return EResult::Fail;
+		vector<uint8> converted(static_cast<sizet>(materialCount) * sizeof(VertexMaterial));
+		for (uint32 i = 0; i < materialCount; ++i)
+		{
+			LegacyVertexMaterial old{};
+			std::memcpy(&old, m_RawData[materialSlot].data() + static_cast<sizet>(i) * sizeof(old), sizeof(old));
+			VertexMaterial current(old.normal, old.texCoord, old.tangent, old.binormal, old.color);
+			std::memcpy(converted.data() + static_cast<sizet>(i) * sizeof(current), &current, sizeof(current));
+		}
+		m_RawData[materialSlot] = std::move(converted);
+		m_StreamStrides[materialSlot] = sizeof(VertexMaterial);
 	}
 
 	if (m_IndexCount > 0 && m_IndexStride != sizeof(uint16) && m_IndexStride != sizeof(uint32))

@@ -280,8 +280,8 @@ Editor/Source/ImGui/GraphCommon/
 │ [VS Stage Inputs]                             │
 │   ● World Position Offset  (Float3)           │
 │   ● Vertex Normal          (Float3)           │
-│   ● Custom UV0             (Float2)           │
-│   ● Custom UV1             (Float2)           │
+│   ● Custom UV0             (Float2, implemented)│
+│   ● Custom UV1             (Float2, implemented)│
 │                                               │
 │ [PS Stage Inputs]                             │
 │   ● Base Color             (Float4)           │
@@ -297,6 +297,9 @@ Editor/Source/ImGui/GraphCommon/
 ### 4.4 컴파일러의 분할 코드 생성 (Split Code Generation)
 
 단일 그래프 데이터로부터 `ShaderGraphCompiler`가 `MaterialVS.hlsl`과 `MaterialPS.hlsl`을 각각 생성한다.
+현재 `Custom UV0/1`은 각각 `Shader.TexCoord0/1`과 Float2 덧셈·곱셈으로 메시 좌표를 정점 단계에서 변환하고 별도의 `TEXCOORD0/1`로 보간한다. 핀 미연결 시 해당 메시 좌표를 그대로 사용한다. Assimp 임포터는 UV1이 있으면 보존하고 없으면 UV0을 복사한다. 이전 메시와 v3 모델 스냅샷도 UV0으로 대체하며, 이전에 임포트된 메시에서 원본 UV1을 복구하려면 원본을 다시 임포트해야 한다. 내장 프리미티브와 지형은 UV0을 복사한다. 생성된 GBuffer·ForwardTransparent 머티리얼 셰이더의 diffuse 슬롯 0은 계속 UV0을 사용하며, UV1은 현재 텍스처 샘플에 연결되지 않는다. 범용 Texture Sample 노드는 미구현이다. 빌드·셰이더 컴파일·실환경 검증은 사용자 실행 대기다.
+
+직접 `VertexMaterial`을 기본 생성해 `texCoord`를 나중에 대입하는 메시 제작 코드는 `texCoord1`도 명시해야 한다. 5인자 생성자는 UV0을 UV1 기본값으로 복사하며, 별도 UV1이 있으면 이를 덮어쓴다.
 
 ```mermaid
 flowchart TD

@@ -1825,6 +1825,7 @@ void MaterialEditor::SyncParametersFromGraph()
 	for (const auto& pin : schema->Pins)
 	{
 		if (pin.Direction != Engine::EGraphPinDirection::Input) continue;
+		if (pin.Key == "worldPositionOffset" || pin.Key == "customUV0" || pin.Key == "customUV1") continue;
 		if (hasLink(pin.Key)) continue; // 노드 링크 연결이 있으면 그래프 연산식이 우선
 
 		const auto it = masterNode->InputValues.find(pin.Key);

@@ -113,9 +113,9 @@ namespace
 			"Shader.ColorOutput", "Shader.MaterialOutput",
 			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Core.Reroute.Float", "Core.Reroute.Float2", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
-			"Math.AddFloat", "Math.MultiplyFloat",
+			"Math.AddFloat", "Math.MultiplyFloat", "Math.AddFloat2", "Math.MultiplyFloat2",
 			"Math.MakeFloat3", "Math.BreakFloat3",
-			"Math.MakeFloat4", "Math.BreakFloat4"
+			"Math.MakeFloat4", "Math.BreakFloat4", "Shader.TexCoord0", "Shader.TexCoord1"
 		};
 		return supported.contains(type);
 	}
@@ -262,6 +262,14 @@ namespace
 			return ResolveInputExpression(graph, registry, { outputPin.Node, "In" }, expectedType, callStack, outExpression);
 		}
 
+		if (type == "Shader.TexCoord0" || type == "Shader.TexCoord1")
+		{
+			if (outputPin.Pin != "uv" || expectedType != EGraphPinType::Float2)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = type == "Shader.TexCoord0" ? "input.TexCoord" : "input.TexCoord1";
+			return {};
+		}
+
 		if (type == "Math.AddFloat" || type == "Math.MultiplyFloat")
 		{
 			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float)
@@ -274,6 +282,22 @@ namespace
 			if (!res.Succeeded()) return res;
 
 			const char* op = (type == "Math.AddFloat") ? " + " : " * ";
+			outExpression = "(" + a + op + b + ")";
+			return {};
+		}
+
+		if (type == "Math.AddFloat2" || type == "Math.MultiplyFloat2")
+		{
+			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float2)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string a, b;
+			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "a" }, EGraphPinType::Float2, callStack, a);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "b" }, EGraphPinType::Float2, callStack, b);
+			if (!res.Succeeded()) return res;
+
+			const char* op = (type == "Math.AddFloat2") ? " + " : " * ";
 			outExpression = "(" + a + op + b + ")";
 			return {};
 		}
@@ -451,18 +475,34 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 
 	std::vector<GraphPinReference> callStack;
 	std::string wpoExpression = "float3(0.0f, 0.0f, 0.0f)";
+	std::string uv0Expression = "input.TexCoord";
+	std::string uv1Expression = "input.TexCoord1";
+	const auto links = graph.GetLinks();
+	const auto hasInputLink = [&](const char* pinName) {
+		return std::any_of(links.begin(), links.end(), [&](const GraphLink& link) {
+			return link.To.Node == outputNode->Id && link.To.Pin == pinName;
+		});
+	};
 
 	if (outputNode->Type == "Shader.MaterialOutput")
 	{
-		const auto links = graph.GetLinks();
-		const bool hasWpo = std::any_of(links.begin(), links.end(), [&](const GraphLink& link) {
-			return link.To.Node == outputNode->Id && link.To.Pin == "worldPositionOffset";
-			});
-
-		if (hasWpo)
+		if (hasInputLink("worldPositionOffset"))
 		{
 			auto result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, callStack, wpoExpression);
+			if (!result.Succeeded()) return result;
+		}
+
+		if (hasInputLink("customUV0"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "customUV0" }, EGraphPinType::Float2, callStack, uv0Expression);
+			if (!result.Succeeded()) return result;
+		}
+		if (hasInputLink("customUV1"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "customUV1" }, EGraphPinType::Float2, callStack, uv1Expression);
 			if (!result.Succeeded()) return result;
 		}
 	}
@@ -478,6 +518,7 @@ float2 TexCoord : TEXCOORD0;
 float3 Tangent : TANGENT;
 float3 Binormal : BINORMAL;
 float4 Color : COLOR;
+float2 TexCoord1 : TEXCOORD1;
 };
 
 struct VS_OUTPUT
@@ -486,6 +527,7 @@ float4 Position : SV_POSITION;
 float3 WorldPos : WORLD_POSITION;
 float3 Normal : NORMAL;
 float2 TexCoord : TEXCOORD0;
+float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
@@ -522,7 +564,8 @@ float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
 
 float determinantSign = dot(axisX, cross(axisY, axisZ)) < 0.0f ? -1.0f : 1.0f;
 output.Normal = normalize(normalWorld * determinantSign);
-output.TexCoord = input.TexCoord;
+output.TexCoord = )" + uv0Expression + R"(;
+output.TexCoord1 = )" + uv1Expression + R"(;
 output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
 output.Color = input.Color;
 output.PickingId = g_Instances[instanceId].PickingData.x;
@@ -568,6 +611,7 @@ float4 Position : SV_POSITION;
 float3 WorldPos : WORLD_POSITION;
 float3 Normal : NORMAL;
 float2 TexCoord : TEXCOORD0;
+float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
@@ -675,6 +719,13 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 
 	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
 	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
+	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput";
+	const char* materialTextureDeclarations = useMaterialTexture
+		? "Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n"
+		: "";
+	const char* materialDiffuseSample = useMaterialTexture
+		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
+		: "";
 
 	std::string source = R"(#include "shading_flags.hlsli"
 
@@ -684,6 +735,7 @@ float4 Position : SV_POSITION;
 float3 WorldPos : WORLD_POSITION;
 float3 Normal : NORMAL;
 float2 TexCoord : TEXCOORD0;
+float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
@@ -698,11 +750,12 @@ float4 Emission : SV_TARGET3;
 float4 Position : SV_TARGET4;
 };
 
-)" + materialConstantsBlock + R"(
+)" + std::string(materialTextureDeclarations) + "\n" + materialConstantsBlock + R"(
 PS_OUTPUT main(PS_INPUT input)
 {
 PS_OUTPUT output;
 float4 diffuse = ()" + baseColor + R"() * input.Color;
+)" + materialDiffuseSample + R"(
 if (diffuse.a < 0.01f) discard;
 
 float3 N = normalize(input.Normal);
@@ -778,22 +831,33 @@ GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 
 	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
 	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
+	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput";
+	const char* materialTextureDeclarations = useMaterialTexture
+		? "Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n"
+		: "";
+	const char* materialDiffuseSample = useMaterialTexture
+		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
+		: "";
 
-	std::string source = R"(struct PS_INPUT
+	std::string source = R"(#include "shading_flags.hlsli"
+
+struct PS_INPUT
 {
 float4 Position : SV_POSITION;
 float3 WorldPos : WORLD_POSITION;
 float3 Normal : NORMAL;
 float2 TexCoord : TEXCOORD0;
+float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
 };
 
-)" + materialConstantsBlock + R"(
+)" + std::string(materialTextureDeclarations) + "\n" + materialConstantsBlock + R"(
 float4 main(PS_INPUT input) : SV_TARGET0
 {
 float4 diffuse = ()" + baseColor + R"() * input.Color;
+)" + materialDiffuseSample + R"(
 float alpha = saturate(diffuse.a);
 if (alpha < 0.001f) discard;
 

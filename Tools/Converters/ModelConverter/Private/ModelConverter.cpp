@@ -21,7 +21,19 @@ namespace Tools::ModelConversion
     namespace
     {
         constexpr uint32_t MODEL_DDC_MAGIC = 0x43444D42; // "BMDC"
-        constexpr uint32_t MODEL_DDC_VERSION = 3;
+        constexpr uint32_t MODEL_DDC_VERSION = 4;
+
+        struct LegacyVertexData
+        {
+            std::array<float, 3> Position;
+            std::array<float, 3> Normal;
+            std::array<float, 2> TexCoord;
+            std::array<float, 3> Tangent;
+            std::array<float, 3> Bitangent;
+            std::array<float, 4> Color;
+            std::array<std::uint32_t, 4> BoneIndices;
+            std::array<float, 4> BoneWeights;
+        };
 
         void WriteString(std::ostream& os, const std::string& str)
         {
@@ -74,14 +86,35 @@ namespace Tools::ModelConversion
             for (const auto& lod : mesh.LODs) WriteMesh(os, lod);
         }
 
-        bool ReadMesh(std::istream& is, MeshData& mesh, bool allowLODs = true)
+        bool ReadMesh(std::istream& is, MeshData& mesh, uint32_t version, bool allowLODs = true)
         {
             if (!ReadString(is, mesh.Name)) return false;
             is.read(reinterpret_cast<char*>(&mesh.MaterialIndex), sizeof(mesh.MaterialIndex));
             is.read(reinterpret_cast<char*>(&mesh.HasSkinning), sizeof(mesh.HasSkinning));
             is.read(reinterpret_cast<char*>(mesh.BoundsMin.data()), sizeof(float) * 3);
             is.read(reinterpret_cast<char*>(mesh.BoundsMax.data()), sizeof(float) * 3);
-            if (!ReadPodVector(is, mesh.Vertices) || !ReadPodVector(is, mesh.Indices)) return false;
+            if (version == 3)
+            {
+                std::vector<LegacyVertexData> legacy;
+                if (!ReadPodVector(is, legacy)) return false;
+                mesh.Vertices.resize(legacy.size());
+                for (std::size_t i = 0; i < legacy.size(); ++i)
+                {
+                    const auto& src = legacy[i];
+                    auto& dst = mesh.Vertices[i];
+                    dst.Position = src.Position;
+                    dst.Normal = src.Normal;
+                    dst.TexCoord = src.TexCoord;
+                    dst.Tangent = src.Tangent;
+                    dst.Bitangent = src.Bitangent;
+                    dst.Color = src.Color;
+                    dst.BoneIndices = src.BoneIndices;
+                    dst.BoneWeights = src.BoneWeights;
+                    dst.TexCoord1 = src.TexCoord;
+                }
+            }
+            else if (!ReadPodVector(is, mesh.Vertices)) return false;
+            if (!ReadPodVector(is, mesh.Indices)) return false;
 
             uint32_t lodCount = 0;
             is.read(reinterpret_cast<char*>(&lodCount), sizeof(lodCount));
@@ -89,7 +122,7 @@ namespace Tools::ModelConversion
             mesh.LODs.resize(lodCount);
             for (uint32_t i = 0; i < lodCount; ++i)
             {
-                if (!ReadMesh(is, mesh.LODs[i], false)) return false;
+                if (!ReadMesh(is, mesh.LODs[i], version, false)) return false;
             }
             return is.good();
         }
@@ -113,7 +146,7 @@ namespace Tools::ModelConversion
             hasher.CombinePod(options.LODCount);
             hasher.CombinePod(options.TargetError);
             for (float rate : options.LODReductionRates) hasher.CombinePod(rate);
-            hasher.CombineString("model_ddc_v3");
+            hasher.CombineString("model_ddc_v4");
 
             return hasher.ResolvePath(Tools::Ddc::FindDdcDirectory("models"));
         }
@@ -126,7 +159,7 @@ namespace Tools::ModelConversion
             uint32_t magic = 0, version = 0;
             file.read(reinterpret_cast<char*>(&magic), sizeof(magic));
             file.read(reinterpret_cast<char*>(&version), sizeof(version));
-            if (magic != MODEL_DDC_MAGIC || version != MODEL_DDC_VERSION) return false;
+            if (magic != MODEL_DDC_MAGIC || (version != 3 && version != MODEL_DDC_VERSION)) return false;
 
             std::string sourcePathStr;
             if (!ReadString(file, sourcePathStr)) return false;
@@ -160,7 +193,7 @@ namespace Tools::ModelConversion
             model.Meshes.resize(meshCount);
             for (auto& mesh : model.Meshes)
             {
-                if (!ReadMesh(file, mesh)) return false;
+                if (!ReadMesh(file, mesh, version)) return false;
             }
 
             // 3. Nodes
@@ -672,6 +705,12 @@ namespace Tools::ModelConversion
                     const auto& uv = source->mTextureCoords[0][vertexIndex];
                     vertex.TexCoord = { static_cast<float>(uv.x), static_cast<float>(uv.y) };
                 }
+                vertex.TexCoord1 = vertex.TexCoord;
+                if (source->HasTextureCoords(1))
+                {
+                    const auto& uv = source->mTextureCoords[1][vertexIndex];
+                    vertex.TexCoord1 = { static_cast<float>(uv.x), static_cast<float>(uv.y) };
+                }
 
                 if (source->HasTangentsAndBitangents())
                 {
@@ -688,7 +727,7 @@ namespace Tools::ModelConversion
                     };
                 }
 
-                if (!IsFinite(vertex.Position) || !IsFinite(vertex.Normal) || !IsFinite(vertex.TexCoord) ||
+                if (!IsFinite(vertex.Position) || !IsFinite(vertex.Normal) || !IsFinite(vertex.TexCoord) || !IsFinite(vertex.TexCoord1) ||
                     !IsFinite(vertex.Tangent) || !IsFinite(vertex.Bitangent) || !IsFinite(vertex.Color))
                 {
                     return Fail(Error::InvalidData, "A vertex contains a non-finite value.");

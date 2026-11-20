@@ -99,6 +99,7 @@ namespace Editor
                     auto& attributes = outMesh.Attributes[i];
                     attributes.normal = { vertex.Normal[0], vertex.Normal[1], vertex.Normal[2] };
                     attributes.texCoord = { vertex.TexCoord[0], vertex.TexCoord[1] };
+                    attributes.texCoord1 = { vertex.TexCoord1[0], vertex.TexCoord1[1] };
                     attributes.tangent = { vertex.Tangent[0], vertex.Tangent[1], vertex.Tangent[2] };
                     attributes.binormal = { vertex.Bitangent[0], vertex.Bitangent[1], vertex.Bitangent[2] };
                     attributes.color = { vertex.Color[0], vertex.Color[1], vertex.Color[2], vertex.Color[3] };
