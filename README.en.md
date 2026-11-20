@@ -1,29 +1,30 @@
 ﻿# BamEngine
 
-[![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/)
-[![CMake](https://img.shields.io/badge/CMake-3.16%2B-064F8C.svg)](https://cmake.org/)
+[![C++](https://img.shields.io/badge/C%2B%2B-20%20%2F%2023-blue.svg)](https://isocpp.org/)
+[![CMake](https://img.shields.io/badge/CMake-3.21%2B-064F8C.svg)](https://cmake.org/)
 [![vcpkg](https://img.shields.io/badge/vcpkg-manifest-5C2D91.svg)](https://github.com/microsoft/vcpkg)
-[![Vulkan](https://img.shields.io/badge/API-Vulkan-A41E22.svg)](https://www.vulkan.org/)
+[![Graphics](https://img.shields.io/badge/API-DirectX12%20%2F%20SDL_GPU-A41E22.svg)](#tech-stack-and-libraries)
 [![Platform](https://img.shields.io/badge/Platform-Windows-informational.svg)](#environment-and-basic-setup)
 [![Status](https://img.shields.io/badge/Status-WIP-orange.svg)](#current-status)
 
-> A modular C++23 game engine + editor project  
+> A modular game engine and editor project using C++20 by default, with selected targets requiring C++23
 > The project separates `Engine` (runtime) and `Editor` (tooling), and focuses on improving productivity through a reflection code generation pipeline.
 
 ## Screenshots
 
-> Main editor screenshot is being prepared.  
-> Add an image to the path below to display it in this README.
+The main editor screenshot has not been added yet. See [the image guide](Docs/Images/README.md) for the expected filename.
 
-```text
-Docs/Images/editor-main.png
-```
+## Documentation
 
-![BamEngine Editor Screenshot](Docs/Images/editor-main.png)
+- [User and developer documentation index](Docs/README.en.md)
+- [Getting Started](Docs/UserGuide/GettingStarted.en.md)
+- [Basic Editor Workflow](Docs/UserGuide/EditorWorkflow.en.md)
+- [Architecture Overview](Docs/Technical/Architecture.en.md)
 
 ## Table of Contents
 
 - [Screenshots](#screenshots)
+- [Documentation](#documentation)
 - [Overview](#overview)
 - [Core Features](#core-features)
 - [Tech Stack and Libraries](#tech-stack-and-libraries)
@@ -53,11 +54,11 @@ Docs/Images/editor-main.png
 ### 1) Runtime Engine (`Engine`)
 
 - **Rendering pipeline**: Layered structure with RenderPass / RenderTarget / RHI.
-- **Vulkan shader flow**: Automatic compilation of `.vert/.frag -> .spv` using `glslc`.
-- **World/object system**: Component-based architecture with `GameObject` and `ComponentRegistry`.
+- **Shader flow**: HLSL compilation through DXC into DXIL / SPIR-V, with shader analysis and conversion tools.
+- **World/object system**: EnTT-based ECS scenes and components.
 - **Resource system**: Safe resource references through `ResourceManager` and `ResourceHandle<T>`.
 - **Physics/collision base**: Collider/RigidBody components and collision manager structure.
-- **Serialization paths**: Json / Binary / Beve save-load routes.
+- **Scene serialization**: Reflection-backed scene archives; the Editor scene document currently writes JSON.
 
 ### 2) Editor (`Editor`)
 
@@ -74,8 +75,8 @@ Docs/Images/editor-main.png
 
 ### 3) Codegen / Toolchain
 
-- Automatic reflection code generation through `ReflectionCore`, `ReflectionCodegen`, and `ReflectionBamAdapter`.
-- Texture conversion support via `Tools/TextureConverter`.
+- Engine reflection code generation through `Projects/Reflection`, with Archive and ReflectionArchive support in their own targets.
+- Texture conversion support via `Tools/Converters/TextureConverter`.
 
 ---
 
@@ -83,16 +84,16 @@ Docs/Images/editor-main.png
 
 ### Language / Build
 
-- **C++23**
-- **CMake (minimum 3.16)**
+- **C++20 baseline**, with C++23 requirements on selected targets
+- **CMake 3.21+**
 - **vcpkg manifest mode**
 
 ### Main libraries (from `vcpkg.json`)
 
 - `fmt`: formatting/output
-- `sdl3` (+ `vulkan`): platform/window/input layer
+- `sdl3`: platform/window/input layer
 - `glm`: math library
-- `vulkan`: rendering backend
+- DirectX 12 and SDL_GPU RHI paths; Vulkan SDK and shader tools are build dependencies
 - `imgui`, `imguizmo`: editor UI and gizmos
 - `assimp`: model import
 - `stb`: image utilities
@@ -108,31 +109,12 @@ Docs/Images/editor-main.png
 
 ```text
 BamEngine/
-├─ Engine/                  # Runtime engine (DLL)
-│  └─ Source/
-│     ├─ Core/
-│     ├─ Render/
-│     ├─ Resource/
-│     ├─ Physics/
-│     ├─ World/
-│     ├─ UI/
-│     ├─ System/
-│     └─ Generated/
-├─ Editor/                  # Editor application (EXE)
-│  └─ Source/
-│     ├─ Application/
-│     ├─ ImGui/
-│     ├─ AssetManager/
-│     ├─ Selection/
-│     └─ Generated/
-├─ Projects/
-│  ├─ ReflectionCore/
-│  ├─ ReflectionCodegen/
-│  ├─ ReflectionBamAdapter/
-│  └─ ReflectionCMake/
-├─ Tools/
-│  └─ TextureConverter/
-├─ Resources/               # Shaders/localization/default resources
+├─ Engine/                  # Runtime engine
+├─ Editor/                  # Editor application
+├─ Client/                  # Standalone execution host
+├─ Projects/                # Reflection, Archive, GameModule, Plugins, etc.
+├─ Tools/                   # AssetWorker, converters, and developer tools
+├─ Docs/                    # User guides, technical docs, design and verification records
 └─ CMakeLists.txt
 ```
 
@@ -144,17 +126,17 @@ BamEngine/
 
 - Windows (based on current presets)
 - Visual Studio (MSVC C++ toolchain)
-- CMake 3.16+
-- Python 3.x (for reflection/localization scripts)
-- Vulkan SDK (`glslc` required)
+- CMake 3.21+
+- Python 3.x, LLVM/Clang 20.1.8, DXC, Vulkan SDK, Qt6 Widgets, and the matching FMOD SDK files
+- GitHub access for the first configure (imnodes FetchContent)
 
 ### Pre-check
 
-`CMakePresets.json` currently contains a hardcoded value:
+`CMakePresets.json` currently contains a hardcoded local value:
 
 - `CMAKE_TOOLCHAIN_FILE`: `I:/vcpkg/scripts/buildsystems/vcpkg.cmake`
 
-Update this path to match your local environment.
+Update `CMAKE_TOOLCHAIN_FILE` in the Windows presets to match your vcpkg installation. The presets also expect the Reflection LLVM/Clang resource path and local FMOD SDK files; see the [Getting Started guide](Docs/UserGuide/GettingStarted.en.md).
 
 ---
 
@@ -179,14 +161,14 @@ Get-ChildItem -Path .\out\build\x64-debug -Recurse -Filter Editor*.exe
 ```
 
 > Note  
-> Based on the root `CMakeLists.txt`, active default targets are `Engine`, `TextureConverter`, and `Editor`.  
-> `Client` is currently commented out.
+> Non-Emscripten root configurations also add `Client` and `GameModule`; `Editor` is added when `BAMENGINE_WITH_EDITOR` is enabled (ON by default).
+> The existence of the Client target does not mean standalone package deployment has been fully verified. See the [Client build and packaging plan](Docs/BuildAndPackagingPlan.md).
 
 ---
 
 ## Resource/Asset Pipeline
 
-- Resources are loaded/registered/queried/released via `ResourceManager`.
+- Resources are loaded/registered/queried/released through `ResourceManager`.
 - The `Handle(index + generation)` layout is used to reduce stale handle issues.
 - Editor importers convert and register assets into engine-friendly formats.
 - Localization CSV files are converted to JSON through the `GenerateLocalization` target.
@@ -195,21 +177,17 @@ Get-ChildItem -Path .\out\build\x64-debug -Recurse -Filter Editor*.exe
 
 ## Reflection Code Generation
 
-- Engine/editor reflection code is generated at CMake stage with `add_reflection_bundle(...)`.
-- Generated files
-  - `Engine/Source/Generated/EngineReflection.gen.cpp`
-  - `Editor/Source/Generated/EditorReflection.gen.cpp`
-- Related projects
-  - `Projects/ReflectionCore`
-  - `Projects/ReflectionCodegen`
-  - `Projects/ReflectionBamAdapter`
+- Engine reflection code is generated at CMake stage through `reflection_generate()` in `Engine/CMake/ReflectionBuild.cmake`.
+- Generated C++ files are placed in the build directory and compiled into the Engine target; the Editor consumes the Engine registry.
+- Related projects include `Projects/Reflection`, `Projects/Archive`, and `Projects/ReflectionArchive`.
 
 ---
 
 ## Current Status
 
-- This repository is currently **WIP (Work In Progress)**.
-- Development is actively focused on rendering, editor tooling, resource handling, and reflection pipeline expansion.
+- This repository is **WIP (Work In Progress)**. Implemented source paths and runtime verification are tracked separately.
+- The implementation log records a user-confirmed `x64-ninja-debug` build and full 44/44 CTest pass on 2026-11-20. This applies to that check set and point in time, not every current change, UI workflow, GPU path, or standalone Client package.
+- See the [documentation index](Docs/README.en.md) and [implementation log](Docs/ImplementationLog.md) for feature scope and verification limits.
 
 ---
 

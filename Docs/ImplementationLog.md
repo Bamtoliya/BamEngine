@@ -8,6 +8,32 @@ This document tracks implementation details, architectural decisions, and techni
 - 공용 핀 렌더러의 연결 상태별 반투명 처리를 제거해 Graph, Material, Animator Graph의 핀 색을 모두 불투명하게 통일했다. Animator Graph는 새 공용 헬퍼 API에 맞게 호출부만 갱신했으며 시각·동작은 바꾸지 않았다. 상세 범위는 [Material Shader Graph 계획](MaterialShaderGraphIntegrationPlan.md#53-그래프-노드-표시-정합)과 [GraphPanel](GraphPanel.md)을 따른다.
 - **정적 확인만 수행:** 공용 렌더 헬퍼 호출 및 해당 변경 diff를 검토했다. 저장소 학습 지침에 따라 빌드·CTest·Editor 시각 확인은 수행하지 않았으며, 노드 드래그/연결, 핀 히트영역, 주석 크기 저장, 좁은 폭·배율별 화면 확인은 사용자 검증이 필요하다.
 
+### [2026-11-21] Material Shader Graph Custom UV1
+
+- Assimp의 두 번째 UV를 모델 스냅샷 v4 및 메시 정점 스트림에 전달한다. 채널 부재, v3 스냅샷과 기존 메시 로드에서는 UV0을 복사한다. 이전에 저장된 메시에서 소실된 원본 UV1은 재임포트가 필요하다. 모델 DDC와 지형 그리드 캐시 버전을 갱신했다.
+- `Shader.TexCoord1`과 `customUV1`을 추가하여 VS 입력 및 VS/PS 간 별도 `TEXCOORD1`로 전달한다. diffuse 슬롯은 기존 UV0을 유지하고 범용 텍스처 노드는 추가하지 않았다. SDL GLSL 스키닝 입력 위치도 추가 정점 속성에 맞췄다.
+- `ShaderGraphCheck`에 UV1 폴백·변환·인터페이스 검사, `AssetWorkerModelCheck`에 UV1이 있는 glTF와 없는 OBJ 스냅샷 검사를 추가했다.
+- **정적 확인 / 미검증:** 빌드·CTest·실제 셰이더 컴파일·임포트/구버전 에셋 재로드·D3D12/SDL 렌더링 및 Editor 프리뷰는 실행하지 않았다. 로캘 JSON은 사용자가 생성 도구로 동기화해야 한다.
+
+### [2026-11-21] Material Shader Graph Custom UV0
+
+- `Shader.MaterialOutput`에 로캘 핀 `customUV0`를 추가했다. `Shader.TexCoord0`와 Shader 도메인 전용 Float2 덧셈·곱셈 노드로 메시 UV를 변환해 VS `TEXCOORD0`로 전달하며, 연결되지 않으면 원래 메시 UV를 유지한다.
+- 그래프 생성 GBuffer·ForwardTransparent PS는 머티리얼 diffuse 슬롯 0이 존재할 때 보간된 `TEXCOORD0`로 텍스처를 샘플링한다. `MaterialEditor::SyncParametersFromGraph()`는 VS 출력 핀(WPO, Custom UV)을 머티리얼 파라미터로 잘못 노출하지 않도록 제외한다.
+- `ShaderGraphCheck`에 기본 UV 폴백, 메시 UV 타일링·오프셋, 동적 Float2 파라미터 전달, GBuffer·ForwardTransparent diffuse 샘플을 추가했다. Custom UV1과 범용 Texture Sample 노드는 범위 밖이다.
+- **미검증:** 이번 코드의 빌드·CTest·Editor 프리뷰는 실행하지 않았다. 사용자 실행 후 결과를 반영해야 하며, 새 `Engine.csv` 키는 기존 GenerateLocalization 절차로 JSON에 동기화해야 한다.
+
+### [2026-11-21] 시작·에디터 사용·아키텍처 문서 작성
+
+- `Docs/README.md`와 영어 색인, 시작하기, 에디터 기본 작업, 아키텍처 개요를 한국어·영어 쌍으로 추가했다. 루트 README의 문서 진입점을 추가하고 C++ 표준, CMake 요구 버전, Client 타깃 및 Reflection 생성 위치의 오래된 설명을 현재 설정과 맞췄다.
+- 씬 Archive의 데이터 모양, Editor 문서 저장 경계, 후보 씬 복원·계층 검증과 현재 제한을 설명하는 `Docs/Technical/ScenePersistence.md` 및 영어 짝 문서를 추가했다.
+- 구현 사실과 자동 검사·사용자 실행 확인을 분리했으며, Client 패키징·UI/GPU·플랫폼 검증이 미완료인 범위를 문서에 표시했다.
+- **검증:** CMake 설정·주요 진입 코드·기존 설계/구현 기록과 문서를 정적으로 대조했다. 문서 변경의 공백·링크 확인은 수행했으며 빌드·CTest·Editor 실행은 하지 않았다. 2026-11-20의 x64 Ninja Debug 44/44 기록은 당시 사용자 확인으로만 인용했다.
+
+### [2026-11-20] 사용자 소스 패키지 빌드·로드 계획
+
+- DLL이 없는 생성 패널의 현재 발견·수동 빌드 경로와 제약을 정리하고, 소스 승인·독립 CMake 구성·후보 게시·기존 DLL 승인 및 패널 등록을 잇는 [단계별 계획](EditorPluginArchitecturePlan.md#사용자-소스-패키지-빌드로드-계획)을 추가했다. 기존 템플릿 마이그레이션, 실패 복구와 Blank/Runtime 모듈의 별도 계약도 구분했다.
+- **상태:** 계획 문서화만 진행했다. 자동 구성·빌드·게시와 사용자 소스 자동 감시는 미구현이며, 기존 생성 패널의 독립 빌드·로드와 새 계획의 실행 검증도 남아 있다.
+
 ### [2026-11-20] 플러그인 관리자 툴바와 패키지 경로 표시
 
 - 상단과 선택 항목 및 빌드 콘솔의 동작을 공용 아이콘 툴바로 정리하고, 상단 경로·SDK 설명을 정보 팝업으로 옮겼다.

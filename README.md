@@ -1,17 +1,24 @@
 ﻿# BamEngine
 
-[![C++](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/)
+[![C++](https://img.shields.io/badge/C%2B%2B-20%20%2F%2023-blue.svg)](https://isocpp.org/)
 [![CMake](https://img.shields.io/badge/CMake-3.21%2B-064F8C.svg)](https://cmake.org/)
 [![vcpkg](https://img.shields.io/badge/vcpkg-manifest-5C2D91.svg)](https://github.com/microsoft/vcpkg)
 [![Graphics](https://img.shields.io/badge/API-DirectX12%20%2F%20SDL_GPU-A41E22.svg)](#2-렌더링-아키텍처-rhi--renderpass)
 [![Platform](https://img.shields.io/badge/Platform-Windows-informational.svg)](#개발-환경-및-기본-셋팅)
 [![Status](https://img.shields.io/badge/Status-WIP-orange.svg)](#현재-상태)
 
-> C++23 기반의 모듈형 게임 엔진 + 에디터 프로젝트  
+> C++20을 기본으로 하며 일부 타깃은 C++23을 요구하는 모듈형 게임 엔진 + 에디터 프로젝트
 > `Engine`(런타임)와 `Editor`(툴링)를 분리하고, Reflection 코드 생성 파이프라인으로 생산성을 높이는 것을 목표로 합니다.
 
-현재는 ECS 씬 편집·저장·불러오기, UI 캔버스 편집, 씬 Undo/Redo와 Logic 그래프 실행 미리보기를 개발하고 있습니다.
-아래 구현 범위는 **현재 작업 공간의 코드 기준**이며, 실행 검증 범위와 남은 작업은 [현재 상태](#현재-상태)에 구분합니다.
+현재 소스에는 ECS 씬 편집·저장·불러오기, UI 캔버스 편집, 씬 Undo/Redo와 Logic 그래프 실행 경로가 있습니다.
+기능 구현 여부와 실제 실행 검증 범위는 [현재 상태](#현재-상태) 및 [문서 색인](Docs/README.md)에서 구분합니다.
+
+## 문서
+
+- [사용자·개발자 문서 색인](Docs/README.md)
+- [시작하기](Docs/UserGuide/GettingStarted.md)
+- [에디터 기본 작업](Docs/UserGuide/EditorWorkflow.md)
+- [기술 아키텍처 개요](Docs/Technical/Architecture.md)
 
 ## 스크린샷
 
@@ -21,6 +28,7 @@
 
 - [BamEngine](#bamengine)
 	- [스크린샷](#스크린샷)
+	- [문서](#문서)
 	- [목차](#목차)
 	- [프로젝트 소개](#프로젝트-소개)
 	- [개발 의도](#개발-의도)
@@ -132,7 +140,7 @@
 - **Reflection Generator**: LLVM/Clang 전처리기와 AST를 이용해 어노테이션이 있는 헤더를 분석하고 등록용 C++ 코드 생성
 - **CMake 통합**: `reflection_generate()`로 코드 생성과 대상 타깃의 컴파일 연결
 - **ReflectionArchive**: Reflection 메타데이터와 Archive의 직렬화 API 연결
-- `Tools/TextureConverter`를 통한 텍스처 변환 지원
+- `Tools/Converters/TextureConverter`를 통한 텍스처 변환 지원
 
 ---
 
@@ -144,7 +152,7 @@
 
 | 기술 | 적용 위치 | 채택 의도 |
 |---|---|---|
-| C++23 | 전체 | 성능 중심 런타임 + 현대 C++ 문법/타입 안정성 확보 |
+| C++20 / C++23 | 타깃별 요구사항 | 루트 기본값은 C++20이며 일부 하위 타깃은 C++23을 요구 |
 | CMake 3.21+ | 전체 | 멀티 타깃(Engine DLL, Editor EXE, Tools) 빌드 오케스트레이션 |
 | vcpkg manifest | 전체 | 의존성 목록과 toolchain 기반 패키지 구성 |
 | Unity Build / PCH | Editor / Engine | Editor의 Unity Build와 Engine의 PCH 사용. Engine의 Unity Build는 현재 비활성화 |
@@ -331,39 +339,12 @@ Shader 도메인의 노드 편집·연결 검증을 완성된 셰이더 제작 �
 
 ```text
 BamEngine/
-├─ Engine/                  # 런타임 엔진 (DLL)
-│  └─ Source/
-│     ├─ Core/
-│     ├─ Runtime/
-│     ├─ Graph/
-│     ├─ Render/
-│     ├─ Resource/
-│     ├─ Physics/
-│     ├─ World/
-│     ├─ UI/
-│     ├─ System/
-│     └─ Utility/
-├─ Editor/                  # 에디터 애플리케이션 (EXE)
-│  └─ Source/
-│     ├─ Application/
-│     ├─ ImGui/
-│     ├─ AssetManager/
-│     ├─ Command/           # 씬 편집 이력과 스냅샷
-│     ├─ Qt/                # 기본 Qt 창·도크 구성
-│     ├─ Rendering/
-│     ├─ Selection/
-│     └─ Generated/
-├─ Projects/
-│  ├─ Reflection/           # Runtime, LLVM/Clang 기반 Generator, CMake 생성 함수
-│  ├─ Archive/              # 공통 Archive API와 JSON / BEVE 구현
-│  ├─ ReflectionArchive/    # Reflection과 Archive 연결 어댑터
-│  ├─ ReflectionConsumer/   # 소비 프로젝트 예제
-│  ├─ ReflectionPackageCheck/
-│  └─ ReflectionEnTT/       # 향후 성능 비교용 별도 구현
-├─ Tools/
-│  └─ TextureConverter/
-├─ Resources/               # 셰이더/로컬라이제이션/기본 리소스
-├─ Docs/                    # 설계 지침·기능별 범위·구현 기록
+├─ Engine/                  # 런타임 엔진
+├─ Editor/                  # 에디터 애플리케이션
+├─ Client/                  # 독립 실행 호스트
+├─ Projects/                # Reflection, Archive, GameModule, Plugins 등
+├─ Tools/                   # AssetWorker 및 변환·개발 도구
+├─ Docs/                    # 사용자 가이드·기술 문서·설계 및 검증 기록
 └─ CMakeLists.txt
 ```
 
@@ -431,8 +412,8 @@ Get-ChildItem -Path .\out\build\x64-debug -Recurse -Filter Editor*.exe
 ```
 
 > 참고  
-> 루트 `CMakeLists.txt` 기준 현재 기본 타깃은 `Engine`, `TextureConverter`, `Editor`입니다.  
-> `Client`는 주석 처리되어 있습니다.
+> 비-Emscripten 루트 구성은 `Client`와 `GameModule`도 타깃으로 추가합니다. `Editor`는 `BAMENGINE_WITH_EDITOR` 옵션이 활성화된 경우 포함되며 기본값은 ON입니다.
+> Client 타깃의 존재는 독립 패키지 배포와 실행 검증 완료를 의미하지 않습니다. 잔여 검증은 [Client 빌드·패키징 계획](Docs/BuildAndPackagingPlan.md)을 참고하세요.
 
 ### 4) 선택 검사 타깃
 
@@ -498,36 +479,12 @@ out/build/x64-debug/Engine/Generated/Debug/
 
 ## 현재 상태
 
-본 저장소는 **WIP(Work In Progress)** 상태입니다. 아래는 2026-10-16 현재 작업 공간 기준입니다.
+본 저장소는 **WIP(Work In Progress)** 상태입니다. 구현과 검증을 같은 의미로 취급하지 않습니다.
 
-**코드에 연결된 범위**
-
-- Reflection Runtime·Generator와 통합 ReflectionRegistry, ECS Inspector·컴포넌트 작업·직렬화 연결
-- JSON / BEVE 기반 씬 저장·불러오기, 영구 ID·계층 복원, 리소스 참조 코덱과 프리팹 API
-- ECS UI 캔버스 편집·버튼 상호작용 미리보기·Z-Index와 그리기/선택 순서
-- Hierarchy 편집, Transform 기즈모, 씬 Undo/Redo와 GPU ID / 레이 경계 피킹 경로
-- Logic / Shader 공통 그래프·패널 편집, Logic 수학·제어 흐름 실행과 추적 미리보기
-
-**아직 남은 범위와 제한**
-
-- PIE 종료 시 `Application::RestoreScene()`은 `NotImplemented` 반환. 실행 전 편집 상태 복원 미완료
-- 그래프 파일 저장·불러오기, 씬 객체 Get/Set 실행, PIE 자동 연결과 Shader 코드 생성 미구현
-- 프리팹은 엔진 API 단계이며 전용 에디터 제작·배치 워크플로우는 미연결
-- Qt 창은 초기 구성 단계. 기본 ImGui 에디터 기능과 엔진 뷰포트를 이전한 상태가 아님
-- 씬 형식은 Version 1이며 마이그레이션과 파일의 원자적 교체는 미구현
-- 임의 포인터·객체 참조의 자동 복원, 모든 컴포넌트·리소스의 왕복 저장을 보장하지 않음
-- 기존 Binary 리소스 경로 미지원. Client 기본 빌드와 배포·패키징 흐름은 미완성
-- Visual Scripting의 전체 제작·실행 흐름, 핫 리로드, 아바타·강화학습 연동은 장기 목표
-
-**검증 기록과 한계**
-
-- [구현 기록](Docs/ImplementationLog.md)과 [Undo/Redo 문서](Docs/EditorUndoRedo.md)에는
-  일부 작업의 Debug·Release 빌드 및 검사 통과 기록이 있습니다.
-- 그래프 패널·실행·호환 노드 검색 등에는 소스 작성·정적 검토만 기록된 항목도 있습니다.
-  과거 기록을 현재 작업 공간 전체의 빌드·테스트 통과로 해석하지 않습니다.
-- 이번 README 갱신은 소스·설정·문서 대조만 수행했습니다. 최신 변경의 빌드·CTest와 GPU·UI 조작 검증은 별도입니다.
-- 일부 상세 문서에는 최신 리소스 핸들·Collider 코덱과 프리팹 코드가 아직 반영되지 않았습니다.
-  해당 지원 범위는 현재 코드와 실제 왕복 검사 결과를 함께 확인해야 합니다.
+- **최근 기록된 자동 검증**: 2026-11-20 사용자가 `x64-ninja-debug` 빌드와 CTest 전체 44/44 통과를 확인했습니다. 이 기록은 해당 시점과 검사 집합에 한정됩니다.
+- **현재 코드 경로**: Editor·Client 실행 타깃, ECS 씬 JSON 직렬화, 에디터 씬 편집 이력 등은 소스와 관련 문서에서 확인할 수 있습니다.
+- **남은 검증**: Client 패키지의 저장소 외부 실행, Release·플랫폼별 렌더링, 최근 UI/GPU 변경의 실환경 확인은 별도 항목입니다. Client 실행·패키징의 현재 범위는 [계획 문서](Docs/BuildAndPackagingPlan.md)를 확인하세요.
+- 기록된 CTest 통과가 모든 패널의 수동 조작, 그래프·PIE 경로, GPU 결과 또는 현재 미커밋 변경을 검증한 것은 아닙니다. 상세 상태와 기준은 [문서 색인](Docs/README.md)과 [구현 기록](Docs/ImplementationLog.md)을 따릅니다.
 
 ---
 
@@ -541,6 +498,7 @@ out/build/x64-debug/Engine/Generated/Debug/
 
 ## 구현 세부 기록
 
+- 사용자·개발자 문서 진입점: [문서 색인](Docs/README.md)
 - 상세 구현 히스토리 및 기술 부채 추적 문서: [ImplementationLog.md](Docs/ImplementationLog.md)
 - 장기 목표와 역할 경계: [엔진·에디터·클라이언트 지침](Docs/EngineEditorClientGuidelines.md)
 - 독립 모듈 목표: [Reflection / Archive 지침](Docs/ReflectionArchiveGuidelines.md)
