@@ -184,6 +184,14 @@ void MaterialInstance::SetPixelShaderHandle(const ResourceHandle<Shader>& shader
 {
 	m_PixelShaderHandle = shader;
 }
+string MaterialInstance::GetShaderGraphPath() const
+{
+	if (!m_ShaderGraphPath.empty())
+		return m_ShaderGraphPath;
+	if (auto* baseMat = GetBaseMaterial())
+		return baseMat->GetShaderGraphPath();
+	return "";
+}
 #pragma endregion
 #pragma region Pipeline
 EBlendMode MaterialInstance::GetBlendMode() const

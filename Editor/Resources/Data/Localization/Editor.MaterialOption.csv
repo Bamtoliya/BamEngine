@@ -1,31 +1,31 @@
-Group,Key,English,Korean
-MaterialOption,Additive,Additive,가산
+﻿Group,Key,English,Korean
+MaterialOption,Additive,Additive,가산 (Additive)
 MaterialOption,Always,Always,항상 통과
-MaterialOption,Back,Back,뒷면
+MaterialOption,Back,Back (Back-face Culling),뒷면 (후면 컬링)
 MaterialOption,Custom,Custom,사용자 정의
 MaterialOption,Decal,Decal,데칼
-MaterialOption,Equal,Equal,같음
+MaterialOption,Equal,Equal (==),같음 (==)
 MaterialOption,Forward,Forward,포워드
 MaterialOption,ForwardTransparent,ForwardTransparent,포워드 투명
-MaterialOption,Front,Front,앞면
+MaterialOption,Front,Front (Front-face Culling),앞면 (전면 컬링)
 MaterialOption,Geometry,Geometry,지오메트리
-MaterialOption,Greater,Greater,큼
-MaterialOption,GreaterEqual,GreaterEqual,크거나 같음
-MaterialOption,Less,Less,작음
-MaterialOption,LessEqual,LessEqual,작거나 같음
+MaterialOption,Greater,Greater (>),큼 (>)
+MaterialOption,GreaterEqual,Greater or Equal (>=),크거나 같음 (>=)
+MaterialOption,Less,Less (<),작음 (<)
+MaterialOption,LessEqual,Less or Equal (<=),작거나 같음 (<=)
 MaterialOption,Lighting,Lighting,조명
 MaterialOption,Masked,Masked,마스크
 MaterialOption,Never,Never,항상 실패
 MaterialOption,NonPremultiplied,Non-premultiplied Alpha,비사전 곱 알파
-MaterialOption,None,None,없음
-MaterialOption,NotEqual,NotEqual,다름
+MaterialOption,None,None (Double-Sided),없음 (양면)
+MaterialOption,NotEqual,Not Equal (!=),다름 (!=)
 MaterialOption,Opaque,Opaque,불투명
 MaterialOption,PostProcess,PostProcess,후처리
 MaterialOption,ReadOnly,ReadOnly,읽기 전용
-MaterialOption,ReadWrite,ReadWrite,읽기 및 쓰기
+MaterialOption,ReadWrite,Read / Write,읽기 및 쓰기
 MaterialOption,Shadow,Shadow,그림자
-MaterialOption,Solid,Solid,채움
-MaterialOption,Translucent,Translucent,반투명
+MaterialOption,Solid,Solid,채움 (솔리드)
+MaterialOption,Translucent,Translucent (Alpha Blend),반투명 (알파 블렌드)
 MaterialOption,UI,UI,사용자 인터페이스
 MaterialOption,Unknown,Unknown,알 수 없음
 MaterialOption,Wireframe,Wireframe,와이어프레임

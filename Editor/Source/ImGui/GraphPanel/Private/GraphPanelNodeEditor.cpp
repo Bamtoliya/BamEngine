@@ -14,6 +14,21 @@ namespace
 		ed::EditorContext* Previous = ed::GetCurrentEditor();
 		~RestoreEditorContext() { ed::SetCurrentEditor(Previous); }
 	};
+
+	float GetPinValueDefaultWidth(Engine::EGraphPinType type)
+	{
+		switch (type)
+		{
+		case Engine::EGraphPinType::Bool: return 24.0f;
+		case Engine::EGraphPinType::Int: return 60.0f;
+		case Engine::EGraphPinType::Float: return 60.0f;
+		case Engine::EGraphPinType::Float2: return 120.0f;
+		case Engine::EGraphPinType::Float3: return 170.0f;
+		case Engine::EGraphPinType::Float4: return 220.0f;
+		case Engine::EGraphPinType::String: return 120.0f;
+		default: return 80.0f;
+		}
+	}
 }
 
 #pragma region Context
@@ -502,7 +517,7 @@ void GraphPanel::DrawNode(const GraphNode& node)
 				const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
 				borderPins.push_back({ found->second.Pins.at(inPin->Key), ed::PinKind::Input, centerY, PinColor(inPin->Type) });
 			}
-			DrawPinValue(node, *inPin, 80.0f);
+			DrawPinValue(node, *inPin, GetPinValueDefaultWidth(inPin->Type));
 		}
 		if (dataStraight) ed::PopStyleVar();
 		ImGui::EndGroup();
@@ -591,7 +606,7 @@ void GraphPanel::DrawPinValue(const GraphNode& node, const GraphPin& pin, float 
 		const bool missing = std::holds_alternative<std::monostate>(value);
 		if (missing) value = MakeDefaultValue(pin.Type);
 
-		const float itemWidth = overridden ? (width - 24.0f) : width;
+		const float itemWidth = width;
 		ImGui::SetNextItemWidth(itemWidth);
 		if (DrawValue(pin.Type, value)) ApplyResult(graph.SetInputValue(m_Registry, reference, value));
 
@@ -1228,8 +1243,10 @@ void GraphPanel::DuplicateSelection()
 
 	for (auto selNodeId : document.SelectedNodes)
 	{
-		const auto* origNode = document.Data.FindNode(selNodeId);
-		if (!origNode) continue;
+		const auto* found = document.Data.FindNode(selNodeId);
+		if (!found) continue;
+		// AddNode가 노드 벡터에 push_back하므로 그 전에 값으로 복사한다(포인터는 재할당 후 무효가 된다).
+		const Engine::GraphNode original = *found;
 
 		const auto origView = document.Nodes.find(selNodeId);
 		ImVec2 origPos = m_AddPosition;
@@ -1240,39 +1257,15 @@ void GraphPanel::DuplicateSelection()
 		}
 
 		m_AddPosition = origPos;
-		GraphNodeCandidate candidate{ origNode->Type, {} };
+		GraphNodeCandidate candidate{ original.Type, {} };
 		if (AddNode(candidate))
 		{
 			const auto newNodeId = document.PendingSelection;
 			newSelected.push_back(newNodeId);
 
-			for (auto selNodeId : document.SelectedNodes)
-			{
-				const auto* found = document.Data.FindNode(selNodeId);
-				if (!found) continue;
-				// AddNode가 노드 벡터에 push_back하므로 그 전에 값으로 복사한다(포인터는 재할당 후 무효가 된다).
-				const Engine::GraphNode original = *found;
-
-				const auto origView = document.Nodes.find(selNodeId);
-				ImVec2 origPos = m_AddPosition;
-				if (origView != document.Nodes.end())
-				{
-					const ImVec2 pos = ed::GetNodePosition(origView->second.Id);
-					if (pos.x != FLT_MAX) origPos = ImVec2(pos.x + offset, pos.y + offset);
-				}
-
-				m_AddPosition = origPos;
-				GraphNodeCandidate candidate{ original.Type, {} };
-				if (AddNode(candidate))
-				{
-					const auto newNodeId = document.PendingSelection;
-					newSelected.push_back(newNodeId);
-
-					for (const auto& [key, val] : original.InputValues)
-						(void)document.Data.SetInputValue(m_Registry, { newNodeId, key }, val);
-					(void)document.Data.SetNodeComment(newNodeId, original.Comment);
-				}
-			}
+			for (const auto& [key, val] : original.InputValues)
+				(void)document.Data.SetInputValue(m_Registry, { newNodeId, key }, val);
+			(void)document.Data.SetNodeComment(newNodeId, original.Comment);
 		}
 	}
 

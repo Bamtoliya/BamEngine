@@ -12,6 +12,7 @@
 #include <cctype>
 #include <algorithm>
 #include <filesystem>
+#include <functional>
 #include <unordered_set>
 #include "RHITexture.h"
 
@@ -380,8 +381,10 @@ namespace Editor
 		}
 	}
 
-	template<typename T>
-	bool DrawInspectorResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit, bool showThumbnail = true)
+	template<typename T, typename LoadedFilter = std::nullptr_t, typename DiskFilter = std::nullptr_t>
+	bool DrawInspectorResourcePicker(Engine::ResourceHandle<T>& value, bool canEdit, bool showThumbnail = true,
+		LoadedFilter loadedFilter = nullptr,
+		DiskFilter diskFilter = nullptr)
 	{
 		ImGui::PushID(&value);
 		auto& manager = Engine::ResourceManager::Get();
@@ -497,7 +500,20 @@ namespace Editor
 					}
 				}
 				const auto handle = !targetPath.empty() ? manager.LoadFile(targetPath) : Engine::Handle{};
-				changed = TryAssignInspectorResource(value, handle);
+				if constexpr (!std::is_same_v<LoadedFilter, std::nullptr_t>)
+				{
+					if (handle.IsValid() && loadedFilter)
+					{
+						auto* res = dynamic_cast<T*>(manager.GetResource(handle));
+						if (res && !loadedFilter(res)) { changed = false; failed = true; }
+						else changed = TryAssignInspectorResource(value, handle);
+					}
+					else changed = TryAssignInspectorResource(value, handle);
+				}
+				else
+				{
+					changed = TryAssignInspectorResource(value, handle);
+				}
 				failed = !changed;
 			}
 			ImGui::EndDragDropTarget();
@@ -564,7 +580,12 @@ namespace Editor
 				{
 					const auto handle = manager.FindHandleByKey(entry.Key);
 					auto* resource = manager.GetResource(handle);
-					if (dynamic_cast<T*>(resource) == nullptr) continue;
+					auto* typedRes = dynamic_cast<T*>(resource);
+					if (typedRes == nullptr) continue;
+					if constexpr (!std::is_same_v<LoadedFilter, std::nullptr_t>)
+					{
+						if (loadedFilter && !loadedFilter(typedRes)) continue;
+					}
 
 					const auto& resourcePath = entry.Path.empty() ? entry.Key : entry.Path;
 					const auto absolutePath = Engine::PlatformPath::ResolveUri(resourcePath);
@@ -600,6 +621,11 @@ namespace Editor
 				{
 					if (!Detail::IsResourceExtensionCompatible<T>(file.LowerFilename))
 						continue;
+					if constexpr (!std::is_same_v<DiskFilter, std::nullptr_t>)
+					{
+						if (diskFilter && !diskFilter(file.LowerFilename))
+							continue;
+					}
 
 					const auto relativePath = Engine::PlatformPath::ToProjectRelative(file.Path);
 					auto key = Detail::NormalizeResourceKey(relativePath.wstring());

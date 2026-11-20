@@ -11,6 +11,7 @@ void MaterialInterface::Free()
 	m_TextureNameToIndex.clear();
 	m_TextureSlotToIndex.clear();
 	m_Parameters.clear();
+	m_ShaderGraphPath.clear();
 }
 
 EResult MaterialInterface::Reload(const std::filesystem::path& filePath)

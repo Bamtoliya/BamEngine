@@ -7,14 +7,11 @@
 #include "GraphReflection.h"
 #include "GraphExecutor.h"
 #include "GraphFile.h"
-#include "ShaderCompiler.h"
-#include "Material.h"
+#include "NodeEditorUI.h"
 
 namespace ax::NodeEditor { struct EditorContext; }
 
 BEGIN(Editor)
-enum class EWireStyle : int { Curved = 0, ElectronicHybrid = 1, Straight = 2 };
-class GraphShaderPreview;
 class GraphPanel : public ResourceEditorInterface
 {
 public:
@@ -58,22 +55,6 @@ private:
 		std::unordered_map<std::string, int> Pins;
 	};
 
-	struct ShaderBuildState
-	{
-		std::string Source;
-		Engine::ShaderCompileResult LastGood;
-		Engine::ERHIType LastTarget = Engine::ERHIType::Unknown;
-		std::string StatusKey = "GraphPanel.ShaderIdle";
-		std::string Details;
-		bool SourceCurrent = false;
-		std::shared_ptr<GraphShaderPreview> Preview;
-		std::string MaterialSource;
-		Engine::ShaderCompileResult MaterialLastGood;
-		bool MaterialCurrent = false;
-		Engine::ResourceHandle<Engine::Material> RuntimeMaterial;
-		std::filesystem::path RuntimeMaterialArtifact;
-	};
-
 	struct GraphDocument
 	{
 		explicit GraphDocument(Engine::EGraphDomain domain) : Data(domain) {}
@@ -92,7 +73,6 @@ private:
 		Engine::GraphNodeId PendingSelection = 0;
 		bool ResetContext = false;
 		bool RestoreSelection = false;
-		ShaderBuildState ShaderBuild;
 	};
 
 #pragma region DrawUI
@@ -111,10 +91,10 @@ private:
 	void DrawFileToolbar(EditorUI::ToolbarLayout& toolbar);
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
-	virtual bool HasUnsavedResourceChanges() const override { return IsDocumentDirty(m_Logic) || IsDocumentDirty(m_Shader); }
+	virtual bool HasUnsavedResourceChanges() const override { return IsDocumentDirty(m_Logic); }
 	std::vector<std::filesystem::path> GetRetainedResourcePaths() const override
 	{
-		return { m_Logic.FilePath, m_Shader.FilePath };
+		return { m_Logic.FilePath };
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
@@ -124,8 +104,6 @@ public:
 private:
 	void OpenDocument(); // 확인 없이 파일 대화상자를 연다. RequestOpenDocument의 확인 후 호출한다.
 	bool IsDocumentDirty(const GraphDocument& document) const;
-	ResourceDocumentHistory<Engine::Graph>& GetHistory(Engine::EGraphDomain domain);
-	const ResourceDocumentHistory<Engine::Graph>& GetHistory(Engine::EGraphDomain domain) const;
 	bool CommitDocumentEdit(GraphDocument& document);
 	bool ApplyDocumentSnapshot(const Engine::Graph& graph);
 	bool InitializeDocumentCanvas(GraphDocument& document);
@@ -140,7 +118,6 @@ private:
 	void UpdateLiveDebugging();
 	void DrawExecutionToolbar(EditorUI::ToolbarLayout& toolbar);
 	void DrawExecutionMenu();
-	void DrawShaderMenu();
 	void DrawExecutionTrace();
 	void BeginExecution();
 	void UpdateExecution();
@@ -156,19 +133,6 @@ private:
 	void DrawStatus();
 	static bool DrawValue(Engine::EGraphPinType type, Engine::GraphValue& value);
 	static Engine::GraphValue MakeDefaultValue(Engine::EGraphPinType type);
-	
-private:
-	void DrawShaderToolbar(EditorUI::ToolbarLayout& toolbar);
-	void DrawShaderBuildDetails();
-	void DrawShaderPreview();
-	bool GenerateShaderSource();
-	bool CompileShaderGraph(Engine::ERHIType target);
-	void BuildShaderPreview();
-	void InvalidateShaderBuild();
-	void CompileMaterialShader();
-	void DrawMaterialShaderDetails();
-	void CreateRuntimeMaterial();
-	void DrawRuntimeMaterialDetails();
 #pragma endregion
 
 #pragma region NodeEditor
@@ -218,10 +182,7 @@ private:
 private:
 	Engine::GraphRegistry m_Registry;
 	GraphDocument m_Logic{ Engine::EGraphDomain::Logic };
-	GraphDocument m_Shader{ Engine::EGraphDomain::Shader };
 	ResourceDocumentHistory<Engine::Graph> m_LogicHistory;
-	ResourceDocumentHistory<Engine::Graph> m_ShaderHistory;
-	Engine::EGraphDomain m_Domain = Engine::EGraphDomain::Logic;
 	Engine::GraphDiagnostic m_LastDiagnostic;
 	bool m_Ready = false;
 	Engine::GraphExecutor m_Executor;

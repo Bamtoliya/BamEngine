@@ -88,6 +88,7 @@ public:
 public:
 	virtual Shader* GetVertexShader(ERenderPassType passType = ERenderPassType::Geometry) const override;
 	virtual Shader* GetPixelShader(ERenderPassType passType = ERenderPassType::Geometry) const override;
+	virtual string GetShaderGraphPath() const override;
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) override;
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) override;

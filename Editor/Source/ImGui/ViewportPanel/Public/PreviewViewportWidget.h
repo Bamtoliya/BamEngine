@@ -69,8 +69,13 @@ public:
 	static void ApplyGlobalCameraPreferences(float speed, float fov);
 	bool CanFocusTarget() const;
 	void RefocusTarget();
-	void ToggleGrid() { m_ShowGrid = !m_ShowGrid; }
-	void SetGridVisible(bool visible) { m_ShowGrid = visible; }
+	void ToggleGrid() { SetGridVisible(!m_ShowGrid); }
+	void SetGridVisible(bool visible)
+	{
+		m_ShowGrid = visible;
+		if (m_ShowGrid) m_Grid.Show();
+		else m_Grid.Hide();
+	}
 	[[nodiscard]] bool IsGridVisible() const { return m_ShowGrid; }
 	void SetBackgroundColor(const Engine::vec4& color) { m_Pipeline.SetClearColor(color); }
 	void SetStudioLightMultiplier(float multiplier) { m_StudioLightMultiplier = std::max(multiplier, 0.0f); }

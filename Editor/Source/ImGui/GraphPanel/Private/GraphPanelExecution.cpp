@@ -23,7 +23,6 @@ void GraphPanel::InvalidateExecution()
 
 void GraphPanel::BeginExecution()
 {
-	if (m_Domain != EGraphDomain::Logic) return;
 	if (m_Executor.GetState() == EGraphExecutionState::Idle)
 	{
 		m_LastDiagnostic = m_Executor.Load(m_Logic.Data, m_Registry, &m_ExecutionReflection);
@@ -36,7 +35,7 @@ void GraphPanel::BeginExecution()
 
 bool GraphPanel::CanRunExecution() const
 {
-	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	if (!m_Open || !m_Ready) return false;
 	if (m_Executor.GetState() == EGraphExecutionState::Running) return false;
 
 	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
@@ -58,7 +57,7 @@ void GraphPanel::RunExecution()
 
 bool GraphPanel::CanPauseExecution() const
 {
-	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	if (!m_Open || !m_Ready) return false;
 	return m_Executor.GetState() == EGraphExecutionState::Running;
 }
 
@@ -71,7 +70,7 @@ void GraphPanel::PauseExecution()
 
 bool GraphPanel::CanStepExecution() const
 {
-	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	if (!m_Open || !m_Ready) return false;
 
 	const auto* entry = m_Logic.Data.FindNode(m_EntryNode);
 	return entry && (entry->Type == "Event.Start" || entry->Type == "Event.Update");
@@ -97,7 +96,7 @@ void GraphPanel::StepExecution()
 
 bool GraphPanel::CanStopExecution() const
 {
-	if (!m_Open || !m_Ready || m_Domain != EGraphDomain::Logic) return false;
+	if (!m_Open || !m_Ready) return false;
 
 	const auto state = m_Executor.GetState();
 	return state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused;
@@ -112,8 +111,6 @@ void GraphPanel::StopExecution()
 
 void GraphPanel::DrawExecutionToolbar(EditorUI::ToolbarLayout& toolbar)
 {
-	if (m_Domain != EGraphDomain::Logic) return;
-
 	// ── 2행 구획 A: 실행 미리보기 (Preview) ──
 	toolbar.Text(LOCAL_CSTR("GraphPanel.ExecutionTrace"));
 
@@ -165,7 +162,6 @@ void GraphPanel::DrawExecutionToolbar(EditorUI::ToolbarLayout& toolbar)
 
 void GraphPanel::UpdateExecution()
 {
-	if (m_Domain != EGraphDomain::Logic) return;
 	if (!std::isfinite(m_StepInterval) || m_StepInterval <= 0.0f) m_StepInterval = 0.15f;
 	if (m_Executor.GetState() == EGraphExecutionState::Running)
 	{
@@ -195,7 +191,6 @@ void GraphPanel::UpdateExecution()
 
 const GraphValue* GraphPanel::FindObservedValue(const GraphPinReference& pin) const
 {
-	if (m_Domain != EGraphDomain::Logic) return nullptr;
 	const auto node = m_ObservedValues.find(pin.Node);
 	if (node == m_ObservedValues.end()) return nullptr;
 	const auto value = node->second.find(pin.Pin);
@@ -224,7 +219,6 @@ std::string GraphPanel::TraceValueText(const GraphValue& value)
 
 void GraphPanel::DrawExecutionTrace()
 {
-	if (m_Domain != EGraphDomain::Logic) return;
 	ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.ExecutionTrace"));
 	const char* states[]{ "GraphPanel.Idle", "GraphPanel.Paused", "GraphPanel.Running",
 		"GraphPanel.Completed", "GraphPanel.Stopped", "GraphPanel.Failed" };
@@ -274,7 +268,6 @@ void GraphPanel::DrawExecutionTrace()
 
 void GraphPanel::DrawExecutionMenu()
 {
-	if (m_Domain != EGraphDomain::Logic) return;
 	if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.DebugMenu").c_str())) return;
 
 	ACTION_MENU_ITEM(LOCAL_LABEL("GraphPanel.Run").c_str(), "Graph.Run");
@@ -293,9 +286,6 @@ void GraphPanel::DrawExecutionMenu()
 }
 void GraphPanel::DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar)
 {
-	if (m_Domain != Engine::EGraphDomain::Logic) return;
-
-
 	// ── 2행 구획 B: PIE 라이브 디버그 관찰 ──
 	toolbar.Text(LOCAL_CSTR("GraphPanel.PieBadge"));
 
@@ -363,7 +353,6 @@ void GraphPanel::UpdateLiveDebugging()
 		if (it->second <= 0.0f) it = m_LinkPulseTimers.erase(it);
 		else ++it;
 	}
-	if (m_Domain != Engine::EGraphDomain::Logic) return;
 	// 게임이 일시정지 상태가 아니라면 히트 노드 초기화
 	if (!PIEManager::IsCreated() || !PIEManager::Get().IsPaused())
 	{

@@ -4,6 +4,7 @@ EditorCommon,Apply,Apply,적용
 EditorCommon,Cancel,Cancel,취소
 EditorCommon,Clear,Clear,지우기
 EditorCommon,Close,Close,닫기
+EditorCommon,Comment,Comment,코멘트
 EditorCommon,Copy,Copy,복사
 EditorCommon,CopyPath,Copy Path,경로 복사
 EditorCommon,CopyUri,Copy URI,URI 복사

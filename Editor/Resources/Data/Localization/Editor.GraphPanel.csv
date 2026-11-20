@@ -174,3 +174,20 @@ GraphPanel,WireStyleElectronic,Electronic (Hybrid),전자 노드 (하이브리�
 GraphPanel,WireStyleStraight,All Straight,모두 직선
 GraphPanel,WireStyleTooltip,Select wire connection rendering style,와이어 연결 렌더링 스타일을 선택합니다.
 GraphPanel,LoadFailed,Cannot open {} (stage {}: {}),{}을(를) 열 수 없습니다 (단계 {}: {})
+GraphPanel,Preview3D,3D Material Preview,3D 머티리얼 미리보기
+GraphPanel,TargetMaterial,Target Material,대상 머티리얼
+GraphPanel,RuntimeMaterialFallback,Default PBR Preview,기본 PBR 미리보기
+GraphPanel,Toggle3DPreview,Toggle 3D Preview,3D 미리보기 전환
+GraphPanel,LiveAutoCompile,Live Auto-Compile,실시간 자동 컴파일
+GraphPanel,LiveCompiling,Compiling...,컴파일 중...
+GraphPanel,LiveSuccess,Live (0.25s),실시간 반영 중
+GraphPanel,LiveError,Compile Error (Last Good Retained),컴파일 오류 (이전 정상 셰이더 유지)
+GraphPanel,LiveManualTrigger,Compile & Hot-Swap,컴파일 및 핫스왑
+GraphPanel,PopOutWindow,Pop Out,창으로 분리
+GraphPanel,PopOutWindowTooltip,Open graph editor in a separate window,별도 창으로 셰이더 그래프 에디터를 엽니다.
+GraphPanel,NoNodeSelectedHint,Select a node in the canvas to inspect and edit its properties.,캔버스에서 노드를 선택하면 속성을 편집할 수 있습니다.
+GraphPanel,CompileHotReload,Compile & Hot-Reload,컴파일 & 실시간 반영
+GraphPanel,CompileHotReloadTooltip,Compile shader graph and immediately apply to preview,셰이더 그래프를 컴파일하고 프리뷰 머티리얼에 즉시 적용합니다.
+GraphPanel,AutoCompile,Auto Compile,자동 컴파일
+GraphPanel,NotReady,Preparing shader graph editor...,셰이더 그래프 에디터를 준비하는 중...
+GraphPanel,DockToMaterial,Dock into Material Editor,머티리얼 에디터로 도킹

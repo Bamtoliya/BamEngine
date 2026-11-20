@@ -14,8 +14,8 @@ namespace Editor
 
 	void MaterialPreviewRenderer::Initialize(uint32 width, uint32 height)
 	{
-		// 1. 공통 3D 프리뷰 위젯 초기화 (바닥 그리드는 기본 Off)
-		m_Widget.Initialize(L"MatPreview", width, height, false);
+		// 1. 공통 3D 프리뷰 위젯 초기화 (바닥 그리드 기본 On)
+		m_Widget.Initialize(L"MatPreview", width, height, true);
 
 		// 2. 프리뷰 메쉬 리소스 로드
 		auto& rm = Engine::ResourceManager::Get();
@@ -96,6 +96,26 @@ namespace Editor
 		m_Widget.Submit(dt);
 	}
 
+	void MaterialPreviewRenderer::ResetView()
+	{
+		auto* trans = m_Widget.GetRegistry().try_get<Engine::TransformComponent>(m_MeshEntity);
+		if (trans) (void)trans->SetEulerRotation(Engine::vec3(0.0f));
+		m_Widget.FocusTarget(Engine::vec3(0.0f), 3.0f);
+		m_AutoRotate = true;
+	}
+
+	void MaterialPreviewRenderer::DrawViewportOnly(const ImVec2& size)
+	{
+		ImVec2 targetSize = size;
+		if (targetSize.x <= 0.0f || targetSize.y <= 0.0f)
+		{
+			targetSize = ImGui::GetContentRegionAvail();
+			targetSize.x = (std::max)(64.0f, targetSize.x);
+			targetSize.y = (std::max)(64.0f, targetSize.y);
+		}
+		m_Widget.Draw(targetSize);
+	}
+
 	void MaterialPreviewRenderer::DrawUI(Engine::MaterialInterface* material)
 	{
 		EditorUI::ToolbarLayout toolbar;
@@ -118,17 +138,12 @@ namespace Editor
 
 		if (toolbar.Icon("ResetView", ICON_FA_ROTATE_LEFT, "GraphPanel.ResetView"))
 		{
-			auto* trans = m_Widget.GetRegistry().try_get<Engine::TransformComponent>(m_MeshEntity);
-			if (trans) (void)trans->SetEulerRotation(Engine::vec3(0.0f));
-			m_Widget.FocusTarget(Engine::vec3(0.0f), 3.0f);
-			m_AutoRotate = true;
+			ResetView();
 		}
 
 		ImGui::Separator();
 
 		// 2. 가용 영역 전체에 맞추어 공통 프리뷰 위젯 렌더링
-		const ImVec2 avail = ImGui::GetContentRegionAvail();
-		const float size = std::max(std::min(avail.x, avail.y), 150.0f);
-		m_Widget.Draw(ImVec2(size, size));
+		DrawViewportOnly();
 	}
 }

@@ -271,6 +271,9 @@ public:
 	virtual Shader* GetPixelShader(ERenderPassType passType = ERenderPassType::Geometry) const;
 	ResourceHandle<Shader> GetVertexShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_VertexShaderHandle; };
 	ResourceHandle<Shader> GetPixelShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_PixelShaderHandle; };
+	virtual string GetShaderGraphPath() const { return m_ShaderGraphPath; }
+	virtual void SetShaderGraphPath(const string& path) { m_ShaderGraphPath = path; }
+	bool HasShaderGraph() const { return !m_ShaderGraphPath.empty(); }
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) { m_PixelShaderHandle = shader; }
@@ -318,6 +321,9 @@ protected:
 
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADER"), DISPLAY_NAME("PROP_PASS_SHADERS"))
 	vector<MaterialPassShader> m_PassShaders = {};
+
+	PROPERTY(EDITABLE, CATEGORY("CATEGORY_SHADER"), DISPLAY_NAME("PROP_SHADER_GRAPH_PATH"))
+	string m_ShaderGraphPath = {};
 
 private:
 	unordered_map<string, uint32> m_TextureNameToIndex = {};

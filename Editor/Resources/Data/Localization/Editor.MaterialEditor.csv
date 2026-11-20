@@ -52,3 +52,46 @@ MaterialEditor,Sphere,Sphere,구체 (Sphere)
 MaterialEditor,ToggleGrid,Toggle Grid,그리드 표시 전환
 MaterialEditor,ViewMenu,View,보기
 MaterialEditor,SearchParameters,Search parameters...,파라미터 검색...
+MaterialEditor,OpenShaderGraph,Open Shader Graph,셰이더 그래프 열기
+MaterialEditor,CreateShaderGraph,Create Shader Graph,새 셰이더 그래프 생성
+MaterialEditor,ShaderGraphPath,Shader Graph,셰이더 그래프
+MaterialEditor,UnlinkShaderGraph,Unlink,연결 해제
+MaterialEditor,CreateGraphPrompt,A shader graph asset does not exist. Do you want to create a new one?,연결된 셰이더 그래프 에셋이 없습니다. 새로 생성하시겠습니까?
+MaterialEditor,BrowseGraph,Browse...,찾아보기...
+MaterialEditor,ShaderMismatchWarning,"Warning: Vertex and Pixel shader signatures are incompatible. (Recommended: GBufferVS + GBufferPS)","경고: 정점 셰이더와 픽셀 셰이더의 입출력 규격이 맞지 않습니다. (권장: GBufferVS + GBufferPS)"
+MaterialEditor,AutoFixShaderPair,Auto-Match Shaders,셰이더 쌍 자동 맞춤
+MaterialEditor,TabProperties,Properties,속성
+MaterialEditor,TabShaderGraph,Shader Graph,셰이더 그래프
+MaterialEditor,NoGraphConnected,No shader graph connected to this material.,이 머티리얼에 연결된 셰이더 그래프가 없습니다.
+MaterialEditor,CreateAndConnectGraph,Create & Connect Shader Graph,새 셰이더 그래프 생성 및 연결
+MaterialEditor,NodeProperties,Node Properties,노드 속성
+MaterialEditor,GraphPoppedOutNotice,Shader graph is popped out into a separate window.,셰이더 그래프가 별도 창으로 분리되었습니다.
+MaterialEditor,DockGraphToEditor,Dock into Material Editor,머티리얼 에디터 안으로 도킹
+MaterialEditor,CompileHotReload,Compile & Hot-Reload,컴파일 & 실시간 반영
+MaterialEditor,CompileHotReloadTooltip,Compile shader graph and apply to preview,셰이더 그래프를 컴파일하고 미리보기에 즉시 반영합니다.
+MaterialEditor,AutoCompile,Auto Compile,자동 컴파일
+MaterialEditor,AutoCompileTooltip,Automatically compile and hot-reload shader when graph changes,그래프 변경 시 자동으로 컴파일하고 실시간 반영합니다.
+MaterialEditor,CompilePassed,Material shader compilation passed.,머티리얼 셰이더 컴파일을 통과했습니다.
+MaterialEditor,CompileFailed,Material shader compilation failed.,머티리얼 셰이더 컴파일에 실패했습니다.
+MaterialEditor,Compiling,Compiling shader...,셰이더 컴파일 중...
+MaterialEditor,SourceGenerated,HLSL source generated.,HLSL 소스를 생성했습니다.
+MaterialEditor,ShaderDiagnostics,Shader Diagnostics,셰이더 진단
+MaterialEditor,GeneratedHlsl,Generated HLSL,생성된 HLSL
+MaterialEditor,CopyHlsl,Copy HLSL,HLSL 복사
+MaterialEditor,NoNodeSelected,Select a node in the graph to view and edit its properties.,그래프에서 노드를 선택하면 속성을 확인하고 편집할 수 있습니다.
+MaterialEditor,DeletePassShader,Delete Pass Shader,패스 셰이더 삭제
+MaterialEditor,DeleteBinding,Delete Binding,바인딩 삭제
+MaterialEditor,DeleteParam,Delete Parameter,파라미터 삭제
+MaterialEditor,AddNode,Add Node,노드 추가
+MaterialEditor,ResetView,Reset View,화면 초기화
+MaterialEditor,StatusHelp,Drag pin to empty space to search nodes | Middle click drag to pan | Ctrl+Click for multi-select,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
+MaterialEditor,StatusSaveNote,Node connections and inputs are saved. Node positions are not saved.,노드 연결·입력값을 저장합니다. 노드 배치는 저장하지 않습니다.
+MaterialEditor,ShaderNotConfigured,Shader graph is not configured or failed to load.,셰이더 그래프가 설정되지 않았거나 로드에 실패했습니다.
+MaterialEditor,NoShaderGraph,This material does not use a shader graph.,이 머티리얼은 셰이더 그래프를 사용하지 않습니다.
+MaterialEditor,ShaderGraphMissing,The linked shader graph file was not found.,연결된 셰이더 그래프 파일을 찾을 수 없습니다.
+MaterialEditor,ShaderGraphLoadFailed,The linked shader graph could not be loaded.,연결된 셰이더 그래프를 불러오지 못했습니다.
+MaterialEditor,ShaderGraphCreateFailed,Failed to create the shader graph file.,셰이더 그래프 파일을 만들지 못했습니다.
+MaterialEditor,NodeTitle,Node #{}: {},노드 #{}: {}
+MaterialEditor,InputPins,Input Pins,입력 핀
+MaterialEditor,PinConnected,Connected,연결됨
+MaterialEditor,CopyDiagnostics,Copy diagnostics,진단 내용 복사

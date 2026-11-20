@@ -314,6 +314,100 @@ void EditorActionRegistry::RegisterAll()
     registerResourceSave("MaterialEditor.Save", EShortcutContext::MaterialEditor, [] {
         return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
     });
+
+    auto findMaterialEditor = []() -> MaterialEditor* {
+        return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
+    };
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.CompileHotReload",
+        .DisplayNameKey = "MaterialEditor.CompileHotReload",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F7),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->LiveHotReloadShader();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.ResetView",
+        .DisplayNameKey = "MaterialEditor.ResetView",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->ResetCanvasView();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.AddNode",
+        .DisplayNameKey = "MaterialEditor.AddNode",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Space),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->OpenAddNodeMenu();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.Delete",
+        .DisplayNameKey = "EditorCommon.Delete",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::Delete),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->DeleteSelectedElements();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.Duplicate",
+        .DisplayNameKey = "EditorCommon.Duplicate",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::D, EModifierKey::Ctrl),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->DuplicateSelectedNodes();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
+
+    sm.RegisterAction({
+        .Id = "MaterialEditor.CreateComment",
+        .DisplayNameKey = "GraphPanel.CreateCommentBox",
+        .CategoryKey = "ResourceEditor.MaterialTitle",
+        .Context = EShortcutContext::MaterialEditor,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::C),
+        .ExecuteHandler = [findMaterialEditor]() {
+            if (auto* panel = findMaterialEditor()) panel->CreateCommentBox();
+        },
+        .CanExecute = [findMaterialEditor]() {
+            const auto* panel = findMaterialEditor();
+            return panel && panel->IsOpen();
+        }
+    });
     registerResourceSave("SpriteEditor.Save", EShortcutContext::SpriteEditor, [] {
         return dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor"));
     });

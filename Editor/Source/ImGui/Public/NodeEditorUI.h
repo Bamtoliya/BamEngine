@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+namespace Editor
+{
+	enum class EWireStyle : int { Curved = 0, ElectronicHybrid = 1, Straight = 2 };
+}
+
 namespace Editor::NodeEditorUI
 {
 	namespace ed = ax::NodeEditor;

@@ -37,6 +37,10 @@ public:
 	[[nodiscard]] const PreviewViewportWidget& GetWidget() const { return m_Widget; }
 	[[nodiscard]] EPreviewMeshType GetPreviewMeshType() const { return m_CurrentMeshType; }
 	void SetPreviewMeshType(EPreviewMeshType type) { m_CurrentMeshType = type; }
+	[[nodiscard]] bool IsAutoRotating() const { return m_AutoRotate; }
+	void SetAutoRotating(bool rotate) { m_AutoRotate = rotate; }
+	void ResetView();
+	void DrawViewportOnly(const ImVec2& size = ImVec2(0.0f, 0.0f));
 
 private:
 	void UpdatePreviewMesh(Engine::MaterialInterface* material);

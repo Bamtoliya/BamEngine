@@ -605,6 +605,7 @@
         "PROP_SCALE_START": "시작 크기",
         "PROP_SEED": "난수 시드",
         "PROP_SETTINGS": "설정",
+        "PROP_SHADER_GRAPH_PATH": "셰이더 그래프",
         "PROP_SHADOW_AMBIENT_FLOOR": "그림자 음영 최저 밝기",
         "PROP_SHADOW_BIAS": "그림자 바이어스",
         "PROP_SHADOW_MAX_DISTANCE": "최대 그림자 거리",

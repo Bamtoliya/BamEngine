@@ -89,9 +89,9 @@ void PreviewViewportWidget::Initialize(const std::wstring& widgetId, uint32 widt
 	m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 
 	// 3. 바닥 그리드 초기화
+	m_Grid.Initialize(m_Id + L"_Grid");
 	if (m_ShowGrid)
 	{
-		m_Grid.Initialize(m_Id + L"_Grid");
 		m_Grid.Show();
 	}
 
