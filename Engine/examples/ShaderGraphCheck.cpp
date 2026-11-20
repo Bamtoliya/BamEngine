@@ -165,6 +165,21 @@ int main()
 			"MakeFloat3 emissive connection failed.");
 		Expect(gbufferSource.find("2.50000000e-01f") != std::string::npos, "BreakFloat4 x roughness failed.");
 		Expect(gbufferSource.find("7.50000000e-01f") != std::string::npos, "BreakFloat4 y metallic failed.");
+
+		// ── 4. MaterialOutput VS (WorldPositionOffset) 검증 ──
+		std::string vsSource;
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(matGraph, registry, vsSource));
+		Expect(vsSource.find("float3 worldPosOffset = float3(0.0f, 0.0f, 0.0f);") != std::string::npos &&
+			vsSource.find("worldPosition.xyz += worldPosOffset;") != std::string::npos,
+			"Default worldPositionOffset expression was incorrect.");
+
+		const auto wpoConst = Add(matGraph, registry, "Core.Float3");
+		Accept(matGraph.SetInputValue(registry, { wpoConst, "value" }, std::array<float, 3>{ 0.0f, 1.0f, 0.0f }));
+		Accept(matGraph.Connect(registry, { wpoConst, "result" }, { matOutput, "worldPositionOffset" }));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(matGraph, registry, vsSource));
+		Expect(vsSource.find("float3(0.00000000e+00f, 1.00000000e+00f, 0.00000000e+00f)") != std::string::npos,
+			"Connected worldPositionOffset expression was incorrect.");
+
 		std::cout << "Shader graph checks passed.\n";
 		return 0;
 	}

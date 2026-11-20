@@ -20,34 +20,39 @@
 
 namespace
 {
-	std::filesystem::path ReserveMaterialShaderSourcePath()
+	namespace
 	{
-		namespace fs = std::filesystem;
-		const auto root = Engine::PlatformPath::ResolveProjectRelative("Temp/MaterialShader");
-		fs::create_directories(root);
-
-		const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-		for (unsigned attempt = 0; attempt < 64; ++attempt)
+		std::filesystem::path ReserveMaterialShaderDirectory()
 		{
-			const auto directory = root / (stamp + "-" + std::to_string(attempt));
-			std::error_code error;
+			namespace fs = std::filesystem;
+			const auto root = Engine::PlatformPath::ResolveProjectRelative("Temp/MaterialShader");
+			fs::create_directories(root);
 
-			if (fs::create_directory(directory, error))
+			const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+			for (unsigned attempt = 0; attempt < 64; ++attempt)
 			{
-				// 생성 HLSL은 #include "shading_flags.hlsli"를 쓰고, 컴파일러는 소스 폴더 기준으로 찾는다.
-				// 기존 GraphPanel과 같이 엔진 원본을 같은 폴더에 복사해 둔다(없으면 컴파일이 항상 실패한다).
-				const auto hlslDirectory = directory / "hlsl";
-				fs::create_directory(hlslDirectory);
-				fs::copy_file(Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl/shading_flags.hlsli"),
-					hlslDirectory / "shading_flags.hlsli", fs::copy_options::overwrite_existing);
-				return hlslDirectory / "MaterialPS.hlsl";
+				const auto directory = root / (stamp + "-" + std::to_string(attempt));
+				std::error_code error;
+
+				if (fs::create_directory(directory, error))
+				{
+					const auto hlslDirectory = directory / "hlsl";
+					fs::create_directory(hlslDirectory);
+					// PS용 shading_flags.hlsli 복사
+					fs::copy_file(Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl/shading_flags.hlsli"),
+						hlslDirectory / "shading_flags.hlsli", fs::copy_options::overwrite_existing);
+					// VS용 common.hlsli 복사
+					fs::copy_file(Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl/common.hlsli"),
+						hlslDirectory / "common.hlsli", fs::copy_options::overwrite_existing);
+					return hlslDirectory;
+				}
+
+				if (error && error != std::errc::file_exists)
+					throw fs::filesystem_error("create_directory", directory, error);
 			}
 
-			if (error && error != std::errc::file_exists)
-				throw fs::filesystem_error("create_directory", directory, error);
+			throw fs::filesystem_error("create_directory", root, std::make_error_code(std::errc::file_exists));
 		}
-
-		throw fs::filesystem_error("create_directory", root, std::make_error_code(std::errc::file_exists));
 	}
 }
 
@@ -90,7 +95,7 @@ namespace Editor
 		auto& build = m_ShaderGraph.ShaderBuild;
 		try
 		{
-			const auto sourcePath = ReserveMaterialShaderSourcePath();
+			const auto sourcePath = ReserveMaterialShaderDirectory() / "MaterialPS.hlsl";
 
 			std::ofstream file;
 			file.exceptions(std::ios::badbit | std::ios::failbit);
@@ -123,39 +128,65 @@ namespace Editor
 	void MaterialEditor::CompileMaterialShader()
 	{
 		auto& build = m_ShaderGraph.ShaderBuild;
-		std::string candidate;
+		std::string candidateVs;
+		std::string candidatePs;
 
-		m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidate);
+		m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVs);
+		if (!m_LastGraphDiagnostic.Succeeded())
+		{
+			build.MaterialCurrent = false;
+			build.StatusKey = "MaterialEditor.CompileFailed";
+			build.Details = m_LastGraphDiagnostic.Message;
+			return;
+		}
+
+		m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs);
 		build.Details.clear();
 
 		if (!m_LastGraphDiagnostic.Succeeded())
 		{
 			build.MaterialCurrent = false;
 			build.StatusKey = "MaterialEditor.CompileFailed";
+			build.Details = m_LastGraphDiagnostic.Message;
 			return;
 		}
 
 		try
 		{
-			const auto sourcePath = ReserveMaterialShaderSourcePath();
+			const auto hlslDir = ReserveMaterialShaderDirectory();
+			const auto vsPath = hlslDir / "MaterialVS.hlsl";
+			const auto psPath = hlslDir / "MaterialPS.hlsl";
 
-			std::ofstream file;
-			file.exceptions(std::ios::badbit | std::ios::failbit);
-			file.open(sourcePath, std::ios::binary | std::ios::trunc);
-			file.write(candidate.data(), static_cast<std::streamsize>(candidate.size()));
-			file.close();
+			{
+				std::ofstream file(vsPath, std::ios::binary | std::ios::trunc);
+				file.write(candidateVs.data(), static_cast<std::streamsize>(candidateVs.size()));
+			}
+			{
+				std::ofstream file(psPath, std::ios::binary | std::ios::trunc);
+				file.write(candidatePs.data(), static_cast<std::streamsize>(candidatePs.size()));
+			}
 
-			auto result = ShaderCompiler::Compile(sourcePath, EShaderType::Fragment, Engine::ERHIType::DirectX12, "main");
-			build.Details = result.ErrorMessage;
-
-			if (!result.Success || result.Bytecode.empty())
+			auto vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, Engine::ERHIType::DirectX12, "main");
+			if (!vsResult.Success || vsResult.Bytecode.empty())
 			{
 				build.MaterialCurrent = false;
 				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
 				return;
 			}
 
-			build.MaterialLastGood = std::move(result);
+			auto psResult = ShaderCompiler::Compile(psPath, EShaderType::Fragment, Engine::ERHIType::DirectX12, "main");
+			build.Details = psResult.ErrorMessage;
+
+			if (!psResult.Success || psResult.Bytecode.empty())
+			{
+				build.MaterialCurrent = false;
+				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = "[PS Compile Error] " + psResult.ErrorMessage;
+				return;
+			}
+
+			build.MaterialLastGood = std::move(psResult);
 			build.MaterialCurrent = true;
 			build.StatusKey = "MaterialEditor.CompilePassed";
 		}
@@ -173,78 +204,126 @@ namespace Editor
 		if (!m_Material || m_IsReadOnly || !m_GraphReady || !HasLinkedShaderGraph()) return;
 
 		auto& build = m_ShaderGraph.ShaderBuild;
-		std::string candidateHlsl;
-		auto diag = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidateHlsl);
-		if (!diag.Succeeded())
+
+		// 1. VS 및 PS HLSL 소스 코드 동시 생성
+		std::string candidateVsHlsl;
+		auto diagVs = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVsHlsl);
+		if (!diagVs.Succeeded())
 		{
 			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = diag.Message;
+			build.Details = diagVs.Message;
+			return;
+		}
+
+		std::string candidatePsHlsl;
+		auto diagPs = Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl);
+		if (!diagPs.Succeeded())
+		{
+			build.StatusKey = "MaterialEditor.CompileFailed";
+			build.Details = diagPs.Message;
 			return;
 		}
 
 		try
 		{
-			const auto sourcePath = ReserveMaterialShaderSourcePath();
+			const auto hlslDir = ReserveMaterialShaderDirectory();
+			const auto vsPath = hlslDir / "MaterialVS.hlsl";
+			const auto psPath = hlslDir / "MaterialPS.hlsl";
 
-			std::ofstream file(sourcePath, std::ios::binary | std::ios::trunc);
-			file.write(candidateHlsl.data(), static_cast<std::streamsize>(candidateHlsl.size()));
-			file.close();
+			// 파일 쓰기
+			{
+				std::ofstream file(vsPath, std::ios::binary | std::ios::trunc);
+				file.write(candidateVsHlsl.data(), static_cast<std::streamsize>(candidateVsHlsl.size()));
+			}
+			{
+				std::ofstream file(psPath, std::ios::binary | std::ios::trunc);
+				file.write(candidatePsHlsl.data(), static_cast<std::streamsize>(candidatePsHlsl.size()));
+			}
 
 			const auto rhiType = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHIType() : Engine::ERHIType::DirectX12;
-			auto result = ShaderCompiler::Compile(sourcePath, EShaderType::Fragment, rhiType, "main");
-			if (!result.Success || result.Bytecode.empty())
+
+			// 2. Vertex Shader 컴파일
+			auto vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, rhiType, "main");
+			if (!vsResult.Success || vsResult.Bytecode.empty())
 			{
 				build.StatusKey = "MaterialEditor.CompileFailed";
-				build.Details = result.ErrorMessage;
+				build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
 				return;
 			}
 
-			build.MaterialLastGood = result;
+			// 3. Pixel Shader 컴파일
+			auto psResult = ShaderCompiler::Compile(psPath, EShaderType::Fragment, rhiType, "main");
+			if (!psResult.Success || psResult.Bytecode.empty())
+			{
+				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = "[PS Compile Error] " + psResult.ErrorMessage;
+				return;
+			}
+
+			build.MaterialLastGood = psResult;
 			build.MaterialCurrent = true;
 			build.StatusKey = "MaterialEditor.CompilePassed";
 			build.Details.clear();
 
-			// 런타임 셰이더 바이트코드 갱신
+			// 4. 런타임 셰이더 리소스 갱신 및 머티리얼 바인딩
 			auto& rm = Engine::ResourceManager::Get();
 			std::string baseName = m_TargetResourcePath.stem().string();
 			const std::string bammat = ".bammat";
 			if (baseName.size() > bammat.size() && baseName.ends_with(bammat))
 				baseName = baseName.substr(0, baseName.size() - bammat.size());
-			const std::wstring shaderKey = L"LiveShader/" + StrToWStr(baseName) + L"_PS";
 
-			auto shaderHandle = rm.GetResourceHandle<Engine::Shader>(shaderKey);
-			if (shaderHandle.IsValid() && shaderHandle.Get())
+			const std::wstring vsKey = L"LiveShader/" + StrToWStr(baseName) + L"_VS";
+			const std::wstring psKey = L"LiveShader/" + StrToWStr(baseName) + L"_PS";
+
+			// VS 핸들 생성 또는 바이트코드 갱신
+			auto vsHandle = rm.GetResourceHandle<Engine::Shader>(vsKey);
+			if (vsHandle.IsValid() && vsHandle.Get())
 			{
-				shaderHandle->UpdateBytecode(result.Bytecode);
+				vsHandle->UpdateBytecode(vsResult.Bytecode);
 			}
 			else
 			{
 				ShaderDesc desc{};
-				desc.Key = shaderKey;
-				desc.Path = result.OutputPath.wstring();
-				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = result.OutputPath.wstring();
-				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = result.OutputPath.wstring();
-				else desc.spirvPath = result.OutputPath.wstring();
+				desc.Key = vsKey;
+				desc.Path = vsResult.OutputPath.wstring();
+				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = vsResult.OutputPath.wstring();
+				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = vsResult.OutputPath.wstring();
+				else desc.spirvPath = vsResult.OutputPath.wstring();
+				desc.shaderType = EShaderType::Vertex;
+				desc.entryPoint = "main";
+				auto* newShader = Engine::Shader::Create(&desc);
+				if (newShader) vsHandle = rm.AddResource<Engine::Shader>(vsKey, newShader);
+			}
+
+			// PS 핸들 생성 또는 바이트코드 갱신
+			auto psHandle = rm.GetResourceHandle<Engine::Shader>(psKey);
+			if (psHandle.IsValid() && psHandle.Get())
+			{
+				psHandle->UpdateBytecode(psResult.Bytecode);
+			}
+			else
+			{
+				ShaderDesc desc{};
+				desc.Key = psKey;
+				desc.Path = psResult.OutputPath.wstring();
+				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = psResult.OutputPath.wstring();
+				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = psResult.OutputPath.wstring();
+				else desc.spirvPath = psResult.OutputPath.wstring();
 				desc.shaderType = EShaderType::Fragment;
 				desc.entryPoint = "main";
 				auto* newShader = Engine::Shader::Create(&desc);
-				if (newShader)
-				{
-					shaderHandle = rm.AddResource<Engine::Shader>(shaderKey, newShader);
-				}
+				if (newShader) psHandle = rm.AddResource<Engine::Shader>(psKey, newShader);
 			}
 
-			if (shaderHandle.IsValid())
+			if (vsHandle.IsValid() && psHandle.IsValid())
 			{
-				m_LivePixelShader = shaderHandle;
-				m_Material->SetPixelShaderHandle(m_LivePixelShader);
+				m_LiveVertexShader = vsHandle;
+				m_LivePixelShader = psHandle;
 
-				// 머티리얼에 Geometry 패스 셰이더가 등록되어 있다면 함께 갱신하여 렌더링에 즉각 반영
-				if (m_Material->HasPassShader(Engine::ERenderPassType::Geometry))
-				{
-					auto vs = m_Material->GetVertexShaderHandle(Engine::ERenderPassType::Geometry);
-					m_Material->SetPassShader(Engine::ERenderPassType::Geometry, vs, m_LivePixelShader);
-				}
+				m_Material->SetVertexShaderHandle(m_LiveVertexShader);
+				m_Material->SetPixelShaderHandle(m_LivePixelShader);
+				m_Material->SetPassShader(Engine::ERenderPassType::Geometry, m_LiveVertexShader, m_LivePixelShader);
+
 				m_Material->IncreaseVersion();
 				m_PreviewDirtyTimer = 0.5f;
 			}

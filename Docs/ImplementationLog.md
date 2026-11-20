@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 셰이더 그래프 단일 마스터 노드 기반 VS/PS 듀얼 통합 컴파일 구현
+
+- **마스터 노드 및 컴파일러 확장 (`GraphRegistry.cpp`, `ShaderGraphCompiler.h/.cpp`)**:
+  - `Shader.MaterialOutput`에 정점 스테이지 입력 핀 `worldPositionOffset`(Float3)을 추가하고, `gbufferVS.hlsl` 인스턴싱 규격을 준수하여 WPO 표현식을 주입하는 `GenerateGBufferMaterialVS`를 구현.
+- **에디터 듀얼 컴파일 및 핫리로드 연동 (`MaterialEditor.h`, `MaterialEditorShader.cpp`)**:
+  - `ReserveMaterialShaderDirectory`에서 `shading_flags.hlsli`와 `common.hlsli`를 함께 복사하도록 확장.
+  - `CompileMaterialShader` 및 `LiveHotReloadShader`가 VS와 PS를 동시 컴파일하여 머티리얼의 `Geometry` 패스에 `(m_LiveVertexShader, m_LivePixelShader)` 쌍으로 바인딩하도록 연동.
+- **검증 상태**: `ShaderGraphCheck`에 미연결/연결 WPO 생성 검증을 추가하여 `x64-ninja-debug` 빌드 및 `ShaderGraphCheck` CTest 통과 사용자 확인.
+- **미검증**: 에디터 실환경 3D 프리뷰에서 `worldPositionOffset` 노드 연결 시 실제 정점 변위 렌더링 동작.
+
 ### BamAssetWorker 텍스처 변환 접근 위반 대응
 
 - 사용자가 `AssetWorkerTextureCheck` 실행 중 첫 요청의 `PROGRESS 3` 뒤 종료 코드 `0xC0000005`를 보고했다. 이는 DDS 변환 호출 중 또는 그 이후 `PROGRESS 4` 전 발생한 접근 위반이다.

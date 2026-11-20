@@ -7,484 +7,573 @@
 #include <unordered_set>
 #include <vector>
 
-namespace Engine
+namespace
 {
-	namespace
+	std::string FormatFloat(float value)
 	{
-		std::string FormatFloat(float value)
-		{
-			std::ostringstream literal;
-			literal.exceptions(std::ios::badbit | std::ios::failbit);
-			literal.imbue(std::locale::classic());
-			literal << std::scientific << std::setprecision(std::numeric_limits<float>::max_digits10 - 1);
-			literal << value << 'f';
-			return literal.str();
-		}
-
-		std::string FormatFloat3(const std::array<float, 3>& value)
-		{
-			return "float3(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ", " + FormatFloat(value[2]) + ")";
-		}
-
-		std::string FormatFloat4(const std::array<float, 4>& value)
-		{
-			return "float4(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ", " +
-				FormatFloat(value[2]) + ", " + FormatFloat(value[3]) + ")";
-		}
-
-		bool IsSupportedShaderNode(const std::string& type)
-		{
-			static const std::unordered_set<std::string> supported{
-				"Shader.ColorOutput", "Shader.MaterialOutput",
-				"Core.Float", "Core.Float3", "Core.Float4",
-				"Core.Reroute.Float", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
-				"Math.MakeFloat3", "Math.BreakFloat3",
-				"Math.MakeFloat4", "Math.BreakFloat4"
-			};
-			return supported.contains(type);
-		}
-
-		GraphDiagnostic ValidateShaderGraph(
-			const Graph& graph, const GraphRegistry& registry, const GraphNode*& outOutputNode)
-		{
-			outOutputNode = nullptr;
-			if (graph.GetDomain() != EGraphDomain::Shader)
-				return { EGraphError::UnsupportedDomain, 0, {}, 0, "ShaderGraph.DomainRequired" };
-
-			const auto diagnostics = graph.Validate(registry);
-			if (!diagnostics.empty()) return diagnostics.front();
-
-			for (const auto& node : graph.GetNodes())
-			{
-				if (!IsSupportedShaderNode(node.Type))
-					return { EGraphError::UnsupportedCompilation, node.Id, {}, 0, "ShaderGraph.UnsupportedNode" };
-
-				if (node.Type == "Shader.ColorOutput" || node.Type == "Shader.MaterialOutput")
-				{
-					if (outOutputNode)
-						return { EGraphError::InvalidDocument, node.Id, {}, 0, "ShaderGraph.SingleOutput" };
-					outOutputNode = &node;
-				}
-			}
-
-			if (!outOutputNode)
-				return { EGraphError::InvalidDocument, 0, {}, 0, "ShaderGraph.SingleOutput" };
-
-			return {};
-		}
-
-		GraphDiagnostic ResolveProducerOutput(
-			const Graph& graph, const GraphRegistry& registry,
-			GraphPinReference outputPin, EGraphPinType expectedType,
-			std::vector<GraphPinReference>& callStack, std::string& outExpression);
-
-		GraphDiagnostic ResolveInputExpression(
-			const Graph& graph, const GraphRegistry& registry,
-			GraphPinReference inputPin, EGraphPinType expectedType,
-			std::vector<GraphPinReference>& callStack, std::string& outExpression)
-		{
-			if (std::find(callStack.begin(), callStack.end(), inputPin) != callStack.end() ||
-				callStack.size() > graph.GetNodes().size() * 8)
-			{
-				return { EGraphError::DataCycle, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.Cycle" };
-			}
-
-			const auto* node = graph.FindNode(inputPin.Node);
-			const auto* pin = node ? registry.FindPin(node->Type, inputPin.Pin) : nullptr;
-			if (!pin || pin->Direction != EGraphPinDirection::Input || pin->Type != expectedType)
-				return { EGraphError::PinNotFound, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.InvalidInput" };
-
-			const auto links = graph.GetLinks();
-			const auto link = std::find_if(links.begin(), links.end(),
-				[&](const GraphLink& item) { return item.To == inputPin; });
-
-			if (link != links.end())
-			{
-				callStack.push_back(inputPin);
-				const auto result = ResolveProducerOutput(
-					graph, registry, link->From, expectedType, callStack, outExpression);
-				callStack.pop_back();
-				return result;
-			}
-
-			const auto overrideValue = node->InputValues.find(inputPin.Pin);
-			const auto& value = overrideValue != node->InputValues.end() ? overrideValue->second : pin->DefaultValue;
-
-			if (!IsFiniteGraphValue(value) || !GraphValueMatchesType(value, expectedType))
-				return { EGraphError::InvalidDefault, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.InvalidColor" };
-
-			if (expectedType == EGraphPinType::Float)
-			{
-				outExpression = FormatFloat(std::get<float>(value));
-				return {};
-			}
-			if (expectedType == EGraphPinType::Float3)
-			{
-				outExpression = FormatFloat3(std::get<std::array<float, 3>>(value));
-				return {};
-			}
-			if (expectedType == EGraphPinType::Float4)
-			{
-				outExpression = FormatFloat4(std::get<std::array<float, 4>>(value));
-				return {};
-			}
-
-			return { EGraphError::UnsupportedCompilation, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-		}
-
-		GraphDiagnostic ResolveProducerOutput(
-			const Graph& graph, const GraphRegistry& registry,
-			GraphPinReference outputPin, EGraphPinType expectedType,
-			std::vector<GraphPinReference>& callStack, std::string& outExpression)
-		{
-			const auto* producer = graph.FindNode(outputPin.Node);
-			if (!producer)
-				return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
-
-			const auto* outPinSchema = registry.FindPin(producer->Type, outputPin.Pin);
-			if (!outPinSchema || outPinSchema->Direction != EGraphPinDirection::Output || outPinSchema->Type != expectedType)
-				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-
-			const auto& type = producer->Type;
-			if (type == "Core.Float" || type == "Core.Float3" || type == "Core.Float4")
-			{
-				if (outputPin.Pin != "result")
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-				return ResolveInputExpression(graph, registry, { outputPin.Node, "value" }, expectedType, callStack, outExpression);
-			}
-
-			if (type == "Core.Reroute.Float" || type == "Core.Reroute.Float3" || type == "Core.Reroute.Float4")
-			{
-				if (outputPin.Pin != "Out")
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-				return ResolveInputExpression(graph, registry, { outputPin.Node, "In" }, expectedType, callStack, outExpression);
-			}
-
-			if (type == "Math.MakeFloat3")
-			{
-				if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float3)
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-
-				std::string x, y, z;
-				auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
-				if (!res.Succeeded()) return res;
-				res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
-				if (!res.Succeeded()) return res;
-				res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
-				if (!res.Succeeded()) return res;
-
-				outExpression = "float3(" + x + ", " + y + ", " + z + ")";
-				return {};
-			}
-
-			if (type == "Math.MakeFloat4")
-			{
-				if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float4)
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-
-				std::string x, y, z, w;
-				auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
-				if (!res.Succeeded()) return res;
-				res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
-				if (!res.Succeeded()) return res;
-				res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
-				if (!res.Succeeded()) return res;
-				res = ResolveInputExpression(graph, registry, { outputPin.Node, "w" }, EGraphPinType::Float, callStack, w);
-				if (!res.Succeeded()) return res;
-
-				outExpression = "float4(" + x + ", " + y + ", " + z + ", " + w + ")";
-				return {};
-			}
-
-			if (type == "Math.BreakFloat3")
-			{
-				if (expectedType != EGraphPinType::Float)
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-
-				const auto links = graph.GetLinks();
-				const auto link = std::find_if(links.begin(), links.end(),
-					[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
-
-				if (link == links.end())
-				{
-					const auto overrideValue = producer->InputValues.find("value");
-					const auto* pin = registry.FindPin(type, "value");
-					const auto& val = overrideValue != producer->InputValues.end() ? overrideValue->second : pin->DefaultValue;
-					if (!IsFiniteGraphValue(val) || !GraphValueMatchesType(val, EGraphPinType::Float3))
-						return { EGraphError::InvalidDefault, outputPin.Node, "value", 0, "ShaderGraph.InvalidColor" };
-
-					const auto& arr = std::get<std::array<float, 3>>(val);
-					float ch = 0.0f;
-					if (outputPin.Pin == "x") ch = arr[0];
-					else if (outputPin.Pin == "y") ch = arr[1];
-					else if (outputPin.Pin == "z") ch = arr[2];
-					else return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
-
-					outExpression = FormatFloat(ch);
-					return {};
-				}
-
-				std::string vecExpr;
-				const auto res = ResolveInputExpression(
-					graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float3, callStack, vecExpr);
-				if (!res.Succeeded()) return res;
-
-				outExpression = "(" + vecExpr + ")." + outputPin.Pin;
-				return {};
-			}
-
-			if (type == "Math.BreakFloat4")
-			{
-				if (expectedType != EGraphPinType::Float)
-					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-
-				const auto links = graph.GetLinks();
-				const auto link = std::find_if(links.begin(), links.end(),
-					[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
-
-				if (link == links.end())
-				{
-					const auto overrideValue = producer->InputValues.find("value");
-					const auto* pin = registry.FindPin(type, "value");
-					const auto& val = overrideValue != producer->InputValues.end() ? overrideValue->second : pin->DefaultValue;
-					if (!IsFiniteGraphValue(val) || !GraphValueMatchesType(val, EGraphPinType::Float4))
-						return { EGraphError::InvalidDefault, outputPin.Node, "value", 0, "ShaderGraph.InvalidColor" };
-
-					const auto& arr = std::get<std::array<float, 4>>(val);
-					float ch = 0.0f;
-					if (outputPin.Pin == "x") ch = arr[0];
-					else if (outputPin.Pin == "y") ch = arr[1];
-					else if (outputPin.Pin == "z") ch = arr[2];
-					else if (outputPin.Pin == "w") ch = arr[3];
-					else return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
-
-					outExpression = FormatFloat(ch);
-					return {};
-				}
-
-				std::string vecExpr;
-				const auto res = ResolveInputExpression(
-					graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float4, callStack, vecExpr);
-				if (!res.Succeeded()) return res;
-
-				outExpression = "(" + vecExpr + ")." + outputPin.Pin;
-				return {};
-			}
-
-			return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-		}
-
-		GraphDiagnostic ResolveShaderOutputColor(const Graph& graph, const GraphRegistry& registry,
-			const GraphNode*& outputNode, std::vector<GraphPinReference>& callStack, std::string& outColor)
-		{
-			const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
-			if (!diagnostic.Succeeded()) return diagnostic;
-
-			const char* colorPin = outputNode->Type == "Shader.MaterialOutput" ? "baseColor" : "color";
-			return ResolveInputExpression(graph, registry, { outputNode->Id, colorPin },
-				EGraphPinType::Float4, callStack, outColor);
-		}
+		std::ostringstream literal;
+		literal.exceptions(std::ios::badbit | std::ios::failbit);
+		literal.imbue(std::locale::classic());
+		literal << std::scientific << std::setprecision(std::numeric_limits<float>::max_digits10 - 1);
+		literal << value << 'f';
+		return literal.str();
 	}
 
-	GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
-		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+	std::string FormatFloat3(const std::array<float, 3>& value)
 	{
-		const GraphNode* outputNode = nullptr;
-		std::string colorLiteral;
-		std::vector<GraphPinReference> callStack;
+		return "float3(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ", " + FormatFloat(value[2]) + ")";
+	}
 
-		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
-		if (!diagnostic.Succeeded()) return diagnostic;
+	std::string FormatFloat4(const std::array<float, 4>& value)
+	{
+		return "float4(" + FormatFloat(value[0]) + ", " + FormatFloat(value[1]) + ", " +
+			FormatFloat(value[2]) + ", " + FormatFloat(value[3]) + ")";
+	}
 
-		std::string source = "float4 main() : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
-		outSource.swap(source);
+	bool IsSupportedShaderNode(const std::string& type)
+	{
+		static const std::unordered_set<std::string> supported{
+			"Shader.ColorOutput", "Shader.MaterialOutput",
+			"Core.Float", "Core.Float3", "Core.Float4",
+			"Core.Reroute.Float", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
+			"Math.MakeFloat3", "Math.BreakFloat3",
+			"Math.MakeFloat4", "Math.BreakFloat4"
+		};
+		return supported.contains(type);
+	}
+
+	GraphDiagnostic ValidateShaderGraph(
+		const Graph& graph, const GraphRegistry& registry, const GraphNode*& outOutputNode)
+	{
+		outOutputNode = nullptr;
+		if (graph.GetDomain() != EGraphDomain::Shader)
+			return { EGraphError::UnsupportedDomain, 0, {}, 0, "ShaderGraph.DomainRequired" };
+
+		const auto diagnostics = graph.Validate(registry);
+		if (!diagnostics.empty()) return diagnostics.front();
+
+		for (const auto& node : graph.GetNodes())
+		{
+			if (!IsSupportedShaderNode(node.Type))
+				return { EGraphError::UnsupportedCompilation, node.Id, {}, 0, "ShaderGraph.UnsupportedNode" };
+
+			if (node.Type == "Shader.ColorOutput" || node.Type == "Shader.MaterialOutput")
+			{
+				if (outOutputNode)
+					return { EGraphError::InvalidDocument, node.Id, {}, 0, "ShaderGraph.SingleOutput" };
+				outOutputNode = &node;
+			}
+		}
+
+		if (!outOutputNode)
+			return { EGraphError::InvalidDocument, 0, {}, 0, "ShaderGraph.SingleOutput" };
+
 		return {};
 	}
 
-	GraphDiagnostic ShaderGraphCompiler::GenerateUnlitMaterialHlsl(
-		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
-	{
-		const GraphNode* outputNode = nullptr;
-		std::string colorLiteral;
-		std::vector<GraphPinReference> callStack;
+	GraphDiagnostic ResolveProducerOutput(
+		const Graph& graph, const GraphRegistry& registry,
+		GraphPinReference outputPin, EGraphPinType expectedType,
+		std::vector<GraphPinReference>& callStack, std::string& outExpression);
 
-		const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
+	GraphDiagnostic ResolveInputExpression(
+		const Graph& graph, const GraphRegistry& registry,
+		GraphPinReference inputPin, EGraphPinType expectedType,
+		std::vector<GraphPinReference>& callStack, std::string& outExpression)
+	{
+		if (std::find(callStack.begin(), callStack.end(), inputPin) != callStack.end() ||
+			callStack.size() > graph.GetNodes().size() * 8)
+		{
+			return { EGraphError::DataCycle, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.Cycle" };
+		}
+
+		const auto* node = graph.FindNode(inputPin.Node);
+		const auto* pin = node ? registry.FindPin(node->Type, inputPin.Pin) : nullptr;
+		if (!pin || pin->Direction != EGraphPinDirection::Input || pin->Type != expectedType)
+			return { EGraphError::PinNotFound, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.InvalidInput" };
+
+		const auto links = graph.GetLinks();
+		const auto link = std::find_if(links.begin(), links.end(),
+			[&](const GraphLink& item) { return item.To == inputPin; });
+
+		if (link != links.end())
+		{
+			callStack.push_back(inputPin);
+			const auto result = ResolveProducerOutput(
+				graph, registry, link->From, expectedType, callStack, outExpression);
+			callStack.pop_back();
+			return result;
+		}
+
+		const auto overrideValue = node->InputValues.find(inputPin.Pin);
+		const auto& value = overrideValue != node->InputValues.end() ? overrideValue->second : pin->DefaultValue;
+
+		if (!IsFiniteGraphValue(value) || !GraphValueMatchesType(value, expectedType))
+			return { EGraphError::InvalidDefault, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.InvalidColor" };
+
+		if (expectedType == EGraphPinType::Float)
+		{
+			outExpression = FormatFloat(std::get<float>(value));
+			return {};
+		}
+		if (expectedType == EGraphPinType::Float3)
+		{
+			outExpression = FormatFloat3(std::get<std::array<float, 3>>(value));
+			return {};
+		}
+		if (expectedType == EGraphPinType::Float4)
+		{
+			outExpression = FormatFloat4(std::get<std::array<float, 4>>(value));
+			return {};
+		}
+
+		return { EGraphError::UnsupportedCompilation, inputPin.Node, inputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+	}
+
+	GraphDiagnostic ResolveProducerOutput(
+		const Graph& graph, const GraphRegistry& registry,
+		GraphPinReference outputPin, EGraphPinType expectedType,
+		std::vector<GraphPinReference>& callStack, std::string& outExpression)
+	{
+		const auto* producer = graph.FindNode(outputPin.Node);
+		if (!producer)
+			return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
+
+		const auto* outPinSchema = registry.FindPin(producer->Type, outputPin.Pin);
+		if (!outPinSchema || outPinSchema->Direction != EGraphPinDirection::Output || outPinSchema->Type != expectedType)
+			return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+		const auto& type = producer->Type;
+		if (type == "Core.Float" || type == "Core.Float3" || type == "Core.Float4")
+		{
+			if (outputPin.Pin != "result")
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			return ResolveInputExpression(graph, registry, { outputPin.Node, "value" }, expectedType, callStack, outExpression);
+		}
+
+		if (type == "Core.Reroute.Float" || type == "Core.Reroute.Float3" || type == "Core.Reroute.Float4")
+		{
+			if (outputPin.Pin != "Out")
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			return ResolveInputExpression(graph, registry, { outputPin.Node, "In" }, expectedType, callStack, outExpression);
+		}
+
+		if (type == "Math.MakeFloat3")
+		{
+			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float3)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string x, y, z;
+			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "float3(" + x + ", " + y + ", " + z + ")";
+			return {};
+		}
+
+		if (type == "Math.MakeFloat4")
+		{
+			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float4)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string x, y, z, w;
+			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
+			if (!res.Succeeded()) return res;
+			res = ResolveInputExpression(graph, registry, { outputPin.Node, "w" }, EGraphPinType::Float, callStack, w);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "float4(" + x + ", " + y + ", " + z + ", " + w + ")";
+			return {};
+		}
+
+		if (type == "Math.BreakFloat3")
+		{
+			if (expectedType != EGraphPinType::Float)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			const auto links = graph.GetLinks();
+			const auto link = std::find_if(links.begin(), links.end(),
+				[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
+
+			if (link == links.end())
+			{
+				const auto overrideValue = producer->InputValues.find("value");
+				const auto* pin = registry.FindPin(type, "value");
+				const auto& val = overrideValue != producer->InputValues.end() ? overrideValue->second : pin->DefaultValue;
+				if (!IsFiniteGraphValue(val) || !GraphValueMatchesType(val, EGraphPinType::Float3))
+					return { EGraphError::InvalidDefault, outputPin.Node, "value", 0, "ShaderGraph.InvalidColor" };
+
+				const auto& arr = std::get<std::array<float, 3>>(val);
+				float ch = 0.0f;
+				if (outputPin.Pin == "x") ch = arr[0];
+				else if (outputPin.Pin == "y") ch = arr[1];
+				else if (outputPin.Pin == "z") ch = arr[2];
+				else return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
+
+				outExpression = FormatFloat(ch);
+				return {};
+			}
+
+			std::string vecExpr;
+			const auto res = ResolveInputExpression(
+				graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float3, callStack, vecExpr);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "(" + vecExpr + ")." + outputPin.Pin;
+			return {};
+		}
+
+		if (type == "Math.BreakFloat4")
+		{
+			if (expectedType != EGraphPinType::Float)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			const auto links = graph.GetLinks();
+			const auto link = std::find_if(links.begin(), links.end(),
+				[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
+
+			if (link == links.end())
+			{
+				const auto overrideValue = producer->InputValues.find("value");
+				const auto* pin = registry.FindPin(type, "value");
+				const auto& val = overrideValue != producer->InputValues.end() ? overrideValue->second : pin->DefaultValue;
+				if (!IsFiniteGraphValue(val) || !GraphValueMatchesType(val, EGraphPinType::Float4))
+					return { EGraphError::InvalidDefault, outputPin.Node, "value", 0, "ShaderGraph.InvalidColor" };
+
+				const auto& arr = std::get<std::array<float, 4>>(val);
+				float ch = 0.0f;
+				if (outputPin.Pin == "x") ch = arr[0];
+				else if (outputPin.Pin == "y") ch = arr[1];
+				else if (outputPin.Pin == "z") ch = arr[2];
+				else if (outputPin.Pin == "w") ch = arr[3];
+				else return { EGraphError::PinNotFound, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.InvalidInput" };
+
+				outExpression = FormatFloat(ch);
+				return {};
+			}
+
+			std::string vecExpr;
+			const auto res = ResolveInputExpression(
+				graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float4, callStack, vecExpr);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "(" + vecExpr + ")." + outputPin.Pin;
+			return {};
+		}
+
+		return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+	}
+
+	GraphDiagnostic ResolveShaderOutputColor(const Graph& graph, const GraphRegistry& registry,
+		const GraphNode*& outputNode, std::vector<GraphPinReference>& callStack, std::string& outColor)
+	{
+		const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
 		if (!diagnostic.Succeeded()) return diagnostic;
 
-		std::string source = R"(#include "shading_flags.hlsli"
+		const char* colorPin = outputNode->Type == "Shader.MaterialOutput" ? "baseColor" : "color";
+		return ResolveInputExpression(graph, registry, { outputNode->Id, colorPin },
+			EGraphPinType::Float4, callStack, outColor);
+	}
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const GraphNode* outputNode = nullptr;
+	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	std::vector<GraphPinReference> callStack;
+	std::string wpoExpression = "float3(0.0f, 0.0f, 0.0f)";
+
+	if (outputNode->Type == "Shader.MaterialOutput")
+	{
+		const auto links = graph.GetLinks();
+		const bool hasWpo = std::any_of(links.begin(), links.end(), [&](const GraphLink& link) {
+			return link.To.Node == outputNode->Id && link.To.Pin == "worldPositionOffset";
+			});
+
+		if (hasWpo)
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, callStack, wpoExpression);
+			if (!result.Succeeded()) return result;
+		}
+	}
+
+	std::string source = R"(#include "common.hlsli"
+
+struct VS_INPUT
+{
+float3 Position : POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float3 Binormal : BINORMAL;
+float4 Color : COLOR;
+};
+
+struct VS_OUTPUT
+{
+float4 Position : SV_POSITION;
+float3 WorldPos : WORLD_POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float4 Color : COLOR0;
+nointerpolation float PickingId : TEXCOORD5;
+};
+
+struct InstanceData
+{
+float4x4 WorldMatrix;
+float4 PickingData;
+};
+
+StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
+
+VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
+{
+VS_OUTPUT output;
+float4x4 world = g_Instances[instanceId].WorldMatrix;
+float4 worldPosition = mul(world, float4(input.Position, 1.0f));
+
+// [World Position Offset (WPO) 그래프 표현식 주입]
+float3 worldPosOffset = )" + wpoExpression + R"(;
+worldPosition.xyz += worldPosOffset;
+
+output.Position = mul(commonData.ViewProjection, worldPosition);
+output.WorldPos = worldPosition.xyz;
+
+float3 axisX = float3(world[0][0], world[1][0], world[2][0]);
+float3 axisY = float3(world[0][1], world[1][1], world[2][1]);
+float3 axisZ = float3(world[0][2], world[1][2], world[2][2]);
+
+float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
+                    input.Normal.y * cross(axisZ, axisX) +
+                    input.Normal.z * cross(axisX, axisY);
+
+float determinantSign = dot(axisX, cross(axisY, axisZ)) < 0.0f ? -1.0f : 1.0f;
+output.Normal = normalize(normalWorld * determinantSign);
+output.TexCoord = input.TexCoord;
+output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
+output.Color = input.Color;
+output.PickingId = g_Instances[instanceId].PickingData.x;
+
+return output;
+}
+)";
+
+	outSource.swap(source);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const GraphNode* outputNode = nullptr;
+	std::string colorLiteral;
+	std::vector<GraphPinReference> callStack;
+
+	const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	std::string source = "float4 main() : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
+	outSource.swap(source);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateUnlitMaterialHlsl(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const GraphNode* outputNode = nullptr;
+	std::string colorLiteral;
+	std::vector<GraphPinReference> callStack;
+
+	const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	std::string source = R"(#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
-	float4 Position : SV_POSITION;
-	float3 WorldPos : WORLD_POSITION;
-	float3 Normal : NORMAL;
-	float2 TexCoord : TEXCOORD0;
-	float3 Tangent : TANGENT;
-	float4 Color : COLOR0;
-	nointerpolation float PickingId : TEXCOORD5;
+float4 Position : SV_POSITION;
+float3 WorldPos : WORLD_POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float4 Color : COLOR0;
+nointerpolation float PickingId : TEXCOORD5;
 };
 
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_TARGET0;
-	float4 Normal : SV_TARGET1;
-	float4 PBR : SV_TARGET2;
-	float4 Emission : SV_TARGET3;
-	float4 Position : SV_TARGET4;
+float4 Diffuse : SV_TARGET0;
+float4 Normal : SV_TARGET1;
+float4 PBR : SV_TARGET2;
+float4 Emission : SV_TARGET3;
+float4 Position : SV_TARGET4;
 };
 
 PS_OUTPUT main(PS_INPUT input)
 {
-	PS_OUTPUT output;
-	output.Diffuse = )";
+PS_OUTPUT output;
+output.Diffuse = )";
 
-		source += colorLiteral;
-		source += R"(;
-	output.Normal = float4(0.5f, 0.5f, 1.0f, PackShadingData(SHADING_MODEL_UNLIT, 0u));
-	output.PBR = float4(1.0f, 0.0f, 0.0f, 1.0f);
-	output.Emission = float4(0.0f, 0.0f, 0.0f, 0.0f);
-	output.Position = float4(input.WorldPos, input.PickingId);
-	return output;
+	source += colorLiteral;
+	source += R"(;
+output.Normal = float4(0.5f, 0.5f, 1.0f, PackShadingData(SHADING_MODEL_UNLIT, 0u));
+output.PBR = float4(1.0f, 0.0f, 0.0f, 1.0f);
+output.Emission = float4(0.0f, 0.0f, 0.0f, 0.0f);
+output.Position = float4(input.WorldPos, input.PickingId);
+return output;
 }
 )";
 
-		outSource.swap(source);
-		return {};
+	outSource.swap(source);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const GraphNode* outputNode = nullptr;
+	std::string baseColor;
+	std::vector<GraphPinReference> callStack;
+
+	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	const auto links = graph.GetLinks();
+	const auto hasInputLink = [&](const std::string& pinName)
+		{
+			return std::any_of(links.begin(), links.end(), [&](const GraphLink& link)
+				{
+					return link.To.Node == outputNode->Id && link.To.Pin == pinName;
+				});
+		};
+
+	// 1. BaseColor: 링크가 있으면 노드 표현식 해결, 없으면 Fast-Path GPU 상수버퍼(gMaterial.baseColor) 참조
+	if (hasInputLink("baseColor"))
+	{
+		auto result = ResolveInputExpression(
+			graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, baseColor);
+		if (!result.Succeeded()) return result;
+	}
+	else
+	{
+		baseColor = "gMaterial.baseColor";
 	}
 
-	GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
-		const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+	// 2. PBR 파라미터: 링크가 있으면 노드 표현식 해결, 없으면 gMaterial 상수버퍼 참조 (Fast-Path)
+	std::string roughness = "gMaterial.roughness";
+	std::string metallic = "gMaterial.metallic";
+	std::string cavity = "gMaterial.cavity";
+	std::string ao = "gMaterial.ao";
+	std::string emissive = "gMaterial.emissiveColor";
+
+	if (outputNode->Type == "Shader.MaterialOutput")
 	{
-		const GraphNode* outputNode = nullptr;
-		std::string baseColor;
-		std::vector<GraphPinReference> callStack;
-
-		const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
-		if (!diagnostic.Succeeded()) return diagnostic;
-
-		const auto links = graph.GetLinks();
-		const auto hasInputLink = [&](const std::string& pinName)
-			{
-				return std::any_of(links.begin(), links.end(), [&](const GraphLink& link)
-					{
-						return link.To.Node == outputNode->Id && link.To.Pin == pinName;
-					});
-			};
-
-		// 1. BaseColor: 링크가 있으면 노드 표현식 해결, 없으면 Fast-Path GPU 상수버퍼(gMaterial.baseColor) 참조
-		if (hasInputLink("baseColor"))
+		if (hasInputLink("roughness"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, baseColor);
+				graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
 			if (!result.Succeeded()) return result;
 		}
-		else
+		if (hasInputLink("metallic"))
 		{
-			baseColor = "gMaterial.baseColor";
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
+			if (!result.Succeeded()) return result;
 		}
-
-		// 2. PBR 파라미터: 링크가 있으면 노드 표현식 해결, 없으면 gMaterial 상수버퍼 참조 (Fast-Path)
-		std::string roughness = "gMaterial.roughness";
-		std::string metallic = "gMaterial.metallic";
-		std::string cavity = "gMaterial.cavity";
-		std::string ao = "gMaterial.ao";
-		std::string emissive = "gMaterial.emissiveColor";
-
-		if (outputNode->Type == "Shader.MaterialOutput")
+		if (hasInputLink("cavity"))
 		{
-			if (hasInputLink("roughness"))
-			{
-				auto result = ResolveInputExpression(
-					graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
-				if (!result.Succeeded()) return result;
-			}
-			if (hasInputLink("metallic"))
-			{
-				auto result = ResolveInputExpression(
-					graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
-				if (!result.Succeeded()) return result;
-			}
-			if (hasInputLink("cavity"))
-			{
-				auto result = ResolveInputExpression(
-					graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
-				if (!result.Succeeded()) return result;
-			}
-			if (hasInputLink("ao"))
-			{
-				auto result = ResolveInputExpression(
-					graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
-				if (!result.Succeeded()) return result;
-			}
-			if (hasInputLink("emissive"))
-			{
-				auto result = ResolveInputExpression(
-					graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
-				if (!result.Succeeded()) return result;
-			}
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
+			if (!result.Succeeded()) return result;
 		}
+		if (hasInputLink("ao"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
+			if (!result.Succeeded()) return result;
+		}
+		if (hasInputLink("emissive"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
+			if (!result.Succeeded()) return result;
+		}
+	}
 
-		std::string source = R"(#include "shading_flags.hlsli"
+	std::string source = R"(#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
-	float4 Position : SV_POSITION;
-	float3 WorldPos : WORLD_POSITION;
-	float3 Normal : NORMAL;
-	float2 TexCoord : TEXCOORD0;
-	float3 Tangent : TANGENT;
-	float4 Color : COLOR0;
-	nointerpolation float PickingId : TEXCOORD5;
+float4 Position : SV_POSITION;
+float3 WorldPos : WORLD_POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float4 Color : COLOR0;
+nointerpolation float PickingId : TEXCOORD5;
 };
 
 struct PS_OUTPUT
 {
-	float4 Diffuse : SV_TARGET0;
-	float4 Normal : SV_TARGET1;
-	float4 PBR : SV_TARGET2;
-	float4 Emission : SV_TARGET3;
-	float4 Position : SV_TARGET4;
+float4 Diffuse : SV_TARGET0;
+float4 Normal : SV_TARGET1;
+float4 PBR : SV_TARGET2;
+float4 Emission : SV_TARGET3;
+float4 Position : SV_TARGET4;
 };
 
 // ── 머티리얼 상수 버퍼 (Space 3, b0 / RHI Slot 2) ──
 struct MaterialConstants
 {
-	uint   materialFlags;
-	float  roughness;
-	float  metallic;
-	float  cavity;
-	float4 baseColor;
-	float3 emissiveColor;
-	float  ao;
+uint   materialFlags;
+float  roughness;
+float  metallic;
+float  cavity;
+float4 baseColor;
+float3 emissiveColor;
+float  ao;
 };
 
 ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);
 
 PS_OUTPUT main(PS_INPUT input)
 {
-	PS_OUTPUT output;
-	float4 diffuse = ()" + baseColor + R"() * input.Color;
-	if (diffuse.a < 0.01f) discard;
+PS_OUTPUT output;
+float4 diffuse = ()" + baseColor + R"() * input.Color;
+if (diffuse.a < 0.01f) discard;
 
-	float3 N = normalize(input.Normal);
-	float roughness = clamp()" + roughness + R"(, 0.04f, 1.0f);
-	float metallic = saturate()" + metallic + R"();
-	float cavity = clamp()" + cavity + R"(, 0.0f, 1.0f);
-	float ao = clamp()" + ao + R"(, 0.0f, 1.0f);
-	float3 emission = )" + emissive + R"(;
+float3 N = normalize(input.Normal);
+float roughness = clamp()" + roughness + R"(, 0.04f, 1.0f);
+float metallic = saturate()" + metallic + R"();
+float cavity = clamp()" + cavity + R"(, 0.0f, 1.0f);
+float ao = clamp()" + ao + R"(, 0.0f, 1.0f);
+float3 emission = )" + emissive + R"(;
 
-	uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
+uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
 
-	output.Diffuse = diffuse;
-	output.Normal = float4(N * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));
-	output.PBR = float4(roughness, metallic, cavity, ao);
-	output.Emission = float4(emission, 1.0f);
-	output.Position = float4(input.WorldPos, input.PickingId);
-	return output;
+output.Diffuse = diffuse;
+output.Normal = float4(N * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));
+output.PBR = float4(roughness, metallic, cavity, ao);
+output.Emission = float4(emission, 1.0f);
+output.Position = float4(input.WorldPos, input.PickingId);
+return output;
 }
 )";
 
-		outSource.swap(source);
-		return {};
-	}
+	outSource.swap(source);
+	return {};
 }

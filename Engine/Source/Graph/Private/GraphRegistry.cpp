@@ -253,6 +253,9 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "z", Direction::Output, Type::Float, {} },
 			{ "w", Direction::Output, Type::Float, {} } } },
 		{ "Shader.MaterialOutput", { EGraphDomain::Shader }, {
+			// [VS Stage Input]
+			{ "worldPositionOffset", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } },
+			// [PS Stage Inputs]
 			{ "baseColor", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
 			{ "roughness", Direction::Input, Type::Float, 0.2f },
 			{ "metallic", Direction::Input, Type::Float, 0.0f },

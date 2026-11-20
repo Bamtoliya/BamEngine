@@ -8,6 +8,10 @@ namespace Engine
 	class ENGINE_API ShaderGraphCompiler final
 	{
 	public:
+
+		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialVS(
+			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
+
 		[[nodiscard]] static GraphDiagnostic GenerateColorHlsl(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
 

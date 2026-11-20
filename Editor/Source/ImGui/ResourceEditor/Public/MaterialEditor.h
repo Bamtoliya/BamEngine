@@ -272,6 +272,7 @@ private:
 	bool m_AutoCompileEnabled = true;
 	float m_LiveCompileCooldown = 0.0f;
 	std::uint64_t m_LastCompiledRevision = 0;
+	Engine::ResourceHandle<Engine::Shader> m_LiveVertexShader;
 	Engine::ResourceHandle<Engine::Shader> m_LivePixelShader;
 	bool m_NeedsNavigateToContent = true;
 };
