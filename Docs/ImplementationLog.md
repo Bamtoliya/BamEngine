@@ -2,6 +2,295 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 머티리얼-셰이더 그래프 양방향 동기화, 공통 그래프 구조 및 VS/PS 통합 아키텍처 설계 문서화
+
+- **머티리얼-셰이더 그래프 동기화, 공통 프레임워크 및 VS/PS 통합 설계서 ([MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md))**:
+  - **파라미터 & 텍스처 동기화 모델 (Source of Truth)**:
+    - 언리얼 엔진 및 유니티 셰이더 그래프의 아키텍처를 분석하여, **인터페이스 정의(Schema/Layout)의 단일 진실의 원천(SSOT)은 항상 "셰이더 그래프"**여야 함을 정립.
+    - 머티리얼 인스펙터 패널에서의 슬라이더/컬러 조절 시 셰이더를 재컴파일하지 않고 GPU 상수 버퍼(`MaterialConstants : register(b2)`) 메모리만 즉시 갱신하는 **Fast-Path(0초 실시간 핫 업데이트)** 파이프라인 수립.
+    - 머티리얼 패널에서 [+ 파라미터 추가] 시 그래프 블랙보드(Variable Pool)에 변수가 자동 등록되고 노드로 꺼내 쓸 수 있도록 하는 양방향 연계 인터페이스 설계.
+  - **다중 그래프 패널 공통 프레임워크 (`Editor::GraphCommon`)**:
+    - `GraphPanel`(로직), `MaterialEditorCanvas`(셰이더), `AnimatorGraphPanel`(FSM) 간 중복 구현된 `ax::NodeEditor` 뷰포트 네비게이션, 초점 맞춤(`NavigateToContent`), 와이어 스타일 토글, 노드 정렬(수평/수직/균등 배치), 코멘트 상자 생성 및 단축키 일원화 구조 설계.
+  - **정점(VS) & 픽셀(PS) 셰이더의 단일 그래프 통합 작성**:
+    - 버텍스 변위(World Position Offset - WPO, 바람/파도/진동 애니메이션)와 Custom UV(정점 단계 사전 계산으로 픽셀 셰이더 비용 최적화) 처리를 위해, **단일 머티리얼 그래프에서 VS와 PS를 동시에 다루어야 함**을 증명.
+    - `Shader.MaterialOutput` 마스터 노드에 `WorldPositionOffset`, `VertexNormal`, `CustomUV0/1` 정점 입력 핀과 서피스 PBR 픽셀 입력 핀을 함께 배치.
+    - `ShaderGraphCompiler`에서 단일 `.bamgraph.json`으로부터 `GenerateGBufferVS`와 `GenerateGBufferPS`를 분할 생성하여 한 번에 빌드/바인딩하는 듀얼 타깃 컴파일 아키텍처 수립.
+- **머티리얼 에디터 패스별 셰이더 카드 헤더 줄바꿈 버그 핫픽스 (`MaterialEditor.cpp`)**:
+  - `[Shadow]` 아래로 휴지통 버튼이 떨어져 개행되던 UI 버그를 해결.
+  - 2열 테이블 내부에서 `SetCursorPosX`로 강제 정렬하던 방식을 탈피하여, 테이블 직전 상단에 `[PassName]`과 `[휴지통]`을 양쪽 끝에 배치하는 헤더 라인을 그리고 그 아래에 2열 프로퍼티 테이블(`정점/픽셀 셰이더 | 리소스 피커`)을 배치하도록 개선하여 요구 스케치와 100% 일치시킴.
+
+### [2026-11-20] 머티리얼 에디터 파이프라인/텍스처/파라미터 UI 완성 및 기본 렌더 패스(Primary Pass Type) 설계 문서화
+
+- **기본 렌더 패스(Primary Pass Type) 도입 설계 문서화 ([MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md))**:
+  - 디퍼드 GBuffer 셰이더(RT 3개 출력)를 암묵적인 기본(Fallback) 셰이더로 삼던 구조적 모호성과 반투명(`AlphaBlend`)·포워드(`Forward`)·UI 렌더 타깃 불일치 문제를 해결하기 위해, 머티리얼이 주(Primary) 렌더 패스 타입을 소유하는 아키텍처를 수립했다.
+  - `MaterialInterface`의 `m_PrimaryPassType` 속성, `GetVertexShader`/`GetPixelShader` Fallback 정합성 개선, `BlendMode` 권장 프리셋 연동 및 셰이더 그래프 코드 생성 연계 계획을 문서화했다.
+- **머티리얼 텍스처 바인딩 테이블 썸네일 일체형 리소스 피커 및 삭제 버튼 복구 (`MaterialEditor.cpp`)**:
+  - 별도의 `Preview` 열을 제거하고, 리소스 피커 버튼 자체에 텍스처 썸네일이 노출되는 모드(`DrawInspectorResourcePicker(..., showThumbnail = true)`)로 통합했다.
+  - 표를 `슬롯(t%u)`, `이름`, `텍스처(ResourceType.Texture)`, `삭제` 4열로 슬림화하고, 썸네일 높이(약 38px)에 맞춰 슬롯 번호, 바인딩 이름, 휴지통 버튼이 수직 중앙 정렬되도록 오프셋을 보정했다.
+  - 휴지통 삭제 열 너비를 `28.0f`로 확보하고 `delOpt.NoWrap = true`를 적용하여 셀 여백 부족으로 인한 버튼 생략(Silent Drop) 현상을 해결했다.
+- **기본 셰이더 및 패스별 셰이더 2열/3행 묶음 카드 테이블 정돈 (`MaterialEditor.cpp`)**:
+  - 기본 셰이더: 위아래 수직 배치 대신 좌측 라벨(`기본 정점/픽셀 셰이더`), 우측 `ResourcePicker`의 2열 프로퍼티 테이블(`##DefaultShadersProps`)로 배치했다.
+  - 패스별 셰이더: `[Shadow]` 아래로 휴지통 버튼이 줄바꿈되던 문제를 해결하고, 각 패스마다 `Row 0: [PassName] (좌측) + [휴지통] (우측 끝)`, `Row 1: 정점 셰이더 | 리소스피커`, `Row 2: 픽셀 셰이더 | 리소스피커` 형태의 독립 카드 테이블(`##PassShaderProps`)로 일체화했다.
+- **파라미터 검색창 가로 1칸 오버플로우 및 삭제 버튼 복구 (`MaterialEditor.cpp`)**:
+  - 수동 `InputTextWithHint` + `Button`을 `EditorUI::DrawSearchBar`로 일체화하여 `ItemSpacing.x`(8px) 초과로 발생하던 패널 가로 1칸 스크롤을 완전 해소했다.
+  - 파라미터 테이블 삭제 열에 `delOpt.NoWrap = true`를 적용하여 휴지통 삭제 버튼을 상시 노출하고, `##MaterialDetailsScroll` 진입 시 `ImGui::SetScrollX(0.0f)`를 강제하여 좌측 라벨 열이 화면 밖으로 밀려 잘려 나가지 않도록 방어했다.
+
+### [2026-11-19] 머티리얼 에디터 3-Pane 레이아웃 너비 초과 줄바꿈 및 캔버스 노드 위치/포커스 핫픽스
+
+- **3분할 가로 레이아웃 안정화 (`MaterialEditor.cpp`)**:
+  - `centerWidth`가 최소 폭(260px)으로 고정될 때 세 패널의 총합이 창의 가용 폭(`availWidth`)을 초과하여 우측 인스펙터 패널이 창 아래로 줄바꿈되어 화면에서 사라지던 문제를 해결.
+  - 좌/우 패널의 합이 가용 공간을 넘지 않도록 비율 기반 스케일 다운 및 클램프를 적용하여, 한 줄에 좌/중/우 3개 패널이 나란히 완벽하게 배치되도록 보장.
+- **셰이더 그래프 로드 및 노드 위치/카메라 자동 포커스 복원 (`MaterialEditor.cpp`, `MaterialEditorCanvas.cpp`)**:
+  - `EnsureShaderGraphLoaded()`에서 `m_Material->GetShaderGraphPath()`를 프로젝트 상대 경로뿐 아니라 머티리얼 에셋 폴더 기준 상대 경로(`m_TargetResourcePath.parent_path()`)까지 순차 검색하도록 강화.
+  - `DrawCustomContent()` 시작 시 `if (!m_GraphReady) EnsureShaderGraphLoaded();`를 호출하여 리소스 로드 시점 타이밍 문제로 그래프가 비어 있는 현상을 원천 차단.
+  - `MaterialEditor.cpp`에서 `ax::NodeEditor`(`ed`) 미참조 컴파일 에러(`C2653`, `C4430`)를 해결하기 위해, 노드 위치 복원(`ed::SetNodePosition`)을 `imgui_node_editor.h`를 직접 참조하는 `MaterialEditorCanvas.cpp`의 `DrawShaderGraphCanvas()`(`m_NeedsNavigateToContent` 처리 블록) 내부로 이관하여 의존성 분리 및 정상 빌드 보장.
+  - 노드 로드 시 `ax::NodeEditor`의 각 노드에 대해 `ed::SetNodePosition(ed::NodeId(node.Id), ImVec2(node.PositionX, node.PositionY))`를 명시적으로 복원하고, 첫 프레임에 `ed::NavigateToContent(0.0f)`를 호출하여 (1152, 473) 등 멀리 위치한 노드가 화면 정중앙에 시원하게 줌/포커스되도록 수정.
+- **캔버스 툴바 우측 정렬 좌표 버그 수정 (`MaterialEditorCanvas.cpp`)**:
+  - `DrawShaderGraphToolbar`에서 `SameLine` 호출 시 `ImGui::GetCursorPosX() + availX - rightToolsWidth`로 절대 x 오프셋을 올바르게 계산하여 `+ 노드 추가`, 화면 포커스, 와이어 스타일 버튼들이 화면 밖으로 날아가지 않고 우측 상단에 정렬되도록 수정.
+- **메인 Material 노드 렌더링 스타일 개선 (`MaterialEditorCanvas.cpp`)**:
+  - `Shader.MaterialOutput` 노드를 언리얼 엔진 스타일의 녹색 헤더와 시인성 높은 타이틀(`Material`)로 렌더링.
+- **좌측 패널 셰이더 그래프 연결 관리 UI 정돈 (`MaterialEditor.cpp`)**:
+  - 불필요한 외장 창 열기 버튼 대신 `[연결해제(Unlink)]` 및 `[새 셰이더 그래프 생성]` 버튼으로 깔끔하게 일원화.
+
+### [2026-11-19] 셰이더 그래프의 머티리얼 에디터 완전 통합 및 GraphPanel 순수 로직 전용 복원
+
+- **아키텍처 책임 완전 분리 및 임베드 방식 전면 폐기**:
+  - 사용자 피드백에 따라 `GraphPanel`을 머티리얼 에디터에 임베드하거나 팝아웃하는 방식을 완전히 폐기하고, **머티리얼 에디터가 셰이더 그래프를 100% 직접 소유**하도록 통합 아키텍처 개편.
+  - `GraphPanel`에서 셰이더 도메인(`EGraphDomain::Shader`), 셰이더 빌드, 3D 미리보기 및 런타임 머티리얼 코드를 완전히 제거하여 **순수 비주얼 스크립팅/로직 전용 에디터**로 복원.
+  - `MaterialEditor`가 독립적으로 `Engine::GraphRegistry`, `ShaderGraphDocument`(`EGraphDomain::Shader`), `ax::NodeEditor::EditorContext*`, 자체 문서 히스토리(Undo/Redo), 캔버스 렌더링, 노드 인스펙터, 셰이더 컴파일러 및 실시간 자동 컴파일(Hot-Reload)을 직접 소유하고 통합 실행.
+- **머티리얼 에디터 표준 3분할(3-Pane) 레이아웃 완성**:
+  - **좌측 패널 (`m_LeftPaneWidth`)**:
+    - **상단 3D 프리뷰 위젯**: 수평 스플리터로 높이를 자유롭게 조절 가능하며, 주변 검은 패딩 여백을 제거하고 바닥 그리드가 기본 표시되도록 개선.
+    - **하단 세부 설정 (스크롤)**:
+      - **파이프라인 설정**: 블렌드 모드, 컬링 모드, 채우기 모드, 깊이 모드, 깊이 비교 연산.
+      - **셰이더 설정**: 셰이더 그래프 연결 표시 및 연결 해제 버튼 (텍스트 잘림 해결), 기본 정점/픽셀 셰이더 피커, 패스별 셰이더 상단 추가 컨트롤 및 각 행별 **삭제(X) 버튼** 완비.
+      - **텍스처 바인딩**: 슬롯 번호/이름/추가 버튼을 표 상단으로 이동, 텍스처 피커 및 각 행별 **삭제(X) 버튼** 제공.
+      - **파라미터**: 이름/타입/추가 버튼과 검색창/리셋(X) 버튼을 상단에 2행으로 깔끔하게 배치, 값 편집 및 각 행별 **삭제(X) 버튼** 제공.
+  - **중앙 패널 (`centerWidth`)**:
+    - `MaterialEditor` 자체 캔버스 워크스페이스 (`DrawCenterCanvasPane`).
+    - 상단 툴바: 번개 아이콘 컴파일 & 실시간 반영 버튼, 자동 컴파일 체크박스, 상태 텍스트, 노드 추가 버튼, 화면 초기화(포커스) 버튼, 와이어 스타일 전환 버튼.
+    - `ax::NodeEditor` 캔버스: 노드 렌더링, 핀 연결/해제, 컨텍스트 메뉴, 핀 드래그 앤 드롭 노드 자동 생성 및 연결.
+    - 하단 상태 바: 높이를 충분히 확보하여 안내 텍스트가 경계선에 묻히지 않고 완전히 표시되도록 여백 개선.
+  - **우측 패널 (`m_RightPaneWidth`)**:
+    - **선택된 노드 속성 (Node Properties)**: 선택된 노드의 타입, ID, 주석 및 입력 핀 값들을 인스펙터 형태로 직접 편집 가능.
+    - **셰이더 진단 및 생성된 HLSL 소스**: 접이식 헤더로 컴파일 결과 에러 로그 표시 및 생성된 HLSL 코드 열람, 원클릭 클립보드 복사 버튼 제공.
+- **실시간 자동 컴파일 (Live Hot-Reload)**:
+  - 노드 편집이나 핀 값 수정 시 0.25초 디바운스 타이머 후 백그라운드 컴파일 및 런타임 셰이더 바이트코드 즉각 핫스왑 실행 (`LiveHotReloadShader()`).
+- **로캘 키 및 단축키 일원화**:
+  - `Editor.MaterialEditor.csv`에 누락되었던 20여 종의 로캘 키 추가 등록.
+  - `EditorActionRegistry.cpp`의 `EShortcutContext::MaterialEditor` 문맥에 `F7`(컴파일), `F`(화면 포커스), `Space`(노드 추가), `Delete`(삭제), `Ctrl+D`(복제), `C`(코멘트) 등록.
+
+
+### [2026-11-19] 머티리얼 에디터 - 독립 Graph 패널 팝업 충돌 해소 및 임베디드 단독 렌더링/양방향 도킹 완성
+
+- **별도 Graph 패널 팝업 및 캔버스 블랙스크린 근본 원인 해결**:
+  - **원인 분석**:
+    - `MaterialEditor::EnsureShaderGraphLoaded()`에서 `GraphPanel::SetTargetResource`를 호출할 때 독립 패널 창(`GraphPanel`)이 기본 열림(`m_Open == true`) 상태로 남아 있었음.
+    - 에디터 메인 루프에서 독립 창의 `Draw()`가 먼저 실행되어 `ax::NodeEditor`의 캔버스 렌더링(`ed::Begin`)을 선점하고, 이어서 머티리얼 에디터 내부의 `DrawEmbeddedWorkspace()`가 두 번째로 동일한 에디터 컨텍스트에 대해 `ed::Begin`을 호출하면서 노드 렌더링이 충돌/무효화되어 내부 캔버스가 검은 화면으로 비어버리는 현상 발생.
+  - **해결 (`MaterialEditor.cpp`, `GraphPanel.cpp`, `GraphPanel.h`)**:
+    - 머티리얼 에디터에서 임베디드로 내장하여 렌더링하고 있을 때(`!m_GraphPoppedOut`), 독립 패널 창을 `graphPanel->SetOpen(false)`로 닫아두어 프레임당 단 **1번만** 캔버스를 단독 렌더링하도록 보장.
+    - `ax::NodeEditor`의 동일 컨텍스트 중복 호출 충돌이 100% 해소되어 머티리얼 에디터 우측 영역에 `MaterialOutput` 노드와 셰이더 그래프가 즉시 선명하게 렌더링됨.
+- **완벽한 양방향 창 분리(Pop Out) 및 도킹(Dock In) 지원**:
+  - 임베디드 상단 툴바의 `[창으로 분리 (Pop Out)]` 버튼 클릭 시 `graphPanel->SetPoppedOut(true)`를 호출하여 독립 창을 열고 포커스.
+  - 분리 모드일 때 머티리얼 에디터 우측 영역은 캔버스 대신 "별도 창으로 분리되었습니다" 안내 배너와 `[머티리얼 에디터 안으로 도킹하기]` 버튼을 표시하여 중복 렌더링 차단.
+  - 독립 창 툴바에 `[머티리얼 에디터로 도킹]` 버튼을 추가하여 클릭 시 독립 창을 닫고 다시 머티리얼 에디터 내부로 쏙 들어오도록 양방향 연동.
+- **임베디드 모드 시 불필요한 3D 프리뷰 중복 위젯 제외**:
+  - `GraphPanel::DrawShaderBuildDetails(bool include3DPreview)`: 머티리얼 에디터 좌측 상단에 이미 고성능 3D 프리뷰 뷰포트가 있으므로, 우측 임베디드 프로퍼티 영역에서는 `include3DPreview = false`로 호출하여 중복 3D 프리뷰를 제거하고 노드 속성 및 변수 편집 영역을 넓게 확보.
+- **하단 상태바 2번째 줄 텍스트 하단 잘림 해결**:
+  - `footerHeight`에 넉넉한 여유 마진(`+ 10.0f`, `ItemSpacing.y * 3.0f`)을 주어 `... 배치는 저장하지 않습니다.` 2줄 텍스트가 잘리지 않고 깨끗하게 보이도록 개선.
+- **로캘 키 추가 (`Editor.GraphPanel.csv`, `Editor.MaterialEditor.csv`)**:
+  - `GraphPanel.NotReady`, `GraphPanel.DockToMaterial` 등록.
+  - `MaterialEditor.GraphPoppedOutNotice`, `MaterialEditor.DockGraphToEditor` 등록.
+
+### [2026-11-19] 머티리얼 에디터 언리얼 엔진 스타일 3-Panel 레이아웃 전면 개편 & 상단 툴바/삭제 UX 개선
+
+- **언리얼 엔진 스타일 3-패널(3-Pane) 레이아웃 전면 개편**:
+  - `Editor/Source/ImGui/ResourceEditor/Public/MaterialEditor.h`, `Private/MaterialEditor.cpp`:
+    - **[좌측 패널 (`m_LeftPaneWidth`, 기본 360px)]**: 상단에 3D 프리뷰 뷰포트(`m_PreviewRenderer`), 하단 스크롤 영역에 머티리얼 세부 설정(파이프라인 설정, 셰이더 설정, 텍스처 바인딩, 파라미터) 통합 배치.
+    - **[중앙 패널 (`centerWidth`, 반응형)]**: 셰이더 그래프 노드 캔버스(`ax::NodeEditor`)를 항상 화면 정중앙에 기본 배치하여 탭 전환 없이 캔버스와 3D 프리뷰를 동시 작업 가능.
+    - **[우측 패널 (`m_RightPaneWidth`, 기본 280px)]**: 캔버스에서 선택한 노드의 상세 속성 및 변수를 편집하는 인스펙터 패널(`DrawNodeInspector`) 전용 배치 (미선택 시 안내 메시지).
+    - 수직 스플리터 2개(`Editor::SplitterV`)를 통해 각 패널의 너비를 자유롭게 조절하고, `CaptureState`/`RestoreState`로 레이아웃 상태 영속적 유지.
+- **머티리얼 열람 시 셰이더 그래프 즉시 캔버스 표시 보장 (`EnsureShaderGraphLoaded`)**:
+  - `MaterialEditor::EnsureShaderGraphLoaded()`:
+    - 머티리얼 열람 시 연결된 셰이더 그래프가 없거나 파일이 존재하지 않는 경우 기본 `Shader.MaterialOutput` 노드가 포함된 그래프를 자동 생성하고 연결.
+    - `GraphPanel::GetActiveGraphPanel()`을 통해 해당 그래프 문서를 즉시 로드하여 중앙 캔버스에 즉시 노드가 표시되도록 보장.
+- **패스별 셰이더 목록 삭제(Remove) 기능 추가**:
+  - `MaterialEditor::DrawShaderSettings()`:
+    - 패스별 셰이더 테이블 4번째 컬럼(`##Action`)의 폭을 36px로 확보하고 빨간색 휴지통 아이콘 버튼(`ICON_FA_TRASH`) 배치.
+    - 클릭 시 `m_Material->RemovePassShader(passToRemove)` 확실한 삭제 동작 수행 및 `m_History.MarkEdited()` 처리.
+- **텍스처 바인딩 슬롯 추가 버튼 상단 이동**:
+  - `MaterialEditor::DrawTextureBindings()`:
+    - 기존 표 하단에 있던 슬롯 추가 버튼을 테이블 상단(`NewBindingControlTop`)으로 이동하여 스크롤 없이 즉시 새 슬롯을 추가할 수 있도록 개선.
+- **파라미터 툴바(추가 컨트롤 & 검색 바) 표 상단 통합 재배치**:
+  - `MaterialEditor::DrawParameters()`:
+    - 1행 (추가 컨트롤): `[파라미터 이름 입력] [파라미터 타입 콤보] [+ 파라미터 추가]`를 표 상단에 반응형으로 배치.
+    - 2행 (검색 바): `EditorUI::DrawSearchBar` 표준 검색창(클리어 `X` 버튼 포함)을 표 바로 위에 배치.
+    - 표 하단에 중복 배치되어 있던 추가 컨트롤 제거.
+- **컴파일 빌드 오류 핫픽스 및 실환경 피드백 6종 2차 완성**:
+  - **하단 상태 바 글자 짤림 해결**:
+    - `GraphPanel::DrawEmbeddedWorkspace()`: 상태 바 2줄 텍스트(`SaveScope` + `Controls`)에 맞게 `footerHeight`를 2줄 높이(`GetTextLineHeightWithSpacing() * 2.0f + ItemSpacing.y * 2.0f`)로 정확하게 산출하여 글자 잘림 원천 차단.
+  - **로캘 누락 및 버튼 오버플로우 해결**:
+    - `Editor.GraphPanel.csv`: `CompileHotReload`, `CompileHotReloadTooltip`, `AutoCompile` 로캘 키 추가.
+    - 상단 툴바의 우측 액션 버튼(`AddNode`, `PopOutWindow`)의 가용 폭 계산을 동적 텍스트 크기 기반으로 수정하여 좁은 화면에서도 삐져나감 방지.
+  - **셰이더 그래프 워크스페이스 통합 (사용자 제안 수용)**:
+    - 어설프게 3분할되었던 패널 구조를 `GraphPanel`의 완성된 원본 워크스페이스(`DrawEmbeddedWorkspace`) 통째 렌더링 방식으로 전환.
+    - 좌측(3D 프리뷰 + 머티리얼 세부설정) ↔ 수직 스플리터 ↔ 우측(셰이더 그래프 캔버스 70% + 노드 인스펙터/변수/빌드상세 30% 내부 리사이즈 테이블).
+  - **오토스크롤링 버그 해소**:
+    - 이중 Child Window 스크롤 충돌을 제거하고 캔버스에 정확한 `contentHeight`를 전달하여 노드 에디터의 스크롤 튐 및 오토스크롤링 문제 원천 해결.
+  - **머티리얼 뷰포트 바닥 그리드 렌더링 복구**:
+    - `PreviewViewportWidget.cpp`: `Initialize` 시 `m_ShowGrid` 조건문 없이 항상 `m_Grid.Initialize`를 수행하도록 변경.
+    - `PreviewViewportWidget.h`: `SetGridVisible`/`ToggleGrid` 시 `m_Grid.Show()` / `Hide()`를 즉시 동기화.
+    - `MaterialPreviewRenderer.cpp`: `Initialize`에서 그리드 활성화(`enableGrid = true`).
+  - **뷰포트 영역 정체불명 패딩 제거**:
+    - `MaterialPreviewRenderer::DrawViewportOnly()`: 기존 정사각형 강제 클램핑(`minSide`)을 제거하고 가용 너비/높이를 100% 채움.
+    - `MaterialEditor.cpp`: `##MaterialViewportChild`에 `ImGuiStyleVar_WindowPadding(0, 0)`을 적용하여 불필요한 내부 패딩 테두리 완전 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - **셰이더/머티리얼 그래프 미표시(`GraphPanel.NotReady`) 해결**:
+    - `GraphPanel.h`, `GraphPanel.cpp`: `inline static GraphPanel* s_Instance`를 도입하여 창 포커스/가시성 여부와 무관하게 `GetActiveGraphPanel()`이 유효한 싱글톤 인스턴스를 항상 반환하도록 보장.
+    - `DrawEmbeddedCanvasOnly` 및 `DrawEmbeddedPropertiesOnly` 진입 시 `m_Domain = EGraphDomain::Shader` 강제 및 `ActivateDocument()`를 명시 호출하여 노드 컨텍스트 활성화.
+  - **툴바 중복 버튼 정리**:
+    - `MaterialEditor::DrawCustomQuickAccess()`: `DrawHistoryButtons` 뒤에 중복 배치되어 있던 Revert 버튼(`ICON_FA_ROTATE_LEFT`)을 제거하여 Undo/Redo/Revert 화살표 반복 혼란 해소.
+  - **프리뷰 위젯 높이 조절 가로 스플리터바 추가 & 퀵액세스 툴바 통합**:
+    - 좌측 패널 상단 프리뷰 뷰포트와 하단 설정 사이에 `Editor::SplitterH("##MaterialPreviewSplitterH", ...)`를 도입하여 마우스 드래그로 높이 자유 조절 지원.
+    - `구체(Sphere)`, `큐브(Cube)`, `평면(Plane)`, `자동 회전 토글(AutoRotate)`, `카메라 리셋(ResetCamera)`, `그리드 토글(ToggleGrid)`을 상단 퀵액세스 툴바로 이동.
+    - `MaterialPreviewRenderer::DrawViewportOnly()` 신설로 프리뷰 내부의 중복 툴바를 제거하고 순수 3D 뷰포트로 꽉 차게 렌더링.
+  - **셰이더 그래프 열기/연결해제 버튼 짤림 방지**:
+    - 긴 텍스트 버튼 대신 `EditorUI::SmallIconButton`을 적용하여 좁은 프로퍼티 컬럼에서도 짤림 없이 콤팩트한 아이콘과 툴팁으로 표시.
+  - **패스별 셰이더 및 기본 셰이더 컬럼 간격 최적화**:
+    - `m_LeftPaneWidth` 기본값을 380px로 상향하여 가로 폭 여유 확보.
+    - `PassShadersTable`의 `PassType` 컬럼 폭을 110px에서 75px로 줄여 `VertexShader`와 `PixelShader` 컬럼이 충분한 폭을 유지하도록 개선.
+  - **패스별 셰이더 헤더 우측 상단으로 추가 컨트롤 이동**:
+    - `--- 패스별 셰이더 ---` 헤더와 같은 줄 오른쪽에 `[패스 종류 콤보]`와 `[+ 패스 셰이더 추가]` 버튼을 나란히 배치하고 표 하단의 중복 컨트롤 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - `Editor/Resources/Data/Localization/Editor.MaterialEditor.csv`: `NodeProperties` (노드 속성) 추가.
+  - `Editor/Resources/Data/Localization/Editor.GraphPanel.csv`: `PopOutWindow`, `PopOutWindowTooltip`, `NoNodeSelectedHint` 추가.
+- **검증 상태**: 정적 코드 리뷰 및 diff 검증 완료. AGENTS.md 2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] D3D12 셰이더 시그니처 호환성 3중 방어 & 언리얼 엔진 스타일 머티리얼 에디터 통합 (Step 2)
+
+- **D3D12 셰이더 시그니처 링키지 불일치 크래시 원천 방어 (3중 방어 체계)**:
+  - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12Pipeline.cpp`:
+    - `SafeCreateGraphicsPipelineState` 헬퍼 함수를 추가하고 MSVC SEH(`__try ... __except`)로 격리하여, D3D12 SDKLayers/드라이버의 0xC0000005 크래시 발생 시 프로세스 종료 대신 `E_FAIL`로 안전하게 실패 처리.
+  - `Engine/Source/Render/Private/Renderer.cpp`:
+    - `PrepareMeshPipelineDesc`에서 VS와 PS의 시그니처 호환성 검증 및 안전한 폴백(자동 보정) 구축:
+      - `isGBufferPS && !isGBufferVS` (예: `DefaultVS` + `gbufferPS`): 메시 속성에 따라 자동으로 `GBufferVS` / `GBufferSkinningVS`로 승격 보정하여 D3D12 정상 렌더링 유지.
+      - `!isGBufferPS && isGBufferVS && isDefaultPS`: `DefaultVS`로 자동 보정.
+      - 알 수 없는 불일치 조합은 `EResult::InvalidArgument`로 D3D12 진입 사전 차단 및 해당 드로우콜 스킵.
+  - `Editor/Source/ImGui/ResourceEditor/Private/MaterialEditor.cpp`:
+    - `DefaultPS`에서 `gbufferPS` 선택 시 정점 셰이더가 `DefaultVS`라면 `gbufferVS`로 자동 동기화.
+    - 불일치 조합 감지 시 테이블 하단에 주황색 경고 메시지 및 `[셰이더 쌍 자동 맞춤]` 원클릭 복구 버튼 제공.
+- **언리얼 엔진 스타일 머티리얼 에디터 내부 탭 통합 (Step 2)**:
+  - `Editor/Source/ImGui/ResourceEditor/Public/MaterialEditor.h`, `Private/MaterialEditor.cpp`:
+    - 우측 디테일 창을 `ImGui::BeginTabBar("##MaterialEditorTabs")` 기반의 2개 탭 구조로 전면 개편:
+      - **탭 1: `[속성 (Properties)]`**: 기존 파이프라인 설정, 셰이더 슬롯, 텍스처 바인딩, 파라미터.
+      - **탭 2: `[셰이더 그래프 (Shader Graph)]`**: 머티리얼에 연결된 셰이더 그래프 노드 캔버스를 내부에서 바로 렌더링.
+    - 상단 툴바의 `[셰이더 그래프 열기]` 클릭 시 별도 창으로 팝업되지 않고 내부 `[셰이더 그래프]` 탭으로 매끄럽게 전환.
+    - 좌측 3D 뷰포트(`MaterialPreviewRenderer`)는 항상 고정되어 노드 조작 시 실시간 핫스왑 결과를 단일 뷰포트에서 즉각 관찰 가능.
+    - 중복 뷰포트 제거로 톤매핑 불일치, 프리뷰 널뛰기, 가로 스크롤 잘림 문제 원천 해결.
+  - `Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h`, `Private/GraphPanel.cpp`:
+    - `DrawEmbeddedWorkspace(width, height)` 신설: 상단 콤팩트 툴바(핫컴파일, 자동 컴파일 체크박스, 컴파일 상태, 팝아웃 버튼) 및 중복 3D 프리뷰가 제외된 순수 노드 캔버스 + 노드 프로퍼티 2분할 레이아웃 제공.
+    - `IsDocumentLoaded(path)` 함수 추가로 효율적인 대상 문서 동기화 지원.
+- **컴파일 빌드 오류 핫픽스 및 실환경 피드백 6종 2차 완성**:
+  - **하단 상태 바 글자 짤림 해결**:
+    - `GraphPanel::DrawEmbeddedWorkspace()`: 상태 바 2줄 텍스트(`SaveScope` + `Controls`)에 맞게 `footerHeight`를 2줄 높이(`GetTextLineHeightWithSpacing() * 2.0f + ItemSpacing.y * 2.0f`)로 정확하게 산출하여 글자 잘림 원천 차단.
+  - **로캘 누락 및 버튼 오버플로우 해결**:
+    - `Editor.GraphPanel.csv`: `CompileHotReload`, `CompileHotReloadTooltip`, `AutoCompile` 로캘 키 추가.
+    - 상단 툴바의 우측 액션 버튼(`AddNode`, `PopOutWindow`)의 가용 폭 계산을 동적 텍스트 크기 기반으로 수정하여 좁은 화면에서도 삐져나감 방지.
+  - **셰이더 그래프 워크스페이스 통합 (사용자 제안 수용)**:
+    - 어설프게 3분할되었던 패널 구조를 `GraphPanel`의 완성된 원본 워크스페이스(`DrawEmbeddedWorkspace`) 통째 렌더링 방식으로 전환.
+    - 좌측(3D 프리뷰 + 머티리얼 세부설정) ↔ 수직 스플리터 ↔ 우측(셰이더 그래프 캔버스 70% + 노드 인스펙터/변수/빌드상세 30% 내부 리사이즈 테이블).
+  - **오토스크롤링 버그 해소**:
+    - 이중 Child Window 스크롤 충돌을 제거하고 캔버스에 정확한 `contentHeight`를 전달하여 노드 에디터의 스크롤 튐 및 오토스크롤링 문제 원천 해결.
+  - **머티리얼 뷰포트 바닥 그리드 렌더링 복구**:
+    - `PreviewViewportWidget.cpp`: `Initialize` 시 `m_ShowGrid` 조건문 없이 항상 `m_Grid.Initialize`를 수행하도록 변경.
+    - `PreviewViewportWidget.h`: `SetGridVisible`/`ToggleGrid` 시 `m_Grid.Show()` / `Hide()`를 즉시 동기화.
+    - `MaterialPreviewRenderer.cpp`: `Initialize`에서 그리드 활성화(`enableGrid = true`).
+  - **뷰포트 영역 정체불명 패딩 제거**:
+    - `MaterialPreviewRenderer::DrawViewportOnly()`: 기존 정사각형 강제 클램핑(`minSide`)을 제거하고 가용 너비/높이를 100% 채움.
+    - `MaterialEditor.cpp`: `##MaterialViewportChild`에 `ImGuiStyleVar_WindowPadding(0, 0)`을 적용하여 불필요한 내부 패딩 테두리 완전 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - **셰이더/머티리얼 그래프 미표시(`GraphPanel.NotReady`) 해결**:
+    - `GraphPanel.h`, `GraphPanel.cpp`: `inline static GraphPanel* s_Instance`를 도입하여 창 포커스/가시성 여부와 무관하게 `GetActiveGraphPanel()`이 유효한 싱글톤 인스턴스를 항상 반환하도록 보장.
+    - `DrawEmbeddedCanvasOnly` 및 `DrawEmbeddedPropertiesOnly` 진입 시 `m_Domain = EGraphDomain::Shader` 강제 및 `ActivateDocument()`를 명시 호출하여 노드 컨텍스트 활성화.
+  - **툴바 중복 버튼 정리**:
+    - `MaterialEditor::DrawCustomQuickAccess()`: `DrawHistoryButtons` 뒤에 중복 배치되어 있던 Revert 버튼(`ICON_FA_ROTATE_LEFT`)을 제거하여 Undo/Redo/Revert 화살표 반복 혼란 해소.
+  - **프리뷰 위젯 높이 조절 가로 스플리터바 추가 & 퀵액세스 툴바 통합**:
+    - 좌측 패널 상단 프리뷰 뷰포트와 하단 설정 사이에 `Editor::SplitterH("##MaterialPreviewSplitterH", ...)`를 도입하여 마우스 드래그로 높이 자유 조절 지원.
+    - `구체(Sphere)`, `큐브(Cube)`, `평면(Plane)`, `자동 회전 토글(AutoRotate)`, `카메라 리셋(ResetCamera)`, `그리드 토글(ToggleGrid)`을 상단 퀵액세스 툴바로 이동.
+    - `MaterialPreviewRenderer::DrawViewportOnly()` 신설로 프리뷰 내부의 중복 툴바를 제거하고 순수 3D 뷰포트로 꽉 차게 렌더링.
+  - **셰이더 그래프 열기/연결해제 버튼 짤림 방지**:
+    - 긴 텍스트 버튼 대신 `EditorUI::SmallIconButton`을 적용하여 좁은 프로퍼티 컬럼에서도 짤림 없이 콤팩트한 아이콘과 툴팁으로 표시.
+  - **패스별 셰이더 및 기본 셰이더 컬럼 간격 최적화**:
+    - `m_LeftPaneWidth` 기본값을 380px로 상향하여 가로 폭 여유 확보.
+    - `PassShadersTable`의 `PassType` 컬럼 폭을 110px에서 75px로 줄여 `VertexShader`와 `PixelShader` 컬럼이 충분한 폭을 유지하도록 개선.
+  - **패스별 셰이더 헤더 우측 상단으로 추가 컨트롤 이동**:
+    - `--- 패스별 셰이더 ---` 헤더와 같은 줄 오른쪽에 `[패스 종류 콤보]`와 `[+ 패스 셰이더 추가]` 버튼을 나란히 배치하고 표 하단의 중복 컨트롤 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - `Editor/Resources/Data/Localization/Editor.GraphPanel.csv`: `PopOutWindow`, `PopOutWindowTooltip` 추가.
+  - `Editor/Resources/Data/Localization/Editor.MaterialEditor.csv`: `TabProperties`, `TabShaderGraph`, `NoGraphConnected`, `CreateAndConnectGraph`, `ShaderMismatchWarning`, `AutoFixShaderPair` 추가.
+- **검증 상태**: 코드 정적 검토 및 diff 확인 완료. AGENTS.md 2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] 머티리얼-셰이더 그래프 통합 Phase 3 (노드 편집 실시간 0.25초 디바운스 핫 컴파일 & 머티리얼 핫스왑) 구현
+
+- **디바운스(Debounce) 자동 컴파일 파이프라인 (`GraphPanel`)**:
+  - `Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h`, `Private/GraphPanel.cpp`:
+    - `m_LastCompiledRevision`과 `m_Shader.Data.GetRevision()` 비교를 통해 캔버스 내 노드 추가/삭제/값/링크 변경 감지.
+    - 변경 감지 시 `m_LiveCompileCooldown = 0.25f` 설정하여 사용자가 드래그 또는 입력 중일 때는 컴파일을 유예(Debounce)하여 CPU/GPU 스파이크 방지.
+    - 입력 정지 후 0.25초 경과 시 `LiveHotReloadShader()` 자동 트리거.
+    - `LoadDocument()` 시 리비전 동기화로 문서 열람 직후 불필요한 즉시 재컴파일 방어.
+- **인메모리 셰이더 핫스왑 및 머티리얼 동기화 (`LiveHotReloadShader`)**:
+  - `Editor/Source/ImGui/GraphPanel/Private/GraphPanelShader.cpp`:
+    - `CompileMaterialShader()`를 통해 `ShaderGraphCompiler::GenerateGBufferMaterialHlsl()` 소스 생성 및 DXIL 메모리 컴파일.
+    - 컴파일 성공 시 `Shader::UpdateBytecode(bytecode)` 호출:
+      - 기존 `RHIShader` 포인터를 보존한 채 바이트코드만 교체하고 `PipelineManager::RebuildPipelinesWithShader`를 통해 D3D12 PSO 전체를 실시간 Rebuild.
+    - 최초 컴파일 시 `Shader::Create` 및 `ResourceManager::AddResource(L"GraphRuntime/LivePixelShader")` 안전 등록.
+    - 바인딩된 머티리얼(`targetMat->SetPixelShaderHandle()`) 및 `targetMat->IncreaseVersion()` 호출로 프리뷰 씬에 새 셰이더 즉시 반영.
+- **안전성 및 에러 방어벽 (Fault-Tolerance & LastGood)**:
+  - 핀 연결 해제 또는 중간 저작 상태로 컴파일 실패 시 크래시를 원천 차단하고 직전 정상 바이트코드(`LastGood`)를 유지.
+  - `Draw3DMaterialPreview()` 툴바에 실시간 컴파일 상태 배지 연동:
+    - 컴파일/디바운스 중: `ICON_FA_SPINNER` "Compiling..." (주황색)
+    - 정상 반영 시: `ICON_FA_CHECK` "Live (0.25s)" (초록색)
+    - 컴파일 에러 시: `ICON_FA_TRIANGLE_EXCLAMATION` "Compile Error (Last Good Retained)" (빨간색, 마우스 호버 시 툴팁 에러 로그)
+    - 수동 즉시 핫스왑 버튼(`ICON_FA_BOLT "Compile & Hot-Swap"`) 및 자동 컴파일 온/오프 체크박스(`m_AutoCompileEnabled`) 제공.
+- **컴파일 빌드 오류 핫픽스 및 실환경 피드백 6종 2차 완성**:
+  - **하단 상태 바 글자 짤림 해결**:
+    - `GraphPanel::DrawEmbeddedWorkspace()`: 상태 바 2줄 텍스트(`SaveScope` + `Controls`)에 맞게 `footerHeight`를 2줄 높이(`GetTextLineHeightWithSpacing() * 2.0f + ItemSpacing.y * 2.0f`)로 정확하게 산출하여 글자 잘림 원천 차단.
+  - **로캘 누락 및 버튼 오버플로우 해결**:
+    - `Editor.GraphPanel.csv`: `CompileHotReload`, `CompileHotReloadTooltip`, `AutoCompile` 로캘 키 추가.
+    - 상단 툴바의 우측 액션 버튼(`AddNode`, `PopOutWindow`)의 가용 폭 계산을 동적 텍스트 크기 기반으로 수정하여 좁은 화면에서도 삐져나감 방지.
+  - **셰이더 그래프 워크스페이스 통합 (사용자 제안 수용)**:
+    - 어설프게 3분할되었던 패널 구조를 `GraphPanel`의 완성된 원본 워크스페이스(`DrawEmbeddedWorkspace`) 통째 렌더링 방식으로 전환.
+    - 좌측(3D 프리뷰 + 머티리얼 세부설정) ↔ 수직 스플리터 ↔ 우측(셰이더 그래프 캔버스 70% + 노드 인스펙터/변수/빌드상세 30% 내부 리사이즈 테이블).
+  - **오토스크롤링 버그 해소**:
+    - 이중 Child Window 스크롤 충돌을 제거하고 캔버스에 정확한 `contentHeight`를 전달하여 노드 에디터의 스크롤 튐 및 오토스크롤링 문제 원천 해결.
+  - **머티리얼 뷰포트 바닥 그리드 렌더링 복구**:
+    - `PreviewViewportWidget.cpp`: `Initialize` 시 `m_ShowGrid` 조건문 없이 항상 `m_Grid.Initialize`를 수행하도록 변경.
+    - `PreviewViewportWidget.h`: `SetGridVisible`/`ToggleGrid` 시 `m_Grid.Show()` / `Hide()`를 즉시 동기화.
+    - `MaterialPreviewRenderer.cpp`: `Initialize`에서 그리드 활성화(`enableGrid = true`).
+  - **뷰포트 영역 정체불명 패딩 제거**:
+    - `MaterialPreviewRenderer::DrawViewportOnly()`: 기존 정사각형 강제 클램핑(`minSide`)을 제거하고 가용 너비/높이를 100% 채움.
+    - `MaterialEditor.cpp`: `##MaterialViewportChild`에 `ImGuiStyleVar_WindowPadding(0, 0)`을 적용하여 불필요한 내부 패딩 테두리 완전 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - **셰이더/머티리얼 그래프 미표시(`GraphPanel.NotReady`) 해결**:
+    - `GraphPanel.h`, `GraphPanel.cpp`: `inline static GraphPanel* s_Instance`를 도입하여 창 포커스/가시성 여부와 무관하게 `GetActiveGraphPanel()`이 유효한 싱글톤 인스턴스를 항상 반환하도록 보장.
+    - `DrawEmbeddedCanvasOnly` 및 `DrawEmbeddedPropertiesOnly` 진입 시 `m_Domain = EGraphDomain::Shader` 강제 및 `ActivateDocument()`를 명시 호출하여 노드 컨텍스트 활성화.
+  - **툴바 중복 버튼 정리**:
+    - `MaterialEditor::DrawCustomQuickAccess()`: `DrawHistoryButtons` 뒤에 중복 배치되어 있던 Revert 버튼(`ICON_FA_ROTATE_LEFT`)을 제거하여 Undo/Redo/Revert 화살표 반복 혼란 해소.
+  - **프리뷰 위젯 높이 조절 가로 스플리터바 추가 & 퀵액세스 툴바 통합**:
+    - 좌측 패널 상단 프리뷰 뷰포트와 하단 설정 사이에 `Editor::SplitterH("##MaterialPreviewSplitterH", ...)`를 도입하여 마우스 드래그로 높이 자유 조절 지원.
+    - `구체(Sphere)`, `큐브(Cube)`, `평면(Plane)`, `자동 회전 토글(AutoRotate)`, `카메라 리셋(ResetCamera)`, `그리드 토글(ToggleGrid)`을 상단 퀵액세스 툴바로 이동.
+    - `MaterialPreviewRenderer::DrawViewportOnly()` 신설로 프리뷰 내부의 중복 툴바를 제거하고 순수 3D 뷰포트로 꽉 차게 렌더링.
+  - **셰이더 그래프 열기/연결해제 버튼 짤림 방지**:
+    - 긴 텍스트 버튼 대신 `EditorUI::SmallIconButton`을 적용하여 좁은 프로퍼티 컬럼에서도 짤림 없이 콤팩트한 아이콘과 툴팁으로 표시.
+  - **패스별 셰이더 및 기본 셰이더 컬럼 간격 최적화**:
+    - `m_LeftPaneWidth` 기본값을 380px로 상향하여 가로 폭 여유 확보.
+    - `PassShadersTable`의 `PassType` 컬럼 폭을 110px에서 75px로 줄여 `VertexShader`와 `PixelShader` 컬럼이 충분한 폭을 유지하도록 개선.
+  - **패스별 셰이더 헤더 우측 상단으로 추가 컨트롤 이동**:
+    - `--- 패스별 셰이더 ---` 헤더와 같은 줄 오른쪽에 `[패스 종류 콤보]`와 `[+ 패스 셰이더 추가]` 버튼을 나란히 배치하고 표 하단의 중복 컨트롤 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - `Editor/Resources/Data/Localization/Editor.GraphPanel.csv`: `LiveAutoCompile`, `LiveCompiling`, `LiveSuccess`, `LiveError`, `LiveManualTrigger` 5개 행 추가.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
 ### [2026-11-19] Client 리소스 쿠킹·바이너리화·팩 배포 계획
 
 - [Client 에셋 팩 계획](ClientAssetCookingAndPackingPlan.md)에 선택 수집, 유형별 쿠킹·기존 BEVE 재사용, Windows 팩 형식·마운트, 기존 내보내기에서 게시하기까지의 단계와 검증 기준을 기록했다.
@@ -22,10 +311,127 @@ This document tracks implementation details, architectural decisions, and techni
 - [프리팹 흐름 개선 계획](PrefabSceneWorkflowPlan.md)에 생성·배치·원본 편집·씬 재열기의 동작과 인스턴스 보존 계약을 기록했다. `Revert All`의 삭제된 객체 접근, 엔티티 참조의 핸들 직렬화, 원본 덮어쓰기와 Undo/Redo의 개선 순서를 정리했다.
 - `SceneArchiveCheck`, `EditorHistoryCheck`, `AssetReferenceCheck`의 기존 검사 범위를 소스와 대조했다. 기능 변경 및 빌드·CTest·에디터·PIE 검증은 이후 단계에 둔다.
 
+### [2026-11-19] 머티리얼-셰이더 그래프 통합 Phase 2 (`GraphPanel` 3D 머티리얼 프리뷰 통합) 구현
+
+- **3D 머티리얼 프리뷰어 결합 (`GraphPanel`)**:
+  - `Editor/Source/ImGui/GraphPanel/Public/GraphPanel.h`, `Private/GraphPanel.cpp`:
+    - `MaterialPreviewRenderer m_Preview3D` 멤버 인스턴스 결합 및 생성자(`Initialize(512, 512)`), `Free()` 해제 라이프사이클 구축.
+    - `Update(f32 dt)` 오버라이드: 도메인이 `EGraphDomain::Shader`일 때 유효한 프리뷰 머티리얼을 찾아 `m_Preview3D.Submit(mat, dt)` 호출 (자전 애니메이션 및 디퍼드 렌더링 제출).
+    - `GetPreviewMaterial()` 머티리얼 획득 계층 구축:
+      1. 타겟 머티리얼 에셋(`m_TargetMaterial`) 우선 바인딩
+      2. 세션 런타임 머티리얼(`RuntimeMaterial`)
+      3. 엔진 기본 PBR 머티리얼(`DefaultMaterial.bammat.json`) 안전 폴백
+    - `SetTargetMaterial(path)`: 머티리얼 에디터 등 외부에서 진입 시 대상 머티리얼을 즉시 바인딩할 수 있는 인터페이스 연동.
+  - `Editor/Source/ImGui/GraphPanel/Private/GraphPanelShader.cpp`:
+    - `Draw3DMaterialPreview()` 신설 및 `DrawShaderBuildDetails()` 상단 배치.
+    - 상단 대상 머티리얼 에셋 정보 표시 및 해제(`ICON_FA_XMARK`) 버튼 연동.
+    - `m_Preview3D.DrawUI(mat)`를 통해 구체(Sphere)/큐브(Cube)/평면(Plane) 메쉬 전환 툴바, 뷰포트 마우스 우클릭 Orbit 회전 및 휠 줌 조작계 제공.
+  - `Editor/Source/ImGui/ResourceEditor/Private/MaterialEditor.cpp`:
+    - `OpenOrCreateShaderGraph()` 진입 시 `GraphPanel::SetTargetMaterial(m_TargetResourcePath)`를 자동 연결하여 머티리얼 에디터에서 열었을 때 해당 머티리얼이 3D 프리뷰에 즉시 로드되도록 연동.
+- **컴파일 빌드 오류 핫픽스 및 실환경 피드백 6종 2차 완성**:
+  - **하단 상태 바 글자 짤림 해결**:
+    - `GraphPanel::DrawEmbeddedWorkspace()`: 상태 바 2줄 텍스트(`SaveScope` + `Controls`)에 맞게 `footerHeight`를 2줄 높이(`GetTextLineHeightWithSpacing() * 2.0f + ItemSpacing.y * 2.0f`)로 정확하게 산출하여 글자 잘림 원천 차단.
+  - **로캘 누락 및 버튼 오버플로우 해결**:
+    - `Editor.GraphPanel.csv`: `CompileHotReload`, `CompileHotReloadTooltip`, `AutoCompile` 로캘 키 추가.
+    - 상단 툴바의 우측 액션 버튼(`AddNode`, `PopOutWindow`)의 가용 폭 계산을 동적 텍스트 크기 기반으로 수정하여 좁은 화면에서도 삐져나감 방지.
+  - **셰이더 그래프 워크스페이스 통합 (사용자 제안 수용)**:
+    - 어설프게 3분할되었던 패널 구조를 `GraphPanel`의 완성된 원본 워크스페이스(`DrawEmbeddedWorkspace`) 통째 렌더링 방식으로 전환.
+    - 좌측(3D 프리뷰 + 머티리얼 세부설정) ↔ 수직 스플리터 ↔ 우측(셰이더 그래프 캔버스 70% + 노드 인스펙터/변수/빌드상세 30% 내부 리사이즈 테이블).
+  - **오토스크롤링 버그 해소**:
+    - 이중 Child Window 스크롤 충돌을 제거하고 캔버스에 정확한 `contentHeight`를 전달하여 노드 에디터의 스크롤 튐 및 오토스크롤링 문제 원천 해결.
+  - **머티리얼 뷰포트 바닥 그리드 렌더링 복구**:
+    - `PreviewViewportWidget.cpp`: `Initialize` 시 `m_ShowGrid` 조건문 없이 항상 `m_Grid.Initialize`를 수행하도록 변경.
+    - `PreviewViewportWidget.h`: `SetGridVisible`/`ToggleGrid` 시 `m_Grid.Show()` / `Hide()`를 즉시 동기화.
+    - `MaterialPreviewRenderer.cpp`: `Initialize`에서 그리드 활성화(`enableGrid = true`).
+  - **뷰포트 영역 정체불명 패딩 제거**:
+    - `MaterialPreviewRenderer::DrawViewportOnly()`: 기존 정사각형 강제 클램핑(`minSide`)을 제거하고 가용 너비/높이를 100% 채움.
+    - `MaterialEditor.cpp`: `##MaterialViewportChild`에 `ImGuiStyleVar_WindowPadding(0, 0)`을 적용하여 불필요한 내부 패딩 테두리 완전 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - **셰이더/머티리얼 그래프 미표시(`GraphPanel.NotReady`) 해결**:
+    - `GraphPanel.h`, `GraphPanel.cpp`: `inline static GraphPanel* s_Instance`를 도입하여 창 포커스/가시성 여부와 무관하게 `GetActiveGraphPanel()`이 유효한 싱글톤 인스턴스를 항상 반환하도록 보장.
+    - `DrawEmbeddedCanvasOnly` 및 `DrawEmbeddedPropertiesOnly` 진입 시 `m_Domain = EGraphDomain::Shader` 강제 및 `ActivateDocument()`를 명시 호출하여 노드 컨텍스트 활성화.
+  - **툴바 중복 버튼 정리**:
+    - `MaterialEditor::DrawCustomQuickAccess()`: `DrawHistoryButtons` 뒤에 중복 배치되어 있던 Revert 버튼(`ICON_FA_ROTATE_LEFT`)을 제거하여 Undo/Redo/Revert 화살표 반복 혼란 해소.
+  - **프리뷰 위젯 높이 조절 가로 스플리터바 추가 & 퀵액세스 툴바 통합**:
+    - 좌측 패널 상단 프리뷰 뷰포트와 하단 설정 사이에 `Editor::SplitterH("##MaterialPreviewSplitterH", ...)`를 도입하여 마우스 드래그로 높이 자유 조절 지원.
+    - `구체(Sphere)`, `큐브(Cube)`, `평면(Plane)`, `자동 회전 토글(AutoRotate)`, `카메라 리셋(ResetCamera)`, `그리드 토글(ToggleGrid)`을 상단 퀵액세스 툴바로 이동.
+    - `MaterialPreviewRenderer::DrawViewportOnly()` 신설로 프리뷰 내부의 중복 툴바를 제거하고 순수 3D 뷰포트로 꽉 차게 렌더링.
+  - **셰이더 그래프 열기/연결해제 버튼 짤림 방지**:
+    - 긴 텍스트 버튼 대신 `EditorUI::SmallIconButton`을 적용하여 좁은 프로퍼티 컬럼에서도 짤림 없이 콤팩트한 아이콘과 툴팁으로 표시.
+  - **패스별 셰이더 및 기본 셰이더 컬럼 간격 최적화**:
+    - `m_LeftPaneWidth` 기본값을 380px로 상향하여 가로 폭 여유 확보.
+    - `PassShadersTable`의 `PassType` 컬럼 폭을 110px에서 75px로 줄여 `VertexShader`와 `PixelShader` 컬럼이 충분한 폭을 유지하도록 개선.
+  - **패스별 셰이더 헤더 우측 상단으로 추가 컨트롤 이동**:
+    - `--- 패스별 셰이더 ---` 헤더와 같은 줄 오른쪽에 `[패스 종류 콤보]`와 `[+ 패스 셰이더 추가]` 버튼을 나란히 배치하고 표 하단의 중복 컨트롤 제거.
+- **로캘 키 등록 (지침 11·14절 준수)**:
+  - `Editor/Resources/Data/Localization/Editor.GraphPanel.csv`: `Preview3D`, `TargetMaterial`, `RuntimeMaterialFallback`, `Toggle3DPreview` 4개 행 추가.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
+### [2026-11-19] 머티리얼-셰이더 그래프 통합 Phase 1 (에셋 바인딩 및 원클릭 진입) 구현
+
+- **데이터 모델 및 아키텍처 확장**:
+  - `Engine/Source/Render/Material/Public/MaterialInterface.h`:
+    - `m_ShaderGraphPath` (string) 프로퍼티 추가 및 리플렉션 등록 (`CATEGORY_SHADER`, `PROP_SHADER_GRAPH_PATH`).
+    - 접근자 `GetShaderGraphPath()`, `SetShaderGraphPath()`, `HasShaderGraph()` 추가.
+    - 기존 머티리얼 JSON 아카이브 로드 시 필드가 누락되어도 안전하게 기본값(`""`)으로 초기화되도록 하위 호환성 보장.
+  - `Engine/Source/Render/Material/Private/MaterialInterface.cpp`: `Free()` 시 `m_ShaderGraphPath.clear()` 추가.
+  - `Engine/Source/Render/Material/Public/MaterialInstance.h`, `Private/MaterialInstance.cpp`:
+    - `MaterialInstance`에서 `GetShaderGraphPath()` 오버라이드 구현.
+    - 인스턴스에 자체 셰이더 그래프가 설정되어 있지 않으면 베이스 머티리얼(`GetBaseMaterial()->GetShaderGraphPath()`)로 자동 폴백.
+- **머티리얼 에디터 원클릭 진입 인터페이스 (`MaterialEditor`)**:
+  - `Editor/Source/ImGui/ResourceEditor/Public/MaterialEditor.h`, `Private/MaterialEditor.cpp`:
+    - 상단 퀵 액세스 툴바(`DrawCustomQuickAccess`): `ICON_FA_DIAGRAM_PROJECT` 아이콘의 [Open Shader Graph] 버튼 추가.
+    - 셰이더 설정 섹션(`DrawShaderSettings`): 상단에 `Shader Graph` 속성 행을 배치하여 연결된 그래프명 표시, 툴팁 전체 경로 안내, `[Open Shader Graph]`(화살표 아이콘) 및 `[Unlink]`(연결 해제 아이콘), 미연결 시 `[Create Shader Graph]`(플러스 아이콘) 제공.
+    - `GenerateDefaultShaderGraphPath()`: `Assets/Shaders/Graphs/<MaterialName>.bamgraph.json` 기본 경로 자동 생성.
+    - `CreateDefaultMaterialShaderGraph(path)`: 그래프 에셋이 없을 때 `Engine::Graph(EGraphDomain::Shader)`를 생성하고 루트 노드인 `Shader.MaterialOutput`(ID: 1, 400x250)을 배치한 기본 템플릿을 디스크에 저장.
+    - `OpenOrCreateShaderGraph()`: `ImGuiManager::Get().RequestOpenResourceEditor(resolvedPath)`를 호출하여 `GraphPanel`을 열고 그래프 파일을 로드.
+- **로캘 키 등록 (지침 11·14절 원본 CSV 원칙 준수)**:
+  - `Editor/Resources/Data/Localization/Editor.MaterialEditor.csv`:
+    - `OpenShaderGraph`, `CreateShaderGraph`, `ShaderGraphPath`, `UnlinkShaderGraph`, `CreateGraphPrompt`, `BrowseGraph` 6종 추가.
+- **검증 상태**: 정적 분석 및 diff 검토 완료. AGENTS.md 제2절에 따라 빌드 및 테스트는 사용자 직접 실행 안내.
+
 ### [2026-11-19] 애니메이션 제작·실행 파이프라인 개선 계획
 
 - [개선 계획](AnimationPipelineIntegrationPlan.md)에 모델 임포트, Animator Graph, VFX, Notify, Action Timeline의 연결을 기록했다. 편집 씬 격리와 Animator 복원, 프리뷰 발동 규칙 일치, 모델·클립 참조 정리, 입력 기반 공격 샘플의 PIE·독립 Client 검증 순서를 정리했다.
 - 현재 소스, `BaselineVerification`의 재생 설정, 저장된 타임라인의 모델 경로와 기존 PIE 이벤트 검증 기록을 대조했다. 개선 코드 적용과 빌드·CTest·실환경 검증은 이후 단계에 둔다.
+
+### [2026-11-19] 머티리얼 에디터 3분할 통합본 결함 수정 (데이터 보호·레이아웃)
+
+- **배경**: 다른 에이전트가 머티리얼 에디터를 좌(프리뷰+속성)·중앙(셰이더 그래프)·우(노드 속성) 3분할로 통합하면서 `GraphPanelShader.cpp`·`GraphPanelMaterial.cpp`를 비우고 그래프 편집을 `MaterialEditorCanvas.cpp`·`MaterialEditorShader.cpp`로 옮겼다. 사용자 확인에서 화면이 제대로 나오지 않았다. 정적 검토 결과는 아래와 같다.
+- **데이터 보호 [심각]**: 머티리얼을 열기만 해도 `EnsureShaderGraphLoaded()`가 `Assets/Shaders/Graphs/<이름>.bamgraph.json`을 만들고 경로를 기록해 미저장 상태로 만들었으며(읽기 전용 엔진 머티리얼 포함), 이어서 `LiveHotReloadShader()`가 빈 그래프를 컴파일해 씬과 공유하는 머티리얼의 픽셀 셰이더를 교체했다. 로드 실패 시 매 프레임 재시도했다. 열기는 연결된 그래프를 읽기만 하도록(`TryLoadLinkedShaderGraph`) 바꾸고, 그래프 생성·연결은 `[셰이더 그래프 만들기]`를 눌렀을 때만(`CreateShaderGraphForMaterial`) 한다. 셰이더 교체는 그래프가 연결되어 읽힌 쓰기 가능한 머티리얼에만 적용한다. 그래프가 없거나 파일이 없는 머티리얼은 중앙 영역에 안내와 만들기 버튼을 보인다.
+- **프리뷰 수명**: 문서를 닫을 때 `m_PreviewRenderer.Free()`를 호출해 두 번째로 연 머티리얼부터 프리뷰가 그려지지 않았다. HEAD와 같이 머티리얼 참조만 놓고 위젯은 패널 수명 동안 유지한다.
+- **레이아웃**: 세 영역과 스플리터 사이 `SameLine` 간격 4회를 폭 계산에서 빼고(우측 패널 잘림), 좁은 창에서는 저장된 선호 폭을 바꾸지 않고 이번 프레임만 비율로 나눈다. 좌측 패널의 세로 간격 2회를 높이에서 뺐다(설정 영역 하단 잘림).
+- **헤더**: 메뉴 줄(파일·보기·편집)이 아이콘 버튼으로 바뀌고 빠른 실행 줄이 같은 함수를 다시 불러 아이콘 줄이 두 번 그려졌으며 되돌리기·닫기·보기 메뉴가 사라졌다. HEAD의 메뉴 줄과 빠른 실행 줄을 복원하고, 새 액션(`MaterialEditor.CompileHotReload`, `MaterialEditor.ResetView`)은 빠른 실행 줄에 둔다.
+- **중앙 캔버스**: `ToolbarLayout::Button(id, icon, labelKey)`에 아이콘+문구와 툴팁 키를 넘기고 수동 `SameLine`을 섞어 버튼 문구가 중복되고 정렬이 꼬였다. 올바른 인자와 `SameLineIfFits`로 바꿨다. 노드를 그리기 전에 `NavigateToContent`를 호출해 처음 열 때 캔버스가 비어 보였으므로 노드를 그린 뒤로 옮겼다. 상태바 오른쪽 문구의 위치 계산을 창 기준으로 고치고 공간이 없으면 생략한다.
+- **우측 노드 속성**: `EmptyState`가 커서를 패널 중앙으로 옮겨 셰이더 진단·HLSL 섹션을 밀어냈으므로 섹션 안 안내 문구로 바꿨다. 하드코딩된 `"Node #..."`, `"Input Pins"`, `"Connected"`를 로캘 키(`MaterialEditor.NodeTitle`, `InputPins`, `PinConnected`)로 바꾸고 입력 핀을 2열(라벨 | 값) 표로 정리했다. `Editor.MaterialEditor.csv`에 7개 키를 추가했다.
+- **노드 그리기 assert (사용자 실행에서 발견)**: 그래프가 있는 머티리얼을 열면 `MaterialEditor::DrawNode`가 `ed::BeginNode`와 `ed::EndNode` 사이에서 `ed::GetNodeBackgroundDrawList()`를 호출해 `NodeBuilder::GetUserBackgroundDrawList`의 assert("available after EndNode()")에서 멈췄다. 프로젝트의 imgui-node-editor는 노드를 만드는 동안 드로우리스트 분할기가 바뀌므로 이 호출을 막는다. 헤더 높이는 `NodeEditorUI::BeginNodeHeader`로 기록하고, 배경은 `ed::EndNode()` 뒤 `NodeEditorUI::DrawNodeHeader`로 그리도록 바꿨다(Graph·Animator 패널과 같은 규격). 출력 핀을 `GetContentRegionAvail()`로 오른쪽 정렬하던 코드는 노드 안에서 폭이 정해지지 않아 노드를 넓히므로, 입력 열과 출력 열을 그룹으로 나란히 그리도록 바꿨다. `"Material"` 하드코딩 제목은 `ResourceType.Material` 로캘 키를 쓴다.
+- **링크 생성·삭제 assert (사용자 실행에서 발견)**: `HandleConnections`가 `ed::EndCreate()`·`ed::EndDelete()`를 `if (ed::BeginCreate())`·`if (ed::BeginDelete())` 밖에서 매 프레임 호출해 `CreateItemAction::End`의 assert("call End() only when Begin() was successful")에서 멈췄다. Graph·Animator 패널처럼 `End*()`를 블록 안으로 옮겼다. 함께 고친 결함: `QueryNewLink`의 첫 핀을 입력으로 가정해 출력 핀에서 끌면 방향이 뒤집혀 연결되지 않았으므로 핀 정의의 방향으로 출력→입력을 정한다. 입력 핀의 기존 링크 교체를 그래프 사본에서 먼저 확인하고 실패하면 `RejectNewItem`으로 표시한다. 생성 트랜잭션 안에서 열던 노드 메뉴는 플래그로 미뤄 캔버스의 `ed::Suspend` 구간에서 연다. 삭제는 트랜잭션 안에서 대상만 모으고 `EndDelete()` 뒤에 한 번에 지운 뒤 이력 한 건으로 기록한다.
+- **캔버스 밖 호출**: 툴바·단축키에서 부르는 `OpenAddNodeMenu`가 캔버스 밖에서 `ed::Suspend()`를 호출하고 다른 ID 스택에서 팝업을 열었으며 편집기가 없으면 null에 접근했다. 요청 플래그만 남기고 다음 캔버스 그리기에서 마우스 위치로 연다. `AlignSelectedNodes`·`DuplicateSelection`·`CreateCommentBoxFromSelection`은 현재 편집기를 이 문서의 편집기로 지정하지 않고 노드 위치를 다뤄 다른 패널의 편집기를 건드릴 수 있었으므로 문서 편집기를 지정·복원한다.
+- **셰이더 컴파일 항상 실패 [높음]**: 진단에 `#include "shading_flags.hlsli"` 오류가 표시되었다. 기존 `GraphPanel`은 임시 폴더에 생성 HLSL과 함께 `shading_flags.hlsli`를 복사했으나, 옮겨진 `ReserveMaterialShaderSourcePath()`는 복사를 빠뜨려 그래프 컴파일·라이브 핫스왑이 모두 실패했다. 임시 폴더를 만들 때 `Engine://Shader/hlsl/shading_flags.hlsli`를 함께 복사한다(세 컴파일 경로 공통).
+- **그래프 지정·생성**: 연결 해제 후 다시 연결할 방법이 없었다. 인스펙터의 Animator·Timeline 지정과 같은 `DrawInspectorAssetPathPicker`로 `.bamgraph.json`을 목록·드래그 앤 드롭으로 지정·해제하고, 그래프가 없으면 `[셰이더 그래프 만들기]`를 함께 보인다. 좌측 셰이더 설정과 중앙 안내 화면 양쪽에 둔다. 고른 그래프는 먼저 읽어 보고 셰이더 그래프로 읽혔을 때만 연결하며, 가상 URI(`Project://…`)·프로젝트 상대·머티리얼 폴더 상대 경로를 모두 해석한다.
+- **진단·HLSL 표시**: 공백 없는 긴 경로가 들어간 컴파일 오류가 패널 밖으로 늘어났다. 줄바꿈 표시, 복사 버튼(`MaterialEditor.CopyDiagnostics`), 폭을 제한한 전체 내용 툴팁을 두고, 툴바 상태 툴팁도 같은 폭으로 줄바꿈한다. 생성 HLSL은 읽기 전용 여러 줄 입력창으로 바꿔 일부 선택·복사가 가능하다.
+- **입력 핀 표**: 공용 `EditorUI::BeginPropertyTable`·`PropertyLabel`(핀 타입을 상세 툴팁)·`PropertyValue`로 바꾸고, 우측 표 전용 `DrawPinInspectorValue`가 값 열 폭을 채운다. Float3·Float4는 인스펙터와 같은 `ReflectionPropertyDrawer::DrawVector3/4`(좁으면 세로 배치)를 쓰고, 정수는 `GraphValue`의 `int64_t`로 편집한다. 노드 안 작은 입력칸은 캔버스용으로 유지한다.
+- **로캘 보완**: `EditorCommon.Comment` 키를 추가하고 코멘트 노드의 하드코딩 `"Comment"`를 바꿨다. `Engine.csv`의 `PROP_SHADER_GRAPH_PATH` 번역을 채웠다.
+- **알려진 한계**: `MaterialInstance::GetShaderGraphPath()`는 자기 경로가 비면 부모 머티리얼 경로를 돌려주므로, 인스턴스에서 해제해도 연결된 것으로 보이고 그래프 편집이 부모 그래프 파일에 반영된다(인스턴스 정책 결정 필요). `Temp/MaterialShader/<번호>` 폴더가 컴파일마다 쌓인다(기존 GraphPanel과 동일).
+- **줄바꿈**: 통합본의 네 파일이 LF로 저장되어 있어 CRLF로 맞췄다.
+- **남은 범위**: 그래프 편집 코드가 `GraphPanelNodeEditor`와 `MaterialEditorCanvas`에 이중으로 있다(공용 컴포넌트로 통합 필요). 셰이더 교체가 씬 공유 머티리얼에 즉시 적용되며 그래프 연결 해제 시 원래 픽셀 셰이더로 돌아가지 않는다(프리뷰 전용 복사본 적용 검토). `EditorCommon.Comment`·`EditorCommon.Duplicate` 로캘 키 누락(통합본 기존 결함). 컴파일이 메인 스레드에서 동기로 실행된다.
+- **검증 상태**: 정적 확인만 했다. 빌드와 화면 확인은 사용자 실행 전이다.
+
+### [2026-11-19] 계층 패널 Visible·Active 토글 아이콘 잘림
+
+- **원인**: 행 오른쪽 토글은 `GetFrameHeight()` 정사각형 `ImGui::Button`이었다. `ImGui::Button`은 `FramePadding` 안쪽에만 라벨을 그려, 체크보다 넓은 `ICON_FA_EYE`·`ICON_FA_EYE_SLASH`의 양옆이 잘렸다. 라벨이 아이콘 자체라 상태가 바뀌면 버튼 ID도 바뀌었다.
+- **수정** (`EntityHierarchyView.cpp`): 두 토글이 같은 슬롯을 쓴다. 높이는 `FramePadding` 트리 노드 행과 같은 `GetFrameHeight()`, 폭은 세 아이콘 중 가장 넓은 폭에 글꼴 크기 15%의 가로 패딩을 더한 값과 행 높이 중 큰 값이다. 버튼을 그리는 동안만 가로 패딩을 줄이고 세로 패딩은 유지해 행 높이가 변하지 않는다. 오른쪽 정렬 폭도 슬롯 기준으로 계산하고, ID는 `##Visible`·`##Active`로 고정했다. 공용 `EditorUI::IconButton`과 같은 계산 방식이지만, `HierarchyEditorCheck`가 `EditorUI.cpp`를 링크하지 않아 같은 파일에서 직접 처리했다.
+- **검증 상태**: 정적 확인만 했다. 보임·숨김 상태의 아이콘 잘림, 두 버튼 크기·높이 일치, UI 배율 변경 시 행 높이 유지는 사용자 확인 전이다.
+
+### [2026-11-19] 프리팹 Revert All 삭제 후 접근 크래시와 교체 실패 처리
+
+- **결함 [심각]**: `InspectorPanel::Draw()`가 보관한 `targetEntity`로 `DrawPrefabHeaderBar()`를 호출하고, `Revert All`이 그 안에서 기존 루트와 자식을 `DestroyEntity`로 삭제했다. 헤더가 돌아온 뒤 `DrawModelMaterialRefresh(*targetEntity)`와 본문 그리기가 해제된 엔티티를 사용했다. 기존 트리 삭제 실패를 무시해 새 트리가 남은 채 성공 알림이 표시될 수 있었고, 이력 기록과 형제 순서 보존이 없었다. [프리팹 흐름 계획 2.1](PrefabSceneWorkflowPlan.md#21-revert-all의-삭제와-그리기-순서)
+- **수정**: 메뉴는 씬과 루트 ID만 담은 요청을 남기고, `ImGui::End()` 뒤 `ExecutePendingPrefabRevert()`가 실행한다. 실행 직전 현재 씬·편집 가능 상태·루트·원본 경로를 다시 확인하고, 편집할 수 없는 상태에서는 메뉴를 비활성화한다. 배치 실패는 기존 트리를 유지하고, 기존 트리 삭제가 거부되면 새 트리를 지운다(실패 시 교체 전 스냅샷 복원). 부모 아래에서는 `ReorderSiblings`로 새 루트를 기존 자리에 둔다. 성공한 교체만 씬 이력 한 건(`Prefab.RevertAll`)으로 기록하고 프리팹 모드 씬이면 미저장 표시를 켠다. 잠긴 인스펙터는 새 루트로 잠금을 옮긴다.
+- **배치 Transform 범위**: 처음 구현은 기존 루트의 위치·회전·스케일을 모두 새 루트에 복사해, 스케일을 바꾼 뒤 `Revert All`을 실행해도 스케일이 되돌아가지 않았다(사용자 확인). 인스턴스를 놓은 자리인 위치·회전만 유지하고 스케일은 원본 값을 쓰도록 고쳤다.
+- **외부 참조 보호**: `DestroyEntity`는 트리 밖에서 트리 안을 가리키는 리플렉션 `entt::entity` 속성을 조용히 비운다. 하위 트리 수집과 참조 탐색을 `Scene.cpp`의 공용 함수로 분리하고 `Scene::CountExternalEntityReferences()`를 추가해, 그런 참조가 있으면 교체를 막고 개수를 알린다(`Notification.PrefabRevertBlockedByReferences`). `DestroyEntity`의 판정 규칙은 그대로다. 실패 알림은 `Notification.PrefabRevertFailed`를 사용한다(`Editor.Notification.csv`).
+- **검사**: `SceneArchiveCheck`에 `CheckExternalEntityReferenceCount`(트리 내부 참조 제외, 외부·부모 참조 계수, 해제 후 0, 다른 씬 엔티티 거부)를 추가했다.
+- **한계**: 최상위 엔티티는 엔진에 형제 순서 모델이 없어 순서를 보존하지 않는다. 프리팹 내부 참조의 새 ID 대응(2.2)과 `Apply All`·`Unpack` 이력(2.3)은 범위 밖이다.
+- **검증 상태**: 정적 확인만 했다. 빌드·CTest(`SceneArchiveCheck`)와 루트 선택·자식 선택·잠긴 인스펙터·원본 누락·외부 참조가 있는 경우의 실환경 확인, Undo/Redo 한 번씩의 복원은 사용자 실행 전이다.
 
 ### [2026-11-19] 재점검 후속: 로캘 누락, 임포트 프리뷰 스레드, 모달 단축키 경로
 

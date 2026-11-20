@@ -1,7 +1,7 @@
 # 머티리얼-셰이더 그래프 통합 및 실시간 3D 프리뷰 개발 계획
 
 - 작성일: 2026-11-19
-- 상태: 계획 수립 완료 (Phase 1 착수 대기)
+- 상태: Phase 1~3 및 Step 1~2(언리얼 스타일 머티리얼 에디터 탭 통합 및 단일 3D 프리뷰어 연동) 구현 완료, 빌드 및 실환경 검증 대기
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [EditorUXTestGuidelines.md](EditorUXTestGuidelines.md)
 - 선행 기반: [EngineDevelopmentPlan.md](EngineDevelopmentPlan.md) 9·10절, [GraphFoundation.md](GraphFoundation.md), [GraphPanel.md](GraphPanel.md), [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md)
 - 통합 우선순위 연결: [DevelopmentPriorities.md](DevelopmentPriorities.md) (머티리얼 및 셰이더 그래프 저작 파이프라인 고도화)
@@ -75,7 +75,7 @@ flowchart TD
 
 ## 4. 단계별 상세 개발 로드맵
 
-### Phase 1. 머티리얼-그래프 에셋 바인딩 및 원클릭 진입 (Entry Point)
+### Phase 1. 머티리얼-그래프 에셋 바인딩 및 원클릭 진입 (Entry Point) [구현 완료: 2026-11-19]
 - **목적:** 머티리얼이 자신의 원본 소스 그래프 에셋을 참조하도록 하고, 머티리얼 에디터에서 원클릭으로 셰이더 그래프를 열거나 신규 생성하도록 연결한다.
 - **세부 내용:**
   - `MaterialInterface.h`:
@@ -91,7 +91,7 @@ flowchart TD
 
 ---
 
-### Phase 2. `GraphPanel` 내 3D 머티리얼 프리뷰 위젯 통합 (3D Preview Dock)
+### Phase 2. `GraphPanel` 내 3D 머티리얼 프리뷰 위젯 통합 (3D Preview Dock) [구현 완료: 2026-11-19]
 - **목적:** 그래프 패널 단독으로도 2D 쿼드 대신 3D 구체/큐브 실시간 뷰포트를 확인하며 노드를 저작할 수 있게 한다.
 - **세부 내용:**
   - `GraphPanel.h` / `GraphPanelShader.cpp`:
@@ -104,7 +104,7 @@ flowchart TD
 
 ---
 
-### Phase 3. 노드 편집 실시간 핫 컴파일 & 머티리얼 핫스왑 (Live Hot-Reload)
+### Phase 3. 노드 편집 실시간 핫 컴파일 & 머티리얼 핫스왑 (Live Hot-Reload) [구현 완료: 2026-11-19]
 - **목적:** 노드를 연결하거나 파라미터를 바꿀 때마다 버튼을 누르지 않아도 자동으로 컴파일되어 3D 프리뷰에 즉각 반영되는 실시간 피드백 루프를 구축한다.
 - **세부 내용:**
   - 디바운스(Debounce) 자동 컴파일:
@@ -122,13 +122,24 @@ flowchart TD
 
 ---
 
-### Phase 4. 노출 파라미터 ↔ 머티리얼 프로퍼티 양방향 연동 (Parameter Sync)
-- **목적:** 셰이더 노드 중 외부에 노출할 파라미터를 지정하고, 머티리얼 인스펙터 슬라이더와 양방향 동기화한다.
-- **세부 내용:**
-  - 노드 메타데이터 확장: `Shader.ConstantFloat`, `Shader.Color`, `Shader.Texture2D` 노드의 속성에 `IsParameter(bool)` 및 `ParameterName(string)` 지정 기능 추가.
-  - 파라미터 자동 등록: 그래프 저장/컴파일 시 노출된 파라미터 목록을 타겟 `Material`의 `m_Parameters` 및 `m_TextureBindings` 슬롯에 자동 매핑.
-  - 머티리얼 에디터의 `DrawParameters()`에서 해당 슬라이더 조작 시 셰이더 상수 버퍼(`MaterialConstants`)로 즉시 전달.
-- **완료 기준:** 셰이더 그래프에서 노출한 파라미터가 머티리얼 에디터의 파라미터 패널에 자동으로 표시되고, 슬라이더 조작 시 프리뷰에 즉시 반영된다.
+### Phase 4. 노출 파라미터 ↔ 머티리얼 프로퍼티 양방향 연동 & VS/PS 통합 [설계 완료]
+- **목적:** 셰이더 노드 중 외부에 노출할 파라미터를 지정하고, 머티리얼 인스펙터 슬라이더와 양방향 동기화하며, 단일 머티리얼 그래프에서 정점(VS, WPO 등) 및 픽셀(PS, PBR) 셰이더를 통합 제어한다.
+- **세부 설계 사양 문서:** [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md)
+- **주요 내용:**
+  - **양방향 동기화 모델:** 셰이더 그래프를 인터페이스(Layout/SSOT)로 두고, 머티리얼은 런타임 값 오버라이드로 분리. 머티리얼 인스펙터의 파라미터 값 변경 시 셰이더 재컴파일 없이 GPU 상수 버퍼(`MaterialConstants`)만 즉시 갱신하는 Fast-Path 구현.
+  - **다중 그래프 패널 공통화:** `GraphPanel`, `MaterialEditorCanvas`, `AnimatorGraphPanel`의 툴바, 줌/팬 네비게이션, 노드 정렬, 단축키 공통 레이어(`Editor::GraphCommon`) 도입.
+  - **VS/PS 통합 컴파일:** 단일 마스터 노드에 버텍스 입력 핀(World Position Offset, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`로 분할 생성하여 한 번에 빌드/바인딩.
+
+---
+
+### Phase 5. 머티리얼 기본 렌더 패스(Primary Pass Type) 도입 및 셰이더 정합성 [설계 완료]
+- **목적:** 머티리얼의 기본 셰이더가 디퍼드 `Geometry` 패스를 암묵적으로 전제하는 구조를 해소하고, `ForwardTransparent`(반투명), `UI`, `PostProcess` 등 주 렌더 패스를 머티리얼이 직접 결정할 수 있도록 확장한다.
+- **세부 설계 사양 문서:** [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md)
+- **주요 내용:**
+  - `MaterialInterface`에 `m_PrimaryPassType` 속성 추가 및 리플렉션 등록.
+  - `GetVertexShader()` / `GetPixelShader()` Fallback 정합성 개선.
+  - 에디터 파이프라인 설정 상단에 기본 패스 타입 선택 콤보 추가 및 `BlendMode` 권장 프리셋 연동.
+  - 셰이더 그래프 컴파일러의 타깃 렌더 패스(GBuffer vs Forward단일 타깃) 코드 생성 연동.
 
 ---
 
