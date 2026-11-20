@@ -2,12 +2,70 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 플러그인 관리자 툴바와 패키지 경로 표시
+
+- 상단과 선택 항목 및 빌드 콘솔의 동작을 공용 아이콘 툴바로 정리하고, 상단 경로·SDK 설명을 정보 팝업으로 옮겼다.
+- 생성 창에 전체 예상 폴더를 표시하고 선택한 설치형 패키지의 폴더 경로와 Windows 탐색기 열기를 추가했다. 탐색기 실행 실패는 알림으로 표시한다.
+- **미검증:** 빌드·로캘 생성·Editor 실행, 툴팁·탐색기 열기와 한·영·좁은 폭 UI.
+
+### [2026-11-20] 에디터 패널 플러그인 템플릿 생성
+
+- 플러그인 관리자 상단 툴바에 패널 생성 모달을 추가했다. 식별자·이름·버전·초기 크기를 검사하고 프로젝트 `Plugins`에 V2 패널 소스, 설치형 매니페스트와 독립 CMake 설정을 생성한다. 기존 폴더는 덮어쓰지 않으며 생성 실패 시 미완성 폴더 경로를 표시한다.
+- 생성 직후 DLL은 없으며 사용자가 같은 Editor 빌드 환경에서 독립 빌드한 뒤 재검색·승인·로드한다. 관리자 내 사용자 소스 빌드와 자동 감시, 아이콘 선택 및 Blank/Runtime 템플릿은 미구현이다. [절차와 제약](EditorPluginArchitecturePlan.md#에디터-패널-템플릿-생성)
+- **사용자 확인:** 패널 템플릿이 생성됐다. 생성된 패널 DLL의 빌드와 로드는 확인되지 않았다.
+- `PanelPluginGeneratorCheck`에 입력 검증, 매니페스트, 생성 결과와 덮어쓰기 방지 사례를 추가했다. **미검증:** 빌드·CTest·로캘 생성·생성된 패널 빌드와 Editor 로드·리로드 및 한·영·좁은 폭 UI.
+
+### [2026-11-20] Baseline 이동 변주와 점프 연출
+
+- `BaselineVerification_Simple.animator`의 Idle·Walk·Run에 Test의 A/B/C 클립을 2D 블렌드로 연결했다. 샘플 `GameModule`이 두 변주 파라미터를 천천히 구동한다.
+- KCC의 `Jump` 트리거와 `IsGrounded`를 사용해 점프 및 착지 복귀를 구성하고, 점프 진입 때 기존 복합 VFX를 캐릭터 위치에 1회 생성한다. 기존 액션 타임라인은 자동 재생을 끄고 수동 재생으로 남겼다. 상세와 제약은 [통합 계획](AnimationPipelineIntegrationPlan.md#baseline-점프와-이동-변주-예시)을 따른다.
+- **미검증:** 빌드·CTest·Editor·PIE·Client, 각 클립의 리그 호환성, 점프와 착지 타이밍, 반복 생성·소멸 및 모듈 핫리로드. 샘플 에셋은 Git 무시 대상이다.
+
 ### [2026-11-20] GPU 텍스처 변환 후 재로드 진단
 
 - 사용자가 디버거에서 `Texture.AlreadyUploaded`를 확인했다. 공유 참조가 있는 GPU 포인터를 `Safe_Release`로 해제해도 포인터가 남아 기존 객체의 Archive 읽기가 실패하는 경로다. 현재 `.bamtex` 재로드는 임시 `Texture`에 읽고 성공 시 기존 자원을 교체한다.
 - **확인**: 21:45 로그에서 실제 GPU BC7 압축과 워커 완료 후 재로드 실패가 기록됐다. 22:21에는 `cached GPU BC7` 변환과 `.bamtex` 재로드 성공이 두 번 기록됐고 사용자는 실패 브레이크가 더 이상 발생하지 않는다고 보고했다. 수정 후 실제 GPU 압축과 재로드를 함께 실행한 것은 확인되지 않았다.
 - **남은 작업**: `Texture::Reload()`의 `IsFailure(result)`와 GPU 업로드 내부 실패 경로를 점검한다. 공유 참조 및 잘못된 입력에서 기존 리소스 보존, 원본·DDS, CPU 폴백, 캐시 미적중 GPU 변환, 중복 재로드 비용과 UI 회귀를 사용자가 검증한다. 상세는 [계획](TextureSpriteEditorIntegrationPlan.md)을 따른다.
 - **기준 상태**: 기준 커밋의 `ContentBrowserPanel.cpp`에는 별도 미커밋 작업에서 수정 중인 문법 오류가 있으므로 이 변경만의 독립 빌드는 검증되지 않았다.
+
+### [2026-11-20] 실행 중 설치형 패널 패키지 재검색
+
+- 플러그인 관리자에서 설치형 패키지를 재검색하고 기존 세션의 패널과 선택을 유지하도록 했다. 프로젝트 `Plugins` 경로를 안내하며 새 패키지는 자동 실행하지 않고 기존 매니페스트 검사와 Custom 승인 경로로 로드한다. 누락된 패키지는 언로드할 수 있도록 현재 세션 목록에 남긴다.
+- 당시 임의 DLL 직접 패키징, 소스 템플릿 생성 및 개발용 빌드 타깃 동적 등록은 구현하지 않았다. 이후 패널 템플릿 생성은 위 항목에서 추가했다. [사용 절차와 제한](EditorPluginArchitecturePlan.md#실행-중-설치형-패널-추가)
+- **미검증**: 빌드·로캘 생성·Editor 실행, 재검색·승인·로드·리로드·누락/중복 복구 및 다국어·좁은 폭 UI.
+
+### [2026-11-20] 액션 타임라인 VFX 동기화와 이동 그래프
+
+- 지속형 VFX는 소유 액션 타임라인의 Pause/Resume·배속을 따르고 해제 후에는 방출과 이벤트 생성만 중단하며 기존 입자·트레일을 수명까지 갱신하도록 변경했다. 일반 1회성 복합 VFX의 종료와 복합 VFX 파티클 트랙 구간 종료에도 잔존 입자 갱신이 적용된다. 프리뷰에서는 재생 VFX를 일시정지하고 독립 테스트 발동은 유지한다.
+- 프리뷰 프레임 이동·스크럽은 이전 VFX를 제거하지만 과거 상태를 재구성하지 않는다. 복합 VFX 사운드 채널은 일시정지·재개하지만 배속에 따른 음높이 변경은 하지 않는다. 프레임 경계와 PIE 전체 일시정지의 제약은 [타임라인 계획 9절](AnimationTimelineEditorPlan.md)에 기록했다.
+- 복합 파티클 트랙의 시작·종료를 한 프레임에서 모두 통과하거나 복합 효과가 끝나는 프레임에도 활성 구간을 먼저 시뮬레이션하도록 처리했다. 해당 경계와 정지·잔존 소멸을 `ActionTimelinePlaybackCheck`에 추가했으나 실행하지 않았다.
+- `BaselineVerification_Simple.animator`에 `Speed` 기반 Idle/Walk/Run 상태를 추가했다. `Test`에는 Rogue용 이동 클립이 없어 기존 KayKit `Rig_Medium` 이동 클립을 참조한다. 씬에는 기존 컨트롤러 경로를 유지한다.
+- **이전 샘플 설명 정정:** 기존에는 Notify Duration 0.4초의 해제 시 파티클이 즉시 삭제되었으므로, 아래의 '수명까지 시뮬레이션'은 당시 동작에 대한 잘못된 설명이었다. 이번 변경은 해당 조기 삭제를 해결하도록 작성했다.
+- **미검증:** 관련 회귀 체크를 추가했지만 빌드·CTest·Editor·PIE·Client 실행은 하지 않았다. 소켓·이동 클립의 스켈레톤 호환성, 재생/취소·잔존·사운드·속도·스크럽 및 기존 VFX 회귀는 사용자가 확인해야 한다. `Assets`의 샘플 데이터는 Git 무시 대상이다.
+
+### [2026-11-20] 리소스 편집기 비동기 열기 기준 계측 시작
+
+- 공용 열기 경로의 각 편집기 `SetTargetResource()` 호출 시간과 모델 편집기의 정상 열기에서 `ResourceManager::LoadFile`, `SetupPreviewModel`, 전체 처리 시간을 `[ResourceOpenTiming]` 로그에 기록한다. 공용 로그는 성공 여부를 뜻하지 않고 패널 내부의 직접 열기는 측정하지 않는다. 의존 리소스와 GPU 생성은 `LoadFile` 시간에 함께 포함되며 첫 창 표시 시간은 아직 측정하지 않는다.
+- **미완료·미검증**: 로딩 UI나 비동기 로드는 구현하지 않았다. 빌드와 실제 모델별 측정은 사용자가 실행해야 하며, 이후 결과에 따라 모델부터 작업 경계를 분리한다. [계획](ResourceEditorAsyncOpenPlan.md)
+
+### [2026-11-20] 플러그인 관리자 레이아웃과 Ninja 빌드 환경
+
+- 실제 플러그인과 모듈·리로드 서비스만 목록에 두고, 확인되지 않은 버전·작성자와 GameModule 제공 기능 설명을 제거했다. 호스트의 빌드·로드 실패와 로드 상태를 배지에 연결하고 서비스의 가짜 로드 배지는 숨겼다.
+- 목록과 상세 사이에 공용 스플리터를 추가하고 선호 폭을 워크스페이스에 저장한다. 카드 이름과 배지를 별도 줄에 배치하며 좁은 폭의 텍스트를 클리핑한다.
+- Ninja 캐시의 `cl.exe`가 상대 이름이면 CMake가 기록한 실제 컴파일러에서 VS 경로, 도구 버전과 아키텍처를 읽는다. 기존 `INCLUDE` 환경이 있으면 그대로 사용하며 탐색 실패는 오류로 남긴다.
+- **사용자 확인:** Visual Studio 디버거를 모두 분리한 뒤 Console 패널의 빌드와 핫 리로드가 완료됐다. 디버거가 연결된 상태에서 발생한 PDB 쓰기 오류는 해결 여부를 확인하지 않았다.
+- **미검증**: Ninja 환경 자동 탐색의 독립 확인, 다른 패널의 빌드·리로드, 상태 표시 및 한·영·UI 배율별 스플리터와 좁은 폭 동작.
+
+### [2026-11-20] 파티클 방출 구간과 잔존 시간 표시
+
+- 방출/이벤트 수신 구간의 양끝을 다이아몬드로 표시하고 유한 방출 뒤 입자 최대 수명의 예상 꼬리를 읽기 전용으로 그린다. 끝없는 방출에는 끝 다이아몬드를 그리지 않으며, 전체 방출 제한과 프리뷰 종료 이후의 빗금 및 설명을 구분한다.
+- 표시 범위만 늘리고 저장된 이펙트 길이·프리뷰 재생 종료·런타임 방출 동작은 변경하지 않았다. 충돌이나 방출 간격에 따라 꼬리는 실제 생존 시간이 아닌 상한 추정이다.
+- **미검증**: 빌드·로캘 생성·CTest·Editor 실행, 한·영 문구 및 트랙 드래그와 좁은 폭 실환경 확인.
+
+### [2026-11-20] 파티클 편집기 Transport Bar 배치
+
+- 재생·프레임 이동·루프·배속·시간/프레임·줌 초기화·활성 파티클 수를 Quick Access에서 트랙 바로 위 Transport Bar로 옮겼다. Quick Access는 파일·저장·Undo/Redo와 카메라 포커스를 유지한다.
+- **미검증**: 정적 코드 검토만 수행했다. 빌드·CTest·Editor 실행, 표준/좁은 도킹 폭에서의 시각 확인은 프로젝트 작업 지침에 따라 사용자가 실행한다.
 
 ### [2026-11-20] 스프라이트 편집기 오른쪽 패널 정리
 
@@ -28,6 +86,23 @@ This document tracks implementation details, architectural decisions, and techni
 - 슬라이스 저장 시 기존 스프라이트별 PPU와 직접 연 파일 형식을 보존한다. 기존 Archive의 파일별 임시 파일·교체 경로를 사용하며 다중 파일 전체는 트랜잭션이 아니다. 슬라이싱 결과가 없을 때 기존 슬라이스를 유지한다.
 - 기존 두 창의 열림 상태는 통합 창으로 복원하되 기존 텍스처 창의 도킹 위치는 이관하지 않는다. 관련 제약과 미검증 항목은 [통합 계획](TextureSpriteEditorIntegrationPlan.md)을 따른다.
 - **검증 상태**: 빌드·CTest·로캘 생성·실제 에디터 검증은 실행하지 않았다.
+
+### [2026-11-20] Composite VFX Phase 5 / 후보 4 문서·코드 현황 동기화
+
+- **문서 정합성 동기화**:
+  - [Docs/DevelopmentPriorities.md](DevelopmentPriorities.md)(트랙 F 요약, 11.6절 후보 4번)와 [Docs/CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)(상단 상태, 9.7절, 9.9절)를 최신 코드 및 연계 계획과 일치하도록 갱신했다.
+  - 이미 2026-11-19 반영된 Phase 5 Step 3(`CurveEditorModal`), `CompositeVFXSystem` Geometry/ForwardTransparent 블렌드 필터 교정(허공 흙갈색 탁화 해소), `forwardParticlePS.hlsl` 정면 알파 완화(`0.90`), `VFXEditorPanel::ToggleAirMode()`, `ActionTimelineSystem`/`AnimationTimelinePanel`의 `SpawnCompositeVFX` 본 소켓 스폰·실시간 추적(`SocketAttachmentComponent`)·지속형 해제(`ActionVFXHoldComponent`)·`ActionTimelineEvents` 기본 구현을 기구현 현황으로 구분했다.
+  - 9.9절의 공중 모드 가상 환경광 보정이 2026-11-19 정정으로 철회된 상태를 상단 요약·후보 4번·9.9절 목록에 일관되게 반영하고, 후보 4번의 실제 잔여 작업을 [Docs/AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 2~5절(편집 씬 격리, Animator 복원 수명, 프리뷰↔런타임 Notify/소켓 평가 순서 단일화, `m_ModelPath` 가상 URI 정규화, 대표 액션 PIE·독립 Client 통합 검증) 및 선택적 순수 Additive(`One/One`) 분리 검토로 재정의했다.
+- **검증 상태**: 문서 정적 대조 및 `git diff --check` 확인. 코드 변경 없음(빌드·테스트·커밋 미실행).
+
+### [2026-11-20] Candidate 4 액션 타임라인 통합 구현 이어서 진행
+
+- **BaselineVerification 예시 에셋**: Test의 `Hit_A` 클립을 사용하는 비루프 타임라인과 0.4초 소켓 Composite VFX/`OnAttackHit` 이벤트, 짧은 고속 확산 Spark 이미터, 한 상태 Idle Animator Controller를 추가하고 씬의 Rogue에 연결했다. 이미터는 낮은 방출률과 지연 Burst를 피하고, 이미 생성된 파티클이 수명까지 시뮬레이션되도록 VFX 트랙을 설정했다. 이 샘플은 에디터·PIE의 재생, 소켓 효과, Animator 복귀를 빠르게 확인하며 입력 및 이벤트 구독 구현을 대체하지 않는다.
+- **샘플 검증 상태**: 네 에셋과 씬 JSON 파싱, 참조·바인딩·클립 길이 점검, `git diff --check`를 통과했다. 씬 로드, 에셋 해결, 빌드·CTest·Editor·PIE·Client 실행은 사용자가 검증해야 한다.
+- **편집 씬 격리·복원 수명**: `ActionTimelineSystem`을 Gameplay 페이즈에 한정하고 인스펙터 재생을 독립 타임라인 프리뷰로 연결했다. Animator에 저장된 원래 클립·시각·재생 상태를 소유권 serial로 보호하며 정상 종료·정지·교체·비활성화·타임라인 컴포넌트 제거 시 복원한다. Animator를 다른 타임라인이 인계받으면 이전 세션을 중단하고 지속형 VFX를 해제한다.
+- **프리뷰·런타임 일치**: 두 실행 경로가 `ActionTimelinePlayback`의 시간 진행과 Notify 교차 계산을 공유한다. 포즈·스키닝 행렬 갱신 후 Notify를 검사하며 시작·경계·다중 루프 사례용 `ActionTimelinePlaybackCheck`를 CTest에 추가했다.
+- **참조 정규화·진단**: 타임라인 모델 경로를 저장 시 가상 URI로 정규화하고 이전 경로는 읽기 호환한다. 모델·클립·스켈레톤·소켓·범위 진단을 보강했으며, 기본 스프라이트·파티클 머티리얼은 기존 셰이더 논리 키를 보존하면서 `GBufferSpriteVS` 바이너리 `AssetPath`를 `Engine://`로 정규화했다.
+- **검증 및 미완료**: 계획 문서에 코드 반영 상태와 패널·편집 씬 격리·복원 수명·Notify 경계·PIE·독립 Windows Release Client 수동 체크리스트를 갱신했다. `git diff --check`는 실행했으나 빌드·CTest·로캘 생성·Editor·PIE·Client는 실행하지 않았다. 사용자 실행 명령은 [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 7절에 있다.
 
 ### [2026-11-20] 텍스처·스프라이트 편집기 통합 계획
 
@@ -99,6 +174,14 @@ ctest --preset x64-debug --output-on-failure -R "AssetReferenceCheck|Localizatio
 cmake --build --preset x64-debug --config Debug --target Editor AssetReferenceCheck AuditLocalization
 ctest --preset x64-debug --output-on-failure -R "AssetReferenceCheck|LocalizationAuditUtility"
 ```
+
+### [2026-11-20] 텍스처 압축 결과 재사용 및 워커 제한 조정
+
+- 사용자가 Ranger 모델의 텍스처 베이킹 실패를 보고했다. 같은 PNG의 워커 단독 실행은 성공했고 `.bamtex`와 DDS의 기록 시각 차이는 약 5분 21초였다. 기존 에디터의 3분 단계 제한에 걸렸을 가능성이 높지만 에디터 당시의 정확한 실패 원인은 확인되지 않았다.
+- 워커와 `TextureImporter` 폴백은 압축 바이트와 헤더를 한 번만 얻어 `.bamtex`와 DDS에 재사용한다. DDS 재구성은 단일 2D 이미지의 포맷·크기·밉 레이아웃을 검사하고 DirectXTex의 DDS 기록을 사용한다. 압축 캐시는 기존 형식을 유지하되 메타데이터와 잘린 데이터는 재생성하고 고유 임시 파일을 통해 교체한다. 비압축 데이터의 포맷 정합성 변경에 따라 해당 캐시 키만 변경했다.
+- 텍스처 워커의 진행 단계별 무응답 제한을 임시로 1시간으로 조정했다. 이는 관찰된 5분대 작업보다 길지만 실측으로 정해진 최종 기준이 아니며, 큰 텍스처의 완료를 보장하지 않는다. 모델 워커의 3분 제한은 유지한다. 텍스처 단계별 경과 시간과 실패 종류를 로그에 구분한다.
+- `AssetWorkerTextureCheck`는 BC7 sRGB·BC5·RGBA, 홀수 크기·밉맵, DDS와 `.bamtex`의 메타데이터 및 바이트 비교, 캐시 적중과 잘린 캐시 복구를 검사하도록 확장했다.
+- **검증 상태**: 코드와 테스트는 작성했으나 프로젝트 지침에 따라 빌드·테스트를 실행하지 않았다. Ranger 재임포트, 긴 처리의 타임아웃·취소, 출력 복구, 에디터 폴백, 대형 텍스처 및 성능 실측은 사용자 확인이 필요하다. 독립 이미지 드롭의 동기 경로 및 비동기 대상 경로 문제는 이번 변경 범위에 포함하지 않았다.
 
 ### BamAssetWorker 텍스처 변환 접근 위반 대응
 
@@ -7112,3 +7195,15 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - Material과 독립 Prefab은 메모리의 아카이브로 복원한다. Model·Sprite·Sprite Animation은 각 문서의 편집 데이터를 복사해 이력에 보관한다. Material의 파일 경로가 외부에서 변경될 수 있는 에셋 이동이 확정되면 이력을 다시 시작한다. Sprite Animation ABI V3의 DLL 리로드는 초안과 Dirty를 보존하고 이력을 초기화한다.
 - 파티클·VFX·애니메이션 타임라인은 공통 이력 UI를 사용한다. VFX 커브 편집도 실제 값이 바뀐 확인 동작을 이력 한 건으로 기록한다.
 - 공통 이력의 편집 묶음·저장 기준점·Redo 분기·실패한 복원에 대한 `EditorHistoryCheck` 사례를 추가했다. 정적 검사만 수행했으며 빌드·CTest·실환경 검증은 사용자 실행 전이다.
+
+### [2026-11-20] 독립 도구 패널 V2 플러그인 이전
+
+- Console, Metrics, Network Profiler를 Editor 실행 파일의 정적 패널 등록에서 각각의 개발용 DLL로 옮겼다. CMake는 해당 패널 소스를 Editor 실행 파일에서 제외하고 플러그인 타깃을 Editor 빌드 의존성으로 추가한다. 개발 목록의 `auto` 메타데이터로 Editor 시작 시 세 DLL을 자동 로드해 항상 사용 가능하게 했다.
+- V2 패널 API는 인스턴스 수명, Update/Draw, 상태 스냅샷, Workspace 설정, 초기 창 크기·플래그를 정의한다. 정적 링크된 패널 DLL은 Draw 진입 시 호스트의 `ImGuiContext`와 allocator를 바인딩하며, 호스트는 우클릭 입력과 고정 폭 Metrics DTO를 제공한다. 기존 패널 이름과 ImGui 창 ID를 보존해 열린 상태·도킹 위치를 이어받도록 했다.
+- Console은 로그·필터·세부 높이를, Metrics는 선택 도메인·일시정지를, Network Profiler는 핑 이력·연결 입력·속도 기준값을 리로드 상태에 담는다. Metrics의 Editor `AssetManager` 접근은 DLL에서 직접 참조하지 않고 호스트 콜백으로 전달한다.
+- **미검증**: 프로젝트의 학습 지침에 따라 빌드·CTest·Editor 실행을 수행하지 않았다. V2 DLL 컴파일, 시작 시 자동 로드, 저장 중 리로드와 기존 상태 복원은 사용자 검증이 필요하다.
+
+### [2026-11-20] 독립 패널 DLL의 ImGui 컨텍스트 바인딩
+
+- Editor와 각 패널 DLL이 정적 `imgui::imgui`를 별도로 링크해 ImGui 전역 상태가 분리되는 문제를 확인했다. V2 Draw 문맥에 호스트 `ImGuiContext`와 allocator 함수를 추가하고 Console·Metrics·Network Profiler DLL의 Draw 진입점에서 이를 바인딩하도록 했다. 구현은 기존 Sprite Animation 플러그인의 DLL 경계 처리 패턴을 따른다.
+- **미검증**: 사용자가 제공한 Console 크래시 스택의 `ImGui::CalcTextSize` 접근 위반은 코드상 원인에 대응했으나, 수정 후 빌드와 Editor 실환경 재검증은 아직 수행하지 않았다.

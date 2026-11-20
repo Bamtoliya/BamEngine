@@ -592,14 +592,14 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - Phase 3 [완료]: `HotReloadManager` 4대 엔진 매니저(`ModuleHotReloadManager`, `ModuleBuildManager`, `ShaderHotReloadManager`, `AssetHotReloadManager`) 및 에디터 패널 플러그인 연동 (`Reload`, `Rebuild & Reload`, `Load / Unload`, `Auto-Reload`).
   - Phase 4 [완료]: 비동기 컴파일 콘솔 전문 스트리밍, 에러/경고 하이라이트 및 `[Retry Compile]` 에러 복구 파이프라인, 메뉴바(`Edit -> Plugins`, `Window -> Panels -> Diagnostics -> Plugin Manager`) 및 로캘 키 40여 종 연동 완료.
   - 공용 패널과 Builtin·Custom 수동 활성화 구현을 반영했다. [설치형 실행 확인](EditorPluginArchitecturePlan.md#사용자-실행-검증) 뒤 생성 템플릿과 설치형 배포를 진행한다. Client 작업은 빌드·패키징 단계에서 재개한다.
-- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15 / Phase 5 환경 고도화 계획 수립]**:
+- **트랙 F (계층형 통합 비주얼 이펙트 시스템 — [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)) [Phase 1~4 완료 / Phase 5 Step 1~3·블렌드 패스 교정·Air Mode 반영 / Step 4 통합·검증 잔여: 2026-11-20]**:
   - 배경: 기존 파티클(입자) 중심 시스템에서 스프라이트 플립북, 메쉬 이펙트(마법진, 충격파 링, UV 스크롤), 순간 조명 섬광, 사운드, 트레일, 데칼, 카메라 셰이크를 타임라인 시간축으로 오케스트레이션하는 계층형 통합 아키텍처 채택.
   - Phase 1 [완료]: `CompositeEffect` 에셋(JSON 아카이브), `CompositeVFXComponent` 및 `CompositeVFXSystem` 런타임 오케스트레이터, 스프라이트 플립북·파티클·라이트 섬광 연동, `VFXEditorPanel` 저작 도구 구축 완료.
   - Phase 2 [완료]: 메쉬 이펙트(`VFXMeshTrack`) 런타임 렌더링 제출(`ForwardTransparentPass`), 스케일/회전 보간 및 UV 스크롤/컬러 페이드 연동(`SpriteDrawCommand` / `SpriteUBO`), 사운드 트랙(`VFXSoundTrack`) 1회성 정밀 타이밍 트리거 연결 완료.
   - Phase 3 [완료]: 트레일 / 리본(`VFXTrailTrack`) 정점 히스토리 수집과 테이퍼링. 2026-11-17 동적 정점 버퍼 기반 연속 Triangle Strip으로 전환(곡선 이음새 해소), 정렬 모드(A-B 축/카메라 정면) 추가. SDL GPU 대체 경로는 미검증.
   - Phase 4 [완료]: 지면 투영 데칼(`VFXDecalTrack`) 알파 페이드아웃 투영 및 다축 사인파 감쇠 카메라 셰이크(`VFXCameraShakeTrack`), `VFXEditorPanel` 트랙 인스펙터 편집 전면 지원 완료.
   - 후보 B 실환경 검증 & 안정화 [완료: 2026-11-15]: `acceptsSceneSubmissions` 가드를 통한 메인 씬 스카이박스 누출 차단, 타임라인 앞뒤 여백(-0.25s/+1.0s) 및 10배 줌아웃(0.1x)·패닝 확장, 트레일 검증용 프리뷰 모션(원형 궤도) 토글, D3D12 `MISMATCHINGCLEARVALUE` 예외 중단 해제 및 RTV null 가드 크래시 해결, 3단계 배경 프리셋(스튜디오 18% 회색/암실/주간) 및 스튜디오 조명 배율 연동, 차콜 PBR 바닥 슬래브(18% 반사율 매트 머티리얼 인스턴스) 적용으로 바닥 자체 블룸 제거 및 플래시 반사 극대화 완료.
-  - Phase 5 [진행 중 / Step 1~2 완료: 2026-11-17]: 상용 엔진(Niagara/VFX Graph) 수준의 환경 상호작용(벽 코너/장애물/더미 마네킹 프리셋, 바람/외력 시뮬레이터), 48m 지면 평면화, 15cm Depth Fade 및 프레넬 림(Step 1 완료). `FloatCurve` (2D 3차 베지어 에르미트 스플라인) 엔진 코어 신설, 메쉬 스케일/알파 및 조도 커브 런타임 샘플링(Ease-Out 폭발 팽창 펀치감 실현), 인스펙터 리플렉션 속성 행 및 프리셋 지원, `EffectTimelineView` 트랙 바 내부 실시간 베지어 곡선 실루엣 및 라벨 뱃지 인라인 렌더링 검증 완료(Step 2 완료). 차기 액션 타임라인 소켓 연동(Step 3) 계획 수립.
+  - Phase 5 [진행 중 / Step 1~3·패스 교정·Air Mode 반영, Step 4 통합·검증 잔여: 2026-11-20]: Step 1(2026-11-16) 3D 기즈모(`GizmoHelper`), 환경 장애물 4종·바람/중력 외력, 48m `PlaneMesh`, 15cm Depth Fade·프레넬 림 코드 반영(기즈모·외력·Depth Fade 실환경 실행 기록 미비). Step 2(2026-11-17) `FloatCurve` (2D 3차 베지어 에르미트 스플라인), Mesh/Light 커브 샘플링, `EffectTimelineView` 인라인 커브 프리뷰 완료. Step 3(2026-11-19) `CurveEditorModal` 2D 베지어 커브 팝업 모달 및 `VFXEditorPanel` 연동 완료. 2026-11-19 추가 반영: `CompositeVFXSystem` Geometry/ForwardTransparent 블렌드 필터 교정(허공 흙갈색 탁화 원인 해소, 프리뷰·씬 확인 완료), `VFXEditorPanel::ToggleAirMode()` 공중 프리뷰 토글, `ActionTimelineSystem`/`AnimationTimelinePanel`의 `SpawnCompositeVFX` 본 소켓 스폰·추적(`SocketAttachmentComponent`)·지속형 해제(`ActionVFXHoldComponent`)·`ActionTimelineEvents` 기본 구현. 잔여(Step 4 및 [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 2~5절): 편집 씬 격리, 컴포넌트 제거 시 Animator 복원, 프리뷰↔런타임 Notify/소켓 평가 순서 단일화, `m_ModelPath` 가상 URI 정규화, PIE·독립 Client 대표 액션 통합 검증, 선택적 순수 Additive(`One/One`) 분리 검토.
 - **트랙 G (비정상 종료 진단 및 에디터 작업 복원 시스템 — [CrashHandlingAndRecoveryPlan.md](CrashHandlingAndRecoveryPlan.md)) [Phase 1~4 구현 및 실환경 검증 완료: 2026-11-15]**:
   - Phase 1 [완료]: Windows SEH / CRT 예외 가로채기 핸들러(`CrashHandler`), `MiniDumpWriteDump` 기반 `.dmp` 미니덤프 생성, 크래시 순간 `Logger::Flush()` 강제 디스크 동기화 파이프라인 구축.
   - Phase 2 [완료]: `StackWalk64` / `SymFromAddr` 기반 심볼릭 콜스택 추출 및 타임스탬프 기반 구조화된 `.crash.json` 진단 리포트 자동 생성.
@@ -662,14 +662,19 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - 45도/60도 급경사 끝단 $\to$ 평지 진입 시 전환 프레임 수직 스냅 속도 제한(Vertical Snap Clamping) 및 법선 보간을 통한 단차 '탁' 충격 완화(Soft Landing).
    - **관련 파일**: `Engine/Source/Physics/Private/KinematicCharacterSystem.cpp`, `Engine/Source/Physics/Private/Collision.cpp`, `Engine/examples/KinematicCharacterCheck.cpp`.
 
-4. **후보 4 (비주얼 이펙트 / 연출): Composite VFX Phase 5 Step 3 본 소켓 연동 & Additive 가산 머티리얼 표준화 (기존 후보 B)**
-   - **기준 문서**: [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)
-   - **목표**: 상용 엔진(Niagara) 수준의 연출 완성도를 위해 캐릭터 공격 액션 타임라인과 복합 VFX를 본 소켓 단위로 연동하고 발광 가산 머티리얼 표준화.
-   - **세부 내용**:
-     - `ActionTimelineComponent` 노티파이 트랙에서 스켈레탈 메시의 본 소켓(무기 끝, 손목 등)을 타깃으로 하는 `CompositeVFXComponent` 실시간 스폰 및 트랜스폼 추적 연동.
-     - `ForwardTransparentPass`의 Additive 가산 블렌딩 셰이더 및 머티리얼 플래그 연동으로 칠흑 배경 결합 시 색상 탁화 방지.
-     - `VFXEditorPanel` 뷰포트 암실 공중(Air Mode) 프리뷰 토글 지원.
-   - **관련 파일**: `Engine/Source/VFX/`, `Engine/Source/Animation/Timeline/`, `Editor/Source/ImGui/TimelinePanel/`, `Editor/Source/ImGui/ResourceEditor/Private/VFXEditorPanel.cpp`.
+4. **후보 4 (비주얼 이펙트 / 액션 파이프라인): Composite VFX Phase 5 Step 4 & 액션 타임라인-소켓 VFX 통합 완성 (기존 후보 B)**
+   - **기준 문서**: [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md)
+   - **목표**: 이미 기본 구현된 본 소켓 VFX 스폰·블렌드 패스 교정·공중 프리뷰를 토대로, 편집 씬 오염·Animator 미복원·프리뷰/런타임 불일치·절대 경로 참조 결함을 해소하고 대표 액션(입력 → 클립 → 무기 소켓 VFX/사운드 → 판정 1회 → 이동 복귀)의 PIE·독립 Client 통합 검증을 완료한다.
+   - **기구현 현황 (2026-11-19 반영, 중복 구현 제외)**:
+     - Phase 5 Step 3 `CurveEditorModal` 2D 커브 팝업 모달 완료.
+     - `ActionTimelineAsset`/`ActionTimelineSystem`/`AnimationTimelinePanel`의 `SpawnCompositeVFX` 본 소켓 스폰·`SocketAttachmentComponent` 실시간 추적·지속형 `ActionVFXHoldComponent` 해제·`ActionTimelineEvents` 기본 구현 완료.
+     - `CompositeVFXSystem` Geometry/ForwardTransparent 블렌드 필터 교정(허공 흙갈색 탁화 해소), `forwardParticlePS.hlsl` 정면 알파 완화(`0.90`), `VFXEditorPanel::ToggleAirMode()` 공중 프리뷰 토글 완료(9.9절 가상 환경광 보정은 2026-11-19 정정으로 철회).
+   - **현재 진행 상태 (2026-11-20)**: 1~3단계 코드와 회귀 검사 사례를 반영했다. 빌드·CTest·로캘 생성·PIE·독립 Client 검증은 실행하지 않았으며, 4단계 수동 통합 검증이 남아 있다. 세부 체크리스트와 명령은 [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 5·7절을 따른다.
+     - 1단계: Gameplay 페이즈 분리, 인스펙터 재생의 독립 프리뷰 라우팅, Animator 소유권 기반 복원과 타임라인 컴포넌트 제거 훅을 반영했다.
+     - 2단계: 프리뷰·런타임이 공용 시간/Notify 교차 판정 helper를 사용하고, 포즈 갱신 뒤 Notify를 검사하도록 정렬했다. `ActionTimelinePlaybackCheck`를 추가했지만 실행하지 않았다.
+     - 3단계: 모델 경로 저장 시 가상 URI 정규화, 클립·스켈레톤·소켓·범위 진단, 기본 스프라이트·파티클 머티리얼의 셰이더 URI 정규화를 반영했다.
+     - 4단계: 패널·편집 씬 격리·복원 수명·Notify 경계·PIE·독립 Windows Release Client 수동 확인이 남아 있다. 순수 Additive(`One/One`) 분리와 `ParticleSystem`/`CompositeVFXSystem` 패스 수집 중복 정리는 선택적 후속 검토이며 이번 구현 범위에 포함하지 않았다.
+   - **관련 파일**: `Engine/Source/VFX/Private/CompositeVFXSystem.cpp`, `Engine/Source/Animation/Timeline/`, `Engine/Source/Render/RHI/Public/RHIBlendTypes.h`, `Editor/Source/ImGui/TimelinePanel/Private/AnimationTimelinePanel.cpp`, `Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp`, `Editor/Source/Application/Private/Application.cpp`, `Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp`, `Editor/Source/ImGui/ResourceEditor/Private/VFXEditorPanel.cpp`.
 
 5. **후보 5 (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동 (기존 후보 C)**
    - **기준 문서**: [OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md)
