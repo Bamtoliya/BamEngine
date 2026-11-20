@@ -38,34 +38,33 @@ namespace Editor::NodeEditorUI
 		ed::PinKind Kind = ed::PinKind::Input;
 		float CenterY = 0.0f;
 		ImU32 Color = IM_COL32(220, 220, 220, 255);
-		bool Connected = true;
 		BorderSide Side = BorderSide::Left;
 
 		BorderPin() = default;
-		BorderPin(ed::PinId pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected = true)
-			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Connected(connected),
+		BorderPin(ed::PinId pinId, ed::PinKind kind, float centerY, ImU32 color)
+			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color),
 			  Side(kind == ed::PinKind::Input ? BorderSide::Left : BorderSide::Right) {}
-		BorderPin(ed::PinId pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected, BorderSide side)
-			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Connected(connected), Side(side) {}
+		BorderPin(ed::PinId pinId, ed::PinKind kind, float centerY, ImU32 color, BorderSide side)
+			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Side(side) {}
 
-		BorderPin(int pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected = true)
-			: PinId(static_cast<uintptr_t>(pinId)), Kind(kind), CenterY(centerY), Color(color), Connected(connected),
+		BorderPin(int pinId, ed::PinKind kind, float centerY, ImU32 color)
+			: PinId(static_cast<uintptr_t>(pinId)), Kind(kind), CenterY(centerY), Color(color),
 			  Side(kind == ed::PinKind::Input ? BorderSide::Left : BorderSide::Right) {}
-		BorderPin(int pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected, BorderSide side)
-			: PinId(static_cast<uintptr_t>(pinId)), Kind(kind), CenterY(centerY), Color(color), Connected(connected), Side(side) {}
+		BorderPin(int pinId, ed::PinKind kind, float centerY, ImU32 color, BorderSide side)
+			: PinId(static_cast<uintptr_t>(pinId)), Kind(kind), CenterY(centerY), Color(color), Side(side) {}
 
-		BorderPin(uintptr_t pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected = true)
-			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Connected(connected),
+		BorderPin(uintptr_t pinId, ed::PinKind kind, float centerY, ImU32 color)
+			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color),
 			  Side(kind == ed::PinKind::Input ? BorderSide::Left : BorderSide::Right) {}
-		BorderPin(uintptr_t pinId, ed::PinKind kind, float centerY, ImU32 color, bool connected, BorderSide side)
-			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Connected(connected), Side(side) {}
+		BorderPin(uintptr_t pinId, ed::PinKind kind, float centerY, ImU32 color, BorderSide side)
+			: PinId(pinId), Kind(kind), CenterY(centerY), Color(color), Side(side) {}
 	};
 
 	// 노드 테두리 좌/우에 걸쳐지는 원형 핀들을 일괄 렌더링 (ed::EndNode() 직후 호출)
 	void DrawNodeBorderPins(const ImVec2& nodeMin, const ImVec2& nodeMax, const std::vector<BorderPin>& pins);
 
 	// 단일 원형 핀 렌더링
-	void DrawCirclePin(ed::PinId pinId, ed::PinKind kind, const ImVec2& center, float radius, ImU32 pinColor, bool connected = true);
+	void DrawCirclePin(ed::PinId pinId, ed::PinKind kind, const ImVec2& center, float radius, ImU32 pinColor);
 
 	// 아이콘 핀 (FontAwesome 화살표 / 실행 재생 아이콘 형태의 핀)
 	void DrawIconPin(ed::PinId pinId, ed::PinKind kind, const char* icon, const ImVec4& color, const ImVec2& pivot = ImVec2(0.5f, 0.5f));

@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-21] 머티리얼 셰이더 그래프 노드 표시 정합
+
+- `MaterialEditorCanvas`의 일반 노드를 Graph Scripter와 같은 헤더·좌우 핀 배치로 정리했다. 140px 최소 폭과 노드·핀 이름의 로캘 조회를 GraphPanel과 맞췄다. 핀은 기존 `NodeEditorUI::DrawNodeBorderPins`를 재사용하며, 데이터 입력값 편집과 링크 연결 의미는 유지한다. 주석 박스는 GraphPanel의 그룹 스타일과 크기 저장을 사용하고, 리라우트는 투명한 단일 원형 핀으로 맞췄다.
+- 공용 핀 렌더러의 연결 상태별 반투명 처리를 제거해 Graph, Material, Animator Graph의 핀 색을 모두 불투명하게 통일했다. Animator Graph는 새 공용 헬퍼 API에 맞게 호출부만 갱신했으며 시각·동작은 바꾸지 않았다. 상세 범위는 [Material Shader Graph 계획](MaterialShaderGraphIntegrationPlan.md#53-그래프-노드-표시-정합)과 [GraphPanel](GraphPanel.md)을 따른다.
+- **정적 확인만 수행:** 공용 렌더 헬퍼 호출 및 해당 변경 diff를 검토했다. 저장소 학습 지침에 따라 빌드·CTest·Editor 시각 확인은 수행하지 않았으며, 노드 드래그/연결, 핀 히트영역, 주석 크기 저장, 좁은 폭·배율별 화면 확인은 사용자 검증이 필요하다.
+
 ### [2026-11-20] 플러그인 관리자 툴바와 패키지 경로 표시
 
 - 상단과 선택 항목 및 빌드 콘솔의 동작을 공용 아이콘 툴바로 정리하고, 상단 경로·SDK 설명을 정보 팝업으로 옮겼다.

@@ -166,6 +166,10 @@ GraphPanel.TargetMaterial,"Target Material","대상 머티리얼","현재 그래
 
 ---
 
+### 5.3 그래프 노드 표시 정합
+
+`MaterialEditorCanvas`는 `NodeEditorUI::CreateDefaultEditor`와 `BeginNodeHeader`를 사용하고, 입력·출력 핀은 공용 `DrawNodeBorderPins` 규격으로 노드 경계에 표시한다. 입력과 출력은 GraphPanel과 같은 좌·우 열 배치를 사용하며, 셰이더 데이터 노드는 같은 헤더 팔레트와 140px 최소 폭을 따른다. 노드·핀 표시 이름은 GraphPanel과 같은 로캘 조회 경로를 사용한다. 모든 그래프 에디터의 핀은 연결 여부와 무관하게 불투명한 타입 색으로 표시하고, 연결 상태는 와이어로 구분한다. 주석 박스와 리라우트도 GraphPanel의 그룹·투명 핀 스타일에 맞춘다. 주석 박스 크기는 그래프 입력값에 저장하고 문서 이력에 반영한다. Animator Graph는 시각 규격 정합을 위한 공용 헬퍼 호출만 조정하며, 노드 구조와 동작은 변경하지 않는다.
+
 ## 6. 검증 및 테스트 계획
 
 ### 6.1 정적 분석 및 안정성 검증

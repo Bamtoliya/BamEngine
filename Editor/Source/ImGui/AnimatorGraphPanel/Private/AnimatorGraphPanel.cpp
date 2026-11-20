@@ -878,8 +878,8 @@ void AnimatorGraphPanel::DrawCanvas()
 
 		// ★ EndNode() 이전에 좌/우 양측 출력 핀 선언
 		NodeEditorUI::DrawNodeBorderPins(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), {
-			{ 11, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinEntry, true, NodeEditorUI::BorderSide::Left },
-			{ 10, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinEntry, true, NodeEditorUI::BorderSide::Right }
+			{ 11, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinEntry, NodeEditorUI::BorderSide::Left },
+			{ 10, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinEntry, NodeEditorUI::BorderSide::Right }
 		});
 
 		ImGui::PopID();
@@ -907,8 +907,8 @@ void AnimatorGraphPanel::DrawCanvas()
 
 		// ★ EndNode() 이전에 좌/우 양측 출력 핀 선언
 		NodeEditorUI::DrawNodeBorderPins(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), {
-			{ 21, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinAnyState, true, NodeEditorUI::BorderSide::Left },
-			{ 20, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinAnyState, true, NodeEditorUI::BorderSide::Right }
+			{ 21, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinAnyState, NodeEditorUI::BorderSide::Left },
+			{ 20, ed::PinKind::Output, centerY, NodeEditorUI::Colors::PinAnyState, NodeEditorUI::BorderSide::Right }
 		});
 
 		ImGui::PopID();
@@ -974,10 +974,10 @@ void AnimatorGraphPanel::DrawCanvas()
 		// LeftOut: 1000 + i*4 + 2, RightOut: 1000 + i*4 + 3
 		const uintptr_t pinBase = 1000 + static_cast<uintptr_t>(i * 4);
 		NodeEditorUI::DrawNodeBorderPins(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), {
-			{ pinBase + 0, ed::PinKind::Input, inCenterY, NodeEditorUI::Colors::PinInput, true, NodeEditorUI::BorderSide::Left },
-			{ pinBase + 1, ed::PinKind::Input, inCenterY, NodeEditorUI::Colors::PinInput, true, NodeEditorUI::BorderSide::Right },
-			{ pinBase + 2, ed::PinKind::Output, outCenterY, NodeEditorUI::Colors::PinOutput, true, NodeEditorUI::BorderSide::Left },
-			{ pinBase + 3, ed::PinKind::Output, outCenterY, NodeEditorUI::Colors::PinOutput, true, NodeEditorUI::BorderSide::Right }
+			{ pinBase + 0, ed::PinKind::Input, inCenterY, NodeEditorUI::Colors::PinInput, NodeEditorUI::BorderSide::Left },
+			{ pinBase + 1, ed::PinKind::Input, inCenterY, NodeEditorUI::Colors::PinInput, NodeEditorUI::BorderSide::Right },
+			{ pinBase + 2, ed::PinKind::Output, outCenterY, NodeEditorUI::Colors::PinOutput, NodeEditorUI::BorderSide::Left },
+			{ pinBase + 3, ed::PinKind::Output, outCenterY, NodeEditorUI::Colors::PinOutput, NodeEditorUI::BorderSide::Right }
 		});
 
 		ImGui::PopID();

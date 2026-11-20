@@ -110,22 +110,13 @@ namespace Editor::NodeEditorUI
 
 			ed::PopStyleVar(1);
 
-			if (pin.Connected)
-			{
-				drawList->AddCircleFilled(center, radius, pin.Color);
-			}
-			else
-			{
-				ImVec4 c = ImGui::ColorConvertU32ToFloat4(pin.Color);
-				c.w *= 0.35f;
-				drawList->AddCircleFilled(center, radius, ImGui::ColorConvertFloat4ToU32(c));
-			}
+			drawList->AddCircleFilled(center, radius, pin.Color);
 			// 1.8px 두께의 선명한 어두운 외곽선
 			drawList->AddCircle(center, radius, IM_COL32(20, 20, 24, 255), 0, 1.8f);
 		}
 	}
 
-	void DrawCirclePin(ed::PinId pinId, ed::PinKind kind, const ImVec2& center, float radius, ImU32 pinColor, bool connected)
+	void DrawCirclePin(ed::PinId pinId, ed::PinKind kind, const ImVec2& center, float radius, ImU32 pinColor)
 	{
 		const float hitExtent = radius + 3.0f;
 		ed::BeginPin(pinId, kind);
@@ -134,16 +125,7 @@ namespace Editor::NodeEditorUI
 		ed::EndPin();
 
 		auto* drawList = ImGui::GetWindowDrawList();
-		if (connected)
-		{
-			drawList->AddCircleFilled(center, radius, pinColor);
-		}
-		else
-		{
-			ImVec4 c = ImGui::ColorConvertU32ToFloat4(pinColor);
-			c.w *= 0.35f;
-			drawList->AddCircleFilled(center, radius, ImGui::ColorConvertFloat4ToU32(c));
-		}
+		drawList->AddCircleFilled(center, radius, pinColor);
 		drawList->AddCircle(center, radius, IM_COL32(20, 20, 24, 255), 0, 1.5f);
 	}
 

@@ -10,6 +10,7 @@
 #include <imgui_node_editor.h>
 #include <imgui_internal.h>
 #include <algorithm>
+#include <cmath>
 
 namespace ed = ax::NodeEditor;
 
@@ -229,73 +230,135 @@ namespace Editor
 		const auto* schema = m_GraphRegistry.Find(node.Type);
 		if (!schema) return;
 
-		ed::BeginNode(ed::NodeId(node.Id));
-		ImGui::PushID(static_cast<int>(node.Id));
-
-		// 1. 노드 타이틀 및 헤더. 헤더 배경은 노드 배경 드로우리스트에 그리는데, 이 목록은 ed::EndNode() 뒤에만 쓸 수 있다
-		// (노드를 만드는 동안에는 드로우리스트 분할기가 바뀌어 있어 라이브러리가 assert로 막는다). 여기서는 높이만 기록한다.
 		const bool isMaterialOutput = (node.Type == "Shader.MaterialOutput");
-		const ImU32 headerColor = isMaterialOutput ? NodeEditorUI::Colors::HeaderFunction : NodeEditorUI::Colors::HeaderDefault;
-		const std::string title = isMaterialOutput ? LOCAL("ResourceType.Material") : (schema->DisplayName.empty() ? node.Type : schema->DisplayName);
-		const float headerBottom = NodeEditorUI::BeginNodeHeader(title.c_str(), 160.0f);
-
-		ImGui::Spacing();
-
-		// 2. 핀 분류 수집
+		auto& localization = LocalizationManager::Get();
+		const std::string title = isMaterialOutput
+			? LOCAL("ResourceType.Material")
+			: (schema->DisplayName.empty() ? node.Type : localization.GetTextForDisplay(schema->DisplayName));
 		std::vector<const Engine::GraphPin*> inputs;
 		std::vector<const Engine::GraphPin*> outputs;
+		bool hasExecutionPin = false;
 		for (const auto& pin : schema->Pins)
 		{
-			if (pin.Direction == Engine::EGraphPinDirection::Input) inputs.push_back(&pin);
-			else if (pin.Direction == Engine::EGraphPinDirection::Output) outputs.push_back(&pin);
+			hasExecutionPin |= pin.Type == Engine::EGraphPinType::Execution;
+			if (pin.Direction == Engine::EGraphPinDirection::Input)
+				inputs.push_back(&pin);
+			else if (pin.Direction == Engine::EGraphPinDirection::Output)
+				outputs.push_back(&pin);
 		}
 
-		// 3. 핀: 입력 열과 출력 열을 각각 그룹으로 그리고 나란히 둔다.
-		// 노드 안에는 가용 폭이 정해져 있지 않으므로 GetContentRegionAvail()로 오른쪽 정렬하면 노드가 비정상적으로 넓어진다.
 		const auto& links = m_ShaderGraph.Data.GetLinks();
-		ImGui::BeginGroup();
+		const auto isConnected = [&](const Engine::GraphPin& pin)
+		{
+			return std::any_of(links.begin(), links.end(),
+				[&](const auto& link) { return link.To.Node == node.Id && link.To.Pin == pin.Key; });
+		};
+		const auto hasValueEditor = [](Engine::EGraphPinType type)
+		{
+			switch (type)
+			{
+			case Engine::EGraphPinType::Bool:
+			case Engine::EGraphPinType::Float:
+			case Engine::EGraphPinType::Float2:
+			case Engine::EGraphPinType::Float3:
+			case Engine::EGraphPinType::Float4:
+			case Engine::EGraphPinType::String:
+				return true;
+			default:
+				return false;
+			}
+		};
+
+		constexpr float pinIconWidth = 18.0f;
+		float maxInputWidth = 0.0f;
 		for (const auto* pin : inputs)
 		{
-			ed::BeginPin(ed::PinId(FindPinId({ node.Id, pin->Key })), ed::PinKind::Input);
-			ImGui::TextColored(ImColor(PinColor(pin->Type)).Value, ICON_FA_CIRCLE);
-			ed::PinPivotRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-			ed::EndPin();
-
-			ImGui::SameLine();
-			ImGui::TextUnformatted(pin->DisplayName.empty() ? pin->Key.c_str() : pin->DisplayName.c_str());
-
-			// 연결되어 있지 않으면 입력값 에디터 제공
-			const bool isConnected = std::any_of(links.begin(), links.end(),
-				[&](const auto& link) { return link.To.Node == node.Id && link.To.Pin == pin->Key; });
-			if (!isConnected)
-			{
-				ImGui::SameLine();
-				DrawPinValue(node, *pin);
-			}
+			const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+			const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+			float width = ImGui::CalcTextSize(label).x + pinIconWidth + 85.0f;
+			if (hasValueEditor(pin->Type))
+				width = std::max(width, GetMaterialPinValueWidth(pin->Type));
+			maxInputWidth = std::max(maxInputWidth, width);
 		}
-		ImGui::EndGroup();
 
-		if (!outputs.empty())
+		float maxOutputWidth = 0.0f;
+		for (const auto* pin : outputs)
 		{
-			if (!inputs.empty())
-				ImGui::SameLine(0.0f, ImGui::GetFontSize());
+			const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+			const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+			maxOutputWidth = std::max(maxOutputWidth, ImGui::CalcTextSize(label).x + pinIconWidth);
+		}
+
+		const float minNodeWidth = 140.0f;
+		const float titleWidth = ImGui::CalcTextSize(title.c_str()).x + 24.0f;
+		const float targetWidth = std::max({ minNodeWidth, titleWidth, maxInputWidth + maxOutputWidth + 20.0f });
+		const ImU32 headerColor = hasExecutionPin ? NodeEditorUI::Colors::HeaderDefault : NodeEditorUI::Colors::HeaderFunction;
+		std::vector<NodeEditorUI::BorderPin> borderPins;
+
+		ed::BeginNode(ed::NodeId(node.Id));
+		ImGui::PushID(static_cast<int>(node.Id));
+		ImGui::BeginGroup();
+		const float headerBottom = NodeEditorUI::BeginNodeHeader(title.c_str(), targetWidth);
+		ImGui::Spacing();
+
+		float leftColumnWidth = 0.0f;
+		if (maxInputWidth > 0.0f)
+		{
+			ImGui::BeginGroup();
+			for (const auto* pin : inputs)
+			{
+				const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+				const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+				ImGui::TextUnformatted(label);
+
+				if (!pin->LiteralOnly)
+				{
+					const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
+					borderPins.push_back({ FindPinId({ node.Id, pin->Key }), ed::PinKind::Input, centerY, PinColor(pin->Type) });
+				}
+
+				if (!isConnected(*pin))
+					DrawPinValue(node, *pin);
+			}
+			ImGui::EndGroup();
+			leftColumnWidth = ImGui::GetItemRectSize().x;
+		}
+
+		if (maxOutputWidth > 0.0f)
+		{
+			const float availableWidth = std::max(targetWidth, leftColumnWidth + maxOutputWidth + 24.0f);
+			const float rightSpacing = std::max(16.0f, availableWidth - leftColumnWidth - maxOutputWidth);
+			if (leftColumnWidth > 0.0f)
+				ImGui::SameLine(0.0f, rightSpacing);
+			else
+			{
+				ImGui::Dummy(ImVec2(rightSpacing, 1.0f));
+				ImGui::SameLine(0.0f, 0.0f);
+			}
+
 			ImGui::BeginGroup();
 			for (const auto* pin : outputs)
 			{
-				ImGui::TextUnformatted(pin->DisplayName.empty() ? pin->Key.c_str() : pin->DisplayName.c_str());
-				ImGui::SameLine();
-				ed::BeginPin(ed::PinId(FindPinId({ node.Id, pin->Key })), ed::PinKind::Output);
-				ImGui::TextColored(ImColor(PinColor(pin->Type)).Value, ICON_FA_CIRCLE);
-				ed::PinPivotRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-				ed::EndPin();
+				const auto pinText = localization.GetTextForDisplay(pin->DisplayName);
+				const char* label = pin->DisplayName.empty() ? pin->Key.c_str() : pinText.c_str();
+				const float indent = std::max(0.0f, maxOutputWidth - ImGui::CalcTextSize(label).x);
+				if (indent > 0.0f) ImGui::Indent(indent);
+				ImGui::TextUnformatted(label);
+				const float centerY = (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f;
+				borderPins.push_back({ FindPinId({ node.Id, pin->Key }), ed::PinKind::Output,
+					centerY, PinColor(pin->Type) });
+				if (indent > 0.0f) ImGui::Unindent(indent);
 			}
 			ImGui::EndGroup();
 		}
 
+		ImGui::EndGroup();
+		if (!borderPins.empty())
+			NodeEditorUI::DrawNodeBorderPins(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), borderPins);
+
 		ImGui::PopID();
 		ed::EndNode();
 
-		// EndNode 직후의 항목 영역이 노드 전체 영역이다. 공용 규격(NodeEditorUI)으로 헤더 배경을 그린다.
 		NodeEditorUI::DrawNodeHeader(ed::NodeId(node.Id), ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), headerBottom, headerColor);
 	}
 
@@ -580,12 +643,42 @@ namespace Editor
 
 	void MaterialEditor::DrawCommentNode(const Engine::GraphNode& node)
 	{
-		ed::PushStyleColor(ed::StyleColor_NodeBg, ImColor(30, 30, 30, 180));
-		ed::PushStyleColor(ed::StyleColor_NodeBorder, ImColor(100, 100, 100, 200));
+		ImVec2 groupSize(400.0f, 250.0f);
+		const auto foundSize = node.InputValues.find("Size");
+		if (foundSize != node.InputValues.end() && std::holds_alternative<std::array<float, 2>>(foundSize->second))
+		{
+			const auto size = std::get<std::array<float, 2>>(foundSize->second);
+			groupSize = ImVec2(size[0], size[1]);
+		}
+
+		ed::PushStyleColor(ed::StyleColor_NodeBg, ImColor(255, 255, 255, 14));
+		ed::PushStyleColor(ed::StyleColor_NodeBorder, ImColor(255, 255, 255, 40));
+		ed::PushStyleColor(ed::StyleColor_HovNodeBorder, ImColor(255, 255, 255, 120));
+		ed::PushStyleColor(ed::StyleColor_SelNodeBorder, ImColor(255, 220, 60, 220));
+		ed::PushStyleVar(ed::StyleVar_NodeRounding, 6.0f);
+		ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 1.2f);
+		ed::PushStyleVar(ed::StyleVar_GroupRounding, 6.0f);
+		ed::PushStyleVar(ed::StyleVar_GroupBorderWidth, 1.2f);
+
 		ed::BeginNode(ed::NodeId(node.Id));
+		ImGui::PushID(static_cast<int>(node.Id));
+		ImGui::BeginGroup();
 		ImGui::TextUnformatted(node.Comment.empty() ? LOCAL_CSTR("EditorCommon.Comment") : node.Comment.c_str());
+		ed::Group(groupSize);
+		ImGui::EndGroup();
+		ImGui::PopID();
 		ed::EndNode();
-		ed::PopStyleColor(2);
+		ed::PopStyleVar(4);
+		ed::PopStyleColor(4);
+
+		ed::NodeState state{};
+		if (ed::GetNodeState(ed::NodeId(node.Id), &state) && state.GroupSize.x > 0.0f && state.GroupSize.y > 0.0f &&
+			(std::abs(state.GroupSize.x - groupSize.x) > 0.5f || std::abs(state.GroupSize.y - groupSize.y) > 0.5f))
+		{
+			const auto result = m_ShaderGraph.Data.SetInputValue(m_GraphRegistry, { node.Id, "Size" },
+				std::array<float, 2>{ state.GroupSize.x, state.GroupSize.y });
+			if (result.Succeeded()) CommitShaderGraphEdit();
+		}
 	}
 
 	void MaterialEditor::CreateCommentBoxFromSelection()
@@ -609,25 +702,45 @@ namespace Editor
 		const auto* schema = m_GraphRegistry.Find(node.Type);
 		if (!schema) return;
 
+		const auto* inPin = m_GraphRegistry.FindPin(node.Type, "In");
+		const auto* outPin = m_GraphRegistry.FindPin(node.Type, "Out");
+		if (!inPin || !outPin) return;
+
+		const ImU32 pinColor = PinColor(inPin->Type);
+		const bool straight = m_WireStyle == EWireStyle::Straight;
+		if (straight) ed::PushStyleVar(ed::StyleVar_LinkStrength, 0.0f);
+		ed::PushStyleColor(ed::StyleColor_NodeBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ed::PushStyleColor(ed::StyleColor_HovNodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ed::PushStyleColor(ed::StyleColor_SelNodeBorder, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+		ed::PushStyleVar(ed::StyleVar_NodeBorderWidth, 0.0f);
+		ed::PushStyleVar(ed::StyleVar_HoveredNodeBorderWidth, 0.0f);
+		ed::PushStyleVar(ed::StyleVar_SelectedNodeBorderWidth, 0.0f);
+		ed::PushStyleVar(ed::StyleVar_NodePadding, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+
 		ed::BeginNode(ed::NodeId(node.Id));
-		for (const auto& pin : schema->Pins)
-		{
-			const auto pinId = FindPinId({ node.Id, pin.Key });
-			if (pin.Direction == Engine::EGraphPinDirection::Input)
-			{
-				ed::BeginPin(ed::PinId(pinId), ed::PinKind::Input);
-				ImGui::TextColored(ImColor(180, 180, 180).Value, ICON_FA_CIRCLE);
-				ed::EndPin();
-				ImGui::SameLine();
-			}
-			else if (pin.Direction == Engine::EGraphPinDirection::Output)
-			{
-				ed::BeginPin(ed::PinId(pinId), ed::PinKind::Output);
-				ImGui::TextColored(ImColor(180, 180, 180).Value, ICON_FA_CIRCLE);
-				ed::EndPin();
-			}
-		}
+		ImGui::PushID(static_cast<int>(node.Id));
+		const ImVec4 dotColor = ed::IsNodeSelected(ed::NodeId(node.Id))
+			? ImVec4(1.0f, 0.85f, 0.3f, 1.0f)
+			: ImGui::ColorConvertU32ToFloat4(pinColor);
+		ImGui::TextColored(dotColor, ICON_FA_CIRCLE);
+		const ImVec2 dotMin = ImGui::GetItemRectMin();
+		const ImVec2 dotMax = ImGui::GetItemRectMax();
+		const ImVec2 dotCenter((dotMin.x + dotMax.x) * 0.5f, (dotMin.y + dotMax.y) * 0.5f);
+
+		ed::BeginPin(ed::PinId(FindPinId({ node.Id, "In" })), ed::PinKind::Input);
+		ed::PinRect(dotMin, ImVec2(dotCenter.x, dotMax.y));
+		ed::PinPivotRect(dotCenter, dotCenter);
+		ed::EndPin();
+		ed::BeginPin(ed::PinId(FindPinId({ node.Id, "Out" })), ed::PinKind::Output);
+		ed::PinRect(ImVec2(dotCenter.x, dotMin.y), dotMax);
+		ed::PinPivotRect(dotCenter, dotCenter);
+		ed::EndPin();
+		ImGui::PopID();
 		ed::EndNode();
+		ed::PopStyleVar(4);
+		ed::PopStyleColor(4);
+		if (straight) ed::PopStyleVar();
 	}
 
 	void MaterialEditor::InsertRerouteNodeOnLink(Engine::GraphLinkId linkId)
