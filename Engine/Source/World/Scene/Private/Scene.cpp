@@ -125,58 +125,97 @@ Entity* Scene::FindEntity(entt::entity handle)
 
 	return it != m_EntityMap.end() ? it->second : nullptr;
 }
-bool Scene::DestroyEntity(Entity& entity)
+namespace
 {
-	if (entity.GetScene() != this || FindEntity(entity.GetEntityHandle()) != &entity) return false;
+	using SceneExternalEntityReference = std::pair<const reflection::PropertyInfo*, reflection::ObjectView>;
 
-	std::vector<entt::entity> pending{ entity.GetEntityHandle() }, removal;
-	std::unordered_set<entt::entity> removalSet;
-
-	while (!pending.empty())
+	// root와 모든 하위 엔티티를 모은다. 계층 링크가 어긋났거나 하위 트리 밖의 엔티티가 그 안을 부모로 가리키면 실패한다.
+	bool CollectSceneSubtreeForRemoval(Scene& scene, entt::registry& world, entt::entity root,
+		std::vector<entt::entity>& removal, std::unordered_set<entt::entity>& removalSet)
 	{
-		const auto current = pending.back();
-		pending.pop_back();
-
-		if (!FindEntity(current) || !removalSet.insert(current).second) return false;
-		removal.push_back(current);
-
-		if (const auto* link = m_LocalRegistry.try_get<HierarchyComponent>(current))
+		std::vector<entt::entity> pending{ root };
+		while (!pending.empty())
 		{
-			for (const auto child : link->children)
+			const auto current = pending.back();
+			pending.pop_back();
+
+			if (!scene.FindEntity(current) || !removalSet.insert(current).second) return false;
+			removal.push_back(current);
+
+			if (const auto* link = world.try_get<HierarchyComponent>(current))
 			{
-				const auto* childLink = m_LocalRegistry.valid(child) ?
-					m_LocalRegistry.try_get<HierarchyComponent>(child) : nullptr;
-				if (!childLink || childLink->parent != current) return false;
-				pending.push_back(child);
+				for (const auto child : link->children)
+				{
+					const auto* childLink = world.valid(child) ? world.try_get<HierarchyComponent>(child) : nullptr;
+					if (!childLink || childLink->parent != current) return false;
+					pending.push_back(child);
+				}
 			}
 		}
+
+		for (auto [other, link] : world.view<HierarchyComponent>().each())
+		{
+			if (removalSet.contains(other)) continue;
+			if (removalSet.contains(link.parent)) return false;
+		}
+		return true;
 	}
 
-	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
+	// 하위 트리 밖 컴포넌트의 리플렉션 entt::entity 속성 중 하위 트리를 가리키는 것을 모은다.
+	// 쓸 수 있는 참조는 writable에 담고, 비울 수 없는 읽기 전용 참조의 수를 반환한다.
+	std::size_t CollectExternalSceneEntityReferences(entt::registry& world, const std::unordered_set<entt::entity>& removalSet,
+		std::vector<SceneExternalEntityReference>& writable)
 	{
-		if (removalSet.contains(other)) continue;
-		if (removalSet.contains(link.parent)) return false;
-	}
+		std::size_t readOnly = 0;
+		if (!ReflectionRegistry::IsCreated()) return readOnly;
 
-	std::vector<std::pair<const reflection::PropertyInfo*, reflection::ObjectView>> references;
-	if (ReflectionRegistry::IsCreated())
 		for (const auto& entry : ReflectionRegistry::Get().GetComponentEntries())
 		{
-			if (!entry.ReflectionType || !entry.MatchesStorage(m_LocalRegistry)) continue;
-			for (auto [handle] : m_LocalRegistry.storage<entt::entity>().each())
+			if (!entry.ReflectionType || !entry.MatchesStorage(world)) continue;
+			for (auto [handle] : world.storage<entt::entity>().each())
 			{
-				if (!entry.Has(m_LocalRegistry, handle) || removalSet.contains(handle)) continue;
-				const auto object = entry.Edit(m_LocalRegistry, handle);
+				if (!entry.Has(world, handle) || removalSet.contains(handle)) continue;
+				const auto object = entry.Edit(world, handle);
 				for (const auto& property : entry.ReflectionType->Properties)
 				{
 					if (property.GetValueCppType() != std::type_index(typeid(entt::entity))) continue;
 					const auto* reference = property.ReadValue(object).Get<entt::entity>();
 					if (!reference || !removalSet.contains(*reference)) continue;
-					if (!property.CanWrite() || object.IsReadOnly()) return false;
-					references.emplace_back(&property, object);
+					if (!property.CanWrite() || object.IsReadOnly())
+						++readOnly;
+					else
+						writable.emplace_back(&property, object);
 				}
 			}
 		}
+		return readOnly;
+	}
+}
+
+std::optional<std::size_t> Scene::CountExternalEntityReferences(Entity& root)
+{
+	if (root.GetScene() != this || FindEntity(root.GetEntityHandle()) != &root) return std::nullopt;
+
+	std::vector<entt::entity> removal;
+	std::unordered_set<entt::entity> removalSet;
+	if (!CollectSceneSubtreeForRemoval(*this, m_LocalRegistry, root.GetEntityHandle(), removal, removalSet)) return std::nullopt;
+
+	std::vector<SceneExternalEntityReference> writable;
+	const std::size_t readOnly = CollectExternalSceneEntityReferences(m_LocalRegistry, removalSet, writable);
+	return writable.size() + readOnly;
+}
+
+bool Scene::DestroyEntity(Entity& entity)
+{
+	if (entity.GetScene() != this || FindEntity(entity.GetEntityHandle()) != &entity) return false;
+
+	std::vector<entt::entity> removal;
+	std::unordered_set<entt::entity> removalSet;
+	if (!CollectSceneSubtreeForRemoval(*this, m_LocalRegistry, entity.GetEntityHandle(), removal, removalSet)) return false;
+
+	// 읽기 전용 참조는 비울 수 없으므로 삭제를 거부한다.
+	std::vector<SceneExternalEntityReference> references;
+	if (CollectExternalSceneEntityReferences(m_LocalRegistry, removalSet, references) != 0) return false;
 
 	const entt::entity cleared = entt::null;
 	for (const auto& [property, object] : references)

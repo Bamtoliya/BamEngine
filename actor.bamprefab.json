@@ -1,0 +1,102 @@
+{
+    "Prefab": {
+        "Entities": [
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "부모"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [5, 2, -3],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [2, 3],
+                    "Parent": 0
+                },
+                "Id": 1
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "둘째"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [0, 0, 0],
+                            "position": [-2, 0, 1],
+                            "rotation": [0, 0, 0, 1],
+                            "scale": [1, 1, 1]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 1
+                },
+                "Id": 2
+            },
+            {
+                "Components": [
+                    {
+                        "Data": {
+                            "flags": 3
+                        },
+                        "Type": "Engine::FlagComponent"
+                    },
+                    {
+                        "Data": {
+                            "name": "첫째"
+                        },
+                        "Type": "Engine::NameComponent"
+                    },
+                    {
+                        "Data": {
+                            "absolute": 0,
+                            "eulerRotation": [25, 450, -35],
+                            "position": [1, 2, 3],
+                            "rotation": [0.3535533845424652, 0.6123724579811096, -0.3535533845424652, 0.6123724579811096],
+                            "scale": [-1, 0, 2]
+                        },
+                        "Type": "Engine::TransformComponent"
+                    }
+                ],
+                "Hierarchy": {
+                    "Children": [],
+                    "Parent": 1
+                },
+                "Id": 3
+            }
+        ],
+        "ResourceReferences": [],
+        "RootId": 1,
+        "Version": 1
+    }
+}

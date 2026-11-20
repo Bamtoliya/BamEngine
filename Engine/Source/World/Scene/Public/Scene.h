@@ -70,6 +70,9 @@ public:
 	const entt::registry& GetRegistry() const { return m_LocalRegistry; }
 	Entity& CreateEntity();
 	[[nodiscard]] bool DestroyEntity(Entity& entity);
+	// root 하위 트리 밖의 컴포넌트가 하위 트리 엔티티를 가리키는 참조 수(DestroyEntity가 비우거나 삭제를 막는 대상).
+	// 하위 트리의 계층이 유효하지 않으면 nullopt를 반환한다.
+	[[nodiscard]] std::optional<std::size_t> CountExternalEntityReferences(Entity& root);
 	[[nodiscard]] EntityReparentResult ReparentEntity(Entity& child, Entity* parent = nullptr);
 	// Move selected roots together and preserve their world transforms. Selected descendants stay in their subtree.
 	[[nodiscard]] EntityReparentResult ReparentEntities(std::span<Entity* const> children, Entity* parent = nullptr);

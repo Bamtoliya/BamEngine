@@ -25,6 +25,7 @@
 #include "Vertex.h"
 #include "PlatformPath.h"
 #include "ActionTimelineComponent.h"
+#include "SpringArmComponent.h"
 #include "CompositeVFXComponent.h"
 #include "ParticleEffectComponent.h"
 #include "SpriteAnimationComponent.h"
@@ -1422,6 +1423,40 @@ namespace
         return ok || Fail("Resource runtime version serialization or reload handling failed.");
     }
 
+    // 하위 트리 교체(Revert All) 전 확인: 트리 밖 컴포넌트가 트리 안 엔티티를 가리키는 참조만 센다.
+    bool CheckExternalEntityReferenceCount()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        ScenePtr other(Engine::Scene::Create());
+        if (!scene || !other)
+            return Fail("Scene creation failed for the external reference check.");
+
+        auto& root = scene->CreateEntity();
+        auto& child = scene->CreateEntity();
+        auto& outside = scene->CreateEntity();
+        if (scene->ReparentEntity(child, &root) != Engine::EntityReparentResult::Success)
+            return Fail("Could not build the subtree for the external reference check.");
+
+        auto& world = scene->GetRegistry();
+        world.emplace<Engine::SpringArmComponent>(root.GetEntityHandle()).TargetEntity = child.GetEntityHandle();
+        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(0))
+            return Fail("A reference inside the subtree was counted as external.");
+
+        auto& outsideArm = world.emplace<Engine::SpringArmComponent>(outside.GetEntityHandle());
+        outsideArm.TargetEntity = child.GetEntityHandle();
+        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(1))
+            return Fail("A reference from outside the subtree was not counted.");
+        if (scene->CountExternalEntityReferences(child) != std::optional<std::size_t>(2))
+            return Fail("Parent and outside references to a child subtree were not both counted.");
+
+        outsideArm.TargetEntity = entt::null;
+        auto& foreign = other->CreateEntity();
+        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(0) ||
+            scene->CountExternalEntityReferences(foreign).has_value())
+            return Fail("Cleared references or entities from another scene were handled incorrectly.");
+        return true;
+    }
+
     bool CheckPrefabRoundTrip()
     {
         auto scene = MakeScene();
@@ -2124,7 +2159,8 @@ int main()
         !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
-        !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip())
+        !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip() ||
+        !CheckExternalEntityReferenceCount())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
     return 0;

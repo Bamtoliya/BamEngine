@@ -28,6 +28,8 @@ public:
 private:
     void DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount);
     void DrawPrefabHeaderBar(Engine::Entity& entity);
+    // 그리기 중에는 요청만 기록하고, 대상 포인터를 쓰는 그리기가 모두 끝난 뒤 교체를 실행한다.
+    void ExecutePendingPrefabRevert();
     void DrawModelMaterialRefresh(Engine::Entity& entity);
     void DrawCommonComponents(Engine::Scene& scene, std::span<const entt::entity> entities);
     void DrawCommonTransformVector(Engine::Scene& scene, std::span<const entt::entity> entities, TransformEditMode mode);
@@ -49,5 +51,13 @@ private:
     Engine::Scene* m_CachedScene = nullptr;
     uint64 m_CachedRevision = 0;
     SceneEditSnapshot m_CachedSnapshot;
+
+    // Revert All 요청: 포인터 대신 씬과 루트 ID를 보관하고 실행 직전에 다시 찾는다.
+    struct PrefabRevertRequest
+    {
+        Engine::Scene* Scene = nullptr;
+        uint64 RootId = 0;
+    };
+    std::optional<PrefabRevertRequest> m_PendingPrefabRevert;
 };
 END

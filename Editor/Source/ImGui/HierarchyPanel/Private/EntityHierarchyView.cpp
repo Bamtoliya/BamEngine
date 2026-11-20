@@ -769,28 +769,32 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             // --- 2. 우측 정렬 컨트롤: Active & Visible 토글 아이콘 버튼 ---
             if (!locked && flagComp)
             {
-                const float itemSize = ImGui::GetFrameHeight();
+                // 두 토글은 같은 슬롯을 쓴다. 높이는 FramePadding 트리 노드 행과 같고, 폭은 가장 넓은 아이콘이 잘리지 않게 잡는다.
+                // ImGui::Button은 FramePadding 안쪽에만 라벨을 그리므로 아이콘 슬롯에서는 가로 패딩을 줄인다.
+                const float iconPadding = ImGui::GetFontSize() * 0.15f;
+                float widestIcon = 0.0f;
+                for (const char* icon : { ICON_FA_EYE, ICON_FA_EYE_SLASH, ICON_FA_CHECK })
+                    widestIcon = std::max(widestIcon, ImGui::CalcTextSize(icon).x);
+                const ImVec2 slot(std::max(ImGui::GetFrameHeight(), widestIcon + iconPadding * 2.0f), ImGui::GetFrameHeight());
                 const float spacing = ImGui::GetStyle().ItemSpacing.x;
                 const float rightPadding = ImGui::GetStyle().WindowPadding.x;
-                const float controlsWidth = (itemSize * 2.0f) + spacing + rightPadding;
+                const float controlsWidth = slot.x * 2.0f + spacing + rightPadding;
                 const float alignX = ImGui::GetWindowContentRegionMax().x - controlsWidth;
 
                 if (alignX > ImGui::GetCursorPosX())
                 {
                     ImGui::SameLine(alignX);
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(iconPadding, ImGui::GetStyle().FramePadding.y));
 
-                    // 1) 가시성(Visible) 눈알 아이콘 버튼
+                    // 1) 가시성(Visible) 눈 아이콘 버튼. 아이콘이 바뀌어도 ID는 유지한다.
                     const bool localVisible = flagComp->IsVisible();
                     const char* eyeIcon = localVisible ? ICON_FA_EYE : ICON_FA_EYE_SLASH;
                     if (!effectiveVisible && localVisible) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
                     else ImGui::PushStyleColor(ImGuiCol_Text, localVisible ? ImVec4(1, 1, 1, 1) : ImVec4(0.4f, 0.4f, 0.4f, 1));
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.15f));
-
-                    if (ImGui::Button(eyeIcon, ImVec2(itemSize, itemSize)))
-                    {
+                    if (ImGui::Button((std::string(eyeIcon) + "##Visible").c_str(), slot))
                         action.ToggleVisible = entity;
-                    }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("%s", Text(!effectiveVisible && localVisible ?
                             "Hierarchy.HiddenByParent" : "Hierarchy.ToggleVisibility").c_str());
@@ -798,22 +802,20 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
 
                     ImGui::SameLine(0.0f, spacing);
 
-                    // 2) 활성화(Active) 체크 아이콘 버튼 (체크박스 대신 동일 규격 아이콘 버튼으로 통일)
+                    // 2) 활성화(Active) 체크 아이콘 버튼: 가시성 버튼과 같은 슬롯 크기
                     const bool localActive = flagComp->IsActive();
-                    const char* activeIcon = ICON_FA_CHECK;
                     if (!effectiveActive && localActive) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 0.5f));
                     else ImGui::PushStyleColor(ImGuiCol_Text, localActive ? ImGui::GetStyle().Colors[ImGuiCol_CheckMark] : ImVec4(0.35f, 0.35f, 0.35f, 1));
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.15f));
-
-                    if (ImGui::Button(activeIcon, ImVec2(itemSize, itemSize)))
-                    {
+                    if (ImGui::Button(ICON_FA_CHECK "##Active", slot))
                         action.ToggleActive = entity;
-                    }
                     if (ImGui::IsItemHovered())
                         ImGui::SetTooltip("%s", Text(!effectiveActive && localActive ?
                             "Hierarchy.DeactivatedByParent" : "Hierarchy.ToggleActive").c_str());
                     ImGui::PopStyleColor(3);
+
+                    ImGui::PopStyleVar();
                 }
             }
             if (row.Depth > 0) ImGui::Unindent(indentStep * static_cast<float>(row.Depth));

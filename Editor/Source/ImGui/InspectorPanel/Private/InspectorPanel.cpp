@@ -158,6 +158,9 @@ void InspectorPanel::Draw()
 	}
 
 	ImGui::End();
+
+	// 이번 프레임에 targetEntity를 쓰는 그리기가 모두 끝난 뒤에 실행한다.
+	ExecutePendingPrefabRevert();
 }
 
 void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity, std::size_t selectionCount)
@@ -323,43 +326,13 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", prefabFileName), ELogLevel::Error, 4.0f);
 		}
 
-		// 2. Revert All: 원본 파일에서 다시 인스턴스화하여 현재 인스턴스 복원
-		if (ImGui::MenuItem((std::string(ICON_FA_ROTATE_LEFT " ") + LOCAL("Prefab.RevertAll")).c_str()))
+		// 2. Revert All: 원본 파일에서 다시 인스턴스화하여 현재 인스턴스 복원.
+		// 기존 트리를 삭제하면 이 프레임의 targetEntity가 무효가 되므로 여기서는 요청만 남긴다.
+		const bool canEditScene = Application::Get().GetEditHistory().Enabled();
+		if (ImGui::MenuItem((std::string(ICON_FA_ROTATE_LEFT " ") + LOCAL("Prefab.RevertAll")).c_str(), nullptr, false, canEditScene))
 		{
-			entt::entity parentH = entt::null;
-			if (const auto* link = world.try_get<Engine::HierarchyComponent>(rootHandle))
-				parentH = link->parent;
-
-			Engine::Entity* parentEntity = (parentH != entt::null) ? scene->FindEntity(parentH) : nullptr;
-			glm::vec3 oldPos{ 0.0f };
-			glm::vec3 oldRot{ 0.0f };
-			glm::vec3 oldScale{ 1.0f };
-
-			if (const auto* tr = world.try_get<Engine::TransformComponent>(rootHandle))
-			{
-				oldPos = tr->position;
-				oldRot = tr->eulerRotation;
-				oldScale = tr->scale;
-			}
-
-			archive::JsonArchive ar;
-			Engine::Entity* newRoot = nullptr;
-			const Engine::EResult res = Engine::SceneManager::Get().InstantiatePrefab(ar, prefabComp->prefabAssetPath, newRoot, parentEntity);
-
-			if (res == Engine::EResult::Success && newRoot)
-			{
-				if (auto* newTr = scene->GetRegistry().try_get<Engine::TransformComponent>(newRoot->GetEntityHandle()))
-				{
-					newTr->position = oldPos;
-					newTr->eulerRotation = oldRot;
-					newTr->scale = oldScale;
-					(void)newTr->SynchronizeRotation();
-				}
-
-				(void)scene->DestroyEntity(*rootEntity);
-				SelectionManager::Get().SetSelectedEntity(newRoot);
-				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL("Notification.PrefabReverted"), ELogLevel::Info, 3.0f);
-			}
+			if (const auto* id = world.try_get<Engine::IDComponent>(rootHandle))
+				m_PendingPrefabRevert = PrefabRevertRequest{ scene, id->id };
 		}
 
 		ImGui::Separator();
@@ -376,6 +349,96 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 
 	ImGui::Spacing();
 	ImGui::Separator();
+}
+
+void InspectorPanel::ExecutePendingPrefabRevert()
+{
+	if (!m_PendingPrefabRevert) return;
+	const auto request = *m_PendingPrefabRevert;
+	m_PendingPrefabRevert.reset();
+
+	// 요청 이후 씬이 바뀌었거나 편집할 수 없는 상태(PIE 등)면 아무것도 바꾸지 않는다.
+	auto* scene = SceneManager::Get().GetCurrentScene();
+	auto& history = Application::Get().GetEditHistory();
+	if (!scene || scene != request.Scene || !history.Enabled()) return;
+
+	auto* root = scene->FindEntityById(request.RootId);
+	auto& world = scene->GetRegistry();
+	const auto* prefab = root ? world.try_get<Engine::PrefabInstanceComponent>(root->GetEntityHandle()) : nullptr;
+	if (!prefab || prefab->prefabAssetPath.empty()) return;
+
+	const std::wstring prefabPath = prefab->prefabAssetPath;
+	const std::string prefabName = Engine::WStrToStr(std::filesystem::path(prefabPath).filename().wstring());
+	const auto title = LOCAL("ResourceType.Prefab");
+	const auto fail = [&]() { NotificationManager::Get().AddNotification(title, LOCAL_FMT("Notification.PrefabRevertFailed", prefabName), ELogLevel::Error, 4.0f); };
+
+	// 교체는 기존 트리를 삭제하며, DestroyEntity는 트리 밖에서 트리 안을 가리키는 참조를 비운다.
+	// 새 트리의 엔티티로 참조를 옮길 대응이 아직 없으므로 그런 참조가 있으면 교체하지 않는다.
+	const auto references = scene->CountExternalEntityReferences(*root);
+	if (!references)
+		return fail();
+	if (*references > 0)
+	{
+		NotificationManager::Get().AddNotification(title, LOCAL_FMT("Notification.PrefabRevertBlockedByReferences", *references), ELogLevel::Warn, 5.0f);
+		return;
+	}
+
+	const auto rootHandle = root->GetEntityHandle();
+	const auto* link = world.try_get<Engine::HierarchyComponent>(rootHandle);
+	const entt::entity parentHandle = link ? link->parent : entt::null;
+	Engine::Entity* parent = parentHandle != entt::null ? scene->FindEntity(parentHandle) : nullptr;
+	if (parentHandle != entt::null && !parent)
+		return fail();
+
+	auto before = SceneEditSnapshot::Capture(*scene);
+	if (!before)
+		return fail();
+
+	// 원본이 없거나 손상되면 배치가 실패하고 기존 트리는 그대로 남는다.
+	archive::JsonArchive ar;
+	Engine::Entity* newRoot = nullptr;
+	if (SceneManager::Get().InstantiatePrefab(ar, prefabPath, newRoot, parent) != Engine::EResult::Success || !newRoot)
+		return fail();
+
+	// 인스턴스를 놓은 자리(위치·회전)만 유지한다. 스케일은 프리팹이 정한 값이므로 원본 값으로 되돌린다.
+	const auto newHandle = newRoot->GetEntityHandle();
+	const auto* oldTransform = world.try_get<Engine::TransformComponent>(rootHandle);
+	if (auto* newTransform = world.try_get<Engine::TransformComponent>(newHandle); oldTransform && newTransform)
+	{
+		newTransform->position = oldTransform->position;
+		newTransform->eulerRotation = oldTransform->eulerRotation;
+		(void)newTransform->SynchronizeRotation();
+	}
+
+	// 부모 아래 형제 순서를 유지하도록 새 루트를 기존 루트 바로 앞에 둔다(최상위 엔티티는 별도 순서가 없다).
+	if (parent)
+		(void)scene->ReorderSiblings(std::span<const entt::entity>(&newHandle, 1), rootHandle, false);
+
+	if (!scene->DestroyEntity(*root))
+	{
+		// 기존 트리를 지울 수 없으면 새 트리를 제거해 요청 전 상태로 돌린다.
+		if (!scene->DestroyEntity(*newRoot))
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Revert All rollback failed; restoring the scene snapshot: {}", prefabName);
+			SelectionManager::Get().ClearSelection();
+			(void)before.Restore();
+		}
+		return fail();
+	}
+
+	SelectionManager::Get().SetSelectedEntity(newRoot);
+	if (m_IsLocked)
+	{
+		if (const auto* id = world.try_get<Engine::IDComponent>(newHandle); id && !scene->FindEntityById(m_LockedEntityId))
+			m_LockedEntityId = id->id;
+	}
+
+	history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "Prefab.RevertAll");
+	auto& prefabMode = PrefabModeManager::Get();
+	if (prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+		prefabMode.MarkDirty();
+
+	NotificationManager::Get().AddNotification(title, LOCAL("Notification.PrefabReverted"), ELogLevel::Info, 3.0f);
 }
 
 void InspectorPanel::DrawModelMaterialRefresh(Engine::Entity& entity)

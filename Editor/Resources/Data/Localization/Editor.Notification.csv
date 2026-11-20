@@ -37,6 +37,8 @@ Notification,OpenExternalFailed,Failed to open file with default program: {},기
 Notification,PrefabApplied,Prefab changes applied: {},프리팹 원본에 적용 완료: {}
 Notification,PrefabInstantiateFailed,Failed to instantiate prefab: {},프리팹 인스턴스화 실패: {}
 Notification,PrefabInstantiated,Prefab instantiated: {},프리팹 인스턴스화 완료: {}
+Notification,PrefabRevertBlockedByReferences,Revert All stopped: {} reference(s) outside the prefab point into it.,프리팹 밖에서 이 프리팹을 가리키는 참조 {}개가 있어 되돌리기를 중단했습니다.
+Notification,PrefabRevertFailed,Failed to revert prefab: {},프리팹 되돌리기 실패: {}
 Notification,PrefabReverted,Prefab reverted to original asset.,프리팹을 원본 상태로 복원했습니다.
 Notification,PrefabSaveFailed,Failed to save prefab: {},프리팹 저장 실패: {}
 Notification,PrefabSaved,Prefab saved: {},프리팹 저장 완료: {}
