@@ -1,8 +1,8 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-17)
-- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리(Phase 1~3B), 텍스처 밉맵, 2D 확장(Phase 1~5 인스턴싱 배칭 및 Unlit 머티리얼), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile·Windows 내장 패키징 실시간 스트리밍 및 DIA SDK 힌트 보강, `ClientGameRuntime` 분리 및 `Client/Web`·WGSL sidecar 초안 구현, 독립 클라이언트 종료 수명주기 크래시 해결, 에디터 비정상 종료 진단·2단계 작업 복원(CrashHandler/Recovery) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 반영. 일부 미커밋 작업과 빌드·UI·GPU·Emscripten·FMOD Web 미검증 항목이 남아 있다.
-- 최신 근거: [2026-11-14 코드·원칙·계획 점검](CodeDocumentationAudit-2026-11-14.md) (B01~B06 및 A06 본체 전량 코드 반영 완료) 및 [2026-11-06 점검](CodeDocumentationAudit-2026-11-06.md) (A01~A10). **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-20)
+- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile 및 독립 클라이언트 패키징/종료 수명주기 안정화에 이어, 2026-11-19~11-20 머티리얼 에디터 언리얼 엔진 스타일 3-Pane 레이아웃 개편, 셰이더 그래프 독립 소유권 완전 전환, 썸네일 일체형 리소스 피커 및 파라미터/패스별 셰이더 UI 완성, 프리팹 Revert All 안전성 강화(외부 엔티티 참조 방어 검증), D3D12 파이프라인 생성 안정화 및 `SceneArchiveCheck` 픽스 후 `x64-ninja-debug` CTest 44개 전체 통과(44/44 Passed)를 반영 완료했다.
+- 최신 근거: [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md), [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md), 최신 커밋선(`fcda4887` -> `1cd11857` -> `11abec04` -> `c2058594`), [ImplementationLog.md](ImplementationLog.md) 2026-11-20 항목. **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -625,36 +625,55 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 ### 11.5 상태·검증 기록 규칙
 
 - 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료; 2026-11-15 복합 비주얼 이펙트(후보 B) 뷰포트 스카이박스 누출 차단, 타임라인 0.1x 줌아웃/패닝, 프리뷰 모션, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 실환경 검증 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인 및 Phase 5 환경 고도화는 미검증).
-- 2026-11-19 `x64-ninja-debug`(Ninja 단일 구성) 모두 빌드 후 CTest 44개 전체 통과를 사용자가 확인했다. 이전 38/38 기록 이후 검사 실행 파일을 빌드하지 않아 숨어 있던 `HierarchyEditorCheck`·`AssetReferenceCheck` 빌드 오류와 `SceneArchiveCheck`(링크 스켈레탈 모델 갱신)·`KinematicCharacterCheck`(계단 판정)·`AssetReferenceCheck`(타임라인 트랙 종류) 실패를 함께 수정했다. 기능 커밋 전에는 Editor 대상만이 아니라 모두 빌드로 검사 실행 파일까지 갱신한다.
+- 2026-11-19 `x64-ninja-debug`(Ninja 단일 구성) 모두 빌드 후 CTest 44개 전체 통과를 사용자가 확인했다.
+- 2026-11-20 `fcda4887`~`c2058594` 커밋(프리팹 Revert All 안전성 강화, D3D12 파이프라인 생성 안정화, 머티리얼 에디터 완전 통합/3분할 구축, 설계 문서화 2건) 및 `SceneArchiveCheck` 핫픽스(`AddSpatialEntity`를 통한 트랜스폼 컴포넌트 보장) 후 `x64-ninja-debug` 모두 빌드 및 CTest 44개 전체 통과(`44/44 Passed`)를 사용자가 확인했다.
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
 
-### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-19 갱신)
+### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-20 갱신)
 
-2026-11-19 기준 커밋 `3170bc23`~`064e6be2`에 세 후보의 코드 변경이 반영되었다. 이후 `x64-ninja-debug` 모두 빌드와 전체 CTest(44개)에서 드러난 검사 빌드 오류 2건·실패 3건을 수정했고 사용자 실행에서 통과를 확인했다([ImplementationLog](ImplementationLog.md) 2026-11-19 재점검 후속 항목). 실환경 확인은 남아 있으므로 새 기능을 고르기 전에 각 후보의 확인 대기 항목을 먼저 닫는다.
+2026-11-20 기준 커밋선(`fcda4887` $\to$ `1cd11857` $\to$ `11abec04` $\to$ `c2058594`)에 머티리얼 에디터 3-Pane 레이아웃 전면 개편, 셰이더 그래프 직접 소유권 전환, 프리팹 Revert All 외부 참조 검증 및 신규 심층 설계 2건이 반영되었다. 이후 `SceneArchiveCheck` 핫픽스를 거쳐 `x64-ninja-debug` 빌드 및 CTest 전체(44개) 통과를 확인했다([ImplementationLog](ImplementationLog.md) 2026-11-20 항목). 머티리얼 시스템 고도화 및 기존 작업 연속성에 맞춰 차기 개발 후보군을 5개 영역으로 공식 재편성한다.
 
-1. **후보 A (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결**
-   - **2026-11-19 상태**: 공중 착지 거리 제한, 오르막 접지 유지, 60° 미끄러짐을 코드와 `KinematicCharacterCheck`에 반영했다(`f1b843be`). CTest와 `SimpleTests` 확인 대기다. [조기 착지 회귀 확인](ThirdPersonCharacterSystemPlan.md#조기-착지-회귀-확인) · [경사 회귀 확인](ThirdPersonCharacterSystemPlan.md#경사-보행과-미끄러짐-회귀-확인)
-   - **목표**: 사용자 실환경 테스트(`SimpleTests` 씬)에서 확인된 물리 상호작용 및 지면 스냅 결함을 안정화하여 자연스러운 3인칭 보행 조작감 완성 ([ThirdPersonCharacterSystemPlan.md 4절](ThirdPersonCharacterSystemPlan.md#4-최종-관측-현상-및-기술적-과제-known-issues--residual-observations)).
+1. **후보 1 (머티리얼 / 셰이더 파이프라인): 머티리얼-셰이더 그래프 양방향 파라미터 동기화(Fast-Path) 및 VS/PS 통합 컴파일 (Phase 4)**
+   - **기준 문서**: [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md)
+   - **목표**: 상용 엔진(UE/Unity) 수준의 0초 실시간 파라미터 튜닝 피드백 및 정점 변위(WPO)/Custom UV를 지원하는 통합 셰이더 컴파일 파이프라인 구축.
    - **세부 내용**:
-     - `KinematicCharacterSystem.cpp`: 체공 낙하(`!IsGrounded && Velocity.y < 0`) 중 `snapMargin` 최소화 및 캡슐 하단 스윕 기반 2단계 착지 확정을 통한 공중 1m 조기 순간이동 흡착 제거.
+     - 머티리얼 인스펙터 슬라이더/컬러 조절 시 셰이더 재컴파일 없이 GPU 상수 버퍼(`MaterialConstants : register(b2)`) 메모리만 즉시 갱신하는 60fps 무지연 Fast-Path 구현.
+     - 셰이더 그래프 블랙보드(Variable Pool) ↔ 머티리얼 파라미터 맵 간 자동 동기화.
+     - `Shader.MaterialOutput` 단일 마스터 노드에 정점 입력 핀(WPO, Normal, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`를 동시 분할 생성.
+   - **관련 파일**: `MaterialEditor.cpp`, `MaterialEditorCanvas.cpp`, `MaterialEditorShader.cpp`, `ShaderGraphCompiler.cpp`, `MaterialInterface.cpp`, `MaterialConstants.h`.
+
+2. **후보 2 (렌더 패스 정합성): 머티리얼 기본 렌더 패스(Primary Pass Type) 도입 및 Fallback 정합성 (Phase 5)**
+   - **기준 문서**: [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md)
+   - **목표**: 머티리얼 기본 셰이더의 암묵적 GBuffer 고정 구조를 해소하고, `ForwardTransparent`(반투명), `UI`, `PostProcess` 등 주 렌더 패스를 머티리얼이 직접 결정할 수 있도록 확장.
+   - **세부 내용**:
+     - `MaterialInterface`에 `m_PrimaryPassType` 속성 및 리플렉션 등록.
+     - `GetPixelShader(passType)`에서 규격 불일치 타 패스 요청 시 렌더러 기본 셰이더로 안전하게 Fallback하도록 조회 로직 개선 (반투명 재질 타깃 불일치 드로우콜 스킵 버그 근본 해결).
+     - 머티리얼 에디터 [파이프라인 설정] 헤더에 기본 패스 타입 선택 콤보 및 `BlendMode` 권장 프리셋 연동.
+   - **관련 파일**: `MaterialInterface.h/.cpp`, `MaterialEditor.cpp`, `MeshRenderSystem.cpp`, `Renderer.cpp`.
+
+3. **후보 3 (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결 (기존 후보 A)**
+   - **기준 문서**: [ThirdPersonCharacterSystemPlan.md](ThirdPersonCharacterSystemPlan.md) 4절
+   - **목표**: `SimpleTests` 씬 실환경에서 확인된 물리 상호작용 및 지면 스냅 결함을 안정화하여 자연스러운 3인칭 보행 조작감 완성.
+   - **세부 내용**:
+     - 체공 낙하(`!IsGrounded && Velocity.y < 0`) 중 `snapMargin` 최소화 및 캡슐 하단 스윕 기반 2단계 착지 확정을 통한 공중 1m 조기 순간이동 흡착 제거.
      - 30도 경사로 보행 시 접촉 표면 법선 방향 `SkinWidth` 최소 분리 오프셋 보정 및 스윕 피부 마진 강화로 메시 파고듦 제거.
      - 45도/60도 급경사 끝단 $\to$ 평지 진입 시 전환 프레임 수직 스냅 속도 제한(Vertical Snap Clamping) 및 법선 보간을 통한 단차 '탁' 충격 완화(Soft Landing).
-   - **관련 파일**: `Engine/Source/Physics/Private/KinematicCharacterSystem.cpp`, `Engine/Source/Physics/Private/Collision.cpp`, `Engine/examples/KinematicCharacterCheck.cpp`, `ThirdPersonCharacterSystemPlan.md`.
+   - **관련 파일**: `Engine/Source/Physics/Private/KinematicCharacterSystem.cpp`, `Engine/Source/Physics/Private/Collision.cpp`, `Engine/examples/KinematicCharacterCheck.cpp`.
 
-2. **후보 B (비주얼 이펙트 / 연출): Composite VFX Phase 5 Step 3 본 소켓 연동 & Additive 가산 머티리얼 표준화**
-   - **2026-11-19 상태**: 액션 타임라인의 `SpawnCompositeVFX` 노티파이와 소켓 부착은 구현되어 있다([ImplementationLog](ImplementationLog.md) 2026-11-19 지속형 VFX 노티파이 항목). 허공 배경의 흙갈색은 트랙 블렌드 모드별 제출 패스 교정(`8cb8813d`, [9.11절](CompositeVisualEffectPlan.md#911-트랙-블렌드-모드별-제출-패스-교정-2026-11-19))으로 원인을 해소했다. 남은 범위는 Additive 머티리얼 표준화와 지면을 끈 공중 프리뷰 토글이다. 공중 모드의 가상 환경광 보정은 결함을 가리므로 진행하지 않는다([9.9절 정정](CompositeVisualEffectPlan.md#99-공중-뷰air-view--허공-배경-시-반투명발광-이펙트의-흙갈색-탁화-및-톤매핑-왜곡-분석-2026-11-18)).
-   - **목표**: 상용 엔진(Niagara) 수준의 연출 완성도를 위해 캐릭터 공격 액션 타임라인과 복합 VFX를 본 소켓 단위로 연동하고, 반투명 디퍼드 탁화 현상을 원천 방지하는 발광 가산 머티리얼 표준화 ([CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)).
+4. **후보 4 (비주얼 이펙트 / 연출): Composite VFX Phase 5 Step 3 본 소켓 연동 & Additive 가산 머티리얼 표준화 (기존 후보 B)**
+   - **기준 문서**: [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md)
+   - **목표**: 상용 엔진(Niagara) 수준의 연출 완성도를 위해 캐릭터 공격 액션 타임라인과 복합 VFX를 본 소켓 단위로 연동하고 발광 가산 머티리얼 표준화.
    - **세부 내용**:
      - `ActionTimelineComponent` 노티파이 트랙에서 스켈레탈 메시의 본 소켓(무기 끝, 손목 등)을 타깃으로 하는 `CompositeVFXComponent` 실시간 스폰 및 트랜스폼 추적 연동.
      - `ForwardTransparentPass`의 Additive 가산 블렌딩 셰이더 및 머티리얼 플래그 연동으로 칠흑 배경 결합 시 색상 탁화 방지.
      - `VFXEditorPanel` 뷰포트 암실 공중(Air Mode) 프리뷰 토글 지원.
    - **관련 파일**: `Engine/Source/VFX/`, `Engine/Source/Animation/Timeline/`, `Editor/Source/ImGui/TimelinePanel/`, `Editor/Source/ImGui/ResourceEditor/Private/VFXEditorPanel.cpp`.
 
-3. **후보 C (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동**
-   - **2026-11-19 상태** 모델 변환·결과 수신과 푸터 단계 표시·취소를 코드에 반영했다. 한글 경로 자동 검사와 대형 모델 실측을 마친 뒤 텍스처 이관을 진행한다. [모델 임포트 1차 검증](OutOfProcessAssetPipelinePlan.md#모델-임포트-1차-검증)
-   - **목표**: 대용량 모델(수백 MB FBX/GLTF) 및 텍스처(BC7 4K) 임포트 시 에디터 메인 스레드 60FPS 무간섭 유지 및 OOM/크래시 100% 완전 격리 ([OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md)).
+5. **후보 5 (에셋 파이프라인 격리): `BamAssetWorker` Phase 3 대용량 모델/텍스처 임포트 독립 프로세스 위임 및 푸터 바 진행률 연동 (기존 후보 C)**
+   - **기준 문서**: [OutOfProcessAssetPipelinePlan.md](OutOfProcessAssetPipelinePlan.md)
+   - **목표**: 대용량 모델(수백 MB FBX/GLTF) 및 텍스처(BC7 4K) 임포트 시 에디터 메인 스레드 60FPS 무간섭 유지 및 OOM/크래시 100% 완전 격리.
    - **세부 내용**:
      - `Tools/AssetWorker/`: `BamAssetWorker.exe` 파이프 데몬 프로토콜에 `IMPORT_MODEL`(Assimp + meshopt LOD) 및 `IMPORT_TEXTURE`(DirectXTex BCn 압축) 명령 확장 및 실시간 진행률(`PROGRESS`) 응답 구현.
      - `Editor/Source/AssetManager/Worker/AssetWorkerHost.cpp`: 에셋 임포트 비동기 위임 및 하단 푸터 바(`FooterBar`) 실시간 진행률 프로그레스 바 / 취소(`[X]`) 버튼 연동.
-   - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `ToolBar.cpp`(하단 푸터 바 `DrawFooterControls`).
+   - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `ToolBar.cpp`.

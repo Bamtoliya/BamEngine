@@ -1431,28 +1431,32 @@ namespace
         if (!scene || !other)
             return Fail("Scene creation failed for the external reference check.");
 
-        auto& root = scene->CreateEntity();
-        auto& child = scene->CreateEntity();
-        auto& outside = scene->CreateEntity();
-        if (scene->ReparentEntity(child, &root) != Engine::EntityReparentResult::Success)
+        const auto rootHandle = AddSpatialEntity(*scene, 10ULL, L"Root", {});
+        const auto childHandle = AddSpatialEntity(*scene, 11ULL, L"Child", {});
+        const auto outsideHandle = AddSpatialEntity(*scene, 12ULL, L"Outside", {});
+        auto* root = scene->FindEntity(rootHandle);
+        auto* child = scene->FindEntity(childHandle);
+        auto* outside = scene->FindEntity(outsideHandle);
+        if (!root || !child || !outside || scene->ReparentEntity(*child, root) != Engine::EntityReparentResult::Success)
             return Fail("Could not build the subtree for the external reference check.");
 
         auto& world = scene->GetRegistry();
-        world.emplace<Engine::SpringArmComponent>(root.GetEntityHandle()).TargetEntity = child.GetEntityHandle();
-        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(0))
+        world.emplace<Engine::SpringArmComponent>(rootHandle).TargetEntity = childHandle;
+        if (scene->CountExternalEntityReferences(*root) != std::optional<std::size_t>(0))
             return Fail("A reference inside the subtree was counted as external.");
 
-        auto& outsideArm = world.emplace<Engine::SpringArmComponent>(outside.GetEntityHandle());
-        outsideArm.TargetEntity = child.GetEntityHandle();
-        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(1))
+        auto& outsideArm = world.emplace<Engine::SpringArmComponent>(outsideHandle);
+        outsideArm.TargetEntity = childHandle;
+        if (scene->CountExternalEntityReferences(*root) != std::optional<std::size_t>(1))
             return Fail("A reference from outside the subtree was not counted.");
-        if (scene->CountExternalEntityReferences(child) != std::optional<std::size_t>(2))
+        if (scene->CountExternalEntityReferences(*child) != std::optional<std::size_t>(2))
             return Fail("Parent and outside references to a child subtree were not both counted.");
 
         outsideArm.TargetEntity = entt::null;
-        auto& foreign = other->CreateEntity();
-        if (scene->CountExternalEntityReferences(root) != std::optional<std::size_t>(0) ||
-            scene->CountExternalEntityReferences(foreign).has_value())
+        const auto foreignHandle = AddSpatialEntity(*other, 20ULL, L"Foreign", {});
+        auto* foreign = other->FindEntity(foreignHandle);
+        if (!foreign || scene->CountExternalEntityReferences(*root) != std::optional<std::size_t>(0) ||
+            scene->CountExternalEntityReferences(*foreign).has_value())
             return Fail("Cleared references or entities from another scene were handled incorrectly.");
         return true;
     }

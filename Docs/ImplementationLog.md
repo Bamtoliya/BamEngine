@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-20] 프로젝트 점검, SceneArchiveCheck 외부 엔티티 참조 검증 핫픽스 및 CTest 44개 전체 통과
+
+- **`SceneArchiveCheck` 외부 엔티티 참조 검증 핫픽스 (`Engine/examples/SceneArchiveCheck.cpp`)**:
+  - `CheckExternalEntityReferenceCount()`에서 `scene->CreateEntity()`로 생성한 기본 엔티티(`IDComponent`만 보유)를 `scene->ReparentEntity(child, &root)`로 부모 설정하려다 3D TRS 월드 변환 필수 컴포넌트(`TransformComponent`, `WorldTransformComponent`) 누락으로 `EntityReparentResult::InvalidTransform` 반환 및 검사 조기 실패가 발생하던 문제 해결.
+  - 헬퍼 함수 `AddSpatialEntity`를 사용하여 `root`, `child`, `outside`, `foreign` 엔티티에 트랜스폼 및 계층 컴포넌트를 완비한 상태로 부모 설정 및 외부 참조 카운트를 측정하도록 수정 완료.
+- **빌드 및 회귀 검증 베이스라인 확립 (CTest 44/44 통과)**:
+  - `x64-ninja-debug` 단일 구성 빌드 정상 완료.
+  - CTest 44개 전체 검사(프리팹 외부 참조 방어, 씬 아카이브, 머티리얼/셰이더, KCC 물리, 타임라인 등) 100% 통과(`44/44 Passed`) 사용자 검증 완료.
+  - [Docs/DevelopmentPriorities.md](DevelopmentPriorities.md) 최신 기준 커밋(`c2058594`) 동기화 및 5대 차기 개발 후보군(머티리얼 Fast-Path/VS·PS 통합, Primary Pass Type, KCC 물리, Composite VFX, BamAssetWorker) 공식 재정의 완료.
+
 ### [2026-11-20] 머티리얼-셰이더 그래프 양방향 동기화, 공통 그래프 구조 및 VS/PS 통합 아키텍처 설계 문서화
 
 - **머티리얼-셰이더 그래프 동기화, 공통 프레임워크 및 VS/PS 통합 설계서 ([MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md))**:
