@@ -1319,21 +1319,11 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 			moves.push_back({ source, target, ReadBrowserFileIdentity(source) });
 			sources.push_back(source);
 		}
-		AssetReferenceImpact impact;
-		vector<AssetReferenceEdit> references;
-		const auto referenceStart = std::chrono::steady_clock::now();
-		const bool referencesReady = AssetReferenceValidator::PrepareMoveReferences(paths, references, &impact);
-		AssetManager::Get().RecordAssetReferenceTiming(
-			AssetReferenceTimingKind::MovePreparation, ImGui::GetFrameCount(), referenceStart);
-		m_MoveDocumentsAvailable = CanApplyAssetMove(moves, references);
 		m_MoveSourcePaths = std::move(sources);
 		m_MoveDestination = destination;
 		m_MoveDestinationIdentity = destinationIdentity;
 		m_MoveFromClipboard = fromClipboard;
 		m_PendingRename = rename;
-		m_MoveImpact = std::move(impact);
-		m_MoveReferences = std::move(references);
-		m_MoveReferencesReady = referencesReady;
 		m_PendingFileMove = std::move(moves);
 		m_MoveImpact = {};
 		m_MoveReferences.clear();
@@ -1364,6 +1354,16 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 			result.ReferencesReady = AssetReferenceValidator::PrepareMoveReferences(
 				paths, result.References, &result.Impact);
 			result.ElapsedMs = std::chrono::duration<double, std::milli>(
+				std::chrono::steady_clock::now() - started).count();
+			return result;
+		});
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		EDITOR_LOG_WARN("Could not prepare file move: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
 	catch (const std::exception& error)
 	{
 		m_MovePreparationPending = false;
@@ -1374,30 +1374,18 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
 			LOCAL("ContentBrowser.MoveReferenceScanFailed"), ELogLevel::Warn);
 	}
-				std::chrono::steady_clock::now() - started).count();
-			return result;
-		});
-	}
-	if (m_MovePreparationPending)
-		m_MovePreparationCancelled = true;
-	catch (const filesystem::filesystem_error& error)
-	{
-		EDITOR_LOG_WARN("Could not prepare file move: {}", error.what());
-		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
-			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
-	}
 }
 
 void ContentBrowserPanel::ClearPendingFileMove()
 {
+	if (m_MovePreparationPending)
+		m_MovePreparationCancelled = true;
 	m_PendingFileMove.clear();
 	m_MoveSourcePaths.clear();
 	m_MoveDestination.clear();
 	m_MoveDestinationIdentity = {};
 	m_MoveFromClipboard = false;
 	m_PendingRename = false;
-		if (m_MovePreparationPending)
-			return;
 	m_MoveImpact = {};
 	m_MoveReferences.clear();
 	m_MoveReferencesReady = false;
@@ -1408,6 +1396,8 @@ void ContentBrowserPanel::ConfirmFileMove()
 {
 	try
 	{
+		if (m_MovePreparationPending)
+			return;
 		CheckContentBrowserPath(m_MoveDestination, m_RootPath.lexically_normal());
 		if (!SameBrowserFile(ReadBrowserFileIdentity(m_MoveDestination), m_MoveDestinationIdentity))
 			throw filesystem::filesystem_error("Move destination changed after confirmation", m_MoveDestination,
@@ -1908,14 +1898,6 @@ bool ContentBrowserPanel::CanDeleteSelectedFiles() const
 }
 
 void ContentBrowserPanel::DeleteSelectedFiles()
-	const auto resetPreparation = [this]
-	{
-		m_DeletionPreparationPending = false;
-		m_DeletionPreparationCancelled = false;
-		m_DeletionPreparation = {};
-		m_PendingFileDeletion.clear();
-		m_DeletionImpact = {};
-	};
 {
 	if (m_CurrentDirectory == m_LastWatchedDirectory)
 		QueueFileDeletion(GetSelectedFilePaths());
@@ -1926,6 +1908,14 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 	if (!CanDeleteFiles(paths) || m_DeletionPreparationPending || m_DeletionPreparation.valid())
 		return;
 
+	const auto resetPreparation = [this]
+	{
+		m_DeletionPreparationPending = false;
+		m_DeletionPreparationCancelled = false;
+		m_DeletionPreparation = {};
+		m_PendingFileDeletion.clear();
+		m_DeletionImpact = {};
+	};
 	try
 	{
 		vector<FileMove> moves;
@@ -1939,8 +1929,18 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 			CheckContentBrowserPath(source, m_RootPath.lexically_normal());
 			moves.push_back({ source, {}, ReadBrowserFileIdentity(source) });
 		}
+		if (moves.empty())
+			return;
 
 		vector<filesystem::path> targets;
+		targets.reserve(moves.size());
+		for (const auto& move : moves)
+			targets.push_back(move.Before);
+
+		PrimeAssetReferencePathRoots();
+		m_DeletionImpact = {};
+		m_DeletionPreparationCancelled = false;
+		m_PendingFileDeletion = std::move(moves);
 		std::promise<DeletionPreparationResult> completion;
 		m_DeletionPreparation = completion.get_future();
 		m_DeletionPreparationPending = true;
@@ -1963,14 +1963,14 @@ void ContentBrowserPanel::QueueFileDeletion(const vector<filesystem::path>& path
 			result.ElapsedMs = Milliseconds(Clock::now() - started).count();
 			completion.set_value(std::move(result));
 		});
-		targets.reserve(moves.size());
-		for (const auto& move : moves)
-			targets.push_back(move.Before);
-
-		PrimeAssetReferencePathRoots();
-		m_DeletionImpact = {};
-		m_DeletionPreparationCancelled = false;
-		m_PendingFileDeletion = std::move(moves);
+	}
+	catch (const filesystem::filesystem_error& error)
+	{
+		resetPreparation();
+		EDITOR_LOG_WARN("Could not capture file deletion targets: {}", error.what());
+		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
+	}
 	catch (const std::exception& error)
 	{
 		resetPreparation();
@@ -2051,13 +2051,6 @@ void ContentBrowserPanel::ProcessDeletionPreparation()
 		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
 			LOCAL("ContentBrowser.DeleteImpactScanFailed"), ELogLevel::Warn);
 	}
-	}
-	catch (const filesystem::filesystem_error& error)
-	{
-		EDITOR_LOG_WARN("Could not capture file deletion targets: {}", error.what());
-		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
-			LOCAL("ContentBrowser.FileHistoryFailed"), ELogLevel::Warn);
-	}
 }
 
 void ContentBrowserPanel::DeleteFiles(vector<FileMove> moves)
@@ -2101,8 +2094,6 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 		{ "EditorCommon.Cancel" }, { "EditorCommon.Delete", CanUseFileCommands(), true }
 	};
 	const int action = EditorUI::DialogButtonBar("ContentBrowserDeleteActions", actions, IM_ARRAYSIZE(actions));
-		else
-			m_DeletionPreparationCancelled = m_DeletionPreparationPending;
 	if (action >= 0)
 	{
 		auto moves = std::exchange(m_PendingFileDeletion, vector<FileMove>{});
@@ -2110,6 +2101,8 @@ void ContentBrowserPanel::DrawFileDeletionConfirmation()
 		ImGui::CloseCurrentPopup();
 		if (action == 1)
 			DeleteFiles(std::move(moves));
+		else
+			m_DeletionPreparationCancelled = m_DeletionPreparationPending;
 	}
 	ImGui::EndPopup();
 }
