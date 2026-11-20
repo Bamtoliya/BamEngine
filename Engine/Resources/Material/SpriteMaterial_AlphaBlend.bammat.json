@@ -24,7 +24,7 @@
   "m_Version": 0,
   "m_VertexShaderHandle": {
     "AssetKey": "Resources/Shader/GBufferSpriteVS",
-    "AssetPath": "Resources/Shader/bin/dxil/gbufferSpriteVS.cso",
+    "AssetPath": "Engine://Shader/bin/dxil/gbufferSpriteVS.cso",
     "Null": false
   }
 }

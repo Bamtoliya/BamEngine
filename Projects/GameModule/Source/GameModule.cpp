@@ -9,7 +9,106 @@
 #include "GameGameplayLibrary.h"
 #include "ReflectionRegistry.h"
 #include "ActionTimelineEvents.h"
+#include "ActionTimelineComponent.h"
+#include "AnimatorComponent.h"
+#include "CharacterControllerComponent.h"
+#include "CompositeVFXComponent.h"
+#include "FlagComponent.h"
+#include "ResourceManager.h"
+#include "TransformSystem.h"
+#include "WorldTransformComponent.h"
+#include <cmath>
+#include <unordered_map>
+#include <unordered_set>
 #include "GameModule.gen.h"
+
+class BaselineJumpVFXSystem final : public Engine::ISystem
+{
+public:
+	static BaselineJumpVFXSystem* Create() { return new BaselineJumpVFXSystem(); }
+
+	void OnUpdate(entt::registry&, const std::vector<Engine::Scene*>& activeScenes, f32 dt) override
+	{
+		if (!std::isfinite(dt) || dt <= 0.0f) return;
+		constexpr f32 fullTurn = 6.28318530718f;
+		m_VariationX = std::fmod(m_VariationX + dt * 0.19f, fullTurn);
+		m_VariationY = std::fmod(m_VariationY + dt * 0.13f, fullTurn);
+		std::unordered_map<Engine::Scene*, std::unordered_set<entt::entity>> jumping;
+		for (auto* scene : activeScenes)
+		{
+			if (!scene || !scene->IsActive()) continue;
+			if (scene->IsPaused())
+			{
+				const auto previous = m_Jumping.find(scene);
+				if (previous != m_Jumping.end()) jumping.emplace(scene, previous->second);
+				continue;
+			}
+
+			auto& world = scene->GetRegistry();
+			std::vector<vec3> effectPositions;
+			auto view = world.view<Engine::AnimatorComponent, Engine::CharacterControllerComponent, Engine::WorldTransformComponent>();
+			for (auto entity : view)
+			{
+				auto& animator = view.get<Engine::AnimatorComponent>(entity);
+				if (animator.controllerPath != "Project://Data/Animation/BaselineVerification_Simple.animator" ||
+					!animator.isPlaying || animator.timelineOverrideOwner != entt::null)
+					continue;
+				const auto* flag = world.try_get<Engine::FlagComponent>(entity);
+				if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, Engine::EEntityFlag::Paused) ||
+					HasFlag(flag->effectiveFlags, Engine::EEntityFlag::Dead)))
+					continue;
+
+				animator.SetFloat("VariationX", 0.5f + 0.45f * std::sin(m_VariationX));
+				animator.SetFloat("VariationY", 0.5f + 0.45f * std::sin(m_VariationY));
+				const auto& runtime = animator.runtimeState;
+				const bool inJump = runtime.GetCurrentStateName() == "Jump" || runtime.GetTransitionTargetStateName() == "Jump";
+				if (!inJump) continue;
+
+				jumping[scene].insert(entity);
+				const auto previous = m_Jumping.find(scene);
+				if (previous == m_Jumping.end() || !previous->second.contains(entity))
+					effectPositions.emplace_back(view.get<Engine::WorldTransformComponent>(entity).worldMatrix[3]);
+			}
+			for (const auto& position : effectPositions)
+				SpawnEffect(*scene, position);
+		}
+		m_Jumping = std::move(jumping);
+	}
+
+private:
+	static void SpawnEffect(Engine::Scene& scene, const vec3& position)
+	{
+		const auto handle = Engine::ResourceManager::Get().LoadFile(L"Project://Effect/BaselineVerification_Hit.bamvfx.json");
+		if (!handle.IsValid())
+		{
+			BAM_LOG(Warn, "GameModule", "BaselineJump", "Could not load the jump effect.");
+			return;
+		}
+
+		auto& world = scene.GetRegistry();
+		auto& entity = scene.CreateEntity();
+		const auto id = entity.GetEntityHandle();
+		auto& transform = world.emplace<Engine::TransformComponent>(id);
+		auto& worldTransform = world.emplace<Engine::WorldTransformComponent>(id);
+		if (!transform.SetLocalPosition(position) || !Engine::TransformSystem::UpdateRootWorld(transform, worldTransform))
+		{
+			BAM_LOG(Warn, "GameModule", "BaselineJump", "Could not position the jump effect.");
+			if (!scene.DestroyEntity(entity))
+				BAM_LOG(Error, "GameModule", "BaselineJump", "Could not remove the invalid jump effect entity.");
+			return;
+		}
+		world.emplace<Engine::FlagComponent>(id);
+		auto& vfx = world.emplace<Engine::CompositeVFXComponent>(id);
+		vfx.effectHandle = Engine::ResourceHandle<Engine::CompositeEffect>(handle);
+		vfx.playOnce = true;
+		vfx.Restart();
+		world.emplace<Engine::ActionVFXLifecycleComponent>(id);
+	}
+
+	std::unordered_map<Engine::Scene*, std::unordered_set<entt::entity>> m_Jumping;
+	f32 m_VariationX = 0.0f;
+	f32 m_VariationY = 0.0f;
+};
 
 class GameModule final : public Engine::IModule
 {
@@ -39,6 +138,7 @@ public:
 		SkyAtmosphereSystem::InitializeResources();
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering Systems...");
 		Engine::SystemManager::Get().AddSystem<SkyAtmosphereSystem>();
+		Engine::SystemManager::Get().AddSystem<BaselineJumpVFXSystem>();
 
 		// 3. 액션 타임라인 이벤트 노티파이 구독 (OnUnload에서 해제하므로 핫리로드 후에도 구독은 하나다)
 		m_ActionEventHandle = Engine::ActionTimelineEvents::Subscribe([](const Engine::ActionTimelineEvent& event) { OnActionTimelineEvent(event); });
@@ -57,6 +157,7 @@ public:
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering Systems...");
 		if (Engine::SystemManager::IsCreated())
 		{
+			Engine::SystemManager::Get().RemoveSystem<BaselineJumpVFXSystem>();
 			Engine::SystemManager::Get().RemoveSystem<SkyAtmosphereSystem>();
 		}
 		// 3. 모듈 언로드 시 컴포넌트 및 리플렉션 심볼 일괄 해제

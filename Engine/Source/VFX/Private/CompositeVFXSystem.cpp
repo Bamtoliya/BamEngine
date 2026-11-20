@@ -18,6 +18,7 @@
 #include "SpriteAnimation.h"
 #include "AudioManager.h"
 #include "AudioClip.h"
+#include "Logger.h"
 #include "Scene.h"
 #include "PickingManager.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,6 +31,22 @@ void Engine::VFXSoundChannelStop::operator()(FMOD::Channel* channel) const noexc
 {
 	if (AudioManager::IsCreated() && AudioManager::Get().GetFMODSystem())
 		(void)channel->stop();
+}
+
+void Engine::CompositeVFXComponent::SetTimelinePaused(bool paused)
+{
+	if (timelinePaused == paused) return;
+	timelinePaused = paused;
+	for (auto& runtime : soundRuntimes)
+	{
+		if (!runtime.channel) continue;
+		const FMOD_RESULT result = runtime.channel->setPaused(paused);
+		if (result != FMOD_OK)
+		{
+			BAM_LOG(Warn, "Engine", "CompositeVFX", "Failed to change sound channel pause state: {}", static_cast<int>(result));
+			runtime.channel.reset();
+		}
+	}
 }
 
 EResult CompositeVFXSystem::Initialize(void* arg)
@@ -77,8 +94,7 @@ void CompositeVFXSystem::SimulateSceneVFX(Scene* scene, f32 dt)
 	}
 }
 
-// 해제된 VFX: 새 방출 없이 남은 트레일 점의 나이만 늘리고, 모두 사라지면 재생을 끝낸다.
-static void UpdateTrailDrain(Engine::CompositeVFXComponent& vfxComp, Engine::f32 dt)
+static bool UpdateTrailDrain(Engine::CompositeVFXComponent& vfxComp, Engine::f32 dt)
 {
 	const auto* effect = vfxComp.effectHandle.Get();
 	const Engine::f32 ageStep = std::max(0.0f, dt * vfxComp.playRate);
@@ -93,33 +109,33 @@ static void UpdateTrailDrain(Engine::CompositeVFXComponent& vfxComp, Engine::f32
 		std::erase_if(rt.points, [lifetime](const Engine::VFXTrailSamplePoint& pt) { return pt.age >= lifetime; });
 		hasPoints |= !rt.points.empty();
 	}
-	if (hasPoints) return;
-	vfxComp.isDraining = false;
-	vfxComp.isFinished = true;
-	vfxComp.isPlaying = false;
+	return hasPoints;
 }
 
 void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, CompositeVFXComponent& vfxComp, const WorldTransformComponent& transform, f32 dt)
 {
-	if (vfxComp.isDraining)
-	{
-		UpdateTrailDrain(vfxComp, dt);
-		return;
-	}
+	if (vfxComp.timelinePaused) return;
+	dt *= std::max(0.0f, vfxComp.timelineTimeScale);
+	const bool draining = vfxComp.isDraining;
 
-	CompositeEffect* effect = vfxComp.isPlaying ? vfxComp.effectHandle.Get() : nullptr;
+	CompositeEffect* effect = (vfxComp.isPlaying || draining) ? vfxComp.effectHandle.Get() : nullptr;
 	const f32 totalDuration = effect ? effect->GetTotalDuration() : 0.0f;
 	if (!std::isfinite(totalDuration) || totalDuration <= 0.0f)
 	{
 		vfxComp.StopSoundTracks();
 		return;
 	}
-	vfxComp.prevTime = vfxComp.currentTime;
-	const f32 playbackDelta = dt * vfxComp.playRate;
-	vfxComp.currentTime += playbackDelta;
+	f32 playbackDelta = dt * vfxComp.playRate;
+	bool releaseAfterParticles = false;
+	f32 drainRemainder = 0.0f;
+	if (!draining)
+	{
+		vfxComp.prevTime = vfxComp.currentTime;
+		vfxComp.currentTime += playbackDelta;
+	}
 
 	// 1. 전체 지속 시간 초과 처리 (루프 / 지속 유지 / 종료)
-	if (vfxComp.currentTime >= totalDuration)
+	if (!draining && vfxComp.currentTime >= totalDuration)
 	{
 		const bool loop = !vfxComp.playOnce && (vfxComp.isLooping || effect->IsLooping());
 		if (!vfxComp.previewSeeking && loop)
@@ -141,10 +157,12 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 		}
 		else
 		{
-			// 1회 재생 종료: 남은 트레일이 수명대로 사라지도록 해제 상태로 넘긴다.
+			if (vfxComp.playRate > 0.0f)
+				drainRemainder = std::clamp((vfxComp.currentTime - totalDuration) / vfxComp.playRate, 0.0f, dt);
+			dt -= drainRemainder;
+			playbackDelta = dt * vfxComp.playRate;
 			vfxComp.currentTime = totalDuration;
-			vfxComp.Release();
-			return;
+			releaseAfterParticles = true;
 		}
 	}
 
@@ -155,6 +173,7 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 		vfxComp.particleRuntimes.resize(particleTracks.size());
 	}
 
+	bool hasParticles = false;
 	for (size_t i = 0; i < particleTracks.size(); ++i)
 	{
 		const auto& track = particleTracks[i];
@@ -171,7 +190,19 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 		}
 
 		const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
-		const bool isTrackActive = (trackLocalTime >= 0.0f && (trackLocalTime <= track.duration || track.loop));
+		if (!draining && trackLocalTime < 0.0f) continue;
+
+		f32 emissionDt = 0.0f;
+		f32 residualDt = draining ? dt : 0.0f;
+		if (!draining && playbackDelta > 0.0f && vfxComp.playRate > 0.0f)
+		{
+			const f32 trackEnd = track.startTime + std::max(0.0f, track.duration);
+			const f32 activeStart = std::max(vfxComp.prevTime, track.startTime);
+			const f32 activeEnd = track.loop ? vfxComp.currentTime : std::min(vfxComp.currentTime, trackEnd);
+			emissionDt = std::max(0.0f, activeEnd - activeStart) / vfxComp.playRate;
+			if (!track.loop)
+				residualDt = std::max(0.0f, vfxComp.currentTime - std::max(vfxComp.prevTime, trackEnd)) / vfxComp.playRate;
+		}
 
 		WorldTransformComponent trackTransform = transform;
 		mat4 localMat = glm::translate(mat4(1.0f), track.localPosition) *
@@ -181,7 +212,7 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 
 		ParticleEffectComponent tempComp;
 		tempComp.effectHandle = track.effectHandle;
-		tempComp.playState = isTrackActive ? EParticlePlayState::Playing : EParticlePlayState::Paused;
+		tempComp.playState = EParticlePlayState::Playing;
 		tempComp.playRate = track.playbackSpeed * vfxComp.playRate;
 		tempComp.instances = std::move(rt.emitterInstances);
 		tempComp.isInitialized = rt.isInitialized;
@@ -201,15 +232,43 @@ void CompositeVFXSystem::UpdateVFXEntity(Scene* scene, entt::entity entity, Comp
 				const vec3 localWind = isWorld ? totalWind : vec3(invWorldMat * vec4(totalWind, 0.0f));
 				for (auto& p : inst.particles)
 				{
-					p.velocity += (totalGravity - emitterData.gravity) * dt;
+					p.velocity += (totalGravity - emitterData.gravity) * (emissionDt + residualDt);
 					if (emitterData.drag > 0.0f)
-						p.velocity += (localWind - emitterData.wind) * (emitterData.drag * dt);
+						p.velocity += (localWind - emitterData.wind) * (emitterData.drag * (emissionDt + residualDt));
 				}
 			}
 		}
-		ParticleSystem::UpdateEffectComponent(scene, tempComp, trackTransform, dt);
+		if (emissionDt > 0.0f)
+			ParticleSystem::UpdateEffectComponent(scene, tempComp, trackTransform, emissionDt);
+		if (residualDt > 0.0f)
+		{
+			tempComp.stopEmission = true;
+			ParticleSystem::UpdateEffectComponent(scene, tempComp, trackTransform, residualDt);
+		}
 		rt.emitterInstances = std::move(tempComp.instances);
 		rt.isInitialized = tempComp.isInitialized;
+		for (size_t eIdx = 0; eIdx < emitters.size() && eIdx < rt.emitterInstances.size(); ++eIdx)
+			hasParticles |= emitters[eIdx].enabled && !rt.emitterInstances[eIdx].particles.empty();
+	}
+
+	if (draining)
+	{
+		const bool hasTrailPoints = UpdateTrailDrain(vfxComp, dt);
+		if (!hasParticles && !hasTrailPoints)
+		{
+			vfxComp.isDraining = false;
+			vfxComp.isFinished = true;
+			vfxComp.isPlaying = false;
+		}
+		return;
+	}
+
+	if (releaseAfterParticles)
+	{
+		vfxComp.Release();
+		if (drainRemainder > 0.0f)
+			UpdateVFXEntity(scene, entity, vfxComp, transform, drainRemainder);
+		return;
 	}
 
 	RefreshFlashLight(vfxComp);

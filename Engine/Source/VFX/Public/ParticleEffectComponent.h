@@ -53,6 +53,7 @@ namespace Engine
 		std::vector<ParticleEmitterInstance> instances;
 		bool isInitialized = false;
 		std::optional<uint32> previewSeed;
+		bool stopEmission = false;
 
 		// 런타임 제어 API
 		void Play() { playState = EParticlePlayState::Playing; }

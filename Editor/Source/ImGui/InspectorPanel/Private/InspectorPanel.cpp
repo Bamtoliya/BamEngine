@@ -28,6 +28,8 @@
 #include <imgui_internal.h>
 #include "FileDialogs.h"
 #include "ActionTimelineComponent.h"
+#include "AnimationTimelinePanel.h"
+#include "PIEManager.h"
 #include "SplineComponent.h"
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
@@ -1486,27 +1488,54 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				changed = true;
 			}
 
-			// 2. 런타임 제어 툴바 (Play, Pause, Stop)
+			// 2. 재생 / 프리뷰 제어 툴바
 			ImGui::Spacing();
 			EditorUI::ToolbarLayout playbackToolbar;
-			if (playbackToolbar.Button("Particle.Play", ICON_FA_PLAY, "Particle.Play"))
+			const bool isEditing = !PIEManager::IsCreated() || PIEManager::Get().IsEditing();
+			if (isEditing)
 			{
-				timeline.Play();
+				const bool canPreview = !timeline.timelinePath.empty() && AnimationTimelinePanel::GetActivePanel() != nullptr;
+				ImGui::BeginDisabled(!canPreview);
+				if (playbackToolbar.Button("Timeline.PreviewPlay", ICON_FA_PLAY, "Timeline.PreviewPlay"))
+				{
+					if (auto* panel = AnimationTimelinePanel::GetActivePanel())
+						panel->RequestPreviewPlayback(Engine::Utf8ToPath(timeline.timelinePath));
+				}
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("%s", LOCAL_CSTR(canPreview ? "Timeline.PreviewPlayTooltip" : "Timeline.PreviewNoAssetTooltip"));
 			}
-
-			if (playbackToolbar.Button("Particle.Pause", ICON_FA_PAUSE, "Particle.Pause"))
+			else
 			{
-				timeline.Pause();
-			}
+				if (playbackToolbar.Button("Particle.Play", ICON_FA_PLAY, "Particle.Play"))
+				{
+					timeline.Play();
+				}
 
-			if (playbackToolbar.Button("Particle.Stop", ICON_FA_STOP, "Particle.Stop"))
-			{
-				timeline.Stop();
-			}
+				if (playbackToolbar.Button("Particle.Pause", ICON_FA_PAUSE, "Particle.Pause"))
+				{
+					timeline.Pause();
+				}
 
-			ImGuiTextBuffer elapsedText;
-			elapsedText.appendf(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
-			playbackToolbar.Text(elapsedText.c_str());
+				const auto* timelineAsset = timeline.timelineAsset.Get();
+				const bool canResume = !timeline.isPlaying && (!timelineAsset || timeline.isLooping ||
+					timeline.currentTime < std::max(0.05f, timelineAsset->GetDuration()));
+				ImGui::BeginDisabled(!canResume);
+				if (playbackToolbar.Button("Timeline.Resume", ICON_FA_PLAY, "EditorCommon.Resume"))
+				{
+					timeline.Resume();
+				}
+				ImGui::EndDisabled();
+
+				if (playbackToolbar.Button("Particle.Stop", ICON_FA_STOP, "Particle.Stop"))
+				{
+					timeline.Stop();
+				}
+
+				ImGuiTextBuffer elapsedText;
+				elapsedText.appendf(LOCAL_CSTR("Inspector.ElapsedSeconds"), timeline.currentTime);
+				playbackToolbar.Text(elapsedText.c_str());
+			}
 
 			// 타임라인 편집기는 경로 필드 더블클릭으로 연다(미저장 확인을 거치는 공용 리소스 편집기 경로).
 			}

@@ -111,10 +111,12 @@ namespace Engine
 		bool playOnce = false;
 		// 지속형 노티파이: 에셋 길이에서 끝내지 않고 Release()까지 유지한다. 런타임 전용.
 		bool holdUntilRelease = false;
-		// 해제됨: 새 방출을 멈추고 남은 트레일이 사라지면 isFinished가 된다. 런타임 전용.
+		// 해제됨: 새 방출을 멈추고 남은 파티클과 트레일이 사라지면 isFinished가 된다. 런타임 전용.
 		bool isDraining = false;
 		bool previewSeeking = false;
 		std::optional<uint32> previewSeed;
+		bool timelinePaused = false;
+		f32 timelineTimeScale = 1.0f;
 
 		// 런타임 파티클 트랙 인스턴스 배열 (effectHandle의 m_ParticleTracks와 1:1 대응)
 		std::vector<VFXParticleTrackRuntime> particleRuntimes;
@@ -147,6 +149,8 @@ namespace Engine
 				runtime.channel.reset();
 		}
 
+		ENGINE_API void SetTimelinePaused(bool paused);
+
 		void Pause()
 		{
 			isPlaying = false;
@@ -155,6 +159,8 @@ namespace Engine
 
 		void Stop()
 		{
+			SetTimelinePaused(false);
+			timelineTimeScale = 1.0f;
 			isPlaying = false;
 			currentTime = 0.0f;
 			prevTime = 0.0f;
@@ -163,14 +169,15 @@ namespace Engine
 			ResetRuntimes();
 		}
 
-		// 새 방출을 멈추고 잔상(트레일)만 남긴다. 파티클·조명·사운드·셰이크는 지금처럼 바로 정리한다.
+		// 새 방출을 멈추고 기존 파티클과 트레일은 수명까지 유지한다.
 		void Release()
 		{
 			if (isFinished || isDraining) return;
+			SetTimelinePaused(false);
+			timelineTimeScale = 1.0f;
 			isDraining = true;
 			holdUntilRelease = false;
 			StopSoundTracks();
-			for (auto& rt : particleRuntimes) rt.Reset();
 			hasActiveLight = false;
 			activeLightIntensity = 0.0f;
 			currentCameraShakeOffset = vec3(0.0f);
@@ -178,6 +185,8 @@ namespace Engine
 
 		void Restart()
 		{
+			SetTimelinePaused(false);
+			timelineTimeScale = 1.0f;
 			currentTime = 0.0f;
 			prevTime = 0.0f;
 			isPlaying = true;

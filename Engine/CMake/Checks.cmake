@@ -6,6 +6,10 @@ add_executable(SceneArchiveCheck examples/SceneArchiveCheck.cpp)
 target_link_libraries(SceneArchiveCheck PRIVATE BamEngine::Engine)
 set_target_properties(SceneArchiveCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
+add_executable(ActionTimelinePlaybackCheck examples/ActionTimelinePlaybackCheck.cpp)
+target_link_libraries(ActionTimelinePlaybackCheck PRIVATE BamEngine::Engine)
+set_target_properties(ActionTimelinePlaybackCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
+
 add_executable(UILayoutCheck examples/UILayoutCheck.cpp)
 target_link_libraries(UILayoutCheck PRIVATE BamEngine::Engine)
 set_target_properties(UILayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -24,6 +28,7 @@ if(BUILD_TESTING)
     add_test(NAME UILayoutCheck COMMAND UILayoutCheck)
     add_test(NAME SceneReflectionCheck COMMAND SceneReflectionCheck)
     add_test(NAME SceneArchiveCheck COMMAND SceneArchiveCheck)
+    add_test(NAME ActionTimelinePlaybackCheck COMMAND ActionTimelinePlaybackCheck)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scene-archive-check")
     set_tests_properties(SceneArchiveCheck PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scene-archive-check")
@@ -34,6 +39,7 @@ if(MSVC)
     target_compile_options(UILayoutCheck PRIVATE /utf-8)
     target_compile_options(SceneReflectionCheck PRIVATE /utf-8)
     target_compile_options(SceneArchiveCheck PRIVATE /utf-8)
+    target_compile_options(ActionTimelinePlaybackCheck PRIVATE /utf-8)
 endif()
 
 foreach(check_target IN ITEMS

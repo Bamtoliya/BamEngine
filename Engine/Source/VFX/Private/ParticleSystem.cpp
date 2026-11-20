@@ -441,6 +441,7 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 	const f32 effectDuration = effect->GetPlaybackDuration();
 	const auto emissionDelta = [&](const ParticleEmitterData& data, const ParticleEmitterInstance& instance)
 	{
+		if (effectComp.stopEmission) return 0.0f;
 		const f64 start = std::isfinite(data.emissionStartTime) ? std::max(0.0f, data.emissionStartTime) : 0.0;
 		const bool bounded = std::isfinite(data.emissionDuration) && data.emissionDuration > 0.0f;
 		if (start == 0.0 && !bounded && effectDuration <= 0.0f) return effectiveDt;

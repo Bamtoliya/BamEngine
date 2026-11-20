@@ -24,6 +24,7 @@
 #include "ModelInstanceComponent.h"
 #include "Logger.h"
 #include "ActionTimelineEvents.h"
+#include "ActionTimelinePlayback.h"
 #include "SystemManager.h"
 
 namespace
@@ -119,8 +120,18 @@ namespace
 			clip = FindClipByName(instance->modelHandle.Get(), clipName);
 		if (!clip.IsValid() && !asset.GetModelPath().empty())
 		{
-			const ResourceHandle<Model> model(ResourceManager::Get().LoadFile(StrToWStr(asset.GetModelPath())));
-			clip = FindClipByName(model.Get(), clipName);
+			const ResourceHandle<Model> authoringModel(ResourceManager::Get().LoadFile(StrToWStr(asset.GetModelPath())));
+			const auto authoringSkeletonHandle = authoringModel.IsValid() ? authoringModel->GetSkeleton() : ResourceHandle<Skeleton>();
+			const auto* targetSkeleton = animatorEntity != entt::null ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+			const auto* authoringSkeleton = authoringSkeletonHandle.Get();
+			if (targetSkeleton && authoringSkeleton &&
+				targetSkeleton->GetSkinBindingSignature() != authoringSkeleton->GetSkinBindingSignature())
+			{
+				BAM_LOG(Warn, "Engine", "ActionTimeline",
+					"Timeline '{}' resolves clip '{}' from an authoring model with a different skeleton binding signature.",
+					WStrToStr(asset.GetPath()), asset.GetClipName());
+			}
+			clip = FindClipByName(authoringModel.Get(), clipName);
 		}
 		if (!clip.IsValid())
 			BAM_LOG(Warn, "Engine", "ActionTimeline", "Timeline clip '{}' was not found (model: '{}'). The animator keeps its current clip.", asset.GetClipName(), asset.GetModelPath());
@@ -144,32 +155,120 @@ namespace
 		}
 	}
 
-	// 타임라인이 Animator를 넘겨받는다. 같은 Animator를 이미 넘겨받았으면(재생 중 다시 Play) 처음 보관한 상태를 유지한다.
-	void BeginAnimatorOverride(ActionTimelineComponent& timeline, entt::entity animatorEntity, const AnimatorComponent& animator)
+	void WarnOutOfRangeNotifies(const ActionTimelineAsset& asset)
 	{
-		timeline.animatorOverrideSerial = timeline.playSerial;
-		if (timeline.animatorOverrideEntity == animatorEntity) return;
-		timeline.animatorOverrideEntity = animatorEntity;
-		timeline.savedAnimatorClip = animator.currentClip;
-		timeline.savedAnimatorTime = animator.currentTime;
-		timeline.savedAnimatorPlaying = animator.isPlaying;
+		const float duration = std::max(0.05f, asset.GetDuration());
+		for (const auto& track : asset.GetNotifyTracks())
+		{
+			for (const auto& notify : track.Notifies)
+			{
+				if (!std::isfinite(notify.TriggerTime) || notify.TriggerTime < 0.0f || notify.TriggerTime > duration ||
+					!std::isfinite(notify.Duration) || notify.Duration < 0.0f ||
+					(notify.Duration > 0.0f && notify.TriggerTime + notify.Duration > duration))
+				{
+					BAM_LOG(Warn, "Engine", "ActionTimeline",
+						"Notify '{}' is outside timeline duration ({:.3f}s).", notify.Name, duration);
+				}
+			}
+		}
+	}
+
+	struct ActionTimelineDestroyHookTag {};
+
+	// 소유 타임라인이 유지 중이던 지속형 VFX를 즉시 해제한다.
+	void ReleaseHeldVFXForOwner(entt::registry& world, entt::entity ownerEntity)
+	{
+		std::vector<entt::entity> released;
+		auto holdView = world.view<ActionVFXHoldComponent, CompositeVFXComponent>();
+		for (auto vfxEntity : holdView)
+		{
+			if (holdView.get<ActionVFXHoldComponent>(vfxEntity).ownerEntity == ownerEntity)
+				released.push_back(vfxEntity);
+		}
+		for (auto vfxEntity : released)
+		{
+			if (!world.valid(vfxEntity) || !world.all_of<ActionVFXHoldComponent, CompositeVFXComponent>(vfxEntity))
+				continue;
+			world.get<CompositeVFXComponent>(vfxEntity).Release();
+			world.remove<ActionVFXHoldComponent>(vfxEntity);
+		}
 	}
 
 	// 넘겨받은 Animator를 보관한 상태로 되돌리고, 타임라인의 마지막 포즈에서 원래 애니메이션으로 섞어 넘어간다.
-	// 원래 정지 상태였으면 AnimationSystem이 돌지 않으므로 섞지 않는다. Animator가 이미 제거되었으면 표시만 지운다.
-	void EndAnimatorOverride(entt::registry& world, ActionTimelineComponent& timeline, float blendOutTime)
+	// 이미 다른 소유자에게 넘어갔거나 Animator가 파괴된 경우에는 건드리지 않는다.
+	void EndAnimatorOverride(entt::registry& world, entt::entity ownerEntity, ActionTimelineComponent& timeline, float blendOutTime)
 	{
 		const entt::entity animatorEntity = timeline.animatorOverrideEntity;
 		if (animatorEntity == entt::null) return;
 		timeline.animatorOverrideEntity = entt::null;
-		if (auto* animator = world.valid(animatorEntity) ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr)
+
+		auto* animator = world.valid(animatorEntity) ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
+		if (!animator || animator->timelineOverrideOwner != ownerEntity ||
+			animator->timelineOverrideSerial != timeline.animatorOverrideSerial) return;
+
+		animator->timelineOverrideOwner = entt::null;
+		animator->timelineOverrideSerial = 0;
+		if (animator->timelineSavedPlaying)
+			animator->BeginBlendFromPose(animator->localBonePose, blendOutTime);
+		animator->currentClip = animator->timelineSavedClip;
+		animator->currentTime = animator->timelineSavedTime;
+		animator->isPlaying = animator->timelineSavedPlaying;
+		animator->timelineSavedClip = {};
+		animator->timelineSavedTime = 0.0f;
+		animator->timelineSavedPlaying = false;
+	}
+
+	void OnActionTimelineComponentDestroy(entt::registry& world, entt::entity entity)
+	{
+		auto& timeline = world.get<ActionTimelineComponent>(entity);
+		const auto* asset = timeline.timelineAsset.Get();
+		const float blendOutTime = asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
+		EndAnimatorOverride(world, entity, timeline, blendOutTime);
+		ReleaseHeldVFXForOwner(world, entity);
+	}
+
+	void EnsureDestroyHook(entt::registry& world)
+	{
+		if (world.ctx().contains<ActionTimelineDestroyHookTag>()) return;
+		world.ctx().emplace<ActionTimelineDestroyHookTag>();
+		world.on_destroy<ActionTimelineComponent>().connect<&OnActionTimelineComponentDestroy>();
+	}
+
+	// 타임라인이 Animator를 넘겨받는다. 처음 넘겨받을 때만 원래 상태를 Animator에 저장하고,
+	// 다른 타임라인에서 인계받는 경우에는 기존 원래 상태를 덮어쓰지 않고 소유권만 넘긴다.
+	void BeginAnimatorOverride(entt::registry& world, entt::entity ownerEntity, ActionTimelineComponent& timeline,
+		entt::entity animatorEntity, AnimatorComponent& animator)
+	{
+		EnsureDestroyHook(world);
+
+		if (animator.timelineOverrideOwner != entt::null && animator.timelineOverrideOwner != ownerEntity)
 		{
-			if (timeline.savedAnimatorPlaying) animator->BeginBlendFromPose(animator->localBonePose, blendOutTime);
-			animator->currentClip = timeline.savedAnimatorClip;
-			animator->currentTime = timeline.savedAnimatorTime;
-			animator->isPlaying = timeline.savedAnimatorPlaying;
+			if (world.valid(animator.timelineOverrideOwner))
+			{
+				if (auto* prevTimeline = world.try_get<ActionTimelineComponent>(animator.timelineOverrideOwner))
+				{
+					if (prevTimeline->animatorOverrideEntity == animatorEntity)
+					{
+						prevTimeline->animatorOverrideEntity = entt::null;
+						prevTimeline->isPlaying = false;
+						prevTimeline->notifyStartPending = true;
+						++prevTimeline->playSerial;
+						ReleaseHeldVFXForOwner(world, animator.timelineOverrideOwner);
+					}
+				}
+			}
 		}
-		timeline.savedAnimatorClip = {};
+		else if (animator.timelineOverrideOwner == entt::null)
+		{
+			animator.timelineSavedClip = animator.currentClip;
+			animator.timelineSavedTime = animator.currentTime;
+			animator.timelineSavedPlaying = animator.isPlaying;
+		}
+
+		animator.timelineOverrideOwner = ownerEntity;
+		animator.timelineOverrideSerial = timeline.playSerial;
+		timeline.animatorOverrideEntity = animatorEntity;
+		timeline.animatorOverrideSerial = timeline.playSerial;
 	}
 }
 
@@ -189,13 +288,16 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 	(void)registry;
 	if (!std::isfinite(dt) || dt <= 0.0f) return;
 
-	// 게임플레이 이벤트는 게임 실행(Gameplay 페이즈 포함)에서만 발행한다. 에디터 실시간 프리뷰(Presentation만)에서는 보내지 않는다.
-	const bool publishGameplayEvents = (SystemManager::Get().GetUpdatePhaseMask() & static_cast<uint8>(ESystemPhase::Gameplay)) != 0;
+	// 편집 모드 뷰포트 Realtime(Presentation)에서는 실제 씬의 타임라인 진행·VFX 생성·카메라 FOV 변경을 막는다.
+	if (SystemManager::IsCreated() &&
+		(SystemManager::Get().GetUpdatePhaseMask() & static_cast<uint8>(ESystemPhase::Gameplay)) == 0)
+		return;
 
 	for (Scene* scene : activeScenes)
 	{
 		if (!scene || !scene->IsActive() || scene->IsPaused()) continue;
 		auto& world = scene->GetRegistry();
+		EnsureDestroyHook(world);
 
 		// 타임라인 순회 중에는 모으기만 하고, 씬의 갱신이 끝난 뒤 같은 프레임에 발행한다(핸들러가 엔티티를 바꿔도 순회가 깨지지 않게).
 		std::vector<ActionTimelineEvent> pendingEvents;
@@ -262,25 +364,39 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 		for (auto entity : view)
 		{
+			auto& timeline = view.get<ActionTimelineComponent>(entity);
 			const auto* flag = world.try_get<FlagComponent>(entity);
-			if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Paused) || HasFlag(flag->effectiveFlags, EEntityFlag::Dead)))
+			if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead)))
+			{
+				const auto* existingAsset = timeline.timelineAsset.Get();
+				const float blendOutTime = existingAsset ? existingAsset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
+				EndAnimatorOverride(world, entity, timeline, blendOutTime);
+				ReleaseHeldVFXForOwner(world, entity);
+				continue;
+			}
+			if (flag && HasFlag(flag->effectiveFlags, EEntityFlag::Paused))
 			{
 				continue;
 			}
-
-			auto& timeline = view.get<ActionTimelineComponent>(entity);
 
 			// 1. 에셋 경로 변경 시 자동 로드 동기화
 			if (timeline.timelinePath != timeline.loadedTimelinePath)
 			{
 				timeline.loadedTimelinePath = timeline.timelinePath;
 				++timeline.playSerial; // 다른 타임라인으로 바뀌면 이전 지속형 VFX를 해제한다
+				timeline.currentTime = 0.0f;
+				timeline.prevTime = 0.0f;
+				timeline.playElapsed = 0.0f;
+				timeline.notifyStartPending = true;
 				if (!timeline.timelinePath.empty())
 				{
 					auto handle = ResourceManager::Get().LoadFile(StrToWStr(timeline.timelinePath));
 					timeline.timelineAsset = ResourceHandle<ActionTimelineAsset>(handle);
 					if (const auto* loaded = timeline.timelineAsset.Get())
+					{
 						WarnMissingSocketBones(world, entity, *loaded);
+						WarnOutOfRangeNotifies(*loaded);
+					}
 				}
 				else
 				{
@@ -295,7 +411,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			{
 				const bool sessionChanged = timeline.animatorOverrideSerial != timeline.playSerial;
 				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
-				if (!asset || (!timeline.isPlaying && (sessionChanged || finished))) EndAnimatorOverride(world, timeline, asset ? asset->GetBlendOutTime() : 0.0f);
+				if (!asset || (!timeline.isPlaying && (sessionChanged || finished)))
+					EndAnimatorOverride(world, entity, timeline, asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime);
 			}
 			if (!asset || !timeline.isPlaying) continue;
 
@@ -307,26 +424,13 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 
 			const float duration = std::max(0.05f, asset->GetDuration());
-			// 세션 첫 틱만 시작 시점(0)을 포함한다. 이후에는 지난 틱에서 처리한 시점(prevTime)을 다시 발동하지 않는다.
-			const bool isFirstTick = timeline.playElapsed <= 0.0f;
 			timeline.prevTime = timeline.currentTime;
-			timeline.currentTime += dt * timeline.playRate;
+			const auto playbackStep = AdvanceActionTimeline(timeline.currentTime, dt * timeline.playRate, duration,
+				timeline.isLooping, timeline.notifyStartPending);
+			timeline.currentTime = playbackStep.CurrentTime;
 			timeline.playElapsed += dt * timeline.playRate;
-
-			bool hasLooped = false;
-			if (timeline.currentTime >= duration)
-			{
-				if (timeline.isLooping)
-				{
-					timeline.currentTime = std::fmod(timeline.currentTime, duration);
-					hasLooped = true;
-				}
-				else
-				{
-					timeline.currentTime = duration;
-					timeline.isPlaying = false;
-				}
-			}
+			timeline.notifyStartPending = false;
+			if (playbackStep.Finished) timeline.isPlaying = false;
 
 			// 2. Animator 구동: 작성 클립이 있을 때만 넘겨받는다. 클립이 없는 타임라인(사운드·카메라 전용)은 Animator를 건드리지 않는다.
 			// Animator는 자신 또는 자식 모델 루트에서 찾는다.
@@ -337,8 +441,9 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			if (animator && clip && skeleton)
 			{
 				// 계층이 바뀌어 다른 Animator를 찾았으면 이전 Animator를 먼저 되돌린다.
-				if (timeline.animatorOverrideEntity != animatorEntity) EndAnimatorOverride(world, timeline, asset->GetBlendOutTime());
-				BeginAnimatorOverride(timeline, animatorEntity, *animator);
+				if (timeline.animatorOverrideEntity != entt::null && timeline.animatorOverrideEntity != animatorEntity)
+					EndAnimatorOverride(world, entity, timeline, asset->GetBlendOutTime());
+				BeginAnimatorOverride(world, entity, timeline, animatorEntity, *animator);
 				animator->isPlaying = false; // 타임라인이 시간을 구동하므로 AnimationSystem의 자체 진행을 멈춘다
 				animator->currentClip = timeline.boundClip;
 				animator->currentTime = timeline.currentTime;
@@ -348,7 +453,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 			else
 			{
-				EndAnimatorOverride(world, timeline, asset->GetBlendOutTime());
+				EndAnimatorOverride(world, entity, timeline, asset->GetBlendOutTime());
 			}
 
 			// 3. 노티파이 이벤트 구간 검출 및 트리거
@@ -358,20 +463,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				if (track.IsMuted) continue;
 				for (const auto& notify : track.Notifies)
 				{
-					// 구간 (from, to]을 지났는지 본다. 경계 시점이 두 틱에 걸쳐 두 번 발동하지 않도록 아래쪽 끝은 첫 틱(또는 루프 후 0)만 포함한다.
-					const float t = notify.TriggerTime;
-					const auto crossed = [t](float from, float to, bool includeFrom) { return (includeFrom ? t >= from : t > from) && t <= to; };
-					const bool triggered = hasLooped
-						? (crossed(timeline.prevTime, duration, isFirstTick) || crossed(0.0f, timeline.currentTime, true))
-						: crossed(timeline.prevTime, timeline.currentTime, isFirstTick);
-
-					if (triggered)
+					const std::size_t crossingCount = CountActionTimelineCrossings(playbackStep, notify.TriggerTime);
+					for (std::size_t crossing = 0; crossing < crossingCount; ++crossing)
 					{
 						// (1) 등록된 C++ / 스크립트 게임플레이 콜백 실행
 						for (const auto& cb : timeline.notifyCallbacks) { if (cb) cb(entity, notify); }
 
 						// (1-1) 이벤트 노티파이: 씬 갱신이 끝난 뒤 ActionTimelineEvents 구독자에게 발행한다.
-						if (notify.Type == EAnimNotifyType::CustomEvent && publishGameplayEvents)
+						if (notify.Type == EAnimNotifyType::CustomEvent)
 							pendingEvents.push_back({ scene, entity, notify.EventTag, notify.Name, notify.TriggerTime });
 
 						// (2) 소리 노티파이 (Audio FX)
@@ -499,6 +598,13 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				const bool ownerEnded = owner && !owner->isPlaying && ownerAsset && owner->currentTime >= std::max(0.05f, ownerAsset->GetDuration());
 				if (ownerGone || ownerEnded || owner->playSerial != hold.playSerial || owner->playElapsed >= hold.releaseElapsed)
 					released.push_back(vfxEntity);
+				else
+				{
+					auto& vfx = holdView.get<CompositeVFXComponent>(vfxEntity);
+					vfx.timelineTimeScale = std::max(0.0f, owner->playRate);
+					vfx.SetTimelinePaused(!owner->isPlaying || vfx.timelineTimeScale == 0.0f ||
+						(ownerFlag && HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Paused)));
+				}
 			}
 			for (auto vfxEntity : released)
 			{

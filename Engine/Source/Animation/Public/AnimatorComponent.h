@@ -82,6 +82,13 @@ namespace Engine
 			blendFromElapsed = 0.0f;
 		}
 
+		// 외부 구동(액션 타임라인) 소유권과 복원 기준 상태 (런타임 전용, 비직렬화)
+		entt::entity timelineOverrideOwner = entt::null;
+		uint32 timelineOverrideSerial = 0;
+		ResourceHandle<Animation> timelineSavedClip;
+		f32 timelineSavedTime = 0.0f;
+		bool timelineSavedPlaying = false;
+
 		// 애니메이션 상태 머신 런타임 인스턴스 (비직렬화)
 		AnimatorRuntimeState runtimeState;
 		std::shared_ptr<AnimatorStateMachine> stateMachineAsset;

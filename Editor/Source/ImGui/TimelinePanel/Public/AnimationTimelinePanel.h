@@ -74,7 +74,8 @@ public:
 
 public:
 	static AnimationTimelinePanel* GetActivePanel() { return s_ActivePanel; }
-	void TogglePlayPause() { m_IsPlaying = !m_IsPlaying; }
+	void RequestPreviewPlayback(const std::filesystem::path& assetPath);
+	void TogglePlayPause();
 	void StepFrame(int step);
 	void GoToFirstFrame() { m_CurrentTime = 0.0f; }
 	void GoToLastFrame() { m_CurrentTime = m_Duration; m_IsPlaying = false; }
@@ -147,6 +148,7 @@ private:
 	TimelineSocketTransform GetSocketWorldTransform(const std::string& boneName, const vec3& offsetPos, const vec3& offsetRot) const;
 	void UpdatePreviewHeldVFX(f32 dt);
 	void ClearPreviewVFX();
+	void StartPreviewFromBeginning();
 
 	void AddNotifyAt(int trackIdx, Engine::EAnimNotifyType type, float time);
 
@@ -172,7 +174,7 @@ private:
 	f32 m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime; // 저장되는 문서 값. 런타임 종료 시 원래 애니메이션으로 섞는 시간
 	f32 m_FPS = 30.0f;
 	f32 m_PlaybackSpeed = 1.0f;
-	f32 m_PrevTime = 0.0f;
+	bool m_NotifyStartPending = true;
 
 	// 분할 패널 폭
 	float m_TimelineZoom = 1.0f;
@@ -223,7 +225,12 @@ private:
 	std::string m_LastTriggeredNotifyName;
 	f32 m_TriggerToastTimer = 0.0f;
 	vec3 m_LastTriggeredWorldPos = vec3(0.0f);
-	std::vector<entt::entity> m_PreviewVFXEntities;
+	struct PreviewVFX
+	{
+		entt::entity Entity = entt::null;
+		bool IsTest = false;
+	};
+	std::vector<PreviewVFX> m_PreviewVFXEntities;
 
 	// 지속형 VFX 노티파이로 생성되어 해제를 기다리는 엔티티
 	struct PreviewHeldVFX

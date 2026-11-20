@@ -39,6 +39,7 @@ namespace Engine
 		// 지속형 노티파이 해제 판정용 (런타임 전용): 재생 세션 번호와 세션 안에서 누적한 재생 시간(루프해도 줄지 않음)
 		uint32 playSerial = 0;
 		f32 playElapsed = 0.0f;
+		bool notifyStartPending = true;
 
 		// 런타임 캐시
 		std::string loadedTimelinePath;
@@ -47,13 +48,10 @@ namespace Engine
 		ResourceHandle<Animation> boundClip;
 		uint32 boundClipSerial = 0xFFFFFFFFu; // 아직 찾지 않음
 
-		// 타임라인이 Animator를 넘겨받기 전 상태 (런타임 전용). 세션이 끝나면(Stop·교체·비루프 종료) 되돌린다.
+		// 타임라인이 넘겨받은 Animator 추적 (런타임 전용). 원래 상태는 AnimatorComponent가 소유하며, 세션 종료·Stop·교체·컴포넌트 제거 시 되돌린다.
 		// animatorOverrideEntity: 넘겨받은 Animator 엔티티(자신 또는 자식 모델 루트). null이면 넘겨받지 않은 상태다.
 		entt::entity animatorOverrideEntity = entt::null;
 		uint32 animatorOverrideSerial = 0;
-		ResourceHandle<Animation> savedAnimatorClip;
-		f32 savedAnimatorTime = 0.0f;
-		bool savedAnimatorPlaying = false;
 
 		// ── 게임플레이 이벤트 콜백 (사용 중단 예정) ──
 		// 해제 수단이 없어 핫리로드되는 모듈에서 쓰면 안전하지 않다. 이벤트 노티파이는 ActionTimelineEvents로 구독한다.
@@ -73,13 +71,14 @@ namespace Engine
 			currentTime = 0.0f;
 			prevTime = 0.0f;
 			playElapsed = 0.0f;
+			notifyStartPending = true;
 			++playSerial;
 			isPlaying = true;
 		}
 
 		void Pause() { isPlaying = false; }
 		void Resume() { isPlaying = true; }
-		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; playElapsed = 0.0f; ++playSerial; }
+		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; playElapsed = 0.0f; notifyStartPending = true; ++playSerial; }
 	};
 
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SOCKET_ATTACHMENT"), CATEGORY("CATEGORY_CORE"))
@@ -109,15 +108,13 @@ namespace Engine
 	};
 
 	// ── 지속형 VFX 노티파이: 소유 타임라인의 해제 시점까지 유지한다 (런타임 생성 전용) ──
+	// ownerEntity에 리플렉션을 붙이면 Scene::DestroyEntity가 비울 수 없는 외부 참조로 오판하므로 런타임 비리플렉션 필드로 둔다.
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ACTION_VFX_HOLD"), CATEGORY("CATEGORY_RENDER"))
-		struct ActionVFXHoldComponent
+	struct ActionVFXHoldComponent
 	{
 		REFLECT_BODY()
-			PROPERTY(READONLY, NOSERIALIZE)
-			entt::entity ownerEntity = entt::null;
-		PROPERTY(READONLY, NOSERIALIZE)
-			uint32 playSerial = 0;
-		PROPERTY(READONLY, NOSERIALIZE)
-			f32 releaseElapsed = 0.0f;
+		entt::entity ownerEntity = entt::null;
+		uint32 playSerial = 0;
+		f32 releaseElapsed = 0.0f;
 	};
 }

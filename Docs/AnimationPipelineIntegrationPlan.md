@@ -1,7 +1,7 @@
 # 애니메이션 제작·실행 파이프라인 개선 계획
 
 - 작성일 2026-11-19
-- 상태 · 현재 코드와 저장 에셋을 확인한 구현 계획. 변경 적용과 통합 실행 검증은 대기 중이다.
+- 상태 · 1~3절의 코드 변경과 헤드리스 회귀 사례를 반영했다. 빌드·CTest·로캘 생성·PIE·독립 Client 검증은 실행하지 않았으므로 통합 완료 판정은 대기 중이다.
 - 관련 기준 · [에디터·클라이언트 지침](EngineEditorClientGuidelines.md) · [에디터 UX 검증](EditorUXTestGuidelines.md) · [Reflection·Archive 지침](ReflectionArchiveGuidelines.md)
 
 ## 1. 목표와 현재 흐름
@@ -24,7 +24,21 @@ flowchart LR
 ```
 
 - 모델 임포트가 모델·스켈레톤·클립을 각각 저장하고, Animator Graph와 Action Timeline이 임포트 결과를 소비한다. Animator Graph의 상태 Notify는 시간·이름·페이로드를 담고 `AnimatorComponent` 콜백으로 전달된다. Action Timeline의 Notify는 VFX·사운드·게임 이벤트의 시간과 소켓을 지정한다. 복합 VFX 에셋은 그 안에서 재생할 개별 연출을 소유한다. 이 책임 분리를 유지한다. [모델 임포트](InteractiveModelImportPreviewPlan.md) · [Animator Graph](AnimatorGraphPlan.md) · [Action Timeline](AnimationTimelineEditorPlan.md) · [Composite VFX](CompositeVisualEffectPlan.md)
-- `BaselineVerification`의 Rogue는 Controller 경로가 비어 있고 타임라인이 자동 재생된다. 기존 검증은 PIE에서 `OnAttackHit` 1회 수신, 루프당 1회 수신, Presentation에서 이벤트 로그 없음, 모듈 핫리로드 뒤 단일 수신을 확인했다. `GameModule` 예제는 받은 이벤트를 로그로 남긴다. 입력에 의한 재생, 상태 머신 복귀, 편집 씬 데이터 보존, 독립 Client는 아래 단계에서 검증한다. [대표 씬](../Assets/Scenes/BaselineVerification.bamscene.json) · [C++ 예제](../Projects/GameModule/Source/GameModule.cpp) · [기존 검증 기록](AnimationTimelineEditorPlan.md#85-1단계-c-게임-모듈-수신-2026-11-19)
+- `BaselineVerification`의 Rogue는 Controller 경로를 `BaselineVerification_Simple.animator`에 연결한다. 타임라인은 자동 재생하지 않으며 인스펙터에서 재생할 수 있다. 이전 구성에서 PIE의 `OnAttackHit` 수신 및 핫리로드 후 단일 구독을 확인했으나 새 구성은 실환경 검증 전이다. `GameModule` 예제는 받은 이벤트를 로그로 남긴다. [대표 씬](../Assets/Scenes/BaselineVerification.bamscene.json) · [C++ 예제](../Projects/GameModule/Source/GameModule.cpp) · [기존 검증 기록](AnimationTimelineEditorPlan.md#85-1단계-c-게임-모듈-수신-2026-11-19)
+
+### Baseline 점프와 이동 변주 예시
+
+- Idle A/B, Walk A/B/C, Run A/B를 각각 2D 블렌드로 연결한다. `GameModule`의 샘플 시스템이 `VariationX/Y`를 천천히 변경한다. 별도 `GameModule`이 없는 그래프 프리뷰에서는 기본값이나 사용자가 입력한 값으로 블렌드한다.
+- KCC의 `Jump` 트리거로 어느 이동 상태에서든 비루프 `Jump_Full_Short`에 진입하고, 클립이 85% 이상 진행되고 접지하면 Idle로 복귀한다. 이동 중에는 기존 `Speed` 전이가 다시 Walk/Run을 선택한다. 씬에서 속도에 따른 전체 Animator 재생률 변경은 꺼서 점프 속도가 이동 속도에 따라 바뀌지 않게 했다.
+- 샘플 시스템은 해당 컨트롤러의 점프 전이를 감지해 기존 `BaselineVerification_Hit` 복합 이펙트를 캐릭터 위치에 한 번 생성한다. Animator의 상태 Notify나 Action Timeline을 재생하는 방식은 아니며, 효과는 생성 위치에 남는다. 점프 진입 감지는 시스템 순서에 따라 프레임 단위 지연이 있을 수 있다. 게임 모듈이 필요하고 그래프 프리뷰에서는 발생하지 않는다.
+- **확인 필요:** Editor와 GameModule 빌드 후 PIE에서 정지·이동·달리기 중 점프, 착지 복귀, 연속 점프와 이펙트 잔존·소멸을 확인한다. 2D 코너와 중간 값의 포즈 호환성, 점프 클립과 실제 체공 시간의 정렬, 타임라인 수동 재생 후 복귀 및 모듈 핫리로드도 확인한다. 에셋은 Git 무시 대상이고 빌드·실행 검증은 하지 않았다.
+
+### 구현 반영 상태
+
+- **1절**: Action Timeline 시스템을 Gameplay 페이즈에 제한하고, 편집 모드 인스펙터 재생을 독립 프리뷰로 라우팅했다. Animator의 원래 상태를 Animator가 소유하고, 세션 소유권·serial로 정상 종료·정지·교체·비활성화·컴포넌트 제거 시 복원 및 지속형 VFX 해제를 연결했다.
+- **2절**: 프리뷰와 런타임이 `ActionTimelinePlayback`의 시간 진행 및 Notify 교차 계산을 공유한다. 포즈·스키닝 행렬 갱신 후 Notify를 검사하며 시작 시각, 구간 경계, 루프 경계와 다중 루프를 검사하는 `ActionTimelinePlaybackCheck`를 추가했다.
+- **3절**: 모델 참조는 저장 시 확인 가능한 `Engine://` 또는 `Project://` URI로 정규화하고, 이전 절대 경로는 읽을 수 있게 유지한다. 클립 누락·동명 클립·스켈레톤 불일치·없는 소켓·범위 밖 Notify를 진단한다. 기본 스프라이트·파티클 머티리얼은 `Resources/Shader/GBufferSpriteVS`의 논리 키를 보존하면서 바이너리 `AssetPath`를 `Engine://` URI로 정규화했다.
+- 위 항목은 코드 반영 상태이며 실행 검증 결과가 아니다. 5절의 수동 체크리스트와 7절의 사용자 실행 검증을 통과하기 전에는 통합 완료로 판정하지 않는다.
 
 ## 2. 편집 씬 격리와 Animator 복원
 
@@ -33,14 +47,14 @@ flowchart LR
 **우선순위 높음.** 씬 뷰의 Realtime은 `Presentation` 업데이트를 실행하고 `ActionTimelineSystem`은 여기에 참여한다. `CustomEvent` 발행만 Gameplay 페이즈로 제한한다. 활성 편집 씬의 타임라인이 재생되면 VFX 엔티티가 생성되거나 메인 카메라 FOV가 변경될 수 있다. 인스펙터의 `Play`는 컴포넌트에 직접 요청한다. [에디터 프레임 루프](../Editor/Source/Application/Private/Application.cpp) · [ActionTimelineSystem](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp) · [인스펙터](../Editor/Source/ImGui/InspectorPanel/Private/InspectorPanel.cpp)
 
 - 실제 씬의 타임라인 진행과 부작용을 Gameplay 실행 경계에 둔다. 편집 모드 인스펙터의 재생은 기존 `AnimationTimelinePanel`의 독립 프리뷰로 연결한다. 대상 문서를 바꿀 때 공용 미저장 확인을 통과한 뒤 재생한다. 전환을 취소하면 현재 프리뷰·문서·편집 씬을 보존한다.
-- [ ] **완료 기준.** VFX와 카메라 샷이 들어 있는 에셋으로 편집 모드 Realtime과 인스펙터 재생을 확인한다. 편집 씬의 엔티티 수, 메인 카메라 FOV, Animator·타임라인 상태와 문서의 미저장 표시가 그대로다. 독립 프리뷰는 로컬 연출을 재생하고 게임 이벤트는 보내지 않는다. PIE에서는 기존 이벤트가 정상 발행된다.
+- [ ] **실환경 확인 대기.** VFX와 카메라 샷이 들어 있는 에셋으로 편집 모드 Realtime과 인스펙터 재생을 확인한다. 편집 씬의 엔티티 수, 메인 카메라 FOV, Animator·타임라인 상태와 문서의 미저장 표시가 그대로다. 독립 프리뷰는 로컬 연출을 재생하고 게임 이벤트는 보내지 않는다. PIE에서는 기존 이벤트가 정상 발행된다.
 
 ### 2.2 액션 세션 종료와 복원
 
 **우선순위 높음.** 현재 타임라인은 `AnimatorComponent::isPlaying`을 끄고 원래 클립·시간·재생 여부를 타임라인 컴포넌트에 보관한다. 타임라인 컴포넌트만 제거하면 이후 갱신 대상에서 빠져 복원할 수 없다. 자신과 자식에서 Animator를 찾는 기존 `AnimationSceneQuery`는 재사용하되, 세션이 실제로 넘겨받은 Animator를 추적한다. [현재 복원과 한계](AnimationTimelineEditorPlan.md#11-animator-넘겨받기복원과-계층-탐색-2026-11-19) · [AnimationSceneQuery](../Engine/Source/Animation/Private/AnimationSceneQuery.cpp)
 
 - 먼저 기존 복원 처리를 정상 종료·정지·에셋 교체·컴포넌트 제거에서 공통으로 실행할 수 있게 연결한다. 인스펙터 삭제 외의 제거에서도 복원되도록 수명을 다룬다. 일시정지·재개는 같은 세션으로 유지한다. 중복 재생 요청이나 Animator 공유가 가능한 경우 이전 요청의 복원이 새 요청을 덮어쓰지 않게 한다. 지속형 VFX는 기존 해제와 잔상 정리 정책을 따른다.
-- [ ] **완료 기준.** Controller가 재생 중인 캐릭터에서 액션의 정상 종료, `Stop()`, 재생 중 새 타임라인, 컴포넌트만 제거, 소유자 제거를 확인한다. 살아 있는 Animator는 원래 재생 상태로 한 번 복원된다. 일시정지·재개 중에는 복원하지 않는다. Animator가 자식에 있는 구성에서도 같은 결과가 나온다.
+- [ ] **실환경 확인 대기.** Controller가 재생 중인 캐릭터에서 액션의 정상 종료, `Stop()`, 재생 중 새 타임라인, 컴포넌트만 제거, 소유자 제거를 확인한다. 살아 있는 Animator는 원래 재생 상태로 한 번 복원된다. 일시정지·재개 중에는 복원하지 않는다. Animator가 자식에 있는 구성에서도 같은 결과가 나온다.
 
 이 단계에서는 기존 블렌드 아웃을 검증한다. 액션 중에도 하체 이동을 유지하거나 상체만 합성해야 하는 요구가 생기면 Animator가 액션 포즈 입력을 소유하는 구조를 검토한다.
 
@@ -50,7 +64,7 @@ flowchart LR
 
 - `ActionTimelineAsset`의 시간 진행과 마커 구간 판정을 순수 로직으로 추출해 패널과 런타임에서 사용한다. 기본 구간은 `(이전, 현재]`로 두고 새 세션과 루프의 시작만 0초를 포함한다. 이전·현재 시간이 같을 때, 여러 루프를 한 틱에 넘을 때, 스크럽할 때의 규칙을 명시한다. 스크럽으로 게임 이벤트나 오디오를 다시 발생시키지 않는다.
 - 양쪽에서 시간 진행과 루프 처리 후 포즈를 갱신하고, 같은 포즈에서 소켓을 조회해 발동한다. 지속형 VFX는 저작한 발동 시점과 지속 시간, 취소·종료 기준을 일치시킨다. 패널은 독립 씬과 테스트 표시를 처리하고, 런타임은 실제 씬의 연출과 `ActionTimelineEvents` 발행을 담당한다. Animator Graph의 상태 Notify는 이 단계에서 이동시키지 않는다.
-- [ ] **완료 기준.** 시작 0초·중간 틱 경계·마지막 프레임·루프 첫 프레임에서 같은 마커 순서와 횟수를 확인한다. Pause·Resume 후 중복 발동이 없고 스크럽 중 이벤트 수신이 없다. 같은 클립과 시간에서 빠르게 움직이는 본의 순간 VFX 위치 및 지속형 VFX 해제 결과를 패널과 PIE에서 비교한다.
+- [ ] **실환경 확인 대기.** 시작 0초·중간 틱 경계·마지막 프레임·루프 첫 프레임에서 같은 마커 순서와 횟수를 확인한다. Pause·Resume 후 중복 발동이 없고 스크럽 중 이벤트 수신이 없다. 같은 클립과 시간에서 빠르게 움직이는 본의 순간 VFX 위치 및 지속형 VFX 해제 결과를 패널과 PIE에서 비교한다.
 
 ## 4. 모델·클립 참조와 재임포트 검증
 
@@ -59,14 +73,17 @@ flowchart LR
 1. **작성 모델 경로.** 기존 에셋 피커의 `PlatformPath::ToVirtualUri()`를 활용해 프로젝트·엔진 마운트 URI로 저장한다. 기존 절대 경로는 읽기 호환을 유지한다. 현재 체크아웃의 마운트에 속하는 경로는 다시 저장할 때 정규화한다. 파일이 이미 사라졌거나 경로를 확정할 수 없으면 재지정을 안내한다. 이전 필드를 읽을 수 있는지부터 확인하고 기존 에셋은 작은 묶음으로 갱신한다. [에셋 피커](../Editor/Source/ImGui/Private/AssetPathPicker.cpp)
 2. **클립과 대상 스켈레톤.** 기존 `ResourceHandle<Animation>`의 직렬화 방식으로 클립 정체성을 보존할 수 있는지 검증한다. 기존 `ClipName`은 이전 문서나 명시적 재매핑에서 사용하고, 동명 클립이 여러 개이거나 대상 스켈레톤이 호환되지 않으면 알린다. `GetSkinBindingSignature()`와 뼈 매핑이 지원하는 호환 범위를 확인한 뒤 비교 기준을 정한다. [리소스 핸들 직렬화](../Engine/Source/Resource/Public/ResourceHandleArchiveAdapter.h) · [Skeleton](../Engine/Source/Animation/Skeleton/Public/Skeleton.h)
 3. **에셋 변경 후 진단.** 클립 누락, 소켓 본 누락, 바뀐 클립 길이, 범위를 벗어난 마커·지속 구간을 열기·저장 시 확인한다. 진단에는 문서와 문제 트랙을 표시하고 저작 값을 보존한다. 의존성 검사에 모델·클립·사운드·VFX가 잡히는지 확인하고 이동·이름 변경 경로도 함께 검증한다. [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
-4. [ ] **완료 기준.** 이전 문서의 정상 읽기, URI로 다시 저장한 문서의 재열기, 모델·클립 이동, 원본 클립의 이름과 길이 변경, 동명 클립을 가진 다른 모델에서의 오류 표시를 확인한다. 다른 경로의 체크아웃과 패키지에서도 같은 모델과 클립을 찾는다.
+4. [ ] **실환경 확인 대기.** 이전 문서의 정상 읽기, URI로 다시 저장한 문서의 재열기, 모델·클립 이동, 원본 클립의 이름과 길이 변경, 동명 클립을 가진 다른 모델에서의 오류 표시를 확인한다. 다른 경로의 체크아웃과 패키지에서도 같은 모델과 클립을 찾는다.
 
 ## 5. 대표 액션 통합 검증
 
-2~4절을 통과한 뒤 기존 모델 임포트·Animator Graph·Composite VFX·Action Timeline으로 타임라인 하나를 만든다. 대표 캐릭터에는 실제 이동 Controller를 설정한다. 게임 입력을 `ActionTimelineComponent::Play()`에 연결하고 `ActionTimelineEvents::Subscribe()`로 판정을 받는다. 로그와 함께 판정 카운터 등 확인 가능한 게임 상태를 한 번만 바꾼다. 모듈 언로드 시 기존 구독 해제 방식을 사용한다. 제작 단계와 사용 에셋 이름은 구현 기록에 남긴다.
+2~4절을 통과한 뒤 기존 모델 임포트·Animator Graph·Composite VFX·Action Timeline으로 타임라인 하나를 검증한다. `Assets/Scenes/BaselineVerification.bamscene.json`의 Rogue는 이동·점프 Controller와 수동 재생용 `BaselineVerification_Hit.bamtimeline.json`을 참조한다. 현재 타임라인은 Test의 `Rig_Medium_General` 모델과 `Idle_A` 클립을 사용하며 0.4초 지점에서 `handslot.r` 소켓 Composite VFX와 `OnAttackHit` 이벤트를 발생시킨다. `BaselineVerification_Hit.bamvfx.json`은 짧은 고속 확산 이미터를 0.9초 동안 재생한다. 이동·점프와 별도의 액션 재생을 확인하는 샘플이며, 입력·판정까지 연결한 완성된 게임플레이 통합은 아니다. 대표 게임플레이 검증에서는 `ActionTimelineComponent::Play()`와 `ActionTimelineEvents::Subscribe()`를 연결해 판정 카운터 등 확인 가능한 게임 상태를 한 번만 바꾼다. 모듈 언로드 시 기존 구독 해제 방식을 사용한다.
 
-- [ ] **패널.** 클립을 선택하고 본 선택기에서 소켓을 정한 뒤 VFX·사운드·`CustomEvent`를 배치한다. 저장·재열기와 한·영 언어 전환 후 클립·시간·소켓 선택이 유지된다. 지원하지 않는 Notify 유형이나 필드는 사용 가능한 결과와 구분해 안내한다. 고정 문구는 기존 로캘 키를 우선 사용하고, 추가할 키는 그룹별 CSV에 한·영 값을 등록한다. 입력과 단축키는 기존 `InputManager`·`ShortcutManager` 경로를 따른다.
-- [ ] **PIE.** 이동 중 액션을 시작하고 포즈, 소켓 VFX, 사운드, 판정 1회, 이동 복귀를 확인한다. 중도 정지·삭제·재생 반복과 모듈 핫리로드에서 복원과 구독이 중복되지 않는다. 부모에 타임라인을, 자식에 모델과 Animator를 둔 사례도 확인한다.
+- [ ] **편집 씬 격리.** Realtime 상태에서 씬 엔티티 수·카메라 FOV·Animator 포즈·타임라인 시간을 기록하고, Inspector Preview 재생 뒤 값이 바뀌지 않는지 확인한다. 독립 프리뷰에서 VFX·오디오가 재생되되 `CustomEvent` 구독자는 호출되지 않아야 한다.
+- [ ] **복원 수명.** Animator Controller가 재생 중인 구성에서 정상 종료, Pause/Resume, Stop, 새 타임라인 재생, 타임라인 컴포넌트만 제거, 소유 엔티티 제거를 각각 확인한다. 원래 클립·시간·재생 상태 복원이 한 번만 발생해야 하며, Animator를 자식 모델 엔티티에 둔 경우도 반복한다.
+- [ ] **Notify 경계.** 시작 0초, 프레임 구간 끝, 클립/타임라인 마지막 시각, 루프 0초 및 여러 루프를 한 프레임에 넘기는 조건에서 패널과 PIE의 발동 횟수를 비교한다. Pause/Resume은 중복 발동하지 않고 스크럽은 게임 이벤트·오디오를 발행하지 않아야 한다.
+- [ ] **패널·참조.** 클립을 선택하고 본 선택기에서 소켓을 정한 뒤 VFX·사운드·`CustomEvent`를 배치한다. 저장·재열기와 한·영 언어 전환 후 클립·시간·소켓 선택이 유지되는지 확인한다. 기존 절대 경로 타임라인을 열어 URI로 다시 저장하고, 모델·클립 누락·동명 클립·없는 본·범위 밖 마커 진단을 확인한다. 기본 스프라이트·파티클 머티리얼이 다른 체크아웃에서도 `Engine://` 셰이더를 찾는지 확인한다.
+- [ ] **PIE.** `BaselineVerification` 샘플에서 타임라인의 Idle_A 포즈, 손 소켓 VFX, `OnAttackHit` 발행, Animator 복귀를 먼저 확인한다. 이어 이동 중 액션을 시작하고 포즈, 소켓 VFX, 사운드, 판정 1회, 이동 복귀를 확인한다. 중도 정지·삭제·재생 반복과 모듈 핫리로드에서 복원과 구독이 중복되지 않는다.
 - [ ] **Windows Client.** 같은 씬을 시작 씬으로 지정해 Release를 내보낸다. 원본 체크아웃에 기대지 않는 다른 위치나 머신에서 Client를 실행해 같은 입력·클립·연출·이벤트·복귀를 확인한다. 에디터 및 Client 버전·설정과 사용한 에셋을 기록한다. [빌드 및 패키징 계획](BuildAndPackagingPlan.md)
 
 ## 6. 통합 검증 후 다룰 항목
@@ -81,8 +98,8 @@ flowchart LR
 
 ```powershell
 cmake --preset x64-debug -DBUILD_TESTING=ON
-cmake --build --preset x64-debug --config Debug --target Editor AuditLocalization SceneArchiveCheck AssetReferenceCheck EditorHistoryCheck BlendTree2DCheck
-ctest --preset x64-debug --output-on-failure -R "SceneArchiveCheck|AssetReferenceCheck|EditorHistoryCheck|BlendTree2DCheck|LocalizationAuditUtility"
+cmake --build --preset x64-debug --config Debug --target Editor ActionTimelinePlaybackCheck AuditLocalization GenerateLocalization
+ctest --preset x64-debug --output-on-failure -R "ActionTimelinePlaybackCheck|LocalizationAuditUtility"
 ```
 
-- **이번 문서 검증 범위.** 호출 경로, 예제 씬·타임라인, 기존 사용자 검증 기록과 테스트 타깃을 대조했다. 개선 코드 작성, 빌드, CTest, PIE와 독립 Client 실행은 이후 단계에 남아 있다.
+- **이번 작업의 검증 상태.** `git diff --check`는 통과했다. 빌드, CTest, 로캘 생성, Editor, PIE와 독립 Client는 실행하지 않았다. 위 CMake·CTest 명령과 수동 체크리스트는 사용자가 실행할 검증 절차다.

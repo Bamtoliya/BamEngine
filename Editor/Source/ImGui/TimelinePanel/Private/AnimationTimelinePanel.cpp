@@ -29,9 +29,11 @@
 #include <imgui.h>
 #include <algorithm>
 #include <cmath>
+#include <system_error>
 #include "AudioClip.h"
 #include "AudioManager.h"
 #include "ActionTimelineComponent.h"
+#include "ActionTimelinePlayback.h"
 #include "NameComponent.h"
 #include "ShortcutManager.h"
 #include "CompositeVFXComponent.h"
@@ -58,6 +60,16 @@ namespace
 	{
 		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
 		return name.ends_with(".bamvfx") || name.ends_with(".bamvfx.json");
+	}
+
+	std::string NormalizeModelAssetPath(const std::string& path)
+	{
+		if (path.empty()) return {};
+		const auto physicalPath = Engine::PlatformPath::ResolveUri(Engine::Utf8ToPath(path));
+		std::error_code error;
+		if (!std::filesystem::exists(physicalPath, error) || error) return path;
+		const auto virtualUri = Engine::PlatformPath::ToVirtualUri(physicalPath);
+		return Engine::PlatformPath::IsVirtualUri(virtualUri) ? Engine::WStrToStr(virtualUri) : path;
 	}
 
 	const Editor::AssetPathPickerDesc NotifySoundPicker{ { ICON_FA_MUSIC, ImVec4(0.45f, 0.80f, 0.95f, 1.0f), "AUDIO" }, IsNotifyAudioFile };
@@ -144,7 +156,24 @@ AnimationTimelinePanel::~AnimationTimelinePanel()
 void AnimationTimelinePanel::StepFrame(int step)
 {
 	const float frameStep = 1.0f / m_FPS;
+	ClearPreviewVFX();
 	m_CurrentTime = std::clamp(m_CurrentTime + static_cast<float>(step) * frameStep, 0.0f, m_Duration);
+	m_NotifyStartPending = m_CurrentTime == 0.0f;
+}
+
+void AnimationTimelinePanel::TogglePlayPause()
+{
+	if (m_IsPlaying)
+	{
+		m_IsPlaying = false;
+		return;
+	}
+	if (!m_IsLooping && m_CurrentTime >= m_Duration)
+	{
+		StartPreviewFromBeginning();
+		return;
+	}
+	m_IsPlaying = true;
 }
 
 bool AnimationTimelinePanel::IsSelectionValid() const
@@ -296,7 +325,8 @@ void AnimationTimelinePanel::ReleaseResourceDocument()
 	m_Selection = {};
 	m_IsDraggingItem = false;
 	m_IsPlaying = false;
-	m_CurrentTime = m_PrevTime = 0.0f;
+	m_CurrentTime = 0.0f;
+	m_NotifyStartPending = true;
 	m_Duration = 2.0f;
 	m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime;
 	ResetZoom();
@@ -314,9 +344,9 @@ void AnimationTimelinePanel::ClearPreviewVFX()
 		return;
 	}
 	auto& reg = scene->GetRegistry();
-	for (auto e : m_PreviewVFXEntities)
+	for (const auto& preview : m_PreviewVFXEntities)
 	{
-		if (reg.valid(e)) reg.destroy(e);
+		if (reg.valid(preview.Entity)) reg.destroy(preview.Entity);
 	}
 	m_PreviewVFXEntities.clear();
 	m_PreviewHeldVFX.clear();
@@ -376,7 +406,7 @@ void AnimationTimelinePanel::SetTargetModel(const Engine::ResourceHandle<Engine:
 {
 	m_TargetModel = model;
 	auto* target = m_TargetModel.Get();
-	m_ModelAssetPath = target ? Engine::WStrToStr(target->GetPath()) : std::string{};
+	m_ModelAssetPath = target ? NormalizeModelAssetPath(Engine::WStrToStr(target->GetPath())) : std::string{};
 	ClearPreviewVFX();
 	SetupPreviewModel();
 
@@ -390,10 +420,10 @@ void AnimationTimelinePanel::SetTargetModel(const Engine::ResourceHandle<Engine:
 	SelectClip(0); // 클립이 없는 모델이면 클립 없음으로 둔다
 
 	m_CurrentTime = 0.0f;
-	m_PrevTime = 0.0f;
 	m_TimelineZoom = 1.0f;
 	m_ViewStartTime = 0.0f;
 	m_IsPlaying = false;
+	m_NotifyStartPending = true;
 }
 
 void AnimationTimelinePanel::SelectClip(int index)
@@ -440,25 +470,69 @@ void AnimationTimelinePanel::NotifySaveWarnings() const
 	// 저장은 막지 않고, 런타임에서 클립·소켓이 연결되지 않는 경우를 알린다.
 	int socketNotifies = 0;
 	int missingSockets = 0;
+	int outOfRangeNotifies = 0;
+	const Engine::Animation* selectedClip = nullptr;
+	auto* model = m_TargetModel.Get();
+	const auto skeletonHandle = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
+	const auto* skeleton = skeletonHandle.Get();
+	if (model && m_SelectedClipIndex >= 0)
+	{
+		const auto animations = model->GetAnimations();
+		if (m_SelectedClipIndex < static_cast<int>(animations.size()) && animations[m_SelectedClipIndex].IsValid())
+			selectedClip = animations[m_SelectedClipIndex].Get();
+	}
+
+	float clipDuration = 0.0f;
+	if (selectedClip)
+	{
+		const double ticksPerSecond = selectedClip->GetTicksPerSecond() > 0.0 ? selectedClip->GetTicksPerSecond() : 25.0;
+		clipDuration = selectedClip->GetDuration() > 0.0
+			? static_cast<float>(selectedClip->GetDuration() / ticksPerSecond) : 0.0f;
+	}
+	const float markerLimit = clipDuration > 0.0f ? std::min(m_Duration, clipDuration) : m_Duration;
 	for (const auto& track : m_NotifyTracks)
 	{
 		for (const auto& notify : track.Notifies)
 		{
-			if (notify.SocketBoneName.empty()) continue;
-			++socketNotifies;
-			if (IsMissingSocketBone(notify.SocketBoneName)) ++missingSockets;
+			if (!notify.SocketBoneName.empty())
+			{
+				++socketNotifies;
+				if (skeleton && !skeleton->GetBoneMap().contains(Engine::StrToWStr(notify.SocketBoneName)))
+					++missingSockets;
+			}
+			if (!std::isfinite(notify.TriggerTime) || notify.TriggerTime < 0.0f || notify.TriggerTime > markerLimit ||
+				!std::isfinite(notify.Duration) || notify.Duration < 0.0f ||
+				(notify.Duration > 0.0f && notify.TriggerTime + notify.Duration > markerLimit))
+				++outOfRangeNotifies;
 		}
 	}
 
 	std::vector<std::string> warnings;
 	if (m_ModelAssetPath.empty())
 		warnings.push_back(socketNotifies > 0 ? LOCAL_FMT("Timeline.SaveWarnSocketsNoModel", socketNotifies) : LOCAL("Timeline.SaveWarnNoModel"));
-	else if (m_CurrentClipName.empty())
+	else if (!Engine::PlatformPath::IsVirtualUri(m_ModelAssetPath))
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnNonPortableModelPath", m_ModelAssetPath));
+	if (!m_ModelAssetPath.empty() && !model)
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnModelNotFound", m_ModelAssetPath));
+	else if (model && m_CurrentClipName.empty())
 		warnings.push_back(LOCAL("Timeline.SaveWarnNoClip"));
-	if (!m_ModelAssetPath.empty() && m_BoneNames.empty() && socketNotifies > 0)
+	else if (model && !m_CurrentClipName.empty() && !selectedClip)
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnClipNotFound", m_CurrentClipName));
+	if (!m_ModelAssetPath.empty() && !skeleton && socketNotifies > 0)
 		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnMissingSockets", socketNotifies));
 	else if (missingSockets > 0)
 		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnMissingSockets", missingSockets));
+	if (outOfRangeNotifies > 0)
+		warnings.push_back(LOCAL_FMT("Timeline.SaveWarnOutOfRangeNotifies", outOfRangeNotifies));
+
+	if (selectedClip && model)
+	{
+		int sameNameClips = 0;
+		for (const auto& clip : model->GetAnimations())
+			if (clip.IsValid() && clip->GetName() == selectedClip->GetName()) ++sameNameClips;
+		if (sameNameClips > 1)
+			warnings.push_back(LOCAL_FMT("Timeline.SaveWarnDuplicateClipName", m_CurrentClipName));
+	}
 
 	for (const auto& warning : warnings)
 		NotificationManager::Get().AddNotification(LOCAL("Timeline.Title"), warning, ELogLevel::Warn);
@@ -551,9 +625,10 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	auto* asset = Engine::ActionTimelineAsset::CreateEmpty();
 	if (!asset) return false;
 
-	// m_ModelAssetPath는 모델을 고를 때(SetTargetModel)·파일을 열 때·경로 이동 때 함께 갱신되므로 그대로 저장한다.
+	// m_ModelAssetPath는 저장할 때 프로젝트·엔진 가상 URI로 정규화한다.
 	// 저장 기준점과 같은 문자열을 써야 저장 직후 미저장 판정이 어긋나지 않는다.
-	asset->SetModelPath(m_ModelAssetPath);
+	const std::string modelPath = NormalizeModelAssetPath(m_ModelAssetPath);
+	asset->SetModelPath(modelPath);
 	asset->SetClipName(m_CurrentClipName);
 	asset->SetDuration(m_Duration);
 	asset->SetBlendOutTime(m_BlendOutTime);
@@ -565,6 +640,7 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 
 	if (success)
 	{
+		m_ModelAssetPath = modelPath;
 		m_CurrentAssetPath = filePath;
 		m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 		MarkDocumentSaved();
@@ -588,10 +664,10 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	if (!asset->GetModelPath().empty())
 	{
 		auto& rm = Engine::ResourceManager::Get();
-		model = Engine::ResourceHandle<Engine::Model>(rm.LoadFile(asset->GetModelPath()));
+		model = Engine::ResourceHandle<Engine::Model>(rm.LoadFile(NormalizeModelAssetPath(asset->GetModelPath())));
 	}
 	SetTargetModel(model);
-	m_ModelAssetPath = asset->GetModelPath();
+	m_ModelAssetPath = NormalizeModelAssetPath(asset->GetModelPath());
 
 	// 저장된 클립을 고르되, 모델에서 찾지 못해도 파일의 클립 이름과 길이는 그대로 보존한다.
 	const int clipIndex = FindClipIndex(asset->GetClipName());
@@ -608,10 +684,53 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 	m_Selection = {};
 	m_RenamingTrackIndex = -1;
+	m_CurrentTime = 0.0f;
+	m_IsPlaying = false;
+	m_NotifyStartPending = true;
 	ClearPreviewVFX();
 	ResetEditHistory();
 	MarkDocumentSaved();
+	NotifySaveWarnings();
 	return true;
+}
+
+void AnimationTimelinePanel::RequestPreviewPlayback(const std::filesystem::path& assetPath)
+{
+	if (assetPath.empty())
+	{
+		NotificationManager::Get().AddNotification(LOCAL("Timeline.Title"), LOCAL("Timeline.PreviewNoAssetTooltip"), ELogLevel::Warn);
+		return;
+	}
+
+	SetOpen(true);
+	if (!m_CurrentAssetPath.empty() &&
+		Engine::PlatformPath::IsSamePath(Engine::PlatformPath::ResolveUri(Engine::Utf8ToPath(m_CurrentAssetPath)),
+			Engine::PlatformPath::ResolveUri(assetPath)))
+	{
+		StartPreviewFromBeginning();
+		return;
+	}
+
+	RunWithDiscardConfirmation([this, assetPath]
+		{
+			const std::string path = Engine::WStrToStr(assetPath.wstring());
+			if (!LoadFromFile(path))
+			{
+				NotificationManager::Get().AddNotification(LOCAL("Timeline.Title"),
+					LOCAL_FMT("Notification.ResourceLoadFailed", path), ELogLevel::Error);
+				return;
+			}
+			StartPreviewFromBeginning();
+		});
+}
+
+void AnimationTimelinePanel::StartPreviewFromBeginning()
+{
+	ClearPreviewVFX();
+	m_CurrentTime = 0.0f;
+	m_NotifyStartPending = true;
+	m_IsScrubbing = false;
+	m_IsPlaying = true;
 }
 
 TimelineSocketTransform AnimationTimelinePanel::GetSocketWorldTransform(const std::string& boneName, const vec3& offsetPos, const vec3& offsetRot) const
@@ -737,7 +856,7 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify,
 					attach.scale = notify.VFXScale;
 				}
 
-				m_PreviewVFXEntities.push_back(e);
+				m_PreviewVFXEntities.push_back({ e, isTest });
 				if (vfxComp.holdUntilRelease)
 					m_PreviewHeldVFX.push_back({ e, notify.TriggerTime + notify.Duration, isTest ? notify.Duration : -1.0f });
 			}
@@ -751,34 +870,20 @@ void AnimationTimelinePanel::Update(f32 dt)
 
 	m_PreviewWidget.BeginFrame(dt);
 
-	const f32 oldTime = m_CurrentTime;
 	const bool showBindPose = m_PreviewWidget.IsBindPoseShown();
+	Engine::ActionTimelinePlaybackStep playbackStep;
+	bool advanced = false;
 
 	if (m_IsPlaying && !m_IsScrubbing && m_Duration > 0.0f)
 	{
-		m_CurrentTime += dt * m_PlaybackSpeed;
-
-		for (const auto& track : m_NotifyTracks)
-		{
-			if (track.IsMuted || showBindPose) continue;
-			for (const auto& notify : track.Notifies)
-			{
-				if (oldTime < notify.TriggerTime && m_CurrentTime >= notify.TriggerTime)
-				{
-					TriggerNotify(notify);
-				}
-			}
-		}
-
-		if (m_CurrentTime >= m_Duration)
-		{
-			if (m_IsLooping) m_CurrentTime = std::fmod(m_CurrentTime, m_Duration);
-			else { m_CurrentTime = m_Duration; m_IsPlaying = false; }
-		}
+		playbackStep = Engine::AdvanceActionTimeline(m_CurrentTime, dt * m_PlaybackSpeed, m_Duration,
+			m_IsLooping, m_NotifyStartPending);
+		m_CurrentTime = playbackStep.CurrentTime;
+		m_NotifyStartPending = false;
+		advanced = true;
+		if (playbackStep.LoopCount > 0) ClearPreviewVFX();
+		if (playbackStep.Finished) m_IsPlaying = false;
 	}
-
-	m_PrevTime = m_CurrentTime;
-	if (m_CurrentTime < oldTime) ClearPreviewVFX();
 
 	Engine::AnimatorComponent* animator = nullptr;
 	if (m_PreviewModelEntity && m_PreviewWidget.GetScene())
@@ -798,6 +903,20 @@ void AnimationTimelinePanel::Update(f32 dt)
 	if (animator)
 		animator->finalBoneMatrices = m_BoneMatrices;
 
+	if (advanced && !showBindPose)
+	{
+		for (const auto& track : m_NotifyTracks)
+		{
+			if (track.IsMuted) continue;
+			for (const auto& notify : track.Notifies)
+			{
+				const std::size_t crossingCount = Engine::CountActionTimelineCrossings(playbackStep, notify.TriggerTime);
+				for (std::size_t crossing = 0; crossing < crossingCount; ++crossing)
+					TriggerNotify(notify);
+			}
+		}
+	}
+
 	if (auto* scene = m_PreviewWidget.GetScene())
 	{
 		auto& reg = scene->GetRegistry();
@@ -814,12 +933,21 @@ void AnimationTimelinePanel::Update(f32 dt)
 		}
 
 		UpdatePreviewHeldVFX(dt);
+		for (const auto& preview : m_PreviewVFXEntities)
+		{
+			auto* vfx = reg.valid(preview.Entity) ? reg.try_get<Engine::CompositeVFXComponent>(preview.Entity) : nullptr;
+			if (!vfx) continue;
+			const bool timelineFinished = !m_IsLooping && m_CurrentTime >= m_Duration;
+			vfx->timelineTimeScale = preview.IsTest || timelineFinished ? 1.0f : std::max(0.0f, m_PlaybackSpeed);
+			vfx->SetTimelinePaused(!preview.IsTest && !timelineFinished &&
+				(!m_IsPlaying || m_IsScrubbing || vfx->timelineTimeScale == 0.0f));
+		}
 		Engine::CompositeVFXSystem::SimulateSceneVFX(scene, dt);
 
 		auto it = m_PreviewVFXEntities.begin();
 		while (it != m_PreviewVFXEntities.end())
 		{
-			entt::entity e = *it;
+			entt::entity e = it->Entity;
 			if (reg.valid(e))
 			{
 				if (const auto* vfx = reg.try_get<Engine::CompositeVFXComponent>(e))
@@ -1189,7 +1317,9 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 					{
 						// 클립은 저장되는 문서 바인딩이므로 편집 이력과 미저장 표시에 포함된다.
 						SelectClip(i);
+						ClearPreviewVFX();
 						m_CurrentTime = 0.0f;
+						m_NotifyStartPending = true;
 						m_TimelineZoom = 1.0f;
 						m_ViewStartTime = 0.0f;
 						m_IsDirty = true;
@@ -1486,12 +1616,17 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 
 	if (isRulerHovered && isMouseClicked && !m_IsDraggingItem)
 	{
+		ClearPreviewVFX();
 		m_IsScrubbing = true;
 		m_IsPlaying = false;
 	}
 	if (m_IsScrubbing)
 	{
-		if (isMouseDown) m_CurrentTime = ScreenXToTime(mousePos.x, timelineMin.x, timelineWidth);
+		if (isMouseDown)
+		{
+			m_CurrentTime = ScreenXToTime(mousePos.x, timelineMin.x, timelineWidth);
+			m_NotifyStartPending = m_CurrentTime == 0.0f;
+		}
 		else m_IsScrubbing = false;
 	}
 
