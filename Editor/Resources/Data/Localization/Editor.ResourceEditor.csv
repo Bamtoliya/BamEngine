@@ -19,6 +19,7 @@ ResourceEditor,SpriteAnimationTitle,Sprite Animation Editor,스프라이트 애�
 ResourceEditor,SpriteTitle,Sprite Editor,스프라이트 편집기
 ResourceEditor,Target,Target: {},대상: {}
 ResourceEditor,TextureTitle,Texture Editor,텍스처 편집기
+ResourceEditor,TextureSpriteTitle,Texture and Sprite Editor,텍스처 및 스프라이트 편집기
 ResourceEditor,CompositeVFXTitle,Composite VFX Editor,통합 비주얼 이펙트 에디터
 ResourceEditor,DiscardTitle,Unsaved Changes,저장하지 않은 변경
 ResourceEditor,DiscardMessage,{} has unsaved changes.,{}에 저장하지 않은 변경 내용이 있습니다.

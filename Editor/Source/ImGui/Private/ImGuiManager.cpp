@@ -840,9 +840,9 @@ EResult ImGuiManager::CreateResourceEditors()
 		return InitializePanel(panel);
 	};
 
-	if (!initializeClosed(new TextureEditor()) ||
-		!initializeClosed(new ModelEditor()) ||
+	if (!initializeClosed(new ModelEditor()) ||
 		!initializeClosed(new ShaderEditor()) ||
+		!initializeClosed(new TextureEditor()) ||
 		!initializeClosed(new SpriteEditor()) ||
 		!initializeClosed(new MaterialEditor()) ||
 		!initializeClosed(new PrefabEditorPanel()) ||

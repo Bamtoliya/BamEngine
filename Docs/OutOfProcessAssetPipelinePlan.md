@@ -2,7 +2,7 @@
 (Out-of-Process Asset Pipeline & Worker Isolation Plan)
 
 - **작성일** 2026-11-16, 최근 갱신 2026-11-20
-- **상태** 3D 썸네일·모델 변환, 독립 텍스처 임포트, 모델 텍스처 베이킹 및 BC7 압축 방식 선택 코드를 반영했다. 사용자가 Debug 빌드와 `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `LocalizationAuditUtility` 통과를 보고했다. 에디터 통합 및 실제 GPU 사용은 미검증이며 텍스처 인스펙터 UI는 현재 연결되어 있지 않다.
+- **상태** 3D 썸네일·모델 변환, 독립 텍스처 임포트, 모델 텍스처 베이킹 및 BC7 압축 방식 선택 코드를 반영했다. 사용자가 이전 Debug 빌드와 `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `LocalizationAuditUtility` 통과를 보고했다. 이후 텍스처 편집기에서 실제 GPU BC7 압축과 캐시 재사용을 로그로 확인했으나 전체 통합 회귀는 미검증이다. 텍스처 인스펙터 UI는 현재 연결되어 있지 않다.
 - **공통 기준**: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 - **연계 문서**:
   - [개발 우선순위 (DevelopmentPriorities.md)](DevelopmentPriorities.md) 11절
@@ -107,7 +107,7 @@ flowchart TD
 
 `IMPORT_MODEL`의 `<options>` 순서는 `FlipUVs`, `ConvertToLeftHanded`, `UniformScale`, `FlipWindingOrder`, `FlipPitch`, `FlipHeading`, `GenerateLODs`, `LODCount`, `TargetError`, 이어서 선택적인 LOD reduction rates다. `IMPORT_TEXTURE`는 `ETextureFormat`과 `ECompressFlags`의 정수 값을 전달한다. 워커는 최종 경로를 리소스 메타데이터에 사용하되 두 파일은 staging 경로에 기록하고, 호스트가 둘 다 성공한 뒤 기존 파일 백업·교체를 처리한다. 실패·취소 시 결과를 게시하지 않는다.
 
-모델 베이킹 UI와 미연결 텍스처 인스펙터 코드에 CPU 표준, CPU 빠른 BC7, GPU BC7 선택을 추가했다. 빠른 방식은 품질이 달라질 수 있으며 GPU 실패 시 CPU 표준으로 폴백하고 HRESULT를 호스트 로그에 남긴다. BC5 등 BC7 이외 형식에는 선택한 방식과 관계없이 CPU 표준을 사용한다. 압축 플래그가 캐시 키에 포함되며, GPU 폴백 결과는 GPU 캐시에 저장하지 않는다. 설정은 재임포트용으로 영속화하지 않는다. DDS 원본 변환은 지원하지 않으며 인스펙터 코드에서 비활성화한다. 이미지 드롭 및 툴바 이미지 임포트는 비동기 경로를 사용한다. 접근 가능한 텍스처 변환 UI는 [통합 계획](TextureSpriteEditorIntegrationPlan.md)에서 다룬다.
+모델 베이킹 UI와 미연결 텍스처 인스펙터 코드에 CPU 표준, CPU 빠른 BC7, GPU BC7 선택을 추가했다. 빠른 방식은 품질이 달라질 수 있으며 GPU 실패 시 CPU 표준으로 폴백하고 HRESULT를 호스트 로그에 남긴다. BC5 등 BC7 이외 형식에는 선택한 방식과 관계없이 CPU 표준을 사용한다. 압축 플래그가 캐시 키에 포함되며, GPU 폴백 결과는 GPU 캐시에 저장하지 않는다. 설정은 재임포트용으로 영속화하지 않는다. DDS 원본 변환은 지원하지 않으며 인스펙터 코드에서 비활성화한다. 이미지 드롭 및 툴바 이미지 임포트는 비동기 경로를 사용한다. 접근 가능한 텍스처 변환 UI와 GPU 재로드 검증 상태는 [작업 흐름 계획](TextureSpriteEditorIntegrationPlan.md)에서 다룬다.
 
 이번 변경의 속도·화질·GPU 장치 호환성, 오류와 취소 시 출력 복구 및 UI 반응성은 실측 전이다. GPU 사용이 CPU보다 빠르다고 보장하지 않으며, 캐시 적중과 실제 압축을 구분해 측정한다.
 

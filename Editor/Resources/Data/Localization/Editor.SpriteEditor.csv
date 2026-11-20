@@ -24,12 +24,16 @@ SpriteEditor,Border,9-Slice Border (L/R/T/B),9-Slice 보더 (좌/우/상/하)
 SpriteEditor,FitView,Fit View,화면 맞춤
 SpriteEditor,OneToOne,1:1 Zoom,1:1 배율
 SpriteEditor,ClearSlices,Clear All Slices,모든 슬라이스 초기화
-SpriteEditor,SliceCountFormat,%zu Slices,%zu개 슬라이스
+SpriteEditor,SliceCountFormat,{} Slices,{}개 슬라이스
 SpriteEditor,NoSlices,No slices defined. Click 'Slice...' to partition texture.,정의된 슬라이스가 없습니다. 'Slice...'를 눌러 텍스처를 분할하세요.
 SpriteEditor,GenerateAnimSuccess,Successfully created animation clips!,스프라이트 애니메이션 클립이 성공적으로 생성되었습니다!
 SpriteEditor,NoTextureLoaded,No valid texture loaded.,유효한 텍스처가 로드되지 않았습니다.
 SpriteEditor,PivotLabel,Pivot,피벗
+SpriteEditor,PivotPresets,Pivot Presets,피벗 프리셋
+SpriteEditor,BorderHorizontal,Border Left / Right,보더 좌 / 우
+SpriteEditor,BorderVertical,Border Top / Bottom,보더 상 / 하
 SpriteEditor,NoSliceSelected,No slice selected.,선택된 슬라이스가 없습니다.
+SpriteEditor,NoSearchResults,No search results found,검색 결과가 없습니다
 SpriteEditor,IndexHeader,#,#
 SpriteEditor,NameHeader,Name,이름
 SpriteEditor,SizeHeader,Size,크기

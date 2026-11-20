@@ -31,10 +31,8 @@ struct SpriteAutoAnimParameters
 class SpriteEditor final : public ResourceEditorInterface
 {
 public:
-	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override
-	{
-		return PrepareTargetPathRelocation(relocation);
-	}
+	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
+	std::vector<std::filesystem::path> GetRetainedResourcePaths() const override;
 	SpriteEditor();
 	virtual ~SpriteEditor() = default;
 
@@ -43,8 +41,9 @@ public:
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
 	virtual bool HasUnsavedResourceChanges() const override { return m_History.IsDirty(); }
 	void SaveResource() override { ApplySlices(); }
-	bool CanSaveDocument() const { return m_Open && m_TextureHandle.IsValid() && !m_Slices.empty(); }
+	bool CanSaveDocument() const;
 	EShortcutContext GetShortcutContext() const override { return EShortcutContext::SpriteEditor; }
+	void OpenInSpriteMode(const std::filesystem::path& path);
 
 private:
 	void DrawCustomToolbar() override;

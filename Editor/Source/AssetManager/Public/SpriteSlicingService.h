@@ -11,6 +11,7 @@ struct SpriteSliceInfo
 	Engine::Rect region = { 0.f, 0.f, 0.f, 0.f };     // 픽셀 영역 (left, top, width, height)
 	vec2 pivot = { 0.5f, 0.5f };                   // 피벗 (0.0 ~ 1.0)
 	vec4 border = { 0.f, 0.f, 0.f, 0.f };          // 9-Slice 인셋 (L, R, T, B)
+	float pixelPerUnit = 100.0f;
 };
 
 enum class ESpriteSliceMethod : uint8

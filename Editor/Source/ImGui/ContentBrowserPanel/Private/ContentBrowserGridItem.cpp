@@ -1206,12 +1206,7 @@ void ContentBrowserGridItem::ContextMenu_Sprite(const std::filesystem::path& pat
 	if (ImGui::MenuItem((ICON_FA_CROP_SIMPLE " " + LOCAL_LABEL("ContentBrowser.OpenInSpriteEditor")).c_str()))
 	{
 		if (auto* spriteEditor = dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor")))
-		{
-			spriteEditor->Focus();
-			const auto current = Engine::PlatformPath::ResolveProjectRelative(spriteEditor->GetTargetResource());
-			if (current != Engine::PlatformPath::ResolveProjectRelative(path))
-				spriteEditor->RunWithDiscardConfirmation([spriteEditor, path] { spriteEditor->SetTargetResource(path); });
-		}
+			spriteEditor->OpenInSpriteMode(path);
 	}
 	if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("ContentBrowser.AddToTilePalette")).c_str()))
 	{
@@ -1230,12 +1225,7 @@ void ContentBrowserGridItem::ContextMenu_Texture(ContentBrowserPanel& browser, c
 	if (ImGui::MenuItem((ICON_FA_CROP_SIMPLE " " + LOCAL_LABEL("ContentBrowser.OpenInSpriteEditor")).c_str()))
 	{
 		if (auto* spriteEditor = dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor")))
-		{
-			spriteEditor->Focus();
-			const auto current = Engine::PlatformPath::ResolveProjectRelative(spriteEditor->GetTargetResource());
-			if (current != Engine::PlatformPath::ResolveProjectRelative(path))
-				spriteEditor->RunWithDiscardConfirmation([spriteEditor, path] { spriteEditor->SetTargetResource(path); });
-		}
+			spriteEditor->OpenInSpriteMode(path);
 	}
 	if (ImGui::MenuItem((ICON_FA_BORDER_ALL " " + LOCAL_LABEL("ContentBrowser.AddToTilePalette")).c_str()))
 	{

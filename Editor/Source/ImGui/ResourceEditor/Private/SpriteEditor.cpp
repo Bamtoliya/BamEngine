@@ -1,11 +1,16 @@
 ﻿#pragma once
 #include "SpriteEditor.h"
+#include "TextureEditor.h"
+#include "ResourceEditorPath.h"
 #include "EditorUI.h"
 #include "Functions.h"
 #include "ResourceManager.h"
 #include "NotificationManager.h"
 #include "PlatformPath.h"
 #include "ImGuiManager.h"
+#include "AssetCache.h"
+#include "AssetPathRelocation.h"
+#include "EditorSettings.h"
 #include "InputManager.h"
 #include "ImGuiSplitter.h"
 #include "FileDialogs.h"
@@ -32,6 +37,13 @@ namespace
 		NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.SpriteTitle"),
 			LOCAL_FMT("Notification.SaveFailed", name), ELogLevel::Error);
 	}
+
+	bool IsSpriteAsset(const std::filesystem::path& path)
+	{
+		const auto name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		return name.ends_with(".bamsprite") || name.ends_with(".bamsprite.json");
+	}
+
 }
 
 SpriteEditor::SpriteEditor()
@@ -42,11 +54,44 @@ SpriteEditor::SpriteEditor()
 
 bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	const auto ext = assetPath.extension().wstring();
+	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
 	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
-	return ext == L".bamsprite" || lower.ends_with(".bamsprite.json") ||
-		ext == L".bamtex" || lower.ends_with(".bamtex.json") ||
-		ext == L".png" || ext == L".jpg" || ext == L".jpeg" || ext == L".tga";
+	return ext == ".bamsprite" || lower.ends_with(".bamsprite.json") ||
+		ext == ".bamtex" || lower.ends_with(".bamtex.json") ||
+		ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
+		ext == ".bmp" || ext == ".dds" || ext == ".hdr";
+}
+
+bool SpriteEditor::CanSaveDocument() const
+{
+	return m_Open && m_TextureHandle.IsValid() && m_TextureHandle.Get() && !m_Slices.empty() &&
+		!Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath);
+}
+
+std::vector<std::filesystem::path> SpriteEditor::GetRetainedResourcePaths() const
+{
+	auto paths = ResourceEditorInterface::GetRetainedResourcePaths();
+	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty())
+		paths.emplace_back(texture->GetPath());
+	return paths;
+}
+
+bool SpriteEditor::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty() &&
+		!SameResourceEditorPath(texture->GetPath(), m_TargetResourcePath) && relocation.Affects(texture->GetPath()))
+		return false;
+	return PrepareTargetPathRelocation(relocation);
+}
+
+void SpriteEditor::OpenInSpriteMode(const std::filesystem::path& path)
+{
+	Focus();
+	if (SameResourceEditorPath(m_TargetResourcePath, path))
+		return;
+	RunWithDiscardConfirmation([this, path] {
+		SetTargetResource(path);
+	});
 }
 
 void SpriteEditor::OpenTextureDialog()
@@ -71,16 +116,21 @@ void SpriteEditor::ReleaseResourceDocument()
 
 void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 {
+	const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
+	if (textureEditor && textureEditor->IsConversionOutput(path))
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+		return;
+	}
 	ResourceHandle<Engine::Texture> textureHandle;
 	std::vector<SpriteSliceInfo> slices;
 
 	auto& rm = Engine::ResourceManager::Get();
 	const std::wstring normPath = Engine::NormalizePath(path.wstring());
-	const std::wstring ext = path.extension().wstring();
-	const std::string lowerExt = Engine::ToLowerStr(Engine::WStrToStr(ext));
 	const std::string filename = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
 
-	if (lowerExt == ".bamsprite" || filename.ends_with(".bamsprite.json"))
+	if (IsSpriteAsset(path))
 	{
 		// 1. 스프라이트 에셋을 연 경우
 		auto spriteHandle = rm.GetResourceHandle<Engine::Sprite>(normPath);
@@ -94,21 +144,6 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 		{
 			auto* sprite = spriteHandle.Get();
 			textureHandle = sprite->GetTextureHandle();
-			if (!textureHandle.IsValid() || !textureHandle.Get())
-			{
-				std::filesystem::path parentDir = path.parent_path();
-				for (const auto* texExt : { L".png", L".jpg", L".jpeg", L".tga", L".bmp", L".dds" })
-				{
-					std::filesystem::path cand = parentDir / (path.stem().wstring() + texExt);
-					if (std::filesystem::exists(cand))
-					{
-						auto rawTex = rm.LoadFile(cand.wstring());
-						textureHandle = static_cast<ResourceHandle<Engine::Texture>>(rawTex);
-						if (textureHandle.IsValid()) break;
-					}
-				}
-			}
-
 			SpriteSliceInfo info;
 			info.name = Engine::WStrToStr(path.stem().wstring());
 			if (Engine::ToLowerStr(info.name).ends_with(".bamsprite"))
@@ -116,6 +151,7 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 			info.region = sprite->GetRegion();
 			info.pivot = sprite->GetPivot();
 			info.border = sprite->GetBorder();
+			info.pixelPerUnit = sprite->GetPixelPerUnit();
 			slices.push_back(info);
 		}
 	}
@@ -162,6 +198,13 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 					if (sHandle.IsValid() && sHandle.Get())
 					{
 						auto* sp = sHandle.Get();
+						const auto& referencedTexture = sp->GetTextureHandle();
+						const auto* referenced = referencedTexture.Get();
+						std::error_code compareError;
+						if (!referenced || referenced->GetPath().empty() ||
+							!std::filesystem::equivalent(Engine::PlatformPath::ResolveUri(referenced->GetPath()),
+								Engine::PlatformPath::ResolveUri(path), compareError))
+							continue;
 						SpriteSliceInfo slice;
 						slice.name = Engine::WStrToStr(entry.path().stem().wstring());
 						if (Engine::ToLowerStr(slice.name).ends_with(".bamsprite"))
@@ -169,6 +212,7 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 						slice.region = sp->GetRegion();
 						slice.pivot = sp->GetPivot();
 						slice.border = sp->GetBorder();
+						slice.pixelPerUnit = sp->GetPixelPerUnit();
 						slices.push_back(slice);
 					}
 				}
@@ -176,7 +220,7 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 		}
 
 		// B. 스캔된 기존 슬라이스가 없으면 기본 1개 전체 영역 슬라이스 생성
-		if (slices.empty())
+		if (slices.empty() && texW > 0.0f && texH > 0.0f)
 		{
 			SpriteSliceInfo defaultSlice;
 			defaultSlice.name = Engine::WStrToStr(path.stem().wstring()) + "_0";
@@ -187,7 +231,13 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 		}
 	}
 
-	if (slices.empty() && !textureHandle.Get())
+	if (textureEditor && textureHandle.Get() && textureEditor->IsConversionOutput(textureHandle.Get()->GetPath()))
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+		return;
+	}
+	if (!textureHandle.IsValid() || !textureHandle.Get() || !textureHandle.Get()->GetRHITexture())
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(),
 			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
@@ -216,20 +266,32 @@ void SpriteEditor::DrawCustomContent()
 {
 	const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
 	const float splitterThickness = Editor::SplitterThickness;
-	const float minCanvasW = 200.0f;
-	const float minSidebarW = 220.0f;
-	float canvasWidth = (std::max)(minCanvasW, contentAvail.x - m_SidebarWidth - splitterThickness - ImGui::GetStyle().ItemSpacing.x);
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	const float overhead = splitterThickness + spacing * 2.0f;
 
-	// [좌측] 인터랙티브 캔버스
-	DrawCanvas(canvasWidth, contentAvail.y);
-	ImGui::SameLine();
+	if (contentAvail.x > overhead + 2.0f && contentAvail.y > 0.0f)
+	{
+		const float paneWidth = contentAvail.x - overhead;
+		const float minSidebarW = (std::min)(220.0f, paneWidth * 0.5f);
+		const float minCanvasW = (std::min)(200.0f, paneWidth - minSidebarW);
+		float sidebarWidth = std::clamp(m_SidebarWidth, minSidebarW, paneWidth - minCanvasW);
+		float canvasWidth = paneWidth - sidebarWidth;
+		const float displayedSidebarWidth = sidebarWidth;
 
-	// [가변 스플리터]
-	SplitterV("##SpriteEditorSplitter", &canvasWidth, &m_SidebarWidth, minCanvasW, minSidebarW, contentAvail.y, splitterThickness);
-	ImGui::SameLine();
+		DrawCanvas(canvasWidth, contentAvail.y);
+		ImGui::SameLine();
 
-	// [우측] 사이드바 (슬라이스 디테일 및 목록)
-	DrawSidebar(m_SidebarWidth, contentAvail.y);
+		if (SplitterV("##SpriteEditorSplitter", &canvasWidth, &sidebarWidth, minCanvasW, minSidebarW,
+			contentAvail.y, splitterThickness) && sidebarWidth != displayedSidebarWidth)
+		{
+			m_SidebarWidth = sidebarWidth;
+		}
+		ImGui::SameLine();
+
+		ImGui::BeginDisabled(Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath));
+		DrawSidebar(displayedSidebarWidth, contentAvail.y);
+		ImGui::EndDisabled();
+	}
 
 	// 팝업 모달
 	DrawSliceModal();
@@ -283,6 +345,8 @@ void SpriteEditor::DrawCustomToolbar()
 		ImGui::EndMenu();
 	}
 
+	ImGui::BeginDisabled(!m_TextureHandle.Get() ||
+		Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath));
 	if (ImGui::BeginMenu(LOCAL_CSTR("SpriteEditor.SliceMethod")))
 	{
 		if (ImGui::MenuItem(LOCAL_CSTR("SpriteEditor.SliceModalTitle")))
@@ -306,6 +370,7 @@ void SpriteEditor::DrawCustomToolbar()
 		}
 		ImGui::EndMenu();
 	}
+	ImGui::EndDisabled();
 
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
@@ -320,9 +385,15 @@ void SpriteEditor::DrawCustomQuickAccess()
 	if (toolbar.Button("SpriteEditor.OpenTexture", ICON_FA_FOLDER_OPEN, "SpriteEditor.OpenTexture"))
 		RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 
+	EditorUI::IconButtonOptions copyOptions;
+	copyOptions.Enabled = !m_TargetResourcePath.empty();
+	if (toolbar.Icon("CopyResourcePath", ICON_FA_COPY, "EditorCommon.CopyPath", copyOptions))
+		ImGui::SetClipboardText(Engine::WStrToStr(m_TargetResourcePath.wstring()).c_str());
 	DrawSaveButton(toolbar);
 	DrawHistoryButtons(toolbar, "SpriteEditor");
 
+	ImGui::BeginDisabled(!m_TextureHandle.Get() ||
+		Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath));
 	if (toolbar.Button("SpriteEditor.SliceModalTitle", ICON_FA_SCISSORS, "SpriteEditor.SliceModalTitle"))
 	{
 		m_ShowSliceModal = true;
@@ -335,12 +406,14 @@ void SpriteEditor::DrawCustomQuickAccess()
 	}
 	ImGui::EndDisabled();
 
+	ImGui::EndDisabled();
 
 	auto* texture = m_TextureHandle.Get();
 	auto* rhiTexture = texture ? texture->GetRHITexture() : nullptr;
 	const float texW = rhiTexture ? static_cast<float>(rhiTexture->GetWidth()) : 0.0f;
 	const float texH = rhiTexture ? static_cast<float>(rhiTexture->GetHeight()) : 0.0f;
 
+	ImGui::BeginDisabled(!m_TextureHandle.Get());
 	if (toolbar.Button("SpriteEditor.FitView", ICON_FA_EXPAND, "SpriteEditor.FitView"))
 	{
 		const ImVec2 contentAvail = ImGui::GetContentRegionAvail();
@@ -355,6 +428,7 @@ void SpriteEditor::DrawCustomQuickAccess()
 
 	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
 	ImGui::SliderFloat("##Zoom", &m_Zoom, 0.1f, 8.0f, "%.1fx");
+	ImGui::EndDisabled();
 
 
 	// 상태 배지
@@ -369,6 +443,8 @@ void SpriteEditor::DrawCustomQuickAccess()
 			rhiTexture->GetWidth(), rhiTexture->GetHeight());
 		toolbar.Text(resolution.c_str());
 	}
+	if (!m_TargetResourcePath.empty() && Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath))
+		toolbar.Text((std::string(ICON_FA_LOCK) + " " + LOCAL("ContentBrowser.EngineReadOnlyBadge")).c_str());
 }
 
 void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
@@ -501,7 +577,7 @@ void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
 		const float btnH = 36.0f;
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - btnW) * 0.5f, canvasPos.y + canvasSize.y * 0.5f - btnH));
 		if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str(), ImVec2(btnW, btnH)))
-			OpenTextureDialog();
+			RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - 320.0f) * 0.5f, canvasPos.y + canvasSize.y * 0.5f + 12.0f));
 		ImGui::TextDisabled("%s %s", ICON_FA_ARROW_DOWN, LOCAL_CSTR("TilePalette.NoSprites"));
@@ -529,7 +605,7 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 	ImGui::BeginChild("##SpriteSidebarChild", ImVec2(availWidth, availHeight), true);
 
 	// 1. 선택된 슬라이스 속성 인스펙터
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("SpriteEditor.SelectedSlice"), ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader(LOCAL_LABEL("SpriteEditor.SelectedSlice").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (m_SelectedSliceIndex >= 0 && m_SelectedSliceIndex < static_cast<int>(m_Slices.size()))
 		{
@@ -569,56 +645,72 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 				}
 			}
 
-			char nameBuf[128];
-			strncpy_s(nameBuf, slice.name.c_str(), sizeof(nameBuf));
-			if (ImGui::InputText(LOCAL_CSTR("SpriteEditor.ClipName"), nameBuf, sizeof(nameBuf)))
+			if (EditorUI::BeginPropertyTable("##SliceProperties", EditorUI::InspectorPropertyTableStyle()))
 			{
-				slice.name = nameBuf;
-				m_History.MarkEdited();
-			}
+				EditorUI::PropertyRow("SpriteEditor.ClipName");
+				char nameBuf[128];
+				strncpy_s(nameBuf, slice.name.c_str(), sizeof(nameBuf));
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::InputText("##SliceName", nameBuf, sizeof(nameBuf)))
+				{
+					slice.name = nameBuf;
+					m_History.MarkEdited();
+				}
 
-			// 영역 편집 (X, Y, W, H)
-			float rectVal[4] = { slice.region.left, slice.region.top, slice.region.width, slice.region.height };
-			if (ImGui::DragFloat2(LOCAL_CSTR("SpriteEditor.XYLabel"), rectVal, 1.0f, 0.0f, 8192.0f, "%.0f px"))
-			{
-				slice.region.left = rectVal[0];
-				slice.region.top = rectVal[1];
-				m_History.MarkEdited();
-			}
-			if (ImGui::DragFloat2(LOCAL_CSTR("SpriteEditor.WHLabel"), &rectVal[2], 1.0f, 1.0f, 8192.0f, "%.0f px"))
-			{
-				slice.region.width = rectVal[2];
-				slice.region.height = rectVal[3];
-				m_History.MarkEdited();
-			}
+				float rectVal[4] = { slice.region.left, slice.region.top, slice.region.width, slice.region.height };
+				EditorUI::PropertyRow("SpriteEditor.XYLabel");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat2("##SlicePosition", rectVal, 1.0f, 0.0f, 8192.0f, "%.0f px"))
+				{
+					slice.region.left = rectVal[0];
+					slice.region.top = rectVal[1];
+					m_History.MarkEdited();
+				}
+				EditorUI::PropertyRow("SpriteEditor.WHLabel");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat2("##SliceSize", &rectVal[2], 1.0f, 1.0f, 8192.0f, "%.0f px"))
+				{
+					slice.region.width = rectVal[2];
+					slice.region.height = rectVal[3];
+					m_History.MarkEdited();
+				}
 
-			// 피벗 편집 (X, Y)
-			if (ImGui::SliderFloat2(LOCAL_CSTR("SpriteEditor.PivotLabel"), &slice.pivot.x, 0.0f, 1.0f, "%.2f"))
-			{
-				m_History.MarkEdited();
-			}
+				EditorUI::PropertyRow("SpriteEditor.PivotLabel");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::SliderFloat2("##SlicePivot", &slice.pivot.x, 0.0f, 1.0f, "%.2f"))
+					m_History.MarkEdited();
 
-			// 피벗 퀵 프리셋 버튼
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotCenter"))) { slice.pivot = { 0.5f, 0.5f }; m_History.MarkEdited(); }
-			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotBottom"))) { slice.pivot = { 0.5f, 0.0f }; m_History.MarkEdited(); }
-			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotTop"))) { slice.pivot = { 0.5f, 1.0f }; m_History.MarkEdited(); }
-			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotLeft"))) { slice.pivot = { 0.0f, 0.5f }; m_History.MarkEdited(); }
-			ImGui::SameLine();
-			if (ImGui::SmallButton(LOCAL_CSTR("SpriteEditor.PivotRight"))) { slice.pivot = { 1.0f, 0.5f }; m_History.MarkEdited(); }
+				EditorUI::PropertyRow("SpriteEditor.PivotPresets");
+				EditorUI::ToolbarLayout presets;
+				if (presets.Icon("PivotCenter", ICON_FA_CROSSHAIRS, "SpriteEditor.PivotCenter")) { slice.pivot = { 0.5f, 0.5f }; m_History.MarkEdited(); }
+				if (presets.Icon("PivotBottom", ICON_FA_ARROW_DOWN, "SpriteEditor.PivotBottom")) { slice.pivot = { 0.5f, 0.0f }; m_History.MarkEdited(); }
+				if (presets.Icon("PivotTop", ICON_FA_ARROW_UP, "SpriteEditor.PivotTop")) { slice.pivot = { 0.5f, 1.0f }; m_History.MarkEdited(); }
+				if (presets.Icon("PivotLeft", ICON_FA_ARROW_LEFT, "SpriteEditor.PivotLeft")) { slice.pivot = { 0.0f, 0.5f }; m_History.MarkEdited(); }
+				if (presets.Icon("PivotRight", ICON_FA_ARROW_RIGHT, "SpriteEditor.PivotRight")) { slice.pivot = { 1.0f, 0.5f }; m_History.MarkEdited(); }
 
-			// 9-Slice 보더 (Left, Right, Top, Bottom)
-			float borderVal[4] = { slice.border.x, slice.border.y, slice.border.z, slice.border.w };
-			if (ImGui::DragFloat4(LOCAL_CSTR("SpriteEditor.Border"), borderVal, 1.0f, 0.0f, 512.0f, "%.0f px"))
-			{
-				slice.border = { borderVal[0], borderVal[1], borderVal[2], borderVal[3] };
-				m_History.MarkEdited();
+				float borderVal[4] = { slice.border.x, slice.border.y, slice.border.z, slice.border.w };
+				EditorUI::PropertyRow("SpriteEditor.BorderHorizontal");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat2("##SliceBorderHorizontal", borderVal, 1.0f, 0.0f, 512.0f, "%.0f px"))
+				{
+					slice.border.x = borderVal[0];
+					slice.border.y = borderVal[1];
+					m_History.MarkEdited();
+				}
+				EditorUI::PropertyRow("SpriteEditor.BorderVertical");
+				ImGui::SetNextItemWidth(-FLT_MIN);
+				if (ImGui::DragFloat2("##SliceBorderVertical", &borderVal[2], 1.0f, 0.0f, 512.0f, "%.0f px"))
+				{
+					slice.border.z = borderVal[2];
+					slice.border.w = borderVal[3];
+					m_History.MarkEdited();
+				}
+				EditorUI::EndPropertyTable();
 			}
 
 			ImGui::Spacing();
-			if (ImGui::Button((std::string(ICON_FA_TRASH) + " " + LOCAL("SpriteEditor.DeleteSlice")).c_str()))
+			EditorUI::ToolbarLayout actions;
+			if (actions.Button("DeleteSlice", ICON_FA_TRASH, "SpriteEditor.DeleteSlice"))
 			{
 				m_Slices.erase(m_Slices.begin() + m_SelectedSliceIndex);
 				if (m_SelectedSliceIndex >= static_cast<int>(m_Slices.size()))
@@ -635,7 +727,7 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 	ImGui::Spacing();
 
 	// 2. 슬라이스 전체 목록 테이블
-	if (ImGui::CollapsingHeader(LOCAL_CSTR("SpriteEditor.SliceList"), ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader(LOCAL_LABEL("SpriteEditor.SliceList").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		if (m_Slices.empty())
 		{
@@ -649,11 +741,13 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 
 			const std::string filterLower = Engine::ToLowerStr(m_SliceSearch);
 
-			if (ImGui::BeginTable("##SlicesTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_ScrollY, ImVec2(0.0f, 260.0f)))
+			ImGui::BeginChild("##SliceListScroll", ImVec2(0.0f, 260.0f), false);
+			bool hasMatches = false;
+			if (EditorUI::BeginSettingsTable("##SlicesTable", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter))
 			{
-				ImGui::TableSetupColumn(LOCAL_CSTR("SpriteEditor.IndexHeader"), ImGuiTableColumnFlags_WidthFixed, 28.0f);
-				ImGui::TableSetupColumn(LOCAL_CSTR("SpriteEditor.NameHeader"), ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableSetupColumn(LOCAL_CSTR("SpriteEditor.SizeHeader"), ImGuiTableColumnFlags_WidthFixed, 75.0f);
+				ImGui::TableSetupColumn(LOCAL_LABEL("SpriteEditor.IndexHeader").c_str(), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 2.0f);
+				ImGui::TableSetupColumn(LOCAL_LABEL("SpriteEditor.NameHeader").c_str(), ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn(LOCAL_LABEL("SpriteEditor.SizeHeader").c_str(), ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 5.5f);
 				ImGui::TableHeadersRow();
 
 				for (int i = 0; i < static_cast<int>(m_Slices.size()); ++i)
@@ -668,6 +762,7 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 						if (!matchName && !matchIdx) continue;
 					}
 
+					hasMatches = true;
 					ImGui::TableNextRow();
 
 					ImGui::TableSetColumnIndex(0);
@@ -675,16 +770,22 @@ void SpriteEditor::DrawSidebar(float availWidth, float availHeight)
 
 					ImGui::TableSetColumnIndex(1);
 					const bool isSelected = (i == m_SelectedSliceIndex);
+					const bool clipped = ImGui::CalcTextSize(slice.name.c_str()).x > ImGui::GetContentRegionAvail().x;
+					ImGui::PushID(i);
 					if (ImGui::Selectable(slice.name.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
 					{
 						m_SelectedSliceIndex = i;
 					}
+					if (clipped && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", slice.name.c_str());
+					ImGui::PopID();
 
 					ImGui::TableSetColumnIndex(2);
 					ImGui::Text(LOCAL_CSTR("SpriteEditor.SizeFormat"), slice.region.width, slice.region.height);
 				}
-				ImGui::EndTable();
+				EditorUI::EndSettingsTable();
+				if (!hasMatches) EditorUI::EmptyState("SpriteEditor.NoSearchResults");
 			}
+			ImGui::EndChild();
 		}
 	}
 
@@ -851,27 +952,30 @@ void SpriteEditor::ExecuteSlice(const SpriteSliceParameters& params)
 
 	if (params.method == ESpriteSliceMethod::Automatic)
 	{
-		std::filesystem::path resolvedPath = Engine::PlatformPath::ResolveUri(m_TargetResourcePath);
-		if (!std::filesystem::exists(resolvedPath) && texture)
+		const auto resolvedPath = Engine::PlatformPath::ResolveUri(texture->GetPath());
+		auto slices = SpriteSlicingService::SliceFromFile(resolvedPath, params, baseName);
+		if (slices.empty())
 		{
-			resolvedPath = Engine::PlatformPath::ResolveUri(texture->GetPath());
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL("TextureEditor.AutomaticSlicingFailed"), ELogLevel::Warn);
+			return;
 		}
-
-		m_Slices = SpriteSlicingService::SliceFromFile(resolvedPath, params, baseName);
-		if (m_Slices.empty())
-		{
-			SpriteSliceInfo slice;
-			slice.name = baseName + "_0";
-			slice.region = { 0.0f, 0.0f, static_cast<float>(texW), static_cast<float>(texH) };
-			slice.pivot = params.defaultPivot;
-			m_Slices.push_back(slice);
-		}
+		m_Slices = std::move(slices);
 	}
 	else
 	{
-		m_Slices = SpriteSlicingService::SliceGrid(texW, texH, params, baseName);
+		auto slices = SpriteSlicingService::SliceGrid(texW, texH, params, baseName);
+		if (slices.empty())
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL("TextureEditor.SlicingNoRegions"), ELogLevel::Warn);
+			return;
+		}
+		m_Slices = std::move(slices);
 	}
 
+	for (auto& slice : m_Slices)
+		slice.pixelPerUnit = params.pixelPerUnit > 0.0f ? params.pixelPerUnit : 100.0f;
 	m_SelectedSliceIndex = m_Slices.empty() ? -1 : 0;
 	m_History.MarkEdited();
 }
@@ -889,6 +993,11 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 {
 	if (!CommitDocumentEdit()) return std::nullopt;
 	if (m_Slices.empty() || !m_TextureHandle.IsValid())
+	{
+		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
+		return std::nullopt;
+	}
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath))
 	{
 		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
 		return std::nullopt;
@@ -927,7 +1036,41 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 			return std::nullopt;
 		}
 
-		const auto& outPath = (jsonExists || (preferJson && !binaryExists)) ? jsonPath : binPath;
+		const auto outPath = IsSpriteAsset(m_TargetResourcePath) &&
+			(SameResourceEditorPath(m_TargetResourcePath, jsonPath) || SameResourceEditorPath(m_TargetResourcePath, binPath))
+			? m_TargetResourcePath : (jsonExists || (preferJson && !binaryExists)) ? jsonPath : binPath;
+		const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
+		if (textureEditor && textureEditor->IsConversionOutput(outPath))
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+			return std::nullopt;
+		}
+		if (Engine::PlatformPath::IsReadOnlyTarget(outPath))
+		{
+			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			return std::nullopt;
+		}
+		if (std::filesystem::exists(outPath, error))
+		{
+			auto existing = rm.GetResourceHandle<Engine::Sprite>(Engine::NormalizePath(outPath.wstring()));
+			if (!existing.IsValid())
+				existing = static_cast<ResourceHandle<Engine::Sprite>>(rm.LoadFile(outPath.wstring()));
+			const auto* sprite = existing.Get();
+			const auto* referenced = sprite ? sprite->GetTextureHandle().Get() : nullptr;
+			const auto* target = m_TextureHandle.Get();
+			if (!referenced || !target || referenced->GetPath().empty() || target->GetPath().empty() ||
+				!std::filesystem::equivalent(Engine::PlatformPath::ResolveUri(referenced->GetPath()),
+					Engine::PlatformPath::ResolveUri(target->GetPath()), error) || error)
+			{
+				NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+				return std::nullopt;
+			}
+		}
+		if (error)
+		{
+			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			return std::nullopt;
+		}
 		if (!uniquePaths.insert(Engine::ToLowerWStr(outPath.lexically_normal().wstring())).second)
 		{
 			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
@@ -942,13 +1085,13 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 	{
 		const auto& slice = m_Slices[i];
 		const auto& outPath = outputPaths[i];
-		const bool useJson = outPath.extension() == L".json";
+		const bool useJson = Engine::ToLowerWStr(outPath.extension().wstring()) == L".json";
 		SpriteCreateDesc desc;
 		desc.texture = m_TextureHandle;
 		desc.region = slice.region;
 		desc.pivot = slice.pivot;
 		desc.border = slice.border;
-		desc.pixelPerUnit = m_SliceParams.pixelPerUnit > 0.0f ? m_SliceParams.pixelPerUnit : 100.0f;
+		desc.pixelPerUnit = slice.pixelPerUnit > 0.0f ? slice.pixelPerUnit : 100.0f;
 		desc.Path = outPath.wstring();
 		desc.Key = Engine::PlatformPath::ToProjectRelative(outPath).wstring();
 
@@ -966,7 +1109,6 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
 			return std::nullopt;
 		}
-
 		// 이미 메모리에 로드된 Sprite 인스턴스가 있으면 잘린 영역(Region)/피벗/보더를 즉시 실시간 갱신
 		Engine::Handle handle = rm.FindHandleByFilePath(outPath);
 		if (!handle.IsValid())

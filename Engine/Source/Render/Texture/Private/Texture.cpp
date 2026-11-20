@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <archive/ArchiveInterface.h>
 #include "Texture.h"
@@ -602,11 +602,33 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	else if (isBamtex)
 	{
 		archive::BeveArchive ar;
-		if (ar.LoadFromFile(targetPath))
+		const auto loadResult = ar.LoadFromFile(targetPath);
+		if (!loadResult)
 		{
-			Safe_Release(m_RHITexture);
-			auto archiveResult = ReadArchive(ar);
-			result = archiveResult ? EResult::Success : EResult::Fail;
+			ENGINE_LOG_ERROR("[Texture Hot Reload] Archive load failed: path={}, code={}, field={}",
+				path, static_cast<int>(loadResult.Code), loadResult.Field);
+		}
+		else
+		{
+			Texture replacement;
+			const auto archiveResult = replacement.ReadArchive(ar);
+			if (!archiveResult)
+			{
+				ENGINE_LOG_ERROR("[Texture Hot Reload] Archive read failed: path={}, code={}, field={}",
+					path, static_cast<int>(archiveResult.Code), archiveResult.Field);
+			}
+			else
+			{
+				auto* previous = m_RHITexture;
+				m_RHITexture = replacement.m_RHITexture;
+				replacement.m_RHITexture = nullptr;
+				m_CachedHeader = replacement.m_CachedHeader;
+				m_TempData = std::move(replacement.m_TempData);
+				m_PixelPerUnit = replacement.m_PixelPerUnit;
+				IncreaseVersion();
+				if (previous) previous->Release();
+				result = EResult::Success;
+			}
 		}
 	}
 	else
