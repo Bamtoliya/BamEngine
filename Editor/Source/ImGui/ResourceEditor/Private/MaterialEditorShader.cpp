@@ -17,6 +17,7 @@
 #include "Logger.h"
 #include <fstream>
 #include <chrono>
+#include <algorithm>
 
 namespace
 {
@@ -58,6 +59,19 @@ namespace
 
 namespace Editor
 {
+	bool MaterialEditor::SupportsGraphPass(Engine::ERenderPassType pass)
+	{
+		return pass == Engine::ERenderPassType::Geometry || pass == Engine::ERenderPassType::ForwardTransparent;
+	}
+
+	bool MaterialEditor::IsGraphShader(const Engine::ResourceHandle<Engine::Shader>& handle)
+	{
+		const auto* shader = handle.Get();
+		return shader && (shader->GetKey().starts_with(L"LiveShader/") ||
+			Engine::PlatformPath::ToProjectRelative(Engine::PlatformPath::ResolveUri(shader->GetPath()))
+				.generic_wstring().starts_with(L"Temp/MaterialShader/"));
+	}
+
 	void MaterialEditor::InvalidateShaderBuild()
 	{
 		auto& build = m_ShaderGraph.ShaderBuild;
@@ -79,6 +93,7 @@ namespace Editor
 		{
 			build.SourceCurrent = false;
 			build.StatusKey = "MaterialEditor.CompileFailed";
+			build.Details = LocalizeGraphMessage(m_LastGraphDiagnostic.Message);
 			return false;
 		}
 
@@ -128,6 +143,14 @@ namespace Editor
 	void MaterialEditor::CompileMaterialShader()
 	{
 		auto& build = m_ShaderGraph.ShaderBuild;
+		const auto primaryPass = m_Material ? m_Material->GetPrimaryPassType() : Engine::ERenderPassType::Geometry;
+		if (!SupportsGraphPass(primaryPass))
+		{
+			build.MaterialCurrent = false;
+			build.StatusKey = "MaterialEditor.GraphPassUnsupported";
+			build.Details = LOCAL("MaterialEditor.GraphPassUnsupported");
+			return;
+		}
 		std::string candidateVs;
 		std::string candidatePs;
 
@@ -136,11 +159,10 @@ namespace Editor
 		{
 			build.MaterialCurrent = false;
 			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = m_LastGraphDiagnostic.Message;
+			build.Details = LocalizeGraphMessage(m_LastGraphDiagnostic.Message);
 			return;
 		}
 
-		const auto primaryPass = m_Material ? m_Material->GetPrimaryPassType() : Engine::ERenderPassType::Geometry;
 		m_LastGraphDiagnostic = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
 			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs)
 			: Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs);
@@ -150,7 +172,7 @@ namespace Editor
 		{
 			build.MaterialCurrent = false;
 			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = m_LastGraphDiagnostic.Message;
+			build.Details = LocalizeGraphMessage(m_LastGraphDiagnostic.Message);
 			return;
 		}
 
@@ -204,9 +226,18 @@ namespace Editor
 	void MaterialEditor::LiveHotReloadShader()
 	{
 		// 그래프가 연결되어 실제로 읽힌 머티리얼에만 컴파일 결과를 적용한다. 읽기 전용 머티리얼의 셰이더는 바꾸지 않는다.
-		if (!m_Material || m_IsReadOnly || !m_GraphReady || !HasLinkedShaderGraph()) return;
+		if (!CanEditShaderGraph() || !m_GraphReady || !HasLinkedShaderGraph()) return;
 
 		auto& build = m_ShaderGraph.ShaderBuild;
+
+		build.MaterialCurrent = false;
+		const auto primaryPass = m_Material->GetPrimaryPassType();
+		if (!SupportsGraphPass(primaryPass))
+		{
+			build.StatusKey = "MaterialEditor.GraphPassUnsupported";
+			build.Details = LOCAL("MaterialEditor.GraphPassUnsupported");
+			return;
+		}
 
 		// 1. VS 및 PS HLSL 소스 코드 동시 생성
 		std::string candidateVsHlsl;
@@ -214,11 +245,10 @@ namespace Editor
 		if (!diagVs.Succeeded())
 		{
 			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = diagVs.Message;
+			build.Details = LocalizeGraphMessage(diagVs.Message);
 			return;
 		}
 
-		const auto primaryPass = m_Material->GetPrimaryPassType();
 		std::string candidatePsHlsl;
 		auto diagPs = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
 			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl)
@@ -226,7 +256,7 @@ namespace Editor
 		if (!diagPs.Succeeded())
 		{
 			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = diagPs.Message;
+			build.Details = LocalizeGraphMessage(diagPs.Message);
 			return;
 		}
 
@@ -266,76 +296,68 @@ namespace Editor
 				return;
 			}
 
-			build.MaterialLastGood = psResult;
+			// 새 셰이더 쌍을 준비한 뒤에만 현재 바인딩을 교체한다.
+			auto& rm = Engine::ResourceManager::Get();
+			const auto asset = Engine::PlatformPath::ToVirtualUri(m_TargetResourcePath);
+			const auto key = L"LiveShader/" + (asset.empty() ? m_TargetResourcePath.generic_wstring() : asset) +
+				L"/" + std::to_wstring(static_cast<unsigned>(primaryPass)) +
+				L"/" + std::to_wstring(static_cast<unsigned>(rhiType)) + L"/" + hlslDir.parent_path().filename().wstring();
+
+			const auto create = [&](const auto& result, EShaderType stage, const wchar_t* suffix)
+				-> Engine::ResourceHandle<Engine::Shader>
+			{
+				ShaderDesc desc{};
+				desc.Key = key + suffix;
+				desc.Path = result.OutputPath.wstring();
+				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = desc.Path;
+				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = desc.Path;
+				else desc.spirvPath = desc.Path;
+				desc.shaderType = stage;
+				desc.entryPoint = "main";
+				auto* shader = Engine::Shader::Create(&desc);
+				return shader ? rm.AddResource<Engine::Shader>(desc.Key, shader) : Engine::ResourceHandle<Engine::Shader>{};
+			};
+			auto layout = Engine::ShaderGraphCompiler::BuildMaterialBufferLayout(m_ShaderGraph.Data);
+			const auto& previousLayout = m_Material->GetBufferLayout();
+			const bool layoutChanged = layout.TotalBufferSize != previousLayout.TotalBufferSize ||
+				!std::ranges::equal(layout.Entries, previousLayout.Entries,
+					[](const auto& a, const auto& b)
+					{
+						return a.Name == b.Name && a.Type == b.Type && a.Offset == b.Offset && a.Size == b.Size;
+					});
+			std::vector<Engine::ERenderPassType> stalePasses;
+			if (layoutChanged)
+			{
+				for (const auto& pass : m_Material->GetPassShaders())
+					if (pass.passType != primaryPass && IsGraphShader(pass.vertexShader) && IsGraphShader(pass.pixelShader))
+						stalePasses.push_back(pass.passType);
+			}
+
+			auto vs = create(vsResult, EShaderType::Vertex, L"/VS");
+			auto ps = vs.IsValid() ? create(psResult, EShaderType::Fragment, L"/PS") : Engine::ResourceHandle<Engine::Shader>{};
+			if (!vs.IsValid() || !ps.IsValid())
+			{
+				if (vs.IsValid()) (void)rm.DestroyResource(vs.GetRawHandle());
+				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = LOCAL("MaterialEditor.GraphShaderPublishFailed");
+				return;
+			}
+
+			m_Material->SetPassShader(primaryPass, vs, ps);
+			for (const auto pass : stalePasses)
+				m_Material->RemovePassShader(pass);
+			m_Material->SetBufferLayout(std::move(layout));
+			m_Material->SetVertexShaderHandle(vs);
+			m_Material->SetPixelShaderHandle(ps);
+			m_LiveVertexShader = std::move(vs);
+			m_LivePixelShader = std::move(ps);
+			m_Material->IncreaseVersion();
+			m_PreviewDirtyTimer = 0.5f;
+
+			build.MaterialLastGood = std::move(psResult);
 			build.MaterialCurrent = true;
 			build.StatusKey = "MaterialEditor.CompilePassed";
 			build.Details.clear();
-
-			// 4. 런타임 셰이더 리소스 갱신 및 머티리얼 바인딩
-			auto& rm = Engine::ResourceManager::Get();
-			std::string baseName = m_TargetResourcePath.stem().string();
-			const std::string bammat = ".bammat";
-			if (baseName.size() > bammat.size() && baseName.ends_with(bammat))
-				baseName = baseName.substr(0, baseName.size() - bammat.size());
-
-			const std::wstring vsKey = L"LiveShader/" + StrToWStr(baseName) + L"_VS";
-			const std::wstring psKey = L"LiveShader/" + StrToWStr(baseName) + L"_PS";
-
-			// VS 핸들 생성 또는 바이트코드 갱신
-			auto vsHandle = rm.GetResourceHandle<Engine::Shader>(vsKey);
-			if (vsHandle.IsValid() && vsHandle.Get())
-			{
-				vsHandle->UpdateBytecode(vsResult.Bytecode);
-			}
-			else
-			{
-				ShaderDesc desc{};
-				desc.Key = vsKey;
-				desc.Path = vsResult.OutputPath.wstring();
-				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = vsResult.OutputPath.wstring();
-				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = vsResult.OutputPath.wstring();
-				else desc.spirvPath = vsResult.OutputPath.wstring();
-				desc.shaderType = EShaderType::Vertex;
-				desc.entryPoint = "main";
-				auto* newShader = Engine::Shader::Create(&desc);
-				if (newShader) vsHandle = rm.AddResource<Engine::Shader>(vsKey, newShader);
-			}
-
-			// PS 핸들 생성 또는 바이트코드 갱신
-			auto psHandle = rm.GetResourceHandle<Engine::Shader>(psKey);
-			if (psHandle.IsValid() && psHandle.Get())
-			{
-				psHandle->UpdateBytecode(psResult.Bytecode);
-			}
-			else
-			{
-				ShaderDesc desc{};
-				desc.Key = psKey;
-				desc.Path = psResult.OutputPath.wstring();
-				if (rhiType == Engine::ERHIType::DirectX12) desc.dxilPath = psResult.OutputPath.wstring();
-				else if (rhiType == Engine::ERHIType::WebGPU) desc.wgslPath = psResult.OutputPath.wstring();
-				else desc.spirvPath = psResult.OutputPath.wstring();
-				desc.shaderType = EShaderType::Fragment;
-				desc.entryPoint = "main";
-				auto* newShader = Engine::Shader::Create(&desc);
-				if (newShader) psHandle = rm.AddResource<Engine::Shader>(psKey, newShader);
-			}
-
-			if (vsHandle.IsValid() && psHandle.IsValid())
-			{
-				m_LiveVertexShader = vsHandle;
-				m_LivePixelShader = psHandle;
-
-				// 동적 상수 버퍼 레이아웃 동기화
-				m_Material->SetBufferLayout(Engine::ShaderGraphCompiler::BuildMaterialBufferLayout(m_ShaderGraph.Data));
-
-				m_Material->SetVertexShaderHandle(m_LiveVertexShader);
-				m_Material->SetPixelShaderHandle(m_LivePixelShader);
-				m_Material->SetPassShader(primaryPass, m_LiveVertexShader, m_LivePixelShader);
-
-				m_Material->IncreaseVersion();
-				m_PreviewDirtyTimer = 0.5f;
-			}
 		}
 		catch (const std::exception& e)
 		{

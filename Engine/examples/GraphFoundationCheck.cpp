@@ -424,7 +424,8 @@ bool SameGraphData(const GraphData& left, const GraphData& right)
 {
 	if (left.Version != right.Version || left.Domain != right.Domain ||
 		left.NextNodeId != right.NextNodeId || left.NextLinkId != right.NextLinkId ||
-		left.Nodes.size() != right.Nodes.size() || left.Links.size() != right.Links.size()) return false;
+		left.Nodes.size() != right.Nodes.size() || left.Links.size() != right.Links.size() ||
+		left.Variables.size() != right.Variables.size()) return false;
 
 	const bool sameNodes = std::equal(left.Nodes.begin(), left.Nodes.end(), right.Nodes.begin(),
 		[](const GraphNode& a, const GraphNode& b)
@@ -439,7 +440,13 @@ bool SameGraphData(const GraphData& left, const GraphData& right)
 			return a.Id == b.Id && a.From == b.From && a.To == b.To;
 		});
 
-	return sameNodes && sameLinks;
+	const bool sameVariables = std::equal(left.Variables.begin(), left.Variables.end(), right.Variables.begin(),
+		[](const GraphVariable& a, const GraphVariable& b)
+		{
+			return a.Name == b.Name && a.Type == b.Type && a.DefaultValue == b.DefaultValue;
+		});
+
+	return sameNodes && sameLinks && sameVariables;
 }
 
 void AcceptGraphFile(const GraphFileResult& result)
@@ -489,13 +496,18 @@ void CheckGraphFile(const GraphRegistry& registry)
 	const auto path = directory / L"그래프.json";
 	const auto badPath = directory / "bad.json";
 
-	Graph source;
-	const auto number = Add(source, registry, "Core.Float");
-	const auto sum = Add(source, registry, "Math.AddFloat");
-	Accept(source.SetInputValue(registry, { number, "value" }, 2.0f));
-	Accept(source.Connect(registry, { number, "result" }, { sum, "a" }));
+	auto fileRegistry = registry;
+	Graph source(EGraphDomain::Shader);
+	const auto number = Add(source, fileRegistry, "Core.Float");
+	const auto sum = Add(source, fileRegistry, "Math.AddFloat");
+	Accept(source.SetInputValue(fileRegistry, { number, "value" }, 2.0f));
+	Accept(source.Connect(fileRegistry, { number, "result" }, { sum, "a" }));
 	Accept(source.SetNodePosition(number, 120.0f, 40.0f)); // sum은 위치 없음 상태로 남겨 둘 다 왕복을 확인한다
 	Accept(source.SetNodeComment(number, "입력 값"));
+	Accept(source.AddVariable(fileRegistry, { "UVScale", EGraphPinType::Float2, std::array<float, 2>{ 2.0f, 3.0f } }));
+	const auto scale = Add(source, fileRegistry, "Variable.Get.UVScale");
+	const auto output = Add(source, fileRegistry, "Shader.MaterialOutput");
+	Accept(source.Connect(fileRegistry, { scale, "value" }, { output, "customUV0" }));
 
 	AcceptGraphFile(SaveGraphJson(path, source, registry, types, codecs));
 	Graph restored(EGraphDomain::Shader);

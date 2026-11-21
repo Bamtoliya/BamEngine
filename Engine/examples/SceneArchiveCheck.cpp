@@ -758,6 +758,11 @@ namespace
         auto matHandle = rm.AddResource<Engine::Material>(matDesc.Key, Engine::Material::Create(&matDesc));
         if (!matHandle.IsValid()) return Fail("Material creation failed.");
         matHandle->SetFloat("Roughness", 0.75f);
+        Engine::MaterialBufferLayout layout;
+        layout.Entries.push_back({ "GraphIntensity", Engine::EMaterialParameterType::Float, 48, 4 });
+        layout.TotalBufferSize = 64;
+        matHandle->SetBufferLayout(layout);
+        matHandle->SetFloat("GraphIntensity", 0.5f);
         if (rm.SaveToJsonFile(matHandle.Get(), L"test-mat.bammat.json") != Engine::EResult::Success)
             return Fail("Material JSON archive save failed.");
 
@@ -768,6 +773,7 @@ namespace
         auto miHandle = rm.AddResource<Engine::MaterialInstance>(miDesc.Key, Engine::MaterialInstance::Create(&miDesc));
         if (!miHandle.IsValid()) return Fail("MaterialInstance creation failed.");
         miHandle->SetFloat("Roughness", 0.25f);
+        miHandle->SetFloat("GraphIntensity", 0.25f);
         if (Engine::IsFailure(rm.SaveToJsonFile(miHandle.Get(), L"test-mi.bammatinst.json")))
             return Fail("MaterialInstance JSON archive save failed.");
 
@@ -1175,6 +1181,16 @@ namespace
 
         ScenePtr linked(Engine::Scene::Create());
         const auto originalMaterial = reloadedMaterials[0];
+        const auto* intensity = originalMaterial->GetBufferLayout().Find("GraphIntensity");
+        if (!intensity || intensity->Offset != 48 || originalMaterial->GetBufferLayout().TotalBufferSize != 64)
+            return Fail("Material graph buffer layout was lost after reloading.");
+        vector<uint8> graphBlob;
+        restoredStatic.materialHandle->BuildConstantBufferBlob(graphBlob);
+        if (graphBlob.size() != 64) return Fail("Instance did not inherit the graph buffer layout.");
+        float graphIntensity = 0.0f;
+        std::memcpy(&graphIntensity, graphBlob.data() + intensity->Offset, sizeof(graphIntensity));
+        if (graphIntensity != 0.25f || originalMaterial->GetParameter<float>("GraphIntensity") != 0.5f)
+            return Fail("Instance did not preserve its graph parameter override separately from the base.");
         const auto newMaterial = restoredStatic.materialHandle;
 
         Engine::Entity* rootA = nullptr;

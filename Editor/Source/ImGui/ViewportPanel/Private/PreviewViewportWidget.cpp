@@ -378,9 +378,14 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	// 1. 디퍼드 파이프라인 패스 카메라 등록 및 조명 연산 준비
 	m_Pipeline.Submit(cameraBuffer, m_PreviewScene);
 
-	// 2. 프리뷰 씬 내부의 메쉬 엔티티들을 파이프라인의 GeometryPass에 자동 제출
+	// 2. 머티리얼에 맞는 프리뷰 패스로 메시를 제출한다.
 	auto& reg = m_PreviewScene->GetRegistry();
 	const uint32 geomPassId = m_Pipeline.GetGeometryPassID();
+	const uint32 transparentPassId = m_Pipeline.GetForwardTransparentPassID();
+	const auto meshPass = [&](const Engine::MaterialInterface& material)
+	{
+		return material.GetPrimaryPassType() == Engine::ERenderPassType::ForwardTransparent ? transparentPassId : geomPassId;
+	};
 
 	// 정적 메쉬 제출
 	auto staticView = reg.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>();
@@ -398,7 +403,7 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 			cmd.material = mat;
 			cmd.worldMatrix = transComp.worldMatrix;
 			cmd.pickingId = 0;
-			Engine::Renderer::Get().SubmitStatic(cmd, geomPassId);
+			Engine::Renderer::Get().SubmitStatic(cmd, meshPass(*mat));
 		}
 	}
 
@@ -433,7 +438,7 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 			cmd.worldMatrix = renderWorldMatrix;
 			cmd.boneMatrices = boneMatrices;
 			cmd.pickingId = 0;
-			Engine::Renderer::Get().SubmitSkinned(cmd, geomPassId);
+			Engine::Renderer::Get().SubmitSkinned(cmd, meshPass(*mat));
 		}
 	}
 

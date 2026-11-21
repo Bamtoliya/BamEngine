@@ -61,27 +61,34 @@ void MaterialInstance::Free()
 void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) const
 {
 	// 1. BaseMaterial의 기본 상수 버퍼 데이터 상속
-	if (m_BaseMaterialHandle && m_BaseMaterialHandle.Get())
+	const auto* base = GetBaseMaterial();
+	if (base)
 	{
-		m_BaseMaterialHandle.Get()->BuildMaterialConstants(outConstants);
+		base->BuildMaterialConstants(outConstants);
 	}
 	else
 	{
 		outConstants = MaterialConstants{};
 	}
-	// 2. 인스턴스 자신의 텍스처 오버라이드 반영 (오버라이드가 등록된 슬롯만 플래그 갱신)
-	for (const auto& binding : m_TextureBindings)
+	const auto flagForSlot = [](uint32 slot)
 	{
-		const uint32 flagBit = (binding.slot == 0) ? static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse)
-			: (binding.slot == 1) ? static_cast<uint32>(EMaterialFeatureFlags::HasNormal)
-			: (binding.slot == 2) ? static_cast<uint32>(EMaterialFeatureFlags::HasPBR)
-			: (binding.slot == 3) ? static_cast<uint32>(EMaterialFeatureFlags::HasEmissive) : 0u;
-		if (flagBit == 0) continue;
-		if (binding.texture && binding.texture.Get())
+		switch (slot)
 		{
-			outConstants.materialFlags |= flagBit;
+		case 0: return static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse);
+		case 1: return static_cast<uint32>(EMaterialFeatureFlags::HasNormal);
+		case 2: return static_cast<uint32>(EMaterialFeatureFlags::HasPBR);
+		case 3: return static_cast<uint32>(EMaterialFeatureFlags::HasEmissive);
+		default: return 0u;
 		}
+	};
+	if (base)
+	{
+		for (const auto& binding : base->GetTextureBindings())
+			if (HasTextureBindingBySlot(binding.slot) || (!binding.name.empty() && HasTextureBinding(binding.name)))
+				outConstants.materialFlags &= ~flagForSlot(binding.slot);
 	}
+	for (const auto& binding : m_TextureBindings)
+		if (binding.texture.Get()) outConstants.materialFlags |= flagForSlot(binding.slot);
 	// 3. 인스턴스 자신의 파라미터 오버라이드 반영
 	ApplyParameterConstants(outConstants);
 }
@@ -89,11 +96,11 @@ void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) c
 void MaterialInstance::BuildConstantBufferBlob(vector<uint8>& outBlob) const
 {
 	Material* baseMat = GetBaseMaterial();
-	const MaterialBufferLayout& effectiveLayout = GetBufferLayout().HasCustomParameters()
-		? GetBufferLayout()
-		: (baseMat ? baseMat->GetBufferLayout() : GetBufferLayout());
+	const MaterialBufferLayout& effectiveLayout = baseMat && !HasShaderGraph() && !GetBufferLayout().HasCustomParameters()
+		? baseMat->GetBufferLayout() : GetBufferLayout();
 
-	const size_t totalSize = (std::max)(sizeof(MaterialConstants), static_cast<size_t>(effectiveLayout.TotalBufferSize));
+	const size_t totalSize = std::clamp<size_t>(effectiveLayout.TotalBufferSize,
+		sizeof(MaterialConstants), MaterialBufferLayout::MaxBufferSize);
 	const size_t alignedSize = (totalSize + 15u) & ~static_cast<size_t>(15u);
 	outBlob.assign(alignedSize, 0u);
 
@@ -101,11 +108,7 @@ void MaterialInstance::BuildConstantBufferBlob(vector<uint8>& outBlob) const
 	BuildMaterialConstants(baseConstants);
 	memcpy(outBlob.data(), &baseConstants, sizeof(MaterialConstants));
 
-	if (baseMat && effectiveLayout.HasCustomParameters())
-		baseMat->BuildConstantBufferBlob(outBlob);
-
-	// 48바이트 헤더는 인스턴스 오버라이드가 반영된 baseConstants로 확정
-	memcpy(outBlob.data(), &baseConstants, sizeof(MaterialConstants));
+	if (baseMat) baseMat->ApplyCustomParametersToBlob(outBlob, effectiveLayout);
 	ApplyCustomParametersToBlob(outBlob, effectiveLayout);
 }
 

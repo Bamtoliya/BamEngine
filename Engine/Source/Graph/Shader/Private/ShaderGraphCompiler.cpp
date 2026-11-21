@@ -104,13 +104,55 @@ namespace
 		return out.str();
 	}
 
+	constexpr int GraphTextureSlotCount = 4;
+	constexpr std::string_view DiffuseTextureDeclaration =
+		"Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n";
+
+	int GraphTextureSlot(const GraphNode& node)
+	{
+		const auto value = node.InputValues.find("slot");
+		if (value == node.InputValues.end()) return 0;
+		const auto* slot = std::get_if<std::int64_t>(&value->second);
+		return slot && *slot >= 0 && *slot < GraphTextureSlotCount ? static_cast<int>(*slot) : -1;
+	}
+
+	std::string BuildGraphTextureHlsl(const Graph& graph, bool declareDiffuse = false)
+	{
+		std::array<bool, GraphTextureSlotCount> slots{};
+		for (const auto& node : graph.GetNodes())
+		{
+			if (node.Type != "Shader.TextureSample") continue;
+			const int slot = GraphTextureSlot(node);
+			if (slot >= 0) slots[slot] = true;
+		}
+
+		std::ostringstream out;
+		if (declareDiffuse || slots[0]) out << DiffuseTextureDeclaration;
+		for (int slot = 0; slot < GraphTextureSlotCount; ++slot)
+		{
+			if (!slots[slot]) continue;
+			const auto suffix = std::to_string(slot);
+			const auto texture = slot == 0 ? "diffuseMap" : "graphTexture" + suffix;
+			const auto sampler = slot == 0 ? "materialSampler" : "graphSampler" + suffix;
+			if (slot != 0)
+			{
+				out << "Texture2D " << texture << " : register(t" << slot << ", space1);\n";
+				out << "SamplerState " << sampler << " : register(s" << slot << ", space1);\n";
+			}
+			out << "float4 SampleGraphTexture" << slot << "(float2 uv)\n{\n"
+				<< "\tif ((gMaterial.materialFlags & " << (1u << slot) << "u) == 0u) return float4(1, 1, 1, 1);\n"
+				<< "\treturn " << texture << ".Sample(" << sampler << ", uv);\n}\n";
+		}
+		return out.str();
+	}
+
 	bool IsSupportedShaderNode(const std::string& type)
 	{
 		if (type.rfind("Variable.Get.", 0) == 0 && type.size() > 13)
 			return true;
 
 		static const std::unordered_set<std::string> supported{
-			"Shader.ColorOutput", "Shader.MaterialOutput",
+			"Shader.ColorOutput", "Shader.MaterialOutput", "Shader.TextureSample",
 			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Core.Reroute.Float", "Core.Reroute.Float2", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
 			"Math.AddFloat", "Math.MultiplyFloat", "Math.AddFloat2", "Math.MultiplyFloat2",
@@ -267,6 +309,28 @@ namespace
 			if (outputPin.Pin != "uv" || expectedType != EGraphPinType::Float2)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 			outExpression = type == "Shader.TexCoord0" ? "input.TexCoord" : "input.TexCoord1";
+			return {};
+		}
+
+		if (type == "Shader.TextureSample")
+		{
+			const auto& rootPin = callStack.front().Pin;
+			if (rootPin == "worldPositionOffset" || rootPin == "customUV0" || rootPin == "customUV1")
+				return { EGraphError::UnsupportedCompilation, producer->Id, "uv", 0, "ShaderGraph.TextureSamplePixelOnly" };
+
+			const int slot = GraphTextureSlot(*producer);
+			if (slot < 0)
+				return { EGraphError::InvalidDefault, producer->Id, "slot", 0, "ShaderGraph.TextureSlotRange" };
+
+			std::string uv = "input.TexCoord";
+			const GraphPinReference uvPin{ producer->Id, "uv" };
+			const auto links = graph.GetLinks();
+			if (std::any_of(links.begin(), links.end(), [&](const GraphLink& link) { return link.To == uvPin; }))
+			{
+				auto result = ResolveInputExpression(graph, registry, uvPin, EGraphPinType::Float2, callStack, uv);
+				if (!result.Succeeded()) return result;
+			}
+			outExpression = "SampleGraphTexture" + std::to_string(slot) + "(" + uv + ")";
 			return {};
 		}
 
@@ -578,6 +642,11 @@ return output;
 	return {};
 }
 
+bool ShaderGraphCompiler::SupportsNode(const std::string& type)
+{
+	return IsSupportedShaderNode(type);
+}
+
 GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
 	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 {
@@ -588,7 +657,17 @@ GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
 	const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
 	if (!diagnostic.Succeeded()) return diagnostic;
 
-	std::string source = "float4 main() : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
+	std::string source;
+	if (colorLiteral.find("gMaterial.") != std::string::npos ||
+		colorLiteral.find("SampleGraphTexture") != std::string::npos)
+	{
+		source += BuildMaterialConstantsHlsl(BuildMaterialBufferLayout(graph));
+		source += BuildGraphTextureHlsl(graph);
+	}
+	const bool needsUv = colorLiteral.find("input.") != std::string::npos;
+	if (needsUv) source += "struct PS_INPUT { float2 TexCoord : TEXCOORD0; float2 TexCoord1 : TEXCOORD1; };\n";
+	source += needsUv ? "float4 main(PS_INPUT input)" : "float4 main()";
+	source += " : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
 	outSource.swap(source);
 	return {};
 }
@@ -626,6 +705,7 @@ float4 Emission : SV_TARGET3;
 float4 Position : SV_TARGET4;
 };
 
+)" + BuildMaterialConstantsHlsl(BuildMaterialBufferLayout(graph)) + BuildGraphTextureHlsl(graph) + R"(
 PS_OUTPUT main(PS_INPUT input)
 {
 PS_OUTPUT output;
@@ -719,10 +799,8 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 
 	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
 	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
-	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput";
-	const char* materialTextureDeclarations = useMaterialTexture
-		? "Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n"
-		: "";
+	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput" &&
+		baseColor.find("SampleGraphTexture0(") == std::string::npos;
 	const char* materialDiffuseSample = useMaterialTexture
 		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
 		: "";
@@ -750,7 +828,7 @@ float4 Emission : SV_TARGET3;
 float4 Position : SV_TARGET4;
 };
 
-)" + std::string(materialTextureDeclarations) + "\n" + materialConstantsBlock + R"(
+)" + materialConstantsBlock + BuildGraphTextureHlsl(graph, useMaterialTexture) + R"(
 PS_OUTPUT main(PS_INPUT input)
 {
 PS_OUTPUT output;
@@ -831,10 +909,8 @@ GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 
 	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
 	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
-	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput";
-	const char* materialTextureDeclarations = useMaterialTexture
-		? "Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n"
-		: "";
+	const bool useMaterialTexture = outputNode->Type == "Shader.MaterialOutput" &&
+		baseColor.find("SampleGraphTexture0(") == std::string::npos;
 	const char* materialDiffuseSample = useMaterialTexture
 		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
 		: "";
@@ -853,7 +929,7 @@ float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
 };
 
-)" + std::string(materialTextureDeclarations) + "\n" + materialConstantsBlock + R"(
+)" + materialConstantsBlock + BuildGraphTextureHlsl(graph, useMaterialTexture) + R"(
 float4 main(PS_INPUT input) : SV_TARGET0
 {
 float4 diffuse = ()" + baseColor + R"() * input.Color;

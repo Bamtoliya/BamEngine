@@ -265,6 +265,10 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV0" } } },
 		{ "Shader.TexCoord1", shader, {
 			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV1" } } },
+		{ "Shader.TextureSample", shader, {
+			{ "slot", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TextureSlot" },
+			{ "uv", Direction::Input, Type::Float2, std::array<float, 2>{}, {}, "Graph.PinName.TextureUV" },
+			{ "rgba", Direction::Output, Type::Float4, {} } } },
 		{ "Shader.MaterialOutput", { EGraphDomain::Shader }, {
 			// [VS Stage Input]
 			{ "worldPositionOffset", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } },
@@ -304,6 +308,12 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		if (definition.Type == "Math.MultiplyFloat2") definition.DisplayName = "Graph.Node.MultiplyFloat2";
 		if (definition.Type == "Shader.TexCoord0") definition.DisplayName = "Graph.Node.TexCoord0";
 		if (definition.Type == "Shader.TexCoord1") definition.DisplayName = "Graph.Node.TexCoord1";
+		if (definition.Type == "Shader.TextureSample")
+		{
+			definition.Category = "Texture";
+			definition.DisplayName = "Graph.Node.TextureSample";
+			definition.Pins.front().LiteralOnly = true;
+		}
 	}
 	for (auto& definition : definitions)
 	{

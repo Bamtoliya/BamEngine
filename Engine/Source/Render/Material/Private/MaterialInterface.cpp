@@ -364,10 +364,11 @@ void MaterialInterface::ApplyCustomParametersToBlob(vector<uint8>& outBlob, cons
 
     for (const auto& entry : layout.Entries)
     {
-        if (entry.Offset + entry.Size > outBlob.size()) continue;
+        if (entry.Offset < sizeof(MaterialConstants) || entry.Offset > outBlob.size() ||
+            entry.Size > outBlob.size() - entry.Offset) continue;
 
         const auto* param = findParamCaseInsensitive(entry.Name);
-        if (!param || param->data.empty()) continue;
+        if (!param || param->type != entry.Type || param->data.empty()) continue;
 
         if (entry.Type == EMaterialParameterType::Bool && entry.Size == sizeof(uint32))
         {
@@ -384,7 +385,8 @@ void MaterialInterface::ApplyCustomParametersToBlob(vector<uint8>& outBlob, cons
 
 void MaterialInterface::BuildConstantBufferBlob(vector<uint8>& outBlob) const
 {
-    const size_t totalSize = (std::max)(sizeof(MaterialConstants), static_cast<size_t>(m_BufferLayout.TotalBufferSize));
+    const size_t totalSize = std::clamp<size_t>(m_BufferLayout.TotalBufferSize,
+        sizeof(MaterialConstants), MaterialBufferLayout::MaxBufferSize);
     const size_t alignedSize = (totalSize + 15u) & ~static_cast<size_t>(15u);
     outBlob.assign(alignedSize, 0u);
 

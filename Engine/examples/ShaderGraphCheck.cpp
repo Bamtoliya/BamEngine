@@ -243,6 +243,37 @@ int main()
 		Expect(vsSource.find("float2 TexCoord1 : TEXCOORD1;", firstUv1 + 1) != std::string::npos,
 			"Generated vertex shader must expose UV1 in both input and output.");
 
+		Graph textureGraph{ EGraphDomain::Shader };
+		const auto textureOutput = Add(textureGraph, registry, "Shader.MaterialOutput");
+		const auto sample = Add(textureGraph, registry, "Shader.TextureSample");
+		Accept(textureGraph.Connect(registry, { sample, "rgba" }, { textureOutput, "baseColor" }));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(textureGraph, registry, matPsSource));
+		Expect(matPsSource.find("SampleGraphTexture0(input.TexCoord)") != std::string::npos &&
+			matPsSource.find("diffuse *= diffuseMap.Sample") == std::string::npos,
+			"Explicit diffuse sampling must default to UV0 and must not multiply by slot 0 twice.");
+
+		const auto textureUv1 = Add(textureGraph, registry, "Shader.TexCoord1");
+		Accept(textureGraph.Connect(registry, { textureUv1, "uv" }, { sample, "uv" }));
+		Accept(textureGraph.SetInputValue(registry, { sample, "slot" }, std::int64_t{ 2 }));
+		Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(textureGraph, registry, matPsSource));
+		Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(textureGraph, registry, transparentPsSource));
+		for (const auto* shader : { &matPsSource, &transparentPsSource })
+			Expect(shader->find("register(t2, space1)") != std::string::npos &&
+				shader->find("register(s2, space1)") != std::string::npos &&
+				shader->find("SampleGraphTexture2(input.TexCoord1)") != std::string::npos,
+				"Texture sample must use the selected material slot and connected UV in both pixel shaders.");
+		Accept(textureGraph.SetInputValue(registry, { sample, "slot" }, std::int64_t{ 4 }));
+		Expect(!ShaderGraphCompiler::GenerateGBufferMaterialHlsl(textureGraph, registry, matPsSource).Succeeded(),
+			"Texture sample accepted a slot outside the supported material flags.");
+		Accept(textureGraph.SetInputValue(registry, { sample, "slot" }, std::int64_t{ 0 }));
+		const auto sampleChannels = Add(textureGraph, registry, "Math.BreakFloat4");
+		const auto position = Add(textureGraph, registry, "Math.MakeFloat3");
+		Accept(textureGraph.Connect(registry, { sample, "rgba" }, { sampleChannels, "value" }));
+		Accept(textureGraph.Connect(registry, { sampleChannels, "x" }, { position, "x" }));
+		Accept(textureGraph.Connect(registry, { position, "result" }, { textureOutput, "worldPositionOffset" }));
+		Expect(!ShaderGraphCompiler::GenerateGBufferMaterialVS(textureGraph, registry, vsSource).Succeeded(),
+			"Pixel-only texture sampling must be rejected through vertex-stage intermediate nodes.");
+
 		// ── 5. 동적 MaterialBufferLayout (16바이트 패킹) 및 커스텀 파라미터(Variable.Get.*) 검증 ──
 		Graph dynGraph{ EGraphDomain::Shader };
 		const auto dynOutput = Add(dynGraph, registry, "Shader.MaterialOutput");

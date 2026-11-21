@@ -132,18 +132,32 @@ struct MaterialParameter
 };
 
 // HLSL 16바이트 패킹 규칙에 맞춘 동적 상수 버퍼 파라미터 엔트리
+STRUCT()
 struct MaterialParameterEntry
 {
+	REFLECT_BODY()
+
+	PROPERTY()
 	string Name;
+	PROPERTY()
 	EMaterialParameterType Type = EMaterialParameterType::Float;
+	PROPERTY()
 	uint32 Offset = 0;
+	PROPERTY()
 	uint32 Size = 0;
 };
 
 // 셰이더 그래프에서 산출되는 동적 상수 버퍼 레이아웃 (앞 48바이트는 표준 MaterialConstants 유지)
+STRUCT()
 struct ENGINE_API MaterialBufferLayout
 {
+	REFLECT_BODY()
+
+	static constexpr uint32 MaxBufferSize = 64u * 1024u;
+
+	PROPERTY()
 	vector<MaterialParameterEntry> Entries;
+	PROPERTY()
 	uint32 TotalBufferSize = sizeof(MaterialConstants);
 
 	const MaterialParameterEntry* Find(const string& name) const;
@@ -240,6 +254,7 @@ public:
 	void ResetAllParameters();
 
 protected:
+	friend class MaterialInstance;
 	void ApplyParameterConstants(MaterialConstants& outConstants) const;
 	void ApplyCustomParametersToBlob(vector<uint8>& outBlob, const MaterialBufferLayout& layout) const;
 
@@ -362,6 +377,7 @@ protected:
 private:
 	unordered_map<string, uint32> m_TextureNameToIndex = {};
 	unordered_map<uint32, uint32> m_TextureSlotToIndex = {};
+	PROPERTY()
 	MaterialBufferLayout m_BufferLayout = {};
 #pragma endregion
 };

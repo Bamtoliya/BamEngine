@@ -20,6 +20,8 @@ enum class EGraphDomain
 };
 
 enum class EGraphPinDirection { Input, Output };
+
+ENUM()
 enum class EGraphPinType { Execution, Bool, Int, Float, Float2, Float3, Float4, Object, String };
 
 // monostate means "no default". Execution and Object pins never carry literal values.

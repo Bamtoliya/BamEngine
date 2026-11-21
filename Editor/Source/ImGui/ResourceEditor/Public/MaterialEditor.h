@@ -13,6 +13,7 @@
 #include "ShaderCompiler.h"
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <string>
 #include <filesystem>
@@ -150,7 +151,15 @@ private:
 	void DrawPipelineSettings();
 	void DrawShaderSettings();
 	void DrawTextureBindings();
+	std::vector<Engine::MaterialTextureBinding> GetEffectiveTextureBindings() const;
+	void DrawTextureBindingPicker(const Engine::MaterialTextureBinding& binding);
+	void DrawTextureSampleBinding(const Engine::GraphNode& node);
+	std::optional<Engine::MaterialTextureBinding> GetTextureSampleBinding(const Engine::GraphNode& node) const;
+	void DrawTextureSampleThumbnail(const Engine::GraphNode& node) const;
 	void DrawParameters();
+	void DrawMaterialParameterValue(const std::string& name, const Engine::MaterialParameter& param);
+	bool AddGraphParameter(const std::string& name, Engine::EGraphPinType type, Engine::GraphValue initial,
+		const ImVec2* position = nullptr, bool adoptExisting = false);
 
 	// 중앙 패널 (셰이더 그래프 캔버스 워크스페이스)
 	void DrawCenterCanvasPane(float width, float height);
@@ -164,11 +173,13 @@ private:
 	void ReadSelection();
 	void ReserveEditorIds();
 	int FindPinId(const Engine::GraphPinReference& reference) const;
+	Engine::GraphPinReference ResolveCanvasPin(ax::NodeEditor::PinId id, Engine::EGraphPinDirection* direction = nullptr) const;
+	void DrawPinContextMenu();
 	std::pair<int, int> GetConnectionPins(const Engine::GraphLink& link) const;
 	ImU32 PinColor(Engine::EGraphPinType type) const;
 	const char* PinTypeName(Engine::EGraphPinType type) const;
 	void DrawCommentNode(const Engine::GraphNode& node);
-	void CreateCommentBoxFromSelection();
+	void CreateCommentBoxFromSelection(const ImVec2* anchor = nullptr);
 	void DrawRerouteNode(const Engine::GraphNode& node);
 	void InsertRerouteNodeOnLink(Engine::GraphLinkId linkId);
 	void AlignSelectedNodes(int alignment);
@@ -192,6 +203,10 @@ private:
 	bool SaveShaderGraph();
 	// 연결된 그래프를 읽기만 한다. 파일 생성·머티리얼 경로 기록·셰이더 교체는 하지 않는다.
 	bool HasLinkedShaderGraph() const;
+	bool HasInheritedShaderGraph() const;
+	bool CanEditShaderGraph() const;
+	static bool SupportsGraphPass(Engine::ERenderPassType pass);
+	static bool IsGraphShader(const Engine::ResourceHandle<Engine::Shader>& handle);
 	void TryLoadLinkedShaderGraph();
 	// 사용자가 요청했을 때만 기본 그래프를 만들어 머티리얼에 연결한다.
 	void CreateShaderGraphForMaterial();
@@ -263,6 +278,7 @@ private:
 	std::unordered_map<Engine::GraphNodeId, NodeView> m_NodeViews;
 	std::vector<GraphNodeCandidate> m_NodeCandidates;
 	char m_NodeSearch[256] = {};
+	char m_NewParameterName[64] = {};
 	ImVec2 m_AddPosition{ 0.0f, 0.0f };
 	Engine::GraphPinReference m_MenuSourcePin;
 	// 핀을 빈 곳에 놓았을 때 노드 메뉴를 연다. 링크 생성 트랜잭션 밖(ed::Suspend 구간)에서 연다.
@@ -270,7 +286,18 @@ private:
 	// 툴바·단축키로 연 노드 메뉴는 캔버스에서 마우스 위치를 추가 위치로 바꾼다.
 	bool m_AddNodeAtMouse = false;
 
-	int m_SelectedPin = 0;
+	Engine::GraphPinReference m_ContextPin;
+	Engine::GraphNodeId m_TexturePickerNode = 0;
+	bool m_OpenTexturePicker = false;
+	std::string m_PendingParameterNode;
+	std::string m_ParameterToReveal;
+	std::string m_ParameterToDelete;
+	std::unordered_set<std::string> m_HiddenParameters;
+	bool m_ShowHiddenParameters = false;
+	Engine::GraphNodeId m_EditingCommentNode = 0;
+	std::string m_CommentDraft;
+	bool m_FocusCommentTitle = false;
+	ImVec2 m_PinMenuPosition{};
 	Engine::GraphNodeId m_SelectedNode = 0;
 	Engine::GraphLinkId m_SelectedLink = 0;
 	std::vector<Engine::GraphNodeId> m_SelectedNodes;
