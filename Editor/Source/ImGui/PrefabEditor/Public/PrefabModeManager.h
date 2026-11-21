@@ -24,8 +24,8 @@ public:
 
     [[nodiscard]] bool IsInPrefabMode() const { return m_IsInPrefabMode; }
     [[nodiscard]] const std::filesystem::path& GetPrefabPath() const { return m_CurrentPrefabPath; }
-    [[nodiscard]] Engine::Scene* GetPrefabScene() const { return m_PrefabScene; }
-    [[nodiscard]] Engine::Entity* GetRootEntity() const { return m_PrefabRootEntity; }
+    [[nodiscard]] Scene* GetPrefabScene() const { return m_PrefabScene; }
+    [[nodiscard]] Entity* GetRootEntity() const { return m_PrefabRootEntity; }
     [[nodiscard]] bool HasUnsavedChanges() const;
     void MarkDirty() { m_HasUnsavedChanges = true; }
 
@@ -40,19 +40,19 @@ public:
 
 
 private:
-    bool SetupDefaultEnvironment(Engine::Scene* scene);
+    bool SetupDefaultEnvironment(Scene* scene);
 
 private:
     bool m_IsInPrefabMode = false;
     std::filesystem::path m_CurrentPrefabPath;
-    Engine::Scene* m_SavedMainScene = nullptr;
-    Engine::Scene* m_PrefabScene = nullptr;
-    Engine::Entity* m_PrefabRootEntity = nullptr;
+    Scene* m_SavedMainScene = nullptr;
+    Scene* m_PrefabScene = nullptr;
+    Entity* m_PrefabRootEntity = nullptr;
     bool m_HasUnsavedChanges = false;
     bool m_QuitAfterExit = false;
     bool m_ShowExitConfirmModal = false;
     bool m_MainSceneHadUnsavedChanges = false;
-    std::vector<Engine::Entity*> m_SavedSelection;
+    std::vector<Entity::WeakRef> m_SavedSelection;
 };
 
 END

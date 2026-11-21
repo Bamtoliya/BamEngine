@@ -79,8 +79,13 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
 
     Safe_AddRef(m_SavedMainScene);
 
-    m_SavedSelection = SelectionManager::Get().GetSelectedEntities();
-    SelectionManager::Get().ClearSelection();
+    auto& selection = SelectionManager::Get();
+    m_SavedSelection.clear();
+
+    for (auto* entity : selection.GetSelectedEntities())
+        m_SavedSelection.push_back(entity->GetWeakRef());
+
+    selection.ClearSelection();
 
     m_PrefabScene = Engine::Scene::Create();
     if (!m_PrefabScene)
@@ -206,11 +211,15 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
     m_CurrentPrefabPath.clear();
     m_HasUnsavedChanges = false;
 
-    SelectionManager::Get().ClearSelection();
-    for (auto* ent : m_SavedSelection)
+    auto& selection = SelectionManager::Get();
+    selection.ClearSelection();
+
+    for (const auto& ref : m_SavedSelection)
     {
-        SelectionManager::Get().AddToSelection(ent);
+        if (auto* entity = Engine::Entity::Resolve(ref))
+            selection.AddToSelection(entity);
     }
+
     m_SavedSelection.clear();
 
     return true;

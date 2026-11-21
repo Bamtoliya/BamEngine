@@ -17,52 +17,63 @@ void SelectionManager::Free()
 #pragma endregion
 
 #pragma region Entity Selection
-vector<class Entity*>& SelectionManager::GetSelectedEntities()
+vector<Entity*> SelectionManager::GetSelectedEntities()
 {
-	return m_SelectedEntities;
+	vector<Entity*> selected;
+	selected.reserve(m_SelectedEntities.size());
+
+	for (const auto& ref : m_SelectedEntities)
+		if (auto* entity = Entity::Resolve(ref)) selected.push_back(entity);
+
+	return selected;
 }
 
 Entity* SelectionManager::GetPrimarySelectedEntity()
 {
-	return m_SelectedEntities.empty() ? nullptr : m_SelectedEntities.back();;
+	for (auto it = m_SelectedEntities.rbegin(); it != m_SelectedEntities.rend(); ++it)
+		if (auto* entity = Entity::Resolve(*it)) return entity;
+
+	return nullptr;
 }
 
 void SelectionManager::ToggleSelection(Entity* entity)
 {
 	if (m_LockPrimarySeletion || !entity) return;
-	auto it = std::find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity);
+
+	std::erase_if(m_SelectedEntities, [](const auto& ref) { return !Entity::Resolve(ref); });
+	const auto it = std::find_if(m_SelectedEntities.begin(), m_SelectedEntities.end(),
+		[entity](const auto& ref) { return Entity::Resolve(ref) == entity; });
+
 	if (it != m_SelectedEntities.end())
-	{
 		m_SelectedEntities.erase(it);
-	}
 	else
-	{
-		m_SelectedEntities.push_back(entity);
-	}
+		m_SelectedEntities.push_back(entity->GetWeakRef());
 }
 
 void SelectionManager::SetSelectedEntity(Entity* entity)
 {
 	if (m_LockPrimarySeletion) return;
+
 	ClearSelection();
 	if (entity)
-	{
-		m_SelectedEntities.push_back(entity);
-	}
+		m_SelectedEntities.push_back(entity->GetWeakRef());
 }
 
 bool SelectionManager::IsEntitySelected(Entity* entity) const
 {
-	return find(m_SelectedEntities.begin(), m_SelectedEntities.end(), entity) != m_SelectedEntities.end();
+	if (!entity) return false;
+
+	return std::any_of(m_SelectedEntities.begin(), m_SelectedEntities.end(),
+		[entity](const auto& ref) { return Entity::Resolve(ref) == entity; });
 }
 
 void SelectionManager::AddToSelection(Entity* entity)
 {
 	if (!entity) return;
+
+	std::erase_if(m_SelectedEntities, [](const auto& ref) { return !Entity::Resolve(ref); });
 	if (!IsEntitySelected(entity))
-	{
-		m_SelectedEntities.push_back(entity);
-	}
+		m_SelectedEntities.push_back(entity->GetWeakRef());
 }
 
 void SelectionManager::ClearSelection(bool force)

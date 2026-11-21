@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "Entity.h"
 
 BEGIN(Editor)
 class SelectionManager : public Base
@@ -18,14 +19,14 @@ private:
 
 #pragma region Entity Selection
 public:
-	vector<class Entity*>& GetSelectedEntities();
-	class Entity* GetPrimarySelectedEntity();
-	void ToggleSelection(class Entity* entity);
-	void ToggleEntitySelection(class Entity* entity) { ToggleSelection(entity); }
-	void SetSelectedEntity(class Entity* entity);
-	bool IsEntitySelected(class Entity* entity) const;
-	void AddToSelection(class Entity* entity);
-	void AddToEntitySelection(class Entity* entity) { AddToSelection(entity); }
+	vector<Entity*> GetSelectedEntities();
+	Entity* GetPrimarySelectedEntity();
+	void ToggleSelection(Entity* entity);
+	void ToggleEntitySelection(Entity* entity) { ToggleSelection(entity); }
+	void SetSelectedEntity(Entity* entity);
+	bool IsEntitySelected(Entity* entity) const;
+	void AddToSelection(Entity* entity);
+	void AddToEntitySelection(Entity* entity) { AddToSelection(entity); }
 	void ClearSelection(bool force = false);
 public:
 	bool IsPrimarySelectionLocked() { return m_LockPrimarySeletion; }
@@ -48,7 +49,7 @@ public:
 
 private:
 	bool m_LockPrimarySeletion = { false };
-	vector<class Entity*> m_SelectedEntities;
+	vector<Entity::WeakRef> m_SelectedEntities;
 	filesystem::path m_LastSelectedAssetPath;
 	filesystem::path m_LastSelectedResourcePath;
 };
