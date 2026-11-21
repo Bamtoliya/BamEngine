@@ -9,6 +9,7 @@
 #include "SelectionManager.h"
 #include "ResourceManager.h"
 #include "Model.h"
+#include "Mesh.h"
 #include "Material.h"
 #include "Skeleton.h"
 #include "Animation.h"
@@ -43,12 +44,19 @@ namespace
 		const auto name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
 		return name.ends_with(".bammodel") || name.ends_with(".bammodel.json");
 	}
+
+	bool IsMeshFile(const std::filesystem::path& path)
+	{
+		const auto name = Engine::ToLowerWStr(path.filename().wstring());
+		return name.ends_with(L".bammesh") || name.ends_with(L".bammesh.json");
+	}
 }
 
 bool ModelEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
 	const auto ext = assetPath.extension().wstring();
-	return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".glb" || IsImportedModelFile(assetPath);
+	return ext == L".fbx" || ext == L".obj" || ext == L".gltf" || ext == L".glb" ||
+		IsImportedModelFile(assetPath) || IsMeshFile(assetPath);
 }
 
 void ModelEditor::Update(f32 dt)
@@ -60,7 +68,7 @@ void ModelEditor::Update(f32 dt)
 	m_PreviewWidget.Submit(dt);
 }
 
-void ModelEditor::SetupPreviewModel()
+void ModelEditor::SetupPreview()
 {
 	if (!m_PreviewWidget.GetScene())
 		return;
@@ -70,6 +78,34 @@ void ModelEditor::SetupPreviewModel()
 	{
 		(void)m_PreviewWidget.GetScene()->DestroyEntity(*m_PreviewEntity);
 		m_PreviewEntity = nullptr;
+	}
+
+	if (const auto* mesh = m_MeshHandle.Get())
+	{
+		auto& scene = *m_PreviewWidget.GetScene();
+		const bool isSkinned = mesh->IsSkinned();
+		Engine::ResourceHandle<Engine::MaterialInterface> material(Engine::ResourceManager::Get().LoadFile(isSkinned
+			? L"Engine://Material/SkinningMaterial.bammat.json"
+			: L"Engine://Material/DefaultMaterial.bammat.json"));
+		m_PreviewEntity = &m_PreviewWidget.CreateEntity(m_TargetResourcePath.filename().wstring());
+		if (isSkinned)
+		{
+			// Without an Animator the skinned draw binds identity bone matrices.
+			auto& renderer = scene.AddComponent<Engine::SkinnedMeshRendererComponent>(*m_PreviewEntity);
+			renderer.meshHandle = m_MeshHandle;
+			renderer.materialHandle = material;
+		}
+		else
+		{
+			auto& renderer = scene.AddComponent<Engine::StaticMeshRendererComponent>(*m_PreviewEntity);
+			renderer.meshHandle = m_MeshHandle;
+			renderer.materialHandle = material;
+		}
+		if (!material.IsValid())
+			EDITOR_LOG_ERROR("Failed to load the default material for the mesh preview.");
+		if (!m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity))
+			EDITOR_LOG_ERROR("Failed to frame the preview mesh.");
+		return;
 	}
 
 	auto* model = m_ModelHandle.Get();
@@ -137,7 +173,7 @@ bool ModelEditor::ApplyDocumentSnapshot(const ModelEditor::MaterialSlots& snapsh
 	{
 		if (model->SetMaterial(static_cast<uint32>(i), snapshot[i]) != EResult::Success) return false;
 	}
-	SetupPreviewModel();
+	SetupPreview();
 	return true;
 }
 
@@ -165,13 +201,15 @@ void ModelEditor::DrawCustomToolbar()
 {
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
-		DrawSaveMenuItem();
-		if (ImGui::MenuItem((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("ModelEditor.RetryLoad")).c_str(),
+		const bool viewingMesh = m_MeshHandle.IsValid();
+		if (!viewingMesh)
+			DrawSaveMenuItem();
+		if (!viewingMesh && ImGui::MenuItem((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("ModelEditor.RetryLoad")).c_str(),
 			nullptr, false, !m_TargetResourcePath.empty()))
 		{
 			RunWithDiscardConfirmation([this] {
 				if (!HasUnsavedResourceChanges()) SetTargetResource(m_TargetResourcePath);
-				else if (RestoreSavedChanges()) SetupPreviewModel();
+				else if (RestoreSavedChanges()) SetupPreview();
 			}, false);
 		}
 		DrawCloseMenuItem();
@@ -179,7 +217,7 @@ void ModelEditor::DrawCustomToolbar()
 		ImGui::EndMenu();
 	}
 
-	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
+	if (!m_MeshHandle.IsValid() && ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.Edit").c_str()))
 	{
 		DrawHistoryMenuItems("ModelEditor");
 		ImGui::Separator();
@@ -196,7 +234,8 @@ void ModelEditor::DrawCustomToolbar()
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.View").c_str()))
 	{
 		auto& sm = ShortcutManager::Get();
-		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL("ModelEditor.Focus")).c_str(), sm.GetShortcutHint("Viewport.Focus")))
+		const auto* focusKey = m_MeshHandle.IsValid() ? "PreviewViewport.Focus" : "ModelEditor.Focus";
+		if (ImGui::MenuItem((ICON_FA_CROSSHAIRS " " + LOCAL_LABEL(focusKey)).c_str(), sm.GetShortcutHint("Viewport.Focus")))
 		{
 			if (m_PreviewEntity) m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity);
 		}
@@ -213,8 +252,12 @@ void ModelEditor::DrawCustomToolbar()
 void ModelEditor::DrawCustomQuickAccess()
 {
 	EditorUI::ToolbarLayout toolbar;
-	DrawSaveButton(toolbar);
-	DrawHistoryButtons(toolbar, "ModelEditor");
+	const bool viewingMesh = m_MeshHandle.IsValid();
+	if (!viewingMesh)
+	{
+		DrawSaveButton(toolbar);
+		DrawHistoryButtons(toolbar, "ModelEditor");
+	}
 
 	EditorUI::IconButtonOptions focusOptions;
 	focusOptions.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
@@ -228,6 +271,9 @@ void ModelEditor::DrawCustomQuickAccess()
 	gridOptions.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleGrid");
 	if (toolbar.Icon("ToggleGrid", ICON_FA_BORDER_ALL, "Action.Viewport.ToggleGrid", gridOptions))
 		m_PreviewWidget.ToggleGrid();
+
+	if (viewingMesh)
+		return;
 
 	auto& history = Application::Get().GetEditHistory();
 	const bool canPlace = history.Enabled() && SceneManager::Get().GetCurrentScene() && m_ModelHandle.IsValid();
@@ -724,6 +770,19 @@ void ModelEditor::DrawCustomContent()
 		[this] { m_PreviewWidget.Draw(); },
 		[this, &history]
 		{
+			if (const auto* mesh = m_MeshHandle.Get())
+			{
+				ImGui::TextUnformatted(LOCAL_CSTR("ModelEditor.MeshPreview"));
+				if (EditorUI::BeginPropertyTable("##MeshInfo", EditorUI::InspectorPropertyTableStyle()))
+				{
+					EditorUI::PropertyRow("ModelEditor.Vertices");
+					ImGui::Text("%u", mesh->GetVertexCount());
+					EditorUI::PropertyRow("ModelEditor.IndexCount");
+					ImGui::Text("%u", mesh->GetIndexCount());
+					EditorUI::EndPropertyTable();
+				}
+				return;
+			}
 			if (auto* model = m_ModelHandle.Get())
 			{
 				const bool canEdit = PIEManager::Get().IsEditing();
@@ -805,6 +864,25 @@ void ModelEditor::InstantiateModel()
 
 void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
+	if (IsMeshFile(assetPath))
+	{
+		auto& manager = Engine::ResourceManager::Get();
+		const auto handle = manager.LoadFile(assetPath.wstring());
+		if (!dynamic_cast<Engine::Mesh*>(manager.GetResource(handle)))
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("ModelEditor.MeshLoadFailed"), ELogLevel::Error);
+			return;
+		}
+		if (!RestoreSavedChanges()) return;
+
+		ResourceEditorInterface::SetTargetResource(assetPath);
+		m_ModelHandle.Reset();
+		m_MeshHandle = Engine::ResourceHandle<Engine::Mesh>(handle);
+		m_StatusKey.clear();
+		m_History.Clear();
+		SetupPreview();
+		return;
+	}
 	if (!IsImportedModelFile(assetPath)) return;
 	using Clock = std::chrono::steady_clock;
 	using Milliseconds = std::chrono::duration<double, std::milli>;
@@ -815,11 +893,12 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	if (!dynamic_cast<Model*>(manager.GetResource(handle)) || !RestoreSavedChanges()) return;
 
 	ResourceEditorInterface::SetTargetResource(assetPath);
+	m_MeshHandle.Reset();
 	m_ModelHandle = ResourceHandle<Model>(handle);
 	m_StatusKey.clear();
 	m_History.Reset(m_ModelHandle.Get()->GetMaterials());
 	const auto previewStart = Clock::now();
-	SetupPreviewModel();
+	SetupPreview();
 	const auto previewEnd = Clock::now();
 	EDITOR_LOG_INFO("[ResourceOpenTiming] Model {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms",
 		WStrToStr(assetPath.wstring()), Milliseconds(loadEnd - loadStart).count(),
@@ -843,7 +922,8 @@ bool ModelEditor::RestoreSavedResource()
 void ModelEditor::ReleaseResourceDocument()
 {
 	m_ModelHandle.Reset();
-	SetupPreviewModel();
+	m_MeshHandle.Reset();
+	SetupPreview();
 	m_StatusKey.clear();
 	m_History.Clear();
 }
@@ -893,7 +973,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 			if (result == EResult::Success)
 			{
 				m_History.MarkEdited();
-				SetupPreviewModel();
+				SetupPreview();
 			}
 		}
 

@@ -7,6 +7,7 @@
 
 BEGIN(Engine)
 class Entity;
+class Mesh;
 struct AnimatorComponent;
 END
 
@@ -34,7 +35,7 @@ public:
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
 
 private:
-	void SetupPreviewModel();
+	void SetupPreview();
 	void InstantiateModel();
 	void DrawCustomToolbar() override;
 	void ReleaseResourceDocument() override;
@@ -53,6 +54,7 @@ private:
 
 private:
 	Engine::ResourceHandle<Engine::Model> m_ModelHandle;
+	Engine::ResourceHandle<Engine::Mesh> m_MeshHandle;
 	string m_StatusKey;
 	using MaterialSlots = std::vector<Engine::ResourceHandle<Engine::MaterialInterface>>;
 	ResourceDocumentHistory<MaterialSlots> m_History;

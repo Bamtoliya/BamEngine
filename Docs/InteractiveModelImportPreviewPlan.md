@@ -64,6 +64,7 @@
 - [x] **`ModelEditor` 프리뷰어 장착**:
   - 기존 2D 프로퍼티 전용 창에서 `PreviewViewportWidget`을 결합한 복합 에디터로 확장.
   - 수평 가변 스플리터(`Splitter`) 적용.
+  - Content Browser에서 `.bammesh` 또는 `.bammesh.json`을 열면 같은 창에서 해당 메시를 읽기 전용으로 표시한다. 기본 머티리얼로 형상을 렌더링하고 정점·인덱스 수를 표시한다. 스킨 데이터가 있는 메시도 단독 보기에서는 정적 형상으로 표시한다.
 - [x] **`ModelConverter` & `ModelImporter` 옵션 확장**:
   - `ModelConversion::Options` 및 `ModelImportDesc`에 `UniformScale`(float), `RotationOffset`(array<float, 3>) 추가.
   - 임포트 배율은 메시 정점, 모든 노드 및 본의 이동 성분, 본 오프셋의 이동 성분, 애니메이션 위치 키에 베이크한다. 노드·본·애니메이션의 스케일 값은 원본 값을 유지한다. 엔티티 Scale이 `1`인 메시 직접 바인딩과 모델 배치에 같은 기본 배율이 적용된다.
