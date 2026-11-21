@@ -23,6 +23,11 @@ GraphPanel,ConnectFrom,Connect from output,출력 핀에서 연결
 GraphPanel,ConnectTo,Connect to input,입력 핀으로 연결
 GraphPanel,Connected,Connected - source takes precedence,연결됨 - 연결된 소스를 사용합니다
 GraphPanel,Connection,Connection,연결
+GraphPanel,LinkSource,Source Pin,출력 핀
+GraphPanel,LinkTarget,Target Pin,입력 핀
+GraphPanel,NodeId,Node ID,노드 ID
+GraphPanel,RemoveVariable,Remove Variable,변수 제거
+GraphPanel,ExecutionState,Execution State,실행 상태
 GraphPanel,Controls,Drag pins to empty space to search nodes | Middle drag to pan | Ctrl for multiple selection,핀을 빈 곳에 놓아 노드 검색 | 가운데 버튼으로 화면 이동 | Ctrl로 다중 선택
 GraphPanel,CreateCommentBox,Create Comment Box (Group),코멘트 상자 생성 (그룹)
 GraphPanel,CreateRuntimeMaterial,Create Session Material,세션 머티리얼 생성

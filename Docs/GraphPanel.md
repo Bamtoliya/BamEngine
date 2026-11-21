@@ -16,6 +16,8 @@
 자료형, 연결 개수, 데이터 순환과 기본값 검증은 기존 Engine API가 담당한다.
 공통 기반과 실행 제한은 `Docs/GraphFoundation.md`를 참고한다.
 
+로직 그래프 우측의 노드 입력, 연결 정보, 변수와 실행 설정은 `EditorUI`의 공용 인스펙터 속성 표를 사용한다. 핀 위젯은 `GraphValue`의 자료형에 맞춰 그리며, 연결된 입력은 편집을 막고 기본값 적용·복원은 그래프 API로 처리한다. 실제 에디터에서는 한·영 전환과 좁은 우측 패널에서 값, 복원 버튼과 변수 작업이 겹치지 않는지 확인한다.
+
 ## 의존성
 
 - `Editor/CMake/NodeEditor.cmake`에서 CMake FetchContent로 `imgui-node-editor` 공식 소스를 가져온다 (`bam_imgui_node_editor`).

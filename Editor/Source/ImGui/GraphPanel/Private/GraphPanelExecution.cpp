@@ -1,5 +1,7 @@
 ﻿#include "GraphPanel.h"
 #include "IconsFontAwesome7.h"
+#include "EditorUI.h"
+#include <cfloat>
 #include "GraphMessageLocalization.h"
 #include "LocalizationManager.h"
 #include "PIEManager.h"
@@ -222,23 +224,35 @@ void GraphPanel::DrawExecutionTrace()
 	ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.ExecutionTrace"));
 	const char* states[]{ "GraphPanel.Idle", "GraphPanel.Paused", "GraphPanel.Running",
 		"GraphPanel.Completed", "GraphPanel.Stopped", "GraphPanel.Failed" };
-	ImGui::TextUnformatted(LOCAL_CSTR(states[static_cast<int>(m_Executor.GetState())]));
-	ImGui::Text("%s: %llu", LOCAL_CSTR("GraphPanel.RemainingBudget"),
-		static_cast<unsigned long long>(m_Executor.GetRemainingBudget()));
-	const auto result = TraceValueText(m_Executor.GetResult());
-	if (!result.empty()) ImGui::Text("%s: %s", LOCAL_CSTR("GraphPanel.Result"), result.c_str());
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::DragFloat(LOCAL_CSTR("GraphPanel.StepInterval"), &m_StepInterval,
-		0.01f, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
 	const auto state = m_Executor.GetState();
-	ImGui::BeginDisabled(state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused);
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::InputFloat(LOCAL_CSTR("GraphPanel.EventDelta"), &m_ExecutionDelta);
-	ImGui::SetNextItemWidth(-1.0f);
-	ImGui::DragInt(LOCAL_CSTR("GraphPanel.TaskBudget"), &m_ExecutionBudget,
-		100.0f, 1, 100000, "%d", ImGuiSliderFlags_AlwaysClamp);
-	ImGui::EndDisabled();
-	ImGui::Checkbox(LOCAL_CSTR("GraphPanel.FollowTrace"), &m_FollowTrace);
+	if (EditorUI::BeginPropertyTable("##GraphExecutionProperties", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("GraphPanel.ExecutionState");
+		ImGui::TextUnformatted(LOCAL_CSTR(states[static_cast<int>(state)]));
+		EditorUI::PropertyRow("GraphPanel.RemainingBudget");
+		ImGui::Text("%llu", static_cast<unsigned long long>(m_Executor.GetRemainingBudget()));
+		const auto result = TraceValueText(m_Executor.GetResult());
+		if (!result.empty())
+		{
+			EditorUI::PropertyRow("GraphPanel.Result");
+			ImGui::TextWrapped("%s", result.c_str());
+		}
+
+		EditorUI::PropertyRow("GraphPanel.StepInterval");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::DragFloat("##StepInterval", &m_StepInterval, 0.01f, 0.01f, 2.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::BeginDisabled(state == EGraphExecutionState::Running || state == EGraphExecutionState::Paused);
+		EditorUI::PropertyRow("GraphPanel.EventDelta");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::InputFloat("##EventDelta", &m_ExecutionDelta);
+		EditorUI::PropertyRow("GraphPanel.TaskBudget");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::DragInt("##TaskBudget", &m_ExecutionBudget, 100.0f, 1, 100000, "%d", ImGuiSliderFlags_AlwaysClamp);
+		ImGui::EndDisabled();
+		EditorUI::PropertyRow("GraphPanel.FollowTrace");
+		ImGui::Checkbox("##FollowTrace", &m_FollowTrace);
+		EditorUI::EndPropertyTable();
+	}
 	if (ImGui::BeginChild("##GraphTraceList", ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 12),
 		ImGuiChildFlags_Borders))
 	{

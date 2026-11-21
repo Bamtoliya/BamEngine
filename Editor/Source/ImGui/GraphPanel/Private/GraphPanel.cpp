@@ -6,6 +6,7 @@
 #include "GraphSystem.h"
 #include "PlatformPath.h"
 #include <algorithm>
+#include <cfloat>
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include "FileDialogs.h"
@@ -696,18 +697,26 @@ void GraphPanel::DrawProperties()
 	const auto* node = document.Data.FindNode(selectedNode);
 	if (node)
 	{
-		ImGui::TextUnformatted(node->Type.c_str());
-		ImGui::TextDisabled("ID: %llu", static_cast<unsigned long long>(node->Id));
 		const auto* definition = m_Registry.Find(node->Type);
-		if (!definition) return;
-		if (!definition->Tooltip.empty()) ImGui::TextWrapped("%s", LOCAL_CSTR(definition->Tooltip));
-		ImGui::PushID(std::to_string(node->Id).c_str());
-		for (const auto& pin : definition->Pins)
+		if (definition && !definition->Tooltip.empty()) ImGui::TextWrapped("%s", LOCAL_CSTR(definition->Tooltip));
+		if (EditorUI::BeginPropertyTable("##GraphNodeProperties", EditorUI::InspectorPropertyTableStyle()))
 		{
-			if (pin.Direction == EGraphPinDirection::Input && pin.Type != EGraphPinType::Execution)
-				DrawInputValue(*node, pin);
+			EditorUI::PropertyRow("EditorCommon.Type");
+			ImGui::TextWrapped("%s", node->Type.c_str());
+			EditorUI::PropertyRow("GraphPanel.NodeId");
+			ImGui::TextDisabled("%llu", static_cast<unsigned long long>(node->Id));
+			if (definition)
+			{
+				ImGui::PushID(std::to_string(node->Id).c_str());
+				for (const auto& pin : definition->Pins)
+				{
+					if (pin.Direction == EGraphPinDirection::Input && pin.Type != EGraphPinType::Execution)
+						DrawInputValue(*node, pin);
+				}
+				ImGui::PopID();
+			}
+			EditorUI::EndPropertyTable();
 		}
-		ImGui::PopID();
 	}
 	else if (document.SelectedNodes.empty() && document.SelectedLinks.size() == 1)
 	{
@@ -715,10 +724,14 @@ void GraphPanel::DrawProperties()
 		{
 			if (link.Id != document.SelectedLinks.front()) continue;
 			ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.Connection"));
-			const string from = fmt::format("{} / {}", link.From.Node, link.From.Pin);
-			const string to = fmt::format("{} / {}", link.To.Node, link.To.Pin);
-			ImGui::TextUnformatted(from.c_str());
-			ImGui::TextUnformatted(to.c_str());
+			if (EditorUI::BeginPropertyTable("##GraphLinkProperties", EditorUI::InspectorPropertyTableStyle()))
+			{
+				EditorUI::PropertyRow("GraphPanel.LinkSource");
+				ImGui::TextWrapped("%s", fmt::format("{} / {}", link.From.Node, link.From.Pin).c_str());
+				EditorUI::PropertyRow("GraphPanel.LinkTarget");
+				ImGui::TextWrapped("%s", fmt::format("{} / {}", link.To.Node, link.To.Pin).c_str());
+				EditorUI::EndPropertyTable();
+			}
 			break;
 		}
 		if (ImGui::Button(LOCAL_CSTR("GraphPanel.Disconnect"))) DeleteSelection();
@@ -741,15 +754,16 @@ void GraphPanel::DrawVariables()
 	{
 		ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.NoVariables"));
 	}
-	else
+	else if (EditorUI::BeginPropertyTable("##GraphVariableList", EditorUI::InspectorPropertyTableStyle()))
 	{
 		for (size_t i = 0; i < vars.size(); ++i)
 		{
 			const auto& var = vars[i];
 			ImGui::PushID(static_cast<int>(i));
 
-			ImGui::BulletText("%s (%s)", var.Name.c_str(), PinTypeName(var.Type));
-			ImGui::SameLine();
+			const auto label = fmt::format("{} ({})", var.Name, PinTypeName(var.Type));
+			EditorUI::PropertyLabel(label.c_str());
+			EditorUI::PropertyValue();
 			if (ImGui::SmallButton(LOCAL_LABEL("GraphPanel.AddVariableGet").c_str()))
 			{
 				m_AddSource = {};
@@ -760,7 +774,7 @@ void GraphPanel::DrawVariables()
 				candidate.Type = "Variable.Get." + var.Name;
 				AddNode(candidate);
 			}
-			ImGui::SameLine();
+			EditorUI::SameLineIfFits(ImGui::CalcTextSize(LOCAL_CSTR("GraphPanel.AddVariableSet")).x + ImGui::GetStyle().FramePadding.x * 2.0f);
 			if (ImGui::SmallButton(LOCAL_LABEL("GraphPanel.AddVariableSet").c_str()))
 			{
 				m_AddSource = {};
@@ -770,9 +784,9 @@ void GraphPanel::DrawVariables()
 				candidate.Type = "Variable.Set." + var.Name;
 				AddNode(candidate);
 			}
-			ImGui::SameLine();
+			EditorUI::SameLineIfFits(EditorUI::GetIconButtonSize(ICON_FA_XMARK, true).x);
 
-			if (ImGui::SmallButton(ICON_FA_XMARK))
+			if (EditorUI::SmallIconButton("RemoveVariable", ICON_FA_XMARK, "GraphPanel.RemoveVariable"))
 			{
 				(void)document.Data.RemoveVariable(m_Registry, var.Name);
 				ImGui::PopID();
@@ -781,6 +795,7 @@ void GraphPanel::DrawVariables()
 
 			ImGui::PopID();
 		}
+		EditorUI::EndPropertyTable();
 	}
 
 	ImGui::Spacing();
@@ -788,8 +803,6 @@ void GraphPanel::DrawVariables()
 
 	// 2. 새 변수 추가 UI
 	ImGui::TextUnformatted(LOCAL_CSTR("GraphPanel.AddVariable"));
-	const string nameLabel = LOCAL("EditorCommon.Name") + "###GraphNewVarName";
-	ImGui::InputText(nameLabel.c_str(), m_NewVarName, sizeof(m_NewVarName));
 
 	const char* typeNames[] = { "Bool", "Int", "Float", "Float2", "Float3", "Float4" };
 	const Engine::EGraphPinType typeValues[] = {
@@ -797,8 +810,16 @@ void GraphPanel::DrawVariables()
 		Engine::EGraphPinType::Float2, Engine::EGraphPinType::Float3, Engine::EGraphPinType::Float4
 	};
 
-	const string typeLabel = LOCAL("EditorCommon.Type") + "###GraphNewVarType";
-	ImGui::Combo(typeLabel.c_str(), &m_NewVarType, typeNames, IM_ARRAYSIZE(typeNames));
+	if (EditorUI::BeginPropertyTable("##GraphNewVariable", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("EditorCommon.Name");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::InputText("##GraphNewVarName", m_NewVarName, sizeof(m_NewVarName));
+		EditorUI::PropertyRow("EditorCommon.Type");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::Combo("##GraphNewVarType", &m_NewVarType, typeNames, IM_ARRAYSIZE(typeNames));
+		EditorUI::EndPropertyTable();
+	}
 
 	if (ImGui::Button(LOCAL_LABEL("GraphPanel.CreateVariable").c_str()) && m_NewVarName[0] != '\0')
 	{
@@ -826,34 +847,14 @@ void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 	const bool missing = std::holds_alternative<std::monostate>(value);
 	if (missing) value = MakeDefaultValue(pin.Type);
 
-	// 핀 고유 키로 확실한 ID 스택 격리
 	ImGui::PushID(pin.Key.c_str());
-	ImGui::Separator();
-	ImGui::AlignTextToFramePadding();
-	ImGui::TextUnformatted((pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName)).c_str());
-
+	const auto label = pin.DisplayName.empty() ? pin.Key : LOCAL(pin.DisplayName);
+	EditorUI::PropertyLabel(label.c_str(), connected ? LOCAL_CSTR("GraphPanel.Connected") : nullptr);
+	EditorUI::PropertyValue();
 	if (connected)
 	{
-		ImGui::SameLine();
-		ImGui::TextDisabled("(%s)", LOCAL_CSTR("GraphPanel.Connected"));
-	}
-	else if (overridden)
-	{
-		ImGui::SameLine();
-		const std::string resetLabel = fmt::format(ICON_FA_ROTATE_LEFT "##Reset_{}", pin.Key);
-		if (ImGui::SmallButton(resetLabel.c_str()))
-			ApplyResult(graph.ResetInputValue(m_Registry, reference));
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphPanel.ResetValue"));
-	}
-	else if (missing)
-	{
-		ImGui::SameLine();
-		const std::string useLabel = fmt::format(ICON_FA_CHECK "##Use_{}", pin.Key);
-		if (ImGui::SmallButton(useLabel.c_str()))
-			ApplyResult(graph.SetInputValue(m_Registry, reference, value));
-		if (ImGui::IsItemHovered())
-			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphPanel.UseValue"));
+		ImGui::TextDisabled("%s", ICON_FA_LINK);
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("GraphPanel.Connected"));
 	}
 
 	if (pin.Type == EGraphPinType::Object)
@@ -865,9 +866,23 @@ void GraphPanel::DrawInputValue(const GraphNode& node, const GraphPin& pin)
 	}
 
 	ImGui::BeginDisabled(connected);
-	ImGui::SetNextItemWidth(-1.0f);
+	const char* actionIcon = overridden ? ICON_FA_ROTATE_LEFT : ICON_FA_CHECK;
+	const bool hasAction = !connected && (overridden || missing);
+	const float actionWidth = hasAction ? EditorUI::GetIconButtonSize(actionIcon, true).x : 0.0f;
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	const bool inlineAction = hasAction && ImGui::GetContentRegionAvail().x >= actionWidth + spacing + ImGui::GetFrameHeight();
+	ImGui::SetNextItemWidth(inlineAction ? -actionWidth - spacing : -FLT_MIN);
 	if (DrawValue(pin.Type, value)) ApplyResult(graph.SetInputValue(m_Registry, reference, value));
 	ImGui::EndDisabled();
+	if (hasAction)
+	{
+		if (inlineAction) ImGui::SameLine();
+		if (EditorUI::SmallIconButton("DefaultValue", actionIcon, overridden ? "GraphPanel.ResetValue" : "GraphPanel.UseValue"))
+		{
+			if (overridden) ApplyResult(graph.ResetInputValue(m_Registry, reference));
+			else ApplyResult(graph.SetInputValue(m_Registry, reference, value));
+		}
+	}
 	ImGui::PopID();
 }
 
