@@ -1,5 +1,7 @@
 Group,Key,English,Korean
 GraphPanel,AddNode,Add node,노드 추가
+GraphPanel,AddConnectedNode,Add Connected Node,연결할 노드 추가
+GraphPanel,DisconnectPin,Disconnect All Links on Pin,이 핀의 모든 연결 해제
 GraphPanel,AddReroute,Add Reroute Node,리루트 노드 추가
 GraphPanel,AddVariable,Add Variable,변수 추가
 GraphPanel,AddVariableGet,+Get,+읽기

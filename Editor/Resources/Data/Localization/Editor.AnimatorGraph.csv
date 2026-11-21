@@ -15,6 +15,10 @@ AnimatorGraph,Entry,Entry,진입 (ENTRY)
 AnimatorGraph,ExitTime,Exit Time,종료 시점 비율
 AnimatorGraph,HasExitTime,Has Exit Time,종료 시간 전이 사용
 AnimatorGraph,MakeTransition,Make Transition,전이 연결선 만들기
+AnimatorGraph,IncomingPin,Incoming transitions,들어오는 전이
+AnimatorGraph,OutgoingPin,Outgoing transitions,나가는 전이
+AnimatorGraph,SelectTransitionTarget,Select Transition Target,전이 대상 선택
+AnimatorGraph,DisconnectPinTransitions,Disconnect Transitions in This Direction,이 방향의 전이 연결 해제
 AnimatorGraph,NoMotion,No Motion,동작 없음
 AnimatorGraph,NoNodeSelected,No node selected.,선택된 노드가 없습니다.
 AnimatorGraph,NodeInspector,Node Inspector,노드 인스펙터

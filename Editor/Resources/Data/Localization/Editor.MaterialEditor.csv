@@ -5,6 +5,36 @@ MaterialEditor,AddParam,Add Param,파라미터 추가
 MaterialEditor,AddPassShader,Add Pass Shader,패스 셰이더 추가
 MaterialEditor,BaseBinding,{} (Base),{} (원본)
 MaterialEditor,BaseMaterial,Base Material: {},기본 머티리얼: {}
+MaterialEditor,OpenBaseMaterial,Open Base Material,원본 머티리얼 열기
+MaterialEditor,AddParameterNode,Create Parameter Node,매개변수 노드 만들기
+MaterialEditor,ParameterNodeName,Name (A-Z 0-9 _),이름 (영문 숫자 _)
+MaterialEditor,TextureDefaultUV,UV0 by default,기본값 UV0
+MaterialEditor,GraphPassRole,Graph target,그래프 대상
+MaterialEditor,GraphPassManual,Manual shader or engine default,수동 셰이더 또는 엔진 기본
+MaterialEditor,GraphPassGenerated,Graph shader,그래프 셰이더
+MaterialEditor,GraphPassUnsupported,This pass uses a manual or engine shader. Graph compilation supports Geometry and Forward Transparent.,이 패스는 수동 또는 엔진 셰이더를 사용합니다. 그래프 컴파일은 Geometry와 Forward Transparent를 지원합니다.
+MaterialEditor,GraphShaderPublishFailed,Failed to create the compiled shader pair.,컴파일된 셰이더 쌍을 생성하지 못했습니다.
+MaterialEditor,GraphInherited,This graph is inherited. Open the base material to edit it.,원본에서 상속한 그래프입니다. 편집하려면 원본 머티리얼을 여세요.
+MaterialEditor,TextureBindingEmpty,Unassigned,미지정
+MaterialEditor,TextureBindingSlot,Slot {} · {},슬롯 {} · {}
+MaterialEditor,TextureBindingOccupied,The binding name or slot is already in use.,이미 사용 중인 바인딩 이름 또는 슬롯입니다.
+MaterialEditor,BindingInherited,Inherited,원본에서 상속
+MaterialEditor,BindingOverride,Overridden,이 인스턴스에서 재정의
+MaterialEditor,RestoreInheritedBinding,Restore Base Value,원본 값으로 복원
+MaterialEditor,ParameterDeclarationInvalid,Use a unique name containing only English letters numbers or underscores.,영문·숫자·밑줄로 이루어진 고유한 이름을 입력하세요.
+MaterialEditor,ParameterUnused,Unused in graph,그래프에서 미사용
+MaterialEditor,EditSampleBinding,Select Texture,텍스처 선택
+MaterialEditor,ExposeParameter,Expose to Graph,그래프에 노출
+MaterialEditor,GraphParameterDefault,Declaration Default,선언 기본값
+MaterialEditor,ParameterActions,Parameter Actions,매개변수 동작
+MaterialEditor,RevealParameter,Show in Graph,그래프에서 보기
+MaterialEditor,HideParameter,Hide from List,목록에서 감추기
+MaterialEditor,UnhideParameter,Show in List,목록에 다시 표시
+MaterialEditor,ShowHiddenParameters,Show hidden parameters,숨긴 매개변수 표시
+MaterialEditor,DeleteGraphParameterTitle,Delete Graph Parameter,그래프 매개변수 삭제
+MaterialEditor,DeleteGraphParameterMessage,Delete {} and remove its graph nodes and links?,{} 매개변수와 연결된 그래프 노드 및 링크를 삭제할까요?
+MaterialEditor,GraphSaveStage,Save stage {} · archive error {},저장 단계 {} · 아카이브 오류 {}
+MaterialEditor,GraphSaveFailedDetail,Failed to save graph {}: {},그래프 저장 실패 {}: {}
 MaterialEditor,BaseMaterialMissing,Base material is missing. Select a base material below.,원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.
 MaterialEditor,BaseMaterialSlot,Base Material,원본 머티리얼
 MaterialEditor,BlendMode,Blend Mode,블렌드 모드

@@ -91,6 +91,7 @@
 ,Compiled output file is too large:,Compiled output file is too large:,컴파일 출력 파일이 너무 큽니다:
 ,Connection must end at an input pin.,Connection must end at an input pin.,연결은 입력 핀에서 끝나야 합니다.
 ,Connection must start at an output pin.,Connection must start at an output pin.,연결은 출력 핀에서 시작해야 합니다.
+,Core,Core,기본
 ,Cos (Degrees),Cos (Degrees),코사인 (도)
 ,DETAIL,Detail,세부 정보
 ,Data connections must be acyclic.,Data connections must be acyclic.,데이터 연결에는 순환이 없어야 합니다.
@@ -156,6 +157,8 @@
 ,Engine::EVFXTrailAlignment.OffsetAxis,Offset Axis (A-B),오프셋 축 (A-B)
 ,Engine::EVFXTrailAlignment.ViewFacing,Camera Facing,카메라 정면
 ,Entity,Entity,엔티티
+,Event,Event,이벤트
+,Execution,Execution,실행
 ,Execution budget exhausted.,Execution budget exhausted.,실행 예산을 모두 사용했습니다.
 ,Execution is not implemented for node type:,Execution is not implemented for node type:,실행이 구현되지 않은 노드 유형:
 ,Execution node is missing.,Execution node is missing.,실행 노드가 없습니다.
@@ -168,6 +171,7 @@
 ,Failed to reload graph: {},Failed to reload graph: {},그래프 다시 로드 실패: {}
 ,Finish then0 before running then1.,Finish then0 before running then1.,then0 실행을 마친 뒤 then1을 실행합니다.
 ,Float is outside the Int range.,Float is outside the Int range.,실숫값이 정수 범위를 벗어났습니다.
+,Flow,Flow,흐름
 ,Function schema has too many argument pins.,Function schema has too many argument pins.,함수 스키마의 인자 핀이 너무 많습니다.
 ,Get 3D Animation Time,Get 3D Animation Time,3D 애니메이션 시간 가져오기
 ,Get Actor Location,Get Actor Location,액터 위치 가져오기
@@ -192,8 +196,11 @@
 ,Graph.Node.MultiplyFloat2,Multiply (Float2),곱하기 (Float2)
 ,Graph.Node.TexCoord0,Texture Coordinate 0,텍스처 좌표 0
 ,Graph.Node.TexCoord1,Texture Coordinate 1,텍스처 좌표 1
+,Graph.Node.TextureSample,Texture Sample,텍스처 샘플
 ,Graph.PinName.CustomUV0,Custom UV0 (mesh UV when unconnected),사용자 UV0 (미연결 시 메시 UV)
 ,Graph.PinName.CustomUV1,Custom UV1 (mesh UV1 when unconnected),사용자 UV1 (미연결 시 메시 UV1)
+,Graph.PinName.TextureSlot,Texture Slot,텍스처 슬롯
+,Graph.PinName.TextureUV,UV,UV
 ,Graph.PinName.UV0,UV0,UV0
 ,Graph.PinName.UV1,UV1,UV1
 ,Input,Input,입력
@@ -234,6 +241,7 @@
 ,Load a graph and finish or stop the current event first.,Load a graph and finish or stop the current event first.,그래프를 불러오고 현재 이벤트를 완료하거나 중지하세요.
 ,Log requires a positive input.,Log requires a positive input.,Log 입력은 양수여야 합니다.
 ,Log2 requires a positive input.,Log2 requires a positive input.,Log2 입력은 양수여야 합니다.
+,Logic,Logic,논리
 ,Logic/Bool,Logic/Bool,논리/Bool
 ,Math,Math,수학
 ,Math result is not a finite Float.,Math result is not a finite Float.,연산 결과가 유한한 실숫값이 아닙니다.
@@ -264,6 +272,8 @@
 ,NODE_INPUT_IS_ACTION_HELD,Is Input Action Held,입력 액션을 누르는 중
 ,NODE_INPUT_WAS_ACTION_PRESSED,Was Input Action Pressed,입력 액션을 누른 순간
 ,NODE_INPUT_WAS_ACTION_RELEASED,Was Input Action Released,입력 액션을 놓은 순간
+,NODE_THIRD_PERSON_REQUEST_JUMP,Request Third Person Jump,3인칭 점프 요청
+,NODE_THIRD_PERSON_SET_MOVE_INPUT,Set Third Person Move Input,3인칭 이동 입력 설정
 ,Native argument type mismatch.,Native argument type mismatch.,네이티브 인자의 자료형이 일치하지 않습니다.
 ,Next link ID must exceed existing link IDs.,Next link ID must exceed existing link IDs.,다음 연결 ID는 기존 연결 ID보다 커야 합니다.
 ,Next node ID must exceed existing node IDs.,Next node ID must exceed existing node IDs.,다음 노드 ID는 기존 노드 ID보다 커야 합니다.
@@ -288,6 +298,7 @@
 ,"Only data inputs can have a finite, exactly typed default value.","Only data inputs can have a finite, exactly typed default value.",데이터 입력에만 자료형이 정확히 일치하는 유한한 기본값을 지정할 수 있습니다.
 ,Only data inputs have default values.,Only data inputs have default values.,데이터 입력에만 기본값이 있습니다.
 ,Only object pins can specify an object type.,Only object pins can specify an object type.,객체 핀에만 객체 자료형을 지정할 수 있습니다.
+,Organization,Organization,정리
 ,Output is not available in this execution context:,Output is not available in this execution context:,현재 실행 문맥에서 사용할 수 없는 출력:
 ,PIN_INPUT_ACTION_ID,Action ID,액션 ID
 ,PIN_INPUT_MAP_ID,Map ID,맵 ID
@@ -703,6 +714,7 @@
 ,PROP_UPSCALE_RT,Upscale RT,업스케일 RT
 ,PROP_USE_ALPHA_CURVE,Use Alpha Curve,알파 커브 사용
 ,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
+,PROP_USE_GRAPH_MOVE_INPUT,Use Graph Movement Input,그래프 이동 입력 사용
 ,PROP_USE_INTENSITY_CURVE,Use Intensity Curve,조도 커브 사용
 ,PROP_USE_SCALE_CURVE,Use Scale Curve,스케일 커브 사용
 ,PROP_UV_SCROLL_SPEED,UV Scroll Speed,UV 스크롤 속도
@@ -757,6 +769,7 @@
 ,RegisterReflectedGraphNodes failed: {},RegisterReflectedGraphNodes failed: {},리플렉션 그래프 노드 등록 실패: {}
 ,Remainder by zero.,Remainder by zero.,나머지 연산의 제수는 0일 수 없습니다.
 ,Remap input interval has zero width.,Remap input interval has zero width.,Remap 입력 구간의 길이가 0입니다.
+,Reroute,Reroute,리라우트
 ,Return the absolute value.,Return the absolute value.,절댓값을 반환합니다.
 ,"Run body for each index in [first, last).","Run body for each index in [first, last).","[first, last) 범위의 각 인덱스에 대해 본문을 실행합니다."
 ,Run the true or false execution path.,Run the true or false execution path.,참 또는 거짓 실행 경로를 실행합니다.
@@ -864,6 +877,8 @@
 ,ShaderGraph.InvalidColor,A finite Float4 color value is required.,유한한 Float4 색상 값이 필요합니다.
 ,ShaderGraph.InvalidInput,The expected Float4 input is unavailable.,필요한 Float4 입력을 사용할 수 없습니다.
 ,ShaderGraph.SingleOutput,Exactly one color output node is required.,색상 출력 노드가 정확히 하나 필요합니다.
+,ShaderGraph.TextureSamplePixelOnly,Texture Sample can only feed pixel shader inputs.,텍스처 샘플은 픽셀 셰이더 입력에만 연결할 수 있습니다.
+,ShaderGraph.TextureSlotRange,Texture Sample requires a slot from 0 to 3.,텍스처 샘플 슬롯은 0부터 3까지 지정할 수 있습니다.
 ,ShaderGraph.UnsupportedNode,This node is not supported by the color shader generator.,색상 셰이더 생성기가 지원하지 않는 노드입니다.
 ,Shadow,Shadow,그림자
 ,Shape,Shape,형상
@@ -916,4 +931,5 @@
 ,Variable not found in executor:,Variable not found in executor:,실행기에서 변수를 찾을 수 없습니다:
 ,Variable not found.,Variable not found.,변수를 찾을 수 없습니다.
 ,Variable with this name already exists.,Variable with this name already exists.,같은 이름의 변수가 이미 있습니다.
+,Variables,Parameters / Variables,매개변수 / 변수
 ,Xor,Xor,XOR

@@ -13,6 +13,9 @@ ModelEditor,Focus,Focus (F),모델에 포커스 (F)
 ModelEditor,HasSkeleton,Yes,있음
 ModelEditor,MaterialSlots,Material Slots,머티리얼 슬롯
 ModelEditor,MeshCount,Meshes,메시 수
+ModelEditor,MeshPreview,Mesh Preview (Read-only),메시 미리보기 (읽기 전용)
+ModelEditor,MeshLoadFailed,Failed to load the mesh. Check the log.,메시를 불러오지 못했습니다. 로그를 확인하세요.
+ModelEditor,IndexCount,Indices,인덱스 수
 ModelEditor,ModelInfo,Model Information,모델 정보
 ModelEditor,NodeCount,Nodes,노드 수
 ModelEditor,NoSkeleton,None (Static Mesh),없음 (스태틱 메시)
