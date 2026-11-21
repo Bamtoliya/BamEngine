@@ -89,11 +89,18 @@ Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPre
 	glm::vec2 size{ 360.0f, 210.0f };
 	if (preset == UIElementPreset::ProgressBar || preset == UIElementPreset::Slider) size = { 240.0f, 28.0f };
 	if (preset == UIElementPreset::Toggle) size = glm::vec2(36.0f);
+	if (preset == UIElementPreset::EllipseMask) size = glm::vec2(200.0f);
 	if (preset == UIElementPreset::ScrollView) size = { 320.0f, 200.0f };
 
 	auto& entity = CreateUIElement(*scene, parent, name, size);
 	auto& world = scene->GetRegistry();
 	const auto handle = entity.GetEntityHandle();
+	if (preset == UIElementPreset::EllipseMask)
+	{
+		world.emplace<UIEllipseMaskComponent>(handle);
+		return entity;
+	}
+
 	auto& image = world.emplace<UIImageComponent>(handle);
 	image.materialHandle = UIRenderSystem::GetDefaultMaterial();
 	image.color = { 0.12f, 0.16f, 0.21f, 0.95f };
@@ -102,6 +109,7 @@ Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPre
 	switch (preset)
 	{
 	case UIElementPreset::Panel:
+	case UIElementPreset::EllipseMask:
 		break;
 	case UIElementPreset::Row:
 	case UIElementPreset::Column:

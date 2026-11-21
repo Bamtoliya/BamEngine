@@ -7,6 +7,8 @@ struct UIVertexOutput
     float4 Position : SV_POSITION;
     float2 TexCoord : TEXCOORD0;
     float4 Color : TEXCOORD1;
+    float4 Ellipse01 : TEXCOORD2;
+    float4 Ellipse23 : TEXCOORD3;
 };
 
 #endif

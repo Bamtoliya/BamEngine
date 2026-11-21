@@ -126,6 +126,8 @@ void Engine::UIRenderSystem::SubmitText(Renderer& renderer, RenderPass& pass, co
     command.color = text.color;
     command.canvasSize = canvasSize;
     command.clipRect = layout.clipRect;
+    command.ellipseMaskPlanes = layout.ellipseMaskPlanes;
+    command.ellipseMaskCount = layout.ellipseMaskCount;
     renderer.SubmitUIImage(command, pass.GetID());
 #endif
 }

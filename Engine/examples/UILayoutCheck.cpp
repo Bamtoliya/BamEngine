@@ -107,6 +107,69 @@ int main()
             !Near(world.get<RectTransformComponent>(content).anchoredPosition, glm::vec2(0.0f)))
             return Fail("Wheel scrolling did not move computed geometry independently of authored values.");
     }
+    {
+        std::unique_ptr<Scene, SceneRelease> editing(Scene::Create());
+        auto& registry = editing->GetRegistry();
+        auto& canvas = editing->CreateEntity();
+        const auto canvasId = canvas.GetEntityHandle();
+        registry.emplace<CanvasComponent>(canvasId);
+        registry.emplace<FlagComponent>(canvasId);
+        registry.emplace<HierarchyComponent>(canvasId);
+        const auto addRect = [&](Entity& parent) -> Entity&
+        {
+            auto& child = editing->CreateEntity();
+            const auto id = child.GetEntityHandle();
+            registry.emplace<RectTransformComponent>(id);
+            registry.emplace<FlagComponent>(id);
+            auto& relation = registry.emplace<HierarchyComponent>(id);
+            relation.parent = parent.GetEntityHandle();
+            registry.get<HierarchyComponent>(relation.parent).children.push_back(id);
+            return child;
+        };
+
+        auto& source = addRect(canvas);
+        auto& destination = addRect(canvas);
+        auto& child = addRect(source);
+        const auto childId = child.GetEntityHandle();
+        const auto destinationId = destination.GetEntityHandle();
+        auto& destinationRect = registry.get<RectTransformComponent>(destinationId);
+        destinationRect.rotation = 30.0f;
+        destinationRect.scale = { 1.5f, 1.5f };
+
+        std::vector<UIElementLayout> before;
+        std::vector<UIElementLayout> after;
+        if (!UILayout::Build(registry, canvasId, before) ||
+            editing->ReparentEntity(child, &destination) != EntityReparentResult::Success ||
+            registry.get<HierarchyComponent>(childId).parent != destinationId ||
+            !UILayout::Build(registry, canvasId, after))
+            return Fail("A UI child could not move between free-layout parents.");
+        const auto sameQuad = [&]()
+        {
+            const auto old = std::ranges::find(before, childId, &UIElementLayout::entity);
+            const auto current = std::ranges::find(after, childId, &UIElementLayout::entity);
+            if (old == before.end() || current == after.end()) return false;
+            for (int axis : { 0, 1, 3 })
+                if (!Near(glm::vec2(old->renderMatrix[axis]), glm::vec2(current->renderMatrix[axis]))) return false;
+            return true;
+        };
+        if (!sameQuad() || editing->ReparentEntity(child, &canvas) != EntityReparentResult::Success ||
+            registry.get<HierarchyComponent>(childId).parent != canvasId ||
+            !UILayout::Build(registry, canvasId, after) || !sameQuad())
+            return Fail("Reparenting a UI child failed to preserve its canvas geometry.");
+
+        const auto authoredRect = registry.get<RectTransformComponent>(childId);
+        registry.emplace<UILayoutGroupComponent>(destinationId).mode = EUILayoutGroupMode::Grid;
+        if (editing->ReparentEntity(child, &destination) != EntityReparentResult::Success ||
+            !UILayout::Build(registry, canvasId, after))
+            return Fail("A UI child could not join a layout group.");
+        const auto managed = std::ranges::find(after, childId, &UIElementLayout::entity);
+        if (managed == after.end() || !managed->managedByGroup ||
+            !Near(registry.get<RectTransformComponent>(childId).anchoredPosition, authoredRect.anchoredPosition))
+            return Fail("Layout group reparenting must preserve authored RectTransform values.");
+        if (editing->ReparentEntity(child, nullptr) != EntityReparentResult::InvalidTransform ||
+            registry.get<HierarchyComponent>(childId).parent != destinationId)
+            return Fail("UI detachment outside a canvas should fail without changing the hierarchy.");
+    }
     std::unique_ptr<Scene, SceneRelease> scene(Scene::Create());
     auto& rootWrapper = scene->CreateEntity();
     auto& childWrapper = scene->CreateEntity();

@@ -501,8 +501,10 @@
 ,PROP_UI_CHECKED,Checked,선택됨
 ,PROP_UI_CHECK_COLOR,Check color,선택 표시 색상
 ,STRUCT_UI_CLIP,UI Clip,UI 클리핑
+,STRUCT_UI_ELLIPSE_MASK,UI Ellipse Mask,UI 타원 마스크
 ,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
 ,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
+,PROP_UI_SCROLL_SHOW_SCROLLBAR,Show Scrollbar,스크롤바 표시
 ,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 속도
 ,PROP_INTERP_MODE,Interpolation Mode,보간 모드
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성

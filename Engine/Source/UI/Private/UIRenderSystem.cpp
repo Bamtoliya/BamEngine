@@ -1,6 +1,7 @@
 #include "UIRenderSystem.h"
 #include "ComponentEnable.h"
 #include "UILayout.h"
+#include "UIClipLayout.h"
 #include "UIEventSystem.h"
 #include "UIWidgetComponents.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -54,6 +55,8 @@ namespace
             command.color = color * tint;
             command.canvasSize = canvasSize;
             command.clipRect = layout.clipRect;
+            command.ellipseMaskPlanes = layout.ellipseMaskPlanes;
+            command.ellipseMaskCount = layout.ellipseMaskCount;
             renderer.SubmitUIImage(command, pass.GetID());
         };
 
@@ -78,6 +81,32 @@ namespace
         }
     }
 
+    void SubmitScrollbar(Engine::Renderer& renderer, Engine::RenderPass& pass, const Engine::UIElementLayout& viewport,
+        const Engine::UIScrollbarLayout& scrollbar, glm::vec2 canvasSize,
+        const Engine::ResourceHandle<Engine::MaterialInterface>& material, const Engine::ResourceHandle<Engine::Texture>& white)
+    {
+        const auto* texture = white.Get();
+        if (!texture || !texture->GetRHITexture() || !material.Get() ||
+            !pass.IsAcceptsBlendMode(material.Get()->GetBlendMode())) return;
+
+        Engine::UIImageDrawCommand command;
+        command.textureHandle = white;
+        command.materialHandle = material;
+        command.canvasSize = canvasSize;
+        command.clipRect = viewport.clipRect;
+        command.ellipseMaskPlanes = viewport.ellipseMaskPlanes;
+        command.ellipseMaskCount = viewport.ellipseMaskCount;
+        const auto track = glm::translate(viewport.renderMatrix, glm::vec3(1.0f - scrollbar.width, 0.0f, 0.0f));
+        command.worldMatrix = glm::scale(track, glm::vec3(scrollbar.width, 1.0f, 1.0f));
+        command.color = { 0.10f, 0.12f, 0.15f, 0.90f };
+        renderer.SubmitUIImage(command, pass.GetID());
+
+        const auto thumb = glm::translate(track, glm::vec3(0.0f, scrollbar.thumbTop, 0.0f));
+        command.worldMatrix = glm::scale(thumb, glm::vec3(scrollbar.width, scrollbar.thumbHeight, 1.0f));
+        command.color = { 0.73f, 0.78f, 0.85f, 1.0f };
+        renderer.SubmitUIImage(command, pass.GetID());
+    }
+
     void SubmitImage(Engine::Renderer& renderer, Engine::RenderPass& pass, const entt::registry& world,
         const Engine::UIElementLayout& layout, glm::vec2 canvasSize,
         const Engine::ResourceHandle<Engine::MaterialInterface>& defaultUIMat, const Engine::ResourceHandle<Engine::Texture>& white)
@@ -86,7 +115,9 @@ namespace
         if (!image || !Engine::UILayout::IsValid(*image) || image->color.a <= 0.0f) return;
 
         // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
-        Engine::ResourceHandle<Engine::MaterialInterface> effectiveMatHandle = image->materialHandle;
+        // Built-in UI shaders carry ellipse coverage; use the built-in material on masked images.
+        Engine::ResourceHandle<Engine::MaterialInterface> effectiveMatHandle =
+            layout.ellipseMaskCount > 0 ? defaultUIMat : image->materialHandle;
         Engine::MaterialInterface* material = effectiveMatHandle.Get();
         if (!material)
         {
@@ -121,6 +152,8 @@ namespace
             !std::isfinite(uv.w) || uv.z <= 0.0f || uv.w <= 0.0f) return;
         command.canvasSize = canvasSize;
         command.clipRect = layout.clipRect;
+        command.ellipseMaskPlanes = layout.ellipseMaskPlanes;
+        command.ellipseMaskCount = layout.ellipseMaskCount;
         renderer.SubmitUIImage(command, pass.GetID());
     }
 }
@@ -166,16 +199,26 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                 std::vector<UIElementLayout> layouts;
                 if (!UILayout::Build(world, root, layouts)) continue;
                 const auto canvasSize = world.get<CanvasComponent>(root).referenceResolution;
-                for (const auto& layout : layouts)
+                const auto overlays = UIClipLayout::GetScrollbarOverlays(world, layouts);
+                auto overlay = overlays.begin();
+                for (std::size_t index = 0; index < layouts.size(); ++index)
                 {
-                    if (!layout.visible) continue;
-                    SubmitImage(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
-                    if (HasWidgetDecorations(world, layout.entity))
-                        SubmitWidgetDecorations(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
+                    const auto& layout = layouts[index];
+                    if (layout.visible)
+                    {
+                        SubmitImage(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
+                        if (HasWidgetDecorations(world, layout.entity))
+                            SubmitWidgetDecorations(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
 
-                    const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
-                    if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)
-                        SubmitText(renderer, *pass, world, layout, *text, canvasSize, defaultUIMat);
+                        const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
+                        if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)
+                            SubmitText(renderer, *pass, world, layout, *text, canvasSize, defaultUIMat);
+                    }
+                    while (overlay != overlays.end() && layouts[overlay->index].subtreeEnd == index + 1)
+                    {
+                        SubmitScrollbar(renderer, *pass, layouts[overlay->index], overlay->geometry, canvasSize, defaultUIMat, white);
+                        ++overlay;
+                    }
                 }
             }
         }

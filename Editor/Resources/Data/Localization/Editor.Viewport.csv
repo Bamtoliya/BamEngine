@@ -57,6 +57,7 @@ Viewport,AddProgressBar,Progress Bar,진행률 바
 Viewport,AddToggle,Toggle,토글
 Viewport,AddSlider,Slider,슬라이더
 Viewport,AddClipPanel,Clip Panel,클리핑 패널
+Viewport,AddEllipseMask,Ellipse Mask,타원 마스크
 Viewport,AddScrollView,Scroll View,스크롤 뷰
 Viewport,ScrollContent,Scroll Content,스크롤 콘텐츠
 Viewport,PointerValueChanged,Value changed,값 변경

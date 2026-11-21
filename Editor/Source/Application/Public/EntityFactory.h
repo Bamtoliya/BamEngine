@@ -6,7 +6,7 @@ BEGIN(Editor)
 
 enum class UIElementPreset
 {
-	Panel, Row, Column, Grid, ProgressBar, Toggle, Slider, ClipPanel, ScrollView
+	Panel, Row, Column, Grid, ProgressBar, Toggle, Slider, ClipPanel, EllipseMask, ScrollView
 };
 
 class EntityFactory

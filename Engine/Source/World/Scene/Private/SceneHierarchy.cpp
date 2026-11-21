@@ -1,7 +1,8 @@
 ﻿#include "Scene.h"
 #include "WorldComponents.h"
 #include "TransformSystem.h"
-#include "UIComponents.h"
+#include "UILayout.h"
+#include "ComponentEnable.h"
 #include <glm/gtx/matrix_decompose.hpp>
 #include <algorithm>
 #include <optional>
@@ -114,6 +115,33 @@ namespace
         return true;
     }
 
+    bool PreserveRectLayout(const Engine::UIElementLayout& previous, const glm::vec2& parentSize,
+        const glm::vec2& parentPivot, const glm::mat4& parentMatrix, Engine::RectTransformComponent& rect)
+    {
+        const glm::dmat4 parentWorld(parentMatrix);
+        const double determinant = glm::determinant(parentWorld);
+        if (!std::isfinite(determinant) || determinant == 0.0) return false;
+        const glm::dmat4 local = glm::inverse(parentWorld) * glm::dmat4(previous.worldTransform);
+        if (!HierarchyFinite(local)) return false;
+
+        const glm::dvec2 x(local[0]), y(local[1]);
+        const double scaleX = glm::length(x);
+        if (scaleX == 0.0) return false;
+        const double scaleY = (x.x * y.y - x.y * y.x) / scaleX;
+        if (scaleY == 0.0) return false;
+
+        const glm::vec2 span = rect.anchorMax - rect.anchorMin;
+        const glm::vec2 anchor = rect.anchorMin + span * rect.pivot;
+        rect.sizeDelta = previous.size - parentSize * span;
+        rect.anchoredPosition = glm::vec2(local[3]) - parentSize * (anchor - parentPivot);
+        rect.scale = glm::vec2(scaleX, scaleY);
+        rect.rotation = static_cast<float>(glm::degrees(std::atan2(x.y, x.x)));
+
+        Engine::UIElementLayout rebuilt;
+        return Engine::UILayout::Resolve(rect, parentSize, parentPivot, parentMatrix, rebuilt) &&
+            HierarchyMatches(glm::dmat4(rebuilt.renderMatrix), glm::dmat4(previous.renderMatrix));
+    }
+
     std::optional<glm::dmat4> WorldMatrix(const entt::registry& world, entt::entity entity)
     {
         glm::mat4 result;
@@ -182,12 +210,52 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
     }
     if (roots.empty()) return Result::Unchanged;
 
-    // A UI reparent needs anchor/size preservation rather than 3D TRS decomposition.
-    if (parent && (world.any_of<CanvasComponent, RectTransformComponent>(target) ||
-        !world.all_of<TransformComponent, WorldTransformComponent>(target)))
-        return Result::InvalidTransform;
-    const auto parentWorld = WorldMatrix(world, target);
-    if (!parentWorld) return Result::InvalidTransform;
+    const auto isUI = [&](entt::entity handle)
+    {
+        return world.valid(handle) && world.any_of<CanvasComponent, RectTransformComponent>(handle);
+    };
+    const bool uiMove = isUI(target) || std::ranges::any_of(roots, isUI);
+    entt::entity canvas = entt::null;
+    std::vector<UIElementLayout> previousLayout;
+    glm::vec2 uiParentSize{ 0.0f };
+    glm::vec2 uiParentPivot{ 0.0f };
+    glm::mat4 uiParentMatrix(1.0f);
+    bool groupManaged = false;
+    std::optional<glm::dmat4> parentWorld;
+    const auto readUIParent = [&](const std::vector<UIElementLayout>& layouts)
+    {
+        if (canvas == target)
+        {
+            uiParentSize = world.get<CanvasComponent>(canvas).referenceResolution;
+            return true;
+        }
+        const auto parentLayout = std::ranges::find(layouts, target, &UIElementLayout::entity);
+        if (parentLayout == layouts.end()) return false;
+        uiParentSize = parentLayout->size;
+        uiParentPivot = world.get<RectTransformComponent>(target).pivot;
+        uiParentMatrix = parentLayout->worldTransform;
+        return true;
+    };
+    if (uiMove)
+    {
+        if (!isUI(target)) return Result::InvalidTransform;
+        canvas = UILayout::FindCanvas(world, target);
+        if (canvas == entt::null || !UILayout::Build(world, canvas, previousLayout, UILayoutBuildMode::Authoring))
+            return Result::InvalidTransform;
+        if (const auto* scroll = TryGetEnabledComponent<UIScrollComponent>(world, target); scroll &&
+            world.all_of<HierarchyComponent>(target) && world.get<HierarchyComponent>(target).children.size() + roots.size() > 1)
+            return Result::InvalidTransform;
+        const auto* group = TryGetEnabledComponent<UILayoutGroupComponent>(world, target);
+        groupManaged = group && UILayout::IsValid(*group);
+        if (!readUIParent(previousLayout)) return Result::InvalidTransform;
+    }
+    else
+    {
+        if (parent && !world.all_of<TransformComponent, WorldTransformComponent>(target))
+            return Result::InvalidTransform;
+        parentWorld = WorldMatrix(world, target);
+        if (!parentWorld) return Result::InvalidTransform;
+    }
 
     struct TransformEdit
     {
@@ -195,15 +263,19 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
         TransformComponent Before;
         TransformComponent After;
     };
+    struct RectEdit
+    {
+        entt::entity Handle;
+        RectTransformComponent Before;
+        RectTransformComponent After;
+    };
     std::vector<TransformEdit> transforms;
-    transforms.reserve(roots.size());
+    std::vector<RectEdit> rects;
+    if (uiMove) rects.reserve(roots.size());
+    else transforms.reserve(roots.size());
     std::vector<std::pair<entt::entity, std::size_t>> pending;
     for (const auto handle : roots)
     {
-        if (world.any_of<CanvasComponent, RectTransformComponent>(handle) ||
-            !world.all_of<TransformComponent, WorldTransformComponent>(handle))
-            return Result::InvalidTransform;
-
         pending.emplace_back(handle, parentDepth + 1);
         while (!pending.empty())
         {
@@ -214,6 +286,26 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
                 for (const auto descendant : link->children) pending.emplace_back(descendant, depth + 1);
         }
 
+        if (uiMove)
+        {
+            const auto* rect = world.try_get<RectTransformComponent>(handle);
+            if (!rect || world.all_of<CanvasComponent>(handle)) return Result::InvalidTransform;
+            const auto sourceCanvas = UILayout::FindCanvas(world, handle);
+            if (sourceCanvas != entt::null && sourceCanvas != canvas) return Result::InvalidTransform;
+            if (sourceCanvas == entt::null && getParent(handle) != entt::null) return Result::InvalidTransform;
+            // Newly attached prefab roots use authored placement. Group destinations use their own slots.
+            if (sourceCanvas == entt::null || groupManaged) continue;
+            const auto prior = std::ranges::find(previousLayout, handle, &UIElementLayout::entity);
+            auto rebased = *rect;
+            if (prior == previousLayout.end() ||
+                !PreserveRectLayout(*prior, uiParentSize, uiParentPivot, uiParentMatrix, rebased))
+                return Result::InvalidTransform;
+            rects.push_back({ handle, *rect, rebased });
+            continue;
+        }
+
+        if (!world.all_of<TransformComponent, WorldTransformComponent>(handle))
+            return Result::InvalidTransform;
         const auto desiredWorld = WorldMatrix(world, handle);
         if (!desiredWorld) return Result::InvalidTransform;
         const auto before = world.get<TransformComponent>(handle);
@@ -268,6 +360,8 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
     {
         for (const auto& edit : transforms)
             world.get<TransformComponent>(edit.Handle) = edit.Before;
+        for (const auto& edit : rects)
+            world.get<RectTransformComponent>(edit.Handle) = edit.Before;
         for (auto& [entity, link] : links)
         {
             if (link.Before)
@@ -282,8 +376,45 @@ Engine::EntityReparentResult Engine::Scene::ReparentEntities(std::span<Entity* c
             world.get_or_emplace<HierarchyComponent>(entity) = std::move(link.After);
         for (const auto& edit : transforms)
             world.get<TransformComponent>(edit.Handle) = edit.After;
-        if (TransformSystem::UpdateHierarchy(world))
+        for (const auto& edit : rects)
+            world.get<RectTransformComponent>(edit.Handle) = edit.After;
+        if (!uiMove && TransformSystem::UpdateHierarchy(world))
             return Result::Success;
+        if (uiMove)
+        {
+            std::vector<UIElementLayout> newLayout;
+            if (UILayout::Build(world, canvas, newLayout, UILayoutBuildMode::Authoring))
+            {
+                if (rects.empty()) return Result::Success;
+                const auto formerParentSize = uiParentSize;
+                const auto formerParentMatrix = uiParentMatrix;
+                bool valid = readUIParent(newLayout);
+                if (valid && (uiParentSize != formerParentSize || uiParentMatrix != formerParentMatrix))
+                {
+                    // Removing an earlier sibling can shift the destination in an authored layout group.
+                    for (auto& edit : rects)
+                    {
+                        const auto previous = std::ranges::find(previousLayout, edit.Handle, &UIElementLayout::entity);
+                        edit.After = edit.Before;
+                        if (!PreserveRectLayout(*previous, uiParentSize, uiParentPivot, uiParentMatrix, edit.After))
+                        {
+                            valid = false;
+                            break;
+                        }
+                        world.get<RectTransformComponent>(edit.Handle) = edit.After;
+                    }
+                    if (valid) valid = UILayout::Build(world, canvas, newLayout, UILayoutBuildMode::Authoring);
+                }
+                if (valid && std::ranges::all_of(rects, [&](const auto& edit)
+                    {
+                        const auto previous = std::ranges::find(previousLayout, edit.Handle, &UIElementLayout::entity);
+                        const auto current = std::ranges::find(newLayout, edit.Handle, &UIElementLayout::entity);
+                        return current != newLayout.end() &&
+                            HierarchyMatches(glm::dmat4(previous->renderMatrix), glm::dmat4(current->renderMatrix));
+                    }))
+                    return Result::Success;
+            }
+        }
     }
     catch (...)
     {

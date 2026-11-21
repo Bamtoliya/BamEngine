@@ -3,7 +3,7 @@
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
-#include "UIComponents.h"
+#include "UILayout.h"
 #include "LocalizationManager.h"
 #include "Functions.h"
 #include <imgui.h>
@@ -744,7 +744,22 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                         action.MoveUp = entity;
                     if (ImGui::MenuItem(Text("Hierarchy.MoveDown", "Move Down").c_str()))
                         action.MoveDown = entity;
-                    if (ImGui::MenuItem((std::string(ICON_FA_ARROW_UP_FROM_BRACKET " ") + LOCAL("Hierarchy.MoveToRoot")).c_str()))
+                    if (world.all_of<Engine::RectTransformComponent>(entity))
+                    {
+                        auto uiRoot = Engine::UILayout::FindCanvas(world, entity);
+                        const auto& prefab = PrefabModeManager::Get();
+                        if (prefab.IsInPrefabMode() && prefab.GetPrefabScene() == &scene)
+                        {
+                            const auto* root = prefab.GetRootEntity();
+                            uiRoot = root ? root->GetEntityHandle() : entt::null;
+                        }
+                        const bool canMove = uiRoot != entt::null && uiRoot != entity && uiRoot != link->parent;
+                        if (ImGui::MenuItem((std::string(ICON_FA_ARROW_UP_FROM_BRACKET " ") + LOCAL("Hierarchy.MoveToUIRoot")).c_str(),
+                            nullptr, false, canMove))
+                            action.Move = EntityHierarchyMove{ { entity }, uiRoot, entity };
+                    }
+                    else if (!isCanvas && ImGui::MenuItem((std::string(ICON_FA_ARROW_UP_FROM_BRACKET " ") +
+                        LOCAL("Hierarchy.MoveToRoot")).c_str()))
                         action.Unparent = entity;
                 }
                 ImGui::Separator();

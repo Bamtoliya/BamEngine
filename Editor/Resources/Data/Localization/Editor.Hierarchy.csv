@@ -41,6 +41,7 @@ Hierarchy,InvalidLinks,Invalid hierarchy links; shown without repair.,잘못된 
 Hierarchy,Light,Light,라이트
 Hierarchy,MoveDown,Move Down,아래로 이동
 Hierarchy,MoveToRoot,Move to Root,루트로 이동
+Hierarchy,MoveToUIRoot,Move to UI Root,UI 루트로 이동
 Hierarchy,MoveUp,Move Up,위로 이동
 Hierarchy,NoMatchingEntities,No matching entities found.,일치하는 엔티티가 없습니다.
 Hierarchy,OpenInUIEditor,Open in UI Editor,UI 편집 패널에서 열기

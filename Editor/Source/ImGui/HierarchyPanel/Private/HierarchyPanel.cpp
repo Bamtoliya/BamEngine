@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
 
@@ -26,7 +26,28 @@
 #include "SceneViewportPanel.h"
 #include "InspectorPanel.h"
 #include "UIViewportPanel.h"
+#include "UIComponents.h"
 
+
+static bool CanUseUIEditingTarget(Scene& scene, const Entity* target)
+{
+	const auto& prefab = PrefabModeManager::Get();
+	if (!target || !prefab.IsInPrefabMode() || prefab.GetPrefabScene() != &scene)
+		return true;
+	const auto& world = scene.GetRegistry();
+	const auto handle = target->GetEntityHandle();
+	if (!world.any_of<CanvasComponent, RectTransformComponent>(handle))
+		return true;
+	const auto* root = prefab.GetRootEntity();
+	std::unordered_set<entt::entity> visited;
+	for (auto current = handle; current != entt::null && visited.insert(current).second;)
+	{
+		if (root && current == root->GetEntityHandle()) return true;
+		const auto* link = world.try_get<HierarchyComponent>(current);
+		current = link ? link->parent : entt::null;
+	}
+	return false;
+}
 
 static bool CheckboxTristate(const char* label, bool* v, bool is_mixed)
 {
@@ -634,6 +655,12 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			return;
 		}
 
+		if (!CanUseUIEditingTarget(*scene, parentEntity))
+		{
+			m_HierarchyMessage = "Hierarchy.EditFailed";
+			return;
+		}
+
 		auto before = SceneEditSnapshot::Capture(*scene);
 		if (!before)
 		{
@@ -700,13 +727,16 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
             editLocked |= child && TransformPropertyEditor::HasAnyLock(scene->GetRegistry(), entity);
         }
         const bool canCapture = !history.Enabled() || before;
-        const auto result = !editLocked && canCapture && (parent || move.Target == entt::null) ?
+        const auto result = !editLocked && canCapture && CanUseUIEditingTarget(*scene, parent) &&
+            (parent || move.Target == entt::null) ?
             scene->ReparentEntities(children, parent) : EntityReparentResult::InvalidEntity;
         switch (result)
         {
         case EntityReparentResult::Success:
             history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.Reparent");
             m_RevealEntity = move.Anchor;
+            if (auto& prefabMode = PrefabModeManager::Get(); prefabMode.IsInPrefabMode() && prefabMode.GetPrefabScene() == scene)
+                prefabMode.MarkDirty();
             [[fallthrough]];
         case EntityReparentResult::Unchanged: m_HierarchyMessage.clear(); break;
         case EntityReparentResult::Cycle:
@@ -733,7 +763,10 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 	if (action.PasteAsChild != entt::null)
 	{
 		auto* parentEntity = scene->FindEntity(action.PasteAsChild);
-		EntityClipboard::Paste(scene, parentEntity);
+		if (CanUseUIEditingTarget(*scene, parentEntity))
+			EntityClipboard::Paste(scene, parentEntity);
+		else
+			m_HierarchyMessage = "Hierarchy.EditFailed";
 	}
     if (!m_HierarchyMessage.empty()) ImGui::TextDisabled("%s", LOCAL_CSTR(m_HierarchyMessage));
 	if (action.StartRename != entt::null)

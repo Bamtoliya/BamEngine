@@ -4,6 +4,7 @@
 #include "ResourceHandle.h"
 #include "Structs.h"
 #include "MaterialInterface.h"
+#include "UIEllipseMaskGeometry.h"
 #include <optional>
 
 BEGIN(Engine)
@@ -82,5 +83,7 @@ struct UIImageDrawCommand
 	vec4 uvTransform{ 0.0f, 0.0f, 1.0f, 1.0f };
 	vec2 canvasSize{ 1920.0f, 1080.0f };
 	std::optional<vec4> clipRect;
+	UIEllipseMaskPlanes ellipseMaskPlanes{};
+	std::size_t ellipseMaskCount = 0;
 };
 END

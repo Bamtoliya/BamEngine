@@ -2,6 +2,7 @@
 
 #include "Engine_Includes.h"
 #include "UIComponents.h"
+#include "UIEllipseMaskGeometry.h"
 #include <optional>
 
 namespace Engine
@@ -18,8 +19,13 @@ namespace Engine
         glm::vec2 parentPivot{ 0.0f };
         bool managedByGroup = false;
         bool visible = true;
+        std::size_t subtreeEnd = 0; // Exclusive end in the canvas's depth-first paint order.
         std::optional<glm::vec4> clipRect; // Canvas pixels: minimum X/Y and maximum X/Y.
+        UIEllipseMaskPlanes ellipseMaskPlanes{};
+        std::size_t ellipseMaskCount = 0;
     };
+
+    enum class UILayoutBuildMode { Runtime, Authoring };
 
     class ENGINE_API UILayout
     {
@@ -34,7 +40,8 @@ namespace Engine
         static std::int32_t GetZIndex(const entt::registry& world, entt::entity entity);
         static bool Resolve(const RectTransformComponent& rect, const glm::vec2& parentSize,
             const glm::vec2& parentPivot, const glm::mat4& parentTransform, UIElementLayout& result);
-        static bool Build(const entt::registry& world, entt::entity canvas, std::vector<UIElementLayout>& result);
+        static bool Build(const entt::registry& world, entt::entity canvas, std::vector<UIElementLayout>& result,
+            UILayoutBuildMode mode = UILayoutBuildMode::Runtime);
         static bool Contains(const UIElementLayout& layout, const glm::vec2& canvasPoint);
     };
 }

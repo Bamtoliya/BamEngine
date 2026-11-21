@@ -190,7 +190,8 @@ bool Engine::UILayout::Resolve(const RectTransformComponent& rect, const glm::ve
     return true;
 }
 
-bool Engine::UILayout::Build(const entt::registry& world, entt::entity canvas, std::vector<UIElementLayout>& result)
+bool Engine::UILayout::Build(const entt::registry& world, entt::entity canvas, std::vector<UIElementLayout>& result,
+    UILayoutBuildMode mode)
 {
     const auto* root = world.valid(canvas) ? world.try_get<CanvasComponent>(canvas) : nullptr;
     if (!root || !IsValid(*root)) return false;
@@ -237,15 +238,17 @@ bool Engine::UILayout::Build(const entt::registry& world, entt::entity canvas, s
             layout.entity = entity;
             layout.managedByGroup = !slots.empty();
             layout.visible = parentVisible && IsComponentEnabled<RectTransformComponent>(world, entity) && Visible(world, entity);
+            const auto layoutIndex = candidate.size();
             candidate.push_back(layout);
             if (!self(self, entity, relation->children, layout.size, rect->pivot, layout.worldTransform, layout.visible, depth + 1))
                 return false;
+            candidate[layoutIndex].subtreeEnd = candidate.size();
         }
         return true;
     };
     if (!visitChildren(visitChildren, canvas, rootRelation->children, root->referenceResolution, glm::vec2(0.0f), glm::mat4(1.0f),
         IsComponentEnabled<CanvasComponent>(world, canvas) && Visible(world, canvas), 2)) return false;
-    UIClipLayout::Apply(world, candidate);
+    if (mode == UILayoutBuildMode::Runtime) UIClipLayout::Apply(world, candidate);
     result.swap(candidate);
     return true;
 }
@@ -256,6 +259,13 @@ bool Engine::UILayout::Contains(const UIElementLayout& layout, const glm::vec2& 
     if (!layout.visible || !Finite(canvasPoint) || !std::isfinite(determinant) || determinant == 0.0f) return false;
     if (const auto& clip = layout.clipRect; clip && (canvasPoint.x < clip->x || canvasPoint.y < clip->y ||
         canvasPoint.x >= clip->z || canvasPoint.y >= clip->w)) return false;
+    const glm::vec3 point(canvasPoint, 1.0f);
+    for (std::size_t index = 0; index < layout.ellipseMaskCount; ++index)
+    {
+        const glm::vec2 localMask(glm::dot(glm::vec3(layout.ellipseMaskPlanes[index * 2]), point),
+            glm::dot(glm::vec3(layout.ellipseMaskPlanes[index * 2 + 1]), point));
+        if (!(glm::dot(localMask, localMask) <= 1.0f)) return false;
+    }
     const glm::vec2 local(glm::inverse(layout.renderMatrix) * glm::vec4(canvasPoint, 0.0f, 1.0f));
     return Finite(local) && local.x >= 0.0f && local.y >= 0.0f && local.x <= 1.0f && local.y <= 1.0f;
 }

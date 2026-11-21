@@ -369,6 +369,11 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
         if (selected && selected->GetScene() == m_TargetScene && FindLayout(selected->GetEntityHandle()))
             parent = selected;
+        if (parent && TryGetEnabledComponent<UIScrollComponent>(m_TargetScene->GetRegistry(), parent->GetEntityHandle()))
+        {
+            const auto content = UIClipLayout::FindScrollContent(m_TargetScene->GetRegistry(), parent->GetEntityHandle());
+            if (content != entt::null) parent = m_TargetScene->FindEntity(content);
+        }
     }
 
     if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddImage").c_str(), nullptr, false, parent != nullptr) && parent)
@@ -392,6 +397,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             { UIElementPreset::Toggle, "Viewport.AddToggle" },
             { UIElementPreset::Slider, "Viewport.AddSlider" },
             { UIElementPreset::ClipPanel, "Viewport.AddClipPanel" },
+            { UIElementPreset::EllipseMask, "Viewport.AddEllipseMask" },
             { UIElementPreset::ScrollView, "Viewport.AddScrollView" }
         };
         for (const auto& entry : presets)
@@ -610,7 +616,8 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         m_View.Pan(InputManager::Get().GetMouseDelta());
     }
     const float wheel = InputManager::Get().GetMouseScrollDeltaY();
-    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && wheel != 0.0f)
+    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && wheel != 0.0f &&
+        (!m_InteractionPreview || !m_Interaction || !m_Interaction->HasPointerCapture()))
     {
         if (m_Interaction) m_Interaction->Cancel();
         const bool scrolled = m_InteractionPreview && m_LayoutValid && HasTarget() &&

@@ -8,6 +8,13 @@ This document tracks implementation details, architectural decisions, and techni
 - 상세 열기·닫기와 기록 초기화 버튼은 좁은 폭에서 줄바꿈한다. 툴바와 상세 제목의 버튼도 실제 라벨 폭에 따라 다음 줄로 이동한다.
 - 변경 범위의 공백과 호출부를 정적으로 확인했다. 빌드와 한국어·영어, 100%·150%·200% 배율, 좁은 도킹 폭의 실제 표시·클릭 검증은 사용자 실행 대기다.
 
+### [2026-11-22] Canvas UI 부모 변경과 스크롤바·타원 마스크
+
+- 같은 Canvas 안에서 계층 드래그와 **UI 루트로 이동**을 지원한다. 자유 배치에서 표현할 수 있는 Canvas 변환은 보존하고, 배치 그룹은 새 슬롯을 계산한다. 프리팹 편집에서는 저장 대상 서브트리 안에서 이동한다.
+- Scroll View가 넘칠 때 세로 스크롤바를 표시한다. 휠, 트랙 클릭과 손잡이 드래그를 지원하고 인스펙터에서 표시 여부를 변경할 수 있다. UI 뷰에서 Scroll View를 선택한 상태로 위젯을 만들면 콘텐츠 아래에 둔다.
+- **타원 마스크**를 UI 프리셋에 추가했다. 기본 HLSL·GLSL 셰이더와 포인터 판정에 같은 타원 경계를 사용한다. 네 개를 넘는 상위 타원은 사각 경계만 적용하며 키보드 탐색은 사각 경계를 사용한다.
+- 호출부와 변경 파일을 정적으로 검토했다. UILayoutCheck와 UIInteractionCheck에 회귀 검사 사례를 추가했다. Windows 빌드, CTest, Editor·PIE·독립 Client와 두 GPU 백엔드의 결과는 사용자 확인 대기다. [UI 뷰 사용법](UIEditorFoundation.md) · [위젯 개발 계획](UIWidgetsAndLayoutPlan.md)
+
 ### [2026-11-21] 게임 UI 입력과 Canvas 제작 기능
 
 - Game View와 Windows Client에 Canvas 포인터 입력을 연결했다. UI에서 시작한 왼쪽 입력을 Gameplay 맵에서 분리하고, 대표 챌린지 재시작 버튼이 기존 초기화 경로를 사용한다.

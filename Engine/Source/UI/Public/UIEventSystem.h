@@ -57,7 +57,7 @@ public:
     MulticastDelegate<const UIPointerEvent&>& OnPointerEvent() { return m_OnPointerEvent; }
     Entity* ResolveTarget(const UIPointerEvent& event) const;
     bool IsPointerOverUI() const { return m_PointerOverUI; }
-    bool HasPointerCapture() const { return m_Pressed.entity != entt::null; }
+    bool HasPointerCapture() const { return m_Pressed.entity != entt::null || m_Scrollbar.entity != entt::null; }
     static glm::vec4 GetButtonTint(const entt::registry& world, entt::entity entity);
 
 private:
@@ -70,7 +70,9 @@ private:
     };
     bool Exists(Target target) const;
     bool CanInteract(Target target, const std::vector<UIElementLayout>& layouts) const;
-    Target HitTest(const glm::vec2& point, const std::vector<UIElementLayout>& layouts, bool& blocked) const;
+    Target HitTest(const glm::vec2& point, const std::vector<UIElementLayout>& layouts, bool& blocked,
+        Target* scrollbar = nullptr) const;
+    bool UpdateScrollbar(const std::vector<UIElementLayout>& layouts, bool pressed);
     void SetState(Target target, bool hovered, bool pressed);
     void SetKeyboardFocus(Target target);
     void Queue(std::vector<UIPointerEvent>& events, EUIPointerEventType type, Target target) const;
@@ -83,6 +85,8 @@ private:
     Target m_Canvas;
     Target m_Hovered;
     Target m_Pressed;
+    Target m_Scrollbar;
+    float m_ScrollbarGrabFraction = 0.5f;
     Target m_KeyboardFocus;
     glm::vec2 m_Position{ 0.0f };
     glm::vec2 m_Delta{ 0.0f };

@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "UIClipLayout.h"
 #include "UIWidgetComponents.h"
 #include "ComponentEnable.h"
 #include "Scene.h"
@@ -62,19 +63,35 @@ bool Engine::UIEventSystem::CanInteract(Target target, const std::vector<UIEleme
 }
 
 Engine::UIEventSystem::Target Engine::UIEventSystem::HitTest(const glm::vec2& point,
-    const std::vector<UIElementLayout>& layouts, bool& blocked) const
+    const std::vector<UIElementLayout>& layouts, bool& blocked, Target* scrollbar) const
 {
     blocked = false;
+    if (scrollbar) *scrollbar = {};
     const auto& world = m_Scene->GetRegistry();
     const auto* canvas = TryGetEnabledComponent<CanvasComponent>(world, m_Canvas.entity);
     if (!canvas || point.x < 0.0f || point.y < 0.0f || point.x >= canvas->referenceResolution.x ||
         point.y >= canvas->referenceResolution.y) return {};
-    for (auto it = layouts.rbegin(); it != layouts.rend(); ++it)
+    const auto overlays = UIClipLayout::GetScrollbarOverlays(world, layouts);
+    auto overlay = overlays.rbegin();
+    for (auto index = layouts.size(); index > 0; --index)
     {
-        const auto* image = TryGetEnabledComponent<UIImageComponent>(world, it->entity);
-        if (!image || !image->raycastTarget || !UILayout::IsValid(*image) || !UILayout::Contains(*it, point)) continue;
+        while (overlay != overlays.rend() && layouts[overlay->index].subtreeEnd == index)
+        {
+            const auto& viewport = layouts[overlay->index];
+            const auto* id = world.try_get<IDComponent>(viewport.entity);
+            if (id && id->id != 0 && UIClipLayout::IsScrollbarHit(viewport, overlay->geometry, point))
+            {
+                blocked = true;
+                if (scrollbar) *scrollbar = { viewport.entity, id->id };
+                return {};
+            }
+            ++overlay;
+        }
+        const auto& layout = layouts[index - 1];
+        const auto* image = TryGetEnabledComponent<UIImageComponent>(world, layout.entity);
+        if (!image || !image->raycastTarget || !UILayout::IsValid(*image) || !UILayout::Contains(layout, point)) continue;
         blocked = true; // Any raycast-target image blocks elements behind it.
-        auto entity = it->entity;
+        auto entity = layout.entity;
         for (std::size_t depth = 0; depth < 256 && entity != m_Canvas.entity; ++depth)
         {
             if (TryGetEnabledComponent<UIButtonComponent>(world, entity) || IsInteractiveWidget(world, entity))
@@ -90,6 +107,31 @@ Engine::UIEventSystem::Target Engine::UIEventSystem::HitTest(const glm::vec2& po
         return {};
     }
     return {};
+}
+
+bool Engine::UIEventSystem::UpdateScrollbar(const std::vector<UIElementLayout>& layouts, bool pressed)
+{
+    if (!Exists(m_Scrollbar)) return false;
+    const auto viewport = std::ranges::find(layouts, m_Scrollbar.entity, &UIElementLayout::entity);
+    if (viewport == layouts.end()) return false;
+    auto& world = m_Scene->GetRegistry();
+    const auto geometry = UIClipLayout::GetScrollbar(world, *viewport);
+    if (!geometry) return false;
+    const float pointerY = UIClipLayout::ToScrollbarLocal(*viewport, m_Position).y;
+    if (!std::isfinite(pointerY)) return false;
+
+    const float thumbOffset = pointerY - geometry->thumbTop;
+    if (pressed)
+    {
+        const bool onThumb = thumbOffset >= 0.0f && thumbOffset <= geometry->thumbHeight;
+        m_ScrollbarGrabFraction = onThumb ? thumbOffset / geometry->thumbHeight : 0.5f;
+        if (onThumb) return true;
+    }
+
+    const float top = pointerY - m_ScrollbarGrabFraction * geometry->thumbHeight;
+    const float fraction = std::clamp(top / (1.0f - geometry->thumbHeight), 0.0f, 1.0f);
+    world.get<UIScrollComponent>(m_Scrollbar.entity).offset = fraction * geometry->scrollRange;
+    return true;
 }
 
 void Engine::UIEventSystem::SetState(Target target, bool hovered, bool pressed)
@@ -232,7 +274,7 @@ void Engine::UIEventSystem::Reset(std::vector<UIPointerEvent>* events)
     SetKeyboardFocus({});
     SetState(m_Pressed, false, false);
     SetState(m_Hovered, false, false);
-    m_Pressed = m_Hovered = {};
+    m_Pressed = m_Hovered = m_Scrollbar = {};
     m_PointerOverUI = false;
     m_HasPosition = false;
     m_SuppressUntilRelease = true;
@@ -276,8 +318,21 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
         m_SuppressUntilRelease = true;
     }
     bool blocked = false;
-    const Target target = input.insideViewport ? HitTest(m_Position, layouts, blocked) : Target{};
-    m_PointerOverUI = blocked;
+    Target scrollbar;
+    const bool draggingScrollbar = m_Scrollbar.entity != entt::null;
+    const Target target = input.insideViewport && !draggingScrollbar
+        ? HitTest(m_Position, layouts, blocked, &scrollbar) : Target{};
+    m_PointerOverUI = blocked || draggingScrollbar;
+    if (draggingScrollbar)
+    {
+        const bool updated = (input.held || input.up) && UpdateScrollbar(layouts, false);
+        if (!updated || input.up)
+        {
+            m_Scrollbar = {};
+            m_SuppressUntilRelease = input.held || input.down;
+        }
+        return true;
+    }
     if (target != m_Hovered)
     {
         Queue(events, EUIPointerEventType::Exit, m_Hovered);
@@ -292,6 +347,13 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
     }
     else if (input.down && m_Pressed.entity == entt::null)
     {
+        if (scrollbar.entity != entt::null)
+        {
+            m_Scrollbar = scrollbar;
+            if (!UpdateScrollbar(layouts, true) || input.up || !input.held) m_Scrollbar = {};
+            Dispatch(events);
+            return true;
+        }
         m_Pressed = target;
         if (IsInteractiveWidget(m_Scene->GetRegistry(), target.entity)) SetKeyboardFocus(target);
         SetState(m_Pressed, true, true);

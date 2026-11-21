@@ -10,4 +10,5 @@
 #include "UILayoutGroupComponent.h"
 #include "UIWidgetComponents.h"
 #include "UIClipComponent.h"
+#include "UIEllipseMaskComponent.h"
 #include "UIScrollComponent.h"

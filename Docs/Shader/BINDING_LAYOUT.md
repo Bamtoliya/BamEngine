@@ -30,6 +30,15 @@ GLSL `layout(set = 2, binding = 0)`.
 > - **2026-11-06 정정:** 현재 `skinningVS.hlsl`의 `boneMatrices`는 `t0, space2`를 사용한다. `Renderer.cpp`는 본 행렬을 `BindInstanceBuffer(..., sizeof(mat4))`로 제출하고 D3D12 root parameter `[4]`가 이를 받는다. 같은 슬롯은 정적 인스턴싱의 `InstanceData`에도 사용되므로 드로우의 셰이더와 stride 계약을 맞춘다. 두 데이터의 동시 사용 지원을 의미하지 않는다. 과거 `t0, space0` 미연결 설명을 현재 상태로 적용하지 않는다.
 > - `SDLGPURHI` currently implements graphics CBV/texture/sampler bindings (`space0`, `space1`, `space2` CBV, `space3` CBV/SRV/Sampler), while `DrawIndexedInstanced`, `BindInstanceBuffer` (`t0, space2`), and Compute UAV/Dispatch (`u0-u1, space3`) are currently D3D12-only.
 
+## UI Image Draw Data
+
+The UI object constant buffer uses RHI slot 1 (`b0, space2` in HLSL and
+`set = 1, binding = 1` in the SDL GPU GLSL vertex layout). The existing 112-byte
+image data is followed by eight `float4`/`vec4` rows, for 240 bytes total. Each
+pair maps a canvas position to one ancestor ellipse. Unused pairs are zero.
+The built-in vertex and fragment shaders pass and test those four coordinate
+pairs together. Rebuild both shader stages after changing this interface.
+
 ## D3D12 Root Signature Layout (`DirectX12RHI.cpp`)
 
 Each descriptor range and root descriptor must declare the same register space as its shader resources:

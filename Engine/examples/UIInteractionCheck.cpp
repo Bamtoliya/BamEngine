@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "UIEllipseMaskComponent.h"
 #include "UIWidgetComponents.h"
 #include "Scene.h"
 #include "WorldComponents.h"
@@ -406,6 +407,57 @@ int main()
             return Fail("Toggle click did not deliver one value change.");
         if (!system.Navigate(0, true) || toggle.checked || changes.size() != 2 || !changes.back().keyboard)
             return Fail("Keyboard activation did not toggle the selected control.");
+    }
+
+    {
+        Fixture masked;
+        auto& world = masked.scene->GetRegistry();
+        world.get<UIImageComponent>(masked.button).raycastTarget = false;
+        const auto mask = masked.Add(masked.canvas, false);
+        world.get<UIImageComponent>(mask).raycastTarget = false;
+        world.emplace<UIEllipseMaskComponent>(mask);
+        const auto child = masked.Add(mask, true);
+        world.get<RectTransformComponent>(child).anchoredPosition = { 0.0f, 0.0f };
+        UIEventSystem system(*masked.scene, masked.canvas);
+        std::vector<UIPointerEvent> hits;
+        system.OnPointerEvent().AddLambda([&](const auto& event) { hits.push_back(event); });
+
+        Feed(system, { 11.0f, 11.0f });
+        if (system.IsPointerOverUI() || !hits.empty()) return Fail("Ellipse mask corner accepted pointer input.");
+        Feed(system, { 60.0f, 40.0f });
+        if (!system.IsPointerOverUI() || !Types(hits, { Type::Enter }) || hits.front().target != child)
+            return Fail("Ellipse mask center rejected pointer input.");
+    }
+
+    {
+        Fixture scrolling;
+        auto& world = scrolling.scene->GetRegistry();
+        const auto viewport = scrolling.Add(scrolling.canvas, false);
+        const auto content = scrolling.Add(viewport, true);
+        world.get<UIImageComponent>(viewport).raycastTarget = false;
+        auto& rect = world.get<RectTransformComponent>(content);
+        rect.anchoredPosition = glm::vec2(0.0f);
+        rect.sizeDelta.y = 180.0f;
+        auto& scroll = world.emplace<UIScrollComponent>(viewport);
+        UIEventSystem system(*scrolling.scene, scrolling.canvas);
+        std::vector<UIPointerEvent> events;
+        system.OnPointerEvent().AddLambda([&](const auto& event) { events.push_back(event); });
+
+        Feed(system, { 105.0f, 20.0f }, true, true);
+        if (!system.HasPointerCapture() || scroll.offset != 0.0f || !events.empty())
+            return Fail("Scrollbar thumb did not capture without moving or activating content.");
+        Feed(system, { 160.0f, 250.0f }, false, true, false, false);
+        if (!system.HasPointerCapture() || scroll.offset != 120.0f)
+            return Fail("Scrollbar drag outside the viewport did not reach its end.");
+        Feed(system, { 160.0f, 250.0f }, false, false, true, false);
+        if (system.HasPointerCapture() || !events.empty())
+            return Fail("Scrollbar did not release its capture cleanly.");
+        Feed(system, { 105.0f, 40.0f }, true, true);
+        if (!system.HasPointerCapture() || scroll.offset <= 0.0f || scroll.offset >= 120.0f)
+            return Fail("Scrollbar track click did not move to an intermediate position.");
+        scroll.showScrollbar = false;
+        Feed(system, { 105.0f, 40.0f }, false, true);
+        if (system.HasPointerCapture()) return Fail("Hiding the scrollbar did not cancel capture.");
     }
 
     // The publisher must tolerate subscription changes and retain mutable callback state.

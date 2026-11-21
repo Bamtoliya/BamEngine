@@ -31,6 +31,7 @@
 #include "PickingManager.h"
 
 #include "TimeManager.h"
+#include <algorithm>
 
 IMPLEMENT_SINGLETON(Renderer)
 
@@ -1020,9 +1021,11 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 		vec2 tiling;
 		vec2 offset;
 		vec4 color;
+		UIEllipseMaskPlanes ellipseMaskPlanes;
 	};
-	static_assert(sizeof(ImageUBO) == 112);
+	static_assert(sizeof(ImageUBO) == 240);
 	static_assert(offsetof(ImageUBO, color) == 96);
+	static_assert(offsetof(ImageUBO, ellipseMaskPlanes) == 112);
 	auto* sampler = SamplerManager::Get().GetDefaultSampler();
 	if (!sampler) return EResult::Fail;
 	RHIPipelineDesc pipelineDesc;
@@ -1105,6 +1108,9 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 			vec2(command.uvTransform) + vec2(command.uvTransform.z, command.uvTransform.w));
 		data.tiling = vec2(1.0f);
 		data.color = command.color;
+		data.ellipseMaskPlanes.fill(vec4(0.0f));
+		const auto maskPlanes = std::min(command.ellipseMaskCount, MaxUIEllipseMasks) * 2;
+		std::copy_n(command.ellipseMaskPlanes.begin(), maskPlanes, data.ellipseMaskPlanes.begin());
 		if (IsFailure(m_RHI->BindConstantBuffer(&data, sizeof(data), 1)) ||
 			IsFailure(m_RHI->BindTextureSampler(texture->GetRHITexture(), sampler, 0)) ||
 			IsFailure(m_RHI->Draw(6))) return EResult::Fail;

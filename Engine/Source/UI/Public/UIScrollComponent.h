@@ -12,6 +12,9 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UI_SCROLL_WHEEL_STEP"), RANGE(1, 512, 1))
         float wheelStep = 40.0f;
 
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_UI_SCROLL_SHOW_SCROLLBAR"))
+        bool showScrollbar = true;
+
         float offset = 0.0f; // Transient canvas-local pixel position.
     };
 }
