@@ -170,7 +170,7 @@ namespace
 			auto& worldTrans = world.get_or_emplace<Engine::WorldTransformComponent>(owner);
 			std::ignore = trans.SetLocalPosition(Engine::vec3(0.0f));
 			Engine::TransformSystem::UpdateRootWorld(trans, worldTrans);
-			world.get_or_emplace<Engine::FlagComponent>(owner);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(owner);
 
 			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
 			timeline.timelineAsset = timelineAsset;
@@ -291,9 +291,9 @@ namespace
 			world.get_or_emplace<Engine::HierarchyComponent>(ownerA).parent = ownerB;
 			world.get_or_emplace<Engine::HierarchyComponent>(ownerA).children = { animatorEntity };
 			world.get_or_emplace<Engine::HierarchyComponent>(animatorEntity).parent = ownerA;
-			world.get_or_emplace<Engine::FlagComponent>(ownerB);
-			world.get_or_emplace<Engine::FlagComponent>(ownerA);
-			world.get_or_emplace<Engine::FlagComponent>(animatorEntity);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(ownerB);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(ownerA);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(animatorEntity);
 
 			auto& animator = world.emplace<Engine::AnimatorComponent>(animatorEntity);
 			animator.currentClip = origClip;
@@ -380,7 +380,7 @@ namespace
 			scene->SetActive(true);
 			auto& world = scene->GetRegistry();
 			const auto owner = scene->CreateEntity().GetEntityHandle();
-			world.get_or_emplace<Engine::FlagComponent>(owner);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(owner);
 			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
 			timeline.timelineAsset = asset;
 			timeline.Play();

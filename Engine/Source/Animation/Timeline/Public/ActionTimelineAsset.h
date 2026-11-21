@@ -167,9 +167,9 @@ private:
 public:
 	virtual EResult Initialize(void* arg = nullptr) override;
 	virtual void Free() override;
-	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates) override;
+	bool PrepareFilePathRelocation(const std::vector<FilePathChange>& changes, std::vector<Utf8FilePathUpdate>& updates) override;
 	static void PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,
-		const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates);
+		const std::vector<FilePathChange>& changes, std::vector<Utf8FilePathUpdate>& updates);
 	static bool IsProjectJsonDocument(const std::filesystem::path& pathOrUri);
 
 	// 종류가 정해진 트랙은 그대로 돌려주고, 이전 트랙은 이전 이름 규칙(Audio·Sound → 오디오, Event → 이벤트, 그 외 → 이펙트)으로 판정한다.

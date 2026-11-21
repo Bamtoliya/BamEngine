@@ -3,6 +3,7 @@
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "ActionTimelineAsset.h"
+#include <entt/entity/entity.hpp>
 #include <functional>
 #include <string>
 #include <vector>
