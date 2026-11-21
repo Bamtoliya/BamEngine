@@ -356,6 +356,147 @@ int main()
 		Expect(readTiling.x == 4.0f && readTiling.y == 5.0f, "Blob UVTiling value mismatch.");
 		Expect(readTint.x == 0.1f && readTint.y == 0.2f && readTint.z == 0.3f, "Blob TintRgb value mismatch.");
 
+		// ── 8. 확장 Math / Shader 입력 노드(Time, WorldPosition, WorldNormal, ViewDirection, Fresnel) 검증 ──
+		{
+			Graph mathGraph{ EGraphDomain::Shader };
+			const auto out = Add(mathGraph, registry, "Shader.MaterialOutput");
+			const auto timeNode = Add(mathGraph, registry, "Shader.Time");
+			const auto sinNode = Add(mathGraph, registry, "Math.SinFloat");
+			const auto cosNode = Add(mathGraph, registry, "Math.CosFloat");
+			const auto absNode = Add(mathGraph, registry, "Math.AbsFloat");
+			const auto subNode = Add(mathGraph, registry, "Math.SubtractFloat");
+			const auto divNode = Add(mathGraph, registry, "Math.DivideFloat");
+			const auto powNode = Add(mathGraph, registry, "Math.PowFloat");
+			const auto minNode = Add(mathGraph, registry, "Math.MinFloat");
+			const auto maxNode = Add(mathGraph, registry, "Math.MaxFloat");
+			const auto clampNode = Add(mathGraph, registry, "Math.ClampFloat");
+			const auto satNode = Add(mathGraph, registry, "Math.SaturateFloat");
+			const auto lerpNode = Add(mathGraph, registry, "Math.LerpFloat");
+			const auto stepNode = Add(mathGraph, registry, "Math.StepFloat");
+			const auto smoothNode = Add(mathGraph, registry, "Math.SmoothStepFloat");
+
+			Accept(mathGraph.Connect(registry, { timeNode, "time" }, { sinNode, "value" }));
+			Accept(mathGraph.Connect(registry, { timeNode, "time" }, { cosNode, "value" }));
+			Accept(mathGraph.Connect(registry, { sinNode, "result" }, { absNode, "value" }));
+			Accept(mathGraph.Connect(registry, { absNode, "result" }, { subNode, "a" }));
+			Accept(mathGraph.Connect(registry, { cosNode, "result" }, { subNode, "b" }));
+			Accept(mathGraph.Connect(registry, { subNode, "result" }, { divNode, "a" }));
+			Accept(mathGraph.SetInputValue(registry, { divNode, "b" }, 2.0f));
+			Accept(mathGraph.Connect(registry, { divNode, "result" }, { powNode, "base" }));
+			Accept(mathGraph.SetInputValue(registry, { powNode, "exponent" }, 3.0f));
+			Accept(mathGraph.Connect(registry, { powNode, "result" }, { minNode, "a" }));
+			Accept(mathGraph.SetInputValue(registry, { minNode, "b" }, 0.9f));
+			Accept(mathGraph.Connect(registry, { minNode, "result" }, { maxNode, "a" }));
+			Accept(mathGraph.SetInputValue(registry, { maxNode, "b" }, 0.1f));
+			Accept(mathGraph.Connect(registry, { maxNode, "result" }, { clampNode, "value" }));
+			Accept(mathGraph.Connect(registry, { clampNode, "result" }, { satNode, "value" }));
+			Accept(mathGraph.Connect(registry, { satNode, "result" }, { out, "roughness" }));
+
+			Accept(mathGraph.Connect(registry, { timeNode, "time" }, { stepNode, "value" }));
+			Accept(mathGraph.SetInputValue(registry, { stepNode, "edge" }, 0.5f));
+			Accept(mathGraph.Connect(registry, { stepNode, "result" }, { lerpNode, "a" }));
+			Accept(mathGraph.Connect(registry, { timeNode, "time" }, { smoothNode, "value" }));
+			Accept(mathGraph.Connect(registry, { smoothNode, "result" }, { lerpNode, "b" }));
+			Accept(mathGraph.Connect(registry, { lerpNode, "result" }, { out, "metallic" }));
+
+			const auto worldPos = Add(mathGraph, registry, "Shader.WorldPosition");
+			const auto worldNrm = Add(mathGraph, registry, "Shader.WorldNormal");
+			const auto viewDir = Add(mathGraph, registry, "Shader.ViewDirection");
+			const auto normPos = Add(mathGraph, registry, "Math.NormalizeFloat3");
+			const auto dotNode = Add(mathGraph, registry, "Math.DotFloat3");
+			const auto fresnelNode = Add(mathGraph, registry, "Shader.Fresnel");
+			const auto scaleEmissive = Add(mathGraph, registry, "Math.ScaleFloat3");
+
+			Accept(mathGraph.Connect(registry, { worldPos, "position" }, { normPos, "value" }));
+			Accept(mathGraph.Connect(registry, { normPos, "result" }, { dotNode, "a" }));
+			Accept(mathGraph.Connect(registry, { worldNrm, "normal" }, { dotNode, "b" }));
+			Accept(mathGraph.Connect(registry, { dotNode, "result" }, { out, "ao" }));
+
+			Accept(mathGraph.Connect(registry, { worldNrm, "normal" }, { fresnelNode, "normal" }));
+			Accept(mathGraph.Connect(registry, { viewDir, "direction" }, { fresnelNode, "viewDir" }));
+			Accept(mathGraph.SetInputValue(registry, { fresnelNode, "power" }, 4.0f));
+			Accept(mathGraph.Connect(registry, { worldNrm, "normal" }, { scaleEmissive, "value" }));
+			Accept(mathGraph.Connect(registry, { fresnelNode, "result" }, { scaleEmissive, "scale" }));
+			Accept(mathGraph.Connect(registry, { scaleEmissive, "result" }, { out, "emissive" }));
+
+			// VS 스테이지에서 WorldNormal / Time / ScaleFloat3 사용 검증
+			const auto vsScale = Add(mathGraph, registry, "Math.ScaleFloat3");
+			Accept(mathGraph.Connect(registry, { worldNrm, "normal" }, { vsScale, "value" }));
+			Accept(mathGraph.Connect(registry, { sinNode, "result" }, { vsScale, "scale" }));
+			Accept(mathGraph.Connect(registry, { vsScale, "result" }, { out, "worldPositionOffset" }));
+
+			std::string mathPs;
+			std::string mathVs;
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(mathGraph, registry, mathPs));
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialVS(mathGraph, registry, mathVs));
+
+			Expect(mathPs.find("#include \"common.hlsli\"") != std::string::npos, "GBuffer PS must include common.hlsli.");
+			Expect(mathPs.find("commonData.Time") != std::string::npos, "Shader.Time failed to emit commonData.Time.");
+			Expect(mathPs.find("sin(commonData.Time)") != std::string::npos, "Math.SinFloat HLSL mismatch.");
+			Expect(mathPs.find("cos(commonData.Time)") != std::string::npos, "Math.CosFloat HLSL mismatch.");
+			Expect(mathPs.find("abs(sin(commonData.Time))") != std::string::npos, "Math.AbsFloat HLSL mismatch.");
+			Expect(mathPs.find("pow(") != std::string::npos, "Math.PowFloat HLSL mismatch.");
+			Expect(mathPs.find("min(") != std::string::npos && mathPs.find("max(") != std::string::npos,
+				"Math.MinFloat / MaxFloat HLSL mismatch.");
+			Expect(mathPs.find("clamp(") != std::string::npos && mathPs.find("saturate(") != std::string::npos,
+				"Math.ClampFloat / SaturateFloat HLSL mismatch.");
+			Expect(mathPs.find("step(") != std::string::npos && mathPs.find("smoothstep(") != std::string::npos &&
+				mathPs.find("lerp(") != std::string::npos, "Step / SmoothStep / Lerp HLSL mismatch.");
+			Expect(mathPs.find("dot(normalize(input.WorldPos), normalize(input.Normal))") != std::string::npos,
+				"Dot / Normalize / WorldPosition / WorldNormal HLSL mismatch.");
+			Expect(mathPs.find("normalize(commonData.CameraPos - input.WorldPos)") != std::string::npos,
+				"Shader.ViewDirection PS HLSL mismatch.");
+			Expect(mathPs.find("pow(1.0f - saturate(dot(") != std::string::npos,
+				"Shader.Fresnel HLSL mismatch.");
+			Expect(mathVs.find("float3 worldNormal = normalize(normalWorld * determinantSign);") != std::string::npos &&
+				mathVs.find("(worldNormal * sin(commonData.Time))") != std::string::npos,
+				"VS stage WorldNormal + Time WPO HLSL mismatch.");
+		}
+
+		// ── 9. MaterialOutput Normal(TBN) 및 OpacityMask(clip) 핀 검증 ──
+		{
+			Graph masterPinGraph{ EGraphDomain::Shader };
+			const auto out = Add(masterPinGraph, registry, "Shader.MaterialOutput");
+
+			// 미연결 시 기본 Fallback 유지 확인
+			std::string fallbackGb;
+			std::string fallbackFt;
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(masterPinGraph, registry, fallbackGb));
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(masterPinGraph, registry, fallbackFt));
+			for (const auto* shader : { &fallbackGb, &fallbackFt })
+			{
+				Expect(shader->find("float3 N = normalize(input.Normal);") != std::string::npos,
+					"Unconnected normal pin must preserve normalize(input.Normal) fallback.");
+				Expect(shader->find("float3x3 TBN") == std::string::npos,
+					"Unconnected normal pin must not emit TBN matrix.");
+				Expect(shader->find("clip(") == std::string::npos,
+					"Unconnected opacityMask pin must not emit clip().");
+			}
+
+			// Normal + OpacityMask 연결 시 TBN 변환 및 clip(opacityMask - 0.5f) 생성 확인
+			const auto normalConst = Add(masterPinGraph, registry, "Core.Float3");
+			const auto maskConst = Add(masterPinGraph, registry, "Core.Float");
+			Accept(masterPinGraph.SetInputValue(registry, { normalConst, "value" }, std::array<float, 3>{ 0.0f, 0.25f, 1.0f }));
+			Accept(masterPinGraph.SetInputValue(registry, { maskConst, "value" }, 0.75f));
+			Accept(masterPinGraph.Connect(registry, { normalConst, "result" }, { out, "normal" }));
+			Accept(masterPinGraph.Connect(registry, { maskConst, "result" }, { out, "opacityMask" }));
+
+			std::string connectedGb;
+			std::string connectedFt;
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(masterPinGraph, registry, connectedGb));
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(masterPinGraph, registry, connectedFt));
+			for (const auto* shader : { &connectedGb, &connectedFt })
+			{
+				Expect(shader->find("float3 tangentSpaceNormal = normalize(float3(") != std::string::npos &&
+					shader->find("float3x3 TBN = float3x3(T, B, baseN);") != std::string::npos &&
+					shader->find("float3 N = normalize(mul(tangentSpaceNormal, TBN));") != std::string::npos,
+					"Connected normal pin must emit TBN tangent-space normal perturbation.");
+				Expect(shader->find("float opacityMask = 7.50000000e-01f;") != std::string::npos &&
+					shader->find("clip(opacityMask - 0.5f);") != std::string::npos,
+					"Connected opacityMask pin must emit clip(opacityMask - 0.5f).");
+			}
+		}
+
 		std::cout << "Shader graph checks passed.\n";
 		return 0;
 	}

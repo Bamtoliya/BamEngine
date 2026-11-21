@@ -256,7 +256,11 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "y", Direction::Output, Type::Float, {} },
 			{ "z", Direction::Output, Type::Float, {} },
 			{ "w", Direction::Output, Type::Float, {} } } },
-		{ "Math.AddFloat2", shader, {
+		{ "Math.AddFloat2", common, {
+			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Math.SubtractFloat2", common, {
 			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
 			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
 			{ "result", Direction::Output, Type::Float2, {} } } },
@@ -264,10 +268,142 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
 			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
 			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Math.DotFloat2", common, {
+			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.NormalizeFloat2", common, {
+			{ "value", Direction::Input, Type::Float2, std::array<float, 2>{ 0.0f, 1.0f } },
+			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Math.LerpFloat2", common, {
+			{ "a", Direction::Input, Type::Float2, std::array<float, 2>{} },
+			{ "b", Direction::Input, Type::Float2, std::array<float, 2>{ 1.0f, 1.0f } },
+			{ "t", Direction::Input, Type::Float, 0.5f },
+			{ "result", Direction::Output, Type::Float2, {} } } },
+		{ "Math.SubtractFloat", common, {
+			{ "a", Direction::Input, Type::Float, 0.0f },
+			{ "b", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.DivideFloat", common, {
+			{ "a", Direction::Input, Type::Float, 0.0f },
+			{ "b", Direction::Input, Type::Float, 1.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.LerpFloat", common, {
+			{ "a", Direction::Input, Type::Float, 0.0f },
+			{ "b", Direction::Input, Type::Float, 1.0f },
+			{ "t", Direction::Input, Type::Float, 0.5f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.ClampFloat", common, {
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "minimum", Direction::Input, Type::Float, 0.0f },
+			{ "maximum", Direction::Input, Type::Float, 1.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.SaturateFloat", common, {
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.PowFloat", common, {
+			{ "base", Direction::Input, Type::Float, 1.0f },
+			{ "exponent", Direction::Input, Type::Float, 1.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.AbsFloat", common, {
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.MinFloat", common, {
+			{ "a", Direction::Input, Type::Float, 0.0f },
+			{ "b", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.MaxFloat", common, {
+			{ "a", Direction::Input, Type::Float, 0.0f },
+			{ "b", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.SinFloat", common, {
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.CosFloat", common, {
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.StepFloat", common, {
+			{ "edge", Direction::Input, Type::Float, 0.0f },
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.SmoothStepFloat", common, {
+			{ "edge0", Direction::Input, Type::Float, 0.0f },
+			{ "edge1", Direction::Input, Type::Float, 1.0f },
+			{ "value", Direction::Input, Type::Float, 0.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.AddFloat3", common, {
+			{ "a", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "b", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.SubtractFloat3", common, {
+			{ "a", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "b", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.MultiplyFloat3", shader, {
+			{ "a", Direction::Input, Type::Float3, std::array<float, 3>{ 1.0f, 1.0f, 1.0f } },
+			{ "b", Direction::Input, Type::Float3, std::array<float, 3>{ 1.0f, 1.0f, 1.0f } },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.ScaleFloat3", common, {
+			{ "value", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "scale", Direction::Input, Type::Float, 1.0f },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.DotFloat3", common, {
+			{ "a", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "b", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.NormalizeFloat3", common, {
+			{ "value", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 1.0f } },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.LerpFloat3", common, {
+			{ "a", Direction::Input, Type::Float3, std::array<float, 3>{} },
+			{ "b", Direction::Input, Type::Float3, std::array<float, 3>{ 1.0f, 1.0f, 1.0f } },
+			{ "t", Direction::Input, Type::Float, 0.5f },
+			{ "result", Direction::Output, Type::Float3, {} } } },
+		{ "Math.AddFloat4", common, {
+			{ "a", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "b", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.SubtractFloat4", common, {
+			{ "a", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "b", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.MultiplyFloat4", shader, {
+			{ "a", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
+			{ "b", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.ScaleFloat4", common, {
+			{ "value", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "scale", Direction::Input, Type::Float, 1.0f },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.DotFloat4", common, {
+			{ "a", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "b", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "result", Direction::Output, Type::Float, {} } } },
+		{ "Math.NormalizeFloat4", common, {
+			{ "value", Direction::Input, Type::Float4, std::array<float, 4>{ 0.0f, 0.0f, 0.0f, 1.0f } },
+			{ "result", Direction::Output, Type::Float4, {} } } },
+		{ "Math.LerpFloat4", common, {
+			{ "a", Direction::Input, Type::Float4, std::array<float, 4>{} },
+			{ "b", Direction::Input, Type::Float4, std::array<float, 4>{ 1.0f, 1.0f, 1.0f, 1.0f } },
+			{ "t", Direction::Input, Type::Float, 0.5f },
+			{ "result", Direction::Output, Type::Float4, {} } } },
 		{ "Shader.TexCoord0", shader, {
 			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV0" } } },
 		{ "Shader.TexCoord1", shader, {
 			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV1" } } },
+		{ "Shader.Time", shader, {
+			{ "time", Direction::Output, Type::Float, {} } } },
+		{ "Shader.WorldPosition", shader, {
+			{ "position", Direction::Output, Type::Float3, {} } } },
+		{ "Shader.WorldNormal", shader, {
+			{ "normal", Direction::Output, Type::Float3, {} } } },
+		{ "Shader.ViewDirection", shader, {
+			{ "direction", Direction::Output, Type::Float3, {} } } },
+		{ "Shader.Fresnel", shader, {
+			{ "normal", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 1.0f } },
+			{ "viewDir", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 1.0f } },
+			{ "power", Direction::Input, Type::Float, 5.0f },
+			{ "result", Direction::Output, Type::Float, {} } } },
 		{ "Shader.TextureSample", shader, {
 			{ "slot", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TextureSlot" },
 			{ "uv", Direction::Input, Type::Float2, std::array<float, 2>{}, {}, "Graph.PinName.TextureUV" },
@@ -283,7 +419,9 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "metallic", Direction::Input, Type::Float, 0.0f },
 			{ "cavity", Direction::Input, Type::Float, 0.5f },
 			{ "ao", Direction::Input, Type::Float, 1.0f },
-			{ "emissive", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } } } },
+			{ "emissive", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } },
+			{ "normal", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 1.0f } },
+			{ "opacityMask", Direction::Input, Type::Float, 1.0f } } },
 		{ "Event.OnTriggerEnter", logic, {
 			{ "exec", Direction::Output, Type::Execution, {} }, { "other", Direction::Output, Type::Int, {} } } },
 		{ "Event.OnTriggerStay", logic, {

@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 #include <unordered_set>
 #include <vector>
@@ -146,6 +147,35 @@ namespace
 		return out.str();
 	}
 
+	enum class EShaderStage
+	{
+		Vertex,
+		Pixel
+	};
+
+	bool HasInputLink(const Graph& graph, GraphNodeId nodeId, const std::string& pinName)
+	{
+		const auto links = graph.GetLinks();
+		return std::any_of(links.begin(), links.end(), [&](const GraphLink& link)
+		{
+			return link.To.Node == nodeId && link.To.Pin == pinName;
+		});
+	}
+
+	std::string BuildNormalCalculationHlsl(const std::string& normalExpr, bool hasNormalLink)
+	{
+		if (!hasNormalLink)
+			return "float3 N = normalize(input.Normal);";
+
+		return "float3 baseN = normalize(input.Normal);\n"
+			"float3 tangentSpaceNormal = normalize(" + normalExpr + ");\n"
+			"float3 orthoT = input.Tangent - dot(input.Tangent, baseN) * baseN;\n"
+			"float3 T = dot(orthoT, orthoT) > 1e-6f ? normalize(orthoT) : float3(1.0f, 0.0f, 0.0f);\n"
+			"float3 B = cross(baseN, T);\n"
+			"float3x3 TBN = float3x3(T, B, baseN);\n"
+			"float3 N = normalize(mul(tangentSpaceNormal, TBN));";
+	}
+
 	bool IsSupportedShaderNode(const std::string& type)
 	{
 		if (type.rfind("Variable.Get.", 0) == 0 && type.size() > 13)
@@ -153,11 +183,22 @@ namespace
 
 		static const std::unordered_set<std::string> supported{
 			"Shader.ColorOutput", "Shader.MaterialOutput", "Shader.TextureSample",
+			"Shader.TexCoord0", "Shader.TexCoord1",
+			"Shader.Time", "Shader.WorldPosition", "Shader.WorldNormal", "Shader.ViewDirection", "Shader.Fresnel",
 			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Core.Reroute.Float", "Core.Reroute.Float2", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
-			"Math.AddFloat", "Math.MultiplyFloat", "Math.AddFloat2", "Math.MultiplyFloat2",
+			"Math.AddFloat", "Math.SubtractFloat", "Math.MultiplyFloat", "Math.DivideFloat",
+			"Math.LerpFloat", "Math.ClampFloat", "Math.SaturateFloat", "Math.PowFloat",
+			"Math.AbsFloat", "Math.MinFloat", "Math.MaxFloat",
+			"Math.SinFloat", "Math.CosFloat", "Math.StepFloat", "Math.SmoothStepFloat",
+			"Math.AddFloat2", "Math.SubtractFloat2", "Math.MultiplyFloat2",
+			"Math.DotFloat2", "Math.NormalizeFloat2", "Math.LerpFloat2",
+			"Math.AddFloat3", "Math.SubtractFloat3", "Math.MultiplyFloat3", "Math.ScaleFloat3",
+			"Math.DotFloat3", "Math.NormalizeFloat3", "Math.LerpFloat3",
+			"Math.AddFloat4", "Math.SubtractFloat4", "Math.MultiplyFloat4", "Math.ScaleFloat4",
+			"Math.DotFloat4", "Math.NormalizeFloat4", "Math.LerpFloat4",
 			"Math.MakeFloat3", "Math.BreakFloat3",
-			"Math.MakeFloat4", "Math.BreakFloat4", "Shader.TexCoord0", "Shader.TexCoord1"
+			"Math.MakeFloat4", "Math.BreakFloat4"
 		};
 		return supported.contains(type);
 	}
@@ -193,12 +234,12 @@ namespace
 
 	GraphDiagnostic ResolveProducerOutput(
 		const Graph& graph, const GraphRegistry& registry,
-		GraphPinReference outputPin, EGraphPinType expectedType,
+		GraphPinReference outputPin, EGraphPinType expectedType, EShaderStage stage,
 		std::vector<GraphPinReference>& callStack, std::string& outExpression);
 
 	GraphDiagnostic ResolveInputExpression(
 		const Graph& graph, const GraphRegistry& registry,
-		GraphPinReference inputPin, EGraphPinType expectedType,
+		GraphPinReference inputPin, EGraphPinType expectedType, EShaderStage stage,
 		std::vector<GraphPinReference>& callStack, std::string& outExpression)
 	{
 		if (std::find(callStack.begin(), callStack.end(), inputPin) != callStack.end() ||
@@ -220,7 +261,7 @@ namespace
 		{
 			callStack.push_back(inputPin);
 			const auto result = ResolveProducerOutput(
-				graph, registry, link->From, expectedType, callStack, outExpression);
+				graph, registry, link->From, expectedType, stage, callStack, outExpression);
 			callStack.pop_back();
 			return result;
 		}
@@ -267,7 +308,7 @@ namespace
 
 	GraphDiagnostic ResolveProducerOutput(
 		const Graph& graph, const GraphRegistry& registry,
-		GraphPinReference outputPin, EGraphPinType expectedType,
+		GraphPinReference outputPin, EGraphPinType expectedType, EShaderStage stage,
 		std::vector<GraphPinReference>& callStack, std::string& outExpression)
 	{
 		const auto* producer = graph.FindNode(outputPin.Node);
@@ -279,6 +320,11 @@ namespace
 			return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
 		const auto& type = producer->Type;
+		const auto resolvePin = [&](const char* pinKey, EGraphPinType pinType, std::string& dst)
+		{
+			return ResolveInputExpression(graph, registry, { outputPin.Node, pinKey }, pinType, stage, callStack, dst);
+		};
+
 		if (type.rfind("Variable.Get.", 0) == 0 && type.size() > 13)
 		{
 			if (outputPin.Pin != "value")
@@ -294,14 +340,14 @@ namespace
 		{
 			if (outputPin.Pin != "result")
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-			return ResolveInputExpression(graph, registry, { outputPin.Node, "value" }, expectedType, callStack, outExpression);
+			return resolvePin("value", expectedType, outExpression);
 		}
 
 		if (type == "Core.Reroute.Float" || type == "Core.Reroute.Float2" || type == "Core.Reroute.Float3" || type == "Core.Reroute.Float4")
 		{
 			if (outputPin.Pin != "Out")
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
-			return ResolveInputExpression(graph, registry, { outputPin.Node, "In" }, expectedType, callStack, outExpression);
+			return resolvePin("In", expectedType, outExpression);
 		}
 
 		if (type == "Shader.TexCoord0" || type == "Shader.TexCoord1")
@@ -312,10 +358,72 @@ namespace
 			return {};
 		}
 
+		if (type == "Shader.Time")
+		{
+			if (outputPin.Pin != "time" || expectedType != EGraphPinType::Float)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = "commonData.Time";
+			return {};
+		}
+
+		if (type == "Shader.WorldPosition")
+		{
+			if (outputPin.Pin != "position" || expectedType != EGraphPinType::Float3)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = stage == EShaderStage::Vertex ? "worldPosition.xyz" : "input.WorldPos";
+			return {};
+		}
+
+		if (type == "Shader.WorldNormal")
+		{
+			if (outputPin.Pin != "normal" || expectedType != EGraphPinType::Float3)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = stage == EShaderStage::Vertex ? "worldNormal" : "normalize(input.Normal)";
+			return {};
+		}
+
+		if (type == "Shader.ViewDirection")
+		{
+			if (outputPin.Pin != "direction" || expectedType != EGraphPinType::Float3)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = stage == EShaderStage::Vertex
+				? "normalize(commonData.CameraPos - worldPosition.xyz)"
+				: "normalize(commonData.CameraPos - input.WorldPos)";
+			return {};
+		}
+
+		if (type == "Shader.Fresnel")
+		{
+			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string normalExpr = stage == EShaderStage::Vertex ? "worldNormal" : "normalize(input.Normal)";
+			if (HasInputLink(graph, producer->Id, "normal"))
+			{
+				auto res = resolvePin("normal", EGraphPinType::Float3, normalExpr);
+				if (!res.Succeeded()) return res;
+			}
+
+			std::string viewExpr = stage == EShaderStage::Vertex
+				? "normalize(commonData.CameraPos - worldPosition.xyz)"
+				: "normalize(commonData.CameraPos - input.WorldPos)";
+			if (HasInputLink(graph, producer->Id, "viewDir"))
+			{
+				auto res = resolvePin("viewDir", EGraphPinType::Float3, viewExpr);
+				if (!res.Succeeded()) return res;
+			}
+
+			std::string powerExpr;
+			auto res = resolvePin("power", EGraphPinType::Float, powerExpr);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "pow(1.0f - saturate(dot(normalize(" + normalExpr + "), normalize(" + viewExpr + "))), " + powerExpr + ")";
+			return {};
+		}
+
 		if (type == "Shader.TextureSample")
 		{
-			const auto& rootPin = callStack.front().Pin;
-			if (rootPin == "worldPositionOffset" || rootPin == "customUV0" || rootPin == "customUV1")
+			if (stage == EShaderStage::Vertex)
 				return { EGraphError::UnsupportedCompilation, producer->Id, "uv", 0, "ShaderGraph.TextureSamplePixelOnly" };
 
 			const int slot = GraphTextureSlot(*producer);
@@ -323,48 +431,140 @@ namespace
 				return { EGraphError::InvalidDefault, producer->Id, "slot", 0, "ShaderGraph.TextureSlotRange" };
 
 			std::string uv = "input.TexCoord";
-			const GraphPinReference uvPin{ producer->Id, "uv" };
-			const auto links = graph.GetLinks();
-			if (std::any_of(links.begin(), links.end(), [&](const GraphLink& link) { return link.To == uvPin; }))
+			if (HasInputLink(graph, producer->Id, "uv"))
 			{
-				auto result = ResolveInputExpression(graph, registry, uvPin, EGraphPinType::Float2, callStack, uv);
+				auto result = resolvePin("uv", EGraphPinType::Float2, uv);
 				if (!result.Succeeded()) return result;
 			}
 			outExpression = "SampleGraphTexture" + std::to_string(slot) + "(" + uv + ")";
 			return {};
 		}
 
-		if (type == "Math.AddFloat" || type == "Math.MultiplyFloat")
+		// 이항 산술 연산 (+, -, *, /)
+		auto tryBinaryOp = [&](const char* op, EGraphPinType operandType) -> std::optional<GraphDiagnostic>
 		{
-			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float)
-				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			if (outputPin.Pin != "result" || expectedType != operandType)
+				return GraphDiagnostic{ EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
 			std::string a, b;
-			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "a" }, EGraphPinType::Float, callStack, a);
+			auto res = resolvePin("a", operandType, a);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "b" }, EGraphPinType::Float, callStack, b);
+			res = resolvePin("b", operandType, b);
 			if (!res.Succeeded()) return res;
 
-			const char* op = (type == "Math.AddFloat") ? " + " : " * ";
 			outExpression = "(" + a + op + b + ")";
+			return GraphDiagnostic{};
+		};
+
+		if (type == "Math.AddFloat")      return *tryBinaryOp(" + ", EGraphPinType::Float);
+		if (type == "Math.SubtractFloat") return *tryBinaryOp(" - ", EGraphPinType::Float);
+		if (type == "Math.MultiplyFloat") return *tryBinaryOp(" * ", EGraphPinType::Float);
+		if (type == "Math.DivideFloat")   return *tryBinaryOp(" / ", EGraphPinType::Float);
+		if (type == "Math.AddFloat2")      return *tryBinaryOp(" + ", EGraphPinType::Float2);
+		if (type == "Math.SubtractFloat2") return *tryBinaryOp(" - ", EGraphPinType::Float2);
+		if (type == "Math.MultiplyFloat2") return *tryBinaryOp(" * ", EGraphPinType::Float2);
+		if (type == "Math.AddFloat3")      return *tryBinaryOp(" + ", EGraphPinType::Float3);
+		if (type == "Math.SubtractFloat3") return *tryBinaryOp(" - ", EGraphPinType::Float3);
+		if (type == "Math.MultiplyFloat3") return *tryBinaryOp(" * ", EGraphPinType::Float3);
+		if (type == "Math.AddFloat4")      return *tryBinaryOp(" + ", EGraphPinType::Float4);
+		if (type == "Math.SubtractFloat4") return *tryBinaryOp(" - ", EGraphPinType::Float4);
+		if (type == "Math.MultiplyFloat4") return *tryBinaryOp(" * ", EGraphPinType::Float4);
+
+		if (type == "Math.ScaleFloat3" || type == "Math.ScaleFloat4")
+		{
+			const auto vecType = (type == "Math.ScaleFloat3") ? EGraphPinType::Float3 : EGraphPinType::Float4;
+			if (outputPin.Pin != "result" || expectedType != vecType)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string value, scale;
+			auto res = resolvePin("value", vecType, value);
+			if (!res.Succeeded()) return res;
+			res = resolvePin("scale", EGraphPinType::Float, scale);
+			if (!res.Succeeded()) return res;
+
+			outExpression = "(" + value + " * " + scale + ")";
 			return {};
 		}
 
-		if (type == "Math.AddFloat2" || type == "Math.MultiplyFloat2")
+		// 단항 HLSL 내장 함수
+		auto tryUnaryFn = [&](const char* fn, EGraphPinType pinType) -> GraphDiagnostic
 		{
-			if (outputPin.Pin != "result" || expectedType != EGraphPinType::Float2)
+			if (outputPin.Pin != "result" || expectedType != pinType)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
-			std::string a, b;
-			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "a" }, EGraphPinType::Float2, callStack, a);
-			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "b" }, EGraphPinType::Float2, callStack, b);
+			std::string val;
+			auto res = resolvePin("value", pinType, val);
 			if (!res.Succeeded()) return res;
 
-			const char* op = (type == "Math.AddFloat2") ? " + " : " * ";
-			outExpression = "(" + a + op + b + ")";
+			outExpression = std::string(fn) + "(" + val + ")";
 			return {};
-		}
+		};
+
+		if (type == "Math.SaturateFloat")   return tryUnaryFn("saturate", EGraphPinType::Float);
+		if (type == "Math.AbsFloat")        return tryUnaryFn("abs", EGraphPinType::Float);
+		if (type == "Math.SinFloat")        return tryUnaryFn("sin", EGraphPinType::Float);
+		if (type == "Math.CosFloat")        return tryUnaryFn("cos", EGraphPinType::Float);
+		if (type == "Math.NormalizeFloat2") return tryUnaryFn("normalize", EGraphPinType::Float2);
+		if (type == "Math.NormalizeFloat3") return tryUnaryFn("normalize", EGraphPinType::Float3);
+		if (type == "Math.NormalizeFloat4") return tryUnaryFn("normalize", EGraphPinType::Float4);
+
+		// 이항 HLSL 내장 함수
+		auto tryBinaryFn = [&](const char* fn, const char* pin0, const char* pin1,
+			EGraphPinType argType, EGraphPinType retType) -> GraphDiagnostic
+		{
+			if (outputPin.Pin != "result" || expectedType != retType)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string p0, p1;
+			auto res = resolvePin(pin0, argType, p0);
+			if (!res.Succeeded()) return res;
+			res = resolvePin(pin1, argType, p1);
+			if (!res.Succeeded()) return res;
+
+			outExpression = std::string(fn) + "(" + p0 + ", " + p1 + ")";
+			return {};
+		};
+
+		if (type == "Math.MinFloat")  return tryBinaryFn("min", "a", "b", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.MaxFloat")  return tryBinaryFn("max", "a", "b", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.PowFloat")  return tryBinaryFn("pow", "base", "exponent", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.StepFloat") return tryBinaryFn("step", "edge", "value", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.DotFloat2") return tryBinaryFn("dot", "a", "b", EGraphPinType::Float2, EGraphPinType::Float);
+		if (type == "Math.DotFloat3") return tryBinaryFn("dot", "a", "b", EGraphPinType::Float3, EGraphPinType::Float);
+		if (type == "Math.DotFloat4") return tryBinaryFn("dot", "a", "b", EGraphPinType::Float4, EGraphPinType::Float);
+
+		// 삼항 HLSL 내장 함수
+		auto tryTernaryFn = [&](const char* fn, const char* pin0, EGraphPinType type0,
+			const char* pin1, EGraphPinType type1, const char* pin2, EGraphPinType type2,
+			EGraphPinType retType) -> GraphDiagnostic
+		{
+			if (outputPin.Pin != "result" || expectedType != retType)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			std::string p0, p1, p2;
+			auto res = resolvePin(pin0, type0, p0);
+			if (!res.Succeeded()) return res;
+			res = resolvePin(pin1, type1, p1);
+			if (!res.Succeeded()) return res;
+			res = resolvePin(pin2, type2, p2);
+			if (!res.Succeeded()) return res;
+
+			outExpression = std::string(fn) + "(" + p0 + ", " + p1 + ", " + p2 + ")";
+			return {};
+		};
+
+		if (type == "Math.LerpFloat")
+			return tryTernaryFn("lerp", "a", EGraphPinType::Float, "b", EGraphPinType::Float, "t", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.LerpFloat2")
+			return tryTernaryFn("lerp", "a", EGraphPinType::Float2, "b", EGraphPinType::Float2, "t", EGraphPinType::Float, EGraphPinType::Float2);
+		if (type == "Math.LerpFloat3")
+			return tryTernaryFn("lerp", "a", EGraphPinType::Float3, "b", EGraphPinType::Float3, "t", EGraphPinType::Float, EGraphPinType::Float3);
+		if (type == "Math.LerpFloat4")
+			return tryTernaryFn("lerp", "a", EGraphPinType::Float4, "b", EGraphPinType::Float4, "t", EGraphPinType::Float, EGraphPinType::Float4);
+		if (type == "Math.ClampFloat")
+			return tryTernaryFn("clamp", "value", EGraphPinType::Float, "minimum", EGraphPinType::Float, "maximum", EGraphPinType::Float, EGraphPinType::Float);
+		if (type == "Math.SmoothStepFloat")
+			return tryTernaryFn("smoothstep", "edge0", EGraphPinType::Float, "edge1", EGraphPinType::Float, "value", EGraphPinType::Float, EGraphPinType::Float);
 
 		if (type == "Math.MakeFloat3")
 		{
@@ -372,11 +572,11 @@ namespace
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
 			std::string x, y, z;
-			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
+			auto res = resolvePin("x", EGraphPinType::Float, x);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
+			res = resolvePin("y", EGraphPinType::Float, y);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
+			res = resolvePin("z", EGraphPinType::Float, z);
 			if (!res.Succeeded()) return res;
 
 			outExpression = "float3(" + x + ", " + y + ", " + z + ")";
@@ -389,13 +589,13 @@ namespace
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
 			std::string x, y, z, w;
-			auto res = ResolveInputExpression(graph, registry, { outputPin.Node, "x" }, EGraphPinType::Float, callStack, x);
+			auto res = resolvePin("x", EGraphPinType::Float, x);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "y" }, EGraphPinType::Float, callStack, y);
+			res = resolvePin("y", EGraphPinType::Float, y);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "z" }, EGraphPinType::Float, callStack, z);
+			res = resolvePin("z", EGraphPinType::Float, z);
 			if (!res.Succeeded()) return res;
-			res = ResolveInputExpression(graph, registry, { outputPin.Node, "w" }, EGraphPinType::Float, callStack, w);
+			res = resolvePin("w", EGraphPinType::Float, w);
 			if (!res.Succeeded()) return res;
 
 			outExpression = "float4(" + x + ", " + y + ", " + z + ", " + w + ")";
@@ -407,11 +607,7 @@ namespace
 			if (expectedType != EGraphPinType::Float)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
-			const auto links = graph.GetLinks();
-			const auto link = std::find_if(links.begin(), links.end(),
-				[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
-
-			if (link == links.end())
+			if (!HasInputLink(graph, outputPin.Node, "value"))
 			{
 				const auto overrideValue = producer->InputValues.find("value");
 				const auto* pin = registry.FindPin(type, "value");
@@ -431,8 +627,7 @@ namespace
 			}
 
 			std::string vecExpr;
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float3, callStack, vecExpr);
+			const auto res = resolvePin("value", EGraphPinType::Float3, vecExpr);
 			if (!res.Succeeded()) return res;
 
 			outExpression = "(" + vecExpr + ")." + outputPin.Pin;
@@ -444,11 +639,7 @@ namespace
 			if (expectedType != EGraphPinType::Float)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 
-			const auto links = graph.GetLinks();
-			const auto link = std::find_if(links.begin(), links.end(),
-				[&](const GraphLink& item) { return item.To == GraphPinReference{ outputPin.Node, "value" }; });
-
-			if (link == links.end())
+			if (!HasInputLink(graph, outputPin.Node, "value"))
 			{
 				const auto overrideValue = producer->InputValues.find("value");
 				const auto* pin = registry.FindPin(type, "value");
@@ -469,8 +660,7 @@ namespace
 			}
 
 			std::string vecExpr;
-			const auto res = ResolveInputExpression(
-				graph, registry, { outputPin.Node, "value" }, EGraphPinType::Float4, callStack, vecExpr);
+			const auto res = resolvePin("value", EGraphPinType::Float4, vecExpr);
 			if (!res.Succeeded()) return res;
 
 			outExpression = "(" + vecExpr + ")." + outputPin.Pin;
@@ -488,7 +678,7 @@ namespace
 
 		const char* colorPin = outputNode->Type == "Shader.MaterialOutput" ? "baseColor" : "color";
 		return ResolveInputExpression(graph, registry, { outputNode->Id, colorPin },
-			EGraphPinType::Float4, callStack, outColor);
+			EGraphPinType::Float4, EShaderStage::Pixel, callStack, outColor);
 	}
 }
 
@@ -553,20 +743,20 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 		if (hasInputLink("worldPositionOffset"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, callStack, wpoExpression);
+				graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, EShaderStage::Vertex, callStack, wpoExpression);
 			if (!result.Succeeded()) return result;
 		}
 
 		if (hasInputLink("customUV0"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "customUV0" }, EGraphPinType::Float2, callStack, uv0Expression);
+				graph, registry, { outputNode->Id, "customUV0" }, EGraphPinType::Float2, EShaderStage::Vertex, callStack, uv0Expression);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("customUV1"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "customUV1" }, EGraphPinType::Float2, callStack, uv1Expression);
+				graph, registry, { outputNode->Id, "customUV1" }, EGraphPinType::Float2, EShaderStage::Vertex, callStack, uv1Expression);
 			if (!result.Succeeded()) return result;
 		}
 	}
@@ -611,13 +801,6 @@ VS_OUTPUT output;
 float4x4 world = g_Instances[instanceId].WorldMatrix;
 float4 worldPosition = mul(world, float4(input.Position, 1.0f));
 
-// [World Position Offset (WPO) 그래프 표현식 주입]
-float3 worldPosOffset = )" + wpoExpression + R"(;
-worldPosition.xyz += worldPosOffset;
-
-output.Position = mul(commonData.ViewProjection, worldPosition);
-output.WorldPos = worldPosition.xyz;
-
 float3 axisX = float3(world[0][0], world[1][0], world[2][0]);
 float3 axisY = float3(world[0][1], world[1][1], world[2][1]);
 float3 axisZ = float3(world[0][2], world[1][2], world[2][2]);
@@ -627,7 +810,15 @@ float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
                     input.Normal.z * cross(axisX, axisY);
 
 float determinantSign = dot(axisX, cross(axisY, axisZ)) < 0.0f ? -1.0f : 1.0f;
-output.Normal = normalize(normalWorld * determinantSign);
+float3 worldNormal = normalize(normalWorld * determinantSign);
+
+// [World Position Offset (WPO) 그래프 표현식 주입]
+float3 worldPosOffset = )" + wpoExpression + R"(;
+worldPosition.xyz += worldPosOffset;
+
+output.Position = mul(commonData.ViewProjection, worldPosition);
+output.WorldPos = worldPosition.xyz;
+output.Normal = worldNormal;
 output.TexCoord = )" + uv0Expression + R"(;
 output.TexCoord1 = )" + uv1Expression + R"(;
 output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
@@ -658,15 +849,23 @@ GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
 	if (!diagnostic.Succeeded()) return diagnostic;
 
 	std::string source;
+	if (colorLiteral.find("commonData.") != std::string::npos)
+	{
+		source += "#include \"common.hlsli\"\n";
+	}
 	if (colorLiteral.find("gMaterial.") != std::string::npos ||
 		colorLiteral.find("SampleGraphTexture") != std::string::npos)
 	{
 		source += BuildMaterialConstantsHlsl(BuildMaterialBufferLayout(graph));
 		source += BuildGraphTextureHlsl(graph);
 	}
-	const bool needsUv = colorLiteral.find("input.") != std::string::npos;
-	if (needsUv) source += "struct PS_INPUT { float2 TexCoord : TEXCOORD0; float2 TexCoord1 : TEXCOORD1; };\n";
-	source += needsUv ? "float4 main(PS_INPUT input)" : "float4 main()";
+	const bool needsInput = colorLiteral.find("input.") != std::string::npos;
+	if (needsInput)
+	{
+		source += "struct PS_INPUT { float3 WorldPos : WORLD_POSITION; float3 Normal : NORMAL; "
+			"float2 TexCoord : TEXCOORD0; float2 TexCoord1 : TEXCOORD1; };\n";
+	}
+	source += needsInput ? "float4 main(PS_INPUT input)" : "float4 main()";
 	source += " : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
 	outSource.swap(source);
 	return {};
@@ -682,7 +881,8 @@ GraphDiagnostic ShaderGraphCompiler::GenerateUnlitMaterialHlsl(
 	const auto diagnostic = ResolveShaderOutputColor(graph, registry, outputNode, callStack, colorLiteral);
 	if (!diagnostic.Succeeded()) return diagnostic;
 
-	std::string source = R"(#include "shading_flags.hlsli"
+	std::string source = R"(#include "common.hlsli"
+#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
@@ -748,7 +948,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 	if (hasInputLink("baseColor"))
 	{
 		auto result = ResolveInputExpression(
-			graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, callStack, baseColor);
+			graph, registry, { outputNode->Id, "baseColor" }, EGraphPinType::Float4, EShaderStage::Pixel, callStack, baseColor);
 		if (!result.Succeeded()) return result;
 	}
 	else
@@ -762,38 +962,56 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 	std::string cavity = "gMaterial.cavity";
 	std::string ao = "gMaterial.ao";
 	std::string emissive = "gMaterial.emissiveColor";
+	std::string normalExpr;
+	std::string opacityMaskExpr;
+	bool hasNormalLink = false;
+	bool hasOpacityMaskLink = false;
 
 	if (outputNode->Type == "Shader.MaterialOutput")
 	{
 		if (hasInputLink("roughness"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, callStack, roughness);
+				graph, registry, { outputNode->Id, "roughness" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, roughness);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("metallic"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, callStack, metallic);
+				graph, registry, { outputNode->Id, "metallic" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, metallic);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("cavity"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, callStack, cavity);
+				graph, registry, { outputNode->Id, "cavity" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, cavity);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("ao"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
+				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, ao);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("emissive"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
+				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, EShaderStage::Pixel, callStack, emissive);
 			if (!result.Succeeded()) return result;
+		}
+		if (hasInputLink("normal"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "normal" }, EGraphPinType::Float3, EShaderStage::Pixel, callStack, normalExpr);
+			if (!result.Succeeded()) return result;
+			hasNormalLink = true;
+		}
+		if (hasInputLink("opacityMask"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "opacityMask" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, opacityMaskExpr);
+			if (!result.Succeeded()) return result;
+			hasOpacityMaskLink = true;
 		}
 	}
 
@@ -804,8 +1022,13 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialHlsl(
 	const char* materialDiffuseSample = useMaterialTexture
 		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
 		: "";
+	const std::string opacityMaskClip = hasOpacityMaskLink
+		? "float opacityMask = " + opacityMaskExpr + ";\nclip(opacityMask - 0.5f);\n"
+		: "";
+	const std::string normalCalcBlock = BuildNormalCalculationHlsl(normalExpr, hasNormalLink);
 
-	std::string source = R"(#include "shading_flags.hlsli"
+	std::string source = R"(#include "common.hlsli"
+#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
@@ -833,10 +1056,10 @@ PS_OUTPUT main(PS_INPUT input)
 {
 PS_OUTPUT output;
 float4 diffuse = ()" + baseColor + R"() * input.Color;
-)" + materialDiffuseSample + R"(
+)" + materialDiffuseSample + opacityMaskClip + R"(
 if (diffuse.a < 0.01f) discard;
 
-float3 N = normalize(input.Normal);
+)" + normalCalcBlock + R"(
 float roughness = clamp()" + roughness + R"(, 0.04f, 1.0f);
 float metallic = saturate()" + metallic + R"();
 float cavity = clamp()" + cavity + R"(, 0.0f, 1.0f);
@@ -881,7 +1104,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 	if (hasInputLink(colorPin))
 	{
 		auto result = ResolveInputExpression(
-			graph, registry, { outputNode->Id, colorPin }, EGraphPinType::Float4, callStack, baseColor);
+			graph, registry, { outputNode->Id, colorPin }, EGraphPinType::Float4, EShaderStage::Pixel, callStack, baseColor);
 		if (!result.Succeeded()) return result;
 	}
 	else
@@ -891,19 +1114,37 @@ GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 
 	std::string emissive = "gMaterial.emissiveColor";
 	std::string ao = "gMaterial.ao";
+	std::string normalExpr;
+	std::string opacityMaskExpr;
+	bool hasNormalLink = false;
+	bool hasOpacityMaskLink = false;
 	if (outputNode->Type == "Shader.MaterialOutput")
 	{
 		if (hasInputLink("emissive"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, callStack, emissive);
+				graph, registry, { outputNode->Id, "emissive" }, EGraphPinType::Float3, EShaderStage::Pixel, callStack, emissive);
 			if (!result.Succeeded()) return result;
 		}
 		if (hasInputLink("ao"))
 		{
 			auto result = ResolveInputExpression(
-				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, callStack, ao);
+				graph, registry, { outputNode->Id, "ao" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, ao);
 			if (!result.Succeeded()) return result;
+		}
+		if (hasInputLink("normal"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "normal" }, EGraphPinType::Float3, EShaderStage::Pixel, callStack, normalExpr);
+			if (!result.Succeeded()) return result;
+			hasNormalLink = true;
+		}
+		if (hasInputLink("opacityMask"))
+		{
+			auto result = ResolveInputExpression(
+				graph, registry, { outputNode->Id, "opacityMask" }, EGraphPinType::Float, EShaderStage::Pixel, callStack, opacityMaskExpr);
+			if (!result.Succeeded()) return result;
+			hasOpacityMaskLink = true;
 		}
 	}
 
@@ -914,8 +1155,13 @@ GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 	const char* materialDiffuseSample = useMaterialTexture
 		? "if ((gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP) != 0u)\n{\n\tdiffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);\n}\n"
 		: "";
+	const std::string opacityMaskClip = hasOpacityMaskLink
+		? "float opacityMask = " + opacityMaskExpr + ";\nclip(opacityMask - 0.5f);\n"
+		: "";
+	const std::string normalCalcBlock = BuildNormalCalculationHlsl(normalExpr, hasNormalLink);
 
-	std::string source = R"(#include "shading_flags.hlsli"
+	std::string source = R"(#include "common.hlsli"
+#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
@@ -933,11 +1179,11 @@ nointerpolation float PickingId : TEXCOORD5;
 float4 main(PS_INPUT input) : SV_TARGET0
 {
 float4 diffuse = ()" + baseColor + R"() * input.Color;
-)" + materialDiffuseSample + R"(
+)" + materialDiffuseSample + opacityMaskClip + R"(
 float alpha = saturate(diffuse.a);
 if (alpha < 0.001f) discard;
 
-float3 N = normalize(input.Normal);
+)" + normalCalcBlock + R"(
 float3 L = normalize(float3(0.45f, 0.80f, 0.38f));
 float ndl = saturate(dot(N, L));
 float hemi = 0.35f + 0.65f * (N.y * 0.5f + 0.5f);
