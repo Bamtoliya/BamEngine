@@ -27,9 +27,30 @@
 #include "ActionTimelineEvents.h"
 #include "ActionTimelinePlayback.h"
 #include "SystemManager.h"
+#include <chrono>
+#include <filesystem>
+#include <unordered_map>
 
 namespace
 {
+	enum class TimelineResourceLoadStage { ScenePreparation, Playback };
+	using TimelineClock = std::chrono::steady_clock;
+
+	void LogSlowTimelineWork(TimelineClock::time_point start, std::string_view operation, const std::string& path)
+	{
+		const double elapsedMs = std::chrono::duration<double, std::milli>(TimelineClock::now() - start).count();
+		if (elapsedMs >= 2.0)
+			BAM_LOG(Info, "Engine", "ActionTimeline", "{} took {:.2f} ms: {}", operation, elapsedMs, path);
+	}
+
+	Handle LoadTimelineResource(const std::string& path, TimelineResourceLoadStage stage)
+	{
+		const auto start = TimelineClock::now();
+		const auto handle = ResourceManager::Get().LoadFile(path);
+		LogSlowTimelineWork(start, stage == TimelineResourceLoadStage::ScenePreparation ? "Scene preparation load" : "Playback load", path);
+		return handle;
+	}
+
 	struct SocketWorldTransform
 	{
 		vec3 position = vec3(0.0f);
@@ -109,6 +130,12 @@ namespace
 		return {};
 	}
 
+	ResourceHandle<Animation> FindTargetModelClip(const entt::registry& world, entt::entity animatorEntity, const std::wstring& clipName)
+	{
+		const auto* instance = animatorEntity != entt::null ? world.try_get<ModelInstanceComponent>(animatorEntity) : nullptr;
+		return instance ? FindClipByName(instance->modelHandle.Get(), clipName) : ResourceHandle<Animation>{};
+	}
+
 	// 타임라인을 작성한 클립을 찾는다. Animator 엔티티(모델 루트)의 연결 모델을 먼저 보고, 없으면 타임라인에 저장된 작성 모델에서 찾는다.
 	// 클립은 스켈레톤 기준이므로 같은 스켈레톤을 쓰는 다른 모델에도 적용할 수 있다.
 	ResourceHandle<Animation> ResolveTimelineClip(const entt::registry& world, entt::entity animatorEntity, const ActionTimelineAsset& asset)
@@ -116,12 +143,10 @@ namespace
 		if (asset.GetClipName().empty()) return {};
 		const std::wstring clipName = StrToWStr(asset.GetClipName());
 
-		ResourceHandle<Animation> clip;
-		if (const auto* instance = animatorEntity != entt::null ? world.try_get<ModelInstanceComponent>(animatorEntity) : nullptr)
-			clip = FindClipByName(instance->modelHandle.Get(), clipName);
+		auto clip = FindTargetModelClip(world, animatorEntity, clipName);
 		if (!clip.IsValid() && !asset.GetModelPath().empty())
 		{
-			const ResourceHandle<Model> authoringModel(ResourceManager::Get().LoadFile(StrToWStr(asset.GetModelPath())));
+			const ResourceHandle<Model> authoringModel(LoadTimelineResource(asset.GetModelPath(), TimelineResourceLoadStage::Playback));
 			const auto authoringSkeletonHandle = authoringModel.IsValid() ? authoringModel->GetSkeleton() : ResourceHandle<Skeleton>();
 			const auto* targetSkeleton = animatorEntity != entt::null ? FindEnabledSkeletonInHierarchy(world, animatorEntity) : nullptr;
 			const auto* authoringSkeleton = authoringSkeletonHandle.Get();
@@ -284,6 +309,58 @@ ActionTimelineSystem* ActionTimelineSystem::Create(void* arg)
 	return instance;
 }
 
+void ActionTimelineSystem::PrepareSceneResources(const Scene& scene)
+{
+	if (!ResourceManager::IsCreated()) return;
+
+	const auto& world = scene.GetRegistry();
+	std::unordered_map<std::string, Handle> preparedPaths;
+	const auto prepare = [&preparedPaths](const std::string& path) -> Handle
+	{
+		if (path.empty()) return {};
+		const auto [entry, inserted] = preparedPaths.try_emplace(path);
+		if (inserted)
+		{
+			try
+			{
+				entry->second = LoadTimelineResource(path, TimelineResourceLoadStage::ScenePreparation);
+			}
+			catch (const std::filesystem::filesystem_error& error)
+			{
+				BAM_LOG(Warn, "Engine", "ActionTimeline", "Scene preparation could not load '{}': {}", path, error.what());
+			}
+		}
+		return entry->second;
+	};
+
+	for (auto [entity, timeline] : world.view<const ActionTimelineComponent>().each())
+	{
+		if (!IsComponentEnabled<ActionTimelineComponent>(world, entity) || timeline.timelinePath.empty()) continue;
+		const auto handle = prepare(timeline.timelinePath);
+		const auto* asset = ResourceHandle<ActionTimelineAsset>(handle).Get();
+		if (!asset) continue;
+
+		if (!asset->GetClipName().empty() && !asset->GetModelPath().empty())
+		{
+			const auto animator = FindAnimatorEntityInHierarchy(world, entity);
+			if (!FindTargetModelClip(world, animator, StrToWStr(asset->GetClipName())).IsValid())
+				prepare(asset->GetModelPath());
+		}
+
+		for (const auto& track : asset->GetNotifyTracks())
+		{
+			if (track.IsMuted) continue;
+			for (const auto& notify : track.Notifies)
+			{
+				if (notify.Type == EAnimNotifyType::Sound)
+					prepare(notify.SoundPath);
+				else if (notify.Type == EAnimNotifyType::SpawnCompositeVFX)
+					prepare(notify.VFXPath);
+			}
+		}
+	}
+}
+
 void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
 	(void)registry;
@@ -394,7 +471,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				timeline.notifyStartPending = true;
 				if (!timeline.timelinePath.empty())
 				{
-					auto handle = ResourceManager::Get().LoadFile(StrToWStr(timeline.timelinePath));
+					auto handle = LoadTimelineResource(timeline.timelinePath, TimelineResourceLoadStage::Playback);
 					timeline.timelineAsset = ResourceHandle<ActionTimelineAsset>(handle);
 					if (const auto* loaded = timeline.timelineAsset.Get())
 					{
@@ -480,12 +557,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 						// (2) 소리 노티파이 (Audio FX)
 						if (notify.Type == EAnimNotifyType::Sound && !notify.SoundPath.empty())
 						{
-							auto audioHandle = ResourceManager::Get().LoadFile(StrToWStr(notify.SoundPath));
+							auto audioHandle = LoadTimelineResource(notify.SoundPath, TimelineResourceLoadStage::Playback);
 							if (auto* clip = dynamic_cast<AudioClip*>(ResourceManager::Get().GetResource(audioHandle)))
 							{
 								if (auto* snd = clip->GetFMODSound())
 								{
+									const auto start = TimelineClock::now();
 									AudioManager::Get().PlayOneShot(snd, notify.SoundVolume);
+									LogSlowTimelineWork(start, "FMOD playSound", notify.SoundPath);
 								}
 							}
 						}
@@ -500,7 +579,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 						// (4) [신설] 복합 VFX 노티파이 (SpawnCompositeVFX)
 						if (notify.Type == EAnimNotifyType::SpawnCompositeVFX && !notify.VFXPath.empty())
 						{
-							auto vfxHandle = ResourceManager::Get().LoadFile(StrToWStr(notify.VFXPath));
+							auto vfxHandle = LoadTimelineResource(notify.VFXPath, TimelineResourceLoadStage::Playback);
 							if (vfxHandle.IsValid())
 							{
 								const auto xform = ComputeSocketWorldTransform(world, entity, notify.SocketBoneName, notify.OffsetPosition, notify.OffsetRotation);

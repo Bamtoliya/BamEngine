@@ -1,6 +1,12 @@
 ﻿#pragma once
 
 #include "SceneManager.h"
+#include "ActionTimelineSystem.h"
+#ifdef BAM_EDITOR
+#include "AnimationSystem.h"
+#include "GraphSystem.h"
+#include "SystemManager.h"
+#endif
 #include <archive/ArchiveInterface.h>
 #include "LightManager.h"
 #include "PrefabInstanceComponent.h"
@@ -50,6 +56,15 @@ EResult SceneManager::OpenScene(Scene* newScene)
 	}
 
 	m_CurrentScene = newScene;
+	ActionTimelineSystem::PrepareSceneResources(*newScene);
+#ifdef BAM_EDITOR
+	AnimationSystem::PrepareSceneControllerResources(*newScene);
+	if (SystemManager::IsCreated())
+	{
+		if (auto* graphs = SystemManager::Get().GetSystem<GraphSystem>())
+			graphs->PrepareSceneGraphs(*newScene);
+	}
+#endif
 	return EResult::Success;
 }
 EResult SceneManager::CloseScene()

@@ -9,6 +9,14 @@
 #include "AnimationSceneQuery.h"
 #include "Skeleton.h"
 #include "AnimatorPoseUpdate.h"
+#ifdef BAM_EDITOR
+#include "Logger.h"
+#include "ReflectionRegistry.h"
+#include "ResourceManager.h"
+#include <filesystem>
+#include <string_view>
+#include <unordered_set>
+#endif
 
 AnimationSystem* AnimationSystem::Create(void* arg)
 {
@@ -20,6 +28,32 @@ AnimationSystem* AnimationSystem::Create(void* arg)
 	}
 	return instance;
 }
+
+#ifdef BAM_EDITOR
+void AnimationSystem::PrepareSceneControllerResources(const Scene& scene)
+{
+	if (!ReflectionRegistry::IsCreated() || !ResourceManager::IsCreated()) return;
+
+	const auto& world = scene.GetRegistry();
+	std::unordered_set<std::string_view> preparedPaths;
+	for (auto [entity, animator] : world.view<const AnimatorComponent>().each())
+	{
+		if (!IsComponentEnabled(world, entity, animator) || animator.controllerPath.empty()) continue;
+		if (!preparedPaths.emplace(animator.controllerPath).second) continue;
+
+		// 역직렬화가 클립을 리소스 매니저에 올린다. 엔티티 바인딩은 첫 게임 틱에서 수행한다.
+		try
+		{
+			AnimatorStateMachine controller;
+			controller.LoadFromFile(animator.controllerPath);
+		}
+		catch (const std::filesystem::filesystem_error& error)
+		{
+			BAM_LOG(Warn, "Engine", "AnimatorTiming", "Scene preparation failed for '{}': {}", animator.controllerPath, error.what());
+		}
+	}
+}
+#endif
 
 void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {

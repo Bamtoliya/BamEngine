@@ -8,8 +8,17 @@
 #include "Logger.h"
 #include "PlatformPath.h"
 #include "InputManager.h"
+#include <chrono>
+#ifdef BAM_EDITOR
+#include <string_view>
+#include <unordered_set>
+#endif
+
 namespace
 {
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+
 	Scene* s_CurrentScene = nullptr;
 	entt::entity s_CurrentEntity = entt::null;
 	float s_CurrentDeltaTime = 0.0f;
@@ -159,6 +168,7 @@ std::filesystem::path GraphSystem::ResolveGraphPath(const std::filesystem::path&
 const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring* sourcePath)
 {
 	if (path.empty() || !ReflectionRegistry::IsCreated()) return nullptr;
+	const auto resolveStart = Clock::now();
 	const auto targetPath = ResolveGraphPath(path);
 	if (targetPath.empty())
 	{
@@ -167,12 +177,28 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	}
 	const auto key = targetPath.wstring();
 	if (sourcePath) *sourcePath = key;
+	CachedGraph candidate;
+#ifdef BAM_EDITOR
+	std::error_code timestampError;
+	candidate.LastWriteTime = std::filesystem::last_write_time(targetPath, timestampError);
+#endif
+	const auto resolveEnd = Clock::now();
 	const auto it = m_GraphCache.find(key);
-	if (it != m_GraphCache.end()) return &it->second;
+	if (it != m_GraphCache.end())
+	{
+#ifdef BAM_EDITOR
+		if (!timestampError && it->second.LastWriteTime == candidate.LastWriteTime)
+			return &it->second.Data;
+		m_GraphCache.erase(it);
+#else
+		return &it->second.Data;
+#endif
+	}
+
+	const auto loadStart = Clock::now();
 	OnInitialize();
 	const auto& reflection = ReflectionRegistry::Get();
-	Graph loadedGraph;
-	const auto result = LoadGraphJson(targetPath, loadedGraph, m_Registry,
+	const auto result = LoadGraphJson(targetPath, candidate.Data, m_Registry,
 		reflection.GetRegistry(), reflection.GetPropertyCodecs());
 	if (!result.Succeeded())
 	{
@@ -180,10 +206,28 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 			WStrToStr(key), static_cast<int>(result.Stage), result.GraphError.Message);
 		return nullptr;
 	}
-	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}'", WStrToStr(key));
-	auto [insertedIt, success] = m_GraphCache.emplace(key, std::move(loadedGraph));
-	return success ? &insertedIt->second : nullptr;
+	auto [insertedIt, success] = m_GraphCache.emplace(key, std::move(candidate));
+	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}' (resolve={:.2f} ms, load={:.2f} ms)",
+		WStrToStr(key), Milliseconds(resolveEnd - resolveStart).count(), Milliseconds(Clock::now() - loadStart).count());
+	return success ? &insertedIt->second.Data : nullptr;
 }
+
+#ifdef BAM_EDITOR
+void GraphSystem::PrepareSceneGraphs(const Scene& scene)
+{
+	const auto& world = scene.GetRegistry();
+	const auto bindings = world.view<GraphBindingComponent>();
+	std::unordered_set<std::wstring_view> preparedPaths;
+	for (const auto entity : bindings)
+	{
+		const auto& binding = bindings.get<GraphBindingComponent>(entity);
+		if (!IsComponentEnabled(world, entity, binding) || binding.graphFile.empty()) continue;
+
+		if (preparedPaths.emplace(binding.graphFile).second)
+			GetOrLoadGraph(binding.graphFile);
+	}
+}
+#endif
 
 void GraphSystem::InvalidateGraphCache(const std::function<bool(const std::filesystem::path&)>& affects)
 {
@@ -219,6 +263,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				const Graph* graphTemplate = GetOrLoadGraph(binding.graphFile, &newState.sourcePath);
 				if (!graphTemplate) continue;
 
+				const auto executorStart = Clock::now();
 				graphTemplate->RegisterVariableNodes(m_Registry);
 
 				newState.loadedPath = binding.graphFile;
@@ -241,6 +286,12 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					else if (node.Type == "Event.OnTriggerExit") newState.triggerExitNodes.push_back(node.Id);
 				}
 				newState.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
+				const auto executorMs = Milliseconds(Clock::now() - executorStart).count();
+				if (executorMs >= 10.0)
+				{
+					BAM_LOG(Info, "GraphSystem", "Load", "Initialized graph executor: '{}' ({:.2f} ms)",
+						WStrToStr(newState.sourcePath), executorMs);
+				}
 				runtime = &world.emplace_or_replace<GraphRuntimeState>(entity, std::move(newState));
 			}
 

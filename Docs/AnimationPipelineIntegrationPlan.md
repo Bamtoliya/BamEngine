@@ -77,20 +77,31 @@ flowchart LR
 
 ## 5. 대표 액션 통합 검증
 
-2~4절을 통과한 뒤 기존 모델 임포트·Animator Graph·Composite VFX·Action Timeline으로 타임라인 하나를 검증한다. `Assets/Scenes/BaselineVerification.bamscene.json`의 Rogue는 이동·점프 Controller와 수동 재생용 `BaselineVerification_Hit.bamtimeline.json`을 참조한다. 현재 타임라인은 Test의 `Rig_Medium_General` 모델과 `Idle_A` 클립을 사용하며 0.4초 지점에서 `handslot.r` 소켓 Composite VFX와 `OnAttackHit` 이벤트를 발생시킨다. `BaselineVerification_Hit.bamvfx.json`은 짧은 고속 확산 이미터를 0.9초 동안 재생한다. 이동·점프와 별도의 액션 재생을 확인하는 샘플이며, 입력·판정까지 연결한 완성된 게임플레이 통합은 아니다. 대표 게임플레이 검증에서는 `ActionTimelineComponent::Play()`와 `ActionTimelineEvents::Subscribe()`를 연결해 판정 카운터 등 확인 가능한 게임 상태를 한 번만 바꾼다. 모듈 언로드 시 기존 구독 해제 방식을 사용한다.
+`BaselineVerification` 씬에서 Rogue를 이동·점프시키고 Q로 타임라인을 재생한다. `BaselineChallengeSystem`은 `OnAttackHit`가 발생했을 때 Rogue와 표적의 거리를 확인하고 재생 한 번에 적중을 최대 한 번 기록한다. 수평 2.5m와 수직 2m 이내에서 적중하며 HUD 세 칸이 차면 완료된다. R로 점수를 초기화한다. 점수와 HUD는 씬에 귀속되며 모듈 언로드 시 이벤트 구독과 함께 정리한다. [샘플 시스템](../Projects/GameModule/Source/BaselineChallengeSystem.cpp) · [입력 설정](../Config/InputActions.json)
+
+샘플 씬과 타임라인은 Git에서 제외되는 로컬 `Assets`에 있다. 다른 체크아웃에서는 샘플을 복사하거나 기준 씬에서 Rogue(Archive ID 5)의 입력을 활성화하고 표적(Archive ID 56)을 준비한다. Rogue 타임라인을 `Project://Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json`에 연결한다. 타임라인은 `Idle_A` 시험 클립을 사용하며 0.4초에 `handslot.r` 소켓 Composite VFX, `OnAttackHit`, `Project://Audio/media/swish.wav` 효과음을 재생한다. [샘플 씬](../Assets/Scenes/BaselineVerification.bamscene.json) · [타임라인](../Assets/Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json)
 
 - [ ] **편집 씬 격리.** Realtime 상태에서 씬 엔티티 수·카메라 FOV·Animator 포즈·타임라인 시간을 기록하고, Inspector Preview 재생 뒤 값이 바뀌지 않는지 확인한다. 독립 프리뷰에서 VFX·오디오가 재생되되 `CustomEvent` 구독자는 호출되지 않아야 한다.
 - [ ] **복원 수명.** Animator Controller가 재생 중인 구성에서 정상 종료, Pause/Resume, Stop, 새 타임라인 재생, 타임라인 컴포넌트만 제거, 소유 엔티티 제거를 각각 확인한다. 원래 클립·시간·재생 상태 복원이 한 번만 발생해야 하며, Animator를 자식 모델 엔티티에 둔 경우도 반복한다.
 - [ ] **Notify 경계.** 시작 0초, 프레임 구간 끝, 클립/타임라인 마지막 시각, 루프 0초 및 여러 루프를 한 프레임에 넘기는 조건에서 패널과 PIE의 발동 횟수를 비교한다. Pause/Resume은 중복 발동하지 않고 스크럽은 게임 이벤트·오디오를 발행하지 않아야 한다.
 - [ ] **패널·참조.** 클립을 선택하고 본 선택기에서 소켓을 정한 뒤 VFX·사운드·`CustomEvent`를 배치한다. 저장·재열기와 한·영 언어 전환 후 클립·시간·소켓 선택이 유지되는지 확인한다. 기존 절대 경로 타임라인을 열어 URI로 다시 저장하고, 모델·클립 누락·동명 클립·없는 본·범위 밖 마커 진단을 확인한다. 기본 스프라이트·파티클 머티리얼이 다른 체크아웃에서도 `Engine://` 셰이더를 찾는지 확인한다.
-- [ ] **PIE.** `BaselineVerification` 샘플에서 타임라인의 Idle_A 포즈, 손 소켓 VFX, `OnAttackHit` 발행, Animator 복귀를 먼저 확인한다. 이어 이동 중 액션을 시작하고 포즈, 소켓 VFX, 사운드, 판정 1회, 이동 복귀를 확인한다. 중도 정지·삭제·재생 반복과 모듈 핫리로드에서 복원과 구독이 중복되지 않는다.
+- [ ] **PIE.** 표적 범위 밖과 안에서 Q를 각각 눌러 점수가 유지되거나 한 칸만 올라가는지 확인한다. 이동 중 액션을 시작해 포즈, 손 소켓 VFX, 소리, Animator 복귀를 확인한다. 세 칸이 차면 완료 색상이 표시되고 R 또는 PIE 재진입 후 점수가 초기화된다. 중도 정지·삭제·재생 반복과 모듈 핫리로드에서 복원과 구독이 중복되지 않는다.
 - [ ] **Windows Client.** 같은 씬을 시작 씬으로 지정해 Release를 내보낸다. 원본 체크아웃에 기대지 않는 다른 위치나 머신에서 Client를 실행해 같은 입력·클립·연출·이벤트·복귀를 확인한다. 에디터 및 Client 버전·설정과 사용한 에셋을 기록한다. [빌드 및 패키징 계획](BuildAndPackagingPlan.md)
+
+### 첫 액션에서 발생한 프레임 지연
+
+2026-11-21 사용자 확인에서 PIE와 독립 Client의 Play 및 Q/R 동작은 정상이고, 두 호스트 모두 첫 Q에서 짧은 멈춤이 있었다. 씬을 열 때 타임라인 리소스를 준비하도록 변경한 뒤 사용자는 첫 Q 멈춤이 사라졌다고 보고했다. Q를 누른 프레임의 재생 시작과 타임라인의 0.4초 노티파이는 각각 비용을 확인할 수 있다. 기존 Editor 로그의 스켈레톤 바인딩 경고는 작성 모델 폴백을 거친 기록이다. [클립 조회와 노티파이](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
+
+- **재생 시작.** 연결 모델에 `Idle_A`가 없으면 작성 모델 `Rig_Medium_General.bammodel`을 `ResourceManager::LoadFile()`로 조회한다. 캐시에 없으면 그 자리에서 로더가 실행된다.
+- **0.4초 노티파이.** VFX 및 `swish.wav`도 같은 방법으로 조회했다. 캐시에 없는 사운드는 `AudioClip::Initialize()`에서 FMOD가 샘플을 동기로 생성한다. VFX는 리소스 로드 뒤에도 런타임 생성과 첫 렌더 제출이 이어진다. [리소스 로드](../Engine/Source/Resource/Private/ResourceManager.cpp) · [오디오 초기화](../Engine/Source/Audio/Private/AudioClip.cpp)
+- **변경.** 씬을 열 때 활성화된 타임라인 컴포넌트의 타임라인, 필요한 작성 모델, 음소거되지 않은 사운드·복합 VFX를 기존 리소스 매니저로 준비한다. 같은 요청 경로는 한 번 조회한다. 준비 비용은 씬 열기에 포함된다. 런타임 중 추가하거나 경로를 수정한 타임라인은 재생 중에 의존 리소스를 로드할 수 있다. [씬 진입](../Engine/Source/World/Scene/Private/SceneManager.cpp) · [리소스 준비 및 재생](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
+- **확인.** Editor와 새로 내보낸 Client를 각각 새 프로세스로 실행하고, 첫 Q와 두 번째 Q의 입력 직후와 0.4초 지점 프레임을 비교한다. 2ms 이상인 `Scene preparation load`, `Playback load`, `FMOD playSound` 로그에서 경로와 시간을 확인한다. 노티파이 프레임이 여전히 길고 로드·오디오 시간이 짧으면 복합 VFX의 첫 생성과 D3D12 첫 제출을 측정한다. 새 빌드의 성능 결과는 확인 대기다.
 
 ## 6. 통합 검증 후 다룰 항목
 
 - **제작 도구 사이 이동.** 대표 액션을 만드는 동안 모델·클립 선택과 VFX 미세조정에 드는 왕복을 기록한다. 반복 비용이 큰 곳에 현재 클립으로 타임라인을 열기, 타임라인의 VFX 참조에서 VFX 편집기를 열기 같은 연결을 추가한다. 기존 에셋 피커와 문서 교체 확인부터 활용한다.
 - **게임플레이 연결 확장.** 먼저 C++ 예제로 실행 계약을 검증한다. 그래프 제작이 필요하면 같은 재생·이벤트 계약을 사용하는 타임라인 재생 및 `On Action Event(Tag)` 노드를 추가한다. 상태 Notify와 액션 Notify의 구독 통합은 기존 사용처와 DLL 수명을 확인한 뒤 판단한다.
-- **미완성 연출과 첫 발동 비용.** 직접 `Particle` Notify는 런타임에서 위치만 계산하며, 기본 카메라 샷 경로는 FOV만 갱신한다. 첫 통합 샘플은 동작이 연결된 Composite VFX·사운드·이벤트로 구성한다. VFX·사운드 발동의 `LoadFile()` 비용은 최초·재생 반복에서 비교하고, 프레임 지연이 확인되면 의존 리소스 준비를 재생 전으로 옮긴다. [런타임 처리](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
+- **미완성 연출.** 직접 `Particle` Notify는 런타임에서 위치를 계산하며, 기본 카메라 샷 경로는 FOV를 갱신한다. 대표 샘플의 연출은 Composite VFX·사운드·이벤트를 사용한다. [런타임 처리](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
 
 ## 7. 빌드와 회귀 검사
 

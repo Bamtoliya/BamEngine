@@ -4,6 +4,7 @@
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "PlatformPath.h"
+#include <chrono>
 
 void AnimatorParameters::SetFloat(const std::string& name, float value)
 {
@@ -563,6 +564,9 @@ std::filesystem::path AnimatorStateMachine::ResolveControllerPath(const std::fil
 
 bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 {
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto started = Clock::now();
 	const auto resolvedPath = ResolveControllerPath(Utf8ToPath(filePath));
 	archive::JsonArchive ar;
 	const auto loadRes = ar.LoadFromFile(resolvedPath);
@@ -572,6 +576,7 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 			static_cast<int>(loadRes.Code), loadRes.Field, filePath, WStrToStr(resolvedPath.wstring()));
 		return false;
 	}
+	const auto fileReady = Clock::now();
 	const auto& refl = Engine::ReflectionRegistry::Get();
 	const auto* type = refl.GetRegistry().FindType<AnimatorStateMachine>();
 	if (!type)
@@ -587,6 +592,12 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 		return false;
 	}
 	*this = std::move(temp);
+	const auto finished = Clock::now();
+	if (Milliseconds(finished - started).count() >= 5.0)
+	{
+		BAM_LOG(Info, "Engine", "AnimatorTiming", "Controller '{}': resolve/read={:.2f} ms, deserialize/resources={:.2f} ms",
+			filePath, Milliseconds(fileReady - started).count(), Milliseconds(finished - fileReady).count());
+	}
 	return true;
 }
 

@@ -8,13 +8,24 @@
 #include "EditorSettingsService.h"
 #include "InputActionSettings.h"
 #include "InputManager.h"
+#include <chrono>
 
 IMPLEMENT_SINGLETON(PIEManager)
+
+PIEManager::PIEManager() = default;
+PIEManager::~PIEManager() = default;
+
+void PIEManager::Free()
+{
+    m_Snapshot.reset();
+}
 
 void PIEManager::StartPlay()
 {
     if (m_State != EPlayState::Edit) return;
 
+    using Clock = std::chrono::steady_clock;
+    const auto requested = Clock::now();
 
     //Input Settings
     {
@@ -26,25 +37,29 @@ void PIEManager::StartPlay()
         }
     }
 
-    // 0. 에디터 프리뷰 사운드 정리
-    Engine::AudioManager::Get().StopAllSounds();
-    // 1. 선택 해제 및 씬 스냅샷 저장
-    SelectionManager::Get().ClearSelection(true);
+    const auto inputReady = Clock::now();
     const EResult snapResult = SnapshotScene();
+    const auto snapshotReady = Clock::now();
     if (snapResult != EResult::Success)
     {
         EDITOR_LOG_ERROR("[PIE] Start failed: Could not snapshot scene.");
         return;
     }
-    // 2. 플레이 상태로 전이
+
+    // 스냅샷 저장에 성공한 뒤 에디터의 프리뷰와 선택을 정리한다.
+    Engine::AudioManager::Get().StopAllSounds();
+    SelectionManager::Get().ClearSelection(true);
     m_State = EPlayState::Play;
-    // 3. 게임 뷰 열기 및 포커스 요청 (실행 상황 표출)
     if (auto* gameView = ImGuiManager::Get().GetImGuiPanel(L"Game View"))
     {
         gameView->Open();
         gameView->Focus();
     }
-    EDITOR_LOG_INFO("[PIE] Started Play Mode");
+    const auto started = Clock::now();
+    using Milliseconds = std::chrono::duration<double, std::milli>;
+    EDITOR_LOG_INFO("[PIE] Started Play Mode: input={:.2f} ms, snapshot={:.2f} ms, transition={:.2f} ms",
+        Milliseconds(inputReady - requested).count(), Milliseconds(snapshotReady - inputReady).count(),
+        Milliseconds(started - snapshotReady).count());
 }
 void PIEManager::Pause()
 {
@@ -90,30 +105,31 @@ void PIEManager::Stop()
 
 EResult PIEManager::SnapshotScene()
 {
-    if (!SceneManager::Get().GetCurrentScene()) return EResult::Fail;
-    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(m_SnapshotPath);
-    std::error_code ec;
-    std::filesystem::create_directories(fullPath.parent_path(), ec);
-    archive::JsonArchive ar;
-    const EResult result = SceneManager::Get().SaveScene(ar, fullPath.wstring());
-    if (result != EResult::Success)
-        EDITOR_LOG_ERROR("[PIE] Scene snapshot failed: {}", ResultToString(result));
-    return result;
+    const auto* scene = SceneManager::Get().GetCurrentScene();
+    if (!scene) return EResult::Fail;
+    auto snapshot = std::make_unique<archive::JsonArchive>();
+    const auto result = scene->WriteArchive(*snapshot);
+    if (!result)
+    {
+        EDITOR_LOG_ERROR("[PIE] Scene snapshot failed: code={}, field={}", static_cast<int32>(result.Code), result.Field);
+        return EResult::Fail;
+    }
+    m_Snapshot = std::move(snapshot);
+    return EResult::Success;
 }
 EResult PIEManager::RestoreScene()
 {
-    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(m_SnapshotPath);
-    if (!std::filesystem::exists(fullPath)) return EResult::FileNotFound;
-    archive::JsonArchive ar;
-    const EResult result = SceneManager::Get().LoadScene(ar, fullPath.wstring());
-    if (result != EResult::Success)
-        return result;
-    std::error_code ec;
-    std::filesystem::remove(fullPath, ec);
-    if (ec)
+    if (!m_Snapshot) return EResult::Fail;
+    Scene* candidate = nullptr;
+    const auto restored = Scene::CreateFromArchive(*m_Snapshot, candidate);
+    if (!restored)
     {
-        EDITOR_LOG_WARN("[PIE] Scene restored, but snapshot cleanup failed: {} ({})",
-            fullPath.string(), ec.message());
+        EDITOR_LOG_ERROR("[PIE] Scene restore failed: code={}, field={}", static_cast<int32>(restored.Code), restored.Field);
+        return EResult::Fail;
     }
-    return EResult::Success;
+    const auto result = SceneManager::Get().OpenScene(candidate);
+    Safe_Release(candidate);
+    if (result == EResult::Success)
+        m_Snapshot.reset();
+    return result;
 }

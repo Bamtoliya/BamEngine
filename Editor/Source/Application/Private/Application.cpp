@@ -42,6 +42,7 @@
 #include "GameViewportPanel.h"
 #include "PlatformPath.h"
 #include "EditorSplashScreen.h"
+#include <chrono>
 
 IMPLEMENT_SINGLETON(Application)
 
@@ -640,6 +641,7 @@ void Application::Run(int argc, char* argv[])
     auto& timeManager = Engine::TimeManager::Get();
 
     bool wasPointerOverGameImage = false;
+    bool measuredFirstPIEFrame = false;
     while (bIsRunning)
     {
 
@@ -768,6 +770,14 @@ void Application::Run(int argc, char* argv[])
         wasPointerOverGameImage = pointerOverGameImage;
         input.EvaluateActionMap("Gameplay", allowGameplay, mouseInput);
 
+        if (PIEManager::Get().IsEditing())
+            measuredFirstPIEFrame = false;
+        const bool measurePIE = PIEManager::Get().IsPlaying() && !measuredFirstPIEFrame;
+        using Clock = std::chrono::steady_clock;
+        const auto gameplayStart = measurePIE ? Clock::now() : Clock::time_point{};
+        auto fixedEnd = gameplayStart;
+        auto updateEnd = gameplayStart;
+        int firstPIESubSteps = 0;
         if (PIEManager::Get().IsPlaying())
         {
             constexpr int maxSubSteps = 2;
@@ -782,8 +792,15 @@ void Application::Run(int argc, char* argv[])
                 while (timeManager.IsFixedUpdateReady()) {}
             }
 
+            if (measurePIE)
+            {
+                fixedEnd = Clock::now();
+                SystemManager::Get().RequestUpdateTiming();
+            }
             m_Runtime->Update(dt, false);
+            if (measurePIE) updateEnd = Clock::now();
             m_Runtime->LateUpdate(dt);
+            if (measurePIE) firstPIESubSteps = subStepsRan;
         }
         else
         {
@@ -805,7 +822,19 @@ void Application::Run(int argc, char* argv[])
 
             m_Runtime->LateUpdate(dt);
         }
+        const auto renderStart = measurePIE ? Clock::now() : Clock::time_point{};
         m_Runtime->Render(dt);
+        if (measurePIE)
+        {
+            const auto renderEnd = Clock::now();
+            using Milliseconds = std::chrono::duration<double, std::milli>;
+            EDITOR_LOG_INFO("[PIE] First game frame: gameplay={:.2f} ms (fixed={:.2f}, update={:.2f}, late={:.2f} ms), "
+                "render call={:.2f} ms, fixed steps={}, dt={:.2f} ms",
+                Milliseconds(renderStart - gameplayStart).count(), Milliseconds(fixedEnd - gameplayStart).count(),
+                Milliseconds(updateEnd - fixedEnd).count(), Milliseconds(renderStart - updateEnd).count(),
+                Milliseconds(renderEnd - renderStart).count(), firstPIESubSteps, static_cast<double>(dt) * 1000.0);
+            measuredFirstPIEFrame = true;
+        }
 
         if (m_QuitApproved)
             bIsRunning = false;

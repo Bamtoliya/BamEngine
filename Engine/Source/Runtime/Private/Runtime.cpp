@@ -2,6 +2,9 @@
 #include "Runtime.h"
 #include "IBLManager.h"
 #include "Logger.h"
+#ifdef BAM_EDITOR
+#include <chrono>
+#endif
 
 IMPLEMENT_SINGLETON(Runtime)
 
@@ -116,9 +119,26 @@ void Runtime::FixedUpdate(f32 dt)
 void Runtime::Update(f32 dt, bool updateInput, uint8 phaseMask)
 {
 	if (updateInput) InputManager::Get().Update(dt);
+	auto& systems = SystemManager::Get();
+#ifdef BAM_EDITOR
+	const bool measure = systems.IsUpdateTimingRequested();
+	using Clock = std::chrono::steady_clock;
+	const auto audioStart = measure ? Clock::now() : Clock::time_point{};
+#endif
 	AudioManager::Get().Update(dt);
-
-	SystemManager::Get().Update(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt, phaseMask);
+#ifdef BAM_EDITOR
+	const auto scenesStart = measure ? Clock::now() : Clock::time_point{};
+#endif
+	const auto& activeScenes = SceneManager::Get().GetActiveScenes();
+#ifdef BAM_EDITOR
+	if (measure)
+	{
+		using Milliseconds = std::chrono::duration<double, std::milli>;
+		BAM_LOG(Info, "Engine", "UpdateTiming", "First PIE update: FMOD update={:.2f} ms, active scenes={:.2f} ms",
+			Milliseconds(scenesStart - audioStart).count(), Milliseconds(Clock::now() - scenesStart).count());
+	}
+#endif
+	systems.Update(m_GlobalRegistry, activeScenes, dt, phaseMask);
 }
 void Runtime::LateUpdate(f32 dt)
 {

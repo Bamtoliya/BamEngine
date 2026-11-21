@@ -5,6 +5,7 @@
 #include "Graph.h"
 #include "GraphExecutor.h"
 #include "GraphRegistry.h"
+#include <filesystem>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -73,6 +74,8 @@ public:
 	static void ClearCurrentContext();
 
 #ifdef BAM_EDITOR
+	void PrepareSceneGraphs(const Scene& scene);
+
 	// ── 디버깅 인터페이스 (에디터 계층 연동용) ──
 	// 1. 에디터 펄스 렌더링용 실행기 조회
 	static const GraphExecutor* GetDebugExecutor(Scene* scene, entt::entity entity);
@@ -84,8 +87,16 @@ public:
 #endif
 
 private:
+	struct CachedGraph
+	{
+		Graph Data;
+#ifdef BAM_EDITOR
+		std::filesystem::file_time_type LastWriteTime{};
+#endif
+	};
+
 	GraphRegistry m_Registry;
-	std::unordered_map<std::wstring, Graph> m_GraphCache;
+	std::unordered_map<std::wstring, CachedGraph> m_GraphCache;
 	bool m_Initialized = false;
 };
 

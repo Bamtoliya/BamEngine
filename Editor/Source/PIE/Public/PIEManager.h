@@ -1,6 +1,9 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include <memory>
+
+namespace archive { class JsonArchive; }
 
 BEGIN(Editor)
 
@@ -11,11 +14,11 @@ class PIEManager final : public Base
     DECLARE_SINGLETON(PIEManager)
 
 private:
-    PIEManager() = default;
-    virtual ~PIEManager() = default;
+    PIEManager();
+    ~PIEManager() override;
 	EResult Initialize(void* arg = nullptr) { return EResult::Success; }
 public:
-    void Free() override {}
+    void Free() override;
 
     void StartPlay();
     void Pause();
@@ -34,7 +37,7 @@ private:
 
 private:
     EPlayState m_State = EPlayState::Edit;
-    std::wstring m_SnapshotPath = L"Temp/__pie_snapshot__.bamscene.json";
+    std::unique_ptr<archive::JsonArchive> m_Snapshot;
 };
 
 END
