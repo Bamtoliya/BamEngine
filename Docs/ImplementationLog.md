@@ -2,6 +2,24 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] Windows Client 공통 시작 화면
+
+- BamEngine 워드마크와 로딩 단계 표시를 독립 Windows 창으로 띄운다. 준비된 게임 창의 첫 프레임이 GPU에서 끝나면 시작 화면을 닫고, 프레임 시간 기준을 다시 잡아 게임을 진행한다. 별도 에셋 없이 Client에 포함한다. [Windows Client 시작 화면](PIEWindowsClientWorkflowPlan.md#windows-client-첫-화면)
+- **디자인 상태.** 사용자는 현재 화면을 임시로 사용하고 시각 디자인을 반드시 교체하기로 했다. 정식 Windows 배포 전 필수 작업으로 기록했으며, 최종 디자인은 미정이다. [디자인 교체 기준](PIEWindowsClientWorkflowPlan.md#windows-client-첫-화면)
+- **검증 상태.** 코드와 초기화·실패 경로를 정적으로 대조했다. 새 Client의 빌드, 첫 실행 화면, 전환 및 오류 경로는 사용자 확인 대기다.
+
+### [2026-11-22] 로직 그래프 우측 속성 표 통일
+
+- 노드와 연결의 속성, 변수 목록·생성 폼, 실행 설정에 `EditorUI` 공용 인스펙터 표를 적용했다. 핀의 기본값 적용·복원은 기존 그래프 API를 사용한다. 새 라벨과 버튼 설명은 한·영 CSV에 등록했다.
+- **검증 상태.** 변경 파일의 `git diff --check`와 로캘 키 사용처를 정적으로 확인했다. 빌드와 좁은 패널·언어 전환·핀 편집의 에디터 확인은 사용자 실행 대기다. [그래프 패널](GraphPanel.md)
+
+### [2026-11-21] Windows 게임 제작과 내보내기 기능 확장
+
+- 캐릭터의 공격 챌린지 컴포넌트에서 표적, 목표 적중 횟수와 판정 거리를 편집한다. GameModule이 점수·HUD를 관리하며, 공격 입력을 그래프에 넘길 수도 있다. 기존 기준 씬은 명시적 챌린지 컴포넌트가 없을 때 이전 설정으로 열린다. [챌린지 구성](AnimationPipelineIntegrationPlan.md#5-대표-액션-통합-검증)
+- 게임플레이 그래프에서 자기 엔티티의 액션 타임라인을 재생하고 같은 엔티티의 Notify 태그를 받아 처리한다. 알림은 씬 레지스트리에 보관하고 그래프 초기화 이후 전달한다. 자기 삭제 노드는 현재 그래프 실행이 끝난 뒤 엔티티를 제거한다. [그래프 실행](GraphExecution.md#액션-타임라인-노드)
+- Windows 빌드 프로필에 추가 씬과 추가 에셋을 `Project://` URI로 저장한다. 추가 씬의 알려진 참조와 적용되는 Gameplay 입력을 검사하고, 지정한 파일을 상대 경로대로 스테이징하며 로그에 포함 이유를 남긴다. [패키징 계획](BuildAndPackagingPlan.md)
+- **검증 상태.** 정적 점검 후 사용자가 공격 챌린지 인스펙터, 그래프 재생·Notify, 추가 씬·에셋 내보내기를 확인했다고 보고했다. 구성별 전체 CTest 결과는 이 보고에 포함되지 않았다.
+
 ### [2026-11-21] 에디터·게임플레이·Windows 배포 변경 정리
 
 - **엔티티 선택과 프리팹.** 에디터 선택과 프리팹 모드 진입 전에 저장하는 선택에 엔티티 약한 참조를 사용한다. 삭제된 엔티티는 조회와 프리팹 모드 복귀에서 제외된다. 실제 에디터에서 선택 엔티티 삭제와 프리팹 모드 왕복을 확인해야 한다. [선택 관리](../Editor/Source/Selection/Private/SelectionManager.cpp) · [프리팹 모드](../Editor/Source/ImGui/PrefabEditor/Private/PrefabModeManager.cpp)
