@@ -161,6 +161,7 @@ public:
 #pragma region Setter
     virtual EResult SetClearColor(vec4 color) BAM_PURE;
     virtual EResult SetViewport(int32 x, int32 y, uint32 width, uint32 height) BAM_PURE;
+    virtual EResult SetScissorRect(uint32 left, uint32 top, uint32 right, uint32 bottom) BAM_PURE;
     void SetSwapChainWidth(uint32 width) { m_SwapChainWidth = width; }
     void SetSwapChainHeight(uint32 height) { m_SwapChainHeight = height; }
 #pragma endregion

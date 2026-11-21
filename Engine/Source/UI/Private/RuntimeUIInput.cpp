@@ -1,4 +1,5 @@
 #include "RuntimeUIInput.h"
+#include "UIClipLayout.h"
 #include "ComponentEnable.h"
 #include "InputManager.h"
 #include "Scene.h"
@@ -34,8 +35,9 @@ void Engine::RuntimeUIInput::Clear()
     m_BlocksGameplayPress = false;
 }
 
-bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIPointerInput& input)
+bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIPointerInput& input, bool* wheelConsumed)
 {
+    if (wheelConsumed) *wheelConsumed = false;
     auto& actions = InputManager::Get();
     actions.EvaluateActionMap("GameUI", input.focused);
     for (const auto& canvas : m_Canvases)
@@ -83,6 +85,26 @@ bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIP
     }
 
     m_Canvases = std::move(canvases);
+    if (input.focused && input.insideViewport && !input.held && !input.down && !input.up &&
+        std::isfinite(input.wheelDelta) && input.wheelDelta != 0.0f)
+    {
+        for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+        {
+            auto& world = it->scene->GetRegistry();
+            std::vector<UIElementLayout> layouts;
+            if (!UILayout::Build(world, it->canvas, layouts)) continue;
+            const auto position = input.position * world.get<CanvasComponent>(it->canvas).referenceResolution;
+            if (UIClipLayout::ScrollAt(world, layouts, position, input.wheelDelta))
+            {
+                if (wheelConsumed) *wheelConsumed = true;
+                break;
+            }
+            bool blocked = false;
+            it->events->HitTest(position, layouts, blocked);
+            if (blocked) break;
+        }
+    }
+
     if (input.down && input.downPosition)
     {
         auto press = input;
@@ -104,13 +126,19 @@ bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIP
         const int direction = static_cast<int>(actions.WasActionPressed("GameUI", "NextButton")) -
             static_cast<int>(actions.WasActionPressed("GameUI", "PreviousButton"));
         const bool submit = actions.WasActionPressed("GameUI", "ActivateButton");
-        if (direction != 0 || submit)
+        const int adjust = static_cast<int>(actions.WasActionPressed("GameUI", "IncreaseValue")) -
+            static_cast<int>(actions.WasActionPressed("GameUI", "DecreaseValue"));
+        if (direction != 0 || submit || adjust != 0)
         {
             const auto focused = std::ranges::find_if(m_Canvases, [](const auto& canvas)
             {
                 return canvas.events->m_KeyboardFocus.entity != entt::null;
             });
-            if (focused != m_Canvases.end()) focused->events->Navigate(direction, submit);
+            if (focused != m_Canvases.end())
+            {
+                if (direction != 0 || submit) focused->events->Navigate(direction, submit);
+                if (adjust != 0) focused->events->AdjustFocusedSlider(adjust);
+            }
             else if (direction != 0)
             {
                 for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)

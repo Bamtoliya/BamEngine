@@ -7,3 +7,7 @@
 #include "UITextComponent.h"
 #include "UIInteractionStateComponent.h"
 #include "UIRenderOrderComponent.h"
+#include "UILayoutGroupComponent.h"
+#include "UIWidgetComponents.h"
+#include "UIClipComponent.h"
+#include "UIScrollComponent.h"

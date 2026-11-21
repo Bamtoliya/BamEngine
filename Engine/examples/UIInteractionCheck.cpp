@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "UIWidgetComponents.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "ReflectionRegistry.h"
@@ -349,6 +350,62 @@ int main()
         system.Navigate(0, true);
         if (focused(menu.button) || clicks.size() != 1)
             return Fail("Keyboard focus survived cancellation.");
+    }
+
+    {
+        Fixture controls;
+        auto& world = controls.scene->GetRegistry();
+        world.remove<UIButtonComponent>(controls.button);
+        auto& slider = world.emplace<UISliderComponent>(controls.button);
+        slider.step = 0.25f;
+        UIEventSystem system(*controls.scene, controls.canvas);
+        std::vector<UIPointerEvent> changes;
+        system.OnPointerEvent().AddLambda([&](const auto& event)
+        {
+            if (event.type == Type::ValueChanged) changes.push_back(event);
+        });
+
+        const glm::vec2 quarter{ 35.0f, 30.0f };
+        Feed(system, quarter);
+        Feed(system, quarter, true, true);
+        Feed(system, quarter, false, true);
+        if (!system.HasPointerCapture() || changes.size() != 1 || changes.back().previousValue != 0.5f ||
+            changes.back().value != 0.25f || slider.value != 0.25f)
+            return Fail("Slider press did not snap once to the selected interval.");
+        Feed(system, outside, false, true, false, false);
+        Feed(system, outside, false, false, true, false);
+        if (system.HasPointerCapture() || changes.size() != 2 || slider.value != 1.0f)
+            return Fail("Captured slider did not reach its endpoint or duplicated its release event.");
+        if (!system.AdjustFocusedSlider(-1) || changes.size() != 3 || !changes.back().keyboard || slider.value != 0.75f)
+            return Fail("A focused slider did not adjust with the keyboard.");
+        slider.interactable = false;
+        Feed(system, quarter);
+        if (system.AdjustFocusedSlider(1) || changes.size() != 3)
+            return Fail("A disabled slider accepted keyboard input.");
+    }
+
+    {
+        Fixture controls;
+        auto& world = controls.scene->GetRegistry();
+        world.remove<UIButtonComponent>(controls.button);
+        auto& toggle = world.emplace<UIToggleComponent>(controls.button);
+        UIEventSystem system(*controls.scene, controls.canvas);
+        std::vector<UIPointerEvent> changes;
+        system.OnPointerEvent().AddLambda([&](const auto& event)
+        {
+            if (event.type == Type::ValueChanged) changes.push_back(event);
+        });
+
+        Feed(system, inside);
+        Feed(system, inside, true, true);
+        Feed(system, outside, false, false, true);
+        if (toggle.checked || !changes.empty()) return Fail("A cancelled toggle click changed its value.");
+        Feed(system, inside, true, true);
+        Feed(system, inside, false, false, true);
+        if (!toggle.checked || changes.size() != 1 || changes.back().previousValue != 0.0f || changes.back().value != 1.0f)
+            return Fail("Toggle click did not deliver one value change.");
+        if (!system.Navigate(0, true) || toggle.checked || changes.size() != 2 || !changes.back().keyboard)
+            return Fail("Keyboard activation did not toggle the selected control.");
     }
 
     // The publisher must tolerate subscription changes and retain mutable callback state.

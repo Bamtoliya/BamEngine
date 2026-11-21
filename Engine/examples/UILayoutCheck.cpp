@@ -1,4 +1,5 @@
-﻿#include "UILayout.h"
+#include "UILayout.h"
+#include "UIClipLayout.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "ReflectionRegistry.h"
@@ -71,6 +72,41 @@ int main()
             !UILayout::Build(destination->GetRegistry(), loadedCanvas->GetEntityHandle(), emptyLayouts) || !emptyLayouts.empty())
             return Fail("Empty Canvas prefab did not restore as a valid layout root.");
     }
+    {
+        std::unique_ptr<Scene, SceneRelease> scene(Scene::Create());
+        auto& world = scene->GetRegistry();
+        const auto canvas = scene->CreateEntity().GetEntityHandle();
+        world.emplace<CanvasComponent>(canvas);
+        world.emplace<HierarchyComponent>(canvas);
+        const auto add = [&](entt::entity parent, glm::vec2 origin, glm::vec2 size)
+        {
+            const auto handle = scene->CreateEntity().GetEntityHandle();
+            world.emplace<HierarchyComponent>(handle).parent = parent;
+            world.get<HierarchyComponent>(parent).children.push_back(handle);
+            auto& rect = world.emplace<RectTransformComponent>(handle);
+            rect.pivot = rect.anchorMin = rect.anchorMax = glm::vec2(0.0f);
+            rect.anchoredPosition = origin;
+            rect.sizeDelta = size;
+            return handle;
+        };
+        const auto viewport = add(canvas, { 0.0f, 0.0f }, { 100.0f, 100.0f });
+        const auto content = add(viewport, { 0.0f, 0.0f }, { 100.0f, 200.0f });
+        const auto mask = add(content, { 20.0f, 20.0f }, { 60.0f, 150.0f });
+        const auto item = add(mask, { 0.0f, 0.0f }, { 100.0f, 150.0f });
+        world.emplace<UIScrollComponent>(viewport);
+        world.emplace<UIClipComponent>(mask);
+
+        std::vector<UIElementLayout> layouts;
+        if (!UILayout::Build(world, canvas, layouts) || layouts.size() != 4 || layouts[3].entity != item ||
+            !UILayout::Contains(layouts[3], { 25.0f, 99.0f }) || UILayout::Contains(layouts[3], { 25.0f, 101.0f }) ||
+            UILayout::Contains(layouts[3], { 90.0f, 25.0f }))
+            return Fail("Nested clipping did not limit hit testing to both ancestors.");
+        if (!UIClipLayout::ScrollAt(world, layouts, { 25.0f, 25.0f }, -1.0f) ||
+            !UILayout::Build(world, canvas, layouts) ||
+            !Near(glm::vec2(layouts[1].renderMatrix[3]), { 0.0f, -40.0f }) ||
+            !Near(world.get<RectTransformComponent>(content).anchoredPosition, glm::vec2(0.0f)))
+            return Fail("Wheel scrolling did not move computed geometry independently of authored values.");
+    }
     std::unique_ptr<Scene, SceneRelease> scene(Scene::Create());
     auto& rootWrapper = scene->CreateEntity();
     auto& childWrapper = scene->CreateEntity();
@@ -98,6 +134,29 @@ int main()
     if (!UILayout::Build(world, root, layouts) || layouts[0].entity != other || layouts[1].entity != child ||
         world.get<HierarchyComponent>(root).children != originalChildren)
         return Fail("Z-index did not reorder drawing independently of the authored hierarchy.");
+    auto& group = world.emplace<UILayoutGroupComponent>(root);
+    group.padding = { 10.0f, 20.0f, 10.0f, 20.0f };
+    group.spacing = { 6.0f, 4.0f };
+    const auto at = [](const UIElementLayout& item, const glm::vec2& origin)
+    {
+        return item.managedByGroup && Near(glm::vec2(item.renderMatrix[3]), origin);
+    };
+    const auto authoredRect = world.get<RectTransformComponent>(child);
+    if (!UILayout::Build(world, root, layouts) || layouts.size() != 2 || !at(layouts[0], { 116.0f, 20.0f }) ||
+        !at(layouts[1], { 10.0f, 20.0f }))
+        return Fail("Row placement did not use authored order independently from Z-index.");
+    group.mode = EUILayoutGroupMode::Column;
+    if (!UILayout::Build(world, root, layouts) || layouts.size() != 2 || !at(layouts[0], { 10.0f, 124.0f }) ||
+        !at(layouts[1], { 10.0f, 20.0f }))
+        return Fail("Column placement did not apply padding and spacing.");
+    group.mode = EUILayoutGroupMode::Grid;
+    group.columns = 1;
+    group.cellSize = { 48.0f, 36.0f };
+    if (!UILayout::Build(world, root, layouts) || layouts.size() != 2 || !at(layouts[0], { 10.0f, 60.0f }) ||
+        !at(layouts[1], { 10.0f, 20.0f }) || !Near(layouts[1].size, group.cellSize) ||
+        !Near(world.get<RectTransformComponent>(child).sizeDelta, authoredRect.sizeDelta) ||
+        !Near(world.get<RectTransformComponent>(child).anchoredPosition, authoredRect.anchoredPosition))
+        return Fail("Grid placement did not compute fixed cells independently of authored RectTransform.");
     const auto grandchild = scene->CreateEntity().GetEntityHandle();
     world.emplace<RectTransformComponent>(grandchild);
     world.emplace<FlagComponent>(grandchild);
@@ -136,6 +195,10 @@ int main()
         restoredWorld.get<IDComponent>(layouts[1].entity).id != world.get<IDComponent>(child).id ||
         restoredWorld.get<IDComponent>(layouts[2].entity).id != world.get<IDComponent>(grandchild).id)
         return Fail("Z-index or ordered subtree restoration failed.");
+    const auto* restoredGroup = restoredWorld.try_get<UILayoutGroupComponent>(restoredRoot->GetEntityHandle());
+    if (!restoredGroup || restoredGroup->mode != EUILayoutGroupMode::Grid || restoredGroup->columns != 1 ||
+        !Near(restoredGroup->cellSize, group.cellSize) || !at(layouts[0], { 10.0f, 60.0f }))
+        return Fail("Grid layout was not preserved by scene restoration.");
     world.get<HierarchyComponent>(child).children.push_back(root);
     if (UILayout::Build(world, root, layouts)) return Fail("Cyclic canvas hierarchy was accepted.");
     std::cout << "UI layout and scene archive checks passed.\n";

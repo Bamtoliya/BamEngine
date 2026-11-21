@@ -747,10 +747,6 @@ void Application::Run(int argc, char* argv[])
             !settings.IsWindowChangePending() && !ShortcutManager::Get().IsCapturing() &&
             !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
-        const bool pointerBlockedByUI = gameView && gameView->UpdateRuntimeUI(input, allowGameplay);
-        uint32 mouseButtons = gameView ? gameView->UpdateGameplayMouseButtons(input, allowGameplay) : 0;
-        if (pointerBlockedByUI)
-            mouseButtons &= ~(uint32{ 1 } << static_cast<uint32>(EMouseButton::Left));
         f32 gameScrollDeltaY = 0.0f;
         if (allowGameplay)
         {
@@ -761,12 +757,19 @@ void Application::Run(int argc, char* argv[])
             }
         }
 
+        bool wheelConsumed = false;
+        const bool pointerBlockedByUI = gameView &&
+            gameView->UpdateRuntimeUI(input, allowGameplay, gameScrollDeltaY, wheelConsumed);
+        uint32 mouseButtons = gameView ? gameView->UpdateGameplayMouseButtons(input, allowGameplay) : 0;
+        if (pointerBlockedByUI)
+            mouseButtons &= ~(uint32{ 1 } << static_cast<uint32>(EMouseButton::Left));
+
         const bool pointerOverGameImage =
             allowGameplay && gameView->HitTestGameplayImage(input.GetScreenMousePosition());
 
         Engine::InputActionMapMouseInput mouseInput;
         mouseInput.AllowedButtons = mouseButtons;
-        mouseInput.ScrollDeltaY = gameScrollDeltaY;
+        mouseInput.ScrollDeltaY = wheelConsumed ? 0.0f : gameScrollDeltaY;
         if (pointerOverGameImage && wasPointerOverGameImage)
             mouseInput.MotionDelta = input.GetMouseDelta();
 

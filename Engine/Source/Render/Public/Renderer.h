@@ -66,7 +66,7 @@ private: //Entity Render
 	EResult RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderSprite(f32 dt, vector<SpriteDrawCommand>& commands, ERenderSortType sortType, RenderPass* renderPass);
 	EResult RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>& commands, RenderPass* renderPass);
-	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass);
+	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass, uint32 width, uint32 height);
 	void ClearFrameQueues();
 #pragma endregion
 

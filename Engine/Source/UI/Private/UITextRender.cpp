@@ -125,6 +125,7 @@ void Engine::UIRenderSystem::SubmitText(Renderer& renderer, RenderPass& pass, co
     command.worldMatrix = glm::scale(glm::translate(layout.worldTransform, glm::vec3(offset, 0.0f)), glm::vec3(size, 1.0f));
     command.color = text.color;
     command.canvasSize = canvasSize;
+    command.clipRect = layout.clipRect;
     renderer.SubmitUIImage(command, pass.GetID());
 #endif
 }

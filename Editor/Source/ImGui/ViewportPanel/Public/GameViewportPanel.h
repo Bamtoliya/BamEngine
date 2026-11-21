@@ -35,7 +35,7 @@ public:
 public:
 	bool HitTestGameplayImage(const vec2& screenPosition) const;
 	uint32 UpdateGameplayMouseButtons(Engine::InputManager& input, bool enabled);
-	bool UpdateRuntimeUI(Engine::InputManager& input, bool enabled);
+	bool UpdateRuntimeUI(Engine::InputManager& input, bool enabled, float wheelDelta, bool& wheelConsumed);
 protected:
 	EResult OnInitialize(void* arg) override;
 	virtual void DrawCustomViewport() override;

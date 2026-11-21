@@ -479,6 +479,30 @@
 ,PROP_INTENSITY,Intensity,강도
 ,PROP_INTENSITY_CURVE,Intensity Curve,조도 커브
 ,PROP_INTERACTABLE,Interactable,상호작용
+,STRUCT_UI_LAYOUT_GROUP,UI Layout Group,UI 레이아웃 그룹
+,PROP_UI_LAYOUT_MODE,Layout mode,배치 방식
+,PROP_UI_LAYOUT_PADDING,Padding (left top right bottom),패딩 (좌 상 우 하)
+,PROP_UI_LAYOUT_SPACING,Spacing,간격
+,PROP_UI_LAYOUT_ALIGNMENT,Alignment,정렬
+,PROP_UI_LAYOUT_CELL_SIZE,Cell size,셀 크기
+,PROP_UI_LAYOUT_COLUMNS,Columns,열 수
+,Engine::EUILayoutGroupMode.Row,Row,가로 행
+,Engine::EUILayoutGroupMode.Column,Column,세로 컬럼
+,Engine::EUILayoutGroupMode.Grid,Grid,그리드
+,STRUCT_UI_PROGRESS_BAR,UI Progress Bar,UI 진행률 바
+,STRUCT_UI_SLIDER,UI Slider,UI 슬라이더
+,STRUCT_UI_TOGGLE,UI Toggle,UI 토글
+,PROP_UI_VALUE_MIN,Minimum,최솟값
+,PROP_UI_VALUE_MAX,Maximum,최댓값
+,PROP_UI_VALUE_STEP,Step,값 간격
+,PROP_UI_VALUE,Value,값
+,PROP_UI_FILL_COLOR,Fill color,채움 색상
+,PROP_UI_HANDLE_COLOR,Handle color,핸들 색상
+,PROP_UI_CHECKED,Checked,선택됨
+,PROP_UI_CHECK_COLOR,Check color,선택 표시 색상
+,STRUCT_UI_CLIP,UI Clip,UI 클리핑
+,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
+,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
 ,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 속도
 ,PROP_INTERP_MODE,Interpolation Mode,보간 모드
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성

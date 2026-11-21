@@ -9,7 +9,7 @@ BEGIN(Engine)
 class Scene;
 class Entity;
 
-enum class EUIPointerEventType { Enter, Exit, Down, Up, Click, Cancel };
+enum class EUIPointerEventType { Enter, Exit, Down, Up, Click, Cancel, ValueChanged };
 
 struct UIPointerInput
 {
@@ -22,6 +22,7 @@ struct UIPointerInput
     // Optional press sample for the runtime output router.
     std::optional<glm::vec2> downPosition;
     bool downInsideViewport = false;
+    float wheelDelta = 0.0f;
 };
 
 struct UIPointerEvent
@@ -34,6 +35,8 @@ struct UIPointerEvent
     glm::vec2 position{ 0.0f };
     glm::vec2 delta{ 0.0f };
     bool keyboard = false;
+    float previousValue = 0.0f; // Toggle values are 0 (off) or 1 (on).
+    float value = 0.0f;
 };
 
 // One owner per canvas/input surface. Keeps its scene alive and contains no Editor or SDL dependency.
@@ -49,6 +52,7 @@ public:
     bool Update(const UIPointerInput& input);
     // Returns false when this canvas has no eligible keyboard targets.
     bool Navigate(int direction, bool submit);
+    bool AdjustFocusedSlider(int direction);
     bool Cancel();
     MulticastDelegate<const UIPointerEvent&>& OnPointerEvent() { return m_OnPointerEvent; }
     Entity* ResolveTarget(const UIPointerEvent& event) const;
@@ -70,6 +74,8 @@ private:
     void SetState(Target target, bool hovered, bool pressed);
     void SetKeyboardFocus(Target target);
     void Queue(std::vector<UIPointerEvent>& events, EUIPointerEventType type, Target target) const;
+    void QueueSliderValue(std::vector<UIPointerEvent>& events, const std::vector<UIElementLayout>& layouts) const;
+    bool ApplyWidgetValue(UIPointerEvent& event);
     void Reset(std::vector<UIPointerEvent>* events);
     void Dispatch(const std::vector<UIPointerEvent>& events);
 

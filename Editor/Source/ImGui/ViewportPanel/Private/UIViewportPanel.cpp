@@ -12,6 +12,7 @@
 #include "RenderPassManager.h"
 #include "Renderer.h"
 #include "PrefabModeManager.h"
+#include "UIClipLayout.h"
 
 namespace
 {
@@ -48,6 +49,7 @@ namespace
         case Engine::EUIPointerEventType::Down: return "Viewport.PointerDown";
         case Engine::EUIPointerEventType::Up: return "Viewport.PointerUp";
         case Engine::EUIPointerEventType::Click: return "Viewport.PointerClick";
+        case Engine::EUIPointerEventType::ValueChanged: return "Viewport.PointerValueChanged";
         default: return "Viewport.PointerCancel";
         }
     }
@@ -378,6 +380,32 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         const auto label = LOCAL("Viewport.NewTextLabel");
         SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
     }
+    if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.UIPresets").c_str(), parent != nullptr))
+    {
+        struct PresetMenuEntry { UIElementPreset preset; const char* labelKey; };
+        static constexpr PresetMenuEntry presets[] = {
+            { UIElementPreset::Panel, "Viewport.AddPanel" },
+            { UIElementPreset::Row, "Viewport.AddRow" },
+            { UIElementPreset::Column, "Viewport.AddColumn" },
+            { UIElementPreset::Grid, "Viewport.AddGrid" },
+            { UIElementPreset::ProgressBar, "Viewport.AddProgressBar" },
+            { UIElementPreset::Toggle, "Viewport.AddToggle" },
+            { UIElementPreset::Slider, "Viewport.AddSlider" },
+            { UIElementPreset::ClipPanel, "Viewport.AddClipPanel" },
+            { UIElementPreset::ScrollView, "Viewport.AddScrollView" }
+        };
+        for (const auto& entry : presets)
+        {
+            if (ImGui::MenuItem(LOCAL_LABEL(entry.labelKey).c_str()) && parent)
+            {
+                auto& element = EntityFactory::CreateUIPreset(m_TargetScene, *parent, entry.preset,
+                    StrToWStr(LOCAL(entry.labelKey)));
+                SelectionManager::Get().SetSelectedEntity(&element);
+            }
+        }
+        ImGui::EndMenu();
+    }
+
     ImGui::Separator();
     for (Scene* scene : SceneManager::Get().GetActiveScenes())
     {
@@ -538,7 +566,7 @@ void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
         drawList->AddQuad(screen[0], screen[1], screen[2], screen[3], IM_COL32(70, 180, 255, 255), 2.0f);
         const auto pivot = m_View.ToScreen(vec2(layout.worldTransform[3]));
         drawList->AddCircle(ImPoint(pivot), 4.0f, IM_COL32(255, 210, 80, 255), 12, 2.0f);
-        if (wrapper != selection.GetPrimarySelectedEntity()) continue;
+        if (wrapper != selection.GetPrimarySelectedEntity() || layout.managedByGroup) continue;
         if (!selection.IsPrimarySelectionLocked())
             for (const auto& point : screen)
                 drawList->AddRectFilled(ImVec2(point.x - 5.0f, point.y - 5.0f),
@@ -581,10 +609,13 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         if (m_Interaction) m_Interaction->Cancel();
         m_View.Pan(InputManager::Get().GetMouseDelta());
     }
-    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && InputManager::Get().GetMouseScrollDeltaY() != 0.0f)
+    const float wheel = InputManager::Get().GetMouseScrollDeltaY();
+    if (hovered && !m_Panning && m_Drag.mode == DragMode::None && wheel != 0.0f)
     {
         if (m_Interaction) m_Interaction->Cancel();
-        m_View.ZoomAt(mouse, std::pow(1.15f, InputManager::Get().GetMouseScrollDeltaY()));
+        const bool scrolled = m_InteractionPreview && m_LayoutValid && HasTarget() &&
+            UIClipLayout::ScrollAt(m_TargetScene->GetRegistry(), m_Layouts, m_View.ToCanvas(mouse), wheel);
+        if (!scrolled) m_View.ZoomAt(mouse, std::pow(1.15f, wheel));
     }
     if (m_InteractionPreview) { m_Drag = {}; HandleInteraction(hovered); return; }
     if (!m_LayoutValid || !HasTarget()) { m_Drag = {}; return; }
@@ -599,6 +630,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         for (const auto& layout : m_Layouts)
         {
             if (m_TargetScene->FindEntity(layout.entity) != selection.GetPrimarySelectedEntity()) continue;
+            if (layout.managedByGroup) continue;
             float nearestDistanceSquared = 8.0f * 8.0f;
             for (const auto& corner : CanvasCorners)
             {
@@ -630,6 +662,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         }
         if (!wrapper) { selection.ClearSelection(); return; }
         selection.SetSelectedEntity(wrapper);
+        if (hit->managedByGroup) return;
         const auto* id = world.try_get<IDComponent>(hit->entity);
         if (!id) return;
         m_Drag.mode = resizeCorner ? DragMode::Resize : DragMode::Move;
@@ -645,6 +678,11 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     const auto* layout = FindLayout(m_Drag.entity);
     if (!id || id->id != m_Drag.id || !layout || !m_Focused || layout->parentTransform != m_Drag.layout.parentTransform ||
         layout->parentSize != m_Drag.layout.parentSize || layout->parentPivot != m_Drag.layout.parentPivot)
+    {
+        m_Drag = {};
+        return;
+    }
+    if (layout->managedByGroup)
     {
         m_Drag = {};
         return;

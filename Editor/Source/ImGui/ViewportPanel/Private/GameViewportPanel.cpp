@@ -184,7 +184,7 @@ uint32 GameViewportPanel::UpdateGameplayMouseButtons(Engine::InputManager& input
 	return frameButtons;
 }
 
-bool GameViewportPanel::UpdateRuntimeUI(Engine::InputManager& input, bool enabled)
+bool GameViewportPanel::UpdateRuntimeUI(Engine::InputManager& input, bool enabled, float wheelDelta, bool& wheelConsumed)
 {
 	if (!PIEManager::Get().IsPlaying())
 	{
@@ -210,7 +210,8 @@ bool GameViewportPanel::UpdateRuntimeUI(Engine::InputManager& input, bool enable
 	pointer.held = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
 	pointer.down = input.IsMouseButtonDown(Engine::EMouseButton::Left);
 	pointer.up = input.IsMouseButtonUp(Engine::EMouseButton::Left);
-	return m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer);
+	pointer.wheelDelta = wheelDelta;
+	return m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer, &wheelConsumed);
 }
 
 void GameViewportPanel::DrawCustomViewport()

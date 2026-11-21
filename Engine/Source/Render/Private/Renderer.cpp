@@ -533,7 +533,7 @@ EResult Renderer::Render(f32 dt)
 
 				if (const auto images = m_UIImageDrawCommands.find(pass->GetID()); images != m_UIImageDrawCommands.end())
 				{
-					const EResult result = RenderUIImages(images->second, pass);
+					const EResult result = RenderUIImages(images->second, pass, rtWidth, rtHeight);
 					if (IsFailure(result))
 					{
 						ENGINE_LOG_ERROR("ECS UI image rendering failed. Pass ID: {}", pass->GetID());
@@ -1010,7 +1010,7 @@ EResult Renderer::RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>
 	return EResult::Success;
 }
 
-EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass)
+EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass, uint32 width, uint32 height)
 {
 	if (!m_RHI || !renderPass) return EResult::Fail;
 	struct ImageUBO
@@ -1036,6 +1036,8 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 	const ERenderPassType passType = renderPass->GetPassType();
 	MaterialInterface* lastMaterial = nullptr;
 	vec2 lastCanvasSize(0.0f);
+	const glm::uvec4 fullScissor(0, 0, width, height);
+	glm::uvec4 lastScissor = fullScissor;
 	for (const auto& command : commands)
 	{
 		Texture* texture = command.textureHandle.Get();
@@ -1077,6 +1079,26 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 
 			lastCanvasSize = command.canvasSize;
 		}
+		glm::uvec4 scissor = fullScissor;
+		if (const auto& clip = command.clipRect)
+		{
+			if (!std::isfinite(clip->x) || !std::isfinite(clip->y) || !std::isfinite(clip->z) || !std::isfinite(clip->w))
+				return EResult::InvalidArgument;
+			const vec2 scale = vec2(width, height) / command.canvasSize;
+			const auto toPixel = [](float edge, float pixelScale, uint32 limit)
+			{
+				// Use half-open bounds at pixel centers, matching the logical hit test.
+				return static_cast<uint32>(glm::clamp(std::ceil(edge * pixelScale - 0.5f), 0.0f, static_cast<float>(limit)));
+			};
+			scissor = { toPixel(clip->x, scale.x, width), toPixel(clip->y, scale.y, height),
+				toPixel(clip->z, scale.x, width), toPixel(clip->w, scale.y, height) };
+			if (scissor.x >= scissor.z || scissor.y >= scissor.w) continue;
+		}
+		if (scissor != lastScissor)
+		{
+			if (IsFailure(m_RHI->SetScissorRect(scissor.x, scissor.y, scissor.z, scissor.w))) return EResult::Fail;
+			lastScissor = scissor;
+		}
 		ImageUBO data{};
 		data.worldMatrix = command.worldMatrix;
 		data.uvRect = vec4(vec2(command.uvTransform),
@@ -1087,6 +1109,8 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 			IsFailure(m_RHI->BindTextureSampler(texture->GetRHITexture(), sampler, 0)) ||
 			IsFailure(m_RHI->Draw(6))) return EResult::Fail;
 	}
+	if (lastScissor != fullScissor && IsFailure(m_RHI->SetScissorRect(0, 0, width, height)))
+		return EResult::Fail;
 	// Restore the pass projection for legacy UI components drawn afterwards.
 	if (renderPass->GetRenderTargetCount() > 0)
 	{

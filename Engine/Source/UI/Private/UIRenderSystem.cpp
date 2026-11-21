@@ -2,6 +2,8 @@
 #include "ComponentEnable.h"
 #include "UILayout.h"
 #include "UIEventSystem.h"
+#include "UIWidgetComponents.h"
+#include <glm/gtc/matrix_transform.hpp>
 #include "Renderer.h"
 #include "RenderPass.h"
 #include "ResourceManager.h"
@@ -23,6 +25,57 @@ namespace
         auto& resources = Engine::ResourceManager::Get();
         auto handle = resources.GetResourceHandle<T>(uri);
         return handle.IsValid() ? handle : resources.GetResourceHandle<T>(legacyKey);
+    }
+
+    bool HasWidgetDecorations(const entt::registry& world, entt::entity entity)
+    {
+        return world.any_of<Engine::UISliderComponent, Engine::UIToggleComponent, Engine::UIProgressBarComponent>(entity);
+    }
+
+    void SubmitWidgetDecorations(Engine::Renderer& renderer, Engine::RenderPass& pass, const entt::registry& world,
+        const Engine::UIElementLayout& layout, glm::vec2 canvasSize,
+        const Engine::ResourceHandle<Engine::MaterialInterface>& material, const Engine::ResourceHandle<Engine::Texture>& white)
+    {
+        const auto* texture = white.Get();
+        if (!texture || !texture->GetRHITexture() || !material.Get() ||
+            !pass.IsAcceptsBlendMode(material.Get()->GetBlendMode())) return;
+
+        const auto tint = Engine::UIEventSystem::GetButtonTint(world, layout.entity);
+        const auto drawRect = [&](glm::vec2 offset, glm::vec2 size, glm::vec4 color)
+        {
+            if (size.x <= 0.0f || size.y <= 0.0f || color.a <= 0.0f ||
+                !glm::all(glm::greaterThanEqual(color, glm::vec4(0.0f))) ||
+                !glm::all(glm::lessThanEqual(color, glm::vec4(1.0f)))) return;
+            Engine::UIImageDrawCommand command;
+            command.textureHandle = white;
+            command.materialHandle = material;
+            command.worldMatrix = glm::scale(glm::translate(layout.renderMatrix, glm::vec3(offset, 0.0f)),
+                glm::vec3(size, 1.0f));
+            command.color = color * tint;
+            command.canvasSize = canvasSize;
+            command.clipRect = layout.clipRect;
+            renderer.SubmitUIImage(command, pass.GetID());
+        };
+
+        if (const auto* slider = Engine::TryGetEnabledComponent<Engine::UISliderComponent>(world, layout.entity))
+        {
+            if (!Engine::UIWidgetRange::IsValid(*slider)) return;
+            const float fraction = Engine::UIWidgetRange::Fraction(slider->minimum, slider->maximum, slider->value);
+            const float handleWidth = std::clamp(layout.size.y * 0.70f / layout.size.x, 0.0f, 0.25f);
+            const float handlePosition = std::clamp(fraction - 0.5f * handleWidth, 0.0f, 1.0f - handleWidth);
+            drawRect({ 0.0f, 0.30f }, { fraction, 0.40f }, slider->fillColor);
+            drawRect({ handlePosition, 0.08f }, { handleWidth, 0.84f }, slider->handleColor);
+        }
+        else if (const auto* toggle = Engine::TryGetEnabledComponent<Engine::UIToggleComponent>(world, layout.entity))
+        {
+            if (toggle->checked) drawRect({ 0.22f, 0.22f }, { 0.56f, 0.56f }, toggle->checkColor);
+        }
+        else if (const auto* progress = Engine::TryGetEnabledComponent<Engine::UIProgressBarComponent>(world, layout.entity))
+        {
+            if (!Engine::UIWidgetRange::IsValid(progress->minimum, progress->maximum, progress->value)) return;
+            const float fraction = Engine::UIWidgetRange::Fraction(progress->minimum, progress->maximum, progress->value);
+            drawRect({ 0.0f, 0.0f }, { fraction, 1.0f }, progress->fillColor);
+        }
     }
 
     void SubmitImage(Engine::Renderer& renderer, Engine::RenderPass& pass, const entt::registry& world,
@@ -67,6 +120,7 @@ namespace
         if (!std::isfinite(uv.x) || !std::isfinite(uv.y) || !std::isfinite(uv.z) ||
             !std::isfinite(uv.w) || uv.z <= 0.0f || uv.w <= 0.0f) return;
         command.canvasSize = canvasSize;
+        command.clipRect = layout.clipRect;
         renderer.SubmitUIImage(command, pass.GetID());
     }
 }
@@ -116,6 +170,8 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                 {
                     if (!layout.visible) continue;
                     SubmitImage(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
+                    if (HasWidgetDecorations(world, layout.entity))
+                        SubmitWidgetDecorations(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
 
                     const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
                     if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)

@@ -7395,3 +7395,11 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 - 프리팹 Archive는 빈 UI 루트에 필요한 계층을 보존하고, 이전 데이터에서 누락된 계층을 복구한다.
 - Unity uGUI, Unreal UMG, Godot Control을 비교해 배치, 기본 입력 위젯, 스크롤과 마스킹 순서를 문서화했다.
 - 정적으로 호출부를 확인했다. 빌드, UILayoutCheck와 Editor의 프리팹 편집·저장·재열기는 사용자 실행 대기다. [UI 편집기](UIEditorFoundation.md) · [위젯·레이아웃 개발 계획](UIWidgetsAndLayoutPlan.md)
+
+
+### [2026-11-22] 게임 UI 프리셋과 위젯 구현
+
+- UI 뷰의 캔버스 메뉴에 패널, 가로 행, 세로 컬럼, 고정 셀 그리드, 진행률 바, 토글, 슬라이더, 클리핑 패널과 스크롤 뷰를 추가했다.
+- 자동 배치는 자식 계층 순서를 사용하고 계산 결과를 원본 RectTransform에 덮어쓰지 않는다. 토글과 슬라이더는 실제 값이 바뀔 때 ValueChanged를 발행한다.
+- D3D12·SDL GPU UI 렌더 경로에서 사각 클립을 적용하고 동일한 영역으로 히트 테스트한다. 스크롤 뷰는 콘텐츠 한 개의 세로 휠 이동을 제공한다.
+- 배치·클리핑·스크롤과 위젯 입력 회귀 검사 사례를 추가했다. 빌드·CTest·Editor·PIE·Client 실제 검증은 사용자 실행 대기다. [개발 계획](UIWidgetsAndLayoutPlan.md) · [사용법](UIEditorFoundation.md)

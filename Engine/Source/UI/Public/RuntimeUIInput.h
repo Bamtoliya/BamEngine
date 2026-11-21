@@ -13,7 +13,7 @@ namespace Engine
     {
     public:
         // The hosts provide output-relative coordinates, where (0, 0) to (1, 1) maps to each Canvas.
-        bool Update(const std::vector<Scene*>& scenes, const UIPointerInput& input);
+        bool Update(const std::vector<Scene*>& scenes, const UIPointerInput& input, bool* wheelConsumed = nullptr);
         void Clear();
 
     private:

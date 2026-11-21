@@ -109,6 +109,7 @@ public:
 #pragma region Setter
 	virtual EResult SetClearColor(vec4 color) override;
 	virtual EResult SetViewport(int32 x, int32 y, uint32 width, uint32 height) override;
+	EResult SetScissorRect(uint32 left, uint32 top, uint32 right, uint32 bottom) override;
 #pragma endregion
 
 #pragma region Getter

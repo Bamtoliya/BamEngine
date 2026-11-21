@@ -2417,6 +2417,16 @@ EResult DirectX12RHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
     m_CommandList->RSSetScissorRects(1, &scissor);
     return EResult::Success;
 }
+
+EResult DirectX12RHI::SetScissorRect(uint32 left, uint32 top, uint32 right, uint32 bottom)
+{
+    if (!m_CommandList || left >= right || top >= bottom || right > INT32_MAX || bottom > INT32_MAX)
+        return EResult::InvalidArgument;
+    const D3D12_RECT rect{ static_cast<LONG>(left), static_cast<LONG>(top), static_cast<LONG>(right),
+        static_cast<LONG>(bottom) };
+    m_CommandList->RSSetScissorRects(1, &rect);
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Frame Metrics

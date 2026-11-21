@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "UIWidgetComponents.h"
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "WorldComponents.h"
@@ -6,6 +7,12 @@
 
 namespace
 {
+    bool IsInteractiveWidget(const entt::registry& world, entt::entity entity)
+    {
+        return Engine::TryGetEnabledComponent<Engine::UISliderComponent>(world, entity) ||
+            Engine::TryGetEnabledComponent<Engine::UIToggleComponent>(world, entity);
+    }
+
     struct UIProcessingScope
     {
         bool& processing;
@@ -42,8 +49,11 @@ bool Engine::UIEventSystem::CanInteract(Target target, const std::vector<UIEleme
     const auto& world = m_Scene->GetRegistry();
     const auto* button = TryGetEnabledComponent<UIButtonComponent>(world, target.entity);
     const auto* image = TryGetEnabledComponent<UIImageComponent>(world, target.entity);
-    if (!button || !button->interactable || !UILayout::IsValid(*button) || !image || !UILayout::IsValid(*image))
-        return false;
+    const auto* slider = TryGetEnabledComponent<UISliderComponent>(world, target.entity);
+    const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(world, target.entity);
+    const bool interactive = slider ? slider->interactable && UIWidgetRange::IsValid(*slider)
+        : toggle ? toggle->interactable : button && button->interactable && UILayout::IsValid(*button);
+    if (!interactive || !image || !UILayout::IsValid(*image)) return false;
     return std::ranges::any_of(layouts, [&](const auto& layout)
     {
         const float determinant = glm::determinant(layout.renderMatrix);
@@ -67,7 +77,7 @@ Engine::UIEventSystem::Target Engine::UIEventSystem::HitTest(const glm::vec2& po
         auto entity = it->entity;
         for (std::size_t depth = 0; depth < 256 && entity != m_Canvas.entity; ++depth)
         {
-            if (TryGetEnabledComponent<UIButtonComponent>(world, entity))
+            if (TryGetEnabledComponent<UIButtonComponent>(world, entity) || IsInteractiveWidget(world, entity))
             {
                 const auto* id = world.try_get<IDComponent>(entity);
                 const Target target{ entity, id ? id->id : 0 };
@@ -138,10 +148,78 @@ bool Engine::UIEventSystem::Navigate(int direction, bool submit)
     return true;
 }
 
+bool Engine::UIEventSystem::AdjustFocusedSlider(int direction)
+{
+    if (direction == 0 || m_Processing || !m_Scene->IsActive() || m_Scene->IsPaused() || !Exists(m_Canvas))
+        return false;
+    const auto* slider = TryGetEnabledComponent<UISliderComponent>(m_Scene->GetRegistry(), m_KeyboardFocus.entity);
+    if (!slider || !slider->interactable || !UIWidgetRange::IsValid(*slider)) return false;
+
+    const double extent = static_cast<double>(slider->maximum) - slider->minimum;
+    const double increment = slider->step > 0.0f ? slider->step : extent * 0.05;
+    const double current = std::clamp(static_cast<double>(slider->value),
+        static_cast<double>(slider->minimum), static_cast<double>(slider->maximum));
+    double requested = current + (direction > 0 ? increment : -increment);
+    // The upper bound stays reachable even when it does not lie on the step grid.
+    if (direction < 0 && slider->step > 0.0f && current == slider->maximum)
+    {
+        double index = std::ceil(extent / increment) - 1.0;
+        requested = slider->minimum + index * increment;
+        if (static_cast<float>(requested) >= slider->maximum)
+            requested = slider->minimum + (index - 1.0) * increment;
+    }
+
+    UIPointerEvent changed{ EUIPointerEventType::ValueChanged, m_KeyboardFocus.entity, m_KeyboardFocus.id,
+        m_Canvas.entity, m_Canvas.id, m_Position, glm::vec2(0.0f), true };
+    changed.value = UIWidgetRange::ClampSliderValue(*slider, requested);
+    UIProcessingScope scope(m_Processing);
+    Dispatch({ changed });
+    return true;
+}
+
 void Engine::UIEventSystem::Queue(std::vector<UIPointerEvent>& events, EUIPointerEventType type, Target target) const
 {
     if (target.entity != entt::null)
         events.push_back({ type, target.entity, target.id, m_Canvas.entity, m_Canvas.id, m_Position, m_Delta });
+}
+
+void Engine::UIEventSystem::QueueSliderValue(std::vector<UIPointerEvent>& events,
+    const std::vector<UIElementLayout>& layouts) const
+{
+    const auto& world = m_Scene->GetRegistry();
+    const auto* slider = TryGetEnabledComponent<UISliderComponent>(world, m_Pressed.entity);
+    if (!slider) return;
+    const auto layout = std::ranges::find(layouts, m_Pressed.entity, &UIElementLayout::entity);
+    if (layout == layouts.end()) return;
+    const glm::vec4 position = glm::inverse(layout->renderMatrix) * glm::vec4(m_Position, 0.0f, 1.0f);
+    if (!std::isfinite(position.x)) return;
+    const double extent = static_cast<double>(slider->maximum) - slider->minimum;
+    const double requested = slider->minimum + extent * std::clamp(position.x, 0.0f, 1.0f);
+    Queue(events, EUIPointerEventType::ValueChanged, m_Pressed);
+    events.back().value = UIWidgetRange::ClampSliderValue(*slider, requested);
+}
+
+bool Engine::UIEventSystem::ApplyWidgetValue(UIPointerEvent& event)
+{
+    auto& world = m_Scene->GetRegistry();
+    if (auto* slider = TryGetEnabledComponent<UISliderComponent>(world, event.target))
+    {
+        if (!slider->interactable || !UIWidgetRange::IsValid(*slider)) return false;
+        event.previousValue = slider->value;
+        event.value = std::clamp(event.value, slider->minimum, slider->maximum);
+        if (event.value == slider->value) return false;
+        slider->value = event.value;
+        return true;
+    }
+    if (auto* toggle = TryGetEnabledComponent<UIToggleComponent>(world, event.target))
+    {
+        if (!toggle->interactable) return false;
+        event.previousValue = toggle->checked ? 1.0f : 0.0f;
+        if (event.value == event.previousValue) return false;
+        toggle->checked = event.value != 0.0f;
+        return true;
+    }
+    return false;
 }
 
 void Engine::UIEventSystem::Reset(std::vector<UIPointerEvent>* events)
@@ -215,9 +293,12 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
     else if (input.down && m_Pressed.entity == entt::null)
     {
         m_Pressed = target;
+        if (IsInteractiveWidget(m_Scene->GetRegistry(), target.entity)) SetKeyboardFocus(target);
         SetState(m_Pressed, true, true);
         Queue(events, EUIPointerEventType::Down, m_Pressed);
     }
+    if (m_Pressed.entity != entt::null && (input.down || input.held || input.up))
+        QueueSliderValue(events, layouts);
     if (m_Pressed.entity != entt::null && input.up)
     {
         const auto pressed = m_Pressed;
@@ -244,7 +325,7 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
 
 void Engine::UIEventSystem::Dispatch(const std::vector<UIPointerEvent>& events)
 {
-    for (const auto& event : events)
+    for (auto event : events)
     {
         if (event.type != EUIPointerEventType::Cancel && event.type != EUIPointerEventType::Exit)
         {
@@ -258,8 +339,19 @@ void Engine::UIEventSystem::Dispatch(const std::vector<UIPointerEvent>& events)
                 if (HitTest(event.position, layouts, blocked) != Target{ event.target, event.targetId }) continue;
             }
         }
-        // All state changes finish before callbacks. No registry references survive a callback.
+        if (event.type == EUIPointerEventType::ValueChanged && !ApplyWidgetValue(event)) continue;
+        // No registry references survive a callback.
         m_OnPointerEvent.Broadcast(event);
+        if (event.type == EUIPointerEventType::Click && Exists({ event.target, event.targetId }))
+        {
+            const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(m_Scene->GetRegistry(), event.target);
+            if (toggle)
+            {
+                event.type = EUIPointerEventType::ValueChanged;
+                event.value = toggle->checked ? 0.0f : 1.0f;
+                Dispatch({ event });
+            }
+        }
     }
 }
 
@@ -274,9 +366,19 @@ glm::vec4 Engine::UIEventSystem::GetButtonTint(const entt::registry& world, entt
 {
     if (!world.valid(entity)) return glm::vec4(1.0f);
     const auto* button = TryGetEnabledComponent<UIButtonComponent>(world, entity);
+    const auto* slider = TryGetEnabledComponent<UISliderComponent>(world, entity);
+    const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(world, entity);
+    const auto* state = world.try_get<UIInteractionStateComponent>(entity);
+    if (slider || toggle)
+    {
+        const bool enabled = slider ? slider->interactable && UIWidgetRange::IsValid(*slider) : toggle->interactable;
+        if (!enabled) return { 0.5f, 0.5f, 0.5f, 0.5f };
+        if (state && state->pressed) return { 0.7f, 0.7f, 0.7f, 1.0f };
+        if (state && (state->hovered || state->keyboardFocused)) return { 0.9f, 0.9f, 0.9f, 1.0f };
+        return glm::vec4(1.0f);
+    }
     if (!button || !UILayout::IsValid(*button)) return glm::vec4(1.0f);
     if (!button->interactable) return button->disabledColor;
-    const auto* state = world.try_get<UIInteractionStateComponent>(entity);
     if (state && state->hovered) return state->pressed ? button->pressedColor : button->hoveredColor;
     if (state && state->keyboardFocused) return button->hoveredColor;
     return button->normalColor;

@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 #include "Engine_Includes.h"
 #include "UIComponents.h"
+#include <optional>
 
 namespace Engine
 {
@@ -15,7 +16,9 @@ namespace Engine
         glm::mat4 parentTransform{ 1.0f };
         glm::vec2 parentSize{ 0.0f };
         glm::vec2 parentPivot{ 0.0f };
+        bool managedByGroup = false;
         bool visible = true;
+        std::optional<glm::vec4> clipRect; // Canvas pixels: minimum X/Y and maximum X/Y.
     };
 
     class ENGINE_API UILayout
@@ -26,6 +29,7 @@ namespace Engine
         static bool IsValid(const UIImageComponent& image);
         static bool IsValid(const UIButtonComponent& button);
         static bool IsValid(const UITextComponent& text);
+        static bool IsValid(const UILayoutGroupComponent& group);
         static entt::entity FindCanvas(const entt::registry& world, entt::entity entity);
         static std::int32_t GetZIndex(const entt::registry& world, entt::entity entity);
         static bool Resolve(const RectTransformComponent& rect, const glm::vec2& parentSize,

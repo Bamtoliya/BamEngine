@@ -818,6 +818,16 @@ EResult SDLGPURHI::SetViewport(int32 x, int32 y, uint32 width, uint32 height)
 	//SDL_SetGPUScissor(m_CurrentRenderPass, &scissor);
 	return EResult::Success;
 }
+
+EResult SDLGPURHI::SetScissorRect(uint32 left, uint32 top, uint32 right, uint32 bottom)
+{
+	if (!m_CurrentRenderPass || left >= right || top >= bottom || right > INT32_MAX || bottom > INT32_MAX)
+		return EResult::InvalidArgument;
+	const SDL_Rect rect{ static_cast<int>(left), static_cast<int>(top), static_cast<int>(right - left),
+		static_cast<int>(bottom - top) };
+	SDL_SetGPUScissor(m_CurrentRenderPass, &rect);
+	return EResult::Success;
+}
 #pragma endregion
 
 #pragma region Draw

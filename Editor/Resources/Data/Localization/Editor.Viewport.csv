@@ -48,6 +48,18 @@ Viewport,NewName,New Viewport,새 뷰포트
 Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
 Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"
 Viewport,Order,Order,표시 순서
+Viewport,UIPresets,UI Presets,UI 프리셋
+Viewport,AddPanel,Panel,패널
+Viewport,AddRow,Row,가로 행
+Viewport,AddColumn,Column,세로 컬럼
+Viewport,AddGrid,Grid,그리드
+Viewport,AddProgressBar,Progress Bar,진행률 바
+Viewport,AddToggle,Toggle,토글
+Viewport,AddSlider,Slider,슬라이더
+Viewport,AddClipPanel,Clip Panel,클리핑 패널
+Viewport,AddScrollView,Scroll View,스크롤 뷰
+Viewport,ScrollContent,Scroll Content,스크롤 콘텐츠
+Viewport,PointerValueChanged,Value changed,값 변경
 Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.
 Viewport,Picking,Picking,선택 판정
 Viewport,Pixel,Pixel,픽셀

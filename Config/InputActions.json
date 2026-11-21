@@ -89,12 +89,16 @@
                 "Actions": [
                     { "Id": "NextButton", "Type": "Button" },
                     { "Id": "PreviousButton", "Type": "Button" },
-                    { "Id": "ActivateButton", "Type": "Button" }
+                    { "Id": "ActivateButton", "Type": "Button" },
+                    { "Id": "DecreaseValue", "Type": "Button" },
+                    { "Id": "IncreaseValue", "Type": "Button" }
                 ],
                 "Bindings": [
                     { "ActionId": "NextButton", "Key": "Tab" },
                     { "ActionId": "PreviousButton", "Key": "Shift+Tab" },
-                    { "ActionId": "ActivateButton", "Key": "Enter" }
+                    { "ActionId": "ActivateButton", "Key": "Enter" },
+                    { "ActionId": "DecreaseValue", "Key": "Left" },
+                    { "ActionId": "IncreaseValue", "Key": "Right" }
                 ]
             }
         ]

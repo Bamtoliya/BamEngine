@@ -159,12 +159,15 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
     pointer.held = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
     pointer.down = input.IsMouseButtonDown(Engine::EMouseButton::Left);
     pointer.up = input.IsMouseButtonUp(Engine::EMouseButton::Left);
-    const bool pointerBlockedByUI = m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer);
+    pointer.wheelDelta = input.GetMouseScrollDeltaY();
+    bool wheelConsumed = false;
+    const bool pointerBlockedByUI = m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer,
+        &wheelConsumed);
     Engine::InputActionMapMouseInput mouseInput;
     if (pointerBlockedByUI)
         mouseInput.AllowedButtons &= ~(Engine::uint32{ 1 } << static_cast<Engine::uint32>(Engine::EMouseButton::Left));
     mouseInput.MotionDelta = input.GetMouseDelta();
-    mouseInput.ScrollDeltaY = input.GetMouseScrollDeltaY();
+    mouseInput.ScrollDeltaY = wheelConsumed ? 0.0f : pointer.wheelDelta;
     input.EvaluateActionMap("Gameplay", inputFocused, mouseInput);
 
     while (timeManager.IsFixedUpdateReady())
