@@ -1,10 +1,13 @@
 ﻿#include <SDL3/SDL_main.h>
+#include "Macro.h"
 #include "PlatformPath.h"
 #include "ModuleManager.h"
 #include "InputManager.h"
 #include "Logger.h"
+#if !BAM_SHIPPING
 #include "CartPoleEnvironment.h"
 #include "RLServer.h"
+#endif
 #include "ClientGameRuntime.h"
 #include "ClientStartupSplash.h"
 #include "DirectX12RHI.h"
@@ -108,8 +111,16 @@ public:
         Engine::RendererDesc rendererDesc = {};
         rendererDesc.rhiType = Engine::ERHIType::DirectX12;
         rendererDesc.rhiDesc = &rhiDesc;
-        const auto initialized = m_ClientRuntime.Initialize(rendererDesc, [this] { LoadGameModule(); },
+        Engine::EResult moduleLoadResult = Engine::EResult::Success;
+        const auto initialized = m_ClientRuntime.Initialize(rendererDesc,
+            [this, &moduleLoadResult] { moduleLoadResult = LoadGameModule(); },
             [&splash](ClientStartupStage stage) { splash.SetStage(stage); });
+        if (Engine::IsFailure(moduleLoadResult))
+        {
+            BAM_LOG(Error, "Client", "Startup", "Aborting startup because GameModule failed to load: {}",
+                Engine::ResultToString(moduleLoadResult));
+            return moduleLoadResult;
+        }
         if (initialized != Engine::EResult::Success)
             return initialized;
 
@@ -211,22 +222,45 @@ public:
     }
 
 private:
-    void LoadGameModule()
+    Engine::EResult LoadGameModule()
     {
         const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        std::error_code ec;
         std::filesystem::path modulePath = exeDir / L"GameModule.dll";
-        if (!std::filesystem::exists(modulePath))
-            modulePath = m_ProjectRoot / L"GameModule.dll";
-
-        if (!std::filesystem::exists(modulePath))
+        bool exists = std::filesystem::exists(modulePath, ec);
+        if (ec)
         {
-            BAM_LOG(Warn, "Client", "Module", "GameModule.dll not found at: {}", modulePath.string());
-            return;
+            BAM_LOG(Error, "Client", "Module", "Failed to inspect GameModule path {}: {}", modulePath.string(), ec.message());
+            return Engine::EResult::Fail;
+        }
+
+        if (!exists && m_ProjectRoot != exeDir)
+        {
+            modulePath = m_ProjectRoot / L"GameModule.dll";
+            exists = std::filesystem::exists(modulePath, ec);
+            if (ec)
+            {
+                BAM_LOG(Error, "Client", "Module", "Failed to inspect GameModule path {}: {}", modulePath.string(), ec.message());
+                return Engine::EResult::Fail;
+            }
+        }
+
+        if (!exists)
+        {
+            BAM_LOG(Warn, "Client", "Module", "GameModule.dll not found (optional); continuing without game module.");
+            return Engine::EResult::Success;
         }
 
         const Engine::EResult result = Engine::ModuleManager::Get().LoadModule(L"GameModule", modulePath);
         if (Engine::IsFailure(result))
-            BAM_LOG(Error, "Client", "Module", "Failed to load GameModule: {}", Engine::ResultToString(result));
+        {
+            BAM_LOG(Error, "Client", "Module", "Failed to load GameModule from {}: {}",
+                modulePath.string(), Engine::ResultToString(result));
+            return result;
+        }
+
+        BAM_LOG(Info, "Client", "Module", "Loaded GameModule from {}", modulePath.string());
+        return Engine::EResult::Success;
     }
 
 private:
@@ -266,6 +300,7 @@ END
 
 int main(int argc, char* argv[])
 {
+#if !BAM_SHIPPING
     // ── 강화학습 헤드리스 모드 (--rl 또는 --headless-rl) ──
     for (int i = 1; i < argc; ++i)
     {
@@ -289,6 +324,10 @@ int main(int argc, char* argv[])
             return 0;
         }
     }
+#else
+    (void)argc;
+    (void)argv;
+#endif
 
     SDL_SetMainReady();
 

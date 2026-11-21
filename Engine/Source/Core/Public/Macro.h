@@ -1,6 +1,36 @@
 #pragma once
 #include <cassert>
 
+#ifndef BAM_SHIPPING
+#define BAM_SHIPPING 0
+#endif
+
+#ifndef BAM_EDITOR
+#define BAM_EDITOR 0
+#endif
+
+#if BAM_SHIPPING
+#define BAM_ASSERT(expr) ((void)0)
+#define BAM_VERIFY(expr) ((void)(expr))
+#define BAM_NON_SHIPPING(...) ((void)0)
+#else
+#define BAM_ASSERT(expr) assert(expr)
+#define BAM_VERIFY(expr)                                \
+	do                                                  \
+	{                                                   \
+		const bool _bam_verify_ok = static_cast<bool>(expr); \
+		assert(_bam_verify_ok && #expr);                \
+		(void)_bam_verify_ok;                           \
+	} while (false)
+#define BAM_NON_SHIPPING(...) do { __VA_ARGS__; } while (false)
+#endif
+
+#if BAM_EDITOR && !BAM_SHIPPING
+#define BAM_EDITOR_ONLY(...) do { __VA_ARGS__; } while (false)
+#else
+#define BAM_EDITOR_ONLY(...) ((void)0)
+#endif
+
 #define BAM_PURE =0
 
 #define BEGIN(NAMESPACE) namespace NAMESPACE {
@@ -40,7 +70,7 @@ ClassName* ClassName::Create(void* arg)					\
 														\
 ClassName& ClassName::Get()								\
 {														\
-	assert(m_instance != nullptr && "Error: Singleton Instance not created yet!");\
+	BAM_ASSERT(m_instance != nullptr && "Error: Singleton Instance not created yet!");\
 	return *m_instance;									\
 }														\
 														\

@@ -13,7 +13,11 @@ target_include_directories(Client PRIVATE
 )
 
 if(WIN32)
-    set_property(TARGET Client PROPERTY WIN32_EXECUTABLE "$<CONFIG:Release>")
+    if(BAMENGINE_SHIPPING)
+        set_property(TARGET Client PROPERTY WIN32_EXECUTABLE TRUE)
+    else()
+        set_property(TARGET Client PROPERTY WIN32_EXECUTABLE "$<CONFIG:Release>")
+    endif()
     target_link_libraries(Client PRIVATE user32 gdi32)
 endif()
 
@@ -29,14 +33,17 @@ set_target_properties(Client PROPERTIES
 
 if(MSVC)
     target_compile_options(Client PRIVATE
-        $<$<CONFIG:Debug>:/ZI>
+        $<$<AND:$<CONFIG:Debug>,$<NOT:$<BOOL:${BAMENGINE_SHIPPING}>>>:/ZI>
         $<$<CONFIG:Debug>:/FS>
         /Zc:preprocessor
         /utf-8
         /MP
     )
     target_link_options(Client PRIVATE
-        $<$<CONFIG:Debug>:/INCREMENTAL>
+        $<$<AND:$<CONFIG:Debug>,$<NOT:$<BOOL:${BAMENGINE_SHIPPING}>>>:/INCREMENTAL>
+        $<$<BOOL:${BAMENGINE_SHIPPING}>:/INCREMENTAL:NO>
+        $<$<BOOL:${BAMENGINE_SHIPPING}>:/OPT:REF>
+        $<$<BOOL:${BAMENGINE_SHIPPING}>:/OPT:ICF>
     )
 endif()
 
