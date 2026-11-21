@@ -21,6 +21,10 @@ namespace
 {
     constexpr f32 GroundContactTolerance = 1.0e-4f;
     constexpr f32 SlopeNormalTolerance = 1.0e-5f;
+    constexpr f32 SoftLandingMinPrevSlopeDegrees = 5.0f;
+    constexpr f32 SoftLandingAngleDeltaDegrees = 2.0f;
+    constexpr f32 SoftLandingMaxSpeed = 3.5f;
+    constexpr f32 SoftLandingMinStep = 0.005f;
 
     bool IsWalkableNormal(const CharacterControllerComponent& kcc, f32 normalY)
     {
@@ -387,6 +391,36 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
             kcc.GroundAngle = glm::degrees(std::acos(glm::clamp(kcc.GroundNormal.y, -1.0f, 1.0f)));
             setGroundEntity(contact.Entity);
         };
+    f32 remainingSoftDrop = glm::max(SoftLandingMinStep, SoftLandingMaxSpeed * dt);
+    const auto applyGroundSnap = [&](const GroundSupport& support)
+        {
+            const vec3 prevNormal = kcc.GroundNormal;
+            const f32 prevAngle = kcc.GroundAngle;
+            const bool targetWalkable = IsWalkableNormal(kcc, support.Contact.Hit.normal.y);
+            const f32 targetAngle = glm::degrees(std::acos(glm::clamp(support.Contact.Hit.normal.y, -1.0f, 1.0f)));
+            const bool shouldSoftLand = targetWalkable && support.Drop > 0.0f &&
+                prevAngle >= SoftLandingMinPrevSlopeDegrees &&
+                targetAngle + SoftLandingAngleDeltaDegrees < prevAngle;
+
+            if (shouldSoftLand && support.Drop > remainingSoftDrop)
+            {
+                const f32 appliedDrop = remainingSoftDrop;
+                const f32 blend = glm::clamp(appliedDrop / support.Drop, 0.0f, 1.0f);
+                currentPos.y -= appliedDrop;
+                remainingSoftDrop = 0.0f;
+                setGroundContact(support.Contact);
+                kcc.GroundNormal = glm::normalize(glm::mix(prevNormal, support.Contact.Hit.normal, blend));
+                kcc.GroundAngle = glm::degrees(std::acos(glm::clamp(kcc.GroundNormal.y, -1.0f, 1.0f)));
+                return;
+            }
+
+            if (shouldSoftLand && support.Drop > 0.0f)
+            {
+                remainingSoftDrop = glm::max(0.0f, remainingSoftDrop - support.Drop);
+            }
+            currentPos.y -= support.Drop;
+            setGroundContact(support.Contact);
+        };
     if (world.valid(kcc.GroundEntity))
     {
         const auto* collider = TryGetEnabledComponent<ColliderComponent>(world, kcc.GroundEntity);
@@ -450,8 +484,7 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
 
     if (foundGround)
     {
-        currentPos.y -= ground.Drop;
-        setGroundContact(ground.Contact);
+        applyGroundSnap(ground);
         if (kcc.IsGrounded)
         {
             kcc.Velocity.y = 0.0f;
@@ -721,8 +754,7 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
                 const auto& stepDownHit = stepDown.Contact.Hit;
                 if (IsWalkableNormal(kcc, stepDownHit.normal.y))
                 {
-                    currentPos.y -= stepDown.Drop;
-                    setGroundContact(stepDown.Contact);
+                    applyGroundSnap(stepDown);
                 }
             }
         }

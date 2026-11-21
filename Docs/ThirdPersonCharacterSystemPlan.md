@@ -134,6 +134,7 @@ flowchart TD
    - **현상**: 가파른 경사로를 미끄러져 내려오다가 경사로 끝부분(바닥면과의 접점)을 통과할 때, '탁' 하고 뚝 떨어지듯 바닥에 거칠게 달라붙는 부자연스러운 착지 현상 관측.
    - **원인 분석**: 경사로 판자 자체의 두께(0.2m)로 인한 바닥과의 수직 단차(Step)와, $60^\circ$ 경사면 접촉 상태에서 $0^\circ$ 평지 접촉 상태로 급격히 전환되면서 Y 높이 흡착(`CalculateGroundContactY`)이 1프레임만에 순간적으로 적용되어 발생하는 단차 충격.
    - **해결 방안**: 경사로 끝단과 바닥면 사이의 법선 보간(Normal Slerp / Curvature Damping)을 적용하거나, 전환 프레임에서 수직 높이 흡착 시 최대 수직 속도 제한(Vertical Snap Clamping)을 적용하여 연착륙(Soft Landing) 유도.
+   - **수정 반영 (2026-11-22, 정적 구현 완료 · 빌드/CTest/실환경 검증 대기)**: `KinematicCharacterSystem::UpdateCharacter`의 접지/Step-Down 스냅 경로(`applyGroundSnap`)에 경사면($\ge 5^\circ$)에서 더 완만한 걸을 수 있는 면/평지로 내려설 때 프레임당 수직 스냅 속도 제한(`3.5m/s`, 최소 보정 `0.005m`)과 스냅 비율에 따른 `GroundNormal`/`GroundAngle` 점진 보간을 추가했다. `KinematicCharacterCheck`에는 `CheckRampToFloorSoftLanding`(45° 내리막 끝단·30° 측면 단차 전환, 60/120Hz) 및 `CheckMovingPlatformInheritance`(이동·Y축 회전 플랫폼 상속, 60/120Hz) 회귀 테스트를 추가했다. (리플렉션 `PROPERTY` 추가 없이 구현해 `Engine.csv` 변경은 없다.)
 
 ### 조기 착지 회귀 확인
 
