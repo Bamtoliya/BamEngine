@@ -101,6 +101,7 @@ END
 
 IMPLEMENT_SINGLETON(ImGuiManager)
 
+ImGuiManager::ImGuiManager() = default;
 ImGuiManager::~ImGuiManager() = default;
 
 #pragma region Constructor&Destructor

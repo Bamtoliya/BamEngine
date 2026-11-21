@@ -31,7 +31,7 @@ class ImGuiManager final : public Base
 	using DESC = ImGuiManagerDesc;
 #pragma region Constructor&Destructor
 private:
-	ImGuiManager() {}
+	ImGuiManager();
 	virtual ~ImGuiManager();
 	EResult Initialize(void* arg = nullptr);
 public:
