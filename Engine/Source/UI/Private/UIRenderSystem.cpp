@@ -57,6 +57,8 @@ namespace
             command.clipRect = layout.clipRect;
             command.ellipseMaskPlanes = layout.ellipseMaskPlanes;
             command.ellipseMaskCount = layout.ellipseMaskCount;
+            command.alphaMasks = layout.alphaMasks;
+            command.alphaMaskCount = layout.alphaMaskCount;
             renderer.SubmitUIImage(command, pass.GetID());
         };
 
@@ -96,6 +98,8 @@ namespace
         command.clipRect = viewport.clipRect;
         command.ellipseMaskPlanes = viewport.ellipseMaskPlanes;
         command.ellipseMaskCount = viewport.ellipseMaskCount;
+        command.alphaMasks = viewport.alphaMasks;
+        command.alphaMaskCount = viewport.alphaMaskCount;
         const auto track = glm::translate(viewport.renderMatrix, glm::vec3(1.0f - scrollbar.width, 0.0f, 0.0f));
         command.worldMatrix = glm::scale(track, glm::vec3(scrollbar.width, 1.0f, 1.0f));
         command.color = { 0.10f, 0.12f, 0.15f, 0.90f };
@@ -115,9 +119,9 @@ namespace
         if (!image || !Engine::UILayout::IsValid(*image) || image->color.a <= 0.0f) return;
 
         // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
-        // Built-in UI shaders carry ellipse coverage; use the built-in material on masked images.
+        // Use the built-in UI material to keep rendering and picking on the same mask.
         Engine::ResourceHandle<Engine::MaterialInterface> effectiveMatHandle =
-            layout.ellipseMaskCount > 0 ? defaultUIMat : image->materialHandle;
+            (layout.ellipseMaskCount > 0 || layout.alphaMaskCount > 0) ? defaultUIMat : image->materialHandle;
         Engine::MaterialInterface* material = effectiveMatHandle.Get();
         if (!material)
         {
@@ -154,6 +158,8 @@ namespace
         command.clipRect = layout.clipRect;
         command.ellipseMaskPlanes = layout.ellipseMaskPlanes;
         command.ellipseMaskCount = layout.ellipseMaskCount;
+        command.alphaMasks = layout.alphaMasks;
+        command.alphaMaskCount = layout.alphaMaskCount;
         renderer.SubmitUIImage(command, pass.GetID());
     }
 }

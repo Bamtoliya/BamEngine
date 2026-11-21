@@ -4,6 +4,8 @@
 #include "UIScrollComponent.h"
 #include "ComponentEnable.h"
 #include "WorldComponents.h"
+#include "Sprite.h"
+#include "Texture.h"
 #include <algorithm>
 
 namespace
@@ -61,12 +63,93 @@ namespace
         return std::max(0.0f, contentLayout.size.y - viewport.size.y);
     }
 
+    bool HasReadableAlpha(const Engine::Texture& texture)
+    {
+        const auto& header = texture.GetCachedHeader();
+        if (header.dimension != ETextureDimension::Texture2D || header.arraySize != 1 || header.depth != 1 ||
+            header.mipLevels == 0 || header.width == 0 || header.height == 0) return false;
+        if (header.format != ETextureFormat::R8G8B8A8_UNORM && header.format != ETextureFormat::R8G8B8A8_UNORM_SRGB &&
+            header.format != ETextureFormat::B8G8R8A8_UNORM && header.format != ETextureFormat::B8G8R8A8_UNORM_SRGB) return false;
+        const auto* rhi = texture.GetRHITexture();
+        return (!rhi || (rhi->GetWidth() == header.width && rhi->GetHeight() == header.height &&
+            rhi->GetFormat() == header.format)) && texture.GetTempData().size() / 4 / header.height >= header.width;
+    }
+
+    bool IsFinite(const glm::vec4& value)
+    {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w);
+    }
+
+    std::optional<Engine::UIAlphaMaskRegion> ResolveAlphaMask(const Engine::UIAlphaMaskComponent& component, const glm::mat4& matrix)
+    {
+        Engine::UIAlphaMaskRegion region;
+        glm::vec4 spritePixels(0.0f);
+        if (component.spriteHandle.GetRawHandle().IsValid())
+        {
+            const auto* sprite = component.spriteHandle.Get();
+            if (!sprite) return {};
+            region.texture = sprite->GetTextureHandle();
+            spritePixels = sprite->GetRegionUV();
+        }
+        else
+        {
+            region.texture = component.textureHandle;
+        }
+        const auto* texture = region.texture.Get();
+        if (!texture || !HasReadableAlpha(*texture) || !IsFinite(spritePixels)) return {};
+        const auto& header = texture->GetCachedHeader();
+        if (spritePixels.z != 0.0f || spritePixels.w != 0.0f)
+        {
+            const glm::vec2 size(header.width, header.height);
+            const glm::vec2 start(spritePixels), span(spritePixels.z, spritePixels.w);
+            if (start.x < 0.0f || start.y < 0.0f || span.x <= 0.0f || span.y <= 0.0f ||
+                glm::any(glm::greaterThan(start + span, size))) return {};
+            region.uvTransform = { start.x / size.x, start.y / size.y, span.x / size.x, span.y / size.y };
+        }
+
+        const float determinant = glm::determinant(matrix);
+        if (!std::isfinite(determinant) || determinant == 0.0f) return {};
+        const auto inverse = glm::inverse(matrix);
+        region.xPlane = { inverse[0][0], inverse[1][0], inverse[3][0], 0.0f };
+        region.yPlane = { inverse[0][1], inverse[1][1], inverse[3][1], 0.0f };
+        if (!IsFinite(region.xPlane) || !IsFinite(region.yPlane)) return {};
+        return region;
+    }
+
+    float SampleAlpha(const Engine::UIAlphaMaskRegion& mask, const glm::vec3& point)
+    {
+        const glm::vec2 local(glm::dot(glm::vec3(mask.xPlane), point), glm::dot(glm::vec3(mask.yPlane), point));
+        if (!(local.x >= 0.0f && local.y >= 0.0f && local.x <= 1.0f && local.y <= 1.0f)) return 0.0f;
+
+        const auto* texture = mask.texture.Get();
+        if (!texture || !HasReadableAlpha(*texture)) return 0.0f;
+        const auto& header = texture->GetCachedHeader();
+        const glm::vec2 size(header.width, header.height);
+        const auto bounds = Engine::UIAlphaMaskUVBounds(mask.uvTransform, size);
+        const glm::vec2 uv = glm::vec2(mask.uvTransform) + local * glm::vec2(mask.uvTransform.z, mask.uvTransform.w);
+        const glm::vec2 pixel = glm::clamp(glm::clamp(uv, glm::vec2(bounds), glm::vec2(bounds.z, bounds.w)) * size -
+            glm::vec2(0.5f), glm::vec2(0.0f), size - 1.0f);
+        const auto x = static_cast<std::size_t>(pixel.x), y = static_cast<std::size_t>(pixel.y);
+        const auto nextX = std::min(x + 1, static_cast<std::size_t>(header.width - 1));
+        const auto nextY = std::min(y + 1, static_cast<std::size_t>(header.height - 1));
+        const auto& bytes = texture->GetTempData();
+        const auto alpha = [&](std::size_t column, std::size_t row)
+        {
+            return bytes[(row * header.width + column) * 4 + 3] / 255.0f;
+        };
+        const float dx = pixel.x - static_cast<float>(x), dy = pixel.y - static_cast<float>(y);
+        return std::lerp(std::lerp(alpha(x, y), alpha(nextX, y), dx),
+            std::lerp(alpha(x, nextY), alpha(nextX, nextY), dx), dy);
+    }
+
     struct ClippingState
     {
         std::optional<glm::vec4> rectangle;
         glm::vec2 displacement{ 0.0f };
         Engine::UIEllipseMaskPlanes ellipseMaskPlanes{};
         std::size_t ellipseMaskCount = 0;
+        Engine::UIAlphaMaskRegions alphaMasks{};
+        std::size_t alphaMaskCount = 0;
     };
 }
 
@@ -90,6 +173,8 @@ void Engine::UIClipLayout::Apply(const entt::registry& world, std::vector<UIElem
         layout.clipRect = state.rectangle;
         layout.ellipseMaskPlanes = state.ellipseMaskPlanes;
         layout.ellipseMaskCount = state.ellipseMaskCount;
+        layout.alphaMasks = state.alphaMasks;
+        layout.alphaMaskCount = state.alphaMaskCount;
         if (layout.visible && state.rectangle)
             layout.visible = NonEmpty(Intersect(*state.rectangle, Bounds(layout.renderMatrix)));
 
@@ -139,9 +224,28 @@ void Engine::UIClipLayout::Apply(const entt::registry& world, std::vector<UIElem
                 state.displacement -= glm::vec2(layout.worldTransform[1]) * offset;
             }
         }
+        if (const auto* alphaMask = TryGetEnabledComponent<UIAlphaMaskComponent>(world, layout.entity))
+        {
+            const auto region = state.alphaMaskCount < MaxUIAlphaMasks ? ResolveAlphaMask(*alphaMask, layout.renderMatrix)
+                : std::nullopt;
+            const auto bounds = region ? Bounds(layout.renderMatrix) : glm::vec4(0.0f);
+            state.rectangle = state.rectangle ? Intersect(*state.rectangle, bounds) : bounds;
+            if (region && NonEmpty(*state.rectangle)) state.alphaMasks[state.alphaMaskCount++] = *region;
+        }
         if (state.rectangle || state.displacement != glm::vec2(0.0f))
             states.emplace(layout.entity, state);
     }
+}
+
+bool Engine::UIClipLayout::AlphaMasksContain(const UIElementLayout& layout, const glm::vec3& point)
+{
+    float coverage = 1.0f;
+    for (std::size_t index = 0; index < layout.alphaMaskCount; ++index)
+    {
+        coverage *= SampleAlpha(layout.alphaMasks[index], point);
+        if (coverage < 0.5f) return false;
+    }
+    return true;
 }
 
 entt::entity Engine::UIClipLayout::FindScrollContent(const entt::registry& world, entt::entity viewport)

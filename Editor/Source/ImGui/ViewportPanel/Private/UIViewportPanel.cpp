@@ -398,6 +398,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             { UIElementPreset::Slider, "Viewport.AddSlider" },
             { UIElementPreset::ClipPanel, "Viewport.AddClipPanel" },
             { UIElementPreset::EllipseMask, "Viewport.AddEllipseMask" },
+            { UIElementPreset::ImageMask, "Viewport.AddImageMask" },
             { UIElementPreset::ScrollView, "Viewport.AddScrollView" }
         };
         for (const auto& entry : presets)

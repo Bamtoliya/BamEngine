@@ -1014,6 +1014,14 @@ EResult Renderer::RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>
 EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass, uint32 width, uint32 height)
 {
 	if (!m_RHI || !renderPass) return EResult::Fail;
+	if (commands.empty()) return EResult::Success;
+	struct AlphaMaskUBO
+	{
+		vec4 xPlane{ 0.0f };
+		vec4 yPlane{ 0.0f };
+		vec4 uvTransform{ 0.0f };
+		vec4 uvClamp{ 0.0f };
+	};
 	struct ImageUBO
 	{
 		mat4 worldMatrix;
@@ -1022,41 +1030,45 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 		vec2 offset;
 		vec4 color;
 		UIEllipseMaskPlanes ellipseMaskPlanes;
+		std::array<AlphaMaskUBO, MaxUIAlphaMasks> alphaMasks;
 	};
-	static_assert(sizeof(ImageUBO) == 240);
+	static_assert(sizeof(AlphaMaskUBO) == 64);
+	static_assert(sizeof(ImageUBO) == 368);
 	static_assert(offsetof(ImageUBO, color) == 96);
 	static_assert(offsetof(ImageUBO, ellipseMaskPlanes) == 112);
+	static_assert(offsetof(ImageUBO, alphaMasks) == 240);
 	auto* sampler = SamplerManager::Get().GetDefaultSampler();
 	if (!sampler) return EResult::Fail;
 	RHIPipelineDesc pipelineDesc;
-	if (!commands.empty())
-	{
-		const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
-		if (IsFailure(prepareResult))
-			return prepareResult;
-	}
+	const EResult prepareResult = PreparePassPipelineDesc(renderPass, pipelineDesc);
+	if (IsFailure(prepareResult)) return prepareResult;
 
 	const ERenderPassType passType = renderPass->GetPassType();
+	auto defaultMaterialHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Engine://Material/UIMaterial.bammat.json");
+	if (!defaultMaterialHandle.IsValid())
+		defaultMaterialHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
+	auto* defaultMaterial = defaultMaterialHandle.Get();
+	auto* defaultPixelShader = defaultMaterial ? defaultMaterial->GetPixelShader(passType) : nullptr;
 	MaterialInterface* lastMaterial = nullptr;
+	bool bindAlphaTextures = false;
 	vec2 lastCanvasSize(0.0f);
 	const glm::uvec4 fullScissor(0, 0, width, height);
 	glm::uvec4 lastScissor = fullScissor;
 	for (const auto& command : commands)
 	{
 		Texture* texture = command.textureHandle.Get();
-		MaterialInterface* material = command.materialHandle.Get();
+		MaterialInterface* material = command.alphaMaskCount > 0 ? defaultMaterial : command.materialHandle.Get();
+		if (command.alphaMaskCount > MaxUIAlphaMasks || (command.alphaMaskCount > 0 && !defaultPixelShader)) continue;
 		if (!texture || !material || !texture->GetRHITexture() ||
 			command.canvasSize.x <= 0.0f || command.canvasSize.y <= 0.0f) return EResult::InvalidArgument;
 		if (material != lastMaterial)
 		{
 			if (IsFailure(BindMeshPipeline(nullptr, material, passType, pipelineDesc)))
 			{
-				auto fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Engine://Material/UIMaterial.bammat.json");
-				if (!fallbackHandle.IsValid()) fallbackHandle = ResourceManager::Get().GetResourceHandle<MaterialInterface>(L"Resources/Material/UIMaterial.bammat.json");
-				MaterialInterface* fallbackMat = fallbackHandle.Get();
-				if (fallbackMat && fallbackMat != material && IsSuccess(BindMeshPipeline(nullptr, fallbackMat, passType, pipelineDesc)))
+				if (defaultMaterial && defaultMaterial != material &&
+					IsSuccess(BindMeshPipeline(nullptr, defaultMaterial, passType, pipelineDesc)))
 				{
-					lastMaterial = fallbackMat;
+					lastMaterial = defaultMaterial;
 				}
 				else
 				{
@@ -1067,6 +1079,7 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 			{
 				lastMaterial = material;
 			}
+			bindAlphaTextures = defaultPixelShader && lastMaterial->GetPixelShader(passType) == defaultPixelShader;
 		}
 		if (command.canvasSize != lastCanvasSize)
 		{
@@ -1111,8 +1124,33 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 		data.ellipseMaskPlanes.fill(vec4(0.0f));
 		const auto maskPlanes = std::min(command.ellipseMaskCount, MaxUIEllipseMasks) * 2;
 		std::copy_n(command.ellipseMaskPlanes.begin(), maskPlanes, data.ellipseMaskPlanes.begin());
+		auto* baseTexture = texture->GetRHITexture();
+		std::array<RHITexture*, MaxUIAlphaMasks> alphaTextures;
+		alphaTextures.fill(baseTexture);
+		bool validMasks = true;
+		for (std::size_t i = 0; i < command.alphaMaskCount; ++i)
+		{
+			const auto& region = command.alphaMasks[i];
+			const auto* mask = region.texture.Get();
+			auto* maskTexture = mask ? mask->GetRHITexture() : nullptr;
+			if (!maskTexture || maskTexture->GetWidth() == 0 || maskTexture->GetHeight() == 0)
+			{
+				validMasks = false;
+				break;
+			}
+			alphaTextures[i] = maskTexture;
+			const vec2 textureSize(maskTexture->GetWidth(), maskTexture->GetHeight());
+			data.alphaMasks[i] = { region.xPlane, region.yPlane, region.uvTransform, UIAlphaMaskUVBounds(region.uvTransform, textureSize) };
+		}
+		if (!validMasks) continue;
+		if (bindAlphaTextures)
+		{
+			// SDL declares all fragment descriptors, including both inactive mask slots.
+			for (uint32 i = 0; i < alphaTextures.size(); ++i)
+				if (IsFailure(m_RHI->BindTextureSampler(alphaTextures[i], sampler, 1 + i))) return EResult::Fail;
+		}
 		if (IsFailure(m_RHI->BindConstantBuffer(&data, sizeof(data), 1)) ||
-			IsFailure(m_RHI->BindTextureSampler(texture->GetRHITexture(), sampler, 0)) ||
+			IsFailure(m_RHI->BindTextureSampler(baseTexture, sampler, 0)) ||
 			IsFailure(m_RHI->Draw(6))) return EResult::Fail;
 	}
 	if (lastScissor != fullScissor && IsFailure(m_RHI->SetScissorRect(0, 0, width, height)))

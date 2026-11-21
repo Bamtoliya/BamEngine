@@ -3,6 +3,7 @@
 #include "Engine_Includes.h"
 #include "UIComponents.h"
 #include "UIEllipseMaskGeometry.h"
+#include "UIAlphaMaskGeometry.h"
 #include <optional>
 
 namespace Engine
@@ -23,6 +24,8 @@ namespace Engine
         std::optional<glm::vec4> clipRect; // Canvas pixels: minimum X/Y and maximum X/Y.
         UIEllipseMaskPlanes ellipseMaskPlanes{};
         std::size_t ellipseMaskCount = 0;
+        UIAlphaMaskRegions alphaMasks{};
+        std::size_t alphaMaskCount = 0;
     };
 
     enum class UILayoutBuildMode { Runtime, Authoring };

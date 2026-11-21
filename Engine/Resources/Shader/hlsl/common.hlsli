@@ -13,6 +13,9 @@ struct CommonData
 	float Time;
 };
 
+#ifdef BAM_COMMON_SDL_VERTEX_BINDING
+[[vk::binding(0, 1)]]
+#endif
 ConstantBuffer<CommonData> commonData : register(b0, space0);
 
 #endif

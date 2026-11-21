@@ -502,6 +502,7 @@
 ,PROP_UI_CHECK_COLOR,Check color,선택 표시 색상
 ,STRUCT_UI_CLIP,UI Clip,UI 클리핑
 ,STRUCT_UI_ELLIPSE_MASK,UI Ellipse Mask,UI 타원 마스크
+,STRUCT_UI_ALPHA_MASK,UI Image Mask,UI 이미지 마스크
 ,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
 ,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
 ,PROP_UI_SCROLL_SHOW_SCROLLBAR,Show Scrollbar,스크롤바 표시
@@ -729,6 +730,8 @@
 ,PROP_TARGET_OFFSET,Target Offset,타깃 오프셋
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
+,PROP_UI_MASK_SPRITE,Mask Sprite,마스크 스프라이트
+,PROP_UI_MASK_TEXTURE,Mask Texture,마스크 텍스처
 ,PROP_TILING,Tiling,반복
 ,PROP_TIME,Time,시간
 ,PROP_TIMELINE_ASSET,Timeline Asset,타임라인 에셋

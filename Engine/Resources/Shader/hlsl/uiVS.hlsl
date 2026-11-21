@@ -1,3 +1,6 @@
+#ifdef __spirv__
+#define BAM_COMMON_SDL_VERTEX_BINDING
+#endif
 #include "common.hlsli"
 #include "uiCommon.hlsli"
 
@@ -9,8 +12,12 @@ struct ObjectData
     float2 UvOffset;
     float4 Color;
     float4 EllipseMaskPlanes[8];
+    UIAlphaMaskData AlphaMasks[2];
 };
 
+#ifdef __spirv__
+[[vk::binding(1, 1)]]
+#endif
 ConstantBuffer<ObjectData> ubo : register(b0, space2);
 
 UIVertexOutput main(uint vertexId : SV_VertexID)
@@ -33,6 +40,12 @@ UIVertexOutput main(uint vertexId : SV_VertexID)
         dot(canvas, ubo.EllipseMaskPlanes[2].xyz), dot(canvas, ubo.EllipseMaskPlanes[3].xyz));
     output.Ellipse23 = float4(dot(canvas, ubo.EllipseMaskPlanes[4].xyz), dot(canvas, ubo.EllipseMaskPlanes[5].xyz),
         dot(canvas, ubo.EllipseMaskPlanes[6].xyz), dot(canvas, ubo.EllipseMaskPlanes[7].xyz));
+    output.AlphaMaskLocal = float4(dot(canvas, ubo.AlphaMasks[0].XPlane.xyz), dot(canvas, ubo.AlphaMasks[0].YPlane.xyz),
+        dot(canvas, ubo.AlphaMasks[1].XPlane.xyz), dot(canvas, ubo.AlphaMasks[1].YPlane.xyz));
+    output.AlphaMask0Uv = ubo.AlphaMasks[0].UvTransform;
+    output.AlphaMask0Clamp = ubo.AlphaMasks[0].UvClamp;
+    output.AlphaMask1Uv = ubo.AlphaMasks[1].UvTransform;
+    output.AlphaMask1Clamp = ubo.AlphaMasks[1].UvClamp;
     output.TexCoord = lerp(ubo.UvRect.xy, ubo.UvRect.zw, uvs[vertexId]) * ubo.UvTiling + ubo.UvOffset;
     output.Color = ubo.Color;
     return output;

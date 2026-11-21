@@ -11,4 +11,5 @@
 #include "UIWidgetComponents.h"
 #include "UIClipComponent.h"
 #include "UIEllipseMaskComponent.h"
+#include "UIAlphaMaskComponent.h"
 #include "UIScrollComponent.h"

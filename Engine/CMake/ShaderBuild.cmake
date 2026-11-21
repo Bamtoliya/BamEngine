@@ -137,7 +137,21 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         )
         list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}" "${SPIRV_OUT}")
         if(BAMENGINE_BUILD_WGSL_SHADERS)
-            add_wgsl_shader_output("${SPIRV_OUT}" WGSL_OUT)
+            set(WGSL_INPUT "${SPIRV_OUT}")
+            if(SHADER_NAME_WE STREQUAL "uiPS")
+                # SDL uses combined texture/sampler descriptors, while Tint needs separate descriptors.
+                set(WGSL_INPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/ShaderWgslInput")
+                set(WGSL_INPUT "${WGSL_INPUT_DIR}/${SHADER_NAME_WE}.spv")
+                add_custom_command(
+                    OUTPUT "${WGSL_INPUT}"
+                    COMMAND "${CMAKE_COMMAND}" -E make_directory "${WGSL_INPUT_DIR}"
+                    COMMAND "${DXC_COMPILER}" -spirv -D BAM_UI_WGSL=1 -T ps_6_0 -E main -Fo "${WGSL_INPUT}" "${SHADER_FILE}"
+                    DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
+                    COMMENT "Compiling ${SHADER_NAME_WE} (SPIR-V with separate samplers for Tint)..."
+                    VERBATIM
+                )
+            endif()
+            add_wgsl_shader_output("${WGSL_INPUT}" WGSL_OUT)
             list(APPEND ALL_SHADER_OUTPUTS "${WGSL_OUT}")
         endif()
 

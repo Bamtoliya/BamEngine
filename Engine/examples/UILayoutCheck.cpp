@@ -3,6 +3,10 @@
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "ReflectionRegistry.h"
+#include "ComponentEnable.h"
+#include "ResourceManager.h"
+#include "Sprite.h"
+#include "Texture.h"
 #include <archive/JsonArchive.h>
 #include <iostream>
 #include <limits>
@@ -106,6 +110,72 @@ int main()
             !Near(glm::vec2(layouts[1].renderMatrix[3]), { 0.0f, -40.0f }) ||
             !Near(world.get<RectTransformComponent>(content).anchoredPosition, glm::vec2(0.0f)))
             return Fail("Wheel scrolling did not move computed geometry independently of authored values.");
+    }
+    {
+        if (!ResourceManager::Create()) return Fail("Alpha mask resource manager initialization failed.");
+        struct ResourceScope { ~ResourceScope() { ResourceManager::Destroy(); } } resourceScope;
+        TextureBinaryHeader header;
+        header.width = 4;
+        header.height = header.depth = header.arraySize = header.mipLevels = 1;
+        header.format = ETextureFormat::R8G8B8A8_UNORM;
+        header.dataSize = 16;
+        const auto atlas = ResourceManager::Get().AddResource<Texture>(L"UILayoutCheck.AlphaAtlas",
+            Texture::Create(header, { 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 255 }));
+        header.width = 1;
+        header.dataSize = 4;
+        const auto partial = ResourceManager::Get().AddResource<Texture>(L"UILayoutCheck.AlphaPartial",
+            Texture::Create(header, { 0, 0, 0, 179 }));
+        SpriteCreateDesc spriteDesc;
+        spriteDesc.Key = L"UILayoutCheck.AlphaRegion";
+        spriteDesc.texture = atlas;
+        spriteDesc.region = { 1.0f, 0.0f, 2.0f, 1.0f };
+        const auto atlasRegion = ResourceManager::Get().AddResource<Sprite>(spriteDesc.Key, Sprite::Create(&spriteDesc));
+        if (!atlas || !partial || !atlasRegion) return Fail("Alpha mask fixtures could not be registered.");
+
+        std::unique_ptr<Scene, SceneRelease> scene(Scene::Create());
+        auto& world = scene->GetRegistry();
+        const auto canvas = scene->CreateEntity().GetEntityHandle();
+        world.emplace<CanvasComponent>(canvas);
+        world.emplace<HierarchyComponent>(canvas);
+        auto parent = canvas;
+        std::array<entt::entity, 4> entries;
+        for (auto& entity : entries)
+        {
+            entity = scene->CreateEntity().GetEntityHandle();
+            world.emplace<HierarchyComponent>(entity).parent = parent;
+            world.get<HierarchyComponent>(parent).children.push_back(entity);
+            auto& rect = world.emplace<RectTransformComponent>(entity);
+            rect.anchorMin = rect.anchorMax = rect.pivot = glm::vec2(0.0f);
+            rect.sizeDelta = glm::vec2(100.0f);
+            parent = entity;
+        }
+        auto& rootRect = world.get<RectTransformComponent>(entries[0]);
+        rootRect.anchoredPosition = { 100.0f, 100.0f };
+        rootRect.rotation = 30.0f;
+        auto& outer = world.emplace<UIAlphaMaskComponent>(entries[0]);
+        outer.textureHandle = partial;
+        outer.spriteHandle = atlasRegion;
+        std::vector<UIElementLayout> layouts;
+        const auto hit = [&](float x)
+        {
+            const glm::vec2 point(layouts[0].renderMatrix * glm::vec4(x, 0.5f, 0.0f, 1.0f));
+            return UILayout::Contains(layouts.back(), point);
+        };
+        if (!UILayout::Build(world, canvas, layouts) || layouts.size() != entries.size() ||
+            layouts.front().alphaMaskCount != 0 || layouts.back().alphaMaskCount != 1 || hit(0.02f) || !hit(0.55f))
+            return Fail("Rotated sprite mask picking leaked atlas neighbours or masked its owner.");
+        world.emplace<UIAlphaMaskComponent>(entries[1]).textureHandle = partial;
+        if (!UILayout::Build(world, canvas, layouts) || layouts.back().alphaMaskCount != 2 || hit(0.55f) || !hit(0.90f))
+            return Fail("Nested image masks did not multiply alpha for picking.");
+        world.emplace<UIAlphaMaskComponent>(entries[2]).textureHandle = partial;
+        if (!UILayout::Build(world, canvas, layouts) || layouts.back().visible)
+            return Fail("Exceeding alpha mask depth should hide descendants.");
+        detail::SetComponentEnabled<UIAlphaMaskComponent>(world, entries[2], false);
+        if (!UILayout::Build(world, canvas, layouts) || !hit(0.90f))
+            return Fail("A disabled image mask should leave ancestor masks active.");
+        world.get<UIAlphaMaskComponent>(entries[1]).textureHandle.Reset();
+        if (!UILayout::Build(world, canvas, layouts) || layouts.back().visible)
+            return Fail("An enabled mask with no assigned asset should hide descendants.");
     }
     {
         std::unique_ptr<Scene, SceneRelease> editing(Scene::Create());

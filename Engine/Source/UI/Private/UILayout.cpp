@@ -266,6 +266,7 @@ bool Engine::UILayout::Contains(const UIElementLayout& layout, const glm::vec2& 
             glm::dot(glm::vec3(layout.ellipseMaskPlanes[index * 2 + 1]), point));
         if (!(glm::dot(localMask, localMask) <= 1.0f)) return false;
     }
+    if (!UIClipLayout::AlphaMasksContain(layout, point)) return false;
     const glm::vec2 local(glm::inverse(layout.renderMatrix) * glm::vec4(canvasPoint, 0.0f, 1.0f));
     return Finite(local) && local.x >= 0.0f && local.y >= 0.0f && local.x <= 1.0f && local.y <= 1.0f;
 }

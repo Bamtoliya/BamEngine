@@ -33,11 +33,18 @@ GLSL `layout(set = 2, binding = 0)`.
 ## UI Image Draw Data
 
 The UI object constant buffer uses RHI slot 1 (`b0, space2` in HLSL and
-`set = 1, binding = 1` in the SDL GPU GLSL vertex layout). The existing 112-byte
-image data is followed by eight `float4`/`vec4` rows, for 240 bytes total. Each
-pair maps a canvas position to one ancestor ellipse. Unused pairs are zero.
-The built-in vertex and fragment shaders pass and test those four coordinate
-pairs together. Rebuild both shader stages after changing this interface.
+`set = 1, binding = 1` in the SDL GPU GLSL vertex layout). The 112-byte image
+prefix is followed by eight `float4`/`vec4` rows for four ellipse masks. At
+offset 240, two 64-byte image mask records bring the total to 368 bytes. Each
+record supplies two canvas-to-mask rows, the atlas UV region and its sampling
+bounds. An inactive record has a zero UV span.
+
+The built-in pixel shader uses texture slots 0–2 for the image and masks. In
+HLSL these are `t0`–`t2, space1` with sampler `s0, space1`. In SDL GPU GLSL
+these are combined samplers at `set = 2, bindings 0–2`. Masks use bilinear mip 0
+sampling within their atlas bounds. For Tint conversion, the UI fragment
+shader uses separate texture bindings 0-2 and a shared sampler at binding 3.
+Rebuild both shader stages after changing this interface.
 
 ## D3D12 Root Signature Layout (`DirectX12RHI.cpp`)
 

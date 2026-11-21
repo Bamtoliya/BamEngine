@@ -5,6 +5,7 @@
 #include "Structs.h"
 #include "MaterialInterface.h"
 #include "UIEllipseMaskGeometry.h"
+#include "UIAlphaMaskGeometry.h"
 #include <optional>
 
 BEGIN(Engine)
@@ -85,5 +86,7 @@ struct UIImageDrawCommand
 	std::optional<vec4> clipRect;
 	UIEllipseMaskPlanes ellipseMaskPlanes{};
 	std::size_t ellipseMaskCount = 0;
+	UIAlphaMaskRegions alphaMasks{};
+	std::size_t alphaMaskCount = 0;
 };
 END
