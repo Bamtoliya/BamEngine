@@ -10,9 +10,12 @@
 
 #pragma region Third Library
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cmath>
 #include <fmt/core.h>
 #include <fstream>
+#include <thread>
 #include <utility>
 #pragma endregion
 
@@ -32,6 +35,8 @@
 #include "NotificationManager.h"
 #include "ResourceEditors.h"
 #include "ResourceManager.h"
+#include "ResourceHandleArchiveAdapter.h"
+#include "Scene.h"
 #include "ResourceEditorInterface.h"
 #include "PluginResourceEditor.h"
 #include "TerrainEditor.h"
@@ -62,7 +67,41 @@
 #pragma pop_macro("COLOR")
 #pragma endregion
 
+BEGIN(Editor)
+struct SceneLoadState
+{
+	enum class EStage
+	{
+		ReadingArchive,
+		PreloadingResources,
+		FinalizingScene
+	};
+
+	std::filesystem::path RequestedPath;
+	std::filesystem::path ResolvedPath;
+	std::string DisplayName;
+	EStage Stage = EStage::ReadingArchive;
+	std::chrono::steady_clock::time_point StartTime{};
+	bool ModalVisible = false;
+	bool FinalizingFrameDrawn = false;
+	std::unique_ptr<archive::JsonArchive> Archive;
+	archive::ArchiveResult ArchiveReadResult;
+	std::vector<Engine::ResourceReference> Resources;
+	size_t NextResourceIndex = 0;
+	std::atomic<bool> ArchiveReady = false;
+	std::thread ArchiveThread;
+
+	~SceneLoadState()
+	{
+		if (ArchiveThread.joinable())
+			ArchiveThread.join();
+	}
+};
+END
+
 IMPLEMENT_SINGLETON(ImGuiManager)
+
+ImGuiManager::~ImGuiManager() = default;
 
 #pragma region Constructor&Destructor
 EResult ImGuiManager::Initialize(void* arg)
@@ -206,6 +245,7 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
+	m_SceneLoadState.reset();
 	ReleaseFrameTextures();
 	if (m_ImGuiContext)
 		ImGui::SetCurrentContext(m_ImGuiContext);
@@ -352,6 +392,8 @@ void ImGuiManager::Draw()
 	DrawResourceQuitConfirmation();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
+	UpdateSceneLoad();
+	DrawSceneLoadingModal();
 	if (RecoveryManager::IsCreated())
 	{
 		RecoveryManager::Get().DrawRecoveryModal();
@@ -389,7 +431,7 @@ void ImGuiManager::Draw()
 
 		const bool hasPopup = ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 		const bool blockedByEditorState = ImGui::GetIO().WantTextInput || m_DocumentController->HasPendingAction() ||
-			EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing();
+			IsSceneLoading() || EditorSettingsService::Get().IsWindowChangePending() || ShortcutManager::Get().IsCapturing();
 		const bool suppressed = blockedByEditorState || hasPopup;
 		EShortcutContext activeContext = EShortcutContext::Global;
 		std::wstring_view activePanel;
@@ -1273,7 +1315,7 @@ bool ImGuiManager::RequestNewScene()
 		return false;
 	}
 
-	if (m_DocumentController->IsBusy())
+	if (m_DocumentController->IsBusy() || IsSceneLoading())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
@@ -1293,7 +1335,7 @@ bool ImGuiManager::ExecuteNewScene(ESceneTemplate templateType)
 		return false;
 	}
 
-	if (m_DocumentController->IsBusy())
+	if (m_DocumentController->IsBusy() || IsSceneLoading())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
@@ -1352,7 +1394,7 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 		return false;
 	}
 
-	if (m_DocumentController->IsBusy())
+	if (m_DocumentController->IsBusy() || IsSceneLoading())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 			LOCAL("EditorDocument.OperationBusy"), ELogLevel::Warn);
@@ -1389,10 +1431,13 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 		documents.push_back(application.GetSceneDocumentId());
 
 	return m_DocumentController->RequestAction(std::move(documents),
-		[action, path = std::move(path)](const std::vector<EditorDocumentId>&) -> EResult
+		[this, action, path = std::move(path)](const std::vector<EditorDocumentId>&) -> EResult
 		{
 			if (!PIEManager::Get().IsEditing())
 				return EResult::AccessDenied;
+
+			if (action == ESceneDocumentAction::Open)
+				return BeginSceneLoad(path) ? EResult::Success : EResult::Fail;
 
 			auto& scenes = SceneManager::Get();
 			EResult result = EResult::Fail;
@@ -1402,14 +1447,10 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 			case ESceneDocumentAction::New:
 				result = scenes.NewScene();
 				break;
-			case ESceneDocumentAction::Open:
-			{
-				archive::JsonArchive reader;
-				result = scenes.LoadScene(reader, path.wstring());
-				break;
-			}
 			case ESceneDocumentAction::Close:
 				result = scenes.CloseScene();
+				break;
+			default:
 				break;
 			}
 
@@ -1417,17 +1458,10 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 				return result;
 
 			SelectionManager::Get().ClearSelection(true);
-			Application::Get().AdoptSceneDocument(
-				action == ESceneDocumentAction::Open ? path : std::filesystem::path{});
+			Application::Get().AdoptSceneDocument(std::filesystem::path{});
 
-			std::string message;
-
-			if (action == ESceneDocumentAction::Open)
-				message = LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(path.wstring()));
-			else if (action == ESceneDocumentAction::New)
-				message = LOCAL("EditorDocument.SceneCreated");
-			else
-				message = LOCAL("EditorDocument.SceneClosed");
+			const std::string message = action == ESceneDocumentAction::New
+				? LOCAL("EditorDocument.SceneCreated") : LOCAL("EditorDocument.SceneClosed");
 
 			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"), message, ELogLevel::Info);
 
@@ -1435,9 +1469,248 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 		});
 }
 
+bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
+{
+	if (m_SceneLoadState)
+		return false;
+
+	std::filesystem::path resolvedPath(path);
+	if (resolvedPath.is_relative())
+		resolvedPath = Engine::PlatformPath::ResolveProjectRelative(resolvedPath);
+
+	std::error_code ec;
+	if (!std::filesystem::exists(resolvedPath, ec))
+	{
+		const std::string ext = resolvedPath.extension().string();
+		if (ext == ".json")
+		{
+			const std::string stem = resolvedPath.stem().string();
+			if (!stem.ends_with(".bamscene"))
+			{
+				const auto candidatePath = resolvedPath.parent_path() / (stem + ".bamscene.json");
+				ec.clear();
+				if (std::filesystem::exists(candidatePath, ec))
+					resolvedPath = candidatePath;
+			}
+		}
+	}
+
+	auto state = std::make_unique<SceneLoadState>();
+	state->RequestedPath = path;
+	state->ResolvedPath = std::move(resolvedPath);
+	state->DisplayName = WStrToStr(path.filename().wstring());
+	state->StartTime = std::chrono::steady_clock::now();
+	state->Archive = std::make_unique<archive::JsonArchive>();
+
+	try
+	{
+		state->ArchiveThread = std::thread([rawState = state.get()]()
+		{
+			rawState->ArchiveReadResult = rawState->Archive->LoadFromFile(rawState->ResolvedPath);
+			if (rawState->ArchiveReadResult)
+			{
+				bool unused = false;
+				Engine::ResourceReferenceSet refs;
+				const auto refResult = rawState->Archive->ReadObject("Scene", unused,
+					[&refs](archive::IArchive& object, bool&) -> archive::ArchiveResult
+					{
+						return archive_resource::ReadResourceReferences(object, "ResourceReferences", refs);
+					});
+				if (refResult)
+					rawState->Resources.assign(refs.begin(), refs.end());
+			}
+			rawState->ArchiveReady.store(true, std::memory_order_release);
+		});
+	}
+	catch (const std::exception& exception)
+	{
+		BAM_LOG(Error, "Editor", "Document", "Failed to start scene load worker: {}", exception.what());
+		return false;
+	}
+
+	m_SceneLoadState = std::move(state);
+	return true;
+}
+
+void ImGuiManager::UpdateSceneLoad()
+{
+	if (!m_SceneLoadState)
+		return;
+
+	if (!PIEManager::Get().IsEditing())
+	{
+		m_SceneLoadState.reset();
+		return;
+	}
+
+	auto& state = *m_SceneLoadState;
+	const auto failLoad = [this](std::string_view logContext, const archive::ArchiveResult& archiveError)
+	{
+		BAM_LOG(Error, "Editor", "Document", "Scene load failed ({}): code={}, field={}",
+			logContext, static_cast<int32>(archiveError.Code), archiveError.Field);
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+		m_SceneLoadState.reset();
+	};
+
+	if (state.Stage == SceneLoadState::EStage::ReadingArchive)
+	{
+		if (!state.ArchiveReady.load(std::memory_order_acquire))
+			return;
+
+		if (state.ArchiveThread.joinable())
+			state.ArchiveThread.join();
+
+		if (!state.ArchiveReadResult)
+		{
+			failLoad("ReadArchive", state.ArchiveReadResult);
+			return;
+		}
+
+		state.Stage = state.Resources.empty()
+			? SceneLoadState::EStage::FinalizingScene
+			: SceneLoadState::EStage::PreloadingResources;
+	}
+
+	if (state.Stage == SceneLoadState::EStage::PreloadingResources && ResourceManager::IsCreated())
+	{
+		const auto frameBudget = std::chrono::milliseconds(8);
+		const auto batchStart = std::chrono::steady_clock::now();
+		auto& manager = ResourceManager::Get();
+
+		while (state.NextResourceIndex < state.Resources.size())
+		{
+			const auto& ref = state.Resources[state.NextResourceIndex++];
+			if (!ref.AssetKey.empty() || !ref.AssetPath.empty())
+			{
+				try
+				{
+					(void)archive_resource::ResolveResourceHandle(manager, ref.AssetKey, ref.AssetPath);
+				}
+				catch (const std::filesystem::filesystem_error& error)
+				{
+					BAM_LOG(Warn, "Editor", "Document", "Resource preload path error: {}", error.what());
+				}
+			}
+
+			if (std::chrono::steady_clock::now() - batchStart >= frameBudget)
+				break;
+		}
+
+		if (state.NextResourceIndex < state.Resources.size())
+			return;
+
+		state.Stage = SceneLoadState::EStage::FinalizingScene;
+		if (state.ModalVisible)
+			return;
+	}
+	else if (state.Stage == SceneLoadState::EStage::PreloadingResources)
+	{
+		state.Stage = SceneLoadState::EStage::FinalizingScene;
+	}
+
+	if (state.Stage == SceneLoadState::EStage::FinalizingScene)
+	{
+		if (state.ModalVisible && !state.FinalizingFrameDrawn)
+			return;
+
+		Scene* candidate = nullptr;
+		const auto result = Engine::Scene::CreateFromArchive(*state.Archive, candidate);
+		if (!result || !candidate)
+		{
+			Safe_Release(candidate);
+			failLoad("CreateFromArchive", result);
+			return;
+		}
+
+		const EResult openResult = SceneManager::Get().OpenScene(candidate);
+		Safe_Release(candidate);
+		if (openResult != EResult::Success)
+		{
+			BAM_LOG(Error, "Editor", "Document", "Scene open failed: result={}", ResultToString(openResult));
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+				LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+			m_SceneLoadState.reset();
+			return;
+		}
+
+		SelectionManager::Get().ClearSelection(true);
+		Application::Get().AdoptSceneDocument(state.RequestedPath);
+		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+			LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(state.RequestedPath.wstring())), ELogLevel::Info);
+		m_SceneLoadState.reset();
+	}
+}
+
+void ImGuiManager::DrawSceneLoadingModal()
+{
+	const std::string modalTitle = LOCAL("EditorDocument.LoadingSceneTitle") + "###SceneLoadingModal";
+	if (m_SceneLoadState)
+	{
+		constexpr auto kModalDelay = std::chrono::milliseconds(150);
+		if (!m_SceneLoadState->ModalVisible &&
+			std::chrono::steady_clock::now() - m_SceneLoadState->StartTime >= kModalDelay)
+		{
+			m_SceneLoadState->ModalVisible = true;
+		}
+
+		if (m_SceneLoadState->ModalVisible && !ImGui::IsPopupOpen(modalTitle.c_str()))
+			ImGui::OpenPopup(modalTitle.c_str());
+	}
+
+	if (!ImGui::IsPopupOpen(modalTitle.c_str()))
+		return;
+
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(420.0f, 0.0f), ImGuiCond_Always);
+
+	constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize |
+		ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, flags))
+		return;
+
+	if (!m_SceneLoadState)
+	{
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+
+	auto& state = *m_SceneLoadState;
+	ImGui::TextUnformatted(state.DisplayName.c_str());
+	ImGui::Spacing();
+
+	float progress = 0.0f;
+	std::string stageText;
+	switch (state.Stage)
+	{
+	case SceneLoadState::EStage::ReadingArchive:
+		stageText = LOCAL("EditorDocument.LoadingSceneReading");
+		progress = 0.08f + 0.12f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f));
+		break;
+	case SceneLoadState::EStage::PreloadingResources:
+		stageText = LOCAL_FMT("EditorDocument.LoadingSceneResources",
+			state.NextResourceIndex, state.Resources.size());
+		progress = 0.20f + 0.70f * (static_cast<float>(state.NextResourceIndex) /
+			static_cast<float>((std::max)(size_t{ 1 }, state.Resources.size())));
+		break;
+	case SceneLoadState::EStage::FinalizingScene:
+		stageText = LOCAL("EditorDocument.LoadingSceneFinalizing");
+		progress = 0.95f;
+		state.FinalizingFrameDrawn = true;
+		break;
+	}
+
+	ImGui::TextDisabled("%s", stageText.c_str());
+	ImGui::Spacing();
+	ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
+	ImGui::EndPopup();
+}
+
 bool ImGuiManager::RequestQuit()
 {
-	if (m_DocumentController->IsBusy() || m_ResourceQuitConfirmPending)
+	if (m_DocumentController->IsBusy() || IsSceneLoading() || m_ResourceQuitConfirmPending)
 		return false;
 	for (auto* panel : m_ImGuiPanels)
 	{
@@ -1463,7 +1736,7 @@ bool ImGuiManager::RequestQuit()
 
 bool ImGuiManager::ContinueQuitRequest()
 {
-	if (m_DocumentController->IsBusy())
+	if (m_DocumentController->IsBusy() || IsSceneLoading())
 		return false;
 
 	if (!PIEManager::Get().IsEditing())
@@ -1502,7 +1775,7 @@ vector<ResourceEditorInterface*> ImGuiManager::CollectUnsavedResourceEditors() c
 
 bool ImGuiManager::CanRepairAssetReferenceSource(const std::filesystem::path& sourceFile) const
 {
-	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() ||
+	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || IsSceneLoading() ||
 		(PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode()))
 		return false;
 
@@ -1536,7 +1809,8 @@ bool ImGuiManager::CanRepairAssetReferenceSource(const std::filesystem::path& so
 
 bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) const
 {
-	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || !CollectUnsavedResourceEditors().empty())
+	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || IsSceneLoading() ||
+		!CollectUnsavedResourceEditors().empty())
 		return false;
 	if (PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode())
 		return false;

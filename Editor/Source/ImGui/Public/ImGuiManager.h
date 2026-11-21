@@ -18,6 +18,7 @@ class ResourceEditorInterface;
 class AssetPathRelocation;
 class PluginResourceEditor;
 struct EditorSettingsChangeResult;
+struct SceneLoadState;
 struct ImGuiManagerDesc
 {
 	SDL_Window* Window = { nullptr };
@@ -31,7 +32,7 @@ class ImGuiManager final : public Base
 #pragma region Constructor&Destructor
 private:
 	ImGuiManager() {}
-	virtual ~ImGuiManager() = default;
+	virtual ~ImGuiManager();
 	EResult Initialize(void* arg = nullptr);
 public:
 	virtual void Free()override;
@@ -163,6 +164,7 @@ public:
 	bool RequestOpenScene(const std::filesystem::path& path);
 	bool RequestCloseScene();
 	bool RequestQuit();
+	bool IsSceneLoading() const { return m_SceneLoadState != nullptr; }
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
 	bool PrepareAssetFileChanges(AssetPathRelocation& relocation) const;
 	bool CanRepairAssetReferenceSource(const std::filesystem::path& sourceFile) const;
@@ -176,6 +178,9 @@ private:
 	};
 
 	bool RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path = {});
+	bool BeginSceneLoad(const std::filesystem::path& path);
+	void UpdateSceneLoad();
+	void DrawSceneLoadingModal();
 	bool ContinueQuitRequest();
 	vector<ResourceEditorInterface*> CollectUnsavedResourceEditors() const;
 	void DrawResourceQuitConfirmation();
@@ -194,6 +199,7 @@ private:
 	bool m_PlatformBackendInitialized = false;
 	bool m_RendererBackendInitialized = false;
 	std::unique_ptr<EditorDocumentController> m_DocumentController;
+	std::unique_ptr<SceneLoadState> m_SceneLoadState;
 	std::unordered_set<Engine::RHITexture*> m_FrameTextures;
 private:
 	PluginHost m_PluginHost;
