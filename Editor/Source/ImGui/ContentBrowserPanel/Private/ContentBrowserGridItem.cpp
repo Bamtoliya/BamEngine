@@ -60,7 +60,7 @@ ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVis
 {
 	AssetVisualDesc desc;
 	desc.Icon = ICON_FA_FILE;
-		const std::string rawFilename = path.filename().string();
+		const std::string rawFilename = Engine::WStrToStr(path.filename().wstring());
 		if (isDirectory)
 		{
 			desc.Icon = ICON_FA_FOLDER;
@@ -174,8 +174,8 @@ ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVis
 			}
 		}
 		// 단일 확장자 분류
-		std::string ext = ToLowerAscii(path.extension().string());
-		desc.CleanName = path.stem().string();
+		std::string ext = ToLowerAscii(Engine::WStrToStr(path.extension().wstring()));
+		desc.CleanName = Engine::WStrToStr(path.stem().wstring());
 		if (!ext.empty() && ext[0] == '.')
 		{
 			desc.BadgeText = ext.substr(1);
@@ -499,7 +499,7 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		ImVec2 imgMax(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize);
 
 		const auto& path = directoryEntry.path();
-		const std::string lowerFilename = ToLowerAscii(path.filename().string());
+		const std::string lowerFilename = ToLowerAscii(Engine::WStrToStr(path.filename().wstring()));
 		if (lowerFilename.ends_with(".bamsprite") || lowerFilename.ends_with(".bamsprite.json"))
 		{
 			auto& rm = Engine::ResourceManager::Get();
@@ -778,7 +778,7 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 	if (ImGui::IsItemHovered())
 	{
 		std::filesystem::path path = directoryEntry.path();
-		std::string filenameString = path.filename().string();
+		std::string filenameString = Engine::WStrToStr(path.filename().wstring());
 		AssetVisualDesc fallbackVisual;
 		const AssetVisualDesc& visual = ctx.Visual ? *ctx.Visual
 			: (fallbackVisual = DescribeAssetVisual(path, directoryEntry.is_directory()));

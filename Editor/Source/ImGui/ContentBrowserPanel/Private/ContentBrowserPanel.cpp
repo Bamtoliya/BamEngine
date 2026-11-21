@@ -27,6 +27,7 @@
 #pragma comment(lib, "shlwapi.lib")
 #include <algorithm>
 #include <chrono>
+#include <string_view>
 #include <utility>
 
 using namespace std;
@@ -94,32 +95,25 @@ void ContentBrowserFileListener::handleFileAction(efsw::WatchID watchid, const s
 }
 #pragma endregion
 
-static bool StringContainsCaseInsensitive(const string& str, const string& subStr)
+static bool StringContainsCaseInsensitive(std::wstring_view filename, std::wstring_view query)
 {
-	if (subStr.empty()) return true;
+	if (query.empty()) return true;
 
-	std::wstring wStr = StrToWStr(str);
-	std::wstring wSubStr = StrToWStr(subStr);
-
-	auto it = std::search(
-		wStr.begin(), wStr.end(),
-		wSubStr.begin(), wSubStr.end(),
-		[](wchar_t ch1, wchar_t ch2) {
-			// CharUpperW를 사용하여 다국어 문자도 안전하게 대문자로 변환하여 비교
-			return CharUpperW((LPWSTR)(INT_PTR)ch1) == CharUpperW((LPWSTR)(INT_PTR)ch2);
-		}
-	);
-	return (it != wStr.end());
+	const auto length = static_cast<int>(query.size());
+	for (size_t offset = 0; offset + query.size() <= filename.size(); ++offset)
+	{
+		if (CompareStringOrdinal(filename.data() + offset, length, query.data(), length, TRUE) == CSTR_EQUAL)
+			return true;
+	}
+	return false;
 }
 
 static bool PassesFilter(const filesystem::directory_entry& entry, uint32 filterMask)
 {
 	if (filterMask == 0) return true; // 아무것도 선택하지 않거나 "All"인 경우 모두 표시
 	if (entry.is_directory()) return true; // 폴더는 무조건 표시
-	string filename = entry.path().filename().string();
-	for (auto& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-	string ext = entry.path().extension().string();
-	for (auto& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	const auto filename = Engine::ToLowerStr(Engine::WStrToStr(entry.path().filename().wstring()));
+	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(entry.path().extension().wstring()));
 	const bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
 		ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".bamtex" || ext == ".bamsprite" ||
 		ext == ".bamspriteanim" || ext == ".spriteanim" ||
@@ -2291,7 +2285,17 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		m_LastSearchString = searchStr;
 		m_SearchResults.clear();
 
-		if (isSearching)
+		std::wstring searchQuery;
+		try
+		{
+			searchQuery = Engine::StrToWStr(searchStr);
+		}
+		catch (const std::filesystem::filesystem_error&)
+		{
+			EDITOR_LOG_WARN("Content Browser search query could not be decoded as UTF-8.");
+		}
+
+		if (!searchQuery.empty())
 		{
 			if (m_SearchAllFolders)
 			{
@@ -2302,7 +2306,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 				{
 					if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(entry.path()))
 						continue;
-					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+					if (StringContainsCaseInsensitive(entry.path().filename().wstring(), searchQuery))
 						m_SearchResults.push_back(entry);
 				}
 
@@ -2312,7 +2316,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 					for (const auto& entry : filesystem::recursive_directory_iterator(
 						m_EngineRootPath, filesystem::directory_options::skip_permission_denied, searchEc))
 					{
-						if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+						if (StringContainsCaseInsensitive(entry.path().filename().wstring(), searchQuery))
 							m_SearchResults.push_back(entry);
 					}
 				}
@@ -2323,7 +2327,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 					for (const auto& entry : filesystem::recursive_directory_iterator(
 						m_EditorRootPath, filesystem::directory_options::skip_permission_denied, searchEc))
 					{
-						if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+						if (StringContainsCaseInsensitive(entry.path().filename().wstring(), searchQuery))
 							m_SearchResults.push_back(entry);
 					}
 				}
@@ -2336,7 +2340,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 				{
 					if (!m_ShowEngineContent && Engine::PlatformPath::IsReadOnlyTarget(entry.path()))
 						continue;
-					if (StringContainsCaseInsensitive(entry.path().filename().string(), searchStr))
+					if (StringContainsCaseInsensitive(entry.path().filename().wstring(), searchQuery))
 						m_SearchResults.push_back(entry);
 				}
 			}
