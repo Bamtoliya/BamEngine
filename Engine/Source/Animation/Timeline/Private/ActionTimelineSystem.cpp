@@ -5,6 +5,7 @@
 #include "SkinnedMeshRendererComponent.h"
 #include "CameraComponent.h"
 #include "TransformComponent.h"
+#include "TransformSystem.h"
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
 #include "HierarchyComponent.h"
@@ -16,8 +17,9 @@
 #include <cmath>
 #include "AnimationSceneQuery.h"
 #include "Skeleton.h"
-#include "CompositeVFXComponent.h" 
-#include "CompositeEffect.h"       
+#include "CompositeVFXComponent.h"
+#include "CompositeEffect.h"
+#include "ParticleEffect.h"
 #include "NameComponent.h"
 #include "AnimationEvaluator.h"
 #include "Animation.h"
@@ -29,6 +31,7 @@
 #include "SystemManager.h"
 #include <chrono>
 #include <filesystem>
+#include <tuple>
 #include <unordered_map>
 
 namespace
@@ -295,6 +298,115 @@ namespace
 		animator.timelineOverrideSerial = timeline.playSerial;
 		timeline.animatorOverrideEntity = animatorEntity;
 		timeline.animatorOverrideSerial = timeline.playSerial;
+	}
+
+	ResourceHandle<CompositeEffect> GetOrCreateNotifyParticleEffect(const AnimNotifyData& notify)
+	{
+		if (!ResourceManager::IsCreated() || notify.BurstCount == 0) return {};
+
+		const auto quantize = [](float value, float scale) -> long long
+		{
+			return std::isfinite(value) ? std::llround(static_cast<double>(value) * static_cast<double>(scale)) : 0LL;
+		};
+		const uint32 clampedBurst = std::max<uint32>(notify.BurstCount, 1u);
+		const float clampedSize = std::max(0.01f, notify.ParticleSize);
+		const float clampedSpeed = std::max(0.0f, notify.ParticleSpeed);
+		const float clampedLifetime = std::max(0.05f, notify.ParticleLifetime);
+
+		const std::wstring keySuffix = std::to_wstring(clampedBurst) + L"_" +
+			std::to_wstring(quantize(clampedSize, 1000.0f)) + L"_" +
+			std::to_wstring(quantize(clampedSpeed, 1000.0f)) + L"_" +
+			std::to_wstring(quantize(clampedLifetime, 1000.0f)) + L"_" +
+			std::to_wstring(quantize(notify.ParticleColor.r, 255.0f)) + L"_" +
+			std::to_wstring(quantize(notify.ParticleColor.g, 255.0f)) + L"_" +
+			std::to_wstring(quantize(notify.ParticleColor.b, 255.0f)) + L"_" +
+			std::to_wstring(quantize(notify.ParticleColor.a, 255.0f));
+
+		const std::wstring particleKey = L"__ActionTimelineParticleEffect_" + keySuffix;
+		const std::wstring compositeKey = L"__ActionTimelineParticleComposite_" + keySuffix;
+
+		auto& rm = ResourceManager::Get();
+		if (auto existing = rm.GetResourceHandle<CompositeEffect>(compositeKey); existing.IsValid())
+		{
+			return existing;
+		}
+
+		auto particleHandle = rm.GetResourceHandle<ParticleEffect>(particleKey);
+		if (!particleHandle.IsValid())
+		{
+			ParticleEmitterData emitter;
+			emitter.name = "NotifyBurst";
+			emitter.triggerMode = EParticleEmitterTrigger::Continuous;
+			emitter.maxParticles = clampedBurst;
+			emitter.emissionRate = 0.0f;
+			emitter.burstCount = clampedBurst;
+			emitter.burstInterval = 0.001f;
+			emitter.lifetimeMax = clampedLifetime;
+			emitter.lifetimeMin = std::max(0.05f, clampedLifetime * 0.8f);
+			emitter.speedMax = clampedSpeed;
+			emitter.speedMin = std::max(0.0f, clampedSpeed * 0.7f);
+			emitter.spreadAngleDegrees = 180.0f;
+			emitter.sizeStart = vec2(clampedSize);
+			emitter.sizeEnd = vec2(std::max(0.005f, clampedSize * 0.25f));
+			emitter.colorStart = notify.ParticleColor;
+			emitter.colorEnd = vec4(notify.ParticleColor.r, notify.ParticleColor.g, notify.ParticleColor.b, 0.0f);
+
+			ParticleEffectCreateDesc particleDesc;
+			particleDesc.emitters.push_back(emitter);
+			particleHandle = rm.AddResource(particleKey, ParticleEffect::Create(&particleDesc));
+		}
+		if (!particleHandle.IsValid()) return {};
+
+		CompositeEffectCreateDesc effectDesc;
+		effectDesc.totalDuration = 0.06f;
+		auto effectHandle = rm.AddResource(compositeKey, CompositeEffect::Create(&effectDesc));
+		if (!effectHandle.IsValid()) return {};
+
+		VFXParticleTrack track;
+		track.trackName = "NotifyBurst";
+		track.startTime = 0.0f;
+		track.duration = 0.06f;
+		track.effectHandle = particleHandle;
+		effectHandle->GetParticleTracks().push_back(track);
+		return effectHandle;
+	}
+
+	entt::entity SpawnTimelineVFXEntity(Scene& scene, entt::registry& world, const std::wstring& entityName,
+		const SocketWorldTransform& xform, const vec3& scale, const ResourceHandle<CompositeEffect>& effectHandle,
+		float playRate, bool holdUntilRelease, bool autoDestroy)
+	{
+		Entity& newEntity = scene.CreateEntity();
+		const entt::entity vfxEntity = newEntity.GetEntityHandle();
+
+		world.get_or_emplace<NameComponent>(vfxEntity).name = entityName;
+
+		auto& trans = world.get_or_emplace<TransformComponent>(vfxEntity);
+		std::ignore = trans.SetLocalPosition(xform.position);
+		trans.rotation = xform.rotation;
+		std::ignore = trans.SetEulerRotation(glm::degrees(glm::eulerAngles(xform.rotation)));
+		std::ignore = trans.SetLocalScale(scale);
+
+		auto& worldTrans = world.get_or_emplace<WorldTransformComponent>(vfxEntity);
+		TransformSystem::UpdateRootWorld(trans, worldTrans);
+
+		auto& flag = world.get_or_emplace<FlagComponent>(vfxEntity);
+		flag.flags = EEntityFlag::Active | EEntityFlag::Visible;
+		flag.effectiveFlags = flag.flags;
+
+		auto& vfxComp = world.get_or_emplace<CompositeVFXComponent>(vfxEntity);
+		vfxComp.effectHandle = effectHandle;
+		vfxComp.isPlaying = true;
+		vfxComp.isLooping = false;
+		vfxComp.playOnce = true;
+		vfxComp.holdUntilRelease = holdUntilRelease;
+		vfxComp.playRate = playRate;
+		vfxComp.Restart();
+
+		if (autoDestroy)
+		{
+			world.get_or_emplace<ActionVFXLifecycleComponent>(vfxEntity);
+		}
+		return vfxEntity;
 	}
 }
 
@@ -570,11 +682,17 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							}
 						}
 
-						// (3) 파티클 노티파이 (Particle FX 위치 계산)
+						// (3) 파티클 노티파이 (Particle FX 버스트 스폰)
 						if (notify.Type == EAnimNotifyType::Particle)
 						{
-							vec3 socketWorldPos = ComputeSocketWorldPos(world, entity, notify.SocketBoneName, notify.OffsetPosition);
-							// 추후 풀링된 파티클 이미터 또는 파티클 매니저가 있을 경우 socketWorldPos 위치에 버스트 생성
+							const vec3 socketWorldPos = ComputeSocketWorldPos(world, entity, notify.SocketBoneName, notify.OffsetPosition);
+							if (auto effectHandle = GetOrCreateNotifyParticleEffect(notify); effectHandle.IsValid())
+							{
+								const std::wstring name = StrToWStr(notify.Name.empty() ? "Spawned_ParticleNotify" : (notify.Name + "_Particle"));
+								SpawnTimelineVFXEntity(*scene, world, name,
+									SocketWorldTransform{ socketWorldPos, quat(1.0f, 0.0f, 0.0f, 0.0f) },
+									vec3(1.0f), effectHandle, 1.0f, false, true);
+							}
 						}
 
 						// (4) [신설] 복합 VFX 노티파이 (SpawnCompositeVFX)
@@ -584,30 +702,10 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							if (vfxHandle.IsValid())
 							{
 								const auto xform = ComputeSocketWorldTransform(world, entity, notify.SocketBoneName, notify.OffsetPosition, notify.OffsetRotation);
-								Entity& newEntity = scene->CreateEntity();
-								const entt::entity vfxEntity = newEntity.GetEntityHandle();
-
-								auto& nameComp = world.get_or_emplace<NameComponent>(vfxEntity);
-								nameComp.name = StrToWStr(notify.Name.empty() ? "Spawned_CompositeVFX" : (notify.Name + "_VFX"));
-
-								auto& trans = world.get_or_emplace<TransformComponent>(vfxEntity);
-								trans.SetLocalPosition(xform.position);
-								trans.rotation = xform.rotation;
-								trans.SetEulerRotation(glm::degrees(glm::eulerAngles(xform.rotation)));
-								trans.SetLocalScale(notify.VFXScale);
-
-								world.get_or_emplace<WorldTransformComponent>(vfxEntity);
-								auto& flag = world.get_or_emplace<FlagComponent>(vfxEntity);
-								flag.flags = EEntityFlag::Active | EEntityFlag::Visible;
-
-								auto& vfxComp = world.get_or_emplace<CompositeVFXComponent>(vfxEntity);
-								vfxComp.effectHandle = ResourceHandle<CompositeEffect>(vfxHandle);
-								vfxComp.isPlaying = true;
-								vfxComp.isLooping = false;
-								vfxComp.playOnce = true;
-								vfxComp.holdUntilRelease = notify.Duration > 0.0f;
-								vfxComp.playRate = notify.VFXPlayRate;
-								vfxComp.Restart();
+								const std::wstring name = StrToWStr(notify.Name.empty() ? "Spawned_CompositeVFX" : (notify.Name + "_VFX"));
+								const bool holdUntilRelease = notify.Duration > 0.0f;
+								const entt::entity vfxEntity = SpawnTimelineVFXEntity(*scene, world, name, xform, notify.VFXScale,
+									ResourceHandle<CompositeEffect>(vfxHandle), notify.VFXPlayRate, holdUntilRelease, notify.AutoDestroy);
 
 								if (notify.AttachToSocket)
 								{
@@ -619,12 +717,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 									attach.scale = notify.VFXScale;
 								}
 
-								if (notify.AutoDestroy)
-								{
-									world.get_or_emplace<ActionVFXLifecycleComponent>(vfxEntity);
-								}
-
-								if (vfxComp.holdUntilRelease)
+								if (holdUntilRelease)
 								{
 									auto& hold = world.get_or_emplace<ActionVFXHoldComponent>(vfxEntity);
 									hold.ownerEntity = entity;

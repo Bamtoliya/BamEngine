@@ -1,4 +1,8 @@
+#include "ActionTimelineAsset.h"
+#include "ActionTimelineComponent.h"
 #include "ActionTimelinePlayback.h"
+#include "ActionTimelineSystem.h"
+#include "Animation.h"
 #include "AnimationSceneQuery.h"
 #include "AnimatorComponent.h"
 #include "ComponentEnable.h"
@@ -6,12 +10,19 @@
 #include "CompositeVFXComponent.h"
 #include "CompositeVFXSystem.h"
 #include "FlagComponent.h"
+#include "Model.h"
+#include "ModelInstanceComponent.h"
 #include "ResourceManager.h"
 #include "Scene.h"
+#include "Skeleton.h"
+#include "SkinnedMeshRendererComponent.h"
+#include "TransformComponent.h"
+#include "TransformSystem.h"
 #include "WorldTransformComponent.h"
 #include <cmath>
 #include <iostream>
 #include <memory>
+#include <tuple>
 
 namespace
 {
@@ -104,6 +115,315 @@ namespace
 		Engine::ResourceManager::Destroy();
 		return passed;
 	}
+
+	struct ReleaseBase
+	{
+		void operator()(Engine::Base* object) const { if (object) object->Release(); }
+	};
+
+	struct ResourceManagerScope
+	{
+		bool Created = Engine::ResourceManager::Create();
+		~ResourceManagerScope()
+		{
+			if (Created) Engine::ResourceManager::Destroy();
+		}
+	};
+
+	using ScenePtr = std::unique_ptr<Engine::Scene, ReleaseBase>;
+	using TimelineSystemPtr = std::unique_ptr<Engine::ActionTimelineSystem, ReleaseBase>;
+
+	bool CheckParticleNotifySpawnAndAutoDestroy()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		{
+			Engine::AnimNotifyData notify;
+			notify.Name = "Burst";
+			notify.TriggerTime = 0.05f;
+			notify.Type = Engine::EAnimNotifyType::Particle;
+			notify.OffsetPosition = Engine::vec3(1.0f, 2.0f, 3.0f);
+			notify.ParticleLifetime = 0.2f;
+			notify.BurstCount = 12;
+
+			Engine::TimelineNotifyTrack track;
+			track.TrackName = "FX Track";
+			track.Notifies.push_back(notify);
+
+			Engine::ActionTimelineCreateDesc timelineDesc;
+			timelineDesc.Duration = 0.5f;
+			timelineDesc.NotifyTracks.push_back(track);
+			auto timelineAsset = Engine::ResourceManager::Get().AddResource(
+				L"TimelineParticleNotifyAsset", Engine::ActionTimelineAsset::Create(&timelineDesc));
+
+			ScenePtr scene(Engine::Scene::Create());
+			TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+			if (!timelineAsset.IsValid() || !scene || !system)
+				return Check(false, "Particle notify test setup failed.");
+
+			scene->SetActive(true);
+			auto& world = scene->GetRegistry();
+			const auto owner = scene->CreateEntity().GetEntityHandle();
+			auto& trans = world.get_or_emplace<Engine::TransformComponent>(owner);
+			auto& worldTrans = world.get_or_emplace<Engine::WorldTransformComponent>(owner);
+			std::ignore = trans.SetLocalPosition(Engine::vec3(0.0f));
+			Engine::TransformSystem::UpdateRootWorld(trans, worldTrans);
+			world.get_or_emplace<Engine::FlagComponent>(owner);
+
+			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
+			timeline.timelineAsset = timelineAsset;
+			timeline.Play();
+
+			system->OnUpdate(world, { scene.get() }, 0.1f);
+
+			Engine::ResourceHandle<Engine::CompositeEffect> firstEffectHandle;
+			std::size_t spawnedCount = 0;
+			Engine::vec3 spawnedPos(0.0f);
+			for (auto vfxEntity : world.view<Engine::CompositeVFXComponent, Engine::ActionVFXLifecycleComponent>())
+			{
+				++spawnedCount;
+				firstEffectHandle = world.get<Engine::CompositeVFXComponent>(vfxEntity).effectHandle;
+				spawnedPos = world.get<Engine::TransformComponent>(vfxEntity).position;
+			}
+			passed &= Check(spawnedCount == 1 && firstEffectHandle.IsValid() &&
+				glm::distance(spawnedPos, Engine::vec3(1.0f, 2.0f, 3.0f)) <= 1.0e-4f,
+				"Particle notify must spawn one CompositeVFX entity at the socket world position.");
+
+			Engine::CompositeVFXSystem::SimulateSceneVFX(scene.get(), 0.016f);
+			std::size_t emittedParticles = 0;
+			for (auto vfxEntity : world.view<Engine::CompositeVFXComponent, Engine::ActionVFXLifecycleComponent>())
+			{
+				const auto& vfxComp = world.get<Engine::CompositeVFXComponent>(vfxEntity);
+				if (!vfxComp.particleRuntimes.empty() && !vfxComp.particleRuntimes[0].emitterInstances.empty())
+					emittedParticles = vfxComp.particleRuntimes[0].emitterInstances[0].particles.size();
+			}
+			passed &= Check(emittedParticles == 12,
+				"Particle notify must emit BurstCount particles on the spawned emitter.");
+
+			Engine::CompositeVFXSystem::SimulateSceneVFX(scene.get(), 0.35f);
+			bool finishedAfterLifetime = false;
+			for (auto vfxEntity : world.view<Engine::CompositeVFXComponent, Engine::ActionVFXLifecycleComponent>())
+			{
+				const auto& vfxComp = world.get<Engine::CompositeVFXComponent>(vfxEntity);
+				finishedAfterLifetime = vfxComp.isFinished &&
+					vfxComp.particleRuntimes[0].emitterInstances[0].particles.empty();
+			}
+			passed &= Check(finishedAfterLifetime,
+				"Spawned particle notify VFX must finish after particle lifetimes expire.");
+
+			system->OnUpdate(world, { scene.get() }, 0.016f);
+			std::size_t remainingCount = 0;
+			for (auto vfxEntity : world.view<Engine::ActionVFXLifecycleComponent>())
+			{
+				(void)vfxEntity;
+				++remainingCount;
+			}
+			passed &= Check(remainingCount == 0,
+				"Finished particle notify entity must be auto-destroyed.");
+
+			timeline.Play();
+			system->OnUpdate(world, { scene.get() }, 0.1f);
+			Engine::ResourceHandle<Engine::CompositeEffect> secondEffectHandle;
+			std::size_t respawnedCount = 0;
+			for (auto vfxEntity : world.view<Engine::CompositeVFXComponent, Engine::ActionVFXLifecycleComponent>())
+			{
+				++respawnedCount;
+				secondEffectHandle = world.get<Engine::CompositeVFXComponent>(vfxEntity).effectHandle;
+			}
+			passed &= Check(respawnedCount == 1 && secondEffectHandle == firstEffectHandle,
+				"Re-triggering the same particle notify must reuse the cached CompositeEffect handle.");
+		}
+		return passed;
+	}
+
+	bool CheckAnimatorOverrideLifecycle()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		{
+			auto& rm = Engine::ResourceManager::Get();
+			SkeletonCreateDesc skelDesc;
+			Bone rootBone;
+			rootBone.Name = L"Root";
+			skelDesc.Bones.push_back(rootBone);
+			auto skeleton = rm.AddResource(L"TimelineLifecycleSkeleton", Engine::Skeleton::Create(&skelDesc));
+
+			AnimationCreateDesc origAnimDesc;
+			origAnimDesc.Name = L"OrigClip";
+			origAnimDesc.Duration = 30.0;
+			origAnimDesc.TicksPerSecond = 30.0;
+			auto origClip = rm.AddResource(L"TimelineLifecycleOrigClip", Engine::Animation::Create(&origAnimDesc));
+
+			AnimationCreateDesc actionAnimDesc;
+			actionAnimDesc.Name = L"ActionClip";
+			actionAnimDesc.Duration = 6.0;
+			actionAnimDesc.TicksPerSecond = 30.0;
+			auto actionClip = rm.AddResource(L"TimelineLifecycleActionClip", Engine::Animation::Create(&actionAnimDesc));
+
+			Engine::ModelCreateDesc modelDesc;
+			modelDesc.Skeleton = skeleton;
+			modelDesc.Animations.push_back(actionClip);
+			auto model = rm.AddResource(L"TimelineLifecycleModel", Engine::Model::Create(&modelDesc));
+
+			Engine::ActionTimelineCreateDesc timelineDesc;
+			timelineDesc.ClipName = "ActionClip";
+			timelineDesc.Duration = 0.2f;
+			auto asset = rm.AddResource(L"TimelineLifecycleAsset", Engine::ActionTimelineAsset::Create(&timelineDesc));
+			if (asset.IsValid()) asset->SetBlendOutTime(0.1f);
+
+			ScenePtr scene(Engine::Scene::Create());
+			TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+			if (!skeleton.IsValid() || !origClip.IsValid() || !actionClip.IsValid() ||
+				!model.IsValid() || !asset.IsValid() || !scene || !system)
+				return Check(false, "Animator override lifecycle setup failed.");
+
+			scene->SetActive(true);
+			auto& world = scene->GetRegistry();
+			const auto ownerB = scene->CreateEntity().GetEntityHandle();
+			const auto ownerA = scene->CreateEntity().GetEntityHandle();
+			const auto animatorEntity = scene->CreateEntity().GetEntityHandle();
+
+			world.get_or_emplace<Engine::HierarchyComponent>(ownerB).children = { ownerA };
+			world.get_or_emplace<Engine::HierarchyComponent>(ownerA).parent = ownerB;
+			world.get_or_emplace<Engine::HierarchyComponent>(ownerA).children = { animatorEntity };
+			world.get_or_emplace<Engine::HierarchyComponent>(animatorEntity).parent = ownerA;
+			world.get_or_emplace<Engine::FlagComponent>(ownerB);
+			world.get_or_emplace<Engine::FlagComponent>(ownerA);
+			world.get_or_emplace<Engine::FlagComponent>(animatorEntity);
+
+			auto& animator = world.emplace<Engine::AnimatorComponent>(animatorEntity);
+			animator.currentClip = origClip;
+			animator.currentTime = 0.3f;
+			animator.isPlaying = true;
+			world.emplace<Engine::SkinnedMeshRendererComponent>(animatorEntity).skeletonHandle = skeleton;
+			world.emplace<Engine::ModelInstanceComponent>(animatorEntity).modelHandle = model;
+
+			auto& timelineA = world.emplace<Engine::ActionTimelineComponent>(ownerA);
+			timelineA.timelineAsset = asset;
+			timelineA.Play();
+
+			// 1) 자연 종료 후 원래 Animator 상태로 복원 + blendFromPose 설정 검증
+			system->OnUpdate(world, { scene.get() }, 0.1f);
+			passed &= Check(animator.timelineOverrideOwner == ownerA && animator.currentClip == actionClip &&
+				!animator.isPlaying && timelineA.animatorOverrideEntity == animatorEntity,
+				"Active timeline must acquire animator override ownership.");
+
+			system->OnUpdate(world, { scene.get() }, 0.15f);
+			system->OnUpdate(world, { scene.get() }, 0.016f);
+			passed &= Check(animator.timelineOverrideOwner == entt::null && animator.currentClip == origClip &&
+				std::abs(animator.currentTime - 0.3f) <= 1.0e-5f && animator.isPlaying &&
+				animator.blendFromPose.size() == 1 && std::abs(animator.blendFromDuration - 0.1f) <= 1.0e-5f,
+				"Natural timeline end must restore saved animator clip, time, playing state, and blend pose.");
+
+			// 2) 오버라이드 도중 컴포넌트 제거 훅(OnActionTimelineComponentDestroy) 복원 검증
+			animator.blendFromPose.clear();
+			timelineA.Play();
+			system->OnUpdate(world, { scene.get() }, 0.05f);
+			passed &= Check(animator.timelineOverrideOwner == ownerA && animator.currentClip == actionClip,
+				"Second playback must re-acquire animator override.");
+			world.remove<Engine::ActionTimelineComponent>(ownerA);
+			passed &= Check(animator.timelineOverrideOwner == entt::null && animator.currentClip == origClip &&
+				std::abs(animator.currentTime - 0.3f) <= 1.0e-5f && animator.isPlaying,
+				"Removing ActionTimelineComponent must immediately restore the overridden animator.");
+
+			// 3) 다른 타임라인으로 소유권 인계 후 이전 소유자 제거 시 중복 복원 차단 검증
+			auto& timelineA2 = world.emplace<Engine::ActionTimelineComponent>(ownerA);
+			timelineA2.timelineAsset = asset;
+			timelineA2.Play();
+			system->OnUpdate(world, { scene.get() }, 0.05f);
+			passed &= Check(animator.timelineOverrideOwner == ownerA,
+				"ownerA must hold animator override before handoff.");
+
+			auto& timelineB = world.emplace<Engine::ActionTimelineComponent>(ownerB);
+			timelineB.timelineAsset = asset;
+			timelineB.Play();
+			system->OnUpdate(world, { scene.get() }, 0.05f);
+			passed &= Check(animator.timelineOverrideOwner == ownerB && animator.timelineSavedClip == origClip &&
+				timelineA2.animatorOverrideEntity == entt::null && timelineB.animatorOverrideEntity == animatorEntity,
+				"ownerB must take over animator override while preserving the original saved clip.");
+
+			world.remove<Engine::ActionTimelineComponent>(ownerA);
+			passed &= Check(animator.timelineOverrideOwner == ownerB && animator.currentClip == actionClip &&
+				!animator.isPlaying,
+				"Destroying previous override owner must not overwrite active handoff owner.");
+
+			system->OnUpdate(world, { scene.get() }, 0.2f);
+			system->OnUpdate(world, { scene.get() }, 0.016f);
+			passed &= Check(animator.timelineOverrideOwner == entt::null && animator.currentClip == origClip &&
+				std::abs(animator.currentTime - 0.3f) <= 1.0e-5f && animator.isPlaying,
+				"Ending the handoff timeline must restore the original animator state once.");
+		}
+		return passed;
+	}
+
+	bool CheckHeldVFXReleaseLifecycle()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		{
+			Engine::ActionTimelineCreateDesc timelineDesc;
+			timelineDesc.Duration = 1.0f;
+			auto asset = Engine::ResourceManager::Get().AddResource(
+				L"TimelineHoldAsset", Engine::ActionTimelineAsset::Create(&timelineDesc));
+
+			ScenePtr scene(Engine::Scene::Create());
+			TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+			if (!asset.IsValid() || !scene || !system)
+				return Check(false, "Held VFX release lifecycle setup failed.");
+
+			scene->SetActive(true);
+			auto& world = scene->GetRegistry();
+			const auto owner = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::FlagComponent>(owner);
+			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
+			timeline.timelineAsset = asset;
+			timeline.Play();
+			system->OnUpdate(world, { scene.get() }, 0.05f);
+
+			const auto held1 = scene->CreateEntity().GetEntityHandle();
+			auto& vfx1 = world.emplace<Engine::CompositeVFXComponent>(held1);
+			vfx1.holdUntilRelease = true;
+			vfx1.isPlaying = true;
+			vfx1.isLooping = true;
+			auto& hold1 = world.emplace<Engine::ActionVFXHoldComponent>(held1);
+			hold1.ownerEntity = owner;
+			hold1.playSerial = timeline.playSerial;
+			hold1.releaseElapsed = 0.2f;
+
+			// 일시정지 중에는 해제되지 않고 동기 일시정지만 반영된다.
+			timeline.Pause();
+			system->OnUpdate(world, { scene.get() }, 0.1f);
+			passed &= Check(world.all_of<Engine::ActionVFXHoldComponent>(held1) && vfx1.timelinePaused && !vfx1.isDraining,
+				"Paused timeline must pause held VFX without releasing it.");
+
+			// 재개 후 releaseElapsed(0.2s)를 넘기면 해제(Release)되고 Hold 컴포넌트가 제거된다.
+			timeline.Resume();
+			system->OnUpdate(world, { scene.get() }, 0.2f);
+			passed &= Check(!world.all_of<Engine::ActionVFXHoldComponent>(held1) && vfx1.isDraining && !vfx1.holdUntilRelease,
+				"Passing releaseElapsed must release held VFX and remove ActionVFXHoldComponent.");
+
+			// 소유 타임라인 컴포넌트 제거 시 지속 중이던 VFX도 즉시 해제된다.
+			const auto held2 = scene->CreateEntity().GetEntityHandle();
+			auto& vfx2 = world.emplace<Engine::CompositeVFXComponent>(held2);
+			vfx2.holdUntilRelease = true;
+			vfx2.isPlaying = true;
+			auto& hold2 = world.emplace<Engine::ActionVFXHoldComponent>(held2);
+			hold2.ownerEntity = owner;
+			hold2.playSerial = timeline.playSerial;
+			hold2.releaseElapsed = 10.0f;
+
+			world.remove<Engine::ActionTimelineComponent>(owner);
+			passed &= Check(!world.all_of<Engine::ActionVFXHoldComponent>(held2) && vfx2.isDraining && !vfx2.holdUntilRelease,
+				"Destroying owning ActionTimelineComponent must release any remaining held VFX.");
+		}
+		return passed;
+	}
 }
 
 int main()
@@ -166,6 +486,9 @@ int main()
 	}
 
 	passed &= CheckParticleTimeline();
+	passed &= CheckParticleNotifySpawnAndAutoDestroy();
+	passed &= CheckAnimatorOverrideLifecycle();
+	passed &= CheckHeldVFXReleaseLifecycle();
 
 	return passed ? 0 : 1;
 }

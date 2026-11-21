@@ -107,7 +107,7 @@ flowchart LR
 
 - **제작 도구 사이 이동.** `SpawnCompositeVFX` Notify에서 참조 VFX를 편집하려면 에셋 필드의 컨텍스트 메뉴에서 **편집기에서 열기**를 선택한다. 모델·클립 선택에서 타임라인으로 이동하는 연결은 제작 중 왕복 비용을 확인한 뒤 다룬다.
 - **게임플레이 그래프.** `Play Action Timeline`으로 그래프 소유 엔티티의 타임라인을 재생하고 `On Action Timeline Event`에 태그를 지정해 같은 엔티티의 Notify에 연결한다. [그래프 실행 순서와 사용법](GraphExecution.md#액션-타임라인-노드)
-- **미완성 연출.** 직접 `Particle` Notify는 런타임에서 위치를 계산하며, 기본 카메라 샷 경로는 FOV를 갱신한다. 대표 샘플의 연출은 Composite VFX·사운드·이벤트를 사용한다. [런타임 처리](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
+- **미완성 연출.** (2026-11-22 확장 · 정적 구현 완료, 빌드/CTest 실행 검증 대기) 직접 `Particle` Notify는 소켓 월드 위치를 계산해 `ResourceManager`에 캐싱된 단발 버스트 `ParticleEffect`/`CompositeEffect`를 스폰하고 `ActionVFXLifecycleComponent`로 자동 소멸하도록 `ActionTimelineSystem`에 연결했다. `ActionTimelinePlaybackCheck`에는 `Particle` 노티파이 버스트 스폰/캐시 재사용/자동 소멸, `Animator` 오버라이드 복원 수명(자연 종료·컴포넌트 제거 훅·소유권 인계 시 중복 복원 차단), `ActionVFXHoldComponent` 일시정지/만료/소유자 제거 해제 회귀 테스트를 추가했다. 기본 카메라 샷 경로는 FOV를 갱신하며 대표 샘플의 연출은 Composite VFX·사운드·이벤트를 사용한다. [런타임 처리](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp) · [회귀 테스트](../Engine/examples/ActionTimelinePlaybackCheck.cpp)
 
 ## 7. 빌드와 회귀 검사
 
