@@ -137,9 +137,21 @@ private:
 #pragma region Flag Mangement
 public:
 	bool IsActive() const { return HasFlag(m_Flags, ESceneFlags::Active); }
-	void SetActive(bool active) { active ? AddFlag(m_Flags, ESceneFlags::Active) : RemoveFlag(m_Flags, ESceneFlags::Active); }
+	void SetActive(bool active)
+	{
+		if (IsActive() == active) return;
+		active ? AddFlag(m_Flags, ESceneFlags::Active) : RemoveFlag(m_Flags, ESceneFlags::Active);
+		++m_ActivityRevision;
+	}
 	bool IsPaused() const { return HasFlag(m_Flags, ESceneFlags::Paused); }
-	void SetPaused(bool paused) { paused ? AddFlag(m_Flags, ESceneFlags::Paused) : RemoveFlag(m_Flags, ESceneFlags::Paused); }
+	void SetPaused(bool paused)
+	{
+		if (IsPaused() == paused) return;
+		paused ? AddFlag(m_Flags, ESceneFlags::Paused) : RemoveFlag(m_Flags, ESceneFlags::Paused);
+		++m_ActivityRevision;
+	}
+
+	uint64 GetActivityRevision() const { return m_ActivityRevision; }
 	void UpdateHierarchyFlags();
 #pragma endregion
 
@@ -160,6 +172,7 @@ protected:
 
 	PROPERTY()
 	ESceneFlags m_Flags = ESceneFlags::Active;
+	uint64 m_ActivityRevision = 0;
 
 	PROPERTY()
 	wstring m_Name = { L"Scene" };

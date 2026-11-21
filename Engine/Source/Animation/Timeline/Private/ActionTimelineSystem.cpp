@@ -538,6 +538,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 
 			// 3. 노티파이 이벤트 구간 검출 및 트리거
+			const auto notifyPlaySerial = timeline.playSerial;
 			const auto& notifyTracks = asset->GetNotifyTracks();
 			for (const auto& track : notifyTracks)
 			{
@@ -552,7 +553,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 						// (1-1) 이벤트 노티파이: 씬 갱신이 끝난 뒤 ActionTimelineEvents 구독자에게 발행한다.
 						if (notify.Type == EAnimNotifyType::CustomEvent)
-							pendingEvents.push_back({ scene, entity, notify.EventTag, notify.Name, notify.TriggerTime });
+							pendingEvents.push_back({ scene, entity, notify.EventTag, notify.Name, notify.TriggerTime, notifyPlaySerial });
 
 						// (2) 소리 노티파이 (Audio FX)
 						if (notify.Type == EAnimNotifyType::Sound && !notify.SoundPath.empty())
@@ -707,7 +708,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 		// 앞선 핸들러가 소유 엔티티를 지웠을 수 있으므로 발행 직전에 확인한다.
 		for (const auto& event : pendingEvents)
 		{
-			if (world.valid(event.entity) && TryGetEnabledComponent<ActionTimelineComponent>(world, event.entity))
+			const auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(world, event.entity);
+			if (timeline && timeline->playSerial == event.playSerial)
 				ActionTimelineEvents::Publish(event);
 		}
 	}

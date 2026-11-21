@@ -5,6 +5,7 @@
 #include "Graph.h"
 #include "GraphExecutor.h"
 #include "GraphRegistry.h"
+#include "Delegate.h"
 #include <filesystem>
 #include <unordered_map>
 #include <string>
@@ -42,6 +43,7 @@ struct ENGINE_API GraphRuntimeState
 	};
 
 	std::vector<ActionEventEntry> actionEventEntries;
+	std::unordered_map<std::string, std::vector<GraphNodeId>> timelineEventEntries;
 };
 
 class ENGINE_API GraphSystem : public ISystem
@@ -70,6 +72,7 @@ public:
 	static Scene* GetCurrentScene();
 	static entt::entity GetCurrentEntity();
 	static float GetCurrentDeltaTime();
+	static void RequestCurrentEntityDestroy();
 	static void SetCurrentContext(Scene* scene, entt::entity entity, float dt);
 	static void ClearCurrentContext();
 
@@ -98,6 +101,7 @@ private:
 	GraphRegistry m_Registry;
 	std::unordered_map<std::wstring, CachedGraph> m_GraphCache;
 	bool m_Initialized = false;
+	DelegateHandle m_TimelineEventHandle = 0;
 };
 
 END

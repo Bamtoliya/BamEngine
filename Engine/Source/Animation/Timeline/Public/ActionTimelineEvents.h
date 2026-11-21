@@ -5,6 +5,7 @@
 #include "Delegate.h"
 #include <entt/entity/registry.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -20,6 +21,7 @@ struct ActionTimelineEvent
 	std::string eventTag;
 	std::string notifyName;
 	float triggerTime = 0.0f;
+	std::uint32_t playSerial = 0; // 노티파이를 발생시킨 재생 세션
 };
 
 // 액션 이벤트 구독 창구. 리스너 목록은 엔진 DLL이 소유한다.

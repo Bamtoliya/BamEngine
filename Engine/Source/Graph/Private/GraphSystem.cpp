@@ -8,7 +8,11 @@
 #include "Logger.h"
 #include "PlatformPath.h"
 #include "InputManager.h"
+#include "ActionTimelineComponent.h"
+#include "ActionTimelineEvents.h"
+#include "FlagComponent.h"
 #include <chrono>
+#include <utility>
 #ifdef BAM_EDITOR
 #include <string_view>
 #include <unordered_set>
@@ -22,6 +26,7 @@ namespace
 	Scene* s_CurrentScene = nullptr;
 	entt::entity s_CurrentEntity = entt::null;
 	float s_CurrentDeltaTime = 0.0f;
+	bool s_CurrentEntityDestroyRequested = false;
 #ifdef BAM_EDITOR
 	GraphSystem::NodeExecuteHook s_NodeExecuteHook = nullptr;
 
@@ -70,22 +75,110 @@ namespace
 
 		return entries;
 	}
+
+	std::unordered_map<std::string, std::vector<GraphNodeId>> CollectTimelineEventEntries(const Graph& graph)
+	{
+		std::unordered_map<std::string, std::vector<GraphNodeId>> entries;
+		for (const auto& node : graph.GetNodes())
+		{
+			if (node.Type != "Event.OnActionTimelineEvent") continue;
+			const auto input = node.InputValues.find("eventTag");
+			if (input == node.InputValues.end()) continue;
+			const auto* tag = std::get_if<std::string>(&input->second);
+			if (tag && !tag->empty()) entries[*tag].push_back(node.Id);
+		}
+		return entries;
+	}
+
+	struct PendingTimelineEvents
+	{
+		std::wstring graphPath;
+		uint64 sceneActivityRevision = 0;
+		uint32 playSerial = 0;
+		std::vector<std::string> tags;
+	};
+
+	using SceneTimelineEvents = std::unordered_map<entt::entity, PendingTimelineEvents>;
+
+	bool IsTimelineEventCurrent(entt::registry& world, entt::entity entity, uint32 playSerial)
+	{
+		const auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(world, entity);
+		if (!timeline || timeline->playSerial != playSerial) return false;
+		const auto* flag = world.try_get<FlagComponent>(entity);
+		return !flag || (flag->IsActiveInHierarchy() && !HasFlag(flag->effectiveFlags, EEntityFlag::Dead) &&
+			!HasFlag(flag->effectiveFlags, EEntityFlag::Paused));
+	}
+
+	void QueueTimelineEvent(const ActionTimelineEvent& event)
+	{
+		if (!event.scene || !event.scene->IsActive() || event.scene->IsPaused() || event.eventTag.empty()) return;
+		auto& world = event.scene->GetRegistry();
+		if (!IsTimelineEventCurrent(world, event.entity, event.playSerial)) return;
+		const auto* binding = TryGetEnabledComponent<GraphBindingComponent>(world, event.entity);
+		if (!binding || binding->graphFile.empty()) return;
+
+		auto& pending = world.ctx().emplace<SceneTimelineEvents>()[event.entity];
+		const auto activityRevision = event.scene->GetActivityRevision();
+		if (pending.graphPath != binding->graphFile || pending.sceneActivityRevision != activityRevision ||
+			pending.playSerial != event.playSerial)
+		{
+			pending.graphPath = binding->graphFile;
+			pending.sceneActivityRevision = activityRevision;
+			pending.playSerial = event.playSerial;
+			pending.tags.clear();
+		}
+		pending.tags.push_back(event.eventTag);
+	}
+
+	void DispatchTimelineEvents(Scene& scene, entt::entity entity, GraphRuntimeState& runtime,
+		const PendingTimelineEvents& pending, float dt)
+	{
+		if (pending.graphPath != runtime.loadedPath) return;
+		auto& world = scene.GetRegistry();
+		for (const auto& tag : pending.tags)
+		{
+			const auto entries = runtime.timelineEventEntries.find(tag);
+			if (entries == runtime.timelineEventEntries.end()) continue;
+			for (const auto node : entries->second)
+			{
+				const auto* binding = TryGetEnabledComponent<GraphBindingComponent>(world, entity);
+				if (s_CurrentEntityDestroyRequested || !binding || binding->graphFile != pending.graphPath ||
+					scene.GetActivityRevision() != pending.sceneActivityRevision ||
+					!IsTimelineEventCurrent(world, entity, pending.playSerial)) return;
+				if (!runtime.executor.Begin(node, dt).Succeeded()) continue;
+				runtime.executor.Resume();
+				while (runtime.executor.GetState() == EGraphExecutionState::Running)
+					runtime.executor.Tick();
+				if (runtime.executor.GetDiagnostic().Code == EGraphError::ExecutionLimit)
+				{
+					runtime.isValid = false;
+					return;
+				}
+			}
+		}
+	}
 }
 
 Scene* GraphSystem::GetCurrentScene() { return s_CurrentScene; }
 entt::entity GraphSystem::GetCurrentEntity() { return s_CurrentEntity; }
 float GraphSystem::GetCurrentDeltaTime() { return s_CurrentDeltaTime; }
+void GraphSystem::RequestCurrentEntityDestroy()
+{
+	if (s_CurrentScene && s_CurrentEntity != entt::null) s_CurrentEntityDestroyRequested = true;
+}
 void GraphSystem::SetCurrentContext(Scene* scene, entt::entity entity, float dt)
 {
 	s_CurrentScene = scene;
 	s_CurrentEntity = entity;
 	s_CurrentDeltaTime = dt;
+	s_CurrentEntityDestroyRequested = false;
 }
 void GraphSystem::ClearCurrentContext()
 {
 	s_CurrentScene = nullptr;
 	s_CurrentEntity = entt::null;
 	s_CurrentDeltaTime = 0.0f;
+	s_CurrentEntityDestroyRequested = false;
 }
 
 GraphSystem* GraphSystem::Create(void* arg)
@@ -108,6 +201,8 @@ EResult GraphSystem::Initialize(void* arg)
 
 void GraphSystem::Free()
 {
+	ActionTimelineEvents::Unsubscribe(m_TimelineEventHandle);
+	m_TimelineEventHandle = 0;
 	m_GraphCache.clear();
 	ClearCurrentContext();
 	m_Initialized = false;
@@ -129,6 +224,10 @@ void GraphSystem::OnInitialize()
 			BAM_LOG(Error, "GraphSystem", "Init", "RegisterReflectedGraphNodes failed: {}", reflectDiag.Message);
 		}
 	}
+	m_TimelineEventHandle = ActionTimelineEvents::Subscribe([this](const ActionTimelineEvent& event)
+		{
+			if (IsActive()) QueueTimelineEvent(event);
+		});
 	m_Initialized = true;
 }
 
@@ -244,9 +343,15 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 
 	for (Scene* scene : activeScenes)
 	{
-		if (!scene || !scene->IsActive() || scene->IsPaused()) continue;
+		if (!scene) continue;
 
 		auto& world = scene->GetRegistry();
+		// 타임라인 시스템은 그래프보다 먼저 갱신되므로 첫 틱의 이벤트도 초기화 후 전달한다.
+		SceneTimelineEvents timelineEvents;
+		if (auto* pending = world.ctx().find<SceneTimelineEvents>()) timelineEvents.swap(*pending);
+		if (!scene->IsActive() || scene->IsPaused()) continue;
+
+		std::vector<entt::entity> destroyRequests;
 		auto view = world.view<GraphBindingComponent>();
 
 		for (auto entity : view)
@@ -286,6 +391,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					else if (node.Type == "Event.OnTriggerExit") newState.triggerExitNodes.push_back(node.Id);
 				}
 				newState.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
+				newState.timelineEventEntries = CollectTimelineEventEntries(*graphTemplate);
 				const auto executorMs = Milliseconds(Clock::now() - executorStart).count();
 				if (executorMs >= 10.0)
 				{
@@ -307,6 +413,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				{
 					for (GraphNodeId startEntry : runtime->startNodes)
 					{
+						if (s_CurrentEntityDestroyRequested) break;
 #ifdef BAM_EDITOR
 						if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, startEntry);
 #endif
@@ -321,11 +428,15 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					runtime->hasStarted = true;
 				}
 
-				if (InputManager::IsCreated())
+				if (const auto found = timelineEvents.find(entity); found != timelineEvents.end())
+					DispatchTimelineEvents(*scene, entity, *runtime, found->second, dt);
+
+				if (runtime->isValid && !s_CurrentEntityDestroyRequested && InputManager::IsCreated())
 				{
 					const auto& input = InputManager::Get();
 					for (const auto& entry : runtime->actionEventEntries)
 					{
+						if (s_CurrentEntityDestroyRequested) break;
 						const bool triggered = entry.Phase == GraphRuntimeState::ActionEventPhase::Pressed
 							? input.WasActionPressed(entry.MapId, entry.ActionId)
 							: input.WasActionReleased(entry.MapId, entry.ActionId);
@@ -347,15 +458,10 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					}
 				}
 
-				if (!runtime->isValid)
-				{
-					ClearCurrentContext();
-					continue;
-				}
-
 				// 2. Event.Update (Tick) 매 프레임 디스패치
 				for (GraphNodeId updateEntry : runtime->updateNodes)
 				{
+					if (!runtime->isValid || s_CurrentEntityDestroyRequested) break;
 #ifdef BAM_EDITOR
 					if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, updateEntry);
 #endif
@@ -401,7 +507,14 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 			}
 
 			// 실행 완료 후 컨텍스트 해제
+			if (s_CurrentEntityDestroyRequested) destroyRequests.push_back(entity);
 			ClearCurrentContext();
+		}
+
+		// 자기 삭제는 현재 실행기와 뷰가 사용하는 컴포넌트를 순회 이후에 제거한다.
+		for (const auto entity : destroyRequests)
+		{
+			if (auto* wrapper = scene->FindEntity(entity)) (void)scene->DestroyEntity(*wrapper);
 		}
 	}
 }
@@ -494,6 +607,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			runtime.loadedPath = binding.graphFile;
 			runtime.sourcePath = std::move(sourcePath);
 			runtime.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
+			runtime.timelineEventEntries = CollectTimelineEventEntries(*graphTemplate);
 			runtime.hasStarted = wasStarted;
 			runtime.isValid = true;
 		}
@@ -521,6 +635,7 @@ void GraphSystem::DispatchTriggerEvent(Scene* scene, entt::entity self, entt::en
 
 	for (GraphNodeId nodeId : *targetNodes)
 	{
+		if (s_CurrentEntityDestroyRequested) break;
 		const int64_t otherId = static_cast<int64_t>(static_cast<uint32_t>(other));
 		if (runtime->executor.BeginTrigger(nodeId, otherId).Succeeded())
 		{
@@ -530,5 +645,10 @@ void GraphSystem::DispatchTriggerEvent(Scene* scene, entt::entity self, entt::en
 		}
 	}
 
+	const bool destroyRequested = s_CurrentEntityDestroyRequested;
 	ClearCurrentContext();
+	if (destroyRequested)
+	{
+		if (auto* wrapper = scene->FindEntity(self)) (void)scene->DestroyEntity(*wrapper);
+	}
 }

@@ -16,10 +16,30 @@
 #include "AnimatorComponent.h"
 #include "AnimationSceneQuery.h"
 #include "ThirdPersonControllerComponent.h"
+#include "ActionTimelineComponent.h"
+#include "FlagComponent.h"
 
 
 namespace Engine::GraphGameplay
 {
+	FUNCTION(GRAPH_CALLABLE("ActionTimeline.Play"), DISPLAY_NAME("NODE_PLAY_ACTION_TIMELINE"), CATEGORY("Animation"))
+	inline bool PlayActionTimeline()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		const auto entity = GraphSystem::GetCurrentEntity();
+		if (!scene || !scene->IsActive() || scene->IsPaused() || entity == entt::null) return false;
+
+		auto& world = scene->GetRegistry();
+		auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(world, entity);
+		if (!timeline || timeline->timelinePath.empty() || timeline->isPlaying) return false;
+		const auto* flag = world.try_get<FlagComponent>(entity);
+		if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead) ||
+			HasFlag(flag->effectiveFlags, EEntityFlag::Paused))) return false;
+
+		timeline->Play();
+		return true;
+	}
+
 	// ── 디버그 출력 노드 (Debug) ──
 		// ── 디버그 출력 노드 (Debug) ──
 	FUNCTION(GRAPH_CALLABLE("Debug.PrintFloat"), DISPLAY_NAME("Print Float"), CATEGORY("Debug"),

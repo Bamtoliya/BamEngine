@@ -21,6 +21,7 @@
 #include "ResourcePicker.h"
 #include "SceneManager.h"
 #include "Scene.h"
+#include "SceneEntityReference.h"
 #include "WorldComponents.h"
 #include "FloatCurve.h"
 #pragma push_macro("new")
@@ -388,14 +389,14 @@ namespace
         return changed;
     }
 
-	bool DrawInspectorEntityPicker(entt::entity& value, bool canEdit)
+	bool DrawInspectorEntityPicker(entt::entity& value, bool canEdit, bool hasMissingReference = false)
 	{
 		bool changed = false;
 		Engine::Scene* scene = Engine::SceneManager::Get().GetCurrentScene();
 		if (!scene) return false;
 		auto& world = scene->GetRegistry();
 		// 1. 현재 할당된 엔티티 이름 결정
-		std::string displayName = "None (Entity)";
+		std::string displayName = hasMissingReference ? LOCAL("Inspector.EntityUnavailable") : LOCAL("EditorCommon.None");
 		if (value != entt::null && world.valid(value))
 		{
 			if (const auto* nameComp = world.try_get<Engine::NameComponent>(value))
@@ -409,7 +410,7 @@ namespace
 		const float rightPadding = 4.0f;                    // 테이블 셀 우측 경계선과의 안전 여백
 		const float availWidth = ImGui::GetContentRegionAvail().x;
 
-		const bool showClearBtn = (value != entt::null && canEdit);
+		const bool showClearBtn = (value != entt::null || hasMissingReference) && canEdit;
 		const float buttonWidth = showClearBtn
 			? std::max(20.0f, availWidth - clearBtnSize - itemSpacing - rightPadding)
 			: std::max(20.0f, availWidth - rightPadding);
@@ -1557,6 +1558,22 @@ namespace Editor
 		{
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
 				[&](entt::entity& candidate) { return DrawInspectorEntityPicker(candidate, canEdit); });
+		}
+		else if (const auto* current = read.Value.Get<Engine::SceneEntityReference>())
+		{
+			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
+				[&](Engine::SceneEntityReference& candidate)
+				{
+					const auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+					if (!scene) return false;
+					const auto* entity = scene->FindEntityById(candidate.PersistentId);
+					entt::entity handle = entt::null;
+					if (entity) handle = entity->GetEntityHandle();
+					if (!DrawInspectorEntityPicker(handle, canEdit, candidate.PersistentId != 0 && !entity)) return false;
+					const auto* id = scene->GetRegistry().try_get<Engine::IDComponent>(handle);
+					candidate.PersistentId = id ? id->id : 0;
+					return true;
+				});
 		}
 		else if (read.Value.Is<Engine::ColliderShape>() || read.Value.Is<Engine::Collider2DShape>())
 		{

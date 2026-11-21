@@ -2,14 +2,14 @@
 
 namespace
 {
-	bool IsActionEventEntry(const std::string& type)
+	bool IsGameplayEventEntry(const std::string& type)
 	{
-		return type == "Event.OnActionPressed" || type == "Event.OnActionReleased";
+		return type == "Event.OnActionPressed" || type == "Event.OnActionReleased" || type == "Event.OnActionTimelineEvent";
 	}
 
 	bool SupportsBuiltin(const std::string& type)
 	{
-		if (IsActionEventEntry(type)) return true;
+		if (IsGameplayEventEntry(type)) return true;
 		if (type.rfind("Variable.Get.", 0) == 0 || type.rfind("Variable.Set.", 0) == 0) return true;
 		if (type.rfind("Core.Reroute", 0) == 0) return true;
 		if (type == "Core.Comment") return true;
@@ -100,7 +100,7 @@ GraphDiagnostic GraphExecutor::Begin(GraphNodeId entry, float delta, std::size_t
 		return { EGraphError::InvalidExecutionState, entry, {}, 0,
 			"Load a graph and finish or stop the current event first." };
 	const auto* node = m_Graph.FindNode(entry);
-	if (!node || (node->Type != "Event.Start" && node->Type != "Event.Update" && !IsActionEventEntry(node->Type)))
+	if (!node || (node->Type != "Event.Start" && node->Type != "Event.Update" && !IsGameplayEventEntry(node->Type)))
 	{
 		return { EGraphError::InvalidExecutionState, entry, {}, 0, "Select a supported event entry." };
 	}
@@ -264,7 +264,7 @@ void GraphExecutor::Execute(const Task& task)
 	if (!m_Active.insert(id).second) throw std::runtime_error("Re-entry into an active node is not supported.");
 	m_Pending.push_back({ TaskKind::Leave, id });
 	if (type.rfind("Core.Reroute", 0) == 0) PushOutput(id, "Out");
-	else if (type == "Event.Start" || type == "Event.Update" || IsActionEventEntry(type) ||
+	else if (type == "Event.Start" || type == "Event.Update" || IsGameplayEventEntry(type) ||
 		type == "Event.OnTriggerEnter" || type == "Event.OnTriggerStay" || type == "Event.OnTriggerExit")
 	{
 		PushOutput(id, "exec");

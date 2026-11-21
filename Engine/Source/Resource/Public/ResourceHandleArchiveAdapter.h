@@ -294,7 +294,9 @@ namespace archive_resource
 
         if (result && resource)
         {
-            if (auto* references = ar.GetWriteContext<Engine::ResourceReferenceSet>())
+            if (auto* context = ar.GetWriteContext<Engine::ResourceReferenceArchiveContext>())
+                context->References.insert(std::move(reference));
+            else if (auto* references = ar.GetWriteContext<Engine::ResourceReferenceSet>())
                 references->insert(std::move(reference));
         }
 

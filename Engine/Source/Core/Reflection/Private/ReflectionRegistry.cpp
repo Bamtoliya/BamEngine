@@ -8,6 +8,7 @@
 #include "UIComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 #include "ResourceHandleArchiveAdapter.h"
+#include "SceneEntityReference.h"
 #include "GraphValueArchiveAdapter.h"
 #include "BlendTree1D.h"
 
@@ -252,6 +253,17 @@ EResult ReflectionRegistry::Initialize(void*)
         !m_Codecs.Register<glm::vec4>(archive_glm::WriteVec4, archive_glm::ReadVec4) ||
         !m_Codecs.Register<glm::quat>(archive_glm::WriteQuat, archive_glm::ReadQuat) ||
         !m_Codecs.Register<glm::mat4>(archive_glm::WriteMat4, archive_glm::ReadMat4) ||
+        !m_Codecs.Register<SceneEntityReference>(
+            [](archive::IArchive& ar, std::string_view key, const SceneEntityReference& value)
+            {
+                const auto* context = ar.GetWriteContext<ResourceReferenceArchiveContext>();
+                // A prefab or clipboard copy has a different persistent-ID scope.
+                return ar.Write(key, context && context->WritingPrefab ? std::uint64_t{ 0 } : value.PersistentId);
+            },
+            [](const archive::IArchive& ar, std::string_view key, SceneEntityReference& value)
+            {
+                return ar.Read(key, value.PersistentId);
+            }) ||
         !m_Codecs.Register<entt::entity>(
             [](archive::IArchive& ar, std::string_view key, const entt::entity& value) -> archive::ArchiveResult
             {

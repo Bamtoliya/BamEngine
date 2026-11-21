@@ -19,4 +19,10 @@ namespace Engine
     };
 
     using ResourceReferenceSet = std::set<ResourceReference>;
+
+    struct ResourceReferenceArchiveContext
+    {
+        ResourceReferenceSet References;
+        bool WritingPrefab = false;
+    };
 }

@@ -34,6 +34,7 @@
 ,CATEGORY_FOG_COLOR,Fog Color,안개 색상
 ,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
+,CATEGORY_GAMEPLAY,Gameplay,게임플레이
 ,CATEGORY_HIT_RESULT,Hit Result,히트 결과
 ,CATEGORY_IBL,Image-Based Lighting,이미지 기반 조명
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
@@ -272,6 +273,7 @@
 ,NODE_INPUT_IS_ACTION_HELD,Is Input Action Held,입력 액션을 누르는 중
 ,NODE_INPUT_WAS_ACTION_PRESSED,Was Input Action Pressed,입력 액션을 누른 순간
 ,NODE_INPUT_WAS_ACTION_RELEASED,Was Input Action Released,입력 액션을 놓은 순간
+,NODE_PLAY_ACTION_TIMELINE,Play Action Timeline,액션 타임라인 재생
 ,NODE_THIRD_PERSON_REQUEST_JUMP,Request Third Person Jump,3인칭 점프 요청
 ,NODE_THIRD_PERSON_SET_MOVE_INPUT,Set Third Person Move Input,3인칭 이동 입력 설정
 ,Native argument type mismatch.,Native argument type mismatch.,네이티브 인자의 자료형이 일치하지 않습니다.
@@ -293,6 +295,7 @@
 ,Object pins require a reflected type name.,Object pins require a reflected type name.,객체 핀에는 리플렉션 자료형 이름이 필요합니다.
 ,OnActionPressed,On Action Pressed,입력 액션을 눌렀을 때
 ,OnActionReleased,On Action Released,입력 액션을 놓았을 때
+,OnActionTimelineEvent,On Action Timeline Event,액션 타임라인 이벤트 발생 시
 ,Only Logic graphs can execute on this interpreter.,Only Logic graphs can execute on this interpreter.,이 인터프리터는 로직 그래프만 실행할 수 있습니다.
 ,Only data inputs accept default values.,Only data inputs accept default values.,데이터 입력에만 기본값을 지정할 수 있습니다.
 ,"Only data inputs can have a finite, exactly typed default value.","Only data inputs can have a finite, exactly typed default value.",데이터 입력에만 자료형이 정확히 일치하는 유한한 기본값을 지정할 수 있습니다.
@@ -300,6 +303,7 @@
 ,Only object pins can specify an object type.,Only object pins can specify an object type.,객체 핀에만 객체 자료형을 지정할 수 있습니다.
 ,Organization,Organization,정리
 ,Output is not available in this execution context:,Output is not available in this execution context:,현재 실행 문맥에서 사용할 수 없는 출력:
+,PIN_ACTION_TIMELINE_EVENT_TAG,Event Tag,이벤트 태그
 ,PIN_INPUT_ACTION_ID,Action ID,액션 ID
 ,PIN_INPUT_MAP_ID,Map ID,맵 ID
 ,PIN_INPUT_NEGATIVE_ACTION_ID,Negative Action ID,음의 방향 액션 ID
@@ -360,6 +364,9 @@
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
 ,PROP_CELL_SIZE,Cell Size,셀 크기
 ,PROP_CENTER,Center,중심
+,PROP_CHALLENGE_HIT_HEIGHT,Vertical Hit Distance,수직 판정 거리
+,PROP_CHALLENGE_HIT_RADIUS,Horizontal Hit Radius,수평 판정 반경
+,PROP_CHALLENGE_REQUIRED_HITS,Required Hits,목표 적중 횟수
 ,PROP_CLOUD_ALTITUDE,Cloud Altitude,구름 고도
 ,PROP_CLOUD_COVERAGE,Cloud Coverage,구름 덮개
 ,PROP_CLOUD_DENSITY,Cloud Density,구름 밀도
@@ -714,6 +721,7 @@
 ,PROP_UPSCALE_RT,Upscale RT,업스케일 RT
 ,PROP_USE_ALPHA_CURVE,Use Alpha Curve,알파 커브 사용
 ,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
+,PROP_USE_GRAPH_ATTACK_INPUT,Use Graph Attack Input,그래프 공격 입력 사용
 ,PROP_USE_GRAPH_MOVE_INPUT,Use Graph Movement Input,그래프 이동 입력 사용
 ,PROP_USE_INTENSITY_CURVE,Use Intensity Curve,조도 커브 사용
 ,PROP_USE_SCALE_CURVE,Use Scale Curve,스케일 커브 사용
@@ -779,6 +787,7 @@
 ,STRUCT_ACTION_VFX_HOLD,Action VFX Hold,액션 VFX 유지
 ,STRUCT_ACTION_VFX_LIFECYCLE,Action VFX Lifecycle,액션 VFX 수명 주기
 ,STRUCT_ANIMATOR,Animator,애니메이터
+,STRUCT_ATTACK_CHALLENGE,Attack Challenge,공격 챌린지
 ,STRUCT_AUDIO_LISTENER,Audio Listener,오디오 리스너
 ,STRUCT_AUDIO_SOURCE,Audio Source,오디오 소스
 ,STRUCT_BOUNDING_BOX,Bounding Box,경계 상자

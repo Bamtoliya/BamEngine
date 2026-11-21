@@ -79,6 +79,12 @@ flowchart LR
 
 `BaselineVerification` 씬에서 Rogue를 이동·점프시키고 Q로 타임라인을 재생한다. `BaselineChallengeSystem`은 `OnAttackHit`가 발생했을 때 Rogue와 표적의 거리를 확인하고 재생 한 번에 적중을 최대 한 번 기록한다. 수평 2.5m와 수직 2m 이내에서 적중하며 HUD 세 칸이 차면 완료된다. R로 점수를 초기화한다. 점수와 HUD는 씬에 귀속되며 모듈 언로드 시 이벤트 구독과 함께 정리한다. [샘플 시스템](../Projects/GameModule/Source/BaselineChallengeSystem.cpp) · [입력 설정](../Config/InputActions.json)
 
+다른 씬에서는 캐릭터에 활성 `ActionTimelineComponent`와 **공격 챌린지** 컴포넌트를 추가하고, 같은 씬의 표적과 목표 적중 횟수(1~12), 수평·수직 거리를 지정한다. 씬마다 유효한 활성 챌린지 한 개를 사용한다. 타임라인에는 `OnAttackHit` Custom Event를 배치한다. 기본 공격 입력은 `Gameplay/Attack`이다. **그래프 공격 입력 사용**을 켜면 그래프의 입력 이벤트를 `Play Action Timeline`에 연결하고, 챌린지는 타임라인에서 발행한 적중만 처리한다. 초기화는 두 모드 모두 `Gameplay/Restart`를 사용한다. 설정은 씬 데이터로 저장되며, 게임 판정과 HUD는 GameModule에서 처리한다. [공격 챌린지 컴포넌트](../Engine/Source/Gameplay/Public/AttackChallengeComponent.h) · [타임라인 그래프 노드](GraphExecution.md#액션-타임라인-노드)
+
+표적은 씬의 영속 엔티티 ID로 저장한다. 프리팹 저장, 복제 또는 붙여넣기는 씬 간에 같은 ID가 다른 엔티티를 가리키지 않도록 표적을 비우고, 인스펙터에서 다시 지정하도록 한다. 일반 씬에서 표적을 삭제하면 속성이 비워지고, 외부 챌린지가 참조하는 프리팹 하위 엔티티는 Revert All의 기존 참조 검사에 포함된다.
+
+2026-11-22 사용자는 공격 챌린지 인스펙터와 그래프의 타임라인 재생·Notify 수신이 동작한다고 확인했다.
+
 샘플 씬과 타임라인은 Git에서 제외되는 로컬 `Assets`에 있다. 다른 체크아웃에서는 샘플을 복사하거나 기준 씬에서 Rogue(Archive ID 5)의 입력을 활성화하고 표적(Archive ID 56)을 준비한다. Rogue 타임라인을 `Project://Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json`에 연결한다. 타임라인은 `Idle_A` 시험 클립을 사용하며 0.4초에 `handslot.r` 소켓 Composite VFX, `OnAttackHit`, `Project://Audio/media/swish.wav` 효과음을 재생한다. [샘플 씬](../Assets/Scenes/BaselineVerification.bamscene.json) · [타임라인](../Assets/Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json)
 
 - [ ] **편집 씬 격리.** Realtime 상태에서 씬 엔티티 수·카메라 FOV·Animator 포즈·타임라인 시간을 기록하고, Inspector Preview 재생 뒤 값이 바뀌지 않는지 확인한다. 독립 프리뷰에서 VFX·오디오가 재생되되 `CustomEvent` 구독자는 호출되지 않아야 한다.
@@ -99,8 +105,8 @@ flowchart LR
 
 ## 6. 통합 검증 후 다룰 항목
 
-- **제작 도구 사이 이동.** 대표 액션을 만드는 동안 모델·클립 선택과 VFX 미세조정에 드는 왕복을 기록한다. 반복 비용이 큰 곳에 현재 클립으로 타임라인을 열기, 타임라인의 VFX 참조에서 VFX 편집기를 열기 같은 연결을 추가한다. 기존 에셋 피커와 문서 교체 확인부터 활용한다.
-- **게임플레이 연결 확장.** 먼저 C++ 예제로 실행 계약을 검증한다. 그래프 제작이 필요하면 같은 재생·이벤트 계약을 사용하는 타임라인 재생 및 `On Action Event(Tag)` 노드를 추가한다. 상태 Notify와 액션 Notify의 구독 통합은 기존 사용처와 DLL 수명을 확인한 뒤 판단한다.
+- **제작 도구 사이 이동.** `SpawnCompositeVFX` Notify에서 참조 VFX를 편집하려면 에셋 필드의 컨텍스트 메뉴에서 **편집기에서 열기**를 선택한다. 모델·클립 선택에서 타임라인으로 이동하는 연결은 제작 중 왕복 비용을 확인한 뒤 다룬다.
+- **게임플레이 그래프.** `Play Action Timeline`으로 그래프 소유 엔티티의 타임라인을 재생하고 `On Action Timeline Event`에 태그를 지정해 같은 엔티티의 Notify에 연결한다. [그래프 실행 순서와 사용법](GraphExecution.md#액션-타임라인-노드)
 - **미완성 연출.** 직접 `Particle` Notify는 런타임에서 위치를 계산하며, 기본 카메라 샷 경로는 FOV를 갱신한다. 대표 샘플의 연출은 Composite VFX·사운드·이벤트를 사용한다. [런타임 처리](../Engine/Source/Animation/Timeline/Private/ActionTimelineSystem.cpp)
 
 ## 7. 빌드와 회귀 검사

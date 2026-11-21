@@ -2,10 +2,12 @@
 
 #include "ActionTimelineComponent.h"
 #include "ActionTimelineEvents.h"
+#include "AttackChallengeComponent.h"
 #include "CanvasComponent.h"
 #include "ComponentEnable.h"
 #include "FlagComponent.h"
 #include "HierarchyComponent.h"
+#include "IDComponent.h"
 #include "InputManager.h"
 #include "Logger.h"
 #include "RectTransformComponent.h"
@@ -15,24 +17,29 @@
 #include <array>
 #include <cmath>
 #include <optional>
+#include <utility>
 
 namespace
 {
-	// Persistent IDs from BaselineVerification.bamscene.json.
-	constexpr uint64 playerId = 5;
-	constexpr uint64 targetId = 56;
-	constexpr std::size_t requiredHits = 3;
-	constexpr f32 hitRadius = 2.5f;
-	constexpr f32 hitHeight = 2.0f;
-	constexpr auto timelinePath = "Project://Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json";
+	using Engine::AttackChallengeComponent;
+
+	struct ChallengeBinding
+	{
+		entt::entity player = entt::null;
+		Engine::ActionTimelineComponent* timeline = nullptr;
+		AttackChallengeComponent settings;
+	};
 
 	struct ChallengeState
 	{
+		entt::entity player = entt::null;
 		entt::entity canvas = entt::null;
-		std::array<entt::entity, requiredHits> indicators{};
-		std::size_t hits = 0;
+		std::array<entt::entity, AttackChallengeComponent::MaxRequiredHits> indicators{};
+		int32 requiredHits = 0;
+		int32 hits = 0;
 		std::optional<uint32> attackSerial;
-		bool hitConsumed = false;
+		std::optional<uint32> consumedAttackSerial;
+		bool usesGraphAttack = false;
 	};
 
 	bool IsPlayingEntity(const entt::registry& world, entt::entity id)
@@ -43,23 +50,50 @@ namespace
 			!HasFlag(flag->effectiveFlags, Engine::EEntityFlag::Dead));
 	}
 
-	Engine::ActionTimelineComponent* GetPlayerTimeline(Engine::Scene& scene, entt::entity& player)
+	ChallengeBinding FindChallengeBinding(Engine::Scene& scene)
 	{
-		const auto* entity = scene.FindEntityById(playerId);
-		if (!entity) return nullptr;
-		player = entity->GetEntityHandle();
+		ChallengeBinding binding;
 		auto& world = scene.GetRegistry();
-		auto* timeline = Engine::TryGetEnabledComponent<Engine::ActionTimelineComponent>(world, player);
-		return timeline && timeline->timelinePath == timelinePath && IsPlayingEntity(world, player) ? timeline : nullptr;
+		const auto challenges = std::as_const(world).view<const AttackChallengeComponent>();
+		if (challenges.empty())
+		{
+			// The existing sample can be opened without adding a component to its local scene file.
+			if (scene.GetName() != L"BaselineVerification") return {};
+			const auto* player = scene.FindEntityById(5);
+			if (!player) return {};
+			binding.player = player->GetEntityHandle();
+			binding.settings.TargetEntity.PersistentId = 56;
+			binding.timeline = Engine::TryGetEnabledComponent<Engine::ActionTimelineComponent>(world, binding.player);
+			if (!binding.timeline || binding.timeline->timelinePath !=
+				"Project://Data/Animation/Timeline/BaselineVerification_Hit.bamtimeline.json") return {};
+			return IsPlayingEntity(world, binding.player) ? binding : ChallengeBinding{};
+		}
+
+		for (const auto player : challenges)
+		{
+			if (!Engine::IsComponentEnabled<AttackChallengeComponent>(world, player) || !IsPlayingEntity(world, player)) continue;
+			auto* timeline = Engine::TryGetEnabledComponent<Engine::ActionTimelineComponent>(world, player);
+			const auto* playerId = world.try_get<Engine::IDComponent>(player);
+			if (!timeline || !playerId) continue;
+			const auto& settings = challenges.get<AttackChallengeComponent>(player);
+			if (settings.TargetEntity.PersistentId == 0 || settings.TargetEntity.PersistentId == playerId->id || settings.RequiredHits < 1 ||
+				settings.RequiredHits > AttackChallengeComponent::MaxRequiredHits ||
+				!std::isfinite(settings.HitRadius) || settings.HitRadius < 0.0f ||
+				!std::isfinite(settings.HitHeight) || settings.HitHeight < 0.0f) continue;
+			// One player owns the global Gameplay input and the HUD for this scene.
+			if (binding.timeline) return {};
+			binding = { player, timeline, settings };
+		}
+		return binding;
 	}
 
 	void UpdateIndicators(entt::registry& world, const ChallengeState& state)
 	{
-		for (std::size_t index = 0; index < state.indicators.size(); ++index)
+		for (int32 index = 0; index < state.requiredHits; ++index)
 		{
 			auto* image = world.try_get<Engine::UIImageComponent>(state.indicators[index]);
 			if (!image) continue;
-			if (state.hits == requiredHits)
+			if (state.hits == state.requiredHits)
 				image->color = glm::vec4(0.20f, 0.90f, 0.44f, 1.0f);
 			else if (index < state.hits)
 				image->color = glm::vec4(1.0f, 0.62f, 0.15f, 1.0f);
@@ -68,17 +102,22 @@ namespace
 		}
 	}
 
-	ChallengeState& CreateChallengeState(Engine::Scene& scene)
+	ChallengeState& CreateChallengeState(Engine::Scene& scene, const ChallengeBinding& binding)
 	{
 		auto& world = scene.GetRegistry();
 		// The challenge is reset when PIE restores the scene archive into a new registry.
 		auto& state = world.ctx().emplace<ChallengeState>();
+		state.player = binding.player;
+		state.requiredHits = binding.settings.RequiredHits;
+		state.usesGraphAttack = binding.settings.UseGraphAttackInput;
 		state.canvas = scene.CreateEntity().GetEntityHandle();
 		world.emplace<Engine::FlagComponent>(state.canvas);
 		world.emplace<Engine::CanvasComponent>(state.canvas);
 		world.emplace<Engine::HierarchyComponent>(state.canvas);
 
-		for (std::size_t index = 0; index < state.indicators.size(); ++index)
+		const f32 stride = glm::min(58.0f, 300.0f / static_cast<f32>(state.requiredHits));
+		const f32 center = static_cast<f32>(state.requiredHits - 1) * 0.5f;
+		for (int32 index = 0; index < state.requiredHits; ++index)
 		{
 			const auto id = scene.CreateEntity().GetEntityHandle();
 			state.indicators[index] = id;
@@ -87,26 +126,37 @@ namespace
 			world.get<Engine::HierarchyComponent>(state.canvas).children.push_back(id);
 			auto& rect = world.emplace<Engine::RectTransformComponent>(id);
 			rect.anchorMin = rect.anchorMax = glm::vec2(0.5f, 1.0f);
-			rect.anchoredPosition = glm::vec2((static_cast<f32>(index) - 1.0f) * 58.0f, -52.0f);
-			rect.sizeDelta = glm::vec2(44.0f, 16.0f);
+			rect.anchoredPosition = glm::vec2((static_cast<f32>(index) - center) * stride, -52.0f);
+			rect.sizeDelta = glm::vec2(44.0f / 58.0f * stride, 16.0f);
 			world.emplace<Engine::UIImageComponent>(id).raycastTarget = false;
 		}
 		UpdateIndicators(world, state);
 		return state;
 	}
 
-	bool IsTargetInRange(Engine::Scene& scene, entt::entity player)
+	void RemoveChallengeState(Engine::Scene& scene, const ChallengeState& state)
 	{
-		const auto* target = scene.FindEntityById(targetId);
+		auto& world = scene.GetRegistry();
+		auto* timeline = world.try_get<Engine::ActionTimelineComponent>(state.player);
+		if (timeline && state.attackSerial == timeline->playSerial)
+			timeline->Stop();
+		if (auto* canvas = scene.FindEntity(state.canvas); canvas && !scene.DestroyEntity(*canvas))
+			BAM_LOG(Warn, "GameModule", "BaselineChallenge", "Could not remove the challenge HUD.");
+		world.ctx().erase<ChallengeState>();
+	}
+
+	bool IsTargetInRange(const Engine::Scene& scene, const ChallengeBinding& binding)
+	{
+		const auto* target = scene.FindEntityById(binding.settings.TargetEntity.PersistentId);
 		if (!target) return false;
-		const auto& world = scene.GetRegistry();
 		const auto targetHandle = target->GetEntityHandle();
-		const auto* playerTransform = Engine::TryGetEnabledComponent<Engine::WorldTransformComponent>(world, player);
+		const auto& world = scene.GetRegistry();
+		const auto* playerTransform = Engine::TryGetEnabledComponent<Engine::WorldTransformComponent>(world, binding.player);
 		const auto* targetTransform = Engine::TryGetEnabledComponent<Engine::WorldTransformComponent>(world, targetHandle);
 		if (!playerTransform || !targetTransform || !IsPlayingEntity(world, targetHandle)) return false;
 
 		const glm::vec3 offset(targetTransform->worldMatrix[3] - playerTransform->worldMatrix[3]);
-		return offset.x * offset.x + offset.z * offset.z <= hitRadius * hitRadius && std::abs(offset.y) <= hitHeight;
+		return std::hypot(offset.x, offset.z) <= binding.settings.HitRadius && std::abs(offset.y) <= binding.settings.HitHeight;
 	}
 }
 
@@ -115,52 +165,60 @@ void BaselineChallengeSystem::OnUpdate(entt::registry&, const std::vector<Engine
 	const auto& input = Engine::InputManager::Get();
 	for (auto* scene : activeScenes)
 	{
-		if (!scene || scene->GetName() != L"BaselineVerification" || !scene->IsActive() || scene->IsPaused()) continue;
+		if (!scene || !scene->IsActive() || scene->IsPaused()) continue;
 
-		entt::entity player = entt::null;
-		auto* timeline = GetPlayerTimeline(*scene, player);
-		if (!timeline) continue;
-
+		const auto binding = FindChallengeBinding(*scene);
 		auto& world = scene->GetRegistry();
 		auto* state = world.ctx().find<ChallengeState>();
-		if (!state || !world.valid(state->canvas))
+		if (state && (!binding.timeline || state->player != binding.player ||
+			state->requiredHits != binding.settings.RequiredHits || state->usesGraphAttack != binding.settings.UseGraphAttackInput ||
+			!world.valid(state->canvas)))
 		{
-			world.ctx().erase<ChallengeState>();
-			state = &CreateChallengeState(*scene);
+			RemoveChallengeState(*scene, *state);
+			state = nullptr;
 		}
+		if (!binding.timeline) continue;
+		if (!state) state = &CreateChallengeState(*scene, binding);
+
+		auto* timeline = binding.timeline;
 		if (input.WasActionPressed("Gameplay", "Restart"))
 		{
 			if (state->attackSerial == timeline->playSerial)
 				timeline->Stop();
 			state->hits = 0;
 			state->attackSerial.reset();
+			state->consumedAttackSerial = timeline->playSerial;
 			UpdateIndicators(world, *state);
 		}
-		else if (state->hits < requiredHits && !timeline->isPlaying && input.WasActionPressed("Gameplay", "Attack"))
+		else if (!state->usesGraphAttack && state->hits < state->requiredHits && !timeline->isPlaying &&
+			timeline->timelinePath == timeline->loadedTimelinePath && timeline->timelineAsset.Get() &&
+			input.WasActionPressed("Gameplay", "Attack"))
 		{
 			timeline->Play();
 			state->attackSerial = timeline->playSerial;
-			state->hitConsumed = false;
 		}
 	}
 }
 
 void BaselineChallengeSystem::OnActionTimelineEvent(const Engine::ActionTimelineEvent& event)
 {
-	if (!event.scene || event.eventTag != "OnAttackHit") return;
+	if (!event.scene || !event.scene->IsActive() || event.scene->IsPaused() || event.eventTag != "OnAttackHit") return;
 	auto& world = event.scene->GetRegistry();
 	auto* state = world.ctx().find<ChallengeState>();
-	if (!state || state->hitConsumed || state->hits >= requiredHits) return;
+	if (!state || state->hits >= state->requiredHits || event.entity != state->player) return;
 
-	entt::entity player = entt::null;
-	const auto* timeline = GetPlayerTimeline(*event.scene, player);
-	if (!timeline || event.entity != player || state->attackSerial != timeline->playSerial) return;
-	state->hitConsumed = true;
-	if (!IsTargetInRange(*event.scene, player)) return;
+	const auto binding = FindChallengeBinding(*event.scene);
+	if (!binding.timeline || binding.player != state->player || state->requiredHits != binding.settings.RequiredHits ||
+		state->usesGraphAttack != binding.settings.UseGraphAttackInput) return;
+	const auto serial = event.playSerial;
+	if (binding.timeline->playSerial != serial) return;
+	if (state->consumedAttackSerial == serial || (!state->usesGraphAttack && state->attackSerial != serial)) return;
+	state->consumedAttackSerial = serial;
+	if (!IsTargetInRange(*event.scene, binding)) return;
 
 	++state->hits;
 	UpdateIndicators(world, *state);
-	BAM_LOG(Info, "GameModule", "BaselineChallenge", "Hits: {}/{}", state->hits, requiredHits);
+	BAM_LOG(Info, "GameModule", "BaselineChallenge", "Hits: {}/{}", state->hits, state->requiredHits);
 }
 
 void BaselineChallengeSystem::ClearSceneState()
@@ -168,14 +226,7 @@ void BaselineChallengeSystem::ClearSceneState()
 	if (!Engine::SceneManager::IsCreated()) return;
 	for (auto* scene : Engine::SceneManager::Get().GetAllScenes())
 	{
-		auto& world = scene->GetRegistry();
-		auto* state = world.ctx().find<ChallengeState>();
-		if (!state) continue;
-		entt::entity player = entt::null;
-		if (auto* timeline = GetPlayerTimeline(*scene, player); timeline && state->attackSerial == timeline->playSerial)
-			timeline->Stop();
-		if (auto* canvas = scene->FindEntity(state->canvas); canvas && !scene->DestroyEntity(*canvas))
-			BAM_LOG(Warn, "GameModule", "BaselineChallenge", "Could not remove the challenge HUD.");
-		world.ctx().erase<ChallengeState>();
+		if (auto* state = scene->GetRegistry().ctx().find<ChallengeState>())
+			RemoveChallengeState(*scene, *state);
 	}
 }

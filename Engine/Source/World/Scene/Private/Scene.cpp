@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Scene.h"
+#include "SceneEntityReference.h"
 #include "WorldComponents.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
@@ -161,13 +162,20 @@ namespace
 		return true;
 	}
 
-	// 하위 트리 밖 컴포넌트의 리플렉션 entt::entity 속성 중 하위 트리를 가리키는 것을 모은다.
+	// 하위 트리 밖 컴포넌트의 리플렉션 엔티티 참조 중 하위 트리를 가리키는 것을 모은다.
 	// 쓸 수 있는 참조는 writable에 담고, 비울 수 없는 읽기 전용 참조의 수를 반환한다.
 	std::size_t CollectExternalSceneEntityReferences(entt::registry& world, const std::unordered_set<entt::entity>& removalSet,
 		std::vector<SceneExternalEntityReference>& writable)
 	{
 		std::size_t readOnly = 0;
 		if (!ReflectionRegistry::IsCreated()) return readOnly;
+
+		std::unordered_set<uint64> removalIds;
+		for (const auto handle : removalSet)
+		{
+			if (const auto* id = world.try_get<IDComponent>(handle); id && id->id != 0)
+				removalIds.insert(id->id);
+		}
 
 		for (const auto& entry : ReflectionRegistry::Get().GetComponentEntries())
 		{
@@ -178,9 +186,20 @@ namespace
 				const auto object = entry.Edit(world, handle);
 				for (const auto& property : entry.ReflectionType->Properties)
 				{
-					if (property.GetValueCppType() != std::type_index(typeid(entt::entity))) continue;
-					const auto* reference = property.ReadValue(object).Get<entt::entity>();
-					if (!reference || !removalSet.contains(*reference)) continue;
+					const auto type = property.GetValueCppType();
+					if (type == std::type_index(typeid(entt::entity)))
+					{
+						const auto value = property.ReadValue(object);
+						const auto* reference = value.Get<entt::entity>();
+						if (!reference || !removalSet.contains(*reference)) continue;
+					}
+					else if (type == std::type_index(typeid(SceneEntityReference)))
+					{
+						const auto value = property.ReadValue(object);
+						const auto* reference = value.Get<SceneEntityReference>();
+						if (!reference || !removalIds.contains(reference->PersistentId)) continue;
+					}
+					else continue;
 					if (!property.CanWrite() || object.IsReadOnly())
 						++readOnly;
 					else
@@ -218,8 +237,13 @@ bool Scene::DestroyEntity(Entity& entity)
 	if (CollectExternalSceneEntityReferences(m_LocalRegistry, removalSet, references) != 0) return false;
 
 	const entt::entity cleared = entt::null;
+	const SceneEntityReference clearedPersistent;
 	for (const auto& [property, object] : references)
-		if (!property->WriteValue(object, reflection::ValueView::From(cleared))) return false;
+	{
+		const auto value = property->GetValueCppType() == std::type_index(typeid(SceneEntityReference))
+			? reflection::ValueView::From(clearedPersistent) : reflection::ValueView::From(cleared);
+		if (!property->WriteValue(object, value)) return false;
+	}
 
 	for (auto [other, link] : m_LocalRegistry.view<HierarchyComponent>().each())
 		std::erase_if(link.children, [&](auto child) { return removalSet.contains(child); });

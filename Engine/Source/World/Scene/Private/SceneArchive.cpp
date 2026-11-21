@@ -261,24 +261,26 @@ namespace
     template<typename Writer>
     archive::ArchiveResult WriteDocumentWithResourceReferences(archive::IArchive& ar, std::string_view key, Writer&& writeDocument)
     {
-        Engine::ResourceReferenceSet references;
-
-        const auto result = ar.WriteObject(key, references,
+        Engine::ResourceReferenceArchiveContext context;
+        context.WritingPrefab = key == "Prefab";
+        const auto result = ar.WriteObject(key, context,
             [&](archive::IArchive& object, const auto&) -> archive::ArchiveResult
             {
-                object.SetWriteContext(&references);
+                object.SetWriteContext(&context);
 
                 auto written = writeDocument(object);
                 if (written)
-                    written = archive_resource::WriteResourceReferences(object, "ResourceReferences", references);
+                    written = archive_resource::WriteResourceReferences(object, "ResourceReferences", context.References);
 
                 return written;
             });
 
         if (result)
         {
-            if (auto* destination = ar.GetWriteContext<Engine::ResourceReferenceSet>())
-                destination->insert(references.begin(), references.end());
+            if (auto* parent = ar.GetWriteContext<Engine::ResourceReferenceArchiveContext>())
+                parent->References.insert(context.References.begin(), context.References.end());
+            else if (auto* destination = ar.GetWriteContext<Engine::ResourceReferenceSet>())
+                destination->insert(context.References.begin(), context.References.end());
         }
 
         return result;

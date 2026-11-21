@@ -205,14 +205,6 @@ namespace Engine::GraphActor
 	FUNCTION(GRAPH_CALLABLE("Entity.DestroySelf"), DISPLAY_NAME("Destroy Actor"), CATEGORY("Entity"))
 		inline void DestroySelf()
 	{
-		Scene* scene = GraphSystem::GetCurrentScene();
-		entt::entity entity = GraphSystem::GetCurrentEntity();
-		if (!scene || entity == entt::null) return;
-
-		Entity* e = scene->FindEntity(entity);
-		if (e)
-		{
-			(void)scene->DestroyEntity(*e);
-		}
+		GraphSystem::RequestCurrentEntityDestroy();
 	}
 }
