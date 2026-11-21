@@ -127,6 +127,7 @@ public:
 public:
 	bool SetInputActionSettings(const InputActionSettings& settings);
 	std::optional<vec2> GetMouseButtonDownScreenPosition(EMouseButton button) const;
+	std::optional<vec2> GetMouseButtonDownPosition(EMouseButton button) const;
 	void EvaluateActionMap(std::string_view mapId, bool enabled, const InputActionMapMouseInput& mouse = {});
 	vec2 GetActionMapMouseDelta(std::string_view mapId) const;
 	f32 GetActionMapMouseScrollDeltaY(std::string_view mapId) const;
@@ -158,6 +159,7 @@ private:
 	array<bool, static_cast<uint32>(EMouseButton::Count)> m_PendingMouseDown{}, m_PendingMouseUp{};
 	std::vector<MouseWheelSample> m_MouseWheelSamples, m_PendingMouseWheelSamples;
 	std::array<std::optional<vec2>, static_cast<std::size_t>(EMouseButton::Count)> m_MouseDownScreenPositions{};
+	std::array<vec2, static_cast<std::size_t>(EMouseButton::Count)> m_MouseDownPositions{};
 
 
 	vec2 m_MousePosition = vec2(0.f);

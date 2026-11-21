@@ -816,6 +816,15 @@
 ,STRUCT_HIT_RESULT,Hit Result,히트 결과
 ,STRUCT_ID,ID,ID
 ,STRUCT_IMAGE,Image,이미지
+,STRUCT_UI_TEXT,UI Text,UI 텍스트
+,PROP_UI_TEXT,Text,텍스트
+,PROP_UI_TEXT_LOCALE_KEY,Localization Key,로캘 키
+,PROP_UI_FONT_PIXELS,Font Size (px),글꼴 크기 (px)
+,PROP_UI_TEXT_ALIGNMENT,Horizontal Alignment,가로 정렬
+,Engine::EUITextAlignment.Left,Left,왼쪽
+,Engine::EUITextAlignment.Center,Center,가운데
+,Engine::EUITextAlignment.Right,Right,오른쪽
+Game,BaselineChallenge.Restart,Restart,다시 시작
 ,STRUCT_JOINT_2D,Distance Joint 2D,2D 거리 조인트
 ,STRUCT_JOINT_3D,Distance Joint,거리 조인트
 ,STRUCT_LIGHT,Light,빛

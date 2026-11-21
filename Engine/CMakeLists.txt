@@ -143,6 +143,7 @@ if(WIN32)
         dxguid.lib
         ws2_32.lib
         dbghelp.lib
+        gdi32.lib
         $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmodL_vc.lib>
         $<$<NOT:$<CONFIG:Debug>>:${CMAKE_SOURCE_DIR}/ThirdParty/FMOD/lib/x64/fmod_vc.lib>
     )

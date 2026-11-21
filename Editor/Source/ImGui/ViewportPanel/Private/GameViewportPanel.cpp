@@ -67,6 +67,7 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 
 void GameViewportPanel::Free()
 {
+	m_RuntimeUIInput.Clear();
 	if (RenderPassManager::IsCreated())
 		RenderPassManager::Get().RemoveRenderPass(m_UIOverlayPassID);
 	m_UIOverlayPassID = INVALID_PASS_ID;
@@ -181,6 +182,35 @@ uint32 GameViewportPanel::UpdateGameplayMouseButtons(Engine::InputManager& input
 	}
 
 	return frameButtons;
+}
+
+bool GameViewportPanel::UpdateRuntimeUI(Engine::InputManager& input, bool enabled)
+{
+	if (!PIEManager::Get().IsPlaying())
+	{
+		m_RuntimeUIInput.Clear();
+		return false;
+	}
+
+	Engine::UIPointerInput pointer;
+	const auto position = input.GetScreenMousePosition();
+	pointer.focused = enabled && m_GameplayImageWindowId != 0 && m_ImageSize.x > 0.0f && m_ImageSize.y > 0.0f;
+	if (pointer.focused)
+	{
+		const auto origin = vec2(m_ImageScreenPos.x, m_ImageScreenPos.y);
+		const auto size = vec2(m_ImageSize.x, m_ImageSize.y);
+		pointer.position = (position - origin) / size;
+		pointer.insideViewport = HitTestGameplayImage(position);
+		if (const auto down = input.GetMouseButtonDownScreenPosition(Engine::EMouseButton::Left))
+		{
+			pointer.downPosition = (*down - origin) / size;
+			pointer.downInsideViewport = HitTestGameplayImage(*down);
+		}
+	}
+	pointer.held = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+	pointer.down = input.IsMouseButtonDown(Engine::EMouseButton::Left);
+	pointer.up = input.IsMouseButtonUp(Engine::EMouseButton::Left);
+	return m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer);
 }
 
 void GameViewportPanel::DrawCustomViewport()

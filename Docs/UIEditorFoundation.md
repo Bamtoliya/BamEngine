@@ -9,12 +9,13 @@ Z-Index 편집과 그리기·선택 순서는 [UIRenderOrder.md](UIRenderOrder.m
 2. UI View의 `Canvas → New Canvas` 또는 Hierarchy의 `Add UI Canvas`로 Canvas Entity를 만든다.
 3. `Canvas → Add Image`로 Image를 추가한다. 선택한 UI 요소가 있으면 그 아래에, 없으면 Canvas 아래에 만든다.
 4. Sprite가 없는 Image는 단색 사각형이다. Inspector의 UIImageComponent에서 Sprite·색상·UI용 Material을 지정한다.
-5. UI View에서 Image를 클릭하고 드래그해 이동한다. 우하단 핸들은 반대 모서리를 유지하며 크기를 조절한다.
+5. UI View에서 Image를 클릭하고 드래그해 이동한다. 네 모서리 핸들로 반대 모서리를 고정한 채 크기를 조절한다.
 6. Ctrl + 클릭은 선택 추가·제거, 빈 영역 클릭은 선택 해제다. 이동·크기 조절은 조작 대상 하나에 적용한다.
 7. `Snap`에서 Grid 또는 Pixel을 선택한다. Alt를 누르는 동안 스냅을 해제한다.
 8. 휠은 마우스 지점을 유지하는 줌, 가운데 버튼은 팬, `Fit` 또는 F는 캔버스 전체 보기다.
 9. `Canvas` 메뉴에서 대상과 디자인 해상도를 바꾼다. RT 리사이즈는 다음 Update에서 수행한다.
 10. 툴바 오른쪽의 `R`·`G`·`B`·`A` 버튼으로 표시할 채널을 각각 켜고 끈다. 선택 상태는 버튼 색상으로 표시한다.
+11. `Canvas → Add Text`로 한 줄 텍스트를 만든다. Inspector에서 문구 또는 로캘 키, 픽셀 크기, 색상과 가로 정렬을 설정한다.
 
 선택 잠금은 선택 및 드래그 변경을 막는다. Escape는 진행 중인 드래그를 시작 값으로 되돌린다.
 View의 안전 영역은 고정 5% 가이드이며 기기별 실제 safe-area 데이터가 아니다.
@@ -22,11 +23,12 @@ View의 안전 영역은 고정 5% 가이드이며 기기별 실제 safe-area �
 
 ## 데이터와 책임
 
-컴포넌트는 `Engine/Source/Core/Public/Components/UI`에 파일별로 둔다.
+컴포넌트는 `Engine/Source/UI/Public`에 파일별로 둔다.
 
 - CanvasComponent.h: 디자인 기준 해상도. 첫 단계의 지원 범위는 최상위 ScreenSpace Canvas다.
 - RectTransformComponent.h: AnchorMin/Max, AnchoredPosition, SizeDelta, Pivot, Scale과 Rotation.
 - UIImageComponent.h: Sprite·Material 참조와 색상. 기본 UIMaterial은 NonPremultiplied 블렌딩을 사용한다.
+- UITextComponent.h: 한 줄 문구, 선택적 로캘 키, 글꼴 크기, 색상과 가로 정렬. 키를 찾지 못하면 문구 값을 사용한다.
 - UIRenderOrderComponent.h: Canvas 또는 같은 부모 아래 형제 그룹의 zIndex.
 
 UI 계층은 기존 HierarchyComponent의 부모와 자식 순서를 사용한다.
@@ -104,9 +106,10 @@ Client의 씬·리소스 로딩과 패스·시스템 등록까지 이 변경만�
 아직 지원하지 않는 기능:
 
 - UI 부모 변경: 3D ReparentEntity로 옮기려 하면 거부한다. 앵커·크기를 보존하는 전용 처리 필요.
-- 캔버스 중첩, WorldSpace UI, 마스크/자식 클리핑, 레이아웃 그룹과 텍스트.
-- 버튼과 포인터 이벤트는 후속 구현에 추가했다. Client/Game View 입력 연결과 키보드·터치 입력은 남아 있다.
-- 다중 요소 동시 변형, 네 모서리 리사이즈, 회전 핸들과 정렬 가이드.
+- 캔버스 중첩, WorldSpace UI, 마스크/자식 클리핑, 레이아웃 그룹과 여러 줄 텍스트.
+- 한 줄 텍스트 렌더링은 Windows의 시스템 글꼴을 사용한다. 한글 표시는 해당 OS의 글꼴 설치 상태에 따르며, 문구가 사각형보다 크면 비율을 유지해 축소한다.
+- 버튼과 포인터 이벤트는 [UIInteraction.md](UIInteraction.md)를 따른다.
+- 다중 요소 동시 변형, 회전 핸들과 정렬 가이드.
 - Sprite 투명 픽셀을 제외하는 UI 피킹. 현재 선택은 변환된 사각형 기준이다.
 - 임의의 Shader/Material 레이아웃. UIImage에는 기존 UIUBO 및 UI VS/PS 출력 규약에 맞는 Material이 필요하다.
 
@@ -132,9 +135,10 @@ CanvasViewCheck: 좌표 왕복, 마우스 중심 줌, 팬과 확대율에 독립
 
 1. Canvas와 단색 Image를 생성하고 Inspector의 RectTransform과 색상이 반영되는지 확인한다.
 2. Sprite를 지정해 UV 방향·영역을 확인하고, 투명 Image 두 개의 합성 순서를 확인한다.
-3. 12.5%, 100%, 800%에서 이동·픽셀/그리드 스냅, 우하단 크기 조절과 Escape 복원을 확인한다.
+3. 12.5%, 100%, 800%에서 이동·픽셀/그리드 스냅을 확인한다. 네 모서리 각각을 조절하고 회전·반전된 부모 및 스트레치 앵커에서도 반대 모서리가 고정되는지 확인한다. Escape와 Undo로 시작 값이 복원되어야 한다.
 4. 자식 Image를 추가하고 부모의 회전·스케일을 변경해 표시·선택·이동을 확인한다.
 5. 디자인 해상도·패널 크기 변경, Fit·줌·팬, 씬 교체와 Canvas 선택 변경을 확인한다.
 6. 씬을 저장하고 다시 열어 UI 계층과 Sprite/Material 참조가 유지되는지 확인한다.
 7. 월드 Sprite의 PPU·영역·Pivot에 따른 크기와 SceneView의 GPU ID/레이 경계 선택이 맞는지 확인한다.
 8. 기본 DirectX12와 SDL GPU 각각에서 셰이더·합성 결과 및 검증 레이어 오류를 확인한다.
+9. Text에서 한글과 영문을 각각 설정하고 좌·중앙·우 정렬을 확인한다. 로캘 키와 대체 문구를 설정해 언어 변경과 씬 저장·재열기 후에도 표시가 맞는지 본다.

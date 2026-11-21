@@ -55,6 +55,18 @@ bool Engine::UILayout::IsValid(const UIButtonComponent& button)
     return true;
 }
 
+bool Engine::UILayout::IsValid(const UITextComponent& text)
+{
+    if (text.fontPixels < UITextComponent::MinFontPixels || text.fontPixels > UITextComponent::MaxFontPixels ||
+        text.text.size() > UITextComponent::MaxTextBytes || text.text.find_first_of("\r\n") != std::string::npos ||
+        text.alignment < EUITextAlignment::Left || text.alignment > EUITextAlignment::Right)
+        return false;
+    for (int channel = 0; channel < 4; ++channel)
+        if (!std::isfinite(text.color[channel]) || text.color[channel] < 0.0f || text.color[channel] > 1.0f)
+            return false;
+    return true;
+}
+
 entt::entity Engine::UILayout::FindCanvas(const entt::registry& world, entt::entity entity)
 {
     std::unordered_set<entt::entity> visited;

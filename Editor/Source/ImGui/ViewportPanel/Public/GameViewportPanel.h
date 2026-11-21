@@ -4,6 +4,7 @@
 #include "ViewportDeferredPipeline.h"
 #include "PostProcess.h"
 #include "ScenePostProcessSettings.h"
+#include "RuntimeUIInput.h"
 
 BEGIN(Engine)
 class InputManager;
@@ -34,6 +35,7 @@ public:
 public:
 	bool HitTestGameplayImage(const vec2& screenPosition) const;
 	uint32 UpdateGameplayMouseButtons(Engine::InputManager& input, bool enabled);
+	bool UpdateRuntimeUI(Engine::InputManager& input, bool enabled);
 protected:
 	EResult OnInitialize(void* arg) override;
 	virtual void DrawCustomViewport() override;
@@ -52,6 +54,7 @@ private:
 	bool m_HasActiveCamera = false;
 	ImGuiID m_GameplayImageWindowId = 0;
 	uint32 m_GameplayMouseButtons = 0;
+	Engine::RuntimeUIInput m_RuntimeUIInput;
 	bool m_UsePixelPerfectView = false;
 };
 

@@ -14,6 +14,8 @@
 
 namespace
 {
+    const glm::vec2 CanvasCorners[] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+
     ImVec2 ImPoint(const glm::vec2& point) { return ImVec2(point.x, point.y); }
     glm::vec2 Point(const ImVec2& point) { return glm::vec2(point.x, point.y); }
     bool SameRect(const Engine::RectTransformComponent& left, const Engine::RectTransformComponent& right)
@@ -353,6 +355,17 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         if (parent)
             SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIButtonEntity(m_TargetScene, *parent));
     }
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddText").c_str(), nullptr, false, HasTarget()))
+    {
+        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
+        auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+        if (selected && selected->GetScene() == m_TargetScene && FindLayout(selected->GetEntityHandle())) parent = selected;
+        if (parent)
+        {
+            const auto label = LOCAL("Viewport.NewTextLabel");
+            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
+        }
+    }
     ImGui::Separator();
     for (Scene* scene : SceneManager::Get().GetActiveScenes())
     {
@@ -501,21 +514,21 @@ void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
     if (!m_LayoutValid || !HasTarget()) return;
     auto& selection = SelectionManager::Get();
     const auto& selected = selection.GetSelectedEntities();
-    const vec2 corners[] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
     for (const auto& layout : m_Layouts)
     {
         auto* wrapper = m_TargetScene->FindEntity(layout.entity);
         if (std::find(selected.begin(), selected.end(), wrapper) == selected.end()) continue;
         ImVec2 screen[4];
         for (int corner = 0; corner < 4; ++corner)
-            screen[corner] = ImPoint(m_View.ToScreen(vec2(layout.renderMatrix * vec4(corners[corner], 0.0f, 1.0f))));
+            screen[corner] = ImPoint(m_View.ToScreen(vec2(layout.renderMatrix * vec4(CanvasCorners[corner], 0.0f, 1.0f))));
         drawList->AddQuad(screen[0], screen[1], screen[2], screen[3], IM_COL32(70, 180, 255, 255), 2.0f);
         const auto pivot = m_View.ToScreen(vec2(layout.worldTransform[3]));
         drawList->AddCircle(ImPoint(pivot), 4.0f, IM_COL32(255, 210, 80, 255), 12, 2.0f);
         if (wrapper != selection.GetPrimarySelectedEntity()) continue;
         if (!selection.IsPrimarySelectionLocked())
-            drawList->AddRectFilled(ImVec2(screen[2].x - 5.0f, screen[2].y - 5.0f),
-                ImVec2(screen[2].x + 5.0f, screen[2].y + 5.0f), IM_COL32(80, 190, 255, 255));
+            for (const auto& point : screen)
+                drawList->AddRectFilled(ImVec2(point.x - 5.0f, point.y - 5.0f),
+                    ImVec2(point.x + 5.0f, point.y + 5.0f), IM_COL32(80, 190, 255, 255));
         if (m_ShowAnchors)
         {
             const auto& rect = m_TargetScene->GetRegistry().get<RectTransformComponent>(layout.entity);
@@ -568,12 +581,23 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     if (m_Drag.mode == DragMode::None && hovered && !m_Panning && InputManager::Get().IsMouseButtonDown(EMouseButton::Left))
     {
         const UIElementLayout* hit = nullptr;
-        bool resize = false;
+        std::optional<vec2> resizeCorner;
         for (const auto& layout : m_Layouts)
         {
             if (m_TargetScene->FindEntity(layout.entity) != selection.GetPrimarySelectedEntity()) continue;
-            const auto handle = m_View.ToScreen(vec2(layout.renderMatrix * vec4(1.0f, 1.0f, 0.0f, 1.0f)));
-            if (glm::length(handle - mouse) <= 8.0f) { hit = &layout; resize = true; break; }
+            float nearestDistanceSquared = 8.0f * 8.0f;
+            for (const auto& corner : CanvasCorners)
+            {
+                const auto handle = m_View.ToScreen(vec2(layout.renderMatrix * vec4(corner, 0.0f, 1.0f)));
+                const auto offset = handle - mouse;
+                const float distanceSquared = glm::dot(offset, offset);
+                if (distanceSquared > nearestDistanceSquared || (resizeCorner && distanceSquared == nearestDistanceSquared))
+                    continue;
+                nearestDistanceSquared = distanceSquared;
+                resizeCorner = corner;
+                hit = &layout;
+            }
+            break;
         }
         if (!hit && canvasPoint.x >= 0.0f && canvasPoint.y >= 0.0f &&
             canvasPoint.x < m_CanvasSize.x && canvasPoint.y < m_CanvasSize.y)
@@ -594,7 +618,8 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         selection.SetSelectedEntity(wrapper);
         const auto* id = world.try_get<IDComponent>(hit->entity);
         if (!id) return;
-        m_Drag.mode = resize ? DragMode::Resize : DragMode::Move;
+        m_Drag.mode = resizeCorner ? DragMode::Resize : DragMode::Move;
+        if (resizeCorner) m_Drag.resizeCorner = *resizeCorner;
         m_Drag.entity = hit->entity;
         m_Drag.id = id->id;
         m_Drag.mouseStart = canvasPoint;
@@ -604,7 +629,8 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     if (m_Drag.mode == DragMode::None) return;
     const auto* id = world.valid(m_Drag.entity) ? world.try_get<IDComponent>(m_Drag.entity) : nullptr;
     const auto* layout = FindLayout(m_Drag.entity);
-    if (!id || id->id != m_Drag.id || !layout || layout->parentTransform != m_Drag.layout.parentTransform || !m_Focused)
+    if (!id || id->id != m_Drag.id || !layout || !m_Focused || layout->parentTransform != m_Drag.layout.parentTransform ||
+        layout->parentSize != m_Drag.layout.parentSize || layout->parentPivot != m_Drag.layout.parentPivot)
     {
         m_Drag = {};
         return;
@@ -636,12 +662,12 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         const float determinant = glm::determinant(m_Drag.layout.worldTransform);
         if (!std::isfinite(determinant) || determinant == 0.0f) return;
         const auto localDelta = vec2(glm::inverse(m_Drag.layout.worldTransform) * vec4(delta, 0.0f, 0.0f));
-        const auto size = glm::max(CanvasView2D::Snap(m_Drag.layout.size + localDelta, step), vec2(1.0f));
-        const auto sizeDelta = size - m_Drag.layout.size;
-        candidate.sizeDelta += sizeDelta;
+        const auto resize = CanvasView2D::ResizeFromCorner(
+            m_Drag.layout.size, candidate.pivot, m_Drag.resizeCorner, localDelta, step);
+        candidate.sizeDelta += resize.sizeChange;
         const auto rotationScale = glm::rotate(mat4(1.0f), glm::radians(candidate.rotation), vec3(0.0f, 0.0f, 1.0f)) *
             glm::scale(mat4(1.0f), vec3(candidate.scale, 1.0f));
-        candidate.anchoredPosition += vec2(rotationScale * vec4(sizeDelta * candidate.pivot, 0.0f, 0.0f));
+        candidate.anchoredPosition += vec2(rotationScale * vec4(resize.localPivotOffset, 0.0f, 0.0f));
     }
     if (UILayout::IsValid(candidate))
         m_PendingEdit = PendingEdit{ m_Drag.entity, m_Drag.id,

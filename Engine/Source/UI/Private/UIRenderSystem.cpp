@@ -24,6 +24,51 @@ namespace
         auto handle = resources.GetResourceHandle<T>(uri);
         return handle.IsValid() ? handle : resources.GetResourceHandle<T>(legacyKey);
     }
+
+    void SubmitImage(Engine::Renderer& renderer, Engine::RenderPass& pass, const entt::registry& world,
+        const Engine::UIElementLayout& layout, glm::vec2 canvasSize,
+        const Engine::ResourceHandle<Engine::MaterialInterface>& defaultUIMat, const Engine::ResourceHandle<Engine::Texture>& white)
+    {
+        const auto* image = Engine::TryGetEnabledComponent<Engine::UIImageComponent>(world, layout.entity);
+        if (!image || !Engine::UILayout::IsValid(*image) || image->color.a <= 0.0f) return;
+
+        // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
+        Engine::ResourceHandle<Engine::MaterialInterface> effectiveMatHandle = image->materialHandle;
+        Engine::MaterialInterface* material = effectiveMatHandle.Get();
+        if (!material)
+        {
+            effectiveMatHandle = defaultUIMat;
+            material = defaultUIMat.Get();
+        }
+        else
+        {
+            // UI 패스 셰이더(SV_VertexID 기반 UIVS)가 아닌 정점 버퍼 입력을 기대하는 VS가 지정된 경우 안전하게 UIMaterial로 대체
+            Engine::Shader* vs = material->GetVertexShader(Engine::ERenderPassType::UI);
+            if (!vs || (vs->GetKey().find(L"ui") == std::wstring::npos && vs->GetKey().find(L"UI") == std::wstring::npos))
+            {
+                effectiveMatHandle = defaultUIMat;
+                material = defaultUIMat.Get();
+            }
+        }
+
+        if (!material || !pass.IsAcceptsBlendMode(material->GetBlendMode())) return;
+        Engine::Sprite* sprite = image->spriteHandle.Get();
+        // Missing assigned assets must not silently turn into a different image.
+        if (image->spriteHandle.GetRawHandle().IsValid() && !sprite) return;
+        Engine::Texture* texture = sprite ? sprite->GetTexture() : white.Get();
+        if (!texture || !texture->GetRHITexture()) return;
+        Engine::UIImageDrawCommand command;
+        command.textureHandle = sprite ? sprite->GetTextureHandle() : white;
+        command.materialHandle = effectiveMatHandle;
+        command.worldMatrix = layout.renderMatrix;
+        command.color = image->color * Engine::UIEventSystem::GetButtonTint(world, layout.entity);
+        command.uvTransform = sprite ? sprite->GetUVTransform() : glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
+        const auto uv = command.uvTransform;
+        if (!std::isfinite(uv.x) || !std::isfinite(uv.y) || !std::isfinite(uv.z) ||
+            !std::isfinite(uv.w) || uv.z <= 0.0f || uv.w <= 0.0f) return;
+        command.canvasSize = canvasSize;
+        renderer.SubmitUIImage(command, pass.GetID());
+    }
 }
 
 Engine::ResourceHandle<Engine::MaterialInterface> Engine::UIRenderSystem::GetDefaultMaterial()
@@ -41,6 +86,7 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
     auto& renderer = Renderer::Get();
     const auto defaultUIMat = GetDefaultMaterial();
     const auto white = GetDefaultTexture();
+    for (auto& [key, cached] : m_TextCache) cached.submitted = false;
     std::unordered_set<RenderPassID> submitted;
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
@@ -68,47 +114,15 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                 const auto canvasSize = world.get<CanvasComponent>(root).referenceResolution;
                 for (const auto& layout : layouts)
                 {
-                    const auto* image = TryGetEnabledComponent<UIImageComponent>(world, layout.entity);
-                    if (!layout.visible || !image || !UILayout::IsValid(*image) || image->color.a <= 0.0f) continue;
+                    if (!layout.visible) continue;
+                    SubmitImage(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
 
-                    // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백
-                    ResourceHandle<MaterialInterface> effectiveMatHandle = image->materialHandle;
-                    MaterialInterface* material = effectiveMatHandle.Get();
-                    if (!material)
-                    {
-                        effectiveMatHandle = defaultUIMat;
-                        material = defaultUIMat.Get();
-                    }
-                    else
-                    {
-                        // UI 패스 셰이더(SV_VertexID 기반 UIVS)가 아닌 정점 버퍼 입력을 기대하는 VS가 지정된 경우 안전하게 UIMaterial로 대체
-                        Shader* vs = material->GetVertexShader(ERenderPassType::UI);
-                        if (!vs || (vs->GetKey().find(L"ui") == std::wstring::npos && vs->GetKey().find(L"UI") == std::wstring::npos))
-                        {
-                            effectiveMatHandle = defaultUIMat;
-                            material = defaultUIMat.Get();
-                        }
-                    }
-
-                    if (!material || !pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
-                    Sprite* sprite = image->spriteHandle.Get();
-                    // Missing assigned assets must not silently turn into a different image.
-                    if (image->spriteHandle.GetRawHandle().IsValid() && !sprite) continue;
-                    Texture* texture = sprite ? sprite->GetTexture() : white.Get();
-                    if (!texture || !texture->GetRHITexture()) continue;
-                    UIImageDrawCommand command;
-                    command.textureHandle = sprite ? sprite->GetTextureHandle() : white;
-                    command.materialHandle = effectiveMatHandle;
-                    command.worldMatrix = layout.renderMatrix;
-                    command.color = image->color * UIEventSystem::GetButtonTint(world, layout.entity);
-                    command.uvTransform = sprite ? sprite->GetUVTransform() : glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
-                    const auto uv = command.uvTransform;
-                    if (!std::isfinite(uv.x) || !std::isfinite(uv.y) || !std::isfinite(uv.z) ||
-                        !std::isfinite(uv.w) || uv.z <= 0.0f || uv.w <= 0.0f) continue;
-                    command.canvasSize = canvasSize;
-                    renderer.SubmitUIImage(command, pass->GetID());
+                    const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
+                    if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)
+                        SubmitText(renderer, *pass, world, layout, *text, canvasSize, defaultUIMat);
                 }
             }
         }
     }
+    std::erase_if(m_TextCache, [](const auto& entry) { return !entry.second.submitted; });
 }

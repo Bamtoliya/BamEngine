@@ -14,7 +14,9 @@
 #include "FlagComponent.h"
 #include "GraphBindingComponent.h"
 #include "InputActionSettings.h"
+#include "LocalizationManager.h"
 #include "PixelPerfectCameraComponent.h"
+#include "PlatformPath.h"
 #include "StartupResourceLoader.h"
 #include "Systems.h"
 
@@ -60,6 +62,18 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
 
     if (onStageChanged)
         onStageChanged(ClientStartupStage::Resources);
+
+    auto& localization = Engine::LocalizationManager::Get();
+    bool registeredCatalog = false;
+    for (const auto* uri : { L"Engine://Data/Localization/English.json", L"Engine://Data/Localization/Korean.json" })
+    {
+        const auto path = Engine::PlatformPath::ResolveUri(uri);
+        std::error_code error;
+        if (std::filesystem::is_regular_file(path, error) && IsSuccess(localization.RegisterLocalizationData(path.wstring())))
+            registeredCatalog = true;
+    }
+    if (registeredCatalog) localization.LoadData();
+
     Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
     if (!Engine::StartupResourceLoader::LoadPipeline(m_ProjectSettings.StartupManifestPath))
         return Engine::EResult::Fail;
@@ -92,8 +106,8 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     return Engine::EResult::Success;
 }
 
-Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine::uint32 height, bool inputFocused,
-    bool isMinimized)
+Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine::uint32 height, glm::vec2 logicalSize,
+    bool inputFocused, bool pointerInWindow)
 {
     if (!m_Runtime)
         return Engine::EResult::InvalidArgument;
@@ -105,8 +119,14 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
     auto& timeManager = Engine::TimeManager::Get();
     timeManager.Update();
     const Engine::f32 dt = timeManager.GetDeltaTime();
-    if (isMinimized || width == 0 || height == 0)
+    auto& input = Engine::InputManager::Get();
+    input.Update(dt);
+    if (width == 0 || height == 0)
+    {
+        m_RuntimeUIInput.Clear();
+        input.EvaluateActionMap("Gameplay", false);
         return Engine::EResult::Success;
+    }
 
     if (width != rhi->GetSwapChainWidth() || height != rhi->GetSwapChainHeight())
     {
@@ -120,9 +140,29 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
         }
     }
 
-    auto& input = Engine::InputManager::Get();
-    input.Update(dt);
+    Engine::UIPointerInput pointer;
+    pointer.focused = inputFocused && logicalSize.x > 0.0f && logicalSize.y > 0.0f;
+    const auto insideOutput = [](const glm::vec2& position)
+    {
+        return position.x >= 0.0f && position.y >= 0.0f && position.x < 1.0f && position.y < 1.0f;
+    };
+    if (pointer.focused)
+    {
+        pointer.position = input.GetMousePosition() / logicalSize;
+        pointer.insideViewport = pointerInWindow && insideOutput(pointer.position);
+        if (const auto down = input.GetMouseButtonDownPosition(Engine::EMouseButton::Left))
+        {
+            pointer.downPosition = *down / logicalSize;
+            pointer.downInsideViewport = insideOutput(*pointer.downPosition);
+        }
+    }
+    pointer.held = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+    pointer.down = input.IsMouseButtonDown(Engine::EMouseButton::Left);
+    pointer.up = input.IsMouseButtonUp(Engine::EMouseButton::Left);
+    const bool pointerBlockedByUI = m_RuntimeUIInput.Update(Engine::SceneManager::Get().GetActiveScenes(), pointer);
     Engine::InputActionMapMouseInput mouseInput;
+    if (pointerBlockedByUI)
+        mouseInput.AllowedButtons &= ~(Engine::uint32{ 1 } << static_cast<Engine::uint32>(Engine::EMouseButton::Left));
     mouseInput.MotionDelta = input.GetMouseDelta();
     mouseInput.ScrollDeltaY = input.GetMouseScrollDeltaY();
     input.EvaluateActionMap("Gameplay", inputFocused, mouseInput);
@@ -142,6 +182,7 @@ void Client::ClientGameRuntime::Free()
     if (!m_Runtime && !Engine::ReflectionRegistry::IsCreated())
         return;
 
+    m_RuntimeUIInput.Clear();
     m_RenderPipeline.Free();
     if (m_Runtime)
     {

@@ -4,6 +4,7 @@
 #include "ClientStartupStage.h"
 #include "Config.h"
 #include "Runtime.h"
+#include "RuntimeUIInput.h"
 
 #include <filesystem>
 #include <functional>
@@ -21,7 +22,8 @@ namespace Client
         Engine::EResult LoadProject(const std::filesystem::path& projectRoot);
         Engine::EResult Initialize(const Engine::RendererDesc& rendererDesc,
             const std::function<void()>& loadModules, const std::function<void(ClientStartupStage)>& onStageChanged);
-        Engine::EResult RunFrame(Engine::uint32 width, Engine::uint32 height, bool inputFocused, bool isMinimized);
+        Engine::EResult RunFrame(Engine::uint32 width, Engine::uint32 height, glm::vec2 logicalSize,
+            bool inputFocused, bool pointerInWindow);
         void Free();
 
         const Engine::ProjectSettings& GetProjectSettings() const { return m_ProjectSettings; }
@@ -37,6 +39,7 @@ namespace Client
         std::filesystem::path m_ProjectRoot;
         Engine::ProjectSettings m_ProjectSettings;
         ClientRenderPipeline m_RenderPipeline;
+        Engine::RuntimeUIInput m_RuntimeUIInput;
         bool m_ProjectLoaded = false;
     };
 }

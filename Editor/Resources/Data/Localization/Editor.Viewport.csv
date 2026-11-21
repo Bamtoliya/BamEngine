@@ -1,5 +1,7 @@
 Group,Key,English,Korean
 Viewport,AddButton,Add Button,버튼 추가
+Viewport,AddText,Add Text,텍스트 추가
+Viewport,NewTextLabel,New Text,새 텍스트
 Viewport,AddImage,Add Image,이미지 추가
 Viewport,AllRenderTargets,All RenderTargets,모든 렌더 타깃
 Viewport,Anchors,Anchors,앵커

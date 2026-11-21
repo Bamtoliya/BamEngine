@@ -83,6 +83,19 @@
                     }
                 ],
                 "Id": "Gameplay"
+            },
+            {
+                "Id": "GameUI",
+                "Actions": [
+                    { "Id": "NextButton", "Type": "Button" },
+                    { "Id": "PreviousButton", "Type": "Button" },
+                    { "Id": "ActivateButton", "Type": "Button" }
+                ],
+                "Bindings": [
+                    { "ActionId": "NextButton", "Key": "Tab" },
+                    { "ActionId": "PreviousButton", "Key": "Shift+Tab" },
+                    { "ActionId": "ActivateButton", "Key": "Enter" }
+                ]
             }
         ]
     }

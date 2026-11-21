@@ -25,6 +25,7 @@ namespace Engine
         static bool IsValid(const RectTransformComponent& rect);
         static bool IsValid(const UIImageComponent& image);
         static bool IsValid(const UIButtonComponent& button);
+        static bool IsValid(const UITextComponent& text);
         static entt::entity FindCanvas(const entt::registry& world, entt::entity entity);
         static std::int32_t GetZIndex(const entt::registry& world, entt::entity entity);
         static bool Resolve(const RectTransformComponent& rect, const glm::vec2& parentSize,

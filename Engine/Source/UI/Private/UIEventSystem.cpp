@@ -2,6 +2,7 @@
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "WorldComponents.h"
+#include <algorithm>
 
 namespace
 {
@@ -85,8 +86,56 @@ void Engine::UIEventSystem::SetState(Target target, bool hovered, bool pressed)
 {
     if (!Exists(target)) return;
     auto& world = m_Scene->GetRegistry();
-    if (!hovered && !pressed) world.remove<UIInteractionStateComponent>(target.entity);
-    else world.emplace_or_replace<UIInteractionStateComponent>(target.entity, hovered, pressed);
+    const bool focused = target == m_KeyboardFocus;
+    if (!hovered && !pressed && !focused) world.remove<UIInteractionStateComponent>(target.entity);
+    else world.emplace_or_replace<UIInteractionStateComponent>(target.entity, hovered, pressed, focused);
+}
+
+void Engine::UIEventSystem::SetKeyboardFocus(Target target)
+{
+    if (target == m_KeyboardFocus) return;
+    const auto previous = m_KeyboardFocus;
+    m_KeyboardFocus = target;
+    SetState(previous, previous == m_Hovered, previous == m_Pressed);
+    SetState(target, target == m_Hovered, target == m_Pressed);
+}
+
+bool Engine::UIEventSystem::Navigate(int direction, bool submit)
+{
+    if (m_Processing || !m_Scene->IsActive() || m_Scene->IsPaused() || !Exists(m_Canvas)) return false;
+    UIProcessingScope scope(m_Processing);
+    const auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+
+    std::vector<Target> buttons;
+    for (const auto& layout : layouts)
+    {
+        const auto* id = world.try_get<IDComponent>(layout.entity);
+        if (!id) continue;
+        const Target candidate{ layout.entity, id->id };
+        if (CanInteract(candidate, layouts)) buttons.push_back(candidate);
+    }
+    if (buttons.empty()) return false;
+
+    const auto focused = std::ranges::find(buttons, m_KeyboardFocus);
+    if (direction != 0)
+    {
+        if (focused == buttons.end()) SetKeyboardFocus(direction > 0 ? buttons.front() : buttons.back());
+        else if (direction > 0) SetKeyboardFocus(focused + 1 == buttons.end() ? buttons.front() : *(focused + 1));
+        else SetKeyboardFocus(focused == buttons.begin() ? buttons.back() : *(focused - 1));
+    }
+    if (submit && m_KeyboardFocus.entity != entt::null)
+    {
+        const auto layout = std::ranges::find(layouts, m_KeyboardFocus.entity, &UIElementLayout::entity);
+        if (layout != layouts.end())
+        {
+            const glm::vec2 center(layout->renderMatrix * glm::vec4(0.5f, 0.5f, 0.0f, 1.0f));
+            Dispatch({ { EUIPointerEventType::Click, m_KeyboardFocus.entity, m_KeyboardFocus.id,
+                m_Canvas.entity, m_Canvas.id, center, glm::vec2(0.0f), true } });
+        }
+    }
+    return true;
 }
 
 void Engine::UIEventSystem::Queue(std::vector<UIPointerEvent>& events, EUIPointerEventType type, Target target) const
@@ -102,6 +151,7 @@ void Engine::UIEventSystem::Reset(std::vector<UIPointerEvent>* events)
         Queue(*events, EUIPointerEventType::Cancel, m_Pressed);
         Queue(*events, EUIPointerEventType::Exit, m_Hovered);
     }
+    SetKeyboardFocus({});
     SetState(m_Pressed, false, false);
     SetState(m_Hovered, false, false);
     m_Pressed = m_Hovered = {};
@@ -138,6 +188,8 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
     if (!std::isfinite(m_Delta.x) || !std::isfinite(m_Delta.y)) m_Delta = glm::vec2(0.0f);
     m_Position = input.position;
     m_HasPosition = true;
+    if (input.down || (m_KeyboardFocus.entity != entt::null && !CanInteract(m_KeyboardFocus, layouts)))
+        SetKeyboardFocus({});
     if (m_Pressed.entity != entt::null && !CanInteract(m_Pressed, layouts))
     {
         Queue(events, EUIPointerEventType::Cancel, m_Pressed);
@@ -182,6 +234,8 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
         m_Pressed = {};
     }
     // An editor restore may remove transient storage; rebuild it from this input owner's current state.
+    if (m_KeyboardFocus.entity != entt::null)
+        SetState(m_KeyboardFocus, m_KeyboardFocus == m_Hovered, m_KeyboardFocus == m_Pressed);
     if (m_Pressed.entity != entt::null) SetState(m_Pressed, m_Pressed == m_Hovered, true);
     if (m_Hovered.entity != entt::null) SetState(m_Hovered, true, m_Hovered == m_Pressed);
     Dispatch(events);
@@ -198,7 +252,7 @@ void Engine::UIEventSystem::Dispatch(const std::vector<UIPointerEvent>& events)
             if (!m_Scene->IsActive() || !Exists(m_Canvas) ||
                 !UILayout::Build(m_Scene->GetRegistry(), m_Canvas.entity, layouts) ||
                 !CanInteract({ event.target, event.targetId }, layouts)) continue;
-            if (event.type == EUIPointerEventType::Click)
+            if (event.type == EUIPointerEventType::Click && !event.keyboard)
             {
                 bool blocked = false;
                 if (HitTest(event.position, layouts, blocked) != Target{ event.target, event.targetId }) continue;
@@ -224,5 +278,6 @@ glm::vec4 Engine::UIEventSystem::GetButtonTint(const entt::registry& world, entt
     if (!button->interactable) return button->disabledColor;
     const auto* state = world.try_get<UIInteractionStateComponent>(entity);
     if (state && state->hovered) return state->pressed ? button->pressedColor : button->hoveredColor;
+    if (state && state->keyboardFocused) return button->hoveredColor;
     return button->normalColor;
 }

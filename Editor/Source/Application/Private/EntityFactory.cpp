@@ -28,26 +28,39 @@ Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
 	return entity;
 }
 
+namespace
+{
+	void ValidateUIParent(Scene* scene, const Entity& parent)
+	{
+		if (!scene || parent.GetScene() != scene ||
+			UILayout::FindCanvas(scene->GetRegistry(), parent.GetEntityHandle()) == entt::null)
+			throw std::invalid_argument("UI element requires a parent in a canvas.");
+		if (!scene->GetRegistry().all_of<HierarchyComponent>(parent.GetEntityHandle()))
+			throw std::invalid_argument("UI parent requires a hierarchy component.");
+	}
+
+	Entity& CreateUIElement(Scene& scene, Entity& parent, const wstring& name, glm::vec2 size)
+	{
+		auto& world = scene.GetRegistry();
+		Entity& entity = scene.CreateEntity();
+		const auto handle = entity.GetEntityHandle();
+		world.emplace<NameComponent>(handle, name);
+		world.emplace<FlagComponent>(handle);
+		world.emplace<HierarchyComponent>(handle).parent = parent.GetEntityHandle();
+		world.emplace<RectTransformComponent>(handle).sizeDelta = size;
+		world.emplace<UIRenderOrderComponent>(handle);
+		world.get<HierarchyComponent>(parent.GetEntityHandle()).children.push_back(handle);
+		return entity;
+	}
+}
+
 Entity& EntityFactory::CreateUIImageEntity(Scene* scene, Entity& parent, const wstring& name)
 {
-	if (!scene || parent.GetScene() != scene ||
-		UILayout::FindCanvas(scene->GetRegistry(), parent.GetEntityHandle()) == entt::null)
-		throw std::invalid_argument("UI Image requires a parent in a canvas.");
-	auto& world = scene->GetRegistry();
-	if (!world.all_of<HierarchyComponent>(parent.GetEntityHandle()))
-		throw std::invalid_argument("UI parent requires a hierarchy component.");
+	ValidateUIParent(scene, parent);
 	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
-	Entity& entity = scene->CreateEntity();
-	const auto handle = entity.GetEntityHandle();
-	world.emplace<NameComponent>(handle, name);
-	world.emplace<FlagComponent>(handle);
-	world.emplace<HierarchyComponent>(handle).parent = parent.GetEntityHandle();
-	auto& rect = world.emplace<RectTransformComponent>(handle);
-	rect.sizeDelta = vec2(200.0f, 120.0f);
-	world.emplace<UIRenderOrderComponent>(handle);
-	auto& image = world.emplace<UIImageComponent>(handle);
+	Entity& entity = CreateUIElement(*scene, parent, name, { 200.0f, 120.0f });
+	auto& image = scene->GetRegistry().emplace<UIImageComponent>(entity.GetEntityHandle());
 	image.materialHandle = Engine::UIRenderSystem::GetDefaultMaterial();
-	world.get<HierarchyComponent>(parent.GetEntityHandle()).children.push_back(handle);
 	return entity;
 }
 
@@ -57,6 +70,15 @@ Entity& EntityFactory::CreateUIButtonEntity(Scene* scene, Entity& parent, const 
 	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = CreateUIImageEntity(scene, parent, name);
 	scene->GetRegistry().emplace<UIButtonComponent>(entity.GetEntityHandle());
+	return entity;
+}
+
+Entity& EntityFactory::CreateUITextEntity(Scene* scene, Entity& parent, const wstring& name, const std::string& text)
+{
+	ValidateUIParent(scene, parent);
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
+	Entity& entity = CreateUIElement(*scene, parent, name, { 200.0f, 48.0f });
+	scene->GetRegistry().emplace<UITextComponent>(entity.GetEntityHandle()).text = text;
 	return entity;
 }
 

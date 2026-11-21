@@ -8,6 +8,12 @@ namespace Editor
 {
     struct CanvasView2D
     {
+        struct CornerResize
+        {
+            glm::vec2 sizeChange;
+            glm::vec2 localPivotOffset;
+        };
+
         glm::vec2 viewportOrigin{ 0.0f };
         glm::vec2 viewportSize{ 1.0f };
         glm::vec2 center{ 960.0f, 540.0f };
@@ -40,6 +46,15 @@ namespace Editor
         {
             if (!std::isfinite(step) || step <= 0.0f) return point;
             return glm::round(point / step) * step;
+        }
+        static CornerResize ResizeFromCorner(const glm::vec2& size, const glm::vec2& pivot,
+            const glm::vec2& corner, const glm::vec2& localDrag, float step)
+        {
+            const glm::vec2 direction = corner * 2.0f - 1.0f;
+            const glm::vec2 resized = glm::max(Snap(size + direction * localDrag, step), glm::vec2(1.0f));
+            const glm::vec2 sizeChange = resized - size;
+            const glm::vec2 opposite = glm::vec2(1.0f) - corner;
+            return { sizeChange, (pivot - opposite) * sizeChange };
         }
     };
 }

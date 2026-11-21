@@ -747,7 +747,10 @@ void Application::Run(int argc, char* argv[])
             !settings.IsWindowChangePending() && !ShortcutManager::Get().IsCapturing() &&
             !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
-        const uint32 mouseButtons = gameView ? gameView->UpdateGameplayMouseButtons(input, allowGameplay) : 0;
+        const bool pointerBlockedByUI = gameView && gameView->UpdateRuntimeUI(input, allowGameplay);
+        uint32 mouseButtons = gameView ? gameView->UpdateGameplayMouseButtons(input, allowGameplay) : 0;
+        if (pointerBlockedByUI)
+            mouseButtons &= ~(uint32{ 1 } << static_cast<uint32>(EMouseButton::Left));
         f32 gameScrollDeltaY = 0.0f;
         if (allowGameplay)
         {

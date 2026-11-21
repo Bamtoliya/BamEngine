@@ -4,5 +4,6 @@
 #include "RectTransformComponent.h"
 #include "UIImageComponent.h"
 #include "UIButtonComponent.h"
+#include "UITextComponent.h"
 #include "UIInteractionStateComponent.h"
 #include "UIRenderOrderComponent.h"

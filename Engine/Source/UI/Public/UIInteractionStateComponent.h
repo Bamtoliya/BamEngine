@@ -12,5 +12,6 @@ namespace Engine
 
         bool hovered = false;
         bool pressed = false;
+        bool keyboardFocused = false;
     };
 }

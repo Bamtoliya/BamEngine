@@ -72,6 +72,7 @@ namespace Editor
             entt::entity entity = entt::null;
             uint64 id = 0;
             vec2 mouseStart{ 0.0f };
+            vec2 resizeCorner{ 1.0f };
             Engine::RectTransformComponent start;
             Engine::UIElementLayout layout;
         };

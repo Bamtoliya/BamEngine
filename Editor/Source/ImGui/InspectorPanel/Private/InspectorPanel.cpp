@@ -1157,6 +1157,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		else if (object.Is<Engine::RectTransformComponent>()) changed = drawUI.operator() < Engine::RectTransformComponent > ();
 		else if (object.Is<Engine::UIImageComponent>()) changed = drawUI.operator() < Engine::UIImageComponent > ();
 		else if (object.Is<Engine::UIButtonComponent>()) changed = drawUI.operator() < Engine::UIButtonComponent > ();
+		else if (object.Is<Engine::UITextComponent>()) changed = drawUI.operator() < Engine::UITextComponent > ();
 		else if (object.Is<Engine::ColliderComponent>()) changed = drawCollider.operator() < Engine::ColliderComponent > ();
 		else if (object.Is<Engine::Collider2DComponent>()) changed = drawCollider.operator() < Engine::Collider2DComponent > ();
 		else if (object.Is<Engine::AudioSourceComponent>())

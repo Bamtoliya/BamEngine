@@ -231,6 +231,14 @@ std::optional<vec2> InputManager::GetMouseButtonDownScreenPosition(EMouseButton 
 
 	return m_MouseDownScreenPositions[index];
 }
+std::optional<vec2> InputManager::GetMouseButtonDownPosition(EMouseButton button) const
+{
+	const auto index = static_cast<uint32>(button);
+	if (index >= m_MouseDownPositions.size() || !m_MouseDownEvents[index])
+		return std::nullopt;
+
+	return m_MouseDownPositions[index];
+}
 bool InputManager::IsMouseButtonUp(EMouseButton button)
 {
 	uint32 buttonIndex = static_cast<uint32>(button);
@@ -319,6 +327,7 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 			if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 			{
 				m_PendingMouseDown[index] = true;
+				m_MouseDownPositions[index] = vec2(event.button.x, event.button.y);
 				m_MouseDownScreenPositions[index] = ToInputScreenPosition(event.button.windowID, event.button.x, event.button.y);
 			}
 			else

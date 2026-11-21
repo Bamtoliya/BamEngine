@@ -61,7 +61,7 @@ Z-Index 편집과 형제/Canvas 그룹의 비교 범위는 [UIRenderOrder.md](UI
 누른 채 밖으로 이동하면 캡처는 유지하고 호버만 해제한다. 다시 들어오면 눌림 표시로 돌아간다.
 Enter 뒤에 Down, Up 뒤에 Click 순으로 통지한다. 한 입력 샘플에 Down/Up이 모두 있으면 한 번 클릭할 수 있다.
 취소 후 버튼을 계속 누르고 있는 동안에는 새로운 누름이나 클릭을 만들지 않는다.
-키보드 포커스·Submit, 드래그 이벤트, 휠, 오른쪽 버튼, 터치/다중 포인터는 후속 범위다.
+드래그 이벤트, 휠, 오른쪽 버튼, 터치와 다중 포인터는 후속 범위다.
 
 이벤트 대상은 EnTT 실행 핸들과 영구 ID로 확인한다. 콜백에서 대상이나 컴포넌트를 제거해도
 다음 이벤트를 전달하기 전에 계층·가시성·상호작용 가능 여부를 다시 검사한다.
@@ -108,7 +108,17 @@ system.Cancel();
 위 코드는 연결 예시이며 canvasPosition 등의 입력 값은 호출자가 제공한다.
 출력 사각형의 원점 O, 크기 S와 Canvas 기준 해상도 C를 사용하면 `(pointer - O) / S * C`로 변환한다.
 레터박스 여백은 insideViewport에서 제외한다. UI View는 CanvasView2D의 역변환을 사용한다.
-Client/Game View의 입력·패스 등록까지 자동 연결한 것은 아니며 동일 API를 명시적으로 연결해야 한다.
+Game View와 Windows Client는 `RuntimeUIInput`으로 같은 이벤트 처리기를 호출한다. Game View는
+영상 표시 사각형, Client는 창의 논리 좌표를 각 Canvas의 기준 해상도로 변환한다. 포인터가 겹친 경우
+가장 앞에 그려지는 Canvas부터 검사하며, UI에서 시작한 왼쪽 버튼 입력은 해제까지 Gameplay 액션 맵에서 제외한다.
+프로젝트 시스템은 같은 프레임에 `GetRuntimeUIPointerEvents(scene)`로 클릭을 읽는다.
+`BaselineVerification`의 재시작 버튼과 기존 Restart 액션은 같은 점수 초기화 경로를 사용한다.
+
+게임에 포커스가 있을 때 `GameUI` 액션 맵의 Tab과 Shift+Tab으로 버튼을 순환하고 Enter로 실행한다.
+처음에는 가장 앞의 조작 가능한 Canvas를 선택하고 같은 Canvas의 UI 배치 순서를 따른다.
+비활성·숨김 버튼은 건너뛴다. 선택된 버튼은 Hover 색으로 표시되며 포인터를 누르거나 게임이
+포커스를 잃으면 키보드 선택을 해제한다. Enter는 포인터 좌표에 의존하지 않는 Click 한 건을
+발행한다. 이벤트 소비자는 기존 Click 처리기를 사용하며, 필요하면 `event.keyboard`로 입력 출처를 확인한다.
 
 구독 해제는 핸들로 수행한다. 수신 객체의 수명을 자동 추적하지 않으므로 수신 객체보다 먼저 해제한다.
 system이 종료되면 남은 구독은 제거한다. system은 Scene/ResourceManager 종료 전에 정리한다.
@@ -125,6 +135,7 @@ MulticastDelegate는 실행 시작 시 구독 목록을 보관한다. 실행 중
 정적 코드·호출부와 공백 검사를 수행했다. 빌드·테스트 실행과 Editor/GPU 조작은 수행하지 않았다.
 UIInteractionCheck는 정상 클릭, 밖에서 놓기, 입력 차단/통과, 자식 이미지, 포커스 상실,
 비활성화·삭제·식별자 변경, 콜백 중 변경, 재진입 거부, 임시 상태 저장 제외, Scene 수명과 구독 변경을 검사한다.
+키보드 역방향 순환, 비활성 버튼 건너뛰기, 실행 이벤트 한 건과 취소 시 포커스 제거도 검사한다.
 
 ```powershell
 cmake --preset x64-debug -DBAMENGINE_BUILD_REFLECTION_CHECK=ON
@@ -134,6 +145,7 @@ ctest --test-dir out/build/x64-debug -C Debug -R 'UIInteractionCheck|UILayoutChe
 
 실제 Editor에서는 Interact 전환, 창 포커스/숨김, 캔버스 교체, 팬·줌 중 취소,
 버튼 tint, 투명 이미지의 입력 차단 및 클릭 횟수를 별도로 확인해야 한다.
+PIE와 Windows Client에서 각각 점수를 올린 뒤 재시작 버튼을 클릭하거나 Tab과 Enter로 실행해 점수가 한 번 초기화되는지 확인한다.
 
 ## Add Button 이후 파이프라인 생성 실패
 

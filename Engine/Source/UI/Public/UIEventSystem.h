@@ -3,6 +3,7 @@
 #include "UILayout.h"
 #include "Delegate.h"
 #include "Macro.h"
+#include <optional>
 
 BEGIN(Engine)
 class Scene;
@@ -18,6 +19,9 @@ struct UIPointerInput
     bool held = false;
     bool down = false;
     bool up = false;
+    // Optional press sample for the runtime output router.
+    std::optional<glm::vec2> downPosition;
+    bool downInsideViewport = false;
 };
 
 struct UIPointerEvent
@@ -29,6 +33,7 @@ struct UIPointerEvent
     uint64 canvasId = 0;
     glm::vec2 position{ 0.0f };
     glm::vec2 delta{ 0.0f };
+    bool keyboard = false;
 };
 
 // One owner per canvas/input surface. Keeps its scene alive and contains no Editor or SDL dependency.
@@ -42,6 +47,8 @@ public:
 
     // Reentrant Update/Cancel calls from a listener are rejected. Do not destroy this object in a listener.
     bool Update(const UIPointerInput& input);
+    // Returns false when this canvas has no eligible keyboard targets.
+    bool Navigate(int direction, bool submit);
     bool Cancel();
     MulticastDelegate<const UIPointerEvent&>& OnPointerEvent() { return m_OnPointerEvent; }
     Entity* ResolveTarget(const UIPointerEvent& event) const;
@@ -50,6 +57,7 @@ public:
     static glm::vec4 GetButtonTint(const entt::registry& world, entt::entity entity);
 
 private:
+    friend class RuntimeUIInput;
     struct Target
     {
         entt::entity entity = entt::null;
@@ -60,6 +68,7 @@ private:
     bool CanInteract(Target target, const std::vector<UIElementLayout>& layouts) const;
     Target HitTest(const glm::vec2& point, const std::vector<UIElementLayout>& layouts, bool& blocked) const;
     void SetState(Target target, bool hovered, bool pressed);
+    void SetKeyboardFocus(Target target);
     void Queue(std::vector<UIPointerEvent>& events, EUIPointerEventType type, Target target) const;
     void Reset(std::vector<UIPointerEvent>* events);
     void Dispatch(const std::vector<UIPointerEvent>& events);
@@ -68,6 +77,7 @@ private:
     Target m_Canvas;
     Target m_Hovered;
     Target m_Pressed;
+    Target m_KeyboardFocus;
     glm::vec2 m_Position{ 0.0f };
     glm::vec2 m_Delta{ 0.0f };
     bool m_HasPosition = false;

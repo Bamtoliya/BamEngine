@@ -320,6 +320,37 @@ int main()
             return Fail("Re-enabled nested button did not regain input.");
     }
 
+    {
+        Fixture menu;
+        const auto secondButton = menu.Add(menu.canvas, true);
+        auto& world = menu.scene->GetRegistry();
+        UIEventSystem system(*menu.scene, menu.canvas);
+        std::vector<UIPointerEvent> clicks;
+        system.OnPointerEvent().AddLambda([&](const auto& event)
+        {
+            if (event.type == Type::Click) clicks.push_back(event);
+        });
+        const auto focused = [&](entt::entity button)
+        {
+            const auto* state = world.try_get<UIInteractionStateComponent>(button);
+            return state && state->keyboardFocused;
+        };
+        if (!system.Navigate(1, false) || !focused(menu.button))
+            return Fail("Keyboard navigation did not select the first button.");
+        if (!system.Navigate(-1, true) || !focused(secondButton) || focused(menu.button))
+            return Fail("Backward keyboard navigation did not wrap to the last button.");
+        if (clicks.size() != 1 || !clicks.front().keyboard || clicks.front().target != secondButton)
+            return Fail("Keyboard submit did not activate the selected button exactly once.");
+        world.get<UIButtonComponent>(secondButton).interactable = false;
+        Feed(system, inside);
+        if (!system.Navigate(1, false) || !focused(menu.button) || focused(secondButton))
+            return Fail("Keyboard navigation selected a disabled button.");
+        system.Cancel();
+        system.Navigate(0, true);
+        if (focused(menu.button) || clicks.size() != 1)
+            return Fail("Keyboard focus survived cancellation.");
+    }
+
     // The publisher must tolerate subscription changes and retain mutable callback state.
     MulticastDelegate<> signal;
     std::vector<int> calls;

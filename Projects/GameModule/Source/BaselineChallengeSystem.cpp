@@ -11,9 +11,13 @@
 #include "InputManager.h"
 #include "Logger.h"
 #include "RectTransformComponent.h"
+#include "RuntimeUIInput.h"
 #include "SceneManager.h"
+#include "UIButtonComponent.h"
 #include "UIImageComponent.h"
+#include "UITextComponent.h"
 #include "WorldTransformComponent.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <optional>
@@ -34,6 +38,7 @@ namespace
 	{
 		entt::entity player = entt::null;
 		entt::entity canvas = entt::null;
+		entt::entity restartButton = entt::null;
 		std::array<entt::entity, AttackChallengeComponent::MaxRequiredHits> indicators{};
 		int32 requiredHits = 0;
 		int32 hits = 0;
@@ -102,6 +107,17 @@ namespace
 		}
 	}
 
+	Engine::RectTransformComponent& CreateHUDImage(Engine::Scene& scene, entt::entity parent, entt::entity& id)
+	{
+		auto& world = scene.GetRegistry();
+		id = scene.CreateEntity().GetEntityHandle();
+		world.emplace<Engine::FlagComponent>(id);
+		world.emplace<Engine::HierarchyComponent>(id).parent = parent;
+		world.get<Engine::HierarchyComponent>(parent).children.push_back(id);
+		world.emplace<Engine::UIImageComponent>(id).raycastTarget = false;
+		return world.emplace<Engine::RectTransformComponent>(id);
+	}
+
 	ChallengeState& CreateChallengeState(Engine::Scene& scene, const ChallengeBinding& binding)
 	{
 		auto& world = scene.GetRegistry();
@@ -119,17 +135,23 @@ namespace
 		const f32 center = static_cast<f32>(state.requiredHits - 1) * 0.5f;
 		for (int32 index = 0; index < state.requiredHits; ++index)
 		{
-			const auto id = scene.CreateEntity().GetEntityHandle();
-			state.indicators[index] = id;
-			world.emplace<Engine::FlagComponent>(id);
-			world.emplace<Engine::HierarchyComponent>(id).parent = state.canvas;
-			world.get<Engine::HierarchyComponent>(state.canvas).children.push_back(id);
-			auto& rect = world.emplace<Engine::RectTransformComponent>(id);
+			auto& rect = CreateHUDImage(scene, state.canvas, state.indicators[index]);
 			rect.anchorMin = rect.anchorMax = glm::vec2(0.5f, 1.0f);
 			rect.anchoredPosition = glm::vec2((static_cast<f32>(index) - center) * stride, -52.0f);
 			rect.sizeDelta = glm::vec2(44.0f / 58.0f * stride, 16.0f);
-			world.emplace<Engine::UIImageComponent>(id).raycastTarget = false;
 		}
+		auto& restartRect = CreateHUDImage(scene, state.canvas, state.restartButton);
+		restartRect.anchorMin = restartRect.anchorMax = glm::vec2(0.5f, 1.0f);
+		restartRect.anchoredPosition = glm::vec2(center * stride + 22.0f / 58.0f * stride + 72.0f, -52.0f);
+		restartRect.sizeDelta = glm::vec2(108.0f, 44.0f);
+		auto& restartImage = world.get<Engine::UIImageComponent>(state.restartButton);
+		restartImage.raycastTarget = true;
+		restartImage.color = glm::vec4(0.26f, 0.39f, 0.53f, 1.0f);
+		world.emplace<Engine::UIButtonComponent>(state.restartButton);
+
+		auto& label = world.emplace<Engine::UITextComponent>(state.restartButton);
+		label.localizationKey = "Game.BaselineChallenge.Restart";
+
 		UpdateIndicators(world, state);
 		return state;
 	}
@@ -172,7 +194,7 @@ void BaselineChallengeSystem::OnUpdate(entt::registry&, const std::vector<Engine
 		auto* state = world.ctx().find<ChallengeState>();
 		if (state && (!binding.timeline || state->player != binding.player ||
 			state->requiredHits != binding.settings.RequiredHits || state->usesGraphAttack != binding.settings.UseGraphAttackInput ||
-			!world.valid(state->canvas)))
+			(!world.valid(state->canvas) || !world.valid(state->restartButton))))
 		{
 			RemoveChallengeState(*scene, *state);
 			state = nullptr;
@@ -181,7 +203,12 @@ void BaselineChallengeSystem::OnUpdate(entt::registry&, const std::vector<Engine
 		if (!state) state = &CreateChallengeState(*scene, binding);
 
 		auto* timeline = binding.timeline;
-		if (input.WasActionPressed("Gameplay", "Restart"))
+		const auto events = Engine::GetRuntimeUIPointerEvents(*scene);
+		const bool restartClicked = std::ranges::any_of(events, [&](const auto& event)
+		{
+			return event.type == Engine::EUIPointerEventType::Click && event.target == state->restartButton;
+		});
+		if (input.WasActionPressed("Gameplay", "Restart") || restartClicked)
 		{
 			if (state->attackSerial == timeline->playSerial)
 				timeline->Stop();

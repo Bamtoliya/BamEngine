@@ -8,6 +8,15 @@ This document tracks implementation details, architectural decisions, and techni
 - 상세 열기·닫기와 기록 초기화 버튼은 좁은 폭에서 줄바꿈한다. 툴바와 상세 제목의 버튼도 실제 라벨 폭에 따라 다음 줄로 이동한다.
 - 변경 범위의 공백과 호출부를 정적으로 확인했다. 빌드와 한국어·영어, 100%·150%·200% 배율, 좁은 도킹 폭의 실제 표시·클릭 검증은 사용자 실행 대기다.
 
+### [2026-11-21] 게임 UI 입력과 Canvas 제작 기능
+
+- Game View와 Windows Client에 Canvas 포인터 입력을 연결했다. UI에서 시작한 왼쪽 입력을 Gameplay 맵에서 분리하고, 대표 챌린지 재시작 버튼이 기존 초기화 경로를 사용한다.
+- Canvas 네 모서리 리사이즈는 반대 모서리를 고정하고 기존 스냅, 취소와 Undo 경로를 사용한다.
+- Windows용 Canvas 한 줄 텍스트를 추가했다. UI View에서 생성할 수 있고 인스펙터에서 텍스트·로캘 키·크기·색상과 정렬을 편집한다.
+- `GameUI` 액션 맵의 Tab/Shift+Tab으로 버튼을 선택하고 Enter로 실행한다. 키보드 실행은 기존 Click 이벤트로 전달한다.
+- `CanvasViewCheck`와 `UIInteractionCheck`에 각각 모서리 고정과 키보드 이동·실행 검사 사례를 추가했다. 빌드, CTest, 실제 Editor·PIE·Client 동작은 사용자 검증 대기다. [Canvas 편집](UIEditorFoundation.md) · [UI 상호작용](UIInteraction.md)
+- 메인 병합에서 Windows 시작 화면의 단계 콜백과 첫 프레임 경로를 유지했다. 재시작 버튼은 설정된 적중 표시 개수에 맞춰 자리 잡는다.
+
 ### [2026-11-22] Windows Client 공통 시작 화면
 
 - BamEngine 워드마크와 로딩 단계 표시를 독립 Windows 창으로 띄운다. 준비된 게임 창의 첫 프레임이 GPU에서 끝나면 시작 화면을 닫고, 프레임 시간 기준을 다시 잡아 게임을 진행한다. 별도 에셋 없이 Client에 포함한다. [Windows Client 시작 화면](PIEWindowsClientWorkflowPlan.md#windows-client-첫-화면)

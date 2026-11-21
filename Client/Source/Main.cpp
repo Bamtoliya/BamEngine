@@ -131,7 +131,7 @@ public:
         auto& time = Engine::TimeManager::Get();
         time.ResetFrameClock();
         const auto firstFrame = m_ClientRuntime.RunFrame(static_cast<Engine::uint32>(width),
-            static_cast<Engine::uint32>(height), false, false);
+            static_cast<Engine::uint32>(height), {}, false, false);
         if (firstFrame != Engine::EResult::Success)
         {
             BAM_LOG(Error, "Client", "Startup", "First game frame failed: {}", Engine::ResultToString(firstFrame));
@@ -191,7 +191,7 @@ public:
             return Engine::EResult::Success;
 
         if (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_MINIMIZED)
-            return m_ClientRuntime.RunFrame(0, 0, false, true);
+            return m_ClientRuntime.RunFrame(0, 0, {}, false, false);
 
         int width = 0;
         int height = 0;
@@ -199,10 +199,15 @@ public:
             return Engine::EResult::Fail;
 
         if (width <= 0 || height <= 0)
-            return m_ClientRuntime.RunFrame(0, 0, false, false);
+            return m_ClientRuntime.RunFrame(0, 0, {}, false, false);
+
+        int logicalWidth = 0;
+        int logicalHeight = 0;
+        if (!SDL_GetWindowSize(m_Window, &logicalWidth, &logicalHeight))
+            return Engine::EResult::Fail;
 
         return m_ClientRuntime.RunFrame(static_cast<Engine::uint32>(width), static_cast<Engine::uint32>(height),
-            SDL_GetKeyboardFocus() == m_Window, false);
+            glm::vec2(logicalWidth, logicalHeight), SDL_GetKeyboardFocus() == m_Window, SDL_GetMouseFocus() == m_Window);
     }
 
 private:
