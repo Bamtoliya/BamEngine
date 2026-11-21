@@ -1335,13 +1335,19 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 
 	const ed::NodeId hoveredNode = ed::GetHoveredNode();
 	const ed::LinkId hoveredLink = ed::GetHoveredLink();
+	const ed::PinId hoveredPin = ed::GetHoveredPin();
 
 	if (canvasHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
 	{
 		const auto mouse = input.GetScreenMousePosition();
 		m_ContextMenuPosition = ed::ScreenToCanvas(ImVec2(mouse.x, mouse.y));
 
-		if (hoveredNode)
+		if (hoveredPin)
+		{
+			m_ContextTransitionPin = hoveredPin.Get();
+			ImGui::OpenPopup("##AnimPinMenu");
+		}
+		else if (hoveredNode)
 		{
 			const uintptr_t rawId = hoveredNode.Get();
 			if (rawId >= 100)
@@ -1366,6 +1372,8 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 			ImGui::OpenPopup("##AnimCanvasMenu");
 		}
 	}
+
+	DrawTransitionPinMenu();
 
 	// 1. 노드 우클릭 팝업
 	if (ImGui::BeginPopup("##AnimNodeMenu"))
@@ -1428,6 +1436,102 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 		}
 		ImGui::EndPopup();
 	}
+}
+
+void AnimatorGraphPanel::DrawTransitionPinMenu()
+{
+	if (!ImGui::BeginPopup("##AnimPinMenu")) return;
+
+	const auto id = m_ContextTransitionPin;
+	const bool entry = id == 10 || id == 11;
+	const bool anyState = id == 20 || id == 21;
+	const auto index = id >= 1000 ? (id - 1000) / 4 : m_StateMachine->states.size();
+	const bool isInput = id >= 1000 && (id - 1000) % 4 < 2;
+	const auto& states = m_StateMachine->states;
+	if (!entry && !anyState && index >= states.size())
+	{
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+
+	const std::string stateName = entry ? LOCAL("AnimatorGraph.Entry") :
+		(anyState ? LOCAL("AnimatorGraph.AnyState") : states[index].name);
+	const auto& direction = LOCAL(isInput ? "AnimatorGraph.IncomingPin" : "AnimatorGraph.OutgoingPin");
+	ImGui::TextDisabled("%s", LOCAL_FMT("GraphPanel.PinSummary", stateName, direction).c_str());
+	ImGui::Separator();
+
+	auto& transitions = m_StateMachine->transitions;
+	const auto matches = [&](const Engine::AnimTransition& transition)
+	{
+		if (anyState) return transition.fromAnyState;
+		if (isInput) return transition.targetState == stateName;
+		return !transition.fromAnyState && transition.sourceState == stateName;
+	};
+	bool edited = false;
+	if (entry || anyState)
+	{
+		const char* menu = entry ? "AnimatorGraph.SetDefaultState" : "AnimatorGraph.SelectTransitionTarget";
+		if (ImGui::BeginMenu(LOCAL_LABEL(menu).c_str(), !states.empty()))
+		{
+			for (size_t i = 0; i < states.size(); ++i)
+			{
+				const auto& target = states[i].name;
+				const bool exists = entry ? m_StateMachine->defaultState == target :
+					std::any_of(transitions.begin(), transitions.end(), [&](const Engine::AnimTransition& transition)
+					{
+						return transition.fromAnyState && transition.targetState == target;
+					});
+				ImGui::PushID(static_cast<int>(i));
+				if (ImGui::MenuItem((target + "###TargetState").c_str(), nullptr, false, !exists))
+				{
+					if (entry)
+						m_StateMachine->defaultState = target;
+					else
+					{
+						Engine::AnimTransition transition{};
+						transition.fromAnyState = true;
+						transition.targetState = target;
+						transition.duration = 0.25f;
+						transitions.push_back(std::move(transition));
+					}
+					edited = true;
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndMenu();
+		}
+	}
+	else if (isInput)
+	{
+		if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.SetDefaultState").c_str(), nullptr, false,
+			m_StateMachine->defaultState != stateName))
+		{
+			m_StateMachine->defaultState = stateName;
+			edited = true;
+		}
+	}
+	else if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.MakeTransition").c_str(), nullptr, false, states.size() > 1))
+	{
+		m_ConnectingSourceIndex = static_cast<int>(index);
+	}
+
+	if (!entry && ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.DisconnectPinTransitions").c_str(), nullptr, false,
+		std::any_of(transitions.begin(), transitions.end(), matches)))
+	{
+		std::erase_if(transitions, matches);
+		edited = true;
+	}
+
+	if (edited)
+	{
+		ed::ClearSelection();
+		m_SelectedTransitionIndex = -1;
+		m_ConnectingSourceIndex = -1;
+		m_History.MarkEdited();
+		SyncPreviewStateMachine();
+	}
+	ImGui::EndPopup();
 }
 
 void AnimatorGraphPanel::AddState(const ImVec2& position)

@@ -1,8 +1,175 @@
 #include "NodeEditorUI.h"
+#include "Editor_Macros.h"
+#include "GraphNodePalette.h"
+#include "LocalizationManager.h"
+#include <fmt/format.h>
+#include <map>
 #include <algorithm>
 
 namespace Editor::NodeEditorUI
 {
+	PinMenuAction DrawPinMenu(const char* name, const char* type, bool canAdd, bool canBreak, bool canReset, bool canPromote)
+	{
+		using Engine::LocalizationManager;
+		ImGui::TextDisabled("%s", LOCAL_FMT("GraphPanel.PinSummary", name, type).c_str());
+		ImGui::Separator();
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.AddConnectedNode").c_str(), nullptr, false, canAdd))
+			return PinMenuAction::AddConnectedNode;
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.DisconnectPin").c_str(), nullptr, false, canBreak))
+			return PinMenuAction::BreakLinks;
+		if (ImGui::MenuItem(LOCAL_LABEL("GraphPanel.ResetValue").c_str(), nullptr, false, canReset))
+			return PinMenuAction::ResetValue;
+		if (canPromote && ImGui::MenuItem(LOCAL_LABEL("GraphPanel.PromoteVariable").c_str()))
+			return PinMenuAction::PromoteVariable;
+		return PinMenuAction::None;
+	}
+
+	void DrawNodePalette(const Engine::GraphRegistry& registry, const std::vector<GraphNodeCandidate>& candidates,
+		const char* search, const std::function<bool(const GraphNodeCandidate&)>& onSelect)
+	{
+		using Engine::LocalizationManager;
+		struct NodeEntry
+		{
+			std::string Type;
+			std::string DisplayName;
+			std::string Tooltip;
+			std::vector<std::string> CompatiblePins;
+		};
+
+		struct CategoryNode
+		{
+			std::string DisplayName;
+			std::map<std::string, CategoryNode> SubCategories;
+			std::vector<NodeEntry> Nodes;
+		};
+
+		const bool hasSearch = search[0] != '\0';
+		CategoryNode root;
+
+		for (const auto& candidate : candidates)
+		{
+			const auto* definition = registry.Find(candidate.Type);
+			if (!definition) continue;
+			std::string name = definition->DisplayName.empty() ? candidate.Type : LOCAL(definition->DisplayName);
+			std::string categoryRaw = definition->Category.empty() ? "EditorCommon.General" : definition->Category;
+			std::string label = LOCAL(categoryRaw) + " / " + name;
+			if (!candidate.Pin.empty())
+			{
+				const auto* pin = registry.FindPin(candidate.Type, candidate.Pin);
+				if (pin) label += " / " + (pin->DisplayName.empty() ? pin->Key : LOCAL(pin->DisplayName));
+			}
+			const std::string searchText = label + " " + LOCAL(definition->Tooltip);
+			if (!MatchesGraphNodeSearch(*definition, candidate, search, searchText)) continue;
+
+			if (candidate.Type.starts_with("Core.Reroute"))
+			{
+				categoryRaw = "Organization/Reroute";
+				const auto separator = candidate.Type.rfind('.');
+				name = LOCAL(candidate.Type == "Core.Reroute" ? "Execution" : candidate.Type.substr(separator + 1));
+			}
+
+			CategoryNode* current = &root;
+			std::string_view remaining = categoryRaw;
+			while (!remaining.empty())
+			{
+				const auto slash = remaining.find('/');
+				const auto part = slash == std::string_view::npos ? remaining : remaining.substr(0, slash);
+				std::string partStr(part == "CATEGORY_PHYSICS" ? "Physics" : part);
+				auto& child = current->SubCategories[partStr];
+				if (child.DisplayName.empty()) child.DisplayName = LOCAL(partStr);
+				current = &child;
+				if (slash == std::string_view::npos) break;
+				remaining.remove_prefix(slash + 1);
+			}
+
+			auto nodeIt = std::find_if(current->Nodes.begin(), current->Nodes.end(),
+				[&](const NodeEntry& n) { return n.Type == candidate.Type; });
+			if (nodeIt == current->Nodes.end())
+			{
+				current->Nodes.push_back({ candidate.Type, name, definition->Tooltip, {} });
+				nodeIt = current->Nodes.end() - 1;
+			}
+			if (!candidate.Pin.empty()) nodeIt->CompatiblePins.push_back(candidate.Pin);
+		}
+
+		ImGui::BeginChild("##NodeResults", ImVec2(ImGui::GetFontSize() * 28.0f, ImGui::GetTextLineHeightWithSpacing() * 18));
+
+		auto DrawCategory = [&](auto& self, const CategoryNode& cat) -> void
+			{
+				for (const auto& [rawName, subCat] : cat.SubCategories)
+				{
+					ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+					if (hasSearch) ImGui::SetNextItemOpen(true);
+
+					if (ImGui::TreeNodeEx(rawName.c_str(), flags, "%s", subCat.DisplayName.c_str()))
+					{
+						self(self, subCat);
+						ImGui::TreePop();
+					}
+				}
+
+				for (const auto& nodeItem : cat.Nodes)
+				{
+					if (nodeItem.CompatiblePins.size() > 1)
+					{
+						ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth;
+						if (hasSearch) ImGui::SetNextItemOpen(true);
+
+						if (ImGui::TreeNodeEx((nodeItem.DisplayName + "###" + nodeItem.Type).c_str(), nodeFlags))
+						{
+							for (const auto& pinKey : nodeItem.CompatiblePins)
+							{
+								const auto* pin = registry.FindPin(nodeItem.Type, pinKey);
+								const std::string pinLabel = pin && !pin->DisplayName.empty() ? LOCAL(pin->DisplayName) : pinKey;
+
+								ImGui::PushID(nodeItem.Type.c_str());
+								ImGui::PushID(pinKey.c_str());
+								if (ImGui::Selectable(pinLabel.c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups))
+								{
+									if (onSelect({ nodeItem.Type, pinKey })) ImGui::CloseCurrentPopup();
+								}
+								ImGui::PopID();
+								ImGui::PopID();
+							}
+							ImGui::TreePop();
+						}
+					}
+					else
+					{
+						const std::string pinKey = nodeItem.CompatiblePins.empty() ? "" : nodeItem.CompatiblePins.front();
+						std::string displayLabel = nodeItem.DisplayName;
+						if (!pinKey.empty())
+						{
+							const auto* pin = registry.FindPin(nodeItem.Type, pinKey);
+							displayLabel += " (" + (pin && !pin->DisplayName.empty() ? LOCAL(pin->DisplayName) : pinKey) + ")";
+						}
+
+						ImGui::PushID(nodeItem.Type.c_str());
+						ImGui::PushID(pinKey.c_str());
+						if (ImGui::Selectable((displayLabel + "###Item").c_str(), false, ImGuiSelectableFlags_NoAutoClosePopups))
+						{
+							if (onSelect({ nodeItem.Type, pinKey })) ImGui::CloseCurrentPopup();
+						}
+						if (ImGui::IsItemHovered())
+						{
+							ImGui::BeginTooltip();
+							ImGui::TextUnformatted(nodeItem.Type.c_str());
+							if (!nodeItem.Tooltip.empty()) ImGui::TextUnformatted(LOCAL_CSTR(nodeItem.Tooltip));
+							ImGui::EndTooltip();
+						}
+						ImGui::PopID();
+						ImGui::PopID();
+					}
+				}
+			};
+
+		const bool any = !root.SubCategories.empty() || !root.Nodes.empty();
+		if (any) DrawCategory(DrawCategory, root);
+		else ImGui::TextDisabled("%s", LOCAL_CSTR("GraphPanel.NoMatchingNodes"));
+
+		ImGui::EndChild();
+	}
+
 	void ApplyDefaultTheme(ed::Style& style)
 	{
 		style.NodeRounding = 6.0f;

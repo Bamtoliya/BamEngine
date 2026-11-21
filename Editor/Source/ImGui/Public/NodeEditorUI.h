@@ -2,17 +2,28 @@
 
 #include <imgui.h>
 #include <imgui_node_editor.h>
+#include <functional>
 #include <string>
+
+namespace Engine { class GraphRegistry; }
 #include <vector>
 
 namespace Editor
 {
+	struct GraphNodeCandidate;
 	enum class EWireStyle : int { Curved = 0, ElectronicHybrid = 1, Straight = 2 };
 }
 
 namespace Editor::NodeEditorUI
 {
 	namespace ed = ax::NodeEditor;
+
+	enum class PinMenuAction { None, AddConnectedNode, BreakLinks, ResetValue, PromoteVariable };
+	PinMenuAction DrawPinMenu(const char* name, const char* type, bool canAdd, bool canBreak, bool canReset,
+		bool canPromote = false);
+
+	void DrawNodePalette(const Engine::GraphRegistry& registry, const std::vector<GraphNodeCandidate>& candidates,
+		const char* search, const std::function<bool(const GraphNodeCandidate&)>& onSelect);
 
 	// ── 1. 글로벌 테마 & 에디터 컨텍스트 설정 ──
 	void ApplyDefaultTheme(ed::Style& style);

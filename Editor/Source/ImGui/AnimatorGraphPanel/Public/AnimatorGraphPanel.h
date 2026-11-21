@@ -64,6 +64,7 @@ private:
 	void DrawCanvas();
 	void DrawTransitions();
 	void DrawCanvasContextMenu();
+	void DrawTransitionPinMenu();
 	void DrawSelectionInspector();
 	void DrawStateInspector(Engine::AnimState& state);
 	void DrawBlend2DPreview(const Engine::AnimState& state);
@@ -122,6 +123,7 @@ private:
 	int m_SelectedTransitionIndex = -1;
 	int m_ConnectingSourceIndex = -1;
 	ImVec2 m_ContextMenuPosition{ 0.0f, 0.0f };
+	uintptr_t m_ContextTransitionPin = 0;
 
 	// 노드 위치
 	std::unordered_map<std::string, ImVec2> m_NodePositions;

@@ -57,7 +57,12 @@ void CheckDirectionsAndCapacity(const GraphRegistry& registry)
 	const auto occupied = AddGraphNodeCandidate(graph, registry, { "Core.Float", "result" }, { sum, "a" });
 	Expect(occupied.Code == EGraphError::InputAlreadyConnected && graph.GetNodes().size() == 3,
 		"A stale data candidate left a partial node or replaced the existing connection.");
-	Expect(graph.Connect(registry, output, { sum, "b" }).Succeeded(), "Cannot prepare data fan-out.");
+	const auto secondInput = graph.Connect(registry, output, { sum, "b" });
+	Expect(secondInput.Succeeded(), "Cannot prepare data fan-out.");
+	Expect(FindGraphPinLinks(graph, { sum, "a" }) == std::vector{ created.Link } &&
+		FindGraphPinLinks(graph, { sum, "b" }) == std::vector{ secondInput.Link } &&
+		FindGraphPinLinks(graph, { sum, "result" }).empty(),
+		"Pin context actions must only include links on the selected pin.");
 	Expect(!FindGraphNodeCandidates(graph, registry, output).empty(), "Data output fan-out was forbidden.");
 
 	const auto entry = Add(graph, registry, "Event.Start");

@@ -2,9 +2,12 @@
 #include "NodeEditorUI.h"
 #include "ShortcutManager.h"
 #include "GraphMessageLocalization.h"
+#include "GraphValue.h"
 #include "InputManager.h"
 #include "LocalizationManager.h"
 #include <imgui_node_editor.h>
+#include <utility>
+
 namespace ed = ax::NodeEditor;
 
 namespace
@@ -286,109 +289,64 @@ void GraphPanel::DrawCanvas(float height)
 		if (ImGui::MenuItem(LOCAL_CSTR("GraphPanel.Delete"), sm.GetShortcutHint("Graph.Delete"))) DeleteSelection();
 		ImGui::EndPopup();
 	}
-	// ── 핀 우클릭 메뉴 ──
 	if (ImGui::BeginPopup("##GraphPinMenu"))
 	{
-		Engine::GraphNodeId targetNodeId = 0;
-		std::string targetPinKey = "";
-		for (const auto& [nodeId, view] : document.Nodes)
+		const auto found = document.Pins.find(static_cast<int>(m_ContextPinId));
+		const auto reference = found == document.Pins.end() ? Engine::GraphPinReference{} : found->second;
+		const auto* node = document.Data.FindNode(reference.Node);
+		const auto* pin = node ? m_Registry.FindPin(node->Type, reference.Pin) : nullptr;
+		if (!pin)
 		{
-			for (const auto& [pinKey, pinId] : view.Pins)
-			{
-				if (pinId == static_cast<int>(m_ContextPinId))
-				{
-					targetNodeId = nodeId;
-					targetPinKey = pinKey;
-					break;
-				}
-			}
-			if (targetNodeId != 0) break;
+			ImGui::CloseCurrentPopup();
 		}
-
-		const auto* targetNode = document.Data.FindNode(targetNodeId);
-		const auto* schema = targetNode ? m_Registry.Find(targetNode->Type) : nullptr;
-		const Engine::GraphPin* pinSchema = nullptr;
-		if (schema)
+		else
 		{
-			for (const auto& pin : schema->Pins)
+			using Action = NodeEditorUI::PinMenuAction;
+			const auto links = FindGraphPinLinks(document.Data, reference);
+			const bool isInput = pin->Direction == Engine::EGraphPinDirection::Input;
+			const bool isData = pin->Type != Engine::EGraphPinType::Execution;
+			const bool supportsMultipleLinks = isInput ? !isData : isData;
+			const bool canAdd = !pin->LiteralOnly && (links.empty() || supportsMultipleLinks);
+			const bool canReset = isInput && isData && links.empty() && node->InputValues.contains(reference.Pin);
+			const auto valueOverride = node->InputValues.find(reference.Pin);
+			const auto& value = valueOverride == node->InputValues.end() ? pin->DefaultValue : valueOverride->second;
+			const bool canPromote = isInput && canAdd && Engine::GraphValueMatchesType(value, pin->Type);
+			const auto name = pin->DisplayName.empty() ? pin->Key : LOCAL(pin->DisplayName);
+			const auto action = NodeEditorUI::DrawPinMenu(name.c_str(), PinTypeName(pin->Type),
+				canAdd, !links.empty(), canReset, canPromote);
+			if (action == Action::AddConnectedNode)
 			{
-				if (pin.Key == targetPinKey) { pinSchema = &pin; break; }
+				m_AddPosition = m_ContextPosition;
+				PrepareNodeMenu(reference);
+				m_OpenNodePopup = true;
 			}
-		}
-
-		if (targetNode && pinSchema)
-		{
-			ImGui::TextDisabled("%s", LOCAL_FMT("GraphPanel.PinSummary", targetPinKey, PinTypeName(pinSchema->Type)).c_str());
-			ImGui::Separator();
-
-			// 1. 해당 핀에 연결된 모든 와이어 분리
-			const std::string breakLabel = ICON_FA_SCISSORS " " + LOCAL_FMT("GraphPanel.BreakPinLinks", targetPinKey) +
-				"###GraphBreakPinLinks";
-			if (ImGui::MenuItem(breakLabel.c_str()))
+			else if (action == Action::BreakLinks)
 			{
-				std::vector<Engine::GraphLinkId> linksToRemove;
-				for (const auto& link : document.Data.GetLinks())
-				{
-					if ((link.From.Node == targetNodeId && link.From.Pin == targetPinKey) ||
-						(link.To.Node == targetNodeId && link.To.Pin == targetPinKey))
-					{
-						linksToRemove.push_back(link.Id);
-					}
-				}
-				for (auto linkId : linksToRemove)
-				{
-					if (ApplyResult(document.Data.Disconnect(linkId))) document.Links.erase(linkId);
-				}
+				for (auto id : links)
+					if (ApplyResult(document.Data.Disconnect(id))) document.Links.erase(id);
 			}
-
-			// 2. 오버라이드된 입력값을 기본값으로 복원 (입력 핀 전용)
-			if (pinSchema->Direction == Engine::EGraphPinDirection::Input && pinSchema->Type != Engine::EGraphPinType::Execution)
+			else if (action == Action::ResetValue)
 			{
-				if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("GraphPanel.ResetValue")).c_str()))
-				{
-					(void)document.Data.ResetInputValue(m_Registry, { targetNodeId, targetPinKey });
-				}
+				ApplyResult(document.Data.ResetInputValue(m_Registry, reference));
 			}
-
-			// 3. 변수로 승격 (Promote to Variable - 데이터 핀 전용)
-			if (pinSchema->Type != Engine::EGraphPinType::Execution)
+			else if (action == Action::PromoteVariable)
 			{
-				if (ImGui::MenuItem((ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE " " + LOCAL_LABEL("GraphPanel.PromoteVariable")).c_str()))
+				std::string variableName = reference.Pin;
+				for (int suffix = 1; document.Data.FindVariable(variableName); ++suffix)
+					variableName = reference.Pin + "_" + std::to_string(suffix);
+				auto next = document.Data;
+				const auto added = next.AddVariable(m_Registry, { variableName, pin->Type, value });
+				if (added.Succeeded())
 				{
-					std::string varName = targetPinKey;
-					int suffix = 1;
-					while (document.Data.FindVariable(varName))
-					{
-						varName = targetPinKey + "_" + std::to_string(suffix++);
-					}
-
-					Engine::GraphValue defaultVal = pinSchema->DefaultValue;
-					if (const auto it = targetNode->InputValues.find(targetPinKey); it != targetNode->InputValues.end())
-					{
-						defaultVal = it->second;
-					}
-
-					Engine::GraphVariable newVar{ varName, pinSchema->Type, defaultVal };
-					if (document.Data.AddVariable(m_Registry, newVar).Succeeded())
-					{
-						document.Data.RegisterVariableNodes(m_Registry);
-						const std::string varNodeType = "Variable.Get." + varName;
-						m_AddPosition = ImVec2(m_ContextPosition.x - 180.0f, m_ContextPosition.y);
-						GraphNodeCandidate candidate{ varNodeType, {} };
-						if (AddNode(candidate))
-						{
-							const auto newNodeId = document.PendingSelection;
-							const auto conn = document.Data.Connect(m_Registry, { newNodeId, "Value" }, { targetNodeId, targetPinKey });
-							if (ApplyResult(conn))
-							{
-								document.Links.emplace(conn.Link, static_cast<int>(document.NextId++));
-							}
-						}
-					}
+					auto previous = std::exchange(document.Data, std::move(next));
+					const auto oldSource = std::exchange(m_AddSource, reference);
+					m_AddPosition = ImVec2(m_ContextPosition.x - 180.0f, m_ContextPosition.y);
+					if (!AddNode({ "Variable.Get." + variableName, "value" }))
+						document.Data = std::move(previous);
+					m_AddSource = oldSource;
 				}
 			}
 		}
-
 		ImGui::EndPopup();
 	}
 }

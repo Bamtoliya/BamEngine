@@ -14,6 +14,14 @@ struct GraphNodeCandidate
 	std::string Pin;
 };
 
+inline std::vector<Engine::GraphLinkId> FindGraphPinLinks(const Engine::Graph& graph, const Engine::GraphPinReference& pin)
+{
+	std::vector<Engine::GraphLinkId> links;
+	for (const auto& link : graph.GetLinks())
+		if (link.From == pin || link.To == pin) links.push_back(link.Id);
+	return links;
+}
+
 inline Engine::GraphDiagnostic AddGraphNodeCandidate(Engine::Graph& graph, const Engine::GraphRegistry& registry,
 	const GraphNodeCandidate& candidate, const Engine::GraphPinReference& source = {})
 {
