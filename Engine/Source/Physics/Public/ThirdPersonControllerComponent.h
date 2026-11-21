@@ -42,6 +42,13 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_INPUT_ENABLED"))
             bool InputEnabled = true;
 
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_USE_GRAPH_MOVE_INPUT"))
+            bool UseGraphMoveInput = false;
+
+        vec2 GraphMoveAxis = vec2(0.0f);
+        bool GraphSprint = false;
+        bool GraphJumpRequested = false;
+
         // Shift(달리기) 시 속도 배율
         PROPERTY(EDITABLE, RANGE(1.0, 3.0), DISPLAY_NAME("PROP_SPRINT_MULTIPLIER"))
             f32 SprintMultiplier = 1.6f;

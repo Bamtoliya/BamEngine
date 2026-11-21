@@ -15,6 +15,7 @@
 #include "CharacterControllerComponent.h"
 #include "AnimatorComponent.h"
 #include "AnimationSceneQuery.h"
+#include "ThirdPersonControllerComponent.h"
 
 
 namespace Engine::GraphGameplay
@@ -485,6 +486,38 @@ namespace Engine::GraphGameplay
 		auto& reg = scene->GetRegistry();
 		const auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		return kcc ? kcc->GroundAngle : 0.0f;
+	}
+
+	inline ThirdPersonControllerComponent* FindGraphMoveController()
+	{
+		auto* scene = GraphSystem::GetCurrentScene();
+		const auto entity = GraphSystem::GetCurrentEntity();
+		if (!scene) return nullptr;
+		auto& world = scene->GetRegistry();
+		if (!world.valid(entity) || !TryGetEnabledComponent<CharacterControllerComponent>(world, entity)) return nullptr;
+
+		auto* ctrl = TryGetEnabledComponent<ThirdPersonControllerComponent>(world, entity);
+		return ctrl && ctrl->InputEnabled && ctrl->UseGraphMoveInput ? ctrl : nullptr;
+	}
+
+	FUNCTION(GRAPH_CALLABLE("ThirdPersonController.SetMoveInput"), DISPLAY_NAME("NODE_THIRD_PERSON_SET_MOVE_INPUT"),
+		CATEGORY("CATEGORY_PHYSICS"), GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f),
+		GRAPH_PIN_DEFAULT("run", false))
+		inline void SetThirdPersonMoveInput(float x, float z, bool run)
+	{
+		if (auto* ctrl = FindGraphMoveController())
+		{
+			ctrl->GraphMoveAxis = vec2(x, z);
+			ctrl->GraphSprint = run;
+		}
+	}
+
+	FUNCTION(GRAPH_CALLABLE("ThirdPersonController.RequestJump"), DISPLAY_NAME("NODE_THIRD_PERSON_REQUEST_JUMP"),
+		CATEGORY("CATEGORY_PHYSICS"))
+		inline void RequestThirdPersonJump()
+	{
+		if (auto* ctrl = FindGraphMoveController())
+			ctrl->GraphJumpRequested = true;
 	}
 
 	// ── 스프링 암 노드 (SpringArm) ──

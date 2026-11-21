@@ -39,7 +39,8 @@ namespace reflection
         struct DynamicFreeBinding<Result(*)(Args...)>
         {
             static constexpr bool Supported =
-                ((std::is_scalar_v<Args> || NumericArrayResult<Args>::value) && ...);
+                ((std::is_scalar_v<Args> || NumericArrayResult<Args>::value ||
+                    std::is_same_v<std::remove_cv_t<Args>, std::string>) && ...);
 
             template<auto Function, std::size_t... I>
             static DynamicInvocationResult Call(std::span<const std::any> args, std::index_sequence<I...>)

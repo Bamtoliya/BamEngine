@@ -116,7 +116,10 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
 
     auto& input = Engine::InputManager::Get();
     input.Update(dt);
-    input.EvaluateActionMap("Gameplay", inputFocused);
+    Engine::InputActionMapMouseInput mouseInput;
+    mouseInput.MotionDelta = input.GetMouseDelta();
+    mouseInput.ScrollDeltaY = input.GetMouseScrollDeltaY();
+    input.EvaluateActionMap("Gameplay", inputFocused, mouseInput);
 
     while (timeManager.IsFixedUpdateReady())
         m_Runtime->FixedUpdate(timeManager.GetFixedStep());
