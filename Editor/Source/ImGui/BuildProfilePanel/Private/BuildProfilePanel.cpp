@@ -3,6 +3,7 @@
 #include "FileDialogs.h"
 #include "Functions.h"
 #include <imgui_stdlib.h>
+#include <algorithm>
 #include <exception>
 #include <shellapi.h>
 #include "Application.h"
@@ -28,6 +29,8 @@ EResult BuildProfilePanel::OnInitialize(void*)
 
     if (!startup.empty())
         m_StartupScene = Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(startup);
+    m_AdditionalScenes = profile.AdditionalScenes;
+    m_AdditionalAssets = profile.AdditionalAssets;
 
     m_OutputDirectory = std::filesystem::u8path(profile.OutputDirectory);
     if (!profile.PackageDirectoryName.empty())
@@ -66,13 +69,74 @@ void BuildProfilePanel::SaveSelection()
 
     const BuildProfileWorkspace profile{
         std::string(scene.begin(), scene.end()), std::string(output.begin(), output.end()),
-        m_PackageDirectoryName, m_ProgramName
+        m_PackageDirectoryName, m_ProgramName, m_AdditionalScenes, m_AdditionalAssets
     };
     if (EditorSettingsService::Get().SetBuildProfileWorkspace(profile) != EEditorSettingsSaveStatus::Saved)
     {
         NotificationManager::Get().AddNotification(
             LOCAL("BuildProfile.Title"), LOCAL("BuildProfile.SelectionSaveFailed"), ELogLevel::Warn);
     }
+}
+
+void BuildProfilePanel::DrawPackageEntries(const char* labelKey, std::vector<std::string>& entries, bool scenes)
+{
+    EditorUI::PropertyRow(labelKey);
+    ImGui::PushID(labelKey);
+    if (ImGui::Button(LOCAL_LABEL("EditorCommon.Add").c_str()))
+    {
+        using Path = Engine::PlatformPath;
+        const auto& assetRoot = Path::GetProjectAssetRoot();
+        const vector<FileDialogFilter> filters = scenes
+            ? vector<FileDialogFilter>{ { Engine::StrToWStr(LOCAL("BuildProfile.SceneFiles")), L"*.bamscene.json" } }
+            : vector<FileDialogFilter>{ { Engine::StrToWStr(LOCAL("BuildProfile.AllFiles")), L"*.*" } };
+        std::wstring selected;
+        if (FileDialogs::OpenFileDialog(selected, filters, assetRoot.wstring(), labelKey))
+        {
+            std::error_code error;
+            const auto relative = std::filesystem::relative(selected, assetRoot, error);
+            const bool valid = !error && !relative.empty() && !relative.is_absolute() && *relative.begin() != L".." &&
+                std::filesystem::is_regular_file(selected, error) &&
+                (!scenes || Engine::ToLowerStr(Engine::WStrToStr(relative.filename().wstring())).ends_with(".bamscene.json"));
+            if (valid)
+            {
+                const auto uri = "Project://" + Engine::WStrToStr(relative.generic_wstring());
+                if (std::ranges::find(entries, uri) == entries.end())
+                {
+                    entries.push_back(uri);
+                    if (scenes)
+                        m_HasSceneReferenceResult = false;
+                    SaveSelection();
+                }
+            }
+            else
+            {
+                const auto message = scenes ? LOCAL("BuildProfile.InvalidAdditionalScene")
+                    : LOCAL("BuildProfile.InvalidAdditionalAsset");
+                NotificationManager::Get().AddNotification(LOCAL("BuildProfile.Title"),
+                    message, ELogLevel::Warn);
+            }
+        }
+    }
+
+    if (entries.empty())
+        ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.None"));
+    for (std::size_t i = 0; i < entries.size(); ++i)
+    {
+        ImGui::PushID(static_cast<int>(i));
+        const bool remove = ImGui::SmallButton(LOCAL_LABEL("BuildProfile.RemoveEntry").c_str());
+        ImGui::SameLine();
+        ImGui::TextWrapped("%s", entries[i].c_str());
+        ImGui::PopID();
+        if (remove)
+        {
+            entries.erase(entries.begin() + i);
+            if (scenes)
+                m_HasSceneReferenceResult = false;
+            SaveSelection();
+            break;
+        }
+    }
+    ImGui::PopID();
 }
 
 void BuildProfilePanel::Draw()
@@ -132,6 +196,11 @@ void BuildProfilePanel::Draw()
             ImGui::EndDisabled();
             ImGui::TextWrapped("%s", m_StartupScene.empty() ? LOCAL_CSTR("EditorCommon.None")
                 : Engine::WStrToStr(m_StartupScene.wstring()).c_str());
+
+            ImGui::BeginDisabled(running);
+            DrawPackageEntries("BuildProfile.AdditionalScenes", m_AdditionalScenes, true);
+            DrawPackageEntries("BuildProfile.AdditionalAssets", m_AdditionalAssets, false);
+            ImGui::EndDisabled();
 
             EditorUI::PropertyRow("BuildProfile.OutputDirectory");
             ImGui::BeginDisabled(running);
@@ -199,6 +268,11 @@ void BuildProfilePanel::DrawSceneReferenceCheck()
     if (ImGui::Button(LOCAL_LABEL("BuildProfile.CheckSceneReferences").c_str()))
     {
         m_SceneReferenceIssues = AssetReferenceValidator::ValidateBuildScene(m_StartupScene);
+        for (const auto& uri : m_AdditionalScenes)
+        {
+            const auto issues = AssetReferenceValidator::ValidateBuildScene(Engine::PlatformPath::ResolveUri(uri));
+            m_SceneReferenceIssues.insert(m_SceneReferenceIssues.end(), issues.begin(), issues.end());
+        }
         m_HasSceneReferenceResult = true;
     }
     ImGui::EndDisabled();
@@ -261,6 +335,8 @@ void BuildProfilePanel::DrawClientBuild()
         try
         {
             ClientPackageRequest request{ m_StartupScene, m_OutputDirectory, m_PackageDirectoryName, m_ProgramName };
+            request.AdditionalScenes = m_AdditionalScenes;
+            request.AdditionalAssets = m_AdditionalAssets;
             request.Destination = InspectClientPackageDestination(projectRoot, request);
             if (request.Destination.ExistingPackage)
             {

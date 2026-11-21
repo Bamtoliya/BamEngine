@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Editor
 {
@@ -37,6 +38,8 @@ namespace Editor
         std::string DirectoryName = DefaultDirectoryName;
         std::string ProgramName = DefaultProgramName;
         ClientPackageDestination Destination;
+        std::vector<std::string> AdditionalScenes;
+        std::vector<std::string> AdditionalAssets;
     };
 
     ClientPackageDestination InspectClientPackageDestination(const std::filesystem::path& projectRoot,

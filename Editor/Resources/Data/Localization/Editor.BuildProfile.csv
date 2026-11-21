@@ -15,6 +15,12 @@ BuildProfile,ReplacePackageTitle,Replace Existing Package,기존 패키지 덮�
 BuildProfile,ReplacePackageMessage,Replace this package after the new build is ready? The previous package will be kept in a backup folder.,새 빌드가 준비되면 이 패키지를 덮어쓸까요? 이전 패키지는 백업 폴더에 보관됩니다.
 BuildProfile,ReplacePackage,Overwrite,덮어쓰기
 BuildProfile,SceneFiles,BamEngine Scenes (*.bamscene.json),BamEngine 씬 (*.bamscene.json)
+BuildProfile,AdditionalScenes,Additional Scenes,추가 씬
+BuildProfile,AdditionalAssets,Additional Assets,추가 에셋
+BuildProfile,AllFiles,All Files,모든 파일
+BuildProfile,RemoveEntry,Remove from List,목록에서 제거
+BuildProfile,InvalidAdditionalScene,Choose a saved scene inside the project asset folder.,프로젝트 에셋 폴더에 저장한 씬을 선택하세요.
+BuildProfile,InvalidAdditionalAsset,Choose a file inside the project asset folder.,프로젝트 에셋 폴더 안의 파일을 선택하세요.
 BuildProfile,CheckSceneReferences,Check Scene References,씬 참조 검사
 BuildProfile,SceneReferencesPassed,No issues found in checked JSON references.,검사한 JSON 참조에 문제가 없습니다.
 BuildProfile,SceneReferenceIssueCount,Reference issues found ({0}),참조 문제 {0}건

@@ -19,12 +19,15 @@ public:
     bool ShouldUpdateWhenClosed() const override { return m_ClientBuild.GetStatus() == ClientBuildJob::Status::Running; }
     EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Hidden; }
 private:
+    void DrawPackageEntries(const char* labelKey, std::vector<std::string>& entries, bool scenes);
     void DrawSceneReferenceCheck();
     void DrawClientBuild();
     void DrawReplacePackageDialog();
     void StartExport(ClientPackageRequest request);
 
     std::filesystem::path m_StartupScene;
+    std::vector<std::string> m_AdditionalScenes;
+    std::vector<std::string> m_AdditionalAssets;
     std::filesystem::path m_OutputDirectory;
     std::string m_PackageDirectoryName = ClientPackageRequest::DefaultDirectoryName;
     std::string m_ProgramName = ClientPackageRequest::DefaultProgramName;

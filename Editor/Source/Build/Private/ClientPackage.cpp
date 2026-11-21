@@ -446,6 +446,39 @@ namespace
         return actions;
     }
 
+    fs::path ResolveAdditionalPackageFile(const std::string& uri, const fs::path& assetRoot, bool scene)
+    {
+        if (!Path::IsProjectUri(uri))
+            throw std::runtime_error("Additional package entries must use Project://: " + uri);
+
+        std::error_code error;
+        const auto file = fs::canonical(Path::ResolveUri(uri), error);
+        if (error || !IsWithin(file, assetRoot) || !fs::is_regular_file(file, error))
+            throw std::runtime_error("Additional package file is missing or outside the project asset folder: " + uri);
+        if (scene && !Engine::ToLowerStr(DisplayPath(file.filename())).ends_with(".bamscene.json"))
+            throw std::runtime_error("Additional scene must be a .bamscene.json file: " + uri);
+        return file;
+    }
+
+    std::vector<std::string> ReadPackageGameplayActions(const fs::path& settings, const Editor::ClientPackageRequest& request)
+    {
+        auto actions = ReadRequiredGameplayActions(settings, request.StartupScene);
+        if (request.AdditionalScenes.empty())
+            return actions;
+
+        const auto assetRoot = fs::canonical(Path::GetProjectAssetRoot());
+        for (const auto& uri : request.AdditionalScenes)
+        {
+            const auto scene = ResolveAdditionalPackageFile(uri, assetRoot, true);
+            for (auto& action : ReadRequiredGameplayActions(settings, scene))
+            {
+                if (std::ranges::find(actions, action) == actions.end())
+                    actions.push_back(std::move(action));
+            }
+        }
+        return actions;
+    }
+
     std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
         const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName,
         PackageProfile& packageProfile, PackageStartupPipeline& startupPipeline)
@@ -574,7 +607,13 @@ namespace Editor
     ClientPackageInput PrepareClientPackageInput(const fs::path& projectRoot, const ClientPackageRequest& request)
     {
         ClientPackageInput input;
-        input.RequiredActions = ReadRequiredGameplayActions(projectRoot / "Config" / "Project.json", request.StartupScene);
+        input.RequiredActions = ReadPackageGameplayActions(projectRoot / "Config" / "Project.json", request);
+        if (!request.AdditionalAssets.empty())
+        {
+            const auto assetRoot = fs::canonical(Path::GetProjectAssetRoot());
+            for (const auto& uri : request.AdditionalAssets)
+                ResolveAdditionalPackageFile(uri, assetRoot, false);
+        }
         if (input.RequiredActions.empty())
             return input;
 
@@ -636,6 +675,27 @@ namespace Editor
             throw std::runtime_error("Scene reference validation failed.");
         }
 
+        std::vector<fs::path> additionalFiles;
+        std::vector<fs::path> additionalSceneReferences;
+        for (const auto& uri : request.AdditionalScenes)
+        {
+            const auto additionalScene = ResolveAdditionalPackageFile(uri, assetRoot, true);
+            additionalFiles.push_back(additionalScene);
+            std::vector<fs::path> dependencies;
+            const auto sceneIssues = AssetReferenceValidator::ValidateBuildScene(additionalScene, &dependencies);
+            for (const auto& issue : sceneIssues)
+                emit(fmt::format("Additional scene reference issue: {} -> {}\n", DisplayPath(issue.SourceFile), issue.TargetReference));
+            if (!sceneIssues.empty())
+                throw std::runtime_error("Additional scene reference validation failed: " + uri);
+            additionalSceneReferences.insert(additionalSceneReferences.end(), dependencies.begin(), dependencies.end());
+            emit(fmt::format("Additional scene: {}\n", uri));
+        }
+        for (const auto& uri : request.AdditionalAssets)
+        {
+            additionalFiles.push_back(ResolveAdditionalPackageFile(uri, assetRoot, false));
+            emit(fmt::format("Explicit runtime asset: {}\n", uri));
+        }
+
         for (const auto* name : RuntimeBinaries)
         {
             if (!fs::is_regular_file(binDirectory / name))
@@ -653,6 +713,11 @@ namespace Editor
         PackageResourceInventory projectInventory;
         PackageResourceInventory engineInventory;
         projectInventory.Expect(startupSceneRelative, "startup scene");
+        for (std::size_t i = 0; i < additionalFiles.size(); ++i)
+        {
+            projectInventory.Expect(RelativeToInput(additionalFiles[i], assetRoot),
+                i < request.AdditionalScenes.size() ? "additional scene" : "explicit runtime asset");
+        }
         if (!packageProfile.RelativePath.empty())
         {
             auto& profileInventory = packageProfile.InEngine ? engineInventory : projectInventory;
@@ -666,6 +731,14 @@ namespace Editor
             auto& inventory = inProject ? projectInventory : engineInventory;
             inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "startup scene dependency");
         }
+        for (const auto& source : additionalSceneReferences)
+        {
+            const bool inProject = IsWithin(source, assetRoot);
+            auto& inventory = inProject ? projectInventory : engineInventory;
+            inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "additional scene dependency");
+        }
+        references.insert(references.end(), additionalFiles.begin(), additionalFiles.end());
+        references.insert(references.end(), additionalSceneReferences.begin(), additionalSceneReferences.end());
         for (const auto& file : startupPipeline.Files)
         {
             const bool inProject = IsWithin(file, assetRoot);
@@ -765,7 +838,7 @@ namespace Editor
         configFile << settings << '\n';
         configFile.close();
 
-        if (ReadRequiredGameplayActions(configDirectory / "Project.json", scene) != input.RequiredActions)
+        if (ReadPackageGameplayActions(configDirectory / "Project.json", request) != input.RequiredActions)
             throw std::runtime_error("Required gameplay actions changed during export. Start the export again.");
 
         const auto stagedInput = configDirectory / "InputActions.json";

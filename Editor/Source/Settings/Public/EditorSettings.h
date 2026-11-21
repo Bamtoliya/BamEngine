@@ -7,6 +7,7 @@
 #include <map>
 #include <cmath>
 #include <array>
+#include <vector>
 
 namespace Editor
 {
@@ -149,6 +150,12 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         std::string ProgramName;
+
+        PROPERTY(META("Optional", true))
+        std::vector<std::string> AdditionalScenes;
+
+        PROPERTY(META("Optional", true))
+        std::vector<std::string> AdditionalAssets;
     };
 
     STRUCT()
