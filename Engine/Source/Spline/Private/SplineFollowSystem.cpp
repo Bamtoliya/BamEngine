@@ -1,4 +1,5 @@
 ﻿#include "SplineFollowSystem.h"
+#include "ComponentEnable.h"
 #include "SplineFollowerComponent.h"
 #include "SplineComponent.h"
 #include "SplineCurve.h"
@@ -147,6 +148,7 @@ namespace Engine
 			auto view = world.view<SplineFollowerComponent, TransformComponent>();
 			for (auto entity : view)
 			{
+				if (!IsComponentEnabled<SplineFollowerComponent>(world, entity)) continue;
 				auto& follower = view.get<SplineFollowerComponent>(entity);
 				const auto& transform = view.get<TransformComponent>(entity);
 
@@ -186,7 +188,7 @@ namespace Engine
 
 				const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
 				const auto parent = hierarchy ? hierarchy->parent : entt::null;
-				const auto* spline = world.valid(parent) ? world.try_get<SplineComponent>(parent) : nullptr;
+				const auto* spline = world.valid(parent) ? TryGetEnabledComponent<SplineComponent>(world, parent) : nullptr;
 				if (!spline)
 				{
 					fail("The direct parent must contain a spline.");

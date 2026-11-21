@@ -296,6 +296,50 @@ EResult ReflectionRegistry::Initialize(void*)
     return EResult::Success;
 }
 
+const reflection::PropertyInfo* ComponentReflectionEntry::FindEnableProperty() const
+{
+    if (!ReflectionType) return nullptr;
+    for (const auto& property : ReflectionType->Properties)
+    {
+        const auto* marker = property.Metadata.Find("ComponentEnable");
+        const auto* enabled = marker ? std::get_if<bool>(marker) : nullptr;
+        if (enabled && *enabled && property.IsValueType<bool>() && property.CanWrite())
+            return &property;
+    }
+    return nullptr;
+}
+
+bool ComponentReflectionEntry::CanDisable() const
+{
+    return Type != typeid(IDComponent) && Type != typeid(NameComponent) &&
+        Type != typeid(FlagComponent) && Type != typeid(HierarchyComponent) &&
+        Type != typeid(TransformComponent) && Type != typeid(WorldTransformComponent) &&
+        Type != typeid(PrefabInstanceComponent) && Type != typeid(ModelInstanceComponent) &&
+        Type != typeid(ModelSourceComponent) && Type != typeid(UIInteractionStateComponent);
+}
+
+bool ComponentReflectionEntry::IsEnabled(const entt::registry& world, entt::entity entity) const
+{
+    if (const auto* property = FindEnableProperty())
+    {
+        const auto value = property->TryReadValue(View(world, entity));
+        if (const auto* current = value.Value.Get<bool>()) return *current;
+    }
+    return IsComponentEnabled(world, entity, StorageId);
+}
+
+bool ComponentReflectionEntry::SetEnabled(entt::registry& world, entt::entity entity, bool enabled) const
+{
+    if (!CanDisable() || !Has || !Has(world, entity) || !SetEnabledState) return false;
+    if (const auto* property = FindEnableProperty())
+    {
+        return property->TryWriteValue(Edit(world, entity), reflection::ValueView::From(enabled)) ==
+            reflection::PropertyAccessError::None;
+    }
+    SetEnabledState(world, entity, enabled);
+    return true;
+}
+
 bool ReflectionRegistry::RegisterComponentOperations()
 {
     std::vector<ComponentReflectionEntry> entries;

@@ -1,4 +1,5 @@
 ﻿#include "KinematicCharacterSystem.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "Collision.h"
 #include "PhysicsSystem.h"
@@ -83,11 +84,17 @@ void KinematicCharacterSystem::OnUpdate(entt::registry& registry, const vector<S
         auto view = world.view<CharacterControllerComponent, TransformComponent, WorldTransformComponent>();
         for (auto entity : view)
         {
+            auto& kcc = view.get<CharacterControllerComponent>(entity);
+            if (!IsComponentEnabled<CharacterControllerComponent>(world, entity))
+            {
+                kcc.MoveInput = vec3(0.0f);
+                kcc.JumpRequested = false;
+                continue;
+            }
             const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
             if (hierarchy && hierarchy->parent != entt::null) continue;
             const auto* flag = world.try_get<FlagComponent>(entity);
             if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead))) continue;
-            auto& kcc = view.get<CharacterControllerComponent>(entity);
             UpdateCharacter(*scene, entity, kcc, dt);
         }
     }
@@ -153,6 +160,7 @@ bool KinematicCharacterSystem::SweepCharacterContact(const Scene& scene, const C
     auto view = world.view<ColliderComponent, WorldTransformComponent>();
     for (auto entity : view)
     {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
         if (entity == ignoreEntity) continue;
         const auto& collider = view.get<ColliderComponent>(entity);
         const auto& settings = collider.GetSettings();
@@ -379,6 +387,13 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
             kcc.GroundAngle = glm::degrees(std::acos(glm::clamp(kcc.GroundNormal.y, -1.0f, 1.0f)));
             setGroundEntity(contact.Entity);
         };
+    if (world.valid(kcc.GroundEntity))
+    {
+        const auto* collider = TryGetEnabledComponent<ColliderComponent>(world, kcc.GroundEntity);
+        const bool supportsCharacter = (collider && collider->GetSettings().Enabled && !collider->GetSettings().IsTrigger) ||
+            TryGetEnabledComponent<TerrainComponent>(world, kcc.GroundEntity);
+        if (!supportsCharacter) kcc.GroundEntity = entt::null;
+    }
     const bool wasSliding = !kcc.IsGrounded && world.valid(kcc.GroundEntity) &&
         !IsWalkableNormal(kcc, kcc.GroundNormal.y);
 
@@ -761,7 +776,7 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
         AnimatorComponent* animator = nullptr;
         if (kcc.TargetAnimatorEntity != entt::null && world.valid(kcc.TargetAnimatorEntity))
         {
-            animator = world.try_get<AnimatorComponent>(kcc.TargetAnimatorEntity);
+            animator = TryGetEnabledComponent<AnimatorComponent>(world, kcc.TargetAnimatorEntity);
         }
         if (!animator)
         {

@@ -1,4 +1,5 @@
 #include "CameraSystem.h"
+#include "ComponentEnable.h"
 #include "CameraComponent.h"
 #include "PixelPerfectCameraComponent.h"
 #include "WorldTransformComponent.h"
@@ -22,7 +23,7 @@ namespace
 		return true;
 	}
 
-	bool IsValidCameraProjection(const Engine::CameraComponent& camera)
+	bool IsValidCameraProjection(const Engine::CameraComponent& camera, Engine::f32 orthographicSize)
 	{
 		if (!std::isfinite(camera.AspectRatio) || camera.AspectRatio <= 0.f)
 			return false;
@@ -40,7 +41,7 @@ namespace
 				camera.FOV > 0.f && camera.FOV < 180.f;
 
 		case Engine::ECameraType::Orthographic:
-			return std::isfinite(camera.OrthographicSize) && camera.OrthographicSize > 0.f;
+			return std::isfinite(orthographicSize) && orthographicSize > 0.f;
 
 		default:
 			return false;
@@ -97,8 +98,10 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 
 	auto& camera = *component;
 	camera.InvalidateCache();
+	if (!IsComponentEnabled<CameraComponent>(registry, entity)) return false;
 
-	auto* pixelPerfect = registry.try_get<PixelPerfectCameraComponent>(entity);
+	f32 orthographicSize = camera.OrthographicSize;
+	auto* pixelPerfect = TryGetEnabledComponent<PixelPerfectCameraComponent>(registry, entity);
 
 	// ── 픽셀 퍼펙트 카메라 연동 1단계: 정수 줌(Integer Zoom) 및 OrthographicSize 자동 계산 ──
 	if (pixelPerfect && camera.CameraType == ECameraType::Orthographic && pixelPerfect->assetsPPU > 0.0f)
@@ -132,11 +135,11 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 		pixelPerfect->currentZoom = calculatedZoom;
 
 		// 뷰포트 세로 픽셀을 정수 줌 배율로 균등 분할하여 1:Zoom 정수배 픽셀 매칭 보장
-		camera.OrthographicSize = static_cast<f32>(vpH) / (pixelPerfect->assetsPPU * static_cast<f32>(calculatedZoom));
+		orthographicSize = static_cast<f32>(vpH) / (pixelPerfect->assetsPPU * static_cast<f32>(calculatedZoom));
 	}
 
 	const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity);
-	if (!worldTransform || !IsValidCameraProjection(camera))
+	if (!worldTransform || !IsValidCameraProjection(camera, orthographicSize))
 		return false;
 
 	const mat4& worldMatrix = worldTransform->worldMatrix;
@@ -180,7 +183,7 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 	}
 	else
 	{
-		f32 halfHeight = camera.OrthographicSize * 0.5f;
+		f32 halfHeight = orthographicSize * 0.5f;
 		f32 halfWidth = halfHeight * camera.AspectRatio;
 
 		if (pixelPerfect && pixelPerfect->assetsPPU > 0.0f)

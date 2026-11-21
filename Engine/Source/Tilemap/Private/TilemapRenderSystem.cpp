@@ -1,4 +1,5 @@
 ﻿#include "TilemapRenderSystem.h"
+#include "ComponentEnable.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "Sprite.h"
@@ -53,6 +54,7 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 
 		for (auto [entity, tilemap, worldTransform, flag] : view.each())
 		{
+			if (!IsComponentEnabled<TilemapComponent>(scene->GetRegistry(), entity)) continue;
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
 			// 씬 로드 후 저장된 타일 목록으로부터 런타임 청크 자동 복원
@@ -83,7 +85,7 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 			if (!mesh || !material) continue;
 
 			const mat4& worldMatrix = worldTransform.worldMatrix;
-			const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+			const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<TilemapComponent>(scene, entity);
 
 			for (const auto& target : geometryTargets)
 			{

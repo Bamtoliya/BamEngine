@@ -18,7 +18,12 @@ public:
 #pragma endregion
 
 public:
-	uint32 RegisterPickingEntity(class Scene* scene, entt::entity entity);
+	uint32 RegisterPickingEntity(class Scene* scene, entt::entity entity, entt::id_type source = 0);
+	template<typename T>
+	uint32 RegisterPickingEntity(class Scene* scene, entt::entity entity)
+	{
+		return RegisterPickingEntity(scene, entity, entt::type_hash<T>::value());
+	}
 	class Entity* ResolvePickingEntity(uint32 pickingId) const;
 	void BeginFrame();
 	void EndFrame(bool frameSucceeded);
@@ -36,12 +41,13 @@ private:
 		class Scene* scene = nullptr;
 		entt::entity entity = entt::null;
 		uint64 persistentId = 0;
+		entt::id_type source = 0;
 	};
 	void ClearPickingTargets(vector<PickingTarget>& targets);
 private:
 	vector<PickingTarget> m_PickingTargets;
 	vector<PickingTarget> m_CompletedPickingTargets;
-	unordered_map<class Scene*, unordered_map<entt::entity, uint32>> m_PickingIds;
+	unordered_map<class Scene*, unordered_map<entt::id_type, unordered_map<entt::entity, uint32>>> m_PickingIds;
 	unordered_set<RenderPassID> m_PickingPasses;
 	unordered_set<RenderPassID> m_CompletedPickingPasses;
 	uint64 m_PickingFrameSerial = 0;

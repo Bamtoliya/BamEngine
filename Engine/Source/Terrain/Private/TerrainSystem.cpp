@@ -1,4 +1,5 @@
 ﻿#include "TerrainSystem.h"
+#include "ComponentEnable.h"
 #include "TerrainComponent.h"
 #include "WorldComponents.h"
 #include "TerrainUtility.h"
@@ -295,6 +296,7 @@ void TerrainSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& act
 		auto view = scene->GetRegistry().view<TerrainComponent>();
 		for (auto [entity, terrain] : view.each())
 		{
+			if (!IsComponentEnabled<TerrainComponent>(scene->GetRegistry(), entity)) continue;
 			EnsureTerrainResources(terrain);
 		}
 	}
@@ -333,6 +335,7 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 		auto view = scene->GetRegistry().view<TerrainComponent, WorldTransformComponent, FlagComponent>();
 		for (auto [entity, terrain, worldTransform, flag] : view.each())
 		{
+			if (!IsComponentEnabled<TerrainComponent>(scene->GetRegistry(), entity)) continue;
 			if (!EnsureTerrainResources(terrain))
 				continue;
 
@@ -375,7 +378,7 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 			command.mesh = mesh;
 			command.material = material;
 			command.worldMatrix = worldTransform.worldMatrix;
-			command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+			command.pickingId = PickingManager::Get().RegisterPickingEntity<TerrainComponent>(scene, entity);
 			command.heightfield.emplace();
 			command.heightfield->gridMesh = terrain.GridMesh;
 			command.heightfield->heightmap = terrain.HeightmapTexture;

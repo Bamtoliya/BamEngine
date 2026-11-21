@@ -42,6 +42,7 @@ The current scene Archive version is `1`. This abbreviated example shows the fie
 - `Id` is the persistent entity identifier. Do not treat the runtime EnTT handle as a persistent ID.
 - When present, `Hierarchy` stores `Parent` and an order-preserving `Children` list separately. `IDComponent` and `HierarchyComponent` are not duplicated in the regular `Components` array.
 - `Components` contains types registered with Reflection and enabled for serialization, represented by a `Type` name and `Data` value. Entities are written in ascending ID order; components are written by Reflection qualified type name.
+- A disabled component keeps its `Data`. A component using the common activation state writes an optional `Enabled: false` beside `Type`. Records without the field keep the enabled default. Components with an existing activation property keep it in `Data`. Prefabs use the same component record.
 - Resource references discovered while writing resource handles are collected separately under the scene object's `ResourceReferences`. Key/path formats and URI resolution follow the resource Archive adapter contract.
 
 ## Editor save flow

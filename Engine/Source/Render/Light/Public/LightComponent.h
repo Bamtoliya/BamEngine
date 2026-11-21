@@ -17,8 +17,9 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
 		bool IsEnabled = true;
+		static constexpr auto ComponentEnableMember = &LightComponent::IsEnabled;
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LIGHT_TYPE"))
 		ELightType LightType = ELightType::Directional;
@@ -87,7 +88,7 @@ namespace Engine
 		[[nodiscard]]
 		std::optional<GPULight> GetGPULightDesc() const
 		{
-			if (!m_IsCacheValid)
+			if (!IsEnabled || !m_IsCacheValid)
 				return std::nullopt;
 
 			return m_GPULight;
@@ -96,7 +97,7 @@ namespace Engine
 		[[nodiscard]]
 		std::optional<CameraBuffer> GetShadowCameraBuffer(uint32 cascadeIndex = 0) const
 		{
-			if (!m_IsCacheValid || !m_IsShadowCacheValid || cascadeIndex >= MAX_SHADOW_CASCADES)
+			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid || cascadeIndex >= MAX_SHADOW_CASCADES)
 				return std::nullopt;
 			return m_ShadowCameraBuffers[cascadeIndex];
 		}
@@ -104,7 +105,7 @@ namespace Engine
 		[[nodiscard]]
 		std::optional<LightShadowData> GetShadowData() const
 		{
-			if (!m_IsCacheValid || !m_IsShadowCacheValid)
+			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid)
 				return std::nullopt;
 
 			LightShadowData data{};
@@ -121,7 +122,7 @@ namespace Engine
 		[[nodiscard]]
 		std::optional<CameraBuffer> GetPointShadowCameraBuffer(uint32 faceIndex) const
 		{
-			if (!m_IsCacheValid || !m_IsShadowCacheValid || faceIndex >= 6)
+			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid || faceIndex >= 6)
 				return std::nullopt;
 			return m_PointShadowCameraBuffers[faceIndex];
 		}

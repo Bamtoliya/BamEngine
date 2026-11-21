@@ -1,4 +1,5 @@
 ﻿#include "CompositeVFXSystem.h"
+#include "ComponentEnable.h"
 #include "CompositeVFXComponent.h"
 #include "LightTypes.h"
 #include "SpriteRendererComponent.h"
@@ -85,7 +86,8 @@ void CompositeVFXSystem::SimulateSceneVFX(Scene* scene, f32 dt)
 	auto view = scene->GetRegistry().view<CompositeVFXComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
-		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
+		if (!IsComponentEnabled<CompositeVFXComponent>(scene->GetRegistry(), entity) ||
+			!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
 		{
 			vfxComp.StopSoundTracks();
 			continue;
@@ -465,6 +467,7 @@ Engine::uint32 CompositeVFXSystem::CollectFlashLights(const Scene& scene, std::s
 	auto view = scene.GetRegistry().view<const CompositeVFXComponent, const WorldTransformComponent, const FlagComponent>();
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
+		if (!IsComponentEnabled<CompositeVFXComponent>(scene.GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		const auto* effect = vfxComp.effectHandle.Get();
 		if (!effect || vfxComp.isFinished) continue;
@@ -645,12 +648,13 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 	auto view = scene->GetRegistry().view<CompositeVFXComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, vfxComp, transform, flag] : view.each())
 	{
+		if (!IsComponentEnabled<CompositeVFXComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
 		CompositeEffect* effect = vfxComp.effectHandle.Get();
 		if (!effect) continue;
 
-		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<CompositeVFXComponent>(scene, entity);
 
 		// ── 스프라이트 플립북 트랙 렌더링 ──
 		const auto& spriteTracks = effect->GetSpriteTracks();

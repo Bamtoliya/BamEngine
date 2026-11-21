@@ -38,8 +38,9 @@ namespace Engine
     {
         REFLECT_BODY()
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
         bool IsEnabled = true;
+        static constexpr auto ComponentEnableMember = &SkyAtmosphereComponent::IsEnabled;
 
         PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_SKY_COLOR"), DISPLAY_NAME("PROP_ZENITH_COLOR"))
         vec3 ZenithColor{ 0.18f, 0.42f, 0.85f };

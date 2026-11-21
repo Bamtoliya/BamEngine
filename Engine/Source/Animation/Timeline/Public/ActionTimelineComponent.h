@@ -47,6 +47,7 @@ namespace Engine
 		// 타임라인을 작성한 클립 (런타임 전용). 재생 세션마다 에셋의 ClipName으로 다시 찾아 Animator에 건다.
 		ResourceHandle<Animation> boundClip;
 		uint32 boundClipSerial = 0xFFFFFFFFu; // 아직 찾지 않음
+		entt::entity boundClipAnimator = entt::null;
 
 		// 타임라인이 넘겨받은 Animator 추적 (런타임 전용). 원래 상태는 AnimatorComponent가 소유하며, 세션 종료·Stop·교체·컴포넌트 제거 시 되돌린다.
 		// animatorOverrideEntity: 넘겨받은 Animator 엔티티(자신 또는 자식 모델 루트). null이면 넘겨받지 않은 상태다.

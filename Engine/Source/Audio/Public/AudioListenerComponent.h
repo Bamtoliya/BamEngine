@@ -10,8 +10,9 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_ACTIVE"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_IS_ACTIVE"), META("ComponentEnable", true))
 		bool isActive = true;
+		static constexpr auto ComponentEnableMember = &AudioListenerComponent::isActive;
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_VOLUME"))
 		f32 volume = 1.f;

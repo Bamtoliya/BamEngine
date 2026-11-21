@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "SceneViewportPanel.h"
+#include "ComponentEnable.h"
 #include "EditorUI.h"
 #include "ShortcutManager.h"
 #include "EditorCameraController.h"
@@ -914,7 +915,7 @@ void SceneViewportPanel::DrawImGuizmo()
 	glm::vec3 meshCenterLocal(0.0f);
 	bool hasMeshBounds = false;
 
-	if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
+	if (const auto* renderer = TryGetEnabledComponent<StaticMeshRendererComponent>(world, entity))
 	{
 		if (const auto* mesh = renderer->meshHandle.Get())
 		{
@@ -926,7 +927,7 @@ void SceneViewportPanel::DrawImGuizmo()
 			hasMeshBounds = true;
 		}
 	}
-	else if (const auto* renderer = world.try_get<SkinnedMeshRendererComponent>(entity))
+	else if (const auto* renderer = TryGetEnabledComponent<SkinnedMeshRendererComponent>(world, entity))
 	{
 		if (const auto* mesh = renderer->meshHandle.Get())
 		{
@@ -1064,7 +1065,7 @@ void SceneViewportPanel::DrawLightOverlay()
 		const auto& light = view.get<LightComponent>(entity);
 		const auto& tr = view.get<WorldTransformComponent>(entity);
 		const auto& flag = view.get<FlagComponent>(entity);
-		if (!light.IsEnabled || !IsSceneOverlayVisible(flag))
+		if (!IsComponentEnabled<LightComponent>(activeScene->GetRegistry(), entity) || !IsSceneOverlayVisible(flag))
 			continue;
 
 		vec3 worldPos = vec3(tr.worldMatrix[3]);
@@ -1193,6 +1194,7 @@ void SceneViewportPanel::DrawCameraOverlay()
 	auto view = activeScene->GetRegistry().view<CameraComponent, WorldTransformComponent, FlagComponent>();
 	for (auto entity : view)
 	{
+		if (!IsComponentEnabled<CameraComponent>(activeScene->GetRegistry(), entity)) continue;
 		const auto& camera = view.get<CameraComponent>(entity);
 		const auto& tr = view.get<WorldTransformComponent>(entity);
 		const auto& flag = view.get<FlagComponent>(entity);
@@ -1410,7 +1412,7 @@ void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstrin
 
 		for (auto [entity, source] : view.each())
 		{
-			if (!source.IsEnabled)
+			if (!IsComponentEnabled<PostProcessComponent>(activeScene->GetRegistry(), entity))
 				continue;
 
 			if (SyncPostProcess(*activeScene, entity, source))
@@ -1602,7 +1604,7 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 			const auto& light = view.get<LightComponent>(entity);
 			const auto& tr = view.get<WorldTransformComponent>(entity);
 			const auto& flag = view.get<FlagComponent>(entity);
-			if (!light.IsEnabled || !IsSceneOverlayVisible(flag))
+			if (!IsComponentEnabled<LightComponent>(registry, entity) || !IsSceneOverlayVisible(flag))
 				continue;
 			const char* lightIcon = ICON_FA_LIGHTBULB;
 			switch (light.LightType)
@@ -1625,6 +1627,7 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 			const auto& flag = view.get<FlagComponent>(entity);
 			if (!IsSceneOverlayVisible(flag))
 				continue;
+			if (!IsComponentEnabled<CameraComponent>(registry, entity)) continue;
 			testOverlayIcon(entity, tr.worldMatrix, ICON_FA_CAMERA, 1.7f);
 		}
 	}
@@ -1665,7 +1668,7 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 	}
 
 	auto& registry = activeScene->GetRegistry();
-	auto* terrain = registry.try_get<Engine::TerrainComponent>(targetEntity->GetEntityHandle());
+	auto* terrain = TryGetEnabledComponent<Engine::TerrainComponent>(registry, targetEntity->GetEntityHandle());
 	auto* transform = registry.try_get<Engine::WorldTransformComponent>(targetEntity->GetEntityHandle());
 	if (!terrain || !transform) return;
 
@@ -1807,6 +1810,12 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 	{
 		tilemapEntity = targetEntity->GetEntityHandle();
 		tilemap = registry.try_get<Engine::TilemapComponent>(tilemapEntity);
+		if (tilemap && !IsComponentEnabled(registry, tilemapEntity, *tilemap))
+		{
+			m_IsTilemapPaintingActive = false;
+			m_IsTileBoxFillDragging = false;
+			return false;
+		}
 		worldTransform = registry.try_get<Engine::WorldTransformComponent>(tilemapEntity);
 	}
 
@@ -1816,7 +1825,8 @@ bool SceneViewportPanel::HandleTilemapPainting(bool imageHovered)
 		auto view = registry.view<Engine::TilemapComponent, Engine::WorldTransformComponent, Engine::FlagComponent>();
 		for (auto [ent, tm, wt, flag] : view.each())
 		{
-			if (flag.IsActiveInHierarchy() && !HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
+			if (IsComponentEnabled(registry, ent, tm) && flag.IsActiveInHierarchy() &&
+				!HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
 			{
 				tilemapEntity = ent;
 				tilemap = &tm;
@@ -2056,7 +2066,7 @@ void SceneViewportPanel::DrawSelectedSpline(Engine::Scene* scene)
 	if (!world.valid(entity))
 		return;
 
-	const auto* spline = world.try_get<Engine::SplineComponent>(entity);
+	const auto* spline = TryGetEnabledComponent<Engine::SplineComponent>(world, entity);
 	if (!spline || !spline->IsValid())
 		return;
 
@@ -2182,7 +2192,7 @@ void SceneViewportPanel::SelectSplinePoint(Engine::Scene* scene, entt::entity en
 	if (!world.valid(entity))
 		return;
 
-	const auto* spline = world.try_get<Engine::SplineComponent>(entity);
+	const auto* spline = TryGetEnabledComponent<Engine::SplineComponent>(world, entity);
 	const auto* identity = world.try_get<Engine::IDComponent>(entity);
 
 	if (!spline || !identity || spline->Points.size() > Engine::SplineComponent::MaxControlPoints)
@@ -2223,7 +2233,7 @@ bool SceneViewportPanel::DrawSplinePointEditor(bool imageHovered)
 
 	auto& world = scene->GetRegistry();
 	const auto entity = selected->GetEntityHandle();
-	auto* spline = world.valid(entity) ? world.try_get<Engine::SplineComponent>(entity) : nullptr;
+	auto* spline = world.valid(entity) ? TryGetEnabledComponent<Engine::SplineComponent>(world, entity) : nullptr;
 	const auto* identity = world.valid(entity) ? world.try_get<Engine::IDComponent>(entity) : nullptr;
 
 	if (!spline || !identity || spline->Points.empty() ||

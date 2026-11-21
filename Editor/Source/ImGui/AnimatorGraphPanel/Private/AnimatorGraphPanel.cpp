@@ -1,4 +1,5 @@
 ﻿#include "AnimatorGraphPanel.h"
+#include "ComponentEnable.h"
 #include "EditorUI.h"
 #include "NodeEditorUI.h"
 #include "AssetPathRelocation.h"
@@ -2443,7 +2444,7 @@ void AnimatorGraphPanel::UpdatePreview(f32 dt)
 	{
 		auto& world = m_PreviewWidget.GetRegistry();
 		const auto entity = m_PreviewModelEntity->GetEntityHandle();
-		auto* animator = world.valid(entity) ? world.try_get<Engine::AnimatorComponent>(entity) : nullptr;
+		auto* animator = Engine::TryGetEnabledComponent<Engine::AnimatorComponent>(world, entity);
 
 		if (animator)
 		{

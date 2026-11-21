@@ -257,6 +257,15 @@ namespace
         history.Record(before, Editor::SceneEditSnapshot::Capture(*scene, targets), "add");
         Check(history.Undo() && !world.all_of<Engine::CameraComponent>(handle), "add undo");
         Check(history.Redo() && world.all_of<Engine::CameraComponent>(handle), "add redo");
+        const auto* camera = Engine::ReflectionRegistry::Get().FindComponent(typeid(Engine::CameraComponent));
+        world.get<Engine::CameraComponent>(handle).FOV = 73.0f;
+        auto beforeToggle = Editor::SceneEditSnapshot::Capture(*scene, targets);
+        Check(camera && camera->SetEnabled(world, handle, false), "disable camera");
+        history.Record(beforeToggle, Editor::SceneEditSnapshot::Capture(*scene, targets), "toggle");
+        Check(history.Undo() && camera->IsEnabled(world, handle) &&
+            world.get<Engine::CameraComponent>(handle).FOV == 73.0f, "enable undo");
+        Check(history.Redo() && !camera->IsEnabled(world, handle) &&
+            world.get<Engine::CameraComponent>(handle).FOV == 73.0f, "enable redo");
         history.Synchronize(scene.get(), false);
         Check(!history.CanUndo() && !history.CanRedo(), "play state");
         history.Synchronize(scene.get(), true);

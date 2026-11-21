@@ -16,12 +16,25 @@ namespace reflection
 
 namespace Editor
 {
+    struct ComponentHeaderActions
+    {
+        bool Enabled = true;
+        const char* EnableTooltipKey = "Inspector.ComponentEnabled";
+        std::function<void(bool)> SetEnabled;
+        std::function<void()> DrawMenu;
+        const reflection::PropertyInfo* EnableProperty = nullptr;
+    };
+
     class ReflectionPropertyDrawer
     {
     public:
         static bool IsVisible(const reflection::TypeInfo& type);
-        static bool DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr, std::function<void()> onHeaderContextMenu = nullptr, bool* outIsOpen = nullptr);
-        static bool DrawPropertyTable(const reflection::TypeInfo& type, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr);
+        static bool DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object,
+            const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr,
+            const ComponentHeaderActions* actions = nullptr, bool* outIsOpen = nullptr);
+        static bool DrawPropertyTable(const reflection::TypeInfo& type, const reflection::ObjectView& object,
+            const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr,
+            const reflection::PropertyInfo* headerProperty = nullptr);
         static bool DrawValue(const reflection::PropertyInfo& property, const reflection::ObjectView& object, const reflection::Registry* registry = nullptr, ReflectionObjectEditSettings* editSettings = nullptr);
 
         // 호출자가 객체와 프로퍼티를 구분하는 ImGui ID를 설정해야 합니다.

@@ -1,4 +1,8 @@
 #include "ActionTimelinePlayback.h"
+#include "AnimationSceneQuery.h"
+#include "AnimatorComponent.h"
+#include "ComponentEnable.h"
+#include "HierarchyComponent.h"
 #include "CompositeVFXComponent.h"
 #include "CompositeVFXSystem.h"
 #include "FlagComponent.h"
@@ -144,6 +148,22 @@ int main()
 	passed &= Check(vfx.particleRuntimes[0].emitterInstances[0].particles.size() == 1, "Release must preserve live particles.");
 	vfx.Release();
 	passed &= Check(vfx.particleRuntimes[0].emitterInstances[0].particles.size() == 1, "Release must be idempotent while draining.");
+
+	{
+		entt::registry world;
+		const auto root = world.create();
+		const auto disabled = world.create();
+		const auto enabled = world.create();
+		world.emplace<Engine::HierarchyComponent>(root).children = { disabled, enabled };
+		world.emplace<Engine::AnimatorComponent>(disabled);
+		world.emplace<Engine::AnimatorComponent>(enabled);
+		Engine::detail::SetComponentEnabled<Engine::AnimatorComponent>(world, disabled, false);
+		passed &= Check(Engine::FindAnimatorEntityInHierarchy(world, root) == enabled,
+			"Animator search must skip disabled siblings and continue through the hierarchy.");
+		Engine::detail::SetComponentEnabled<Engine::AnimatorComponent>(world, disabled, true);
+		passed &= Check(Engine::FindAnimatorEntityInHierarchy(world, root) == disabled,
+			"Re-enabling an Animator must restore its normal lookup priority.");
+	}
 
 	passed &= CheckParticleTimeline();
 

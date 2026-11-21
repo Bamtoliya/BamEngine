@@ -1,4 +1,5 @@
 ﻿#include "UIViewportPanel.h"
+#include "ComponentEnable.h"
 #include "InputManager.h"
 #include "ShortcutManager.h"
 #include "Application.h"
@@ -579,7 +580,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         {
             for (auto it = m_Layouts.rbegin(); it != m_Layouts.rend(); ++it)
             {
-                const auto* image = world.try_get<UIImageComponent>(it->entity);
+                const auto* image = TryGetEnabledComponent<UIImageComponent>(world, it->entity);
                 if (image && image->color.a > 0.0f && UILayout::Contains(*it, canvasPoint)) { hit = &*it; break; }
             }
         }

@@ -1,4 +1,5 @@
 ﻿#include "SpriteRenderSystem.h"
+#include "ComponentEnable.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "ResourceHandle.h"
@@ -52,6 +53,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
 
         for (auto [entity, spriteRenderer, worldTransform, flag] : view.each())
         {
+            if (!IsComponentEnabled<SpriteRendererComponent>(scene->GetRegistry(), entity)) continue;
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
             Sprite* sprite = spriteRenderer.spriteHandle.Get();
@@ -111,7 +113,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                 baseUV.w = -baseUV.w;
             }
 
-            const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+            const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<SpriteRendererComponent>(scene, entity);
 
             for (const auto& target : geometryTargets)
             {

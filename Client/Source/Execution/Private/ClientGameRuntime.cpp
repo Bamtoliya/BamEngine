@@ -6,6 +6,7 @@
 
 #include "BuiltInPrimitiveMeshes.h"
 #include "CameraComponent.h"
+#include "ComponentEnable.h"
 #include "ConfigManager.h"
 #if defined(_WIN32)
 #include "CrashHandler.h"
@@ -278,6 +279,7 @@ void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
         if (!flag.IsActiveInHierarchy() || Engine::HasFlag(flag.effectiveFlags, Engine::EEntityFlag::Dead))
             continue;
 
+        if (!Engine::IsComponentEnabled<Engine::CameraComponent>(registry, entity)) continue;
         auto& camera = cameraView.get<Engine::CameraComponent>(entity);
         const auto previousAspect = camera.AspectRatio;
         camera.AspectRatio = aspectRatio;
@@ -293,7 +295,7 @@ void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
         if (!selectedBuffer || camera.IsMainCamera)
         {
             selectedBuffer = buffer;
-            const auto* pixelCamera = registry.try_get<Engine::PixelPerfectCameraComponent>(entity);
+            const auto* pixelCamera = Engine::TryGetEnabledComponent<Engine::PixelPerfectCameraComponent>(registry, entity);
             pixelPerfect = camera.CameraType == Engine::ECameraType::Orthographic && pixelCamera &&
                 pixelCamera->assetsPPU > 0.0f;
         }
@@ -339,11 +341,12 @@ bool Client::ClientGameRuntime::ValidateStartupGraphs()
         return false;
     }
 
-    const auto bindings = scene->GetRegistry().view<Engine::GraphBindingComponent>();
+    const auto& world = scene->GetRegistry();
+    const auto bindings = world.view<Engine::GraphBindingComponent>();
     for (const auto entity : bindings)
     {
         const auto& binding = bindings.get<Engine::GraphBindingComponent>(entity);
-        if (binding.enabled && !binding.graphFile.empty() && !graphSystem->GetOrLoadGraph(binding.graphFile))
+        if (Engine::IsComponentEnabled(world, entity, binding) && !binding.graphFile.empty() && !graphSystem->GetOrLoadGraph(binding.graphFile))
             return false;
     }
 

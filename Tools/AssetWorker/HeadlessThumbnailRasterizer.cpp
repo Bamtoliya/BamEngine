@@ -7,6 +7,7 @@
 #include <DirectXTex.h>
 
 #include "HeadlessThumbnailRasterizer.h"
+#include "ComponentEnable.h"
 
 #include "BoundingBox.h"
 #include "Engine_Includes.h"
@@ -902,6 +903,10 @@ namespace Tools::AssetWorker
                                     bool hasType = false, hasData = false;
                                     if (!compObj.HasField("Type", hasType) || !hasType || !compObj.Read("Type", typeName)) return {};
                                     if (!compObj.HasField("Data", hasData) || !hasData) return {};
+                                    bool hasEnabled = false;
+                                    bool enabled = true;
+                                    if (!compObj.HasField("Enabled", hasEnabled) ||
+                                        (hasEnabled && (!compObj.Read("Enabled", enabled) || !enabled))) return {};
 
                                     bool dDummy = false;
                                     (void)compObj.ReadObject("Data", dDummy, [&](archive::IArchive& dataObj, bool&) -> archive::ArchiveResult
@@ -982,6 +987,7 @@ namespace Tools::AssetWorker
 
                     for (auto e : registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>())
                     {
+                        if (!Engine::IsComponentEnabled<Engine::StaticMeshRendererComponent>(registry, e)) continue;
                         const auto& mr = registry.get<Engine::StaticMeshRendererComponent>(e);
                         const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
                         const auto* mesh = mr.meshHandle.Get();
@@ -998,6 +1004,7 @@ namespace Tools::AssetWorker
 
                     for (auto e : registry.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>())
                     {
+                        if (!Engine::IsComponentEnabled<Engine::SkinnedMeshRendererComponent>(registry, e)) continue;
                         const auto& smr = registry.get<Engine::SkinnedMeshRendererComponent>(e);
                         const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
                         const auto* mesh = smr.meshHandle.Get();
@@ -1014,6 +1021,7 @@ namespace Tools::AssetWorker
 
                     for (auto e : registry.view<Engine::SpriteRendererComponent, Engine::WorldTransformComponent>())
                     {
+                        if (!Engine::IsComponentEnabled<Engine::SpriteRendererComponent>(registry, e)) continue;
                         const auto& sr = registry.get<Engine::SpriteRendererComponent>(e);
                         const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
                         auto* mesh = sr.meshHandle.Get();

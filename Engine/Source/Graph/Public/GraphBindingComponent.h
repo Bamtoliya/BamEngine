@@ -13,7 +13,8 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_GRAPH_FILE"))
 		std::wstring graphFile;
 
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
 		bool enabled = true;
+		static constexpr auto ComponentEnableMember = &GraphBindingComponent::enabled;
 	};
 }

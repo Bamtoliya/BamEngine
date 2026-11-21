@@ -1,4 +1,5 @@
 #include "CameraSystem.h"
+#include "ComponentEnable.h"
 #include "CameraComponent.h"
 #include "PixelPerfectCameraComponent.h"
 #include "WorldTransformComponent.h"
@@ -52,8 +53,9 @@ int main()
 			return Fail("currentZoom should be 6 for 1920x1080 with 320x180 reference");
 
 		// OrthographicSize = 1080 / (16 * 6) = 11.25
-		if (!Near(camera.OrthographicSize, 11.25f))
-			return Fail("OrthographicSize should be exactly 11.25 for 1080p with Zoom=6, PPU=16");
+		const auto buffer = camera.GetCameraBuffer();
+		if (!buffer || !Near(buffer->projMatrix[1][1], 2.0f / 11.25f))
+			return Fail("1080p pixel-perfect projection should use a height of 11.25");
 	}
 
 	// ── Test 2: 1280x720 뷰포트에서 4배 정수 줌 검증 ──
@@ -66,8 +68,9 @@ int main()
 			return Fail("currentZoom should be 4 for 1280x720 with 320x180 reference");
 
 		// OrthographicSize = 720 / (16 * 4) = 11.25
-		if (!Near(camera.OrthographicSize, 11.25f))
-			return Fail("OrthographicSize should be exactly 11.25 for 720p with Zoom=4, PPU=16");
+		const auto buffer = camera.GetCameraBuffer();
+		if (!buffer || !Near(buffer->projMatrix[1][1], 2.0f / 11.25f))
+			return Fail("720p pixel-perfect projection should use a height of 11.25");
 	}
 
 	// ── Test 3: 비정규 1400x900 뷰포트 (종횡비 불일치)에서 보수적 정수 줌 검증 ──
@@ -81,8 +84,9 @@ int main()
 			return Fail("currentZoom should be min(4, 5) = 4 for 1400x900");
 
 		// OrthographicSize = 900 / (16 * 4) = 14.0625
-		if (!Near(camera.OrthographicSize, 14.0625f))
-			return Fail("OrthographicSize should be 14.0625 for 900 height with Zoom=4, PPU=16");
+		const auto buffer = camera.GetCameraBuffer();
+		if (!buffer || !Near(buffer->projMatrix[1][1], 2.0f / 14.0625f))
+			return Fail("900p pixel-perfect projection should use a height of 14.0625");
 	}
 
 	// ── Test 4: 서브픽셀 카메라 위치 스냅 검증 ──
@@ -126,6 +130,13 @@ int main()
 		if (!Near(buffer->projMatrix[1][1], 1.0f / 5.625f))
 			return Fail("Cropped ortho projMatrix[1][1] does not match refResolutionY");
 	}
+
+	Engine::detail::SetComponentEnabled<PixelPerfectCameraComponent>(registry, entity, false);
+	if (!CameraSystem::UpdateCamera(registry, entity, 1400, 900))
+		return Fail("Disabling the pixel-perfect component should keep the camera usable");
+	const auto normalBuffer = camera.GetCameraBuffer();
+	if (!normalBuffer || !Near(camera.OrthographicSize, 10.0f) || !Near(normalBuffer->projMatrix[1][1], 2.0f / 10.0f))
+		return Fail("The configured orthographic size should be restored when pixel-perfect is disabled");
 
 	std::cout << "[PASS] All PixelPerfectCamera tests passed successfully!" << std::endl;
 	return 0;

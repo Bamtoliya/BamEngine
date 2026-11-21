@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 
@@ -38,8 +39,8 @@ bool Engine::UIEventSystem::CanInteract(Target target, const std::vector<UIEleme
 {
     if (!Exists(target)) return false;
     const auto& world = m_Scene->GetRegistry();
-    const auto* button = world.try_get<UIButtonComponent>(target.entity);
-    const auto* image = world.try_get<UIImageComponent>(target.entity);
+    const auto* button = TryGetEnabledComponent<UIButtonComponent>(world, target.entity);
+    const auto* image = TryGetEnabledComponent<UIImageComponent>(world, target.entity);
     if (!button || !button->interactable || !UILayout::IsValid(*button) || !image || !UILayout::IsValid(*image))
         return false;
     return std::ranges::any_of(layouts, [&](const auto& layout)
@@ -54,18 +55,18 @@ Engine::UIEventSystem::Target Engine::UIEventSystem::HitTest(const glm::vec2& po
 {
     blocked = false;
     const auto& world = m_Scene->GetRegistry();
-    const auto* canvas = world.try_get<CanvasComponent>(m_Canvas.entity);
+    const auto* canvas = TryGetEnabledComponent<CanvasComponent>(world, m_Canvas.entity);
     if (!canvas || point.x < 0.0f || point.y < 0.0f || point.x >= canvas->referenceResolution.x ||
         point.y >= canvas->referenceResolution.y) return {};
     for (auto it = layouts.rbegin(); it != layouts.rend(); ++it)
     {
-        const auto* image = world.try_get<UIImageComponent>(it->entity);
+        const auto* image = TryGetEnabledComponent<UIImageComponent>(world, it->entity);
         if (!image || !image->raycastTarget || !UILayout::IsValid(*image) || !UILayout::Contains(*it, point)) continue;
-        blocked = true; // Even a disabled button or a plain image blocks elements behind it.
+        blocked = true; // Any raycast-target image blocks elements behind it.
         auto entity = it->entity;
         for (std::size_t depth = 0; depth < 256 && entity != m_Canvas.entity; ++depth)
         {
-            if (world.all_of<UIButtonComponent>(entity))
+            if (TryGetEnabledComponent<UIButtonComponent>(world, entity))
             {
                 const auto* id = world.try_get<IDComponent>(entity);
                 const Target target{ entity, id ? id->id : 0 };
@@ -218,7 +219,7 @@ Engine::Entity* Engine::UIEventSystem::ResolveTarget(const UIPointerEvent& event
 glm::vec4 Engine::UIEventSystem::GetButtonTint(const entt::registry& world, entt::entity entity)
 {
     if (!world.valid(entity)) return glm::vec4(1.0f);
-    const auto* button = world.try_get<UIButtonComponent>(entity);
+    const auto* button = TryGetEnabledComponent<UIButtonComponent>(world, entity);
     if (!button || !UILayout::IsValid(*button)) return glm::vec4(1.0f);
     if (!button->interactable) return button->disabledColor;
     const auto* state = world.try_get<UIInteractionStateComponent>(entity);

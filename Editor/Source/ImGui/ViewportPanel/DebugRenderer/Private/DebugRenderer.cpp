@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "DebugRenderer.h"
+#include "ComponentEnable.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
 #include "PipelineManager.h"
@@ -198,6 +199,7 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 		};
 	for (auto [entity, collider, tr, flag] : registry.view<ColliderComponent, WorldTransformComponent, FlagComponent>().each())
 	{
+		if (!IsComponentEnabled<ColliderComponent>(registry, entity)) continue;
 		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 		const auto& settings = collider.GetSettings();
 		if (!settings.Enabled) continue;
@@ -256,6 +258,7 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	// CharacterControllerComponent 캡슐 와이어프레임 디버그 렌더링
 	for (auto [entity, kcc, tr, flag] : registry.view<CharacterControllerComponent, WorldTransformComponent, FlagComponent>().each())
 	{
+		if (!IsComponentEnabled<CharacterControllerComponent>(registry, entity)) continue;
 		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 		const vec4 color = kcc.IsGrounded ? vec4(0.2f, 0.9f, 0.3f, 1.0f) : vec4(0.9f, 0.6f, 0.1f, 1.0f);
 		const vec3 offset = kcc.Center;
@@ -292,6 +295,7 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	// SpringArmComponent 디버그 렌더링 (피벗, 붐 라인, 프로브 구체)
 	for (auto [entity, arm, tr, flag] : registry.view<SpringArmComponent, WorldTransformComponent, FlagComponent>().each())
 	{
+		if (!IsComponentEnabled<SpringArmComponent>(registry, entity)) continue;
 		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 
 		// 1. 타깃 기준점 위치(피벗) 산출 (SpringArmSystem과 동일한 로직)
@@ -330,6 +334,7 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	}
 	for (auto [entity, collider2D, tr, flag] : registry.view<Collider2DComponent, WorldTransformComponent, FlagComponent>().each())
 	{
+		if (!IsComponentEnabled<Collider2DComponent>(registry, entity)) continue;
 		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 		const auto& settings = collider2D.GetSettings();
 		if (!settings.Enabled) continue;
@@ -372,7 +377,8 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	// 4. JointComponent 3D 연결선 및 앵커 핀 렌더링
 	for (auto [entity, joint, tr, flag] : registry.view<JointComponent, WorldTransformComponent, FlagComponent>().each())
 	{
-		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead) || !joint.Enabled) continue;
+		if (!IsComponentEnabled<JointComponent>(registry, entity)) continue;
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 		const vec3 worldAnchorA = vec3(tr.worldMatrix * vec4(joint.LocalAnchor, 1.0f));
 		DrawSphere(worldAnchorA, 0.05f, vec4(1.0f, 0.85f, 0.1f, 1.0f));
 
@@ -390,7 +396,8 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 	// 5. Joint2DComponent 2D 연결선 및 앵커 핀 렌더링
 	for (auto [entity, joint2D, tr, flag] : registry.view<Joint2DComponent, WorldTransformComponent, FlagComponent>().each())
 	{
-		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead) || !joint2D.Enabled) continue;
+		if (!IsComponentEnabled<Joint2DComponent>(registry, entity)) continue;
+		if (!HasFlag(flag.flags, EEntityFlag::Active) || HasFlag(flag.flags, EEntityFlag::Dead)) continue;
 		const vec3 worldAnchorA = vec3(tr.worldMatrix * vec4(joint2D.LocalAnchor, 0.0f, 1.0f));
 		DrawSphere(worldAnchorA, 0.04f, vec4(1.0f, 0.65f, 0.1f, 1.0f));
 

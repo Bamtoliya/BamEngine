@@ -2,6 +2,7 @@
 
 #include "GraphAnnotations.h"
 #include "GraphSystem.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "FlagComponent.h"
@@ -163,7 +164,7 @@ namespace Engine::GraphActor
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* light = reg.try_get<LightComponent>(entity);
+		auto* light = TryGetEnabledComponent<LightComponent>(reg, entity);
 		if (!light) return;
 
 		light->Color = glm::vec3(r, g, b);
@@ -178,7 +179,7 @@ namespace Engine::GraphActor
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* light = reg.try_get<LightComponent>(entity);
+		auto* light = TryGetEnabledComponent<LightComponent>(reg, entity);
 		if (!light) return;
 
 		light->Intensity = intensity;
@@ -194,9 +195,10 @@ namespace Engine::GraphActor
 
 		auto& reg = scene->GetRegistry();
 		auto* light = reg.try_get<LightComponent>(entity);
-		if (!light) return;
+		if (!light || light->IsEnabled == enabled) return;
 
 		light->IsEnabled = enabled;
+		light->InvalidateCache();
 	}
 
 	// ── 엔티티 생명주기 노드 ──

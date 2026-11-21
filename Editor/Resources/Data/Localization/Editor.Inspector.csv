@@ -6,6 +6,9 @@ Inspector,AxisReset,Reset {} to {:.3f},{}축을 {:.3f}(으)로 초기화
 Inspector,AxisResetHint,Axis button / middle click: reset,축 버튼 / 가운데 클릭: 초기화
 Inspector,CanvasInvalidated,The edit would invalidate the canvas layout.,이 편집은 캔버스 레이아웃을 무효화하므로 적용할 수 없습니다.
 Inspector,CommonComponents,Common Components,공통 컴포넌트
+Inspector,ComponentAlwaysEnabled,Required scene component,씬에 필요한 컴포넌트
+Inspector,ComponentEnabled,Enable component,컴포넌트 활성화
+Inspector,ComponentMenu,Component actions,컴포넌트 메뉴
 Inspector,Components,Components,컴포넌트
 Inspector,EditSettings,Edit settings,편집 설정
 Inspector,ElapsedSeconds,(%.2fs),(%.2f초)

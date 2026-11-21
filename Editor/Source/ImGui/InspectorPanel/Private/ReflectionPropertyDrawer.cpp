@@ -1215,7 +1215,7 @@ namespace Editor
 
 	bool ReflectionPropertyDrawer::DrawObject(const reflection::TypeInfo& type, const reflection::ObjectView& object,
 		const reflection::Registry* registry, ReflectionObjectEditSettings* editSettings,
-		std::function<void()> onHeaderContextMenu, bool* outIsOpen)
+		const ComponentHeaderActions* actions, bool* outIsOpen)
 	{
 		if (!IsVisible(type))
 		{
@@ -1226,31 +1226,88 @@ namespace Editor
 		ImGui::PushID(type.QualifiedName.c_str());
 
 		const std::string displayName = GetReflectionDrawerDisplayName(type.Metadata, type.QualifiedName);
-		bool changed = false;
-
 		const std::string headerLabel = displayName + "###ObjectHeader";
-		const bool open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		bool open = false;
+		if (actions)
+		{
+			const auto padding = ImGui::GetStyle().FramePadding;
+			const float inset = std::min(padding.x, padding.y) * 0.5f;
+			const ImVec2 controlPadding(padding.x, padding.y - inset);
+			const float controlHeight = ImGui::GetFontSize() + 2.0f * controlPadding.y;
+			const float menuWidth = std::max(controlHeight, ImGui::CalcTextSize(ICON_FA_ELLIPSIS_VERTICAL).x + 2.0f * padding.x);
+			const bool hasMenu = static_cast<bool>(actions->DrawMenu);
+			const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+			const float actionsWidth = padding.x * 2.0f + controlHeight + (hasMenu ? spacing + menuWidth : 0.0f);
+			constexpr ImVec4 transparent(0.f, 0.f, 0.f, 0.f);
+			constexpr auto tableFlags = ImGuiTableFlags_NoPadOuterX | ImGuiTableFlags_NoPadInnerX;
+			ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(0.f, inset));
+			const bool tableOpen = ImGui::BeginTable("ComponentHeader", 2, tableFlags);
+			ImGui::PopStyleVar();
+			if (tableOpen)
+			{
+				ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, actionsWidth);
+				ImGui::TableNextRow();
+				ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, controlPadding);
+				ImGui::TableSetColumnIndex(0);
+				ImGui::PushStyleColor(ImGuiCol_Header, transparent);
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, transparent);
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, transparent);
+				ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
+				open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+				ImGui::PopStyleVar();
+				ImGui::PopStyleColor(3);
+				const auto background = ImGui::IsItemActive() ? ImGuiCol_HeaderActive :
+					ImGui::IsItemHovered() ? ImGuiCol_HeaderHovered : ImGuiCol_Header;
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, ImGui::GetColorU32(background));
+				if (hasMenu) ImGui::OpenPopupOnItemClick("##HeaderContextMenu", ImGuiPopupFlags_MouseButtonRight);
+
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padding.x);
+				const bool canToggle = static_cast<bool>(actions->SetEnabled);
+				bool enabled = actions->Enabled;
+				ImGui::BeginDisabled(!canToggle);
+				if (ImGui::Checkbox("##ComponentEnabled", &enabled) && canToggle) actions->SetEnabled(enabled);
+				ImGui::EndDisabled();
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					ImGui::SetTooltip("%s", LOCAL_CSTR(actions->EnableTooltipKey));
+				if (hasMenu)
+				{
+					ImGui::SameLine(0.f, spacing);
+					ImGui::PushStyleColor(ImGuiCol_Button, transparent);
+					ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
+					const bool pressed = ImGui::Button(ICON_FA_ELLIPSIS_VERTICAL "###ComponentMenu",
+						ImVec2(menuWidth, controlHeight));
+					ImGui::PopStyleVar();
+					ImGui::PopStyleColor();
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+						ImGui::SetTooltip("%s", LOCAL_CSTR("Inspector.ComponentMenu"));
+					if (pressed) ImGui::OpenPopup("##HeaderContextMenu");
+				}
+				ImGui::PopStyleVar();
+				if (hasMenu && ImGui::BeginPopup("##HeaderContextMenu"))
+				{
+					actions->DrawMenu();
+					ImGui::EndPopup();
+				}
+				ImGui::EndTable();
+			}
+		}
+		else
+		{
+			open = ImGui::CollapsingHeader(headerLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+		}
+
 		if (outIsOpen) *outIsOpen = open;
-
-		// [중요] CollapsingHeader 바로 직후에 호출해야 헤더바에만 정확히 우클릭 메뉴가 바인딩됩니다.
-		if (onHeaderContextMenu && ImGui::BeginPopupContextItem("##HeaderContextMenu"))
-		{
-			onHeaderContextMenu();
-			ImGui::EndPopup();
-		}
-
-		if (open)
-		{
-			changed = DrawPropertyTable(type, object, registry, editSettings);
-		}
-
+		const bool changed = open && DrawPropertyTable(type, object, registry, editSettings,
+			actions ? actions->EnableProperty : nullptr);
 		ImGui::PopID();
 		return changed;
 	}
 
 	bool ReflectionPropertyDrawer::DrawPropertyTable(const reflection::TypeInfo& type,
 		const reflection::ObjectView& object, const reflection::Registry* registry,
-		ReflectionObjectEditSettings* editSettings)
+		ReflectionObjectEditSettings* editSettings, const reflection::PropertyInfo* headerProperty)
 	{
 		if (!IsVisible(type)) return false;
 
@@ -1261,6 +1318,7 @@ namespace Editor
 
 		const auto isPropertyShown = [&](const reflection::PropertyInfo& property)
 			{
+				if (&property == headerProperty) return false;
 				if (editSettings && editSettings->HiddenProperties.contains(property.Name)) return false;
 				if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) return false;
 				return EvaluateEditCondition(property, type, object, registry);

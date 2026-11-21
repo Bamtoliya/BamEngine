@@ -1,4 +1,5 @@
 ﻿#include "ActionTimelineSystem.h"
+#include "ComponentEnable.h"
 #include "ActionTimelineComponent.h"
 #include "AnimatorComponent.h"
 #include "SkinnedMeshRendererComponent.h"
@@ -55,8 +56,8 @@ namespace
 
 		// 본 행렬은 Animator 엔티티(모델 루트) 공간이다. 대상 엔티티의 자식에 모델을 둔 구성도 있으므로 자식 계층까지 찾는다.
 		const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
-		const auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
-		const auto* skeleton = animator ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+		const auto* animator = animatorEntity != entt::null ? TryGetEnabledComponent<AnimatorComponent>(world, animatorEntity) : nullptr;
+		const auto* skeleton = animator ? FindEnabledSkeletonInHierarchy(world, animatorEntity) : nullptr;
 		if (!animator || !skeleton || animator->finalBoneMatrices.empty())
 		{
 			const mat4 finalMat = entityWorldMat * offsetMat;
@@ -122,7 +123,7 @@ namespace
 		{
 			const ResourceHandle<Model> authoringModel(ResourceManager::Get().LoadFile(StrToWStr(asset.GetModelPath())));
 			const auto authoringSkeletonHandle = authoringModel.IsValid() ? authoringModel->GetSkeleton() : ResourceHandle<Skeleton>();
-			const auto* targetSkeleton = animatorEntity != entt::null ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+			const auto* targetSkeleton = animatorEntity != entt::null ? FindEnabledSkeletonInHierarchy(world, animatorEntity) : nullptr;
 			const auto* authoringSkeleton = authoringSkeletonHandle.Get();
 			if (targetSkeleton && authoringSkeleton &&
 				targetSkeleton->GetSkinBindingSignature() != authoringSkeleton->GetSkinBindingSignature())
@@ -143,7 +144,7 @@ namespace
 	{
 		// 소켓 계산과 같은 스켈레톤(Animator 엔티티 계층)으로 판정한다. Animator가 없으면 모든 소켓이 원점으로 대체된다.
 		const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
-		const auto* skeleton = animatorEntity != entt::null ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+		const auto* skeleton = animatorEntity != entt::null ? FindEnabledSkeletonInHierarchy(world, animatorEntity) : nullptr;
 		for (const auto& track : asset.GetNotifyTracks())
 		{
 			for (const auto& notify : track.Notifies)
@@ -309,6 +310,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 			for (auto attachEntity : attachView)
 			{
+				if (!IsComponentEnabled<SocketAttachmentComponent>(world, attachEntity)) continue;
 				auto& attach = attachView.get<SocketAttachmentComponent>(attachEntity);
 				auto& trans = attachView.get<TransformComponent>(attachEntity);
 
@@ -345,6 +347,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 			for (auto vfxEntity : vfxView)
 			{
+				if (!IsComponentEnabled<ActionVFXLifecycleComponent, CompositeVFXComponent>(world, vfxEntity)) continue;
 				const auto& vfxComp = vfxView.get<CompositeVFXComponent>(vfxEntity);
 				const auto& lifecycle = vfxView.get<ActionVFXLifecycleComponent>(vfxEntity);
 
@@ -366,7 +369,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 		{
 			auto& timeline = view.get<ActionTimelineComponent>(entity);
 			const auto* flag = world.try_get<FlagComponent>(entity);
-			if (flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead)))
+			if (!IsComponentEnabled<ActionTimelineComponent>(world, entity) ||
+				(flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))))
 			{
 				const auto* existingAsset = timeline.timelineAsset.Get();
 				const float blendOutTime = existingAsset ? existingAsset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
@@ -405,22 +409,26 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 
 			auto* asset = timeline.timelineAsset.Get();
+			const entt::entity animatorEntity = asset && (timeline.isPlaying || timeline.animatorOverrideEntity != entt::null)
+				? FindAnimatorEntityInHierarchy(world, entity) : entt::entity(entt::null);
 
 			// 세션이 끝났으면 Animator를 타임라인 이전 상태로 되돌린다. 일시정지(같은 세션, 끝나기 전)는 마지막 포즈를 유지한다.
 			if (timeline.animatorOverrideEntity != entt::null)
 			{
 				const bool sessionChanged = timeline.animatorOverrideSerial != timeline.playSerial;
 				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
-				if (!asset || (!timeline.isPlaying && (sessionChanged || finished)))
+				if (!asset || timeline.animatorOverrideEntity != animatorEntity ||
+					(!timeline.isPlaying && (sessionChanged || finished)))
 					EndAnimatorOverride(world, entity, timeline, asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime);
 			}
 			if (!asset || !timeline.isPlaying) continue;
 
-			// 재생 세션이 바뀌면(Play·Stop·타임라인 교체) 작성 클립을 다시 찾는다.
-			if (timeline.boundClipSerial != timeline.playSerial)
+			// 재생 세션이나 활성 Animator 대상이 바뀌면 작성 클립을 다시 찾는다.
+			if (timeline.boundClipSerial != timeline.playSerial || timeline.boundClipAnimator != animatorEntity)
 			{
-				timeline.boundClip = ResolveTimelineClip(world, FindAnimatorEntityInHierarchy(world, entity), *asset);
+				timeline.boundClip = ResolveTimelineClip(world, animatorEntity, *asset);
 				timeline.boundClipSerial = timeline.playSerial;
+				timeline.boundClipAnimator = animatorEntity;
 			}
 
 			const float duration = std::max(0.05f, asset->GetDuration());
@@ -434,15 +442,11 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 			// 2. Animator 구동: 작성 클립이 있을 때만 넘겨받는다. 클립이 없는 타임라인(사운드·카메라 전용)은 Animator를 건드리지 않는다.
 			// Animator는 자신 또는 자식 모델 루트에서 찾는다.
-			const entt::entity animatorEntity = FindAnimatorEntityInHierarchy(world, entity);
-			auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
+			auto* animator = animatorEntity != entt::null ? TryGetEnabledComponent<AnimatorComponent>(world, animatorEntity) : nullptr;
 			const auto* clip = timeline.boundClip.Get();
-			const auto* skeleton = (animator && clip) ? FindSkeletonInHierarchy(world, animatorEntity) : nullptr;
+			const auto* skeleton = (animator && clip) ? FindEnabledSkeletonInHierarchy(world, animatorEntity) : nullptr;
 			if (animator && clip && skeleton)
 			{
-				// 계층이 바뀌어 다른 Animator를 찾았으면 이전 Animator를 먼저 되돌린다.
-				if (timeline.animatorOverrideEntity != entt::null && timeline.animatorOverrideEntity != animatorEntity)
-					EndAnimatorOverride(world, entity, timeline, asset->GetBlendOutTime());
 				BeginAnimatorOverride(world, entity, timeline, animatorEntity, *animator);
 				animator->isPlaying = false; // 타임라인이 시간을 구동하므로 AnimationSystem의 자체 진행을 멈춘다
 				animator->currentClip = timeline.boundClip;
@@ -570,6 +574,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 					auto camView = world.view<CameraComponent>();
 					for (auto camEntity : camView)
 					{
+						if (!IsComponentEnabled<CameraComponent>(world, camEntity)) continue;
 						auto& cam = camView.get<CameraComponent>(camEntity);
 						if (cam.IsMainCamera)
 						{
@@ -590,12 +595,18 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			std::vector<entt::entity> released;
 			for (auto vfxEntity : holdView)
 			{
+				if (!IsComponentEnabled<CompositeVFXComponent>(world, vfxEntity)) continue;
 				const auto& hold = holdView.get<ActionVFXHoldComponent>(vfxEntity);
-				const auto* owner = world.valid(hold.ownerEntity) ? world.try_get<ActionTimelineComponent>(hold.ownerEntity) : nullptr;
+				const auto* owner = world.valid(hold.ownerEntity) ? TryGetEnabledComponent<ActionTimelineComponent>(world, hold.ownerEntity) : nullptr;
 				const auto* ownerFlag = owner ? world.try_get<FlagComponent>(hold.ownerEntity) : nullptr;
 				const bool ownerGone = !owner || (ownerFlag && (!ownerFlag->IsActiveInHierarchy() || HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Dead)));
 				const auto* ownerAsset = owner ? owner->timelineAsset.Get() : nullptr;
 				const bool ownerEnded = owner && !owner->isPlaying && ownerAsset && owner->currentTime >= std::max(0.05f, ownerAsset->GetDuration());
+				if (!IsComponentEnabled<ActionVFXHoldComponent>(world, vfxEntity))
+				{
+					holdView.get<CompositeVFXComponent>(vfxEntity).Release();
+					continue;
+				}
 				if (ownerGone || ownerEnded || owner->playSerial != hold.playSerial || owner->playElapsed >= hold.releaseElapsed)
 					released.push_back(vfxEntity);
 				else
@@ -617,7 +628,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 		// 앞선 핸들러가 소유 엔티티를 지웠을 수 있으므로 발행 직전에 확인한다.
 		for (const auto& event : pendingEvents)
 		{
-			if (world.valid(event.entity)) ActionTimelineEvents::Publish(event);
+			if (world.valid(event.entity) && TryGetEnabledComponent<ActionTimelineComponent>(world, event.entity))
+				ActionTimelineEvents::Publish(event);
 		}
 	}
 }

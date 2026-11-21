@@ -42,6 +42,7 @@
 - `Id`는 저장용 엔티티 식별자입니다. 실행 중 사용하는 EnTT 핸들을 영속 ID로 취급하지 않습니다.
 - `Hierarchy`가 있는 엔티티는 `Parent`와 순서가 보존되는 `Children` 목록을 별도 저장합니다. `IDComponent`와 `HierarchyComponent`는 일반 `Components` 배열에 중복 저장하지 않습니다.
 - `Components`에는 Reflection에 등록되고 직렬화가 허용된 컴포넌트 타입이 `Type` 이름과 `Data` 값으로 들어갑니다. 엔티티는 ID 오름차순, 컴포넌트는 Reflection의 정규 타입 이름 순으로 기록됩니다.
+- 비활성화한 컴포넌트도 `Data`를 저장합니다. 공통 활성 상태를 사용하는 컴포넌트가 꺼져 있으면 `Type`과 같은 위치에 선택 필드 `Enabled: false`를 기록합니다. 필드가 없는 파일은 기본값인 활성으로 읽습니다. 기존 활성 속성을 사용하는 컴포넌트는 해당 값을 `Data`에 저장합니다. 프리팹도 같은 형식을 사용합니다.
 - 리소스 핸들에서 발견한 참조는 씬 객체의 `ResourceReferences`에 별도로 수집됩니다. 키·경로 형식과 URI 해석은 리소스 Archive 어댑터의 계약을 따릅니다.
 
 ## Editor 저장 흐름

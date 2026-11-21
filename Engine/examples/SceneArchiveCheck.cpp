@@ -3,6 +3,8 @@
 #include "WorldComponents.h"
 #include "PhysicsComponent.h"
 #include "RenderComponents.h"
+#include "PickingManager.h"
+#include "SpriteRendererComponent.h"
 #include "UIComponents.h"
 #include "Resources.h"
 #include "ResourceManager.h"
@@ -282,6 +284,13 @@ namespace
         cloud.MorphSpeed = 0.065f;
         cloud.PowderExtinction = 0.58f;
 
+        const auto& components = Engine::ReflectionRegistry::Get();
+        const auto* timelineEntry = components.FindComponent(typeid(Engine::ActionTimelineComponent));
+        const auto* fogEntry = components.FindComponent(typeid(Engine::FogComponent));
+        if (!timelineEntry || !fogEntry || !timelineEntry->SetEnabled(sourceWorld, entityA, false) ||
+            !fogEntry->SetEnabled(sourceWorld, entityB, false))
+            return Fail("Could not disable the timeline or fog component.");
+
         // 3. 파일 저장 (JSON 또는 BEVE)
         Archive writer;
         if (!original->WriteArchive(writer) || !writer.SaveToFile(path))
@@ -301,6 +310,12 @@ namespace
         auto& restoredWorld = restored->GetRegistry();
         const auto restoredA = restored->FindEntityById(1001ULL)->GetEntityHandle();
         const auto restoredB = restored->FindEntityById(1002ULL)->GetEntityHandle();
+
+        if (timelineEntry->IsEnabled(restoredWorld, restoredA) || fogEntry->IsEnabled(restoredWorld, restoredB) ||
+            Engine::IsComponentEnabled<Engine::FogComponent>(restoredWorld, restoredB) ||
+            !Engine::IsComponentEnabled<Engine::VolumetricCloudComponent>(restoredWorld, restoredB) ||
+            !Engine::IsComponentEnabled<Engine::SpriteAnimationComponent>(restoredWorld, restoredB))
+            return Fail("Component enabled state did not survive scene loading.");
 
         // 5. 엔티티 A 프로퍼티 및 런타임 필드 단언 검증
         const auto* resTimeline = restoredWorld.try_get<Engine::ActionTimelineComponent>(restoredA);
@@ -328,7 +343,7 @@ namespace
             return Fail("SpriteAnimationComponent settings or transient state mismatch after loading.");
 
         const auto* resFog = restoredWorld.try_get<Engine::FogComponent>(restoredB);
-        if (!resFog || !resFog->IsEnabled || resFog->FogType != Engine::EFogType::ExponentialHeight ||
+        if (!resFog || resFog->IsEnabled || resFog->FogType != Engine::EFogType::ExponentialHeight ||
             glm::distance(resFog->FogColor, glm::vec3(0.45f, 0.55f, 0.65f)) > 1.0e-4f ||
             std::abs(resFog->FogDensity - 0.035f) > 1.0e-4f || std::abs(resFog->FogHeightFalloff - 0.22f) > 1.0e-4f ||
             resFog->FogHeight != 45.0f || resFog->FogStartDistance != 12.0f || resFog->FogEndDistance != 280.0f ||
@@ -1461,6 +1476,34 @@ namespace
         return true;
     }
 
+    bool CheckDisabledPickingSource()
+    {
+        ScenePtr scene(Engine::Scene::Create());
+        if (!scene || Engine::SceneManager::Get().OpenScene(scene.get()) != Engine::EResult::Success ||
+            !Engine::PickingManager::Create())
+            return Fail("Could not initialize the picking check.");
+        struct PickingScope { ~PickingScope() { Engine::PickingManager::Destroy(); } } scope;
+        scene->SetActive(true);
+        const auto handle = AddSpatialEntity(*scene, RootId, L"Picking", {});
+        auto& world = scene->GetRegistry();
+        world.emplace<Engine::StaticMeshRendererComponent>(handle);
+        world.emplace<Engine::SpriteRendererComponent>(handle);
+        auto& picking = Engine::PickingManager::Get();
+        picking.BeginFrame();
+        const auto meshId = picking.RegisterPickingEntity<Engine::StaticMeshRendererComponent>(scene.get(), handle);
+        const auto spriteId = picking.RegisterPickingEntity<Engine::SpriteRendererComponent>(scene.get(), handle);
+        picking.EndFrame(true);
+        if (meshId == spriteId || !picking.ResolvePickingEntity(meshId) || !picking.ResolvePickingEntity(spriteId))
+            return Fail("Picking sources on the same entity did not resolve individually.");
+
+        const auto* mesh = Engine::ReflectionRegistry::Get().FindComponent(typeid(Engine::StaticMeshRendererComponent));
+        if (!mesh || !mesh->SetEnabled(world, handle, false) ||
+            Engine::IsComponentEnabled(world, handle, world.get<Engine::StaticMeshRendererComponent>(handle)) ||
+            picking.ResolvePickingEntity(meshId) || !picking.ResolvePickingEntity(spriteId))
+            return Fail("A previous frame still resolved the disabled mesh or lost the enabled sprite.");
+        return true;
+    }
+
     bool CheckPrefabRoundTrip()
     {
         auto scene = MakeScene();
@@ -1472,6 +1515,12 @@ namespace
         if (rootEntity == nullptr)
             return Fail("Root entity not found for prefab check.");
         const auto rootHandle = rootEntity->GetEntityHandle();
+
+        auto& world = scene->GetRegistry();
+        const auto* cameraEntry = Engine::ReflectionRegistry::Get().FindComponent(typeid(Engine::CameraComponent));
+        world.emplace<Engine::CameraComponent>(rootHandle).FOV = 73.0f;
+        if (!cameraEntry || !cameraEntry->SetEnabled(world, rootHandle, false))
+            return Fail("Could not disable the prefab camera.");
 
         archive::JsonArchive prefabWriter;
         if (manager.SavePrefab(prefabWriter, L"actor.bamprefab.json", *rootEntity) != Engine::EResult::Success)
@@ -1485,7 +1534,13 @@ namespace
             return Fail("InstantiatePrefab failed.");
 
         const auto instantiatedRoot = instantiatedRootEntity->GetEntityHandle();
-        auto& world = scene->GetRegistry();
+        const auto* camera = world.try_get<Engine::CameraComponent>(instantiatedRoot);
+        if (!camera || camera->FOV != 73.0f || cameraEntry->IsEnabled(world, instantiatedRoot))
+            return Fail("Instantiated prefab lost the camera settings or enabled state.");
+        world.remove<Engine::CameraComponent>(instantiatedRoot);
+        world.emplace<Engine::CameraComponent>(instantiatedRoot);
+        if (!cameraEntry->IsEnabled(world, instantiatedRoot) || cameraEntry->IsEnabled(world, rootHandle))
+            return Fail("Re-added component inherited the removed component's disabled state.");
         const auto newRootId = world.get<Engine::IDComponent>(instantiatedRoot).id;
         if (newRootId == 0 || newRootId == RootId || newRootId == FirstChildId || newRootId == SecondChildId)
             return Fail("Instantiated prefab root ID collided with existing scene IDs.");
@@ -2164,7 +2219,7 @@ int main()
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
         !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip() ||
-        !CheckExternalEntityReferenceCount())
+        !CheckExternalEntityReferenceCount() || !CheckDisabledPickingSource())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
     return 0;

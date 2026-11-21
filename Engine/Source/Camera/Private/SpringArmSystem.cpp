@@ -1,4 +1,5 @@
 ﻿#include "SpringArmSystem.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "PhysicsSystem.h"
 #include "TransformSystem.h"
@@ -53,13 +54,32 @@ namespace Engine
 
         for (auto entity : view)
         {
+            if (!IsComponentEnabled<SpringArmComponent>(world, entity)) continue;
             const auto* flag = world.try_get<FlagComponent>(entity);
             if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
                 continue;
 
-            auto& arm = view.get<SpringArmComponent>(entity);
             const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
+            entt::entity targetCamEntity = entity;
+            bool hasCamera = world.all_of<CameraComponent>(entity);
+            if (hierarchy)
+            {
+                for (const auto child : hierarchy->children)
+                {
+                    if (!world.valid(child) || !world.all_of<CameraComponent>(child)) continue;
+                    hasCamera = true;
+                    if (IsComponentEnabled<CameraComponent>(world, child) &&
+                        world.all_of<TransformComponent, WorldTransformComponent>(child))
+                    {
+                        targetCamEntity = child;
+                        break;
+                    }
+                }
+            }
+            if (targetCamEntity == entity && hasCamera && !TryGetEnabledComponent<CameraComponent>(world, entity))
+                continue;
 
+            auto& arm = view.get<SpringArmComponent>(entity);
             // 1. 타깃 기준점 위치 및 회전 산출
             vec3 targetWorldPos = vec3(0.0f);
             entt::entity ignoreEntity = entity;
@@ -161,20 +181,7 @@ namespace Engine
                 arm.IsInitialized = true;
             }
 
-            // 6. 자식 카메라 엔티티 탐색 (자식에 CameraComponent가 있으면 자식을 이동, 없으면 현재 엔티티를 이동)
-            entt::entity cameraEntity = entt::null;
-            if (hierarchy && !hierarchy->children.empty())
-            {
-                for (entt::entity child : hierarchy->children)
-                {
-                    if (world.all_of<CameraComponent>(child))
-                    {
-                        cameraEntity = child;
-                        break;
-                    }
-                }
-            }
-            entt::entity targetCamEntity = (cameraEntity != entt::null && world.valid(cameraEntity)) ? cameraEntity : entity;
+            // 6. 활성 카메라 또는 카메라를 붙이지 않은 암의 위치를 갱신한다.
             auto& camTransform = world.get<TransformComponent>(targetCamEntity);
             auto& camWorld = world.get<WorldTransformComponent>(targetCamEntity);
             // 부모 계층이 있는 경우 월드 좌표를 부모 기준 로컬 좌표로 변환하여 적용

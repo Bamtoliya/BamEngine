@@ -1,4 +1,5 @@
 ﻿#include "ThumbnailRenderer.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
@@ -474,11 +475,13 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 
 	for (auto e : registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>())
 	{
+		if (!Engine::IsComponentEnabled<Engine::StaticMeshRendererComponent>(registry, e)) continue;
 		accumulateBounds(registry.get<Engine::StaticMeshRendererComponent>(e).meshHandle.Get(),
 			registry.get<Engine::WorldTransformComponent>(e).worldMatrix);
 	}
 	for (auto e : registry.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>())
 	{
+		if (!Engine::IsComponentEnabled<Engine::SkinnedMeshRendererComponent>(registry, e)) continue;
 		accumulateBounds(registry.get<Engine::SkinnedMeshRendererComponent>(e).meshHandle.Get(),
 			registry.get<Engine::WorldTransformComponent>(e).worldMatrix);
 	}
@@ -505,6 +508,7 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 
 	for (auto e : registry.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>())
 	{
+		if (!Engine::IsComponentEnabled<Engine::StaticMeshRendererComponent>(registry, e)) continue;
 		const auto& mr = registry.get<Engine::StaticMeshRendererComponent>(e);
 		const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
 		auto* mesh = mr.meshHandle.Get();
@@ -524,6 +528,7 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 	m_BindPoseMatrices.clear();
 	for (auto e : registry.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>())
 	{
+		if (!Engine::IsComponentEnabled<Engine::SkinnedMeshRendererComponent>(registry, e)) continue;
 		const auto& smr = registry.get<Engine::SkinnedMeshRendererComponent>(e);
 		const auto& wt = registry.get<Engine::WorldTransformComponent>(e);
 		auto* mesh = smr.meshHandle.Get();

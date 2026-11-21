@@ -1,4 +1,5 @@
 ﻿#include "MeshRenderSystem.h"
+#include "ComponentEnable.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h" 
 #include "SplineComponent.h"
@@ -173,12 +174,14 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 return !sceneWorld.valid(item.first) ||
                     !sceneWorld.all_of<SplineComponent, SplineMeshComponent, StaticMeshRendererComponent,
                     WorldTransformComponent, FlagComponent>(item.first) ||
+                    !IsComponentEnabled<SplineComponent, SplineMeshComponent, StaticMeshRendererComponent>(sceneWorld, item.first) ||
                     sceneWorld.get<SplineMeshComponent>(item.first).DeformToPath;
             });
 
         auto view = sceneWorld.view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
         {
+            if (!IsComponentEnabled<StaticMeshRendererComponent>(sceneWorld, entity)) continue;
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
                 HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
             {
@@ -187,7 +190,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
             Mesh* baseMesh = meshRenderer.meshHandle.Get();
             MaterialInterface* material = meshRenderer.materialHandle.Get();
-            if (auto* splineMesh = sceneWorld.try_get<SplineMeshComponent>(entity))
+            if (auto* splineMesh = TryGetEnabledComponent<SplineMeshComponent>(sceneWorld, entity))
             {
                 using BuildStatus = ESplineMeshBuildStatus;
                 const auto finishBuild = [&](BuildStatus status, uint32 count = 0)
@@ -197,7 +200,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                         splineMesh->HasBuildError = status != BuildStatus::Ready && status != BuildStatus::NoOutput;
                     };
 
-                const auto* spline = sceneWorld.try_get<SplineComponent>(entity);
+                const auto* spline = TryGetEnabledComponent<SplineComponent>(sceneWorld, entity);
                 if (!spline)
                 {
                     finishBuild(BuildStatus::InvalidPath);
@@ -214,7 +217,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     continue;
                 }
 
-                const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+                const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<StaticMeshRendererComponent>(scene, entity);
                 StaticDrawCommand deformedCommand;
                 std::span<const StaticDrawCommand> commands;
 
@@ -265,8 +268,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             }
             if (!baseMesh || !material) continue;
 
-            auto* lodGroup = scene->GetRegistry().try_get<LODGroupComponent>(entity);
-            const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+            auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(scene->GetRegistry(), entity);
+            const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<StaticMeshRendererComponent>(scene, entity);
 
             for (const auto& target : targets)
             {
@@ -335,6 +338,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         auto skinnedView = world.view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
         for (auto [entity, skinnedRenderer, worldTransform, flag] : skinnedView.each())
         {
+            if (!IsComponentEnabled<SkinnedMeshRendererComponent>(world, entity)) continue;
             if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() ||
                 HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
@@ -348,7 +352,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
             // 자신 또는 부모(루트) 계층의 AnimatorComponent에서 계산된 본 행렬 목록 참조
             const auto animatorEntity = FindAnimatorEntityInAncestors(world, entity);
-            const auto* animator = animatorEntity != entt::null ? world.try_get<AnimatorComponent>(animatorEntity) : nullptr;
+            const auto* animator = animatorEntity != entt::null ? TryGetEnabledComponent<AnimatorComponent>(world, animatorEntity) : nullptr;
             const std::vector<mat4>* boneMatrices = (animator && !animator->finalBoneMatrices.empty())
                 ? &animator->finalBoneMatrices : nullptr;
 
@@ -367,7 +371,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
             command.worldMatrix = renderWorldMatrix;
             command.boneMatrices = boneMatrices;
-            command.pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+            command.pickingId = PickingManager::Get().RegisterPickingEntity<SkinnedMeshRendererComponent>(scene, entity);
 
             for (const auto& target : targets)
             {

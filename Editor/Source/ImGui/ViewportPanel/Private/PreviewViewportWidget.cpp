@@ -1,4 +1,5 @@
 ﻿#include "InputManager.h"
+#include "ComponentEnable.h"
 #include "EditorUI.h"
 #pragma push_macro("COLOR")
 #undef COLOR
@@ -41,6 +42,13 @@
 
 namespace
 {
+	entt::entity FindFirstEnabledAnimator(const entt::registry& world)
+	{
+		for (const auto entity : world.view<Engine::AnimatorComponent>())
+			if (Engine::IsComponentEnabled<Engine::AnimatorComponent>(world, entity)) return entity;
+		return entt::null;
+	}
+
 	// 오버레이 툴바 버튼은 글리프 폭과 무관하게 모두 같은 정사각형 슬롯을 사용한다.
 	ImVec2 GetOverlayButtonSize()
 	{
@@ -240,9 +248,9 @@ bool PreviewViewportWidget::TryGetModelBounds(entt::entity root, Engine::Boundin
 			pending.insert(pending.end(), hierarchy->children.begin(), hierarchy->children.end());
 
 		const Engine::Mesh* mesh = nullptr;
-		if (const auto* renderer = registry.try_get<Engine::StaticMeshRendererComponent>(entity))
+		if (const auto* renderer = Engine::TryGetEnabledComponent<Engine::StaticMeshRendererComponent>(registry, entity))
 			mesh = renderer->meshHandle.Get();
-		else if (const auto* skinned = registry.try_get<Engine::SkinnedMeshRendererComponent>(entity))
+		else if (const auto* skinned = Engine::TryGetEnabledComponent<Engine::SkinnedMeshRendererComponent>(registry, entity))
 			mesh = skinned->meshHandle.Get();
 
 		const auto* transform = registry.try_get<Engine::WorldTransformComponent>(entity);
@@ -329,8 +337,9 @@ void PreviewViewportWidget::BeginFrame(Engine::f32 dt)
 		auto animView = reg.view<Engine::AnimatorComponent>();
 		for (auto animEntity : animView)
 		{
+			if (!Engine::IsComponentEnabled<Engine::AnimatorComponent>(reg, animEntity)) continue;
 			auto& animator = animView.get<Engine::AnimatorComponent>(animEntity);
-			const auto* skeleton = FindSkeletonInHierarchy(reg, animEntity);
+			const auto* skeleton = Engine::FindEnabledSkeletonInHierarchy(reg, animEntity);
 			if (!skeleton) continue;
 			const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
 			if (source == Engine::EAnimatorBasePoseSource::None)
@@ -351,7 +360,7 @@ void PreviewViewportWidget::BeginFrame(Engine::f32 dt)
 	const auto& intensities = m_PreviewLightDraft ? *m_PreviewLightDraft : saved;
 	for (std::size_t i = 0; i < m_StudioLights.size(); ++i)
 	{
-		if (auto* light = reg.try_get<Engine::LightComponent>(m_StudioLights[i]))
+		if (auto* light = Engine::TryGetEnabledComponent<Engine::LightComponent>(reg, m_StudioLights[i]))
 			light->Intensity = intensities[i] * m_StudioLightMultiplier;
 	}
 
@@ -377,6 +386,7 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	auto staticView = reg.view<Engine::StaticMeshRendererComponent, Engine::WorldTransformComponent>();
 	for (auto entity : staticView)
 	{
+		if (!Engine::IsComponentEnabled<Engine::StaticMeshRendererComponent>(reg, entity)) continue;
 		const auto& meshComp = staticView.get<Engine::StaticMeshRendererComponent>(entity);
 		const auto& transComp = staticView.get<Engine::WorldTransformComponent>(entity);
 		auto* mesh = meshComp.meshHandle.Get();
@@ -396,6 +406,7 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	auto skinnedView = reg.view<Engine::SkinnedMeshRendererComponent, Engine::WorldTransformComponent>();
 	for (auto entity : skinnedView)
 	{
+		if (!Engine::IsComponentEnabled<Engine::SkinnedMeshRendererComponent>(reg, entity)) continue;
 		const auto& skinnedComp = skinnedView.get<Engine::SkinnedMeshRendererComponent>(entity);
 		const auto& transComp = skinnedView.get<Engine::WorldTransformComponent>(entity);
 		auto* mesh = skinnedComp.meshHandle.Get();
@@ -403,16 +414,9 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 		if (mesh && mat)
 		{
 			entt::entity animEntity = Engine::FindAnimatorEntityInAncestors(reg, entity);
-			auto* animator = animEntity != entt::null ? reg.try_get<Engine::AnimatorComponent>(animEntity) : nullptr;
-			if (!animator)
-			{
-				auto animView = reg.view<Engine::AnimatorComponent>();
-				if (!animView.empty())
-				{
-					animEntity = animView.front();
-					animator = &animView.get<Engine::AnimatorComponent>(animEntity);
-				}
-			}
+			if (animEntity == entt::null) animEntity = FindFirstEnabledAnimator(reg);
+			const auto* animator = animEntity != entt::null
+				? Engine::TryGetEnabledComponent<Engine::AnimatorComponent>(reg, animEntity) : nullptr;
 			const auto* boneMatrices = (animator && !animator->finalBoneMatrices.empty()) ? &animator->finalBoneMatrices : nullptr;
 
 			Engine::mat4 renderWorldMatrix = transComp.worldMatrix;
@@ -490,7 +494,7 @@ void PreviewViewportWidget::Draw(const ImVec2& size)
 	const auto& style = ImGui::GetStyle();
 	const float margin = std::min(ImGui::GetFontSize() * 0.4f, std::min(widgetSize.x, widgetSize.y) * 0.1f);
 	const ImVec2 slot = GetOverlayButtonSize();
-	const bool hasAnimator = m_PreviewScene && !m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>().empty();
+	const bool hasAnimator = m_PreviewScene && FindFirstEnabledAnimator(m_PreviewScene->GetRegistry()) != entt::null;
 	const int buttonCount = hasAnimator ? 6 : 4;
 	const float overlayWidth = std::max(1.0f, widgetSize.x - margin * 2.0f);
 	const float overlayHeight = std::max(1.0f, widgetSize.y - margin * 2.0f);
@@ -637,8 +641,9 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 
 	if (m_PreviewScene)
 	{
-		auto animView = m_PreviewScene->GetRegistry().view<Engine::AnimatorComponent>();
-		if (!animView.empty())
+		auto& world = m_PreviewScene->GetRegistry();
+		const auto animEntity = FindFirstEnabledAnimator(world);
+		if (animEntity != entt::null)
 		{
 			options.Enabled = true;
 			options.ShortcutHint = nullptr;
@@ -651,7 +656,7 @@ void PreviewViewportWidget::DrawOverlayToolbar()
 			}
 			else
 			{
-				auto& anim = animView.get<Engine::AnimatorComponent>(animView.front());
+				auto& anim = world.get<Engine::AnimatorComponent>(animEntity);
 				options.Active = anim.isPlaying;
 				if (EditorUI::IconButton("PlayMotion", anim.isPlaying ? ICON_FA_PAUSE : ICON_FA_PLAY, anim.isPlaying ? "PreviewViewport.ShowBindPose" : "PreviewViewport.PlayMotion", options))
 					anim.isPlaying = !anim.isPlaying;
@@ -813,8 +818,9 @@ void PreviewViewportWidget::DrawBoneOverlay()
 	auto animView = reg.view<Engine::AnimatorComponent>();
 	for (auto entity : animView)
 	{
+		if (!Engine::IsComponentEnabled<Engine::AnimatorComponent>(reg, entity)) continue;
 		const auto& animator = animView.get<Engine::AnimatorComponent>(entity);
-		const auto* skeleton = FindSkeletonInHierarchy(reg, entity);
+		const auto* skeleton = Engine::FindEnabledSkeletonInHierarchy(reg, entity);
 		if (!skeleton) continue;
 		const auto& bones = skeleton->GetBones();
 		if (bones.empty() || animator.finalBoneMatrices.size() < bones.size()) continue;

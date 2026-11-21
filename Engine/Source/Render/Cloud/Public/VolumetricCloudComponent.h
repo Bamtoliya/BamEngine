@@ -34,8 +34,9 @@ namespace Engine
     {
         REFLECT_BODY()
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
         bool IsEnabled = true;
+        static constexpr auto ComponentEnableMember = &VolumetricCloudComponent::IsEnabled;
 
         // ── 구름층 고도 및 범위 ──
         PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_LAYER_PLACEMENT"), DISPLAY_NAME("PROP_LAYER_BOTTOM"))

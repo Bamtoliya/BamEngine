@@ -10,8 +10,9 @@ namespace Engine
     {
         REFLECT_BODY()
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
         bool IsEnabled = true;
+        static constexpr auto ComponentEnableMember = &PostProcessComponent::IsEnabled;
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UNBOUND"))
         bool IsUnbound = true; // 전역 볼륨 여부 (true면 씬 전체에 적용)

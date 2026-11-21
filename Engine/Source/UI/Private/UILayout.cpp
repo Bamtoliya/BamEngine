@@ -1,4 +1,5 @@
 ﻿#include "UILayout.h"
+#include "ComponentEnable.h"
 #include "WorldComponents.h"
 
 namespace
@@ -68,7 +69,7 @@ entt::entity Engine::UILayout::FindCanvas(const entt::registry& world, entt::ent
 
 std::int32_t Engine::UILayout::GetZIndex(const entt::registry& world, entt::entity entity)
 {
-    const auto* order = world.valid(entity) ? world.try_get<UIRenderOrderComponent>(entity) : nullptr;
+    const auto* order = world.valid(entity) ? TryGetEnabledComponent<UIRenderOrderComponent>(world, entity) : nullptr;
     return order ? order->zIndex : 0;
 }
 
@@ -125,7 +126,7 @@ bool Engine::UILayout::Build(const entt::registry& world, entt::entity canvas, s
         UIElementLayout layout;
         if (!Resolve(*rect, parentSize, parentPivot, parentMatrix, layout)) return false;
         layout.entity = entity;
-        layout.visible = parentVisible && Visible(world, entity);
+        layout.visible = parentVisible && IsComponentEnabled<RectTransformComponent>(world, entity) && Visible(world, entity);
         candidate.push_back(layout);
         for (const auto child : orderedChildren(relation->children))
             if (!self(self, child, entity, layout.size, rect->pivot, layout.worldTransform, layout.visible, depth + 1))
@@ -134,7 +135,7 @@ bool Engine::UILayout::Build(const entt::registry& world, entt::entity canvas, s
     };
     for (const auto child : orderedChildren(rootRelation->children))
         if (!visit(visit, child, canvas, root->referenceResolution, glm::vec2(0.0f), glm::mat4(1.0f),
-            Visible(world, canvas), 2)) return false;
+            IsComponentEnabled<CanvasComponent>(world, canvas) && Visible(world, canvas), 2)) return false;
     result.swap(candidate);
     return true;
 }

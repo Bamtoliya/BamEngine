@@ -1,4 +1,5 @@
 ﻿#include "GraphSystem.h"
+#include "ComponentEnable.h"
 #include "GraphFile.h"
 #include "GraphReflection.h"
 #include "ReflectionRegistry.h"
@@ -207,7 +208,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 		for (auto entity : view)
 		{
 			const auto& binding = view.get<GraphBindingComponent>(entity);
-			if (!binding.enabled || binding.graphFile.empty()) continue;
+			if (!IsComponentEnabled(world, entity, binding) || binding.graphFile.empty()) continue;
 
 			auto* runtime = world.try_get<GraphRuntimeState>(entity);
 
@@ -358,7 +359,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 const GraphExecutor* GraphSystem::GetDebugExecutor(Scene* scene, entt::entity entity)
 {
 	if (!scene || entity == entt::null) return nullptr;
-	const auto* runtime = scene->GetRegistry().try_get<GraphRuntimeState>(entity);
+	const auto& world = scene->GetRegistry();
+	if (!TryGetEnabledComponent<GraphBindingComponent>(world, entity)) return nullptr;
+	const auto* runtime = world.try_get<GraphRuntimeState>(entity);
 	return runtime ? &runtime->executor : nullptr;
 }
 
@@ -401,6 +404,12 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 		{
 			const auto& binding = view.get<GraphBindingComponent>(entity);
 			auto& runtime = view.get<GraphRuntimeState>(entity);
+			if (!IsComponentEnabled(world, entity, binding))
+			{
+				runtime.loadedPath.clear();
+				runtime.isValid = false;
+				continue;
+			}
 			if (binding.graphFile.empty()) continue;
 
 			std::wstring sourcePath;
@@ -446,6 +455,7 @@ void GraphSystem::DispatchTriggerEvent(Scene* scene, entt::entity self, entt::en
 {
 	if (!scene) return;
 	auto& world = scene->GetRegistry();
+	if (!TryGetEnabledComponent<GraphBindingComponent>(world, self)) return;
 	auto* runtime = world.try_get<GraphRuntimeState>(self);
 	if (!runtime || !runtime->isValid) return;
 

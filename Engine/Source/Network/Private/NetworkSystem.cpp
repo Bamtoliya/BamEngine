@@ -1,4 +1,5 @@
 ﻿#include "NetworkSystem.h"
+#include "ComponentEnable.h"
 #include "TransformComponent.h"
 #include <algorithm>
 
@@ -71,6 +72,7 @@ void NetworkSystem::UpdateServerSync(entt::registry& registry, f32 dt)
 
     for (auto entity : view)
     {
+        if (!IsComponentEnabled<NetworkIdentityComponent, NetworkTransformComponent>(registry, entity)) continue;
         auto& netId = view.get<NetworkIdentityComponent>(entity);
         auto& trans = view.get<TransformComponent>(entity);
         auto& netTrans = view.get<NetworkTransformComponent>(entity);
@@ -116,6 +118,7 @@ void NetworkSystem::UpdateClientInterpolation(entt::registry& registry, f32 dt)
 
     for (auto entity : view)
     {
+        if (!IsComponentEnabled<NetworkIdentityComponent, NetworkTransformComponent>(registry, entity)) continue;
         auto& netId = view.get<NetworkIdentityComponent>(entity);
         auto& trans = view.get<TransformComponent>(entity);
         auto& netTrans = view.get<NetworkTransformComponent>(entity);
@@ -145,7 +148,8 @@ void NetworkSystem::HandleSyncTransform(const Network::PacketHeader& header, Net
     if (!reader.ReadQuat(rot)) return;
 
     entt::entity entity = FindEntityByNetId(netId);
-    if (entity == entt::null || !registry.valid(entity)) return;
+    if (entity == entt::null || !registry.valid(entity) ||
+        !IsComponentEnabled<NetworkIdentityComponent, NetworkTransformComponent>(registry, entity)) return;
 
     auto* trans = registry.try_get<TransformComponent>(entity);
     auto* netTrans = registry.try_get<NetworkTransformComponent>(entity);

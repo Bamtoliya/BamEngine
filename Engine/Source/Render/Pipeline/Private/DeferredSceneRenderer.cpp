@@ -1,4 +1,5 @@
 ﻿#include "DeferredSceneRenderer.h"
+#include "ComponentEnable.h"
 
 #include "IBLManager.h"
 #include "CompositeVFXSystem.h"
@@ -150,7 +151,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 	auto skyView = registry.view<Engine::SkyAtmosphereComponent>();
 	for (auto [e, sky] : skyView.each())
 	{
-		if (!sky.IsEnabled) continue;
+		if (!IsComponentEnabled(registry, e, sky)) continue;
 
 		f32 hourAngle = (sky.TimeOfDay - 12.0f) * (glm::pi<float>() / 12.0f);
 		f32 latRad = glm::radians(sky.Latitude);
@@ -174,7 +175,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 			auto lightView = registry.view<Engine::LightComponent>();
 			for (auto [le, light] : lightView.each())
 			{
-				if (light.IsEnabled && light.LightType == Engine::ELightType::Directional)
+				if (IsComponentEnabled(registry, le, light) && light.LightType == Engine::ELightType::Directional)
 				{
 					skyData.SunColor = light.Color;
 					skyData.SunIntensity = light.Intensity;
@@ -189,7 +190,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 	auto cloudView = registry.view<Engine::VolumetricCloudComponent>();
 	for (auto [ce, cloud] : cloudView.each())
 	{
-		if (!cloud.IsEnabled) continue;
+		if (!IsComponentEnabled(registry, ce, cloud)) continue;
 		skyData.Cloud.EnableClouds = 1u;
 		skyData.Cloud.LayerBottomAltitude = cloud.LayerBottomAltitude;
 		skyData.Cloud.LayerHeight = cloud.LayerHeight;
@@ -218,10 +219,11 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	Texture* defaultBRDFLUT = nullptr;
 	if (targetScene)
 	{
-		auto skyView = targetScene->GetRegistry().view<SkyAtmosphereComponent>();
+		auto& world = targetScene->GetRegistry();
+		auto skyView = world.view<SkyAtmosphereComponent>();
 		for (auto [entity, sky] : skyView.each())
 		{
-			if (!sky.IsEnabled)
+			if (!IsComponentEnabled(world, entity, sky))
 				continue;
 			const auto* prefiltered = sky.PrefilteredMap.Get();
 			const auto* irradiance = sky.IrradianceMap.Get();
@@ -272,7 +274,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				auto fogView = sceneToQuery->GetRegistry().view<Engine::FogComponent>();
 				for (auto [e, fog] : fogView.each())
 				{
-					if (!fog.IsEnabled) continue;
+					if (!IsComponentEnabled(sceneToQuery->GetRegistry(), e, fog)) continue;
 					fogData.FogEnabled = 1u;
 					fogData.FogType = static_cast<uint32>(fog.FogType);
 					fogData.FogColor = fog.FogColor;
@@ -287,7 +289,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 						auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
 						for (auto [se, sky] : skyView.each())
 						{
-							if (sky.IsEnabled)
+							if (IsComponentEnabled(sceneToQuery->GetRegistry(), se, sky))
 							{
 								fogData.FogColor = glm::mix(fog.FogColor, sky.HorizonColor, 0.65f);
 								break;
@@ -346,6 +348,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 						{
 							if (count >= MAX_LIGHTS) break;
 							const auto& light = view.get<Engine::LightComponent>(entity);
+							if (!IsComponentEnabled(targetScene->GetRegistry(), entity, light)) continue;
 							const auto optGpuLight = light.GetGPULightDesc();
 							if (optGpuLight.has_value())
 								gpuLights[count++] = optGpuLight.value();
@@ -381,7 +384,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				auto skyView = sceneToQuery->GetRegistry().view<Engine::SkyAtmosphereComponent>();
 				for (auto [e, sky] : skyView.each())
 				{
-					if (sky.IsEnabled)
+					if (IsComponentEnabled(sceneToQuery->GetRegistry(), e, sky))
 					{
 						lightingData.IBLIntensity = sky.IBLIntensity;
 						lightingData.ShadowAmbientFloor = sky.ShadowAmbientFloor;

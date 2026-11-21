@@ -1,4 +1,5 @@
 ﻿#include "ThirdPersonControllerSystem.h"
+#include "ComponentEnable.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "CharacterControllerComponent.h"
@@ -49,6 +50,7 @@ namespace Engine
         auto view = world.view<ThirdPersonControllerComponent, CharacterControllerComponent, TransformComponent>();
         for (auto entity : view)
         {
+            if (!IsComponentEnabled<ThirdPersonControllerComponent, CharacterControllerComponent>(world, entity)) continue;
             const auto* flag = world.try_get<FlagComponent>(entity);
             if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) || HasFlag(flag->flags, EEntityFlag::Dead)))
                 continue;
@@ -63,11 +65,11 @@ namespace Engine
             SpringArmComponent* arm = nullptr;
             if (ctrl.SpringArmEntity != entt::null && world.valid(ctrl.SpringArmEntity))
             {
-                arm = world.try_get<SpringArmComponent>(ctrl.SpringArmEntity);
+                arm = TryGetEnabledComponent<SpringArmComponent>(world, ctrl.SpringArmEntity);
             }
             if (!arm)
             {
-                arm = world.try_get<SpringArmComponent>(entity);
+                arm = TryGetEnabledComponent<SpringArmComponent>(world, entity);
             }
             if (!arm)
             {
@@ -75,7 +77,7 @@ namespace Engine
                 {
                     for (auto child : hier->children)
                     {
-                        if (world.valid(child) && (arm = world.try_get<SpringArmComponent>(child)))
+                        if (world.valid(child) && (arm = TryGetEnabledComponent<SpringArmComponent>(world, child)))
                             break;
                     }
                 }

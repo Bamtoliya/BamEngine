@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "PickingManager.h"
+#include "ComponentEnable.h"
 #include "SceneManager.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
@@ -64,15 +65,15 @@ void PickingManager::ClearState()
 	m_CompletedPickingFrameSerial = 0;
 }
 
-uint32 PickingManager::RegisterPickingEntity(Scene* scene, entt::entity entity)
+uint32 PickingManager::RegisterPickingEntity(Scene* scene, entt::entity entity, entt::id_type source)
 {
 	if (!scene || !scene->GetRegistry().valid(entity)) return 0;
 	const auto* id = scene->GetRegistry().try_get<IDComponent>(entity);
 	if (!id || id->id == 0) return 0;
-	auto& ids = m_PickingIds[scene];
+	auto& ids = m_PickingIds[scene][source];
 	if (const auto found = ids.find(entity); found != ids.end()) return found->second;
 	if (m_PickingTargets.size() >= 0x00ffffffu) return 0;
-	m_PickingTargets.push_back({ scene, entity, id->id });
+	m_PickingTargets.push_back({ scene, entity, id->id, source });
 	Safe_AddRef(scene);
 	const uint32 pickingId = static_cast<uint32>(m_PickingTargets.size());
 	ids.emplace(entity, pickingId);
@@ -92,6 +93,12 @@ Entity* PickingManager::ResolvePickingEntity(uint32 pickingId) const
 
 	const auto* id = world.try_get<IDComponent>(target.entity);
 	if (!id || id->id != target.persistentId) return nullptr;
+	if (target.source != 0)
+	{
+		const auto* storage = world.storage(target.source);
+		if (!storage || !storage->contains(target.entity) || !IsComponentEnabled(world, target.entity, target.source))
+			return nullptr;
+	}
 
 	target.scene->UpdateHierarchyFlags();
 
@@ -169,13 +176,13 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 					}
 				};
 
-			if (const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity))
+			if (const auto* renderer = TryGetEnabledComponent<StaticMeshRendererComponent>(world, entity))
 			{
 				Mesh* mesh = renderer->meshHandle.Get();
 
 				if (renderer->materialHandle.Get())
 				{
-					if (const auto* splineMesh = world.try_get<SplineMeshComponent>(entity);
+					if (const auto* splineMesh = TryGetEnabledComponent<SplineMeshComponent>(world, entity);
 						splineMesh && splineMesh->DeformToPath)
 					{
 						const auto instance = SplineMeshDeformCache::Find(world, entity, transform.worldMatrix);
@@ -183,7 +190,7 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 					}
 					else if (splineMesh)
 					{
-						const auto* spline = world.try_get<SplineComponent>(entity);
+						const auto* spline = TryGetEnabledComponent<SplineComponent>(world, entity);
 						std::vector<mat4> matrices;
 
 						if (mesh && !mesh->IsDynamic() && !mesh->IsSkinned() && spline &&
@@ -211,7 +218,7 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 					}
 				}
 			}
-			if (const auto* renderer = world.try_get<SpriteRendererComponent>(entity))
+			if (const auto* renderer = TryGetEnabledComponent<SpriteRendererComponent>(world, entity))
 			{
 				mat4 quadMatrix;
 				if (renderer->drawMode == ESpriteDrawMode::Simple && renderer->spriteHandle.Get() &&

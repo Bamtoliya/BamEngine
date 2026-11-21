@@ -1,4 +1,5 @@
 #include "SpriteAnimationSystem.h"
+#include "ComponentEnable.h"
 #include "SpriteAnimationComponent.h"
 #include "SpriteRendererComponent.h"
 #include "Scene.h"
@@ -27,6 +28,7 @@ void SpriteAnimationSystem::OnUpdate(entt::registry& registry, const vector<Scen
 		std::vector<entt::entity> toDestroy;
 		for (auto entity : view)
 		{
+			if (!IsComponentEnabled<SpriteAnimationComponent, SpriteRendererComponent>(world, entity)) continue;
 			const auto* flag = world.try_get<FlagComponent>(entity);
 			if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
 				HasFlag(flag->flags, EEntityFlag::Dead)))

@@ -1,4 +1,5 @@
 ﻿#include "AnimationTimelinePanel.h"
+#include "ComponentEnable.h"
 #include "EditorUI.h"
 #include "AssetPathRelocation.h"
 #include "TimelineView.h"
@@ -887,7 +888,8 @@ void AnimationTimelinePanel::Update(f32 dt)
 
 	Engine::AnimatorComponent* animator = nullptr;
 	if (m_PreviewModelEntity && m_PreviewWidget.GetScene())
-		animator = m_PreviewWidget.GetRegistry().try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+		animator = Engine::TryGetEnabledComponent<Engine::AnimatorComponent>(m_PreviewWidget.GetRegistry(),
+			m_PreviewModelEntity->GetEntityHandle());
 
 	auto* model = m_TargetModel.Get();
 	auto skeleton = model ? model->GetSkeleton() : Engine::ResourceHandle<Engine::Skeleton>();
@@ -923,6 +925,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 		auto attachView = reg.view<Engine::SocketAttachmentComponent, Engine::TransformComponent>();
 		for (auto e : attachView)
 		{
+			if (!Engine::IsComponentEnabled<Engine::SocketAttachmentComponent>(reg, e)) continue;
 			auto& attach = attachView.get<Engine::SocketAttachmentComponent>(e);
 			auto& trans = attachView.get<Engine::TransformComponent>(e);
 			const auto xform = GetSocketWorldTransform(attach.boneName, attach.offsetPosition, attach.offsetRotation);
@@ -935,7 +938,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 		UpdatePreviewHeldVFX(dt);
 		for (const auto& preview : m_PreviewVFXEntities)
 		{
-			auto* vfx = reg.valid(preview.Entity) ? reg.try_get<Engine::CompositeVFXComponent>(preview.Entity) : nullptr;
+			auto* vfx = Engine::TryGetEnabledComponent<Engine::CompositeVFXComponent>(reg, preview.Entity);
 			if (!vfx) continue;
 			const bool timelineFinished = !m_IsLooping && m_CurrentTime >= m_Duration;
 			vfx->timelineTimeScale = preview.IsTest || timelineFinished ? 1.0f : std::max(0.0f, m_PlaybackSpeed);
@@ -950,7 +953,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 			entt::entity e = it->Entity;
 			if (reg.valid(e))
 			{
-				if (const auto* vfx = reg.try_get<Engine::CompositeVFXComponent>(e))
+				if (const auto* vfx = Engine::TryGetEnabledComponent<Engine::CompositeVFXComponent>(reg, e))
 				{
 					if (vfx->isFinished && !vfx->isLooping)
 					{

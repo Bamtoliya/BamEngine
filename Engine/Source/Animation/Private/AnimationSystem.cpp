@@ -1,4 +1,5 @@
 #include "AnimationSystem.h"
+#include "ComponentEnable.h"
 #include "AnimatorComponent.h"
 #include "SkinnedMeshRendererComponent.h"
 #include "FlagComponent.h"
@@ -34,6 +35,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 
 		for (auto entity : view)
 		{
+			if (!IsComponentEnabled<AnimatorComponent>(world, entity)) continue;
 			const auto* flag = world.try_get<FlagComponent>(entity);
 			if (flag && (!flag->IsActiveInHierarchy() ||
 				HasFlag(flag->effectiveFlags, EEntityFlag::Paused) ||
@@ -59,7 +61,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 			}
 
 			// 2. 스켈레톤과 재생 상태 확인
-			const auto* skeleton = FindSkeletonInHierarchy(world, entity);
+			const auto* skeleton = FindEnabledSkeletonInHierarchy(world, entity);
 			if (!skeleton) continue;
 
 			if (!animator.isPlaying)

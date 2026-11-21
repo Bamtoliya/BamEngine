@@ -1,4 +1,5 @@
 ﻿#include "SplineMeshDeformCache.h"
+#include "ComponentEnable.h"
 #include "SplineComponent.h"
 #include "SplineMeshComponent.h"
 #include "SplineMeshDeformer.h"
@@ -56,9 +57,9 @@ namespace
 		if (!world.valid(entity) || worldMatrix[3].w != 1.0f)
 			return false;
 
-		const auto* settings = world.try_get<SplineMeshComponent>(entity);
-		const auto* spline = world.try_get<SplineComponent>(entity);
-		const auto* renderer = world.try_get<StaticMeshRendererComponent>(entity);
+		const auto* settings = TryGetEnabledComponent<SplineMeshComponent>(world, entity);
+		const auto* spline = TryGetEnabledComponent<SplineComponent>(world, entity);
+		const auto* renderer = TryGetEnabledComponent<StaticMeshRendererComponent>(world, entity);
 
 		if (!settings || !settings->DeformToPath || !spline || !spline->IsValid() || !renderer)
 			return false;
@@ -305,10 +306,11 @@ namespace Engine
 			{
 				const entt::entity entity = item.first;
 				if (!world.valid(entity) ||
-					!world.all_of<SplineComponent, StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>(entity))
+					!world.all_of<SplineComponent, StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>(entity) ||
+					!IsComponentEnabled<SplineComponent, StaticMeshRendererComponent>(world, entity))
 					return true;
 
-				const auto* settings = world.try_get<SplineMeshComponent>(entity);
+				const auto* settings = TryGetEnabledComponent<SplineMeshComponent>(world, entity);
 				const auto& renderer = world.get<StaticMeshRendererComponent>(entity);
 				return !settings || !settings->DeformToPath || !renderer.meshHandle.IsValid();
 			});

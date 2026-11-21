@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "LightManager.h"
+#include "ComponentEnable.h"
 #include "Light.h"
 #include "RHIBuffer.h"
 #include "RHI.h"
@@ -103,6 +104,7 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 		{
 			if (currentLightIndex >= MAX_LIGHTS) break;
 			const auto& light = view.get<LightComponent>(entity);
+			if (!IsComponentEnabled(scene->GetRegistry(), entity, light)) continue;
 			const auto optGpuLight = light.GetGPULightDesc();
 			if (optGpuLight.has_value())
 			{

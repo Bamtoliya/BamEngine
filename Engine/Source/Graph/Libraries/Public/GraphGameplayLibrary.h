@@ -3,6 +3,7 @@
 #include "GraphAnnotations.h"
 #include "GraphSystem.h"
 #include "RigidBodyComponent.h"
+#include "ComponentEnable.h"
 #include "AudioManager.h"
 #include "InputManager.h"
 #include "PhysicsSystem.h"
@@ -130,7 +131,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* rb = reg.try_get<RigidBodyComponent>(entity);
+		auto* rb = TryGetEnabledComponent<RigidBodyComponent>(reg, entity);
 		if (!rb || rb->BodyType != ERigidBodyType::Dynamic || rb->Mass <= 0.0f) return;
 
 		rb->LinearVelocity += glm::vec3(x, y, z) / rb->Mass;
@@ -145,7 +146,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* rb = reg.try_get<RigidBodyComponent>(entity);
+		auto* rb = TryGetEnabledComponent<RigidBodyComponent>(reg, entity);
 		if (!rb || rb->BodyType != ERigidBodyType::Dynamic) return;
 
 		rb->AccumulatedForce += glm::vec3(x, y, z);
@@ -160,7 +161,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* rb = reg.try_get<RigidBodyComponent>(entity);
+		auto* rb = TryGetEnabledComponent<RigidBodyComponent>(reg, entity);
 		if (!rb) return;
 
 		rb->LinearVelocity = glm::vec3(x, y, z);
@@ -174,7 +175,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return { 0.0f, 0.0f, 0.0f };
 
 		auto& reg = scene->GetRegistry();
-		const auto* rb = reg.try_get<RigidBodyComponent>(entity);
+		const auto* rb = TryGetEnabledComponent<RigidBodyComponent>(reg, entity);
 		if (!rb) return { 0.0f, 0.0f, 0.0f };
 
 		return { rb->LinearVelocity.x, rb->LinearVelocity.y, rb->LinearVelocity.z };
@@ -235,7 +236,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		if (anim) anim->Play();
 	}
 	FUNCTION(GRAPH_CALLABLE("Sprite.PauseAnimation"), DISPLAY_NAME("Pause Sprite Animation"), CATEGORY("Sprite"))
@@ -244,7 +245,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		if (anim) anim->Pause();
 	}
 	FUNCTION(GRAPH_CALLABLE("Sprite.StopAnimation"), DISPLAY_NAME("Stop Sprite Animation"), CATEGORY("Sprite"))
@@ -253,7 +254,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		if (anim) anim->Stop();
 	}
 	FUNCTION(GRAPH_CALLABLE("Sprite.SetFrame"), DISPLAY_NAME("Set Sprite Frame"), CATEGORY("Sprite"),
@@ -263,7 +264,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		if (anim) anim->SetFrame(frameIndex);
 	}
 	FUNCTION(GRAPH_CALLABLE("Sprite.SetPlayRate"), DISPLAY_NAME("Set Sprite Play Rate"), CATEGORY("Sprite"),
@@ -273,7 +274,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		if (anim) anim->playRate = rate;
 	}
 	FUNCTION(GRAPH_PURE("Sprite.IsPlaying"), DISPLAY_NAME("Is Sprite Animation Playing"), CATEGORY("Sprite"))
@@ -282,7 +283,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return false;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		return anim ? anim->isPlaying : false;
 	}
 	FUNCTION(GRAPH_PURE("Sprite.GetCurrentFrame"), DISPLAY_NAME("Get Current Sprite Frame"), CATEGORY("Sprite"))
@@ -291,7 +292,7 @@ namespace Engine::GraphGameplay
 		Scene* scene = GraphSystem::GetCurrentScene();
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return 0;
-		auto* anim = scene->GetRegistry().try_get<SpriteAnimationComponent>(entity);
+		auto* anim = TryGetEnabledComponent<SpriteAnimationComponent>(scene->GetRegistry(), entity);
 		return anim ? anim->currentFrameIndex : 0;
 	}
 
@@ -416,7 +417,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
 		auto& reg = scene->GetRegistry();
-		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		if (!kcc) return;
 		kcc->Move(glm::vec3(x, y, z), run);
 	}
@@ -427,7 +428,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
 		auto& reg = scene->GetRegistry();
-		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		if (!kcc) return;
 		kcc->Jump();
 	}
@@ -438,7 +439,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return false;
 		auto& reg = scene->GetRegistry();
-		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		const auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		return kcc ? kcc->IsGrounded : false;
 	}
 	FUNCTION(GRAPH_PURE("CharacterController.GetVelocity"), DISPLAY_NAME("Get Character Velocity"), CATEGORY("CharacterController"))
@@ -448,7 +449,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return { 0.0f, 0.0f, 0.0f };
 		auto& reg = scene->GetRegistry();
-		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		const auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		if (!kcc) return { 0.0f, 0.0f, 0.0f };
 		return { kcc->Velocity.x, kcc->Velocity.y, kcc->Velocity.z };
 	}
@@ -460,7 +461,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return;
 		auto& reg = scene->GetRegistry();
-		auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		if (!kcc) return;
 		kcc->SetVelocity(glm::vec3(x, y, z));
 	}
@@ -471,7 +472,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return { 0.0f, 1.0f, 0.0f };
 		auto& reg = scene->GetRegistry();
-		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		const auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		if (!kcc) return { 0.0f, 1.0f, 0.0f };
 		return { kcc->GroundNormal.x, kcc->GroundNormal.y, kcc->GroundNormal.z };
 	}
@@ -482,7 +483,7 @@ namespace Engine::GraphGameplay
 		entt::entity entity = GraphSystem::GetCurrentEntity();
 		if (!scene || entity == entt::null) return 0.0f;
 		auto& reg = scene->GetRegistry();
-		const auto* kcc = reg.try_get<CharacterControllerComponent>(entity);
+		const auto* kcc = TryGetEnabledComponent<CharacterControllerComponent>(reg, entity);
 		return kcc ? kcc->GroundAngle : 0.0f;
 	}
 
@@ -496,7 +497,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		auto* arm = TryGetEnabledComponent<SpringArmComponent>(reg, entity);
 		if (arm) arm->AddPitch(delta);
 	}
 
@@ -509,7 +510,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		auto* arm = TryGetEnabledComponent<SpringArmComponent>(reg, entity);
 		if (arm) arm->AddYaw(delta);
 	}
 
@@ -522,7 +523,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return;
 
 		auto& reg = scene->GetRegistry();
-		auto* arm = reg.try_get<SpringArmComponent>(entity);
+		auto* arm = TryGetEnabledComponent<SpringArmComponent>(reg, entity);
 		if (arm) arm->TargetArmLength = length;
 	}
 
@@ -534,7 +535,7 @@ namespace Engine::GraphGameplay
 		if (!scene || entity == entt::null) return 4.0f;
 
 		auto& reg = scene->GetRegistry();
-		const auto* arm = reg.try_get<SpringArmComponent>(entity);
+		const auto* arm = TryGetEnabledComponent<SpringArmComponent>(reg, entity);
 		return arm ? arm->CurrentArmLength : 4.0f;
 	}
 }

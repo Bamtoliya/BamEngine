@@ -303,13 +303,20 @@ void PrefabEditorPanel::DrawPrefabInspector()
             entry.Type == std::type_index(typeid(Engine::IDComponent)))
             continue;
 
-        if (entry.Has && entry.Has(registry, m_SelectedEntity) && entry.Edit && entry.ReflectionType)
-        {
-            auto object = entry.Edit(registry, m_SelectedEntity);
-            if (ReflectionPropertyDrawer::DrawObject(*entry.ReflectionType, object, &Engine::ReflectionRegistry::Get().GetRegistry()))
-            {
-                m_History.MarkEdited();
-            }
-        }
+        if (!entry.Has || !entry.Has(registry, m_SelectedEntity) || !entry.Edit || !entry.ReflectionType) continue;
+
+        auto object = entry.Edit(registry, m_SelectedEntity);
+        ComponentHeaderActions actions;
+        actions.Enabled = entry.IsEnabled(registry, m_SelectedEntity);
+        actions.EnableProperty = entry.FindEnableProperty();
+        std::optional<bool> requestedEnable;
+        if (entry.CanDisable() && !object.IsReadOnly())
+            actions.SetEnabled = [&](bool enabled) { requestedEnable = enabled; };
+        if (!entry.CanDisable()) actions.EnableTooltipKey = "Inspector.ComponentAlwaysEnabled";
+
+        const auto& reflection = Engine::ReflectionRegistry::Get().GetRegistry();
+        bool changed = ReflectionPropertyDrawer::DrawObject(*entry.ReflectionType, object, &reflection, nullptr, &actions);
+        if (requestedEnable) changed |= entry.SetEnabled(registry, m_SelectedEntity, *requestedEnable);
+        if (changed) m_History.MarkEdited();
     }
 }

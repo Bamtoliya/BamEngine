@@ -2,6 +2,7 @@
 
 #include "Base.h"
 #include "Resource.h"
+#include "Types.h"
 
 STRUCT()
 struct Keyframe
@@ -9,7 +10,7 @@ struct Keyframe
 	REFLECT_BODY()
 
 	PROPERTY()
-	f64 Time = 0.0;
+	Engine::f64 Time = 0.0;
 
 	bool operator==(const Keyframe& other) const {
 		return Time == other.Time;
@@ -22,7 +23,7 @@ struct VectorKeyframe : public Keyframe
 	REFLECT_BODY()
 
 	PROPERTY()
-	vec3 Value = vec3(0.0f);
+	Engine::vec3 Value = Engine::vec3(0.0f);
 
 	bool operator==(const VectorKeyframe& other) const {
 		return Time == other.Time && Value == other.Value;
@@ -35,7 +36,7 @@ struct QuaternionKeyframe : public Keyframe
 	REFLECT_BODY()
 
 	PROPERTY()
-	quat Value = glm::identity<quat>();
+	Engine::quat Value = glm::identity<Engine::quat>();
 
 	bool operator==(const QuaternionKeyframe& other) const {
 		return Time == other.Time &&
@@ -49,16 +50,16 @@ struct AnimationTrack
 	REFLECT_BODY()
 
 	PROPERTY()
-	wstring TargetBoneName;
+	Engine::wstring TargetBoneName;
 
 	PROPERTY()
-	vector<VectorKeyframe> PositionKeyframes;
+	std::vector<VectorKeyframe> PositionKeyframes;
 
 	PROPERTY()
-	vector<QuaternionKeyframe> RotationKeyframes;
+	std::vector<QuaternionKeyframe> RotationKeyframes;
 
 	PROPERTY()
-	vector<VectorKeyframe> ScaleKeyframes;
+	std::vector<VectorKeyframe> ScaleKeyframes;
 
 	bool operator==(const AnimationTrack& other) const {
 		return TargetBoneName == other.TargetBoneName &&
@@ -70,10 +71,10 @@ struct AnimationTrack
 
 struct AnimationCreateDesc : public ResourceCreateDesc
 {
-	wstring Name;
-	f64 Duration = 0.0;
-	f64 TicksPerSecond = 0.0;
-	vector<AnimationTrack> Tracks;
+	Engine::wstring Name;
+	Engine::f64 Duration = 0.0;
+	Engine::f64 TicksPerSecond = 0.0;
+	std::vector<AnimationTrack> Tracks;
 };
 
 BEGIN(Engine)
@@ -99,7 +100,7 @@ public:
 	const wstring& GetName() const { return m_Name; }
 	f64 GetDuration() const { return m_Duration; }
 	f64 GetTicksPerSecond() const { return m_TicksPerSecond; }
-	const vector<AnimationTrack>& GetTracks() const { return m_Tracks; }
+	const std::vector<AnimationTrack>& GetTracks() const { return m_Tracks; }
 #pragma endregion
 
 
@@ -114,6 +115,6 @@ private:
 	f64 m_TicksPerSecond = { 0.0f };
 
 	PROPERTY()
-	vector<AnimationTrack> m_Tracks;
+	std::vector<AnimationTrack> m_Tracks;
 };
 END

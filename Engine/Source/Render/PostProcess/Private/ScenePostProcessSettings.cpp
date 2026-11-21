@@ -1,4 +1,5 @@
 #include "ScenePostProcessSettings.h"
+#include "ComponentEnable.h"
 
 #include "PlatformPath.h"
 #include "PostProcessComponent.h"
@@ -14,9 +15,10 @@ bool Engine::ScenePostProcessSettings::Apply(PostProcessPipeline& pipeline, Scen
 {
 	if (scene)
 	{
-		for (auto [entity, source] : scene->GetRegistry().view<PostProcessComponent>().each())
+		auto& world = scene->GetRegistry();
+		for (auto [entity, source] : world.view<PostProcessComponent>().each())
 		{
-			if (!source.IsEnabled)
+			if (!IsComponentEnabled(world, entity, source))
 				continue;
 			if (m_LastEntity == entity && m_LastPreset == source.PresetName && m_LastSettings == source.PipelineSettings)
 				return m_Usable;

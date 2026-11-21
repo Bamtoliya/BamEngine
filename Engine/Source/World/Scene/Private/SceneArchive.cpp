@@ -170,6 +170,8 @@ namespace
                     [&](archive::IArchive& component, const auto* entry) -> archive::ArchiveResult
                     {
                         auto data = component.Write("Type", entry->ReflectionType->QualifiedName);
+                        if (data && !Engine::IsComponentEnabled(world, entity.Handle, entry->StorageId))
+                            data = component.Write("Enabled", false);
                         if (data) data = Engine::ReflectionRegistry::Get().WriteComponent(
                             component, "Data", world, entity.Handle, entry->Type);
                         return data;
@@ -196,7 +198,21 @@ namespace
             result = archive_reflection::IsSerializationEnabled(entry->ReflectionType->Metadata, "Type", enabled);
             if (!result) return result;
             if (!enabled) return { archive::ArchiveErrorCode::InvalidValue, "Type" };
-            return registry.ReadComponent(component, "Data", world, handle, entry->Type);
+            bool hasEnableState = false;
+            result = component.HasField("Enabled", hasEnableState);
+            if (!result) return result;
+            bool componentEnabled = true;
+            if (hasEnableState)
+            {
+                result = component.Read("Enabled", componentEnabled);
+                if (!result) return result;
+                if (!entry->CanDisable())
+                    return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
+            }
+            result = registry.ReadComponent(component, "Data", world, handle, entry->Type);
+            if (result && hasEnableState && !entry->SetEnabled(world, handle, componentEnabled))
+                return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
+            return result;
         });
     }
 

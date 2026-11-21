@@ -181,6 +181,8 @@ AGENTS.md는 학습 중심 작업 방식과 공통 평가 기준을 정의한다
   `Docs/DevelopmentPriorities.md`와 여기서 연결하는 해당 기능의 개발 계획
 - 에디터 UI/UX 사용성 테스트, 계층별(정적·헤드리스 CTest·실환경) 검증 및 Pass/Fail 판정 기준:
   `Docs/EditorUXTestGuidelines.md`
+- 컴포넌트 등록 및 실행 시스템 작성 시 공통 `Enable` 상태와 실행 조건:
+  `Docs/EngineEditorClientGuidelines.md`의 5.1절
 
 ### 세부 요구사항 확인 절차
 

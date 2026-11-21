@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InspectorPanel.h"
 #include "EditorUI.h"
 #include "Application.h"
@@ -991,6 +991,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	std::size_t componentCount = 0;
 	bool refreshWorldMatrices = false;
 	bool anyChanged = false;
+	bool componentEnableChanged = false;
 	const std::array targets{ handle };
 	auto& history = Application::Get().GetEditHistory();
 
@@ -1090,13 +1091,27 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 
 		auto& componentSettings = entityEditState.Components[type.QualifiedName];
 		bool changed = false;
+		std::optional<bool> requestedEnable;
+		const auto* entry = Engine::ReflectionRegistry::Get().FindComponent(std::string_view(type.QualifiedName));
+		ComponentHeaderActions headerActions;
+		headerActions.DrawMenu = drawHeaderMenu;
+		if (entry)
+		{
+			headerActions.Enabled = entry->IsEnabled(world, handle);
+			if (!entry->CanDisable()) headerActions.EnableTooltipKey = "Inspector.ComponentAlwaysEnabled";
+			headerActions.EnableProperty = entry->FindEnableProperty();
+			if (entry->CanDisable() && !object.IsReadOnly() &&
+				(!headerActions.EnableProperty ||
+					!componentSettings.ReadOnlyProperties.contains(headerActions.EnableProperty->Name)))
+				headerActions.SetEnabled = [&](bool enabled) { requestedEnable = enabled; };
+		}
 
 		const auto drawCollider = [&]<typename T>()
 		{
 			auto& current = world.get<T>(handle);
 			T candidate = current;
 			if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-				registry, &componentSettings, drawHeaderMenu)) return false;
+				registry, &componentSettings, &headerActions)) return false;
 			if (!TryCommitInspectorCollider(current, std::move(candidate)))
 			{
 				ImGui::TextDisabled("%s", LocalizeInspectorText("Inspector.InvalidValue").c_str());
@@ -1109,7 +1124,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			auto& current = world.get<T>(handle);
 			T candidate = current;
 			if (!ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-				registry, &componentSettings, drawHeaderMenu)) return false;
+				registry, &componentSettings, &headerActions)) return false;
 			if (!Engine::UILayout::IsValid(candidate))
 			{
 				ImGui::TextDisabled("%s", (LOCAL("Inspector.LayoutRejected")).c_str());
@@ -1132,7 +1147,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		{
 			auto candidate = *transform;
 			if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-				registry, &componentSettings, drawHeaderMenu))
+				registry, &componentSettings, &headerActions))
 			{
 				changed = TransformPropertyEditor::ApplyCandidate(world, handle, candidate);
 				if (!changed) ImGui::TextDisabled("%s", LOCAL("Inspector.TransformRejected").c_str());
@@ -1147,7 +1162,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		else if (object.Is<Engine::AudioSourceComponent>())
 		{
 			bool isOpen = false;
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
 			if (isOpen)
 			{
 				auto& audioSource = world.get<Engine::AudioSourceComponent>(handle);
@@ -1171,7 +1186,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		else if (object.Is<Engine::SpriteAnimationComponent>())
 		{
 			bool isOpen = false;
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
 			if (isOpen)
 			{
 			auto& anim = world.get<Engine::SpriteAnimationComponent>(handle);
@@ -1258,7 +1273,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		{
 			componentSettings.HiddenProperties.insert("controllerPath");
 			bool isOpen = false;
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
 			if (isOpen)
 			{
 			auto& animator = world.get<Engine::AnimatorComponent>(handle);
@@ -1434,7 +1449,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 		else if (object.Is<Engine::ParticleEmitterComponent>())
 		{
 			bool isOpen = false;
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
 			if (isOpen)
 			{
 			auto& emitter = world.get<Engine::ParticleEmitterComponent>(handle);
@@ -1472,7 +1487,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			componentSettings.HiddenProperties.insert("timelineAsset");
 			componentSettings.HiddenProperties.insert("timelinePath");
 			bool isOpen = false;
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu, &isOpen);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
 			if (isOpen)
 			{
 			auto& timeline = world.get<Engine::ActionTimelineComponent>(handle);
@@ -1547,7 +1562,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			const bool previousClosed = spline.Closed;
 			const bool wasValid = spline.IsValid();
 
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions);
 
 			int addedIndex = -1;
 			if (spline.Points.size() == previousPoints.size() + 1)
@@ -1623,7 +1638,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			settings.ReadOnlyProperties.insert("skeletonHandle");
 
 			if (ReflectionPropertyDrawer::DrawObject(type, reflection::ObjectView::From(candidate),
-				registry, &settings, drawHeaderMenu))
+				registry, &settings, &headerActions))
 			{
 				if (candidate.meshHandle != current.meshHandle &&
 					scene->ReplaceLinkedSkinnedPartMesh(entity, candidate.meshHandle) != Engine::EResult::Success)
@@ -1649,13 +1664,18 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					: world.get<Engine::StaticMeshRendererComponent>(handle).materialHandle;
 
 				const auto previousMaterial = material;
-				changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+				changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions);
 				if (changed && material != previousMaterial)
 					source->useModelMaterial = false;
 }
 		else
-			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, drawHeaderMenu);
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions);
 
+		if (requestedEnable && entry->SetEnabled(world, handle, *requestedEnable))
+		{
+			componentEnableChanged = true;
+			changed = true;
+		}
 		if (changed && object.Is<Engine::CameraComponent>()) world.get<Engine::CameraComponent>(handle).InvalidateCache();
 		if (changed && object.Is<Engine::LightComponent>()) world.get<Engine::LightComponent>(handle).InvalidateCache();
 		anyChanged |= changed;
@@ -1690,7 +1710,7 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 	if (anyChanged)
 	{
 		auto after = SceneEditSnapshot::Capture(*scene, targets);
-		history.Record(std::move(before), after, "History.Command.EditProperties", true);
+		history.Record(std::move(before), after, "History.Command.EditProperties", !componentEnableChanged);
 
 		m_CachedSnapshot = std::move(after);
 		m_CachedRevision = history.Revision();

@@ -1,4 +1,5 @@
 ﻿#include "PhysicsSystem.h"
+#include "ComponentEnable.h"
 #include "Logger.h"
 #include <chrono>
 #include "PhysicsComponent.h"
@@ -33,9 +34,10 @@ static mat3 GetPhysicsMatrix2D(const mat4& world)
 
 static bool TryBuildPhysicsShape(const entt::registry& world, entt::entity entity, PhysicsShape2D& result)
 {
-    const auto& collider = world.get<Collider2DComponent>(entity);
-    if (!collider.GetSettings().Enabled)
+    const auto* activeCollider = TryGetEnabledComponent<Collider2DComponent>(world, entity);
+    if (!activeCollider || !activeCollider->GetSettings().Enabled)
         return false;
+    const auto& collider = *activeCollider;
 
     const auto* hierarchy = world.try_get<HierarchyComponent>(entity);
     if (hierarchy && hierarchy->parent != entt::null)
@@ -168,8 +170,8 @@ static bool IntersectsPhysicsShapes2D(const entt::registry& world, entt::entity 
 
 static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity)
 {
-    auto* bodyA = world.try_get<RigidBody2DComponent>(entityA);
-    auto* bodyB = world.try_get<RigidBody2DComponent>(entityB);
+    auto* bodyA = TryGetEnabledComponent<RigidBody2DComponent>(world, entityA);
+    auto* bodyB = TryGetEnabledComponent<RigidBody2DComponent>(world, entityB);
 
     const auto tryGetInverseMass = [](const RigidBody2DComponent* body, double& inverseMass)
         {
@@ -309,8 +311,8 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
 
 static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity)
 {
-    auto* bodyA = world.try_get<RigidBodyComponent>(entityA);
-    auto* bodyB = world.try_get<RigidBodyComponent>(entityB);
+    auto* bodyA = TryGetEnabledComponent<RigidBodyComponent>(world, entityA);
+    auto* bodyB = TryGetEnabledComponent<RigidBodyComponent>(world, entityB);
 
     const auto tryGetInverseMass3D = [](const RigidBodyComponent* body, double& inverseMass)
     {
@@ -356,8 +358,8 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
     glm::dvec3 velocityB = getContactVelocity3D(bodyB);
     const double normalSpeed = glm::dot(velocityA - velocityB, normal);
 
-    const auto* colA = world.try_get<ColliderComponent>(entityA);
-    const auto* colB = world.try_get<ColliderComponent>(entityB);
+    const auto* colA = TryGetEnabledComponent<ColliderComponent>(world, entityA);
+    const auto* colB = TryGetEnabledComponent<ColliderComponent>(world, entityB);
     const f32 restA = colA ? colA->GetSettings().Restitution : 0.0f;
     const f32 restB = colB ? colB->GetSettings().Restitution : 0.0f;
     const f32 fricA = colA ? colA->GetSettings().Friction : 0.5f;
@@ -447,11 +449,11 @@ static void ResolveJoints2D(entt::registry& world, f32 dt)
     for (auto entityA : view)
     {
         const auto& joint = view.get<Joint2DComponent>(entityA);
-        if (!joint.Enabled || joint.RestLength < 0.0f) continue;
+        if (!IsComponentEnabled(world, entityA, joint) || joint.RestLength < 0.0f) continue;
 
-        auto* bodyA = world.try_get<RigidBody2DComponent>(entityA);
+        auto* bodyA = TryGetEnabledComponent<RigidBody2DComponent>(world, entityA);
         const auto connectedEntity = joint.ConnectedEntity;
-        auto* bodyB = (connectedEntity != entt::null && world.valid(connectedEntity)) ? world.try_get<RigidBody2DComponent>(connectedEntity) : nullptr;
+        auto* bodyB = (connectedEntity != entt::null && world.valid(connectedEntity)) ? TryGetEnabledComponent<RigidBody2DComponent>(world, connectedEntity) : nullptr;
 
         const f32 invMassA = (bodyA && bodyA->BodyType == ERigidBodyType::Dynamic && bodyA->Mass > 0.0f) ? (1.0f / bodyA->Mass) : 0.0f;
         const f32 invMassB = (bodyB && bodyB->BodyType == ERigidBodyType::Dynamic && bodyB->Mass > 0.0f) ? (1.0f / bodyB->Mass) : 0.0f;
@@ -515,11 +517,11 @@ static void ResolveJoints3D(entt::registry& world, f32 dt)
     for (auto entityA : view)
     {
         const auto& joint = view.get<JointComponent>(entityA);
-        if (!joint.Enabled || joint.RestLength < 0.0f) continue;
+        if (!IsComponentEnabled(world, entityA, joint) || joint.RestLength < 0.0f) continue;
 
-        auto* bodyA = world.try_get<RigidBodyComponent>(entityA);
+        auto* bodyA = TryGetEnabledComponent<RigidBodyComponent>(world, entityA);
         const auto connectedEntity = joint.ConnectedEntity;
-        auto* bodyB = (connectedEntity != entt::null && world.valid(connectedEntity)) ? world.try_get<RigidBodyComponent>(connectedEntity) : nullptr;
+        auto* bodyB = (connectedEntity != entt::null && world.valid(connectedEntity)) ? TryGetEnabledComponent<RigidBodyComponent>(world, connectedEntity) : nullptr;
 
         const f32 invMassA = (bodyA && bodyA->BodyType == ERigidBodyType::Dynamic && bodyA->Mass > 0.0f) ? (1.0f / bodyA->Mass) : 0.0f;
         const f32 invMassB = (bodyB && bodyB->BodyType == ERigidBodyType::Dynamic && bodyB->Mass > 0.0f) ? (1.0f / bodyB->Mass) : 0.0f;
@@ -719,6 +721,7 @@ static void CollectPhysicsTriggerEvents3D(Scene& scene)
 
     for (auto entity : colliders)
     {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
         const auto& col = colliders.get<ColliderComponent>(entity);
         const auto& settings = col.GetSettings();
         if (!settings.Enabled) continue;
@@ -762,6 +765,7 @@ static void CollectPhysicsTriggerEvents3D(Scene& scene)
         auto kccView = world.view<CharacterControllerComponent, WorldTransformComponent>();
         for (auto kccEntity : kccView)
         {
+            if (!IsComponentEnabled<CharacterControllerComponent>(world, kccEntity)) continue;
             const auto& kcc = kccView.get<CharacterControllerComponent>(kccEntity);
             const auto& kccTr = kccView.get<WorldTransformComponent>(kccEntity);
             const BoundingBox kccAABB = kcc.GetWorldAABB(vec3(kccTr.worldMatrix[3]));
@@ -859,6 +863,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
 
         for (auto entity : view)
         {
+            if (!IsComponentEnabled<RigidBody2DComponent>(world, entity)) continue;
             auto& body = view.get<RigidBody2DComponent>(entity);
             auto& transform = view.get<TransformComponent>(entity);
 
@@ -936,7 +941,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                 if (body.InverseInertia <= 0.f && body.Mass > 0.f)
                 {
                     f32 width = 1.0f, height = 1.0f;
-                    if (const auto* col2D = world.try_get<Collider2DComponent>(entity))
+                    if (const auto* col2D = TryGetEnabledComponent<Collider2DComponent>(world, entity))
                     {
                         if (const auto* b2D = std::get_if<Box2DShape>(&col2D->GetShape()))
                         {
@@ -978,6 +983,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
 
         for (auto entity : view3D)
         {
+            if (!IsComponentEnabled<RigidBodyComponent>(world, entity)) continue;
             auto& body = view3D.get<RigidBodyComponent>(entity);
             auto& transform = view3D.get<TransformComponent>(entity);
 
@@ -1082,6 +1088,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
         std::vector<ColliderProxy3D> proxies3D;
         for (auto entity : colliders3D)
         {
+            if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
             const auto& col = colliders3D.get<ColliderComponent>(entity);
             const auto& settings = col.GetSettings();
             if (!settings.Enabled || settings.IsTrigger) continue;
@@ -1091,7 +1098,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
             BoundingBox aabb{};
             if (!ComputeColliderWorldAABB3D(col, worldTr.worldMatrix, aabb)) continue;
 
-            const auto* body = world.try_get<RigidBodyComponent>(entity);
+            const auto* body = TryGetEnabledComponent<RigidBodyComponent>(world, entity);
             const bool isDyn = body && body->BodyType == ERigidBodyType::Dynamic;
             const bool isBox = std::holds_alternative<BoxShape>(col.GetShape());
 
@@ -1339,6 +1346,7 @@ bool PhysicsSystem::Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit&
     auto view = world.view<ColliderComponent, WorldTransformComponent>();
     for (auto entity : view)
     {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
         const auto& collider = view.get<ColliderComponent>(entity);
         if (!PassRaycastFilter(world, entity, collider.GetSettings(), query)) continue;
         const auto& worldTransform = view.get<WorldTransformComponent>(entity);
@@ -1357,6 +1365,7 @@ bool PhysicsSystem::Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit&
     auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
     for (auto entity : terrainView)
     {
+        if (!IsComponentEnabled<TerrainComponent>(world, entity)) continue;
         if (entity == query.ignoreEntity) continue;
         const auto* flag = world.try_get<FlagComponent>(entity);
         if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
@@ -1395,6 +1404,7 @@ std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const
     auto view = world.view<ColliderComponent, WorldTransformComponent>();
     for (auto entity : view)
     {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
         const auto& collider = view.get<ColliderComponent>(entity);
         if (!PassRaycastFilter(world, entity, collider.GetSettings(), query)) continue;
         const auto& worldTransform = view.get<WorldTransformComponent>(entity);
@@ -1409,6 +1419,7 @@ std::vector<SceneRaycastHit> PhysicsSystem::RaycastAll(const Scene& scene, const
     auto terrainView = world.view<TerrainComponent, WorldTransformComponent>();
     for (auto entity : terrainView)
     {
+        if (!IsComponentEnabled<TerrainComponent>(world, entity)) continue;
         if (entity == query.ignoreEntity) continue;
         const auto* flag = world.try_get<FlagComponent>(entity);
         if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
@@ -1457,10 +1468,10 @@ bool PhysicsSystem::Overlap3D(const Scene& scene, entt::entity entityA, entt::en
     const auto& trA = world.get<WorldTransformComponent>(entityA);
     const auto& trB = world.get<WorldTransformComponent>(entityB);
 
-    const auto* kccA = world.try_get<CharacterControllerComponent>(entityA);
-    const auto* kccB = world.try_get<CharacterControllerComponent>(entityB);
-    const auto* colA = world.try_get<ColliderComponent>(entityA);
-    const auto* colB = world.try_get<ColliderComponent>(entityB);
+    const auto* kccA = TryGetEnabledComponent<CharacterControllerComponent>(world, entityA);
+    const auto* kccB = TryGetEnabledComponent<CharacterControllerComponent>(world, entityB);
+    const auto* colA = TryGetEnabledComponent<ColliderComponent>(world, entityA);
+    const auto* colB = TryGetEnabledComponent<ColliderComponent>(world, entityB);
 
     // KCC vs KCC
     if (kccA && kccB)
@@ -1590,14 +1601,14 @@ void PhysicsSystem::DispatchTriggerEvents(Scene& scene, const std::vector<Trigge
         const auto invoke = [&](entt::entity self, entt::entity other) {
             if (!world.valid(self)) return;
             // 1. C++ TriggerCallbackComponent 델리게이트 호출
-            if (auto* cb = world.try_get<TriggerCallbackComponent>(self))
+            if (auto* cb = TryGetEnabledComponent<TriggerCallbackComponent>(world, self))
             {
                 if (event.type == ETriggerEventType::Enter && cb->OnEnter) cb->OnEnter(self, other, event.type);
                 else if (event.type == ETriggerEventType::Stay && cb->OnStay) cb->OnStay(self, other, event.type);
                 else if (event.type == ETriggerEventType::Exit && cb->OnExit) cb->OnExit(self, other, event.type);
             }
             // 2. 유니티 스타일 NativeScriptComponent 가상 함수 호출
-            if (auto* ns = world.try_get<NativeScriptComponent>(self))
+            if (auto* ns = TryGetEnabledComponent<NativeScriptComponent>(world, self))
             {
                 if (!ns->Instance && ns->InstantiateScript)
                 {

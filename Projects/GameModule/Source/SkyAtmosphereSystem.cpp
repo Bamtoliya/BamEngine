@@ -1,4 +1,5 @@
 ﻿#include "SkyAtmosphereSystem.h"
+#include "ComponentEnable.h"
 #include "SkyAtmosphereComponent.h"
 #include "LightComponent.h"
 #include "WorldComponents.h"
@@ -77,7 +78,7 @@ void SkyAtmosphereSystem::OnUpdate(entt::registry& globalRegistry, const std::ve
 		auto skyView = registry.view<Engine::SkyAtmosphereComponent>();
 		for (auto [e, sky] : skyView.each())
 		{
-			if (!sky.IsEnabled) continue;
+			if (!Engine::IsComponentEnabled(registry, e, sky)) continue;
 
 			// 1. 시간 시뮬레이션
 			if (sky.EnableTimeProgression && sky.DayCycleDuration > 0.1f)
@@ -97,7 +98,7 @@ void SkyAtmosphereSystem::OnUpdate(entt::registry& globalRegistry, const std::ve
 				auto lightView = registry.view<Engine::LightComponent, Engine::TransformComponent>();
 				for (auto [le, light, tr] : lightView.each())
 				{
-					if (light.IsEnabled && light.LightType == Engine::ELightType::Directional)
+					if (Engine::IsComponentEnabled(registry, le, light) && light.LightType == Engine::ELightType::Directional)
 					{
 						vec3 forward = -toSun;
 						f32 pitch = glm::degrees(std::asin(-forward.y));

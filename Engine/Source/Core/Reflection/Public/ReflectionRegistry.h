@@ -2,6 +2,7 @@
 
 #include "Types.h"
 #include "Base.h"
+#include "ComponentEnable.h"
 #include <reflection/Registry.h>
 #include <reflection_archive/PropertyArchiveCodecs.h>
 #include <entt/entity/registry.hpp>
@@ -40,6 +41,12 @@ struct ComponentReflectionEntry
     ReadFunc Read = nullptr;
     bool (*Copy)(const entt::registry&, entt::entity, entt::registry&, entt::entity) = nullptr;
     void (*Remove)(entt::registry&, entt::entity) = nullptr;
+    void (*SetEnabledState)(entt::registry&, entt::entity, bool) = nullptr;
+
+    [[nodiscard]] ENGINE_API const reflection::PropertyInfo* FindEnableProperty() const;
+    [[nodiscard]] ENGINE_API bool CanDisable() const;
+    [[nodiscard]] ENGINE_API bool IsEnabled(const entt::registry& world, entt::entity entity) const;
+    ENGINE_API bool SetEnabled(entt::registry& world, entt::entity entity, bool enabled) const;
 
     ENGINE_API void EnsureDependencies(entt::registry& world, entt::entity entity) const;
 
@@ -116,11 +123,13 @@ namespace detail
                 return reflection::ObjectView::From(s_Default);
                 };
         }
+        entry.SetEnabledState = &SetComponentEnabled<T>;
         entry.Copy = [](const entt::registry& source, entt::entity from, entt::registry& target, entt::entity to) {
             if constexpr (std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>) {
                 if (!source.valid(from) || !target.valid(to) || !source.all_of<T>(from)) return false;
                 if constexpr (entt::component_traits<T>::page_size == 0) target.emplace_or_replace<T>(to);
                 else target.emplace_or_replace<T>(to, source.get<T>(from));
+                SetComponentEnabled<T>(target, to, IsComponentEnabled(source, from, entt::type_hash<T>::value()));
                 return true;
             }
             return false;

@@ -32,6 +32,12 @@
 
 namespace
 {
+    bool IsPrefabThumbnail(std::string_view filename)
+    {
+        return filename.ends_with(".bamprefab") || filename.ends_with(".prefab") ||
+            filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
+    }
+
     std::string ThumbnailCacheKey(const filesystem::path& path)
     {
         if (path.empty()) return {};
@@ -390,8 +396,7 @@ AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheK
     const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
     const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json") || isRawModel;
     const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
-    const bool isPrefab = ext == ".bamprefab" || ext == ".prefab" ||
-        filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
+    const bool isPrefab = IsPrefabThumbnail(filename);
     const bool isTextureOrSprite = ext == ".bamtex" || ext == ".bamsprite" ||
         filename.ends_with(".bamtex.json") || filename.ends_with(".bamsprite.json");
 
@@ -601,9 +606,14 @@ std::filesystem::path AssetCache::CalculateDiskCachePath(const std::filesystem::
     const auto relPath = Engine::PlatformPath::ToProjectRelative(fullPath);
     const auto timePoint = lastWrite.time_since_epoch().count();
 
+    auto filename = Engine::WStrToStr(fullPath.filename().wstring());
+    for (char& ch : filename)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    const char* cacheVersion = IsPrefabThumbnail(filename) ? "_v3" : "_v2";
+
     // 고유 캐시 키 문자열: 상대경로 + 파일크기 + 수정시각 + 포맷버전
     const std::string seed = Engine::WStrToStr(relPath.generic_wstring()) + "_" +
-        std::to_string(fileSize) + "_" + std::to_string(timePoint) + "_v2";
+        std::to_string(fileSize) + "_" + std::to_string(timePoint) + cacheVersion;
 
     // 64비트 FNV-1a 해시 생성
     uint64_t hash = 14695981039346656037ull;
@@ -1250,8 +1260,7 @@ void AssetCache::ProcessPending3DThumbnail()
         const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
         const bool isModel = ext == ".bammodel" || filename.ends_with(".bammodel.json") || isRawModel;
         const bool isMesh = ext == ".bammesh" || filename.ends_with(".bammesh.json");
-        const bool isPrefab = ext == ".bamprefab" || ext == ".prefab" ||
-            filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
+        const bool isPrefab = IsPrefabThumbnail(filename);
         const bool isTex = ext == ".bamtex" || filename.ends_with(".bamtex.json");
         const bool isSprite = ext == ".bamsprite" || filename.ends_with(".bamsprite.json");
 

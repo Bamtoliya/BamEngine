@@ -1,4 +1,5 @@
 ﻿#include "LightSystem.h"
+#include "ComponentEnable.h"
 #include "LightComponent.h"
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
@@ -102,7 +103,7 @@ void LightSystem::UpdateLights(entt::registry& registry)
 		auto& light = view.get<LightComponent>(entity);
 		light.InvalidateCache();
 
-		if (!light.IsEnabled)
+		if (!IsComponentEnabled(registry, entity, light))
 			continue;
 
 		if (const auto* flag = registry.try_get<FlagComponent>(entity))

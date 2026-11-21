@@ -29,8 +29,9 @@ namespace Engine
     {
         REFLECT_BODY()
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
         bool IsEnabled = true;
+        static constexpr auto ComponentEnableMember = &FogComponent::IsEnabled;
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FOG_TYPE"))
         EFogType FogType = EFogType::ExponentialHeight;

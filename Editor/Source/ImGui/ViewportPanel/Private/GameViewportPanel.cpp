@@ -2,6 +2,7 @@
 #include "SceneManager.h"
 #include "Scene.h"
 #include "CameraComponent.h"
+#include "ComponentEnable.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
@@ -227,6 +228,7 @@ std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 
 		for (const auto entity : view)
 		{
+			if (!Engine::IsComponentEnabled<Engine::CameraComponent>(registry, entity)) continue;
 			auto& camera = view.get<Engine::CameraComponent>(entity);
 			if (camera.IsMainCamera != requireMainCamera)
 				continue;
@@ -245,7 +247,7 @@ std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 				continue;
 			}
 
-			const auto* pixelPerfect = registry.try_get<Engine::PixelPerfectCameraComponent>(entity);
+			const auto* pixelPerfect = Engine::TryGetEnabledComponent<Engine::PixelPerfectCameraComponent>(registry, entity);
 			m_UsePixelPerfectView = camera.CameraType == Engine::ECameraType::Orthographic &&
 				pixelPerfect && pixelPerfect->assetsPPU > 0.0f;
 

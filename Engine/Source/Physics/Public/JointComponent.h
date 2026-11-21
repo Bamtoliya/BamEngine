@@ -13,8 +13,9 @@ namespace Engine
     struct JointComponent
     {
         REFLECT_BODY()
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLED"), META("ComponentEnable", true))
         bool Enabled = true;
+        static constexpr auto ComponentEnableMember = &JointComponent::Enabled;
         // Raw entity references require a scene reference codec; serialization must fail until then.
         PROPERTY(READONLY, DISPLAY_NAME("PROP_CONNECTED_ENTITY"))
         entt::entity ConnectedEntity = entt::null;

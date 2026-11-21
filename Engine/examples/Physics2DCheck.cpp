@@ -1,6 +1,7 @@
 ﻿#include "PhysicsSystem.h"
 #include "Scene.h"
 #include "PhysicsComponent.h"
+#include "ComponentEnable.h"
 #include "TransformComponent.h"
 #include "Collision.h"
 #include "SystemManager.h"
@@ -210,6 +211,13 @@ namespace
             HitResult hit{};
             if (!QueryOverlap2D(*triggerEntity, *dynamicEntity, hit) || !hit.hasHit)
                 return Fail("Trigger overlap was not detected.");
+
+            Engine::detail::SetComponentEnabled<Collider2DComponent>(world, trigger, false);
+            if (QueryOverlap2D(*triggerEntity, *dynamicEntity, hit) || hit.hasHit)
+                return Fail("Overlap used a collider with its component disabled.");
+            Engine::detail::SetComponentEnabled<Collider2DComponent>(world, trigger, true);
+            if (!QueryOverlap2D(*triggerEntity, *dynamicEntity, hit))
+                return Fail("Re-enabled collider did not regain overlap participation.");
 
             HitResult reversed{};
             if (!QueryOverlap2D(*dynamicEntity, *triggerEntity, reversed) ||

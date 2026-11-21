@@ -291,6 +291,35 @@ int main()
             return Fail("Non-raycast image with a high Z-index did not pass input through.");
     }
 
+    {
+        Fixture nested;
+        auto& registry = nested.scene->GetRegistry();
+        const auto child = nested.Add(nested.button, true);
+        const auto* buttonEntry = ReflectionRegistry::Get().FindComponent(typeid(UIButtonComponent));
+        if (!buttonEntry || !buttonEntry->SetEnabled(registry, child, false))
+            return Fail("Could not disable the nested button component.");
+        std::vector<UIPointerEvent> clicks;
+        UIEventSystem nestedSystem(*nested.scene, nested.canvas);
+        nestedSystem.OnPointerEvent().AddLambda([&](const auto& event)
+        {
+            if (event.type == Type::Click) clicks.push_back(event);
+        });
+        const auto click = [&]
+        {
+            clicks.clear();
+            Feed(nestedSystem, inside);
+            Feed(nestedSystem, inside, true, true);
+            Feed(nestedSystem, inside, false, false, true);
+        };
+        click();
+        if (clicks.size() != 1 || clicks.front().target != nested.button)
+            return Fail("Disabled nested button prevented its enabled ancestor from receiving the click.");
+        if (!buttonEntry->SetEnabled(registry, child, true)) return Fail("Could not re-enable the nested button.");
+        click();
+        if (clicks.size() != 1 || clicks.front().target != child)
+            return Fail("Re-enabled nested button did not regain input.");
+    }
+
     // The publisher must tolerate subscription changes and retain mutable callback state.
     MulticastDelegate<> signal;
     std::vector<int> calls;

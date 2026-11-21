@@ -1,4 +1,5 @@
 #include "UIRenderSystem.h"
+#include "ComponentEnable.h"
 #include "UILayout.h"
 #include "UIEventSystem.h"
 #include "Renderer.h"
@@ -51,7 +52,8 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
             auto& world = scene->GetRegistry();
             std::vector<entt::entity> canvases;
             for (const auto root : world.view<CanvasComponent, IDComponent>())
-                if (!viewport.filterUICanvas || root == viewport.uiCanvas) canvases.push_back(root);
+                if (IsComponentEnabled<CanvasComponent>(world, root) &&
+                    (!viewport.filterUICanvas || root == viewport.uiCanvas)) canvases.push_back(root);
             std::sort(canvases.begin(), canvases.end(), [&](auto left, auto right)
             {
                 const auto leftOrder = UILayout::GetZIndex(world, left);
@@ -66,7 +68,7 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                 const auto canvasSize = world.get<CanvasComponent>(root).referenceResolution;
                 for (const auto& layout : layouts)
                 {
-                    const auto* image = world.try_get<UIImageComponent>(layout.entity);
+                    const auto* image = TryGetEnabledComponent<UIImageComponent>(world, layout.entity);
                     if (!layout.visible || !image || !UILayout::IsValid(*image) || image->color.a <= 0.0f) continue;
 
                     // UI 패스 전용 머티리얼 결정: 비어있거나 3D용 머티리얼(SpriteMaterial 등)이 지정된 경우 기본 UIMaterial로 안전 폴백

@@ -1,4 +1,5 @@
 ﻿#include "AudioSystem.h"
+#include "ComponentEnable.h"
 #include "AudioManager.h"
 #include "AudioComponents.h"
 #include "TransformComponent.h"
@@ -29,35 +30,41 @@ void AudioSystem::Free()
 
 void AudioSystem::OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt)
 {
-	UpdateListeners(globalRegistry);
-	UpdateSources(globalRegistry);
+	FMOD::System* fmodSystem = AudioManager::Get().GetFMODSystem();
+	if (!fmodSystem) return;
 
+	bool hasListener = UpdateListener(globalRegistry);
 	for (Scene* scene : activeScenes)
 	{
-		if (scene != nullptr)
-		{
-			UpdateListeners(scene->GetRegistry());
-			UpdateSources(scene->GetRegistry());
-		}
+		if (scene && UpdateListener(scene->GetRegistry())) hasListener = true;
+	}
+
+	if (!hasListener && m_HadActiveListener)
+	{
+		const FMOD_VECTOR zero{ 0.f, 0.f, 0.f };
+		const FMOD_VECTOR forward{ 0.f, 0.f, 1.f };
+		const FMOD_VECTOR up{ 0.f, 1.f, 0.f };
+		fmodSystem->set3DListenerAttributes(0, &zero, &zero, &forward, &up);
+		m_LastListenerPosition = vec3(0.f);
+	}
+	m_HadActiveListener = hasListener;
+
+	UpdateSources(globalRegistry);
+	for (Scene* scene : activeScenes)
+	{
+		if (scene) UpdateSources(scene->GetRegistry());
 	}
 }
 
-namespace
-{
-	vec3 g_LastListenerPos{ 0.f };
-	bool g_HasActiveListener = false;
-}
-
-void AudioSystem::UpdateListeners(entt::registry& registry)
+bool AudioSystem::UpdateListener(entt::registry& registry)
 {
 	FMOD::System* fmodSystem = AudioManager::Get().GetFMODSystem();
-	if (!fmodSystem) return;
+	if (!fmodSystem) return false;
 
 	auto view = registry.view<AudioListenerComponent>();
 	for (auto entity : view)
 	{
-		const auto& listener = view.get<AudioListenerComponent>(entity);
-		if (!listener.isActive) continue;
+		if (!IsComponentEnabled<AudioListenerComponent>(registry, entity)) continue;
 
 		vec3 pos(0.f);
 		vec3 forward(0.f, 0.f, 1.f);
@@ -81,10 +88,10 @@ void AudioSystem::UpdateListeners(entt::registry& registry)
 		FMOD_VECTOR fUp = { up.x, up.y, up.z };
 
 		fmodSystem->set3DListenerAttributes(0, &fPos, &fVel, &fFwd, &fUp);
-		g_LastListenerPos = pos;
-		g_HasActiveListener = true;
-		break;
+		m_LastListenerPosition = pos;
+		return true;
 	}
+	return false;
 }
 
 void AudioSystem::UpdateSources(entt::registry& registry)
@@ -96,6 +103,13 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 	for (auto entity : view)
 	{
 		auto& source = view.get<AudioSourceComponent>(entity);
+		if (!IsComponentEnabled<AudioSourceComponent>(registry, entity))
+		{
+			source.StopImmediate();
+			source.m_PauseRequested = false;
+			source.m_ResumeRequested = false;
+			continue;
+		}
 
 		vec3 pos(0.f);
 		if (const auto* worldTransform = registry.try_get<WorldTransformComponent>(entity))
@@ -177,9 +191,9 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 						source.m_Channel->setPaused(false);
 						source.m_IsPlaying = true;
 
-						f32 dist = glm::distance(pos, g_LastListenerPos);
+						f32 dist = glm::distance(pos, m_LastListenerPosition);
 						BAM_LOG(Info, "Engine","AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
-							g_LastListenerPos.x, g_LastListenerPos.y, g_LastListenerPos.z, pos.x, pos.y, pos.z, dist, source.maxDistance);
+							m_LastListenerPosition.x, m_LastListenerPosition.y, m_LastListenerPosition.z, pos.x, pos.y, pos.z, dist, source.maxDistance);
 					}
 					else
 					{

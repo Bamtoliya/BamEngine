@@ -11,6 +11,7 @@
 #include "ActionTimelineEvents.h"
 #include "ActionTimelineComponent.h"
 #include "AnimatorComponent.h"
+#include "ComponentEnable.h"
 #include "CharacterControllerComponent.h"
 #include "CompositeVFXComponent.h"
 #include "FlagComponent.h"
@@ -49,6 +50,8 @@ public:
 			auto view = world.view<Engine::AnimatorComponent, Engine::CharacterControllerComponent, Engine::WorldTransformComponent>();
 			for (auto entity : view)
 			{
+				if (!Engine::IsComponentEnabled<Engine::AnimatorComponent, Engine::CharacterControllerComponent>(world, entity))
+					continue;
 				auto& animator = view.get<Engine::AnimatorComponent>(entity);
 				if (animator.controllerPath != "Project://Data/Animation/BaselineVerification_Simple.animator" ||
 					!animator.isPlaying || animator.timelineOverrideOwner != entt::null)

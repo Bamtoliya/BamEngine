@@ -1,4 +1,5 @@
 ﻿#include "ParticleSystem.h"
+#include "ComponentEnable.h"
 #include "ParticleEmitterComponent.h"
 #include "ParticleEffectComponent.h"
 #include "CompositeVFXComponent.h"
@@ -134,6 +135,7 @@ void Engine::ParticleSystem::SimulateSceneParticles(Scene* scene, f32 dt)
 	auto view = scene->GetRegistry().view<ParticleEmitterComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, emitter, transform, flag] : view.each())
 	{
+		if (!IsComponentEnabled<ParticleEmitterComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		emitter.ClearEvents();
 		// 최초 1회 예열(Warmup) 시뮬레이션
@@ -152,6 +154,7 @@ void Engine::ParticleSystem::SimulateSceneParticles(Scene* scene, f32 dt)
 	auto effectView = scene->GetRegistry().view<ParticleEffectComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, effectComp, transform, flag] : effectView.each())
 	{
+		if (!IsComponentEnabled<ParticleEffectComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		UpdateEffectComponent(scene, effectComp, transform, dt);
 	}
@@ -777,6 +780,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 	auto view = scene->GetRegistry().view<ParticleEmitterComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, emitter, transform, flag] : view.each())
 	{
+		if (!IsComponentEnabled<ParticleEmitterComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		if (emitter.particles.empty()) continue;
 
@@ -788,7 +792,7 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
 		if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None) continue;
 
-		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<ParticleEmitterComponent>(scene, entity);
 		const bool isWorldSpace = (emitter.simulationSpace == EParticleSimulationSpace::World);
 
 		for (const auto& p : emitter.particles)
@@ -851,12 +855,13 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 	auto effectView = scene->GetRegistry().view<ParticleEffectComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, effectComp, transform, flag] : effectView.each())
 	{
+		if (!IsComponentEnabled<ParticleEffectComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		ParticleEffect* effect = effectComp.effectHandle.Get();
 		if (!effect) continue;
 
 		const auto& emitters = effect->GetEmitters();
-		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<ParticleEffectComponent>(scene, entity);
 
 		for (size_t eIdx = 0; eIdx < emitters.size() && eIdx < effectComp.instances.size(); ++eIdx)
 		{
@@ -947,12 +952,13 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 	auto vfxView = scene->GetRegistry().view<CompositeVFXComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, vfxComp, transform, flag] : vfxView.each())
 	{
+		if (!IsComponentEnabled<CompositeVFXComponent>(scene->GetRegistry(), entity)) continue;
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		CompositeEffect* effect = vfxComp.effectHandle.Get();
 		if (!effect) continue;
 
 		const auto& pTracks = effect->GetParticleTracks();
-		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity(scene, entity);
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<CompositeVFXComponent>(scene, entity);
 
 		for (size_t tIdx = 0; tIdx < pTracks.size() && tIdx < vfxComp.particleRuntimes.size(); ++tIdx)
 		{
