@@ -168,11 +168,12 @@ namespace Editor
 
         try
         {
-            m_WorkerThread = std::thread([this, projectRoot, package = std::move(package)]() mutable {
+            auto input = package ? PrepareClientPackageInput(projectRoot, *package) : ClientPackageInput{};
+            m_WorkerThread = std::thread([this, projectRoot, package = std::move(package), input = std::move(input)] {
                 Result res;
                 try
                 {
-                    res = Build(projectRoot, package, [this](std::string_view text) { AppendOutput(text); });
+                    res = Build(projectRoot, package, input, [this](std::string_view text) { AppendOutput(text); });
                 }
                 catch (const std::exception& error)
                 {
@@ -206,6 +207,9 @@ namespace Editor
 
     void ClientBuildJob::Update()
     {
+        if (m_Status != Status::Running)
+            return;
+
         {
             std::lock_guard lock(m_OutputMutex);
             if (m_Output.size() != m_LiveOutput.size())
@@ -238,7 +242,7 @@ namespace Editor
     }
 
     ClientBuildJob::Result ClientBuildJob::Build(const std::filesystem::path& projectRoot,
-        const std::optional<ClientPackageRequest>& package, OutputCallback onOutput)
+        const std::optional<ClientPackageRequest>& package, const ClientPackageInput& input, OutputCallback onOutput)
     {
         struct SdlTlsCleanup
         {
@@ -309,7 +313,7 @@ namespace Editor
             if (onOutput) onOutput("\n[Package export]\n");
             try
             {
-                ExportClientPackage(projectRoot, binDirectory, *package, onOutput);
+                ExportClientPackage(projectRoot, binDirectory, *package, input, onOutput);
                 result.ExportedDirectory = package->Destination.Directory;
             }
             catch (const std::exception& error)

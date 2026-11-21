@@ -12,6 +12,8 @@
 
 namespace Editor
 {
+    struct ClientPackageInput;
+
     struct ClientPackageIdentity
     {
         std::uint32_t Volume = 0;
@@ -70,7 +72,7 @@ namespace Editor
         };
 
         static Result Build(const std::filesystem::path& projectRoot,
-            const std::optional<ClientPackageRequest>& package, OutputCallback onOutput);
+            const std::optional<ClientPackageRequest>& package, const ClientPackageInput& input, OutputCallback onOutput);
         void AppendOutput(std::string_view text);
 
         Status m_Status = Status::Idle;

@@ -6,12 +6,17 @@
 #include "DeferredProfilePasses.h"
 #include "DeferredProfileShaders.h"
 #include "Functions.h"
+#include "InputActionSettings.h"
+#include "InputManager.h"
 #include "PlatformPath.h"
+#include "ReflectionRegistry.h"
 #include "Renderer.h"
 #include "StartupResourceLoader.h"
 
+#include <archive/JsonArchive.h>
 #include <fmt/format.h>
 #include <glaze/glaze.hpp>
+#include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <windows.h>
 #include <algorithm>
 #include <chrono>
@@ -32,6 +37,7 @@ namespace
 {
     namespace fs = std::filesystem;
     using Path = Engine::PlatformPath;
+    using PackageJson = glz::generic_u64;
 
     constexpr const wchar_t* RuntimeBinaries[] = {
         L"Client.exe", L"Engine.dll", L"GameModule.dll", L"GameplayScore.dll", L"SDL3.dll", L"fmod.dll",
@@ -361,19 +367,22 @@ namespace
         std::vector<fs::path> Files;
     };
 
-    std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
-        const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName,
-        PackageProfile& packageProfile, PackageStartupPipeline& startupPipeline)
+    std::string ReadPackageConfigFile(const fs::path& source)
     {
         std::ifstream input(source, std::ios::binary);
         if (!input)
-            throw std::runtime_error("Could not read project settings: " + DisplayPath(source));
+            throw std::runtime_error("Could not read package settings file: " + DisplayPath(source));
+        input.exceptions(std::ios::badbit);
+        return { std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+    }
 
-        std::string text{ std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>() };
+    PackageJson ReadPackageProjectSettings(const fs::path& source)
+    {
+        auto text = ReadPackageConfigFile(source);
         if (text.starts_with("\xef\xbb\xbf"))
             text.erase(0, 3);
 
-        glz::generic_u64 config;
+        PackageJson config;
         if (glz::validate_json(text) || glz::read_json(config, text) || !config.is_object())
             throw std::runtime_error("Invalid project settings: " + DisplayPath(source));
 
@@ -387,6 +396,62 @@ namespace
         if (!schema || *schema == 0 || *schema > Engine::ProjectSettings::CurrentSchemaVersion)
             throw std::runtime_error("Unsupported project settings schema: " + DisplayPath(source));
 
+        return config;
+    }
+
+    std::vector<std::string> ReadRequiredGameplayActions(const fs::path& projectSettings, const fs::path& startupScene)
+    {
+        const auto config = ReadPackageProjectSettings(projectSettings);
+        const auto& values = config.get_object().at("Settings").get_object();
+        const auto requiredEntry = values.find("RequiredGameplayActions");
+        if (requiredEntry == values.end())
+            return {};
+        const auto* required = requiredEntry->second.get_if<PackageJson::array_t>();
+        if (!required)
+            throw std::runtime_error("RequiredGameplayActions must be an array: " + DisplayPath(projectSettings));
+        if (required->empty())
+            return {};
+
+        if (const auto entry = values.find("RequiredGameplayActionsScene"); entry != values.end())
+        {
+            const auto* scope = entry->second.get_if<std::string>();
+            if (!scope)
+                throw std::runtime_error("RequiredGameplayActionsScene must be a string: " + DisplayPath(projectSettings));
+            if (!scope->empty())
+            {
+                const auto scopePath = Engine::Utf8ToPath(*scope);
+                const bool projectUri = Path::IsProjectUri(*scope);
+                if (!projectUri && (scopePath.has_root_name() || scopePath.has_root_directory()))
+                    throw std::runtime_error("RequiredGameplayActionsScene must use a project URI or asset-relative path: " + *scope);
+                const auto assetRoot = fs::weakly_canonical(Path::GetProjectAssetRoot());
+                const auto scopedScene = fs::weakly_canonical(projectUri ? Path::ResolveUri(scopePath.wstring()) : assetRoot / scopePath);
+                if (!IsWithin(scopedScene, assetRoot) ||
+                    !Engine::ToLowerStr(DisplayPath(scopedScene.filename())).ends_with(".bamscene.json"))
+                    throw std::runtime_error("RequiredGameplayActionsScene must identify a project scene: " + *scope);
+                const auto canonicalScene = fs::weakly_canonical(startupScene);
+                if (CompareStringOrdinal(scopedScene.c_str(), -1, canonicalScene.c_str(), -1, TRUE) != CSTR_EQUAL)
+                    return {};
+            }
+        }
+
+        std::vector<std::string> actions;
+        actions.reserve(required->size());
+        for (const auto& entry : *required)
+        {
+            const auto* action = entry.get_if<std::string>();
+            if (!action || action->empty() || std::ranges::find(actions, *action) != actions.end())
+                throw std::runtime_error("RequiredGameplayActions must contain unique non-empty action IDs: " + DisplayPath(projectSettings));
+            actions.push_back(*action);
+        }
+        return actions;
+    }
+
+    std::string MakePackageSettings(const fs::path& source, const fs::path& startupSceneRelative,
+        const fs::path& assetRoot, const fs::path& engineRoot, std::string_view programName,
+        PackageProfile& packageProfile, PackageStartupPipeline& startupPipeline)
+    {
+        auto config = ReadPackageProjectSettings(source);
+        auto& values = config.get_object().at("Settings").get_object();
         Engine::ProjectSettings defaults;
         std::string startupManifestUri = defaults.StartupManifestPath;
         if (const auto entry = values.find("StartupManifestPath"); entry != values.end())
@@ -506,8 +571,42 @@ namespace Editor
         return { destination, ReadPackageIdentity(destination) };
     }
 
+    ClientPackageInput PrepareClientPackageInput(const fs::path& projectRoot, const ClientPackageRequest& request)
+    {
+        ClientPackageInput input;
+        input.RequiredActions = ReadRequiredGameplayActions(projectRoot / "Config" / "Project.json", request.StartupScene);
+        if (input.RequiredActions.empty())
+            return input;
+
+        const auto inputPath = projectRoot / "Config" / "InputActions.json";
+        if (!fs::is_regular_file(inputPath))
+            throw std::runtime_error("Required input settings file is missing: " + DisplayPath(inputPath));
+        input.Contents = ReadPackageConfigFile(inputPath);
+        Engine::InputActionSettings settings;
+        archive::JsonArchive archive;
+        const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+        const auto* type = registry.FindType<Engine::InputActionSettings>();
+        if (!archive.Parse(input.Contents) || !type ||
+            !archive_reflection::ReadObject(archive, "Settings", *type, settings, &registry) ||
+            !Engine::InputManager::ValidateInputActionSettings(settings))
+            throw std::runtime_error("Invalid package input settings: " + DisplayPath(inputPath));
+
+        const auto gameplay = std::ranges::find(settings.Maps, std::string_view{ "Gameplay" }, &Engine::InputActionMap::Id);
+        if (gameplay == settings.Maps.end())
+            throw std::runtime_error("Required input map 'Gameplay' is missing: " + DisplayPath(inputPath));
+
+        for (const auto& action : input.RequiredActions)
+        {
+            if (std::ranges::find(gameplay->Actions, action, &Engine::InputAction::Id) == gameplay->Actions.end())
+                throw std::runtime_error("Required input action 'Gameplay/" + action + "' is missing: " + DisplayPath(inputPath));
+            if (std::ranges::find(gameplay->Bindings, action, &Engine::InputBinding::ActionId) == gameplay->Bindings.end())
+                throw std::runtime_error("Required input action 'Gameplay/" + action + "' has no binding: " + DisplayPath(inputPath));
+        }
+        return input;
+    }
+
     void ExportClientPackage(const fs::path& projectRoot, const fs::path& binDirectory,
-        const ClientPackageRequest& request, const std::function<void(std::string_view)>& onOutput)
+        const ClientPackageRequest& request, const ClientPackageInput& input, const std::function<void(std::string_view)>& onOutput)
     {
         const auto emit = [&](std::string_view text) {
             if (onOutput) onOutput(text);
@@ -666,9 +765,26 @@ namespace Editor
         configFile << settings << '\n';
         configFile.close();
 
-        const auto inputActions = projectRoot / "Config" / "InputActions.json";
-        if (fs::is_regular_file(inputActions))
-            CopyPackageFile(inputActions, configDirectory / "InputActions.json");
+        if (ReadRequiredGameplayActions(configDirectory / "Project.json", scene) != input.RequiredActions)
+            throw std::runtime_error("Required gameplay actions changed during export. Start the export again.");
+
+        const auto stagedInput = configDirectory / "InputActions.json";
+        if (!input.RequiredActions.empty())
+        {
+            std::ofstream inputFile;
+            inputFile.exceptions(std::ios::failbit | std::ios::badbit);
+            inputFile.open(stagedInput, std::ios::binary);
+            inputFile << input.Contents;
+            inputFile.close();
+
+            if (ReadPackageConfigFile(stagedInput) != input.Contents)
+                throw std::runtime_error("Staged input settings differ from the validated input: " + DisplayPath(stagedInput));
+            emit("Verified required Gameplay actions in staged Config/InputActions.json.\n");
+        }
+        else if (const auto sourceInput = projectRoot / "Config" / "InputActions.json"; fs::is_regular_file(sourceInput))
+        {
+            CopyPackageFile(sourceInput, stagedInput);
+        }
 
         std::ofstream marker;
         marker.exceptions(std::ios::failbit | std::ios::badbit);

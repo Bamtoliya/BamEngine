@@ -240,7 +240,8 @@ EEditorSettingsSaveStatus EditorSettingsService::SaveProjectSettings(const Engin
     if (m_ProjectRoot.empty())
         return EEditorSettingsSaveStatus::Failed;
     const std::filesystem::path projectPath = m_ProjectRoot / "Config" / "Project.json";
-    const auto result = WriteEditorSettingsFile(settings, projectPath, m_SettingsRegistry, true, "ProjectSettings");
+    const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+    const auto result = WriteEditorSettingsFile(settings, projectPath, registry, true, "ProjectSettings");
     if (result == EEditorSettingsSaveStatus::Saved)
         m_ProjectSettings = settings;
     return result;

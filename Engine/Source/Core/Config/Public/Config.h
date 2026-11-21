@@ -3,6 +3,7 @@
 #include <reflection/Annotations.h>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace Engine
 {
@@ -31,6 +32,12 @@ namespace Engine
 
         PROPERTY(META("Optional", true))
         std::string StartupScenePath = "Scenes/RaytracingScene.bamscene.json";
+
+        PROPERTY(META("Optional", true))
+        std::string RequiredGameplayActionsScene;
+
+        PROPERTY(META("Optional", true))
+        std::vector<std::string> RequiredGameplayActions;
 
         PROPERTY(META("Optional", true))
         std::string RenderPipelineProfilePath;
