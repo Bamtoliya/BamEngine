@@ -310,6 +310,136 @@ namespace
         }
         return false;
     }
+
+    bool CheckRampToFloorSoftLanding(KinematicCharacterSystem& system, const MeshShape& floorShape, f32 dt)
+    {
+        auto runTransition = [&](f32 pitch, const vec3& rampPos, const vec3& rampScale, const vec3& moveDir) -> bool
+        {
+            std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+            if (!scene) return false;
+            const auto floor = AddSurface(*scene, floorShape, vec3(0.0f), vec3(20.0f, 1.0f, 20.0f));
+            const auto ramp = AddSurface(*scene, BoxShape{}, rampPos, rampScale, pitch);
+            if (floor == entt::null || ramp == entt::null) return false;
+
+            auto& world = scene->GetRegistry();
+            const auto character = scene->CreateEntity().GetEntityHandle();
+            auto& controller = world.emplace<CharacterControllerComponent>(character);
+            controller.AutoUpdateAnimator = false;
+
+            const auto& rampTransform = world.get<TransformComponent>(ramp);
+            const vec3 normal = rampTransform.rotation * vec3(0.0f, 1.0f, 0.0f);
+            const vec3 top = rampTransform.position + normal * (rampScale.y * 0.5f);
+            const vec3 start = top + normal * controller.Radius - controller.GetWorldCapsule(vec3(0.0f)).pointA;
+            if (!SetPosition(world, character, start)) return false;
+
+            const auto& transform = world.get<TransformComponent>(character);
+            const f32 maxStepDrop = 6.5f * dt + 0.015f;
+            bool touchedRamp = false;
+            bool inTransition = false;
+            int transitionFrames = 0;
+
+            for (f32 elapsed = 0.0f; elapsed < 2.0f; elapsed += dt)
+            {
+                const f32 previousY = transform.position.y;
+                controller.Move(moveDir);
+                system.OnUpdate(world, { scene.get() }, dt);
+
+                if (transform.position.y < -0.001f)
+                    return false;
+
+                if (!touchedRamp)
+                {
+                    if (controller.IsGrounded && controller.GroundEntity == ramp &&
+                        glm::abs(controller.GroundAngle - pitch) <= 1.0f)
+                    {
+                        touchedRamp = true;
+                    }
+                    continue;
+                }
+
+                if (!inTransition && (controller.GroundEntity != ramp || controller.GroundAngle > pitch + 1.0f))
+                {
+                    inTransition = true;
+                }
+
+                if (inTransition)
+                {
+                    ++transitionFrames;
+                    if (previousY - transform.position.y > maxStepDrop)
+                        return false;
+                    if (controller.IsGrounded && controller.GroundEntity == floor &&
+                        glm::abs(transform.position.y) <= 0.002f && controller.GroundAngle < 1.0f)
+                    {
+                        return transitionFrames >= 2;
+                    }
+                }
+            }
+            return false;
+        };
+
+        // 1) 45도 경사로 내리막 끝단(단차 약 0.19m) -> 평지 전환 연착륙
+        const vec3 downhill45 = glm::normalize(vec3(0.0f, 0.0f, 1.0f));
+        if (!runTransition(45.0f, vec3(0.0f, 1.68f, 0.0f), vec3(3.0f, 0.2f, 4.0f), downhill45))
+            return false;
+
+        // 2) 30도 경사로 측면 단차(약 0.20m) -> 평지 전환 stepDown 연착륙
+        if (!runTransition(30.0f, vec3(0.0f, 0.18f, 0.0f), vec3(1.6f, 0.2f, 4.0f), vec3(1.0f, 0.0f, 0.0f)))
+            return false;
+
+        return true;
+    }
+
+    bool CheckMovingPlatformInheritance(KinematicCharacterSystem& system, f32 dt)
+    {
+        std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+        if (!scene) return false;
+        const auto platform = AddSurface(*scene, BoxShape{}, vec3(0.0f, -0.25f, 0.0f), vec3(6.0f, 0.5f, 6.0f));
+        if (platform == entt::null) return false;
+
+        auto& world = scene->GetRegistry();
+        const auto character = scene->CreateEntity().GetEntityHandle();
+        const vec3 initialCharPos(1.2f, 0.0f, 0.0f);
+        if (!SetPosition(world, character, initialCharPos)) return false;
+
+        auto& controller = world.emplace<CharacterControllerComponent>(character);
+        controller.AutoUpdateAnimator = false;
+
+        auto& platformTransform = world.get<TransformComponent>(platform);
+        auto& platformWorld = world.get<WorldTransformComponent>(platform);
+        const auto& charTransform = world.get<TransformComponent>(character);
+
+        system.OnUpdate(world, { scene.get() }, dt);
+        if (!controller.IsGrounded || controller.GroundEntity != platform)
+            return false;
+
+        const vec3 expectedLocalOffset = initialCharPos - platformTransform.position;
+        vec3 platformPos = platformTransform.position;
+        f32 platformYaw = 0.0f;
+
+        for (f32 elapsed = 0.0f; elapsed < 0.5f; elapsed += dt)
+        {
+            platformPos += vec3(1.5f * dt, 0.0f, 0.6f * dt);
+            platformYaw += 45.0f * dt;
+            if (!platformTransform.SetLocalPosition(platformPos) ||
+                !platformTransform.SetEulerRotation(vec3(0.0f, platformYaw, 0.0f)) ||
+                !TransformSystem::UpdateRootWorld(platformTransform, platformWorld))
+                return false;
+
+            system.OnUpdate(world, { scene.get() }, dt);
+            if (!controller.IsGrounded || controller.GroundEntity != platform ||
+                glm::abs(charTransform.position.y) > 0.01f)
+                return false;
+        }
+
+        const vec3 actualLocalOffset = glm::inverse(platformTransform.rotation) *
+            (charTransform.position - platformTransform.position);
+        if (glm::length(actualLocalOffset - expectedLocalOffset) > 0.02f)
+            return false;
+
+        const vec3 charForward = charTransform.rotation * vec3(0.0f, 0.0f, 1.0f);
+        const vec3 platformForward = platformTransform.rotation * vec3(0.0f, 0.0f, 1.0f);
+        return glm::dot(charForward, platformForward) >= 0.99f;
+    }
 }
 
 int main()
@@ -359,6 +489,16 @@ int main()
         if (!CheckOccludedLanding(*system, meshFloor, dt))
         {
             std::cerr << "An invalid ray hit hid the landing surface below it. dt=" << dt << '\n';
+            return 1;
+        }
+        if (!CheckRampToFloorSoftLanding(*system, meshFloor, dt))
+        {
+            std::cerr << "Ramp-to-floor transition dropped abruptly or penetrated the floor. dt=" << dt << '\n';
+            return 1;
+        }
+        if (!CheckMovingPlatformInheritance(*system, dt))
+        {
+            std::cerr << "Moving platform position or rotation inheritance failed. dt=" << dt << '\n';
             return 1;
         }
     }
