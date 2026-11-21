@@ -11,6 +11,7 @@
 #include <reflection/EnumValue.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -42,7 +43,8 @@ namespace reflection
         UnorderedSet,
         Map,
 		UnorderedMap,
-		SmartPointer
+		SmartPointer,
+        Optional
     };
 
     namespace detail
@@ -53,6 +55,10 @@ namespace reflection
         struct SmartPointerTraits<std::shared_ptr<T>> { static constexpr bool IsSmartPointer = true; static constexpr bool IsShared = true; static constexpr bool IsUnique = false; using PointeeType = T; };
         template<typename T>
         struct SmartPointerTraits<std::unique_ptr<T>> { static constexpr bool IsSmartPointer = true; static constexpr bool IsShared = false; static constexpr bool IsUnique = true; using PointeeType = T; };
+        template<typename T>
+        struct OptionalTraits { static constexpr bool IsOptional = false; };
+        template<typename T>
+        struct OptionalTraits<std::optional<T>> { static constexpr bool IsOptional = true; using ValueType = T; };
         struct PropertyPointerAccess
         {
             std::type_index PointeeType{ typeid(void) };
@@ -61,8 +67,21 @@ namespace reflection
             bool (*IsNull)(const void* owner) = nullptr;
             void (*Reset)(void* owner) = nullptr;
             ObjectView(*CreateDefault)(void* owner) = nullptr;
-            ObjectView(*GetPointeeObject)(void* owner) = nullptr;
+            ObjectView(*GetConstPointeeObject)(const void* owner) = nullptr;
+            ObjectView(*GetMutablePointeeObject)(void* owner) = nullptr;
         };
+        struct PropertyOptionalAccess
+        {
+            std::type_index ValueType{ typeid(void) };
+            bool (*HasValue)(const void* owner) = nullptr;
+            void (*Reset)(void* owner) = nullptr;
+            ObjectView(*GetConstInnerObject)(const void* owner) = nullptr;
+            ObjectView(*GetMutableInnerObject)(void* owner) = nullptr;
+            ObjectView(*EmplaceDefault)(void* owner) = nullptr;
+            const PropertyInfo* (*GetInnerProperty)() = nullptr;
+        };
+        template<typename T>
+        const PropertyInfo* GetOptionalInnerProperty();
         template<typename T>
         struct MemberTraits;
 
@@ -130,6 +149,10 @@ namespace reflection
             {
                 return PropertyValueKind::SmartPointer;
             }
+            else if constexpr (OptionalTraits<Value>::IsOptional)
+            {
+                return PropertyValueKind::Optional;
+            }
             else if constexpr (std::is_class_v<Value>)
             {
                 return PropertyValueKind::Class;
@@ -149,6 +172,9 @@ namespace reflection
 
     template<typename Container>
     PropertyInfo MakeContainerProperty(std::string name);
+
+    template<typename T>
+    PropertyInfo MakeSelfProperty(std::string name);
 
     template<auto Member>
     PropertyInfo MakeProperty(
@@ -210,7 +236,9 @@ namespace reflection
         [[nodiscard]]
         bool CanWrite() const noexcept
         {
-            return m_write != nullptr || (IsSmartPointer() && m_pointerAccess.Reset != nullptr);
+            return m_write != nullptr ||
+                (IsSmartPointer() && m_pointerAccess.Reset != nullptr) ||
+                (IsOptional() && m_optionalAccess.Reset != nullptr);
         }
 
         [[nodiscard]]
@@ -1655,9 +1683,51 @@ namespace reflection
         }
         [[nodiscard]] ObjectView GetPointeeObject(const ObjectView& object) const
         {
-            if (!object.IsValid() || object.m_type != m_ownerType || m_pointerAccess.GetPointeeObject == nullptr) return {};
-            void* targetAddress = object.m_writeAddress != nullptr ? object.m_writeAddress : const_cast<void*>(object.m_readAddress);
-            return m_pointerAccess.GetPointeeObject(targetAddress);
+            if (!object.IsValid() || object.m_type != m_ownerType) return {};
+            if (object.m_writeAddress != nullptr && m_pointerAccess.GetMutablePointeeObject != nullptr)
+            {
+                return m_pointerAccess.GetMutablePointeeObject(object.m_writeAddress);
+            }
+            if (m_pointerAccess.GetConstPointeeObject != nullptr)
+            {
+                return m_pointerAccess.GetConstPointeeObject(object.m_readAddress);
+            }
+            return {};
+        }
+
+        [[nodiscard]] bool IsOptional() const noexcept { return m_valueKind == PropertyValueKind::Optional; }
+        [[nodiscard]] std::type_index GetOptionalValueCppType() const noexcept { return m_optionalAccess.ValueType; }
+        [[nodiscard]] bool HasOptionalValue(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || m_optionalAccess.HasValue == nullptr) return false;
+            return m_optionalAccess.HasValue(object.m_readAddress);
+        }
+        void ResetOptional(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || object.m_writeAddress == nullptr || m_optionalAccess.Reset == nullptr) return;
+            m_optionalAccess.Reset(object.m_writeAddress);
+        }
+        [[nodiscard]] ObjectView EmplaceOptionalDefault(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType || object.m_writeAddress == nullptr || m_optionalAccess.EmplaceDefault == nullptr) return {};
+            return m_optionalAccess.EmplaceDefault(object.m_writeAddress);
+        }
+        [[nodiscard]] ObjectView GetOptionalInnerObject(const ObjectView& object) const
+        {
+            if (!object.IsValid() || object.m_type != m_ownerType) return {};
+            if (object.m_writeAddress != nullptr && m_optionalAccess.GetMutableInnerObject != nullptr)
+            {
+                return m_optionalAccess.GetMutableInnerObject(object.m_writeAddress);
+            }
+            if (m_optionalAccess.GetConstInnerObject != nullptr)
+            {
+                return m_optionalAccess.GetConstInnerObject(object.m_readAddress);
+            }
+            return {};
+        }
+        [[nodiscard]] const PropertyInfo* GetOptionalInnerProperty() const
+        {
+            return m_optionalAccess.GetInnerProperty != nullptr ? m_optionalAccess.GetInnerProperty() : nullptr;
         }
 
     private:
@@ -1696,6 +1766,25 @@ namespace reflection
         ObjectView(*m_editObject)(void*) = nullptr;
         detail::PropertyContainerAccess m_container;
         detail::PropertyPointerAccess m_pointerAccess{};
+        detail::PropertyOptionalAccess m_optionalAccess{};
+
+        template<typename T>
+            requires (std::is_object_v<T> && !std::is_volatile_v<T>)
+        [[nodiscard]] static ObjectView MakeRawValueView(T& value) noexcept
+        {
+            using Target = std::remove_const_t<T>;
+            ObjectView view;
+            view.m_type = std::type_index(typeid(Target));
+            view.m_readAddress = std::addressof(value);
+            if constexpr (!std::is_const_v<T>)
+            {
+                view.m_writeAddress = std::addressof(value);
+            }
+            return view;
+        }
+
+        template<auto Member, typename Owner, typename MemberValue>
+        static void BindPropertyAccess(PropertyInfo& property);
 
         template<auto Member>
         friend PropertyInfo MakeProperty(
@@ -1706,24 +1795,16 @@ namespace reflection
         template<typename Container>
         friend PropertyInfo MakeContainerProperty(std::string name);
 
+        template<typename T>
+        friend PropertyInfo MakeSelfProperty(std::string name);
+
         PropertyAccessStatus m_readStatus = PropertyAccessStatus::NotBound;
         PropertyAccessStatus m_writeStatus = PropertyAccessStatus::NotBound;
     };
 
-    template<auto Member>
-    PropertyInfo MakeProperty(
-        std::string name,
-        std::string typeName
-    )
+    template<auto Member, typename Owner, typename MemberValue>
+    void PropertyInfo::BindPropertyAccess(PropertyInfo& property)
     {
-        static_assert(
-            std::is_member_object_pointer_v<decltype(Member)>,
-            "MakeProperty requires a data member pointer"
-            );
-
-        using Traits = detail::MemberTraits<decltype(Member)>;
-        using Owner = typename Traits::OwnerType;
-        using MemberValue = typename Traits::ValueType;
         using Value = std::remove_cv_t<MemberValue>;
 
         static_assert(
@@ -1731,9 +1812,6 @@ namespace reflection
             "Volatile properties are not supported"
             );
 
-        PropertyInfo property;
-        property.Name = std::move(name);
-        property.TypeName = std::move(typeName);
         property.m_ownerType = std::type_index(typeid(Owner));
         property.m_valueType = std::type_index(typeid(Value));
         property.m_valueKind = detail::GetPropertyValueKind<Value>();
@@ -1741,8 +1819,7 @@ namespace reflection
         property.m_read = +[](const void* object) -> const void*
             {
                 const auto* owner = static_cast<const Owner*>(object);
-
-                return std::addressof(owner->*Member);
+                return std::addressof(detail::GetPropertyContainerValue<Member>(*owner));
             };
 
         property.m_objectValue = std::is_class_v<Value> || std::is_union_v<Value>;
@@ -1753,7 +1830,7 @@ namespace reflection
             property.m_editObject = +[](void* object) -> ObjectView
                 {
                     auto* owner = static_cast<Owner*>(object);
-                    return ObjectView::From(owner->*Member);
+                    return ObjectView::From(detail::GetPropertyContainerValue<Member>(*owner));
                 };
         }
 
@@ -1766,7 +1843,7 @@ namespace reflection
             property.m_write = +[](void* object, const void* value)
                 {
                     auto* owner = static_cast<Owner*>(object);
-                    owner->*Member = *static_cast<const Value*>(value);
+                    detail::GetPropertyContainerValue<Member>(*owner) = *static_cast<const Value*>(value);
                 };
         }
         else
@@ -1803,41 +1880,121 @@ namespace reflection
             property.m_pointerAccess.IsUnique = detail::SmartPointerTraits<Value>::IsUnique;
             property.m_pointerAccess.IsNull = +[](const void* object) -> bool {
                 const auto* owner = static_cast<const Owner*>(object);
-                return (owner->*Member) == nullptr;
+                return detail::GetPropertyContainerValue<Member>(*owner) == nullptr;
                 };
+            if constexpr (std::is_class_v<Pointee> || std::is_union_v<Pointee>)
+            {
+                property.m_pointerAccess.GetConstPointeeObject = +[](const void* object) -> ObjectView {
+                    const auto* owner = static_cast<const Owner*>(object);
+                    const auto& ptr = detail::GetPropertyContainerValue<Member>(*owner);
+                    return ptr ? ObjectView::From(std::as_const(*ptr)) : ObjectView{};
+                    };
+            }
             if constexpr (!std::is_const_v<MemberValue>)
             {
                 property.m_pointerAccess.Reset = +[](void* object) {
                     auto* owner = static_cast<Owner*>(object);
-                    (owner->*Member).reset();
+                    detail::GetPropertyContainerValue<Member>(*owner).reset();
                     };
-                if constexpr (std::default_initializable<Pointee> && (std::is_class_v<Pointee> || std::is_union_v<Pointee>))
+                if constexpr (!std::is_const_v<Pointee> && std::default_initializable<Pointee> &&
+                    (std::is_class_v<Pointee> || std::is_union_v<Pointee>))
                 {
                     property.m_pointerAccess.CreateDefault = +[](void* object) -> ObjectView {
                         auto* owner = static_cast<Owner*>(object);
+                        auto& ptr = detail::GetPropertyContainerValue<Member>(*owner);
                         if constexpr (detail::SmartPointerTraits<Value>::IsShared)
                         {
-                            owner->*Member = std::make_shared<Pointee>();
-                            return ObjectView::From(*(owner->*Member));
+                            ptr = std::make_shared<Pointee>();
                         }
                         else
                         {
-                            owner->*Member = std::make_unique<Pointee>();
-                            return ObjectView::From(*(owner->*Member));
+                            ptr = std::make_unique<Pointee>();
                         }
+                        return ObjectView::From(*ptr);
                         };
                 }
-                if constexpr (std::is_class_v<Pointee> || std::is_union_v<Pointee>)
+                if constexpr (!std::is_const_v<Pointee> && (std::is_class_v<Pointee> || std::is_union_v<Pointee>))
                 {
-                    property.m_pointerAccess.GetPointeeObject = +[](void* object) -> ObjectView {
+                    property.m_pointerAccess.GetMutablePointeeObject = +[](void* object) -> ObjectView {
                         auto* owner = static_cast<Owner*>(object);
-                        return (owner->*Member) ? ObjectView::From(*(owner->*Member)) : ObjectView{};
+                        auto& ptr = detail::GetPropertyContainerValue<Member>(*owner);
+                        return ptr ? ObjectView::From(*ptr) : ObjectView{};
+                        };
+                }
+            }
+        }
+
+        if constexpr (detail::OptionalTraits<Value>::IsOptional)
+        {
+            using Inner = typename detail::OptionalTraits<Value>::ValueType;
+            property.m_optionalAccess.ValueType = std::type_index(typeid(std::remove_cv_t<Inner>));
+            property.m_optionalAccess.GetInnerProperty = &detail::GetOptionalInnerProperty<std::remove_cv_t<Inner>>;
+            property.m_optionalAccess.HasValue = +[](const void* object) -> bool {
+                const auto* owner = static_cast<const Owner*>(object);
+                return detail::GetPropertyContainerValue<Member>(*owner).has_value();
+                };
+            property.m_optionalAccess.GetConstInnerObject = +[](const void* object) -> ObjectView {
+                const auto* owner = static_cast<const Owner*>(object);
+                const auto& opt = detail::GetPropertyContainerValue<Member>(*owner);
+                return opt.has_value() ? MakeRawValueView(std::as_const(*opt)) : ObjectView{};
+                };
+            if constexpr (!std::is_const_v<MemberValue> && !std::is_const_v<Inner>)
+            {
+                property.m_optionalAccess.Reset = +[](void* object) {
+                    auto* owner = static_cast<Owner*>(object);
+                    detail::GetPropertyContainerValue<Member>(*owner).reset();
+                    };
+                property.m_optionalAccess.GetMutableInnerObject = +[](void* object) -> ObjectView {
+                    auto* owner = static_cast<Owner*>(object);
+                    auto& opt = detail::GetPropertyContainerValue<Member>(*owner);
+                    return opt.has_value() ? MakeRawValueView(*opt) : ObjectView{};
+                    };
+                if constexpr (std::default_initializable<Inner>)
+                {
+                    property.m_optionalAccess.EmplaceDefault = +[](void* object) -> ObjectView {
+                        auto* owner = static_cast<Owner*>(object);
+                        auto& opt = detail::GetPropertyContainerValue<Member>(*owner);
+                        return MakeRawValueView(opt.emplace());
                         };
                 }
             }
         }
 
         property.m_container = detail::MakePropertyContainerAccess<Member, Owner>();
+    }
+
+    template<auto Member>
+    PropertyInfo MakeProperty(
+        std::string name,
+        std::string typeName
+    )
+    {
+        static_assert(
+            std::is_member_object_pointer_v<decltype(Member)>,
+            "MakeProperty requires a data member pointer"
+            );
+
+        using Traits = detail::MemberTraits<decltype(Member)>;
+        using Owner = typename Traits::OwnerType;
+        using MemberValue = typename Traits::ValueType;
+
+        PropertyInfo property;
+        property.Name = std::move(name);
+        property.TypeName = std::move(typeName);
+        PropertyInfo::BindPropertyAccess<Member, Owner, MemberValue>(property);
+        return property;
+    }
+
+    // Describes a value of type T where the ObjectView owner is the value itself.
+    template<typename T>
+    PropertyInfo MakeSelfProperty(std::string name)
+    {
+        using Value = std::remove_cv_t<T>;
+        static_assert(std::is_object_v<Value> && !std::is_volatile_v<T>, "Volatile properties are not supported");
+
+        PropertyInfo property;
+        property.Name = std::move(name);
+        PropertyInfo::BindPropertyAccess<nullptr, Value, T>(property);
         return property;
     }
 
@@ -1888,6 +2045,13 @@ namespace reflection
             {
                 return nullptr;
             }
+        }
+
+        template<typename T>
+        const PropertyInfo* GetOptionalInnerProperty()
+        {
+            static const auto property = MakeSelfProperty<std::remove_cv_t<T>>("Value");
+            return &property;
         }
     }
 }

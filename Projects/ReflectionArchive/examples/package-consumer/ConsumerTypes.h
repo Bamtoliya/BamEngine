@@ -6,6 +6,7 @@
 #include <array>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_map>
@@ -135,6 +136,12 @@ namespace consumer
         std::shared_ptr<Entry> ActiveEntry = nullptr;
         PROPERTY()
         std::shared_ptr<Entry> NullEntry = nullptr;
+        PROPERTY()
+        std::optional<std::int32_t> OptionalRevision;
+        PROPERTY()
+        std::optional<Entry> OptionalEntry;
+        PROPERTY()
+        std::optional<std::vector<Mode>> OptionalModes;
 
         std::int32_t GetRevision() const { return m_revision; }
         void SetRevision(std::int32_t value) { m_revision = value; }
@@ -148,7 +155,9 @@ namespace consumer
                 Flags != other.Flags || PermissionsByMode != other.PermissionsByMode ||
                 ModesByPermission != other.ModesByPermission || EntriesByMode != other.EntriesByMode ||
                 FixedEntries != other.FixedEntries || Matrix != other.Matrix || EntryGroups != other.EntryGroups ||
-                ModeGroups != other.ModeGroups || m_revision != other.m_revision)
+                ModeGroups != other.ModeGroups || OptionalRevision != other.OptionalRevision ||
+                OptionalEntry != other.OptionalEntry || OptionalModes != other.OptionalModes ||
+                m_revision != other.m_revision)
             {
                 return false;
             }

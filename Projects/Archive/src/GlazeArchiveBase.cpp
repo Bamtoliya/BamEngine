@@ -136,6 +136,41 @@ namespace archive
         return {};
     }
 
+    ArchiveResult GlazeArchiveBase::IsNull(std::string_view key, bool& isNull) const
+    {
+        isNull = false;
+        const auto* object = FindObject(m_Root, m_ObjectPath);
+
+        if (!object)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+
+        const auto it = object->find(key);
+        if (it == object->end())
+        {
+            return { ArchiveErrorCode::MissingField, std::string{ key } };
+        }
+
+        isNull = it->second.is_null();
+        return {};
+    }
+
+    ArchiveResult GlazeArchiveBase::WriteNull(std::string_view key)
+    {
+        auto* object = FindObject(m_Root, m_ObjectPath);
+
+        if (!object)
+        {
+            return { ArchiveErrorCode::InvalidOperation, std::string{ key } };
+        }
+
+        Value nullValue;
+        nullValue.data = nullptr;
+        object->insert_or_assign(std::string{ key }, std::move(nullValue));
+        return {};
+    }
+
     ArchiveResult GlazeArchiveBase::GetFieldNames(std::vector<std::string>& names) const
     {
         const auto* object = FindObject(m_Root, m_ObjectPath);

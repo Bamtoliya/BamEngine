@@ -33,6 +33,7 @@
 #include "SpriteAnimationComponent.h"
 #include "FogComponent.h"
 #include "VolumetricCloudComponent.h"
+#include "AttackChallengeComponent.h"
 
 namespace
 {
@@ -244,6 +245,13 @@ namespace
         particle.playState = Engine::EParticlePlayState::Playing;
         particle.playRate = 1.25f;
 
+        auto& challenge = sourceWorld.emplace<Engine::AttackChallengeComponent>(entityA);
+        challenge.TargetEntity.PersistentId = 1002ULL;
+        challenge.RequiredHits = 7;
+        challenge.HitRadius = 4.25f;
+        challenge.HitHeight = 3.5f;
+        challenge.UseGraphAttackInput = true;
+
         // 2. 엔티티 B: 스프라이트 애니메이션, 지수 안개, 볼류메트릭 클라우드
         const auto entityB = AddSpatialEntity(*original, 1002ULL, L"EntityAtmosphereSprite", { -4.0f, 0.0f, 8.0f });
         auto& spriteAnim = sourceWorld.emplace<Engine::SpriteAnimationComponent>(entityB);
@@ -333,6 +341,12 @@ namespace
         if (!resParticle || resParticle->playState != Engine::EParticlePlayState::Playing ||
             resParticle->playRate != 1.25f)
             return Fail("ParticleEffectComponent settings mismatch after loading.");
+
+        const auto* resChallenge = restoredWorld.try_get<Engine::AttackChallengeComponent>(restoredA);
+        if (!resChallenge || resChallenge->TargetEntity.PersistentId != 1002ULL ||
+            resChallenge->RequiredHits != 7 || std::abs(resChallenge->HitRadius - 4.25f) > 1.0e-4f ||
+            std::abs(resChallenge->HitHeight - 3.5f) > 1.0e-4f || !resChallenge->UseGraphAttackInput)
+            return Fail("AttackChallengeComponent settings mismatch after loading.");
 
         // 6. 엔티티 B 프로퍼티 및 런타임 필드 단언 검증
         const auto* resSprite = restoredWorld.try_get<Engine::SpriteAnimationComponent>(restoredB);
@@ -1538,6 +1552,13 @@ namespace
         if (!cameraEntry || !cameraEntry->SetEnabled(world, rootHandle, false))
             return Fail("Could not disable the prefab camera.");
 
+        auto& prefabChallenge = world.emplace<Engine::AttackChallengeComponent>(rootHandle);
+        prefabChallenge.TargetEntity.PersistentId = SecondChildId;
+        prefabChallenge.RequiredHits = 5;
+        prefabChallenge.HitRadius = 3.25f;
+        prefabChallenge.HitHeight = 2.75f;
+        prefabChallenge.UseGraphAttackInput = true;
+
         archive::JsonArchive prefabWriter;
         if (manager.SavePrefab(prefabWriter, L"actor.bamprefab.json", *rootEntity) != Engine::EResult::Success)
             return Fail("SavePrefab failed.");
@@ -1553,6 +1574,13 @@ namespace
         const auto* camera = world.try_get<Engine::CameraComponent>(instantiatedRoot);
         if (!camera || camera->FOV != 73.0f || cameraEntry->IsEnabled(world, instantiatedRoot))
             return Fail("Instantiated prefab lost the camera settings or enabled state.");
+        const auto* instantiatedChallenge = world.try_get<Engine::AttackChallengeComponent>(instantiatedRoot);
+        if (!instantiatedChallenge || instantiatedChallenge->TargetEntity.PersistentId != 0 ||
+            instantiatedChallenge->RequiredHits != 5 ||
+            std::abs(instantiatedChallenge->HitRadius - 3.25f) > 1.0e-4f ||
+            std::abs(instantiatedChallenge->HitHeight - 2.75f) > 1.0e-4f ||
+            !instantiatedChallenge->UseGraphAttackInput)
+            return Fail("Instantiated prefab lost AttackChallengeComponent settings or leaked persistent target ID.");
         world.remove<Engine::CameraComponent>(instantiatedRoot);
         world.emplace<Engine::CameraComponent>(instantiatedRoot);
         if (!cameraEntry->IsEnabled(world, instantiatedRoot) || cameraEntry->IsEnabled(world, rootHandle))

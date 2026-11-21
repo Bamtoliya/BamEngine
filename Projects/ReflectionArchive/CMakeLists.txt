@@ -2,6 +2,12 @@
 
 project(ReflectionArchive VERSION 0.1.0 LANGUAGES CXX)
 
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include(CTest)
+endif()
+
+option(REFLECTION_ARCHIVE_BUILD_TESTS "Build ReflectionArchive standalone checks" OFF)
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
@@ -58,3 +64,19 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/ReflectionArchiveConfigVersion.cmake"
     DESTINATION "${_reflection_archive_package_dir}"
 )
+
+if(REFLECTION_ARCHIVE_BUILD_TESTS)
+    add_executable(ReflectionArchiveCheck examples/ReflectionArchiveCheck.cpp)
+    target_link_libraries(ReflectionArchiveCheck PRIVATE ReflectionArchive::Adapter)
+    set_target_properties(ReflectionArchiveCheck PROPERTIES
+        CXX_EXTENSIONS OFF
+        UNITY_BUILD OFF
+        FOLDER "Checks"
+    )
+    if(MSVC)
+        target_compile_options(ReflectionArchiveCheck PRIVATE /utf-8)
+    endif()
+    if(BUILD_TESTING)
+        add_test(NAME ReflectionArchiveCheck COMMAND ReflectionArchiveCheck)
+    endif()
+endif()
