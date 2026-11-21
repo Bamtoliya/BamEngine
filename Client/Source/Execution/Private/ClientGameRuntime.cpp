@@ -41,7 +41,7 @@ Engine::EResult Client::ClientGameRuntime::LoadProject(const std::filesystem::pa
 }
 
 Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc& rendererDesc,
-    const std::function<void()>& loadModules)
+    const std::function<void()>& loadModules, const std::function<void(ClientStartupStage)>& onStageChanged)
 {
     if (!m_ProjectLoaded || m_Runtime || !rendererDesc.rhiDesc)
         return Engine::EResult::InvalidArgument;
@@ -52,10 +52,14 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     runtimeDesc.AssetRoot = std::filesystem::u8path(m_ProjectSettings.AssetDirectory);
     runtimeDesc.EngineResourceRoot = std::filesystem::u8path(m_ProjectSettings.EngineResourceDirectory);
 
+    if (onStageChanged)
+        onStageChanged(ClientStartupStage::Graphics);
     m_Runtime = Engine::Runtime::Create(&runtimeDesc);
     if (!m_Runtime)
         return Engine::EResult::Fail;
 
+    if (onStageChanged)
+        onStageChanged(ClientStartupStage::Resources);
     Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
     if (!Engine::StartupResourceLoader::LoadPipeline(m_ProjectSettings.StartupManifestPath))
         return Engine::EResult::Fail;
@@ -79,6 +83,8 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
         return Engine::EResult::Fail;
     if (loadModules)
         loadModules();
+    if (onStageChanged)
+        onStageChanged(ClientStartupStage::Scene);
     if (IsFailure(LoadStartupScene()) || !ValidateStartupGraphs())
         return Engine::EResult::Fail;
 

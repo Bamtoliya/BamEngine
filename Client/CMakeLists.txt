@@ -14,6 +14,7 @@ target_include_directories(Client PRIVATE
 
 if(WIN32)
     set_property(TARGET Client PROPERTY WIN32_EXECUTABLE "$<CONFIG:Release>")
+    target_link_libraries(Client PRIVATE user32 gdi32)
 endif()
 
 target_link_libraries(Client PRIVATE

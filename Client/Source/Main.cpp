@@ -6,6 +6,11 @@
 #include "CartPoleEnvironment.h"
 #include "RLServer.h"
 #include "ClientGameRuntime.h"
+#include "ClientStartupSplash.h"
+#include "DirectX12RHI.h"
+#include "Renderer.h"
+#include "TimeManager.h"
+#include <chrono>
 #if defined(_WIN32)
 #include "CrashHandler.h"
 #endif
@@ -40,6 +45,10 @@ public:
 
     Engine::EResult Initialize()
     {
+        const auto startupBegan = std::chrono::steady_clock::now();
+        ClientStartupSplash splash;
+        const bool splashVisible = splash.Show();
+
         // 1. 프로젝트 루트를 가장 먼저 확정
         m_ProjectRoot = ResolveProjectRoot();
 
@@ -49,6 +58,8 @@ public:
             return Engine::EResult::Fail;
 
         m_LoggerInitialized = true;
+        if (!splashVisible)
+            BAM_LOG(Warn, "Client", "Startup", "The BamEngine startup screen could not be shown.");
 #if defined(_WIN32)
         Engine::CrashHandler::Initialize(m_ProjectRoot / "Logs" / "Crashes");
         Engine::CrashHandler::SetCustomContext("Host", "Client");
@@ -66,7 +77,7 @@ public:
         m_SDLInitialized = true;
         const auto& settings = m_ClientRuntime.GetProjectSettings();
         const char* title = settings.WindowTitle.empty() ? "BamEngine Client" : settings.WindowTitle.c_str();
-        m_Window = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+        m_Window = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
 
         if (!m_Window)
         {
@@ -86,6 +97,7 @@ public:
         HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         if (!hwnd)
             return Engine::EResult::Fail;
+        splash.SetBounds(hwnd);
 
         DirectX12RHIDesc rhiDesc = {};
         rhiDesc.windowHandle = hwnd;
@@ -96,7 +108,52 @@ public:
         Engine::RendererDesc rendererDesc = {};
         rendererDesc.rhiType = Engine::ERHIType::DirectX12;
         rendererDesc.rhiDesc = &rhiDesc;
-        return m_ClientRuntime.Initialize(rendererDesc, [this] { LoadGameModule(); });
+        const auto initialized = m_ClientRuntime.Initialize(rendererDesc, [this] { LoadGameModule(); },
+            [&splash](ClientStartupStage stage) { splash.SetStage(stage); });
+        if (initialized != Engine::EResult::Success)
+            return initialized;
+
+        splash.SetStage(ClientStartupStage::FirstFrame);
+        if (!SDL_ShowWindow(m_Window))
+        {
+            BAM_LOG(Error, "Client", "Startup", "SDL_ShowWindow failed: {}", SDL_GetError());
+            return Engine::EResult::Fail;
+        }
+        splash.SetBounds(hwnd);
+
+        if (!SDL_GetWindowSizeInPixels(m_Window, &width, &height) || width <= 0 || height <= 0)
+        {
+            BAM_LOG(Error, "Client", "Startup", "Could not determine the visible game window size: {}", SDL_GetError());
+            SDL_HideWindow(m_Window);
+            return Engine::EResult::Fail;
+        }
+
+        auto& time = Engine::TimeManager::Get();
+        time.ResetFrameClock();
+        const auto firstFrame = m_ClientRuntime.RunFrame(static_cast<Engine::uint32>(width),
+            static_cast<Engine::uint32>(height), false, false);
+        if (firstFrame != Engine::EResult::Success)
+        {
+            BAM_LOG(Error, "Client", "Startup", "First game frame failed: {}", Engine::ResultToString(firstFrame));
+            SDL_HideWindow(m_Window);
+            return firstFrame;
+        }
+
+        // Keep the splash visible while the initial D3D12 frame finishes on the GPU.
+        auto* dx12 = static_cast<Engine::DirectX12RHI*>(Engine::Renderer::Get().GetRHI());
+        const auto presented = dx12->WaitForGPU();
+        if (presented != Engine::EResult::Success)
+        {
+            BAM_LOG(Error, "Client", "Startup", "The GPU did not complete the first game frame: {}", Engine::ResultToString(presented));
+            SDL_HideWindow(m_Window);
+            return presented;
+        }
+
+        splash.Hide();
+        time.ResetFrameClock();
+        const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - startupBegan);
+        BAM_LOG(Info, "Client", "Startup", "First game frame completed after {} ms.", millis.count());
+        return Engine::EResult::Success;
     }
 
     Engine::EResult Run()

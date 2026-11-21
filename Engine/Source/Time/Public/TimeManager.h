@@ -23,6 +23,8 @@ public:
 #pragma region Loop
 public:
 	void Update();
+	// Resume frame timing without advancing simulation through the elapsed wall time.
+	void ResetFrameClock() noexcept;
 #pragma endregion
 
 #pragma region Getter

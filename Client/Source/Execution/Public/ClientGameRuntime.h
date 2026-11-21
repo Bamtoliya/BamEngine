@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ClientRenderPipeline.h"
+#include "ClientStartupStage.h"
 #include "Config.h"
 #include "Runtime.h"
 
@@ -19,7 +20,7 @@ namespace Client
 
         Engine::EResult LoadProject(const std::filesystem::path& projectRoot);
         Engine::EResult Initialize(const Engine::RendererDesc& rendererDesc,
-            const std::function<void()>& loadModules);
+            const std::function<void()>& loadModules, const std::function<void(ClientStartupStage)>& onStageChanged);
         Engine::EResult RunFrame(Engine::uint32 width, Engine::uint32 height, bool inputFocused, bool isMinimized);
         void Free();
 

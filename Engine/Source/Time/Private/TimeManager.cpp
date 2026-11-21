@@ -6,14 +6,11 @@ IMPLEMENT_SINGLETON(TimeManager)
 #pragma region Constructor&Destructor
 EResult TimeManager::Initialize(void* arg)
 {
-    m_LastTime = std::chrono::steady_clock::now();
-    m_DeltaTime = 0.0f;
+    ResetFrameClock();
     m_TotalTime = 0.0;
 
     m_TargetFPS = 0;
     m_FixedStep = DefaultFixedStep;
-
-    m_AccTime = 0.0;
 
     m_FPS = 0;
     m_FrameCount = 0;
@@ -28,6 +25,13 @@ void TimeManager::Free()
 #pragma endregion
 
 #pragma region Loop
+void TimeManager::ResetFrameClock() noexcept
+{
+    m_LastTime = std::chrono::steady_clock::now();
+    m_DeltaTime = 0.0f;
+    m_AccTime = 0.0;
+}
+
 void TimeManager::Update()
 {
     auto currentTime = std::chrono::steady_clock::now();
