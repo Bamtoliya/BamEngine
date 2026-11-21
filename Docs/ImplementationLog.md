@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 엔진 통계 대시보드 반응형 배치
+
+- 다섯 통계 카드는 실제 글꼴 크기, 번역된 버튼 문구와 패널 폭으로 열 수를 정하고, 콘텐츠 높이에 맞춰 늘어난다. 제목과 상태가 한 줄에 들어가지 않으면 상태를 다음 줄에 표시한다.
+- 상세 열기·닫기와 기록 초기화 버튼은 좁은 폭에서 줄바꿈한다. 툴바와 상세 제목의 버튼도 실제 라벨 폭에 따라 다음 줄로 이동한다.
+- 변경 범위의 공백과 호출부를 정적으로 확인했다. 빌드와 한국어·영어, 100%·150%·200% 배율, 좁은 도킹 폭의 실제 표시·클릭 검증은 사용자 실행 대기다.
+
 ### [2026-11-22] Windows Client 공통 시작 화면
 
 - BamEngine 워드마크와 로딩 단계 표시를 독립 Windows 창으로 띄운다. 준비된 게임 창의 첫 프레임이 GPU에서 끝나면 시작 화면을 닫고, 프레임 시간 기준을 다시 잡아 게임을 진행한다. 별도 에셋 없이 Client에 포함한다. [Windows Client 시작 화면](PIEWindowsClientWorkflowPlan.md#windows-client-첫-화면)

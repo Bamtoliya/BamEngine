@@ -1,5 +1,6 @@
 ﻿#include "MetricsPanel.h"
 #include "TimeManager.h"
+#include "MetricsCardUI.h"
 #include <cstring>
 
 namespace
@@ -63,12 +64,21 @@ void MetricsPanel::Draw(const PanelHostServicesV2& host)
 
 void MetricsPanel::DrawToolbar(const PanelHostServicesV2& host)
 {
-    ImGui::Checkbox(LOCAL_LABEL("Metrics.PauseCapture").c_str(), &m_Paused);
+    const auto pause = LOCAL("Metrics.PauseCapture");
+    const auto reset = LOCAL("Metrics.ResetHistory");
+    const auto& style = ImGui::GetStyle();
+    const float available = ImGui::GetContentRegionAvail().x;
+    const float pauseWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(pause.c_str()).x;
+    const bool pauseFits = pauseWidth <= available;
+    ImGui::Checkbox((pauseFits ? pause + "###Metrics.PauseCapture" : "###Metrics.PauseCapture").c_str(), &m_Paused);
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", LOCAL_CSTR("Metrics.PauseHint"));
 
-    ImGui::SameLine();
-    if (ImGui::Button(LOCAL_LABEL("Metrics.ResetHistory").c_str()))
+    if (!pauseFits)
+        ImGui::TextWrapped("%s", pause.c_str());
+    else if (pauseWidth + style.ItemSpacing.x + MetricsCardUI::ButtonWidth(reset.c_str()) <= available)
+        ImGui::SameLine();
+    if (MetricsCardUI::Button("Metrics.ResetHistory", reset.c_str()))
     {
         m_FrameMetrics.ResetHistory();
         m_RenderMetrics.ResetHistory();
@@ -78,16 +88,13 @@ void MetricsPanel::DrawToolbar(const PanelHostServicesV2& host)
 
 void MetricsPanel::DrawDashboardCards()
 {
-    const float availableWidth = ImGui::GetContentRegionAvail().x;
-    const float spacing = ImGui::GetStyle().ItemSpacing.x;
-
-    int columns = 4;
-    if (availableWidth < 550.0f)
-        columns = 1;
-    else if (availableWidth < 850.0f)
-        columns = 2;
-    else if (availableWidth < 1100.0f)
-        columns = 3;
+    const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+    const auto& style = ImGui::GetStyle();
+    const float spacing = style.ItemSpacing.x;
+    const float actionWidth = std::max(MetricsCardUI::ButtonWidth(LOCAL_CSTR("Metrics.ViewDetails")),
+        MetricsCardUI::ButtonWidth(LOCAL_CSTR("Metrics.CloseDetail")));
+    const float minimumWidth = std::max(ImGui::GetFontSize() * 14.0f, actionWidth) + 2.0f * style.WindowPadding.x;
+    const int columns = std::clamp(static_cast<int>((availableWidth + spacing) / (minimumWidth + spacing)), 1, 4);
 
     const float cardWidth = (availableWidth - spacing * (columns - 1)) / static_cast<float>(columns);
 
@@ -114,9 +121,20 @@ void MetricsPanel::DrawDetailedInspectionView()
 {
     const auto drawDetails = [this](const char* titleKey, const auto& widget)
         {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), ">> %s", LOCAL_CSTR(titleKey));
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - 110.0f);
-            if (ImGui::Button(LOCAL_LABEL("Metrics.CloseDetailX").c_str()))
+            const auto title = ">> " + LOCAL(titleKey);
+            const auto close = LOCAL("Metrics.CloseDetailX");
+            const float start = ImGui::GetCursorPosX();
+            const float available = ImGui::GetContentRegionAvail().x;
+            const float closeWidth = MetricsCardUI::ButtonWidth(close.c_str());
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "%s", title.c_str());
+            ImGui::PopTextWrapPos();
+            const float titleWidth = ImGui::CalcTextSize(title.c_str()).x;
+            if (titleWidth > available)
+                MetricsCardUI::ShowFullTextOnHover(title.c_str());
+            if (titleWidth + ImGui::GetStyle().ItemSpacing.x + closeWidth <= available)
+                ImGui::SameLine(start + available - closeWidth);
+            if (MetricsCardUI::Button("Metrics.CloseDetailX", close.c_str()))
             {
                 m_SelectedDomain = EMetricsDomain::None;
                 return;
@@ -124,7 +142,9 @@ void MetricsPanel::DrawDetailedInspectionView()
 
             ImGui::Separator();
             ImGui::Spacing();
+            ImGui::PushTextWrapPos(0.0f);
             widget.DrawDetails();
+            ImGui::PopTextWrapPos();
         };
 
     switch (m_SelectedDomain)

@@ -1,5 +1,6 @@
 ﻿#include "FrameMetricsWidget.h"
 #include "LocalizationManager.h"
+#include "MetricsCardUI.h"
 
 void FrameMetricsWidget::Update(f32 dt, uint32 targetFPS)
 {
@@ -52,32 +53,16 @@ void FrameMetricsWidget::RecalculateStatistics()
 
 bool FrameMetricsWidget::DrawCard(float cardWidth, bool selected) const
 {
-    const ImVec4 background = selected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, background);
-    ImGui::BeginChild("Card_Performance", ImVec2(cardWidth, 125.0f),
-        ImGuiChildFlags_Borders, ImGuiWindowFlags_NoScrollbar);
-
-    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.Performance"));
-    ImGui::SameLine(cardWidth - 75.0f);
-
     const f32 fps = m_AverageMs > 0.0f ? 1000.0f / m_AverageMs : 0.0f;
-    if (fps >= 55.0f)
-        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.Good"));
-    else if (fps >= 30.0f)
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", LOCAL_CSTR("Metrics.Warn"));
-    else
-        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "%s", LOCAL_CSTR("Metrics.Poor"));
-
-    ImGui::Text(LOCAL_CSTR("Metrics.Fps"), fps);
-    ImGui::TextDisabled(LOCAL_CSTR("Metrics.FrameMsAvg"), m_CurrentMs, m_AverageMs);
-
-    ImGui::Spacing();
-    const auto detailLabel = LOCAL(selected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details";
-    const bool clicked = ImGui::SmallButton(detailLabel.c_str());
-
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-    return clicked;
+    const char* status = fps >= 55.0f ? "Metrics.Good" : fps >= 30.0f ? "Metrics.Warn" : "Metrics.Poor";
+    const auto color = fps >= 55.0f ? ImVec4(0.2f, 0.9f, 0.2f, 1.0f) :
+        fps >= 30.0f ? ImVec4(1.0f, 0.8f, 0.2f, 1.0f) : ImVec4(1.0f, 0.3f, 0.3f, 1.0f);
+    return MetricsCardUI::Draw("Card_Performance", cardWidth, selected, LOCAL_CSTR("Metrics.Performance"),
+        ImVec4(0.3f, 0.8f, 1.0f, 1.0f), LOCAL_CSTR(status), color, [&]
+        {
+            ImGui::Text(LOCAL_CSTR("Metrics.Fps"), fps);
+            ImGui::TextDisabled(LOCAL_CSTR("Metrics.FrameMsAvg"), m_CurrentMs, m_AverageMs);
+        });
 }
 
 void FrameMetricsWidget::DrawDetails() const

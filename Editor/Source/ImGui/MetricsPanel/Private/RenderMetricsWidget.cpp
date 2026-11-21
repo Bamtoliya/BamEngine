@@ -3,6 +3,7 @@
 #include "RHI.h"
 #include "RenderPass.h"
 #include "RenderPassManager.h"
+#include "MetricsCardUI.h"
 
 void RenderMetricsWidget::Update(f32 dt)
 {
@@ -29,24 +30,16 @@ void RenderMetricsWidget::ResetHistory()
 
 bool RenderMetricsWidget::DrawCard(float cardWidth, bool isSelected) const
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
-    ImGui::BeginChild("Card_Rendering", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
-
-    ImGui::TextColored(ImVec4(0.4f, 0.9f, 0.4f, 1.0f), LOCAL_CSTR("Metrics.GpuRendering"));
-    ImGui::SameLine(cardWidth - 75.0f);
-    if (m_DisplaySnapshot.RenderFailed) ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), LOCAL_CSTR("Metrics.Fail"));
-    else ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Ok"));
-
-    ImGui::Text(LOCAL_CSTR("Metrics.Draws"), m_DisplaySnapshot.GetTotalDrawCalls());
-    ImGui::TextDisabled(LOCAL_CSTR("Metrics.GpuTimeMsVerts"), m_DisplaySnapshot.TotalGPUTimeMs, m_DisplaySnapshot.SubmittedVertices);
-
-    ImGui::Spacing();
-    const auto detailLabel = LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details";
-    const bool clicked = ImGui::SmallButton(detailLabel.c_str());
-
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-    return clicked;
+    const bool failed = m_DisplaySnapshot.RenderFailed;
+    const char* status = failed ? "Metrics.Fail" : "Metrics.Ok";
+    const auto color = failed ? ImVec4(1.0f, 0.3f, 0.3f, 1.0f) : ImVec4(0.2f, 0.9f, 0.2f, 1.0f);
+    return MetricsCardUI::Draw("Card_Rendering", cardWidth, isSelected, LOCAL_CSTR("Metrics.GpuRendering"),
+        ImVec4(0.4f, 0.9f, 0.4f, 1.0f), LOCAL_CSTR(status), color, [&]
+        {
+            ImGui::Text(LOCAL_CSTR("Metrics.Draws"), m_DisplaySnapshot.GetTotalDrawCalls());
+            ImGui::TextDisabled(LOCAL_CSTR("Metrics.GpuTimeMsVerts"), m_DisplaySnapshot.TotalGPUTimeMs,
+                m_DisplaySnapshot.SubmittedVertices);
+        });
 }
 
 void RenderMetricsWidget::DrawDetails() const
@@ -130,11 +123,11 @@ void RenderMetricsWidget::DrawDetails() const
 
     // 하드웨어 기능 지원 (RHICapabilities 멤버 바인딩)
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.HardwareCapabilities"));
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.ComputeShader", LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.IndirectDraw", LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.MeshShader", LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DXRRaytracing", LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
-    ImGui::BulletText("%s", LOCAL_FMT("Metrics.DescriptorIndexing", LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.ComputeShader", LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.IndirectDraw", LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.MeshShader", LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.DXRRaytracing", LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.DescriptorIndexing", LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
 }
 
 void RenderMetricsWidget::UpdatePassStats()

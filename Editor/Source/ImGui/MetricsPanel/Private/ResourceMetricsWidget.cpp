@@ -1,30 +1,22 @@
 ﻿#include "ResourceMetricsWidget.h"
 #include "ResourceManager.h"
+#include "MetricsCardUI.h"
 
 #include <cmath>
 #include <fmt/format.h>
 
 bool ResourceMetricsWidget::DrawCard(float cardWidth, bool isSelected) const
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
-    ImGui::BeginChild("Card_Memory", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
-
-    ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.3f, 1.0f), LOCAL_CSTR("Metrics.MemoryCache"));
-    ImGui::SameLine(cardWidth - 75.0f);
-    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.2f, 1.0f), LOCAL_CSTR("Metrics.Healthy"));
-
-    ImGui::Text(LOCAL_CSTR("Metrics.ActiveSlots"), m_ResourceMetrics.ActiveResources, m_ResourceMetrics.TotalSlots);
-    const auto modelCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Model)];
-    const auto texCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Texture)];
-    ImGui::TextDisabled(LOCAL_CSTR("Metrics.ModelsTextures"), modelCount, texCount);
-
-    ImGui::Spacing();
-    const auto detailLabel = LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details";
-    const bool clicked = ImGui::SmallButton(detailLabel.c_str());
-
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-    return clicked;
+    const char* status = "Metrics.Healthy";
+    const ImVec4 color(0.2f, 0.9f, 0.2f, 1.0f);
+    return MetricsCardUI::Draw("Card_Memory", cardWidth, isSelected, LOCAL_CSTR("Metrics.MemoryCache"),
+        ImVec4(1.0f, 0.7f, 0.3f, 1.0f), LOCAL_CSTR(status), color, [&]
+        {
+            ImGui::Text(LOCAL_CSTR("Metrics.ActiveSlots"), m_ResourceMetrics.ActiveResources, m_ResourceMetrics.TotalSlots);
+            const auto modelCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Model)];
+            const auto texCount = m_ResourceMetrics.CountsByType[static_cast<size_t>(Engine::EResourceType::Texture)];
+            ImGui::TextDisabled(LOCAL_CSTR("Metrics.ModelsTextures"), modelCount, texCount);
+        });
 }
 
 void ResourceMetricsWidget::Update(f32 dt)

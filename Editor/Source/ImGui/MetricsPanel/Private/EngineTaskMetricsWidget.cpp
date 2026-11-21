@@ -1,4 +1,5 @@
 ﻿#include "EngineTaskMetricsWidget.h"
+#include "MetricsCardUI.h"
 
 void EngineTaskMetricsWidget::Update(const PanelHostServicesV2& host)
 {
@@ -28,25 +29,16 @@ void EngineTaskMetricsWidget::DrawDetails() const
 
 bool EngineTaskMetricsWidget::DrawCard(f32 cardWidth, bool isSelected) const
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, isSelected ? ImVec4(0.15f, 0.25f, 0.35f, 0.8f) : ImVec4(0.14f, 0.14f, 0.16f, 0.7f));
-    ImGui::BeginChild("Card_EngineTasks", ImVec2(cardWidth, 125.0f), true, ImGuiWindowFlags_NoScrollbar);
-
-    ImGui::TextColored(ImVec4(0.8f, 0.4f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.TasksEngine"));
-    ImGui::SameLine(cardWidth - 75.0f);
-    if (m_Metrics.Outstanding > 0) ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), LOCAL_CSTR("Metrics.Busy"));
-    else ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), LOCAL_CSTR("Metrics.Idle"));
-
-    ImGui::Text(LOCAL_CSTR("Metrics.PassesScenes"), m_Metrics.RegisteredPassCount, m_Metrics.ActiveSceneCount);
-    ImGui::TextDisabled(LOCAL_CSTR("Metrics.TasksActiveDone"), m_Metrics.Outstanding,
-        m_Metrics.Succeeded + m_Metrics.Failed);
-
-    ImGui::Spacing();
-    const auto detailLabel = LOCAL(isSelected ? "Metrics.CloseDetail" : "Metrics.ViewDetails") + "###Details";
-    const bool clicked = ImGui::SmallButton(detailLabel.c_str());
-
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
-    return clicked;
+    const bool busy = m_Metrics.Outstanding > 0;
+    const char* status = busy ? "Metrics.Busy" : "Metrics.Idle";
+    const auto color = busy ? ImVec4(0.3f, 0.7f, 1.0f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+    return MetricsCardUI::Draw("Card_EngineTasks", cardWidth, isSelected, LOCAL_CSTR("Metrics.TasksEngine"),
+        ImVec4(0.8f, 0.4f, 1.0f, 1.0f), LOCAL_CSTR(status), color, [&]
+        {
+            ImGui::Text(LOCAL_CSTR("Metrics.PassesScenes"), m_Metrics.RegisteredPassCount, m_Metrics.ActiveSceneCount);
+            ImGui::TextDisabled(LOCAL_CSTR("Metrics.TasksActiveDone"), m_Metrics.Outstanding,
+                m_Metrics.Succeeded + m_Metrics.Failed);
+        });
 }
 
 void EngineTaskMetricsWidget::DrawEngineStatus() const
