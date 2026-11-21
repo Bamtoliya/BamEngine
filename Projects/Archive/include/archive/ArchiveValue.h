@@ -37,6 +37,7 @@ namespace archive::detail
 
         bool is_object() const noexcept { return get_if<object_t>() != nullptr; }
         bool is_array() const noexcept { return get_if<array_t>() != nullptr || get_if<bytes_t>() != nullptr; }
+        bool is_null() const noexcept { return get_if<std::nullptr_t>() != nullptr; }
 
         bool is_number() const noexcept
         {

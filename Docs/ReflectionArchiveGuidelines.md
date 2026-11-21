@@ -149,15 +149,17 @@ Reflection, Archive, ReflectionArchive를 완성한 뒤
 3. **순환 참조 및 그래프 직렬화 경계**:
    - 단순 단방향 트리 소유권과 양방향 그래프 참조를 구분한다. `std::weak_ptr`이나 순환 참조가 필요한 복합 그래프는 단순 계층 아카이브와 분리하여 ID 기반 식별자 정책을 정립한 후 확장한다.
 
-### 8.3 구현 완료 및 아키텍처 상세 (2026-11-02)
+### 8.3 구현 완료 및 아키텍처 상세 (2026-11-02 · 2026-11-22 확장)
 1. **Reflection 모듈 일급 시민 지원 (`PropertyInfo.h`)**:
-   - `PropertyValueKind::SmartPointer` 열거값 추가.
-   - `SmartPointerTraits<T>`를 통해 `std::shared_ptr<T>`, `std::unique_ptr<T>` 컴파일 타임 자동 감지.
-   - `PropertyPointerAccess` 함수 포인터 테이블 도입 (`IsNull`, `Reset`, `CreateDefault`, `GetPointeeObject`, `PointeeType`).
-   - `MakeProperty`에서 스마트 포인터 수명 주기 함수들을 자동 바인딩하여 런타임 제네릭 인터페이스 제공.
-2. **ReflectionArchive 모듈 제네릭 어댑터 연동 (`ReflectionArchiveAdapter.h`)**:
-   - `WriteSmartPointer`: `nullptr`일 경우 아카이브 필드 생략(Omit), 유효 포인터일 경우 역참조하여 순수 멤버 데이터 직렬화 (가상 메모리 주소 비기록).
-   - `ReadSmartPointer`: 필드 부재/null 시 `ResetPointer()`, 필드 존재 시 `CreatePointerInstance()`(`std::make_shared<T>()` 동적 할당) 후 내부 멤버 역직렬화.
-3. **검증 및 성과**:
-   - `package-consumer` 독립 예제에 `ActiveEntry`(유효 인스턴스) 및 `NullEntry`(`nullptr`) 왕복(Round-trip) 테스트 연동.
-   - 타입별 수동 코덱(`PropertyCodecs::Register`) 등록 0개로 100% 자동 직렬화 달성.
+   - `PropertyValueKind::SmartPointer` 열거값, `SmartPointerTraits<T>`, `PropertyPointerAccess` 함수 포인터 테이블 도입 (`IsNull`, `Reset`, `CreateDefault`, `GetConstPointeeObject`, `GetMutablePointeeObject`, `PointeeType`).
+   - `PropertyValueKind::Optional` 열거값, `OptionalTraits<T>`, `PropertyOptionalAccess` 함수 포인터 테이블(`HasValue`, `Reset`, `GetConstInnerObject`, `GetMutableInnerObject`, `EmplaceDefault`, `GetInnerProperty`) 및 `MakeSelfProperty<T>` 도입 (2026-11-22).
+   - `BindPropertyAccess`로 `MakeProperty`와 `MakeSelfProperty`의 접근 바인딩을 통합하고, `MakeRawValueView`를 통해 스칼라·열거형·구조체·컨테이너·스마트포인터를 가리지 않고 `std::optional<T>` 내부 값을 재귀적으로 직렬화/역직렬화할 수 있도록 구성했다.
+2. **Archive null 계약 및 ReflectionArchive 제네릭 어댑터 연동 (`IArchive`, `GlazeArchiveBase`, `ReflectionArchiveAdapter.h`)**:
+   - `IArchive::WriteNull` / `IArchive::IsNull` 및 `ArchiveValue::is_null()`을 추가하여 JSON·BEVE에서 명시적 `null` 리터럴 쓰기 및 판별을 지원한다 (2026-11-22).
+   - `WriteSmartPointer` / `ReadSmartPointer`: `nullptr`은 필드를 생략하고, 읽기 시 필드 부재 또는 명시적 `null`일 때만 `ResetPointer()`를 수행하며, `null`이 아닌 비객체 값(타입 불일치)에 대한 `BeginReadObject` 실패는 조용히 초기화하지 않고 엄격하게 오류(`InvalidValue`)를 반환한다 (2026-11-22 수정).
+   - `WriteOptional` / `ReadOptional`: `std::nullopt`는 명시적 `null`로 기록하고, 읽기 시 필드 부재 또는 `null`이면 `ResetOptional()`, 유효 값이 있으면 `EmplaceOptionalDefault()` 후 내부 `PropertyInfo`로 `WriteProperty` / `ReadProperty`를 재귀 호출한다 (2026-11-22).
+3. **검증 현황 및 범위**:
+   - `package-consumer` 독립 예제에 `ActiveEntry`(유효 인스턴스), `NullEntry`(`nullptr`) 및 `std::optional<T>`(스칼라·구조체·컨테이너)·타입 불일치 실패 검증 항목을 연동했다 (2026-11-22 확장 반영).
+   - 엔진·EnTT 비의존 독립 CTest(`Projects/ReflectionArchive/examples/ReflectionArchiveCheck.cpp`)를 신설해 `WriteNull`/`IsNull`, 다양한 `std::optional<T>` JSON/BEVE 왕복, `unique_ptr`, 미등록 타입 거부, 타입 불일치 비오염을 커버하도록 구성했다 (2026-11-22).
+   - **검증 상태 구분**: 2026-11-22 확장분(`WriteNull`/`IsNull`, `PropertyValueKind::Optional`, `ReadSmartPointer` 타입 불일치 엄격 실패, `ReflectionArchiveCheck`, `SceneArchiveCheck`의 `AttackChallengeComponent` 보강)은 **정적 구현 완료 및 빌드·CTest 실행 검증 대기** 상태다.
+   - *(기존 2026-11-02 기준)* 타입별 수동 코덱(`PropertyCodecs::Register`) 등록 없이 자동 직렬화 적용.

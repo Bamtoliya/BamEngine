@@ -1166,6 +1166,18 @@ namespace archive_reflection
                 property.ResetPointer(object);
                 return {};
             }
+            bool isNull = false;
+            const auto nullResult = ar.IsNull(property.Name, isNull);
+            if (!nullResult)
+            {
+                return nullResult;
+            }
+            if (isNull)
+            {
+                // 명시적 null 리터럴은 null 포인터로 초기화(Reset)합니다.
+                property.ResetPointer(object);
+                return {};
+            }
             if (registry == nullptr)
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
@@ -1175,22 +1187,21 @@ namespace archive_reflection
             {
                 return { archive::ArchiveErrorCode::UnsupportedType, property.Name };
             }
+            const auto beginResult = ar.BeginReadObject(property.Name);
+            if (!beginResult)
+            {
+                return beginResult;
+            }
             auto targetObject = property.GetPointeeObject(object);
             if (!targetObject.IsValid())
             {
-                // 동적 인스턴스 생성 (std::make_shared<T>())
+                // 동적 인스턴스 생성 (std::make_shared<T>() 또는 std::make_unique<T>())
                 targetObject = property.CreatePointerInstance(object);
             }
             if (!targetObject.IsValid())
             {
+                static_cast<void>(ar.EndObject());
                 return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
-            }
-            const auto beginResult = ar.BeginReadObject(property.Name);
-            if (!beginResult)
-            {
-                // 필드는 있으나 null 리터럴 등으로 인해 객체 시작에 실패한 경우 안전하게 reset
-                property.ResetPointer(object);
-                return {};
             }
             const auto result = ReadProperties(ar, *pointeeType, targetObject, registry, codecs);
             const auto endResult = ar.EndObject();
@@ -1199,6 +1210,78 @@ namespace archive_reflection
                 return WithParentField(property.Name, result);
             }
             return WithParentField(property.Name, endResult);
+        }
+
+        inline archive::ArchiveResult WriteOptional(archive::IArchive& ar,
+            const reflection::PropertyInfo& property, const reflection::ObjectView& object,
+            const reflection::Registry* registry, const PropertyCodecs* codecs)
+        {
+            if (!property.HasOptionalValue(object))
+            {
+                return ar.WriteNull(property.Name);
+            }
+
+            const auto* innerTemplate = property.GetOptionalInnerProperty();
+            const auto innerObject = property.GetOptionalInnerObject(object);
+            if (innerTemplate == nullptr || !innerObject.IsValid())
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+
+            auto innerProperty = *innerTemplate;
+            innerProperty.Name = property.Name;
+            return WriteProperty(ar, innerProperty, innerObject, registry, codecs);
+        }
+
+        inline archive::ArchiveResult ReadOptional(archive::IArchive& ar,
+            const reflection::PropertyInfo& property, const reflection::ObjectView& object,
+            const reflection::Registry* registry, const PropertyCodecs* codecs)
+        {
+            bool exists = false;
+            const auto fieldResult = ar.HasField(property.Name, exists);
+            if (!fieldResult)
+            {
+                return fieldResult;
+            }
+            if (!exists)
+            {
+                property.ResetOptional(object);
+                return {};
+            }
+
+            bool isNull = false;
+            const auto nullResult = ar.IsNull(property.Name, isNull);
+            if (!nullResult)
+            {
+                return nullResult;
+            }
+            if (isNull)
+            {
+                property.ResetOptional(object);
+                return {};
+            }
+
+            const auto* innerTemplate = property.GetOptionalInnerProperty();
+            if (innerTemplate == nullptr)
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+
+            const bool hadValue = property.HasOptionalValue(object);
+            const auto innerObject = property.EmplaceOptionalDefault(object);
+            if (!innerObject.IsValid())
+            {
+                return { archive::ArchiveErrorCode::InvalidOperation, property.Name };
+            }
+
+            auto innerProperty = *innerTemplate;
+            innerProperty.Name = property.Name;
+            const auto result = ReadProperty(ar, innerProperty, innerObject, registry, codecs);
+            if (!result && !hadValue)
+            {
+                property.ResetOptional(object);
+            }
+            return result;
         }
 
         inline archive::ArchiveResult WriteProperty(archive::IArchive& ar,
@@ -1299,6 +1382,10 @@ namespace archive_reflection
             else if (property.GetValueKind() == reflection::PropertyValueKind::SmartPointer)
             {
                 result = WriteSmartPointer(ar, property, object, registry, codecs);
+            }
+            else if (property.GetValueKind() == reflection::PropertyValueKind::Optional)
+            {
+                result = WriteOptional(ar, property, object, registry, codecs);
             }
             else if (property.GetValueKind() == reflection::PropertyValueKind::Class)
             {
@@ -1483,6 +1570,10 @@ namespace archive_reflection
             else if (property.GetValueKind() == reflection::PropertyValueKind::SmartPointer)
             {
                 result = ReadSmartPointer(ar, property, object, registry, codecs);
+            }
+            else if (property.GetValueKind() == reflection::PropertyValueKind::Optional)
+            {
+                result = ReadOptional(ar, property, object, registry, codecs);
             }
             else if (property.GetValueKind() == reflection::PropertyValueKind::Class)
             {

@@ -723,6 +723,8 @@ namespace archive
 
         //Field
         [[nodiscard]] virtual ArchiveResult HasField(std::string_view key, bool& exists) const = 0;
+        [[nodiscard]] virtual ArchiveResult IsNull(std::string_view key, bool& isNull) const = 0;
+        [[nodiscard]] virtual ArchiveResult WriteNull(std::string_view key) = 0;
         [[nodiscard]] virtual ArchiveResult GetFieldNames(std::vector<std::string>& names) const = 0;
 
         //Object

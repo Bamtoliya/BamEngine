@@ -32,6 +32,9 @@ namespace
         restored.Enabled = false;
         restored.Entries = { { L"Before", 99.0f, 99 } };
         restored.SetRevision(-1);
+        restored.OptionalRevision = -99;
+        restored.OptionalEntry = consumer::Entry{ L"BeforeOpt", 50.0f, 5 };
+        restored.OptionalModes = std::vector<consumer::Mode>{ consumer::Mode::Backward };
 
         const auto result = archive_reflection::WriteObject(
             writer, "Settings", type, reflection::ObjectView::From(source), &registry);
@@ -89,6 +92,9 @@ int main()
     source.SetRevision(42);
     source.ActiveEntry = std::make_shared<consumer::Entry>(L"스마트포인터", 9.9f, 77);
     source.NullEntry = nullptr;
+    source.OptionalRevision = 88;
+    source.OptionalEntry = consumer::Entry{ L"선택 항목", 3.5f, 12 };
+    source.OptionalModes = std::vector<consumer::Mode>{ consumer::Mode::Forward, consumer::Mode::Idle };
 
     if (!CheckRoundTrip<archive::JsonArchive>(registry, *type, source))
     {
@@ -206,6 +212,36 @@ int main()
         return Fail("Invalid nested matrix changed the destination.");
     }
 
+    struct OptionalFailure
+    {
+        const char* Json;
+        std::string_view Field;
+    };
+
+    const OptionalFailure optionalFailures[]{
+        { R"({"Settings":{"ActiveEntry":"bad"}})", "ActiveEntry" },
+        { R"({"Settings":{"OptionalRevision":"bad"}})", "OptionalRevision" },
+        { R"({"Settings":{"OptionalEntry":123}})", "OptionalEntry" },
+        { R"({"Settings":{"OptionalModes":"bad"}})", "OptionalModes" }
+    };
+
+    for (const auto& failure : optionalFailures)
+    {
+        if (!invalidReader.Parse(failure.Json))
+        {
+            return Fail("Invalid optional/pointer document parsing failed.");
+        }
+
+        const auto optionalFailure = archive_reflection::ReadObject(
+            invalidReader, "Settings", *type, unchanged, &registry);
+
+        if (optionalFailure.Code != archive::ArchiveErrorCode::InvalidValue ||
+            optionalFailure.Field != failure.Field || unchanged != source)
+        {
+            return Fail("Invalid optional or smart pointer field changed the destination.");
+        }
+    }
+
     source.Matrix.clear();
     source.EntryGroups.clear();
     source.ModeGroups = {};
@@ -220,6 +256,9 @@ int main()
     source.PermissionsByMode.clear();
     source.ModesByPermission.clear();
     source.EntriesByMode.clear();
+    source.OptionalRevision.reset();
+    source.OptionalEntry.reset();
+    source.OptionalModes.reset();
 
     if (!CheckRoundTrip<archive::JsonArchive>(registry, *type, source) ||
         !CheckRoundTrip<archive::BeveArchive>(registry, *type, source))

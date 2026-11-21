@@ -18,6 +18,8 @@ namespace archive
         [[nodiscard]] std::size_t GetObjectDepth() const noexcept override;
         [[nodiscard]] ArchiveResult GetMapSize(std::string_view key, std::size_t& size) const override;
         [[nodiscard]] ArchiveResult HasField(std::string_view key, bool& exists) const override;
+        [[nodiscard]] ArchiveResult IsNull(std::string_view key, bool& isNull) const override;
+        [[nodiscard]] ArchiveResult WriteNull(std::string_view key) override;
         [[nodiscard]] ArchiveResult GetFieldNames(std::vector<std::string>& names) const override;
         [[nodiscard]] ArchiveResult BeginWriteObject(std::string_view key) override;
         [[nodiscard]] ArchiveResult BeginReadObject(std::string_view key) override;
