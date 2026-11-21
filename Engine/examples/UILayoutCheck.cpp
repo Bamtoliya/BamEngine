@@ -54,6 +54,23 @@ int main()
 
     if (!ReflectionRegistry::Create()) return Fail("Reflection initialization failed.");
     struct RegistryRelease { ~RegistryRelease() { ReflectionRegistry::Destroy(); } } registryRelease;
+    {
+        std::unique_ptr<Scene, SceneRelease> source(Scene::Create());
+        auto& canvas = source->CreateEntity();
+        const auto handle = canvas.GetEntityHandle();
+        source->GetRegistry().emplace<CanvasComponent>(handle);
+        source->GetRegistry().emplace<HierarchyComponent>(handle);
+        archive::JsonArchive prefab;
+        if (!source->WritePrefabArchive(prefab, canvas))
+            return Fail("Empty Canvas prefab could not be saved.");
+
+        std::unique_ptr<Scene, SceneRelease> destination(Scene::Create());
+        Entity* loadedCanvas = nullptr;
+        std::vector<UIElementLayout> emptyLayouts;
+        if (!destination->InstantiatePrefabArchive(prefab, loadedCanvas, nullptr) || !loadedCanvas ||
+            !UILayout::Build(destination->GetRegistry(), loadedCanvas->GetEntityHandle(), emptyLayouts) || !emptyLayouts.empty())
+            return Fail("Empty Canvas prefab did not restore as a valid layout root.");
+    }
     std::unique_ptr<Scene, SceneRelease> scene(Scene::Create());
     auto& rootWrapper = scene->CreateEntity();
     auto& childWrapper = scene->CreateEntity();

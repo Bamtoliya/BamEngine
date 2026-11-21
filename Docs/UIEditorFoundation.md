@@ -2,6 +2,13 @@
 
 후속 UI 버튼·포인터 상호작용은 [UIInteraction.md](UIInteraction.md)를 따른다.
 Z-Index 편집과 그리기·선택 순서는 [UIRenderOrder.md](UIRenderOrder.md)를 따른다.
+자동 배치·기본 위젯·마스킹의 구현 순서는 [게임 UI 개발 계획](UIWidgetsAndLayoutPlan.md)을 따른다.
+
+## 프리팹 모드에서 사용
+
+Canvas 또는 RectTransform 루트 프리팹을 프리팹 모드로 열면 UI 뷰에 포커스한다. Canvas 루트는 저장된 캔버스를 사용하고, RectTransform 루트는 편집용 미리보기 캔버스에서 표시한다. 이미지·버튼·텍스트는 프리팹 루트 또는 선택한 자손 아래에 추가한다. 저장은 실제 프리팹 루트의 하위 트리를 대상으로 한다.
+
+프리팹 모드의 새 루트 Canvas 명령은 비활성화한다. 새 UI 프리팹을 만들 때는 씬에서 캔버스를 만들고 프리팹으로 저장한다. 이 경로는 현재 씬을 교체하는 프리팹 모드에 적용된다.
 
 ## 사용 흐름
 

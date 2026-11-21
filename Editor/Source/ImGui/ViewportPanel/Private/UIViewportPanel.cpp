@@ -11,10 +11,25 @@
 #include "RenderTargetManager.h"
 #include "RenderPassManager.h"
 #include "Renderer.h"
+#include "PrefabModeManager.h"
 
 namespace
 {
     const glm::vec2 CanvasCorners[] = { { 0.0f, 0.0f }, { 1.0f, 0.0f }, { 1.0f, 1.0f }, { 0.0f, 1.0f } };
+
+    Engine::Scene* GetPrefabEditScene()
+    {
+        if (!Editor::PrefabModeManager::IsCreated()) return nullptr;
+        const auto& prefab = Editor::PrefabModeManager::Get();
+        return prefab.IsInPrefabMode() ? prefab.GetPrefabScene() : nullptr;
+    }
+
+    bool IsPrefabPreviewCanvas(const Engine::Scene* scene, entt::entity canvas)
+    {
+        if (!scene || scene != GetPrefabEditScene()) return false;
+        const auto* root = Editor::PrefabModeManager::Get().GetRootEntity();
+        return root && root->GetEntityHandle() != canvas;
+    }
 
     ImVec2 ImPoint(const glm::vec2& point) { return ImVec2(point.x, point.y); }
     glm::vec2 Point(const ImVec2& point) { return glm::vec2(point.x, point.y); }
@@ -72,6 +87,8 @@ void Editor::UIViewportPanel::Free()
 bool Editor::UIViewportPanel::HasTarget() const
 {
     if (!m_TargetScene) return false;
+    if (const auto* prefabScene = GetPrefabEditScene(); prefabScene && prefabScene != m_TargetScene)
+        return false;
     const auto active = SceneManager::Get().GetActiveScenes();
     if (std::find(active.begin(), active.end(), m_TargetScene) == active.end()) return false;
     const auto& world = m_TargetScene->GetRegistry();
@@ -127,8 +144,10 @@ void Editor::UIViewportPanel::ResolveTarget()
     if (selected && selected != m_LastSelection)
     {
         // Compare wrappers from live registries before dereferencing a possibly stale selection pointer.
+        const auto* prefabScene = GetPrefabEditScene();
         for (Scene* scene : SceneManager::Get().GetActiveScenes())
         {
+            if (prefabScene && scene != prefabScene) continue;
             for (const auto entity : scene->GetRegistry().view<IDComponent>())
             {
                 if (scene->FindEntity(entity) != selected) continue;
@@ -267,7 +286,8 @@ void Editor::UIViewportPanel::DrawOrderMenu()
     }
     auto& world = m_TargetScene->GetRegistry();
     const bool canEdit = history.Enabled() && !m_InteractionPreview &&
-        !SelectionManager::Get().IsPrimarySelectionLocked();
+        !SelectionManager::Get().IsPrimarySelectionLocked() &&
+        (selected != m_TargetCanvas || !IsPrefabPreviewCanvas(m_TargetScene, m_TargetCanvas));
     ImGui::BeginDisabled(!canEdit);
     int value = UILayout::GetZIndex(world, selected);
     if (ImGui::InputInt(LOCAL_LABEL("Viewport.ZIndex").c_str(), &value, 0, 0) && canEdit) SetZIndex(selected, value);
@@ -313,6 +333,7 @@ void Editor::UIViewportPanel::DrawOrderMenu()
 void Editor::UIViewportPanel::SetZIndex(entt::entity entity, std::int32_t zIndex)
 {
     if (!HasTarget() || m_InteractionPreview || SelectionManager::Get().IsPrimarySelectionLocked()) return;
+    if (entity == m_TargetCanvas && IsPrefabPreviewCanvas(m_TargetScene, m_TargetCanvas)) return;
     auto& history = Application::Get().GetEditHistory();
     auto& world = m_TargetScene->GetRegistry();
     if (!history.Enabled() || !world.valid(entity) || UILayout::FindCanvas(world, entity) != m_TargetCanvas ||
@@ -331,44 +352,36 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
 {
     if (!ImGui::BeginMenu(LOCAL_LABEL("Viewport.Canvas").c_str())) return;
     auto* current = SceneManager::Get().GetCurrentScene();
-    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.NewCanvas").c_str(), nullptr, false, current != nullptr))
+    auto* prefabScene = GetPrefabEditScene();
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.NewCanvas").c_str(), nullptr, false, current && !prefabScene))
     {
         auto& canvas = EntityFactory::CreateCanvasEntity(current);
         SetTarget(current, canvas.GetEntityHandle());
         SelectionManager::Get().SetSelectedEntity(&canvas);
     }
-    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddImage").c_str(), nullptr, false, HasTarget()))
+    Entity* parent = nullptr;
+    if (HasTarget())
     {
-        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
-        for (const auto& layout : m_Layouts)
-            if (m_TargetScene->FindEntity(layout.entity) == SelectionManager::Get().GetPrimarySelectedEntity())
-                parent = m_TargetScene->FindEntity(layout.entity);
-        if (parent)
-            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIImageEntity(m_TargetScene, *parent));
-    }
-    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddButton").c_str(), nullptr, false, HasTarget()))
-    {
-        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
-        for (const auto& layout : m_Layouts)
-            if (m_TargetScene->FindEntity(layout.entity) == SelectionManager::Get().GetPrimarySelectedEntity())
-                parent = m_TargetScene->FindEntity(layout.entity);
-        if (parent)
-            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIButtonEntity(m_TargetScene, *parent));
-    }
-    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddText").c_str(), nullptr, false, HasTarget()))
-    {
-        Entity* parent = m_TargetScene->FindEntity(m_TargetCanvas);
+        parent = IsPrefabPreviewCanvas(m_TargetScene, m_TargetCanvas)
+            ? PrefabModeManager::Get().GetRootEntity() : m_TargetScene->FindEntity(m_TargetCanvas);
         auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
-        if (selected && selected->GetScene() == m_TargetScene && FindLayout(selected->GetEntityHandle())) parent = selected;
-        if (parent)
-        {
-            const auto label = LOCAL("Viewport.NewTextLabel");
-            SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
-        }
+        if (selected && selected->GetScene() == m_TargetScene && FindLayout(selected->GetEntityHandle()))
+            parent = selected;
+    }
+
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddImage").c_str(), nullptr, false, parent != nullptr) && parent)
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIImageEntity(m_TargetScene, *parent));
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddButton").c_str(), nullptr, false, parent != nullptr) && parent)
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIButtonEntity(m_TargetScene, *parent));
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddText").c_str(), nullptr, false, parent != nullptr) && parent)
+    {
+        const auto label = LOCAL("Viewport.NewTextLabel");
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
     }
     ImGui::Separator();
     for (Scene* scene : SceneManager::Get().GetActiveScenes())
     {
+        if (prefabScene && scene != prefabScene) continue;
         for (auto [entity, canvas, id] : scene->GetRegistry().view<CanvasComponent, IDComponent>().each())
         {
             const auto* name = scene->GetRegistry().try_get<NameComponent>(entity);
@@ -379,7 +392,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
                 SetTarget(scene, entity);
         }
     }
-    if (HasTarget())
+    if (HasTarget() && !IsPrefabPreviewCanvas(m_TargetScene, m_TargetCanvas))
     {
         auto& history = Application::Get().GetEditHistory();
         const std::array targets{ m_TargetCanvas };
@@ -471,7 +484,8 @@ void Editor::UIViewportPanel::DrawCustomViewport()
     }
     if (!HasTarget() || !m_LayoutValid)
         drawList->AddText(ImVec2(origin.x + 12.0f, origin.y + 12.0f), IM_COL32(240, 190, 100, 255),
-            !HasTarget() ? LOCAL_CSTR("Viewport.CreateCanvasHint") : LOCAL_CSTR("Viewport.CanvasUnavailable"));
+            LOCAL_CSTR(HasTarget() ? "Viewport.CanvasUnavailable" :
+                GetPrefabEditScene() ? "Viewport.PrefabCanvasHint" : "Viewport.CreateCanvasHint"));
     if (!m_InteractionPreview && SelectionManager::Get().IsPrimarySelectionLocked())
         drawList->AddText(ImVec2(origin.x + 12.0f, end.y - 26.0f), IM_COL32(100, 240, 140, 255),
             LOCAL_CSTR("Viewport.SelectionLocked"));

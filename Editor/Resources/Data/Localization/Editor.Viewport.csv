@@ -42,6 +42,8 @@ Viewport,Interact,Interact,상호작용
 Viewport,InteractionStatus,Interact | Clicks: {} | {},상호작용 | 클릭 수: {} | {}
 Viewport,Local,Local,로컬
 Viewport,NewCanvas,New Canvas,새 캔버스
+Viewport,PrefabCanvasHint,Open a UI prefab with a Canvas or Rect Transform root.,캔버스나 Rect 트랜스폼을 루트로 가진 UI 프리팹을 여세요.
+Viewport,PrefabPreviewCanvas,Prefab Preview Canvas,프리팹 미리보기 캔버스
 Viewport,NewName,New Viewport,새 뷰포트
 Viewport,NoUsableCamera,No usable active camera in the scene.,씬에 사용할 수 있는 활성 카메라가 없습니다.
 Viewport,OpenInViewport,"Open ""{}"" in new viewport","""{}""을(를) 새 뷰포트에서 열기"

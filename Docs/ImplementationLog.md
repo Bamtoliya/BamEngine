@@ -7387,3 +7387,11 @@ Use this as the primary execution list until a playable 2D vertical slice is com
 
 - Editor와 각 패널 DLL이 정적 `imgui::imgui`를 별도로 링크해 ImGui 전역 상태가 분리되는 문제를 확인했다. V2 Draw 문맥에 호스트 `ImGuiContext`와 allocator 함수를 추가하고 Console·Metrics·Network Profiler DLL의 Draw 진입점에서 이를 바인딩하도록 했다. 구현은 기존 Sprite Animation 플러그인의 DLL 경계 처리 패턴을 따른다.
 - **미검증**: 사용자가 제공한 Console 크래시 스택의 `ImGui::CalcTextSize` 접근 위반은 코드상 원인에 대응했으나, 수정 후 빌드와 Editor 실환경 재검증은 아직 수행하지 않았다.
+
+
+### [2026-11-22] 프리팹 모드 UI 뷰와 게임 UI 위젯 계획
+
+- UI 프리팹 모드에서 UI 뷰가 편집 씬을 사용한다. Canvas 루트는 직접 편집하고 RectTransform 루트에는 미리보기 캔버스를 사용한다. 추가한 요소는 프리팹 루트 하위에 보관한다.
+- 프리팹 Archive는 빈 UI 루트에 필요한 계층을 보존하고, 이전 데이터에서 누락된 계층을 복구한다.
+- Unity uGUI, Unreal UMG, Godot Control을 비교해 배치, 기본 입력 위젯, 스크롤과 마스킹 순서를 문서화했다.
+- 정적으로 호출부를 확인했다. 빌드, UILayoutCheck와 Editor의 프리팹 편집·저장·재열기는 사용자 실행 대기다. [UI 편집기](UIEditorFoundation.md) · [위젯·레이아웃 개발 계획](UIWidgetsAndLayoutPlan.md)

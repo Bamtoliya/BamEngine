@@ -6,6 +6,7 @@
 #include "Entity.h"
 #include "EntityFactory.h"
 #include "WorldComponents.h"
+#include "UIComponents.h"
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "SelectionManager.h"
@@ -18,6 +19,29 @@
 #include "AssetCache.h"
 
 IMPLEMENT_LAZY_SINGLETON(PrefabModeManager)
+
+namespace
+{
+    bool PreparePrefabUICanvas(Engine::Scene& scene, Engine::Entity& root)
+    {
+        auto& world = scene.GetRegistry();
+        const auto rootHandle = root.GetEntityHandle();
+        if (world.all_of<Engine::CanvasComponent>(rootHandle))
+            return true;
+        if (!world.all_of<Engine::RectTransformComponent>(rootHandle))
+            return false;
+
+        // Preview a reusable UI subtree at the default canvas size. Only the original root's
+        // subtree is written by SavePrefab(), so this canvas remains local to the edit scene.
+        const auto canvas = scene.CreateEntity().GetEntityHandle();
+        world.emplace<Engine::NameComponent>(canvas, Engine::StrToWStr(LOCAL("Viewport.PrefabPreviewCanvas")));
+        world.emplace<Engine::FlagComponent>(canvas);
+        world.emplace<Engine::CanvasComponent>(canvas);
+        world.emplace<Engine::HierarchyComponent>(canvas).children.push_back(rootHandle);
+        world.get_or_emplace<Engine::HierarchyComponent>(rootHandle).parent = canvas;
+        return true;
+    }
+}
 
 PrefabModeManager::~PrefabModeManager()
 {
@@ -85,8 +109,6 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
     for (auto* entity : selection.GetSelectedEntities())
         m_SavedSelection.push_back(entity->GetWeakRef());
 
-    selection.ClearSelection();
-
     m_PrefabScene = Engine::Scene::Create();
     if (!m_PrefabScene)
     {
@@ -120,12 +142,21 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
         return false;
     }
 
+    const bool hasUI = PreparePrefabUICanvas(*m_PrefabScene, *m_PrefabRootEntity);
     SetupDefaultEnvironment(m_PrefabScene);
 
-    sm.OpenScene(m_PrefabScene);
+    if (sm.OpenScene(m_PrefabScene) != Engine::EResult::Success)
+    {
+        Safe_Release(m_SavedMainScene);
+        m_SavedMainScene = nullptr;
+        Safe_Release(m_PrefabScene);
+        m_PrefabScene = nullptr;
+        m_PrefabRootEntity = nullptr;
+        m_SavedSelection.clear();
+        return false;
+    }
 
-    if (sm.GetCurrentScene() == m_PrefabScene)
-        history.ResetDocument(m_PrefabScene, history.Enabled());
+    history.ResetDocument(m_PrefabScene, history.Enabled());
 
     Safe_Release(m_PrefabScene);
 
@@ -134,6 +165,10 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
     m_IsInPrefabMode = true;
     m_CurrentPrefabPath = prefabPath;
     m_HasUnsavedChanges = false;
+
+    if (hasUI && ImGuiManager::IsCreated())
+        if (auto* view = ImGuiManager::Get().GetImGuiPanel(L"UI View"))
+            view->Focus();
 
     NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.EnterPrefabMode", WStrToStr(prefabPath.stem().wstring())), ELogLevel::Info, 3.0f);
     return true;

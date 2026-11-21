@@ -354,7 +354,9 @@ void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
 
 	if (ImGui::BeginMenu((ICON_FA_WINDOW_MAXIMIZE " " + LOCAL_LABEL("Hierarchy.UI")).c_str()))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str()))
+		const auto& prefab = PrefabModeManager::Get();
+		const bool canCreateCanvas = !prefab.IsInPrefabMode() || prefab.GetPrefabScene() != scene;
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str(), nullptr, false, canCreateCanvas))
 			EntityFactory::CreateCanvasEntity(scene);
 		ImGui::EndMenu();
 	}

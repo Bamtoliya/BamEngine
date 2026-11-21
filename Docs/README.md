@@ -20,6 +20,7 @@
 - [셰이더 바인딩 레이아웃](Shader/BINDING_LAYOUT.md)
 - [씬 Undo/Redo 사용 범위와 제약](EditorUndoRedo.md)
 - [에디터 UX 검증 기준](EditorUXTestGuidelines.md)
+- [게임 UI 위젯·레이아웃·마스킹 개발 계획](UIWidgetsAndLayoutPlan.md)
 - [Client 빌드·패키징 계획과 잔여 검증](BuildAndPackagingPlan.md)
 - [구현 기록](ImplementationLog.md)
 - [개발 우선순위](DevelopmentPriorities.md)

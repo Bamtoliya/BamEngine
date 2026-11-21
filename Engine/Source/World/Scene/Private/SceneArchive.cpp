@@ -462,7 +462,8 @@ archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const En
         auto& entity = entities[i];
         if (const auto* hierarchy = m_LocalRegistry.try_get<HierarchyComponent>(entity.Handle))
         {
-            entity.HasHierarchy = (i > 0) || !hierarchy->children.empty();
+            entity.HasHierarchy = (i > 0) || !hierarchy->children.empty() ||
+                m_LocalRegistry.any_of<CanvasComponent, RectTransformComponent>(entity.Handle);
             if (i > 0)
             {
                 const auto parent = subtreeIds.find(hierarchy->parent);
@@ -612,6 +613,10 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
     }
 
     Entity* liveRoot = prefabToLive.at(rootId);
+    const auto liveRootHandle = liveRoot->GetEntityHandle();
+    if (m_LocalRegistry.any_of<CanvasComponent, RectTransformComponent>(liveRootHandle))
+        m_LocalRegistry.get_or_emplace<HierarchyComponent>(liveRootHandle);
+
     if (parent != nullptr)
     {
         const auto reparentResult = ReparentEntity(*liveRoot, parent);
