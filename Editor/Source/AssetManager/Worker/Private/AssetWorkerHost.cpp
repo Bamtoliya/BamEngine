@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -427,6 +428,14 @@ namespace
     }
 }
 
+float AssetWorkerHost::ComputeAggregatedProgress(float localProgress, const ImportProgressScope& scope)
+{
+    const float safeLocal = std::isfinite(localProgress) ? std::clamp(localProgress, 0.0f, 1.0f) : 0.0f;
+    const float safeBase = std::isfinite(scope.BaseProgress) ? std::clamp(scope.BaseProgress, 0.0f, 1.0f) : 0.0f;
+    const float safeSpan = std::isfinite(scope.ProgressSpan) ? std::clamp(scope.ProgressSpan, 0.0f, 1.0f - safeBase) : (1.0f - safeBase);
+    return std::clamp(safeBase + safeSpan * safeLocal, 0.0f, 1.0f);
+}
+
 bool AssetWorkerHost::CreateTextureStagingPath(const std::filesystem::path& targetPath, std::filesystem::path& outPath)
 {
     return CreateSiblingTempFile(targetPath, outPath);
@@ -558,7 +567,7 @@ std::vector<AssetWorkerHost::CompletedThumbnailTask> AssetWorkerHost::PollComple
 }
 
 bool AssetWorkerHost::EnqueueImportModel(const std::filesystem::path& sourcePath,
-    Tools::ModelConversion::Options options, ModelImportCompletion complete)
+    Tools::ModelConversion::Options options, ModelImportCompletion complete, ImportProgressScope progressScope)
 {
     if (!m_Available || sourcePath.empty() || !complete) return false;
     if (sourcePath.native().find_first_of(L"\t\r\n") != std::wstring::npos) return false;
@@ -566,14 +575,15 @@ bool AssetWorkerHost::EnqueueImportModel(const std::filesystem::path& sourcePath
     std::lock_guard lock(m_QueueMutex);
     if (m_StopRequested || m_PendingImports.size() + m_PendingTextureImports.size() >= MAX_QUEUE_SIZE) return false;
 
-    m_PendingImports.push_back({ m_NextImportRequestId++, sourcePath, std::move(options), std::move(complete) });
+    m_PendingImports.push_back({ m_NextImportRequestId++, sourcePath, std::move(options), std::move(complete), std::move(progressScope) });
     m_QueueCv.notify_one();
     return true;
 }
 
 bool AssetWorkerHost::EnqueueImportTexture(const std::filesystem::path& sourcePath,
     const std::filesystem::path& finalBamtexPath, const std::filesystem::path& finalDdsPath,
-    Engine::ETextureFormat targetFormat, ECompressFlags compressFlags, TextureImportCompletion complete)
+    Engine::ETextureFormat targetFormat, ECompressFlags compressFlags, TextureImportCompletion complete,
+    ImportProgressScope progressScope)
 {
     const auto hasProtocolDelimiter = [](const std::filesystem::path& path)
     {
@@ -595,6 +605,7 @@ bool AssetWorkerHost::EnqueueImportTexture(const std::filesystem::path& sourcePa
     task.TargetFormat = targetFormat;
     task.CompressFlags = compressFlags;
     task.Complete = std::move(complete);
+    task.ProgressScope = std::move(progressScope);
     m_PendingTextureImports.push_back(std::move(task));
     m_QueueCv.notify_one();
     return true;
@@ -670,10 +681,12 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         }
 
         const std::string command = BuildModelCommand(task.RequestId, task.SourcePath, snapshot.Path, task.Options);
+        const std::string displayName = task.ProgressScope.DisplayName.empty()
+            ? Engine::WStrToStr(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
         {
             std::lock_guard lock(m_ImportStatusMutex);
             m_ActiveImportStatus = {
-                task.RequestId, Engine::WStrToStr(task.SourcePath.filename().wstring()), 0.05f, "ModelImport.WorkerStarting"
+                task.RequestId, displayName, ComputeAggregatedProgress(0.05f, task.ProgressScope), "ModelImport.WorkerStarting"
             };
             m_ActiveImportProcess = proc.Process;
             m_ImportCancelled = false;
@@ -705,7 +718,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                 {
                     deadline = Clock::now() + timeout;
                     std::lock_guard lock(m_ImportStatusMutex);
-                    m_ActiveImportStatus.Progress = value == 1 ? 0.15f : 0.9f;
+                    m_ActiveImportStatus.Progress = ComputeAggregatedProgress(value == 1 ? 0.15f : 0.9f, task.ProgressScope);
                     m_ActiveImportStatus.StepKey = value == 1
                         ? "ModelImport.WorkerConverting" : "ModelImport.WorkerReceiving";
                 }
@@ -775,10 +788,12 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
 
         const std::string command = BuildTextureCommand(task.RequestId, task.SourcePath,
             task.FinalBamtexPath, task.FinalDdsPath, task.TargetFormat, task.CompressFlags, outputs);
+        const std::string displayName = task.ProgressScope.DisplayName.empty()
+            ? Engine::WStrToStr(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
         {
             std::lock_guard lock(m_ImportStatusMutex);
             m_ActiveImportStatus = {
-                task.RequestId, Engine::WStrToStr(task.SourcePath.filename().wstring()), 0.05f,
+                task.RequestId, displayName, ComputeAggregatedProgress(0.05f, task.ProgressScope),
                 "ModelImport.TextureWorkerStarting"
             };
             m_ActiveImportProcess = proc.Process;
@@ -841,8 +856,9 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                     lastProgress = value;
                     lastProgressAt = now;
                     deadline = lastProgressAt + timeout;
+                    const float localProgress = value == 1 ? 0.15f : value == 2 ? 0.45f : value == 3 ? 0.7f : 0.9f;
                     std::lock_guard lock(m_ImportStatusMutex);
-                    m_ActiveImportStatus.Progress = value == 1 ? 0.15f : value == 2 ? 0.45f : value == 3 ? 0.7f : 0.9f;
+                    m_ActiveImportStatus.Progress = ComputeAggregatedProgress(localProgress, task.ProgressScope);
                     m_ActiveImportStatus.StepKey = value == 1 ? "ModelImport.TextureWorkerCompressing"
                         : value == 2 ? "ModelImport.TextureWorkerWritingBamtex"
                         : value == 3 ? "ModelImport.TextureWorkerWritingDds"

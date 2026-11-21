@@ -51,4 +51,9 @@ if(BUILD_TESTING)
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/TextureWorkerCheck.py"
             $<TARGET_FILE:BamAssetWorker> $<TARGET_FILE:AssetWorkerTextureOutputCheck>)
     set_tests_properties(AssetWorkerTextureCheck PROPERTIES TIMEOUT 180)
+
+    add_test(NAME AssetWorkerFaultIsolationCheck
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/FaultIsolationCheck.py"
+            $<TARGET_FILE:BamAssetWorker> $<TARGET_FILE:AssetWorkerSnapshotCheck> $<TARGET_FILE:AssetWorkerTextureOutputCheck>)
+    set_tests_properties(AssetWorkerFaultIsolationCheck PROPERTIES TIMEOUT 90)
 endif()

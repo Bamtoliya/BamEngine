@@ -158,7 +158,7 @@ flowchart TD
 - 임포트 변환은 한 번에 하나씩 처리한다. 다른 워커는 썸네일을 처리할 수 있다. 하단 푸터는 변환 단계를 표시하고 현재 요청만 취소한다. 워커 시작·버전 확인·임시 경로 준비에 실패하면 기존 인프로세스 준비를 사용한다. 요청을 보낸 뒤 변환 실패, 단계별 응답 제한 초과 또는 취소가 발생하면 에디터가 결과 게시를 시작하지 않는다.
 - 모델 프리뷰는 에디터 백그라운드 스레드에서 원본을 파싱하고 메인 스레드에서 메시·머티리얼 생성을 여러 프레임에 나누어 처리한다. 재임포트 원본 탐색은 로드된 모델의 원본 URI와 같은 폴더의 동명 원본을 우선하고, 필요한 경우 모델 에셋을 읽는다.
 - 모델 임포트 중 `BakeTexturesToDDS`는 최종화 전에 내장/외부 텍스처를 수집해 `AssetWorkerHost`로 순차 위임한다. 슬롯별 BC5/BC7·sRGB 설정과 기존 파일명/출력 폴더를 유지하며, 텍스처 베이킹 실패·취소 시 기존 동작처럼 원본 텍스처로 진행한다. 워커를 사용할 수 없으면 인프로세스 변환으로 폴백한다. 모델 자원 등록과 머티리얼 커밋은 모든 요청의 완료 후 진행한다.
-- 모델 임포트 시 푸터의 세부 진행률 합산은 후속이다. 현재 푸터에는 워커가 처리 중인 텍스처 요청의 단계가 표시되며, 전체 모델 최종화 진행률로 합산하지 않는다.
+- 모델 임포트 시 푸터의 세부 진행률 합산도 반영했다. 모델 임포트에 내장/외부 텍스처 베이킹이 포함되면 모델 워커 변환 단계를 `0.0..0.35`, 순차 `BakeTexturesToDDS` 요청들을 `0.35..0.95` 범위(`1/N..N/N` 구간 분할, 모델 파일명과 `(i/N)` 표시)로 `AssetWorkerHost::ImportProgressScope`를 통해 푸터 진행률 바에 합산하며, 기존 `ModelImport.*` 로캘 키를 재사용한다.
 
 ## 4. 단계별 개발 로드맵 (Phased Implementation Roadmap)
 
@@ -166,8 +166,8 @@ flowchart TD
 | :--- | :--- | :--- | :--- |
 | **Phase 1** | 독립 CLI 워커 및 썸네일 베이커 구축 *(완료)* | • `Tools/AssetWorker/` CMake 프로젝트 및 `BamAssetWorker.exe` 구축<br>• 헤드리스 PBR 래스터라이저(`HeadlessThumbnailRasterizer`) 구현<br>• 모델/메시/원시모델/프리팹 썸네일 단독 CLI & 데몬 모드 구현 | `BamAssetWorker.exe` |
 | **Phase 2** | 에디터 호스트 및 썸네일 파이프라인 연동 *(완료)* | • 에디터 내 `AssetWorkerHost` 구축 (Job Object + 데몬 파이프 풀 2개)<br>• `AssetCache` 비동기 워커 위임/폴링 연동 및 프리팹 저장 무효화 연동<br>• 레거시 `Resources/` -> `Assets/` 리소스 참조 폴백 보강 | `AssetWorkerHost.h/.cpp`, `AssetCache.cpp` |
-| **Phase 3** | 모델 워커 소비 검증 및 독립 텍스처 임포트 *(코드 반영, 사용자 보고 워커 검사 통과, 실환경 검증 대기)* | • 모델 변환 및 임시 결과 수신, 푸터 진행률·취소 연결<br>• snapshot을 실제 소비 API로 읽는 검사 추가<br>• 독립 텍스처의 DirectXTex 변환, 두 산출물 staging/교체, 진행률·취소 연결<br>• 모델 임포트 내장/외부 텍스처의 워커 위임 연결<br>• 에디터 통합 및 대형 에셋 실측 잔여 | `BamAssetWorker`, `AssetWorkerModelCheck`, `AssetWorkerSnapshotCheck`, `AssetWorkerTextureCheck` |
-| **Phase 4** | 결함 격리 및 60FPS 무간섭 검증 *(진행 전)* | • 고의적 OOM/크래시 에셋 주입 시 에디터 무영향 검증<br>• 대용량 에셋 일괄 처리 도중 60FPS 유지 실측 | 검증 리포트, 단위 테스트 |
+| **Phase 3** | 모델 워커 소비 검증 및 독립 텍스처 임포트 *(코드 반영, 사용자 보고 워커 검사 통과, 실환경 검증 대기)* | • 모델 변환 및 임시 결과 수신, 푸터 진행률 합산·취소 연결<br>• snapshot을 실제 소비 API로 읽는 검사 추가<br>• 독립 텍스처의 DirectXTex 변환, 두 산출물 staging/교체, 진행률·취소 연결<br>• 모델 임포트 내장/외부 텍스처의 워커 위임 및 진행률 합산 연결<br>• 에디터 통합 및 대형 에셋 실측 잔여 | `BamAssetWorker`, `AssetWorkerModelCheck`, `AssetWorkerSnapshotCheck`, `AssetWorkerTextureCheck` |
+| **Phase 4** | 결함 격리 및 60FPS 무간섭 검증 *(자동화 결함 격리 검사 코드 반영, 빌드/CTest 및 60FPS 실환경 측정 대기)* | • 잘못된 프로토콜·손상 에셋 주입 후 동일 데몬 복구, 기존 `.bamtex`/`.dds` 보존, 강제 종료 후 재시작, 파이프 EOF 및 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 자동화 검사(`AssetWorkerFaultIsolationCheck`) 추가<br>• 대용량 에셋 일괄 처리 도중 60FPS 유지 및 에디터 UI 취소 실측 대기 | `Tools/AssetWorker/FaultIsolationCheck.py`, `AssetWorkerFaultIsolationCheck` |
 
 ---
 
@@ -180,7 +180,8 @@ flowchart TD
 - 에디터에서 스킨드 모델과 큰 정적 모델을 각각 임포트한다. 배율·축 보정·LOD 설정, 본·클립, 하위 폴더와 원본 URI, 머티리얼 덮어쓰기 옵션이 기존 경로와 일치하는지 확인한다.
 - 변환 진행 중 푸터의 취소를 눌러 변환 결과가 게시되지 않고 기존 파일이 유지되는지 확인한다. 대기 중인 모델 요청과 썸네일 작업이 이어지는지, 재요청이 성공하는지도 확인한다.
 - 같은 모델과 옵션으로 워커 사용·미사용 조건의 프레임 간격을 비교한다. 프리뷰 준비, 변환, 에디터의 GPU 등록·저장 구간을 함께 기록한다.
-- 2026-11-19 정적 확인에서 워커 명령과 에디터 호출 경로, 푸터의 로캘 키를 대조했다. 2026-11-20 모델 snapshot 소비 검사와 텍스처 워커 코드를 추가하고, 모델 임포트의 내장/외부 텍스처 베이킹도 워커 요청·폴백 경로에 연결했다. 사용자는 Debug 빌드 후 `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `LocalizationAuditUtility` 3개 통과를 보고했다. Editor 통합과 대형 에셋 실측은 확인되지 않았다.
+- `AssetWorkerFaultIsolationCheck` (`Tools/AssetWorker/FaultIsolationCheck.py`)에서 잘못된 명령·비유한 옵션(`nan`)·손상 `.gltf`/빈 `.obj`·잘못된 텍스처 포맷/플래그·손상 및 잘린 `.png` 입력이 데몬을 중단시키지 않고 `RESULT 0` 후 동일 데몬에서 후속 정상 모델/텍스처 변환으로 복구되는지, 실패 요청 및 스테이징 실행 중 기존 최종 `.bamtex`/`.dds`가 바이트 단위로 보존되는지, 중도 강제 종료(`TerminateProcess` / `kill`) 후 파이프 EOF 및 새 워커 재시작 복구가 되는지, 부모 파이프 EOF 시 좀비 프로세스 없이 정상 종료되는지, Windows `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 핸들 종료 시 블로킹된 데몬이 즉시 정리되는지를 검증한다.
+- 2026-11-19 정적 확인에서 워커 명령과 에디터 호출 경로, 푸터의 로캘 키를 대조했다. 2026-11-20 모델 snapshot 소비 검사와 텍스처 워커 코드를 추가하고, 모델 임포트의 내장/외부 텍스처 베이킹도 워커 요청·폴백 경로에 연결했다. 사용자는 Debug 빌드 후 `AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `LocalizationAuditUtility` 3개 통과를 보고했다. 2026-11-22 모델 임포트 푸터 진행률 합산(`AssetWorkerHost::ImportProgressScope`)과 `AssetWorkerFaultIsolationCheck`를 정적 반영했으며, 해당 변경분의 빌드·CTest(`AssetWorkerModelCheck`, `AssetWorkerTextureCheck`, `AssetWorkerFaultIsolationCheck`) 및 에디터 통합·대형 에셋 60FPS 실측은 사용자 실행 대기 중이다.
 
 ### 전체 목표
 

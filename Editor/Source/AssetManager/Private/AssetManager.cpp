@@ -311,6 +311,11 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 
 				const auto& request = task->GetRequest();
 				auto promise = std::make_shared<std::promise<EResult>>();
+				const bool expectsTextureBake = request.Settings.SaveToFile && request.Settings.BakeTexturesToDDS &&
+					HasFlag(request.Settings.ImportOptions, EModelImportOption::Materials);
+				AssetWorkerHost::ImportProgressScope progressScope;
+				progressScope.BaseProgress = 0.0f;
+				progressScope.ProgressSpan = expectsTextureBake ? 0.35f : 1.0f;
 				const bool queued = AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().EnqueueImportModel(
 					request.SourcePath, ModelImporter::MakeConversionOptions(request.Settings),
 					[task, promise](AssetWorkerHost::ModelImportResult result, const filesystem::path& snapshot)
@@ -331,7 +336,8 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 						{
 							promise->set_exception(std::current_exception());
 						}
-					});
+					},
+					std::move(progressScope));
 
 				pending.Future = queued ? promise->get_future() : std::async(std::launch::async, [task]()
 					{

@@ -38,6 +38,13 @@ public:
         const char* StepKey = "ModelImport.WorkerStarting";
     };
 
+    struct ImportProgressScope
+    {
+        std::string DisplayName;
+        float BaseProgress = 0.0f;
+        float ProgressSpan = 1.0f;
+    };
+
     enum class ModelImportResult
     {
         SnapshotReady,
@@ -74,6 +81,7 @@ private:
         std::filesystem::path SourcePath;
         Tools::ModelConversion::Options Options;
         ModelImportCompletion Complete;
+        ImportProgressScope ProgressScope;
     };
 
     struct PendingTextureImportTask
@@ -85,6 +93,7 @@ private:
         Engine::ETextureFormat TargetFormat = Engine::ETextureFormat::BC7_RGBA_UNORM;
         ECompressFlags CompressFlags = ECompressFlags::None;
         TextureImportCompletion Complete;
+        ImportProgressScope ProgressScope;
     };
 
 private:
@@ -105,10 +114,11 @@ public:
 
     // The snapshot is available during the worker-thread completion callback.
     bool EnqueueImportModel(const std::filesystem::path& sourcePath, Tools::ModelConversion::Options options,
-        ModelImportCompletion complete);
+        ModelImportCompletion complete, ImportProgressScope progressScope = {});
     bool EnqueueImportTexture(const std::filesystem::path& sourcePath, const std::filesystem::path& finalBamtexPath,
         const std::filesystem::path& finalDdsPath, Engine::ETextureFormat targetFormat, ECompressFlags compressFlags,
-        TextureImportCompletion complete);
+        TextureImportCompletion complete, ImportProgressScope progressScope = {});
+    static float ComputeAggregatedProgress(float localProgress, const ImportProgressScope& scope);
     static bool CreateTextureStagingPath(const std::filesystem::path& targetPath, std::filesystem::path& outPath);
     static bool CommitTextureOutputs(const std::filesystem::path& stagedBamtexPath, const std::filesystem::path& stagedDdsPath,
         const std::filesystem::path& finalBamtexPath, const std::filesystem::path& finalDdsPath);

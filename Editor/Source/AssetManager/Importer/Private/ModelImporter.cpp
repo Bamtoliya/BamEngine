@@ -191,6 +191,7 @@ namespace Editor
 		size_t NextTextureBake = 0;
 		std::optional<TextureBake> ActiveTextureBake;
 		filesystem::path TextureOutputDirectory;
+		std::string ModelDisplayName;
 		unordered_map<wstring, bool> TextureBakeResults;
 		unordered_map<wstring, bool> EmbeddedTextureFilesWritten;
 		bool TextureBakesScheduled = false;
@@ -412,8 +413,20 @@ namespace
 		if (state.NextTextureBake >= state.PendingTextureBakes.size())
 			return false;
 
-		const auto& request = state.PendingTextureBakes[state.NextTextureBake++];
+		const size_t total = state.PendingTextureBakes.size();
+		const size_t index = state.NextTextureBake++;
+		const auto& request = state.PendingTextureBakes[index];
 		const auto& outputDir = state.TextureOutputDirectory;
+		constexpr float kModelPhaseEnd = 0.35f;
+		constexpr float kTexturePhaseSpan = 0.60f;
+		const float sliceSpan = kTexturePhaseSpan / static_cast<float>(total);
+		AssetWorkerHost::ImportProgressScope progressScope;
+		progressScope.BaseProgress = kModelPhaseEnd + sliceSpan * static_cast<float>(index);
+		progressScope.ProgressSpan = sliceSpan;
+		progressScope.DisplayName = (state.ModelDisplayName.empty()
+			? WStrToStr(request.SourcePath.filename().wstring()) : state.ModelDisplayName)
+			+ " (" + std::to_string(index + 1) + "/" + std::to_string(total) + ")";
+
 		auto promise = std::make_shared<std::promise<EResult>>();
 		auto future = promise->get_future();
 		const bool queued = AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().EnqueueImportTexture(
@@ -438,7 +451,8 @@ namespace
 				{
 					promise->set_exception(std::current_exception());
 				}
-			});
+			},
+			std::move(progressScope));
 
 		if (queued)
 		{
@@ -1523,6 +1537,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			task.m_FinalizeState = std::make_shared<ModelFinalizeState>();
 			auto& state = *task.m_FinalizeState;
 			state.Settings = request.Settings;
+			state.ModelDisplayName = WStrToStr(data.SourcePath.filename().wstring());
 
 			if (const auto result = state.Output.Acquire(outputDir); result != EResult::Success)
 				return finish(result);
