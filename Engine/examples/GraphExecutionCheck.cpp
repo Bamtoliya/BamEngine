@@ -8,6 +8,13 @@
 #include <stdexcept>
 #include "TransformSystem.h"
 #include "TransformComponent.h"
+#include "GraphSystem.h"
+#include "ReflectionRegistry.h"
+#include "Scene.h"
+#include "HealthComponent.h"
+#include "HitboxComponent.h"
+#include "InteractableComponent.h"
+#include <memory>
 
 namespace
 {
@@ -443,6 +450,166 @@ void CheckFailuresAndVectors(const GraphRegistry& registry, const reflection::Re
 	Expect(executor.GetState() == EGraphExecutionState::Failed && executor.GetDiagnostic().Node == narrow &&
 		executor.GetDiagnostic().Pin == "value", "Native int32 range was not checked at the input pin.");
 }
+
+void CheckGameplayComponents()
+{
+	HealthComponent health;
+	Expect(health.maxHealth == 100.0f && health.currentHealth == 100.0f && !health.invulnerable && !health.isDead,
+		"HealthComponent defaults were unexpected.");
+
+	Expect(health.ApplyDamage(30.0f) == 30.0f && health.currentHealth == 70.0f && !health.isDead,
+		"HealthComponent ApplyDamage failed.");
+	Expect(health.ApplyDamage(0.0f) == 0.0f && health.ApplyDamage(-10.0f) == 0.0f &&
+		health.ApplyDamage(std::numeric_limits<float>::quiet_NaN()) == 0.0f && health.currentHealth == 70.0f,
+		"HealthComponent accepted invalid damage input.");
+
+	health.invulnerable = true;
+	Expect(health.ApplyDamage(50.0f) == 0.0f && health.currentHealth == 70.0f && !health.isDead,
+		"Invulnerable HealthComponent took damage.");
+	health.invulnerable = false;
+
+	Expect(health.Heal(50.0f) == 30.0f && health.currentHealth == 100.0f,
+		"HealthComponent Heal did not clamp to maxHealth.");
+	Expect(health.Heal(-5.0f) == 0.0f && health.currentHealth == 100.0f,
+		"HealthComponent accepted negative heal.");
+
+	Expect(health.ApplyDamage(150.0f) == 100.0f && health.currentHealth == 0.0f && health.isDead,
+		"HealthComponent did not clamp to zero or set isDead.");
+	Expect(health.Heal(25.0f) == 0.0f && health.currentHealth == 0.0f && health.isDead,
+		"Dead HealthComponent was healed.");
+	Expect(health.ApplyDamage(10.0f) == 0.0f && health.currentHealth == 0.0f,
+		"Dead HealthComponent took additional damage.");
+
+	health.ResetHealth();
+	Expect(health.currentHealth == 100.0f && !health.isDead, "HealthComponent ResetHealth failed.");
+
+	HitboxComponent hitbox;
+	Expect(hitbox.damage == 10.0f && hitbox.knockbackForce == 0.0f && !hitbox.destroyOnHit && hitbox.active,
+		"HitboxComponent defaults were unexpected.");
+
+	InteractableComponent interactable;
+	interactable.oneShot = true;
+	Expect(interactable.CanInteract() && interactable.TryConsume() && interactable.consumed && !interactable.CanInteract(),
+		"InteractableComponent oneShot consumption failed.");
+	Expect(!interactable.TryConsume(), "Consumed oneShot InteractableComponent was consumed twice.");
+}
+
+void CheckGameplayGraphNodes()
+{
+	struct ReflectionScope
+	{
+		bool created = false;
+		ReflectionScope()
+		{
+			if (!ReflectionRegistry::IsCreated())
+			{
+				Expect(ReflectionRegistry::Create() != nullptr, "Failed to create ReflectionRegistry.");
+				created = true;
+			}
+		}
+		~ReflectionScope()
+		{
+			if (created) ReflectionRegistry::Destroy();
+		}
+	} reflectionScope;
+
+	const auto& engineReflection = ReflectionRegistry::Get().GetRegistry();
+	Expect(engineReflection.FindType<HealthComponent>() != nullptr, "HealthComponent was not reflected.");
+	Expect(engineReflection.FindType<HitboxComponent>() != nullptr, "HitboxComponent was not reflected.");
+	Expect(engineReflection.FindType<InteractableComponent>() != nullptr, "InteractableComponent was not reflected.");
+
+	GraphRegistry engineRegistry;
+	Accept(engineRegistry.RegisterBuiltins());
+	Accept(RegisterReflectedGraphNodes(engineRegistry, engineReflection));
+
+	for (const char* nodeType : {
+		"Entity.SpawnPrefab",
+		"Entity.DestroyEntity",
+		"Audio.PlayOneShot",
+		"VFX.SpawnCompositeVFX",
+		"Gameplay.ApplyDamage",
+		"Gameplay.Heal",
+		"Gameplay.GetHealth" })
+	{
+		Expect(engineRegistry.Find(nodeType) != nullptr,
+			std::string("Missing reflected gameplay graph node: ") + nodeType);
+	}
+
+	struct SceneDeleter { void operator()(Scene* s) const { Safe_Release(s); } };
+	std::unique_ptr<Scene, SceneDeleter> scene(Scene::Create());
+	Expect(scene != nullptr, "Failed to create test Scene.");
+
+	Entity& actor = scene->CreateEntity();
+	const entt::entity actorHandle = actor.GetEntityHandle();
+	scene->AddComponent<HealthComponent>(actor);
+
+	Entity& victim = scene->CreateEntity();
+	const entt::entity victimHandle = victim.GetEntityHandle();
+	const std::int64_t victimId = static_cast<std::int64_t>(static_cast<std::uint32_t>(victimHandle));
+
+	struct ContextScope
+	{
+		ContextScope(Scene* s, entt::entity e) { GraphSystem::SetCurrentContext(s, e, 0.016f); }
+		~ContextScope() { GraphSystem::ClearCurrentContext(); }
+	} contextScope(scene.get(), actorHandle);
+
+	// 1. Gameplay.ApplyDamage -> Gameplay.Heal -> Gameplay.GetHealth
+	Graph healthGraph;
+	const auto start = Add(healthGraph, engineRegistry, "Event.Start");
+	const auto damage = Add(healthGraph, engineRegistry, "Gameplay.ApplyDamage");
+	const auto heal = Add(healthGraph, engineRegistry, "Gameplay.Heal");
+	const auto getHealth = Add(healthGraph, engineRegistry, "Gameplay.GetHealth");
+	const auto out = Add(healthGraph, engineRegistry, "Logic.FloatResult");
+	Accept(healthGraph.SetInputValue(engineRegistry, { damage, "amount" }, 25.0f));
+	Accept(healthGraph.SetInputValue(engineRegistry, { heal, "amount" }, 10.0f));
+	Link(healthGraph, engineRegistry, start, "exec", damage, "exec");
+	Link(healthGraph, engineRegistry, damage, "then", heal, "exec");
+	Link(healthGraph, engineRegistry, heal, "then", out, "exec");
+	Link(healthGraph, engineRegistry, getHealth, "result", out, "value");
+
+	GraphExecutor executor;
+	Accept(executor.Load(healthGraph, engineRegistry, &engineReflection));
+	Dispatch(executor, start);
+	Expect(std::get<float>(executor.GetResult()) == 85.0f, "Gameplay health graph produced wrong result.");
+	Expect(scene->GetComponent<HealthComponent>(actor).currentHealth == 85.0f,
+		"Gameplay health graph did not update HealthComponent.");
+
+	// 2. Entity.DestroyEntity destroys target entity safely
+	Graph destroyGraph;
+	const auto destroyStart = Add(destroyGraph, engineRegistry, "Event.Start");
+	const auto destroyNode = Add(destroyGraph, engineRegistry, "Entity.DestroyEntity");
+	const auto destroyOut = Add(destroyGraph, engineRegistry, "Logic.BoolResult");
+	Accept(destroyGraph.SetInputValue(engineRegistry, { destroyNode, "entityId" }, victimId));
+	Link(destroyGraph, engineRegistry, destroyStart, "exec", destroyNode, "exec");
+	Link(destroyGraph, engineRegistry, destroyNode, "then", destroyOut, "exec");
+	Link(destroyGraph, engineRegistry, destroyNode, "result", destroyOut, "value");
+
+	Accept(executor.Load(destroyGraph, engineRegistry, &engineReflection));
+	Dispatch(executor, destroyStart);
+	Expect(std::get<bool>(executor.GetResult()) == true && scene->FindEntity(victimHandle) == nullptr,
+		"Entity.DestroyEntity did not destroy target entity.");
+
+	// 3. Safe fallback when AudioManager / ResourceManager / Prefab file is absent
+	Graph safetyGraph;
+	const auto safeStart = Add(safetyGraph, engineRegistry, "Event.Start");
+	const auto audioNode = Add(safetyGraph, engineRegistry, "Audio.PlayOneShot");
+	const auto vfxNode = Add(safetyGraph, engineRegistry, "VFX.SpawnCompositeVFX");
+	const auto prefabNode = Add(safetyGraph, engineRegistry, "Entity.SpawnPrefab");
+	const auto safeOut = Add(safetyGraph, engineRegistry, "Logic.IntResult");
+	Accept(safetyGraph.SetInputValue(engineRegistry, { audioNode, "clipPath" }, std::string{ "missing.wav" }));
+	Accept(safetyGraph.SetInputValue(engineRegistry, { vfxNode, "vfxPath" }, std::string{ "missing.bamvfx.json" }));
+	Accept(safetyGraph.SetInputValue(engineRegistry, { prefabNode, "prefabPath" }, std::string{ "missing.bamprefab.json" }));
+	Link(safetyGraph, engineRegistry, safeStart, "exec", audioNode, "exec");
+	Link(safetyGraph, engineRegistry, audioNode, "then", vfxNode, "exec");
+	Link(safetyGraph, engineRegistry, vfxNode, "then", prefabNode, "exec");
+	Link(safetyGraph, engineRegistry, prefabNode, "then", safeOut, "exec");
+	Link(safetyGraph, engineRegistry, prefabNode, "result", safeOut, "value");
+
+	Accept(executor.Load(safetyGraph, engineRegistry, &engineReflection));
+	Dispatch(executor, safeStart);
+	Expect(std::get<std::int64_t>(executor.GetResult()) == -1,
+		"Missing prefab/VFX/audio nodes did not fail safely.");
+}
 }
 
 int main()
@@ -464,6 +631,8 @@ int main()
 		CheckStateAndSequence(registry);
 		CheckGateFlipFlopAndStop(registry);
 		CheckFailuresAndVectors(registry, reflection);
+		CheckGameplayComponents();
+		CheckGameplayGraphNodes();
 		std::cout << "Graph math, execution and trace checks passed.\n";
 		return 0;
 	}

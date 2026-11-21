@@ -5,11 +5,22 @@
 #include "RigidBodyComponent.h"
 #include "ComponentEnable.h"
 #include "AudioManager.h"
+#include "AudioClip.h"
+#include "ResourceManager.h"
+#include "CompositeVFXComponent.h"
+#include "CompositeEffect.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
+#include "TransformSystem.h"
+#include "NameComponent.h"
+#include "HealthComponent.h"
 #include "InputManager.h"
 #include "PhysicsSystem.h"
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <limits>
+#include <string>
 #include "Logger.h"
 #include "SpriteAnimationComponent.h"
 #include "CharacterControllerComponent.h"
@@ -203,9 +214,28 @@ namespace Engine::GraphGameplay
 	}
 
 	// ── 오디오 노드 (Audio) ──
+	FUNCTION(GRAPH_CALLABLE("Audio.PlayOneShot"), DISPLAY_NAME("Play One-Shot Audio"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("clipPath", ""), GRAPH_PIN_DEFAULT("volume", 1.0f))
+		inline bool PlayOneShotAudio(std::string clipPath, float volume)
+	{
+		if (clipPath.empty() || !AudioManager::IsCreated() || !ResourceManager::IsCreated()) return false;
+
+		const auto handle = ResourceManager::Get().LoadFile(clipPath);
+		if (!handle.IsValid()) return false;
+
+		auto* clip = dynamic_cast<AudioClip*>(ResourceManager::Get().GetResource(handle));
+		if (!clip) return false;
+
+		auto* sound = clip->GetFMODSound();
+		if (!sound) return false;
+
+		return AudioManager::Get().PlayOneShot(sound, std::clamp(volume, 0.0f, 1.0f)) == EResult::Success;
+	}
+
 	FUNCTION(GRAPH_CALLABLE("Audio.StopAll"), DISPLAY_NAME("Stop All Audio"), CATEGORY("Audio"))
 		inline void StopAllAudio()
 	{
+		if (!AudioManager::IsCreated()) return;
 		AudioManager::Get().StopAllSounds();
 	}
 
@@ -213,6 +243,7 @@ namespace Engine::GraphGameplay
 		GRAPH_PIN_DEFAULT("volume", 1.0f))
 		inline void SetMasterVolume(float volume)
 	{
+		if (!AudioManager::IsCreated()) return;
 		AudioManager::Get().SetMasterVolume(std::clamp(volume, 0.0f, 1.0f));
 	}
 
@@ -590,5 +621,113 @@ namespace Engine::GraphGameplay
 		auto& reg = scene->GetRegistry();
 		const auto* arm = TryGetEnabledComponent<SpringArmComponent>(reg, entity);
 		return arm ? arm->CurrentArmLength : 4.0f;
+	}
+
+	// ── VFX 노드 (CompositeVFX) ──
+	FUNCTION(GRAPH_CALLABLE("VFX.SpawnCompositeVFX"), DISPLAY_NAME("Spawn Composite VFX"), CATEGORY("VFX"),
+		GRAPH_PIN_DEFAULT("vfxPath", ""),
+		GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("y", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f),
+		GRAPH_PIN_DEFAULT("playRate", 1.0f))
+		inline std::int64_t SpawnCompositeVFX(std::string vfxPath, float x, float y, float z, float playRate)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || vfxPath.empty() || !ResourceManager::IsCreated()) return -1;
+
+		const auto handle = ResourceManager::Get().LoadFile(vfxPath);
+		if (!handle.IsValid()) return -1;
+
+		ResourceHandle<CompositeEffect> effectHandle(handle);
+		if (!effectHandle.Get()) return -1;
+
+		Entity& newEntity = scene->CreateEntity();
+		const entt::entity vfxEntity = newEntity.GetEntityHandle();
+		auto& world = scene->GetRegistry();
+
+		world.get_or_emplace<NameComponent>(vfxEntity).name = L"Spawned_CompositeVFX";
+
+		auto& trans = world.get_or_emplace<TransformComponent>(vfxEntity);
+		(void)trans.SetLocalPosition(glm::vec3(x, y, z));
+
+		auto& worldTrans = world.get_or_emplace<WorldTransformComponent>(vfxEntity);
+		TransformSystem::UpdateRootWorld(trans, worldTrans);
+
+		auto& flag = world.get_or_emplace<FlagComponent>(vfxEntity);
+		flag.flags = EEntityFlag::Active | EEntityFlag::Visible;
+		flag.effectiveFlags = flag.flags;
+
+		auto& vfxComp = world.get_or_emplace<CompositeVFXComponent>(vfxEntity);
+		vfxComp.effectHandle = effectHandle;
+		vfxComp.isPlaying = true;
+		vfxComp.isLooping = false;
+		vfxComp.playOnce = true;
+		vfxComp.playRate = playRate > 0.0f ? playRate : 1.0f;
+		vfxComp.Restart();
+
+		world.get_or_emplace<ActionVFXLifecycleComponent>(vfxEntity).autoDestroy = true;
+		return static_cast<std::int64_t>(static_cast<std::uint32_t>(vfxEntity));
+	}
+
+	// ── 게임플레이 체력 노드 (Gameplay) ──
+	namespace Detail
+	{
+		inline entt::entity ResolveGameplayTargetEntity(const entt::registry& reg, std::int64_t targetEntityId)
+		{
+			if (targetEntityId < 0)
+			{
+				const entt::entity current = GraphSystem::GetCurrentEntity();
+				return (current != entt::null && reg.valid(current)) ? current : entt::null;
+			}
+			if (targetEntityId > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+				return entt::null;
+			const entt::entity target = static_cast<entt::entity>(static_cast<std::uint32_t>(targetEntityId));
+			return reg.valid(target) ? target : entt::null;
+		}
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Gameplay.ApplyDamage"), DISPLAY_NAME("Apply Damage"), CATEGORY("Gameplay"),
+		GRAPH_PIN_DEFAULT("amount", 0.0f), GRAPH_PIN_DEFAULT("targetEntityId", -1))
+		inline float ApplyDamage(float amount, std::int64_t targetEntityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene) return 0.0f;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = Detail::ResolveGameplayTargetEntity(reg, targetEntityId);
+		if (target == entt::null) return 0.0f;
+
+		auto* health = TryGetEnabledComponent<HealthComponent>(reg, target);
+		if (!health) return 0.0f;
+		return health->ApplyDamage(amount);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Gameplay.Heal"), DISPLAY_NAME("Heal"), CATEGORY("Gameplay"),
+		GRAPH_PIN_DEFAULT("amount", 0.0f), GRAPH_PIN_DEFAULT("targetEntityId", -1))
+		inline float Heal(float amount, std::int64_t targetEntityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene) return 0.0f;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = Detail::ResolveGameplayTargetEntity(reg, targetEntityId);
+		if (target == entt::null) return 0.0f;
+
+		auto* health = TryGetEnabledComponent<HealthComponent>(reg, target);
+		if (!health) return 0.0f;
+		return health->Heal(amount);
+	}
+
+	FUNCTION(GRAPH_PURE("Gameplay.GetHealth"), DISPLAY_NAME("Get Health"), CATEGORY("Gameplay"),
+		GRAPH_PIN_DEFAULT("targetEntityId", -1))
+		inline float GetHealth(std::int64_t targetEntityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene) return 0.0f;
+
+		const auto& reg = scene->GetRegistry();
+		const entt::entity target = Detail::ResolveGameplayTargetEntity(reg, targetEntityId);
+		if (target == entt::null) return 0.0f;
+
+		const auto* health = TryGetEnabledComponent<HealthComponent>(reg, target);
+		return health ? health->currentHealth : 0.0f;
 	}
 }

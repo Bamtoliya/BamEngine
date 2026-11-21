@@ -5,9 +5,17 @@
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "TransformComponent.h"
+#include "WorldTransformComponent.h"
+#include "TransformSystem.h"
 #include "FlagComponent.h"
 #include "LightComponent.h"
+#include "PrefabInstanceComponent.h"
+#include "PlatformPath.h"
+#include <archive/JsonArchive.h>
 #include <array>
+#include <cstdint>
+#include <limits>
+#include <string>
 #include <glm/glm.hpp>
 
 namespace Engine::GraphActor
@@ -206,5 +214,59 @@ namespace Engine::GraphActor
 		inline void DestroySelf()
 	{
 		GraphSystem::RequestCurrentEntityDestroy();
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Entity.SpawnPrefab"), DISPLAY_NAME("Spawn Prefab"), CATEGORY("Entity"),
+		GRAPH_PIN_DEFAULT("prefabPath", ""),
+		GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("y", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f))
+		inline std::int64_t SpawnPrefab(std::string prefabPath, float x, float y, float z)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || prefabPath.empty()) return -1;
+
+		const std::wstring wPath = StrToWStr(prefabPath);
+		const auto physical = PlatformPath::ResolveUri(wPath);
+		archive::JsonArchive ar;
+		auto result = ar.LoadFromFile(physical);
+		if (!result) return -1;
+
+		Entity* rootEntity = nullptr;
+		result = scene->InstantiatePrefabArchive(ar, rootEntity, nullptr);
+		if (!result || !rootEntity) return -1;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity spawned = rootEntity->GetEntityHandle();
+		auto& prefabComp = reg.emplace_or_replace<PrefabInstanceComponent>(spawned);
+		const auto uri = PlatformPath::ToVirtualUri(physical);
+		prefabComp.prefabAssetPath = PlatformPath::IsProjectUri(uri) ? uri : wPath;
+
+		if (auto* transform = reg.try_get<TransformComponent>(spawned))
+		{
+			(void)transform->SetLocalPosition(glm::vec3(x, y, z));
+			if (auto* worldTransform = reg.try_get<WorldTransformComponent>(spawned))
+				TransformSystem::UpdateRootWorld(*transform, *worldTransform);
+		}
+		return static_cast<std::int64_t>(static_cast<std::uint32_t>(spawned));
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Entity.DestroyEntity"), DISPLAY_NAME("Destroy Entity"), CATEGORY("Entity"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+		inline bool DestroyEntity(std::int64_t entityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || entityId < 0 ||
+			entityId > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max()))
+			return false;
+
+		const entt::entity target = static_cast<entt::entity>(static_cast<std::uint32_t>(entityId));
+		if (target == GraphSystem::GetCurrentEntity())
+		{
+			GraphSystem::RequestCurrentEntityDestroy();
+			return true;
+		}
+
+		Entity* wrapper = scene->FindEntity(target);
+		if (!wrapper) return false;
+		return scene->DestroyEntity(*wrapper);
 	}
 }
