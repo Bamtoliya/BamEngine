@@ -30,6 +30,14 @@
                     {
                         "Id": "MoveLeft",
                         "Type": "Button"
+                    },
+                    {
+                        "Id": "Attack",
+                        "Type": "Button"
+                    },
+                    {
+                        "Id": "Restart",
+                        "Type": "Button"
                     }
                 ],
                 "Bindings": [
@@ -64,6 +72,14 @@
                     {
                         "ActionId": "MoveLeft",
                         "Key": "A"
+                    },
+                    {
+                        "ActionId": "Attack",
+                        "Key": "Q"
+                    },
+                    {
+                        "ActionId": "Restart",
+                        "Key": "R"
                     }
                 ],
                 "Id": "Gameplay"

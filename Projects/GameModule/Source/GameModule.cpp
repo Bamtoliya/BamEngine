@@ -5,6 +5,7 @@
 #include "GameplayScoreApi.h"
 #include "Logger.h"
 #include "SystemManager.h"
+#include "BaselineChallengeSystem.h"
 #include "SkyAtmosphereSystem.h"
 #include "GameGameplayLibrary.h"
 #include "ReflectionRegistry.h"
@@ -142,6 +143,7 @@ public:
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering Systems...");
 		Engine::SystemManager::Get().AddSystem<SkyAtmosphereSystem>();
 		Engine::SystemManager::Get().AddSystem<BaselineJumpVFXSystem>();
+		Engine::SystemManager::Get().AddSystem<BaselineChallengeSystem>();
 
 		// 3. 액션 타임라인 이벤트 노티파이 구독 (OnUnload에서 해제하므로 핫리로드 후에도 구독은 하나다)
 		m_ActionEventHandle = Engine::ActionTimelineEvents::Subscribe([](const Engine::ActionTimelineEvent& event) { OnActionTimelineEvent(event); });
@@ -160,9 +162,11 @@ public:
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Unregistering Systems...");
 		if (Engine::SystemManager::IsCreated())
 		{
+			Engine::SystemManager::Get().RemoveSystem<BaselineChallengeSystem>();
 			Engine::SystemManager::Get().RemoveSystem<BaselineJumpVFXSystem>();
 			Engine::SystemManager::Get().RemoveSystem<SkyAtmosphereSystem>();
 		}
+		BaselineChallengeSystem::ClearSceneState();
 		// 3. 모듈 언로드 시 컴포넌트 및 리플렉션 심볼 일괄 해제
 		if (Engine::ReflectionRegistry::IsCreated())
 		{
@@ -195,6 +199,7 @@ private:
 	// 이벤트 노티파이 수신 예제: 타임라인이 지정 시점을 지날 때 한 번 호출된다. 게임 규칙(공격 판정 등)은 EventTag로 나눠 연결한다.
 	static void OnActionTimelineEvent(const Engine::ActionTimelineEvent& event)
 	{
+		BaselineChallengeSystem::OnActionTimelineEvent(event);
 		BAM_LOG(Info, "GameModule", "ActionEvent", "Action event '{}' (notify '{}', {:.2f}s) on entity {}",
 			event.eventTag, event.notifyName, event.triggerTime, entt::to_integral(event.entity));
 	}
