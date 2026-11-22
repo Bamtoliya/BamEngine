@@ -1,15 +1,16 @@
-﻿{
-  "Settings": {
-    "SchemaVersion": 1,
-    "ProjectName": "BamEngine",
-    "AssetDirectory": "Assets",
-    "EngineResourceDirectory": "Engine/Resources",
-    "StartupManifestPath": "Config/Startup/StartupManifest.json",
-    "StartupScenePath": "Scenes/2DRegressionLabReady.bamscene.json",
-    "RequiredGameplayActionsScene": "Project://Scenes/BaselineVerification.bamscene.json",
-    "RequiredGameplayActions": [
-      "MoveForward", "MoveBackward", "MoveLeft", "MoveRight", "OrbitCamera", "Jump", "Attack", "Restart"
-    ],
-    "RenderPipelineProfilePath": "Engine://RenderPipelines/Deferred.bamrenderpipeline.json"
-  }
+{
+    "Settings": {
+        "AssetDirectory": "Assets",
+        "EngineResourceDirectory": "Engine/Resources",
+        "ProjectName": "BamEngine",
+        "RaytracedShadowMode": 1,
+        "RenderPipelineProfilePath": "Engine://RenderPipelines/Deferred.bamrenderpipeline.json",
+        "RequiredGameplayActions": ["MoveForward", "MoveBackward", "MoveLeft", "MoveRight", "OrbitCamera", "Jump", "Attack", "Restart"],
+        "RequiredGameplayActionsScene": "Project://Scenes/BaselineVerification.bamscene.json",
+        "SchemaVersion": 1,
+        "ShaderSourceDirectory": "Engine/Resources/Shader/hlsl",
+        "StartupManifestPath": "Config/Startup/StartupManifest.json",
+        "StartupScenePath": "Scenes/2DRegressionLabReady.bamscene.json",
+        "WindowTitle": ""
+    }
 }

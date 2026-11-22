@@ -5,6 +5,29 @@
                 "Components": [
                     {
                         "Data": {
+                            "HitHeight": 2.75,
+                            "HitRadius": 3.25,
+                            "RequiredHits": 5,
+                            "TargetEntity": 0,
+                            "UseGraphAttackInput": true
+                        },
+                        "Type": "Engine::AttackChallengeComponent"
+                    },
+                    {
+                        "Data": {
+                            "AspectRatio": 1.7777777910232544,
+                            "CameraType": 0,
+                            "FOV": 73,
+                            "FarPlane": 1000,
+                            "IsMainCamera": false,
+                            "NearPlane": 0.10000000149011612,
+                            "OrthographicSize": 10
+                        },
+                        "Enabled": false,
+                        "Type": "Engine::CameraComponent"
+                    },
+                    {
+                        "Data": {
                             "flags": 3
                         },
                         "Type": "Engine::FlagComponent"
