@@ -412,6 +412,16 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         const auto label = LOCAL("Viewport.NewTextLabel");
         SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
     }
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddTextInput").c_str(), nullptr, false, parent != nullptr) && parent)
+    {
+        const auto label = LOCAL("Viewport.AddTextInput");
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextInputEntity(m_TargetScene, *parent, StrToWStr(label)));
+    }
+    if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddDropdown").c_str(), nullptr, false, parent != nullptr) && parent)
+    {
+        const auto label = LOCAL("Viewport.AddDropdown");
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIDropdownEntity(m_TargetScene, *parent, StrToWStr(label)));
+    }
     if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.UIPresets").c_str(), parent != nullptr))
     {
         struct PresetMenuEntry { UIElementPreset preset; const char* labelKey; };
@@ -426,7 +436,9 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             { UIElementPreset::ClipPanel, "Viewport.AddClipPanel" },
             { UIElementPreset::EllipseMask, "Viewport.AddEllipseMask" },
             { UIElementPreset::ImageMask, "Viewport.AddImageMask" },
-            { UIElementPreset::ScrollView, "Viewport.AddScrollView" }
+            { UIElementPreset::ScrollView, "Viewport.AddScrollView" },
+            { UIElementPreset::TextInput, "Viewport.AddTextInput" },
+            { UIElementPreset::Dropdown, "Viewport.AddDropdown" }
         };
         for (const auto& entry : presets)
         {

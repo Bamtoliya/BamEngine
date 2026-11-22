@@ -80,7 +80,7 @@ namespace Engine
         }
     }
 
-    STRUCT(COMPONENT, CATEGORY("CATEGORY_UI"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_UI_TEXT_INPUT"), CATEGORY("CATEGORY_UI"))
     struct UITextInputComponent
     {
         REFLECT_BODY()

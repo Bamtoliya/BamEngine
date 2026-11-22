@@ -4,6 +4,11 @@
 #include "UIClipLayout.h"
 #include "UIEventSystem.h"
 #include "UIWidgetComponents.h"
+#include "CanvasScalerComponent.h"
+#include "UITextInputComponent.h"
+#include "UIDropdownComponent.h"
+#include "UIAdvancedWidgetRuntime.h"
+#include "RenderTargetManager.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include "Renderer.h"
 #include "RenderPass.h"
@@ -202,11 +207,32 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
             });
             for (const auto root : canvases)
             {
+                glm::vec2 viewportSize(1920.0f, 1080.0f);
+                if (auto* rhi = renderer.GetRHI())
+                {
+                    viewportSize = glm::vec2(static_cast<float>(rhi->GetSwapChainWidth()), static_cast<float>(rhi->GetSwapChainHeight()));
+                }
+                if (pass->GetRenderTargetCount() > 0)
+                {
+                    if (auto* rt = RenderTargetManager::Get().GetRenderTarget(pass->GetRenderTargetName(0)))
+                    {
+                        viewportSize = glm::vec2(static_cast<float>(rt->GetWidth()), static_cast<float>(rt->GetHeight()));
+                    }
+                }
+                if (viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+                {
+                    if (auto* scaler = TryGetEnabledComponent<CanvasScalerComponent>(world, root))
+                    {
+                        UpdateCanvasScaler(world, root, viewportSize);
+                    }
+                }
+
                 std::vector<UIElementLayout> layouts;
                 if (!UILayout::Build(world, root, layouts)) continue;
                 const auto canvasSize = world.get<CanvasComponent>(root).referenceResolution;
                 const auto overlays = UIClipLayout::GetScrollbarOverlays(world, layouts);
                 auto overlay = overlays.begin();
+                std::vector<std::pair<UIElementLayout, UIDropdownComponent>> openDropdowns;
                 for (std::size_t index = 0; index < layouts.size(); ++index)
                 {
                     const auto& layout = layouts[index];
@@ -216,15 +242,37 @@ void Engine::UIRenderSystem::OnSubmit(entt::registry& registry, const vector<Sce
                         if (HasWidgetDecorations(world, layout.entity))
                             SubmitWidgetDecorations(renderer, *pass, world, layout, canvasSize, defaultUIMat, white);
 
-                        const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
-                        if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)
-                            SubmitText(renderer, *pass, world, layout, *text, canvasSize, defaultUIMat);
+                        const auto* textInput = TryGetEnabledComponent<UITextInputComponent>(world, layout.entity);
+                        if (textInput)
+                        {
+                            SubmitTextInput(renderer, *pass, world, layout, *textInput, canvasSize, defaultUIMat, white);
+                        }
+                        else
+                        {
+                            const auto* text = TryGetEnabledComponent<UITextComponent>(world, layout.entity);
+                            if (text && UILayout::IsValid(*text) && text->color.a > 0.0f)
+                                SubmitText(renderer, *pass, world, layout, *text, canvasSize, defaultUIMat);
+                        }
+
+                        const auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, layout.entity);
+                        if (dropdown)
+                        {
+                            SubmitDropdown(renderer, *pass, world, layout, *dropdown, canvasSize, defaultUIMat, white);
+                            if (dropdown->isOpen && !dropdown->options.empty())
+                            {
+                                openDropdowns.push_back({ layout, *dropdown });
+                            }
+                        }
                     }
                     while (overlay != overlays.end() && layouts[overlay->index].subtreeEnd == index + 1)
                     {
                         SubmitScrollbar(renderer, *pass, layouts[overlay->index], overlay->geometry, canvasSize, defaultUIMat, white);
                         ++overlay;
                     }
+                }
+                for (const auto& [dropdownLayout, openDropdown] : openDropdowns)
+                {
+                    SubmitDropdownPopup(renderer, *pass, world, dropdownLayout, openDropdown, canvasSize, defaultUIMat, white);
                 }
             }
         }

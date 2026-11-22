@@ -10,6 +10,8 @@
 #include "ResourceManager.h"
 #include "UILayout.h"
 #include "UIRenderSystem.h"
+#include "UITextInputComponent.h"
+#include "UIDropdownComponent.h"
 #include "PrefabModeManager.h"
 #include <stdexcept>
 
@@ -84,6 +86,47 @@ Entity& EntityFactory::CreateUITextEntity(Scene* scene, Entity& parent, const ws
 	return entity;
 }
 
+Entity& EntityFactory::CreateUITextInputEntity(Scene* scene, Entity& parent, const wstring& name, const std::string& placeholder)
+{
+	ValidateUIParent(scene, parent);
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
+	Entity& entity = CreateUIElement(*scene, parent, name, { 200.0f, 40.0f });
+	auto& world = scene->GetRegistry();
+	const auto handle = entity.GetEntityHandle();
+	auto& image = world.emplace<UIImageComponent>(handle);
+	image.materialHandle = UIRenderSystem::GetDefaultMaterial();
+	image.color = { 0.15f, 0.15f, 0.18f, 0.95f };
+	image.raycastTarget = true;
+	auto& textInput = world.emplace<UITextInputComponent>(handle);
+	textInput.placeholder = placeholder;
+	auto& text = world.emplace<UITextComponent>(handle);
+	text.text = "";
+	text.fontPixels = 18;
+	text.useLocalization = false;
+	return entity;
+}
+
+Entity& EntityFactory::CreateUIDropdownEntity(Scene* scene, Entity& parent, const wstring& name)
+{
+	ValidateUIParent(scene, parent);
+	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
+	Entity& entity = CreateUIElement(*scene, parent, name, { 200.0f, 36.0f });
+	auto& world = scene->GetRegistry();
+	const auto handle = entity.GetEntityHandle();
+	auto& image = world.emplace<UIImageComponent>(handle);
+	image.materialHandle = UIRenderSystem::GetDefaultMaterial();
+	image.color = { 0.20f, 0.22f, 0.26f, 1.0f };
+	image.raycastTarget = true;
+	auto& dropdown = world.emplace<UIDropdownComponent>(handle);
+	dropdown.placeholder = "Select...";
+	dropdown.options = { "Option 1", "Option 2", "Option 3" };
+	auto& text = world.emplace<UITextComponent>(handle);
+	text.text = "";
+	text.fontPixels = 18;
+	text.useLocalization = false;
+	return entity;
+}
+
 Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPreset preset, const wstring& name)
 {
 	ValidateUIParent(scene, parent);
@@ -93,6 +136,8 @@ Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPre
 	if (preset == UIElementPreset::Toggle) size = glm::vec2(36.0f);
 	if (preset == UIElementPreset::EllipseMask || preset == UIElementPreset::ImageMask) size = glm::vec2(200.0f);
 	if (preset == UIElementPreset::ScrollView) size = { 320.0f, 200.0f };
+	if (preset == UIElementPreset::TextInput) size = { 200.0f, 40.0f };
+	if (preset == UIElementPreset::Dropdown) size = { 200.0f, 36.0f };
 
 	auto& entity = CreateUIElement(*scene, parent, name, size);
 	auto& world = scene->GetRegistry();
@@ -161,6 +206,31 @@ Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPre
 			contentImage.materialHandle = UIRenderSystem::GetDefaultMaterial();
 			contentImage.color = { 0.18f, 0.23f, 0.29f, 1.0f };
 			contentImage.raycastTarget = false;
+		}
+		break;
+	case UIElementPreset::TextInput:
+		image.raycastTarget = true;
+		image.color = { 0.15f, 0.15f, 0.18f, 0.95f };
+		{
+			auto& textInput = world.emplace<UITextInputComponent>(handle);
+			textInput.placeholder = "Enter text...";
+			auto& text = world.emplace<UITextComponent>(handle);
+			text.text = "";
+			text.fontPixels = 18;
+			text.useLocalization = false;
+		}
+		break;
+	case UIElementPreset::Dropdown:
+		image.raycastTarget = true;
+		image.color = { 0.20f, 0.22f, 0.26f, 1.0f };
+		{
+			auto& dropdown = world.emplace<UIDropdownComponent>(handle);
+			dropdown.placeholder = "Select...";
+			dropdown.options = { "Option 1", "Option 2", "Option 3" };
+			auto& text = world.emplace<UITextComponent>(handle);
+			text.text = "";
+			text.fontPixels = 18;
+			text.useLocalization = false;
 		}
 		break;
 	}

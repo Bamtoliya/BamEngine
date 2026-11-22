@@ -61,6 +61,8 @@ Viewport,AddClipPanel,Clip Panel,클리핑 패널
 Viewport,AddEllipseMask,Ellipse Mask,타원 마스크
 Viewport,AddImageMask,Image Mask,이미지 마스크
 Viewport,AddScrollView,Scroll View,스크롤 뷰
+Viewport,AddTextInput,Text Input,텍스트 입력
+Viewport,AddDropdown,Dropdown,드롭다운
 Viewport,ScrollContent,Scroll Content,스크롤 콘텐츠
 Viewport,PointerValueChanged,Value changed,값 변경
 Viewport,OrderSelectionHint,Select a UI element or Canvas.,UI 요소나 캔버스를 선택하세요.

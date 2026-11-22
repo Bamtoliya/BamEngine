@@ -121,7 +121,8 @@ bool Engine::UILayout::IsValid(const UIButtonComponent& button)
 bool Engine::UILayout::IsValid(const UITextComponent& text)
 {
     if (text.fontPixels < UITextComponent::MinFontPixels || text.fontPixels > UITextComponent::MaxFontPixels ||
-        text.text.size() > UITextComponent::MaxTextBytes || text.text.find_first_of("\r\n") != std::string::npos ||
+        text.text.size() > UITextComponent::MaxTextBytes ||
+        (!text.multiline && !text.wordWrap && text.text.find_first_of("\r\n") != std::string::npos) ||
         text.fontFamily.size() > UITextComponent::MaxFontFamilyBytes ||
         text.fontFamily.find_first_of("\r\n") != std::string::npos || text.fontFamily.find('\0') != std::string::npos ||
         text.alignment < EUITextAlignment::Left || text.alignment > EUITextAlignment::Right ||

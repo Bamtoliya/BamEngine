@@ -11,6 +11,8 @@ namespace Engine
     class Texture;
     struct UIElementLayout;
     struct UITextComponent;
+    struct UITextInputComponent;
+    struct UIDropdownComponent;
     class Renderer;
     class RenderPass;
 
@@ -34,6 +36,15 @@ namespace Engine
         void SubmitText(Renderer& renderer, RenderPass& pass, const entt::registry& world,
             const UIElementLayout& layout, const UITextComponent& text, const glm::vec2& canvasSize,
             const ResourceHandle<MaterialInterface>& material);
+        void SubmitTextInput(Renderer& renderer, RenderPass& pass, const entt::registry& world,
+            const UIElementLayout& layout, const UITextInputComponent& input, const glm::vec2& canvasSize,
+            const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Texture>& white);
+        void SubmitDropdown(Renderer& renderer, RenderPass& pass, const entt::registry& world,
+            const UIElementLayout& layout, const UIDropdownComponent& dropdown, const glm::vec2& canvasSize,
+            const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Texture>& white);
+        void SubmitDropdownPopup(Renderer& renderer, RenderPass& pass, const entt::registry& world,
+            const UIElementLayout& layout, const UIDropdownComponent& dropdown, const glm::vec2& canvasSize,
+            const ResourceHandle<MaterialInterface>& material, const ResourceHandle<Texture>& white);
         // Glyph textures can be shared across elements with different colors and alignment.
         std::map<std::tuple<int, std::string, std::string>, CachedText> m_TextCache;
     };
