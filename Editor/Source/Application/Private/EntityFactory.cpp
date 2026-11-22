@@ -78,7 +78,9 @@ Entity& EntityFactory::CreateUITextEntity(Scene* scene, Entity& parent, const ws
 	ValidateUIParent(scene, parent);
 	SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.CreateEntity");
 	Entity& entity = CreateUIElement(*scene, parent, name, { 200.0f, 48.0f });
-	scene->GetRegistry().emplace<UITextComponent>(entity.GetEntityHandle()).text = text;
+	auto& uiText = scene->GetRegistry().emplace<UITextComponent>(entity.GetEntityHandle());
+	uiText.text = text;
+	uiText.useLocalization = false;
 	return entity;
 }
 

@@ -14,9 +14,11 @@ public:
     [[nodiscard]] bool IsDirty() const { return m_Dirty; }
 
 private:
+    void DrawMetadata(const EditorSettingsService& settings);
     void DrawRendering();
 
     int32 m_DraftRaytracedShadow = 0;
+
     string m_DraftProjectName;
     string m_DraftStartupScenePath;
     string m_DraftAssetDirectory;

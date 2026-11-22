@@ -22,6 +22,7 @@ namespace Editor
     protected:
         EResult OnInitialize(void* arg) override;
         void DrawCustomOptions() override;
+        void DrawQuickAccessBar() override;
         float GetCustomOptionsWidth() const override;
         void DrawCustomViewport() override;
 
@@ -30,6 +31,8 @@ namespace Editor
         bool HasTarget() const;
         void DrawCanvasMenu();
         void DrawOrderMenu();
+        void ToggleInteractionPreview();
+        void ShowActualSize();
         void SetZIndex(entt::entity entity, std::int32_t zIndex);
         void DrawGrid(ImDrawList* drawList);
         void DrawSelection(ImDrawList* drawList);

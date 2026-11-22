@@ -24,6 +24,9 @@
 #include "SceneEntityReference.h"
 #include "WorldComponents.h"
 #include "FloatCurve.h"
+#include "UITextComponent.h"
+#include <algorithm>
+#include <vector>
 #pragma push_macro("new")
 #undef new
 #include <imgui_internal.h>
@@ -32,6 +35,87 @@
 
 namespace
 {
+#if defined(_WIN32)
+    int CALLBACK CollectInstalledFont(const LOGFONTW* font, const TEXTMETRICW*, DWORD, LPARAM context)
+    {
+        if (font->lfFaceName[0] == L'@') return 1;
+        auto& fonts = *reinterpret_cast<std::vector<std::string>*>(context);
+        std::string name;
+        if (archive::detail::WideToUtf8(font->lfFaceName, name) && !name.empty() &&
+            name.size() <= Engine::UITextComponent::MaxFontFamilyBytes)
+            fonts.push_back(std::move(name));
+        return 1;
+    }
+#endif
+
+    std::vector<std::string> EnumerateInstalledFonts()
+    {
+        std::vector<std::string> fonts;
+#if defined(_WIN32)
+        if (HDC dc = CreateCompatibleDC(nullptr))
+        {
+            LOGFONTW query{};
+            query.lfCharSet = DEFAULT_CHARSET;
+            EnumFontFamiliesExW(dc, &query, CollectInstalledFont, reinterpret_cast<LPARAM>(&fonts), 0);
+            DeleteDC(dc);
+            std::ranges::sort(fonts);
+            fonts.erase(std::unique(fonts.begin(), fonts.end()), fonts.end());
+        }
+#endif
+        return fonts;
+    }
+
+    bool DrawInspectorFontFamily(std::string& value)
+    {
+        const auto preview = value.empty() ? LOCAL("Inspector.FontSystemDefault") : value;
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        if (!ImGui::BeginCombo("##Value", preview.c_str(), ImGuiComboFlags_HeightLarge))
+        {
+            ImGui::SetItemTooltip("%s", LOCAL_CSTR("Inspector.FontCanvasPreview"));
+            return false;
+        }
+
+        static char search[128]{};
+        static std::vector<std::string> fonts;
+        EditorUI::SearchBarOptions options;
+        options.FocusOnDraw = ImGui::IsWindowAppearing();
+        if (options.FocusOnDraw)
+        {
+            search[0] = '\0';
+            fonts = EnumerateInstalledFonts();
+        }
+        EditorUI::DrawSearchBar("FontSearch", search, sizeof(search), "Inspector.SearchFont", options);
+        ImGui::Separator();
+
+        bool changed = false;
+        if (ImGui::BeginChild("##FontFamilies", ImVec2(0.0f, ImGui::GetTextLineHeightWithSpacing() * 12.0f)))
+        {
+            if (ImGui::Selectable(LOCAL_LABEL("Inspector.FontSystemDefault").c_str(), value.empty()))
+            {
+                changed = !value.empty();
+                value.clear();
+                ImGui::CloseCurrentPopup();
+            }
+
+            const ImGuiTextFilter filter(search);
+            for (const auto& name : fonts)
+            {
+                if (!filter.PassFilter(name.c_str())) continue;
+                ImGui::PushID(name.c_str());
+                if (ImGui::Selectable((name + "###Family").c_str(), name == value))
+                {
+                    changed = name != value;
+                    value = name;
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+        ImGui::EndCombo();
+        return changed;
+    }
+
     bool DrawInspectorText(std::string& value)
     {
         return ImGui::InputText("##Value", &value);
@@ -1440,8 +1524,12 @@ namespace Editor
 		}
 		else if (const auto* current = read.Value.Get<std::string>())
 		{
+			const bool isUIFontFamily = object.Is<Engine::UITextComponent>() && property.Name == "fontFamily";
 			changed = DrawReflectionPropertyEditor(property, object, *current, canEdit,
-				[](std::string& candidate) { return DrawInspectorText(candidate); });
+				[isUIFontFamily](std::string& candidate)
+				{
+					return isUIFontFamily ? DrawInspectorFontFamily(candidate) : DrawInspectorText(candidate);
+				});
 		}
 		else if (const auto* current = read.Value.Get<std::wstring>())
 		{

@@ -11,6 +11,7 @@
 #include "PlatformPath.h"
 #include "AssetCache.h"
 #include "Functions.h"
+#include <utility>
 
 namespace
 {
@@ -24,6 +25,18 @@ namespace
 				ch += L'a' - L'A';
 		}
 		return value;
+	}
+
+	bool IsLocalizationDirectory(const std::filesystem::path& path)
+	{
+		return LowerAscii(path.filename().wstring()) == L"localization" &&
+			LowerAscii(path.parent_path().filename().wstring()) == L"data";
+	}
+
+	bool IsLocalizationFile(const std::filesystem::path& path)
+	{
+		const auto ext = LowerAscii(path.extension().wstring());
+		return ext == L".csv" || ext == L".json";
 	}
 
 	EAssetReloadKind ClassifyAssetReload(const std::filesystem::path& path)
@@ -41,7 +54,7 @@ namespace
 		if (name.ends_with(L".bammesh") || name.ends_with(L".bammesh.json"))
 			return EAssetReloadKind::Mesh;
 
-		if (name == L"korean.json" || name == L"english.json" || name.ends_with(L".csv"))
+		if (IsLocalizationDirectory(path) || (IsLocalizationDirectory(path.parent_path()) && IsLocalizationFile(path)))
 			return EAssetReloadKind::Localization;
 
 		return EAssetReloadKind::Unsupported;
@@ -53,19 +66,23 @@ namespace
 		explicit TextureFileListener(AssetHotReloadManager* manager) : m_Manager(manager) {}
 
 		void handleFileAction(efsw::WatchID, const std::string& dir, const std::string& filename,
-			efsw::Action action, std::string) override
+			efsw::Action action, std::string oldFilename) override
 		{
-			if (action != efsw::Actions::Modified && action != efsw::Actions::Add && action != efsw::Actions::Moved)
-				return;
-
 			try
 			{
-				const auto path = Engine::Utf8ToPath(dir) / Engine::Utf8ToPath(filename);
-				if (ClassifyAssetReload(path) != EAssetReloadKind::Unsupported)
-				{
-					EDITOR_LOG_INFO("[Asset Hot Reload] Detected file change: {} (action: {})",
-						filename, static_cast<int>(action));
+				const auto directory = Engine::Utf8ToPath(dir);
+				const auto path = directory / Engine::Utf8ToPath(filename);
+				const auto kind = ClassifyAssetReload(path);
+				const bool modified = action == efsw::Actions::Modified || action == efsw::Actions::Add ||
+					action == efsw::Actions::Moved;
+				if ((modified && kind != EAssetReloadKind::Unsupported) ||
+					(action == efsw::Actions::Delete && kind == EAssetReloadKind::Localization))
 					m_Manager->NotifyFileModified(path);
+				if (action == efsw::Actions::Moved && !oldFilename.empty())
+				{
+					const auto oldPath = directory / Engine::Utf8ToPath(oldFilename);
+					if (ClassifyAssetReload(oldPath) == EAssetReloadKind::Localization)
+						m_Manager->NotifyFileModified(oldPath);
 				}
 			}
 			catch (const std::exception& error)
@@ -97,6 +114,17 @@ namespace
 			character = static_cast<wchar_t>(std::towlower(character));
 
 		return key;
+	}
+
+	std::filesystem::path ProjectLocalizationDirectory()
+	{
+		return Engine::PlatformPath::ResolveUri(Engine::LocalizationManager::ProjectCatalogDirectory);
+	}
+
+	bool IsProjectLocalizationEvent(const std::filesystem::path& path)
+	{
+		const auto root = AssetFileKey(ProjectLocalizationDirectory());
+		return !root.empty() && (AssetFileKey(path) == root || AssetFileKey(path.parent_path()) == root);
 	}
 
 	std::wstring AssetRelativeKey(const std::filesystem::path& filePath)
@@ -284,6 +312,10 @@ AssetHotReloadManager* AssetHotReloadManager::Create(void* arg)
 
 void AssetHotReloadManager::Update()
 {
+	bool reloadProject = std::exchange(m_ProjectLocaleReloadRequested, false);
+	if (!m_PendingProjectLocaleImport.empty())
+		ImportProjectLocalization(std::exchange(m_PendingProjectLocaleImport, std::filesystem::path{}));
+
 	for (const auto& file : CollectReadyFiles(std::chrono::milliseconds(300)))
 	{
 		switch (ClassifyAssetReload(file))
@@ -291,10 +323,75 @@ void AssetHotReloadManager::Update()
 		case EAssetReloadKind::Texture: ProcessModifiedTexture(file); break;
 		case EAssetReloadKind::Material: ProcessModifiedMaterial(file); break;
 		case EAssetReloadKind::Mesh: ProcessModifiedMesh(file); break;
-		case EAssetReloadKind::Localization: ProcessModifiedLocalization(file); break;
+		case EAssetReloadKind::Localization:
+			if (IsProjectLocalizationEvent(file)) reloadProject = true;
+			else ProcessModifiedLocalization(file);
+			break;
 		case EAssetReloadKind::Unsupported: break;
 		}
 	}
+	if (reloadProject) ReloadProjectLocalization();
+}
+
+void AssetHotReloadManager::RequestProjectLocalizationImport(std::filesystem::path source)
+{
+	m_PendingProjectLocaleImport = std::move(source);
+}
+
+void AssetHotReloadManager::RequestProjectLocalizationReload()
+{
+	m_ProjectLocaleReloadRequested = true;
+}
+
+void AssetHotReloadManager::ReloadProjectLocalization()
+{
+	const bool loaded = IsSuccess(Engine::LocalizationManager::Get().ReloadProjectData());
+	NotificationManager::Get().AddNotification(LOCAL("Settings.ProjectLocale"),
+		LOCAL(loaded ? "Settings.ProjectLocaleReloaded" : "Settings.ProjectLocaleReloadFailed"),
+		loaded ? ELogLevel::Info : ELogLevel::Warn, 3.0f);
+}
+
+void AssetHotReloadManager::ImportProjectLocalization(const std::filesystem::path& source)
+{
+	const auto directory = ProjectLocalizationDirectory();
+	const auto destination = directory / source.filename();
+	const auto sourceName = Engine::WStrToStr(source.filename().wstring());
+	std::error_code ec;
+	if (directory.empty() || !IsLocalizationFile(source) || !std::filesystem::is_regular_file(source, ec))
+	{
+		NotificationManager::Get().AddNotification(LOCAL("Settings.ProjectLocale"),
+			LOCAL_FMT("Settings.ProjectLocaleImportFailed", sourceName), ELogLevel::Warn);
+		return;
+	}
+
+	// Selecting a catalog already inside the active directory just refreshes it.
+	if (std::filesystem::equivalent(source, destination, ec) && !ec)
+	{
+		ReloadProjectLocalization();
+		return;
+	}
+	ec.clear();
+	std::filesystem::create_directories(directory, ec);
+	const bool copied = !ec && std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, ec);
+	if (!copied)
+	{
+		EDITOR_LOG_WARN("[Localization] Could not import {}: {}", sourceName, ec.message());
+		NotificationManager::Get().AddNotification(LOCAL("Settings.ProjectLocale"),
+			LOCAL_FMT("Settings.ProjectLocaleImportFailed", sourceName), ELogLevel::Warn);
+		return;
+	}
+
+	// The manager keeps the active catalog if any file is invalid. Roll back this newly added file only.
+	if (IsFailure(Engine::LocalizationManager::Get().ReloadProjectData()))
+	{
+		std::filesystem::remove(destination, ec);
+		if (ec) EDITOR_LOG_WARN("[Localization] Could not remove rejected catalog {}: {}", sourceName, ec.message());
+		NotificationManager::Get().AddNotification(LOCAL("Settings.ProjectLocale"),
+			LOCAL_FMT("Settings.ProjectLocaleImportFailed", sourceName), ELogLevel::Warn);
+		return;
+	}
+	NotificationManager::Get().AddNotification(LOCAL("Settings.ProjectLocale"),
+		LOCAL_FMT("Settings.ProjectLocaleImported", sourceName), ELogLevel::Info, 3.0f);
 }
 
 void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& texturePath)
@@ -364,6 +461,10 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 
 void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::path& locPath)
 {
+	const auto parent = AssetFileKey(locPath.parent_path());
+	const auto engine = AssetFileKey(Engine::PlatformPath::GetEngineResourceRoot() / "Data/Localization");
+	const auto editor = AssetFileKey(Engine::PlatformPath::GetEditorResourceRoot() / "Data/Localization");
+	if (parent.empty() || (parent != engine && parent != editor) || !IsLocalizationFile(locPath)) return;
 	// .csv 파일이 수정된 경우 파이썬 변환 스크립트 실행
 	if (LowerAscii(locPath.extension().wstring()) == L".csv")
 	{

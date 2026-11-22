@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <filesystem>
 #include <string_view>
 #include <unordered_map>
 
@@ -66,11 +67,17 @@ public:
 	EResult LoadData();
 	EResult ReloadData();
 
+	static constexpr const wchar_t* ProjectCatalogDirectory = L"Project://Data/Localization";
+	// Apply project CSV and JSON catalogs as a single transaction on the host thread.
+	EResult ReloadProjectData();
+	const std::vector<std::filesystem::path>& GetProjectCatalogFiles() const { return m_ProjectCatalogFiles; }
+
 	EResult RegisterLocalizationData(const wstring& filePath);
 private:
 	const string* FindText(std::string_view key) const;
 public:
 	string GetText(std::string_view key) const;
+	string GetText(std::string_view key, std::string_view fallback) const;
 	string GetText(const wstring& key) const;
 	LocalizedText GetTextForDisplay(std::string_view key) const;
 	LocalizedText GetTextForDisplay(const wstring& key) const;
@@ -93,6 +100,8 @@ private:
 
 	using TextMap = std::unordered_map<string, string, TextKeyHash, std::equal_to<>>;
 	std::vector<TextMap> m_LocalizationData;
+	std::vector<TextMap> m_ProjectLocalizationData;
+	std::vector<std::filesystem::path> m_ProjectCatalogFiles;
 	std::vector<wstring> m_RegisteredFiles;
 #pragma endregion
 

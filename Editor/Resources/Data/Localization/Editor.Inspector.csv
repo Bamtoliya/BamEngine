@@ -12,6 +12,9 @@ Inspector,ComponentMenu,Component actions,컴포넌트 메뉴
 Inspector,Components,Components,컴포넌트
 Inspector,EditSettings,Edit settings,편집 설정
 Inspector,ElapsedSeconds,(%.2fs),(%.2f초)
+Inspector,FontCanvasPreview,The selected font is previewed on the canvas in UI View.,선택한 글꼴은 UI 뷰의 캔버스에서 미리 볼 수 있습니다.
+Inspector,FontSystemDefault,System default (Malgun Gothic),시스템 기본값 (맑은 고딕)
+Inspector,SearchFont,Search installed fonts...,설치된 글꼴 검색...
 Inspector,ElementCount,{} elements,요소 {}개
 Inspector,EntityUnavailable,Entity is no longer available.,엔티티를 더 이상 사용할 수 없습니다.
 Inspector,FastWheelHint,Shift + wheel: x10,Shift + 휠: 10배 간격으로 변경

@@ -66,7 +66,11 @@ void BaseViewportPanel::Draw()
 		DrawOptionsBar();
 	}
 	ImGui::PopStyleVar();
-	if (visible) DrawCustomViewport();
+	if (visible)
+	{
+		DrawQuickAccessBar();
+		DrawCustomViewport();
+	}
 	else
 	{
 		if (m_FocusRequested)

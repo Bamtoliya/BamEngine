@@ -30,6 +30,16 @@ Settings,LanguageEnglish,English,English
 Settings,LanguageKorean,Korean,한국어
 Settings,Logging,Logging,로깅
 Settings,MinimumLogLevel,Minimum Log Level,최소 로그 수준
+Settings,ProjectLocale,Project translations,프로젝트 번역
+Settings,ProjectLocaleHelp,Add a translation catalog to {}. Changes to files in this folder are reloaded automatically.,{}에 번역 파일을 추가합니다. 이 폴더의 파일을 수정하면 자동으로 다시 불러옵니다.
+Settings,ProjectLocaleEmpty,No active translation files.,활성 번역 파일이 없습니다.
+Settings,ProjectLocaleFiles,Translation Files (*.csv;*.json),번역 파일 (*.csv;*.json)
+Settings,ProjectLocaleImport,Add translation file,번역 파일 추가
+Settings,ProjectLocaleImported,Added {}.,{} 파일을 추가했습니다.
+Settings,ProjectLocaleImportFailed,Could not add {}. Check the Console for details.,{} 파일을 추가하지 못했습니다. 자세한 내용은 콘솔을 확인하세요.
+Settings,ProjectLocaleReload,Reload translations,번역 다시 불러오기
+Settings,ProjectLocaleReloaded,Project translations reloaded.,프로젝트 번역을 다시 불러왔습니다.
+Settings,ProjectLocaleReloadFailed,Could not reload translations. Check the Console for details.,번역을 다시 불러오지 못했습니다. 자세한 내용은 콘솔을 확인하세요.
 Settings,ProjectMetadata,Project Metadata,프로젝트 메타데이터
 Settings,ProjectName,Project Name,프로젝트 이름
 Settings,ProjectRoot,Project Root,프로젝트 루트

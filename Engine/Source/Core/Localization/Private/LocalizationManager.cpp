@@ -94,28 +94,34 @@ const string* LocalizationManager::FindText(std::string_view key) const
 {
 	if (key.empty()) return nullptr;
 
-	int index = static_cast<int>(m_CurrentLanguage);
-	auto it = m_LocalizationData[index].find(key);
-	if (it != m_LocalizationData[index].end())
-		return &it->second;
-
-	if (m_CurrentLanguage != ELocalizationLanguage::English)
+	const auto find = [&](const std::vector<TextMap>& catalog) -> const string*
 	{
-		index = static_cast<int>(ELocalizationLanguage::English);
-		it = m_LocalizationData[index].find(key);
-		if (it != m_LocalizationData[index].end())
-			return &it->second;
-	}
+		if (catalog.empty()) return nullptr;
+		const auto& current = catalog[static_cast<std::size_t>(m_CurrentLanguage)];
+		const auto translated = current.find(key);
+		if (translated != current.end()) return &translated->second;
+		if (m_CurrentLanguage == ELocalizationLanguage::English) return nullptr;
 
-	return nullptr;
+		const auto& fallback = catalog[static_cast<std::size_t>(ELocalizationLanguage::English)];
+		const auto english = fallback.find(key);
+		return english != fallback.end() ? &english->second : nullptr;
+	};
+	// Project files provide game strings without replacing Engine or Editor labels.
+	if (const auto* text = find(m_LocalizationData)) return text;
+	return find(m_ProjectLocalizationData);
 }
 
 string LocalizationManager::GetText(std::string_view key) const
 {
+	return GetText(key, key);
+}
+
+string LocalizationManager::GetText(std::string_view key, std::string_view fallback) const
+{
 	if (const string* text = FindText(key))
 		return *text;
 
-	return string(key);
+	return string(fallback);
 }
 
 string LocalizationManager::GetText(const wstring& key) const

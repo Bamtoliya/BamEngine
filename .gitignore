@@ -104,6 +104,14 @@ Assets/KayKit_Adventurers_2.0_FREE/
 Assets/asphalt_02_4k.blend/
 Assets/kenney_city-kit-roads/
 Assets
+!/Assets/
+/Assets/*
+!/Assets/Data/
+/Assets/Data/*
+!/Assets/Data/Localization/
+/Assets/Data/Localization/*
+!/Assets/Data/Localization/*.csv
+!/Assets/Data/Localization/*.json
 Client/결과
 managed-scene.json
 shader-path-round-trip.bamshader.json

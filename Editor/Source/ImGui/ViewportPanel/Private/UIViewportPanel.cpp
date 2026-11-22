@@ -7,6 +7,7 @@
 #include "WorldComponents.h"
 #include "SelectionManager.h"
 #include "EntityFactory.h"
+#include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "RenderTargetManager.h"
 #include "RenderPassManager.h"
@@ -211,38 +212,14 @@ void Editor::UIViewportPanel::Draw()
 
 float Editor::UIViewportPanel::GetCustomOptionsWidth() const
 {
-    ImGuiTextBuffer zoom;
-    zoom.appendf("%.0f%%", m_View.zoom * 100.0f);
     return MeasureOptionLabels({ LOCAL_CSTR("Viewport.Canvas"), LOCAL_CSTR("Viewport.Order"),
-        LOCAL_CSTR("Viewport.Interact"), LOCAL_CSTR("Viewport.Fit"), "100%", zoom.c_str(),
-        LOCAL_CSTR("Viewport.Snap"), LOCAL_CSTR("Viewport.View") }) + ImGui::GetFrameHeight();
+        LOCAL_CSTR("Viewport.Snap"), LOCAL_CSTR("Viewport.View") });
 }
 
 void Editor::UIViewportPanel::DrawCustomOptions()
 {
     DrawCanvasMenu();
     DrawOrderMenu();
-    if (ImGui::Checkbox(LOCAL_LABEL("Viewport.Interact").c_str(), &m_InteractionPreview))
-    {
-        m_Drag = {};
-        m_PendingEdit.reset();
-        m_Panning = false;
-        if (m_Interaction) m_Interaction->Cancel();
-    }
-    if (ImGui::Button(LOCAL_LABEL("Viewport.Fit").c_str())) FocusCanvas();
-    if (ImGui::IsItemHovered())
-    {
-        const char* hint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
-        if (hint && *hint) ImGui::SetTooltip("%s (%s)", LOCAL_CSTR("Viewport.Fit"), hint);
-        else ImGui::SetTooltip("%s", LOCAL_CSTR("Viewport.Fit"));
-    }
-    if (ImGui::Button("100%"))
-    {
-        m_View.zoom = 1.0f;
-        m_View.center = m_CanvasSize * 0.5f;
-        if (m_Interaction) m_Interaction->Cancel();
-    }
-    ImGui::Text("%.0f%%", m_View.zoom * 100.0f);
     if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.Snap").c_str()))
     {
         if (ImGui::Checkbox(LOCAL_LABEL("Viewport.Grid").c_str(), &m_GridSnap) && m_GridSnap) m_PixelSnap = false;
@@ -255,12 +232,62 @@ void Editor::UIViewportPanel::DrawCustomOptions()
     }
     if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.View").c_str()))
     {
+        if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Interact").c_str(), nullptr, m_InteractionPreview))
+            ToggleInteractionPreview();
+        if (ImGui::MenuItem(LOCAL_LABEL("Viewport.Fit").c_str(), ShortcutManager::Get().GetShortcutHint("Viewport.Focus"),
+            false, CanFocusCanvas()))
+            FocusCanvas();
+        if (ImGui::MenuItem(LOCAL_LABEL("Viewport.ActualSize").c_str(), nullptr, false, HasTarget()))
+            ShowActualSize();
+        ImGui::Separator();
         ImGui::Checkbox(LOCAL_LABEL("Viewport.Grid").c_str(), &m_ShowGrid);
         ImGui::Checkbox(LOCAL_LABEL("Viewport.SafeArea").c_str(), &m_ShowSafeArea);
         ImGui::Checkbox(LOCAL_LABEL("Viewport.Anchors").c_str(), &m_ShowAnchors);
         ImGui::EndMenu();
     }
+}
 
+void Editor::UIViewportPanel::DrawQuickAccessBar()
+{
+    EditorUI::ToolbarLayout toolbar;
+    EditorUI::IconButtonOptions interact;
+    interact.Active = m_InteractionPreview;
+    if (toolbar.Icon("Interact", ICON_FA_HAND_POINTER, "Viewport.Interact", interact))
+        ToggleInteractionPreview();
+
+    EditorUI::IconButtonOptions fit;
+    fit.Enabled = CanFocusCanvas();
+    fit.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.Focus");
+    if (toolbar.Icon("Fit", ICON_FA_EXPAND, "Viewport.Fit", fit))
+        FocusCanvas();
+
+    EditorUI::IconButtonOptions actualSize;
+    actualSize.Enabled = HasTarget();
+    if (toolbar.Icon("ActualSize", ICON_FA_PERCENT, "Viewport.ActualSize", actualSize))
+        ShowActualSize();
+
+    ImGuiTextBuffer zoom;
+    zoom.appendf("%.0f%%", m_View.zoom * 100.0f);
+    toolbar.Text(zoom.c_str());
+    ImGui::Separator();
+}
+
+void Editor::UIViewportPanel::ToggleInteractionPreview()
+{
+    m_InteractionPreview = !m_InteractionPreview;
+    m_Drag = {};
+    m_PendingEdit.reset();
+    m_Panning = false;
+    if (m_Interaction) m_Interaction->Cancel();
+}
+
+void Editor::UIViewportPanel::ShowActualSize()
+{
+    m_FitPending = false;
+    m_View.zoom = 1.0f;
+    m_View.center = m_CanvasSize * 0.5f;
+    m_Drag = {};
+    if (m_Interaction) m_Interaction->Cancel();
 }
 
 void Editor::UIViewportPanel::DrawOrderMenu()
@@ -565,6 +592,7 @@ void Editor::UIViewportPanel::DrawSelection(ImDrawList* drawList)
     const auto& selected = selection.GetSelectedEntities();
     for (const auto& layout : m_Layouts)
     {
+        if (!layout.visible) continue;
         auto* wrapper = m_TargetScene->FindEntity(layout.entity);
         if (std::find(selected.begin(), selected.end(), wrapper) == selected.end()) continue;
         ImVec2 screen[4];
@@ -637,7 +665,7 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
         std::optional<vec2> resizeCorner;
         for (const auto& layout : m_Layouts)
         {
-            if (m_TargetScene->FindEntity(layout.entity) != selection.GetPrimarySelectedEntity()) continue;
+            if (!layout.visible || m_TargetScene->FindEntity(layout.entity) != selection.GetPrimarySelectedEntity()) continue;
             if (layout.managedByGroup) continue;
             float nearestDistanceSquared = 8.0f * 8.0f;
             for (const auto& corner : CanvasCorners)
@@ -659,7 +687,11 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
             for (auto it = m_Layouts.rbegin(); it != m_Layouts.rend(); ++it)
             {
                 const auto* image = TryGetEnabledComponent<UIImageComponent>(world, it->entity);
-                if (image && image->color.a > 0.0f && UILayout::Contains(*it, canvasPoint)) { hit = &*it; break; }
+                const auto* text = TryGetEnabledComponent<UITextComponent>(world, it->entity);
+                const bool hasVisibleContent = (image && image->color.a > 0.0f) || (text && text->color.a > 0.0f);
+                if (!hasVisibleContent || !UILayout::Contains(*it, canvasPoint)) continue;
+                hit = &*it;
+                break;
             }
         }
         auto* wrapper = hit ? m_TargetScene->FindEntity(hit->entity) : nullptr;
@@ -684,7 +716,8 @@ void Editor::UIViewportPanel::HandleInput(bool hovered)
     if (m_Drag.mode == DragMode::None) return;
     const auto* id = world.valid(m_Drag.entity) ? world.try_get<IDComponent>(m_Drag.entity) : nullptr;
     const auto* layout = FindLayout(m_Drag.entity);
-    if (!id || id->id != m_Drag.id || !layout || !m_Focused || layout->parentTransform != m_Drag.layout.parentTransform ||
+    if (!id || id->id != m_Drag.id || !layout || !layout->visible || !m_Focused ||
+        layout->parentTransform != m_Drag.layout.parentTransform ||
         layout->parentSize != m_Drag.layout.parentSize || layout->parentPivot != m_Drag.layout.parentPivot)
     {
         m_Drag = {};

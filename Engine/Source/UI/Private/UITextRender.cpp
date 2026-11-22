@@ -14,7 +14,8 @@
 #if defined(_WIN32)
 namespace
 {
-    Engine::ResourceHandle<Engine::Texture> CreateTextTexture(Engine::RHI& rhi, const std::string& text, int fontPixels)
+    Engine::ResourceHandle<Engine::Texture> CreateTextTexture(Engine::RHI& rhi, const std::string& text,
+        const std::string& fontFamily, int fontPixels)
     {
         const auto byteCount = static_cast<int>(text.size());
         const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), byteCount, nullptr, 0);
@@ -23,11 +24,16 @@ namespace
         if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), byteCount, line.data(), length) != length)
             return {};
 
+        wchar_t family[LF_FACESIZE]{};
+        const bool validFamily = !fontFamily.empty() &&
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, fontFamily.c_str(), -1, family, LF_FACESIZE) > 0;
+        const auto* face = validFamily ? family : L"Malgun Gothic";
+
         // Destroy the DC before the selected font and bitmap.
         const auto deleteObject = [](auto* object) { DeleteObject(object); };
         std::unique_ptr<std::remove_pointer_t<HFONT>, decltype(deleteObject)> font(
             CreateFontW(-fontPixels, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Malgun Gothic"), deleteObject);
+                CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH, face), deleteObject);
         std::unique_ptr<std::remove_pointer_t<HBITMAP>, decltype(deleteObject)> bitmap(nullptr, deleteObject);
         std::unique_ptr<std::remove_pointer_t<HDC>, decltype(&DeleteDC)> dc(CreateCompatibleDC(nullptr), DeleteDC);
         if (!font || !dc || !SelectObject(dc.get(), font.get())) return {};
@@ -92,18 +98,18 @@ void Engine::UIRenderSystem::SubmitText(Renderer& renderer, RenderPass& pass, co
     const ResourceHandle<MaterialInterface>& material)
 {
 #if defined(_WIN32)
-    const auto* resolved = &text.text;
-    if (!text.localizationKey.empty() && LocalizationManager::IsCreated())
-        if (const auto* localized = LocalizationManager::Get().FindText(text.localizationKey)) resolved = localized;
-    if (layout.size.x <= 0.0f || layout.size.y <= 0.0f || resolved->empty() || resolved->size() > UITextComponent::MaxTextBytes ||
-        resolved->find_first_of("\r\n") != std::string::npos) return;
+    const bool useTranslation = text.useLocalization && !text.localizationKey.empty() && LocalizationManager::IsCreated();
+    const auto resolved = useTranslation ? LocalizationManager::Get().GetText(text.localizationKey, text.text) : text.text;
+    if (layout.size.x <= 0.0f || layout.size.y <= 0.0f || resolved.empty() || resolved.size() > UITextComponent::MaxTextBytes ||
+        resolved.find_first_of("\r\n") != std::string::npos) return;
 
     auto* rhi = renderer.GetRHI();
     const auto* mat = material.Get();
     if (!rhi || !mat || !pass.IsAcceptsBlendMode(mat->GetBlendMode())) return;
 
-    auto& cached = m_TextCache[{ text.fontPixels, *resolved }];
-    if (!cached.submitted && !cached.texture.IsValid()) cached.texture = CreateTextTexture(*rhi, *resolved, text.fontPixels);
+    auto& cached = m_TextCache[{ text.fontPixels, text.fontFamily, resolved }];
+    if (!cached.submitted && !cached.texture.IsValid())
+        cached.texture = CreateTextTexture(*rhi, resolved, text.fontFamily, text.fontPixels);
     cached.submitted = true;
     const auto* texture = cached.texture.Get();
     if (!texture) return;
@@ -117,7 +123,8 @@ void Engine::UIRenderSystem::SubmitText(Renderer& renderer, RenderPass& pass, co
     const glm::vec2 available = layout.size - size;
     if (text.alignment == EUITextAlignment::Center) offset.x += available.x * 0.5f;
     if (text.alignment == EUITextAlignment::Right) offset.x += available.x;
-    offset.y += available.y * 0.5f;
+    if (text.verticalAlignment == EUITextVerticalAlignment::Middle) offset.y += available.y * 0.5f;
+    if (text.verticalAlignment == EUITextVerticalAlignment::Bottom) offset.y += available.y;
 
     UIImageDrawCommand command;
     command.textureHandle = cached.texture;

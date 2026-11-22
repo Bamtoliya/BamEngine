@@ -1795,6 +1795,9 @@ void InspectorPanel::DrawAddComponentPopup(Engine::Entity& entity)
 			auto before = SceneEditSnapshot::Capture(*scene, targets);
 			if (before && entry.TryAdd(world, handle))
 			{
+				if (entry.Type == typeid(Engine::UITextComponent))
+					world.get<Engine::UITextComponent>(handle).useLocalization = false;
+
 				history.Record(std::move(before), SceneEditSnapshot::Capture(*scene, targets),
 					"History.Command.AddComponent");
 

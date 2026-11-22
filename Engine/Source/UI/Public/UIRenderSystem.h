@@ -3,6 +3,7 @@
 #include "System.h"
 #include "ResourceHandle.h"
 #include <map>
+#include <tuple>
 
 namespace Engine
 {
@@ -33,6 +34,7 @@ namespace Engine
         void SubmitText(Renderer& renderer, RenderPass& pass, const entt::registry& world,
             const UIElementLayout& layout, const UITextComponent& text, const glm::vec2& canvasSize,
             const ResourceHandle<MaterialInterface>& material);
-        std::map<std::pair<int, std::string>, CachedText> m_TextCache;
+        // Glyph textures can be shared across elements with different colors and alignment.
+        std::map<std::tuple<int, std::string, std::string>, CachedText> m_TextCache;
     };
 }

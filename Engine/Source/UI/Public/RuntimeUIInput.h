@@ -12,6 +12,10 @@ namespace Engine
     class ENGINE_API RuntimeUIInput final
     {
     public:
+        RuntimeUIInput() = default;
+        RuntimeUIInput(const RuntimeUIInput&) = delete;
+        RuntimeUIInput& operator=(const RuntimeUIInput&) = delete;
+
         // The hosts provide output-relative coordinates, where (0, 0) to (1, 1) maps to each Canvas.
         bool Update(const std::vector<Scene*>& scenes, const UIPointerInput& input, bool* wheelConsumed = nullptr);
         void Clear();

@@ -257,7 +257,8 @@ namespace
         fs::path Relative;
         std::uintmax_t Size = 0;
     };
-    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory)
+    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory,
+        bool includeProjectCatalogs = false)
     {
         fs::create_directories(targetRoot);
         std::vector<FileCopyTask> tasks;
@@ -278,9 +279,15 @@ namespace
                 continue;
             }
 
-            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && IsRuntimeResource(source))
+            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
             {
                 const auto relative = source.lexically_relative(sourceRoot);
+                const auto extension = Engine::ToLowerWStr(source.extension().wstring());
+                const bool projectCatalog = includeProjectCatalogs &&
+                    Engine::ToLowerWStr(relative.parent_path().generic_wstring()) == L"data/localization" &&
+                    (extension == L".csv" || extension == L".json");
+                if (!projectCatalog && !IsRuntimeResource(source)) continue;
+                if (projectCatalog) inventory.Expect(relative, "project localization");
                 const auto target = targetRoot / relative;
                 dirsToCreate.insert(target.parent_path().wstring());
                 tasks.push_back({ source, target, relative, entry->file_size() });
@@ -767,7 +774,7 @@ namespace Editor
         const auto stagedAssets = staging / "Assets";
         const auto stagedEngine = staging / "Engine" / "Resources";
         emit("Staging project assets (parallel)...\n");
-        CopyRuntimeResources(assetRoot, stagedAssets, projectInventory);
+        CopyRuntimeResources(assetRoot, stagedAssets, projectInventory, true);
         emit("Staging engine resources (parallel)...\n");
         CopyRuntimeResources(engineRoot, stagedEngine, engineInventory);
 

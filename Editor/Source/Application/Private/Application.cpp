@@ -583,6 +583,8 @@ EResult Application::InitializeLocalization()
         BAM_LOG(Error, "Editor", "Application", "Failed to load localization data");
         return EResult::Fail;
     }
+    if (IsFailure(localizationManager->ReloadProjectData()))
+        EDITOR_LOG_WARN("[Localization] Project catalogs could not be loaded. See the localization log for details.");
     return EResult::Success;
 }
 #pragma endregion

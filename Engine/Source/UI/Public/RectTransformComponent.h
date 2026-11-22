@@ -20,7 +20,7 @@ namespace Engine
         glm::vec2 sizeDelta{ 100.0f, 100.0f };
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PIVOT"), RANGE(0.0, 1.0, 0.01))
         glm::vec2 pivot{ 0.5f };
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SCALE"), STEP(0.01))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UI_RECT_SCALE"), STEP(0.01))
         glm::vec2 scale{ 1.0f };
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ROTATION"), STEP(1.0))
         f32 rotation = 0.0f;

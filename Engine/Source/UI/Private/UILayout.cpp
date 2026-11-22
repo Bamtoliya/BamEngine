@@ -122,7 +122,10 @@ bool Engine::UILayout::IsValid(const UITextComponent& text)
 {
     if (text.fontPixels < UITextComponent::MinFontPixels || text.fontPixels > UITextComponent::MaxFontPixels ||
         text.text.size() > UITextComponent::MaxTextBytes || text.text.find_first_of("\r\n") != std::string::npos ||
-        text.alignment < EUITextAlignment::Left || text.alignment > EUITextAlignment::Right)
+        text.fontFamily.size() > UITextComponent::MaxFontFamilyBytes ||
+        text.fontFamily.find_first_of("\r\n") != std::string::npos || text.fontFamily.find('\0') != std::string::npos ||
+        text.alignment < EUITextAlignment::Left || text.alignment > EUITextAlignment::Right ||
+        text.verticalAlignment < EUITextVerticalAlignment::Top || text.verticalAlignment > EUITextVerticalAlignment::Bottom)
         return false;
     for (int channel = 0; channel < 4; ++channel)
         if (!std::isfinite(text.color[channel]) || text.color[channel] < 0.0f || text.color[channel] > 1.0f)

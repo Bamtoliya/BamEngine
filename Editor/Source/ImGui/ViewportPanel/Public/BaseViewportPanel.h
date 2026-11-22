@@ -89,6 +89,7 @@ protected:
 protected:
 	void DrawOptionsBar();
 	virtual void DrawCustomOptions();
+	virtual void DrawQuickAccessBar() {}
 	void DrawRenderTargetMenu();
 	virtual float GetCustomOptionsWidth() const;
 	virtual float GetProjectionButtonsWidth() const { return 0.0f; }

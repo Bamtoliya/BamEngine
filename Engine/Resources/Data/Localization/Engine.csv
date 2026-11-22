@@ -13,6 +13,7 @@
 ,Anchor,Anchor,앵커
 ,Angles use radians.,Angles use radians.,각도는 라디안 단위를 사용합니다.
 ,Animation,Animation,애니메이션
+,Apply Damage,,
 ,"Asin input must be in [-1, 1].","Asin input must be in [-1, 1].","Asin 입력은 [-1, 1] 범위여야 합니다."
 ,Atan2 direction has zero length.,Atan2 direction has zero length.,Atan2 방향 벡터의 길이가 0입니다.
 ,Audio,Audio,오디오
@@ -104,6 +105,7 @@
 ,Default value must be finite and exactly typed.,Default value must be finite and exactly typed.,기본값은 유한하며 자료형이 정확히 일치해야 합니다.
 ,Delta must be finite/non-negative and budget positive.,Delta must be finite/non-negative and budget positive.,시간 간격은 유한한 0 이상 값이고 실행 예산은 양수여야 합니다.
 ,Destroy Actor,Destroy Actor,액터 파괴
+,Destroy Entity,,
 ,Details,Details,세부 정보
 ,Division by zero.,Division by zero.,0으로 나눌 수 없습니다.
 ,Duplicate link ID.,Duplicate link ID.,연결 ID가 중복되었습니다.
@@ -155,6 +157,15 @@
 ,Engine::ETransformAbsolute.Position,Absolute Position,위치 독립
 ,Engine::ETransformAbsolute.Rotation,Absolute Rotation,회전 독립
 ,Engine::ETransformAbsolute.Scale,Absolute Scale,크기 독립
+,Engine::EUILayoutGroupMode.Column,Column,세로 컬럼
+,Engine::EUILayoutGroupMode.Grid,Grid,그리드
+,Engine::EUILayoutGroupMode.Row,Row,가로 행
+,Engine::EUITextAlignment.Center,Center,가운데
+,Engine::EUITextAlignment.Left,Left,왼쪽
+,Engine::EUITextAlignment.Right,Right,오른쪽
+,Engine::EUITextVerticalAlignment.Bottom,Bottom,아래쪽
+,Engine::EUITextVerticalAlignment.Middle,Middle,가운데
+,Engine::EUITextVerticalAlignment.Top,Top,위쪽
 ,Engine::EVFXTrailAlignment.OffsetAxis,Offset Axis (A-B),오프셋 축 (A-B)
 ,Engine::EVFXTrailAlignment.ViewFacing,Camera Facing,카메라 정면
 ,Entity,Entity,엔티티
@@ -174,6 +185,7 @@
 ,Float is outside the Int range.,Float is outside the Int range.,실숫값이 정수 범위를 벗어났습니다.
 ,Flow,Flow,흐름
 ,Function schema has too many argument pins.,Function schema has too many argument pins.,함수 스키마의 인자 핀이 너무 많습니다.
+,Gameplay,,
 ,Get 3D Animation Time,Get 3D Animation Time,3D 애니메이션 시간 가져오기
 ,Get Actor Location,Get Actor Location,액터 위치 가져오기
 ,Get Arm Length,Get Arm Length,암 길이 가져오기
@@ -185,6 +197,7 @@
 ,Get Forward Vector,Get Forward Vector,전방 벡터 가져오기
 ,Get Ground Angle,Get Ground Angle,지면 각도 가져오기
 ,Get Ground Normal,Get Ground Normal,지면 법선 가져오기
+,Get Health,,
 ,Get Last Hit Distance,Get Last Hit Distance,마지막 히트 거리 가져오기
 ,Get Last Hit Location,Get Last Hit Location,마지막 히트 위치 가져오기
 ,Get Last Hit Normal,Get Last Hit Normal,마지막 히트 법선 가져오기
@@ -204,6 +217,7 @@
 ,Graph.PinName.TextureUV,UV,UV
 ,Graph.PinName.UV0,UV0,UV0
 ,Graph.PinName.UV1,UV1,UV1
+,Heal,,
 ,Input,Input,입력
 ,Input pin is missing.,Input pin is missing.,입력 핀이 없습니다.
 ,Input requires a finite value or connection.,Input requires a finite value or connection.,입력에 유한한 값 또는 연결이 필요합니다.
@@ -479,33 +493,6 @@
 ,PROP_INTENSITY,Intensity,강도
 ,PROP_INTENSITY_CURVE,Intensity Curve,조도 커브
 ,PROP_INTERACTABLE,Interactable,상호작용
-,STRUCT_UI_LAYOUT_GROUP,UI Layout Group,UI 레이아웃 그룹
-,PROP_UI_LAYOUT_MODE,Layout mode,배치 방식
-,PROP_UI_LAYOUT_PADDING,Padding (left top right bottom),패딩 (좌 상 우 하)
-,PROP_UI_LAYOUT_SPACING,Spacing,간격
-,PROP_UI_LAYOUT_ALIGNMENT,Alignment,정렬
-,PROP_UI_LAYOUT_CELL_SIZE,Cell size,셀 크기
-,PROP_UI_LAYOUT_COLUMNS,Columns,열 수
-,Engine::EUILayoutGroupMode.Row,Row,가로 행
-,Engine::EUILayoutGroupMode.Column,Column,세로 컬럼
-,Engine::EUILayoutGroupMode.Grid,Grid,그리드
-,STRUCT_UI_PROGRESS_BAR,UI Progress Bar,UI 진행률 바
-,STRUCT_UI_SLIDER,UI Slider,UI 슬라이더
-,STRUCT_UI_TOGGLE,UI Toggle,UI 토글
-,PROP_UI_VALUE_MIN,Minimum,최솟값
-,PROP_UI_VALUE_MAX,Maximum,최댓값
-,PROP_UI_VALUE_STEP,Step,값 간격
-,PROP_UI_VALUE,Value,값
-,PROP_UI_FILL_COLOR,Fill color,채움 색상
-,PROP_UI_HANDLE_COLOR,Handle color,핸들 색상
-,PROP_UI_CHECKED,Checked,선택됨
-,PROP_UI_CHECK_COLOR,Check color,선택 표시 색상
-,STRUCT_UI_CLIP,UI Clip,UI 클리핑
-,STRUCT_UI_ELLIPSE_MASK,UI Ellipse Mask,UI 타원 마스크
-,STRUCT_UI_ALPHA_MASK,UI Image Mask,UI 이미지 마스크
-,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
-,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
-,PROP_UI_SCROLL_SHOW_SCROLLBAR,Show Scrollbar,스크롤바 표시
 ,PROP_INTERPOLATION_SPEED,Interpolation Speed,보간 속도
 ,PROP_INTERP_MODE,Interpolation Mode,보간 모드
 ,PROP_INVERSE_INERTIA,Inverse Inertia,역관성
@@ -731,8 +718,6 @@
 ,PROP_TARGET_OFFSET,Target Offset,타깃 오프셋
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
-,PROP_UI_MASK_SPRITE,Mask Sprite,마스크 스프라이트
-,PROP_UI_MASK_TEXTURE,Mask Texture,마스크 텍스처
 ,PROP_TILING,Tiling,반복
 ,PROP_TIME,Time,시간
 ,PROP_TIMELINE_ASSET,Timeline Asset,타임라인 에셋
@@ -747,6 +732,32 @@
 ,PROP_TRANSFORM_ABSOLUTE,World Channels (Ignore Parent),월드 기준 채널 (부모 상속 해제)
 ,PROP_TRIGGER_BURST_COUNT,Trigger Burst Count,트리거 버스트 수
 ,PROP_TRIGGER_MODE,Trigger Mode,발화 조건(트리거)
+,PROP_UI_CHECKED,Checked,선택됨
+,PROP_UI_CHECK_COLOR,Check color,선택 표시 색상
+,PROP_UI_FILL_COLOR,Fill color,채움 색상
+,PROP_UI_FONT_FAMILY,Font family,글꼴 이름
+,PROP_UI_FONT_PIXELS,Font Size (px),글꼴 크기 (px)
+,PROP_UI_HANDLE_COLOR,Handle color,핸들 색상
+,PROP_UI_LAYOUT_ALIGNMENT,Alignment,정렬
+,PROP_UI_LAYOUT_CELL_SIZE,Cell size,셀 크기
+,PROP_UI_LAYOUT_COLUMNS,Columns,열 수
+,PROP_UI_LAYOUT_MODE,Layout mode,배치 방식
+,PROP_UI_LAYOUT_PADDING,Padding (left top right bottom),패딩 (좌 상 우 하)
+,PROP_UI_LAYOUT_SPACING,Spacing,간격
+,PROP_UI_MASK_SPRITE,Mask Sprite,마스크 스프라이트
+,PROP_UI_MASK_TEXTURE,Mask Texture,마스크 텍스처
+,PROP_UI_RECT_SCALE,Scale,배율
+,PROP_UI_SCROLL_SHOW_SCROLLBAR,Show Scrollbar,스크롤바 표시
+,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
+,PROP_UI_TEXT,Text,텍스트
+,PROP_UI_TEXT_ALIGNMENT,Horizontal Alignment,가로 정렬
+,PROP_UI_TEXT_LOCALE_KEY,Localization Key,로캘 키
+,PROP_UI_TEXT_USE_LOCALIZATION,Use translation,번역 사용
+,PROP_UI_TEXT_VERTICAL_ALIGNMENT,Vertical Alignment,세로 정렬
+,PROP_UI_VALUE,Value,값
+,PROP_UI_VALUE_MAX,Maximum,최댓값
+,PROP_UI_VALUE_MIN,Minimum,최솟값
+,PROP_UI_VALUE_STEP,Step,값 간격
 ,PROP_UNBOUND,Unbound,전역 적용
 ,PROP_UPSCALE_RT,Upscale RT,업스케일 RT
 ,PROP_USE_ALPHA_CURVE,Use Alpha Curve,알파 커브 사용
@@ -790,6 +801,7 @@
 ,Pin types must match exactly; conversions are explicit.,Pin types must match exactly; conversions are explicit.,핀 자료형이 정확히 일치해야 합니다. 변환은 명시적으로 지정하세요.
 ,Pipeline,Pipeline,파이프라인
 ,Play 3D Animation,Play 3D Animation,3D 애니메이션 재생
+,Play One-Shot Audio,,
 ,Play Sprite Animation,Play Sprite Animation,스프라이트 애니메이션 재생
 ,Pointer/reference parameters are not supported by graphs.,Pointer/reference parameters are not supported by graphs.,그래프는 포인터 또는 참조 매개변수를 지원하지 않습니다.
 ,Pointer/reference results are not supported by graphs.,Pointer/reference results are not supported by graphs.,그래프는 포인터 또는 참조 반환값을 지원하지 않습니다.
@@ -846,15 +858,6 @@
 ,STRUCT_HIT_RESULT,Hit Result,히트 결과
 ,STRUCT_ID,ID,ID
 ,STRUCT_IMAGE,Image,이미지
-,STRUCT_UI_TEXT,UI Text,UI 텍스트
-,PROP_UI_TEXT,Text,텍스트
-,PROP_UI_TEXT_LOCALE_KEY,Localization Key,로캘 키
-,PROP_UI_FONT_PIXELS,Font Size (px),글꼴 크기 (px)
-,PROP_UI_TEXT_ALIGNMENT,Horizontal Alignment,가로 정렬
-,Engine::EUITextAlignment.Left,Left,왼쪽
-,Engine::EUITextAlignment.Center,Center,가운데
-,Engine::EUITextAlignment.Right,Right,오른쪽
-Game,BaselineChallenge.Restart,Restart,다시 시작
 ,STRUCT_JOINT_2D,Distance Joint 2D,2D 거리 조인트
 ,STRUCT_JOINT_3D,Distance Joint,거리 조인트
 ,STRUCT_LIGHT,Light,빛
@@ -894,8 +897,17 @@ Game,BaselineChallenge.Restart,Restart,다시 시작
 ,STRUCT_TILEMAP,Tilemap,타일맵
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
+,STRUCT_UI_ALPHA_MASK,UI Image Mask,UI 이미지 마스크
+,STRUCT_UI_CLIP,UI Clip,UI 클리핑
+,STRUCT_UI_ELLIPSE_MASK,UI Ellipse Mask,UI 타원 마스크
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
+,STRUCT_UI_LAYOUT_GROUP,UI Layout Group,UI 레이아웃 그룹
+,STRUCT_UI_PROGRESS_BAR,UI Progress Bar,UI 진행률 바
 ,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
+,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
+,STRUCT_UI_SLIDER,UI Slider,UI 슬라이더
+,STRUCT_UI_TEXT,UI Text,UI 텍스트
+,STRUCT_UI_TOGGLE,UI Toggle,UI 토글
 ,STRUCT_VOLUMETRIC_CLOUD,Volumetric Cloud,볼류메트릭 클라우드
 ,STRUCT_WORLD_TRANSFORM,World Transform,월드 트랜스폼
 ,Script error on entity {}: {},Script error on entity {}: {},엔티티 {}의 스크립트 오류: {}
@@ -933,6 +945,8 @@ Game,BaselineChallenge.Restart,Restart,다시 시작
 ,Sin (Degrees),Sin (Degrees),사인 (도)
 ,Sky,Sky,하늘
 ,SmoothStep requires edge0 < edge1.,SmoothStep requires edge0 < edge1.,SmoothStep에서는 edge0가 edge1보다 작아야 합니다.
+,Spawn Composite VFX,,
+,Spawn Prefab,,
 ,Specify exactly one of GRAPH_PURE(id) and GRAPH_CALLABLE(id).,Specify exactly one of GRAPH_PURE(id) and GRAPH_CALLABLE(id).,GRAPH_PURE(id)와 GRAPH_CALLABLE(id) 중 하나만 지정하세요.
 ,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,Specify exactly one of GRAPH_READONLY and GRAPH_READWRITE.,GRAPH_READONLY와 GRAPH_READWRITE 중 하나만 지정하세요.
 ,Spot Inner Angle (Degrees),Spot Inner Angle (Degrees),스포트 내부 각도(도)
@@ -970,6 +984,7 @@ Game,BaselineChallenge.Restart,Restart,다시 시작
 ,Unsupported node domain:,Unsupported node domain:,지원하지 않는 노드 도메인:
 ,Unsupported property type:,Unsupported property type:,지원하지 않는 속성 자료형:
 ,Unsupported return type:,Unsupported return type:,지원하지 않는 반환 자료형:
+,VFX,,
 ,VIGNETTE_INTENSITY,Intensity,강도
 ,VIGNETTE_ROUNDNESS,Roundness,원형도
 ,VIGNETTE_SMOOTHNESS,Smoothness,부드러움

@@ -19,7 +19,11 @@ public:
 public:
 	void Update() override;
 	void RecordMeshFileState(const std::filesystem::path& filePath);
+	void RequestProjectLocalizationImport(std::filesystem::path source);
+	void RequestProjectLocalizationReload();
 private:
+	void ImportProjectLocalization(const std::filesystem::path& source);
+	void ReloadProjectLocalization();
 	void ProcessModifiedTexture(const std::filesystem::path& texturePath);
 	void ProcessModifiedMaterial(const std::filesystem::path& materialPath);
 	void ProcessModifiedMesh(const std::filesystem::path& meshPath);
@@ -42,6 +46,8 @@ private:
 	std::vector<efsw::WatchID> m_WatchIDs;
 	std::vector<std::filesystem::path> m_WatchedDirectories;
 	std::unordered_map<std::wstring, MeshFileState> m_MeshFileStates;
+	std::filesystem::path m_PendingProjectLocaleImport;
+	bool m_ProjectLocaleReloadRequested = false;
 };
 
 END

@@ -1,4 +1,4 @@
-#include "UILayout.h"
+﻿#include "UILayout.h"
 #include "UIClipLayout.h"
 #include "Scene.h"
 #include "WorldComponents.h"
@@ -81,18 +81,20 @@ int main()
         auto& world = scene->GetRegistry();
         const auto canvas = scene->CreateEntity().GetEntityHandle();
         world.emplace<CanvasComponent>(canvas);
+        world.emplace<FlagComponent>(canvas);
         world.emplace<HierarchyComponent>(canvas);
         const auto add = [&](entt::entity parent, glm::vec2 origin, glm::vec2 size)
-        {
-            const auto handle = scene->CreateEntity().GetEntityHandle();
-            world.emplace<HierarchyComponent>(handle).parent = parent;
-            world.get<HierarchyComponent>(parent).children.push_back(handle);
-            auto& rect = world.emplace<RectTransformComponent>(handle);
-            rect.pivot = rect.anchorMin = rect.anchorMax = glm::vec2(0.0f);
-            rect.anchoredPosition = origin;
-            rect.sizeDelta = size;
-            return handle;
-        };
+            {
+                const auto handle = scene->CreateEntity().GetEntityHandle();
+                world.emplace<FlagComponent>(handle);
+                world.emplace<HierarchyComponent>(handle).parent = parent;
+                world.get<HierarchyComponent>(parent).children.push_back(handle);
+                auto& rect = world.emplace<RectTransformComponent>(handle);
+                rect.pivot = rect.anchorMin = rect.anchorMax = glm::vec2(0.0f);
+                rect.anchoredPosition = origin;
+                rect.sizeDelta = size;
+                return handle;
+            };
         const auto viewport = add(canvas, { 0.0f, 0.0f }, { 100.0f, 100.0f });
         const auto content = add(viewport, { 0.0f, 0.0f }, { 100.0f, 200.0f });
         const auto mask = add(content, { 20.0f, 20.0f }, { 60.0f, 150.0f });
@@ -136,12 +138,14 @@ int main()
         auto& world = scene->GetRegistry();
         const auto canvas = scene->CreateEntity().GetEntityHandle();
         world.emplace<CanvasComponent>(canvas);
+        world.emplace<FlagComponent>(canvas);
         world.emplace<HierarchyComponent>(canvas);
         auto parent = canvas;
         std::array<entt::entity, 4> entries;
         for (auto& entity : entries)
         {
             entity = scene->CreateEntity().GetEntityHandle();
+            world.emplace<FlagComponent>(entity);
             world.emplace<HierarchyComponent>(entity).parent = parent;
             world.get<HierarchyComponent>(parent).children.push_back(entity);
             auto& rect = world.emplace<RectTransformComponent>(entity);
@@ -170,7 +174,7 @@ int main()
         world.emplace<UIAlphaMaskComponent>(entries[2]).textureHandle = partial;
         if (!UILayout::Build(world, canvas, layouts) || layouts.back().visible)
             return Fail("Exceeding alpha mask depth should hide descendants.");
-        detail::SetComponentEnabled<UIAlphaMaskComponent>(world, entries[2], false);
+        Engine::detail::SetComponentEnabled<UIAlphaMaskComponent>(world, entries[2], false);
         if (!UILayout::Build(world, canvas, layouts) || !hit(0.90f))
             return Fail("A disabled image mask should leave ancestor masks active.");
         world.get<UIAlphaMaskComponent>(entries[1]).textureHandle.Reset();
@@ -328,6 +332,28 @@ int main()
         restoredWorld.get<IDComponent>(layouts[1].entity).id != world.get<IDComponent>(child).id ||
         restoredWorld.get<IDComponent>(layouts[2].entity).id != world.get<IDComponent>(grandchild).id)
         return Fail("Z-index or ordered subtree restoration failed.");
+    // Older UIText records have no translation toggle, font family or vertical alignment.
+    archive::JsonArchive legacyText;
+    const auto legacyData = R"({"Data":{"alignment":1,"color":[1,0,0,1],"fontPixels":43,"localizationKey":"Old.Key","text":"Legacy"}})";
+    if (!legacyText.Parse(legacyData) ||
+        !ReflectionRegistry::Get().ReadComponent<UITextComponent>(legacyText, "Data", world, child))
+        return Fail("Legacy UI text without font or vertical alignment could not load.");
+    const auto* text = world.try_get<UITextComponent>(child);
+    if (!text || text->text != "Legacy" || text->fontPixels != 43 || !text->fontFamily.empty() ||
+        text->verticalAlignment != EUITextVerticalAlignment::Middle || !text->useLocalization ||
+        text->localizationKey != "Old.Key")
+        return Fail("Legacy UI text did not preserve values and use defaults for missing fields.");
+
+    world.get<UITextComponent>(child).useLocalization = false;
+    archive::JsonArchive untranslatedText;
+    const auto& registry = ReflectionRegistry::Get();
+    if (!registry.WriteComponent<UITextComponent>(untranslatedText, "Data", world, child) ||
+        !registry.ReadComponent<UITextComponent>(untranslatedText, "Data", world, other))
+        return Fail("UI text with translation disabled could not round-trip.");
+    const auto& untranslated = world.get<UITextComponent>(other);
+    if (untranslated.useLocalization || untranslated.localizationKey != "Old.Key" || untranslated.text != "Legacy")
+        return Fail("Disabling translation did not preserve the locale key and literal text.");
+
     const auto* restoredGroup = restoredWorld.try_get<UILayoutGroupComponent>(restoredRoot->GetEntityHandle());
     if (!restoredGroup || restoredGroup->mode != EUILayoutGroupMode::Grid || restoredGroup->columns != 1 ||
         !Near(restoredGroup->cellSize, group.cellSize) || !at(layouts[0], { 10.0f, 60.0f }))

@@ -6,6 +6,51 @@
 #include "LocalizationManager.h"
 #include "EditorUI.h"
 #include "RaytracedShadowModeUI.h"
+#include "AssetHotReloadManager.h"
+#include "HotReloadManager.h"
+#include "PlatformPath.h"
+
+namespace
+{
+    void DrawProjectLocalization()
+    {
+        if (!ImGui::CollapsingHeader(LOCAL_LABEL("Settings.ProjectLocale").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+            return;
+
+        const auto uri = Engine::WStrToStr(Engine::LocalizationManager::ProjectCatalogDirectory);
+        ImGui::TextWrapped("%s", LOCAL_FMT("Settings.ProjectLocaleHelp", uri).c_str());
+        if (!Engine::LocalizationManager::IsCreated() || !Editor::HotReloadManager::IsCreated())
+            return;
+
+        auto& locale = Engine::LocalizationManager::Get();
+        const auto& files = locale.GetProjectCatalogFiles();
+        if (files.empty())
+            ImGui::TextWrapped("%s", LOCAL_CSTR("Settings.ProjectLocaleEmpty"));
+        else
+        {
+            for (const auto& file : files)
+            {
+                ImGui::Bullet();
+                ImGui::TextWrapped("%s", Engine::WStrToStr(file.filename().wstring()).c_str());
+            }
+        }
+
+        auto& reloader = Editor::HotReloadManager::Get().GetAssetReloader();
+        EditorUI::ToolbarLayout actions;
+        if (actions.Button("ImportProjectLocale", ICON_FA_FILE_IMPORT, "Settings.ProjectLocaleImport"))
+        {
+            std::wstring path;
+            const auto catalogDirectory = Engine::PlatformPath::ResolveUri(Engine::LocalizationManager::ProjectCatalogDirectory);
+            const vector<FileDialogFilter> filters = {
+                { Engine::StrToWStr(LOCAL("Settings.ProjectLocaleFiles")), L"*.csv;*.json" }
+            };
+            if (FileDialogs::OpenFileDialog(path, filters, catalogDirectory.wstring(), "Settings.ProjectLocaleImport"))
+                reloader.RequestProjectLocalizationImport(std::filesystem::path(path));
+        }
+        if (actions.Button("ReloadProjectLocale", ICON_FA_ROTATE, "Settings.ProjectLocaleReload"))
+            reloader.RequestProjectLocalizationReload();
+    }
+}
 
 void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
 {
@@ -35,6 +80,19 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     ImGuiManager::Get().NotifySettingsChange({ result == EEditorSettingsSaveStatus::Saved, result });
 }
 
+void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
+{
+    ImGui::TextUnformatted(LOCAL_CSTR("Settings.CategoryProjectSettings"));
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("Settings.ProjectMetadata").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        DrawMetadata(settings);
+
+    DrawRendering();
+    DrawProjectLocalization();
+}
+
 void ProjectSettingsWidget::DrawRendering()
 {
     if (!ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
@@ -49,17 +107,8 @@ void ProjectSettingsWidget::DrawRendering()
     ImGui::Spacing();
 }
 
-void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
+void ProjectSettingsWidget::DrawMetadata(const EditorSettingsService& settings)
 {
-    ImGui::TextUnformatted(LOCAL_CSTR("Settings.CategoryProjectSettings"));
-    ImGui::Separator();
-    ImGui::Spacing();
-
-    DrawRendering();
-
-    if (!ImGui::CollapsingHeader(LOCAL_CSTR("Settings.ProjectMetadata"), ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-
     const auto& projectRoot = settings.GetProjectRoot();
 
     if (EditorUI::BeginPropertyTable("##ProjectSettingsTable"))

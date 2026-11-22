@@ -73,6 +73,8 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
             registeredCatalog = true;
     }
     if (registeredCatalog) localization.LoadData();
+    if (!IsSuccess(localization.ReloadProjectData()))
+        BAM_LOG(Warn, "Client", "Startup", "Project localization catalogs could not be loaded.");
 
     Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
     if (!Engine::StartupResourceLoader::LoadPipeline(m_ProjectSettings.StartupManifestPath))
