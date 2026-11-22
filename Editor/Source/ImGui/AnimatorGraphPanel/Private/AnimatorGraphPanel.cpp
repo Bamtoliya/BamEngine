@@ -18,6 +18,7 @@
 #include "ShortcutManager.h"
 #include "EditorSettings.h"
 #include "Scene.h"
+#include "PIEManager.h"
 #include "NotificationManager.h"
 #include <imgui_stdlib.h>
 #include <imgui_node_editor.h>
@@ -120,7 +121,7 @@ void AnimatorGraphPanel::DrawCustomContent()
 	m_InspectorWidth = std::clamp(m_InspectorWidth, minPaneWidth, maxSideWidth);
 	float canvasWidth = (std::max)(minCanvasWidth, totalWidth - m_LeftPaneWidth - m_InspectorWidth - overhead);
 
-	// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 독 ──
+	// ── [좌측 영역] 3D 프리뷰 뷰포트 + 파라미터 & 레이어 독 ──
 	ImGui::BeginChild("LeftPane", ImVec2(m_LeftPaneWidth, contentHeight), true);
 	if (m_ShowPreviewViewport)
 	{
@@ -128,7 +129,20 @@ void AnimatorGraphPanel::DrawCustomContent()
 		DrawPreviewSection(m_LeftPaneWidth - 16.0f, previewHeight);
 		ImGui::Separator();
 	}
-	DrawParametersTab();
+	if (ImGui::BeginTabBar("LeftPaneTabs"))
+	{
+		if (ImGui::BeginTabItem(LOCAL_CSTR("Animator.Parameters")))
+		{
+			DrawParametersTab();
+			ImGui::EndTabItem();
+		}
+		if (ImGui::BeginTabItem(LOCAL_CSTR("PROP_ANIMATOR_LAYERS")))
+		{
+			DrawLayersTab();
+			ImGui::EndTabItem();
+		}
+		ImGui::EndTabBar();
+	}
 	ImGui::EndChild();
 	ImGui::SameLine();
 
@@ -136,10 +150,80 @@ void AnimatorGraphPanel::DrawCustomContent()
 	Editor::SplitterV("##LeftSplitter", &m_LeftPaneWidth, &canvasWidth, minPaneWidth, minCanvasWidth, contentHeight, splitterThickness);
 	ImGui::SameLine();
 
-	// ── [중앙 영역] 상태 머신 노드 캔버스 ──
+	// ── [중앙 영역] 상태 머신 노드 캔버스 및 레이어 탭 ──
 	ImGui::BeginChild("CanvasPanel", ImVec2(canvasWidth, contentHeight), true,
 		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-	DrawCanvas();
+
+	Engine::AnimatorComponent* canvasAnimator = nullptr;
+	if (auto* pie = PIEManager::Get(); pie && (pie->IsPlaying() || pie->IsPaused()))
+	{
+		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+		const auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+		if (scene && selected && selected->GetScene() == scene)
+		{
+			canvasAnimator = scene->GetRegistry().try_get<Engine::AnimatorComponent>(selected->GetEntityHandle());
+		}
+	}
+	if (!canvasAnimator && m_PreviewModelEntity && m_PreviewWidget.GetScene())
+	{
+		canvasAnimator = m_PreviewWidget.GetRegistry().try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+	}
+
+	if (canvasAnimator && !canvasAnimator->layers.empty())
+	{
+		if (ImGui::BeginTabBar("CanvasLayerTabs"))
+		{
+			if (ImGui::BeginTabItem(LOCAL_CSTR("AnimatorGraph.Entry")))
+			{
+				m_SelectedLayerIndex = 0;
+				ImGui::EndTabItem();
+			}
+			for (size_t i = 0; i < canvasAnimator->layers.size(); ++i)
+			{
+				const auto& layer = canvasAnimator->layers[i];
+				std::string title = layer.name.empty() ? ("Layer " + std::to_string(i + 1)) : layer.name;
+				title += " (" + std::to_string(static_cast<int>(layer.weight * 100.0f)) + "%)###CanvasTab_" + std::to_string(i);
+				if (ImGui::BeginTabItem(title.c_str()))
+				{
+					m_SelectedLayerIndex = static_cast<int>(i + 1);
+					ImGui::EndTabItem();
+				}
+			}
+			ImGui::EndTabBar();
+		}
+	}
+	else
+	{
+		m_SelectedLayerIndex = 0;
+	}
+
+	if (m_SelectedLayerIndex == 0)
+	{
+		DrawCanvas();
+	}
+	else if (canvasAnimator && m_SelectedLayerIndex - 1 < static_cast<int>(canvasAnimator->layers.size()))
+	{
+		auto& layer = canvasAnimator->layers[m_SelectedLayerIndex - 1];
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Layer Properties: %s", layer.name.c_str());
+		ImGui::Separator();
+		ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
+		ImGui::SliderFloat("Weight", &layer.weight, 0.0f, 1.0f, "%.2f");
+
+		std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
+		if (ImGui::InputText("Mask Root Bone", &rootBoneStr))
+			layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
+		ImGui::Checkbox("Recursive Children", &layer.mask.includeChildren);
+
+		auto clip = layer.clip;
+		if (DrawInspectorResourcePicker(clip, true))
+			layer.clip = clip;
+
+		ImGui::DragFloat("Play Rate", &layer.playRate, 0.05f, 0.1f, 5.0f);
+		ImGui::Checkbox("Looping", &layer.isLooping);
+		ImGui::SameLine();
+		ImGui::Checkbox("Playing", &layer.isPlaying);
+	}
 	ImGui::EndChild();
 	ImGui::SameLine();
 
@@ -677,41 +761,225 @@ void AnimatorGraphPanel::RenameParameter(const std::string& oldName, const std::
 	m_History.MarkEdited();
 }
 
+void AnimatorGraphPanel::DrawLayersTab()
+{
+	Engine::AnimatorComponent* targetAnimator = nullptr;
+	const bool isPIE = PIEManager::Get() && (PIEManager::Get()->IsPlaying() || PIEManager::Get()->IsPaused());
+	if (isPIE)
+	{
+		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+		const auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+		if (scene && selected && selected->GetScene() == scene)
+		{
+			auto& world = scene->GetRegistry();
+			auto entity = selected->GetEntityHandle();
+			while (entity != entt::null && world.valid(entity))
+			{
+				if (auto* anim = world.try_get<Engine::AnimatorComponent>(entity))
+				{
+					targetAnimator = anim;
+					break;
+				}
+				const auto* hierarchy = world.try_get<Engine::HierarchyComponent>(entity);
+				entity = hierarchy ? hierarchy->parent : entt::null;
+			}
+		}
+
+		if (!targetAnimator && scene)
+		{
+			auto& world = scene->GetRegistry();
+			for (auto [entity, anim] : world.view<Engine::AnimatorComponent>().each())
+			{
+				if ((!m_CurrentFilePath.empty() && anim.controllerPath == m_CurrentFilePath) ||
+					(anim.runtimeState.HasStateMachine() && anim.runtimeState.GetStateMachine() == m_StateMachine))
+				{
+					targetAnimator = &anim;
+					break;
+				}
+			}
+		}
+	}
+
+	if (!targetAnimator && m_PreviewModelEntity && m_PreviewWidget.GetScene())
+	{
+		auto& world = m_PreviewWidget.GetRegistry();
+		targetAnimator = world.try_get<Engine::AnimatorComponent>(m_PreviewModelEntity->GetEntityHandle());
+	}
+
+	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("PROP_ANIMATOR_LAYERS"));
+
+	if (!targetAnimator)
+	{
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.PreviewUnavailable"));
+		return;
+	}
+
+	ImGui::PushID("AnimatorLayersTab");
+
+	// Base Layer
+	if (ImGui::CollapsingHeader("Base Layer", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		ImGui::TextDisabled("Weight: 1.00 (Base)");
+		ImGui::TextDisabled("Mask: Full Body");
+	}
+
+	// Additional Layers
+	int toDeleteIndex = -1;
+	for (size_t i = 0; i < targetAnimator->layers.size(); ++i)
+	{
+		auto& layer = targetAnimator->layers[i];
+		ImGui::PushID(static_cast<int>(i));
+
+		std::string headerTitle = layer.name.empty() ? ("Layer " + std::to_string(i + 1)) : layer.name;
+		headerTitle += " (" + std::to_string(static_cast<int>(layer.weight * 100.0f)) + "%)###LayerHeader";
+
+		if (ImGui::CollapsingHeader(headerTitle.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
+			ImGui::SliderFloat("Weight", &layer.weight, 0.0f, 1.0f, "%.2f");
+
+			std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
+			if (ImGui::InputText("Mask Root Bone", &rootBoneStr))
+			{
+				layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
+			}
+			ImGui::Checkbox("Recursive Children", &layer.mask.includeChildren);
+			if (!layer.mask.boneWeights.empty())
+			{
+				ImGui::TextDisabled("Evaluated Bones: %zu", layer.mask.boneWeights.size());
+			}
+
+			auto clip = layer.clip;
+			if (DrawInspectorResourcePicker(clip, true))
+			{
+				layer.clip = clip;
+			}
+
+			ImGui::DragFloat("Play Rate", &layer.playRate, 0.05f, 0.1f, 5.0f);
+			ImGui::Checkbox("Looping", &layer.isLooping);
+			ImGui::SameLine();
+			ImGui::Checkbox("Playing", &layer.isPlaying);
+
+			if (ImGui::Button(LOCAL_CSTR("EditorCommon.Delete")))
+			{
+				toDeleteIndex = static_cast<int>(i);
+			}
+		}
+		ImGui::PopID();
+	}
+
+	if (toDeleteIndex >= 0 && toDeleteIndex < static_cast<int>(targetAnimator->layers.size()))
+	{
+		targetAnimator->layers.erase(targetAnimator->layers.begin() + toDeleteIndex);
+	}
+
+	ImGui::Spacing();
+	if (ImGui::Button(LOCAL_CSTR("EditorCommon.Add")))
+	{
+		targetAnimator->layers.push_back(Engine::AnimatorLayer{
+			"UpperBody",
+			1.0f,
+			Engine::BoneMask{ L"Spine", true },
+			{},
+			1.0f,
+			true,
+			true,
+			0.0f
+		});
+	}
+
+	ImGui::PopID();
+}
+
 void AnimatorGraphPanel::DrawPreviewParameters()
 {
+	bool isPIE = false;
+	if (auto* pie = PIEManager::Get())
+	{
+		isPIE = pie->IsPlaying() || pie->IsPaused();
+	}
+
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
-		"%s", LOCAL_CSTR("AnimatorGraph.PreviewParameters"));
+		"%s", isPIE ? "[PIE Live Parameters]" : LOCAL_CSTR("AnimatorGraph.PreviewParameters"));
 
-	if (!m_StateMachine || !m_ShowPreviewViewport ||
-		!m_PreviewWidget.GetScene() || !m_PreviewModelEntity)
+	Engine::AnimatorRuntimeState* activeRuntime = nullptr;
+	Engine::AnimatorComponent* activeAnimator = nullptr;
+
+	if (isPIE)
+	{
+		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+		const auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+		if (scene && selected && selected->GetScene() == scene)
+		{
+			auto& world = scene->GetRegistry();
+			auto entity = selected->GetEntityHandle();
+			while (entity != entt::null && world.valid(entity))
+			{
+				if (auto* anim = world.try_get<Engine::AnimatorComponent>(entity))
+				{
+					if (anim->runtimeState.HasStateMachine())
+					{
+						activeRuntime = &anim->runtimeState;
+						activeAnimator = anim;
+						break;
+					}
+				}
+				const auto* hierarchy = world.try_get<Engine::HierarchyComponent>(entity);
+				entity = hierarchy ? hierarchy->parent : entt::null;
+			}
+		}
+
+		if (!activeRuntime && scene)
+		{
+			auto& world = scene->GetRegistry();
+			for (auto [entity, anim] : world.view<Engine::AnimatorComponent>().each())
+			{
+				if (anim.runtimeState.HasStateMachine() &&
+					((!m_CurrentFilePath.empty() && anim.controllerPath == m_CurrentFilePath) ||
+					 anim.runtimeState.GetStateMachine() == m_StateMachine))
+				{
+					activeRuntime = &anim.runtimeState;
+					activeAnimator = &anim;
+					break;
+				}
+			}
+		}
+	}
+	else if (m_ShowPreviewViewport && m_PreviewWidget.GetScene() && m_PreviewModelEntity)
+	{
+		auto& world = m_PreviewWidget.GetRegistry();
+		const auto entity = m_PreviewModelEntity->GetEntityHandle();
+		auto* animator = world.valid(entity) ? world.try_get<Engine::AnimatorComponent>(entity) : nullptr;
+		if (animator && animator->runtimeState.GetStateMachine() == m_StateMachine)
+		{
+			activeRuntime = &animator->runtimeState;
+			activeAnimator = animator;
+		}
+	}
+
+	if (!m_StateMachine || !activeRuntime || !activeAnimator)
 	{
 		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.PreviewUnavailable"));
 		return;
 	}
 
-	auto& world = m_PreviewWidget.GetRegistry();
-	const auto entity = m_PreviewModelEntity->GetEntityHandle();
-	auto* animator = world.valid(entity) ? world.try_get<Engine::AnimatorComponent>(entity) : nullptr;
-
-	if (!animator || animator->runtimeState.GetStateMachine() != m_StateMachine)
-	{
-		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.PreviewUnavailable"));
-		return;
-	}
-
-	auto& runtime = animator->runtimeState;
+	auto& runtime = *activeRuntime;
+	auto* animator = activeAnimator;
 
 	ImGui::PushID("PreviewParameters");
 	const auto& defaultState = m_StateMachine->defaultState;
 	const bool canRestart = !defaultState.empty() && m_StateMachine->FindState(defaultState) != nullptr;
 
-	ImGui::BeginDisabled(!canRestart);
-	if (ImGui::Button(LOCAL_LABEL("AnimatorGraph.PreviewRestart").c_str()))
-		SyncPreviewStateMachine();
-	ImGui::EndDisabled();
+	if (!isPIE)
+	{
+		ImGui::BeginDisabled(!canRestart);
+		if (ImGui::Button(LOCAL_LABEL("AnimatorGraph.PreviewRestart").c_str()))
+			SyncPreviewStateMachine();
+		ImGui::EndDisabled();
 
-	if (!canRestart && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-		ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.PreviewRestartNeedsEntry"));
+		if (!canRestart && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("AnimatorGraph.PreviewRestartNeedsEntry"));
+	}
 
 	const auto& currentState = runtime.GetCurrentStateName();
 	const auto targetState = runtime.GetTransitionTargetStateName();
@@ -795,7 +1063,54 @@ void AnimatorGraphPanel::DrawCanvas()
 	// ── 0. 현재 씬 또는 프리뷰에서 선택된 엔티티의 런타임 애니메이터 상태 조회 ──
 	const Engine::AnimatorRuntimeState* observedRuntime = nullptr;
 
-	if (m_ShowPreviewViewport)
+	bool isPIE = false;
+	if (auto* pie = PIEManager::Get())
+	{
+		isPIE = pie->IsPlaying() || pie->IsPaused();
+	}
+
+	if (isPIE)
+	{
+		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+		const auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+
+		if (scene && selected && selected->GetScene() == scene)
+		{
+			auto& world = scene->GetRegistry();
+			auto entity = selected->GetEntityHandle();
+
+			while (entity != entt::null && world.valid(entity))
+			{
+				if (const auto* animator = world.try_get<Engine::AnimatorComponent>(entity))
+				{
+					if (animator->runtimeState.HasStateMachine())
+					{
+						observedRuntime = &animator->runtimeState;
+						break;
+					}
+				}
+
+				const auto* hierarchy = world.try_get<Engine::HierarchyComponent>(entity);
+				entity = hierarchy ? hierarchy->parent : entt::null;
+			}
+		}
+
+		if (!observedRuntime && scene)
+		{
+			auto& world = scene->GetRegistry();
+			for (auto [entity, anim] : world.view<const Engine::AnimatorComponent>().each())
+			{
+				if (anim.runtimeState.HasStateMachine() &&
+					((!m_CurrentFilePath.empty() && anim.controllerPath == m_CurrentFilePath) ||
+					 anim.runtimeState.GetStateMachine() == m_StateMachine))
+				{
+					observedRuntime = &anim.runtimeState;
+					break;
+				}
+			}
+		}
+	}
+	else if (m_ShowPreviewViewport)
 	{
 		if (m_PreviewModelEntity && m_PreviewWidget.GetScene())
 		{
@@ -1011,7 +1326,7 @@ void AnimatorGraphPanel::DrawCanvas()
 	}
 
 	// ── 4. 트랜지션(링크) 렌더링 ──
-	DrawTransitions();
+	DrawTransitions(observedRuntime);
 
 	// ── 4-1. 모든 노드 및 링크 배치 완료 후 안전하게 뷰포트 내비게이션 ──
 	if (m_NeedNavigateToContent)
@@ -1204,7 +1519,7 @@ void AnimatorGraphPanel::DrawCanvas()
 	ed::SetCurrentEditor(previousContext);
 }
 
-void AnimatorGraphPanel::DrawTransitions()
+void AnimatorGraphPanel::DrawTransitions(const Engine::AnimatorRuntimeState* observedRuntime)
 {
 	if (!m_StateMachine) return;
 
@@ -1319,12 +1634,27 @@ void AnimatorGraphPanel::DrawTransitions()
 			}
 		}
 
+		bool isTransitionActive = false;
+		if (observedRuntime && observedRuntime->IsTransitioning())
+		{
+			if (transition.fromAnyState)
+			{
+				isTransitionActive = (transition.targetState == observedRuntime->GetTransitionTargetStateName());
+			}
+			else
+			{
+				isTransitionActive = (transition.sourceState == observedRuntime->GetCurrentStateName() &&
+									  transition.targetState == observedRuntime->GetTransitionTargetStateName());
+			}
+		}
+
 		const bool isSelected = (m_SelectedTransitionIndex == static_cast<int>(k));
 		ImVec4 col = isSelected ? NodeEditorUI::Colors::WireSelected
-			: (transition.fromAnyState ? NodeEditorUI::Colors::WireAnyState : NodeEditorUI::Colors::WireDefault);
-		const float thickness = isSelected ? 3.5f : 2.0f;
+			: (isTransitionActive ? ImVec4(0.0f, 1.0f, 0.8f, 1.0f)
+			: (transition.fromAnyState ? NodeEditorUI::Colors::WireAnyState : NodeEditorUI::Colors::WireDefault));
+		const float thickness = isSelected ? 3.5f : (isTransitionActive ? 3.0f : 2.0f);
 
-		NodeEditorUI::DrawLink(100 + static_cast<uintptr_t>(k), startPin, endPin, col, thickness);
+		NodeEditorUI::DrawLink(100 + static_cast<uintptr_t>(k), startPin, endPin, col, thickness, isTransitionActive);
 	}
 }
 

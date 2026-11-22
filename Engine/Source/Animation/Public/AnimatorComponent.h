@@ -6,6 +6,8 @@
 #include "AnimatorStateMachine.h"
 #include "BoneMask.h"
 #include "AnimationEvaluator.h"
+#include "RootMotion.h"
+#include "AnimationIK.h"
 
 namespace Engine
 {
@@ -62,6 +64,18 @@ namespace Engine
 
 		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_CURRENT_TIME"))
 			f32 currentTime = 0.0f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		bool applyRootMotion = false;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		std::string rootMotionBoneName;
+
+		PROPERTY(READONLY, NOSERIALIZE)
+		vec3 lastRootMotionDeltaPos = vec3(0.0f);
+
+		PROPERTY(READONLY, NOSERIALIZE)
+		quat lastRootMotionDeltaRot = glm::identity<quat>();
 
 		// 셰이더 및 스키닝에 사용할 최종 뼈 변환 행렬 목록
 		PROPERTY(READONLY, NOSERIALIZE)

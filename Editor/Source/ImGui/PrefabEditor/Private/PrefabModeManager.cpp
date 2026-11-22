@@ -17,11 +17,18 @@
 #include <archive/JsonArchive.h>
 #include "Application.h"
 #include "AssetCache.h"
+#include "PrefabInstanceComponent.h"
+#include "SceneEditHistory.h"
 
 IMPLEMENT_LAZY_SINGLETON(PrefabModeManager)
 
 namespace
 {
+    struct PrefabSceneDeleter
+    {
+        void operator()(Engine::Scene* scene) const { if (scene != nullptr) scene->Release(); }
+    };
+
     bool PreparePrefabUICanvas(Engine::Scene& scene, Engine::Entity& root)
     {
         auto& world = scene.GetRegistry();
@@ -109,9 +116,19 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
     for (auto* entity : selection.GetSelectedEntities())
         m_SavedSelection.push_back(entity->GetWeakRef());
 
+    const auto restoreSelectionOnFailure = [&]()
+    {
+        selection.ClearSelection();
+        for (const auto& ref : m_SavedSelection)
+            if (auto* entity = Engine::Entity::Resolve(ref))
+                selection.AddToSelection(entity);
+        m_SavedSelection.clear();
+    };
+
     m_PrefabScene = Engine::Scene::Create();
     if (!m_PrefabScene)
     {
+        restoreSelectionOnFailure();
         Safe_Release(m_SavedMainScene);
         m_SavedMainScene = nullptr;
         return false;
@@ -121,6 +138,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
     archive::JsonArchive ar;
     if (!ar.LoadFromFile(prefabPath))
     {
+        restoreSelectionOnFailure();
         Safe_Release(m_SavedMainScene);
         m_SavedMainScene = nullptr;
         Safe_Release(m_PrefabScene);
@@ -135,6 +153,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
 
     if (!m_PrefabRootEntity)
     {
+        restoreSelectionOnFailure();
         Safe_Release(m_SavedMainScene);
         m_SavedMainScene = nullptr;
         Safe_Release(m_PrefabScene);
@@ -147,17 +166,16 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
 
     if (sm.OpenScene(m_PrefabScene) != Engine::EResult::Success)
     {
+        restoreSelectionOnFailure();
         Safe_Release(m_SavedMainScene);
         m_SavedMainScene = nullptr;
         Safe_Release(m_PrefabScene);
         m_PrefabScene = nullptr;
         m_PrefabRootEntity = nullptr;
-        m_SavedSelection.clear();
         return false;
     }
 
-    history.ResetDocument(m_PrefabScene, history.Enabled());
-
+    // Preserve main scene undo history across prefab mode switch
     Safe_Release(m_PrefabScene);
 
     SelectionManager::Get().SetSelectedEntity(m_PrefabRootEntity);
@@ -229,10 +247,9 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
         if (sm.OpenScene(m_SavedMainScene) != Engine::EResult::Success)
             return false;
 
+        // Preserve main scene undo history: do NOT call history.ResetDocument
         auto& history = Application::Get().GetEditHistory();
-        history.ResetDocument(m_SavedMainScene, history.Enabled());
-
-        if (m_MainSceneHadUnsavedChanges)
+        if (m_MainSceneHadUnsavedChanges && !history.HasUnsavedChanges())
             history.NotifyUntrackedChange();
 
         Safe_Release(m_SavedMainScene);
@@ -256,6 +273,131 @@ bool PrefabModeManager::ExitPrefabMode(bool discardChanges)
     }
 
     m_SavedSelection.clear();
+
+    return true;
+}
+
+bool PrefabModeManager::ApplyPrefabInstance(Engine::Scene& scene, entt::entity rootEntity)
+{
+    auto& world = scene.GetRegistry();
+    if (!world.valid(rootEntity))
+        return false;
+
+    const auto* prefabComp = world.try_get<Engine::PrefabInstanceComponent>(rootEntity);
+    if (!prefabComp || prefabComp->prefabAssetPath.empty())
+        return false;
+
+    const auto targetPath = Engine::PlatformPath::ResolveUri(prefabComp->prefabAssetPath);
+    if (targetPath.empty())
+        return false;
+
+    if (Engine::PlatformPath::IsReadOnlyTarget(targetPath.wstring()))
+    {
+        NotificationManager::Get().AddNotification(
+            LOCAL("ResourceType.Prefab"),
+            LOCAL_FMT("Notification.PrefabSaveFailed", Engine::WStrToStr(targetPath.filename().wstring())),
+            ELogLevel::Error, 4.0f);
+        return false;
+    }
+
+    auto* liveEntity = scene.FindEntity(rootEntity);
+    if (!liveEntity)
+        return false;
+
+    // Preserve the instance's placement transform:
+    // If original prefab asset exists, read its root transform to write back to the prefab asset.
+    std::optional<Engine::TransformComponent> originalRootTransform;
+    if (std::filesystem::exists(targetPath))
+    {
+        archive::JsonArchive origAr;
+        if (origAr.LoadFromFile(targetPath))
+        {
+            std::unique_ptr<Engine::Scene, PrefabSceneDeleter> staging(Engine::Scene::Create());
+            Engine::Entity* stagingRoot = nullptr;
+            if (staging && staging->InstantiatePrefabArchive(origAr, stagingRoot, nullptr) && stagingRoot)
+            {
+                if (const auto* origTr = staging->GetRegistry().try_get<Engine::TransformComponent>(stagingRoot->GetEntityHandle()))
+                {
+                    originalRootTransform = *origTr;
+                }
+            }
+        }
+    }
+
+    // Temporarily swap root entity transform to the original prefab root transform (or default identity if new)
+    auto* liveTransform = world.try_get<Engine::TransformComponent>(rootEntity);
+    std::optional<Engine::TransformComponent> savedLiveTransform;
+    if (liveTransform)
+    {
+        savedLiveTransform = *liveTransform;
+        if (originalRootTransform)
+        {
+            *liveTransform = *originalRootTransform;
+        }
+        else
+        {
+            *liveTransform = Engine::TransformComponent{};
+        }
+        (void)liveTransform->SynchronizeRotation();
+    }
+
+    archive::JsonArchive ar;
+    auto result = scene.WritePrefabArchive(ar, *liveEntity);
+    if (result)
+        result = ar.SaveToFile(targetPath);
+
+    // Restore live instance's placement transform
+    if (liveTransform && savedLiveTransform)
+    {
+        *liveTransform = *savedLiveTransform;
+        (void)liveTransform->SynchronizeRotation();
+    }
+
+    const std::string prefabFileName = Engine::WStrToStr(targetPath.filename().wstring());
+    if (result)
+    {
+        if (AssetCache::IsCreated())
+            AssetCache::Get().RequestInvalidate(targetPath);
+
+        NotificationManager::Get().AddNotification(
+            LOCAL("ResourceType.Prefab"),
+            LOCAL_FMT("Notification.PrefabApplied", prefabFileName),
+            ELogLevel::Info, 3.0f);
+        return true;
+    }
+    else
+    {
+        NotificationManager::Get().AddNotification(
+            LOCAL("ResourceType.Prefab"),
+            LOCAL_FMT("Notification.PrefabSaveFailed", prefabFileName),
+            ELogLevel::Error, 4.0f);
+        return false;
+    }
+}
+
+bool PrefabModeManager::UnpackPrefabInstance(Engine::Scene& scene, entt::entity rootEntity, SceneEditHistory* history)
+{
+    auto& world = scene.GetRegistry();
+    if (!world.valid(rootEntity) || !world.all_of<Engine::PrefabInstanceComponent>(rootEntity))
+        return false;
+
+    if (!history && Application::IsCreated())
+    {
+        history = &Application::Get().GetEditHistory();
+    }
+
+    auto before = (history && history->Enabled()) ? SceneEditSnapshot::Capture(scene) : SceneEditSnapshot{};
+    world.remove<Engine::PrefabInstanceComponent>(rootEntity);
+
+    if (before && history)
+    {
+        history->Record(std::move(before), SceneEditSnapshot::Capture(scene), "History.Command.UnpackPrefab");
+    }
+
+    NotificationManager::Get().AddNotification(
+        LOCAL("ResourceType.Prefab"),
+        LOCAL("Notification.PrefabUnpacked"),
+        ELogLevel::Info, 3.0f);
 
     return true;
 }

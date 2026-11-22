@@ -60,9 +60,10 @@ private:
 	bool ReplacePreviewModel(const Engine::ResourceHandle<Engine::Model>& requested);
 
 	void DrawParametersTab();
+	void DrawLayersTab();
 	void DrawPreviewParameters();
 	void DrawCanvas();
-	void DrawTransitions();
+	void DrawTransitions(const Engine::AnimatorRuntimeState* observedRuntime = nullptr);
 	void DrawCanvasContextMenu();
 	void DrawTransitionPinMenu();
 	void DrawSelectionInspector();
@@ -121,6 +122,7 @@ private:
 	// UI 선택 및 조작 상태
 	int m_SelectedStateIndex = -1;
 	int m_SelectedTransitionIndex = -1;
+	int m_SelectedLayerIndex = 0;
 	int m_ConnectingSourceIndex = -1;
 	ImVec2 m_ContextMenuPosition{ 0.0f, 0.0f };
 	uintptr_t m_ContextTransitionPin = 0;

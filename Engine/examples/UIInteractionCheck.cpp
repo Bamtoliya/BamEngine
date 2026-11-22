@@ -1,6 +1,11 @@
 ﻿#include "UIEventSystem.h"
 #include "UIEllipseMaskComponent.h"
 #include "UIWidgetComponents.h"
+#include "CanvasScalerComponent.h"
+#include "UITextInputComponent.h"
+#include "UIDropdownComponent.h"
+#include "UIMultilineTextLayout.h"
+#include "UIAdvancedWidgetRuntime.h"
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "ReflectionRegistry.h"
@@ -487,6 +492,239 @@ int main()
     signal.Broadcast();
     if (calls != std::vector<int>{ 1, 3 }) return Fail("Clear during dispatch called a disconnected listener.");
 
-    std::cout << "UI pointer interaction, transient archive and delegate checks passed.\n";
+    {
+        CanvasScalerComponent scaler;
+        scaler.scaleMode = ECanvasScaleMode::ConstantPixelSize;
+        scaler.scaleFactor = 1.5f;
+        if (std::abs(scaler.ComputeScaleFactor({ 1920.0f, 1080.0f }) - 1.5f) > 1e-4f)
+            return Fail("CanvasScaler ConstantPixelSize scale factor failed.");
+        const glm::vec2 eff1 = scaler.ComputeEffectiveDesignSize({ 1500.0f, 900.0f });
+        if (std::abs(eff1.x - 1000.0f) > 1e-3f || std::abs(eff1.y - 600.0f) > 1e-3f)
+            return Fail("CanvasScaler ConstantPixelSize effective design size failed.");
+
+        scaler.scaleMode = ECanvasScaleMode::ScaleWithScreenSize;
+        scaler.referenceResolution = { 1920.0f, 1080.0f };
+        scaler.matchWidthOrHeight = 0.0f; // Width match
+        if (std::abs(scaler.ComputeScaleFactor({ 3840.0f, 1080.0f }) - 2.0f) > 1e-4f)
+            return Fail("CanvasScaler ScaleWithScreenSize width match failed.");
+
+        scaler.matchWidthOrHeight = 1.0f; // Height match
+        if (std::abs(scaler.ComputeScaleFactor({ 1920.0f, 2160.0f }) - 2.0f) > 1e-4f)
+            return Fail("CanvasScaler ScaleWithScreenSize height match failed.");
+
+        scaler.matchWidthOrHeight = 0.5f; // 0.5 log-weighted match: sqrt(2 * 0.5) = 1.0
+        scaler.referenceResolution = { 1000.0f, 1000.0f };
+        if (std::abs(scaler.ComputeScaleFactor({ 2000.0f, 500.0f }) - 1.0f) > 1e-4f)
+            return Fail("CanvasScaler ScaleWithScreenSize 0.5 log-weighted match failed.");
+
+        // Zero / negative resolution safety
+        scaler.referenceResolution = { 0.0f, 1000.0f };
+        if (scaler.ComputeScaleFactor({ 1920.0f, 1080.0f }) != 1.0f)
+            return Fail("CanvasScaler invalid reference resolution safety failed.");
+
+        // UpdateCanvasScaler helper
+        Fixture canvasFixture;
+        auto& reg = canvasFixture.scene->GetRegistry();
+        auto& cs = reg.emplace<CanvasScalerComponent>(canvasFixture.canvas);
+        cs.scaleMode = ECanvasScaleMode::ConstantPixelSize;
+        cs.scaleFactor = 2.0f;
+        if (!UpdateCanvasScaler(reg, canvasFixture.canvas, { 800.0f, 600.0f }))
+            return Fail("UpdateCanvasScaler failed.");
+        const auto& canvasComp = reg.get<CanvasComponent>(canvasFixture.canvas);
+        if (std::abs(canvasComp.referenceResolution.x - 400.0f) > 1e-3f ||
+            std::abs(canvasComp.referenceResolution.y - 300.0f) > 1e-3f)
+            return Fail("UpdateCanvasScaler did not apply effective design resolution.");
+    }
+
+    {
+        UITextInputComponent input;
+        input.placeholder = "Enter text...";
+        input.isFocused = true;
+
+        // Multibyte Korean text editing
+        input.InsertUtf8("한글입력");
+        if (input.text != "한글입력" || input.cursorByteIndex != 12)
+            return Fail("UITextInput Korean UTF-8 insertion failed.");
+
+        input.MoveCursorLeft();
+        if (input.cursorByteIndex != 9) return Fail("UITextInput Korean cursor move left 1 failed.");
+        input.MoveCursorLeft();
+        if (input.cursorByteIndex != 6) return Fail("UITextInput Korean cursor move left 2 failed.");
+
+        // Backspace deletes '글' (bytes 3..6)
+        if (!input.Backspace() || input.text != "한입력" || input.cursorByteIndex != 3)
+            return Fail("UITextInput Korean multibyte backspace failed.");
+
+        // DeleteForward deletes '입' (bytes 3..6)
+        if (!input.DeleteForward() || input.text != "한력" || input.cursorByteIndex != 3)
+            return Fail("UITextInput Korean multibyte delete forward failed.");
+
+        // Range selection and deletion
+        input.text = "Hello World";
+        input.cursorByteIndex = 5;
+        input.selectionAnchorByteIndex = 0;
+        if (!input.HasSelection() || input.GetSelectedText() != "Hello")
+            return Fail("UITextInput range selection failed.");
+        if (!input.DeleteSelection() || input.text != " World" || input.cursorByteIndex != 0)
+            return Fail("UITextInput delete selection failed.");
+
+        input.SelectAll();
+        if (input.GetSelectedText() != " World") return Fail("UITextInput SelectAll failed.");
+        input.ClearSelection();
+        if (input.HasSelection()) return Fail("UITextInput ClearSelection failed.");
+
+        // IME composition preview & commit / cancel
+        input.text = "안녕";
+        input.cursorByteIndex = input.text.size();
+        input.selectionAnchorByteIndex = input.cursorByteIndex;
+        input.SetImeComposition("하");
+        if (input.text != "안녕" || input.GetDisplayText() != "안녕하")
+            return Fail("UITextInput IME composition preview failed.");
+        input.CommitImeComposition();
+        if (input.text != "안녕하" || !input.imeComposition.empty())
+            return Fail("UITextInput IME commit failed.");
+        input.SetImeComposition("세");
+        input.CancelImeComposition();
+        if (input.text != "안녕하" || !input.imeComposition.empty())
+            return Fail("UITextInput IME cancel failed.");
+
+        // Password masking
+        input.isPassword = true;
+        if (input.GetDisplayText() != "***")
+            return Fail("UITextInput password masking failed.");
+        input.SetImeComposition("요");
+        if (input.GetDisplayText() != "****")
+            return Fail("UITextInput password masking with IME failed.");
+        input.CancelImeComposition();
+        input.isPassword = false;
+
+        // MaxLength clamping
+        input.text.clear();
+        input.cursorByteIndex = 0;
+        input.selectionAnchorByteIndex = 0;
+        input.maxLength = 5;
+        input.InsertUtf8("1234");
+        if (!input.InsertUtf8("567") || input.text != "12345")
+            return Fail("UITextInput maxLength truncate insert failed.");
+        if (input.InsertUtf8("8") || input.text != "12345")
+            return Fail("UITextInput maxLength boundary rejection failed.");
+
+        // Keyboard routing via UIAdvancedWidgetRuntime
+        input.text = "abc";
+        input.cursorByteIndex = 3;
+        input.selectionAnchorByteIndex = 3;
+        if (!HandleTextInputKey(input, EUIKey::Backspace) || input.text != "ab")
+            return Fail("HandleTextInputKey backspace failed.");
+        std::string clipboard;
+        input.SelectAll();
+        HandleTextInputKey(input, EUIKey::A, { .ctrl = true });
+        HandleTextInputKey(input, EUIKey::C, { .ctrl = true }, &clipboard);
+        if (clipboard != "ab") return Fail("HandleTextInputKey copy failed.");
+        input.cursorByteIndex = 2;
+        input.selectionAnchorByteIndex = 2;
+        HandleTextInputKey(input, EUIKey::V, { .ctrl = true }, nullptr, "cd");
+        if (input.text != "abcd") return Fail("HandleTextInputKey paste failed.");
+    }
+
+    {
+        UIDropdownComponent dropdown;
+        dropdown.placeholder = "Choose...";
+
+        // Empty options safety
+        dropdown.ToggleOpen();
+        if (dropdown.isOpen) return Fail("UIDropdown empty options should not open.");
+        if (dropdown.GetSelectedLabel() != "Choose...") return Fail("UIDropdown empty placeholder failed.");
+        if (dropdown.GetPopupHeight() != 0.0f) return Fail("UIDropdown empty popup height failed.");
+        if (dropdown.HitTestOptionIndex(10.0f) != -1) return Fail("UIDropdown empty hit test failed.");
+        if (dropdown.SelectIndex(0)) return Fail("UIDropdown empty SelectIndex should fail.");
+
+        // Populated options
+        dropdown.options = { "Option A", "Option B", "Option C", "Option D" };
+        dropdown.itemHeight = 25.0f;
+        dropdown.maxVisibleItems = 3;
+
+        dropdown.ToggleOpen();
+        if (!dropdown.isOpen) return Fail("UIDropdown ToggleOpen failed.");
+        if (dropdown.GetPopupHeight() != 75.0f)
+            return Fail("UIDropdown popup height calculation failed.");
+
+        if (dropdown.HitTestOptionIndex(10.0f) != 0) return Fail("UIDropdown HitTest index 0 failed.");
+        if (dropdown.HitTestOptionIndex(30.0f) != 1) return Fail("UIDropdown HitTest index 1 failed.");
+        if (dropdown.HitTestOptionIndex(60.0f) != 2) return Fail("UIDropdown HitTest index 2 failed.");
+        if (dropdown.HitTestOptionIndex(80.0f) != -1) return Fail("UIDropdown HitTest outside height failed.");
+
+        if (!dropdown.SelectIndex(1) || dropdown.selectedIndex != 1 || dropdown.isOpen)
+            return Fail("UIDropdown SelectIndex failed.");
+        if (dropdown.GetSelectedLabel() != "Option B")
+            return Fail("UIDropdown GetSelectedLabel failed.");
+
+        // HandleDropdownClick runtime helper
+        const glm::vec2 headerPos{ 10.0f, 10.0f };
+        const glm::vec2 headerSize{ 120.0f, 30.0f };
+
+        // Click on header opens dropdown
+        if (!HandleDropdownClick(dropdown, { 50.0f, 20.0f }, headerPos, headerSize) || !dropdown.isOpen)
+            return Fail("HandleDropdownClick header click open failed.");
+
+        // Click on popup selects option (popup starts at y = 40.0f; local y = 55.0f -> item 2)
+        if (!HandleDropdownClick(dropdown, { 50.0f, 95.0f }, headerPos, headerSize) ||
+            dropdown.selectedIndex != 2 || dropdown.isOpen)
+            return Fail("HandleDropdownClick popup option selection failed.");
+
+        // Click outside closes open dropdown
+        dropdown.Open();
+        if (HandleDropdownClick(dropdown, { 300.0f, 300.0f }, headerPos, headerSize) || dropdown.isOpen)
+            return Fail("HandleDropdownClick outside click close failed.");
+    }
+
+    {
+        const auto measureChar10 = [](std::string_view s)
+        {
+            return static_cast<float>(s.size()) * 10.0f;
+        };
+
+        // Explicit newlines
+        const auto nlResult = WrapMultilineText("Alpha\nBeta\nGamma", 200.0f, measureChar10, 20.0f);
+        if (nlResult.lines.size() != 3 || nlResult.lines[0].text != "Alpha" ||
+            nlResult.lines[1].text != "Beta" || nlResult.lines[2].text != "Gamma")
+            return Fail("WrapMultilineText explicit newlines failed.");
+        if (nlResult.totalHeight != 60.0f)
+            return Fail("WrapMultilineText explicit newlines total height failed.");
+
+        // Word wrap with space separation
+        const auto wordResult = WrapMultilineText("One Two Three", 60.0f, measureChar10, 20.0f);
+        if (wordResult.lines.size() != 3 || wordResult.lines[0].text != "One" ||
+            wordResult.lines[1].text != "Two" || wordResult.lines[2].text != "Three")
+            return Fail("WrapMultilineText word wrap failed.");
+
+        // Multibyte CJK wrapping
+        const auto measureCjk = [](std::string_view s)
+        {
+            return static_cast<float>(UIUtf8::CountCodepoints(s)) * 20.0f;
+        };
+        const auto cjkResult = WrapMultilineText("가나다라마", 60.0f, measureCjk, 25.0f);
+        if (cjkResult.lines.size() != 2 || cjkResult.lines[0].text != "가나다" || cjkResult.lines[1].text != "라마")
+            return Fail("WrapMultilineText CJK multibyte character wrap failed.");
+
+        // Alignment offsets
+        const auto alignResult = WrapMultilineText("가나다\n라마", 100.0f, 25.0f, 100.0f,
+            EUITextAlignment::Right, EUIVerticalAlignment::Bottom, measureCjk);
+        if (std::abs(alignResult.lines[0].offset.x - 40.0f) > 1e-3f ||
+            std::abs(alignResult.lines[0].offset.y - 50.0f) > 1e-3f ||
+            std::abs(alignResult.lines[1].offset.x - 60.0f) > 1e-3f ||
+            std::abs(alignResult.lines[1].offset.y - 75.0f) > 1e-3f)
+            return Fail("WrapMultilineText Right / Bottom alignment offsets failed.");
+
+        // Center / Middle alignment
+        const auto centerResult = WrapMultilineText("가나다\n라마", 100.0f, 25.0f, 100.0f,
+            EUITextAlignment::Center, EUIVerticalAlignment::Middle, measureCjk);
+        if (std::abs(centerResult.lines[0].offset.x - 20.0f) > 1e-3f ||
+            std::abs(centerResult.lines[0].offset.y - 25.0f) > 1e-3f ||
+            std::abs(centerResult.lines[1].offset.x - 30.0f) > 1e-3f ||
+            std::abs(centerResult.lines[1].offset.y - 50.0f) > 1e-3f)
+            return Fail("WrapMultilineText Center / Middle alignment offsets failed.");
+    }
+
+    std::cout << "UI pointer interaction, transient archive, advanced widgets and delegate checks passed.\n";
     return 0;
 }

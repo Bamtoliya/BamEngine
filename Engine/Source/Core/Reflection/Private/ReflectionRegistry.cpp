@@ -234,6 +234,26 @@ namespace
 
 BEGIN(Engine)
 
+struct EntityIdRemapContext
+{
+    const std::unordered_map<entt::entity, uint64>* EntityToPersistentId = nullptr;
+    const std::unordered_map<uint64, entt::entity>* PersistentIdToEntity = nullptr;
+    bool IsPrefab = false;
+
+    static void SetActiveContext(const EntityIdRemapContext* context) noexcept
+    {
+        s_ActiveContext = context;
+    }
+
+    static const EntityIdRemapContext* GetActiveContext() noexcept
+    {
+        return s_ActiveContext;
+    }
+
+private:
+    inline static thread_local const EntityIdRemapContext* s_ActiveContext = nullptr;
+};
+
 IMPLEMENT_SINGLETON(ReflectionRegistry)
 
 EResult ReflectionRegistry::Initialize(void*)
@@ -267,10 +287,61 @@ EResult ReflectionRegistry::Initialize(void*)
         !m_Codecs.Register<entt::entity>(
             [](archive::IArchive& ar, std::string_view key, const entt::entity& value) -> archive::ArchiveResult
             {
+                const auto* remapCtx = ar.GetWriteContext<EntityIdRemapContext>();
+                if (!remapCtx)
+                    remapCtx = EntityIdRemapContext::GetActiveContext();
+
+                if (remapCtx != nullptr && remapCtx->EntityToPersistentId != nullptr)
+                {
+                    if (value == entt::null)
+                        return ar.Write(key, std::uint64_t{ 0 });
+
+                    const auto it = remapCtx->EntityToPersistentId->find(value);
+                    if (it != remapCtx->EntityToPersistentId->end())
+                        return ar.Write(key, it->second);
+
+                    // Out-of-subtree or invalid reference cleanly serialized as 0 (null)
+                    return ar.Write(key, std::uint64_t{ 0 });
+                }
+
                 return ar.Write(key, static_cast<std::uint32_t>(value));
             },
             [](const archive::IArchive& ar, std::string_view key, entt::entity& value) -> archive::ArchiveResult
             {
+                const auto* remapCtx = ar.GetWriteContext<EntityIdRemapContext>();
+                if (!remapCtx)
+                    remapCtx = EntityIdRemapContext::GetActiveContext();
+
+                if (remapCtx != nullptr && remapCtx->PersistentIdToEntity != nullptr)
+                {
+                    std::uint64_t id = 0;
+                    auto result = ar.Read(key, id);
+                    if (!result)
+                    {
+                        std::uint32_t legacyId = 0;
+                        result = ar.Read(key, legacyId);
+                        if (!result) return result;
+                        id = static_cast<std::uint64_t>(legacyId);
+                    }
+
+                    if (id == 0 || id == static_cast<std::uint64_t>(static_cast<std::uint32_t>(entt::null)))
+                    {
+                        value = entt::null;
+                        return {};
+                    }
+
+                    const auto it = remapCtx->PersistentIdToEntity->find(id);
+                    if (it != remapCtx->PersistentIdToEntity->end())
+                    {
+                        value = it->second;
+                    }
+                    else
+                    {
+                        value = entt::null;
+                    }
+                    return {};
+                }
+
                 std::uint32_t id = static_cast<std::uint32_t>(entt::null);
                 const auto result = ar.Read(key, id);
                 if (result)

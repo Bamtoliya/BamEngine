@@ -11,6 +11,8 @@ END
 
 BEGIN(Editor)
 
+class SceneEditHistory;
+
 class PrefabModeManager final : public Base
 {
     DECLARE_SINGLETON(PrefabModeManager)
@@ -33,6 +35,10 @@ public:
     bool SavePrefab();
     bool ExitPrefabMode(bool discardChanges = false);
     bool ResolvePrefabModeBeforeQuit();
+
+    // Prefab instance operations (Apply All / Unpack)
+    static bool ApplyPrefabInstance(Engine::Scene& scene, entt::entity rootEntity);
+    static bool UnpackPrefabInstance(Engine::Scene& scene, entt::entity rootEntity, SceneEditHistory* history = nullptr);
 
     // 헤더바(MenuBar) 내부 좌측 UI 및 종료 확인 모달
     void DrawMenuBarUI();
