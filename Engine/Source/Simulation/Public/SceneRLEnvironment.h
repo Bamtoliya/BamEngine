@@ -5,14 +5,18 @@
 #include "Types.h"
 
 #include <entt/entt.hpp>
+#include <limits>
 #include <optional>
 #include <random>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace Engine
 {
 	class Scene;
 	class PhysicsSystem;
+	class SaveGameManager;
 
 	struct ENGINE_API SceneRLEnvConfig
 	{
@@ -38,10 +42,23 @@ namespace Engine
 		vec3 TargetMax = vec3(6.0f, 0.5f, 3.0f);
 		f32 TargetReachRadius = 0.85f;
 
-		// 선택적 정적 장애물 설정
+		// 선택적 정적/동적 장애물 설정
 		bool SpawnObstacle = true;
 		vec3 ObstaclePosition = vec3(1.5f, 0.5f, 2.5f);
 		vec3 ObstacleSize = vec3(1.0f, 1.0f, 1.0f);
+		bool EnableMovingObstacle = false;
+		vec3 ObstaclePatrolAxis = vec3(0.0f, 0.0f, 1.0f);
+		f32 ObstaclePatrolRange = 2.5f;
+		f32 ObstaclePatrolSpeed = 1.5f;
+
+		// 다중 웨이포인트 및 커리큘럼 설정 (Waypoints가 비어 있으면 기존 단일 TargetMin..TargetMax 모드 유지)
+		std::vector<vec3> Waypoints{};
+		f32 WaypointReward = 3.0f;
+		int32 CurriculumLevel = 0;
+
+		// 최고 보상 에피소드 SaveGame 스냅샷 자동 저장 설정
+		bool AutoSaveBestEpisode = false;
+		std::string BestEpisodeSlotName = "rl_best_episode";
 
 		// 종료 경계 및 보상 파라미터
 		f32 FallYThreshold = -2.0f;
@@ -79,13 +96,28 @@ namespace Engine
 		const SceneRLEnvConfig& GetConfig() const { return m_Config; }
 		vec3 GetAgentPosition() const;
 		vec3 GetAgentVelocity() const;
+		vec3 GetObstaclePosition() const;
 		vec3 GetTargetPosition() const { return m_TargetPosition; }
 		void SetTargetPosition(const vec3& target);
 		int32 GetStepCount() const { return m_StepCount; }
 		Scene* GetScene() const { return m_Scene; }
 
+		void SetCurriculumLevel(int32 level);
+		int32 GetCurriculumLevel() const { return m_Config.CurriculumLevel; }
+		int32 GetCurrentWaypointIndex() const { return m_CurrentWaypointIndex; }
+		int32 GetTotalWaypoints() const { return m_Config.Waypoints.empty() ? 1 : static_cast<int32>(m_Config.Waypoints.size()); }
+		f32 GetEpisodeReward() const { return m_EpisodeReward; }
+		f32 GetBestEpisodeReward() const { return m_BestEpisodeReward; }
+		bool HasBestEpisode() const { return m_HasBestEpisode; }
+
+		void SetSnapshotManager(SaveGameManager* manager) { m_SnapshotManager = manager; }
+		[[nodiscard]] bool SaveSnapshotToSlot(SaveGameManager& manager, std::string_view slotName,
+			std::string_view checkpointId = "rl_snapshot") const;
+		[[nodiscard]] bool LoadSnapshotFromSlot(const SaveGameManager& manager, std::string_view slotName);
+
 	private:
 		void RebuildSceneEntities(const vec3& agentSpawnPos);
+		void UpdateMovingObstacle(f32 dt);
 		RLObservation BuildObservation() const;
 		vec3 ComputeActionForce(const RLAction& action) const;
 		vec3 SampleVec3(const vec3& minVal, const vec3& maxVal);
@@ -101,6 +133,12 @@ namespace Engine
 		vec3 m_TargetPosition = vec3(4.0f, 0.5f, 0.0f);
 		f32 m_PreviousDistance = 0.0f;
 		int32 m_StepCount = 0;
+		int32 m_CurrentWaypointIndex = 0;
+		f32 m_ElapsedTime = 0.0f;
+		f32 m_EpisodeReward = 0.0f;
+		f32 m_BestEpisodeReward = -std::numeric_limits<f32>::infinity();
+		bool m_HasBestEpisode = false;
+		SaveGameManager* m_SnapshotManager = nullptr;
 		std::mt19937_64 m_Rng;
 	};
 }

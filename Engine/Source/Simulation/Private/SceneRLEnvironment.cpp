@@ -3,6 +3,7 @@
 #include "ColliderComponent.h"
 #include "PhysicsSystem.h"
 #include "RigidBodyComponent.h"
+#include "SaveGameManager.h"
 #include "Scene.h"
 #include "TransformComponent.h"
 #include "TransformSystem.h"
@@ -62,7 +63,12 @@ namespace Engine
 		}
 
 		m_StepCount = 0;
-		m_TargetPosition = (m_Config.TargetMin + m_Config.TargetMax) * 0.5f;
+		m_CurrentWaypointIndex = 0;
+		m_ElapsedTime = 0.0f;
+		m_EpisodeReward = 0.0f;
+		m_TargetPosition = !m_Config.Waypoints.empty()
+			? m_Config.Waypoints.front()
+			: (m_Config.TargetMin + m_Config.TargetMax) * 0.5f;
 		RebuildSceneEntities((m_Config.AgentSpawnMin + m_Config.AgentSpawnMax) * 0.5f);
 		m_PreviousDistance = glm::length(m_TargetPosition - GetAgentPosition());
 	}
@@ -73,6 +79,9 @@ namespace Engine
 		m_FloorEntity = entt::null;
 		m_ObstacleEntity = entt::null;
 		m_StepCount = 0;
+		m_CurrentWaypointIndex = 0;
+		m_ElapsedTime = 0.0f;
+		m_EpisodeReward = 0.0f;
 
 		if (m_Scene)
 		{
@@ -159,7 +168,7 @@ namespace Engine
 			(void)shapeOk;
 
 			auto& body = registry.emplace<RigidBodyComponent>(m_ObstacleEntity);
-			body.BodyType = ERigidBodyType::Static;
+			body.BodyType = m_Config.EnableMovingObstacle ? ERigidBodyType::Kinematic : ERigidBodyType::Static;
 		}
 
 		// 3. 에이전트(Agent) 동적 강체 엔티티
@@ -213,12 +222,47 @@ namespace Engine
 		}
 
 		const vec3 agentSpawn = SampleVec3(m_Config.AgentSpawnMin, m_Config.AgentSpawnMax);
-		m_TargetPosition = SampleVec3(m_Config.TargetMin, m_Config.TargetMax);
+		m_CurrentWaypointIndex = 0;
+		m_ElapsedTime = 0.0f;
+		m_EpisodeReward = 0.0f;
+		m_TargetPosition = !m_Config.Waypoints.empty()
+			? m_Config.Waypoints.front()
+			: SampleVec3(m_Config.TargetMin, m_Config.TargetMax);
 		RebuildSceneEntities(agentSpawn);
 
 		m_StepCount = 0;
 		m_PreviousDistance = glm::length(m_TargetPosition - GetAgentPosition());
 		return BuildObservation();
+	}
+
+	void SceneRLEnvironment::UpdateMovingObstacle(f32 dt)
+	{
+		m_ElapsedTime += dt;
+
+		if (!m_Config.SpawnObstacle || !m_Config.EnableMovingObstacle || !m_Scene || m_ObstacleEntity == entt::null)
+			return;
+
+		auto& registry = m_Scene->GetRegistry();
+		if (!registry.valid(m_ObstacleEntity))
+			return;
+
+		const f32 axisLen = glm::length(m_Config.ObstaclePatrolAxis);
+		if (!std::isfinite(axisLen) || axisLen <= 1e-5f)
+			return;
+
+		const vec3 axis = m_Config.ObstaclePatrolAxis / axisLen;
+		const f32 phase = m_ElapsedTime * m_Config.ObstaclePatrolSpeed;
+		const vec3 offset = axis * (m_Config.ObstaclePatrolRange * std::sin(phase));
+		const vec3 targetPos = m_Config.ObstaclePosition + offset;
+		if (!IsFiniteVec3(targetPos))
+			return;
+
+		auto* tr = registry.try_get<TransformComponent>(m_ObstacleEntity);
+		auto* worldTr = registry.try_get<WorldTransformComponent>(m_ObstacleEntity);
+		if (tr && worldTr && tr->SetLocalPosition(targetPos))
+		{
+			(void)TransformSystem::UpdateRootWorld(*tr, *worldTr);
+		}
 	}
 
 	vec3 SceneRLEnvironment::ComputeActionForce(const RLAction& action) const
@@ -274,6 +318,7 @@ namespace Engine
 
 		for (int32 i = 0; i < subSteps; ++i)
 		{
+			UpdateMovingObstacle(dt);
 			if (auto* body = registry.try_get<RigidBodyComponent>(m_AgentEntity))
 			{
 				body->AccumulatedForce += force;
@@ -303,9 +348,21 @@ namespace Engine
 		}
 		else if (currDistance <= m_Config.TargetReachRadius)
 		{
-			reward += m_Config.GoalReward;
-			terminated = true;
-			reason = "goal";
+			if (!m_Config.Waypoints.empty() &&
+				(m_CurrentWaypointIndex + 1) < static_cast<int32>(m_Config.Waypoints.size()))
+			{
+				reward += m_Config.WaypointReward;
+				++m_CurrentWaypointIndex;
+				m_TargetPosition = m_Config.Waypoints[static_cast<std::size_t>(m_CurrentWaypointIndex)];
+				m_PreviousDistance = glm::length(m_TargetPosition - pos);
+				reason = "waypoint";
+			}
+			else
+			{
+				reward += m_Config.GoalReward;
+				terminated = true;
+				reason = "goal";
+			}
 		}
 		else if (pos.y < m_Config.FallYThreshold)
 		{
@@ -326,15 +383,37 @@ namespace Engine
 			reason = "max_steps";
 		}
 
+		const f32 stepReward = std::isfinite(reward) ? reward : 0.0f;
+		m_EpisodeReward += stepReward;
+
 		RLStepResult result;
 		result.Observation = BuildObservation();
-		result.Reward = std::isfinite(reward) ? reward : 0.0f;
+		result.Reward = stepReward;
 		result.Terminated = terminated;
 		result.Truncated = truncated;
 
+		if (terminated || truncated)
+		{
+			if (!m_HasBestEpisode || m_EpisodeReward > m_BestEpisodeReward)
+			{
+				m_BestEpisodeReward = m_EpisodeReward;
+				m_HasBestEpisode = true;
+				if (m_Config.AutoSaveBestEpisode && !m_Config.BestEpisodeSlotName.empty())
+				{
+					SaveGameManager& manager = m_SnapshotManager ? *m_SnapshotManager : SaveGameManager::Get();
+					(void)SaveSnapshotToSlot(manager, m_Config.BestEpisodeSlotName, "best_episode");
+				}
+			}
+		}
+
+		const f32 safeDist = std::isfinite(currDistance) ? currDistance : 0.0f;
+		const f32 safeEpisodeReward = std::isfinite(m_EpisodeReward) ? m_EpisodeReward : 0.0f;
 		std::ostringstream info;
 		info << "{\"steps\":" << m_StepCount
-			<< ",\"distance\":" << currDistance
+			<< ",\"distance\":" << safeDist
+			<< ",\"waypoint\":" << m_CurrentWaypointIndex
+			<< ",\"total_waypoints\":" << GetTotalWaypoints()
+			<< ",\"episode_reward\":" << safeEpisodeReward
 			<< ",\"reason\":\"" << reason << "\"}";
 		result.InfoJson = info.str();
 		return result;
@@ -424,5 +503,185 @@ namespace Engine
 		if (!IsFiniteVec3(target)) return;
 		m_TargetPosition = target;
 		m_PreviousDistance = glm::length(m_TargetPosition - GetAgentPosition());
+	}
+
+	vec3 SceneRLEnvironment::GetObstaclePosition() const
+	{
+		if (!m_Scene || m_ObstacleEntity == entt::null) return m_Config.ObstaclePosition;
+		const auto& registry = m_Scene->GetRegistry();
+		if (const auto* tr = registry.try_get<TransformComponent>(m_ObstacleEntity))
+		{
+			return tr->position;
+		}
+		return m_Config.ObstaclePosition;
+	}
+
+	void SceneRLEnvironment::SetCurriculumLevel(int32 level)
+	{
+		const int32 clampedLevel = std::max(level, 0);
+		m_Config.CurriculumLevel = clampedLevel;
+		if (clampedLevel == 0)
+		{
+			m_Config.EnableMovingObstacle = false;
+			m_Config.ObstaclePatrolSpeed = 1.5f;
+		}
+		else if (clampedLevel == 1)
+		{
+			m_Config.SpawnObstacle = true;
+			m_Config.EnableMovingObstacle = false;
+			m_Config.ObstaclePatrolSpeed = 1.5f;
+		}
+		else
+		{
+			m_Config.SpawnObstacle = true;
+			m_Config.EnableMovingObstacle = true;
+			m_Config.ObstaclePatrolSpeed = 1.5f + 0.5f * static_cast<f32>(clampedLevel - 2);
+		}
+
+		if (m_Scene && m_ObstacleEntity != entt::null)
+		{
+			auto& registry = m_Scene->GetRegistry();
+			if (auto* body = registry.try_get<RigidBodyComponent>(m_ObstacleEntity))
+			{
+				body->BodyType = m_Config.EnableMovingObstacle ? ERigidBodyType::Kinematic : ERigidBodyType::Static;
+			}
+		}
+	}
+
+	bool SceneRLEnvironment::SaveSnapshotToSlot(SaveGameManager& manager, std::string_view slotName,
+		std::string_view checkpointId) const
+	{
+		if (!m_Scene || m_AgentEntity == entt::null) return false;
+		if (!m_Scene->GetRegistry().valid(m_AgentEntity)) return false;
+
+		SaveGameData data;
+		if (!SaveGameManager::CaptureCheckpointFromEntity(*m_Scene, m_AgentEntity, m_Config.Name, checkpointId, data))
+		{
+			return false;
+		}
+
+		const vec3 vel = GetAgentVelocity();
+		const vec3 obsPos = GetObstaclePosition();
+		data.metadata.playTimeSeconds = static_cast<double>(m_ElapsedTime);
+		data.floatFlags["vel_x"] = std::isfinite(vel.x) ? vel.x : 0.0f;
+		data.floatFlags["vel_y"] = std::isfinite(vel.y) ? vel.y : 0.0f;
+		data.floatFlags["vel_z"] = std::isfinite(vel.z) ? vel.z : 0.0f;
+		data.floatFlags["target_x"] = std::isfinite(m_TargetPosition.x) ? m_TargetPosition.x : 0.0f;
+		data.floatFlags["target_y"] = std::isfinite(m_TargetPosition.y) ? m_TargetPosition.y : 0.0f;
+		data.floatFlags["target_z"] = std::isfinite(m_TargetPosition.z) ? m_TargetPosition.z : 0.0f;
+		data.floatFlags["obstacle_x"] = std::isfinite(obsPos.x) ? obsPos.x : 0.0f;
+		data.floatFlags["obstacle_y"] = std::isfinite(obsPos.y) ? obsPos.y : 0.0f;
+		data.floatFlags["obstacle_z"] = std::isfinite(obsPos.z) ? obsPos.z : 0.0f;
+		data.floatFlags["elapsed_time"] = std::isfinite(m_ElapsedTime) ? m_ElapsedTime : 0.0f;
+		data.floatFlags["episode_reward"] = std::isfinite(m_EpisodeReward) ? m_EpisodeReward : 0.0f;
+		data.floatFlags["best_episode_reward"] = (m_HasBestEpisode && std::isfinite(m_BestEpisodeReward))
+			? m_BestEpisodeReward : 0.0f;
+		data.intFlags["step_count"] = static_cast<int64_t>(m_StepCount);
+		data.intFlags["waypoint_index"] = static_cast<int64_t>(m_CurrentWaypointIndex);
+		data.intFlags["curriculum_level"] = static_cast<int64_t>(m_Config.CurriculumLevel);
+		data.boolFlags["has_best_episode"] = m_HasBestEpisode;
+
+		return manager.WriteSlot(slotName, data);
+	}
+
+	bool SceneRLEnvironment::LoadSnapshotFromSlot(const SaveGameManager& manager, std::string_view slotName)
+	{
+		if (!m_Scene || !m_PhysicsSystem || m_AgentEntity == entt::null)
+		{
+			Initialize();
+		}
+		if (!m_Scene || m_AgentEntity == entt::null) return false;
+
+		SaveGameData data;
+		if (!manager.ReadSlot(slotName, data))
+		{
+			return false;
+		}
+
+		if (!SaveGameManager::ApplyCheckpointToEntity(*m_Scene, m_AgentEntity, data))
+		{
+			return false;
+		}
+
+		auto readFloat = [&data](std::string_view key, f32 fallback) -> f32
+		{
+			if (const auto it = data.floatFlags.find(std::string(key));
+				it != data.floatFlags.end() && std::isfinite(it->second))
+			{
+				return it->second;
+			}
+			return fallback;
+		};
+		auto readInt = [&data](std::string_view key, int64_t fallback) -> int64_t
+		{
+			if (const auto it = data.intFlags.find(std::string(key)); it != data.intFlags.end())
+			{
+				return it->second;
+			}
+			return fallback;
+		};
+
+		auto& registry = m_Scene->GetRegistry();
+		if (auto* body = registry.try_get<RigidBodyComponent>(m_AgentEntity))
+		{
+			body->LinearVelocity = vec3(
+				readFloat("vel_x", 0.0f),
+				readFloat("vel_y", 0.0f),
+				readFloat("vel_z", 0.0f));
+			body->AngularVelocity = vec3(0.0f);
+			body->AccumulatedForce = vec3(0.0f);
+			body->AccumulatedTorque = vec3(0.0f);
+		}
+		if (auto* tr = registry.try_get<TransformComponent>(m_AgentEntity))
+		{
+			if (auto* worldTr = registry.try_get<WorldTransformComponent>(m_AgentEntity))
+			{
+				(void)TransformSystem::UpdateRootWorld(*tr, *worldTr);
+			}
+		}
+
+		m_TargetPosition = vec3(
+			readFloat("target_x", m_TargetPosition.x),
+			readFloat("target_y", m_TargetPosition.y),
+			readFloat("target_z", m_TargetPosition.z));
+
+		if (m_ObstacleEntity != entt::null && registry.valid(m_ObstacleEntity))
+		{
+			const vec3 obsPos(
+				readFloat("obstacle_x", m_Config.ObstaclePosition.x),
+				readFloat("obstacle_y", m_Config.ObstaclePosition.y),
+				readFloat("obstacle_z", m_Config.ObstaclePosition.z));
+			auto* obsTr = registry.try_get<TransformComponent>(m_ObstacleEntity);
+			auto* obsWorldTr = registry.try_get<WorldTransformComponent>(m_ObstacleEntity);
+			if (obsTr && obsWorldTr && obsTr->SetLocalPosition(obsPos))
+			{
+				(void)TransformSystem::UpdateRootWorld(*obsTr, *obsWorldTr);
+			}
+		}
+
+		(void)TransformSystem::UpdateHierarchy(registry);
+
+		m_ElapsedTime = std::max(readFloat("elapsed_time", 0.0f), 0.0f);
+		m_EpisodeReward = readFloat("episode_reward", 0.0f);
+		m_StepCount = std::max(static_cast<int32>(readInt("step_count", 0)), 0);
+		m_CurrentWaypointIndex = std::max(static_cast<int32>(readInt("waypoint_index", 0)), 0);
+		if (!m_Config.Waypoints.empty())
+		{
+			m_CurrentWaypointIndex = std::min(m_CurrentWaypointIndex, static_cast<int32>(m_Config.Waypoints.size()) - 1);
+		}
+		const int32 loadedLevel = std::max(static_cast<int32>(readInt("curriculum_level", m_Config.CurriculumLevel)), 0);
+		if (loadedLevel != m_Config.CurriculumLevel)
+		{
+			SetCurriculumLevel(loadedLevel);
+		}
+
+		const auto bestIt = data.boolFlags.find("has_best_episode");
+		m_HasBestEpisode = (bestIt != data.boolFlags.end()) && bestIt->second;
+		m_BestEpisodeReward = m_HasBestEpisode
+			? readFloat("best_episode_reward", m_EpisodeReward)
+			: -std::numeric_limits<f32>::infinity();
+
+		m_PreviousDistance = glm::length(m_TargetPosition - GetAgentPosition());
+		return true;
 	}
 }

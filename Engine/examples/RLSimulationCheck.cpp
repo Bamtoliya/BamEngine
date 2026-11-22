@@ -1,4 +1,5 @@
 #include "CartPoleEnvironment.h"
+#include "SaveGameManager.h"
 #include "SceneRLEnvironment.h"
 #include "VectorizedRLEnvironment.h"
 #if !defined(__EMSCRIPTEN__)
@@ -6,6 +7,7 @@
 #endif
 
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -346,6 +348,166 @@ namespace
 		return true;
 	}
 #endif
+
+	bool CheckMovingObstacleAndCurriculum()
+	{
+		SceneRLEnvConfig cfg;
+		cfg.SpawnObstacle = false;
+		cfg.AgentSpawnMin = vec3(0.0f, 0.5f, 0.0f);
+		cfg.AgentSpawnMax = vec3(0.0f, 0.5f, 0.0f);
+		cfg.TargetMin = vec3(5.0f, 0.5f, 0.0f);
+		cfg.TargetMax = vec3(5.0f, 0.5f, 0.0f);
+		cfg.ObstaclePosition = vec3(1.5f, 0.5f, 2.5f);
+		cfg.ObstaclePatrolAxis = vec3(0.0f, 0.0f, 1.0f);
+		cfg.ObstaclePatrolRange = 2.5f;
+
+		SceneRLEnvironment env(cfg);
+		env.SetCurriculumLevel(2);
+		if (!env.GetConfig().SpawnObstacle || !env.GetConfig().EnableMovingObstacle || env.GetCurriculumLevel() != 2)
+		{
+			return false;
+		}
+
+		(void)env.Reset(101ull);
+		const vec3 posBefore = env.GetObstaclePosition();
+
+		RLAction idle;
+		idle.Type = ERLActionType::Continuous;
+		idle.ContinuousActions = { 0.0f, 0.0f, 0.0f };
+		for (int i = 0; i < 15; ++i)
+		{
+			(void)env.Step(idle);
+		}
+
+		const vec3 posAfter = env.GetObstaclePosition();
+		if (std::abs(posAfter.z - posBefore.z) <= 0.2f) return false;
+		if (std::abs(posAfter.z - cfg.ObstaclePosition.z) > cfg.ObstaclePatrolRange + 1e-3f) return false;
+		return true;
+	}
+
+	bool CheckMultiWaypointNavigation()
+	{
+		SceneRLEnvConfig cfg;
+		cfg.SpawnObstacle = false;
+		cfg.AgentSpawnMin = vec3(0.0f, 0.5f, 0.0f);
+		cfg.AgentSpawnMax = vec3(0.0f, 0.5f, 0.0f);
+		cfg.Waypoints = { vec3(2.0f, 0.5f, 0.0f), vec3(4.5f, 0.5f, 0.0f) };
+		cfg.WaypointReward = 3.0f;
+		cfg.TargetReachRadius = 0.85f;
+		cfg.MaxControlForce = 30.0f;
+		cfg.MaxSteps = 250;
+
+		SceneRLEnvironment env(cfg);
+		if (env.GetTotalWaypoints() != 2) return false;
+		(void)env.Reset(202ull);
+		if (env.GetCurrentWaypointIndex() != 0) return false;
+		if (glm::length(env.GetTargetPosition() - cfg.Waypoints[0]) > 1e-4f) return false;
+
+		RLAction pushTowardX;
+		pushTowardX.Type = ERLActionType::Continuous;
+		pushTowardX.ContinuousActions = { 1.0f, 0.0f, 0.0f };
+
+		bool sawWaypointTransition = false;
+		bool reachedFinalGoal = false;
+		for (int i = 0; i < cfg.MaxSteps; ++i)
+		{
+			const RLStepResult res = env.Step(pushTowardX);
+			if (!AllFinite(res.Observation.Data) || !std::isfinite(res.Reward)) return false;
+
+			if (!res.Terminated && res.InfoJson.find("\"waypoint\"") != std::string::npos &&
+				env.GetCurrentWaypointIndex() == 1 &&
+				glm::length(env.GetTargetPosition() - cfg.Waypoints[1]) < 1e-4f)
+			{
+				sawWaypointTransition = true;
+			}
+
+			if (res.Terminated)
+			{
+				if (res.Truncated || res.InfoJson.find("\"goal\"") == std::string::npos) return false;
+				reachedFinalGoal = true;
+				break;
+			}
+		}
+
+		return sawWaypointTransition && reachedFinalGoal;
+	}
+
+	bool CheckSaveGameSnapshotRoundTripAndBestEpisode()
+	{
+		struct TempDirGuard
+		{
+			std::filesystem::path Path;
+			~TempDirGuard()
+			{
+				std::error_code ec;
+				std::filesystem::remove_all(Path, ec);
+			}
+		};
+
+		TempDirGuard tempDir{ std::filesystem::temp_directory_path() / "BamEngine_RLSimulationCheck_Saves" };
+		std::error_code ec;
+		std::filesystem::remove_all(tempDir.Path, ec);
+
+		SaveGameManager saveMgr(tempDir.Path);
+
+		SceneRLEnvConfig cfg;
+		cfg.SpawnObstacle = false;
+		cfg.AgentSpawnMin = vec3(0.0f, 0.5f, 0.0f);
+		cfg.AgentSpawnMax = vec3(0.0f, 0.5f, 0.0f);
+		cfg.TargetMin = vec3(3.0f, 0.5f, 0.0f);
+		cfg.TargetMax = vec3(3.0f, 0.5f, 0.0f);
+		cfg.TargetReachRadius = 0.85f;
+		cfg.MaxControlForce = 30.0f;
+		cfg.MaxSteps = 200;
+		cfg.AutoSaveBestEpisode = true;
+		cfg.BestEpisodeSlotName = "best_rl_slot";
+
+		SceneRLEnvironment env(cfg);
+		env.SetSnapshotManager(&saveMgr);
+		(void)env.Reset(77ull);
+
+		RLAction pushTowardX;
+		pushTowardX.Type = ERLActionType::Continuous;
+		pushTowardX.ContinuousActions = { 1.0f, 0.0f, 0.0f };
+
+		for (int i = 0; i < 10; ++i)
+		{
+			const RLStepResult res = env.Step(pushTowardX);
+			if (res.Terminated || res.Truncated) return false;
+		}
+
+		const vec3 savedPos = env.GetAgentPosition();
+		const vec3 savedVel = env.GetAgentVelocity();
+		const vec3 savedTarget = env.GetTargetPosition();
+		const int32 savedStepCount = env.GetStepCount();
+		const f32 savedEpisodeReward = env.GetEpisodeReward();
+		if (savedStepCount != 10 || glm::length(savedVel) <= 1e-4f) return false;
+
+		if (!env.SaveSnapshotToSlot(saveMgr, "manual_snap")) return false;
+
+		(void)env.Reset(999ull);
+		if (env.GetStepCount() != 0 || glm::length(env.GetAgentVelocity()) > 1e-4f) return false;
+
+		if (!env.LoadSnapshotFromSlot(saveMgr, "manual_snap")) return false;
+		if (env.GetStepCount() != savedStepCount) return false;
+		if (std::abs(env.GetEpisodeReward() - savedEpisodeReward) > 1e-3f) return false;
+		if (glm::length(env.GetAgentPosition() - savedPos) > 1e-3f) return false;
+		if (glm::length(env.GetAgentVelocity() - savedVel) > 1e-3f) return false;
+		if (glm::length(env.GetTargetPosition() - savedTarget) > 1e-3f) return false;
+
+		bool reachedGoal = false;
+		for (int i = 0; i < cfg.MaxSteps; ++i)
+		{
+			const RLStepResult res = env.Step(pushTowardX);
+			if (res.Terminated && res.InfoJson.find("\"goal\"") != std::string::npos)
+			{
+				reachedGoal = true;
+				break;
+			}
+		}
+
+		return reachedGoal && saveMgr.HasSlot("best_rl_slot") && env.HasBestEpisode() && env.GetBestEpisodeReward() > 0.0f;
+	}
 }
 
 int main()
@@ -369,6 +531,15 @@ int main()
 	if (!CheckRLServerProtocol())
 		return Fail("RLServer ProcessCommand single/vectorized protocol check failed.");
 #endif
+
+	if (!CheckMovingObstacleAndCurriculum())
+		return Fail("SceneRLEnvironment moving obstacle / curriculum check failed.");
+
+	if (!CheckMultiWaypointNavigation())
+		return Fail("SceneRLEnvironment multi-waypoint navigation check failed.");
+
+	if (!CheckSaveGameSnapshotRoundTripAndBestEpisode())
+		return Fail("SceneRLEnvironment SaveGame snapshot round-trip / best episode check failed.");
 
 	std::cout << "[RLSimulationCheck] All checks passed.\n";
 	return 0;
