@@ -185,7 +185,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
     2. 피커의 CWD 의존 스캔과 Shader 복합 확장자 누락, 모델 임포트의 머티리얼 저장 실패/재임포트 처리([점검 F02·F06·F12](CodeDocumentationAudit-2026-11-02.md)).
 - 완료 기준: JSON/바이너리의 같은 콘텐츠 타입을 구분하고, 리소스 피커가 프레임 드랍 없이 해당 핸들 타입(`T`)과 호환되는 에셋만 디스크에서 즉각 선별·표시하며, 미로드 에셋 선택·검색 범위 전환·손상/미지원 처리가 동작한다.
 
-### P1-E. 머티리얼 플래그 기반 텍스처 샘플링 분기 및 그래프 입력 유연화
+### P1-E. 머티리얼 플래그 기반 텍스처 샘플링 분기 및 그래프 입력 유연화 [완료: 2026-11-22]
 
 - **2026-11-01 현황 및 배경**:
   - **즉시 조치 반영 완료**: 머티리얼 바인딩 시 미지정 슬롯의 텍스처 상태 누수(이전 드로우콜 텍스처 잔류로 인한 PBR/Emission 오염 및 화면 폭발/순백색 자체 발광 버그)를 막기 위해, `MaterialInterface::Bind()` 및 `MaterialInstance::Bind()`에서 슬롯 0~3 점유 여부를 추적하고 미지정 슬롯을 안전한 기본 더미 텍스처(`white1x1`, `blue1x1`, `black1x1`)로 리셋하도록 조치 완료했다. 또한 머티리얼 인스턴스의 역직렬화 직후 슬롯 캐시(`m_TextureSlotToIndex`)가 비어 있는 경우 자동 재구축하도록 방어했다.
@@ -198,6 +198,12 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   2. **머티리얼 그래프 기반 상수/벡터/컬러 분리 입력 연동**:
      - 텍스처 에셋을 반드시 샘플링하는 구조 대신, 머티리얼 그래프에서 특정 변수나 단일 Color(RGBA), 스칼라 파라미터(Float), 분리된 채널(Split RGBA / Swizzle)을 G-Buffer의 각 속성에 직접 공급할 수 있는 평가 경로 구축.
      - Albedo에 단색(Color Uniform) 직결, Roughness/Metallic에 스칼라 슬라이더 직결, Emission에 HDR Color 직결 등 텍스처 없는 절차적/상수 기반 머티리얼 작성을 완전하게 지원.
+- **2026-11-22 구현 및 검증 완료**:
+  - Shader Graph 범용 `Shader.TextureSample` 노드 멀티슬롯(`0..7`) 바인딩 지원 및 채널 분리(`rgba`/`rgb`/`r`/`g`/`b`/`a`) 출력 핀 추가 완료.
+  - `MaterialInterface::SyncTextureBindings` 연동으로 그래프 노드의 텍스처 슬롯/경로와 머티리얼 인터페이스 실시간 동기화 완료 (`c58c2980`, `633b5e58`).
+  - `MaterialInterface` / `MaterialInstance` 상수 버퍼 블롭 버전 캐싱(`m_ConstantsBlob`, `m_ConstantsBlobVersion`) 및 단일 순회 무할당(Zero-allocation) 파라미터 해석 구축 (`9b17e906`).
+  - `Renderer` 드로우 패스 PSO-First 정렬로 파이프라인/루트 시그니처/섀도 바인딩 중복 전환 제거.
+  - `ShaderGraphCheck` 단위 테스트 통과 완료.
 - 완료 기준: 텍스처가 없는 머티리얼에서 이전 드로우콜의 텍스처 오염이나 하얗게 새는 현상이 발생하지 않고, 머티리얼 그래프에서 연결된 상수 컬러 및 채널 분리 데이터가 G-Buffer와 최종 라이팅에 정확히 반영된다.
 
 ### P1-F. 대화형 3D 모델 임포트 프리뷰 시스템 및 에디터 뷰포트 일원화
@@ -628,12 +634,28 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - 2026-11-19 `x64-ninja-debug`(Ninja 단일 구성) 모두 빌드 후 CTest 44개 전체 통과를 사용자가 확인했다.
 - 2026-11-20 `fcda4887`~`c2058594` 커밋(프리팹 Revert All 안전성 강화, D3D12 파이프라인 생성 안정화, 머티리얼 에디터 완전 통합/3분할 구축, 설계 문서화 2건) 및 `SceneArchiveCheck` 핫픽스(`AddSpatialEntity`를 통한 트랜스폼 컴포넌트 보장) 후 `x64-ninja-debug` 모두 빌드 및 CTest 44개 전체 통과(`44/44 Passed`)를 사용자가 확인했다.
 - 2026-11-22 병렬 기능 스프린트(`a388afbe`~`61f4594f`: 셰이더 그래프 핀/노드 확장, 게임플레이 컴포넌트/노드, `BAM_SHIPPING` 가드·`RuntimeSystemManifest`, 프리팹 내부 `entt::entity` 리맵/계약, ECS 게임 UI 확장, 애니메이션 IK/Root Motion/PIE 동기화, 2D GPU 배칭·아틀라스·`SpatialBroadphase`·씬 `Sweep`/`OverlapAll`, `AsyncResourceOpenService`·DCC 프리셋 영속화, `Plugin://` 가상 URI·CMake 소스 빌드/게시, 프로젝트 로캘 카탈로그 및 UI 텍스트 폰트·번역 토글) 및 회귀 수정(`dbdaa188`, `e0eebb53`) 후 `x64-ninja-debug` 전체 빌드 및 전체 CTest 통과를 사용자가 확인했다. (`x64-release`, `BAMENGINE_WITH_EDITOR=OFF` 독립 Client, PIE·실환경 UI/GPU 수동 검증은 후속 검증 범위.)
+- 2026-11-22 티어 1 스프린트 A & B, 후보 그룹 A & B-2, 신규 6대 핵심 엔진 시스템(스프린트 C) 전체 구현 및 단위 테스트(12개 CTest 타깃 전원 통과)를 사용자가 확인했다:
+  - `UIInteractionCheck` (ECS UI 런타임 렌더링, 열린 드롭다운 팝업 HitTest/배경 차단, TextInput 런타임 키/텍스트/IME 라우팅)
+  - `ShaderGraphCheck` (범용 `Shader.TextureSample` 0..7 슬롯, 채널 분리, `SyncTextureBindings`, B-2 상수 버퍼 블롭 캐싱·무할당 해석 및 렌더러 PSO 우선 정렬)
+  - `VirtualPathCheck` (`ModelImportModal` 60FPS 실시간 프리뷰 트랜스폼 갱신 및 Phase 6 `ModelSubfolderHelper` 서브폴더 구성)
+  - `ActionTimelinePlaybackCheck` (`GameplayCombatSystem` 공격 스윙 중복 피격 방지/넉백 및 `ActionTimelineSystem` `"HitboxOn"`/`"HitboxOff"` 노티파이 연동)
+  - `BlendTree2DCheck` (`AnimationIKComponent` Foot Ground IK 지면 레이캐스트 접지·골반 보정 및 비주얼 스크립팅 IK 노드)
+  - `KinematicCharacterCheck` (KCC 체공 낙하 조기 스냅 억제, 30도 경사로 법선 분리 오프셋, 경사→평지 연착륙 `IsSoftLanding` 클램핑)
+  - `PakArchiveCheck` (`.bampak` 아카이브 포맷, 결정적 `PakWriter`, 무결성 검증 `PakReader`, `PakMountManager`)
+  - `SaveGameCheck` (`SaveGameManager` 원자적 슬롯 저장, 메타데이터 조회, 체크포인트 캡처/복원)
+  - `NavigationAICheck` (`NavGrid` 8방향 A* 코너 컷 방지·직선화 스무딩, `NavAgentComponent`, `AIPerceptionComponent`, `NavigationSystem`)
+  - `AudioMixerCheck` (`AudioMixer` 5대 버스 유효 게인·페이드·3D 거리 감쇠·FMOD 채널 그룹 동기화)
+  - `NetworkRpcCheck` (`NetworkRpc` Server/Client/Multicast RPC, Dead Reckoning 스냅샷 외삽, 지연/손실 시뮬레이터)
+  - `SceneStreamingCheck` (`ScenePersistenceComponent` `DontDestroyOnLoad`, Additive 서브씬 스트리밍, `AsyncResourceLoader`)
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
 
 ### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-22 갱신)
 
-2026-11-22 병렬 스프린트(`a388afbe`~`61f4594f`)를 통해 Render M3 DXR 1차, Shader Graph `Normal`/`OpacityMask` 핀·노드, `HealthComponent`/`HitboxComponent`/`InteractableComponent`, `BAM_SHIPPING` 가드·`RuntimeSystemManifest`, 프리팹 내부 `entt::entity` 리맵·계약, ECS UI 위젯 확장, IK·Root Motion·AnimatorGraph PIE 동기화, 2D GPU 배칭·`SpatialBroadphase`·씬 `Sweep`/`OverlapAll`, `ModelEditor` 비동기 열기·DCC 프리셋, `Plugin://` 및 원클릭 CMake 빌드/게시, 프로젝트 로캘 카탈로그가 코드에 반영되었고 `x64-ninja-debug` 전체 빌드·CTest 통과를 확인했다. 이후 우선 남은 코어-에디터 연결 과제는 (1) 신규 ECS UI 위젯(`CanvasScalerComponent`, `UITextInputComponent`, `UIDropdownComponent`, `UIMultilineTextLayout`)의 `UIRenderSystem`/에디터 프리셋 연결, (2) Shader Graph 범용 `TextureSample` 노드, (3) `ModelImportModal` 실시간 3D 프리뷰 임베딩 및 Phase 6 폴더 정리, (4) `AsyncResourceOpenService` 타 리소스 편집기 확산과 `MaterialFeatureFlags`/DXR M3 반사 확장이다.
+2026-11-22 후속 집중 스프린트를 통해 다음 3개 영역이 전면 구현되고 단위 검증(12개 CTest 타깃)을 통과했다:
+1. **티어 1 스프린트 A & B**: ECS UI 위젯 런타임 렌더링·프리셋 및 열린 드롭다운 팝업 HitTest/배경 차단·TextInput 런타임 입력/IME(`UIInteractionCheck`), Shader Graph 범용 `TextureSample` 0..7 슬롯·채널 분리·`SyncTextureBindings`(`ShaderGraphCheck`), `ModelImportModal` 60FPS 실시간 프리뷰 트랜스폼 및 Phase 6 서브폴더 구성(`VirtualPathCheck`), `GameplayCombatSystem` 중복 피격 방지/넉백 및 `ActionTimelineSystem` 노티파이 연동(`ActionTimelinePlaybackCheck`), `AnimationIKComponent` Foot Ground IK 접지·골반 보정 및 비주얼 스크립팅 노드(`BlendTree2DCheck`).
+2. **후보 그룹 A & B-2**: `AsyncResourceOpenService` 4대 리소스 편집기(Material, Texture, VFX, Sprite) 전면 확산(`3fdfff6f`), `GameplayCombatSystem` 런타임 매니페스트 등록 및 뷰포트 디버그 기즈모(`e3e00bd0`), KCC 체공 낙하 조기 스냅 억제·30도 경사로 법선 분리 오프셋·경사→평지 연착륙 클램핑(`KinematicCharacterCheck`), B-2 머티리얼 상수 버퍼 블롭 버전 캐싱·단일 순회 무할당 파라미터 해석 및 렌더러 PSO 우선 정렬(`9b17e906`, `ShaderGraphCheck`).
+3. **신규 6대 핵심 엔진 시스템 (스프린트 C)**: `.bampak` 리소스 팩 아카이브 포맷·결정적 `PakWriter`·무결성 `PakReader`·`PakMountManager`(`PakArchiveCheck`), `SaveGameManager` 원자적 슬롯 저장(`.tmp` + `MoveFileExW`)·메타데이터·체크포인트 캡처/복원(`SaveGameCheck`), `NavGrid` 8방향 A* 코너 컷 방지·직선화 스무딩·`NavAgentComponent`·`AIPerceptionComponent`·`NavigationSystem`(`NavigationAICheck`), `AudioMixer` 5대 버스 유효 게인·페이드·3D 거리 감쇠·FMOD 채널 그룹 동기화(`AudioMixerCheck`), `NetworkRpc` Server/Client/Multicast RPC·Dead Reckoning 외삽·지연/손실 시뮬레이터(`NetworkRpcCheck`), `ScenePersistenceComponent` `DontDestroyOnLoad`·Additive 서브씬 스트리밍·`AsyncResourceLoader`(`SceneStreamingCheck`).
 
 2026-11-22 사용자 선택으로 Render M3의 DXR 방향광 그림자 1차를 진행했다. 구현 범위와 남은 검증은 [RenderingDevelopmentPlan](RenderingDevelopmentPlan.md#m3-dxr-그림자--반사)을 따른다.
 
@@ -641,7 +663,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 
 2026-11-20 기준 커밋선(`fcda4887` $\to$ `1cd11857` $\to$ `11abec04` $\to$ `c2058594`)에 머티리얼 에디터 3-Pane 레이아웃 전면 개편, 셰이더 그래프 직접 소유권 전환, 프리팹 Revert All 외부 참조 검증 및 신규 심층 설계 2건이 반영되었다. 이후 `SceneArchiveCheck` 핫픽스를 거쳐 `x64-ninja-debug` 빌드 및 CTest 전체(44개) 통과를 확인했다([ImplementationLog](ImplementationLog.md) 2026-11-20 항목). 머티리얼 시스템 고도화 및 기존 작업 연속성에 맞춰 차기 개발 후보군을 5개 영역으로 공식 재편성한다.
 
-1. **후보 1 (머티리얼 / 셰이더 파이프라인): 그래프 파라미터 동기화 및 VS/PS 기능 마감 (Phase 4 일부 구현, 2026-11-21)**
+1. **후보 1 (머티리얼 / 셰이더 파이프라인): 그래프 파라미터 동기화 및 VS/PS 기능 마감 [구현 완료: 2026-11-22]**
    - **기준 문서**: [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md)
    - **목표**: 상용 엔진(UE/Unity) 수준의 0초 실시간 파라미터 튜닝 피드백 및 정점 변위(WPO)/Custom UV를 지원하는 통합 셰이더 컴파일 파이프라인 구축.
    - **세부 내용**:
@@ -650,7 +672,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - **범용 동적 버퍼 레이아웃(Dynamic ConstantBuffer Layout)**: 48바이트 정적 PBR 구조체(`baseColor`, `roughness` 등) 하드코딩 종속을 탈피하고, 그래프의 임의 커스텀 파라미터(디졸브, UV 스케일 등)를 수집하여 HLSL `cbuffer` 동적 생성 및 원시 바이트 블롭(`std::vector<uint8_t>`) 기반 런타임 저장소로 고도화하는 아키텍처 수립.
      - `Shader.MaterialOutput` 단일 마스터 노드에 정점 입력 핀(WPO, Normal, Custom UV)과 픽셀 입력 핀(PBR)을 함께 배치하고, `ShaderGraphCompiler`에서 `GenerateGBufferVS`와 `GenerateGBufferPS`를 동시 분할 생성.
    - **관련 파일**: `MaterialEditor.cpp`, `MaterialEditorCanvas.cpp`, `MaterialEditorShader.cpp`, `ShaderGraphCompiler.cpp`, `MaterialInterface.cpp`, `MaterialConstants.h`.
-   - **구현 반영:** 동적 cbuffer·GraphVariable 노출·WPO VS/PS 생성은 구현됐다. `Custom UV0/1`의 메시 UV 기반 연산과 폴백, 별도 보간 경로와 diffuse 슬롯 0의 UV0 샘플링을 코드와 `ShaderGraphCheck`에 반영했다. 이번 변경의 빌드·CTest·Editor 검증은 사용자 실행 대기이며, 범용 Texture Sample은 후속 범위다.
+   - **구현 반영:** 동적 cbuffer·GraphVariable 노출·WPO VS/PS 생성, `Custom UV0/1` 연산/폴백, 범용 `Shader.TextureSample` 노드 멀티슬롯(`0..7`) 바인딩, 채널 분리(`rgba`/`rgb`/`r`/`g`/`b`/`a`), `MaterialInterface::SyncTextureBindings`, B-2 상수 버퍼 블롭 캐싱(`m_ConstantsBlob`) 및 무할당 파라미터 해석, `Renderer` PSO 우선 정렬까지 전면 반영 완료되어 `ShaderGraphCheck` 단위 테스트를 통과했다.
 
 2. **후보 2 (렌더 패스 정합성): 머티리얼 기본 렌더 패스(Primary Pass Type) 및 Fallback 정합성 [구현 완료: 2026-11-20]**
    - **기준 문서**: [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md)
@@ -661,7 +683,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - 머티리얼 에디터 [파이프라인 설정] 헤더에 기본 패스 타입 선택 콤보 및 `BlendMode` 권장 프리셋 연동.
    - **관련 파일**: `MaterialInterface.h/.cpp`, `MaterialEditor.cpp`, `MeshRenderSystem.cpp`, `Renderer.cpp`.
 
-3. **후보 3 (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결 (기존 후보 A)**
+3. **후보 3 (물리 / 3인칭 캐릭터): KCC 지면 착지 및 경사로 3대 물리 상호작용 잔여 결함 해결 [구현 완료: 2026-11-22]**
    - **기준 문서**: [ThirdPersonCharacterSystemPlan.md](ThirdPersonCharacterSystemPlan.md) 4절
    - **목표**: `SimpleTests` 씬 실환경에서 확인된 물리 상호작용 및 지면 스냅 결함을 안정화하여 자연스러운 3인칭 보행 조작감 완성.
    - **세부 내용**:
@@ -669,6 +691,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - 30도 경사로 보행 시 접촉 표면 법선 방향 `SkinWidth` 최소 분리 오프셋 보정 및 스윕 피부 마진 강화로 메시 파고듦 제거.
      - 45도/60도 급경사 끝단 $\to$ 평지 진입 시 전환 프레임 수직 스냅 속도 제한(Vertical Snap Clamping) 및 법선 보간을 통한 단차 '탁' 충격 완화(Soft Landing).
    - **관련 파일**: `Engine/Source/Physics/Private/KinematicCharacterSystem.cpp`, `Engine/Source/Physics/Private/Collision.cpp`, `Engine/examples/KinematicCharacterCheck.cpp`.
+   - **구현 반영:** 3대 물리 결함 수정 및 연착륙 슬라이드 감속 예산 공제 로직을 반영하여 `KinematicCharacterCheck` 단위 테스트를 통과했다 (`68213696`, `5b3d775b`, `671d6ae6`).
 
 4. **후보 4 (비주얼 이펙트 / 액션 파이프라인): Composite VFX Phase 5 Step 4 & 액션 타임라인-소켓 VFX 통합 완성 (기존 후보 B)**
    - **기준 문서**: [CompositeVisualEffectPlan.md](CompositeVisualEffectPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md)
@@ -677,6 +700,7 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
      - Phase 5 Step 3 `CurveEditorModal` 2D 커브 팝업 모달 완료.
      - `ActionTimelineAsset`/`ActionTimelineSystem`/`AnimationTimelinePanel`의 `SpawnCompositeVFX` 본 소켓 스폰·`SocketAttachmentComponent` 실시간 추적·지속형 `ActionVFXHoldComponent` 해제·`ActionTimelineEvents` 기본 구현 완료.
      - `CompositeVFXSystem` Geometry/ForwardTransparent 블렌드 필터 교정(허공 흙갈색 탁화 해소), `forwardParticlePS.hlsl` 정면 알파 완화(`0.90`), `VFXEditorPanel::ToggleAirMode()` 공중 프리뷰 토글 완료(9.9절 가상 환경광 보정은 2026-11-19 정정으로 철회).
+     - **2026-11-22 전투 연동 반영:** `GameplayCombatSystem` 단일 공격 내 중복 피격 방지(피격자 해시셋 캐싱), 넉백 벡터 계산, 상호작용 질의 및 `ActionTimelineSystem` `"HitboxOn"` / `"HitboxOff"` 노티파이 창 수명 연동을 완료하고 `ActionTimelinePlaybackCheck` 단위 테스트를 통과했다 (`24288084`, `952b112a`).
    - **현재 진행 상태 (2026-11-20)**: 1~3단계 코드와 회귀 검사 사례를 반영했다. 빌드·CTest·로캘 생성·PIE·독립 Client 검증은 실행하지 않았으며, 4단계 수동 통합 검증이 남아 있다. 세부 체크리스트와 명령은 [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 5·7절을 따른다.
      - 1단계: Gameplay 페이즈 분리, 인스펙터 재생의 독립 프리뷰 라우팅, Animator 소유권 기반 복원과 타임라인 컴포넌트 제거 훅을 반영했다.
      - 2단계: 프리뷰·런타임이 공용 시간/Notify 교차 판정 helper를 사용하고, 포즈 갱신 뒤 Notify를 검사하도록 정렬했다. `ActionTimelinePlaybackCheck`를 추가했지만 실행하지 않았다.
