@@ -18,7 +18,7 @@ namespace
 		return true;
 	}
 
-	bool ApproxEqual(f32 a, f32 b, f32 epsilon = 0.001f)
+	bool ApproxEqual(Engine::f32 a, Engine::f32 b, Engine::f32 epsilon = 0.001f)
 	{
 		return std::abs(a - b) <= epsilon;
 	}

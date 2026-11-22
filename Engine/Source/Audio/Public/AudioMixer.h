@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Engine_API.h"
 #include "Macro.h"
 #include "Types.h"
 #include "ComponentAnnotations.h"
