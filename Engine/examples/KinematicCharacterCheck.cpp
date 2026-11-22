@@ -688,12 +688,12 @@ namespace
 
         // ── OverlapAll 테스트 ──
         {
-            // z=4.0 위치에서 반경 2.5의 구체 오버랩: e3(z=3.0)과 e1(z=5.0) 포함
+            // z=4.0 위치에서 반경 1.5의 구체 오버랩: e3(z=3.0)과 e1(z=5.0) 포함, e4(z=1.5) 제외
             OverlapQuery oq{};
             oq.layerMask = 1;
             oq.includeTrigger = false;
 
-            const BoundingSphere sphere(vec3(0.0f, 0.0f, 4.0f), 2.5f);
+            const BoundingSphere sphere(vec3(0.0f, 0.0f, 4.0f), 1.5f);
             auto overlaps = PhysicsSystem::OverlapAll(*scene, sphere, oq);
 
             // 트리거 제외 시 e1만 감지

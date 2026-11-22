@@ -169,6 +169,35 @@ static bool IntersectsPhysicsShapes2D(const entt::registry& world, entt::entity 
         }, shapeA, shapeB);
 }
 
+static void ComputePhysicsShapeWorldAABB2D(const entt::registry& world, entt::entity entity,
+    const PhysicsShape2D& shape, vec2& outMin, vec2& outMax)
+{
+    if (const auto* r = std::get_if<Rect>(&shape))
+    {
+        const mat4& worldMatrix = world.get<WorldTransformComponent>(entity).worldMatrix;
+        outMin = vec2(std::numeric_limits<f32>::max());
+        outMax = vec2(-std::numeric_limits<f32>::max());
+        for (int index = 0; index < 4; ++index)
+        {
+            const f32 x = (index & 1) ? r->Right() : r->left;
+            const f32 y = (index & 2) ? r->Bottom() : r->top;
+            const vec2 pt(worldMatrix * vec4(x, y, 0.0f, 1.0f));
+            outMin = glm::min(outMin, pt);
+            outMax = glm::max(outMax, pt);
+        }
+    }
+    else if (const auto* c = std::get_if<Circle>(&shape))
+    {
+        outMin = c->center - vec2(c->radius);
+        outMax = c->center + vec2(c->radius);
+    }
+    else if (const auto* cap = std::get_if<Capsule>(&shape))
+    {
+        outMin = glm::min(vec2(cap->pointA), vec2(cap->pointB)) - vec2(cap->radius);
+        outMax = glm::max(vec2(cap->pointA), vec2(cap->pointB)) + vec2(cap->radius);
+    }
+}
+
 static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity)
 {
     auto* bodyA = TryGetEnabledComponent<RigidBody2DComponent>(world, entityA);
@@ -622,21 +651,7 @@ static void CollectPhysicsTriggerEvents2D(Scene& scene)
         if (!TryBuildPhysicsShape(world, entity, shape)) continue;
 
         vec2 bMin(0.0f), bMax(0.0f);
-        if (const auto* r = std::get_if<Rect>(&shape))
-        {
-            bMin = vec2(r->left, r->top);
-            bMax = vec2(r->Right(), r->Bottom());
-        }
-        else if (const auto* c = std::get_if<Circle>(&shape))
-        {
-            bMin = c->center - vec2(c->radius);
-            bMax = c->center + vec2(c->radius);
-        }
-        else if (const auto* cap = std::get_if<Capsule>(&shape))
-        {
-            bMin = glm::min(vec2(cap->pointA), vec2(cap->pointB)) - vec2(cap->radius);
-            bMax = glm::max(vec2(cap->pointA), vec2(cap->pointB)) + vec2(cap->radius);
-        }
+        ComputePhysicsShapeWorldAABB2D(world, entity, shape, bMin, bMax);
         broadphase2D.Insert(entity, bMin, bMax);
     }
 
@@ -1149,21 +1164,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                 if (!TryBuildPhysicsShape(world, entity, shape)) continue;
 
                 vec2 bMin(0.0f), bMax(0.0f);
-                if (const auto* r = std::get_if<Rect>(&shape))
-                {
-                    bMin = vec2(r->left, r->top);
-                    bMax = vec2(r->Right(), r->Bottom());
-                }
-                else if (const auto* c = std::get_if<Circle>(&shape))
-                {
-                    bMin = c->center - vec2(c->radius);
-                    bMax = c->center + vec2(c->radius);
-                }
-                else if (const auto* cap = std::get_if<Capsule>(&shape))
-                {
-                    bMin = glm::min(vec2(cap->pointA), vec2(cap->pointB)) - vec2(cap->radius);
-                    bMax = glm::max(vec2(cap->pointA), vec2(cap->pointB)) + vec2(cap->radius);
-                }
+                ComputePhysicsShapeWorldAABB2D(world, entity, shape, bMin, bMax);
                 broadphase2D.Insert(entity, bMin, bMax);
             }
 

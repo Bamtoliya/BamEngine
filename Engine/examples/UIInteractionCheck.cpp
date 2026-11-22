@@ -448,6 +448,7 @@ int main()
         std::vector<UIPointerEvent> events;
         system.OnPointerEvent().AddLambda([&](const auto& event) { events.push_back(event); });
 
+        Feed(system, { 105.0f, 20.0f });
         Feed(system, { 105.0f, 20.0f }, true, true);
         if (!system.HasPointerCapture() || scroll.offset != 0.0f || !events.empty())
             return Fail("Scrollbar thumb did not capture without moving or activating content.");
