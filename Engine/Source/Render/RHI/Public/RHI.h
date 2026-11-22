@@ -212,7 +212,9 @@ public:
     virtual void EndPassMetrics();
     virtual const RHICapabilities& GetCapabilities() const { return m_Capabilities; }
     virtual RHIMemoryStats QueryMemoryStats() { return {}; }
+    const RHIBufferUploadStats& GetBufferUploadStats() const { return m_BufferUploadStats; }
 protected:
+    RHIBufferUploadStats m_BufferUploadStats{};
     void RecordDraw(uint32 vertexCount);
     void RecordIndexedDraw(uint32 indexCount);
 #pragma endregion

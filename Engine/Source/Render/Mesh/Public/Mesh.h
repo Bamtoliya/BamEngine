@@ -167,6 +167,8 @@ public:
 public:
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
+	EResult UploadToGPU() override;
+	[[nodiscard]] size_t GetUploadByteSize() const override;
 protected:
 	EResult OnPostLoad() override;
 #pragma endregion

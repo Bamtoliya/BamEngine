@@ -75,6 +75,8 @@ public:
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
 	EResult ReloadFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
+	EResult UploadToGPU() override;
+	[[nodiscard]] size_t GetUploadByteSize() const override { return m_TempData.size(); }
 private:
 	[[nodiscard]] uint32 GetArchiveFormatVersion() const noexcept override { return 1; }
 #pragma endregion

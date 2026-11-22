@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "Mesh.h"
 #include "Renderer.h"
+#include "ResourceUpload.h"
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
 
@@ -23,7 +24,7 @@ EResult Mesh::Initialize(void* arg)
 	if (IsFailure(__super::Initialize(arg))) return EResult::Fail;
 	CAST_DESC
 
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 
 	for (uint32 i = 0; i < static_cast<uint32>(EMeshStream::Max); ++i)
 	{
@@ -342,7 +343,7 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 	}
 
 	RHIBuffer* buffer = nullptr;
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 	if (rhi)
 	{
 		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, ERHIBufferType::Vertex);
@@ -380,7 +381,7 @@ EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 	std::memcpy(raw.data(), data, totalSize);
 
 	RHIBuffer* buffer = nullptr;
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 	if (rhi)
 	{
 		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, ERHIBufferType::Index);
@@ -494,10 +495,15 @@ EResult Mesh::OnPostLoad()
 	Safe_Release(m_IndexBuffer);
 
 	m_Flags = m_Flags | EMeshFlag::KeepRawData;
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	return UploadToGPU();
+}
+
+EResult Mesh::UploadToGPU()
+{
+	RHI* rhi = GetResourceUploadRHI();
 	for (uint32 i = 0; i < (uint32)EMeshStream::Max; ++i)
 	{
-		if (rhi && !m_RawData[i].empty() && m_StreamStrides[i] > 0)
+		if (rhi && !m_VertexBuffers[i] && !m_RawData[i].empty() && m_StreamStrides[i] > 0)
 		{
 			m_VertexBuffers[i] = rhi->CreateBuffer(
 				m_RawData[i].data(), static_cast<uint32>(m_RawData[i].size()), m_StreamStrides[i], ERHIBufferType::Vertex);
@@ -506,7 +512,7 @@ EResult Mesh::OnPostLoad()
 		}
 	}
 
-	if (rhi && !m_IndexRaw.empty() && m_IndexStride > 0)
+	if (rhi && !m_IndexBuffer && !m_IndexRaw.empty() && m_IndexStride > 0)
 	{
 		m_IndexBuffer = rhi->CreateBuffer(
 			m_IndexRaw.data(), static_cast<uint32>(m_IndexRaw.size()), m_IndexStride, ERHIBufferType::Index);
@@ -518,6 +524,13 @@ EResult Mesh::OnPostLoad()
 	return EResult::Success;
 }
 #pragma endregion
+
+size_t Mesh::GetUploadByteSize() const
+{
+	size_t bytes = m_IndexRaw.size();
+	for (const auto& stream : m_RawData) bytes += stream.size();
+	return bytes;
+}
 
 #pragma region Internal
 void Mesh::RebuildCachedBuffers()

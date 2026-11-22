@@ -263,6 +263,21 @@ void ResourceManager::RegisterExplicitLoader()
 	for (const wchar_t* extension : { L".bamshader", L".cso", L".dxil", L".spv", L".wgsl" })
 		m_LoaderRegistry[extension] = shaderLoader;
 }
+Handle ResourceManager::RegisterPreparedResource(Resource* resource)
+{
+	if (!resource) return {};
+
+	const uint64 hash = RunTimeHash(NormalizePath(resource->GetKey()));
+	const Handle existing = FindHandle(hash);
+	if (existing.IsValid() || resource->UploadToGPU() != EResult::Success)
+	{
+		resource->Free();
+		delete resource;
+		return existing;
+	}
+	return AddResourceInternal(hash, resource);
+}
+
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {
 	if (!handle.IsValid()) return EResult::InvalidArgument;

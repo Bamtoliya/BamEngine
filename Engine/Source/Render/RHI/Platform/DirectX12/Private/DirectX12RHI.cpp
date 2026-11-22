@@ -331,6 +331,9 @@ void DirectX12RHI::Free()
     for (auto& buffers : m_TextureUploadBuffers)
         buffers.clear();
 
+    for (auto& arena : m_FrameUploadArenas)
+        arena.clear();
+
     for (auto& cursor : m_TextureUploadCursors)
         cursor = 0;
 
@@ -516,6 +519,7 @@ EResult DirectX12RHI::BeginFrame()
     m_OpenTimestampCount = 0;
 
     m_TextureUploadCursors[m_CurrentBackBufferIndex] = 0;
+    ResetFrameUploadArena();
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
 	m_DynamicHeapCursor = 0;
 	m_FrameSRVTables.clear();
@@ -930,7 +934,15 @@ RHIBuffer* DirectX12RHI::CreateBuffer(void* data, uint32 size, uint32 stride, ER
     desc.size = size;
     desc.stride = stride;
     desc.initialData = data;
-    return DirectX12Buffer::Create(this, desc);
+
+    const f64 uploadBefore = m_BufferUploadStats.UploadMilliseconds;
+    const auto createStart = std::chrono::steady_clock::now();
+    RHIBuffer* buffer = DirectX12Buffer::Create(this, desc);
+    const f64 elapsed = std::chrono::duration<f64, std::milli>(std::chrono::steady_clock::now() - createStart).count();
+    // 업로드 시간은 따로 세므로 빼고 GPU 객체를 만든 시간만 더한다.
+    m_BufferUploadStats.CreateMilliseconds += elapsed - (m_BufferUploadStats.UploadMilliseconds - uploadBefore);
+    ++m_BufferUploadStats.CreateCount;
+    return buffer;
 }
 
 RHIBuffer* DirectX12RHI::CreateVertexBuffer(void* data, uint32 size, uint32 stride)
@@ -970,8 +982,15 @@ EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint
 
     const bool recordInFrame = m_FrameRecording && (m_CommandList != nullptr);
 
+    const auto uploadStart = std::chrono::steady_clock::now();
     ComPtr<ID3D12Resource> uploadBuffer;
-    if (recordInFrame)
+    UINT64 uploadOffset = 0;
+    uint8* uploadMemory = nullptr;
+    if (recordInFrame && AllocateFrameUpload(size, uploadBuffer, uploadOffset, uploadMemory))
+    {
+        std::memcpy(uploadMemory, data, size);
+    }
+    else if (recordInFrame)
     {
         auto& buffers = m_TextureUploadBuffers[m_CurrentBackBufferIndex];
         auto& cursor = m_TextureUploadCursors[m_CurrentBackBufferIndex];
@@ -998,13 +1017,16 @@ EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint
             return EResult::Fail;
     }
 
-    void* mapped = nullptr;
-    D3D12_RANGE readRange = { 0, 0 };
-    if (FAILED(uploadBuffer->Map(0, &readRange, &mapped)))
-        return EResult::Fail;
+    if (!uploadMemory)
+    {
+        void* mapped = nullptr;
+        D3D12_RANGE readRange = { 0, 0 };
+        if (FAILED(uploadBuffer->Map(0, &readRange, &mapped)))
+            return EResult::Fail;
 
-    std::memcpy(mapped, data, size);
-    uploadBuffer->Unmap(0, nullptr);
+        std::memcpy(mapped, data, size);
+        uploadBuffer->Unmap(0, nullptr);
+    }
 
     ComPtr<ID3D12CommandAllocator> allocator;
     ComPtr<ID3D12GraphicsCommandList> list;
@@ -1042,7 +1064,7 @@ EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint
         copyList->ResourceBarrier(1, &barrier);
     }
 
-    copyList->CopyBufferRegion(destination, offset, uploadBuffer.Get(), 0, size);
+    copyList->CopyBufferRegion(destination, offset, uploadBuffer.Get(), uploadOffset, size);
 
     D3D12_RESOURCE_STATES targetState = D3D12_RESOURCE_STATE_GENERIC_READ;
     if (dxBuffer->GetBufferType() == ERHIBufferType::Vertex)
@@ -1058,6 +1080,8 @@ EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint
     {
         dxBuffer->SetCurrentState(targetState);
         m_BuffersTransitionedThisFrame.insert(buffer);
+        ++m_BufferUploadStats.UploadCount;
+        m_BufferUploadStats.UploadMilliseconds += std::chrono::duration<f64, std::milli>(std::chrono::steady_clock::now() - uploadStart).count();
         return EResult::Success;
     }
 
@@ -1124,8 +1148,53 @@ RHITexture* DirectX12RHI::CreateTextureFromNativeHandle(void* nativeHandle)
     return nullptr;
 }
 
+void DirectX12RHI::ResetFrameUploadArena()
+{
+    // 이 백버퍼의 이전 프레임은 GPU 실행이 끝났다. 지난번에 쓰지 않은 구역은 돌려주고 하나만 남긴다.
+    auto& arena = m_FrameUploadArenas[m_CurrentBackBufferIndex];
+    size_t used = 0;
+    for (const auto& chunk : arena)
+        if (chunk.Used > 0) ++used;
+    if (arena.size() > std::max<size_t>(used, 1)) arena.resize(std::max<size_t>(used, 1));
+    for (auto& chunk : arena) chunk.Used = 0;
+}
+
+bool DirectX12RHI::AllocateFrameUpload(UINT64 size, ComPtr<ID3D12Resource>& outBuffer, UINT64& outOffset, uint8*& outMemory)
+{
+    if (size == 0 || size > FRAME_UPLOAD_CHUNK_SIZE) return false;
+
+    // 앞 구역부터 채우므로 사용한 구역은 항상 앞에 모인다.
+    auto& arena = m_FrameUploadArenas[m_CurrentBackBufferIndex];
+    const UINT64 alignedSize = (size + 15) & ~UINT64{ 15 };
+    for (auto& chunk : arena)
+    {
+        if (chunk.Used + alignedSize > FRAME_UPLOAD_CHUNK_SIZE) continue;
+        outBuffer = chunk.Buffer;
+        outOffset = chunk.Used;
+        outMemory = chunk.Memory + chunk.Used;
+        chunk.Used += alignedSize;
+        return true;
+    }
+
+    FrameUploadChunk chunk;
+    chunk.Buffer = CreateTextureUploadBuffer(FRAME_UPLOAD_CHUNK_SIZE);
+    if (!chunk.Buffer) return false;
+
+    void* mapped = nullptr;
+    const D3D12_RANGE readRange = { 0, 0 };
+    if (FAILED(chunk.Buffer->Map(0, &readRange, &mapped))) return false;
+    chunk.Memory = static_cast<uint8*>(mapped); // 업로드 힙은 해제할 때까지 매핑해 둔다.
+    chunk.Used = alignedSize;
+    outBuffer = chunk.Buffer;
+    outOffset = 0;
+    outMemory = chunk.Memory;
+    arena.push_back(std::move(chunk));
+    return true;
+}
+
 ComPtr<ID3D12Resource> DirectX12RHI::CreateTextureUploadBuffer(UINT64 size)
 {
+    ++m_BufferUploadStats.UploadHeapCount;
     if (!m_Device || size == 0)
         return {};
 

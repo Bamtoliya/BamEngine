@@ -1,6 +1,7 @@
 ﻿#include "ModuleHotReloadManager.h"
 #include "PIEManager.h"
 #include "Functions.h"
+#include "ResourcePreloader.h"
 
 // efsw 파일 이벤트 리스너
 class ModuleHotReloadFileListener final : public efsw::FileWatchListener
@@ -70,6 +71,9 @@ ModuleHotReloadManager* ModuleHotReloadManager::Create(void* arg)
 void ModuleHotReloadManager::Update()
 {
     if (m_State == EHotReloadState::Reloading)
+        return;
+    // 작업 스레드가 리플렉션 등록 정보를 읽는 동안에는 모듈을 바꾸지 않고 다음 프레임에 다시 확인한다.
+    if (Engine::ResourcePreloader::IsAnyActive())
         return;
 
     const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(250));
@@ -244,6 +248,11 @@ EResult ModuleHotReloadManager::ReloadModule()
 {
     if (m_OriginalDllPath.empty())
         return EResult::AlreadyInitialized;
+    if (Engine::ResourcePreloader::IsAnyActive())
+    {
+        EDITOR_LOG_WARN("[HotReload] Module reload is blocked while scene resources are loading.");
+        return EResult::Fail;
+    }
 
     m_State = EHotReloadState::Reloading;
     EDITOR_LOG_INFO("[HotReload] Reloading module: {}", m_OriginalDllPath.string());

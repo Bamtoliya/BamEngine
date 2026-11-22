@@ -3,6 +3,7 @@
 #include <archive/ArchiveInterface.h>
 #include "Texture.h"
 #include "Renderer.h"
+#include "ResourceUpload.h"
 #include "ResourceManager.h"
 #include "Runtime.h"
 #include "PlatformPath.h"
@@ -143,7 +144,7 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 	if (encodedData.empty() || encodedData.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
 		return EResult::InvalidArgument;
 
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 
 	const int encodedSize = static_cast<int>(encodedData.size());
 	int width = 0;
@@ -260,7 +261,7 @@ EResult Texture::InitializeFromDDSMemory(const vector<uint8>& ddsData)
 	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount))
 		return EResult::InvalidArgument;
 
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 	RHITexture* texture = nullptr;
 	if (rhi)
 	{
@@ -365,6 +366,27 @@ void Texture::Free()
 	Safe_Release(m_RHITexture);
 }
 #pragma endregion
+
+EResult Texture::UploadToGPU()
+{
+	RHI* rhi = GetResourceUploadRHI();
+	if (!rhi || m_RHITexture) return EResult::Success;
+
+	RHITextureDesc textureDesc{};
+	textureDesc.width = m_CachedHeader.width;
+	textureDesc.height = m_CachedHeader.height;
+	textureDesc.depth = m_CachedHeader.depth;
+	textureDesc.mipLevels = m_CachedHeader.mipLevels;
+	textureDesc.arraySize = m_CachedHeader.arraySize;
+	textureDesc.format = m_CachedHeader.format;
+	textureDesc.dimension = m_CachedHeader.dimension;
+	textureDesc.usage = ETextureUsage::Sampler;
+	textureDesc.data = m_TempData.data();
+	textureDesc.dataSize = static_cast<uint32>(m_TempData.size());
+
+	m_RHITexture = rhi->CreateTexture(textureDesc);
+	return m_RHITexture ? EResult::Success : EResult::Fail;
+}
 
 #pragma region Bind
 EResult Texture::Bind(uint32 slot)
@@ -536,7 +558,7 @@ archive::ArchiveResult Texture::ReadArchive(const archive::IArchive& ar)
 		return result;
 
 	// Renderer 초기화 후, 프레임 렌더링 전에 호출합니다.
-	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
+	RHI* rhi = GetResourceUploadRHI();
 	RHITexture* texture = nullptr;
 	if (rhi)
 	{

@@ -84,6 +84,14 @@ public:
 	}
 #pragma endregion
 
+#pragma region GPU Upload
+public:
+	// DeferredResourceUpload 범위에서 만든 리소스의 GPU 객체를 만든다. 이미 있거나 필요 없으면 성공이다. 메인 스레드 전용.
+	virtual EResult UploadToGPU() { return EResult::Success; }
+	// UploadToGPU가 복사할 CPU 데이터의 크기
+	[[nodiscard]] virtual size_t GetUploadByteSize() const { return 0; }
+#pragma endregion
+
 #pragma region Save&Load
 public:
 	[[nodiscard]] virtual reflection::ObjectView GetReflectedObjectView() noexcept

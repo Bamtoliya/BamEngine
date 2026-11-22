@@ -62,6 +62,10 @@ public:
 	Handle LoadFile(const string& filePath);
 	Handle LoadFile(const wstring& filePath);
 	void RegisterExplicitLoader();
+	// 작업 스레드가 CPU 데이터까지 읽은 리소스를 GPU에 올려 등록하고 소유권을 가져온다. 메인 스레드 전용.
+	// 같은 키가 이미 있으면 기존 핸들을, GPU 생성에 실패하면 빈 핸들을 반환하며 두 경우 모두 resource를 버린다.
+	// 키와 경로는 LoadFile이 정하는 값과 같아야 한다(ResolveFileKey).
+	Handle RegisterPreparedResource(Resource* resource);
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
 #ifdef BAM_EDITOR

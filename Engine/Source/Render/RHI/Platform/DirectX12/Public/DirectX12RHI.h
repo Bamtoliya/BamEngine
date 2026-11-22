@@ -209,6 +209,18 @@ private:
 private:
 	ComPtr<ID3D12Resource> CreateTextureUploadBuffer(UINT64 size);
 
+	// 프레임 안에서 올리는 버퍼 데이터는 업로드 힙을 새로 만들지 않고 구역을 나눠 쓴다.
+	struct FrameUploadChunk
+	{
+		ComPtr<ID3D12Resource> Buffer;
+		uint8* Memory = nullptr;
+		UINT64 Used = 0;
+	};
+	static constexpr UINT64 FRAME_UPLOAD_CHUNK_SIZE = 8ull * 1024 * 1024;
+	std::vector<FrameUploadChunk> m_FrameUploadArenas[MAX_SWAPCHAIN_BUFFERS];
+	void ResetFrameUploadArena();
+	bool AllocateFrameUpload(UINT64 size, ComPtr<ID3D12Resource>& outBuffer, UINT64& outOffset, uint8*& outMemory);
+
 	std::vector<ComPtr<ID3D12Resource>> m_TextureUploadBuffers[MAX_SWAPCHAIN_BUFFERS];
 	std::size_t m_TextureUploadCursors[MAX_SWAPCHAIN_BUFFERS] = {};
 private:

@@ -37,6 +37,7 @@
 #include "ResourceEditors.h"
 #include "ResourceManager.h"
 #include "ResourceHandleArchiveAdapter.h"
+#include "ResourcePreloader.h"
 #include "Scene.h"
 #include "ResourceEditorInterface.h"
 #include "AsyncResourceOpenService.h"
@@ -90,8 +91,11 @@ struct SceneLoadState
 	archive::ArchiveResult ArchiveReadResult;
 	std::vector<Engine::ResourceReference> Resources;
 	size_t NextResourceIndex = 0;
+	// 메시·텍스처를 작업 스레드에서 먼저 읽는다. 끝나면 나머지 리소스를 순서대로 로드한다.
+	std::unique_ptr<Engine::ResourcePreloader> Preloader;
+	bool Preloaded = false;
 
-	// 로드 구간 계측. 리소스 시간은 종류별로 합치며, 재질 시간에는 함께 로드한 텍스처가 포함된다.
+	// 로드 구간 계측. 리소스 시간은 메인 스레드에서 쓴 시간을 종류별로 합친 값이다.
 	struct ResourceTiming
 	{
 		size_t Count = 0;
@@ -101,6 +105,9 @@ struct SceneLoadState
 	double ResourceMilliseconds = 0.0;
 	std::chrono::steady_clock::time_point PreloadStart{};
 	double PreloadWallMilliseconds = 0.0;
+	double PreparedWallMilliseconds = 0.0;
+	Engine::RHIBufferUploadStats PreparedBufferBaseline;
+	Engine::RHIBufferUploadStats PreparedBufferStats;
 	std::map<std::string, ResourceTiming> ResourceTimings;
 	std::vector<std::pair<double, std::string>> SlowestResources;
 
@@ -1657,8 +1664,24 @@ void ImGuiManager::UpdateSceneLoad()
 		// 로딩 창이 뜬 뒤에는 다른 조작을 할 수 없으므로 화면이 갱신되는 범위에서 예산을 늘린다.
 		const auto frameBudget = std::chrono::milliseconds(state.ModalVisible ? 24 : 8);
 		const auto batchStart = std::chrono::steady_clock::now();
-		if (state.NextResourceIndex == 0)
+		if (!state.Preloader)
+		{
 			state.PreloadStart = batchStart;
+			state.PreparedBufferBaseline = Engine::Renderer::Get().GetRHI()->GetBufferUploadStats();
+			state.Preloader = std::make_unique<Engine::ResourcePreloader>();
+			state.Preloader->Start(state.Resources);
+		}
+		if (!state.Preloaded)
+		{
+			state.Preloaded = state.Preloader->Update(batchStart + frameBudget, [&state](const std::wstring& key, double milliseconds)
+				{
+					state.RecordResource({ key, key }, milliseconds);
+				});
+			if (!state.Preloaded)
+				return;
+			state.PreparedBufferStats = Engine::Renderer::Get().GetRHI()->GetBufferUploadStats();
+			state.PreparedWallMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - state.PreloadStart).count();
+		}
 		auto& manager = ResourceManager::Get();
 
 		while (state.NextResourceIndex < state.Resources.size())
@@ -1727,6 +1750,22 @@ void ImGuiManager::UpdateSceneLoad()
 		BAM_LOG(Info, "Editor", "Document", "Scene load timing: {} | total {:.0f} ms (archive {:.0f}, resource work {:.0f} over {} item(s) / wall {:.0f}, entities {:.0f}, open {:.0f})",
 			state.DisplayName, elapsedMs(state.StartTime, openEnd), state.ArchiveMilliseconds, state.ResourceMilliseconds,
 			state.Resources.size(), state.PreloadWallMilliseconds, elapsedMs(createStart, openStart), elapsedMs(openStart, openEnd));
+		if (state.Preloader)
+		{
+			const auto stats = state.Preloader->GetStats();
+			BAM_LOG(Info, "Editor", "Document", "Scene load workers: {} thread(s), {} mesh(es), {} texture(s), {:.0f} MB | worker {:.0f} ms (slowest {:.0f}), main {:.0f} ms (mesh {:.0f}, texture {:.0f}), wall {:.0f} ms",
+				stats.WorkerCount, stats.MeshCount, stats.TextureCount, static_cast<double>(stats.UploadBytes) / (1024.0 * 1024.0),
+				stats.WorkerMilliseconds, stats.SlowestWorkerMilliseconds, stats.MainMilliseconds,
+				stats.MeshMainMilliseconds, stats.TextureMainMilliseconds, state.PreparedWallMilliseconds);
+		}
+		{
+			const auto& before = state.PreparedBufferBaseline;
+			const auto& after = state.PreparedBufferStats;
+			BAM_LOG(Info, "Editor", "Document", "Scene load GPU buffers: {} created in {:.0f} ms, {} upload(s) in {:.0f} ms, {} upload heap(s)",
+				after.CreateCount - before.CreateCount, after.CreateMilliseconds - before.CreateMilliseconds,
+				after.UploadCount - before.UploadCount, after.UploadMilliseconds - before.UploadMilliseconds,
+				after.UploadHeapCount - before.UploadHeapCount);
+		}
 		for (const auto& [extension, timing] : state.ResourceTimings)
 			BAM_LOG(Info, "Editor", "Document", "Scene load resources: {} x{} = {:.0f} ms", extension, timing.Count, timing.Milliseconds);
 		for (const auto& [milliseconds, resourcePath] : state.SlowestResources)
@@ -1788,11 +1827,17 @@ void ImGuiManager::DrawSceneLoadingModal()
 		progress = 0.08f + 0.12f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f));
 		break;
 	case SceneLoadState::EStage::PreloadingResources:
-		stageText = LOCAL_FMT("EditorDocument.LoadingSceneResources",
-			state.NextResourceIndex, state.Resources.size());
-		progress = 0.20f + 0.70f * (static_cast<float>(state.NextResourceIndex) /
-			static_cast<float>((std::max)(size_t{ 1 }, state.Resources.size())));
+	{
+		// 작업 스레드 단계(70%)와 남은 리소스 단계(20%)를 이어서 표시한다.
+		const bool preparing = state.Preloader && !state.Preloaded;
+		const auto stats = state.Preloader ? state.Preloader->GetStats() : Engine::ResourcePreloader::Stats{};
+		const size_t finished = preparing ? stats.FinishedCount : state.NextResourceIndex;
+		const size_t total = preparing ? stats.ScheduledCount : state.Resources.size();
+		const float fraction = static_cast<float>(finished) / static_cast<float>((std::max)(size_t{ 1 }, total));
+		stageText = LOCAL_FMT("EditorDocument.LoadingSceneResources", finished, total);
+		progress = preparing ? 0.20f + 0.50f * fraction : 0.70f + 0.20f * fraction;
 		break;
+	}
 	case SceneLoadState::EStage::FinalizingScene:
 		stageText = LOCAL("EditorDocument.LoadingSceneFinalizing");
 		progress = 0.95f;

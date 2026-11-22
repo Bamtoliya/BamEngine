@@ -196,19 +196,47 @@ namespace archive
         }
 
         std::string document;
-        std::array<char, 4096> buffer{};
 
-        while (file.read(buffer.data(), static_cast<std::streamsize>(buffer.size())))
+        // 크기를 알 수 있으면 한 번에 읽는다. 알 수 없는 입력과 읽는 동안 늘어난 부분은 아래에서 이어 읽는다.
+        file.seekg(0, std::ios::end);
+        const auto size = static_cast<std::streamoff>(file.tellg());
+        if (!file || size < 0)
         {
-            document.append(buffer.data(), buffer.size());
+            file.clear();
         }
-
-        if (file.bad() || !file.eof())
+        file.seekg(0, std::ios::beg);
+        if (!file)
         {
             return { ArchiveErrorCode::FileReadFailed, {} };
         }
 
-        document.append(buffer.data(), static_cast<std::size_t>(file.gcount()));
+        if (size > 0)
+        {
+            document.resize(static_cast<std::size_t>(size));
+            file.read(document.data(), static_cast<std::streamsize>(size));
+            document.resize(static_cast<std::size_t>(file.gcount()));
+            if (file.bad())
+            {
+                return { ArchiveErrorCode::FileReadFailed, {} };
+            }
+        }
+
+        if (!file.eof())
+        {
+            std::array<char, 4096> buffer{};
+            while (file.read(buffer.data(), static_cast<std::streamsize>(buffer.size())))
+            {
+                document.append(buffer.data(), buffer.size());
+            }
+
+            if (file.bad() || !file.eof())
+            {
+                return { ArchiveErrorCode::FileReadFailed, {} };
+            }
+
+            document.append(buffer.data(), static_cast<std::size_t>(file.gcount()));
+        }
+
         return Decode(document);
     }
 }

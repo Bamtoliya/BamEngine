@@ -8,6 +8,7 @@
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "ResourceHandleArchiveAdapter.h"
+#include "ResourcePreloader.h"
 
 namespace Engine
 {
@@ -426,6 +427,8 @@ namespace
 
     void PreloadDocumentResources(std::string_view kind, const Engine::ResourceReferenceSet& references)
     {
+        const std::vector<Engine::ResourceReference> ordered(references.begin(), references.end());
+        Engine::ResourcePreloader::LoadBlocking(ordered);
         const auto unresolved = archive_resource::PreloadResourceReferences(references);
 
         for (const auto& reference : unresolved)

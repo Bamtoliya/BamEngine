@@ -38,6 +38,16 @@ namespace Engine
         uint32 AllocatedDescriptors = 0;
     };
 
+    // 시작부터 누적한 정적 버퍼 생성·업로드 비용. 로딩 구간은 두 시점의 차이로 구한다.
+    struct RHIBufferUploadStats
+    {
+        uint64 CreateCount = 0;
+        uint64 UploadCount = 0;
+        uint64 UploadHeapCount = 0;
+        f64 CreateMilliseconds = 0.0;
+        f64 UploadMilliseconds = 0.0;
+    };
+
     struct RHIFrameMetrics
     {
         uint64 DrawCalls = 0;
