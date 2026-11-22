@@ -1,4 +1,5 @@
 ﻿#include "MaterialEditor.h"
+#include "AsyncResourceOpenService.h"
 #include "EditorUI.h"
 #include "ShortcutManager.h"
 #include "Material.h"
@@ -96,6 +97,7 @@ MaterialEditor::MaterialEditor()
 
 MaterialEditor::~MaterialEditor()
 {
+	CancelAsyncOpen();
 	ReleaseResourceDocument();
 }
 
@@ -114,18 +116,11 @@ bool MaterialEditor::HasUnsavedResourceChanges() const
 
 bool MaterialEditor::CanSaveDocument() const
 {
-	return m_Open && m_Material && !m_IsReadOnly;
+	return m_Open && m_Material && !m_IsReadOnly && !IsAsyncLoading();
 }
 
-void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
+void MaterialEditor::ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate)
 {
-	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
-	auto& manager = Engine::ResourceManager::Get();
-	auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
-	if (!candidate.IsValid())
-		candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
-	if (!candidate.Get() || !RestoreSavedChanges()) return;
-
 	m_TargetResourcePath = assetPath;
 	m_IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(assetPath);
 	m_PreviewRenderer.ReleaseMaterial();
@@ -152,9 +147,130 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	else m_History.Clear();
 }
 
+void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
+{
+	CancelAsyncOpen();
+	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
+	auto& manager = Engine::ResourceManager::Get();
+	auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
+	if (!candidate.IsValid())
+		candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
+	if (!candidate.Get() || !RestoreSavedChanges()) return;
+
+	ApplyLoadedMaterial(assetPath, std::move(candidate));
+}
+
+bool MaterialEditor::BeginAsyncOpen(const std::filesystem::path& assetPath)
+{
+	if (!IsSupported(assetPath))
+		return false;
+
+	if (!RestoreSavedChanges())
+		return false;
+
+	CancelAsyncOpen();
+
+	m_AsyncTargetPath = assetPath;
+	m_AsyncStartTime = std::chrono::steady_clock::now();
+	m_AsyncLoadStart = m_AsyncStartTime;
+	m_AsyncLoadDurationMs = 0.0;
+	m_AsyncStage = EAsyncStage::WaitingBackground;
+	m_AsyncProgress = 0.08f;
+
+	Open();
+	Focus();
+	return true;
+}
+
+bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
+{
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto stepDeadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+		std::chrono::duration<float>(maxTimeSeconds));
+
+	if (m_AsyncStage == EAsyncStage::WaitingBackground)
+	{
+		m_AsyncStage = EAsyncStage::LoadingResource;
+		m_AsyncProgress = 0.35f;
+		m_AsyncLoadStart = Clock::now();
+	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingResource)
+	{
+		const auto path = Engine::PlatformPath::ToProjectRelative(m_AsyncTargetPath).wstring();
+		auto& manager = Engine::ResourceManager::Get();
+		auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
+		if (!candidate.IsValid())
+			candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
+		if (!candidate.Get())
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+			m_AsyncPendingMaterial.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = m_Material ? EAsyncStage::None : EAsyncStage::Failed;
+			return true;
+		}
+
+		m_AsyncPendingMaterial = std::move(candidate);
+		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
+		m_AsyncStage = EAsyncStage::LoadingGraph;
+		m_AsyncProgress = 0.70f;
+
+		if (Clock::now() >= stepDeadline)
+			return false;
+	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingGraph)
+	{
+		if (!RestoreSavedChanges())
+		{
+			m_AsyncPendingMaterial.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+
+		const auto graphStart = Clock::now();
+		auto targetPath = std::move(m_AsyncTargetPath);
+		auto candidate = std::move(m_AsyncPendingMaterial);
+		ApplyLoadedMaterial(targetPath, std::move(candidate));
+		const auto graphEnd = Clock::now();
+		const double graphMs = Milliseconds(graphEnd - graphStart).count();
+		const double totalMs = Milliseconds(graphEnd - m_AsyncStartTime).count();
+
+		EDITOR_LOG_INFO("[ResourceOpenTiming] Material {}: resource={:.2f}ms, graph={:.2f}ms, total={:.2f}ms (async)",
+			WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, graphMs, totalMs);
+
+		m_AsyncProgress = 1.0f;
+		m_AsyncStage = EAsyncStage::None;
+		return true;
+	}
+
+	return true;
+}
+
+void MaterialEditor::CancelAsyncOpen()
+{
+	AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
+	m_AsyncStage = EAsyncStage::None;
+	m_AsyncProgress = 0.0f;
+	m_AsyncTargetPath.clear();
+	m_AsyncPendingMaterial.Reset();
+}
+
+void MaterialEditor::DrawAsyncLoadingOverlay()
+{
+	DrawStandardAsyncLoadingOverlay(m_AsyncTargetPath, m_AsyncProgress,
+		m_AsyncStage == EAsyncStage::WaitingBackground, m_AsyncStage == EAsyncStage::Failed);
+}
+
 void MaterialEditor::Update(f32 dt)
 {
-	if (!m_Material || !m_IsVisibleOnScreen) return;
+	if (IsAsyncLoading() || !m_Material || !m_IsVisibleOnScreen) return;
 
 	// 1. 프리뷰 렌더러 프레임 갱신
 	m_PreviewRenderer.Submit(m_Material, dt);
@@ -178,6 +294,7 @@ void MaterialEditor::OnResourceWindowVisibility(bool visible)
 
 void MaterialEditor::ReleaseResourceDocument()
 {
+	CancelAsyncOpen();
 	// 프리뷰 위젯은 패널 수명 동안 유지한다(생성자에서 한 번 초기화). 문서를 닫을 때는 머티리얼 참조만 놓는다.
 	m_PreviewRenderer.ReleaseMaterial();
 	m_Material = nullptr;
@@ -261,7 +378,7 @@ void MaterialEditor::DrawCustomToolbar()
 // 공통 3줄 헤더의 빠른 실행 줄. 셰이더 그래프 액션은 등록된 단축키 액션을 그대로 실행한다.
 void MaterialEditor::DrawCustomQuickAccess()
 {
-	if (!m_Material) return;
+	if (!m_Material || IsAsyncLoading()) return;
 
 	EditorUI::ToolbarLayout toolbar;
 	DrawSaveButton(toolbar);
@@ -2233,9 +2350,9 @@ void MaterialEditor::RestoreState(const EditorWorkspace& workspace)
 	m_RightPaneWidth = workspace.GetSplitter("Material.RightPaneWidth", 300.0f);
 }
 
-void MaterialEditor::AlignNodes(int alignment) { AlignSelectedNodes(alignment); }
-void MaterialEditor::DuplicateSelectedNodes() { DuplicateSelection(); }
-void MaterialEditor::CreateCommentBox() { CreateCommentBoxFromSelection(); }
+void MaterialEditor::AlignNodes(int alignment) { if (!IsAsyncLoading()) AlignSelectedNodes(alignment); }
+void MaterialEditor::DuplicateSelectedNodes() { if (!IsAsyncLoading()) DuplicateSelection(); }
+void MaterialEditor::CreateCommentBox() { if (!IsAsyncLoading()) CreateCommentBoxFromSelection(); }
 
 void MaterialEditor::SyncParametersFromGraph()
 {

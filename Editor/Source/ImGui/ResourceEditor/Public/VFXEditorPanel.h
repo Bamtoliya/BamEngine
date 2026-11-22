@@ -8,6 +8,7 @@
 #include "CommandHistory.h"
 #include "GizmoHelper.h"
 #include "CurveEditorModal.h"
+#include <chrono>
 
 BEGIN(Engine)
 class Entity;
@@ -51,6 +52,11 @@ public:
 	bool IsSupported(const std::filesystem::path& assetPath) const override;
 	bool HasUnsavedResourceChanges() const override { return m_InspectorEdit.has_value() || m_UntrackedDirty || m_TimelineHistory.GetCurrentStateId() != m_SavedStateId; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool BeginAsyncOpen(const std::filesystem::path& assetPath) override;
+	bool StepAsyncOpen(float maxTimeSeconds = 0.002f) override;
+	bool IsAsyncLoading() const override { return m_AsyncStage != EAsyncStage::None; }
+	void DrawAsyncLoadingOverlay() override;
+	void CancelAsyncOpen() override;
 	EShortcutContext GetShortcutContext() const override
 	{
 		return EShortcutContext::CompositeTimeline;
@@ -196,6 +202,23 @@ private:
 	};
 	std::optional<VFXInspectorEdit> m_InspectorEdit;
 	bool m_IsGizmoUsing = false;
+
+	// 비동기 열기 상태
+	enum class EAsyncStage
+	{
+		None,
+		WaitingBackground,
+		LoadingResource,
+		SettingUpPreview,
+		Failed
+	};
+	EAsyncStage m_AsyncStage = EAsyncStage::None;
+	float m_AsyncProgress = 0.0f;
+	std::filesystem::path m_AsyncTargetPath;
+	Engine::ResourceHandle<Engine::CompositeEffect> m_AsyncPendingEffect;
+	std::chrono::steady_clock::time_point m_AsyncStartTime{};
+	std::chrono::steady_clock::time_point m_AsyncLoadStart{};
+	double m_AsyncLoadDurationMs = 0.0;
 };
 
 END

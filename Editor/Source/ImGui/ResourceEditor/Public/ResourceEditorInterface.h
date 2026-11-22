@@ -62,6 +62,7 @@ protected:
 
     // A panel can scope its own draw context around this call.
     virtual void DrawResourceFrame();
+    void DrawStandardAsyncLoadingOverlay(const std::filesystem::path& targetPath, float progress, bool indeterminate, bool failed);
     void DrawCopyResourcePath();
 private:
     friend class ImGuiManager;

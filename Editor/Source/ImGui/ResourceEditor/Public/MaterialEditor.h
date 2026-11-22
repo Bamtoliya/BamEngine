@@ -17,6 +17,7 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <chrono>
 
 BEGIN(Engine)
 class MaterialInterface;
@@ -123,6 +124,11 @@ public:
 	bool CanSaveDocument() const;
 	EShortcutContext GetShortcutContext() const override { return EShortcutContext::MaterialEditor; }
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool BeginAsyncOpen(const std::filesystem::path& assetPath) override;
+	bool StepAsyncOpen(float maxTimeSeconds = 0.002f) override;
+	bool IsAsyncLoading() const override { return m_AsyncStage != EAsyncStage::None; }
+	void DrawAsyncLoadingOverlay() override;
+	void CancelAsyncOpen() override;
 	virtual void Update(f32 dt) override;
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
@@ -198,6 +204,7 @@ private:
 	void DrawGeneratedHlsl();
 
 	// 저장 & 문서 관리
+	void ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate);
 	void SaveTarget();
 	bool LoadShaderGraph(const std::filesystem::path& path);
 	bool SaveShaderGraph();
@@ -310,6 +317,23 @@ private:
 	Engine::ResourceHandle<Engine::Shader> m_LiveVertexShader;
 	Engine::ResourceHandle<Engine::Shader> m_LivePixelShader;
 	bool m_NeedsNavigateToContent = true;
+
+	// 비동기 열기 상태
+	enum class EAsyncStage
+	{
+		None,
+		WaitingBackground,
+		LoadingResource,
+		LoadingGraph,
+		Failed
+	};
+	EAsyncStage m_AsyncStage = EAsyncStage::None;
+	float m_AsyncProgress = 0.0f;
+	std::filesystem::path m_AsyncTargetPath;
+	Engine::ResourceHandle<Engine::MaterialInterface> m_AsyncPendingMaterial;
+	std::chrono::steady_clock::time_point m_AsyncStartTime{};
+	std::chrono::steady_clock::time_point m_AsyncLoadStart{};
+	double m_AsyncLoadDurationMs = 0.0;
 };
 
 END

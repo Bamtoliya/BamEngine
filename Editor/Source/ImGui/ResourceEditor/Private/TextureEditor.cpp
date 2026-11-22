@@ -1,4 +1,5 @@
 #include "TextureEditor.h"
+#include "AsyncResourceOpenService.h"
 #include "SpriteEditor.h"
 #include "ResourceEditorPath.h"
 #include "EditorUI.h"
@@ -103,15 +104,36 @@ bool TextureEditor::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
 	return PrepareTargetPathRelocation(relocation);
 }
 
+TextureEditor::~TextureEditor()
+{
+	CancelAsyncOpen();
+}
+
 void TextureEditor::ReleaseResourceDocument()
 {
+	CancelAsyncOpen();
 	m_TextureHandle.Reset();
 	m_ShowConversionConfirmation = false;
 	m_PendingSource.clear();
 }
 
+void TextureEditor::ApplyLoadedTexture(const std::filesystem::path& path, ResourceHandle<Engine::Texture> handle)
+{
+	m_TextureHandle.Reset();
+	m_ShowConversionConfirmation = false;
+	m_PendingSource.clear();
+	m_TargetResourcePath = path;
+	m_TextureHandle = std::move(handle);
+	if (IsTextureEditorConversionSource(path))
+	{
+		m_ImportDesc = TextureImporter::GetDefaultImportDesc(path);
+		m_ImportDesc.CompressFlags &= ~ECompressFlags::NormalMap;
+	}
+}
+
 void TextureEditor::SetTargetResource(const std::filesystem::path& path)
 {
+	CancelAsyncOpen();
 	if (IsConversionOutput(path))
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
@@ -124,24 +146,116 @@ void TextureEditor::SetTargetResource(const std::filesystem::path& path)
 			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Error);
 		return;
 	}
-	ReleaseResourceDocument();
-	m_TargetResourcePath = path;
-	m_TextureHandle = std::move(handle);
-	if (IsTextureEditorConversionSource(path))
+	ApplyLoadedTexture(path, std::move(handle));
+}
+
+bool TextureEditor::BeginAsyncOpen(const std::filesystem::path& path)
+{
+	if (!IsSupported(path) || IsConversionOutput(path))
+		return false;
+
+	CancelAsyncOpen();
+
+	m_AsyncTargetPath = path;
+	m_AsyncStartTime = std::chrono::steady_clock::now();
+	m_AsyncLoadStart = m_AsyncStartTime;
+	m_AsyncLoadDurationMs = 0.0;
+	m_AsyncStage = EAsyncStage::WaitingBackground;
+	m_AsyncProgress = 0.08f;
+
+	Open();
+	Focus();
+	return true;
+}
+
+bool TextureEditor::StepAsyncOpen(float maxTimeSeconds)
+{
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto stepDeadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+		std::chrono::duration<float>(maxTimeSeconds));
+
+	if (m_AsyncStage == EAsyncStage::WaitingBackground)
 	{
-		m_ImportDesc = TextureImporter::GetDefaultImportDesc(path);
-		m_ImportDesc.CompressFlags &= ~ECompressFlags::NormalMap;
+		m_AsyncStage = EAsyncStage::LoadingResource;
+		m_AsyncProgress = 0.35f;
+		m_AsyncLoadStart = Clock::now();
 	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingResource)
+	{
+		if (IsConversionOutput(m_AsyncTargetPath))
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+			m_AsyncPendingTexture.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+
+		auto handle = static_cast<ResourceHandle<Engine::Texture>>(Engine::ResourceManager::Get().LoadFile(m_AsyncTargetPath.wstring()));
+		if (!handle.IsValid() || !handle.Get() || !handle.Get()->GetRHITexture())
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+			m_AsyncPendingTexture.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = m_TextureHandle.Get() ? EAsyncStage::None : EAsyncStage::Failed;
+			return true;
+		}
+
+		m_AsyncPendingTexture = std::move(handle);
+		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
+		m_AsyncStage = EAsyncStage::Finalizing;
+		m_AsyncProgress = 0.75f;
+
+		if (Clock::now() >= stepDeadline)
+			return false;
+	}
+
+	if (m_AsyncStage == EAsyncStage::Finalizing)
+	{
+		auto targetPath = std::move(m_AsyncTargetPath);
+		auto pendingTexture = std::move(m_AsyncPendingTexture);
+		ApplyLoadedTexture(targetPath, std::move(pendingTexture));
+		const double totalMs = Milliseconds(Clock::now() - m_AsyncStartTime).count();
+
+		EDITOR_LOG_INFO("[ResourceOpenTiming] Texture {}: resource={:.2f}ms, total={:.2f}ms (async)",
+			Engine::WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, totalMs);
+
+		m_AsyncProgress = 1.0f;
+		m_AsyncStage = EAsyncStage::None;
+		return true;
+	}
+
+	return true;
+}
+
+void TextureEditor::CancelAsyncOpen()
+{
+	AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
+	m_AsyncStage = EAsyncStage::None;
+	m_AsyncProgress = 0.0f;
+	m_AsyncTargetPath.clear();
+	m_AsyncPendingTexture.Reset();
+}
+
+void TextureEditor::DrawAsyncLoadingOverlay()
+{
+	DrawStandardAsyncLoadingOverlay(m_AsyncTargetPath, m_AsyncProgress,
+		m_AsyncStage == EAsyncStage::WaitingBackground, m_AsyncStage == EAsyncStage::Failed);
 }
 
 void TextureEditor::DrawCustomQuickAccess()
 {
 	EditorUI::ToolbarLayout toolbar;
 	EditorUI::IconButtonOptions copyOptions;
-	copyOptions.Enabled = !m_TargetResourcePath.empty();
+	copyOptions.Enabled = !m_TargetResourcePath.empty() && !IsAsyncLoading();
 	if (toolbar.Icon("CopyResourcePath", ICON_FA_COPY, "EditorCommon.CopyPath", copyOptions))
 		ImGui::SetClipboardText(Engine::WStrToStr(m_TargetResourcePath.wstring()).c_str());
-	ImGui::BeginDisabled(!m_TextureHandle.Get() || IsConversionOutput(m_TargetResourcePath));
+	ImGui::BeginDisabled(IsAsyncLoading() || !m_TextureHandle.Get() || IsConversionOutput(m_TargetResourcePath));
 	if (toolbar.Button("TextureEditor.OpenSpriteEditor", ICON_FA_CROP_SIMPLE, "TextureEditor.OpenSpriteEditor"))
 	{
 		if (auto* editor = dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor")))
