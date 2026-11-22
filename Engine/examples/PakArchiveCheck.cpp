@@ -364,16 +364,16 @@ static int TestPakMountManager(const fs::path& tempDir)
     // Engine.bampak 생성
     {
         PakWriter writer;
-        writer.AddEntry("Engine://Shaders/Test.dxil", engineShader);
-        writer.AddEntry("Project://Textures/Shared.dds", sharedTexEngine);
+        EXPECT_EQ(writer.AddEntry("Engine://Shaders/Test.dxil", engineShader), EResult::Success);
+        EXPECT_EQ(writer.AddEntry("Project://Textures/Shared.dds", sharedTexEngine), EResult::Success);
         EXPECT_EQ(writer.WriteToFile(enginePakPath), EResult::Success);
     }
 
     // Project.bampak 생성 (동일 URI 오버라이드 포함)
     {
         PakWriter writer;
-        writer.AddEntry("Project://Scenes/Level.bamscene.json", projectScene);
-        writer.AddEntry("Project://Textures/Shared.dds", sharedTexProject);
+        EXPECT_EQ(writer.AddEntry("Project://Scenes/Level.bamscene.json", projectScene), EResult::Success);
+        EXPECT_EQ(writer.AddEntry("Project://Textures/Shared.dds", sharedTexProject), EResult::Success);
         EXPECT_EQ(writer.WriteToFile(projectPakPath), EResult::Success);
     }
 

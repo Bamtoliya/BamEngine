@@ -1016,8 +1016,10 @@ namespace
 			spline.LookAtTargetName = "Boss";
 			desc.CameraSplineTracks.push_back(spline);
 
-			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> srcAsset(Engine::ActionTimelineAsset::Create(&desc));
-			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> dstAsset(Engine::ActionTimelineAsset::Create(nullptr));
+			auto* srcAsset = Engine::ResourceManager::Get().AddResource(
+				L"CamSeqArchiveSrc", Engine::ActionTimelineAsset::Create(&desc)).Get();
+			auto* dstAsset = Engine::ResourceManager::Get().AddResource(
+				L"CamSeqArchiveDst", Engine::ActionTimelineAsset::Create(nullptr)).Get();
 			if (!srcAsset || !dstAsset)
 				return Check(false, "Failed to create ActionTimelineAsset for archive test.");
 
@@ -1040,8 +1042,10 @@ namespace
 			Engine::ActionTimelineCreateDesc legacyDesc;
 			legacyDesc.Duration = 1.5f;
 			legacyDesc.ClipName = "Idle";
-			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> legacySrc(Engine::ActionTimelineAsset::Create(&legacyDesc));
-			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> legacyAsset(Engine::ActionTimelineAsset::Create(nullptr));
+			auto* legacySrc = Engine::ResourceManager::Get().AddResource(
+				L"CamSeqLegacySrc", Engine::ActionTimelineAsset::Create(&legacyDesc)).Get();
+			auto* legacyAsset = Engine::ResourceManager::Get().AddResource(
+				L"CamSeqLegacyDst", Engine::ActionTimelineAsset::Create(nullptr)).Get();
 			if (!legacySrc || !legacyAsset)
 				return Check(false, "Failed to create legacy ActionTimelineAsset.");
 
