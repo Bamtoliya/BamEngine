@@ -7,6 +7,8 @@
 #include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
+#include "AnimationIK.h"
+#include "RootMotion.h"
 
 int main()
 {
@@ -279,5 +281,132 @@ int main()
 	if (tree.Evaluate(0.0f, 15.0f, output))
 		return fail("A zero-width axis was accepted.");
 
-	std::cout << "BlendTree2D weight and failure checks passed.\n";
+	// ── 2-Bone IK Unit Tests ──
+	{
+		const vec3 rootPos(0.0f, 0.0f, 0.0f);
+		const vec3 midPos(0.0f, 5.0f, 0.0f);
+		const vec3 endPos(0.0f, 10.0f, 0.0f);
+		const vec3 poleVec(0.0f, 5.0f, 5.0f); // bending forward in +Z
+
+		// Reachable target within max reach (10.0)
+		const vec3 reachableTarget(0.0f, 4.0f, 3.0f); // distance = 5.0
+		const auto solReachable = SolveTwoBoneIK(rootPos, midPos, endPos, reachableTarget, poleVec, 1.0f);
+		if (!solReachable.solved)
+			return fail("2-Bone IK failed to solve reachable target.");
+
+		if (glm::distance(solReachable.newEndPos, reachableTarget) > 1e-3f)
+			return fail("2-Bone IK end-effector did not reach target within epsilon.");
+
+		const float len1 = glm::distance(solReachable.newMidPos, rootPos);
+		const float len2 = glm::distance(solReachable.newEndPos, solReachable.newMidPos);
+		if (std::abs(len1 - 5.0f) > 1e-3f || std::abs(len2 - 5.0f) > 1e-3f)
+			return fail("2-Bone IK violated bone length preservation.");
+
+		// Unreachable target beyond max reach (20.0 > 10.0)
+		const vec3 unreachableTarget(0.0f, 20.0f, 0.0f);
+		const auto solUnreachable = SolveTwoBoneIK(rootPos, midPos, endPos, unreachableTarget, poleVec, 1.0f);
+		if (!solUnreachable.solved)
+			return fail("2-Bone IK failed to solve unreachable target.");
+
+		if (std::isnan(solUnreachable.newEndPos.x) || std::isnan(solUnreachable.newEndPos.y) || std::isnan(solUnreachable.newEndPos.z))
+			return fail("2-Bone IK produced NaN on unreachable target.");
+
+		const float reachDist = glm::distance(solUnreachable.newEndPos, rootPos);
+		if (reachDist > 10.0f || reachDist < 9.5f)
+			return fail("2-Bone IK soft distance clamping failed for unreachable target.");
+
+		const float uLen1 = glm::distance(solUnreachable.newMidPos, rootPos);
+		const float uLen2 = glm::distance(solUnreachable.newEndPos, solUnreachable.newMidPos);
+		if (std::abs(uLen1 - 5.0f) > 1e-3f || std::abs(uLen2 - 5.0f) > 1e-3f)
+			return fail("2-Bone IK violated bone length preservation on unreachable target.");
+
+		// Weight blending check (weight = 0.0 returns initial end position)
+		const auto solZeroWeight = SolveTwoBoneIK(rootPos, midPos, endPos, reachableTarget, poleVec, 0.0f);
+		if (glm::distance(solZeroWeight.newEndPos, endPos) > 1e-3f)
+			return fail("2-Bone IK with zero weight did not preserve initial pose.");
+	}
+
+	// ── Look-At IK Unit Tests ──
+	{
+		const vec3 bonePos(0.0f, 10.0f, 0.0f);
+		const quat boneRot = glm::identity<quat>();
+		const vec3 fwd(0.0f, 0.0f, 1.0f);
+		const vec3 up(0.0f, 1.0f, 0.0f);
+		const float maxYaw = glm::radians(45.0f);
+		const float maxPitch = glm::radians(30.0f);
+
+		// Target within angle bounds
+		const vec3 reachableTarget(2.0f, 10.0f, 10.0f); // yaw ~11.3 deg < 45 deg
+		const auto solLookAt = SolveLookAtIK(bonePos, boneRot, reachableTarget, fwd, up, maxYaw, maxPitch, 1.0f);
+		if (!solLookAt.solved)
+			return fail("Look-At IK failed to solve.");
+
+		const vec3 newFwd = solLookAt.rotationOffset * fwd;
+		const vec3 expectedDir = glm::normalize(reachableTarget - bonePos);
+		if (glm::distance(newFwd, expectedDir) > 1e-3f)
+			return fail("Look-At IK forward direction did not align with target.");
+
+		// Target beyond max yaw angle (e.g. 80 deg)
+		const vec3 extremeTarget(100.0f, 10.0f, 10.0f);
+		const auto solClamped = SolveLookAtIK(bonePos, boneRot, extremeTarget, fwd, up, maxYaw, maxPitch, 1.0f);
+		if (!solClamped.solved)
+			return fail("Look-At IK failed to solve clamped target.");
+
+		const vec3 clampedFwd = solClamped.rotationOffset * fwd;
+		const float clampedYaw = std::atan2(clampedFwd.x, clampedFwd.z);
+		if (std::abs(clampedYaw - maxYaw) > 1e-3f)
+			return fail("Look-At IK did not clamp yaw angle to max limit.");
+
+		// Zero weight preserves orientation
+		const auto solZeroWeight = SolveLookAtIK(bonePos, boneRot, reachableTarget, fwd, up, maxYaw, maxPitch, 0.0f);
+		const vec3 zeroFwd = solZeroWeight.rotationOffset * fwd;
+		if (glm::distance(zeroFwd, fwd) > 1e-3f)
+			return fail("Look-At IK with zero weight did not preserve initial orientation.");
+	}
+
+	// ── Root Motion Extraction Unit Tests ──
+	{
+		AnimationCreateDesc rmDesc{};
+		rmDesc.Key = L"RootMotionCheck_Clip";
+		rmDesc.Path = rmDesc.Key;
+		rmDesc.Name = rmDesc.Key;
+		rmDesc.Duration = 2.0; // 2 seconds at 1 TPS
+		rmDesc.TicksPerSecond = 1.0;
+
+		AnimationTrack rootTrack{};
+		rootTrack.TargetBoneName = L"Root";
+		{
+			VectorKeyframe k0{}; k0.Time = 0.0; k0.Value = vec3(0.0f, 0.0f, 0.0f);
+			VectorKeyframe k1{}; k1.Time = 1.0; k1.Value = vec3(0.0f, 0.0f, 5.0f);
+			VectorKeyframe k2{}; k2.Time = 2.0; k2.Value = vec3(0.0f, 0.0f, 10.0f);
+			rootTrack.PositionKeyframes = { k0, k1, k2 };
+		}
+		rmDesc.Tracks.push_back(rootTrack);
+
+		auto* rmClip = Animation::Create(&rmDesc);
+		if (!rmClip) return fail("Root Motion test clip creation failed.");
+		auto rmClipHandle = manager.AddResource<Animation>(rmDesc.Key, rmClip);
+		if (!rmClipHandle.IsValid()) return fail("Root Motion test clip registration failed.");
+
+		// Normal step: 0.2s -> 0.6s => delta = (0, 0, 3.0 - 1.0) = (0, 0, 2.0)
+		const auto deltaNormal = ExtractRootMotionDelta(*rmClip, 0, 0.2f, 0.6f, true);
+		if (!deltaNormal.valid)
+			return fail("Root Motion normal extraction failed.");
+		if (glm::distance(deltaNormal.deltaPosition, vec3(0.0f, 0.0f, 2.0f)) > 1e-3f)
+			return fail("Root Motion normal delta position inaccurate.");
+
+		// Loop wrap-around: 1.8s -> 0.2s (duration = 2.0s)
+		// Segment 1: [1.8 .. 2.0] => pos(2.0) - pos(1.8) = 10.0 - 9.0 = 1.0
+		// Segment 2: [0.0 .. 0.2] => pos(0.2) - pos(0.0) = 1.0 - 0.0 = 1.0
+		// Total delta = 1.0 + 1.0 = 2.0
+		const auto deltaWrap = ExtractRootMotionDelta(*rmClip, 0, 1.8f, 0.2f, true);
+		if (!deltaWrap.valid)
+			return fail("Root Motion loop wrap-around extraction failed.");
+		if (glm::distance(deltaWrap.deltaPosition, vec3(0.0f, 0.0f, 2.0f)) > 1e-3f)
+			return fail("Root Motion wrap-around delta position inaccurate.");
+		if (deltaWrap.deltaPosition.z <= 0.0f)
+			return fail("Root Motion wrap-around jumped backward.");
+	}
+
+	std::cout << "BlendTree2D, 2-Bone IK, Look-At IK, and Root Motion checks passed.\n";
 }

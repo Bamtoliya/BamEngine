@@ -9,6 +9,10 @@
 #include "AnimationSceneQuery.h"
 #include "Skeleton.h"
 #include "AnimatorPoseUpdate.h"
+#include "RootMotion.h"
+#include "AnimationIK.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
 #ifdef BAM_EDITOR
 #include "Logger.h"
 #include "ReflectionRegistry.h"
@@ -107,6 +111,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 				continue;
 			}
 
+			const float prevTime = animator.currentTime;
 			const auto source = Engine::UpdateAnimatorBasePose(animator, *skeleton, dt);
 			if (source == Engine::EAnimatorBasePoseSource::None)
 			{
@@ -129,7 +134,74 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 				}
 			}
 
+			if (animator.applyRootMotion)
+			{
+				const Animation* clip = nullptr;
+				bool isLooping = animator.isLooping;
+				if (source == Engine::EAnimatorBasePoseSource::Clip)
+				{
+					clip = animator.currentClip.Get();
+				}
+				else if (source == Engine::EAnimatorBasePoseSource::StateMachine)
+				{
+					clip = animator.runtimeState.GetCurrentClip();
+					if (const auto* sm = animator.runtimeState.GetStateMachine().get())
+					{
+						if (const auto* st = sm->FindState(animator.runtimeState.GetCurrentStateName()))
+							isLooping = st->isLooping;
+					}
+				}
+
+				if (clip)
+				{
+					int32 rootBoneIdx = 0;
+					if (!animator.rootMotionBoneName.empty())
+					{
+						std::wstring wname(animator.rootMotionBoneName.begin(), animator.rootMotionBoneName.end());
+						uint32 idx = skeleton->GetBoneIndex(wname);
+						if (idx != UINT32_MAX) rootBoneIdx = static_cast<int32>(idx);
+					}
+
+					const auto delta = ExtractRootMotionDelta(*clip, rootBoneIdx, prevTime, animator.currentTime, isLooping, skeleton);
+					if (delta.valid)
+					{
+						animator.lastRootMotionDeltaPos = delta.deltaPosition;
+						animator.lastRootMotionDeltaRot = delta.deltaRotation;
+
+						if (auto* transform = world.try_get<TransformComponent>(entity))
+						{
+							transform->TranslateLocal(delta.deltaPosition);
+							transform->SetLocalRotation(transform->rotation * delta.deltaRotation);
+						}
+
+						if (static_cast<size_t>(rootBoneIdx) < animator.localBonePose.size())
+						{
+							animator.localBonePose[rootBoneIdx].Position = vec3(0.0f);
+							animator.localBonePose[rootBoneIdx].Rotation = glm::identity<quat>();
+						}
+					}
+				}
+			}
+
 			Engine::UpdateAnimatorSkinning(animator, *skeleton, dt);
+
+			if (const auto* ikComp = world.try_get<AnimationIKComponent>(entity))
+			{
+				if (ikComp->enabled)
+				{
+					mat4 worldMatrix = mat4(1.0f);
+					if (const auto* wt = world.try_get<WorldTransformComponent>(entity))
+					{
+						worldMatrix = wt->worldMatrix;
+					}
+					else if (const auto* tr = world.try_get<TransformComponent>(entity))
+					{
+						worldMatrix = tr->GetLocalMatrix();
+					}
+
+					ApplyAnimationIK(*skeleton, animator.localBonePose, animator.finalBoneMatrices, *ikComp, worldMatrix);
+				}
+			}
 		}
 	}
 }
