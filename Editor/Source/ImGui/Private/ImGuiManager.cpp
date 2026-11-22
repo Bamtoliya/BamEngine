@@ -831,7 +831,15 @@ void ImGuiManager::OpenPendingResourceEditor()
 	const bool sameTarget = editor->FocusRetainedResource(path) ||
 		(!target.empty() && (current == path || std::filesystem::equivalent(current, path, error)));
 
-	if (!sameTarget)
+	if (sameTarget)
+	{
+		if (editor->IsAsyncLoading())
+		{
+			AsyncResourceOpenService::Get().CancelRequestsForEditor(editor);
+			editor->CancelAsyncOpen();
+		}
+	}
+	else
 	{
 		const auto openTarget = [editor, path] {
 			const auto started = std::chrono::steady_clock::now();

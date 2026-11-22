@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "SpriteEditor.h"
+#include "AsyncResourceOpenService.h"
 #include "TextureEditor.h"
 #include "ResourceEditorPath.h"
 #include "EditorUI.h"
@@ -44,137 +45,60 @@ namespace
 		return name.ends_with(".bamsprite") || name.ends_with(".bamsprite.json");
 	}
 
-}
-
-SpriteEditor::SpriteEditor()
-{
-	m_Name = L"Sprite Editor";
-	m_DisplayNameKey = "ResourceEditor.SpriteTitle";
-}
-
-bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
-{
-	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
-	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
-	return ext == ".bamsprite" || lower.ends_with(".bamsprite.json") ||
-		ext == ".bamtex" || lower.ends_with(".bamtex.json") ||
-		ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
-		ext == ".bmp" || ext == ".dds" || ext == ".hdr";
-}
-
-bool SpriteEditor::CanSaveDocument() const
-{
-	return m_Open && m_TextureHandle.IsValid() && m_TextureHandle.Get() && !m_Slices.empty() &&
-		!Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath);
-}
-
-std::vector<std::filesystem::path> SpriteEditor::GetRetainedResourcePaths() const
-{
-	auto paths = ResourceEditorInterface::GetRetainedResourcePaths();
-	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty())
-		paths.emplace_back(texture->GetPath());
-	return paths;
-}
-
-bool SpriteEditor::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
-{
-	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty() &&
-		!SameResourceEditorPath(texture->GetPath(), m_TargetResourcePath) && relocation.Affects(texture->GetPath()))
-		return false;
-	return PrepareTargetPathRelocation(relocation);
-}
-
-void SpriteEditor::OpenInSpriteMode(const std::filesystem::path& path)
-{
-	Focus();
-	if (SameResourceEditorPath(m_TargetResourcePath, path))
-		return;
-	RunWithDiscardConfirmation([this, path] {
-		SetTargetResource(path);
-	});
-}
-
-void SpriteEditor::OpenTextureDialog()
-{
-	std::wstring selectedPath;
-	const std::vector<FileDialogFilter> filters{ { StrToWStr(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } };
-	if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::SpriteOpen))
-		SetTargetResource(selectedPath);
-}
-
-void SpriteEditor::ReleaseResourceDocument()
-{
-	m_TextureHandle.Reset();
-	m_Slices.clear();
-	m_SelectedSliceIndex = -1;
-	m_History.Clear();
-	m_ShowSliceModal = false;
-	m_ShowCreateAnimModal = false;
-	m_Zoom = 1.0f;
-	m_PanOffset = {};
-}
-
-void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
-{
-	const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
-	if (textureEditor && textureEditor->IsConversionOutput(path))
+	void LoadSpriteOrTextureResource(const std::filesystem::path& path,
+		ResourceHandle<Engine::Texture>& outTexture, std::vector<SpriteSliceInfo>& outSlices)
 	{
-		NotificationManager::Get().AddNotification(GetDisplayName(),
-			LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
-		return;
-	}
-	ResourceHandle<Engine::Texture> textureHandle;
-	std::vector<SpriteSliceInfo> slices;
+		auto& rm = Engine::ResourceManager::Get();
+		const std::wstring normPath = Engine::NormalizePath(path.wstring());
 
-	auto& rm = Engine::ResourceManager::Get();
-	const std::wstring normPath = Engine::NormalizePath(path.wstring());
-	const std::string filename = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		if (IsSpriteAsset(path))
+		{
+			auto spriteHandle = rm.GetResourceHandle<Engine::Sprite>(normPath);
+			if (!spriteHandle.IsValid())
+			{
+				auto raw = rm.LoadFile(normPath);
+				spriteHandle = static_cast<ResourceHandle<Engine::Sprite>>(raw);
+			}
 
-	if (IsSpriteAsset(path))
-	{
-		// 1. 스프라이트 에셋을 연 경우
-		auto spriteHandle = rm.GetResourceHandle<Engine::Sprite>(normPath);
-		if (!spriteHandle.IsValid())
+			if (spriteHandle.IsValid() && spriteHandle.Get())
+			{
+				auto* sprite = spriteHandle.Get();
+				outTexture = sprite->GetTextureHandle();
+				SpriteSliceInfo info;
+				info.name = Engine::WStrToStr(path.stem().wstring());
+				if (Engine::ToLowerStr(info.name).ends_with(".bamsprite"))
+					info.name = info.name.substr(0, info.name.size() - 10);
+				info.region = sprite->GetRegion();
+				info.pivot = sprite->GetPivot();
+				info.border = sprite->GetBorder();
+				info.pixelPerUnit = sprite->GetPixelPerUnit();
+				outSlices.push_back(info);
+			}
+		}
+		else
 		{
 			auto raw = rm.LoadFile(normPath);
-			spriteHandle = static_cast<ResourceHandle<Engine::Sprite>>(raw);
-		}
-
-		if (spriteHandle.IsValid() && spriteHandle.Get())
-		{
-			auto* sprite = spriteHandle.Get();
-			textureHandle = sprite->GetTextureHandle();
-			SpriteSliceInfo info;
-			info.name = Engine::WStrToStr(path.stem().wstring());
-			if (Engine::ToLowerStr(info.name).ends_with(".bamsprite"))
-				info.name = info.name.substr(0, info.name.size() - 10);
-			info.region = sprite->GetRegion();
-			info.pivot = sprite->GetPivot();
-			info.border = sprite->GetBorder();
-			info.pixelPerUnit = sprite->GetPixelPerUnit();
-			slices.push_back(info);
-		}
-	}
-	else
-	{
-		// 2. 텍스처 에셋(.png, .jpg, .bamtex 등)을 직접 연 경우 - LoadFile로 이미지 디코드 및 RHI 텍스처 생성
-		auto raw = rm.LoadFile(normPath);
-		textureHandle = static_cast<ResourceHandle<Engine::Texture>>(raw);
-		if (!textureHandle.IsValid())
-		{
-			textureHandle = rm.GetResourceHandle<Engine::Texture>(normPath);
+			outTexture = static_cast<ResourceHandle<Engine::Texture>>(raw);
+			if (!outTexture.IsValid())
+			{
+				outTexture = rm.GetResourceHandle<Engine::Texture>(normPath);
+			}
 		}
 	}
 
-	// 텍스처가 유효한 경우, 기존 슬라이스 스캔 또는 기본 전체 슬라이스 등록
-	if (textureHandle.IsValid() && textureHandle.Get() && slices.empty())
+	void ScanOrCreateDefaultSlices(const std::filesystem::path& path,
+		const ResourceHandle<Engine::Texture>& textureHandle, std::vector<SpriteSliceInfo>& slices)
 	{
+		if (!textureHandle.IsValid() || !textureHandle.Get() || !slices.empty())
+			return;
+
+		auto& rm = Engine::ResourceManager::Get();
+		const std::string filename = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
 		auto* texture = textureHandle.Get();
 		auto* rhiTexture = texture->GetRHITexture();
 		const float texW = rhiTexture ? static_cast<float>(rhiTexture->GetWidth()) : 0.0f;
 		const float texH = rhiTexture ? static_cast<float>(rhiTexture->GetHeight()) : 0.0f;
 
-		// A. 동일 폴더 내에 기존에 분할 저장된 .bamsprite.json 파일들이 있는지 스캔
 		std::filesystem::path parentDir = path.parent_path();
 		const auto stem = filename.ends_with(".bamtex.json") ? path.stem().stem() : path.stem();
 		const std::string stemName = Engine::WStrToStr(stem.wstring());
@@ -219,7 +143,6 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 			}
 		}
 
-		// B. 스캔된 기존 슬라이스가 없으면 기본 1개 전체 영역 슬라이스 생성
 		if (slices.empty() && texW > 0.0f && texH > 0.0f)
 		{
 			SpriteSliceInfo defaultSlice;
@@ -231,6 +154,103 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 		}
 	}
 
+}
+
+SpriteEditor::SpriteEditor()
+{
+	m_Name = L"Sprite Editor";
+	m_DisplayNameKey = "ResourceEditor.SpriteTitle";
+}
+
+SpriteEditor::~SpriteEditor()
+{
+	CancelAsyncOpen();
+}
+
+bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
+{
+	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
+	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	return ext == ".bamsprite" || lower.ends_with(".bamsprite.json") ||
+		ext == ".bamtex" || lower.ends_with(".bamtex.json") ||
+		ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
+		ext == ".bmp" || ext == ".dds" || ext == ".hdr";
+}
+
+bool SpriteEditor::CanSaveDocument() const
+{
+	return m_Open && !IsAsyncLoading() && m_TextureHandle.IsValid() && m_TextureHandle.Get() && !m_Slices.empty() &&
+		!Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath);
+}
+
+std::vector<std::filesystem::path> SpriteEditor::GetRetainedResourcePaths() const
+{
+	auto paths = ResourceEditorInterface::GetRetainedResourcePaths();
+	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty())
+		paths.emplace_back(texture->GetPath());
+	return paths;
+}
+
+bool SpriteEditor::PrepareAssetPathRelocation(AssetPathRelocation& relocation)
+{
+	if (const auto* texture = m_TextureHandle.Get(); texture && !texture->GetPath().empty() &&
+		!SameResourceEditorPath(texture->GetPath(), m_TargetResourcePath) && relocation.Affects(texture->GetPath()))
+		return false;
+	return PrepareTargetPathRelocation(relocation);
+}
+
+void SpriteEditor::OpenInSpriteMode(const std::filesystem::path& path)
+{
+	Focus();
+	if (SameResourceEditorPath(m_TargetResourcePath, path) && !IsAsyncLoading())
+		return;
+	RunWithDiscardConfirmation([this, path] {
+		if (!AsyncResourceOpenService::Get().RequestOpen(this, path))
+			SetTargetResource(path);
+	});
+}
+
+void SpriteEditor::OpenTextureDialog()
+{
+	std::wstring selectedPath;
+	const std::vector<FileDialogFilter> filters{ { StrToWStr(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } };
+	if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::SpriteOpen))
+	{
+		const std::filesystem::path targetPath(selectedPath);
+		if (!AsyncResourceOpenService::Get().RequestOpen(this, targetPath))
+			SetTargetResource(targetPath);
+	}
+}
+
+void SpriteEditor::ReleaseResourceDocument()
+{
+	CancelAsyncOpen();
+	m_TextureHandle.Reset();
+	m_Slices.clear();
+	m_SelectedSliceIndex = -1;
+	m_History.Clear();
+	m_ShowSliceModal = false;
+	m_ShowCreateAnimModal = false;
+	m_Zoom = 1.0f;
+	m_PanOffset = {};
+}
+
+void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
+{
+	CancelAsyncOpen();
+	const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
+	if (textureEditor && textureEditor->IsConversionOutput(path))
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+		return;
+	}
+	ResourceHandle<Engine::Texture> textureHandle;
+	std::vector<SpriteSliceInfo> slices;
+
+	LoadSpriteOrTextureResource(path, textureHandle, slices);
+	ScanOrCreateDefaultSlices(path, textureHandle, slices);
+
 	if (textureEditor && textureHandle.Get() && textureEditor->IsConversionOutput(textureHandle.Get()->GetPath()))
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(),
@@ -240,7 +260,7 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 	if (!textureHandle.IsValid() || !textureHandle.Get() || !textureHandle.Get()->GetRHITexture())
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(),
-			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Error);
 		return;
 	}
 
@@ -250,6 +270,154 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 	m_Slices = std::move(slices);
 	m_History.Reset(m_Slices);
 	m_SelectedSliceIndex = m_Slices.empty() ? -1 : 0;
+}
+
+bool SpriteEditor::BeginAsyncOpen(const std::filesystem::path& assetPath)
+{
+	if (!IsSupported(assetPath))
+		return false;
+
+	const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
+	if (textureEditor && textureEditor->IsConversionOutput(assetPath))
+		return false;
+
+	if (!RestoreSavedChanges())
+		return false;
+
+	CancelAsyncOpen();
+
+	m_AsyncTargetPath = assetPath;
+	m_AsyncStartTime = std::chrono::steady_clock::now();
+	m_AsyncLoadStart = m_AsyncStartTime;
+	m_AsyncLoadDurationMs = 0.0;
+	m_AsyncStage = EAsyncStage::WaitingBackground;
+	m_AsyncProgress = 0.08f;
+
+	Open();
+	Focus();
+	return true;
+}
+
+bool SpriteEditor::StepAsyncOpen(float maxTimeSeconds)
+{
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto stepDeadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+		std::chrono::duration<float>(maxTimeSeconds));
+
+	if (m_AsyncStage == EAsyncStage::WaitingBackground)
+	{
+		m_AsyncStage = EAsyncStage::LoadingResource;
+		m_AsyncProgress = 0.35f;
+		m_AsyncLoadStart = Clock::now();
+	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingResource)
+	{
+		const auto* textureEditor = dynamic_cast<TextureEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Texture Editor"));
+		if (textureEditor && textureEditor->IsConversionOutput(m_AsyncTargetPath))
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+			m_AsyncPendingTexture.Reset();
+			m_AsyncPendingSlices.clear();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+
+		ResourceHandle<Engine::Texture> textureHandle;
+		std::vector<SpriteSliceInfo> slices;
+		LoadSpriteOrTextureResource(m_AsyncTargetPath, textureHandle, slices);
+
+		if (textureEditor && textureHandle.Get() && textureEditor->IsConversionOutput(textureHandle.Get()->GetPath()))
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL("TextureEditor.ConversionTargetBusy"), ELogLevel::Warn);
+			m_AsyncPendingTexture.Reset();
+			m_AsyncPendingSlices.clear();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+		if (!textureHandle.IsValid() || !textureHandle.Get() || !textureHandle.Get()->GetRHITexture())
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+			m_AsyncPendingTexture.Reset();
+			m_AsyncPendingSlices.clear();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = m_TextureHandle.Get() ? EAsyncStage::None : EAsyncStage::Failed;
+			return true;
+		}
+
+		m_AsyncPendingTexture = std::move(textureHandle);
+		m_AsyncPendingSlices = std::move(slices);
+		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
+		m_AsyncStage = EAsyncStage::ScanningSlices;
+		m_AsyncProgress = 0.70f;
+
+		if (Clock::now() >= stepDeadline)
+			return false;
+	}
+
+	if (m_AsyncStage == EAsyncStage::ScanningSlices)
+	{
+		if (!RestoreSavedChanges())
+		{
+			m_AsyncPendingTexture.Reset();
+			m_AsyncPendingSlices.clear();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+
+		const auto scanStart = Clock::now();
+		auto targetPath = std::move(m_AsyncTargetPath);
+		auto pendingTexture = std::move(m_AsyncPendingTexture);
+		auto pendingSlices = std::move(m_AsyncPendingSlices);
+		ScanOrCreateDefaultSlices(targetPath, pendingTexture, pendingSlices);
+
+		ReleaseResourceDocument();
+		m_TargetResourcePath = targetPath;
+		m_TextureHandle = std::move(pendingTexture);
+		m_Slices = std::move(pendingSlices);
+		m_History.Reset(m_Slices);
+		m_SelectedSliceIndex = m_Slices.empty() ? -1 : 0;
+
+		const auto scanEnd = Clock::now();
+		const double scanMs = Milliseconds(scanEnd - scanStart).count();
+		const double totalMs = Milliseconds(scanEnd - m_AsyncStartTime).count();
+
+		EDITOR_LOG_INFO("[ResourceOpenTiming] Sprite {}: resource={:.2f}ms, slices={:.2f}ms, total={:.2f}ms (async)",
+			Engine::WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, scanMs, totalMs);
+
+		m_AsyncProgress = 1.0f;
+		m_AsyncStage = EAsyncStage::None;
+		return true;
+	}
+
+	return true;
+}
+
+void SpriteEditor::CancelAsyncOpen()
+{
+	AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
+	m_AsyncStage = EAsyncStage::None;
+	m_AsyncProgress = 0.0f;
+	m_AsyncTargetPath.clear();
+	m_AsyncPendingTexture.Reset();
+	m_AsyncPendingSlices.clear();
+}
+
+void SpriteEditor::DrawAsyncLoadingOverlay()
+{
+	DrawStandardAsyncLoadingOverlay(m_AsyncTargetPath, m_AsyncProgress,
+		m_AsyncStage == EAsyncStage::WaitingBackground, m_AsyncStage == EAsyncStage::Failed);
 }
 
 void SpriteEditor::FitView(float canvasW, float canvasH, float texW, float texH)
@@ -314,12 +482,12 @@ bool SpriteEditor::ApplyDocumentSnapshot(const std::vector<SpriteSliceInfo>& sna
 
 bool SpriteEditor::CanUndoDocument() const
 {
-	return m_TextureHandle.Get() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
+	return !IsAsyncLoading() && m_TextureHandle.Get() && m_History.CanUndo() && (!m_History.HasPendingEdit() || !IsHistoryGestureActive());
 }
 
 bool SpriteEditor::CanRedoDocument() const
 {
-	return m_TextureHandle.Get() && m_History.CanRedo();
+	return !IsAsyncLoading() && m_TextureHandle.Get() && m_History.CanRedo();
 }
 
 void SpriteEditor::UndoDocument()
@@ -334,9 +502,10 @@ void SpriteEditor::RedoDocument()
 
 void SpriteEditor::DrawCustomToolbar()
 {
+	const bool loading = IsAsyncLoading();
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
-		if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str()))
+		if (ImGui::MenuItem((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str(), nullptr, false, !loading))
 			RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 		ImGui::Separator();
 		DrawSaveMenuItem();
@@ -345,7 +514,7 @@ void SpriteEditor::DrawCustomToolbar()
 		ImGui::EndMenu();
 	}
 
-	ImGui::BeginDisabled(!m_TextureHandle.Get() ||
+	ImGui::BeginDisabled(loading || !m_TextureHandle.Get() ||
 		Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath));
 	if (ImGui::BeginMenu(LOCAL_CSTR("SpriteEditor.SliceMethod")))
 	{
@@ -381,6 +550,7 @@ void SpriteEditor::DrawCustomToolbar()
 
 void SpriteEditor::DrawCustomQuickAccess()
 {
+	if (IsAsyncLoading()) return;
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Button("SpriteEditor.OpenTexture", ICON_FA_FOLDER_OPEN, "SpriteEditor.OpenTexture"))
 		RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
@@ -592,7 +762,10 @@ void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
 		{
 			const std::filesystem::path droppedPath(static_cast<const wchar_t*>(payload->Data));
 			if (IsSupported(droppedPath))
-				RunWithDiscardConfirmation([this, droppedPath] { SetTargetResource(droppedPath); });
+				RunWithDiscardConfirmation([this, droppedPath] {
+					if (!AsyncResourceOpenService::Get().RequestOpen(this, droppedPath))
+						SetTargetResource(droppedPath);
+				});
 		}
 		ImGui::EndDragDropTarget();
 	}

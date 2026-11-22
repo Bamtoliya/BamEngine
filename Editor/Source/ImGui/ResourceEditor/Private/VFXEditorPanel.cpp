@@ -1,4 +1,6 @@
 ﻿#include "VFXEditorPanel.h"
+#include "AsyncResourceOpenService.h"
+#include "NotificationManager.h"
 #include <utility>
 #include "EffectDocumentFile.h"
 #include "EditorUI.h"
@@ -165,6 +167,7 @@ VFXEditorPanel::VFXEditorPanel()
 
 VFXEditorPanel::~VFXEditorPanel()
 {
+	CancelAsyncOpen();
 	ReleaseResourceDocument();
 	m_PreviewWidget.Free();
 }
@@ -178,6 +181,7 @@ bool VFXEditorPanel::IsSupported(const std::filesystem::path& assetPath) const
 
 void VFXEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 {
+	CancelAsyncOpen();
 	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
 	auto& manager = Engine::ResourceManager::Get();
 	auto candidate = manager.GetResourceHandle<Engine::CompositeEffect>(path);
@@ -202,6 +206,131 @@ void VFXEditorPanel::SetTargetResource(const std::filesystem::path& assetPath)
 	m_EffectHandle = std::move(candidate);
 	m_IsLooping = m_EffectHandle.Get()->IsLooping();
 	SetupPreview();
+}
+
+bool VFXEditorPanel::BeginAsyncOpen(const std::filesystem::path& assetPath)
+{
+	if (!IsSupported(assetPath))
+		return false;
+
+	if (!RestoreSavedChanges())
+		return false;
+
+	CancelAsyncOpen();
+
+	m_AsyncTargetPath = assetPath;
+	m_AsyncStartTime = std::chrono::steady_clock::now();
+	m_AsyncLoadStart = m_AsyncStartTime;
+	m_AsyncLoadDurationMs = 0.0;
+	m_AsyncStage = EAsyncStage::WaitingBackground;
+	m_AsyncProgress = 0.08f;
+
+	Open();
+	Focus();
+	return true;
+}
+
+bool VFXEditorPanel::StepAsyncOpen(float maxTimeSeconds)
+{
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto stepDeadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+		std::chrono::duration<float>(maxTimeSeconds));
+
+	if (m_AsyncStage == EAsyncStage::WaitingBackground)
+	{
+		m_AsyncStage = EAsyncStage::LoadingResource;
+		m_AsyncProgress = 0.35f;
+		m_AsyncLoadStart = Clock::now();
+	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingResource)
+	{
+		const auto path = Engine::PlatformPath::ToProjectRelative(m_AsyncTargetPath).wstring();
+		auto& manager = Engine::ResourceManager::Get();
+		auto candidate = manager.GetResourceHandle<Engine::CompositeEffect>(path);
+		if (!candidate.IsValid())
+			candidate = Engine::ResourceHandle<Engine::CompositeEffect>(manager.LoadFile(path));
+		if (!candidate.Get())
+		{
+			auto* effect = Engine::CompositeEffect::Create();
+			if (effect)
+			{
+				const auto resolved = Engine::PlatformPath::ResolveProjectRelative(m_AsyncTargetPath);
+				if (effect->LoadFromFile(resolved.wstring()))
+					candidate = manager.AddResource<Engine::CompositeEffect>(path, effect);
+				else
+					manager.DestroyResource(effect);
+			}
+		}
+
+		if (!candidate.Get())
+		{
+			NotificationManager::Get().AddNotification(GetDisplayName(),
+				LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+			m_AsyncPendingEffect.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = m_EffectHandle.Get() ? EAsyncStage::None : EAsyncStage::Failed;
+			return true;
+		}
+
+		m_AsyncPendingEffect = std::move(candidate);
+		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
+		m_AsyncStage = EAsyncStage::SettingUpPreview;
+		m_AsyncProgress = 0.70f;
+
+		if (Clock::now() >= stepDeadline)
+			return false;
+	}
+
+	if (m_AsyncStage == EAsyncStage::SettingUpPreview)
+	{
+		if (!RestoreSavedChanges())
+		{
+			m_AsyncPendingEffect.Reset();
+			m_AsyncTargetPath.clear();
+			m_AsyncProgress = 0.0f;
+			m_AsyncStage = EAsyncStage::None;
+			return true;
+		}
+
+		const auto previewStart = Clock::now();
+		auto targetPath = std::move(m_AsyncTargetPath);
+		auto pendingEffect = std::move(m_AsyncPendingEffect);
+		ReleaseResourceDocument();
+		m_TargetResourcePath = targetPath;
+		m_EffectHandle = std::move(pendingEffect);
+		m_IsLooping = m_EffectHandle.Get()->IsLooping();
+		SetupPreview();
+		const auto previewEnd = Clock::now();
+		const double previewMs = Milliseconds(previewEnd - previewStart).count();
+		const double totalMs = Milliseconds(previewEnd - m_AsyncStartTime).count();
+
+		EDITOR_LOG_INFO("[ResourceOpenTiming] VFX {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms (async)",
+			WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
+
+		m_AsyncProgress = 1.0f;
+		m_AsyncStage = EAsyncStage::None;
+		return true;
+	}
+
+	return true;
+}
+
+void VFXEditorPanel::CancelAsyncOpen()
+{
+	AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
+	m_AsyncStage = EAsyncStage::None;
+	m_AsyncProgress = 0.0f;
+	m_AsyncTargetPath.clear();
+	m_AsyncPendingEffect.Reset();
+}
+
+void VFXEditorPanel::DrawAsyncLoadingOverlay()
+{
+	DrawStandardAsyncLoadingOverlay(m_AsyncTargetPath, m_AsyncProgress,
+		m_AsyncStage == EAsyncStage::WaitingBackground, m_AsyncStage == EAsyncStage::Failed);
 }
 
 static void ApplySavedCompositeEffect(Engine::CompositeEffect& effect, Engine::CompositeEffect& saved)
@@ -232,6 +361,7 @@ bool VFXEditorPanel::RestoreSavedResource()
 
 void VFXEditorPanel::ReleaseResourceDocument()
 {
+	CancelAsyncOpen();
 	StopPreviewSounds();
 	auto* scene = m_PreviewWidget.GetScene();
 	if (scene && m_PreviewEntity) (void)scene->DestroyEntity(*m_PreviewEntity);
@@ -484,7 +614,7 @@ void VFXEditorPanel::InvalidateTimelinePreview()
 
 void VFXEditorPanel::Update(f32 dt)
 {
-	if (!m_Open) return;
+	if (!m_Open || IsAsyncLoading()) return;
 	auto* scene = m_PreviewWidget.GetScene();
 	if (m_PreviewEntity && scene && m_EffectHandle.IsValid())
 	{
@@ -543,6 +673,7 @@ void VFXEditorPanel::Update(f32 dt)
 
 void VFXEditorPanel::NewEffect()
 {
+	CancelAsyncOpen();
 	Engine::CompositeEffectCreateDesc desc;
 	desc.totalDuration = 2.0f;
 	desc.isLooping = false;
@@ -569,7 +700,9 @@ void VFXEditorPanel::OpenEffect()
 	std::wstring openPath;
 	if (FileDialogs::OpenFileDialog(openPath, { { L"Visual Effect (*.bamvfx.json, *.bamvfx)", L"*.bamvfx.json;*.bamvfx;*.vfx" } }, L"", EFileDialogContext::General))
 	{
-		SetTargetResource(std::filesystem::path(openPath));
+		const std::filesystem::path selectedPath(openPath);
+		if (!AsyncResourceOpenService::Get().RequestOpen(this, selectedPath))
+			SetTargetResource(selectedPath);
 	}
 }
 
@@ -632,12 +765,13 @@ void VFXEditorPanel::DrawCustomContent()
 
 void VFXEditorPanel::DrawCustomToolbar()
 {
-	const bool hasResource = m_EffectHandle.Get() != nullptr;
+	const bool loading = IsAsyncLoading();
+	const bool hasResource = !loading && (m_EffectHandle.Get() != nullptr);
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.File")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuNew").c_str(), nullptr)) RunWithDiscardConfirmation([this] { NewEffect(); });
-		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuOpen").c_str(), nullptr)) RunWithDiscardConfirmation([this] { OpenEffect(); });
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuNew").c_str(), nullptr, false, !loading)) RunWithDiscardConfirmation([this] { NewEffect(); });
+		if (ImGui::MenuItem(LOCAL_LABEL("ParticleEditor.MenuOpen").c_str(), nullptr, false, !loading)) RunWithDiscardConfirmation([this] { OpenEffect(); });
 		DrawSaveMenuItem();
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.SaveAs").c_str(), nullptr, false, hasResource)) SaveEffectAs();
 		ImGui::Separator();
@@ -654,6 +788,7 @@ void VFXEditorPanel::DrawCustomToolbar()
 
 void VFXEditorPanel::DrawCustomQuickAccess()
 {
+	if (IsAsyncLoading()) return;
 	const bool hasResource = m_EffectHandle.IsValid() && (m_EffectHandle.Get() != nullptr);
 	auto* effect = m_EffectHandle.Get();
 
@@ -1670,7 +1805,7 @@ bool VFXEditorPanel::CanExecuteTimelineAction(EditorUI::TimelineAction action) c
 {
 	using enum EditorUI::TimelineAction;
 	auto* effect = m_EffectHandle.Get();
-	if (!m_Open || !effect || m_Timeline.Drag || m_CurveModal.IsOpen()) return false;
+	if (!m_Open || !effect || IsAsyncLoading() || m_Timeline.Drag || m_CurveModal.IsOpen()) return false;
 	if (action == Undo) return m_InspectorEdit.has_value() || m_TimelineHistory.CanUndo();
 	if (action == Redo) return !m_InspectorEdit && m_TimelineHistory.CanRedo();
 	if (action == Delete) return VisitVFXTrack(*effect, m_SelectedTrack, [](auto&, std::size_t) {});

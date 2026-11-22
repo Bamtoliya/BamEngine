@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 #include <string>
+#include <chrono>
 
 BEGIN(Editor)
 
@@ -34,11 +35,16 @@ public:
 	bool PrepareAssetPathRelocation(AssetPathRelocation& relocation) override;
 	std::vector<std::filesystem::path> GetRetainedResourcePaths() const override;
 	SpriteEditor();
-	virtual ~SpriteEditor() = default;
+	virtual ~SpriteEditor() override;
 
 public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override;
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool BeginAsyncOpen(const std::filesystem::path& assetPath) override;
+	bool StepAsyncOpen(float maxTimeSeconds = 0.002f) override;
+	bool IsAsyncLoading() const override { return m_AsyncStage != EAsyncStage::None; }
+	void DrawAsyncLoadingOverlay() override;
+	void CancelAsyncOpen() override;
 	virtual bool HasUnsavedResourceChanges() const override { return m_History.IsDirty(); }
 	void SaveResource() override { ApplySlices(); }
 	bool CanSaveDocument() const;
@@ -89,6 +95,24 @@ private:
 	SpriteSliceParameters m_SliceParams;
 	SpriteAutoAnimParameters m_AnimParams;
 	char m_SliceSearch[64] = {};
+
+	// 비동기 열기 상태
+	enum class EAsyncStage
+	{
+		None,
+		WaitingBackground,
+		LoadingResource,
+		ScanningSlices,
+		Failed
+	};
+	EAsyncStage m_AsyncStage = EAsyncStage::None;
+	float m_AsyncProgress = 0.0f;
+	std::filesystem::path m_AsyncTargetPath;
+	ResourceHandle<Engine::Texture> m_AsyncPendingTexture;
+	std::vector<SpriteSliceInfo> m_AsyncPendingSlices;
+	std::chrono::steady_clock::time_point m_AsyncStartTime{};
+	std::chrono::steady_clock::time_point m_AsyncLoadStart{};
+	double m_AsyncLoadDurationMs = 0.0;
 };
 
 END

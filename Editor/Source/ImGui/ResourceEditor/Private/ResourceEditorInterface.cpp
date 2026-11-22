@@ -1,4 +1,5 @@
 ﻿#include "ResourceEditorInterface.h"
+#include "AsyncResourceOpenService.h"
 #include "IconsFontAwesome7.h"
 #include "AssetPathRelocation.h"
 #include "NotificationManager.h"
@@ -6,9 +7,11 @@
 #include "TimelineView.h"
 #include <utility>
 #include <algorithm>
+#include <cmath>
 
 ResourceEditorInterface::~ResourceEditorInterface()
 {
+    AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
     CancelAsyncOpen();
 }
 
@@ -36,6 +39,7 @@ bool ResourceEditorInterface::RestoreSavedChanges()
 
 void ResourceEditorInterface::CloseResourceDocument()
 {
+    AsyncResourceOpenService::Get().CancelRequestsForEditor(this);
     CancelAsyncOpen();
     if (!RestoreSavedChanges()) return;
     ReleaseResourceDocument();
@@ -144,6 +148,12 @@ void ResourceEditorInterface::DrawResourceFrame()
 
 void ResourceEditorInterface::DrawAsyncLoadingOverlay()
 {
+    DrawStandardAsyncLoadingOverlay(m_TargetResourcePath, 0.0f, true, false);
+}
+
+void ResourceEditorInterface::DrawStandardAsyncLoadingOverlay(
+    const std::filesystem::path& targetPath, float progress, bool indeterminate, bool failed)
+{
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     if (avail.x <= 1.0f || avail.y <= 1.0f) return;
 
@@ -151,8 +161,15 @@ void ResourceEditorInterface::DrawAsyncLoadingOverlay()
     ImGui::GetWindowDrawList()->AddRectFilled(
         origin, ImVec2(origin.x + avail.x, origin.y + avail.y), IM_COL32(22, 24, 28, 255), 4.0f);
 
+    if (failed)
+    {
+        EditorUI::EmptyState("ModelImport.PreviewFailed");
+        return;
+    }
+
     const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 320.0f);
-    const std::string filename = !m_TargetResourcePath.empty() ? WStrToStr(m_TargetResourcePath.filename().wstring()) : "";
+    const auto& displayPath = !targetPath.empty() ? targetPath : m_TargetResourcePath;
+    const std::string filename = !displayPath.empty() ? WStrToStr(displayPath.filename().wstring()) : "";
     const std::string pendingText = filename.empty()
         ? LOCAL("ModelImport.PreviewPending")
         : LOCAL("ModelImport.PreviewPending") + " (" + filename + ")";
@@ -166,7 +183,9 @@ void ResourceEditorInterface::DrawAsyncLoadingOverlay()
 
     ImGui::Spacing();
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(12.0f, (avail.x - barWidth) * 0.5f));
-    const float displayProgress = 0.15f + 0.35f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f));
+    const float displayProgress = indeterminate
+        ? 0.08f + 0.15f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f))
+        : std::clamp(progress, 0.0f, 1.0f);
     ImGui::ProgressBar(displayProgress, ImVec2(barWidth, 0.0f));
 }
 
