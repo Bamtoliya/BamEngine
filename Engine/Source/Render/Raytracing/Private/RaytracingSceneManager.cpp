@@ -1,6 +1,10 @@
 #include "RaytracingSceneManager.h"
 #include "RHI.h"
 #include "RHIBuffer.h"
+#include "RHITexture.h"
+#include "Texture.h"
+#include "MaterialInstance.h"
+#include "Vertex.h"
 #include "Scene.h"
 #include "ComponentEnable.h"
 #include "WorldComponents.h"
@@ -37,7 +41,7 @@ EResult RaytracingSceneManager::Initialize(void* arg)
 void RaytracingSceneManager::Free()
 {
 	for (auto& [scene, entry] : m_TopLevels)
-		Safe_Release(entry.AccelerationStructure);
+		ReleaseTopLevel(entry);
 	m_TopLevels.clear();
 
 	for (auto& [key, entry] : m_BottomLevels)
@@ -56,12 +60,17 @@ bool RaytracingSceneManager::IsSupported() const
 	return m_RHI && m_RHI->GetCapabilities().SupportsInlineRaytracing;
 }
 
-void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID)
+void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID, bool reflections)
 {
 	if (!scene || !IsSupported())
 		return;
-	if (!IsSceneRequested(scene, viewID))
-		m_RequestedScenes.push_back({ scene, viewID });
+	for (auto& request : m_RequestedScenes)
+	{
+		if (request.Source != scene || request.ViewID != viewID) continue;
+		request.Reflections |= reflections;
+		return;
+	}
+	m_RequestedScenes.push_back({ scene, viewID, reflections });
 }
 
 bool RaytracingSceneManager::IsSceneRequested(const Scene* scene, uint32 viewID) const
@@ -86,7 +95,7 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 		{
 			TopLevelEntry& entry = m_TopLevels[TopLevelKey{ request.Source, request.ViewID }];
 			entry.LastRequestedFrame = m_FrameCounter;
-			const EResult result = BuildScene(*request.Source, request.ViewID, entry, stats);
+			const EResult result = BuildScene(*request.Source, request.ViewID, request.Reflections, entry, stats);
 			entry.BuiltThisFrame = IsSuccess(result);
 			if (IsFailure(result))
 			{
@@ -118,7 +127,7 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 			++it;
 			continue;
 		}
-		Safe_Release(it->second.AccelerationStructure);
+		ReleaseTopLevel(it->second);
 		it = m_TopLevels.erase(it);
 	}
 
@@ -174,10 +183,96 @@ const RaytracedCasterSet* RaytracingSceneManager::GetTopLevelCasters(const Scene
 	return &it->second.Casters;
 }
 
-EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevelEntry& entry, Stats& stats)
+uint32 RaytracingSceneManager::GetInstanceTableIndex(const Scene* scene, uint32 viewID) const
+{
+	const auto it = m_TopLevels.find(TopLevelKey{ scene, viewID });
+	if (it == m_TopLevels.end() || !it->second.BuiltThisFrame || !it->second.AccelerationStructure)
+		return RHI::INVALID_BINDLESS_INDEX;
+	return it->second.InstanceTableIndex;
+}
+
+void RaytracingSceneManager::ReleaseTopLevel(TopLevelEntry& entry)
+{
+	Safe_Release(entry.AccelerationStructure);
+	for (auto*& table : entry.InstanceTables)
+		Safe_Release(table);
+}
+
+bool RaytracingSceneManager::BuildInstanceData(const Mesh& mesh, const MaterialInterface& material, RaytracingInstanceData& data) const
+{
+	data.PositionBuffer = m_RHI->GetBindlessIndex(mesh.GetPositionBuffer());
+	data.MaterialBuffer = m_RHI->GetBindlessIndex(mesh.GetMaterialBuffer());
+	data.PositionStride = mesh.GetStreamStride(EMeshStream::Position);
+	data.MaterialStride = mesh.GetStreamStride(EMeshStream::Material);
+	if (data.PositionBuffer == RHI::INVALID_BINDLESS_INDEX || data.MaterialBuffer == RHI::INVALID_BINDLESS_INDEX)
+		return false;
+	if (mesh.GetIndexBuffer())
+	{
+		data.IndexBuffer = m_RHI->GetBindlessIndex(mesh.GetIndexBuffer());
+		data.IndexStride = mesh.GetIndexStride();
+		if (data.IndexBuffer == RHI::INVALID_BINDLESS_INDEX)
+			return false;
+	}
+
+	MaterialConstants constants;
+	material.BuildMaterialConstants(constants);
+	data.MaterialFlags = constants.materialFlags;
+	data.Roughness = constants.roughness;
+	data.Metallic = constants.metallic;
+	data.BaseColor = constants.baseColor;
+	data.EmissiveColor = constants.emissiveColor;
+	data.AmbientOcclusion = constants.ao;
+
+	const auto* instance = dynamic_cast<const MaterialInstance*>(&material);
+	const auto* base = instance ? instance->GetBaseMaterial() : nullptr;
+	const auto findTexture = [&](uint32 slot) -> uint32
+		{
+			const Texture* texture = material.GetTextureBySlot(slot);
+			if (!texture && base && !material.HasTextureBindingBySlot(slot))
+				texture = base->GetTextureBySlot(slot);
+			// 스트리밍 중이면 지금 올라가 있는 밉을 쓴다.
+			return texture ? m_RHI->GetBindlessIndex(texture->GetAvailableRHITexture()) : RHI::INVALID_BINDLESS_INDEX;
+		};
+	data.BaseColorTexture = findTexture(0);
+	data.PbrTexture = findTexture(2);
+	data.EmissiveTexture = findTexture(3);
+	return true;
+}
+
+bool RaytracingSceneManager::UploadInstanceTable(TopLevelEntry& entry)
+{
+	const uint32 frameIndex = m_RHI->GetFrameResourceIndex();
+	if (frameIndex >= MAX_SWAPCHAIN_BUFFERS)
+		return false;
+
+	const auto count = static_cast<uint32>(m_InstanceDataScratch.size());
+	auto*& table = entry.InstanceTables[frameIndex];
+	auto& capacity = entry.InstanceTableCapacity[frameIndex];
+	if (!table || capacity < count)
+	{
+		const uint32 newCapacity = std::max({ count, capacity * 2, 64u });
+		std::vector<RaytracingInstanceData> zeros(newCapacity);
+		auto* buffer = m_RHI->CreateBuffer(zeros.data(), newCapacity * static_cast<uint32>(sizeof(RaytracingInstanceData)),
+			sizeof(RaytracingInstanceData), ERHIBufferType::Structured);
+		if (!buffer)
+			return false;
+		Safe_Release(table);
+		table = buffer;
+		capacity = newCapacity;
+	}
+	if (count > 0)
+		table->SetData(m_InstanceDataScratch.data(), count * static_cast<uint32>(sizeof(RaytracingInstanceData)));
+	entry.InstanceTableIndex = m_RHI->GetBindlessIndex(table);
+	return entry.InstanceTableIndex != RHI::INVALID_BINDLESS_INDEX;
+}
+
+EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool reflections, TopLevelEntry& entry, Stats& stats)
 {
 	auto& world = scene.GetRegistry();
 	m_InstanceScratch.clear();
+	m_InstanceDataScratch.clear();
+	entry.InstanceTableIndex = RHI::INVALID_BINDLESS_INDEX;
+	reflections = reflections && m_RHI->GetCapabilities().SupportsBindlessResources;
 	entry.Casters.Begin();
 	entry.InstanceCount = 0;
 	entry.UnsupportedCasterCount = 0;
@@ -191,7 +286,8 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevel
 		if (!IsComponentEnabled<StaticMeshRendererComponent>(world, entity)) continue;
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
 			continue;
-		if (!meshRenderer.castShadow) continue;
+		const bool castsShadow = meshRenderer.castShadow;
+		if (!castsShadow && !reflections) continue;
 
 		Mesh* mesh = meshRenderer.meshHandle.Get();
 		MaterialInterface* material = meshRenderer.materialHandle.Get();
@@ -200,7 +296,7 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevel
 		// 스플라인 배치·변형 메시는 프레임마다 형상이 달라질 수 있어 섀도맵에 맡긴다.
 		if (TryGetEnabledComponent<SplineMeshComponent>(world, entity))
 		{
-			++entry.UnsupportedCasterCount;
+			if (castsShadow) ++entry.UnsupportedCasterCount;
 			continue;
 		}
 
@@ -209,31 +305,46 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevel
 		mesh = ResidentMeshLODs(mesh, lodGroup).Find(lodGroup ? lodGroup->viewLODs.Get(viewID) : 0);
 		if (!mesh)
 		{
-			++entry.PendingCasterCount;
+			if (castsShadow) ++entry.PendingCasterCount;
 			continue;
 		}
 
-		if (!IsShadowCasterSupported(mesh, material))
-		{
+		const bool shadowSupported = castsShadow && IsShadowCasterSupported(mesh, material);
+		if (castsShadow && !shadowSupported)
 			++entry.UnsupportedCasterCount;
+
+		RaytracingInstanceData instanceData;
+		const bool reflectionSupported = reflections && IsReflectionSupported(mesh, material) && BuildInstanceData(*mesh, *material, instanceData);
+		if (!shadowSupported && !reflectionSupported)
 			continue;
-		}
 
 		// TLAS에 넣지 못한 캐스터는 Casters에 없으므로 섀도맵에 남는다.
 		RHIAccelerationStructure* bottomLevel = nullptr;
 		const EBottomLevelState state = GetOrBuildBottomLevel(*mesh, stats, bottomLevel);
 		if (state != EBottomLevelState::Ready)
 		{
-			++(state == EBottomLevelState::Pending ? entry.PendingCasterCount : entry.FailedCasterCount);
+			if (shadowSupported)
+				++(state == EBottomLevelState::Pending ? entry.PendingCasterCount : entry.FailedCasterCount);
 			continue;
 		}
 
 		RHIRaytracingInstanceDesc instance;
 		instance.worldMatrix = worldTransform.worldMatrix;
 		instance.bottomLevel = bottomLevel;
-		instance.instanceID = static_cast<uint32>(entt::to_integral(entity));
+		instance.instanceMask = 0;
+		if (shadowSupported)
+			instance.instanceMask |= RAYTRACING_MASK_SHADOW;
+		if (reflectionSupported)
+		{
+			instance.instanceMask |= RAYTRACING_MASK_REFLECTION;
+			if (castsShadow) instance.instanceMask |= RAYTRACING_MASK_REFLECTION_SHADOW;
+			instance.forceNonOpaque = material->GetBlendMode() == EBlendMode::Masked;
+			instance.instanceID = static_cast<uint32>(m_InstanceDataScratch.size());
+			m_InstanceDataScratch.push_back(instanceData);
+		}
 		m_InstanceScratch.push_back(instance);
-		entry.Casters.Add(static_cast<uint32>(entt::to_entity(entity)));
+		if (shadowSupported)
+			entry.Casters.Add(static_cast<uint32>(entt::to_entity(entity)));
 	}
 
 	// 스킨드 캐스터는 1차 범위에서 섀도맵이 담당한다(통계만 집계).
@@ -250,7 +361,12 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevel
 	const EResult result = m_RHI->BuildTopLevelAS(entry.AccelerationStructure, m_InstanceScratch.data(),
 		static_cast<uint32>(m_InstanceScratch.size()));
 	if (IsSuccess(result))
+	{
 		entry.InstanceCount = static_cast<uint32>(m_InstanceScratch.size());
+		// 표를 만들지 못하면 이번 프레임의 반사만 쓰지 않는다.
+		if (reflections && !UploadInstanceTable(entry))
+			entry.InstanceTableIndex = RHI::INVALID_BINDLESS_INDEX;
+	}
 	return result;
 }
 #pragma endregion
@@ -340,6 +456,17 @@ void RaytracingSceneManager::PruneBottomLevels()
 #pragma endregion
 
 #pragma region Caster Policy
+bool RaytracingSceneManager::IsReflectionSupported(const Mesh* mesh, const MaterialInterface* material)
+{
+	if (!mesh || !material || mesh->IsDynamic() || mesh->IsSkinned() || mesh->GetTopology() != ETopology::TriangleList)
+		return false;
+	if (!mesh->GetPositionBuffer() || !mesh->GetMaterialBuffer() || mesh->GetVertexCount() == 0 ||
+		mesh->GetStreamStride(EMeshStream::Material) != sizeof(VertexMaterial))
+		return false;
+	const EBlendMode blendMode = material->GetBlendMode();
+	return blendMode == EBlendMode::Opaque || blendMode == EBlendMode::Masked;
+}
+
 bool RaytracingSceneManager::IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material)
 {
 	if (!mesh || !material)

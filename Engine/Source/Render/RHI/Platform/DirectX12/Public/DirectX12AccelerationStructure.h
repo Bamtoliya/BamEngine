@@ -5,6 +5,7 @@
 
 BEGIN(Engine)
 class DirectX12RHI;
+class DirectX12Buffer;
 
 // D3D12 BLAS/TLAS. 결과 버퍼는 RAYTRACING_ACCELERATION_STRUCTURE 상태로 생성되어 그 상태를 유지한다.
 // BLAS는 한 번 빌드한 뒤 재사용하고, TLAS는 결과·스크래치·인스턴스 버퍼를 재빌드마다 재사용한다.
@@ -20,6 +21,8 @@ public:
 	static EResult BuildTopLevel(DirectX12RHI* rhi, RHIAccelerationStructure*& topLevel,
 		const RHIRaytracingInstanceDesc* instances, uint32 instanceCount);
 	virtual void Free() override;
+	// 이번 프레임에 상태를 바꾼 정적 버퍼를 BLAS 빌드와 Compute SRV가 읽을 수 있게 한다.
+	static void TransitionToShaderRead(DirectX12RHI& rhi, ID3D12GraphicsCommandList* commandList, DirectX12Buffer& buffer);
 public:
 	virtual void* GetNativeHandle() const override { return m_Result.Get(); }
 	D3D12_GPU_VIRTUAL_ADDRESS GetGPUAddress() const { return m_Result ? m_Result->GetGPUVirtualAddress() : 0; }

@@ -52,7 +52,7 @@ struct LightingPassData
     uint CascadeShadowLight;
     uint SpotShadowLight;
     uint PointShadowLight;
-    uint _ShadowLightPad;
+    uint UseRaytracedReflections; // 1이면 t15의 반사를 환경광 반사 대신 합성한다
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -66,6 +66,8 @@ StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
 StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
 // 광원별 레이트레이싱 그림자 가시성(1 = 빛, 0 = 차폐). TLAS에 들어간 정적 불투명 캐스터만 반영한다.
 Texture2D<float4> gRaytracedShadowMask : register(t14, space3);
+// 거울 방향 반사(rgb)와 합성 비율(a). 비율이 0이면 기존 환경광 반사를 쓴다.
+Texture2D<float4> gRaytracedReflection : register(t15, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -815,7 +817,16 @@ float4 main(PS_INPUT input) : SV_TARGET
     float ambientFloor = max(gLightingData.ShadowAmbientFloor, 0.02f);
     diffuseIBL = max(diffuseIBL, kd * albedo * ambientFloor * gLightingData.IBLIntensity);
 
-    float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion;
+    // ── 5. 레이트레이싱 반사: 추적한 만큼 환경광 반사를 대신한다. 실제 가림을 추적했으므로 AO는 곱하지 않는다. ──
+    float3 raytracedSpecular = float3(0.0f, 0.0f, 0.0f);
+    if (gLightingData.UseRaytracedReflections != 0u)
+    {
+        float4 reflection = gRaytracedReflection.Load(pixelCoord);
+        raytracedSpecular = reflection.rgb * EnvBRDFApprox(f0, roughness, normalDotView) * reflection.a;
+        specularIBL *= 1.0f - reflection.a;
+    }
+
+    float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion + raytracedSpecular;
     float3 color = ambient + directLighting + emission;
     float4 fog = CalculateFog(worldPosition, commonData.CameraPos);
     color = lerp(color, fog.rgb, fog.a);

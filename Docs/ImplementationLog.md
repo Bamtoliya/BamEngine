@@ -2,6 +2,17 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-23] 레이트레이싱 반사 1차: 매끈한 면
+
+- **바인드리스.** Compute가 텍스처(`space4`)와 정점·인덱스 버퍼(`space5`)를 번호로 읽는다. 루트 시그니처에 테이블 두 개와 정적 샘플러를 더했고 PSO 캐시 버전을 올렸다. Resource Binding Tier 2 이상에서만 쓴다.
+- **추적.** 조명 패스에서 전체 해상도로 거울 방향 광선을 하나 쏜다. 닿은 면은 재질 색·발광, 확산 직접광(광원 버퍼 앞 64개), 대표 방향광의 그림자 광선 하나와 환경광을 계산한다. 닿지 않으면 기존 환경광 반사를 쓴다.
+- **대상.** 정적 메시의 불투명·Masked 재질이다. 그림자와 TLAS를 함께 쓰고 광선 마스크로 구분한다. Masked는 광선마다 알파를 확인한다.
+- **설정.** 기본 꺼짐이며 프로젝트 → 그래픽 → 뷰포트 순서로 덮어쓴다. Client는 프로젝트 설정만 쓴다.
+- **검사.** `RaytracedShadowSettingsCheck`에 광선 마스크와 반사 설정 순서를, `EditorSettingsCheck`에 저장을 추가했다.
+- **확인된 결과.** 사용자가 시험 씬에서 Scene View와 Game View(설정으로 켬)의 반사를 확인했다. 화면에서 화면 밖 물체와 Masked 패널의 반사를 확인했고 로그에 WARN·ERROR가 없었다.
+- **확인하지 못한 것.** GPU 시간, Release, Client, CTest 실행 기록.
+- **남은 한계.** 스킨드·동적·스플라인 메시, 지형, 반투명은 반사에 나타나지 않는다. 반사 속 면은 정반사 하이라이트와 법선 맵이 없고 금속은 환경광으로 근사한다. 음수 배율 정적 메시는 래스터에서 안쪽 면이 보이는 기존 결함이 있다.
+
 ### [2026-11-23] 거리 기반 메시·텍스처 스트리밍
 
 - **읽기.** `ResourceStreamer`가 자리만 등록한 메시와 텍스처를 작업 스레드에서 이어 읽는다. 메시는 화면에 필요한 LOD만, 텍스처는 가장 가까운 거리와 메시의 UV 밀도로 정한 밉까지 올린다. 화면 비중이 큰 것부터 읽고 카메라 뒤에 있는 것은 미룬다. UV를 바꿀 수 있는 셰이더와 정적 메시가 아닌 곳의 텍스처는 가장 자세한 밉을 쓴다.
@@ -11,7 +22,7 @@ This document tracks implementation details, architectural decisions, and techni
 - **결함 수정.** 읽는 중인 재질의 썸네일이 단색이나 64px 상태로 저장될 수 있었다. 썸네일은 원본을 읽은 뒤 그린다.
 - **검사.** `StreamingPolicyCheck`를 추가하고 `ResourcePreloaderCheck`를 스트리머와 밉 캐시에 맞춰 바꿨다.
 - **확인된 결과.** 사용자가 통과를 알렸다. Debug 로그 1회에서 씬을 연 직후 메시 626개 중 199개(224MB)를 올렸고, 한도 16MB에서 461번 내려 한도를 지켰으며 512MB로 되돌리면 226MB까지 다시 올렸다. 실패와 WARN·ERROR는 없었다. 밉 캐시는 214MB였다.
-- **확인하지 못한 것.** 기록 시점에 `StreamingPolicyCheck` 실행 파일과 CTest 실행 기록이 없고, 캐시를 쓰는 두 번째 실행, Client, Release는 로그가 없다.
+- **확인하지 못한 것.** 기록 시점에 `StreamingPolicyCheck` 실행 파일과 CTest 실행 기록이 없고, Client, Release는 로그가 없다. 캐시를 쓰는 실행은 이후 로그에서 `660 deferred (34 cached)`, 리소스 준비 477ms로 확인했다(이전 첫 실행 831ms).
 - **남은 한계.** 밉을 압축하지 않아 디스크를 많이 쓴다. `.dds`·`.bamtex`와 `.bampak` 안의 파일은 미루지 않는다.
 
 ### [2026-11-23] 씬을 먼저 열고 자세한 리소스를 이어 읽기

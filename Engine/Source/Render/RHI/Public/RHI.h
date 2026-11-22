@@ -166,6 +166,15 @@ public:
     virtual EResult ResourceBarrierUAV(RHITexture* texture) { return EResult::NotImplemented; }
 #pragma endregion
 
+#pragma region Bindless
+public:
+    static constexpr uint32 INVALID_BINDLESS_INDEX = 0xFFFFFFFFu;
+    // Compute 셰이더가 번호로 직접 읽는 SRV 번호. 이번 프레임에 읽을 수 있는 상태로 바꾸므로 사용하는 프레임마다 호출한다.
+    // 2D 텍스처는 space4, 버퍼(ByteAddressBuffer)는 space5에서 읽는다. 지원하지 않거나 만들 수 없으면 INVALID_BINDLESS_INDEX.
+    virtual uint32 GetBindlessIndex(RHITexture* texture) { return INVALID_BINDLESS_INDEX; }
+    virtual uint32 GetBindlessIndex(RHIBuffer* buffer) { return INVALID_BINDLESS_INDEX; }
+#pragma endregion
+
 #pragma region Raytracing
 public:
     // 정적 삼각형 기하로 BLAS를 만들고 현재 프레임 커맨드 리스트에 빌드를 기록한다.

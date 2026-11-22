@@ -71,6 +71,11 @@ namespace
 	}
 }
 
+void DirectX12AccelerationStructure::TransitionToShaderRead(DirectX12RHI& rhi, ID3D12GraphicsCommandList* commandList, DirectX12Buffer& buffer)
+{
+	TransitionToBuildInput(rhi, commandList, buffer);
+}
+
 DirectX12AccelerationStructure* DirectX12AccelerationStructure::CreateBottomLevel(DirectX12RHI* rhi, const RHIRaytracingGeometryDesc& desc)
 {
 	if (!CanUseRaytracing(rhi))
@@ -227,6 +232,8 @@ EResult DirectX12AccelerationStructure::BuildTopLevel(DirectX12RHI* rhi, RHIAcce
 		desc.InstanceContributionToHitGroupIndex = 0;
 		// 그림자 차폐는 면 방향과 무관해야 하므로 삼각형 컬링을 끈다(음수 배율·한쪽 면 메시 포함).
 		desc.Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
+		if (source.forceNonOpaque)
+			desc.Flags |= D3D12_RAYTRACING_INSTANCE_FLAG_FORCE_NON_OPAQUE;
 		desc.AccelerationStructure = bottomLevel->GetGPUAddress();
 		descs[validCount++] = desc;
 	}

@@ -301,6 +301,7 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 	}
 
 	m_Pipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(state.RaytracedShadowMode));
+	m_Pipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(state.RaytracedReflectionMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -317,6 +318,7 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 	}
 
 	state.RaytracedShadowMode = static_cast<int32>(m_Pipeline.GetRaytracedShadowMode());
+	state.RaytracedReflectionMode = static_cast<int32>(m_Pipeline.GetRaytracedReflectionMode());
 	return state;
 }
 #pragma endregion
@@ -843,6 +845,23 @@ void SceneViewportPanel::DrawRenderPassMenu()
 		}
 		if (!supportsRaytracing && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowUnsupported"));
+		const bool supportsReflection = supportsRaytracing && rhi->GetCapabilities().SupportsBindlessResources;
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.RaytracedReflection").c_str(), supportsReflection))
+		{
+			const auto current = m_Pipeline.GetRaytracedReflectionMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(RaytracedShadowModeKeys); ++index)
+			{
+				const auto mode = Engine::ToRaytracedShadowMode(index);
+				if (ImGui::MenuItem(LOCAL_LABEL(RaytracedShadowModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetRaytracedReflectionMode(mode);
+			}
+			ImGui::Separator();
+			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsRaytracedReflectionActive() ?
+				"GraphicsSettings.RaytracedReflectionActive" : "GraphicsSettings.RaytracedReflectionInactive"));
+			ImGui::EndMenu();
+		}
+		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedReflectionUnsupported"));
 		ImGui::EndMenu();
 	}
 }

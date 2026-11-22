@@ -18,11 +18,13 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftTargetFPS = static_cast<std::int32_t>(Engine::TimeManager::Get().GetTargetFPS());
     m_DraftVSync = settings.GetEditorVSync().value_or(settings.GetPreferences().VSync);
     m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
+    m_DraftRaytracedReflection = settings.GetPreferences().RaytracedReflectionMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
     m_VSyncDirty = false;
     m_RaytracedShadowDirty = false;
+    m_RaytracedReflectionDirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -41,6 +43,14 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_RaytracedShadowDirty = false;
+    }
+
+    if (m_RaytracedReflectionDirty)
+    {
+        const auto result = settings.SetEditorRaytracedReflectionMode(m_DraftRaytracedReflection);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_RaytracedReflectionDirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -221,6 +231,8 @@ void GraphicSettingsWidget::Draw()
         {
             EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
             m_RaytracedShadowDirty |= DrawRaytracedShadowModeCombo("###RaytracedShadow", m_DraftRaytracedShadow);
+            EditorUI::PropertyRow("GraphicsSettings.RaytracedReflection");
+            m_RaytracedReflectionDirty |= DrawRaytracedShadowModeCombo("###RaytracedReflection", m_DraftRaytracedReflection, "GraphicsSettings.RaytracedReflectionHint");
             EditorUI::EndPropertyTable();
         }
         if (!supported)

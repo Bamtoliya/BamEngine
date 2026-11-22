@@ -9,6 +9,8 @@
 
 static const uint MAX_RAYTRACED_SHADOW_LIGHTS = 4u;
 static const uint INVALID_LIGHT = 0xFFFFFFFFu;
+// RaytracingInstanceData.h와 같다. 반사에만 쓰는 메시(Masked 등)는 그림자 광선에서 제외한다.
+static const uint RAYTRACING_MASK_SHADOW = 1u;
 // 점·스포트 섀도맵의 Near와 같다. 광원을 감싼 전구 메시에 막히지 않게 한다.
 static const float LOCAL_LIGHT_NEAR = 0.05f;
 
@@ -62,7 +64,7 @@ float TraceVisibility(Light light, float3 origin, float3 normal)
 
 	// 차폐 여부만 필요하므로 첫 교차에서 탐색을 끝낸다.
 	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> query;
-	query.TraceRayInline(gSceneTLAS, RAY_FLAG_NONE, 0xFF, ray);
+	query.TraceRayInline(gSceneTLAS, RAY_FLAG_NONE, RAYTRACING_MASK_SHADOW, ray);
 	query.Proceed();
 	return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
 }

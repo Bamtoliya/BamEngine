@@ -196,6 +196,7 @@ namespace
         scene.FarPlane = 20000.0f;
         scene.RenderPassStates = { { L"Shadow", false }, { L"Geometry", true } };
         scene.RaytracedShadowMode = 2;
+        scene.RaytracedReflectionMode = 1;
 
         auto& game = expected.ViewportStates[L"Game View"];
         game.ResolutionMode = 1;
@@ -233,7 +234,8 @@ namespace
             restored.FOV == scene.FOV && restored.OrthographicSize == scene.OrthographicSize &&
             restored.CameraSpeed == scene.CameraSpeed && restored.NearPlane == scene.NearPlane &&
             restored.FarPlane == scene.FarPlane && restored.RenderPassStates == scene.RenderPassStates &&
-            restored.RaytracedShadowMode == scene.RaytracedShadowMode,
+            restored.RaytracedShadowMode == scene.RaytracedShadowMode &&
+            restored.RaytracedReflectionMode == scene.RaytracedReflectionMode,
             "Scene viewport camera or render-pass settings changed.");
 
         const auto& restoredGame = loaded.ViewportStates.at(L"Game View");

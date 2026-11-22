@@ -64,7 +64,7 @@ passSampRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 3);// s0-s7, space
 CD3DX12_DESCRIPTOR_RANGE computeUavRange;
 computeUavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 2, 3);  // u2-u5, space3
 
-CD3DX12_ROOT_PARAMETER rootParams[12];
+CD3DX12_ROOT_PARAMETER rootParams[14];
 rootParams[0].InitAsConstantBufferView(0, 0);                    // b0, space0 (Global CBV)
 rootParams[1].InitAsDescriptorTable(1, &matSrvRange, D3D12_SHADER_VISIBILITY_ALL);
 rootParams[2].InitAsDescriptorTable(1, &matSampRange, D3D12_SHADER_VISIBILITY_ALL);
@@ -77,6 +77,10 @@ rootParams[8].InitAsDescriptorTable(1, &passSampRange, D3D12_SHADER_VISIBILITY_P
 rootParams[9].InitAsUnorderedAccessView(0, 3);                   // u0, space3 (Pass UAV #0)
 rootParams[10].InitAsUnorderedAccessView(1, 3);                  // u1, space3 (Pass UAV #1)
 rootParams[11].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILITY_ALL); // u2-u5, space3
+// Resource Binding Tier 2 이상에서만 추가한다.
+rootParams[12].InitAsDescriptorTable(1, &bindlessTextureRange, D3D12_SHADER_VISIBILITY_ALL); // t0.., space4 (SRV 힙 전체)
+rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIBILITY_ALL);  // t0.., space5 (SRV 힙 전체)
+// 정적 샘플러 s0, space4 (linear wrap)
 ```
 
 > **2026-11-22 갱신:** `[4]`는 VERTEX, `[8]`은 PIXEL 가시성이다(이전 문서의 ALL 표기는 코드와 달랐다).
@@ -91,6 +95,21 @@ rootParams[11].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILIT
 | `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 그림자 마스크 출력. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`) |
 | `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 32바이트. 채널별 광원 버퍼 인덱스 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
 | `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.RaytracedShadowLights`의 채널과 광원 인덱스가 같을 때만 사용 |
+
+### 레이트레이싱 반사와 번호로 읽는 리소스 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t0.., space4` | `raytracing.hlsli` | `Texture2D` 배열. 번호는 `RHI::GetBindlessIndex(RHITexture*)` |
+| `t0.., space5` | `raytracing.hlsli` | `ByteAddressBuffer` 배열. 정점·인덱스 버퍼와 인스턴스 표. 번호는 `RHI::GetBindlessIndex(RHIBuffer*)` |
+| `s0, space4` | `raytracing.hlsli` | 정적 샘플러 |
+| `t13, space3` | `raytracedReflectionRTCS` | TLAS. 그림자와 공유하며 광선 마스크로 구분 |
+| `u2, space3` | `raytracedReflectionRTCS` | RGBA16F 반사. rgb는 밝기, a는 합성 비율 |
+| `b1, space3` | `raytracedReflectionRTCS` | `RaytracedReflectionParams` 64바이트 |
+| `t15, space3` | `lightingPS` | 반사. `LightingPassData.UseRaytracedReflections`가 1일 때만 읽음 |
+
+`space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(80바이트)는 `raytracing.hlsli`의 `RaytracedInstance`와,
+광선 마스크는 세 셰이더 파일의 상수와 일치해야 한다. 버퍼 번호는 최대 16,384개이며 버퍼가 해제되면 지연 반환한다.
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
 `LightingPassData`는 544바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.

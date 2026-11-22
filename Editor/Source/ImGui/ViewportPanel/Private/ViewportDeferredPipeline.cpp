@@ -260,13 +260,18 @@ void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::
 {
 	Engine::RaytracedShadowOverrides overrides;
 	overrides.Viewport = m_RaytracedShadowMode;
+	Engine::RaytracedShadowOverrides reflectionOverrides;
+	reflectionOverrides.Viewport = m_RaytracedReflectionMode;
 	if (EditorSettingsService::IsCreated())
 	{
 		const auto& settings = EditorSettingsService::Get();
 		overrides.Project = Engine::ToRaytracedShadowMode(settings.GetProjectSettings().RaytracedShadowMode);
 		overrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().RaytracedShadowMode);
+		reflectionOverrides.Project = Engine::ToRaytracedShadowMode(settings.GetProjectSettings().RaytracedReflectionMode);
+		reflectionOverrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().RaytracedReflectionMode);
 	}
 	m_SceneRenderer.SetRaytracedShadowOverrides(overrides);
+	m_SceneRenderer.SetRaytracedReflectionOverrides(reflectionOverrides);
 
 	m_SceneRenderer.Submit(cameraBuffer, targetScene, { m_ShadowPassID, m_PointShadowPassID, m_GeometryPassID,
 		m_LightingPassID, m_ForwardPassID, m_ForwardTransparentPassID, m_LightingInputs, m_PointShadowDepthName, m_AcceptSceneMeshes });

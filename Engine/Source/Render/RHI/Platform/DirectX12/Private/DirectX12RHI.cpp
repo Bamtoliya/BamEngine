@@ -96,7 +96,7 @@ EResult DirectX12RHI::Initialize(void* arg)
     m_RtvAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 256);
     m_DsvAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 256);
 
-    const uint32 srvHeapCapacity = FRAME_SRV_DESCRIPTOR_COUNT * m_SwapChainBufferCount + 4096;
+    const uint32 srvHeapCapacity = FRAME_SRV_DESCRIPTOR_COUNT * m_SwapChainBufferCount + 4096 + MAX_BINDLESS_BUFFERS;
     m_SrvAllocator = new DirectX12DescriptorAllocator(
         m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, srvHeapCapacity);
     m_SamplerAllocator = new DirectX12DescriptorAllocator(m_Device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 128);
@@ -234,7 +234,8 @@ EResult DirectX12RHI::Initialize(void* arg)
         srvRanges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 2);      // Object SRV: t0, space2
         srvRanges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 3);     // Pass SRV: t0-t15, space3
 
-        CD3DX12_ROOT_PARAMETER rootParameters[12];
+        CD3DX12_ROOT_PARAMETER rootParameters[14];
+        UINT rootParameterCount = 12;
 
         // [0] Global CBV (b0, space0) — Root Descriptor (직접 GPU 주소 바인딩)
         rootParameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
@@ -277,8 +278,26 @@ EResult DirectX12RHI::Initialize(void* arg)
         computeUavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, UAV_TABLE_SIZE, 2, 3);
         rootParameters[COMPUTE_UAV_TABLE_ROOT_INDEX].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILITY_ALL);
 
+        // [12], [13] 번호로 읽는 2D 텍스처(t0.., space4)와 원시 버퍼(t0.., space5) — SRV 힙 전체. Compute만 묶는다.
+        // SRV를 무제한으로 둘 수 있는 Binding Tier 2 이상에서만 추가한다. 그보다 낮은 장치는 레이트레이싱도 지원하지 않는다.
+        D3D12_FEATURE_DATA_D3D12_OPTIONS bindingOptions = {};
+        m_BindlessSupported = SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &bindingOptions, sizeof(bindingOptions))) &&
+            bindingOptions.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_2;
+        CD3DX12_DESCRIPTOR_RANGE bindlessRanges[2];
+        bindlessRanges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, UINT_MAX, 0, 4);
+        bindlessRanges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, UINT_MAX, 0, 5);
+        // s0, space4: 번호로 읽는 텍스처의 샘플러. Compute에는 패스 샘플러 테이블이 없어 정적으로 둔다.
+        CD3DX12_STATIC_SAMPLER_DESC bindlessSampler(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR);
+        bindlessSampler.RegisterSpace = 4;
+        if (m_BindlessSupported)
+        {
+            rootParameters[BINDLESS_TEXTURE_ROOT_INDEX].InitAsDescriptorTable(1, &bindlessRanges[0], D3D12_SHADER_VISIBILITY_ALL);
+            rootParameters[BINDLESS_BUFFER_ROOT_INDEX].InitAsDescriptorTable(1, &bindlessRanges[1], D3D12_SHADER_VISIBILITY_ALL);
+            rootParameterCount = 14;
+        }
+
         CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
-        rootSigDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr,
+        rootSigDesc.Init(rootParameterCount, rootParameters, m_BindlessSupported ? 1 : 0, m_BindlessSupported ? &bindlessSampler : nullptr,
             D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
         ComPtr<ID3DBlob> signature;
         ComPtr<ID3DBlob> error;
@@ -2524,6 +2543,11 @@ EResult DirectX12RHI::ApplyShaderResources()
         m_CommandList->SetComputeRootDescriptorTable(1, m_SrvAllocator->GetGPUHandle(tableIndex));
         m_CommandList->SetComputeRootDescriptorTable(7, m_SrvAllocator->GetGPUHandle(tableIndex + MAX_MATERIAL_TEXTURE_SLOTS));
         m_CommandList->SetComputeRootDescriptorTable(COMPUTE_UAV_TABLE_ROOT_INDEX, m_SrvAllocator->GetGPUHandle(tableIndex + SRV_TABLE_SIZE));
+        if (m_BindlessSupported)
+        {
+            m_CommandList->SetComputeRootDescriptorTable(BINDLESS_TEXTURE_ROOT_INDEX, m_SrvAllocator->GetGPUHandle(0));
+            m_CommandList->SetComputeRootDescriptorTable(BINDLESS_BUFFER_ROOT_INDEX, m_SrvAllocator->GetGPUHandle(0));
+        }
     }
     else
     {
@@ -2702,6 +2726,67 @@ EResult DirectX12RHI::BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const
 {
     return DirectX12AccelerationStructure::BuildTopLevel(this, topLevel, instances, instanceCount);
 }
+uint32 DirectX12RHI::GetBindlessIndex(RHITexture* texture)
+{
+    if (!m_BindlessSupported || !m_CommandList || !m_FrameRecording || !texture || !texture->GetNativeHandle()) return INVALID_BINDLESS_INDEX;
+    if (texture->GetDimension() != ETextureDimension::Texture2D || !HasFlag(texture->GetUsage(), ETextureUsage::Sampler)) return INVALID_BINDLESS_INDEX;
+
+    auto* dxTexture = static_cast<DirectX12Texture*>(texture);
+    if (dxTexture->GetSRVDescriptorIndex() == UINT32_MAX) return INVALID_BINDLESS_INDEX;
+
+    // 같은 프레임의 픽셀 셰이더도 읽으므로 두 상태를 함께 둔다.
+    constexpr D3D12_RESOURCE_STATES readState = D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE;
+    const D3D12_RESOURCE_STATES before = dxTexture->GetCurrentState();
+    if ((before & readState) != readState)
+    {
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = before;
+        barrier.Transition.StateAfter = readState;
+        m_CommandList->ResourceBarrier(1, &barrier);
+        dxTexture->SetCurrentState(readState);
+    }
+    return dxTexture->GetSRVDescriptorIndex();
+}
+
+uint32 DirectX12RHI::GetBindlessIndex(RHIBuffer* buffer)
+{
+    if (!m_BindlessSupported || !m_CommandList || !m_FrameRecording || !buffer || !buffer->GetNativeHandle()) return INVALID_BINDLESS_INDEX;
+
+    auto* dxBuffer = static_cast<DirectX12Buffer*>(buffer);
+    if (dxBuffer->GetBindlessDescriptorIndex() == UINT32_MAX)
+    {
+        auto* resource = static_cast<ID3D12Resource*>(buffer->GetNativeHandle());
+        const D3D12_RESOURCE_DESC resourceDesc = resource->GetDesc();
+        if (resourceDesc.Width < 4 || m_BindlessBufferCount >= MAX_BINDLESS_BUFFERS) return INVALID_BINDLESS_INDEX;
+
+        D3D12_CPU_DESCRIPTOR_HANDLE handle = {};
+        uint32 index = UINT32_MAX;
+        if (!m_SrvAllocator->Allocate(handle, index)) return INVALID_BINDLESS_INDEX;
+
+        D3D12_SHADER_RESOURCE_VIEW_DESC view = {};
+        view.Format = DXGI_FORMAT_R32_TYPELESS;
+        view.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+        view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+        view.Buffer.NumElements = static_cast<UINT>(resourceDesc.Width / 4);
+        view.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
+        m_Device->CreateShaderResourceView(resource, &view, handle);
+        dxBuffer->SetBindlessDescriptorIndex(index);
+        ++m_BindlessBufferCount;
+    }
+    DirectX12AccelerationStructure::TransitionToShaderRead(*this, m_CommandList.Get(), *dxBuffer);
+    return dxBuffer->GetBindlessDescriptorIndex();
+}
+
+void DirectX12RHI::ReleaseBindlessBuffer(uint32 descriptorIndex)
+{
+    if (descriptorIndex == UINT32_MAX) return;
+    DeferDescriptorFree(m_SrvAllocator, descriptorIndex);
+    if (m_BindlessBufferCount > 0) --m_BindlessBufferCount;
+}
+
 EResult DirectX12RHI::BindAccelerationStructure(RHIAccelerationStructure* topLevel, uint32 slot)
 {
     if (!m_CommandList || !m_FrameRecording)
@@ -2819,6 +2904,7 @@ void DirectX12RHI::InitializeCapabilities()
     D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
     if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &options, sizeof(options))))
         m_Capabilities.SupportsDescriptorIndexing = (options.ResourceBindingTier >= D3D12_RESOURCE_BINDING_TIER_3);
+    m_Capabilities.SupportsBindlessResources = m_BindlessSupported;
 }
 
 void DirectX12RHI::InitializeTimestampQueries()

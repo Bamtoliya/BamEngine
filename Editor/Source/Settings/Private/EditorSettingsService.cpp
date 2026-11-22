@@ -633,6 +633,16 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorRaytracedShadowMode(s
     return ApplyAndSavePreferences(candidate);
 }
 
+EditorSettingsChangeResult EditorSettingsService::SetEditorRaytracedReflectionMode(std::int32_t mode)
+{
+    if (!Engine::IsValidRaytracedShadowMode(mode))
+        return {};
+
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.RaytracedReflectionMode = mode;
+    return ApplyAndSavePreferences(candidate);
+}
+
 EditorSettingsChangeResult EditorSettingsService::SetEditorLanguage(ELocalizationLanguage language)
 {
     if (language != ELocalizationLanguage::English && language != ELocalizationLanguage::Korean)

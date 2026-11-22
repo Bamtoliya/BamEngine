@@ -32,6 +32,10 @@ public:
 	}
 
 public:
+	uint32 GetBindlessDescriptorIndex() const { return m_BindlessDescriptorIndex; }
+	void SetBindlessDescriptorIndex(uint32 index) { m_BindlessDescriptorIndex = index; }
+
+public:
 	virtual void SetData(const void* data, uint32 size) override;
 	virtual void* GetMappedPointer() const override { return m_MappedData; }
 public:
@@ -41,6 +45,7 @@ protected:
 private:
 	ComPtr<ID3D12Resource> m_Buffer;
 	GpuHeapAllocation m_HeapAllocation; // 정적 지오메트리 힙에 배치했을 때만 유효
+	uint32 m_BindlessDescriptorIndex = UINT32_MAX;
 	void* m_MappedData = nullptr;
 	D3D12_RESOURCE_STATES m_CurrentState = D3D12_RESOURCE_STATE_COMMON;
 };

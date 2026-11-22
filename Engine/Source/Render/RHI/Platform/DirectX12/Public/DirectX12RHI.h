@@ -190,9 +190,17 @@ public:
 	ID3D12RootSignature* GetGlobalRootSignature() const { return m_GlobalRootSignature.Get(); }
 	// 전역 루트 시그니처 구성이 바뀔 때마다 올린다. PSO 디스크 캐시 키에 섞여 이전 구성의 PSO를 불러오지 않게 한다.
 	// 2: [11] Compute Storage Texture UAV Table(u2-u5, space3) 추가
-	static constexpr uint32 GLOBAL_ROOT_SIGNATURE_LAYOUT_VERSION = 2;
+	static constexpr uint32 GLOBAL_ROOT_SIGNATURE_LAYOUT_VERSION = 3;
 #pragma endregion
 
+
+#pragma region Bindless
+public:
+	virtual uint32 GetBindlessIndex(RHITexture* texture) override;
+	virtual uint32 GetBindlessIndex(RHIBuffer* buffer) override;
+	// 버퍼가 해제될 때 번호를 지연 반환한다.
+	void ReleaseBindlessBuffer(uint32 descriptorIndex);
+#pragma endregion
 
 #pragma region Frame Metrics
 public:
@@ -267,6 +275,12 @@ private:
 	// 이번 프레임 커맨드 리스트에서 상태 전환을 기록한 버퍼(주소 비교만 하며 역참조하지 않는다). BeginFrame에서 비운다.
 	std::unordered_set<const RHIBuffer*> m_BuffersTransitionedThisFrame;
 	static constexpr uint32 FRAME_SRV_DESCRIPTOR_COUNT = SRV_TABLE_SIZE * 1024;
+	// 번호로 읽는 배열은 SRV 힙 전체를 가리킨다. 텍스처는 자기 SRV 번호를, 버퍼는 처음 요청할 때 만든 원시 SRV 번호를 쓴다.
+	static constexpr uint32 BINDLESS_TEXTURE_ROOT_INDEX = 12;
+	static constexpr uint32 BINDLESS_BUFFER_ROOT_INDEX = 13;
+	static constexpr uint32 MAX_BINDLESS_BUFFERS = 16384;
+	bool m_BindlessSupported = false;
+	uint32 m_BindlessBufferCount = 0;
 	uint32 m_SRVTableStartIndices[MAX_SWAPCHAIN_BUFFERS] = {};
 	// 같은 프레임에서 리소스 조합이 같은 그래픽스 드로우는 SRV 테이블을 공유한다. 드로우마다 새 테이블을 쓰면
 	// 캐스케이드처럼 드로우가 많은 프레임이 FRAME_SRV_DESCRIPTOR_COUNT를 넘는다.

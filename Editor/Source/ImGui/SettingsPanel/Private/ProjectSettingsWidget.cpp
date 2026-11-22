@@ -61,6 +61,7 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftAssetDirectory = project.AssetDirectory;
     m_DraftShaderSourceDirectory = project.ShaderSourceDirectory;
     m_DraftRaytracedShadow = project.RaytracedShadowMode;
+    m_DraftRaytracedReflection = project.RaytracedReflectionMode;
     m_DraftStreamingBudget = project.ResourceStreamingBudgetMB;
     m_Dirty = false;
 }
@@ -75,6 +76,7 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.AssetDirectory = m_DraftAssetDirectory;
     project.ShaderSourceDirectory = m_DraftShaderSourceDirectory;
     project.RaytracedShadowMode = m_DraftRaytracedShadow;
+    project.RaytracedReflectionMode = m_DraftRaytracedReflection;
     project.ResourceStreamingBudgetMB = m_DraftStreamingBudget;
 
     const auto result = settings.SaveProjectSettings(project);
@@ -104,6 +106,8 @@ void ProjectSettingsWidget::DrawRendering()
         {
             EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
             m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedShadow", m_DraftRaytracedShadow);
+            EditorUI::PropertyRow("GraphicsSettings.RaytracedReflection");
+            m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedReflection", m_DraftRaytracedReflection, "GraphicsSettings.RaytracedReflectionHint");
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();

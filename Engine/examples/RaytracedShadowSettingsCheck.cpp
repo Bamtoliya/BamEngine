@@ -1,4 +1,5 @@
 #include "RaytracedShadowSettings.h"
+#include "RaytracingInstanceData.h"
 
 #include <cstdio>
 
@@ -22,6 +23,11 @@ int main()
     constexpr auto On = ERaytracedShadowMode::On;
     constexpr auto Off = ERaytracedShadowMode::Off;
 
+    // 광선 마스크는 겹치지 않아야 그림자와 반사가 서로의 메시를 보지 않는다.
+    static_assert((RAYTRACING_MASK_SHADOW & RAYTRACING_MASK_REFLECTION) == 0 && (RAYTRACING_MASK_SHADOW & RAYTRACING_MASK_REFLECTION_SHADOW) == 0 &&
+        (RAYTRACING_MASK_REFLECTION & RAYTRACING_MASK_REFLECTION_SHADOW) == 0);
+    // 반사는 조명 설정 없이 프로젝트 → 그래픽 → 뷰포트 순서로만 켠다.
+    Expect(ResolveRaytracedShadow(false, { On, Inherit, Inherit }) && !ResolveRaytracedShadow(false, { On, Inherit, Off }), "reflection overrides must follow the same order");
     Expect(!ResolveRaytracedShadow(false, {}), "the light default must stay off");
     Expect(ResolveRaytracedShadow(true, {}), "an enabled light must be used when nothing overrides it");
 

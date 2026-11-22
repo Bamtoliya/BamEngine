@@ -32,6 +32,8 @@ struct RHIRaytracingInstanceDesc
 	RHIAccelerationStructure* bottomLevel = nullptr;
 	uint32 instanceID = 0;
 	uint8 instanceMask = 0xFF;
+	// 알파 테스트처럼 교차마다 셰이더가 판정해야 하는 인스턴스
+	bool forceNonOpaque = false;
 };
 
 // 레이트레이싱 가속 구조(BLAS/TLAS)의 결과 버퍼를 소유한다.

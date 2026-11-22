@@ -3,6 +3,8 @@
 #include "Base.h"
 #include "RHIAccelerationStructure.h"
 #include "RaytracingBuildPolicy.h"
+#include "RaytracingInstanceData.h"
+#include "RenderTargetTypes.h"
 
 struct RaytracingSceneManagerDesc
 {
@@ -38,7 +40,8 @@ public:
 	// 현재 장치가 인라인 RayQuery(DXR Tier 1.1 + SM 6.5)를 지원하는지
 	bool IsSupported() const;
 	// 이번 프레임에 TLAS가 필요한 씬과 뷰를 등록한다. 같은 조합은 한 번만 빌드한다.
-	void RequestScene(Scene* scene, uint32 viewID);
+	// reflections면 반사에 필요한 메시와 인스턴스 표도 함께 준비한다.
+	void RequestScene(Scene* scene, uint32 viewID, bool reflections = false);
 	// 이번 프레임에 TLAS가 요청된 씬인지. 제출 단계에서 섀도맵 제외 후보를 표시할 때 확인한다.
 	bool IsSceneRequested(const Scene* scene, uint32 viewID) const;
 	// 빌드 전에 프레임이 중단되면 해제된 씬 포인터가 다음 프레임에 남지 않도록 프레임 큐와 함께 비운다.
@@ -50,12 +53,16 @@ public:
 	RHIAccelerationStructure* GetTopLevelAS(const Scene* scene, uint32 viewID) const;
 	// 이번 프레임의 TLAS에 실제로 들어간 엔티티. TLAS가 없으면 nullptr이며, 그 씬의 캐스터는 모두 섀도맵에 그려야 한다.
 	const RaytracedCasterSet* GetTopLevelCasters(const Scene* scene, uint32 viewID) const;
+	// 이번 프레임의 반사용 인스턴스 표(RaytracingInstanceData)의 바인드리스 번호. 준비되지 않았으면 RHI::INVALID_BINDLESS_INDEX.
+	uint32 GetInstanceTableIndex(const Scene* scene, uint32 viewID) const;
 #pragma endregion
 
 #pragma region Caster Policy
 public:
 	// 레이트레이싱 그림자가 형상을 그대로 표현할 수 있는 캐스터인지. 섀도맵 제외 여부는 이 판정이 아니라 GetTopLevelCasters로 정한다.
 	static bool IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material);
+	// 반사에 나타낼 수 있는 정적 메시인지. Masked는 광선마다 알파를 확인한다.
+	static bool IsReflectionSupported(const Mesh* mesh, const MaterialInterface* material);
 #pragma endregion
 
 #pragma region Statistics
@@ -113,6 +120,7 @@ private:
 	{
 		Scene* Source = nullptr;
 		uint32 ViewID = 0;
+		bool Reflections = false;
 	};
 	struct TopLevelEntry
 	{
@@ -124,12 +132,19 @@ private:
 		uint32 FailedCasterCount = 0;
 		uint64 LastRequestedFrame = 0;
 		bool BuiltThisFrame = false;
+		// GPU가 이전 프레임의 표를 읽는 동안 덮어쓰지 않도록 프레임 슬롯별로 둔다.
+		RHIBuffer* InstanceTables[MAX_SWAPCHAIN_BUFFERS] = {};
+		uint32 InstanceTableCapacity[MAX_SWAPCHAIN_BUFFERS] = {};
+		uint32 InstanceTableIndex = 0xFFFFFFFFu;
 	};
 	enum class EBottomLevelState { Ready, Pending, Failed };
 
 	// Ready일 때만 bottomLevel이 유효하다. 이번 프레임 예산이 없으면 Pending을 반환하고 캐시에 남기지 않는다.
 	EBottomLevelState GetOrBuildBottomLevel(Mesh& mesh, Stats& stats, RHIAccelerationStructure*& bottomLevel);
-	EResult BuildScene(Scene& scene, uint32 viewID, TopLevelEntry& entry, Stats& stats);
+	EResult BuildScene(Scene& scene, uint32 viewID, bool reflections, TopLevelEntry& entry, Stats& stats);
+	bool BuildInstanceData(const Mesh& mesh, const MaterialInterface& material, RaytracingInstanceData& data) const;
+	bool UploadInstanceTable(TopLevelEntry& entry);
+	void ReleaseTopLevel(TopLevelEntry& entry);
 	void ReleaseBottomLevel(const BottomLevelKey& key, BottomLevelEntry& entry);
 	void PruneBottomLevels();
 
@@ -144,6 +159,7 @@ private:
 	// 측정 전 시작값이다. 프레임당 새 BLAS 16개 또는 삼각형 100만 개.
 	RaytracingBuildBudget m_BuildBudget{ 16, 1'000'000 };
 	std::vector<RHIRaytracingInstanceDesc> m_InstanceScratch;
+	std::vector<RaytracingInstanceData> m_InstanceDataScratch;
 	Stats m_LastStats;
 };
 END

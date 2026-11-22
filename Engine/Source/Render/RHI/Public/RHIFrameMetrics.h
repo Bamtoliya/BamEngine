@@ -23,6 +23,7 @@ namespace Engine
         bool SupportsRaytracing = false;          // DXR Tier 1.0 이상
         bool SupportsInlineRaytracing = false;    // DXR Tier 1.1 이상 + Shader Model 6.5 이상 (RayQuery)
         bool SupportsDescriptorIndexing = false; // Bindless
+        bool SupportsBindlessResources = false;       // 번호로 읽는 텍스처·버퍼 배열(RHI::GetBindlessIndex)
         uint32 MaxComputeWorkGroupInvocations = 0;
         uint32 RaytracingTier = 0;                // 10 = Tier 1.0, 11 = Tier 1.1, 0 = 미지원
         uint32 HighestShaderModel = 0;            // 0x65 = Shader Model 6.5, 0 = 조회 실패

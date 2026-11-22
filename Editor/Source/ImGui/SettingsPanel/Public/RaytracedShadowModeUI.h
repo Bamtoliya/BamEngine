@@ -5,14 +5,14 @@
 #include "RaytracedShadowSettings.h"
 
 BEGIN(Editor)
-// 프로젝트·그래픽·뷰포트가 공유하는 레이트레이싱 그림자 3상태 문구. 인덱스는 ERaytracedShadowMode와 같다.
+// 프로젝트·그래픽·뷰포트가 공유하는 레이트레이싱 그림자·반사 3상태 문구. 인덱스는 ERaytracedShadowMode와 같다.
 inline constexpr const char* RaytracedShadowModeKeys[] = {
     "GraphicsSettings.RaytracedShadowInherit",
     "GraphicsSettings.RaytracedShadowOn",
     "GraphicsSettings.RaytracedShadowOff"
 };
 
-inline bool DrawRaytracedShadowModeCombo(const char* id, int32& mode)
+inline bool DrawRaytracedShadowModeCombo(const char* id, int32& mode, const char* hintKey = "GraphicsSettings.RaytracedShadowHint")
 {
     const int32 current = static_cast<int32>(Engine::ToRaytracedShadowMode(mode));
     bool changed = false;
@@ -30,7 +30,7 @@ inline bool DrawRaytracedShadowModeCombo(const char* id, int32& mode)
         ImGui::EndCombo();
     }
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowHint"));
+        ImGui::SetTooltip("%s", LOCAL_CSTR(hintKey));
     return changed;
 }
 END

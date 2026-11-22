@@ -46,7 +46,8 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 	D3D12_RESOURCE_DESC resourceDesc = {};
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 	resourceDesc.Alignment = 0;
-	resourceDesc.Width = m_Size;
+	// 원시 SRV는 4바이트 단위로만 읽으므로 16비트 인덱스의 마지막 값까지 읽을 수 있게 올린다.
+	resourceDesc.Width = isStaticGeometryBuffer ? (static_cast<UINT64>(m_Size) + 3) & ~static_cast<UINT64>(3) : m_Size;
 	resourceDesc.Height = 1;
 	resourceDesc.DepthOrArraySize = 1;
 	resourceDesc.MipLevels = 1;
@@ -112,7 +113,12 @@ void DirectX12Buffer::Free()
 	m_MappedData = nullptr;
 
 	if (m_RHI)
-		static_cast<DirectX12RHI*>(m_RHI)->DeferRelease(m_Buffer.Get(), m_HeapAllocation);
+	{
+		auto* dxRHI = static_cast<DirectX12RHI*>(m_RHI);
+		dxRHI->DeferRelease(m_Buffer.Get(), m_HeapAllocation);
+		dxRHI->ReleaseBindlessBuffer(m_BindlessDescriptorIndex);
+	}
+	m_BindlessDescriptorIndex = UINT32_MAX;
 
 	m_HeapAllocation = {};
 	m_Buffer.Reset();

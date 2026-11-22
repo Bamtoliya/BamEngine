@@ -46,6 +46,10 @@ namespace Engine
         PROPERTY(META("Optional", true))
         std::int32_t RaytracedShadowMode = 0;
 
+        // 레이트레이싱 반사: 0·2 끄기, 1 켜기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+        std::int32_t RaytracedReflectionMode = 0;
+
         // 스트리밍하는 메시와 텍스처의 GPU 메모리 한도(MB)
         PROPERTY(META("Optional", true))
         std::int32_t ResourceStreamingBudgetMB = 512;

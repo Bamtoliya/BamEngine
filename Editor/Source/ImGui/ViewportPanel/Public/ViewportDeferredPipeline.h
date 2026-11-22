@@ -36,6 +36,9 @@ public:
 	void SetRaytracedShadowMode(Engine::ERaytracedShadowMode mode) { m_RaytracedShadowMode = mode; }
 	[[nodiscard]] Engine::ERaytracedShadowMode GetRaytracedShadowMode() const { return m_RaytracedShadowMode; }
 	[[nodiscard]] bool IsRaytracedShadowActive() const { return m_SceneRenderer.IsRaytracedShadowActive(); }
+	void SetRaytracedReflectionMode(Engine::ERaytracedShadowMode mode) { m_RaytracedReflectionMode = mode; }
+	[[nodiscard]] Engine::ERaytracedShadowMode GetRaytracedReflectionMode() const { return m_RaytracedReflectionMode; }
+	[[nodiscard]] bool IsRaytracedReflectionActive() const { return m_SceneRenderer.IsRaytracedReflectionActive(); }
 
 	// 4. 게터 (최종 조명 합성 완료 텍스처 및 주요 패스 정보)
 	[[nodiscard]] const std::wstring& GetFinalColorRTName() const { return m_LightingColorName; }
@@ -74,6 +77,7 @@ private:
 	uint32 m_Height = 0;
 	bool m_AcceptSceneMeshes = true;
 	Engine::ERaytracedShadowMode m_RaytracedShadowMode = Engine::ERaytracedShadowMode::Inherit;
+	Engine::ERaytracedShadowMode m_RaytracedReflectionMode = Engine::ERaytracedShadowMode::Inherit;
 
 	// 타깃 목록은 기존 구성에서는 고정 슬롯 순서, 프로필 구성에서는 생성 순서를 따른다.
 	std::vector<std::wstring> m_OwnedRTNames;

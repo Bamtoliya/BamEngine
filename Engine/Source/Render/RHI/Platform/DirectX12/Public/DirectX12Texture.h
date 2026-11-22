@@ -39,6 +39,7 @@ public:
 	D3D12_CPU_DESCRIPTOR_HANDLE GetRTVHandle() const { return m_RTVHandle; }
 	void SetRTVHandle(D3D12_CPU_DESCRIPTOR_HANDLE handle) { m_RTVHandle = handle; }
 	D3D12_CPU_DESCRIPTOR_HANDLE GetSRVHandle() const { return m_SRVHandle; }
+	uint32 GetSRVDescriptorIndex() const { return m_SRVDescriptorIndex; }
 	void SetSRVHandle(D3D12_CPU_DESCRIPTOR_HANDLE handle) { m_SRVHandle = handle; }
 
 	D3D12_GPU_DESCRIPTOR_HANDLE GetSRVGPUHandle() const { return m_SRVGPUHandle; }
