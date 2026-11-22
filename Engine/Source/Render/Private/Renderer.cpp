@@ -317,14 +317,27 @@ EResult Renderer::Render(f32 dt)
 				const auto skinnedIt = m_SkinnedDrawCommands.find(pid);
 				const bool hasStaticCasters = meshIt != m_StaticDrawCommands.end() && !meshIt->second.empty();
 				const bool hasSkinnedCasters = skinnedIt != m_SkinnedDrawCommands.end() && !skinnedIt->second.empty();
-				// 레이트레이싱 그림자가 켜진 방향광 패스: 캐스케이드에는 TLAS가 맡지 않는 캐스터만 그린다.
+				// 레이트레이싱 그림자가 켜진 방향광 패스: 캐스케이드에는 이번 프레임 TLAS에 들어가지 못한 캐스터만 그린다.
+				// BLAS 대기·실패나 TLAS 빌드 실패 시에는 해당 캐스터가 섀도맵에 남아 그림자가 사라지지 않는다.
 				// 같은 아틀라스의 스포트 사분면은 전체 캐스터를 그대로 사용한다.
 				vector<StaticDrawCommand> rasterOnlyCasters;
 				const bool filterCascades = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedShadowCasters();
 				if (filterCascades)
 				{
+					const Scene* casterScene = nullptr;
+					const RaytracedCasterSet* tracedCasters = nullptr;
 					std::copy_if(meshIt->second.begin(), meshIt->second.end(), std::back_inserter(rasterOnlyCasters),
-						[](const StaticDrawCommand& command) { return !command.raytracedShadowCaster; });
+						[&](const StaticDrawCommand& command)
+						{
+							if (!command.raytracedScene) return true;
+							if (command.raytracedScene != casterScene)
+							{
+								casterScene = command.raytracedScene;
+								tracedCasters = RaytracingSceneManager::IsCreated() ?
+									RaytracingSceneManager::Get().GetTopLevelCasters(casterScene) : nullptr;
+							}
+							return !tracedCasters || !tracedCasters->Contains(command.raytracedEntityIndex);
+						});
 				}
 				bool renderingCascade = false;
 				const auto renderShadowCasters = [&](const CameraBuffer& lightCamera) -> EResult

@@ -71,6 +71,7 @@ bool RaytracingSceneManager::IsSceneRequested(const Scene* scene) const
 EResult RaytracingSceneManager::BuildRequestedScenes()
 {
 	++m_FrameCounter;
+	m_BuildBudget.Reset();
 	Stats stats{};
 
 	for (auto& [scene, entry] : m_TopLevels)
@@ -131,14 +132,18 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	}
 	m_LastBuildFrame = m_FrameCounter;
 
-	if (stats.BottomLevelBuiltThisFrame > 0 || stats.SceneCount != m_LastStats.SceneCount ||
+	// 예산을 나눠 쓰는 동안에는 시작과 끝만 기록한다.
+	const bool pending = stats.PendingCasterCount > 0;
+	const bool pendingChanged = pending != (m_LastStats.PendingCasterCount > 0);
+	const bool resultChanged = stats.BottomLevelBuiltThisFrame > 0 || stats.SceneCount != m_LastStats.SceneCount ||
 		stats.InstanceCount != m_LastStats.InstanceCount ||
-		stats.UnsupportedCasterCount != m_LastStats.UnsupportedCasterCount || stats.FailedCasterCount != m_LastStats.FailedCasterCount)
+		stats.UnsupportedCasterCount != m_LastStats.UnsupportedCasterCount || stats.FailedCasterCount != m_LastStats.FailedCasterCount;
+	if (pendingChanged || (!pending && resultChanged))
 	{
-		ENGINE_LOG_INFO("Raytracing AS: {} scene(s), {} instance(s), {} BLAS ({} new, {:.2f} MB), TLAS {:.2f} MB, {} caster(s) left to shadow maps, {} failed.",
+		ENGINE_LOG_INFO("Raytracing AS: {} scene(s), {} instance(s), {} BLAS ({} new, {:.2f} MB), TLAS {:.2f} MB, {} caster(s) left to shadow maps, {} pending, {} failed.",
 			stats.SceneCount, stats.InstanceCount, stats.BottomLevelCount, stats.BottomLevelBuiltThisFrame,
 			static_cast<double>(stats.BottomLevelBytes) / (1024.0 * 1024.0), static_cast<double>(stats.TopLevelBytes) / (1024.0 * 1024.0),
-			stats.UnsupportedCasterCount, stats.FailedCasterCount);
+			stats.UnsupportedCasterCount, stats.PendingCasterCount, stats.FailedCasterCount);
 	}
 
 	m_LastStats = stats;
@@ -153,10 +158,19 @@ RHIAccelerationStructure* RaytracingSceneManager::GetTopLevelAS(const Scene* sce
 	return it->second.AccelerationStructure;
 }
 
+const RaytracedCasterSet* RaytracingSceneManager::GetTopLevelCasters(const Scene* scene) const
+{
+	const auto it = m_TopLevels.find(scene);
+	if (it == m_TopLevels.end() || !it->second.BuiltThisFrame || !it->second.AccelerationStructure)
+		return nullptr;
+	return &it->second.Casters;
+}
+
 EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, Stats& stats)
 {
 	auto& world = scene.GetRegistry();
 	m_InstanceScratch.clear();
+	entry.Casters.Begin();
 
 	auto view = world.view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
@@ -193,10 +207,12 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, S
 			continue;
 		}
 
-		RHIAccelerationStructure* bottomLevel = GetOrBuildBottomLevel(*mesh, stats);
-		if (!bottomLevel)
+		// TLAS에 넣지 못한 캐스터는 Casters에 없으므로 섀도맵에 남는다.
+		RHIAccelerationStructure* bottomLevel = nullptr;
+		const EBottomLevelState state = GetOrBuildBottomLevel(*mesh, stats, bottomLevel);
+		if (state != EBottomLevelState::Ready)
 		{
-			++stats.FailedCasterCount;
+			++(state == EBottomLevelState::Pending ? stats.PendingCasterCount : stats.FailedCasterCount);
 			continue;
 		}
 
@@ -205,6 +221,7 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, S
 		instance.bottomLevel = bottomLevel;
 		instance.instanceID = static_cast<uint32>(entt::to_integral(entity));
 		m_InstanceScratch.push_back(instance);
+		entry.Casters.Add(static_cast<uint32>(entt::to_entity(entity)));
 	}
 
 	// 스킨드 캐스터는 1차 범위에서 섀도맵이 담당한다(통계만 집계).
@@ -238,8 +255,10 @@ size_t RaytracingSceneManager::BottomLevelKeyHash::operator()(const BottomLevelK
 	return seed;
 }
 
-RHIAccelerationStructure* RaytracingSceneManager::GetOrBuildBottomLevel(Mesh& mesh, Stats& stats)
+RaytracingSceneManager::EBottomLevelState RaytracingSceneManager::GetOrBuildBottomLevel(Mesh& mesh, Stats& stats,
+	RHIAccelerationStructure*& bottomLevel)
 {
+	bottomLevel = nullptr;
 	BottomLevelKey key;
 	key.PositionBuffer = mesh.GetPositionBuffer();
 	key.IndexBuffer = mesh.GetIndexBuffer();
@@ -250,8 +269,13 @@ RHIAccelerationStructure* RaytracingSceneManager::GetOrBuildBottomLevel(Mesh& me
 	if (const auto it = m_BottomLevels.find(key); it != m_BottomLevels.end())
 	{
 		it->second.LastUsedFrame = m_FrameCounter;
-		return it->second.AccelerationStructure;
+		bottomLevel = it->second.AccelerationStructure;
+		return bottomLevel ? EBottomLevelState::Ready : EBottomLevelState::Failed;
 	}
+
+	const uint64 triangleCount = (key.IndexBuffer ? key.IndexCount : key.VertexCount) / 3;
+	if (!m_BuildBudget.TryConsume(triangleCount))
+		return EBottomLevelState::Pending;
 
 	RHIRaytracingGeometryDesc geometry;
 	geometry.positionBuffer = key.PositionBuffer;
@@ -262,10 +286,10 @@ RHIAccelerationStructure* RaytracingSceneManager::GetOrBuildBottomLevel(Mesh& me
 	geometry.indexStride = mesh.GetIndexStride();
 
 	// 실패한 기하도 항목으로 남겨 같은 메시를 매 프레임 재시도하거나 로그를 반복하지 않는다(보존 기간이 지나면 정리).
-	RHIAccelerationStructure* bottomLevel = m_RHI->CreateBottomLevelAS(geometry);
+	bottomLevel = m_RHI->CreateBottomLevelAS(geometry);
 	if (!bottomLevel)
 	{
-		ENGINE_LOG_WARN("Failed to build a BLAS for mesh '{}' ({} vertices, {} indices). Its shadow is skipped.",
+		ENGINE_LOG_WARN("Failed to build a BLAS for mesh '{}' ({} vertices, {} indices). It stays in shadow maps.",
 			WStrToStr(mesh.GetKey()), key.VertexCount, key.IndexCount);
 	}
 	else
@@ -276,7 +300,7 @@ RHIAccelerationStructure* RaytracingSceneManager::GetOrBuildBottomLevel(Mesh& me
 	Safe_AddRef(key.PositionBuffer);
 	Safe_AddRef(key.IndexBuffer);
 	m_BottomLevels.emplace(key, BottomLevelEntry{ bottomLevel, m_FrameCounter });
-	return bottomLevel;
+	return bottomLevel ? EBottomLevelState::Ready : EBottomLevelState::Failed;
 }
 
 void RaytracingSceneManager::ReleaseBottomLevel(const BottomLevelKey& key, BottomLevelEntry& entry)

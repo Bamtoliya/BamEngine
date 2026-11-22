@@ -50,6 +50,7 @@ foreach(check_target IN ITEMS
     SplineCurveCheck
     BuiltInMeshWindingCheck
     RaytracedShadowSettingsCheck
+    RaytracingBuildPolicyCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)

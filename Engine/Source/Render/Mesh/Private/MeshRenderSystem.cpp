@@ -167,7 +167,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         if (!scene) continue;
 
         auto& sceneWorld = scene->GetRegistry();
-        // TLAS를 빌드할 씬의 캐스터만 레이트레이싱 담당으로 표시한다. 함께 활성화된 다른 씬은 섀도맵에 남는다.
+        // TLAS를 빌드할 씬의 캐스터만 섀도맵 제외 후보로 표시한다. 함께 활성화된 다른 씬은 섀도맵에 남는다.
         const bool sceneRaytraced = RaytracingSceneManager::IsCreated() && RaytracingSceneManager::Get().IsSceneRequested(scene);
         SplineMeshDeformCache::Prune(sceneWorld);
         auto& splineMeshes = sceneWorld.ctx().emplace<SplineMeshSceneCache>();
@@ -332,7 +332,10 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
                 command.pickingId = pickingId;
                 if (sceneRaytraced && target.pass->GetPassType() == ERenderPassType::Shadow)
-                    command.raytracedShadowCaster = RaytracingSceneManager::IsShadowCasterSupported(activeMesh, material);
+                {
+                    command.raytracedScene = scene;
+                    command.raytracedEntityIndex = static_cast<uint32>(entt::to_entity(entity));
+                }
                 renderer.SubmitStatic(command, target.pass->GetID());
             }
         }

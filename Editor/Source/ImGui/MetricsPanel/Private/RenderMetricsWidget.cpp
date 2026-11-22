@@ -146,6 +146,8 @@ void RenderMetricsWidget::DrawDetails() const
         ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingMemory", raytracing.BottomLevelCount,
             static_cast<double>(raytracing.BottomLevelBytes) / bytesPerMB, static_cast<double>(raytracing.TopLevelBytes) / bytesPerMB).c_str());
         ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingFallback", raytracing.UnsupportedCasterCount).c_str());
+        if (raytracing.PendingCasterCount > 0)
+            ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingPending", raytracing.PendingCasterCount).c_str());
         if (raytracing.FailedCasterCount > 0)
             ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_FMT("Metrics.RaytracingFailed", raytracing.FailedCasterCount).c_str());
     }
