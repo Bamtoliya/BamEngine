@@ -187,6 +187,10 @@ bool AnimationTimelinePanel::IsSelectionValid() const
 	}
 	if (m_Selection.Type == ETimelineSelectionType::CameraShot)
 		return m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraTracks.size());
+	if (m_Selection.Type == ETimelineSelectionType::CameraCut)
+		return m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraCutTracks.size());
+	if (m_Selection.Type == ETimelineSelectionType::CameraSpline)
+		return m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraSplineTracks.size());
 	return false;
 }
 
@@ -204,9 +208,17 @@ void AnimationTimelinePanel::DeleteSelected()
 		auto& notifies = m_NotifyTracks[m_Selection.TrackIndex].Notifies;
 		notifies.erase(notifies.begin() + m_Selection.ItemIndex);
 	}
-	else
+	else if (m_Selection.Type == ETimelineSelectionType::CameraShot)
 	{
 		m_CameraTracks.erase(m_CameraTracks.begin() + m_Selection.TrackIndex);
+	}
+	else if (m_Selection.Type == ETimelineSelectionType::CameraCut)
+	{
+		m_CameraCutTracks.erase(m_CameraCutTracks.begin() + m_Selection.TrackIndex);
+	}
+	else if (m_Selection.Type == ETimelineSelectionType::CameraSpline)
+	{
+		m_CameraSplineTracks.erase(m_CameraSplineTracks.begin() + m_Selection.TrackIndex);
 	}
 
 	m_Selection = {};
@@ -215,7 +227,7 @@ void AnimationTimelinePanel::DeleteSelected()
 
 AnimationTimelinePanel::DocumentSnapshot AnimationTimelinePanel::CaptureDocument() const
 {
-	return { m_NotifyTracks, m_CameraTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration, m_BlendOutTime };
+	return { m_NotifyTracks, m_CameraTracks, m_CameraCutTracks, m_CameraSplineTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration, m_BlendOutTime };
 }
 
 bool AnimationTimelinePanel::HasUncommittedEdit() const
@@ -223,6 +235,7 @@ bool AnimationTimelinePanel::HasUncommittedEdit() const
 	// 매 프레임 호출되므로 문서를 복사하지 않고 필드별로 비교한다.
 	const auto& committed = m_CommittedDocument;
 	return m_NotifyTracks != committed.NotifyTracks || m_CameraTracks != committed.CameraTracks ||
+		m_CameraCutTracks != committed.CameraCutTracks || m_CameraSplineTracks != committed.CameraSplineTracks ||
 		m_ModelAssetPath != committed.ModelPath || m_CurrentClipName != committed.ClipName || m_Duration != committed.Duration ||
 		m_BlendOutTime != committed.BlendOutTime;
 }
@@ -270,6 +283,8 @@ void AnimationTimelinePanel::ApplyDocumentSnapshot(const DocumentSnapshot& snaps
 
 	m_NotifyTracks = snapshot.NotifyTracks;
 	m_CameraTracks = snapshot.CameraTracks;
+	m_CameraCutTracks = snapshot.CameraCutTracks;
+	m_CameraSplineTracks = snapshot.CameraSplineTracks;
 	m_CommittedDocument = snapshot;
 
 	// 되돌린 상태에 없는 항목을 가리키지 않도록 선택·이름 변경을 정리하고, 이전 상태로 만든 프리뷰 VFX를 지운다.
@@ -321,6 +336,8 @@ void AnimationTimelinePanel::ReleaseResourceDocument()
 	SetTargetModel({});
 	m_NotifyTracks.clear();
 	m_CameraTracks.clear();
+	m_CameraCutTracks.clear();
+	m_CameraSplineTracks.clear();
 	m_CurrentClipName.clear();
 	m_CurrentAssetPath.clear();
 	m_Selection = {};
@@ -635,6 +652,8 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	asset->SetBlendOutTime(m_BlendOutTime);
 	asset->GetNotifyTracks() = m_NotifyTracks;
 	asset->GetCameraTracks() = m_CameraTracks;
+	asset->GetCameraCutTracks() = m_CameraCutTracks;
+	asset->GetCameraSplineTracks() = m_CameraSplineTracks;
 
 	const bool success = asset->SaveToFile(filePath);
 	Engine::ResourceManager::Get().DestroyResource(asset);
@@ -679,6 +698,8 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	m_BlendOutTime = asset->GetBlendOutTime();
 	m_NotifyTracks = asset->GetNotifyTracks();
 	m_CameraTracks = asset->GetCameraTracks();
+	m_CameraCutTracks = asset->GetCameraCutTracks();
+	m_CameraSplineTracks = asset->GetCameraSplineTracks();
 
 	Engine::ResourceManager::Get().DestroyResource(asset);
 	m_CurrentAssetPath = filePath;
@@ -1425,6 +1446,20 @@ void AnimationTimelinePanel::DrawInspector()
 			DrawCameraShotInspector(m_CameraTracks[m_Selection.TrackIndex]);
 		}
 	}
+	else if (m_Selection.Type == ETimelineSelectionType::CameraCut)
+	{
+		if (m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraCutTracks.size()))
+		{
+			DrawCameraCutInspector(m_CameraCutTracks[m_Selection.TrackIndex]);
+		}
+	}
+	else if (m_Selection.Type == ETimelineSelectionType::CameraSpline)
+	{
+		if (m_Selection.TrackIndex >= 0 && m_Selection.TrackIndex < static_cast<int>(m_CameraSplineTracks.size()))
+		{
+			DrawCameraSplineInspector(m_CameraSplineTracks[m_Selection.TrackIndex]);
+		}
+	}
 }
 
 void AnimationTimelinePanel::DrawNotifyInspector(Engine::AnimNotifyData& notify)
@@ -1552,6 +1587,254 @@ void AnimationTimelinePanel::DrawCameraShotInspector(Engine::TimelineCameraTrack
 	ImGui::EndDisabled();
 }
 
+void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSection& cutSection)
+{
+	ImGui::PushID("CameraCutInspector");
+	bool changed = false;
+
+	if (EditorUI::BeginPropertyTable("CameraCutProperties", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("PROP_NAME");
+		char nameBuf[128];
+		strncpy_s(nameBuf, cutSection.TrackName.c_str(), sizeof(nameBuf) - 1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputText("##CutTrackName", nameBuf, sizeof(nameBuf)))
+		{
+			cutSection.TrackName = nameBuf;
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("PROP_ENABLED");
+		if (ImGui::Checkbox("##CutIsActive", &cutSection.IsActive)) changed = true;
+
+		EditorUI::PropertyRow("PROP_START_TIME");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##CutStartTime", &cutSection.StartTime, 0.01f, 0.0f, cutSection.EndTime, "%.2fs"))
+		{
+			cutSection.StartTime = std::clamp(cutSection.StartTime, 0.0f, cutSection.EndTime);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("End Time");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##CutEndTime", &cutSection.EndTime, 0.01f, cutSection.StartTime, m_Duration, "%.2fs"))
+		{
+			cutSection.EndTime = std::clamp(cutSection.EndTime, cutSection.StartTime, m_Duration);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Blend In");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		const float maxBlend = std::max(0.0f, cutSection.EndTime - cutSection.StartTime);
+		if (ImGui::DragFloat("##CutBlendIn", &cutSection.BlendInDuration, 0.01f, 0.0f, maxBlend, "%.2fs"))
+		{
+			cutSection.BlendInDuration = std::clamp(cutSection.BlendInDuration, 0.0f, maxBlend);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Target Camera");
+		char camBuf[128];
+		strncpy_s(camBuf, cutSection.TargetCameraName.c_str(), sizeof(camBuf) - 1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputTextWithHint("##CutTargetCamera", "(Main Camera)", camBuf, sizeof(camBuf)))
+		{
+			cutSection.TargetCameraName = camBuf;
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Use Local Offset");
+		bool useOffset = (cutSection.LocalPositionOffset != vec3(0.0f) || cutSection.LocalEulerRotationOffset != vec3(0.0f));
+		if (ImGui::Checkbox("##CutUseOffset", &useOffset))
+		{
+			if (!useOffset)
+			{
+				cutSection.LocalPositionOffset = vec3(0.0f);
+				cutSection.LocalEulerRotationOffset = vec3(0.0f);
+			}
+			changed = true;
+		}
+
+		if (useOffset)
+		{
+			EditorUI::PropertyRow("Position Offset");
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::DragFloat3("##CutPosOffset", &cutSection.LocalPositionOffset.x, 0.05f, -100.0f, 100.0f, "%.2f"))
+			{
+				changed = true;
+			}
+
+			EditorUI::PropertyRow("Rotation Offset");
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::DragFloat3("##CutRotOffset", &cutSection.LocalEulerRotationOffset.x, 0.5f, -180.0f, 180.0f, "%.1f deg"))
+			{
+				changed = true;
+			}
+		}
+
+		EditorUI::PropertyRow("Override FOV");
+		bool overrideFOV = (cutSection.TargetFOV > 0.0f);
+		if (ImGui::Checkbox("##CutOverrideFOV", &overrideFOV))
+		{
+			cutSection.TargetFOV = overrideFOV ? 60.0f : 0.0f;
+			changed = true;
+		}
+
+		if (overrideFOV)
+		{
+			EditorUI::PropertyRow("PROP_TARGET_FOV");
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::SliderFloat("##CutTargetFOV", &cutSection.TargetFOV, 15.0f, 120.0f, "%.1f deg"))
+			{
+				changed = true;
+			}
+		}
+
+		EditorUI::EndPropertyTable();
+	}
+
+	if (changed)
+	{
+		cutSection.StartTime = std::clamp(cutSection.StartTime, 0.0f, m_Duration);
+		cutSection.EndTime = std::clamp(cutSection.EndTime, cutSection.StartTime, m_Duration);
+		cutSection.BlendInDuration = std::clamp(cutSection.BlendInDuration, 0.0f, std::max(0.0f, cutSection.EndTime - cutSection.StartTime));
+		m_IsDirty = true;
+	}
+
+	ImGui::Spacing();
+	EditorUI::ToolbarLayout actions;
+	ImGui::BeginDisabled(!CanDeleteSelected());
+	if (actions.Button("DeleteCameraCut", ICON_FA_TRASH, "EditorCommon.Delete")) DeleteSelected();
+	ImGui::EndDisabled();
+
+	ImGui::PopID();
+}
+
+void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSplineSection& splineSection)
+{
+	ImGui::PushID("CameraSplineInspector");
+	bool changed = false;
+
+	if (EditorUI::BeginPropertyTable("CameraSplineProperties", EditorUI::InspectorPropertyTableStyle()))
+	{
+		EditorUI::PropertyRow("PROP_NAME");
+		char nameBuf[128];
+		strncpy_s(nameBuf, splineSection.TrackName.c_str(), sizeof(nameBuf) - 1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputText("##SplineTrackName", nameBuf, sizeof(nameBuf)))
+		{
+			splineSection.TrackName = nameBuf;
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("PROP_ENABLED");
+		if (ImGui::Checkbox("##SplineIsActive", &splineSection.IsActive)) changed = true;
+
+		EditorUI::PropertyRow("PROP_START_TIME");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##SplineStartTime", &splineSection.StartTime, 0.01f, 0.0f, splineSection.EndTime, "%.2fs"))
+		{
+			splineSection.StartTime = std::clamp(splineSection.StartTime, 0.0f, splineSection.EndTime);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("End Time");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::DragFloat("##SplineEndTime", &splineSection.EndTime, 0.01f, splineSection.StartTime, m_Duration, "%.2fs"))
+		{
+			splineSection.EndTime = std::clamp(splineSection.EndTime, splineSection.StartTime, m_Duration);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Blend In");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		const float maxBlend = std::max(0.0f, splineSection.EndTime - splineSection.StartTime);
+		if (ImGui::DragFloat("##SplineBlendIn", &splineSection.BlendInDuration, 0.01f, 0.0f, maxBlend, "%.2fs"))
+		{
+			splineSection.BlendInDuration = std::clamp(splineSection.BlendInDuration, 0.0f, maxBlend);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Spline Entity");
+		char splineBuf[128];
+		strncpy_s(splineBuf, splineSection.SplineEntityName.c_str(), sizeof(splineBuf) - 1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputTextWithHint("##SplineEntityName", "SplineEntityName", splineBuf, sizeof(splineBuf)))
+		{
+			splineSection.SplineEntityName = splineBuf;
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Start T (0~1)");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::SliderFloat("##SplineStartT", &splineSection.StartT, 0.0f, 1.0f, "%.2f"))
+		{
+			splineSection.StartT = std::clamp(splineSection.StartT, 0.0f, splineSection.EndT);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("End T (0~1)");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::SliderFloat("##SplineEndT", &splineSection.EndT, 0.0f, 1.0f, "%.2f"))
+		{
+			splineSection.EndT = std::clamp(splineSection.EndT, splineSection.StartT, 1.0f);
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Closed Loop");
+		ImGui::TextDisabled("%s", "(In Spline Component)");
+
+		EditorUI::PropertyRow("Look-At Target");
+		char lookAtBuf[128];
+		strncpy_s(lookAtBuf, splineSection.LookAtTargetName.c_str(), sizeof(lookAtBuf) - 1);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputTextWithHint("##SplineLookAtTarget", "(None / Spline Tangent)", lookAtBuf, sizeof(lookAtBuf)))
+		{
+			splineSection.LookAtTargetName = lookAtBuf;
+			changed = true;
+		}
+
+		EditorUI::PropertyRow("Follow Tangent");
+		if (ImGui::Checkbox("##SplineFollowTangent", &splineSection.FollowTangent)) changed = true;
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Follow spline tangent when Look-At Target is empty");
+
+		EditorUI::PropertyRow("Override FOV");
+		bool overrideFOV = (splineSection.TargetFOV > 0.0f);
+		if (ImGui::Checkbox("##SplineOverrideFOV", &overrideFOV))
+		{
+			splineSection.TargetFOV = overrideFOV ? 60.0f : 0.0f;
+			changed = true;
+		}
+
+		if (overrideFOV)
+		{
+			EditorUI::PropertyRow("PROP_TARGET_FOV");
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::SliderFloat("##SplineTargetFOV", &splineSection.TargetFOV, 15.0f, 120.0f, "%.1f deg"))
+			{
+				changed = true;
+			}
+		}
+
+		EditorUI::EndPropertyTable();
+	}
+
+	if (changed)
+	{
+		splineSection.StartTime = std::clamp(splineSection.StartTime, 0.0f, m_Duration);
+		splineSection.EndTime = std::clamp(splineSection.EndTime, splineSection.StartTime, m_Duration);
+		splineSection.BlendInDuration = std::clamp(splineSection.BlendInDuration, 0.0f, std::max(0.0f, splineSection.EndTime - splineSection.StartTime));
+		m_IsDirty = true;
+	}
+
+	ImGui::Spacing();
+	EditorUI::ToolbarLayout actions;
+	ImGui::BeginDisabled(!CanDeleteSelected());
+	if (actions.Button("DeleteCameraSpline", ICON_FA_TRASH, "EditorCommon.Delete")) DeleteSelected();
+	ImGui::EndDisabled();
+
+	ImGui::PopID();
+}
+
 void AnimationTimelinePanel::DrawTimelineTrackArea()
 {
 	DrawTransportBar();
@@ -1665,6 +1948,20 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 			DrawCameraTrackRow(rowsDraw, static_cast<int>(i), m_CameraTracks[i], ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
 			currentY += m_TrackHeight;
 		}
+
+		// 4. 시네마틱 카메라 컷 트랙 목록
+		for (size_t i = 0; i < m_CameraCutTracks.size(); ++i)
+		{
+			DrawCameraCutTrackRow(rowsDraw, static_cast<int>(i), m_CameraCutTracks[i], ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
+			currentY += m_TrackHeight;
+		}
+
+		// 5. 시네마틱 카메라 스플라인 트랙 목록
+		for (size_t i = 0; i < m_CameraSplineTracks.size(); ++i)
+		{
+			DrawCameraSplineTrackRow(rowsDraw, static_cast<int>(i), m_CameraSplineTracks[i], ImVec2(timelineMin.x, currentY), ImVec2(timelineMax.x, currentY + m_TrackHeight), timelineWidth);
+			currentY += m_TrackHeight;
+		}
 		rowsEndY = currentY;
 
 		// 행 영역의 이름 칸 경계선과 재생 헤드 선 (눈금자 높이 부분은 아래에서 고정 영역에 그린다)
@@ -1723,6 +2020,26 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 			newCam.Duration = 0.5f;
 			newCam.TargetFOV = 35.0f;
 			m_CameraTracks.push_back(newCam);
+			m_IsDirty = true;
+		}
+		if (ImGui::MenuItem((ICON_FA_CLAPPERBOARD " Add Camera Cut Section")))
+		{
+			Engine::TimelineCameraCutSection newCut{};
+			newCut.TrackName = "Camera_Cut_" + std::to_string(m_CameraCutTracks.size() + 1);
+			newCut.StartTime = m_AddTrackTime;
+			newCut.EndTime = std::min(m_Duration, m_AddTrackTime + 1.0f);
+			newCut.BlendInDuration = 0.2f;
+			m_CameraCutTracks.push_back(newCut);
+			m_IsDirty = true;
+		}
+		if (ImGui::MenuItem((ICON_FA_ROUTE " Add Camera Spline Section")))
+		{
+			Engine::TimelineCameraSplineSection newSpline{};
+			newSpline.TrackName = "Camera_Spline_" + std::to_string(m_CameraSplineTracks.size() + 1);
+			newSpline.StartTime = m_AddTrackTime;
+			newSpline.EndTime = std::min(m_Duration, m_AddTrackTime + 1.0f);
+			newSpline.BlendInDuration = 0.2f;
+			m_CameraSplineTracks.push_back(newSpline);
 			m_IsDirty = true;
 		}
 
@@ -2089,6 +2406,344 @@ void AnimationTimelinePanel::DrawCameraTrackRow(ImDrawList* drawList, int camIdx
 	}
 
 	if (isTrackHovered && !isShotHovered && isMouseClicked)
+	{
+		m_IsDraggingItem = false;
+		m_DragTimeOffset = 0.0f;
+		m_Selection = {};
+	}
+}
+
+void AnimationTimelinePanel::DrawCameraCutTrackRow(ImDrawList* drawList, int cutIdx, Engine::TimelineCameraCutSection& cutSection, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
+{
+	const ImVec2 headerMin(m_TrackAreaLeft, trackMin.y);
+	const ImVec2 headerMax(trackMin.x, trackMax.y);
+	const auto scale = EditorUI::MakeTimelineScale(trackMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+	const bool rowSelected = (m_Selection.Type == ETimelineSelectionType::CameraCut && m_Selection.TrackIndex == cutIdx);
+	const size_t trackOrder = m_NotifyTracks.size() + m_CameraTracks.size() + static_cast<size_t>(cutIdx) + 1;
+	EditorUI::DrawTimelineRowBackground(*drawList, headerMin.x, scale, trackMin.y, trackMax.y, trackOrder, rowSelected);
+
+	auto& input = Engine::InputManager::Get();
+	const auto mousePos = input.GetScreenMousePosition();
+	const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+	const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
+
+	const auto labelState = rowSelected ? EditorUI::TimelineLabelState::Selected
+		: (cutSection.IsActive ? EditorUI::TimelineLabelState::Normal : EditorUI::TimelineLabelState::Disabled);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y,
+		ICON_FA_CLAPPERBOARD, IM_COL32(140, 160, 255, 255), cutSection.TrackName, labelState);
+
+	const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && windowHovered);
+	if (isHeaderHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
+	{
+		ImGui::OpenPopup(("##CutHeaderPopup_" + std::to_string(cutIdx)).c_str());
+	}
+	if (ImGui::BeginPopup(("##CutHeaderPopup_" + std::to_string(cutIdx)).c_str()))
+	{
+		const char* activeMenuKey = cutSection.IsActive ? "Timeline.DeactivateShot" : "Timeline.ActivateShot";
+		const char* activeMenuIcon = cutSection.IsActive ? ICON_FA_EYE_SLASH : ICON_FA_EYE;
+		const std::string activeMenuLabel = std::string(activeMenuIcon) + " " + LOCAL(activeMenuKey) + "###ToggleCutActive";
+		if (ImGui::MenuItem(activeMenuLabel.c_str()))
+		{
+			cutSection.IsActive = !cutSection.IsActive;
+			m_IsDirty = true;
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
+		{
+			m_CameraCutTracks.erase(m_CameraCutTracks.begin() + cutIdx);
+			m_Selection = {};
+			m_IsDirty = true;
+			ImGui::EndPopup();
+			return;
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SetCursorScreenPos(trackMin);
+	const std::string cutHitboxId = "##CutTrackHitbox_" + std::to_string(cutIdx);
+	ImGui::InvisibleButton(cutHitboxId.c_str(), ImVec2(timelineWidth, m_TrackHeight), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+	const bool isTrackHovered = ImGui::IsItemHovered();
+
+	drawList->PushClipRect(trackMin, trackMax, true);
+	EditorUI::DrawTimelineGrid(*drawList, scale, trackMin.y, trackMax.y, m_FPS);
+
+	const float cutStartX = TimeToScreenX(cutSection.StartTime, trackMin.x, timelineWidth);
+	const float cutEndX = TimeToScreenX(cutSection.EndTime, trackMin.x, timelineWidth);
+	const float inset = EditorUI::GetTimelineBarInset();
+	const ImVec2 barMin(cutStartX, trackMin.y + inset);
+	const ImVec2 barMax(std::max(cutStartX + 2.0f, cutEndX), trackMax.y - inset);
+
+	const bool isSelected = (m_Selection.Type == ETimelineSelectionType::CameraCut && m_Selection.TrackIndex == cutIdx);
+	const bool isBarHovered = isTrackHovered && (mousePos.x >= barMin.x && mousePos.x <= barMax.x && mousePos.y >= barMin.y && mousePos.y <= barMax.y);
+
+	// 청보라/남색 계열 색상 (선택/비선택/비활성)
+	const ImU32 barColor = !cutSection.IsActive
+		? IM_COL32(60, 65, 90, 150)
+		: (isSelected ? IM_COL32(75, 95, 210, 240) : IM_COL32(45, 60, 150, 210));
+
+	EditorUI::DrawTimelineBar(*drawList, barMin, barMax, barColor, isSelected, isSelected);
+
+	// 블렌드 인(BlendInDuration) 사선/음영 표시
+	if (cutSection.BlendInDuration > 0.0f)
+	{
+		const float blendTime = std::min(cutSection.EndTime, cutSection.StartTime + cutSection.BlendInDuration);
+		const float blendEndX = TimeToScreenX(blendTime, trackMin.x, timelineWidth);
+		if (blendEndX > barMin.x)
+		{
+			drawList->AddTriangleFilled(ImVec2(barMin.x, barMax.y), ImVec2(blendEndX, barMin.y), ImVec2(barMin.x, barMin.y), IM_COL32(255, 255, 255, 40));
+			drawList->AddLine(ImVec2(barMin.x, barMax.y), ImVec2(blendEndX, barMin.y), IM_COL32(255, 255, 255, 140), 1.5f);
+		}
+	}
+
+	// 바 내부 텍스트 표시
+	std::string cutText = cutSection.TargetCameraName.empty() ? cutSection.TrackName : (cutSection.TrackName + " (" + cutSection.TargetCameraName + ")");
+	std::string barLabel = std::string(ICON_FA_CLAPPERBOARD " ") + cutText;
+	const ImVec2 labelSize = ImGui::CalcTextSize(barLabel.c_str());
+	const float barCenterY = (barMin.y + barMax.y) * 0.5f;
+	const float labelPosY = barCenterY - labelSize.y * 0.5f - 1.0f;
+	if (barMax.x - barMin.x > labelSize.x + 12.0f)
+	{
+		drawList->AddText(ImVec2(barMin.x + 8.0f, labelPosY), IM_COL32(255, 255, 255, 245), barLabel.c_str());
+	}
+	else if (barMax.x - barMin.x > 24.0f)
+	{
+		drawList->AddText(ImVec2(barMin.x + 4.0f, labelPosY), IM_COL32(255, 255, 255, 245), ICON_FA_CLAPPERBOARD);
+	}
+
+	drawList->PopClipRect();
+
+	constexpr float HandleWidth = 8.0f;
+	const bool canResize = (barMax.x - barMin.x >= HandleWidth * 2.0f);
+	const bool isHoverLeftHandle = canResize && isBarHovered && (mousePos.x <= barMin.x + HandleWidth);
+	const bool isHoverRightHandle = canResize && isBarHovered && (mousePos.x >= barMax.x - HandleWidth);
+
+	if (isBarHovered)
+	{
+		if (isHoverLeftHandle || isHoverRightHandle) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+		else ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+	}
+
+	if (isBarHovered && isMouseClicked)
+	{
+		m_Selection = { ETimelineSelectionType::CameraCut, cutIdx, 0 };
+		m_IsDraggingItem = true;
+		const float clickTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
+		m_DragItemDuration = cutSection.EndTime - cutSection.StartTime;
+
+		if (isHoverLeftHandle)
+		{
+			m_ItemDragMode = ETimelineItemDrag::ResizeStart;
+			m_DragTimeOffset = clickTime - cutSection.StartTime;
+		}
+		else if (isHoverRightHandle)
+		{
+			m_ItemDragMode = ETimelineItemDrag::ResizeEnd;
+			m_DragTimeOffset = clickTime - cutSection.EndTime;
+		}
+		else
+		{
+			m_ItemDragMode = ETimelineItemDrag::Move;
+			m_DragTimeOffset = clickTime - cutSection.StartTime;
+		}
+	}
+
+	if (m_IsDraggingItem && isSelected && isMouseDown)
+	{
+		const float curMouseTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
+		if (m_ItemDragMode == ETimelineItemDrag::Move)
+		{
+			const float length = m_DragItemDuration > 0.0f ? m_DragItemDuration : (cutSection.EndTime - cutSection.StartTime);
+			const float maxStart = std::max(0.0f, m_Duration - length);
+			const float newStart = std::clamp(curMouseTime - m_DragTimeOffset, 0.0f, maxStart);
+			cutSection.StartTime = newStart;
+			cutSection.EndTime = newStart + length;
+			m_IsDirty = true;
+		}
+		else if (m_ItemDragMode == ETimelineItemDrag::ResizeStart)
+		{
+			const float newStart = std::clamp(curMouseTime - m_DragTimeOffset, 0.0f, cutSection.EndTime - 0.05f);
+			cutSection.StartTime = newStart;
+			m_IsDirty = true;
+		}
+		else if (m_ItemDragMode == ETimelineItemDrag::ResizeEnd)
+		{
+			const float newEnd = std::clamp(curMouseTime - m_DragTimeOffset, cutSection.StartTime + 0.05f, m_Duration);
+			cutSection.EndTime = newEnd;
+			m_IsDirty = true;
+		}
+	}
+
+	if (isTrackHovered && !isBarHovered && isMouseClicked)
+	{
+		m_IsDraggingItem = false;
+		m_DragTimeOffset = 0.0f;
+		m_Selection = {};
+	}
+}
+
+void AnimationTimelinePanel::DrawCameraSplineTrackRow(ImDrawList* drawList, int splineIdx, Engine::TimelineCameraSplineSection& splineSection, const ImVec2& trackMin, const ImVec2& trackMax, float timelineWidth)
+{
+	const ImVec2 headerMin(m_TrackAreaLeft, trackMin.y);
+	const ImVec2 headerMax(trackMin.x, trackMax.y);
+	const auto scale = EditorUI::MakeTimelineScale(trackMin.x, timelineWidth, m_Duration, m_TimelineZoom, m_ViewStartTime);
+	const bool rowSelected = (m_Selection.Type == ETimelineSelectionType::CameraSpline && m_Selection.TrackIndex == splineIdx);
+	const size_t trackOrder = m_NotifyTracks.size() + m_CameraTracks.size() + m_CameraCutTracks.size() + static_cast<size_t>(splineIdx) + 1;
+	EditorUI::DrawTimelineRowBackground(*drawList, headerMin.x, scale, trackMin.y, trackMax.y, trackOrder, rowSelected);
+
+	auto& input = Engine::InputManager::Get();
+	const auto mousePos = input.GetScreenMousePosition();
+	const bool isMouseDown = input.IsMouseButtonPressed(Engine::EMouseButton::Left);
+	const bool windowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	const bool isMouseClicked = windowHovered && input.IsMouseButtonDown(Engine::EMouseButton::Left);
+
+	const auto labelState = rowSelected ? EditorUI::TimelineLabelState::Selected
+		: (splineSection.IsActive ? EditorUI::TimelineLabelState::Normal : EditorUI::TimelineLabelState::Disabled);
+	EditorUI::DrawTimelineRowLabel(*drawList, headerMin.x, headerMax.x, headerMin.y, headerMax.y,
+		ICON_FA_ROUTE, IM_COL32(50, 220, 170, 255), splineSection.TrackName, labelState);
+
+	const bool isHeaderHovered = (mousePos.x >= headerMin.x && mousePos.x <= headerMax.x && mousePos.y >= headerMin.y && mousePos.y <= headerMax.y && windowHovered);
+	if (isHeaderHovered && input.IsMouseButtonDown(Engine::EMouseButton::Right))
+	{
+		ImGui::OpenPopup(("##SplineHeaderPopup_" + std::to_string(splineIdx)).c_str());
+	}
+	if (ImGui::BeginPopup(("##SplineHeaderPopup_" + std::to_string(splineIdx)).c_str()))
+	{
+		const char* activeMenuKey = splineSection.IsActive ? "Timeline.DeactivateShot" : "Timeline.ActivateShot";
+		const char* activeMenuIcon = splineSection.IsActive ? ICON_FA_EYE_SLASH : ICON_FA_EYE;
+		const std::string activeMenuLabel = std::string(activeMenuIcon) + " " + LOCAL(activeMenuKey) + "###ToggleSplineActive";
+		if (ImGui::MenuItem(activeMenuLabel.c_str()))
+		{
+			splineSection.IsActive = !splineSection.IsActive;
+			m_IsDirty = true;
+		}
+		ImGui::Separator();
+		if (ImGui::MenuItem((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str()))
+		{
+			m_CameraSplineTracks.erase(m_CameraSplineTracks.begin() + splineIdx);
+			m_Selection = {};
+			m_IsDirty = true;
+			ImGui::EndPopup();
+			return;
+		}
+		ImGui::EndPopup();
+	}
+
+	ImGui::SetCursorScreenPos(trackMin);
+	const std::string splineHitboxId = "##SplineTrackHitbox_" + std::to_string(splineIdx);
+	ImGui::InvisibleButton(splineHitboxId.c_str(), ImVec2(timelineWidth, m_TrackHeight), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+	const bool isTrackHovered = ImGui::IsItemHovered();
+
+	drawList->PushClipRect(trackMin, trackMax, true);
+	EditorUI::DrawTimelineGrid(*drawList, scale, trackMin.y, trackMax.y, m_FPS);
+
+	const float splineStartX = TimeToScreenX(splineSection.StartTime, trackMin.x, timelineWidth);
+	const float splineEndX = TimeToScreenX(splineSection.EndTime, trackMin.x, timelineWidth);
+	const float inset = EditorUI::GetTimelineBarInset();
+	const ImVec2 barMin(splineStartX, trackMin.y + inset);
+	const ImVec2 barMax(std::max(splineStartX + 2.0f, splineEndX), trackMax.y - inset);
+
+	const bool isSelected = (m_Selection.Type == ETimelineSelectionType::CameraSpline && m_Selection.TrackIndex == splineIdx);
+	const bool isBarHovered = isTrackHovered && (mousePos.x >= barMin.x && mousePos.x <= barMax.x && mousePos.y >= barMin.y && mousePos.y <= barMax.y);
+
+	// 청록/에메랄드 계열 색상 (선택/비선택/비활성)
+	const ImU32 barColor = !splineSection.IsActive
+		? IM_COL32(50, 70, 65, 150)
+		: (isSelected ? IM_COL32(25, 175, 140, 240) : IM_COL32(15, 115, 90, 210));
+
+	EditorUI::DrawTimelineBar(*drawList, barMin, barMax, barColor, isSelected, isSelected);
+
+	// 블렌드 인(BlendInDuration) 사선/음영 표시
+	if (splineSection.BlendInDuration > 0.0f)
+	{
+		const float blendTime = std::min(splineSection.EndTime, splineSection.StartTime + splineSection.BlendInDuration);
+		const float blendEndX = TimeToScreenX(blendTime, trackMin.x, timelineWidth);
+		if (blendEndX > barMin.x)
+		{
+			drawList->AddTriangleFilled(ImVec2(barMin.x, barMax.y), ImVec2(blendEndX, barMin.y), ImVec2(barMin.x, barMin.y), IM_COL32(255, 255, 255, 40));
+			drawList->AddLine(ImVec2(barMin.x, barMax.y), ImVec2(blendEndX, barMin.y), IM_COL32(255, 255, 255, 140), 1.5f);
+		}
+	}
+
+	// 바 내부 텍스트 표시
+	std::string splineText = splineSection.SplineEntityName.empty() ? splineSection.TrackName : (splineSection.TrackName + " (" + splineSection.SplineEntityName + ")");
+	std::string barLabel = std::string(ICON_FA_ROUTE " ") + splineText;
+	const ImVec2 labelSize = ImGui::CalcTextSize(barLabel.c_str());
+	const float barCenterY = (barMin.y + barMax.y) * 0.5f;
+	const float labelPosY = barCenterY - labelSize.y * 0.5f - 1.0f;
+	if (barMax.x - barMin.x > labelSize.x + 12.0f)
+	{
+		drawList->AddText(ImVec2(barMin.x + 8.0f, labelPosY), IM_COL32(255, 255, 255, 245), barLabel.c_str());
+	}
+	else if (barMax.x - barMin.x > 24.0f)
+	{
+		drawList->AddText(ImVec2(barMin.x + 4.0f, labelPosY), IM_COL32(255, 255, 255, 245), ICON_FA_ROUTE);
+	}
+
+	drawList->PopClipRect();
+
+	constexpr float HandleWidth = 8.0f;
+	const bool canResize = (barMax.x - barMin.x >= HandleWidth * 2.0f);
+	const bool isHoverLeftHandle = canResize && isBarHovered && (mousePos.x <= barMin.x + HandleWidth);
+	const bool isHoverRightHandle = canResize && isBarHovered && (mousePos.x >= barMax.x - HandleWidth);
+
+	if (isBarHovered)
+	{
+		if (isHoverLeftHandle || isHoverRightHandle) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+		else ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+	}
+
+	if (isBarHovered && isMouseClicked)
+	{
+		m_Selection = { ETimelineSelectionType::CameraSpline, splineIdx, 0 };
+		m_IsDraggingItem = true;
+		const float clickTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
+		m_DragItemDuration = splineSection.EndTime - splineSection.StartTime;
+
+		if (isHoverLeftHandle)
+		{
+			m_ItemDragMode = ETimelineItemDrag::ResizeStart;
+			m_DragTimeOffset = clickTime - splineSection.StartTime;
+		}
+		else if (isHoverRightHandle)
+		{
+			m_ItemDragMode = ETimelineItemDrag::ResizeEnd;
+			m_DragTimeOffset = clickTime - splineSection.EndTime;
+		}
+		else
+		{
+			m_ItemDragMode = ETimelineItemDrag::Move;
+			m_DragTimeOffset = clickTime - splineSection.StartTime;
+		}
+	}
+
+	if (m_IsDraggingItem && isSelected && isMouseDown)
+	{
+		const float curMouseTime = ScreenXToTime(mousePos.x, trackMin.x, timelineWidth);
+		if (m_ItemDragMode == ETimelineItemDrag::Move)
+		{
+			const float length = m_DragItemDuration > 0.0f ? m_DragItemDuration : (splineSection.EndTime - splineSection.StartTime);
+			const float maxStart = std::max(0.0f, m_Duration - length);
+			const float newStart = std::clamp(curMouseTime - m_DragTimeOffset, 0.0f, maxStart);
+			splineSection.StartTime = newStart;
+			splineSection.EndTime = newStart + length;
+			m_IsDirty = true;
+		}
+		else if (m_ItemDragMode == ETimelineItemDrag::ResizeStart)
+		{
+			const float newStart = std::clamp(curMouseTime - m_DragTimeOffset, 0.0f, splineSection.EndTime - 0.05f);
+			splineSection.StartTime = newStart;
+			m_IsDirty = true;
+		}
+		else if (m_ItemDragMode == ETimelineItemDrag::ResizeEnd)
+		{
+			const float newEnd = std::clamp(curMouseTime - m_DragTimeOffset, splineSection.StartTime + 0.05f, m_Duration);
+			splineSection.EndTime = newEnd;
+			m_IsDirty = true;
+		}
+	}
+
+	if (isTrackHovered && !isBarHovered && isMouseClicked)
 	{
 		m_IsDraggingItem = false;
 		m_DragTimeOffset = 0.0f;
