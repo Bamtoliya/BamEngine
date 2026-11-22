@@ -2,9 +2,50 @@
 #include "WorldComponents.h"
 #include "TransformSystem.h"
 #include "UIComponents.h"
+#include "PrefabInstanceComponent.h"
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "ResourceHandleArchiveAdapter.h"
+
+namespace Engine
+{
+    struct EntityIdRemapContext
+    {
+        const std::unordered_map<entt::entity, uint64>* EntityToPersistentId = nullptr;
+        const std::unordered_map<uint64, entt::entity>* PersistentIdToEntity = nullptr;
+        bool IsPrefab = false;
+
+        static void SetActiveContext(const EntityIdRemapContext* context) noexcept
+        {
+            s_ActiveContext = context;
+        }
+
+        static const EntityIdRemapContext* GetActiveContext() noexcept
+        {
+            return s_ActiveContext;
+        }
+
+    private:
+        inline static thread_local const EntityIdRemapContext* s_ActiveContext = nullptr;
+    };
+
+    struct EntityIdRemapScope
+    {
+        explicit EntityIdRemapScope(const EntityIdRemapContext* context)
+            : m_Previous(EntityIdRemapContext::GetActiveContext())
+        {
+            EntityIdRemapContext::SetActiveContext(context);
+        }
+
+        ~EntityIdRemapScope()
+        {
+            EntityIdRemapContext::SetActiveContext(m_Previous);
+        }
+
+    private:
+        const EntityIdRemapContext* m_Previous = nullptr;
+    };
+}
 
 namespace
 {
@@ -120,13 +161,14 @@ namespace
         return {};
     }
 
-    archive::ArchiveResult CollectComponents(const entt::registry& world, SceneEntityRecord& entity)
+    archive::ArchiveResult CollectComponents(const entt::registry& world, SceneEntityRecord& entity, bool isPrefabRoot = false)
     {
         const auto& registry = Engine::ReflectionRegistry::Get();
         for (auto&& [storageId, storage] : world.storage())
         {
             if (!storage.contains(entity.Handle) || storageId == entt::type_hash<Engine::IDComponent>::value() ||
-                storageId == entt::type_hash<Engine::HierarchyComponent>::value())
+                storageId == entt::type_hash<Engine::HierarchyComponent>::value() ||
+                (isPrefabRoot && storageId == entt::type_hash<Engine::PrefabInstanceComponent>::value()))
                 continue;
             const auto* entry = registry.FindComponent(storageId);
             if (entry == nullptr || entry->ReflectionType == nullptr)
@@ -220,12 +262,14 @@ namespace
     archive::ArchiveResult ReadEntityRecords(const archive::IArchive& object, entt::registry& world, uint64& nextEntityId, std::vector<SceneEntityRecord>& entities, CreateEntity&& createEntity)
     {
         std::unordered_set<uint64> ids;
-        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
+        std::unordered_map<uint64, entt::entity> idToHandle;
+
+        auto prepass = object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
             {
-                SceneEntityRecord entity;
-                auto data = value.Read("Id", entity.Id);
+                uint64 id = 0;
+                auto data = value.Read("Id", id);
                 if (!data) return data;
-                if (entity.Id == 0 || ids.contains(entity.Id))
+                if (id == 0 || ids.contains(id))
                     return { archive::ArchiveErrorCode::InvalidValue, "Id" };
 
                 while (ids.contains(nextEntityId))
@@ -233,9 +277,25 @@ namespace
                     nextEntityId = nextEntityId == (std::numeric_limits<uint64>::max)() ? 1 : nextEntityId + 1;
                 }
 
-                entity.Handle = createEntity(nextEntityId);
-                world.get<Engine::IDComponent>(entity.Handle).id = entity.Id;
-                ids.insert(entity.Id);
+                const entt::entity handle = createEntity(nextEntityId);
+                world.get<Engine::IDComponent>(handle).id = id;
+                ids.insert(id);
+                idToHandle.emplace(id, handle);
+                return {};
+            });
+        if (!prepass) return prepass;
+
+        Engine::EntityIdRemapContext remapContext;
+        remapContext.PersistentIdToEntity = &idToHandle;
+        Engine::EntityIdRemapScope remapScope(&remapContext);
+
+        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
+            {
+                SceneEntityRecord entity;
+                auto data = value.Read("Id", entity.Id);
+                if (!data) return data;
+
+                entity.Handle = idToHandle.at(entity.Id);
 
                 data = value.HasField("Hierarchy", entity.HasHierarchy);
                 if (!data) return data;
@@ -355,6 +415,11 @@ archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
     }
     auto result = ValidateHierarchy(entities, m_LocalRegistry);
     if (!result) return result;
+
+    EntityIdRemapContext remapContext;
+    remapContext.EntityToPersistentId = &ids;
+    remapContext.IsPrefab = false;
+    EntityIdRemapScope remapScope(&remapContext);
 
     return WriteDocumentWithResourceReferences(ar, "Scene", [&](archive::IArchive& object) -> archive::ArchiveResult
     {
@@ -479,7 +544,8 @@ archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const En
                 entity.Children.push_back(child->second);
             }
         }
-        auto result = CollectComponents(m_LocalRegistry, entity);
+        const bool isRoot = (i == 0);
+        auto result = CollectComponents(m_LocalRegistry, entity, isRoot);
         if (!result)
         {
             result.Field = EntityField(i, "Components") + "." + result.Field;
@@ -489,6 +555,11 @@ archive::ArchiveResult Scene::WritePrefabArchive(archive::IArchive& ar, const En
 
     auto result = ValidateHierarchy(entities, m_LocalRegistry);
     if (!result) return result;
+
+    EntityIdRemapContext remapContext;
+    remapContext.EntityToPersistentId = &subtreeIds;
+    remapContext.IsPrefab = true;
+    EntityIdRemapScope remapScope(&remapContext);
 
     return WriteDocumentWithResourceReferences(ar, "Prefab", [&](archive::IArchive& object) -> archive::ArchiveResult
     {
@@ -569,6 +640,7 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
     const uint64 savedNextId = m_NextEntityId;
     std::vector<entt::entity> createdEntities = CreateEntities(entities.size());
     std::unordered_map<uint64, Entity*> prefabToLive;
+    std::unordered_map<entt::entity, entt::entity> stagingToLive;
 
     const auto rollback = [&](archive::ArchiveResult failure) -> archive::ArchiveResult
         {
@@ -588,6 +660,7 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
         const auto& record = entities[i];
         const entt::entity liveHandle = createdEntities[i];
         prefabToLive.emplace(record.Id, FindEntity(liveHandle));
+        stagingToLive.emplace(record.Handle, liveHandle);
 
         for (auto&& [storageId, storage] : staging->m_LocalRegistry.storage())
         {
@@ -598,6 +671,44 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
             const auto* entry = ReflectionRegistry::Get().FindComponent(storageId);
             if (entry == nullptr || !entry->Copy(staging->m_LocalRegistry, record.Handle, m_LocalRegistry, liveHandle))
                 return rollback({ archive::ArchiveErrorCode::InvalidOperation, "Prefab.Copy" });
+        }
+    }
+
+    // Remap internal reflected entt::entity references to newly created live entity handles
+    for (std::size_t i = 0; i < entities.size(); ++i)
+    {
+        const entt::entity liveHandle = createdEntities[i];
+        for (auto&& [storageId, storage] : m_LocalRegistry.storage())
+        {
+            if (!storage.contains(liveHandle) ||
+                storageId == entt::type_hash<IDComponent>::value() ||
+                storageId == entt::type_hash<HierarchyComponent>::value())
+                continue;
+
+            const auto* entry = ReflectionRegistry::Get().FindComponent(storageId);
+            if (entry && entry->ReflectionType)
+            {
+                auto object = entry->Edit(m_LocalRegistry, liveHandle);
+                if (object.IsValid())
+                {
+                    for (const auto& prop : entry->ReflectionType->Properties)
+                    {
+                        if (prop.IsValueType<entt::entity>() && prop.CanWrite())
+                        {
+                            auto valView = prop.TryReadValue(object);
+                            if (const auto* currentEnt = valView.Value.Get<entt::entity>())
+                            {
+                                if (*currentEnt != entt::null)
+                                {
+                                    auto it = stagingToLive.find(*currentEnt);
+                                    entt::entity newEnt = (it != stagingToLive.end()) ? it->second : entt::null;
+                                    prop.TryWriteValue(object, reflection::ValueView::From(newEnt));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

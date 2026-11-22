@@ -2242,6 +2242,128 @@ namespace
         cleanup();
         return true;
     }
+
+    bool CheckEntityReferenceSerializationAndPrefabIndependence()
+    {
+        // 1. Scene round-trip remaps reflected entt::entity fields to the restored entity handles.
+        {
+            ScenePtr scene(Engine::Scene::Create());
+            if (!scene)
+                return Fail("Failed to create scene for entity reference round-trip test.");
+
+            const auto rootHandle = AddSpatialEntity(*scene, 100ULL, L"CameraRig", {});
+            const auto childHandle = AddSpatialEntity(*scene, 101ULL, L"FollowTarget", {});
+            auto* root = scene->FindEntity(rootHandle);
+            auto* child = scene->FindEntity(childHandle);
+            if (!root || !child || scene->ReparentEntity(*child, root) != Engine::EntityReparentResult::Success)
+                return Fail("Failed to set up hierarchy for entity reference round-trip test.");
+
+            auto& world = scene->GetRegistry();
+            auto& arm = world.emplace<Engine::SpringArmComponent>(rootHandle);
+            arm.TargetEntity = childHandle;
+            arm.TargetArmLength = 5.0f;
+
+            archive::JsonArchive sceneArchive;
+            if (!scene->WriteArchive(sceneArchive))
+                return Fail("Failed to write scene archive with SpringArmComponent::TargetEntity.");
+
+            Engine::Scene* reloadedRaw = nullptr;
+            if (!Engine::Scene::CreateFromArchive(sceneArchive, reloadedRaw) || !reloadedRaw)
+                return Fail("Failed to reload scene with SpringArmComponent::TargetEntity.");
+
+            ScenePtr reloadedScene(reloadedRaw);
+            auto* reloadedRoot = reloadedScene->FindEntityById(100ULL);
+            auto* reloadedChild = reloadedScene->FindEntityById(101ULL);
+            if (!reloadedRoot || !reloadedChild)
+                return Fail("Reloaded entities not found by persistent ID.");
+
+            const auto& reloadedArm = reloadedScene->GetRegistry().get<Engine::SpringArmComponent>(reloadedRoot->GetEntityHandle());
+            if (reloadedArm.TargetEntity != reloadedChild->GetEntityHandle())
+                return Fail("Scene round-trip did not remap SpringArmComponent::TargetEntity to the restored entity handle.");
+
+            if (reloadedArm.TargetEntity == childHandle && childHandle != reloadedChild->GetEntityHandle())
+                return Fail("Scene round-trip leaked old runtime entity handle instead of remapping.");
+        }
+
+        // 2. Instantiating the same prefab twice produces two independent internal entt::entity references
+        // pointing to each instance's own child entity (not colliding with the first instance!).
+        {
+            ScenePtr authoringScene(Engine::Scene::Create());
+            if (!authoringScene)
+                return Fail("Failed to create authoring scene for prefab independence test.");
+
+            const auto prefabRootHandle = AddSpatialEntity(*authoringScene, 1ULL, L"PrefabRoot", {});
+            const auto prefabChildHandle = AddSpatialEntity(*authoringScene, 2ULL, L"PrefabFollowTarget", {});
+            const auto outsideHandle = AddSpatialEntity(*authoringScene, 99ULL, L"OutsideEntity", {});
+            auto* pRoot = authoringScene->FindEntity(prefabRootHandle);
+            auto* pChild = authoringScene->FindEntity(prefabChildHandle);
+            if (!pRoot || !pChild || authoringScene->ReparentEntity(*pChild, pRoot) != Engine::EntityReparentResult::Success)
+                return Fail("Failed to set up hierarchy for prefab authoring.");
+
+            auto& authWorld = authoringScene->GetRegistry();
+            auto& pArm = authWorld.emplace<Engine::SpringArmComponent>(prefabRootHandle);
+            pArm.TargetEntity = prefabChildHandle;
+            pArm.TargetArmLength = 4.0f;
+
+            // Outside entity arm referencing the child (to verify out-of-subtree becomes null)
+            auto& outsideArm = authWorld.emplace<Engine::SpringArmComponent>(outsideHandle);
+            outsideArm.TargetEntity = prefabChildHandle;
+
+            archive::JsonArchive prefabArchive;
+            if (!authoringScene->WritePrefabArchive(prefabArchive, *pRoot))
+                return Fail("Failed to write prefab archive with internal entity reference.");
+
+            ScenePtr liveScene(Engine::Scene::Create());
+            if (!liveScene)
+                return Fail("Failed to create live scene for prefab instantiation test.");
+
+            // Create some unrelated entities first so entity handle IDs are non-zero / shifted
+            AddSpatialEntity(*liveScene, 10ULL, L"Dummy1", {});
+            AddSpatialEntity(*liveScene, 20ULL, L"Dummy2", {});
+
+            // Instance 1
+            Engine::Entity* inst1Root = nullptr;
+            if (!liveScene->InstantiatePrefabArchive(prefabArchive, inst1Root, nullptr) || !inst1Root)
+                return Fail("Failed to instantiate prefab instance 1.");
+
+            const auto inst1RootHandle = inst1Root->GetEntityHandle();
+            const auto& inst1Hierarchy = liveScene->GetRegistry().get<Engine::HierarchyComponent>(inst1RootHandle);
+            if (inst1Hierarchy.children.empty())
+                return Fail("Prefab instance 1 has no children.");
+            const auto inst1ChildHandle = inst1Hierarchy.children[0];
+
+            const auto& inst1Arm = liveScene->GetRegistry().get<Engine::SpringArmComponent>(inst1RootHandle);
+            if (inst1Arm.TargetEntity != inst1ChildHandle)
+                return Fail("Prefab instance 1 SpringArmComponent::TargetEntity was not remapped to instance 1's child.");
+
+            // Instance 2
+            Engine::Entity* inst2Root = nullptr;
+            if (!liveScene->InstantiatePrefabArchive(prefabArchive, inst2Root, nullptr) || !inst2Root)
+                return Fail("Failed to instantiate prefab instance 2.");
+
+            const auto inst2RootHandle = inst2Root->GetEntityHandle();
+            const auto& inst2Hierarchy = liveScene->GetRegistry().get<Engine::HierarchyComponent>(inst2RootHandle);
+            if (inst2Hierarchy.children.empty())
+                return Fail("Prefab instance 2 has no children.");
+            const auto inst2ChildHandle = inst2Hierarchy.children[0];
+
+            const auto& inst2Arm = liveScene->GetRegistry().get<Engine::SpringArmComponent>(inst2RootHandle);
+            if (inst2Arm.TargetEntity != inst2ChildHandle)
+                return Fail("Prefab instance 2 SpringArmComponent::TargetEntity was not remapped to instance 2's child.");
+
+            // CRITICAL CHECK: The two instances must point to their OWN children, not each other's!
+            if (inst1Arm.TargetEntity == inst2Arm.TargetEntity)
+                return Fail("Prefab instance 1 and 2 collided! Both point to the same entity reference.");
+
+            if (inst1Arm.TargetEntity != inst1ChildHandle || inst2Arm.TargetEntity != inst2ChildHandle)
+                return Fail("Prefab instances do not independently reference their own children.");
+
+            if (inst1Arm.TargetEntity == prefabChildHandle || inst2Arm.TargetEntity == prefabChildHandle)
+                return Fail("Prefab instances leaked authoring/staging entity handles.");
+        }
+
+        return true;
+    }
 }
 
 int main()
@@ -2263,6 +2385,7 @@ int main()
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
         !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip() ||
+        !CheckEntityReferenceSerializationAndPrefabIndependence() ||
         !CheckExternalEntityReferenceCount() || !CheckDisabledPickingSource())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
