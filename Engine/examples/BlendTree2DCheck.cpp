@@ -9,6 +9,14 @@
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "AnimationIK.h"
 #include "RootMotion.h"
+#include "ComponentEnable.h"
+#include "Scene.h"
+#include "ColliderComponent.h"
+#include "TransformComponent.h"
+#include "WorldTransformComponent.h"
+#include "TransformSystem.h"
+#include "PhysicsSystem.h"
+#include "GraphGameplayLibrary.h"
 
 int main()
 {
@@ -408,5 +416,208 @@ int main()
 			return fail("Root Motion wrap-around jumped backward.");
 	}
 
-	std::cout << "BlendTree2D, 2-Bone IK, Look-At IK, and Root Motion checks passed.\n";
+	// ── Foot Ground IK & Visual Scripting IK Unit Tests ──
+	{
+		// 1. Verify ComponentEnableMember contract
+		static_assert(requires { AnimationIKComponent::ComponentEnableMember; },
+			"AnimationIKComponent must define ComponentEnableMember.");
+		static_assert(AnimationIKComponent::ComponentEnableMember == &AnimationIKComponent::enabled,
+			"ComponentEnableMember must point to AnimationIKComponent::enabled.");
+
+		entt::registry testRegistry;
+		const auto testEntity = testRegistry.create();
+		auto& testIk = testRegistry.emplace<AnimationIKComponent>(testEntity);
+		testIk.enabled = true;
+		if (!IsComponentEnabled<AnimationIKComponent>(testRegistry, testEntity))
+			return fail("IsComponentEnabled failed for enabled AnimationIKComponent.");
+		if (TryGetEnabledComponent<AnimationIKComponent>(testRegistry, testEntity) != &testIk)
+			return fail("TryGetEnabledComponent failed to retrieve enabled AnimationIKComponent.");
+
+		testIk.enabled = false;
+		if (IsComponentEnabled<AnimationIKComponent>(testRegistry, testEntity))
+			return fail("IsComponentEnabled reported true for disabled AnimationIKComponent.");
+		if (TryGetEnabledComponent<AnimationIKComponent>(testRegistry, testEntity) != nullptr)
+			return fail("TryGetEnabledComponent returned non-null for disabled AnimationIKComponent.");
+
+		// 2. Setup Scene, Skeleton, and Floor Collider
+		auto* scene = Scene::Create();
+		if (!scene) return fail("Scene creation failed for Foot Ground IK check.");
+		scene->SetActive(true);
+
+		struct SceneScope
+		{
+			Scene* scenePtr;
+			~SceneScope() { Safe_Release(scenePtr); }
+		} sceneScope{ scene };
+
+		auto& world = scene->GetRegistry();
+
+		// Floor entity: elevated box collider at height 0.2f
+		// Box extents: size = (10, 0.4, 10), center = (0, 0.0, 0), top face = 0.2f
+		const auto floorEntity = scene->CreateEntity().GetEntityHandle();
+		auto& floorTrans = world.get_or_emplace<TransformComponent>(floorEntity);
+		auto& floorWorldTrans = world.get_or_emplace<WorldTransformComponent>(floorEntity);
+		floorTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
+		TransformSystem::UpdateRootWorld(floorTrans, floorWorldTrans);
+
+		auto& floorCol = world.emplace<ColliderComponent>(floorEntity);
+		BoxShape floorBox{};
+		floorBox.Size = vec3(10.0f, 0.4f, 10.0f); // Top is at y = 0.0 + 0.2 = +0.2f
+		floorCol.SetShape(floorBox);
+
+		// Character entity
+		const auto charEntity = scene->CreateEntity().GetEntityHandle();
+		auto& charTrans = world.get_or_emplace<TransformComponent>(charEntity);
+		auto& charWorldTrans = world.get_or_emplace<WorldTransformComponent>(charEntity);
+		charTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
+		TransformSystem::UpdateRootWorld(charTrans, charWorldTrans);
+
+		auto& ikComp = world.emplace<AnimationIKComponent>(charEntity);
+		ikComp.enabled = true;
+		ikComp.enableFootGroundIK = true;
+		ikComp.footHeightOffset = 0.05f;
+		ikComp.raycastUpOffset = 0.5f;
+		ikComp.raycastDownDistance = 1.2f;
+		ikComp.maxPelvisOffset = 0.4f;
+		ikComp.pelvisSmoothSpeed = 10.0f;
+		ikComp.pelvisBoneName = "Pelvis";
+		ikComp.leftFootChainIndex = 0;
+		ikComp.rightFootChainIndex = 1;
+
+		// 3. Setup Skeleton: Pelvis -> Thigh -> Calf -> Foot
+		SkeletonCreateDesc ikSkelDesc{};
+		ikSkelDesc.Key = L"FootIK_TestSkeleton";
+
+		// Bone 0: Pelvis (parent -1, local pos y = 1.0)
+		Bone bPelvis{};
+		bPelvis.Name = L"Pelvis";
+		bPelvis.ParentIndex = -1;
+		bPelvis.LocalTransform = glm::translate(mat4(1.0f), vec3(0.0f, 1.0f, 0.0f));
+		bPelvis.OffsetMatrix = glm::inverse(bPelvis.LocalTransform);
+		ikSkelDesc.Bones.push_back(bPelvis);
+
+		// Bone 1: Thigh (parent 0, local pos y = 0.0) -> global y = 1.0
+		Bone bThigh{};
+		bThigh.Name = L"Thigh";
+		bThigh.ParentIndex = 0;
+		bThigh.LocalTransform = mat4(1.0f);
+		bThigh.OffsetMatrix = glm::inverse(bPelvis.LocalTransform * bThigh.LocalTransform);
+		ikSkelDesc.Bones.push_back(bThigh);
+
+		// Bone 2: Calf (parent 1, local pos y = -0.5) -> global y = 0.5
+		Bone bCalf{};
+		bCalf.Name = L"Calf";
+		bCalf.ParentIndex = 1;
+		bCalf.LocalTransform = glm::translate(mat4(1.0f), vec3(0.0f, -0.5f, 0.0f));
+		bCalf.OffsetMatrix = glm::inverse(bPelvis.LocalTransform * bThigh.LocalTransform * bCalf.LocalTransform);
+		ikSkelDesc.Bones.push_back(bCalf);
+
+		// Bone 3: Foot (parent 2, local pos y = -0.5) -> global y = 0.0
+		Bone bFoot{};
+		bFoot.Name = L"Foot";
+		bFoot.ParentIndex = 2;
+		bFoot.LocalTransform = glm::translate(mat4(1.0f), vec3(0.0f, -0.5f, 0.0f));
+		bFoot.OffsetMatrix = glm::inverse(bPelvis.LocalTransform * bThigh.LocalTransform * bCalf.LocalTransform * bFoot.LocalTransform);
+		ikSkelDesc.Bones.push_back(bFoot);
+
+		auto* ikSkelResource = Skeleton::Create(&ikSkelDesc);
+		if (!ikSkelResource) return fail("Foot IK Skeleton creation failed.");
+		auto ikSkeleton = manager.AddResource<Skeleton>(ikSkelDesc.Key, ikSkelResource);
+		if (!ikSkeleton.Get()) return fail("Foot IK Skeleton registration failed.");
+
+		// Chain 0: Thigh -> Calf -> Foot
+		TwoBoneIKChain chain{};
+		chain.rootBoneName = "Thigh";
+		chain.midBoneName = "Calf";
+		chain.endBoneName = "Foot";
+		chain.poleVector = vec3(0.0f, 0.5f, 1.0f);
+		chain.weight = 1.0f;
+		chain.enabled = true;
+		ikComp.twoBoneChains.push_back(chain);
+
+		// Initial local pose matching default bind pose
+		std::vector<BoneLocalPose> localPose(4);
+		localPose[0].Position = vec3(0.0f, 1.0f, 0.0f); // Pelvis
+		localPose[1].Position = vec3(0.0f, 0.0f, 0.0f); // Thigh
+		localPose[2].Position = vec3(0.0f, -0.5f, 0.0f); // Calf
+		localPose[3].Position = vec3(0.0f, -0.5f, 0.0f); // Foot
+
+		std::vector<mat4> globalPose;
+		const mat4 entityWorldMatrix = charWorldTrans.worldMatrix;
+
+		// 4. Test UpdateFootGroundIK
+		UpdateFootGroundIK(*scene, charEntity, *ikSkeleton.Get(), localPose, globalPose, ikComp, entityWorldMatrix, 0.0f);
+
+		// Floor top is at y = 0.2f. Foot height offset is 0.05f.
+		// Expected target foot Y = 0.2f + 0.05f = 0.25f.
+		const float expectedFootY = 0.2f + 0.05f;
+		if (std::abs(ikComp.twoBoneChains[0].targetPosition.y - expectedFootY) > 1e-3f)
+			return fail("UpdateFootGroundIK did not update foot targetPosition.y to floorTopY + footHeightOffset.");
+		if (!ikComp.twoBoneChains[0].targetInWorldSpace)
+			return fail("UpdateFootGroundIK did not set targetInWorldSpace to true.");
+
+		// 5. Test ApplyAnimationIK moves the foot bone to the ground target
+		std::vector<mat4> skinningMatrices;
+		ApplyAnimationIK(*ikSkeleton.Get(), localPose, skinningMatrices, ikComp, entityWorldMatrix);
+
+		// Forward kinematics to check new global position of Foot (bone 3)
+		std::vector<mat4> solvedGlobals(4);
+		for (size_t i = 0; i < 4; ++i)
+		{
+			const mat4 localM = glm::translate(mat4(1.0f), localPose[i].Position) *
+				glm::toMat4(localPose[i].Rotation) * glm::scale(mat4(1.0f), localPose[i].Scale);
+			const int32 parent = ikSkeleton->GetBones()[i].ParentIndex;
+			solvedGlobals[i] = (parent >= 0) ? solvedGlobals[parent] * localM : localM;
+		}
+
+		const vec3 solvedFootWorld = vec3(entityWorldMatrix * solvedGlobals[3][3]);
+		if (std::abs(solvedFootWorld.y - expectedFootY) > 1e-2f)
+			return fail("ApplyAnimationIK did not move the foot bone to the ground target.");
+
+		// 6. Test uneven/lower ground pelvis offset
+		// Move floor lower: top at y = -0.1f -> expected desiredY = -0.05f -> delta = -0.05f
+		floorTrans.SetLocalPosition(vec3(0.0f, -0.3f, 0.0f)); // center -0.3, size 0.4 -> top = -0.1f
+		TransformSystem::UpdateRootWorld(floorTrans, floorWorldTrans);
+
+		// Reset local pose
+		localPose[0].Position = vec3(0.0f, 1.0f, 0.0f);
+		localPose[0].Rotation = glm::identity<quat>();
+		localPose[1].Position = vec3(0.0f, 0.0f, 0.0f);
+		localPose[1].Rotation = glm::identity<quat>();
+		localPose[2].Position = vec3(0.0f, -0.5f, 0.0f);
+		localPose[2].Rotation = glm::identity<quat>();
+		localPose[3].Position = vec3(0.0f, -0.5f, 0.0f);
+		localPose[3].Rotation = glm::identity<quat>();
+
+		UpdateFootGroundIK(*scene, charEntity, *ikSkeleton.Get(), localPose, globalPose, ikComp, entityWorldMatrix, 0.0f);
+		const float lowerExpectedY = -0.1f + 0.05f; // -0.05f
+		if (std::abs(ikComp.twoBoneChains[0].targetPosition.y - lowerExpectedY) > 1e-3f)
+			return fail("UpdateFootGroundIK did not update targetPosition for lower ground.");
+
+		if (ikComp.currentPelvisOffset >= 0.0f || std::abs(ikComp.currentPelvisOffset - (-0.05f)) > 1e-3f)
+			return fail("UpdateFootGroundIK did not lower currentPelvisOffset for lower ground.");
+
+		if (std::abs(localPose[0].Position.y - (1.0f - 0.05f)) > 1e-3f)
+			return fail("UpdateFootGroundIK did not apply currentPelvisOffset to pelvis local pose.");
+
+		// 7. Test Visual Scripting IK helper functions in GraphGameplayLibrary
+		const uint64 entityId = static_cast<uint64>(static_cast<uint32>(charEntity));
+		GraphGameplayLibrary::SetTwoBoneIKTarget(*scene, entityId, 0, vec3(0.0f, 0.3f, 0.0f), 0.8f);
+		if (std::abs(ikComp.twoBoneChains[0].targetPosition.y - 0.3f) > 1e-4f ||
+			std::abs(ikComp.twoBoneChains[0].weight - 0.8f) > 1e-4f)
+			return fail("GraphGameplayLibrary::SetTwoBoneIKTarget failed to modify chain.");
+
+		GraphGameplayLibrary::SetLookAtIKTarget(*scene, entityId, 0, vec3(0.0f, 1.0f, 5.0f), 0.7f);
+
+		GraphGameplayLibrary::SetFootGroundIKEnabled(*scene, entityId, false, 0.08f);
+		if (ikComp.enableFootGroundIK || std::abs(ikComp.footHeightOffset - 0.08f) > 1e-4f)
+			return fail("GraphGameplayLibrary::SetFootGroundIKEnabled failed to update settings.");
+
+		GraphGameplayLibrary::SetAnimationIKEnabled(*scene, entityId, false);
+		if (ikComp.enabled)
+			return fail("GraphGameplayLibrary::SetAnimationIKEnabled failed to disable IK.");
+	}
+
+	std::cout << "BlendTree2D, 2-Bone IK, Look-At IK, Root Motion, and Foot Ground IK checks passed.\n";
+	return 0;
 }
