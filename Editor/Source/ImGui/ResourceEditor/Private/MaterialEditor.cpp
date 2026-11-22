@@ -17,6 +17,7 @@
 #include "GraphFile.h"
 #include "GraphMessageLocalization.h"
 #include "GraphRegistry.h"
+#include "ShaderGraphCompiler.h"
 #include "ReflectionRegistry.h"
 #include "IconsFontAwesome7.h"
 #include "AssetPathPicker.h"
