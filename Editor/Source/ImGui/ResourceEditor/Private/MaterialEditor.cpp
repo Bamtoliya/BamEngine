@@ -889,10 +889,19 @@ std::optional<Engine::MaterialTextureBinding> MaterialEditor::GetTextureSampleBi
 	const auto slot = value ? *value : 0;
 	if (!m_Material || slot < 0 || slot > 3) return std::nullopt;
 
+	const auto nameStored = node.InputValues.find("name");
+	const auto* nameVal = nameStored == node.InputValues.end() ? nullptr : std::get_if<std::string>(&nameStored->second);
+
 	const auto& local = m_Material->GetTextureBindings();
 	const auto key = static_cast<uint32>(slot);
 	const auto found = std::ranges::find(local, key, &Engine::MaterialTextureBinding::slot);
-	if (found != local.end()) return *found;
+	if (found != local.end())
+	{
+		auto binding = *found;
+		if (binding.name.empty() && nameVal && !nameVal->empty())
+			binding.name = *nameVal;
+		return binding;
+	}
 	const auto* instance = dynamic_cast<const Engine::MaterialInstance*>(m_Material);
 	const auto* base = instance ? instance->GetBaseMaterial() : nullptr;
 	if (base)
@@ -900,10 +909,17 @@ std::optional<Engine::MaterialTextureBinding> MaterialEditor::GetTextureSampleBi
 		const auto& bindings = base->GetTextureBindings();
 		const auto inherited = std::ranges::find(bindings, key, &Engine::MaterialTextureBinding::slot);
 		if (inherited != bindings.end() && (inherited->name.empty() || !m_Material->HasTextureBinding(inherited->name)))
-			return *inherited;
+		{
+			auto binding = *inherited;
+			if (binding.name.empty() && nameVal && !nameVal->empty())
+				binding.name = *nameVal;
+			return binding;
+		}
 	}
 	Engine::MaterialTextureBinding binding{};
 	binding.slot = key;
+	if (nameVal && !nameVal->empty())
+		binding.name = *nameVal;
 	return binding;
 }
 
@@ -2208,6 +2224,9 @@ void MaterialEditor::CreateCommentBox() { CreateCommentBoxFromSelection(); }
 void MaterialEditor::SyncParametersFromGraph()
 {
 	if (!CanEditShaderGraph() || !m_GraphReady) return;
+
+	const auto texDescriptors = Engine::ShaderGraphCompiler::CollectTextureDescriptors(m_ShaderGraph.Data);
+	m_Material->SyncTextureBindings(texDescriptors);
 
 	// 선언의 기본값은 아직 런타임 값이 없는 변수에만 적용한다.
 	const auto& curParams = m_Material->GetParameters();

@@ -424,7 +424,7 @@ namespace
 		if (type == "Shader.TextureSample")
 		{
 			if (stage == EShaderStage::Vertex)
-				return { EGraphError::UnsupportedCompilation, producer->Id, "uv", 0, "ShaderGraph.TextureSamplePixelOnly" };
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.TextureSamplePixelOnly" };
 
 			const int slot = GraphTextureSlot(*producer);
 			if (slot < 0)
@@ -436,7 +436,48 @@ namespace
 				auto result = resolvePin("uv", EGraphPinType::Float2, uv);
 				if (!result.Succeeded()) return result;
 			}
-			outExpression = "SampleGraphTexture" + std::to_string(slot) + "(" + uv + ")";
+
+			const std::string sampleCall = "SampleGraphTexture" + std::to_string(slot) + "(" + uv + ")";
+			if (outputPin.Pin == "rgba")
+			{
+				if (expectedType != EGraphPinType::Float4)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = sampleCall;
+			}
+			else if (outputPin.Pin == "rgb")
+			{
+				if (expectedType != EGraphPinType::Float3)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").rgb";
+			}
+			else if (outputPin.Pin == "r")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").r";
+			}
+			else if (outputPin.Pin == "g")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").g";
+			}
+			else if (outputPin.Pin == "b")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").b";
+			}
+			else if (outputPin.Pin == "a")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").a";
+			}
+			else
+			{
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			}
 			return {};
 		}
 
@@ -715,6 +756,72 @@ MaterialBufferLayout ShaderGraphCompiler::BuildMaterialBufferLayout(const Graph&
 
 	layout.TotalBufferSize = (cursor + 15u) & ~15u;
 	return layout;
+}
+
+std::vector<MaterialTextureDescriptor> ShaderGraphCompiler::CollectTextureDescriptors(const Graph& graph)
+{
+	std::vector<MaterialTextureDescriptor> descriptors;
+
+	for (const auto& node : graph.GetNodes())
+	{
+		if (node.Type != "Shader.TextureSample") continue;
+
+		const int slot = GraphTextureSlot(node);
+		if (slot < 0 || slot >= GraphTextureSlotCount) continue;
+
+		const uint32 uSlot = static_cast<uint32>(slot);
+
+		std::string name;
+		const auto itName = node.InputValues.find("name");
+		if (itName != node.InputValues.end())
+		{
+			if (const auto* s = std::get_if<std::string>(&itName->second); s && !s->empty())
+				name = *s;
+		}
+		if (name.empty())
+		{
+			const auto itSlotName = node.InputValues.find("slotName");
+			if (itSlotName != node.InputValues.end())
+			{
+				if (const auto* s = std::get_if<std::string>(&itSlotName->second); s && !s->empty())
+					name = *s;
+			}
+		}
+		if (name.empty())
+		{
+			name = (uSlot == 0) ? "diffuseMap" : ("graphTexture" + std::to_string(uSlot));
+		}
+
+		auto existing = std::find_if(descriptors.begin(), descriptors.end(),
+			[uSlot](const MaterialTextureDescriptor& d) { return d.Slot == uSlot; });
+
+		if (existing != descriptors.end())
+		{
+			const std::string defaultName = (uSlot == 0) ? "diffuseMap" : ("graphTexture" + std::to_string(uSlot));
+			if (existing->Name == defaultName && name != defaultName)
+			{
+				existing->Name = name;
+				existing->NodeId = node.Id;
+			}
+		}
+		else
+		{
+			descriptors.push_back({ uSlot, name, node.Id });
+		}
+	}
+
+	std::sort(descriptors.begin(), descriptors.end(),
+		[](const MaterialTextureDescriptor& a, const MaterialTextureDescriptor& b)
+		{
+			return a.Slot < b.Slot;
+		});
+
+	return descriptors;
+}
+
+std::vector<MaterialTextureDescriptor> ShaderGraphCompiler::CollectTextureParameters(const Graph& graph)
+{
+	return CollectTextureDescriptors(graph);
 }
 
 GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(

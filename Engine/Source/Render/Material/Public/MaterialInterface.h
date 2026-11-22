@@ -147,6 +147,24 @@ struct MaterialParameterEntry
 	uint32 Size = 0;
 };
 
+// 셰이더 그래프에서 수집된 텍스처 슬롯/파라미터 디스크립터
+STRUCT()
+struct ENGINE_API MaterialTextureDescriptor
+{
+	REFLECT_BODY()
+
+	PROPERTY()
+	uint32 Slot = 0;
+
+	PROPERTY()
+	string Name;
+
+	PROPERTY()
+	uint64 NodeId = 0;
+
+	bool operator==(const MaterialTextureDescriptor& other) const = default;
+};
+
 // 셰이더 그래프에서 산출되는 동적 상수 버퍼 레이아웃 (앞 48바이트는 표준 MaterialConstants 유지)
 STRUCT()
 struct ENGINE_API MaterialBufferLayout
@@ -288,6 +306,10 @@ public:
 	void RemoveTextureBindingBySlot(uint32 slot);
 	void ClearTextureBindings();
 
+	void SyncTextureBindings(const vector<MaterialTextureDescriptor>& descriptors);
+	const vector<MaterialTextureDescriptor>& GetTextureDescriptors() const { return m_TextureDescriptors; }
+	void SetTextureDescriptors(const vector<MaterialTextureDescriptor>& descriptors) { m_TextureDescriptors = descriptors; }
+
 	const vector<MaterialTextureBinding>& GetTextureBindings() const { return m_TextureBindings; }
 #pragma endregion
 
@@ -379,6 +401,8 @@ private:
 	unordered_map<uint32, uint32> m_TextureSlotToIndex = {};
 	PROPERTY()
 	MaterialBufferLayout m_BufferLayout = {};
+	PROPERTY()
+	vector<MaterialTextureDescriptor> m_TextureDescriptors = {};
 #pragma endregion
 };
 END

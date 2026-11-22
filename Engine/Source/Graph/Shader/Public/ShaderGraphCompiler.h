@@ -12,6 +12,8 @@ namespace Engine
 		[[nodiscard]] static bool SupportsNode(const std::string& type);
 
 		[[nodiscard]] static MaterialBufferLayout BuildMaterialBufferLayout(const Graph& graph);
+		[[nodiscard]] static std::vector<MaterialTextureDescriptor> CollectTextureDescriptors(const Graph& graph);
+		[[nodiscard]] static std::vector<MaterialTextureDescriptor> CollectTextureParameters(const Graph& graph);
 
 		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialVS(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);

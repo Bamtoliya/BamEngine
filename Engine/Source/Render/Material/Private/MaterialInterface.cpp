@@ -24,6 +24,7 @@ void MaterialInterface::Free()
 	m_Parameters.clear();
 	m_ShaderGraphPath.clear();
 	m_BufferLayout.Clear();
+	m_TextureDescriptors.clear();
 }
 
 EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
@@ -618,6 +619,29 @@ void MaterialInterface::ClearTextureBindings()
     m_TextureBindings.clear();
     m_TextureNameToIndex.clear();
     m_TextureSlotToIndex.clear();
+}
+
+void MaterialInterface::SyncTextureBindings(const vector<MaterialTextureDescriptor>& descriptors)
+{
+    m_TextureDescriptors = descriptors;
+    for (const auto& desc : descriptors)
+    {
+        int32 existingIndex = FindTextureBindingIndexBySlot(desc.Slot);
+        if (existingIndex < 0)
+        {
+            string bindingName = desc.Name.empty() ? ("TextureSlot" + std::to_string(desc.Slot)) : desc.Name;
+            SetTextureBinding(bindingName, desc.Slot, {});
+        }
+        else
+        {
+            if (!desc.Name.empty() && (m_TextureBindings[existingIndex].name.empty() ||
+                m_TextureBindings[existingIndex].name.rfind("TextureSlot", 0) == 0))
+            {
+                m_TextureBindings[existingIndex].name = desc.Name;
+                RebuildTextureBindingCache();
+            }
+        }
+    }
 }
 #pragma endregion
 
