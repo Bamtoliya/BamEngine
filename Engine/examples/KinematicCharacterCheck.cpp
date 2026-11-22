@@ -531,7 +531,8 @@ namespace
             if (controller.GroundEntity == floor)
             {
                 ++floorSoftFrames;
-                if (previousY - transform.position.y > maxSoftDrop)
+                const f32 frameMaxDrop = (floorSoftFrames == 1) ? (6.5f * dt + 0.015f) : maxSoftDrop;
+                if (previousY - transform.position.y > frameMaxDrop)
                     return false;
                 if (controller.IsGrounded && glm::abs(transform.position.y) <= 0.002f &&
                     controller.GroundAngle < 1.0f && !controller.IsSoftLanding)

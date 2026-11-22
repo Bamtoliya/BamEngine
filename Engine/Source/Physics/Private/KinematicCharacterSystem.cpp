@@ -793,6 +793,10 @@ void KinematicCharacterSystem::UpdateCharacter(Scene& scene, entt::entity entity
         // 계단 내려가기 및 경사로 침투 보정 (Step-Down Ground Snapping: 점프 상승 중에는 실행 방지)
         if (kcc.IsGrounded && !justJumped && !stepped && !reachedSupport)
         {
+            if (currentPos.y < surfaceStartY)
+            {
+                remainingSoftDrop = glm::max(0.0f, remainingSoftDrop - (surfaceStartY - currentPos.y));
+            }
             const f32 stepDownMaxDrop = (kcc.StepOffset > 0.001f) ? GroundSnapDistance(kcc) : 0.0f;
             GroundSupport stepDown{};
             if (FindGroundSupport(scene, kcc, currentPos, stepDownMaxDrop, stepDown, entity))

@@ -832,7 +832,9 @@ int main()
         std::vector<UIPointerEvent> dropEvents;
         dropSystem.OnPointerEvent().AddLambda([&](const auto& ev) { dropEvents.push_back(ev); });
 
-        // Step 1: Dropdown is closed. Click at { 30.0f, 50.0f } which is on behindButton.
+        // Step 1: Dropdown is closed. Clear initial m_SuppressUntilRelease, then click behindButton at { 30.0f, 50.0f }.
+        Feed(dropSystem, { 30.0f, 50.0f });
+        dropEvents.clear();
         Feed(dropSystem, { 30.0f, 50.0f }, true, true);
         Feed(dropSystem, { 30.0f, 50.0f }, false, false, true);
         if (dropEvents.empty() || dropEvents.back().target != behindButton)
@@ -899,7 +901,9 @@ int main()
         std::vector<UIPointerEvent> textEvents;
         inputSystem.OnPointerEvent().AddLambda([&](const auto& ev) { textEvents.push_back(ev); });
 
-        // Click text input to focus
+        // Click text input to focus (clear initial m_SuppressUntilRelease first)
+        Feed(inputSystem, { 30.0f, 30.0f });
+        textEvents.clear();
         Feed(inputSystem, { 30.0f, 30.0f }, true, true);
         Feed(inputSystem, { 30.0f, 30.0f }, false, false, true);
         if (!textInput.isFocused)
