@@ -56,3 +56,10 @@ ModelImport,CompressionCpuStandard,CPU standard,CPU 표준
 ModelImport,CompressionCpuFast,CPU fast BC7,CPU 빠른 BC7
 ModelImport,CompressionGpu,GPU BC7,GPU BC7
 ModelImport,TextureCompressionTooltip,Fast BC7 may reduce quality. GPU supports BC7 only and falls back to CPU if unavailable. BC5 uses CPU.,빠른 BC7은 화질이 낮아질 수 있습니다. GPU는 BC7만 지원하며 사용할 수 없으면 CPU로 대체합니다. BC5는 CPU를 사용합니다.
+ModelImport,FolderOrganization,Folder Organization (Hybrid Layout),폴더 정리 (하이브리드 레이아웃)
+ModelImport,CreateModelFolder,Create Dedicated Model Folder,모델 전용 폴더 생성
+ModelImport,SubfolderMeshes,Put Meshes in Meshes/ Subfolder,메시를 Meshes/ 하위 폴더로 분류
+ModelImport,SubfolderMaterials,Put Materials in Materials/ Subfolder,머티리얼을 Materials/ 하위 폴더로 분류
+ModelImport,SubfolderTextures,Put Textures in Textures/ Subfolder,텍스처를 Textures/ 하위 폴더로 분류
+ModelImport,SubfolderAnimations,Put Animations in Animations/ Subfolder,애니메이션을 Animations/ 하위 폴더로 분류
+ModelImport,DestinationPath,Target Model Path,대상 모델 경로

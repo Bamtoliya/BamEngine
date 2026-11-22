@@ -20,6 +20,7 @@
 #include "MaterialInstance.h"
 #include "Texture.h"
 #include "ImGuiManager.h"
+#include "ModelSubfolderHelper.h"
 
 namespace Editor
 {
@@ -140,7 +141,6 @@ namespace Editor
 			if (!scene || !scene->DestroyEntity(*m_PreviewEntity))
 			{
 				BAM_LOG(Error, "Editor", "Asset", "Model import preview entity cleanup failed.");
-				return;
 			}
 
 			m_PreviewEntity = nullptr;
@@ -529,9 +529,8 @@ namespace Editor
 		const auto rotX = glm::angleAxis(glm::radians(rotation[0]), Engine::vec3(1.0f, 0.0f, 0.0f));
 		const auto rotY = glm::angleAxis(glm::radians(rotation[1]), Engine::vec3(0.0f, 1.0f, 0.0f));
 		const auto rotZ = glm::angleAxis(glm::radians(rotation[2]), Engine::vec3(0.0f, 0.0f, 1.0f));
-		const Engine::quat identity(1.0f, 0.0f, 0.0f, 0.0f);
-		const auto pitch = m_Desc.FlipPitch ? Engine::quat(0.0f, 1.0f, 0.0f, 0.0f) : identity;
-		const auto heading = m_Desc.FlipHeading ? Engine::quat(0.0f, 0.0f, 1.0f, 0.0f) : identity;
+		const auto pitch = glm::angleAxis(glm::radians(m_Desc.FlipPitch ? 180.0f : 0.0f), Engine::vec3(1.0f, 0.0f, 0.0f));
+		const auto heading = glm::angleAxis(glm::radians(m_Desc.FlipHeading ? 180.0f : 0.0f), Engine::vec3(0.0f, 1.0f, 0.0f));
 
 		if (!candidate.SetLocalRotation(rotZ * rotY * rotX * heading * pitch))
 			return false;
@@ -780,6 +779,34 @@ namespace Editor
 							ImGui::Unindent();
 						}
 					}
+
+					ImGui::Spacing();
+
+					// Phase 6: Folder Organization (하이브리드 에셋 폴더 정리)
+					if (ImGui::CollapsingHeader(LOCAL_LABEL("ModelImport.FolderOrganization").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+					{
+						ImGui::Checkbox(LOCAL_LABEL("ModelImport.CreateModelFolder").c_str(), &m_Desc.CreateModelSubfolder);
+						if (m_Desc.CreateModelSubfolder)
+						{
+							ImGui::Indent();
+							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderMeshes").c_str(), &m_Desc.UseMeshSubfolder);
+							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderMaterials").c_str(), &m_Desc.UseMaterialSubfolder);
+							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderTextures").c_str(), &m_Desc.UseTextureSubfolder);
+							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderAnimations").c_str(), &m_Desc.UseAnimationSubfolder);
+							ImGui::Unindent();
+						}
+
+						const auto targetLayout = Engine::ModelSubfolderHelper::ResolveLayout(
+							m_DestDir, m_SourcePath.stem().wstring(),
+							m_Desc.CreateModelSubfolder,
+							m_Desc.UseMeshSubfolder, m_Desc.UseMaterialSubfolder,
+							m_Desc.UseTextureSubfolder, m_Desc.UseAnimationSubfolder);
+
+						const std::string previewPath = Engine::WStrToStr(targetLayout.ModelFilePath.wstring());
+						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+						ImGui::TextWrapped("%s: %s", LOCAL_CSTR("ModelImport.DestinationPath"), previewPath.c_str());
+						ImGui::PopStyleColor();
+					}
 				}, previewFlags, /*reserveHalfForContent=*/false);
 
 			ImGui::Spacing();
@@ -819,9 +846,13 @@ namespace Editor
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::Combo("###ModelImport.DccPresetCombo", &currentPreset, presetLabels, IM_ARRAYSIZE(presetLabels)))
 		{
+			const auto prevFlags = m_Desc.PostProcessFlags;
 			ApplyDccPreset(static_cast<EModelImportDccPreset>(currentPreset));
 			UpdatePreviewTransform();
-			m_PreviewReloadRequested = true;
+			if (m_PreviewEntity)
+				m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
+			if (m_Desc.PostProcessFlags != prevFlags)
+				m_PreviewReloadRequested = true;
 		}
 
 		// One-click quick DCC preset buttons
@@ -838,9 +869,13 @@ namespace Editor
 				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 			if (ImGui::SmallButton(quickPresets[i].Name))
 			{
+				const auto prevFlags = m_Desc.PostProcessFlags;
 				ApplyDccPreset(quickPresets[i].Preset);
 				UpdatePreviewTransform();
-				m_PreviewReloadRequested = true;
+				if (m_PreviewEntity)
+					m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
+				if (m_Desc.PostProcessFlags != prevFlags)
+					m_PreviewReloadRequested = true;
 			}
 			if (isSelected)
 				ImGui::PopStyleColor();
@@ -879,6 +914,8 @@ namespace Editor
 				m_Desc.UniformScale = preset.Scale;
 				m_Desc.DccPreset = EModelImportDccPreset::Custom;
 				transformChanged = true;
+				if (m_PreviewEntity)
+					m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
 			}
 		}
 
@@ -901,7 +938,36 @@ namespace Editor
 			}
 		}
 
+		// Quick-rotate buttons
+		const float btnHalfWidth = (ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f;
+		const bool pitchActive = m_Desc.FlipPitch;
+		if (pitchActive)
+			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+		if (ImGui::Button((LOCAL("ModelImport.Pitch180") + "###Pitch180Btn").c_str(), ImVec2(btnHalfWidth, 0.0f)))
+		{
+			m_Desc.FlipPitch = !m_Desc.FlipPitch;
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
+			transformChanged = true;
+		}
+		if (pitchActive)
+			ImGui::PopStyleColor();
+
+		ImGui::SameLine();
+
+		const bool yawActive = m_Desc.FlipHeading;
+		if (yawActive)
+			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+		if (ImGui::Button((LOCAL("ModelImport.Yaw180") + "###Yaw180Btn").c_str(), ImVec2(btnHalfWidth, 0.0f)))
+		{
+			m_Desc.FlipHeading = !m_Desc.FlipHeading;
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
+			transformChanged = true;
+		}
+		if (yawActive)
+			ImGui::PopStyleColor();
+
 		const bool pitchChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Pitch180").c_str(), &m_Desc.FlipPitch);
+		ImGui::SameLine();
 		const bool yawChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Yaw180").c_str(), &m_Desc.FlipHeading);
 		if (pitchChanged || yawChanged)
 		{
@@ -911,11 +977,14 @@ namespace Editor
 
 		if (ImGui::SmallButton(LOCAL_LABEL("ModelImport.Reset").c_str()))
 		{
+			m_Desc.UniformScale = 1.0f;
 			m_Desc.RotationOffset = {};
 			m_Desc.FlipPitch = false;
 			m_Desc.FlipHeading = false;
 			m_Desc.DccPreset = EModelImportDccPreset::Custom;
 			transformChanged = true;
+			if (m_PreviewEntity)
+				m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
 		}
 		if (transformChanged)
 			UpdatePreviewTransform();
