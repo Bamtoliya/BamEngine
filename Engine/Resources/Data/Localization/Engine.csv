@@ -21,6 +21,7 @@
 ,BLOOM_SCATTER,Scatter,확산 반경
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
 ,BLOOM_THRESHOLD,Threshold,임계값
+,CATEGORY_AMBIENT,Ambient Light,환경광
 ,CATEGORY_ANCHOR,Anchor,앵커
 ,CATEGORY_ANIMATION,Animation,애니메이션
 ,CATEGORY_ATMOSPHERE,Atmosphere,대기
@@ -29,7 +30,6 @@
 ,CATEGORY_BOUNDS,Bounds,경계
 ,CATEGORY_CAMERA,Camera,카메라
 ,CATEGORY_CIRCLE,Circle,원
-,CATEGORY_CLOUDS,Clouds,구름
 ,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
 ,CATEGORY_CORE,Core,기본
 ,CATEGORY_FOG_COLOR,Fog Color,안개 색상
@@ -37,7 +37,6 @@
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
 ,CATEGORY_GAMEPLAY,Gameplay,게임플레이
 ,CATEGORY_HIT_RESULT,Hit Result,히트 결과
-,CATEGORY_IBL,Image-Based Lighting,이미지 기반 조명
 ,CATEGORY_LAYER_PLACEMENT,Layer Placement,구름층 배치
 ,CATEGORY_LIGHTING,Lighting,조명
 ,CATEGORY_NETWORK,Network,네트워크
@@ -64,7 +63,6 @@
 ,CATEGORY_SHADER,Shader,셰이더
 ,CATEGORY_SHADOW,Shadow,그림자
 ,CATEGORY_SKY,Sky,하늘
-,CATEGORY_SKY_COLOR,Sky Color,하늘 색상
 ,CATEGORY_SPLINE,Spline,스플라인
 ,CATEGORY_SUN_DISC,Sun Disc,태양 원반
 ,CATEGORY_TEXTURE,Texture,텍스처
@@ -388,10 +386,6 @@
 ,PROP_CHALLENGE_HIT_HEIGHT,Vertical Hit Distance,수직 판정 거리
 ,PROP_CHALLENGE_HIT_RADIUS,Horizontal Hit Radius,수평 판정 반경
 ,PROP_CHALLENGE_REQUIRED_HITS,Required Hits,목표 적중 횟수
-,PROP_CLOUD_ALTITUDE,Cloud Altitude,구름 고도
-,PROP_CLOUD_COVERAGE,Cloud Coverage,구름 덮개
-,PROP_CLOUD_DENSITY,Cloud Density,구름 밀도
-,PROP_CLOUD_SPEED,Cloud Speed,구름 속도
 ,PROP_COLLISION_LAYER,Collision Layer,충돌 레이어
 ,PROP_COLLISION_MASK,Collision Mask,충돌 마스크
 ,PROP_COLLISION_MODE,Collision Mode,충돌 모드
@@ -440,7 +434,6 @@
 ,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화
 ,PROP_ENABLE_CAMERA_LAG,Enable Camera Lag,카메라 지연 활성화
-,PROP_ENABLE_CLOUDS,Enable Clouds,구름 활성화
 ,PROP_ENABLE_COLLISION,Enable Collision,충돌 허용
 ,PROP_ENABLE_CURL_NOISE,Enable Turbulence,와류(컬 노이즈) 활성화
 ,PROP_ENABLE_TIME_CYCLE,Enable Time Cycle,시간 주기 활성화
@@ -450,6 +443,7 @@
 ,PROP_EXTINCTION,Extinction Factor,빛 흡수 계수
 ,PROP_FADE_OUT_DURATION,Fade Out Duration,페이드 아웃 시간
 ,PROP_FADE_START_TIME,Fade Start Time,페이드 시작 시간
+,PROP_FALLBACK_AMBIENT_COLOR,Fallback Ambient Color,대체 환경광 색상
 ,PROP_FAR_PLANE,Far Plane,원거리 평면
 ,PROP_FILL_AMOUNT,Fill Amount,채우기 진행도
 ,PROP_FILL_METHOD,Fill Method,채우기 방식
@@ -461,6 +455,7 @@
 ,PROP_FLIPY,FlipY,Y 반전
 ,PROP_FLOOR_HEIGHT,Floor Height,바닥 높이
 ,PROP_FOCUS_BONE,Focus Bone,포커스 본
+,PROP_FOG_BLEND_COLOR,Fog Blend Color,안개 혼합 색상
 ,PROP_FOG_COLOR,Fog Color,안개 색상
 ,PROP_FOG_DENSITY,Fog Density,안개 밀도
 ,PROP_FOG_END_DIST,Fog End Distance,안개 종료 거리
@@ -483,13 +478,11 @@
 ,PROP_GRAVITY_MODIFIER,Gravity,중력
 ,PROP_GRAVITY_MULTIPLIER,Gravity Multiplier,중력 배율
 ,PROP_GRAVITY_SCALE,Gravity Scale,중력 배율
-,PROP_GROUND_COLOR,Ground Color,지면 색상
 ,PROP_HEIGHT,Height,높이
 ,PROP_HORIZON_BLEND,Horizon Blend,지평선 블렌드
-,PROP_HORIZON_COLOR,Horizon Color,지평선 색상
 ,PROP_HOVER_COLOR,Hover Color,호버 색
 ,PROP_HYSTERESIS_MARGIN,Hysteresis Margin,히스테리시스 마진
-,PROP_IBL_INTENSITY,IBL Intensity,이미지 기반 조명 강도
+,PROP_IBL_INTENSITY,Ambient Intensity,환경광 강도
 ,PROP_ID,ID,ID
 ,PROP_INDIRECT_INTENSITY,Indirect Intensity,간접 강도
 ,PROP_INFORMATION,Information,정보
@@ -611,6 +604,7 @@
 ,PROP_PIVOT,Pivot,피벗
 ,PROP_PIXEL_SHADER,Pixel Shader,픽셀 셰이더
 ,PROP_PIXEL_SHADER_HANDLE,Pixel Shader Handle,픽셀 셰이더 핸들
+,PROP_PLANET_SURFACE_COLOR,Planet Surface Color,지표 색상
 ,PROP_PLAY_MODE,Playback Mode,재생 방식
 ,PROP_PLAY_ON_AWAKE,Play On Awake,시작 시 자동 재생
 ,PROP_PLAY_RATE,Playback Rate,재생 배속
@@ -793,7 +787,6 @@
 ,PROP_WORLD_MATRIX,World Matrix,월드 매트릭스
 ,PROP_WORLD_TRANSFORM,World Transform,월드 트랜스폼
 ,PROP_YAW,Yaw,요 각도
-,PROP_ZENITH_COLOR,Zenith Color,천정 색상
 ,PROP_ZOOM_LAG_SPEED,Zoom Lag Speed,줌 보간 속도
 ,PROP_ZOOM_SENSITIVITY,Zoom Sensitivity,줌 감도
 ,PROP_Z_INDEX,Z-Index,Z 순서

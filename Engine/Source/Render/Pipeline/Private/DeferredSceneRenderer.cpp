@@ -183,6 +183,8 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(Engine::Scene* scene)
 {
 	Engine::SkyAtmosphereData skyData{};
+	// 구름은 활성 VolumetricCloudComponent가 있을 때만 그린다.
+	skyData.Cloud.EnableClouds = 0u;
 	if (!scene) return skyData;
 
 	auto& registry = scene->GetRegistry();
@@ -205,11 +207,6 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 		skyData.SunSize = sky.SunSize;
 		skyData.SunColor = sky.CustomSunColor;
 		skyData.SunIntensity = sky.CustomSunIntensity;
-		skyData.Cloud.EnableClouds = sky.EnableClouds ? 1u : 0u;
-		skyData.Cloud.CloudCoverage = sky.CloudCoverage;
-		skyData.Cloud.CloudDensity = sky.CloudDensity;
-		skyData.Cloud.LayerBottomAltitude = sky.CloudAltitude;
-		skyData.Cloud.WindSpeed = sky.CloudSpeed * 100.0f;
 		if (sky.AutoSyncDirectionalLight)
 		{
 			auto lightView = registry.view<Engine::LightComponent>();
@@ -226,7 +223,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 		break;
 	}
 
-	// 2. 씬에 전용 VolumetricCloudComponent가 있으면 상세 설정으로 덮어쓰기
+	// 2. VolumetricCloudComponent의 구름 설정
 	auto cloudView = registry.view<Engine::VolumetricCloudComponent>();
 	for (auto [ce, cloud] : cloudView.each())
 	{

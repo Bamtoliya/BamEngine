@@ -33,6 +33,7 @@
 #include "SpriteAnimationComponent.h"
 #include "FogComponent.h"
 #include "VolumetricCloudComponent.h"
+#include "SkyAtmosphereComponent.h"
 #include "AttackChallengeComponent.h"
 
 namespace
@@ -503,6 +504,68 @@ namespace
         if (original->WriteArchive(writer).Code != archive::ArchiveErrorCode::InvalidValue ||
             !writer.Encode(after) || before != after)
             return Fail("Partial scene serialization was committed after an invalid transform.");
+        return true;
+    }
+
+    // Sky Atmosphere에 저장된 이전 구름 설정은 Volumetric Cloud로 옮겨야 한다.
+    bool CheckLegacySkyCloudMigration()
+    {
+        const auto load = [](Engine::Scene& source, const char* enableClouds) -> ScenePtr
+            {
+                archive::JsonArchive writer;
+                std::string json;
+                if (!source.WriteArchive(writer) || !writer.Encode(json)) return nullptr;
+
+                const std::string key = "\"AutoSyncDirectionalLight\"";
+                const std::string legacy = std::string("\"EnableClouds\":") + enableClouds +
+                    ",\"CloudCoverage\":0.25,\"CloudDensity\":0.5,\"CloudSpeed\":0.125,\"CloudAltitude\":3000,";
+                if (json.find("EnableClouds") != std::string::npos) return nullptr;
+                for (std::size_t at = json.find(key); at != std::string::npos; at = json.find(key, at + legacy.size() + key.size()))
+                    json.insert(at, legacy);
+
+                archive::JsonArchive reader;
+                Engine::Scene* output = nullptr;
+                if (!reader.Decode(json) || !Engine::Scene::CreateFromArchive(reader, output)) return nullptr;
+                return ScenePtr(output);
+            };
+        const auto cloudCount = [](Engine::Scene& scene) { return scene.GetRegistry().storage<Engine::VolumetricCloudComponent>().size(); };
+
+        ScenePtr source(Engine::Scene::Create());
+        auto& world = source->GetRegistry();
+        const auto first = AddSpatialEntity(*source, 2001ULL, L"Sky", { 0.0f, 0.0f, 0.0f });
+        world.emplace<Engine::SkyAtmosphereComponent>(first);
+
+        auto restored = load(*source, "true");
+        if (!restored || cloudCount(*restored) != 1) return Fail("Legacy sky clouds were not migrated.");
+        const auto* cloud = restored->GetRegistry().try_get<Engine::VolumetricCloudComponent>(
+            restored->FindEntityById(2001ULL)->GetEntityHandle());
+        if (!cloud || !cloud->IsEnabled || cloud->CloudCoverage != 0.25f || cloud->CloudDensity != 0.5f ||
+            cloud->WindSpeed != 12.5f || cloud->LayerBottomAltitude != 3000.0f)
+            return Fail("Migrated cloud settings changed.");
+
+        // 다시 저장하면 이전 필드가 남지 않고 그대로 복원된다.
+        archive::JsonArchive rewritten;
+        std::string rewrittenJson;
+        if (!restored->WriteArchive(rewritten) || !rewritten.Encode(rewrittenJson) ||
+            rewrittenJson.find("EnableClouds") != std::string::npos)
+            return Fail("Migrated scene still stores legacy cloud fields.");
+
+        restored = load(*source, "false");
+        if (!restored || cloudCount(*restored) != 0) return Fail("Disabled legacy clouds were migrated.");
+
+        // 이전 렌더러는 비활성 Sky Atmosphere의 구름을 그리지 않았다.
+        world.get<Engine::SkyAtmosphereComponent>(first).IsEnabled = false;
+        restored = load(*source, "true");
+        if (!restored || cloudCount(*restored) != 0) return Fail("Clouds of a disabled sky were migrated.");
+        world.get<Engine::SkyAtmosphereComponent>(first).IsEnabled = true;
+
+        // 이전 렌더러는 활성 Volumetric Cloud를 우선했다.
+        const auto second = AddSpatialEntity(*source, 2002ULL, L"Cloud", { 0.0f, 0.0f, 0.0f });
+        world.emplace<Engine::VolumetricCloudComponent>(second).CloudCoverage = 0.75f;
+        restored = load(*source, "true");
+        if (!restored || cloudCount(*restored) != 1 || restored->GetRegistry().get<Engine::VolumetricCloudComponent>(
+            restored->FindEntityById(2002ULL)->GetEntityHandle()).CloudCoverage != 0.75f)
+            return Fail("An active volumetric cloud was not preferred over legacy clouds.");
         return true;
     }
 
@@ -2420,7 +2483,7 @@ int main()
         !CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve") ||
         !CheckModernComponentsRoundTrip<archive::JsonArchive>(L"round-trip-modern.json") ||
         !CheckModernComponentsRoundTrip<archive::BeveArchive>(L"round-trip-modern.beve") ||
-        !CheckManagerAndWriteFailure() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
+        !CheckManagerAndWriteFailure() || !CheckLegacySkyCloudMigration() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
         !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
         !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
         !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||

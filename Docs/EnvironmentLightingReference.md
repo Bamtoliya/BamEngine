@@ -12,9 +12,7 @@ flowchart LR
     SA[Sky Atmosphere] -- "TimeOfDay·Latitude로 회전을 덮어씀<br/>(AutoSyncDirectionalLight)" --> DL[Directional Light]
     DL -- "Color·Intensity를 읽음<br/>(AutoSyncDirectionalLight)" --> SA
     SA -- "태양 방향·색·강도" --> SKY[하늘 셰이더]
-    SA -- "구름 기본값" --> VC[Volumetric Cloud 값]
-    VCC[Volumetric Cloud 컴포넌트] -- "있으면 전부 덮어씀" --> VC
-    VC --> SKY
+    VC[Volumetric Cloud] -- "구름" --> SKY
     SA -- "HorizonColor 65% 혼합<br/>(AutoSyncAtmosphere)" --> FOG[Fog]
     DL -- "직접광·그림자" --> LP[조명 패스]
     SL[Sky Light] -- "반구 환경광" --> LP
@@ -73,7 +71,7 @@ flowchart LR
 | 변수 | 상태 | 쓰임 |
 | --- | --- | --- |
 | `Color` | 사용 | 위쪽 환경광 색 |
-| `GroundColor` | 사용 | 아래쪽 환경광 색 (GPU에서는 감쇠 계수 자리에 저장) |
+| `GroundColor` (아래쪽 환경광 색상) | 사용 | 아래쪽 환경광 색 (GPU에서는 감쇠 계수 자리에 저장) |
 | `Intensity` × `IndirectIntensity` | 사용 | 환경광 강도 (`IndirectIntensity`는 `Range` 자리에 저장) |
 | `Flags.AffectDiffuse/AffectSpecular` | 사용 | 확산·반사 환경광 구분 |
 | 트랜스폼 회전 | 사용 | **엔티티의 위(+Y)를 하늘 쪽**으로 사용. 회전하지 않으면 월드 위쪽이며, Yaw는 영향이 없고 기울이면 반구도 기운다 |
@@ -89,13 +87,13 @@ flowchart LR
 | `CustomSunColor`, `CustomSunIntensity` | 조건부 | 동기화를 끄거나 Directional Light가 없을 때 |
 | `SunSize` | 사용 | 태양 원반 크기 |
 | `SkyIntensity` | 사용 | 하늘 밝기, 구름 환경광, 대체 환경광 |
-| `GroundColor` | 조건부 | 지평선 아래로 지표를 볼 때 |
-| `ZenithColor` | 조건부 | 하늘에는 미사용. 3절의 대체 환경광(3번)에만 사용 |
-| `HorizonColor` | 조건부 | 하늘에는 미사용. Fog 색 혼합에만 사용 |
-| `HorizonBlend` | 미사용 | 이전 하늘 셰이더(`skyPS`)용 |
-| `EnableClouds`, `CloudCoverage`, `CloudDensity`, `CloudAltitude`, `CloudSpeed` | 조건부 | 활성 Volumetric Cloud가 **없을 때만**. `CloudSpeed`는 ×100해 m/s로 사용 |
+| `GroundColor` (지표 색상) | 조건부 | 지평선 아래로 지표를 볼 때 |
+| `ZenithColor` (대체 환경광 색상) | 조건부 | 하늘에는 미사용. 3절의 대체 환경광(3번)에만 사용 |
+| `HorizonColor` (안개 혼합 색상) | 조건부 | 하늘에는 미사용. Fog 색 혼합에만 사용 |
+| `HorizonBlend` | 미사용 | 이전 하늘 셰이더(`skyPS`)용. 인스펙터에서 숨기고 저장 값만 유지 |
+| 구름 | - | Sky Atmosphere에는 구름 변수가 없다(2026-11-22 Volumetric Cloud로 통일). 이전 문서는 불러올 때 변환한다(4.6절) |
 | `IrradianceMap`, `PrefilteredMap`, `BRDFLutMap` | 사용 | IBL. Irradiance가 없으면 Prefiltered로, LUT가 없으면 기본 LUT로 대체 |
-| `IBLIntensity`, `ShadowAmbientFloor` | 사용 | 3절 |
+| `IBLIntensity` (환경광 강도), `ShadowAmbientFloor` | 사용 | 3절 |
 
 ### 4.4 Fog (`FogComponent`)
 
@@ -122,6 +120,24 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 | `TracingMaxDistance` | 조건부 | 셰이더가 25km로 제한하므로 그보다 큰 값은 효과 없음 |
 
 구름은 하늘 셰이더 안에서 그려지므로 하늘 메시가 없으면 보이지 않는다.
+
+### 4.6 인스펙터 표시와 이전 데이터
+
+| 대상 | 표시 조건 |
+| --- | --- |
+| 광원 `Range`, 감쇠 | Point·Spot. 감쇠 계수는 계수 방식일 때만 |
+| 광원 `ShadowStrength` | Sky가 아니고 `CastShadows`가 켜졌을 때 |
+| 광원 `ShadowBias`, `ShadowSlopeBias`, `ShadowNormalBias` | Directional·Spot이고 `CastShadows`가 켜졌을 때. Point 그림자 셰이더는 고정 바이어스를 쓴다 |
+| 광원 `ShadowRange`, `ShadowMaxDistance`, `CascadeSplitLambda`, `RaytracedShadow` | Directional이고 `CastShadows`가 켜졌을 때 |
+| 광원 `GroundColor`, `IndirectIntensity` | Sky |
+| 광원 `LightingLayerMask`, 플래그 `UseInForwardRendering`·`Volumetric` | 숨김. 읽는 코드가 없음 |
+| Sky Atmosphere `CustomSunColor`, `CustomSunIntensity` | `AutoSyncDirectionalLight`가 꺼졌을 때. 동기화 중이지만 Directional Light가 없으면 이 값이 쓰인다 |
+| Sky Atmosphere `DayCycleDuration` | `EnableTimeProgression` |
+| Fog `FogDensity` / `FogEndDistance` / `FogHeight`·`FogHeightFalloff` | Linear가 아닐 때 / Linear / ExponentialHeight |
+
+`Flags`의 `CastShadows`는 Sky Light에도 표시되지만 효과가 없다. 항목별 조건부 표시는 지원하지 않는다.
+
+이전 씬·프리팹의 Sky Atmosphere 구름 값은 불러올 때 `SceneArchive`가 옮긴다. 활성 Volumetric Cloud가 없고 첫 활성 Sky Atmosphere의 `EnableClouds`가 켜져 있으면 같은 엔티티에 Volumetric Cloud를 붙인다(`CloudSpeed`는 ×100). 다른 구름 값은 기존 렌더러의 기본값과 같다. 노이즈 배율은 이전에 반올림한 상수(0.00067, 0.0067)를 썼으므로 무늬가 약 0.5% 다를 수 있다. 저장하기 전에는 파일이 바뀌지 않는다.
 
 ## 5. GPU로 전달되는 값
 
@@ -152,8 +168,8 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 | 8 | 보통 | 캐스케이드가 첫 Geometry 카메라 하나만 기준 | `LightSystem`. 뷰포트가 둘이면 한쪽의 섀도맵이 다른 카메라 기준일 수 있음 |
 | 9 | 보통 | Sky Atmosphere·Fog·Cloud가 엔티티의 활성·숨김 상태를 확인하지 않음 | 컴포넌트 활성만 검사. 광원은 계층 활성 상태를 검사 |
 | 10 | 낮음 | 태양 계산 중복 | `SkyAtmosphereSystem`과 `BuildSkyAtmosphereData` |
-| 11 | 낮음 | 이름·편집 항목 혼동 | `GroundColor`가 두 컴포넌트에서 다른 뜻. Sky Light에 그림자 항목, Directional Light에 `GroundColor`가 보임. `HorizonBlend`는 효과 없음 |
-| 12 | 낮음 | 구름 값이 두 컴포넌트에 중복 | Volumetric Cloud가 있으면 Sky Atmosphere의 구름 항목은 무시되지만 편집 가능 |
+| 11 | 수정함 (2026-11-22) | 이름·편집 항목 혼동 | 표시 이름을 실제 쓰임에 맞추고, 광원 종류와 `CastShadows`에 따라 관련 없는 항목을 숨긴다. `HorizonBlend`도 숨긴다 |
+| 12 | 수정함 (2026-11-22) | 구름 값이 두 컴포넌트에 중복 | Volumetric Cloud로 통일하고 이전 문서를 변환한다 (4.6절) |
 | 13 | 낮음 | 엔진 기능이 GameModule에 있음 | `SkyAtmosphereSystem`과 구름 텍스처. 모듈이 없는 Client에서 동작하지 않음 |
 
 ## 7. 현재 구조에서의 권장 설정
@@ -162,12 +178,12 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 2. Directional Light는 하나만 켜고 `AutoSyncDirectionalLight`를 유지한다. 방향은 `TimeOfDay`로, 색과 강도는 광원에서 조절한다.
 3. 환경광은 IBL 맵과 Sky Light 중 하나만 쓴다. 둘 다 두면 Sky Light는 무시된다.
 4. Sky Light는 보통 회전하지 않는다. 하늘 쪽을 기울여야 할 때만 회전한다.
-5. 구름을 조절할 때는 Volumetric Cloud만 사용한다.
+5. 구름은 Volumetric Cloud에서만 설정한다. Sky Atmosphere만 추가하면 구름이 없다.
 6. Fog는 `HorizonColor`를 화면의 지평선 색에 맞춘다.
 
 ## 8. 수정 순서 제안
 
-1. **화면이 바뀌지 않는 정리:** 10, 5의 사용하지 않는 계산 제거, 11의 편집 조건
+1. **화면이 바뀌지 않는 정리:** 10, 5의 사용하지 않는 계산 제거 (11, 12는 수정함)
 2. **규칙 통일:** 4, 9, 3 (태양 방향의 출처를 하나로)
 3. **화면이 바뀌는 수정:** 1 → 6 → 7 (2는 수정함). 항목마다 기준 화면을 비교한다.
 4. **기능 연결과 이전:** 5의 구름 그림자, 8의 뷰별 캐스케이드, 13의 엔진 이전

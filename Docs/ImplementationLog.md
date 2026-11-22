@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 환경 조명의 구름 설정과 이름 정리
+
+- **통일.** Sky Atmosphere의 구름 변수 5개를 없애고 Volumetric Cloud에서만 설정한다. 활성 Volumetric Cloud가 없으면 구름을 그리지 않는다.
+- **이전 데이터.** 씬·프리팹을 불러올 때 첫 활성 Sky Atmosphere의 구름이 켜져 있고 활성 Volumetric Cloud가 없으면 같은 값의 Volumetric Cloud를 붙인다. 노이즈 배율은 이전의 반올림한 상수와 약 0.5% 다르다.
+- **이름.** 실제 쓰임에 맞춰 대체 환경광·안개 혼합·지표·아래쪽 환경광 색상과 환경광 강도로 표시한다. C++ 이름과 저장 형식은 그대로다. 읽는 곳이 없는 `HorizonBlend`는 숨기고 저장 값만 유지한다.
+- **검사.** `SceneArchiveCheck`에 변환, 꺼진 구름, 비활성 하늘, 기존 Volumetric Cloud 우선 사례를 추가했다.
+- **확인된 결과.** 사용자가 CTest 통과와 화면을 확인했다. 로그에서 Sponza의 변환을 확인했다.
+
 ### [2026-11-22] 인스펙터의 조건부 표시와 미사용 속성 정리
 
 - **조건식.** `EDITCONDITION`에 `&&`, `||`, 괄호, 비트 플래그(`Flags & CastShadows`), 숫자 비교를 추가했다. 평가는 `EditCondition.h`로 분리했다. 해석할 수 없는 조건은 속성을 숨기지 않고 경고를 한 번 남긴다(지침에만 있고 구현되지 않았던 동작).

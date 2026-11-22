@@ -3,6 +3,8 @@
 #include "TransformSystem.h"
 #include "UIComponents.h"
 #include "PrefabInstanceComponent.h"
+#include "SkyAtmosphereComponent.h"
+#include "VolumetricCloudComponent.h"
 #include <archive/ArchiveInterface.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "ResourceHandleArchiveAdapter.h"
@@ -221,7 +223,78 @@ namespace
             });
     }
 
-    archive::ArchiveResult ReadComponents(archive::IArchive& ar, entt::registry& world, entt::entity handle)
+    // Sky Atmosphere에서 구름을 설정하던 이전 데이터
+    struct LegacySkyClouds
+    {
+        entt::entity Entity = entt::null;
+        bool Enabled = false;
+        f32 Coverage = 0.45f;
+        f32 Density = 0.8f;
+        f32 Speed = 0.03f;
+        f32 Altitude = 2500.0f;
+    };
+
+    archive::ArchiveResult ReadLegacySkyClouds(const archive::IArchive& component, entt::entity handle, std::vector<LegacySkyClouds>& clouds)
+    {
+        LegacySkyClouds legacy;
+        const auto result = component.ReadObject("Data", legacy, [](const archive::IArchive& data, LegacySkyClouds& value)
+            -> archive::ArchiveResult
+            {
+                const auto readOptional = [&](const char* key, auto& field) -> archive::ArchiveResult
+                    {
+                        bool exists = false;
+                        const auto found = data.HasField(key, exists);
+                        return found && exists ? data.Read(key, field) : found;
+                    };
+                auto field = readOptional("EnableClouds", value.Enabled);
+                if (field) field = readOptional("CloudCoverage", value.Coverage);
+                if (field) field = readOptional("CloudDensity", value.Density);
+                if (field) field = readOptional("CloudSpeed", value.Speed);
+                if (field) field = readOptional("CloudAltitude", value.Altitude);
+                return field;
+            });
+        if (result && legacy.Enabled)
+        {
+            legacy.Entity = handle;
+            clouds.push_back(legacy);
+        }
+        return result;
+    }
+
+    bool HasActiveVolumetricCloud(const entt::registry& world)
+    {
+        for (const auto entity : world.view<const Engine::VolumetricCloudComponent>())
+        {
+            if (Engine::IsComponentEnabled<Engine::VolumetricCloudComponent>(world, entity)) return true;
+        }
+        return false;
+    }
+
+    // 이전 렌더러처럼 활성 Volumetric Cloud가 없을 때 첫 활성 Sky Atmosphere의 구름만 옮긴다.
+    void MigrateLegacySkyClouds(entt::registry& world, const std::vector<LegacySkyClouds>& clouds, const entt::registry* targetWorld)
+    {
+        if (clouds.empty() || HasActiveVolumetricCloud(world) || (targetWorld && HasActiveVolumetricCloud(*targetWorld))) return;
+
+        for (const auto entity : world.view<Engine::SkyAtmosphereComponent>())
+        {
+            if (!Engine::IsComponentEnabled<Engine::SkyAtmosphereComponent>(world, entity)) continue;
+
+            const auto found = std::ranges::find(clouds, entity, &LegacySkyClouds::Entity);
+            if (found == clouds.end()) return;
+
+            auto& cloud = world.get_or_emplace<Engine::VolumetricCloudComponent>(entity);
+            cloud.IsEnabled = true;
+            cloud.CloudCoverage = found->Coverage;
+            cloud.CloudDensity = found->Density;
+            cloud.LayerBottomAltitude = found->Altitude;
+            cloud.WindSpeed = found->Speed * 100.0f;
+            Engine::detail::SetComponentEnabled<Engine::VolumetricCloudComponent>(world, entity, true);
+            ENGINE_LOG_INFO("Moved Sky Atmosphere cloud settings to a Volumetric Cloud component. Save the document to keep the change.");
+            return;
+        }
+    }
+
+    archive::ArchiveResult ReadComponents(archive::IArchive& ar, entt::registry& world, entt::entity handle, std::vector<LegacySkyClouds>& legacyClouds)
     {
         const auto& registry = Engine::ReflectionRegistry::Get();
         std::unordered_set<std::string> types;
@@ -254,12 +327,14 @@ namespace
             result = registry.ReadComponent(component, "Data", world, handle, entry->Type);
             if (result && hasEnableState && !entry->SetEnabled(world, handle, componentEnabled))
                 return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
+            if (result && entry->Type == std::type_index(typeid(Engine::SkyAtmosphereComponent)))
+                result = ReadLegacySkyClouds(component, handle, legacyClouds);
             return result;
         });
     }
 
     template<typename CreateEntity>
-    archive::ArchiveResult ReadEntityRecords(const archive::IArchive& object, entt::registry& world, uint64& nextEntityId, std::vector<SceneEntityRecord>& entities, CreateEntity&& createEntity)
+    archive::ArchiveResult ReadEntityRecords(const archive::IArchive& object, entt::registry& world, uint64& nextEntityId, std::vector<SceneEntityRecord>& entities, CreateEntity&& createEntity, const entt::registry* targetWorld = nullptr)
     {
         std::unordered_set<uint64> ids;
         std::unordered_map<uint64, entt::entity> idToHandle;
@@ -289,7 +364,8 @@ namespace
         remapContext.PersistentIdToEntity = &idToHandle;
         Engine::EntityIdRemapScope remapScope(&remapContext);
 
-        return object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
+        std::vector<LegacySkyClouds> legacyClouds;
+        const auto result = object.ReadObjectArray("Entities", [&](archive::IArchive& value, std::size_t) -> archive::ArchiveResult
             {
                 SceneEntityRecord entity;
                 auto data = value.Read("Id", entity.Id);
@@ -312,10 +388,12 @@ namespace
                     if (!data) return data;
                 }
 
-                data = ReadComponents(value, world, entity.Handle);
+                data = ReadComponents(value, world, entity.Handle, legacyClouds);
                 if (data) entities.push_back(std::move(entity));
                 return data;
             });
+        if (result) MigrateLegacySkyClouds(world, legacyClouds, targetWorld);
+        return result;
     }
 
     template<typename Writer>
@@ -603,7 +681,7 @@ archive::ArchiveResult Scene::InstantiatePrefabArchive(const archive::IArchive& 
             return { archive::ArchiveErrorCode::InvalidValue, "RootId" };
         PreloadDocumentResources("Prefab", resourceReferences);
         return ReadEntityRecords(object, staging->m_LocalRegistry, staging->m_NextEntityId, entities,
-            [&](uint64 id) { return staging->CreateEntityWithId(id).GetEntityHandle(); });
+            [&](uint64 id) { return staging->CreateEntityWithId(id).GetEntityHandle(); }, &m_LocalRegistry);
     });
     if (!result) return result;
     staging->m_LocalRegistry.ctx().erase<DeferredComponentTransformUpdate>();
