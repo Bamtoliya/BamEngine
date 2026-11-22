@@ -7,7 +7,7 @@ class AssetPathRelocation;
 class ResourceEditorInterface : public IImGui
 {
 public:
-	virtual ~ResourceEditorInterface() = default;
+	virtual ~ResourceEditorInterface();
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const = 0;
 	virtual bool HasUnsavedResourceChanges() const { return false; }
     virtual void SaveResource() {}
@@ -15,6 +15,11 @@ public:
     virtual bool CanRedoDocument() const { return false; }
     virtual void UndoDocument() {}
     virtual void RedoDocument() {}
+    virtual bool BeginAsyncOpen(const std::filesystem::path& assetPath) { return false; }
+    virtual bool StepAsyncOpen(float maxTimeSeconds = 0.002f) { return true; }
+    virtual bool IsAsyncLoading() const { return false; }
+    virtual void DrawAsyncLoadingOverlay();
+    virtual void CancelAsyncOpen() {}
     virtual void SetTargetResource(const std::filesystem::path& assetPath)
     {
         m_TargetResourcePath = assetPath;

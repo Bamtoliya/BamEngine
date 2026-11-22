@@ -864,6 +864,7 @@ void ModelEditor::InstantiateModel()
 
 void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 {
+	CancelAsyncOpen();
 	if (IsMeshFile(assetPath))
 	{
 		auto& manager = Engine::ResourceManager::Get();
@@ -905,9 +906,163 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 		Milliseconds(previewEnd - previewStart).count(), Milliseconds(previewEnd - loadStart).count());
 }
 
+bool ModelEditor::BeginAsyncOpen(const std::filesystem::path& assetPath)
+{
+	if (!IsSupported(assetPath))
+		return false;
+
+	if (!RestoreSavedChanges())
+		return false;
+
+	CancelAsyncOpen();
+
+	m_TargetResourcePath = assetPath;
+	m_AsyncTargetPath = assetPath;
+	m_ModelHandle.Reset();
+	m_MeshHandle.Reset();
+	m_StatusKey.clear();
+	m_History.Clear();
+	if (m_PreviewEntity && m_PreviewWidget.GetScene())
+	{
+		(void)m_PreviewWidget.GetScene()->DestroyEntity(*m_PreviewEntity);
+		m_PreviewEntity = nullptr;
+	}
+
+	m_AsyncStartTime = std::chrono::steady_clock::now();
+	m_AsyncLoadStart = m_AsyncStartTime;
+	m_AsyncLoadDurationMs = 0.0;
+	m_AsyncStage = EAsyncStage::WaitingBackground;
+	m_AsyncProgress = 0.08f;
+
+	Open();
+	Focus();
+	return true;
+}
+
+bool ModelEditor::StepAsyncOpen(float maxTimeSeconds)
+{
+	using Clock = std::chrono::steady_clock;
+	using Milliseconds = std::chrono::duration<double, std::milli>;
+	const auto stepDeadline = Clock::now() + std::chrono::duration_cast<Clock::duration>(
+		std::chrono::duration<float>(maxTimeSeconds));
+
+	if (m_AsyncStage == EAsyncStage::WaitingBackground)
+	{
+		m_AsyncStage = EAsyncStage::LoadingResource;
+		m_AsyncProgress = 0.35f;
+		m_AsyncLoadStart = Clock::now();
+	}
+
+	if (m_AsyncStage == EAsyncStage::LoadingResource)
+	{
+		auto& manager = Engine::ResourceManager::Get();
+		if (IsMeshFile(m_AsyncTargetPath))
+		{
+			const auto handle = manager.LoadFile(m_AsyncTargetPath.wstring());
+			if (!dynamic_cast<Engine::Mesh*>(manager.GetResource(handle)))
+			{
+				NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("ModelEditor.MeshLoadFailed"), ELogLevel::Error);
+				m_AsyncStage = EAsyncStage::Failed;
+				return true;
+			}
+			m_MeshHandle = Engine::ResourceHandle<Engine::Mesh>(handle);
+		}
+		else if (IsImportedModelFile(m_AsyncTargetPath))
+		{
+			const auto handle = manager.LoadFile(m_AsyncTargetPath.wstring());
+			auto* model = dynamic_cast<Model*>(manager.GetResource(handle));
+			if (!model)
+			{
+				NotificationManager::Get().AddNotification(GetDisplayName(), LOCAL("ModelImport.PreviewFailed"), ELogLevel::Error);
+				m_AsyncStage = EAsyncStage::Failed;
+				return true;
+			}
+			m_ModelHandle = ResourceHandle<Model>(handle);
+			m_History.Reset(m_ModelHandle.Get()->GetMaterials());
+		}
+		else
+		{
+			m_AsyncStage = EAsyncStage::Failed;
+			return true;
+		}
+
+		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
+		m_AsyncStage = EAsyncStage::SettingUpPreview;
+		m_AsyncProgress = 0.70f;
+
+		if (Clock::now() >= stepDeadline)
+			return false; // Yield to next frame within budget
+	}
+
+	if (m_AsyncStage == EAsyncStage::SettingUpPreview)
+	{
+		const auto previewStart = Clock::now();
+		SetupPreview();
+		const auto previewEnd = Clock::now();
+		const double previewMs = Milliseconds(previewEnd - previewStart).count();
+		const double totalMs = Milliseconds(previewEnd - m_AsyncStartTime).count();
+
+		EDITOR_LOG_INFO("[ResourceOpenTiming] Model {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms (async)",
+			WStrToStr(m_AsyncTargetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
+
+		m_AsyncProgress = 1.0f;
+		m_AsyncStage = EAsyncStage::None;
+		return true; // Complete!
+	}
+
+	if (m_AsyncStage == EAsyncStage::Failed)
+	{
+		return true;
+	}
+
+	return true;
+}
+
+void ModelEditor::CancelAsyncOpen()
+{
+	m_AsyncStage = EAsyncStage::None;
+	m_AsyncProgress = 0.0f;
+}
+
+void ModelEditor::DrawAsyncLoadingOverlay()
+{
+	const ImVec2 avail = ImGui::GetContentRegionAvail();
+	if (avail.x <= 1.0f || avail.y <= 1.0f) return;
+
+	const ImVec2 origin = ImGui::GetCursorScreenPos();
+	ImGui::GetWindowDrawList()->AddRectFilled(
+		origin, ImVec2(origin.x + avail.x, origin.y + avail.y), IM_COL32(22, 24, 28, 255), 4.0f);
+
+	if (m_AsyncStage == EAsyncStage::Failed)
+	{
+		EditorUI::EmptyState("ModelImport.PreviewFailed");
+		return;
+	}
+
+	const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 320.0f);
+	const std::string filename = !m_TargetResourcePath.empty() ? WStrToStr(m_TargetResourcePath.filename().wstring()) : "";
+	const std::string pendingText = filename.empty()
+		? LOCAL("ModelImport.PreviewPending")
+		: LOCAL("ModelImport.PreviewPending") + " (" + filename + ")";
+
+	const ImVec2 textSize = ImGui::CalcTextSize(pendingText.c_str());
+	const float blockHeight = textSize.y + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+	ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(12.0f, (avail.y - blockHeight) * 0.5f));
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(12.0f, (avail.x - textSize.x) * 0.5f));
+	ImGui::TextDisabled("%s", pendingText.c_str());
+
+	ImGui::Spacing();
+	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(12.0f, (avail.x - barWidth) * 0.5f));
+	const float displayProgress = (m_AsyncStage == EAsyncStage::WaitingBackground)
+		? 0.08f + 0.15f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f))
+		: m_AsyncProgress;
+	ImGui::ProgressBar(displayProgress, ImVec2(barWidth, 0.0f));
+}
+
 bool ModelEditor::CanSaveDocument() const
 {
-	return m_Open && m_ModelHandle.Get() && PIEManager::Get().IsEditing();
+	return m_Open && m_ModelHandle.Get() && PIEManager::Get().IsEditing() && !IsAsyncLoading();
 }
 
 bool ModelEditor::RestoreSavedResource()
@@ -921,6 +1076,7 @@ bool ModelEditor::RestoreSavedResource()
 
 void ModelEditor::ReleaseResourceDocument()
 {
+	CancelAsyncOpen();
 	m_ModelHandle.Reset();
 	m_MeshHandle.Reset();
 	SetupPreview();

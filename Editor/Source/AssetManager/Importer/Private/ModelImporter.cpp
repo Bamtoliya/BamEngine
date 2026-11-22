@@ -13,6 +13,7 @@
 #pragma push_macro("new")
 #undef new
 #include <archive/BeveArchive.h>
+#include <archive/JsonArchive.h>
 #pragma pop_macro("new")
 
 #include "HotReloadManager.h"
@@ -1342,6 +1343,18 @@ namespace
 		rollback.Committed = true;
 		state.MeshCommitComplete = true;
 
+		if (settings.SaveToFile)
+		{
+			const wstring sidecarStem = SanitizeFileName(data.SourcePath.stem().wstring());
+			const auto sidecarPath = outputDir / (sidecarStem + L".bamimport.json");
+			ModelImporter::SaveImportOptions(sidecarPath, settings);
+
+			const auto bamImportDir = Engine::PlatformPath::ResolveProjectRelative(L".bam/import");
+			std::error_code ec;
+			std::filesystem::create_directories(bamImportDir, ec);
+			ModelImporter::SaveImportOptions(bamImportDir / (sidecarStem + L".bamimport.json"), settings);
+		}
+
 		BAM_LOG(Info, "Editor", "Asset", "Model import finished: meshes={}, nodes={}, has_skeleton={}, animations={}, key={}",
 			modelDesc.Meshes.size(), modelDesc.Nodes.size(), modelDesc.Skeleton.IsValid(),
 			modelDesc.Animations.size(), WStrToStr(modelKey));
@@ -1965,7 +1978,17 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 	if (outJob || sourcePath.empty())
 		return EResult::InvalidArgument;
 
-	ModelImportDesc settings = arg ? *static_cast<const ModelImportDesc*>(arg) : ModelImportDesc{};
+	ModelImportDesc settings;
+	if (arg)
+	{
+		settings = *static_cast<const ModelImportDesc*>(arg);
+	}
+	else
+	{
+		const auto sidecar = ResolveSidecarPath(sourcePath, destDir);
+		if (sidecar.empty() || !LoadImportOptions(sidecar, settings))
+			settings = ModelImportDesc{};
+	}
 
 	if (settings.PostProcessFlags == EModelPostProcessFlag::None)
 		settings.PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs;
@@ -2064,5 +2087,145 @@ std::filesystem::path ModelImporter::ResolveExternalTexturePath(const std::files
 		BAM_LOG(Warn, "Editor", "Asset", "External texture path resolution failed: {}", exception.what());
 	}
 
+	return {};
+}
+
+bool ModelImporter::SaveImportOptions(const std::filesystem::path& sidecarPath, const ModelImportDesc& desc)
+{
+	try
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(sidecarPath.parent_path(), ec);
+
+		archive::JsonArchive ar;
+		ar.Write("DccPreset", static_cast<uint32>(desc.DccPreset));
+		ar.Write("PostProcessFlags", static_cast<uint32>(desc.PostProcessFlags));
+		ar.Write("ImportOptions", static_cast<uint32>(desc.ImportOptions));
+		ar.Write("UniformScale", desc.UniformScale);
+		ar.Write("RotationX", desc.RotationOffset[0]);
+		ar.Write("RotationY", desc.RotationOffset[1]);
+		ar.Write("RotationZ", desc.RotationOffset[2]);
+		ar.Write("SaveToFile", desc.SaveToFile);
+		ar.Write("Overwrite", desc.Overwrite);
+		ar.Write("OverwriteMaterials", desc.OverwriteMaterials);
+		ar.Write("BakeTexturesToDDS", desc.BakeTexturesToDDS);
+		ar.Write("TextureCompression", static_cast<uint32>(desc.TextureCompression));
+		ar.Write("FlipPitch", desc.FlipPitch);
+		ar.Write("FlipHeading", desc.FlipHeading);
+		ar.Write("GenerateLODs", desc.GenerateLODs);
+		ar.Write("LODCount", desc.LODCount);
+		ar.Write("LOD1Reduction", desc.LOD1Reduction);
+		ar.Write("LOD2Reduction", desc.LOD2Reduction);
+		ar.Write("TargetError", desc.TargetError);
+
+		std::string jsonStr;
+		if (!ar.ToJson(jsonStr))
+			return false;
+
+		std::ofstream file(sidecarPath, std::ios::out | std::ios::trunc);
+		if (!file.is_open())
+			return false;
+
+		file << jsonStr;
+		return true;
+	}
+	catch (...)
+	{
+		return false;
+	}
+}
+
+bool ModelImporter::LoadImportOptions(const std::filesystem::path& sidecarPath, ModelImportDesc& outDesc)
+{
+	try
+	{
+		std::error_code ec;
+		if (!std::filesystem::is_regular_file(sidecarPath, ec))
+			return false;
+
+		std::ifstream file(sidecarPath, std::ios::in);
+		if (!file.is_open())
+			return false;
+
+		std::string jsonStr((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+		file.close();
+
+		if (jsonStr.empty())
+			return false;
+
+		archive::JsonArchive ar;
+		if (!ar.Parse(jsonStr))
+			return false;
+
+		uint32 dccPreset = 0;
+		if (ar.Read("DccPreset", dccPreset))
+			outDesc.DccPreset = static_cast<EModelImportDccPreset>(dccPreset);
+
+		uint32 flags = 0;
+		if (ar.Read("PostProcessFlags", flags))
+			outDesc.PostProcessFlags = static_cast<EModelPostProcessFlag>(flags);
+
+		uint32 options = 0;
+		if (ar.Read("ImportOptions", options))
+			outDesc.ImportOptions = static_cast<EModelImportOption>(options);
+
+		float scale = 1.0f;
+		if (ar.Read("UniformScale", scale))
+			outDesc.UniformScale = scale;
+
+		float rotX = 0.0f, rotY = 0.0f, rotZ = 0.0f;
+		if (ar.Read("RotationX", rotX)) outDesc.RotationOffset[0] = rotX;
+		if (ar.Read("RotationY", rotY)) outDesc.RotationOffset[1] = rotY;
+		if (ar.Read("RotationZ", rotZ)) outDesc.RotationOffset[2] = rotZ;
+
+		bool bVal = false;
+		if (ar.Read("SaveToFile", bVal)) outDesc.SaveToFile = bVal;
+		if (ar.Read("Overwrite", bVal)) outDesc.Overwrite = bVal;
+		if (ar.Read("OverwriteMaterials", bVal)) outDesc.OverwriteMaterials = bVal;
+		if (ar.Read("BakeTexturesToDDS", bVal)) outDesc.BakeTexturesToDDS = bVal;
+
+		uint32 compression = 0;
+		if (ar.Read("TextureCompression", compression))
+			outDesc.TextureCompression = static_cast<ETextureCompressionMode>(compression);
+
+		if (ar.Read("FlipPitch", bVal)) outDesc.FlipPitch = bVal;
+		if (ar.Read("FlipHeading", bVal)) outDesc.FlipHeading = bVal;
+		if (ar.Read("GenerateLODs", bVal)) outDesc.GenerateLODs = bVal;
+
+		uint32 lodCount = 3;
+		if (ar.Read("LODCount", lodCount)) outDesc.LODCount = lodCount;
+
+		float lod1 = 0.5f, lod2 = 0.25f, error = 0.02f;
+		if (ar.Read("LOD1Reduction", lod1)) outDesc.LOD1Reduction = lod1;
+		if (ar.Read("LOD2Reduction", lod2)) outDesc.LOD2Reduction = lod2;
+		if (ar.Read("TargetError", error)) outDesc.TargetError = error;
+
+		return true;
+	}
+	catch (...)
+	{
+		return false;
+	}
+}
+
+std::filesystem::path ModelImporter::ResolveSidecarPath(const std::filesystem::path& modelOrSourcePath, const std::filesystem::path& destDir)
+{
+	std::error_code ec;
+	const wstring stem = SanitizeFileName(modelOrSourcePath.stem().wstring());
+
+	std::vector<std::filesystem::path> candidates;
+	if (!destDir.empty())
+	{
+		candidates.push_back(destDir / (stem + L".bamimport.json"));
+		candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(destDir / (stem + L".bamimport.json")));
+	}
+	candidates.push_back(modelOrSourcePath.parent_path() / (stem + L".bamimport.json"));
+	candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(std::filesystem::path(".bam/import") / (stem + L".bamimport.json")));
+
+	for (const auto& cand : candidates)
+	{
+		if (std::filesystem::is_regular_file(cand, ec))
+			return cand;
+	}
 	return {};
 }
