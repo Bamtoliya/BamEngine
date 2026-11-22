@@ -1,6 +1,7 @@
 #pragma once
 
 #include "System.h"
+#include "SpriteBatcher.h"
 
 BEGIN(Engine)
 
@@ -16,6 +17,12 @@ public:
 	virtual void Free() override;
 
 	virtual void OnSubmit(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt) override;
+
+	SpriteBatcher& GetBatcher() { return m_Batcher; }
+	const SpriteBatcher& GetBatcher() const { return m_Batcher; }
+
+private:
+	SpriteBatcher m_Batcher;
 };
 
 END

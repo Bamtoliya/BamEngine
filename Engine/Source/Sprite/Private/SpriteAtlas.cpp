@@ -1,6 +1,8 @@
 #include "SpriteAtlas.h"
+#include "ResourceManager.h"
 #include <algorithm>
 #include <limits>
+#include <cstring>
 
 namespace Engine
 {
@@ -186,6 +188,157 @@ namespace Engine
 		return true;
 	}
 
+	bool SpriteAtlas::BakeAtlasPixels(
+		int32 atlasWidth, int32 atlasHeight, int32 padding,
+		const std::vector<AtlasInputItem>& items,
+		const std::vector<AtlasEntry>& entries,
+		std::vector<uint8>& outRgbaBuffer)
+	{
+		outRgbaBuffer.clear();
+		if (atlasWidth <= 0 || atlasHeight <= 0 || items.empty())
+			return false;
+
+		const size_t totalBytes = static_cast<size_t>(atlasWidth) * static_cast<size_t>(atlasHeight) * 4;
+		outRgbaBuffer.assign(totalBytes, 0);
+
+		// 이름 기반 엔트리 매핑
+		std::unordered_map<std::string, const AtlasEntry*> entryMap;
+		for (const auto& entry : entries)
+		{
+			entryMap[entry.name] = &entry;
+		}
+
+		for (const auto& item : items)
+		{
+			if (!item.rgbaPixels || item.width <= 0 || item.height <= 0)
+				continue;
+
+			auto it = entryMap.find(item.name);
+			if (it == entryMap.end() || !it->second)
+				continue;
+
+			const auto& entry = *it->second;
+			const int32 dstX = static_cast<int32>(entry.pixelRegion.left);
+			const int32 dstY = static_cast<int32>(entry.pixelRegion.top);
+			const int32 w = item.width;
+			const int32 h = item.height;
+
+			if (dstX < 0 || dstY < 0 || dstX + w > atlasWidth || dstY + h > atlasHeight)
+				continue;
+
+			// 본체 픽셀 복사
+			for (int32 row = 0; row < h; ++row)
+			{
+				const uint8* srcRow = item.rgbaPixels + static_cast<size_t>(row) * static_cast<size_t>(w) * 4;
+				uint8* dstRow = outRgbaBuffer.data() + (static_cast<size_t>(dstY + row) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+				std::memcpy(dstRow, srcRow, static_cast<size_t>(w) * 4);
+			}
+
+			// 패딩 영역 처리: 가장자리 픽셀 복제로 번짐 방지
+			if (padding > 0)
+			{
+				// 상단 패딩
+				for (int32 p = 1; p <= padding; ++p)
+				{
+					const int32 py = dstY - p;
+					if (py >= 0)
+					{
+						const uint8* srcRow = outRgbaBuffer.data() + (static_cast<size_t>(dstY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+						uint8* dstRow = outRgbaBuffer.data() + (static_cast<size_t>(py) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+						std::memcpy(dstRow, srcRow, static_cast<size_t>(w) * 4);
+					}
+				}
+				// 하단 패딩
+				for (int32 p = 0; p < padding; ++p)
+				{
+					const int32 py = dstY + h + p;
+					if (py < atlasHeight)
+					{
+						const uint8* srcRow = outRgbaBuffer.data() + (static_cast<size_t>(dstY + h - 1) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+						uint8* dstRow = outRgbaBuffer.data() + (static_cast<size_t>(py) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+						std::memcpy(dstRow, srcRow, static_cast<size_t>(w) * 4);
+					}
+				}
+				// 좌측 및 우측 패딩 (모서리 포함)
+				const int32 startY = std::max(0, dstY - padding);
+				const int32 endY = std::min(atlasHeight - 1, dstY + h + padding - 1);
+				for (int32 y = startY; y <= endY; ++y)
+				{
+					const uint8* leftPixel = outRgbaBuffer.data() + (static_cast<size_t>(y) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX)) * 4;
+					for (int32 p = 1; p <= padding; ++p)
+					{
+						const int32 px = dstX - p;
+						if (px >= 0)
+						{
+							uint8* dst = outRgbaBuffer.data() + (static_cast<size_t>(y) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(px)) * 4;
+							std::memcpy(dst, leftPixel, 4);
+						}
+					}
+
+					const uint8* rightPixel = outRgbaBuffer.data() + (static_cast<size_t>(y) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstX + w - 1)) * 4;
+					for (int32 p = 0; p < padding; ++p)
+					{
+						const int32 px = dstX + w + p;
+						if (px < atlasWidth)
+						{
+							uint8* dst = outRgbaBuffer.data() + (static_cast<size_t>(y) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(px)) * 4;
+							std::memcpy(dst, rightPixel, 4);
+						}
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+
+	bool SpriteAtlas::BakeAtlasPixels(const std::vector<AtlasInputItem>& items, std::vector<uint8>& outRgbaBuffer) const
+	{
+		return BakeAtlasPixels(m_Width, m_Height, m_Padding, items, m_Entries, outRgbaBuffer);
+	}
+
+	Texture* SpriteAtlas::CreateTextureFromBakedPixels(const std::vector<uint8>& rgbaPixels, const std::wstring& textureKey)
+	{
+		if (rgbaPixels.size() != static_cast<size_t>(m_Width) * static_cast<size_t>(m_Height) * 4)
+			return nullptr;
+
+		TextureBinaryHeader header{};
+		header.width = static_cast<uint32>(m_Width);
+		header.height = static_cast<uint32>(m_Height);
+		header.depth = 1;
+		header.mipLevels = 1;
+		header.arraySize = 1;
+		header.format = ETextureFormat::R8G8B8A8_UNORM;
+		header.dimension = ETextureDimension::Texture2D;
+		header.dataSize = static_cast<uint32>(rgbaPixels.size());
+
+		return Texture::Create(header, rgbaPixels, textureKey);
+	}
+
+	bool SpriteAtlas::CreateAndAssignTexture(const std::vector<AtlasInputItem>& items, const std::wstring& textureKey)
+	{
+		if (m_BakedPixels.empty())
+		{
+			if (!BakeAtlasPixels(items, m_BakedPixels))
+				return false;
+		}
+
+		const std::wstring effectiveKey = textureKey.empty()
+			? (L"SpriteAtlas_" + std::to_wstring(reinterpret_cast<uintptr_t>(this)))
+			: textureKey;
+
+		Texture* tex = CreateTextureFromBakedPixels(m_BakedPixels, effectiveKey);
+		if (!tex)
+			return false;
+
+		if (ResourceManager::IsCreated())
+		{
+			m_Texture = ResourceManager::Get().AddResource<Texture>(effectiveKey, tex);
+		}
+		IncreaseVersion();
+		return true;
+	}
+
 	EResult SpriteAtlas::Initialize(void* arg)
 	{
 		if (arg)
@@ -206,6 +359,21 @@ namespace Engine
 				for (size_t i = 0; i < m_Entries.size(); ++i)
 				{
 					m_EntryLookup[m_Entries[i].name] = i;
+				}
+
+				bool hasPixels = false;
+				for (const auto& item : desc->items)
+				{
+					if (item.rgbaPixels)
+					{
+						hasPixels = true;
+						break;
+					}
+				}
+
+				if (hasPixels)
+				{
+					CreateAndAssignTexture(desc->items);
 				}
 			}
 		}
@@ -230,6 +398,7 @@ namespace Engine
 		m_Entries.clear();
 		m_EntryLookup.clear();
 		m_Texture = {};
+		m_BakedPixels.clear();
 	}
 
 	bool SpriteAtlas::TryGetEntry(const std::string& name, AtlasEntry& outEntry) const

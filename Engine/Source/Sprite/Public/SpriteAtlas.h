@@ -66,10 +66,31 @@ namespace Engine
 			const std::vector<AtlasInputItem>& items,
 			std::vector<AtlasEntry>& outEntries);
 
+		// RGBA8 픽셀 결합 (CPU atlas baking)
+		static bool BakeAtlasPixels(
+			int32 atlasWidth, int32 atlasHeight, int32 padding,
+			const std::vector<AtlasInputItem>& items,
+			const std::vector<AtlasEntry>& entries,
+			std::vector<uint8>& outRgbaBuffer);
+
+		bool BakeAtlasPixels(
+			const std::vector<AtlasInputItem>& items,
+			std::vector<uint8>& outRgbaBuffer) const;
+
+		// 텍스처 생성 훅 (헤더 기반 Texture 생성)
+		Texture* CreateTextureFromBakedPixels(
+			const std::vector<uint8>& rgbaPixels,
+			const std::wstring& textureKey = L"");
+
+		bool CreateAndAssignTexture(
+			const std::vector<AtlasInputItem>& items,
+			const std::wstring& textureKey = L"");
+
 		bool TryGetEntry(const std::string& name, AtlasEntry& outEntry) const;
 		bool HasEntry(const std::string& name) const;
 
 		const std::vector<AtlasEntry>& GetEntries() const { return m_Entries; }
+		const std::vector<uint8>& GetBakedPixels() const { return m_BakedPixels; }
 		int32 GetAtlasWidth() const { return m_Width; }
 		int32 GetAtlasHeight() const { return m_Height; }
 		int32 GetPadding() const { return m_Padding; }
@@ -93,6 +114,7 @@ namespace Engine
 		PROPERTY(EDITABLE)
 		ResourceHandle<Texture> m_Texture;
 
+		std::vector<uint8> m_BakedPixels;
 		std::unordered_map<std::string, size_t> m_EntryLookup;
 	};
 }

@@ -1,6 +1,8 @@
 #include "BuiltInPrimitiveMeshes.h"
 #include "ColliderComponent.h"
 #include "KinematicCharacterSystem.h"
+#include "SpatialBroadphase.h"
+#include "PhysicsSystem.h"
 #include "Mesh.h"
 #include "ResourceManager.h"
 #include "Scene.h"
@@ -440,6 +442,279 @@ namespace
         const vec3 platformForward = platformTransform.rotation * vec3(0.0f, 0.0f, 1.0f);
         return glm::dot(charForward, platformForward) >= 0.99f;
     }
+
+    bool CheckSpatialBroadphaseParity()
+    {
+        // ── 3D SpatialBroadphase 검증: 브루트포스 O(N^2)와 정확한 후보 쌍 일치 여부 ──
+        SpatialBroadphase3D broadphase3D(2.0f);
+        struct BoxInfo { entt::entity id; BoundingBox aabb; };
+        std::vector<BoxInfo> boxes3D;
+
+        for (int i = 0; i < 40; ++i)
+        {
+            const f32 x = (i % 6) * 1.5f - 4.5f;
+            const f32 y = ((i / 6) % 4) * 1.5f - 3.0f;
+            const f32 z = (i / 3) * 0.8f - 4.0f;
+            const vec3 bMin(x, y, z);
+            const vec3 bMax = bMin + vec3(1.2f, 1.2f, 1.2f);
+            const auto id = static_cast<entt::entity>(i + 1);
+            boxes3D.push_back({ id, BoundingBox(bMin, bMax) });
+            broadphase3D.Insert(id, BoundingBox(bMin, bMax));
+        }
+
+        std::vector<std::pair<entt::entity, entt::entity>> expectedPairs3D;
+        for (size_t i = 0; i < boxes3D.size(); ++i)
+        {
+            for (size_t j = i + 1; j < boxes3D.size(); ++j)
+            {
+                if (boxes3D[i].aabb.max.x >= boxes3D[j].aabb.min.x && boxes3D[i].aabb.min.x <= boxes3D[j].aabb.max.x &&
+                    boxes3D[i].aabb.max.y >= boxes3D[j].aabb.min.y && boxes3D[i].aabb.min.y <= boxes3D[j].aabb.max.y &&
+                    boxes3D[i].aabb.max.z >= boxes3D[j].aabb.min.z && boxes3D[i].aabb.min.z <= boxes3D[j].aabb.max.z)
+                {
+                    auto a = boxes3D[i].id;
+                    auto b = boxes3D[j].id;
+                    if (b < a) std::swap(a, b);
+                    expectedPairs3D.emplace_back(a, b);
+                }
+            }
+        }
+        std::sort(expectedPairs3D.begin(), expectedPairs3D.end());
+        expectedPairs3D.erase(std::unique(expectedPairs3D.begin(), expectedPairs3D.end()), expectedPairs3D.end());
+
+        std::vector<std::pair<entt::entity, entt::entity>> actualPairs3D;
+        broadphase3D.QueryPairs(actualPairs3D);
+
+        if (actualPairs3D.size() != expectedPairs3D.size())
+            return false;
+        for (size_t i = 0; i < actualPairs3D.size(); ++i)
+        {
+            if (actualPairs3D[i] != expectedPairs3D[i])
+                return false;
+        }
+
+        // QueryAABB 검증
+        const BoundingBox queryBox(vec3(-2.0f, -2.0f, -2.0f), vec3(2.0f, 2.0f, 2.0f));
+        std::vector<entt::entity> expectedAABBResults;
+        for (const auto& b : boxes3D)
+        {
+            if (queryBox.max.x >= b.aabb.min.x && queryBox.min.x <= b.aabb.max.x &&
+                queryBox.max.y >= b.aabb.min.y && queryBox.min.y <= b.aabb.max.y &&
+                queryBox.max.z >= b.aabb.min.z && queryBox.min.z <= b.aabb.max.z)
+            {
+                expectedAABBResults.push_back(b.id);
+            }
+        }
+        std::sort(expectedAABBResults.begin(), expectedAABBResults.end());
+
+        std::vector<entt::entity> actualAABBResults;
+        broadphase3D.QueryAABB(queryBox, actualAABBResults);
+        if (actualAABBResults != expectedAABBResults)
+            return false;
+
+        // ── 2D SpatialBroadphase 검증 ──
+        SpatialBroadphase2D broadphase2D(2.0f);
+        struct BoxInfo2D { entt::entity id; vec2 min; vec2 max; };
+        std::vector<BoxInfo2D> boxes2D;
+
+        for (int i = 0; i < 30; ++i)
+        {
+            const f32 x = (i % 6) * 1.5f - 4.5f;
+            const f32 y = (i / 6) * 1.5f - 3.5f;
+            const vec2 bMin(x, y);
+            const vec2 bMax = bMin + vec2(1.2f, 1.2f);
+            const auto id = static_cast<entt::entity>(i + 1);
+            boxes2D.push_back({ id, bMin, bMax });
+            broadphase2D.Insert(id, bMin, bMax);
+        }
+
+        std::vector<std::pair<entt::entity, entt::entity>> expectedPairs2D;
+        for (size_t i = 0; i < boxes2D.size(); ++i)
+        {
+            for (size_t j = i + 1; j < boxes2D.size(); ++j)
+            {
+                if (boxes2D[i].max.x >= boxes2D[j].min.x && boxes2D[i].min.x <= boxes2D[j].max.x &&
+                    boxes2D[i].max.y >= boxes2D[j].min.y && boxes2D[i].min.y <= boxes2D[j].max.y)
+                {
+                    auto a = boxes2D[i].id;
+                    auto b = boxes2D[j].id;
+                    if (b < a) std::swap(a, b);
+                    expectedPairs2D.emplace_back(a, b);
+                }
+            }
+        }
+        std::sort(expectedPairs2D.begin(), expectedPairs2D.end());
+        expectedPairs2D.erase(std::unique(expectedPairs2D.begin(), expectedPairs2D.end()), expectedPairs2D.end());
+
+        std::vector<std::pair<entt::entity, entt::entity>> actualPairs2D;
+        broadphase2D.QueryPairs(actualPairs2D);
+
+        if (actualPairs2D != expectedPairs2D)
+            return false;
+
+        return true;
+    }
+
+    bool CheckPhysicsSystemSweepAndOverlap()
+    {
+        std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+        if (!scene) return false;
+        scene->SetActive(true);
+        auto& world = scene->GetRegistry();
+
+        // 1. Entity 1: 일반 장애물 박스 (Layer 1, z=5.0)
+        const auto e1 = scene->CreateEntity().GetEntityHandle();
+        SetPosition(world, e1, vec3(0.0f, 0.0f, 5.0f));
+        auto& col1 = world.emplace<ColliderComponent>(e1);
+        col1.SetShape(BoxShape{ vec3(2.0f, 2.0f, 2.0f) });
+        ColliderSettings s1{};
+        s1.CollisionLayer = 1;
+        s1.CollisionMask = 0xFFFFFFFF;
+        col1.SetSettings(s1);
+
+        // 2. Entity 2: 다른 레이어 장애물 박스 (Layer 2, z=10.0)
+        const auto e2 = scene->CreateEntity().GetEntityHandle();
+        SetPosition(world, e2, vec3(0.0f, 0.0f, 10.0f));
+        auto& col2 = world.emplace<ColliderComponent>(e2);
+        col2.SetShape(BoxShape{ vec3(2.0f, 2.0f, 2.0f) });
+        ColliderSettings s2{};
+        s2.CollisionLayer = 2;
+        s2.CollisionMask = 0xFFFFFFFF;
+        col2.SetSettings(s2);
+
+        // 3. Entity 3: 트리거 박스 (Layer 1, z=3.0, IsTrigger=true)
+        const auto e3 = scene->CreateEntity().GetEntityHandle();
+        SetPosition(world, e3, vec3(0.0f, 0.0f, 3.0f));
+        auto& col3 = world.emplace<ColliderComponent>(e3);
+        col3.SetShape(BoxShape{ vec3(2.0f, 2.0f, 2.0f) });
+        ColliderSettings s3{};
+        s3.CollisionLayer = 1;
+        s3.CollisionMask = 0xFFFFFFFF;
+        s3.IsTrigger = true;
+        col3.SetSettings(s3);
+
+        // 4. Entity 4: 무시 대상 장애물 박스 (Layer 1, z=1.5)
+        const auto e4 = scene->CreateEntity().GetEntityHandle();
+        SetPosition(world, e4, vec3(0.0f, 0.0f, 1.5f));
+        auto& col4 = world.emplace<ColliderComponent>(e4);
+        col4.SetShape(BoxShape{ vec3(1.0f, 1.0f, 1.0f) });
+        ColliderSettings s4{};
+        s4.CollisionLayer = 1;
+        s4.CollisionMask = 0xFFFFFFFF;
+        col4.SetSettings(s4);
+
+        // ── Sweep 테스트 1: 기본 구체 스윕 (트리거 제외, Layer 1) ──
+        // e4를 ignoreEntity로 지정 -> e3은 트리거이므로 제외 -> e1(z=5.0)에 충돌
+        {
+            SceneSweepHit hit{};
+            SweepQuery q{};
+            q.maxDistance = 20.0f;
+            q.layerMask = 1;
+            q.includeTrigger = false;
+            q.ignoreEntity = e4;
+
+            const BoundingSphere sphere(vec3(0.0f), 0.5f);
+            if (!PhysicsSystem::Sweep(*scene, sphere, vec3(0.0f, 0.0f, 1.0f), hit, q))
+                return false;
+
+            if (hit.Entity != e1 || !hit.Hit.hasHit)
+                return false;
+
+            // e1의 앞면 z = 5.0 - 1.0 = 4.0. 구체 반경 0.5 -> 거리 = 3.5
+            if (std::abs(hit.Hit.distance - 3.5f) > 0.05f)
+                return false;
+        }
+
+        // ── Sweep 테스트 2: LayerMask 필터링 (Layer 2만 탐색) ──
+        // Layer 1인 e4, e3, e1 모두 건너뛰고 e2(z=10.0)에 충돌해야 함
+        {
+            SceneSweepHit hit{};
+            SweepQuery q{};
+            q.maxDistance = 20.0f;
+            q.layerMask = 2;
+
+            const BoundingSphere sphere(vec3(0.0f), 0.5f);
+            if (!PhysicsSystem::Sweep(*scene, sphere, vec3(0.0f, 0.0f, 1.0f), hit, q))
+                return false;
+
+            if (hit.Entity != e2)
+                return false;
+            // e2의 앞면 z = 10.0 - 1.0 = 9.0. 거리 = 8.5
+            if (std::abs(hit.Hit.distance - 8.5f) > 0.05f)
+                return false;
+        }
+
+        // ── Sweep 테스트 3: includeTrigger 필터링 (트리거 포함) ──
+        // e4 무시 시, 트리거인 e3(z=3.0)에 먼저 충돌해야 함
+        {
+            SceneSweepHit hit{};
+            SweepQuery q{};
+            q.maxDistance = 20.0f;
+            q.layerMask = 1;
+            q.includeTrigger = true;
+            q.ignoreEntity = e4;
+
+            const BoundingSphere sphere(vec3(0.0f), 0.5f);
+            if (!PhysicsSystem::Sweep(*scene, sphere, vec3(0.0f, 0.0f, 1.0f), hit, q))
+                return false;
+
+            if (hit.Entity != e3)
+                return false;
+        }
+
+        // ── SweepAll 테스트: 거리 순 정렬 반환 ──
+        {
+            SweepQuery q{};
+            q.maxDistance = 20.0f;
+            q.layerMask = 0xFFFFFFFF;
+            q.includeTrigger = true;
+
+            const BoundingSphere sphere(vec3(0.0f), 0.5f);
+            auto allHits = PhysicsSystem::SweepAll(*scene, sphere, vec3(0.0f, 0.0f, 1.0f), q);
+
+            if (allHits.size() != 4)
+                return false;
+
+            // 거리 순서대로 e4, e3, e1, e2인지 확인
+            if (allHits[0].Entity != e4 || allHits[1].Entity != e3 ||
+                allHits[2].Entity != e1 || allHits[3].Entity != e2)
+                return false;
+
+            for (size_t i = 1; i < allHits.size(); ++i)
+            {
+                if (allHits[i].Hit.distance < allHits[i - 1].Hit.distance)
+                    return false;
+            }
+        }
+
+        // ── OverlapAll 테스트 ──
+        {
+            // z=4.0 위치에서 반경 2.5의 구체 오버랩: e3(z=3.0)과 e1(z=5.0) 포함
+            OverlapQuery oq{};
+            oq.layerMask = 1;
+            oq.includeTrigger = false;
+
+            const BoundingSphere sphere(vec3(0.0f, 0.0f, 4.0f), 2.5f);
+            auto overlaps = PhysicsSystem::OverlapAll(*scene, sphere, oq);
+
+            // 트리거 제외 시 e1만 감지
+            if (overlaps.size() != 1 || overlaps[0].Entity != e1)
+                return false;
+
+            // 트리거 포함 시 e1과 e3 감지
+            oq.includeTrigger = true;
+            auto overlapsWithTrig = PhysicsSystem::OverlapAll(*scene, sphere, oq);
+            if (overlapsWithTrig.size() != 2)
+                return false;
+
+            // ignoreEntity 지정 시 제외 검증
+            oq.ignoreEntity = e1;
+            auto overlapsIgnored = PhysicsSystem::OverlapAll(*scene, sphere, oq);
+            if (overlapsIgnored.size() != 1 || overlapsIgnored[0].Entity != e3)
+                return false;
+        }
+
+        return true;
+    }
 }
 
 int main()
@@ -447,6 +722,17 @@ int main()
     using namespace Engine;
     if (!ResourceManager::Create()) return 1;
     struct ResourceScope { ~ResourceScope() { ResourceManager::Destroy(); } } resourceScope;
+
+    if (!CheckSpatialBroadphaseParity())
+    {
+        std::cerr << "SpatialBroadphase candidate pair parity vs brute-force failed.\n";
+        return 1;
+    }
+    if (!CheckPhysicsSystemSweepAndOverlap())
+    {
+        std::cerr << "PhysicsSystem Sweep and OverlapAll query filtering failed.\n";
+        return 1;
+    }
 
     auto& resources = ResourceManager::Get();
     RegisterBuiltInPrimitiveMeshes(resources);
