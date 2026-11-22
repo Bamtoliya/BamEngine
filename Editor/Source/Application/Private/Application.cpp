@@ -923,14 +923,10 @@ void Application::RestoreLastEditedScene()
 
         path = path.lexically_normal();
 
-        archive::JsonArchive reader;
-        if (SceneManager::Get().LoadScene(reader, path.wstring()) != EResult::Success)
-        {
+        // 큰 씬에서 창이 멈추지 않도록 씬 열기와 같은 로딩 창 경로를 쓴다. 문서 등록은 로드 완료 시점에 한다.
+        std::error_code error;
+        if (!std::filesystem::is_regular_file(path, error) || !m_ImGuiManager || !m_ImGuiManager->RestoreSceneOnStartup(path))
             BAM_LOG(Warn, "Editor", "Workspace", "Cannot restore scene: {}", storedPath);
-            return;
-        }
-
-        AdoptSceneDocument(path);
     }
     catch (const std::filesystem::filesystem_error& error)
     {

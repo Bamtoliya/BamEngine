@@ -11,6 +11,7 @@
 #include "LightManager.h"
 #include "PrefabInstanceComponent.h"
 #include "PlatformPath.h"
+#include <chrono>
 
 #pragma region Constructor&Destructor
 IMPLEMENT_SINGLETON(SceneManager)
@@ -235,9 +236,14 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 			}
 		}
 	}
+	using Clock = std::chrono::steady_clock;
+	const auto elapsedMs = [](Clock::time_point begin, Clock::time_point end) { return std::chrono::duration<double, std::milli>(end - begin).count(); };
+	const auto readStart = Clock::now();
 	Scene* candidate = nullptr;
 	auto result = ar.LoadFromFile(targetPath);
+	const auto createStart = Clock::now();
 	if (result) result = Scene::CreateFromArchive(ar, candidate);
+	const auto openStart = Clock::now();
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
@@ -245,6 +251,9 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 	}
 	const EResult openResult = OpenScene(candidate);
 	Safe_Release(candidate);
+	ENGINE_LOG_INFO("Scene load timing: {} | archive {:.0f} ms, resources and entities {:.0f} ms, open {:.0f} ms",
+		WStrToStr(targetPath.filename().wstring()), elapsedMs(readStart, createStart), elapsedMs(createStart, openStart),
+		elapsedMs(openStart, Clock::now()));
 	return openResult;
 }
 #pragma endregion

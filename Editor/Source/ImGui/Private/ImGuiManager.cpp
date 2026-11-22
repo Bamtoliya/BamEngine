@@ -15,6 +15,7 @@
 #include <cmath>
 #include <fmt/core.h>
 #include <fstream>
+#include <map>
 #include <thread>
 #include <utility>
 #pragma endregion
@@ -89,6 +90,41 @@ struct SceneLoadState
 	archive::ArchiveResult ArchiveReadResult;
 	std::vector<Engine::ResourceReference> Resources;
 	size_t NextResourceIndex = 0;
+
+	// 로드 구간 계측. 리소스 시간은 종류별로 합치며, 재질 시간에는 함께 로드한 텍스처가 포함된다.
+	struct ResourceTiming
+	{
+		size_t Count = 0;
+		double Milliseconds = 0.0;
+	};
+	double ArchiveMilliseconds = 0.0;
+	double ResourceMilliseconds = 0.0;
+	std::chrono::steady_clock::time_point PreloadStart{};
+	double PreloadWallMilliseconds = 0.0;
+	std::map<std::string, ResourceTiming> ResourceTimings;
+	std::vector<std::pair<double, std::string>> SlowestResources;
+
+	void RecordResource(const Engine::ResourceReference& reference, double milliseconds)
+	{
+		const std::filesystem::path path(reference.AssetPath.empty() ? reference.AssetKey : reference.AssetPath);
+		auto extension = path.extension();
+		if (extension == L".json" || extension == L".beve")
+		{
+			if (const auto embedded = path.stem().extension(); !embedded.empty())
+				extension = embedded;
+		}
+		auto& timing = ResourceTimings[extension.empty() ? std::string("(none)") : Engine::ToLowerStr(Engine::WStrToStr(extension.wstring()))];
+		++timing.Count;
+		timing.Milliseconds += milliseconds;
+		ResourceMilliseconds += milliseconds;
+
+		constexpr size_t SlowestCount = 5;
+		SlowestResources.emplace_back(milliseconds, Engine::WStrToStr(path.wstring()));
+		std::sort(SlowestResources.begin(), SlowestResources.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+		if (SlowestResources.size() > SlowestCount)
+			SlowestResources.resize(SlowestCount);
+	}
+
 	std::atomic<bool> ArchiveReady = false;
 	std::thread ArchiveThread;
 
@@ -398,7 +434,8 @@ void ImGuiManager::Draw()
 	DrawNewSceneDialog();
 	UpdateSceneLoad();
 	DrawSceneLoadingModal();
-	if (RecoveryManager::IsCreated())
+	// 시작 씬 로드가 끝나기 전에 복원하면 뒤늦은 로드가 복원 결과를 덮어쓴다.
+	if (RecoveryManager::IsCreated() && !IsSceneLoading())
 	{
 		RecoveryManager::Get().DrawRecoveryModal();
 	}
@@ -1476,6 +1513,11 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 		});
 }
 
+bool ImGuiManager::RestoreSceneOnStartup(const std::filesystem::path& path)
+{
+	return BeginSceneLoad(path);
+}
+
 bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 {
 	if (m_SceneLoadState)
@@ -1513,6 +1555,7 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 	{
 		state->ArchiveThread = std::thread([rawState = state.get()]()
 		{
+			const auto readStart = std::chrono::steady_clock::now();
 			rawState->ArchiveReadResult = rawState->Archive->LoadFromFile(rawState->ResolvedPath);
 			if (rawState->ArchiveReadResult)
 			{
@@ -1524,8 +1567,19 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 						return archive_resource::ReadResourceReferences(object, "ResourceReferences", refs);
 					});
 				if (refResult)
+				{
 					rawState->Resources.assign(refs.begin(), refs.end());
+					// 모델은 참조하는 메시를 한 번에 모두 로드한다. 메시를 먼저 나눠 로드하고 모델을 뒤에 두어 한 프레임에 몰리지 않게 한다.
+					const auto isModel = [](const Engine::ResourceReference& reference)
+						{
+							const auto& path = reference.AssetPath.empty() ? reference.AssetKey : reference.AssetPath;
+							return Engine::ToLowerStr(Engine::WStrToStr(path)).find(".bammodel") != std::string::npos;
+						};
+					std::stable_partition(rawState->Resources.begin(), rawState->Resources.end(),
+						[&isModel](const Engine::ResourceReference& reference) { return !isModel(reference); });
+				}
 			}
+			rawState->ArchiveMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - readStart).count();
 			rawState->ArchiveReady.store(true, std::memory_order_release);
 		});
 	}
@@ -1581,8 +1635,11 @@ void ImGuiManager::UpdateSceneLoad()
 
 	if (state.Stage == SceneLoadState::EStage::PreloadingResources && ResourceManager::IsCreated())
 	{
-		const auto frameBudget = std::chrono::milliseconds(8);
+		// 로딩 창이 뜬 뒤에는 다른 조작을 할 수 없으므로 화면이 갱신되는 범위에서 예산을 늘린다.
+		const auto frameBudget = std::chrono::milliseconds(state.ModalVisible ? 24 : 8);
 		const auto batchStart = std::chrono::steady_clock::now();
+		if (state.NextResourceIndex == 0)
+			state.PreloadStart = batchStart;
 		auto& manager = ResourceManager::Get();
 
 		while (state.NextResourceIndex < state.Resources.size())
@@ -1590,6 +1647,7 @@ void ImGuiManager::UpdateSceneLoad()
 			const auto& ref = state.Resources[state.NextResourceIndex++];
 			if (!ref.AssetKey.empty() || !ref.AssetPath.empty())
 			{
+				const auto resourceStart = std::chrono::steady_clock::now();
 				try
 				{
 					(void)archive_resource::ResolveResourceHandle(manager, ref.AssetKey, ref.AssetPath);
@@ -1598,6 +1656,7 @@ void ImGuiManager::UpdateSceneLoad()
 				{
 					BAM_LOG(Warn, "Editor", "Document", "Resource preload path error: {}", error.what());
 				}
+				state.RecordResource(ref, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - resourceStart).count());
 			}
 
 			if (std::chrono::steady_clock::now() - batchStart >= frameBudget)
@@ -1607,6 +1666,7 @@ void ImGuiManager::UpdateSceneLoad()
 		if (state.NextResourceIndex < state.Resources.size())
 			return;
 
+		state.PreloadWallMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - state.PreloadStart).count();
 		state.Stage = SceneLoadState::EStage::FinalizingScene;
 		if (state.ModalVisible)
 			return;
@@ -1621,8 +1681,10 @@ void ImGuiManager::UpdateSceneLoad()
 		if (state.ModalVisible && !state.FinalizingFrameDrawn)
 			return;
 
+		const auto createStart = std::chrono::steady_clock::now();
 		Scene* candidate = nullptr;
 		const auto result = Engine::Scene::CreateFromArchive(*state.Archive, candidate);
+		const auto openStart = std::chrono::steady_clock::now();
 		if (!result || !candidate)
 		{
 			Safe_Release(candidate);
@@ -1640,6 +1702,16 @@ void ImGuiManager::UpdateSceneLoad()
 			m_SceneLoadState.reset();
 			return;
 		}
+
+		const auto openEnd = std::chrono::steady_clock::now();
+		const auto elapsedMs = [](auto begin, auto end) { return std::chrono::duration<double, std::milli>(end - begin).count(); };
+		BAM_LOG(Info, "Editor", "Document", "Scene load timing: {} | total {:.0f} ms (archive {:.0f}, resource work {:.0f} over {} item(s) / wall {:.0f}, entities {:.0f}, open {:.0f})",
+			state.DisplayName, elapsedMs(state.StartTime, openEnd), state.ArchiveMilliseconds, state.ResourceMilliseconds,
+			state.Resources.size(), state.PreloadWallMilliseconds, elapsedMs(createStart, openStart), elapsedMs(openStart, openEnd));
+		for (const auto& [extension, timing] : state.ResourceTimings)
+			BAM_LOG(Info, "Editor", "Document", "Scene load resources: {} x{} = {:.0f} ms", extension, timing.Count, timing.Milliseconds);
+		for (const auto& [milliseconds, resourcePath] : state.SlowestResources)
+			BAM_LOG(Info, "Editor", "Document", "Scene load slowest: {:.0f} ms {}", milliseconds, resourcePath);
 
 		SelectionManager::Get().ClearSelection(true);
 		Application::Get().AdoptSceneDocument(state.RequestedPath);

@@ -913,6 +913,12 @@ int RunAssetReferenceChecks()
         [&]() { fs::rename(texture, newTexture); return true; }) || customProbe->GetKey() != L"SemanticTextureKey" ||
         manager.FindHandleByFilePath(newTexture) != custom.GetRawHandle() || custom.Get() != customProbe)
         return 40;
+    // Path lookup must ignore name casing and still reject the same file name in another directory.
+    auto upperName = newTexture.filename().wstring();
+    std::transform(upperName.begin(), upperName.end(), upperName.begin(), ::towupper);
+    if (manager.FindHandleByFilePath(newTexture.parent_path() / upperName) != custom.GetRawHandle() ||
+        manager.FindHandleByFilePath(destination / L"OtherFolder" / newTexture.filename()).IsValid())
+        return 58;
 
     // Prefixes compare by component, support directory casing, and never match a sibling name.
     const auto remapped = Engine::PlatformPath::RemapFilePath(material,

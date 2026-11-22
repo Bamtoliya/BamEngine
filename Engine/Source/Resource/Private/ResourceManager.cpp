@@ -36,6 +36,36 @@ namespace
 
 		return NormalizePath(relativePath.wstring());
 	}
+
+	std::wstring_view LastPathComponent(std::wstring_view path)
+	{
+		while (!path.empty() && (path.back() == L'/' || path.back() == L'\\'))
+			path.remove_suffix(1);
+		const auto separator = path.find_last_of(L"/\\");
+		return separator == std::wstring_view::npos ? path : path.substr(separator + 1);
+	}
+
+	// 두 경로의 파일 이름이 다르다고 확실할 때만 false. 경로 해석은 파일 이름을 바꾸지 않으므로,
+	// 비용이 큰 ResolveUri·정규화 전에 대부분의 리소스를 걸러낸다. 비ASCII 문자는 판정하지 않고 정확한 비교에 맡긴다.
+	bool MayHaveSameFileName(std::wstring_view lhs, std::wstring_view rhs)
+	{
+		lhs = LastPathComponent(lhs);
+		rhs = LastPathComponent(rhs);
+		const auto isOrdinary = [](std::wstring_view name) { return !name.empty() && name != L"." && name != L".."; };
+		if (!isOrdinary(lhs) || !isOrdinary(rhs))
+			return true;
+		if (lhs.size() != rhs.size())
+			return false;
+		const auto foldAscii = [](wchar_t c) { return c >= L'A' && c <= L'Z' ? static_cast<wchar_t>(c - L'A' + L'a') : c; };
+		for (size_t i = 0; i < lhs.size(); ++i)
+		{
+			if (lhs[i] > 0x7F || rhs[i] > 0x7F)
+				continue;
+			if (foldAscii(lhs[i]) != foldAscii(rhs[i]))
+				return false;
+		}
+		return true;
+	}
 }
 
 void Engine::ResourceHandleAccess::AddRef(const Engine::Handle& handle)
@@ -452,11 +482,13 @@ Handle ResourceManager::FindHandleByFilePath(const std::filesystem::path& filePa
 		return keyed;
 	// A resource can have a semantic key unrelated to its backing file name.
 	const auto physical = PlatformPath::ResolveUri(filePath);
+	const wstring physicalName = physical.wstring();
 	shared_lock lock(m_PoolMutex);
 	for (size_t index = 0; index < m_Resources.size(); ++index)
 	{
 		const auto& slot = m_Resources[index];
 		if (slot.IsActive && slot.Instance && !slot.Instance->GetPath().empty() &&
+			MayHaveSameFileName(physicalName, slot.Instance->GetPath()) &&
 			PlatformPath::IsSamePath(physical, PlatformPath::ResolveUri(slot.Instance->GetPath())))
 			return Handle(static_cast<uint32>(index), slot.Generation);
 	}

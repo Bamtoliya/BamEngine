@@ -31,13 +31,26 @@ namespace archive_resource
             L".json", L".beve"
         };
 
+        // 키가 가리키는 파일이 그대로 있으면 확장자를 바꾼 후보의 파일 경로 탐색은 건너뛴다(키 탐색은 유지).
+        // 처음 로드하는 리소스마다 후보 수만큼 전체 리소스를 훑는 비용을 막는다.
+        bool hasExactFile = false;
+        if (Engine::PlatformPath::IsVirtualUri(assetKey))
+        {
+            std::error_code error;
+            hasExactFile = std::filesystem::is_regular_file(Engine::PlatformPath::ResolveUri(assetKey), error);
+        }
+
         // 1. 이미 로드된 리소스 중 확장자가 붙은 키 또는 파일 경로 탐색
+        const auto findLoaded = [&](const std::wstring& candidate) -> Engine::Handle
+            {
+                auto found = manager.FindHandleByKey(candidate);
+                if (!manager.IsValid(found) && !hasExactFile)
+                    found = manager.FindHandleByFilePath(candidate);
+                return found;
+            };
         for (const auto& ext : candidateExtensions)
         {
-            const auto candidate = assetKey + std::wstring(ext);
-            handle = manager.FindHandleByKey(candidate);
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByFilePath(candidate);
+            handle = findLoaded(assetKey + std::wstring(ext));
             if (manager.IsValid(handle)) return handle;
         }
 
@@ -47,30 +60,19 @@ namespace archive_resource
         {
             std::filesystem::path stripped = keyPath;
             stripped.replace_extension();
-            handle = manager.FindHandleByKey(stripped.wstring());
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByFilePath(stripped.wstring());
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByKey(assetKey + L".json");
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByFilePath(assetKey + L".json");
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByKey(assetKey + L".beve");
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByFilePath(assetKey + L".beve");
-            if (manager.IsValid(handle)) return handle;
+            for (const auto& candidate : { stripped.wstring(), assetKey + L".json", assetKey + L".beve" })
+            {
+                handle = findLoaded(candidate);
+                if (manager.IsValid(handle)) return handle;
+            }
         }
 
         // 가상 URI 키는 현재 프로젝트 기준으로 풀리므로 저장 당시의 AssetPath보다 먼저 쓴다.
         // 절대 AssetPath는 다른 체크아웃이나 옮기기 전 위치의 파일을 가리킬 수 있다.
-        if (Engine::PlatformPath::IsVirtualUri(assetKey))
+        if (hasExactFile)
         {
-            std::error_code error;
-            if (std::filesystem::is_regular_file(Engine::PlatformPath::ResolveUri(assetKey), error))
-            {
-                handle = manager.LoadFile(assetKey);
-                if (manager.IsValid(handle)) return handle;
-            }
+            handle = manager.LoadFile(assetKey);
+            if (manager.IsValid(handle)) return handle;
         }
 
         // 2. assetPath가 있으면 파일 로드 시도

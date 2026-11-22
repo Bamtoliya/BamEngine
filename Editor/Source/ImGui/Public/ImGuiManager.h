@@ -163,6 +163,8 @@ public:
 	bool ExecuteNewScene(ESceneTemplate templateType);
 	bool RequestOpenScene(const std::filesystem::path& path);
 	bool RequestCloseScene();
+	// 에디터 시작 시 마지막 작업 씬을 로딩 창과 함께 연다. 이미 로드 중이면 false.
+	bool RestoreSceneOnStartup(const std::filesystem::path& path);
 	bool RequestQuit();
 	bool IsSceneLoading() const { return m_SceneLoadState != nullptr; }
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
