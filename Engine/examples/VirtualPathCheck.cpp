@@ -1,4 +1,5 @@
 #include "PlatformPath.h"
+#include "ModelSubfolderHelper.h"
 #include <iostream>
 #include <filesystem>
 #include <fstream>
@@ -220,6 +221,76 @@ int main()
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Resources/Data/Localization/English.json"));
         EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Assets/Material/GBufferMaterial.bammat.json"));
         EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Resources/Material/GBufferMaterial.bammat.json"));
+    }
+
+    // 13. Phase 6: ModelSubfolderHelper 하이브리드 에셋 서브폴더 구조 및 이름 정리(Sanitizer) 검증
+    {
+        // (1) SanitizeName 검증: 특수문자 치환, 공백/마침표 트리밍, 윈도우 예약어 회피, 빈 문자열 폴백
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L"Barbarian:01*?<>|"), L"Barbarian_01_____");
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L"  Knight.Mesh.  "), L"Knight.Mesh");
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L"CON"), L"_CON");
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L"aux"), L"_aux");
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L"   "), L"Model");
+        EXPECT_EQ(ModelSubfolderHelper::SanitizeName(L""), L"Model");
+
+        // (2) ResolveLayout 검증: 기본 하이브리드 레이아웃 (새 폴더 생성)
+        const fs::path targetDir = mockAssetRoot / "Models" / "Characters";
+        const auto layout1 = ModelSubfolderHelper::ResolveLayout(targetDir, L"Barbarian", true, true, true, true, true);
+        EXPECT_TRUE(layout1.UsesDedicatedModelFolder);
+        EXPECT_EQ(layout1.RootDirectory, PlatformPath::Normalize(targetDir / "Barbarian"));
+        EXPECT_EQ(layout1.ModelFilePath, PlatformPath::Normalize(targetDir / "Barbarian/Barbarian.bammodel"));
+        EXPECT_EQ(layout1.SkeletonFilePath, PlatformPath::Normalize(targetDir / "Barbarian/Barbarian_Skeleton.bamskel"));
+        EXPECT_EQ(layout1.MeshesDirectory, PlatformPath::Normalize(targetDir / "Barbarian/Meshes"));
+        EXPECT_EQ(layout1.MaterialsDirectory, PlatformPath::Normalize(targetDir / "Barbarian/Materials"));
+        EXPECT_EQ(layout1.TexturesDirectory, PlatformPath::Normalize(targetDir / "Barbarian/Textures"));
+        EXPECT_EQ(layout1.AnimationsDirectory, PlatformPath::Normalize(targetDir / "Barbarian/Animations"));
+        EXPECT_EQ(layout1.SidecarFilePath, PlatformPath::Normalize(targetDir / "Barbarian/Barbarian.bamimport.json"));
+
+        // (3) ResolveLayout 재임포트 중복 방지 검증: 이미 모델 전용 폴더 안인 경우 Barbarian/Barbarian 중복 방지
+        const fs::path dedicatedDir = targetDir / "Barbarian";
+        const auto layout2 = ModelSubfolderHelper::ResolveLayout(dedicatedDir, L"Barbarian", true, true, true, true, true);
+        EXPECT_TRUE(layout2.UsesDedicatedModelFolder);
+        EXPECT_EQ(layout2.RootDirectory, PlatformPath::Normalize(dedicatedDir));
+        EXPECT_EQ(layout2.ModelFilePath, PlatformPath::Normalize(dedicatedDir / "Barbarian.bammodel"));
+
+        // (4) ResolveLayout 평탄화(Flat) 옵션 검증: 서브폴더 비활성화 시 모든 산출물이 RootDirectory에 배치
+        const auto layoutFlat = ModelSubfolderHelper::ResolveLayout(targetDir, L"Prop_Box", false, false, false, false, false);
+        EXPECT_FALSE(layoutFlat.UsesDedicatedModelFolder);
+        EXPECT_EQ(layoutFlat.RootDirectory, PlatformPath::Normalize(targetDir));
+        EXPECT_EQ(layoutFlat.MeshesDirectory, PlatformPath::Normalize(targetDir));
+        EXPECT_EQ(layoutFlat.MaterialsDirectory, PlatformPath::Normalize(targetDir));
+        EXPECT_EQ(layoutFlat.TexturesDirectory, PlatformPath::Normalize(targetDir));
+        EXPECT_EQ(layoutFlat.AnimationsDirectory, PlatformPath::Normalize(targetDir));
+
+        // (5) 파생 에셋 경로 생성 (LOD, 머티리얼, 텍스처, 애니메이션) 검증
+        EXPECT_EQ(ModelSubfolderHelper::BuildMeshPath(layout1, L"Body", 0),
+            PlatformPath::Normalize(targetDir / "Barbarian/Meshes/Body.bammesh"));
+        EXPECT_EQ(ModelSubfolderHelper::BuildMeshPath(layout1, L"Body", 1),
+            PlatformPath::Normalize(targetDir / "Barbarian/Meshes/Body_LOD1.bammesh"));
+        EXPECT_EQ(ModelSubfolderHelper::BuildMeshPath(layout1, L"Body", 2),
+            PlatformPath::Normalize(targetDir / "Barbarian/Meshes/Body_LOD2.bammesh"));
+        EXPECT_EQ(ModelSubfolderHelper::BuildMaterialPath(layout1, L"M_Barbarian"),
+            PlatformPath::Normalize(targetDir / "Barbarian/Materials/M_Barbarian.bammatinst"));
+        EXPECT_EQ(ModelSubfolderHelper::BuildTexturePath(layout1, L"T_Albedo", L".png"),
+            PlatformPath::Normalize(targetDir / "Barbarian/Textures/T_Albedo.png"));
+        EXPECT_EQ(ModelSubfolderHelper::BuildAnimationPath(layout1, L"Walk"),
+            PlatformPath::Normalize(targetDir / "Barbarian/Animations/Walk.bamanim"));
+
+        // (6) 충돌 처리 (ResolveUniqueDirectory, ResolveUniqueFilePath) 검증
+        const fs::path testCollisionDir = tempRoot / "CollisionTest";
+        fs::create_directories(testCollisionDir, ec);
+        fs::create_directories(testCollisionDir / "ModelA", ec);
+        const auto uniqueDir1 = ModelSubfolderHelper::ResolveUniqueDirectory(testCollisionDir / "ModelA");
+        EXPECT_EQ(uniqueDir1, PlatformPath::Normalize(testCollisionDir / "ModelA_1"));
+
+        fs::create_directories(testCollisionDir / "ModelA_1", ec);
+        const auto uniqueDir2 = ModelSubfolderHelper::ResolveUniqueDirectory(testCollisionDir / "ModelA");
+        EXPECT_EQ(uniqueDir2, PlatformPath::Normalize(testCollisionDir / "ModelA_2"));
+
+        const fs::path dummyFile = testCollisionDir / "Item.bammodel";
+        std::ofstream(dummyFile) << "dummy";
+        const auto uniqueFile1 = ModelSubfolderHelper::ResolveUniqueFilePath(dummyFile);
+        EXPECT_EQ(uniqueFile1, PlatformPath::Normalize(testCollisionDir / "Item_1.bammodel"));
     }
 
     std::cout << "[VirtualPathCheck] All virtual path and URI tests passed successfully!" << std::endl;

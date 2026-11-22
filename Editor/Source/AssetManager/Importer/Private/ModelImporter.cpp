@@ -9,6 +9,7 @@
 #include "ResourceManager.h"
 #include "Logger.h"
 #include "PlatformPath.h"
+#include "ModelSubfolderHelper.h"
 
 #pragma push_macro("new")
 #undef new
@@ -158,6 +159,7 @@ namespace Editor
 		OutputReservation Output;
 		ModelImportDesc Settings;
 		ModelCreateDesc ModelDesc;
+		Engine::ModelSubfolderLayout Layout;
 		filesystem::path MeshDirectory;
 		ResourceHandle<Material> BaseMaterial;
 		std::vector<PendingMesh> Meshes;
@@ -207,13 +209,7 @@ namespace
 {
 	wstring SanitizeFileName(wstring name)
 	{
-		static const wstring invalid = L"\\/:*?\"<>|";
-		for (wchar_t& ch : name)
-		{
-			if (invalid.find(ch) != wstring::npos)
-				ch = L'_';
-		}
-		return name;
+		return Engine::ModelSubfolderHelper::SanitizeName(name);
 	}
 
 	void AssignModelSourceKeys(const Editor::PreparedModelData& data, ModelCreateDesc& desc)
@@ -1552,12 +1548,22 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			state.Settings = request.Settings;
 			state.ModelDisplayName = WStrToStr(data.SourcePath.filename().wstring());
 
-			if (const auto result = state.Output.Acquire(outputDir); result != EResult::Success)
+			// Phase 6: 하이브리드 모델 에셋 서브폴더 레이아웃 계산
+			state.Layout = Engine::ModelSubfolderHelper::ResolveLayout(
+				outputDir,
+				data.SourcePath.stem().wstring(),
+				state.Settings.CreateModelSubfolder,
+				state.Settings.UseMeshSubfolder,
+				state.Settings.UseMaterialSubfolder,
+				state.Settings.UseTextureSubfolder,
+				state.Settings.UseAnimationSubfolder);
+
+			if (const auto result = state.Output.Acquire(state.Layout.RootDirectory); result != EResult::Success)
 				return finish(result);
 
 			auto& desc = state.ModelDesc;
-			const wstring stem = SanitizeFileName(data.SourcePath.stem().wstring());
-			desc.Key = NormalizePath((outputDir / (stem + L".bammodel")).wstring());
+			const wstring stem = state.Layout.ModelStem;
+			desc.Key = NormalizePath(state.Layout.ModelFilePath.wstring());
 			desc.Path = desc.Key;
 			const auto& rotation = state.Settings.RotationOffset;
 			desc.PlacementEulerDegrees = vec3(rotation[0], rotation[1], rotation[2]);
@@ -1571,10 +1577,10 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				return finish(result);
 			}
 
-			desc.UseMeshSubfolder = true;
-			desc.UseMaterialSubfolder = true;
-			desc.UseAnimationSubfolder = true;
-			desc.UseTextureSubfolder = true;
+			desc.UseMeshSubfolder = state.Layout.UsesMeshSubfolder;
+			desc.UseMaterialSubfolder = state.Layout.UsesMaterialSubfolder;
+			desc.UseAnimationSubfolder = state.Layout.UsesAnimationSubfolder;
+			desc.UseTextureSubfolder = state.Layout.UsesTextureSubfolder;
 
 
 			auto modelHandle = manager.FindHandleByKey(desc.Key);
@@ -1619,7 +1625,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				desc.UseTextureSubfolder = existingModel->UsesTextureSubfolder();
 			}
 
-			state.MeshDirectory = desc.UseMeshSubfolder ? outputDir / L"Meshes" : outputDir;
+			state.MeshDirectory = desc.UseMeshSubfolder ? state.Layout.MeshesDirectory : state.Layout.RootDirectory;
 
 			const auto options = state.Settings.ImportOptions;
 			if (HasFlag(options, EModelImportOption::Materials) && !data.Materials.empty())
@@ -1927,9 +1933,12 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			return std::nullopt;
 		}
 
+		const auto& modelRootDir = state->Layout.RootDirectory.empty()
+			? outputDir : state->Layout.RootDirectory;
+
 		if (!state->TextureBakesScheduled)
 		{
-			if (const EResult result = ScheduleModelTextureBakes(*state, data, outputDir);
+			if (const EResult result = ScheduleModelTextureBakes(*state, data, modelRootDir);
 				result != EResult::Success)
 			{
 				return finish(result);
@@ -1940,7 +1949,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			return std::nullopt;
 
 		const auto commitStart = Clock::now();
-		const EResult commitResult = CommitPreparedModel(*state, data, outputDir);
+		const EResult commitResult = CommitPreparedModel(*state, data, modelRootDir);
 		const double commitMs = std::chrono::duration<double, std::milli>(Clock::now() - commitStart).count();
 
 		BAM_LOG(Info, "Editor", "Asset",
@@ -2117,6 +2126,11 @@ bool ModelImporter::SaveImportOptions(const std::filesystem::path& sidecarPath, 
 		ar.Write("LOD1Reduction", desc.LOD1Reduction);
 		ar.Write("LOD2Reduction", desc.LOD2Reduction);
 		ar.Write("TargetError", desc.TargetError);
+		ar.Write("CreateModelSubfolder", desc.CreateModelSubfolder);
+		ar.Write("UseMeshSubfolder", desc.UseMeshSubfolder);
+		ar.Write("UseMaterialSubfolder", desc.UseMaterialSubfolder);
+		ar.Write("UseTextureSubfolder", desc.UseTextureSubfolder);
+		ar.Write("UseAnimationSubfolder", desc.UseAnimationSubfolder);
 
 		std::string jsonStr;
 		if (!ar.ToJson(jsonStr))
@@ -2200,6 +2214,12 @@ bool ModelImporter::LoadImportOptions(const std::filesystem::path& sidecarPath, 
 		if (ar.Read("LOD2Reduction", lod2)) outDesc.LOD2Reduction = lod2;
 		if (ar.Read("TargetError", error)) outDesc.TargetError = error;
 
+		if (ar.Read("CreateModelSubfolder", bVal)) outDesc.CreateModelSubfolder = bVal;
+		if (ar.Read("UseMeshSubfolder", bVal)) outDesc.UseMeshSubfolder = bVal;
+		if (ar.Read("UseMaterialSubfolder", bVal)) outDesc.UseMaterialSubfolder = bVal;
+		if (ar.Read("UseTextureSubfolder", bVal)) outDesc.UseTextureSubfolder = bVal;
+		if (ar.Read("UseAnimationSubfolder", bVal)) outDesc.UseAnimationSubfolder = bVal;
+
 		return true;
 	}
 	catch (...)
@@ -2217,7 +2237,9 @@ std::filesystem::path ModelImporter::ResolveSidecarPath(const std::filesystem::p
 	if (!destDir.empty())
 	{
 		candidates.push_back(destDir / (stem + L".bamimport.json"));
+		candidates.push_back(destDir / stem / (stem + L".bamimport.json"));
 		candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(destDir / (stem + L".bamimport.json")));
+		candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(destDir / stem / (stem + L".bamimport.json")));
 	}
 	candidates.push_back(modelOrSourcePath.parent_path() / (stem + L".bamimport.json"));
 	candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(std::filesystem::path(".bam/import") / (stem + L".bamimport.json")));

@@ -93,6 +93,13 @@ struct ModelImportDesc
 	float LOD1Reduction = 0.5f;
 	float LOD2Reduction = 0.25f;
 	float TargetError = 0.02f;
+
+	// Phase 6: Hybrid model asset subfolder organization
+	bool CreateModelSubfolder = true;
+	bool UseMeshSubfolder = true;
+	bool UseMaterialSubfolder = true;
+	bool UseTextureSubfolder = true;
+	bool UseAnimationSubfolder = true;
 };
 
 BEGIN(Editor)
