@@ -38,9 +38,12 @@ public:
 	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None; }
 	bool IsEnabled() const { return m_Desc.isEnabled; }
 	bool UsesPointSpriteSampling() const { return m_PointSpriteSampling; }
-	// 방향광 그림자 패스: 레이트레이싱이 차폐를 맡는 캐스터를 캐스케이드에서 제외하는지(스포트 사분면은 그대로 그림)
+	// 레이트레이싱이 차폐를 맡는 캐스터를 제외하는지. 방향광 그림자 패스는 캐스케이드, 점광원 그림자 패스는 큐브맵에 적용한다.
 	bool SkipsRaytracedShadowCasters() const { return m_SkipsRaytracedShadowCasters; }
 	void SetSkipsRaytracedShadowCasters(bool skip) { m_SkipsRaytracedShadowCasters = skip; }
+	// 방향광 그림자 패스의 스포트 사분면에서 제외하는지
+	bool SkipsRaytracedSpotCasters() const { return m_SkipsRaytracedSpotCasters; }
+	void SetSkipsRaytracedSpotCasters(bool skip) { m_SkipsRaytracedSpotCasters = skip; }
 #pragma endregion
 
 #pragma region Setter
@@ -119,6 +122,7 @@ private:
 	unordered_map<uint32, wstring> m_PassTextures;
 	bool m_PointSpriteSampling = false;
 	bool m_SkipsRaytracedShadowCasters = false;
+	bool m_SkipsRaytracedSpotCasters = false;
 #pragma endregion
 };
 END

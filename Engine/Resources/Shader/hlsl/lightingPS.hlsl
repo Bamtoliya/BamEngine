@@ -47,8 +47,12 @@ struct LightingPassData
     float ShadowAmbientFloor;
     float3 SkyZenithColor;
     float SkyIntensity;
-    uint UseRaytracedShadow; // 1이면 첫 그림자 방향광에 레이트레이싱 마스크(t14)를 섀도맵과 min으로 합성
-    uint3 _RaytracedShadowPad;
+    uint4 RaytracedShadowLights; // 마스크(t14)의 채널별 광원 버퍼 인덱스. 빈 채널은 INVALID_LIGHT_INDEX
+    // 섀도맵을 가진 광원의 버퍼 인덱스. 다른 광원은 섀도맵을 읽지 않는다.
+    uint CascadeShadowLight;
+    uint SpotShadowLight;
+    uint PointShadowLight;
+    uint _ShadowLightPad;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -60,8 +64,8 @@ Texture2D gShadowDepth : register(t5, space3);
 TextureCube gPointShadowDepth : register(t7, space3);
 StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
 StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
-// 레이트레이싱 그림자 가시성(1 = 빛, 0 = 차폐). TLAS에 들어간 정적 불투명 캐스터만 반영한다.
-Texture2D<float> gRaytracedShadowMask : register(t14, space3);
+// 광원별 레이트레이싱 그림자 가시성(1 = 빛, 0 = 차폐). TLAS에 들어간 정적 불투명 캐스터만 반영한다.
+Texture2D<float4> gRaytracedShadowMask : register(t14, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -649,7 +653,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 skyDiffuseIrradiance = float3(0.0f, 0.0f, 0.0f);
     float3 skySpecularRadiance = float3(0.0f, 0.0f, 0.0f);
     bool hasSkyLight = false;
-    bool consumedShadowMap = false;
+    const bool hasRaytracedShadow = gLightingData.RaytracedShadowLights.x != INVALID_LIGHT_INDEX;
+    const float4 raytracedShadow = hasRaytracedShadow ? gRaytracedShadowMask.Load(pixelCoord) : float4(1.0f, 1.0f, 1.0f, 1.0f);
     uint numLights = gLightBuffer.Load(0u);
 
 	uint cloudSunLightIndex = INVALID_LIGHT_INDEX;
@@ -727,28 +732,36 @@ float4 main(PS_INPUT input) : SV_TARGET
         }
 
 		float shadowFactor = 1.0f;
-        if (receiveShadow && !consumedShadowMap && lightType == LIGHT_TYPE_DIRECTIONAL && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
+        if (receiveShadow && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
         {
-            float3 lightDir = normalize(-light.Direction);
-            float mainShadow = CalcShadowFactor(light, worldPosition, normal, input.Position.xy);
-            // 레이트레이싱이 켜지면 섀도맵에는 TLAS 미지원 캐스터(스킨드 등)만 남으므로 두 결과를 합친다.
-            if (gLightingData.UseRaytracedShadow != 0u)
-                mainShadow = min(mainShadow, gRaytracedShadowMask.Load(pixelCoord));
-            float contactShadow = CalcContactShadow(worldPosition, normal, lightDir, input.Position.xy);
-            // 접촉 그림자를 부드럽게 감쇠(최대 40% 차폐)하여 주 그림자와 자연스럽게 합성
-            float rawShadow = min(mainShadow, lerp(0.4f, 1.0f, contactShadow));
-            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
-            consumedShadowMap = true;
-        }
-        else if (receiveShadow && lightType == LIGHT_TYPE_SPOT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
-        {
-            float rawShadow = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
-            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
-        }
-        else if (receiveShadow && lightType == LIGHT_TYPE_POINT && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
-        {
-            float rawShadow = CalcPointShadowFactor(light, worldPosition, normal, input.Position.xy);
-            shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
+            // 섀도맵은 소유한 광원만 읽는다. 레이트레이싱하는 광원의 섀도맵에는 TLAS 미지원 캐스터(스킨드 등)만
+            // 남으므로 두 결과를 합친다. 둘 다 없는 광원은 그림자가 없다.
+            const bool ownsShadowMap = lightIndex == gLightingData.CascadeShadowLight ||
+                lightIndex == gLightingData.SpotShadowLight || lightIndex == gLightingData.PointShadowLight;
+            const bool4 raytracedChannel = gLightingData.RaytracedShadowLights == uint4(lightIndex, lightIndex, lightIndex, lightIndex);
+            if (ownsShadowMap || any(raytracedChannel))
+            {
+                float rawShadow = 1.0f;
+                if (lightIndex == gLightingData.CascadeShadowLight)
+                    rawShadow = CalcShadowFactor(light, worldPosition, normal, input.Position.xy);
+                else if (lightIndex == gLightingData.SpotShadowLight)
+                    rawShadow = CalcSpotShadowFactor(light, worldPosition, normal, input.Position.xy);
+                else if (lightIndex == gLightingData.PointShadowLight)
+                    rawShadow = CalcPointShadowFactor(light, worldPosition, normal, input.Position.xy);
+
+                if (raytracedChannel.x) rawShadow = min(rawShadow, raytracedShadow.x);
+                if (raytracedChannel.y) rawShadow = min(rawShadow, raytracedShadow.y);
+                if (raytracedChannel.z) rawShadow = min(rawShadow, raytracedShadow.z);
+                if (raytracedChannel.w) rawShadow = min(rawShadow, raytracedShadow.w);
+
+                if (lightType == LIGHT_TYPE_DIRECTIONAL)
+                {
+                    // 접촉 그림자를 부드럽게 감쇠(최대 40% 차폐)하여 주 그림자와 자연스럽게 합성
+                    float contactShadow = CalcContactShadow(worldPosition, normal, normalize(-light.Direction), input.Position.xy);
+                    rawShadow = min(rawShadow, lerp(0.4f, 1.0f, contactShadow));
+                }
+                shadowFactor = lerp(1.0f - light.ShadowStrength, 1.0f, rawShadow);
+            }
         }
 
         directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;

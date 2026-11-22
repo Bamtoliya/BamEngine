@@ -733,7 +733,7 @@ namespace
                     return Fail("Attenuation visibility does not match the light type.");
                 if (shown("ShadowStrength") != (castShadows && !sky) ||
                     shown("ShadowMaxDistance") != (castShadows && directional) ||
-                    shown("RaytracedShadow") != (castShadows && directional) ||
+                    shown("RaytracedShadow") != (castShadows && !sky) ||
                     shown("ShadowBias") != (castShadows && (directional || lightType == ELightType::Spot)))
                     return Fail("Shadow visibility does not match the light type and CastShadows.");
             }

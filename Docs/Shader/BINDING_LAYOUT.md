@@ -88,12 +88,12 @@ rootParams[11].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILIT
 | Register | 셰이더 | 내용 |
 | --- | --- | --- |
 | `t13, space3` | `raytracedShadowMaskRTCS` | TLAS (`BindAccelerationStructure`, 다음 `Dispatch` 한 번에만 적용) |
-| `u2, space3` | `raytracedShadowMaskRTCS` | R8 그림자 마스크 출력 (`BindComputeStorageTexture` slot `0`) |
-| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
-| `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.UseRaytracedShadow`가 1일 때만 읽음 |
+| `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 그림자 마스크 출력. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`) |
+| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 32바이트. 채널별 광원 버퍼 인덱스 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.RaytracedShadowLights`의 채널과 광원 인덱스가 같을 때만 사용 |
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
-`LightingPassData`는 528바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
+`LightingPassData`는 544바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
 
 ### 재질 알파 기준값
 

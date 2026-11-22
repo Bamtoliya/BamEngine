@@ -42,10 +42,15 @@ namespace
 		f32 ShadowAmbientFloor = 0.15f;
 		vec3 SkyZenithColor{ 0.18f, 0.42f, 0.85f };
 		f32 SkyIntensity = 1.0f;
-		uint32 UseRaytracedShadow = 0u; // 1: 첫 그림자 방향광에 레이트레이싱 마스크(t14)를 섀도맵과 min 합성
-		uint32 RaytracedShadowPad[3] = {};
+		// 마스크(t14)의 채널별 광원 버퍼 인덱스. 마스크가 없으면 모두 INVALID_SHADOW_LIGHT
+		std::array<uint32, MAX_RAYTRACED_SHADOW_LIGHTS> RaytracedShadowLights{ INVALID_SHADOW_LIGHT, INVALID_SHADOW_LIGHT, INVALID_SHADOW_LIGHT, INVALID_SHADOW_LIGHT };
+		// 섀도맵을 가진 광원의 버퍼 인덱스. 다른 광원은 섀도맵을 읽지 않는다.
+		uint32 CascadeShadowLight = INVALID_SHADOW_LIGHT;
+		uint32 SpotShadowLight = INVALID_SHADOW_LIGHT;
+		uint32 PointShadowLight = INVALID_SHADOW_LIGHT;
+		uint32 ShadowLightPad = 0u;
 	};
-	static_assert(sizeof(DeferredLightingPassData) == 528);
+	static_assert(sizeof(DeferredLightingPassData) == 544);
 	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
 	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
 	static_assert(offsetof(DeferredLightingPassData, SunDirection) == 464);
@@ -56,7 +61,8 @@ namespace
 	static_assert(offsetof(DeferredLightingPassData, ShadowAmbientFloor) == 492);
 	static_assert(offsetof(DeferredLightingPassData, SkyZenithColor) == 496);
 	static_assert(offsetof(DeferredLightingPassData, SkyIntensity) == 508);
-	static_assert(offsetof(DeferredLightingPassData, UseRaytracedShadow) == 512);
+	static_assert(offsetof(DeferredLightingPassData, RaytracedShadowLights) == 512);
+	static_assert(offsetof(DeferredLightingPassData, CascadeShadowLight) == 528);
 
 	// raytracedShadowMaskRTCS.hlsl의 RaytracedShadowParams (b1, space3)
 	struct RaytracedShadowParams
@@ -65,8 +71,9 @@ namespace
 		f32 DistanceBiasScale = 0.0005f;
 		f32 RayMaxDistance = 10000.0f;
 		uint32 Pad = 0u;
+		std::array<uint32, MAX_RAYTRACED_SHADOW_LIGHTS> Lights{};
 	};
-	static_assert(sizeof(RaytracedShadowParams) == 16);
+	static_assert(sizeof(RaytracedShadowParams) == 32);
 
 	constexpr const wchar_t* RaytracedShadowShaderKey = L"Resources/Shader/RaytracedShadowMaskRTCS";
 	constexpr const wchar_t* RaytracedShadowShaderFile = L"raytracedShadowMaskRTCS.cso";
@@ -136,19 +143,32 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	// 0. 레이트레이싱 그림자 사용 여부. 켜지면 방향광 캐스케이드에서는 TLAS가 맡는 캐스터를 그리지 않는다.
 	// 셰이더를 쓸 수 없으면 캐스터를 빼기 전에 섀도맵으로 되돌린다.
 	auto* lightingPass = rpm.GetRenderPassByID(passes.Lighting);
-	const bool useRaytracedShadow = sceneToQuery && lightingPass && lightingPass->IsEnabled() &&
-		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() &&
-		ShouldUseRaytracedShadow(sceneToQuery, passes.AcceptSceneMeshes) && GetRaytracedShadowPipeline();
+	ShadowLightSet shadowLights;
+	RaytracedShadowAssignment raytracedLights;
+	if (sceneToQuery && lightingPass && lightingPass->IsEnabled() &&
+		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported())
+	{
+		shadowLights = CollectViewShadowLights(sceneToQuery, passes.AcceptSceneMeshes);
+		raytracedLights = AssignRaytracedShadows(shadowLights, m_RaytracedShadowOverrides);
+		if (!raytracedLights.Empty() && !GetRaytracedShadowPipeline())
+			raytracedLights = {};
+	}
+	const bool useRaytracedShadow = !raytracedLights.Empty();
 	m_RaytracedShadowActive = useRaytracedShadow;
 
 	// 1. ShadowPass & PointShadowPass 카메라 등록
 	auto* shadowPass = rpm.GetRenderPassByID(passes.DirectionalShadow);
 	if (shadowPass)
-		shadowPass->SetSkipsRaytracedShadowCasters(useRaytracedShadow);
+	{
+		shadowPass->SetSkipsRaytracedShadowCasters(raytracedLights.Contains(shadowLights.CascadeLight));
+		shadowPass->SetSkipsRaytracedSpotCasters(raytracedLights.Contains(shadowLights.SpotLight));
+	}
 	if (shadowPass && shadowPass->IsEnabled())
 		renderer.RegisterShadowPassForView(shadowPass, cameraBuffer, passes.Geometry);
 
 	auto* pointShadowPass = rpm.GetRenderPassByID(passes.PointShadow);
+	if (pointShadowPass)
+		pointShadowPass->SetSkipsRaytracedShadowCasters(raytracedLights.Contains(shadowLights.PointLight));
 	if (pointShadowPass && pointShadowPass->IsEnabled())
 		renderer.RegisterShadowPassForView(pointShadowPass, cameraBuffer, passes.Geometry);
 
@@ -279,7 +299,8 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this, cameraBuffer, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
-			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow](f32, Engine::RenderPass*) -> Engine::EResult
+			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow,
+			raytracedOverrides = m_RaytracedShadowOverrides](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -364,6 +385,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			if (auto* idxBuf = lightManager.GetTileLightIndexBuffer())
 				rhi->BindStorageBuffer(idxBuf, 2);
 			// 7. 광원 데이터 버퍼 바인딩 (slot 0 -> t6, space3)
+			ShadowLightSet localShadowLights;
 			if (!acceptSceneMeshes)
 			{
 				// [격리] 독립 프리뷰(Thumbnail, MatPreview)는 자체 버퍼를 바인딩하여 씬 뷰포트의 LightManager 오염 방지
@@ -390,8 +412,9 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 							const auto& light = view.get<Engine::LightComponent>(entity);
 							if (!IsComponentEnabled(targetScene->GetRegistry(), entity, light)) continue;
 							const auto optGpuLight = light.GetGPULightDesc();
-							if (optGpuLight.has_value())
-								gpuLights[count++] = optGpuLight.value();
+							if (!optGpuLight.has_value()) continue;
+							LightManager::AddShadowLight(localShadowLights, light, *optGpuLight, count);
+							gpuLights[count++] = optGpuLight.value();
 						}
 						auto remaining = std::span<GPULight>{ gpuLights + count, MAX_LIGHTS - count };
 						count += Engine::CompositeVFXSystem::CollectFlashLights(*targetScene, remaining);
@@ -410,22 +433,29 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			}
 			// 7-1. 레이트레이싱 그림자 마스크 (G-Buffer·카메라·광원 버퍼 바인딩을 그대로 사용하는 Compute)
 			DeferredLightingPassData lightingData{};
-			if (useRaytracedShadow)
+			const ShadowLightSet& shadowLights = acceptSceneMeshes ? lightManager.GetShadowLights() : localShadowLights;
+			lightingData.CascadeShadowLight = shadowLights.CascadeLight;
+			lightingData.SpotShadowLight = shadowLights.SpotLight;
+			lightingData.PointShadowLight = shadowLights.PointLight;
+			// 채널은 이번 프레임 광원 버퍼의 인덱스로 다시 정한다.
+			const RaytracedShadowAssignment raytracedLights = useRaytracedShadow ?
+				AssignRaytracedShadows(shadowLights, raytracedOverrides) : RaytracedShadowAssignment{};
+			if (!raytracedLights.Empty())
 			{
 				// 조명 패스 안에서 실행되므로 추적 비용을 별도 구간으로 잰다(조명 시간에도 포함된다).
 				rhi->BeginPassMetrics(sourceNames[4] + L"_RaytracedShadowMask");
-				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, viewID, sourceNames[4]);
+				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, viewID, sourceNames[4], raytracedLights);
 				rhi->EndPassMetrics();
 				// Compute 파이프라인으로 바뀐 상태를 조명 파이프라인으로 되돌린다(같은 루트 시그니처라 그래픽 바인딩은 유지된다).
 				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 					return Engine::EResult::Fail;
 				if (shadowMask && Engine::IsSuccess(rhi->BindTextureSampler(shadowMask, sampler, RaytracedShadowMaskSlot)))
 				{
-					lightingData.UseRaytracedShadow = 1u;
+					lightingData.RaytracedShadowLights = raytracedLights.Lights;
 				}
 				else if (!m_RaytracedShadowFailureLogged)
 				{
-					// 섀도맵 캐스케이드에서 TLAS 캐스터를 이미 제외했으므로 이번 프레임에는 해당 그림자가 빠진다.
+					// 섀도맵에서 TLAS 캐스터를 이미 제외했으므로 이번 프레임에는 해당 그림자가 빠진다.
 					ENGINE_LOG_ERROR("Raytraced shadow mask was not produced; casters handled by raytracing are missing from shadows this frame.");
 					m_RaytracedShadowFailureLogged = true;
 				}
@@ -498,7 +528,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	);
 }
 
-bool Engine::DeferredSceneRenderer::ShouldUseRaytracedShadow(Engine::Scene* scene, bool usesGlobalLights) const
+Engine::ShadowLightSet Engine::DeferredSceneRenderer::CollectViewShadowLights(Engine::Scene* scene, bool usesGlobalLights) const
 {
 	// 메인 뷰포트는 LightManager가 모은 활성 씬 전체의 광원을, 독립 프리뷰는 자기 씬의 광원만 사용한다.
 	std::vector<Engine::Scene*> scenes;
@@ -506,24 +536,7 @@ bool Engine::DeferredSceneRenderer::ShouldUseRaytracedShadow(Engine::Scene* scen
 		scenes = Engine::SceneManager::Get().GetActiveScenes();
 	else
 		scenes.push_back(scene);
-
-	for (Engine::Scene* lightScene : scenes)
-	{
-		if (!lightScene) continue;
-		const auto& world = lightScene->GetRegistry();
-		auto view = world.view<const Engine::LightComponent>();
-		for (const auto entity : view)
-		{
-			const auto& light = view.get<const Engine::LightComponent>(entity);
-			if (light.LightType != Engine::ELightType::Directional ||
-				!HasFlag(light.Flags, Engine::ELightFlags::CastShadows) ||
-				!HasFlag(light.Flags, Engine::ELightFlags::UseInDeferredRendering) ||
-				!IsComponentEnabled(world, entity, light) || !light.GetGPULightDesc().has_value())
-				continue;
-			return Engine::ResolveRaytracedShadow(light.RaytracedShadow, m_RaytracedShadowOverrides);
-		}
-	}
-	return false; // 그림자 방향광이 없으면 추적할 대상이 없다.
+	return Engine::LightManager::CollectShadowLights(scenes);
 }
 
 Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracedShadowPipeline()
@@ -571,12 +584,12 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracedShadowMask(c
 	Engine::RenderTarget* mask = targets.GetRenderTarget(name);
 	if (!mask)
 	{
-		// 가시성 0~1만 담으므로 R8. 렌더 타깃 목록·진단 뷰어에서 볼 수 있도록 RenderTargetManager에 등록한다.
+		// 광원 최대 4개의 가시성(0~1)을 채널마다 담는다. 렌더 타깃 목록·진단 뷰어에서 볼 수 있도록 RenderTargetManager에 등록한다.
 		Engine::RenderTargetDesc desc{};
 		desc.name = name;
 		desc.textureDesc.width = width;
 		desc.textureDesc.height = height;
-		desc.textureDesc.format = Engine::ETextureFormat::R8_UNORM;
+		desc.textureDesc.format = Engine::ETextureFormat::R8G8B8A8_UNORM;
 		desc.textureDesc.dimension = Engine::ETextureDimension::Texture2D;
 		desc.textureDesc.usage = Engine::ETextureUsage::Sampler | Engine::ETextureUsage::ComputeReadWrite;
 		mask = targets.CreateRenderTarget(&desc);
@@ -590,7 +603,7 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracedShadowMask(c
 }
 
 Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(Engine::RHI& rhi, Engine::Scene* scene,
-	RenderPassID viewID, const std::wstring& positionTargetName)
+	RenderPassID viewID, const std::wstring& positionTargetName, const RaytracedShadowAssignment& lights)
 {
 	if (!scene || !Engine::RaytracingSceneManager::IsCreated())
 		return nullptr;
@@ -607,7 +620,8 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(E
 	if (!mask || !pipeline)
 		return nullptr;
 
-	const RaytracedShadowParams params{};
+	RaytracedShadowParams params{};
+	params.Lights = lights.Lights;
 	if (Engine::IsFailure(rhi.BindPipeline(pipeline)) ||
 		Engine::IsFailure(rhi.BindConstantBuffer(&params, sizeof(params), 3)) ||
 		Engine::IsFailure(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot)) ||

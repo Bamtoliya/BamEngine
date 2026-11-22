@@ -81,6 +81,7 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 	uint32 currentLightIndex = 0;
 	m_DirectionalShadow.reset();
+	m_ShadowLights = {};
 	m_HasSpotShadow = false;
 	m_HasPointShadow = false;
 	m_SpotShadowParams = vec4(0.0f);
@@ -105,16 +106,16 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 			const auto& light = view.get<LightComponent>(entity);
 			if (!IsComponentEnabled(scene->GetRegistry(), entity, light)) continue;
 			const auto optGpuLight = light.GetGPULightDesc();
-			if (optGpuLight.has_value())
+			if (!optGpuLight.has_value()) continue;
+
+			const uint32 lightIndex = currentLightIndex++;
+			gpuLights[lightIndex] = optGpuLight.value();
+			AddShadowLight(m_ShadowLights, light, *optGpuLight, lightIndex);
+			if (lightIndex == m_ShadowLights.CascadeLight)
 			{
-				gpuLights[currentLightIndex++] = optGpuLight.value();
+				m_DirectionalShadow = light.GetDirectionalShadowSettings();
 			}
-			if (light.LightType == ELightType::Directional)
-			{
-				if (!m_DirectionalShadow)
-					m_DirectionalShadow = light.GetDirectionalShadowSettings();
-			}
-			else if (light.LightType == ELightType::Spot && !m_HasSpotShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
+			else if (lightIndex == m_ShadowLights.SpotLight)
 			{
 				if (auto optCam = light.GetSpotShadowCameraBuffer())
 				{
@@ -124,7 +125,7 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 					m_HasSpotShadow = true;
 				}
 			}
-			else if (light.LightType == ELightType::Point && !m_HasPointShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
+			else if (lightIndex == m_ShadowLights.PointLight)
 			{
 				bool allFacesCollected = true;
 				for (uint32 f = 0; f < 6; ++f)
@@ -141,8 +142,7 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 				}
 				if (allFacesCollected)
 				{
-					if (optGpuLight.has_value())
-						m_PointShadowPosRange = vec4(optGpuLight->Position, glm::max(optGpuLight->Range, 0.1f));
+					m_PointShadowPosRange = vec4(optGpuLight->Position, glm::max(optGpuLight->Range, 0.1f));
 					m_PointShadowParams = vec4(light.ShadowBias, light.ShadowSlopeBias, light.ShadowNormalBias, 1.0f);
 					m_HasPointShadow = true;
 				}
@@ -164,6 +164,45 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 	m_BufferDirty[frameIndex] = false;
 	return EResult::Success;
 }
+void LightManager::AddShadowLight(ShadowLightSet& set, const LightComponent& light, const GPULight& gpuLight, uint32 lightIndex)
+{
+	// CastShadows는 그림자 설정이 유효할 때만 GPU 플래그에 남는다(LightSystem).
+	const uint32 required = static_cast<uint32>(ELightFlags::CastShadows | ELightFlags::UseInDeferredRendering);
+	if ((gpuLight.PackedFlags & required) != required) return;
+
+	uint32* owner = nullptr;
+	switch (light.LightType)
+	{
+	case ELightType::Directional: owner = &set.CascadeLight; break;
+	case ELightType::Spot: owner = &set.SpotLight; break;
+	case ELightType::Point: owner = &set.PointLight; break;
+	default: return;
+	}
+	if (*owner == INVALID_SHADOW_LIGHT) *owner = lightIndex;
+	set.Lights.push_back({ lightIndex, light.RaytracedShadow });
+}
+
+ShadowLightSet LightManager::CollectShadowLights(std::span<Scene* const> scenes)
+{
+	ShadowLightSet set;
+	uint32 lightIndex = 0;
+	for (Scene* scene : scenes)
+	{
+		if (!scene) continue;
+		const auto& world = scene->GetRegistry();
+		auto view = world.view<const LightComponent>();
+		for (const auto entity : view)
+		{
+			if (lightIndex >= MAX_LIGHTS) break;
+			const auto& light = view.get<const LightComponent>(entity);
+			if (!IsComponentEnabled(world, entity, light)) continue;
+			const auto gpuLight = light.GetGPULightDesc();
+			if (gpuLight) AddShadowLight(set, light, *gpuLight, lightIndex++);
+		}
+	}
+	return set;
+}
+
 EResult LightManager::EnsureBuffer()
 {
 	if (!m_RHI) return EResult::Fail;

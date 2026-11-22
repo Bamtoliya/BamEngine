@@ -4,6 +4,8 @@
 #include "Light.h"
 #include "CameraBuffer.h"
 #include "DirectionalShadowCascades.h"
+#include "ShadowLightAssignment.h"
+#include <span>
 #include <optional>
 
 #define MAX_LIGHTS 1024
@@ -36,6 +38,12 @@ public:
 public:
 	EResult Bind(uint32 slot);
 	EResult UpdateLightBuffer(class Scene* targetScene = nullptr);
+	// 광원 버퍼에 넣은 광원이 그림자를 만들면 목록에 더하고, 종류별 첫 광원을 섀도맵 소유자로 정한다.
+	static void AddShadowLight(ShadowLightSet& set, const struct LightComponent& light, const GPULight& gpuLight, uint32 lightIndex);
+	// UpdateLightBuffer와 같은 순서로 씬의 그림자 광원을 모은다.
+	static ShadowLightSet CollectShadowLights(std::span<class Scene* const> scenes);
+	// 마지막 UpdateLightBuffer가 버퍼에 넣은 그림자 광원
+	const ShadowLightSet& GetShadowLights() const { return m_ShadowLights; }
 private:
 	EResult EnsureBuffer();
 #pragma endregion
@@ -70,6 +78,7 @@ private:
 	class RHIBuffer* m_LightBuffers[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_BufferDirty[MAX_SWAPCHAIN_BUFFERS] = {};
 	std::optional<DirectionalShadowSettings> m_DirectionalShadow;
+	ShadowLightSet m_ShadowLights;
 
 	class RHIBuffer* m_TileLightGridBuffer = nullptr;
 	class RHIBuffer* m_TileLightIndexBuffer = nullptr;

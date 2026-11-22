@@ -62,7 +62,7 @@ flowchart LR
 | `Flags.CastShadows` | 사용 | 섀도맵과 레이트레이싱 그림자의 전제 |
 | `ShadowStrength`, `ShadowBias`, `ShadowSlopeBias`, `ShadowNormalBias` | 사용 | 그림자 농도와 바이어스 |
 | `ShadowMaxDistance`, `CascadeSplitLambda` | 사용 | 캐스케이드 범위(20~500m)와 분할. 시작 거리는 0.1m 고정이며 카메라 Near와 무관 |
-| `RaytracedShadow` | 조건부 | 프로젝트·그래픽·뷰포트 설정이 덮어쓸 수 있음 |
+| `RaytracedShadow` | 조건부 | Directional·Spot·Point. 뷰마다 최대 4개이며 프로젝트·그래픽·뷰포트 설정이 덮어쓸 수 있음 |
 | `ShadowRange` | 조건부 | 카메라가 없을 때의 대체 범위. 유효성 검사에는 항상 사용 |
 | `GroundColor`, `IndirectIntensity`, `Range`, 감쇠, 스포트 각도 | 미사용 | 다른 광원 종류용 |
 
@@ -128,7 +128,8 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 | 광원 `Range`, 감쇠 | Point·Spot. 감쇠 계수는 계수 방식일 때만 |
 | 광원 `ShadowStrength` | Sky가 아니고 `CastShadows`가 켜졌을 때 |
 | 광원 `ShadowBias`, `ShadowSlopeBias`, `ShadowNormalBias` | Directional·Spot이고 `CastShadows`가 켜졌을 때. Point 그림자 셰이더는 고정 바이어스를 쓴다 |
-| 광원 `ShadowRange`, `ShadowMaxDistance`, `CascadeSplitLambda`, `RaytracedShadow` | Directional이고 `CastShadows`가 켜졌을 때 |
+| 광원 `RaytracedShadow` | Sky가 아니고 `CastShadows`가 켜졌을 때 |
+| 광원 `ShadowRange`, `ShadowMaxDistance`, `CascadeSplitLambda` | Directional이고 `CastShadows`가 켜졌을 때 |
 | 광원 `GroundColor`, `IndirectIntensity` | Sky |
 | 광원 `LightingLayerMask`, 플래그 `UseInForwardRendering`·`Volumetric` | 숨김. 읽는 코드가 없음 |
 | Sky Atmosphere `CustomSunColor`, `CustomSunIntensity` | `AutoSyncDirectionalLight`가 꺼졌을 때. 동기화 중이지만 Directional Light가 없으면 이 값이 쓰인다 |
@@ -145,7 +146,7 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 | --- | --- | --- | --- |
 | `SkyAtmosphereData` (256B) | `b1, space3` Forward | 태양, 하늘 색, 구름 | `atmosphereSkyPS` |
 | `FogData` (48B) | `b0, space3` Lighting | Fog | `lightingPS` |
-| `LightingPassData` (528B) | `b1, space3` Lighting | 그림자, 구름, 태양 방향, 환경광 | `lightingPS` |
+| `LightingPassData` (544B) | `b1, space3` Lighting | 그림자, 구름, 태양 방향, 환경광 | `lightingPS` |
 | 광원 버퍼 | `t6, space3` Lighting | Directional·Sky Light 포함 전체 광원 | `lightingPS` |
 
 - `SkyAtmosphereData`의 앞쪽 `CloudCoverage`~`EnableClouds`(32바이트)는 채우지 않는 이전 필드다. 실제 값은 뒤의 `Cloud`에 있다.

@@ -351,12 +351,14 @@ EResult Renderer::Render(f32 dt)
 				const auto skinnedIt = m_SkinnedDrawCommands.find(pid);
 				const bool hasStaticCasters = meshIt != m_StaticDrawCommands.end() && !meshIt->second.empty();
 				const bool hasSkinnedCasters = skinnedIt != m_SkinnedDrawCommands.end() && !skinnedIt->second.empty();
-				// 레이트레이싱 그림자가 켜진 방향광 패스: 캐스케이드에는 이번 프레임 TLAS에 들어가지 못한 캐스터만 그린다.
+				// 레이트레이싱하는 광원의 섀도맵에는 이번 프레임 TLAS에 들어가지 못한 캐스터만 그린다.
 				// BLAS 대기·실패나 TLAS 빌드 실패 시에는 해당 캐스터가 섀도맵에 남아 그림자가 사라지지 않는다.
-				// 같은 아틀라스의 스포트 사분면은 전체 캐스터를 그대로 사용한다.
+				// 같은 아틀라스라도 레이트레이싱하지 않는 광원은 전체 캐스터를 그대로 사용한다.
 				vector<StaticDrawCommand> rasterOnlyCasters;
 				const bool filterCascades = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedShadowCasters();
-				if (filterCascades)
+				const bool filterSpot = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedSpotCasters();
+				const bool filterPoint = hasStaticCasters && isCubeShadow && pass->SkipsRaytracedShadowCasters();
+				if (filterCascades || filterSpot || filterPoint)
 				{
 					const Scene* casterScene = nullptr;
 					RenderPassID casterView = INVALID_PASS_ID;
@@ -375,11 +377,11 @@ EResult Renderer::Render(f32 dt)
 							return !tracedCasters || !tracedCasters->Contains(command.raytracedEntityIndex);
 						});
 				}
-				bool renderingCascade = false;
+				bool rasterOnly = false;
 				const auto renderShadowCasters = [&](const CameraBuffer& lightCamera) -> EResult
 				{
 					const vector<StaticDrawCommand>* staticCasters = hasStaticCasters ? &meshIt->second : nullptr;
-					if (renderingCascade && filterCascades)
+					if (rasterOnly)
 						staticCasters = &rasterOnlyCasters;
 					if (staticCasters && !staticCasters->empty())
 					{
@@ -399,6 +401,7 @@ EResult Renderer::Render(f32 dt)
 						// ── Point Light: 6면 큐브맵 개별 슬라이스 순회 렌더링 ──
 						if (LightManager::Get().HasPointShadow())
 						{
+							rasterOnly = filterPoint;
 							for (uint32 face = 0; face < 6; ++face)
 							{
 								if (IsFailure(m_RHI->BindDepthSlice(depthRT->GetTexture(), face)) ||
@@ -453,9 +456,8 @@ EResult Renderer::Render(f32 dt)
 								return viewportResult;
 							}
 
-							renderingCascade = true;
+							rasterOnly = filterCascades;
 							const EResult result = renderShadowCasters(cascadeCam);
-							renderingCascade = false;
 							if (IsFailure(result))
 							{
 								ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
@@ -484,6 +486,7 @@ EResult Renderer::Render(f32 dt)
 								return viewportResult;
 							}
 
+							rasterOnly = filterSpot;
 							const EResult result = renderShadowCasters(spotCam);
 							if (IsFailure(result))
 							{

@@ -4,6 +4,7 @@
 #include "RenderPassTypes.h"
 #include "RenderTargetTypes.h"
 #include "RaytracedShadowSettings.h"
+#include "ShadowLightAssignment.h"
 #include <array>
 
 BEGIN(Engine)
@@ -49,14 +50,15 @@ private:
 
 	// 레이트레이싱 그림자 마스크를 G-Buffer 크기로 계산한다. 성공하면 마스크 텍스처를 반환한다.
 	// 조명 파이프라인 대신 Compute 파이프라인을 바인딩하므로 호출 후 조명 파이프라인을 다시 바인딩해야 한다.
-	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName);
+	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
+		const RaytracedShadowAssignment& lights);
 	class RenderTarget* EnsureRaytracedShadowMask(const std::wstring& positionTargetName, uint32 width, uint32 height);
 	RHIPipeline* GetRaytracedShadowPipeline();
 
 	RHIPipeline* m_LightingPipeline = nullptr;
 	RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
-	// 이 뷰포트의 조명 버퍼에서 섀도맵·마스크를 적용받는 첫 그림자 방향광의 설정과 덮어쓰기를 합친 결과
-	bool ShouldUseRaytracedShadow(Scene* scene, bool usesGlobalLights) const;
+	// 이 뷰포트의 조명 버퍼에 들어갈 그림자 광원
+	ShadowLightSet CollectViewShadowLights(Scene* scene, bool usesGlobalLights) const;
 
 	RaytracedShadowOverrides m_RaytracedShadowOverrides;
 	bool m_RaytracedShadowActive = false;
