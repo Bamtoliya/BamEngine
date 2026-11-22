@@ -6,6 +6,7 @@
 #include "PluginPanel.h"
 #include "HotReloadManager.h"
 #include "ModuleBuildManager.h"
+#include "PlatformPath.h"
 
 #include <algorithm>
 #include <system_error>
@@ -35,6 +36,47 @@ namespace Editor
 
             return Engine::WStrToStr(panelId);
         }
+
+        std::filesystem::path ResolvePluginContentDirectory(const PluginCatalogEntry& catalog)
+        {
+            if (catalog.PackageDirectory.empty())
+                return {};
+
+            std::error_code ec;
+            const auto manifestPath = catalog.PackageDirectory / "plugin.json";
+            if (std::filesystem::exists(manifestPath, ec))
+            {
+                PluginManifest manifest;
+                if (ReadPluginManifest(manifestPath, manifest) == EPluginManifestResult::Success && !manifest.contentRoot.empty())
+                {
+                    const auto candidate = catalog.PackageDirectory / manifest.contentRoot;
+                    if (std::filesystem::is_directory(candidate, ec))
+                        return candidate;
+                }
+            }
+
+            const auto defaultContent = catalog.PackageDirectory / "Content";
+            if (std::filesystem::is_directory(defaultContent, ec))
+                return defaultContent;
+
+            return {};
+        }
+
+        bool TryMountPluginContent(const PluginCatalogEntry& catalog)
+        {
+            const auto contentDir = ResolvePluginContentDirectory(catalog);
+            if (!contentDir.empty())
+            {
+                Engine::PlatformPath::RegisterPluginMount(catalog.Id, contentDir);
+                return true;
+            }
+            return false;
+        }
+
+        void TryUnmountPluginContent(const PluginCatalogEntry& catalog)
+        {
+            Engine::PlatformPath::UnregisterPluginMount(catalog.Id);
+        }
     }
 
     void PluginHost::Initialize(const std::filesystem::path& executableDirectory, const std::filesystem::path& projectRoot,
@@ -60,6 +102,17 @@ namespace Editor
 
     void PluginHost::Clear()
     {
+        m_SourceBuilder.Free();
+        m_PendingBuildPluginId.clear();
+        for (auto& entry : m_Entries)
+        {
+            if (entry.IsContentMounted)
+            {
+                TryUnmountPluginContent(entry.Catalog);
+                entry.IsContentMounted = false;
+            }
+        }
+        Engine::PlatformPath::ClearPluginMounts();
         ResolveApproval(false);
         m_Entries.clear();
         m_ExecutableDirectory.clear();
@@ -70,7 +123,13 @@ namespace Editor
     PluginHostStatus PluginHost::GetStatus(std::size_t index) const
     {
         const auto& entry = m_Entries.at(index);
-        return { entry.Module != nullptr, entry.LastActionFailed };
+        return { entry.Module != nullptr || entry.IsContentMounted, entry.LastActionFailed, entry.IsContentMounted };
+    }
+
+    bool PluginHost::IsPluginContentMounted(std::size_t index) const
+    {
+        if (index >= m_Entries.size()) return false;
+        return m_Entries[index].IsContentMounted;
     }
 
     std::vector<PluginHostPanel> PluginHost::GetPanels(std::size_t index) const
@@ -166,6 +225,39 @@ namespace Editor
 
     void PluginHost::Update(ImGuiManager& gui)
     {
+        // Poll source builder for completed async builds
+        if (m_SourceBuilder.HasNewResult())
+        {
+            m_SourceBuilder.ClearNewResult();
+            const auto result = m_SourceBuilder.GetLastResult();
+            if (result.Success)
+            {
+                EDITOR_LOG_INFO("[PluginHost] Plugin '{}' source build succeeded. Refreshing and loading/reloading...", result.PluginId);
+                RefreshInstalledPackages();
+                const auto it = std::find_if(m_Entries.begin(), m_Entries.end(), [&result](const Entry& e) {
+                    return e.Catalog.Id == result.PluginId;
+                });
+                if (it != m_Entries.end())
+                {
+                    const std::size_t foundIndex = std::distance(m_Entries.begin(), it);
+                    if (it->Module || it->IsContentMounted)
+                        Request(foundIndex, EPluginHostAction::Reload);
+                    else
+                        Request(foundIndex, EPluginHostAction::Load);
+                }
+            }
+            else
+            {
+                EDITOR_LOG_ERROR("[PluginHost] Plugin '{}' source build failed: {}", result.PluginId, result.ErrorMessage);
+                const auto it = std::find_if(m_Entries.begin(), m_Entries.end(), [&result](const Entry& e) {
+                    return e.Catalog.Id == result.PluginId;
+                });
+                if (it != m_Entries.end())
+                    it->LastActionFailed = true;
+            }
+            m_PendingBuildPluginId.clear();
+        }
+
         for (std::size_t index = 0; index < m_Entries.size(); ++index)
         {
             auto& entry = m_Entries[index];
@@ -211,7 +303,16 @@ namespace Editor
     {
         auto& catalog = entry.Catalog;
         if (!catalog.Development)
+        {
+            const auto contentDir = ResolvePluginContentDirectory(catalog);
+            if (catalog.BinaryPath.empty() && !contentDir.empty())
+            {
+                if (TryMountPluginContent(catalog))
+                    entry.IsContentMounted = true;
+                return entry.IsContentMounted;
+            }
             return false;
+        }
 
         catalog.Status = ResolveDevelopmentPluginBinary(m_ExecutableDirectory, *catalog.Development, catalog.BinaryPath);
         if (catalog.Status != EPluginCatalogStatus::Ready)
@@ -221,7 +322,13 @@ namespace Editor
         if (!module->Reload())
             return false;
 
-        return RegisterPanels(entry, std::move(module), gui);
+        if (!RegisterPanels(entry, std::move(module), gui))
+            return false;
+
+        if (TryMountPluginContent(catalog))
+            entry.IsContentMounted = true;
+
+        return true;
     }
 
     bool PluginHost::RegisterPanels(Entry& entry, std::shared_ptr<PluginPanelModule> module, ImGuiManager& gui)
@@ -262,6 +369,16 @@ namespace Editor
     bool PluginHost::Reload(Entry& entry)
     {
         auto& catalog = entry.Catalog;
+        if (entry.IsContentMounted && (!catalog.Development && catalog.BinaryPath.empty()))
+        {
+            if (TryMountPluginContent(catalog))
+            {
+                entry.IsContentMounted = true;
+                return true;
+            }
+            return false;
+        }
+
         if (!catalog.Development)
             return false;
 
@@ -270,7 +387,11 @@ namespace Editor
             return false;
 
         PluginModule candidate;
-        return candidate.Open(catalog.BinaryPath.c_str()) && entry.Module->Adopt(candidate);
+        const bool adopted = candidate.Open(catalog.BinaryPath.c_str()) && entry.Module->Adopt(candidate);
+        if (adopted && TryMountPluginContent(catalog))
+            entry.IsContentMounted = true;
+
+        return adopted;
     }
 
     bool PluginHost::ActivateInstalled(std::size_t index, ImGuiManager& gui, const PluginApproval* confirmed)
@@ -292,6 +413,20 @@ namespace Editor
 
         catalog.Status = found->Status;
         catalog.BinaryPath = found->BinaryPath;
+
+        // Content-only plugin check: If no DLL binary but has Content directory, activate as content mount
+        const auto contentDir = ResolvePluginContentDirectory(catalog);
+        const bool isContentOnly = catalog.BinaryPath.empty() && !contentDir.empty();
+        if (isContentOnly)
+        {
+            if (TryMountPluginContent(catalog))
+            {
+                entry.IsContentMounted = true;
+                return true;
+            }
+            return false;
+        }
+
         if (catalog.Status != EPluginCatalogStatus::Ready && catalog.Status != EPluginCatalogStatus::NeedsApproval)
             return false;
 
@@ -336,6 +471,9 @@ namespace Editor
                 return false;
         }
 
+        if (TryMountPluginContent(catalog))
+            entry.IsContentMounted = true;
+
         if (custom && confirmed && !SavePluginApproval(approvalsPath, approval))
             EDITOR_LOG_WARN("Plugin {} loaded, but its approval could not be saved", catalog.Id);
 
@@ -344,6 +482,12 @@ namespace Editor
 
     void PluginHost::Unload(Entry& entry, ImGuiManager& gui)
     {
+        if (entry.IsContentMounted)
+        {
+            TryUnmountPluginContent(entry.Catalog);
+            entry.IsContentMounted = false;
+        }
+
         if (!entry.Module)
             return;
 
@@ -354,5 +498,47 @@ namespace Editor
         }
 
         entry.Module.reset();
+    }
+
+    bool PluginHost::BuildAndReloadPluginSource(const std::string& pluginId)
+    {
+        if (m_SourceBuilder.IsBuilding())
+            return false;
+
+        const auto it = std::find_if(m_Entries.begin(), m_Entries.end(), [&pluginId](const Entry& e) {
+            return e.Catalog.Id == pluginId;
+        });
+
+        if (it == m_Entries.end())
+            return false;
+
+        auto& entry = *it;
+        if (entry.Catalog.PackageDirectory.empty())
+            return false;
+
+        const auto sourceDir = entry.Catalog.PackageDirectory;
+        std::error_code ec;
+        if (!std::filesystem::exists(sourceDir / "CMakeLists.txt", ec))
+            return false;
+
+        std::filesystem::path outputBinDir;
+        if (!entry.Catalog.BinaryPath.empty())
+            outputBinDir = entry.Catalog.BinaryPath.parent_path();
+        else
+            outputBinDir = sourceDir / "Binaries" / "Win64";
+
+        m_PendingBuildPluginId = pluginId;
+        EDITOR_LOG_INFO("[PluginHost] Starting source build for plugin '{}' in '{}'", pluginId, sourceDir.string());
+        return m_SourceBuilder.StartBuild(pluginId, sourceDir, outputBinDir);
+    }
+
+    bool PluginHost::IsPluginSourceBuilding() const
+    {
+        return m_SourceBuilder.IsBuilding();
+    }
+
+    std::string PluginHost::GetPluginBuildLogs() const
+    {
+        return m_SourceBuilder.GetLogs();
     }
 }

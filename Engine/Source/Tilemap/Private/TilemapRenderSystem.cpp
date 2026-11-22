@@ -46,6 +46,8 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 	const auto geometryTargets = renderer.CollectGeometryViewportCameras();
 	if (geometryTargets.empty()) return;
 
+	m_Batcher.Begin();
+
 	for (Scene* scene : activeScenes)
 	{
 		if (!scene) continue;
@@ -133,13 +135,15 @@ void TilemapRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*
 							command.orderInLayer = tilemap.orderInLayer;
 							command.worldMatrix = worldMatrix * localQuad;
 
-							renderer.SubmitSprite(command, target.renderPass->GetID());
+							m_Batcher.DrawSprite(command, target.renderPass->GetID());
 						}
 					}
 				}
 			}
 		}
 	}
+
+	m_Batcher.Flush();
 }
 
 } // namespace Engine

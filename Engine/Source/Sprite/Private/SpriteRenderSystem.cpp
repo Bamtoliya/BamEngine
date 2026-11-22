@@ -45,6 +45,8 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
     const auto geometryTargets = renderer.CollectGeometryViewportCameras();
     if (geometryTargets.empty()) return;
 
+    m_Batcher.Begin();
+
     for (Scene* scene : activeScenes)
     {
         if (!scene) continue;
@@ -181,7 +183,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                     command.sortingLayerID = spriteRenderer.sortingLayerID;
                     command.orderInLayer = spriteRenderer.orderInLayer;
                     command.worldMatrix = finalWorldMatrix * quadMatrix;
-                    renderer.SubmitSprite(command, target.renderPass->GetID());
+                    m_Batcher.DrawSprite(command, target.renderPass->GetID());
                 }
                 else if (spriteRenderer.drawMode == ESpriteDrawMode::Sliced)
                 {
@@ -244,7 +246,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                             command.sortingLayerID = spriteRenderer.sortingLayerID;
                             command.orderInLayer = spriteRenderer.orderInLayer;
                             command.worldMatrix = finalWorldMatrix * patchMatrix;
-                            renderer.SubmitSprite(command, target.renderPass->GetID());
+                            m_Batcher.DrawSprite(command, target.renderPass->GetID());
 
                             currX += curW;
                         }
@@ -288,7 +290,7 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                             command.sortingLayerID = spriteRenderer.sortingLayerID;
                             command.orderInLayer = spriteRenderer.orderInLayer;
                             command.worldMatrix = finalWorldMatrix * patchMatrix;
-                            renderer.SubmitSprite(command, target.renderPass->GetID());
+                            m_Batcher.DrawSprite(command, target.renderPass->GetID());
                         }
                     }
                 }
@@ -330,11 +332,13 @@ void SpriteRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
                     command.sortingLayerID = spriteRenderer.sortingLayerID;
                     command.orderInLayer = spriteRenderer.orderInLayer;
                     command.worldMatrix = finalWorldMatrix * quadMatrix;
-                    renderer.SubmitSprite(command, target.renderPass->GetID());
+                    m_Batcher.DrawSprite(command, target.renderPass->GetID());
                 }
             }
         }
     }
+
+    m_Batcher.Flush();
 }
 
 } // namespace Engine

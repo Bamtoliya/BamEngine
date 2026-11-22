@@ -1,4 +1,5 @@
 ﻿#include "PhysicsSystem.h"
+#include "SpatialBroadphase.h"
 #include "ComponentEnable.h"
 #include "Logger.h"
 #include <chrono>
@@ -614,34 +615,54 @@ static void CollectPhysicsTriggerEvents2D(Scene& scene)
     std::set<PhysicsTriggerPair> current;
     auto colliders = world.view<Collider2DComponent, TransformComponent, WorldTransformComponent>();
 
-    for (auto first = colliders.begin(); first != colliders.end(); ++first)
+    SpatialBroadphase2D broadphase2D;
+    for (auto entity : colliders)
     {
-        auto second = first;
-        ++second;
+        PhysicsShape2D shape;
+        if (!TryBuildPhysicsShape(world, entity, shape)) continue;
 
-        for (; second != colliders.end(); ++second)
+        vec2 bMin(0.0f), bMax(0.0f);
+        if (const auto* r = std::get_if<Rect>(&shape))
         {
-            const auto handleA = *first;
-            const auto handleB = *second;
-            const auto& settingsA = colliders.get<Collider2DComponent>(handleA).GetSettings();
-            const auto& settingsB = colliders.get<Collider2DComponent>(handleB).GetSettings();
-
-            if (!settingsA.IsTrigger && !settingsB.IsTrigger)
-                continue;
-
-            auto* entityA = scene.FindEntity(handleA);
-            auto* entityB = scene.FindEntity(handleB);
-            HitResult hit{};
-
-            if (!entityA || !entityB || !PhysicsSystem::Overlap2D(*entityA, *entityB, hit))
-                continue;
-
-            PhysicsTriggerPair pair{ handleA, handleB };
-            if (pair.second < pair.first)
-                std::swap(pair.first, pair.second);
-
-            current.insert(pair);
+            bMin = vec2(r->left, r->top);
+            bMax = vec2(r->Right(), r->Bottom());
         }
+        else if (const auto* c = std::get_if<Circle>(&shape))
+        {
+            bMin = c->center - vec2(c->radius);
+            bMax = c->center + vec2(c->radius);
+        }
+        else if (const auto* cap = std::get_if<Capsule>(&shape))
+        {
+            bMin = glm::min(vec2(cap->pointA), vec2(cap->pointB)) - vec2(cap->radius);
+            bMax = glm::max(vec2(cap->pointA), vec2(cap->pointB)) + vec2(cap->radius);
+        }
+        broadphase2D.Insert(entity, bMin, bMax);
+    }
+
+    std::vector<std::pair<entt::entity, entt::entity>> candidatePairs;
+    broadphase2D.QueryPairs(candidatePairs);
+
+    for (const auto& [handleA, handleB] : candidatePairs)
+    {
+        const auto& settingsA = colliders.get<Collider2DComponent>(handleA).GetSettings();
+        const auto& settingsB = colliders.get<Collider2DComponent>(handleB).GetSettings();
+
+        if (!settingsA.IsTrigger && !settingsB.IsTrigger)
+            continue;
+
+        auto* entityA = scene.FindEntity(handleA);
+        auto* entityB = scene.FindEntity(handleB);
+        HitResult hit{};
+
+        if (!entityA || !entityB || !PhysicsSystem::Overlap2D(*entityA, *entityB, hit))
+            continue;
+
+        PhysicsTriggerPair pair{ handleA, handleB };
+        if (pair.second < pair.first)
+            std::swap(pair.first, pair.second);
+
+        current.insert(pair);
     }
 
     for (const auto& pair : current)
@@ -739,20 +760,25 @@ static void CollectPhysicsTriggerEvents3D(Scene& scene)
     std::set<PhysicsTriggerPair> current;
     if (!triggerIndices.empty())
     {
+        SpatialBroadphase3D broadphase3D;
+        for (size_t i = 0; i < allColliders.size(); ++i)
+        {
+            broadphase3D.Insert(static_cast<entt::entity>(i), allColliders[i].worldAABB);
+        }
+
         for (size_t tIdx : triggerIndices)
         {
             const auto& trig = allColliders[tIdx];
-            for (size_t oIdx = 0; oIdx < allColliders.size(); ++oIdx)
+            std::vector<entt::entity> candidates;
+            broadphase3D.QueryAABB(trig.worldAABB, candidates);
+
+            for (entt::entity candEntity : candidates)
             {
+                const size_t oIdx = static_cast<size_t>(candEntity);
                 if (tIdx == oIdx) continue;
                 const auto& other = allColliders[oIdx];
                 if (other.isTrigger && oIdx < tIdx) continue;
                 if ((trig.layer & other.mask) == 0u || (other.layer & trig.mask) == 0u) continue;
-
-                if (trig.worldAABB.max.x < other.worldAABB.min.x || trig.worldAABB.min.x > other.worldAABB.max.x ||
-                    trig.worldAABB.max.y < other.worldAABB.min.y || trig.worldAABB.min.y > other.worldAABB.max.y ||
-                    trig.worldAABB.max.z < other.worldAABB.min.z || trig.worldAABB.min.z > other.worldAABB.max.z)
-                    continue;
 
                 HitResult hit{};
                 if (!PhysicsSystem::Overlap3D(scene, trig.entity, other.entity, hit)) continue;
@@ -769,14 +795,16 @@ static void CollectPhysicsTriggerEvents3D(Scene& scene)
             const auto& kcc = kccView.get<CharacterControllerComponent>(kccEntity);
             const auto& kccTr = kccView.get<WorldTransformComponent>(kccEntity);
             const BoundingBox kccAABB = kcc.GetWorldAABB(vec3(kccTr.worldMatrix[3]));
-            for (size_t tIdx : triggerIndices)
+
+            std::vector<entt::entity> candidates;
+            broadphase3D.QueryAABB(kccAABB, candidates);
+
+            for (entt::entity candEntity : candidates)
             {
+                const size_t tIdx = static_cast<size_t>(candEntity);
                 const auto& trig = allColliders[tIdx];
+                if (!trig.isTrigger) continue;
                 if ((trig.layer & kcc.CollisionMask) == 0u) continue;
-                if (trig.worldAABB.max.x < kccAABB.min.x || trig.worldAABB.min.x > kccAABB.max.x ||
-                    trig.worldAABB.max.y < kccAABB.min.y || trig.worldAABB.min.y > kccAABB.max.y ||
-                    trig.worldAABB.max.z < kccAABB.min.z || trig.worldAABB.min.z > kccAABB.max.z)
-                    continue;
 
                 HitResult hit{};
                 if (!PhysicsSystem::Overlap3D(scene, kccEntity, trig.entity, hit)) continue;
@@ -1112,92 +1140,115 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
             const bool resolveVelocity = iteration == 0;
             bool anyPenetration = false;
 
-            for (auto first = colliders.begin(); first != colliders.end(); ++first)
+            SpatialBroadphase2D broadphase2D;
+            for (auto entity : colliders)
             {
-                auto second = first;
-                ++second;
+                const auto& settings = colliders.get<Collider2DComponent>(entity).GetSettings();
+                if (settings.IsTrigger) continue;
+                PhysicsShape2D shape;
+                if (!TryBuildPhysicsShape(world, entity, shape)) continue;
 
-                for (; second != colliders.end(); ++second)
+                vec2 bMin(0.0f), bMax(0.0f);
+                if (const auto* r = std::get_if<Rect>(&shape))
                 {
-                    const auto entityA = *first;
-                    const auto entityB = *second;
-                    const auto& settingsA = colliders.get<Collider2DComponent>(entityA).GetSettings();
-                    const auto& settingsB = colliders.get<Collider2DComponent>(entityB).GetSettings();
-
-                    if (settingsA.IsTrigger || settingsB.IsTrigger)
-                        continue;
-
-                    if ((settingsA.CollisionLayer & settingsB.CollisionMask) == 0u ||
-                        (settingsB.CollisionLayer & settingsA.CollisionMask) == 0u)
-                        continue;
-
-                    PhysicsShape2D shapeA, shapeB;
-                    if (!TryBuildPhysicsShape(world, entityA, shapeA) ||
-                        !TryBuildPhysicsShape(world, entityB, shapeB))
-                        continue;
-
-                    HitResult hit{};
-                    if (!IntersectsPhysicsShapes2D(world, entityA, entityB, shapeA, shapeB, hit))
-                        continue;
-
-                    if (hit.denetrationDepth > 0.001f)
-                        anyPenetration = true;
-
-                    ResolvePhysicsContact(world, entityA, entityB, hit, resolveVelocity);
+                    bMin = vec2(r->left, r->top);
+                    bMax = vec2(r->Right(), r->Bottom());
                 }
+                else if (const auto* c = std::get_if<Circle>(&shape))
+                {
+                    bMin = c->center - vec2(c->radius);
+                    bMax = c->center + vec2(c->radius);
+                }
+                else if (const auto* cap = std::get_if<Capsule>(&shape))
+                {
+                    bMin = glm::min(vec2(cap->pointA), vec2(cap->pointB)) - vec2(cap->radius);
+                    bMax = glm::max(vec2(cap->pointA), vec2(cap->pointB)) + vec2(cap->radius);
+                }
+                broadphase2D.Insert(entity, bMin, bMax);
+            }
+
+            std::vector<std::pair<entt::entity, entt::entity>> candidatePairs2D;
+            broadphase2D.QueryPairs(candidatePairs2D);
+
+            for (const auto& [entityA, entityB] : candidatePairs2D)
+            {
+                const auto& settingsA = colliders.get<Collider2DComponent>(entityA).GetSettings();
+                const auto& settingsB = colliders.get<Collider2DComponent>(entityB).GetSettings();
+
+                if (settingsA.IsTrigger || settingsB.IsTrigger)
+                    continue;
+
+                if ((settingsA.CollisionLayer & settingsB.CollisionMask) == 0u ||
+                    (settingsB.CollisionLayer & settingsA.CollisionMask) == 0u)
+                    continue;
+
+                PhysicsShape2D shapeA, shapeB;
+                if (!TryBuildPhysicsShape(world, entityA, shapeA) ||
+                    !TryBuildPhysicsShape(world, entityB, shapeB))
+                    continue;
+
+                HitResult hit{};
+                if (!IntersectsPhysicsShapes2D(world, entityA, entityB, shapeA, shapeB, hit))
+                    continue;
+
+                if (hit.denetrationDepth > 0.001f)
+                    anyPenetration = true;
+
+                ResolvePhysicsContact(world, entityA, entityB, hit, resolveVelocity);
             }
 
             const size_t numProxies = proxies3D.size();
+            SpatialBroadphase3D broadphase3D;
             for (size_t i = 0; i < numProxies; ++i)
             {
-                auto& a = proxies3D[i];
-                for (size_t j = i + 1; j < numProxies; ++j)
+                broadphase3D.Insert(static_cast<entt::entity>(i), proxies3D[i].worldAABB);
+            }
+
+            std::vector<std::pair<entt::entity, entt::entity>> candidatePairs3D;
+            broadphase3D.QueryPairs(candidatePairs3D);
+
+            for (const auto& [candA, candB] : candidatePairs3D)
+            {
+                auto& a = proxies3D[static_cast<size_t>(candA)];
+                auto& b = proxies3D[static_cast<size_t>(candB)];
+
+                if (!a.isDynamic && !b.isDynamic)
+                    continue;
+
+                if ((a.layer & b.mask) == 0u || (b.layer & a.mask) == 0u)
+                    continue;
+
+                HitResult hit{};
+                if (a.isBox && b.isBox)
                 {
-                    auto& b = proxies3D[j];
-
-                    if (!a.isDynamic && !b.isDynamic)
+                    if (!Collision::Intersects(a.worldAABB, b.worldAABB, hit))
                         continue;
-
-                    if ((a.layer & b.mask) == 0u || (b.layer & a.mask) == 0u)
+                }
+                else
+                {
+                    if (!PhysicsSystem::Overlap3D(*scene, a.entity, b.entity, hit))
                         continue;
+                }
 
-                    if (a.worldAABB.max.x < b.worldAABB.min.x || a.worldAABB.min.x > b.worldAABB.max.x ||
-                        a.worldAABB.max.y < b.worldAABB.min.y || a.worldAABB.min.y > b.worldAABB.max.y ||
-                        a.worldAABB.max.z < b.worldAABB.min.z || a.worldAABB.min.z > b.worldAABB.max.z)
-                        continue;
+                if (hit.denetrationDepth > 0.001f)
+                    anyPenetration = true;
 
-                    HitResult hit{};
-                    if (a.isBox && b.isBox)
-                    {
-                        if (!Collision::Intersects(a.worldAABB, b.worldAABB, hit))
-                            continue;
-                    }
-                    else
-                    {
-                        if (!PhysicsSystem::Overlap3D(*scene, a.entity, b.entity, hit))
-                            continue;
-                    }
+                const vec3 oldPosA = a.transform->position;
+                const vec3 oldPosB = b.transform->position;
 
-                    if (hit.denetrationDepth > 0.001f)
-                        anyPenetration = true;
+                ResolvePhysicsContact3D(world, a.entity, b.entity, hit, resolveVelocity);
 
-                    const vec3 oldPosA = a.transform->position;
-                    const vec3 oldPosB = b.transform->position;
-
-                    ResolvePhysicsContact3D(world, a.entity, b.entity, hit, resolveVelocity);
-
-                    if (a.isDynamic)
-                    {
-                        const vec3 deltaA = a.transform->position - oldPosA;
-                        a.worldAABB.min += deltaA;
-                        a.worldAABB.max += deltaA;
-                    }
-                    if (b.isDynamic)
-                    {
-                        const vec3 deltaB = b.transform->position - oldPosB;
-                        b.worldAABB.min += deltaB;
-                        b.worldAABB.max += deltaB;
-                    }
+                if (a.isDynamic)
+                {
+                    const vec3 deltaA = a.transform->position - oldPosA;
+                    a.worldAABB.min += deltaA;
+                    a.worldAABB.max += deltaA;
+                }
+                if (b.isDynamic)
+                {
+                    const vec3 deltaB = b.transform->position - oldPosB;
+                    b.worldAABB.min += deltaB;
+                    b.worldAABB.max += deltaB;
                 }
             }
 
@@ -1657,3 +1708,569 @@ void PhysicsSystem::ClearGlobalTriggerCallbacks()
 {
     s_GlobalTriggerCallbacks.clear();
 }
+
+#pragma region Sweep & Overlap
+static bool IsMatrixAxisAligned(const mat4& matrix)
+{
+    for (int i = 0; i < 3; ++i)
+    {
+        vec3 offAxis(matrix[i]);
+        const f32 scale = std::abs(offAxis[i]);
+        offAxis[i] = 0.0f;
+        if (glm::dot(offAxis, offAxis) > scale * scale * 1.0e-10f) return false;
+    }
+    return true;
+}
+
+static bool PassSweepFilter(const entt::registry& world, entt::entity entity, const ColliderSettings& settings, const SweepQuery& query)
+{
+    if (entity == query.ignoreEntity) return false;
+    if (!settings.Enabled) return false;
+    if (settings.IsTrigger && !query.includeTrigger) return false;
+    if ((settings.CollisionLayer & query.layerMask) == 0u) return false;
+    const auto* flag = world.try_get<FlagComponent>(entity);
+    if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
+        HasFlag(flag->flags, EEntityFlag::Dead)))
+        return false;
+    return true;
+}
+
+static bool PassOverlapFilter(const entt::registry& world, entt::entity entity, const ColliderSettings& settings, const OverlapQuery& query)
+{
+    if (entity == query.ignoreEntity) return false;
+    if (!settings.Enabled) return false;
+    if (settings.IsTrigger && !query.includeTrigger) return false;
+    if ((settings.CollisionLayer & query.layerMask) == 0u) return false;
+    const auto* flag = world.try_get<FlagComponent>(entity);
+    if (flag && (!flag->IsActive() || HasFlag(flag->flags, EEntityFlag::Paused) ||
+        HasFlag(flag->flags, EEntityFlag::Dead)))
+        return false;
+    return true;
+}
+
+static bool TestSweepColliderSphere(const BoundingSphere& sphere, const vec3& dir, f32 maxDist,
+    const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* box = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!box->HasValidParameters()) return false;
+        const vec3 halfSize = box->Size * 0.5f;
+        if (!IsMatrixAxisAligned(colliderWorld))
+        {
+            const Capsule cap(sphere.center, sphere.center, sphere.radius);
+            const BoundingBox localBox(-halfSize, halfSize);
+            return Collision::Sweep(cap, dir, maxDist, localBox, colliderWorld, outHit);
+        }
+        else
+        {
+            const vec3 worldCenter = vec3(colliderWorld[3]);
+            const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                                glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                                glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+            const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+            return Collision::Sweep(sphere, dir, maxDist, obstacle, outHit);
+        }
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Sweep(sphere, dir, maxDist, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+        const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+        const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+        const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+        const Capsule obstacleCap(pA, pB, cap->Radius * scaleXZ);
+        const Capsule sphereAsCap(sphere.center, sphere.center, sphere.radius);
+        return Collision::Sweep(sphereAsCap, dir, maxDist, obstacleCap, outHit);
+    }
+    return false;
+}
+
+static bool TestSweepColliderBox(const BoundingBox& box, const vec3& dir, f32 maxDist,
+    const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* b = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!b->HasValidParameters()) return false;
+        const vec3 halfSize = b->Size * 0.5f;
+        const vec3 worldCenter = vec3(colliderWorld[3]);
+        const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                            glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                            glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+        const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+        return Collision::Sweep(box, dir, maxDist, obstacle, outHit);
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Sweep(box, dir, maxDist, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        BoundingBox capAABB{};
+        if (!ComputeColliderWorldAABB3D(col, worldMatrix, capAABB)) return false;
+        return Collision::Sweep(box, dir, maxDist, capAABB, outHit);
+    }
+    return false;
+}
+
+static bool TestSweepColliderCapsule(const Capsule& capsule, const vec3& dir, f32 maxDist,
+    const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* box = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!box->HasValidParameters()) return false;
+        const vec3 halfSize = box->Size * 0.5f;
+        if (!IsMatrixAxisAligned(colliderWorld))
+        {
+            const BoundingBox localBox(-halfSize, halfSize);
+            return Collision::Sweep(capsule, dir, maxDist, localBox, colliderWorld, outHit);
+        }
+        else
+        {
+            const vec3 worldCenter = vec3(colliderWorld[3]);
+            const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                                glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                                glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+            const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+            return Collision::Sweep(capsule, dir, maxDist, obstacle, outHit);
+        }
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Sweep(capsule, dir, maxDist, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+        const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+        const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+        const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+        const Capsule obstacleCap(pA, pB, cap->Radius * scaleXZ);
+        return Collision::Sweep(capsule, dir, maxDist, obstacleCap, outHit);
+    }
+    return false;
+}
+
+static bool TestOverlapColliderSphere(const BoundingSphere& sphere, const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* box = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!box->HasValidParameters()) return false;
+        const vec3 halfSize = box->Size * 0.5f;
+        if (!IsMatrixAxisAligned(colliderWorld))
+        {
+            const BoundingBox localBox(-halfSize, halfSize);
+            return Collision::Intersects(localBox, sphere, colliderWorld, outHit);
+        }
+        else
+        {
+            const vec3 worldCenter = vec3(colliderWorld[3]);
+            const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                                glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                                glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+            const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+            return Collision::Intersects(obstacle, sphere, outHit);
+        }
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Intersects(sphere, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+        const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+        const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+        const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+        const Capsule obstacleCap(pA, pB, cap->Radius * scaleXZ);
+        return Collision::Intersects(obstacleCap, sphere, outHit);
+    }
+    return false;
+}
+
+static bool TestOverlapColliderBox(const BoundingBox& box, const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* b = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!b->HasValidParameters()) return false;
+        const vec3 halfSize = b->Size * 0.5f;
+        const vec3 worldCenter = vec3(colliderWorld[3]);
+        const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                            glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                            glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+        const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+        return Collision::Intersects(box, obstacle, outHit);
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Intersects(box, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+        const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+        const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+        const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+        const Capsule obstacleCap(pA, pB, cap->Radius * scaleXZ);
+        return Collision::Intersects(obstacleCap, box, outHit);
+    }
+    return false;
+}
+
+static bool TestOverlapColliderCapsule(const Capsule& capsule, const ColliderComponent& col, const mat4& worldMatrix, HitResult& outHit)
+{
+    const mat4 colliderWorld = worldMatrix * glm::translate(mat4(1.0f), col.GetOffset());
+    if (const auto* box = std::get_if<BoxShape>(&col.GetShape()))
+    {
+        if (!box->HasValidParameters()) return false;
+        const vec3 halfSize = box->Size * 0.5f;
+        if (!IsMatrixAxisAligned(colliderWorld))
+        {
+            const BoundingBox localBox(-halfSize, halfSize);
+            return Collision::Intersects(capsule, localBox, colliderWorld, outHit);
+        }
+        else
+        {
+            const vec3 worldCenter = vec3(colliderWorld[3]);
+            const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                                glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                                glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+            const BoundingBox obstacle(worldCenter - extent, worldCenter + extent);
+            return Collision::Intersects(capsule, obstacle, outHit);
+        }
+    }
+    if (const auto* sph = std::get_if<SphereShape>(&col.GetShape()))
+    {
+        if (!sph->HasValidParameters()) return false;
+        const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+        const BoundingSphere obstacle(vec3(colliderWorld[3]), sph->Radius * scale);
+        return Collision::Intersects(capsule, obstacle, outHit);
+    }
+    if (const auto* cap = std::get_if<CapsuleShape>(&col.GetShape()))
+    {
+        if (!cap->HasValidParameters()) return false;
+        const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+        const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+        const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+        const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+        const Capsule obstacleCap(pA, pB, cap->Radius * scaleXZ);
+        return Collision::Intersects3D(capsule, obstacleCap, outHit);
+    }
+    return false;
+}
+
+bool PhysicsSystem::Sweep(const Scene& scene, const BoundingSphere& sphere, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+{
+    outHit = {};
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return false;
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return false;
+    const vec3 dir = glm::normalize(direction);
+
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    f32 closestDistance = query.maxDistance;
+    bool hasHit = false;
+    SceneSweepHit bestHit{};
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderSphere(sphere, dir, closestDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance < closestDistance)
+            {
+                closestDistance = tempHit.distance;
+                bestHit = { entity, tempHit };
+                hasHit = true;
+            }
+        }
+    }
+
+    if (hasHit)
+    {
+        outHit = bestHit;
+        return true;
+    }
+    return false;
+}
+
+bool PhysicsSystem::Sweep(const Scene& scene, const BoundingBox& box, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+{
+    outHit = {};
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return false;
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return false;
+    const vec3 dir = glm::normalize(direction);
+
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    f32 closestDistance = query.maxDistance;
+    bool hasHit = false;
+    SceneSweepHit bestHit{};
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderBox(box, dir, closestDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance < closestDistance)
+            {
+                closestDistance = tempHit.distance;
+                bestHit = { entity, tempHit };
+                hasHit = true;
+            }
+        }
+    }
+
+    if (hasHit)
+    {
+        outHit = bestHit;
+        return true;
+    }
+    return false;
+}
+
+bool PhysicsSystem::Sweep(const Scene& scene, const Capsule& capsule, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+{
+    outHit = {};
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return false;
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return false;
+    const vec3 dir = glm::normalize(direction);
+
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    f32 closestDistance = query.maxDistance;
+    bool hasHit = false;
+    SceneSweepHit bestHit{};
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderCapsule(capsule, dir, closestDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance < closestDistance)
+            {
+                closestDistance = tempHit.distance;
+                bestHit = { entity, tempHit };
+                hasHit = true;
+            }
+        }
+    }
+
+    if (hasHit)
+    {
+        outHit = bestHit;
+        return true;
+    }
+    return false;
+}
+
+std::vector<SceneSweepHit> PhysicsSystem::SweepAll(const Scene& scene, const BoundingSphere& sphere, const vec3& direction, const SweepQuery& query)
+{
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return {};
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return {};
+    const vec3 dir = glm::normalize(direction);
+
+    std::vector<SceneSweepHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderSphere(sphere, dir, query.maxDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance <= query.maxDistance)
+                results.push_back({ entity, tempHit });
+        }
+    }
+
+    std::sort(results.begin(), results.end(), [](const SceneSweepHit& a, const SceneSweepHit& b) {
+        return a.Hit.distance < b.Hit.distance;
+    });
+    return results;
+}
+
+std::vector<SceneSweepHit> PhysicsSystem::SweepAll(const Scene& scene, const BoundingBox& box, const vec3& direction, const SweepQuery& query)
+{
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return {};
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return {};
+    const vec3 dir = glm::normalize(direction);
+
+    std::vector<SceneSweepHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderBox(box, dir, query.maxDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance <= query.maxDistance)
+                results.push_back({ entity, tempHit });
+        }
+    }
+
+    std::sort(results.begin(), results.end(), [](const SceneSweepHit& a, const SceneSweepHit& b) {
+        return a.Hit.distance < b.Hit.distance;
+    });
+    return results;
+}
+
+std::vector<SceneSweepHit> PhysicsSystem::SweepAll(const Scene& scene, const Capsule& capsule, const vec3& direction, const SweepQuery& query)
+{
+    if (query.maxDistance <= 0.0f || !std::isfinite(query.maxDistance)) return {};
+    const f32 dirLenSq = glm::dot(direction, direction);
+    if (!std::isfinite(dirLenSq) || dirLenSq <= 1.0e-6f) return {};
+    const vec3 dir = glm::normalize(direction);
+
+    std::vector<SceneSweepHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassSweepFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestSweepColliderCapsule(capsule, dir, query.maxDistance, col, worldTr.worldMatrix, tempHit))
+        {
+            if (tempHit.hasHit && tempHit.distance <= query.maxDistance)
+                results.push_back({ entity, tempHit });
+        }
+    }
+
+    std::sort(results.begin(), results.end(), [](const SceneSweepHit& a, const SceneSweepHit& b) {
+        return a.Hit.distance < b.Hit.distance;
+    });
+    return results;
+}
+
+std::vector<SceneOverlapHit> PhysicsSystem::OverlapAll(const Scene& scene, const BoundingSphere& sphere, const OverlapQuery& query)
+{
+    std::vector<SceneOverlapHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassOverlapFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestOverlapColliderSphere(sphere, col, worldTr.worldMatrix, tempHit))
+        {
+            results.push_back({ entity, tempHit });
+        }
+    }
+    return results;
+}
+
+std::vector<SceneOverlapHit> PhysicsSystem::OverlapAll(const Scene& scene, const BoundingBox& box, const OverlapQuery& query)
+{
+    std::vector<SceneOverlapHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassOverlapFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestOverlapColliderBox(box, col, worldTr.worldMatrix, tempHit))
+        {
+            results.push_back({ entity, tempHit });
+        }
+    }
+    return results;
+}
+
+std::vector<SceneOverlapHit> PhysicsSystem::OverlapAll(const Scene& scene, const Capsule& capsule, const OverlapQuery& query)
+{
+    std::vector<SceneOverlapHit> results;
+    const auto& world = scene.GetRegistry();
+    auto view = world.view<ColliderComponent, WorldTransformComponent>();
+
+    for (auto entity : view)
+    {
+        if (!IsComponentEnabled<ColliderComponent>(world, entity)) continue;
+        const auto& col = view.get<ColliderComponent>(entity);
+        if (!PassOverlapFilter(world, entity, col.GetSettings(), query)) continue;
+
+        const auto& worldTr = view.get<WorldTransformComponent>(entity);
+        HitResult tempHit{};
+        if (TestOverlapColliderCapsule(capsule, col, worldTr.worldMatrix, tempHit))
+        {
+            results.push_back({ entity, tempHit });
+        }
+    }
+    return results;
+}
+#pragma endregion

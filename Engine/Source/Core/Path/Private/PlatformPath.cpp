@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cwctype>
 #include <fstream>
+#include <mutex>
 
 namespace Engine
 {
@@ -15,6 +16,14 @@ namespace Engine
     static std::filesystem::path s_EngineResourceRoot;
     static std::filesystem::path s_EditorResourceRoot;
     static std::filesystem::path s_ProjectAssetRoot;
+
+    struct PluginMountEntry
+    {
+        std::string Id;
+        std::filesystem::path ContentRoot;
+    };
+    static std::mutex s_PluginMountMutex;
+    static std::vector<PluginMountEntry> s_PluginMounts;
 
     namespace
     {
@@ -325,14 +334,166 @@ namespace Engine
         return StartsWithIgnoreCase(uri, "project://") || StartsWithIgnoreCase(uri, "asset://");
     }
 
+    bool PlatformPath::IsPluginUri(const std::wstring& uri)
+    {
+        return StartsWithIgnoreCase(uri, L"plugin://");
+    }
+
+    bool PlatformPath::IsPluginUri(const std::string& uri)
+    {
+        return StartsWithIgnoreCase(uri, "plugin://");
+    }
+
+    bool PlatformPath::IsPluginUri(std::wstring_view uri)
+    {
+        return StartsWithIgnoreCase(uri, L"plugin://");
+    }
+
+    bool PlatformPath::IsPluginUri(std::string_view uri)
+    {
+        return StartsWithIgnoreCase(uri, "plugin://");
+    }
+
     bool PlatformPath::IsVirtualUri(const std::wstring& uri)
     {
-        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri);
+        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri) || IsPluginUri(uri);
     }
 
     bool PlatformPath::IsVirtualUri(const std::string& uri)
     {
-        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri);
+        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri) || IsPluginUri(uri);
+    }
+
+    bool PlatformPath::IsVirtualUri(std::wstring_view uri)
+    {
+        return IsEngineUri(std::wstring(uri)) || IsEditorUri(std::wstring(uri)) ||
+            IsProjectUri(std::wstring(uri)) || IsPluginUri(uri);
+    }
+
+    bool PlatformPath::IsVirtualUri(std::string_view uri)
+    {
+        return IsEngineUri(std::string(uri)) || IsEditorUri(std::string(uri)) ||
+            IsProjectUri(std::string(uri)) || IsPluginUri(uri);
+    }
+
+    void PlatformPath::RegisterPluginMount(std::string_view pluginId, const std::filesystem::path& contentRoot)
+    {
+        if (pluginId.empty()) return;
+        const std::lock_guard lock(s_PluginMountMutex);
+        const auto normRoot = Normalize(contentRoot);
+        for (auto& mount : s_PluginMounts)
+        {
+            if (StartsWithIgnoreCase(mount.Id, pluginId) && mount.Id.size() == pluginId.size())
+            {
+                mount.ContentRoot = normRoot;
+                return;
+            }
+        }
+        s_PluginMounts.push_back({ std::string(pluginId), normRoot });
+    }
+
+    void PlatformPath::UnregisterPluginMount(std::string_view pluginId)
+    {
+        if (pluginId.empty()) return;
+        const std::lock_guard lock(s_PluginMountMutex);
+        std::erase_if(s_PluginMounts, [pluginId](const PluginMountEntry& m) {
+            return StartsWithIgnoreCase(m.Id, pluginId) && m.Id.size() == pluginId.size();
+        });
+    }
+
+    void PlatformPath::ClearPluginMounts()
+    {
+        const std::lock_guard lock(s_PluginMountMutex);
+        s_PluginMounts.clear();
+    }
+
+    bool PlatformPath::HasPluginMount(std::string_view pluginId)
+    {
+        if (pluginId.empty()) return false;
+        const std::lock_guard lock(s_PluginMountMutex);
+        for (const auto& mount : s_PluginMounts)
+        {
+            if (StartsWithIgnoreCase(mount.Id, pluginId) && mount.Id.size() == pluginId.size())
+                return true;
+        }
+        return false;
+    }
+
+    std::filesystem::path PlatformPath::GetPluginMountRoot(std::string_view pluginId)
+    {
+        if (pluginId.empty()) return {};
+        const std::lock_guard lock(s_PluginMountMutex);
+        for (const auto& mount : s_PluginMounts)
+        {
+            if (StartsWithIgnoreCase(mount.Id, pluginId) && mount.Id.size() == pluginId.size())
+                return mount.ContentRoot;
+        }
+        return {};
+    }
+
+    std::filesystem::path PlatformPath::ResolvePluginUri(std::wstring_view uri)
+    {
+        if (!IsPluginUri(uri)) return {};
+        std::wstring_view rest = uri.substr(9);
+        if (rest.empty()) return {};
+
+        const size_t slashPos = rest.find_first_of(L"/\\");
+        std::wstring_view pluginIdW;
+        std::wstring_view subPathW;
+        if (slashPos == std::wstring_view::npos)
+        {
+            pluginIdW = rest;
+        }
+        else
+        {
+            pluginIdW = rest.substr(0, slashPos);
+            subPathW = rest.substr(slashPos + 1);
+        }
+
+        if (pluginIdW.empty()) return {};
+
+        std::string pluginId(pluginIdW.begin(), pluginIdW.end());
+        std::filesystem::path contentRoot;
+        {
+            const std::lock_guard lock(s_PluginMountMutex);
+            for (const auto& mount : s_PluginMounts)
+            {
+                if (StartsWithIgnoreCase(mount.Id, pluginId) && mount.Id.size() == pluginId.size())
+                {
+                    contentRoot = mount.ContentRoot;
+                    break;
+                }
+            }
+        }
+
+        if (contentRoot.empty()) return {};
+
+        const auto subPath = std::filesystem::path(subPathW);
+        const auto resolved = Normalize(contentRoot / subPath);
+
+        // Security traversal check: block ".." path traversal outside contentRoot!
+        if (!IsSubpathOf(resolved, contentRoot) && resolved != contentRoot)
+        {
+            return contentRoot;
+        }
+        return resolved;
+    }
+
+    std::filesystem::path PlatformPath::ResolvePluginUri(std::string_view uri)
+    {
+        if (!IsPluginUri(uri)) return {};
+        std::wstring wstr(uri.begin(), uri.end());
+        return ResolvePluginUri(std::wstring_view(wstr));
+    }
+
+    std::filesystem::path PlatformPath::ResolvePluginUri(const std::wstring& uri)
+    {
+        return ResolvePluginUri(std::wstring_view(uri));
+    }
+
+    std::filesystem::path PlatformPath::ResolvePluginUri(const std::string& uri)
+    {
+        return ResolvePluginUri(std::string_view(uri));
     }
 
     std::filesystem::path PlatformPath::ResolveUri(const std::wstring& pathOrUri)
@@ -371,6 +532,11 @@ namespace Engine
                 return GetProjectAssetRoot();
             }
             return resolved;
+        }
+
+        if (IsPluginUri(pathOrUri))
+        {
+            return ResolvePluginUri(pathOrUri);
         }
 
         const std::filesystem::path fsPath(pathOrUri);
@@ -436,6 +602,25 @@ namespace Engine
         if (IsVirtualUri(rawStr)) return rawStr;
 
         const auto norm = physicalPath.is_absolute() ? Normalize(physicalPath) : ResolveUri(physicalPath);
+
+        // Check registered plugin content mounts first
+        {
+            const std::lock_guard lock(s_PluginMountMutex);
+            for (const auto& mount : s_PluginMounts)
+            {
+                if (mount.ContentRoot.empty()) continue;
+                if (IsSubpathOf(norm, mount.ContentRoot) || norm == mount.ContentRoot)
+                {
+                    auto rel = norm.lexically_relative(mount.ContentRoot);
+                    std::wstring idW(mount.Id.begin(), mount.Id.end());
+                    const auto relW = rel.generic_wstring();
+                    if (relW.empty() || relW == L".")
+                        return L"Plugin://" + idW;
+                    return L"Plugin://" + idW + L"/" + relW;
+                }
+            }
+        }
+
         const auto engineRoot = GetEngineResourceRoot();
         const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
@@ -478,6 +663,14 @@ namespace Engine
             return true;
         if (IsProjectUri(pathOrUri))
             return false;
+        if (IsPluginUri(pathOrUri))
+        {
+            const auto resolved = ResolvePluginUri(pathOrUri);
+            const auto engineRoot = GetEngineResourceRoot();
+            if (IsSubpathOf(resolved, engineRoot) || resolved == engineRoot)
+                return true;
+            return false;
+        }
 
         const auto resolved = ResolveUri(pathOrUri);
         const auto engineRoot = GetEngineResourceRoot();

@@ -31,6 +31,12 @@ namespace Editor
 		m_Open = false;
 	}
 
+	ModelImportModal::~ModelImportModal()
+	{
+		if (m_PreviewThread.joinable())
+			m_PreviewThread.join();
+	}
+
 	EResult ModelImportModal::OnInitialize(void*)
 	{
 		m_PreviewWidget.Initialize(L"ModelImportModalPreview", 380, 380, true);
@@ -40,6 +46,8 @@ namespace Editor
 	void ModelImportModal::Free()
 	{
 		CancelAsyncPreview();
+		if (m_PreviewThread.joinable())
+			m_PreviewThread.join();
 		m_AsyncPreview.reset();
 		ClearPreview();
 		m_PreviewWidget.Free();
@@ -57,6 +65,8 @@ namespace Editor
 		m_Desc = {};
 		m_Desc.Overwrite = true;
 
+		LoadSavedImportOptions();
+
 		m_PreviewReady = false;
 		m_PreviewBuilding = false;
 		m_PreviewProgress = 0.0f;
@@ -65,6 +75,52 @@ namespace Editor
 		m_ImportRequested = false;
 		m_OpenRequested = true;
 		m_Open = true;
+	}
+
+	void ModelImportModal::LoadSavedImportOptions()
+	{
+		const auto sidecar = ModelImporter::ResolveSidecarPath(m_SourcePath, m_DestDir);
+		if (!sidecar.empty())
+		{
+			ModelImportDesc loaded;
+			if (ModelImporter::LoadImportOptions(sidecar, loaded))
+			{
+				m_Desc = loaded;
+				m_Desc.Overwrite = true; // 재임포트 시 덮어쓰기 유지
+			}
+		}
+	}
+
+	void ModelImportModal::ApplyDccPreset(EModelImportDccPreset preset)
+	{
+		m_Desc.DccPreset = preset;
+		switch (preset)
+		{
+		case EModelImportDccPreset::Blender:
+			m_Desc.UniformScale = 1.0f;
+			m_Desc.RotationOffset = { 0.0f, 0.0f, 0.0f };
+			m_Desc.FlipPitch = false;
+			m_Desc.FlipHeading = false;
+			m_Desc.PostProcessFlags |= (EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::FlipWindingOrder);
+			break;
+		case EModelImportDccPreset::Unreal:
+			m_Desc.UniformScale = 0.01f; // Unreal cm -> BamEngine m
+			m_Desc.RotationOffset = { -90.0f, 0.0f, 0.0f }; // Unreal Z-up -> BamEngine Y-up
+			m_Desc.FlipPitch = false;
+			m_Desc.FlipHeading = false;
+			m_Desc.PostProcessFlags |= (EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::FlipWindingOrder);
+			break;
+		case EModelImportDccPreset::Unity:
+			m_Desc.UniformScale = 1.0f;
+			m_Desc.RotationOffset = { 0.0f, 0.0f, 0.0f };
+			m_Desc.FlipPitch = false;
+			m_Desc.FlipHeading = false;
+			m_Desc.PostProcessFlags |= (EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::FlipWindingOrder);
+			break;
+		case EModelImportDccPreset::Custom:
+		default:
+			break;
+		}
 	}
 
 	void ModelImportModal::ClearPreview()
@@ -115,6 +171,13 @@ namespace Editor
 
 	void ModelImportModal::StartAsyncPreviewPrepare(bool focusCamera)
 	{
+		if (m_PreviewThread.joinable())
+		{
+			if (m_AsyncPreview)
+				m_AsyncPreview->Cancelled.store(true, std::memory_order_release);
+			m_PreviewThread.join();
+		}
+
 		m_AlbedoPreviewInfo.clear();
 		ClearPreview();
 
@@ -137,7 +200,7 @@ namespace Editor
 		m_AsyncPreview = state;
 		m_PreviewProgress = 0.05f;
 
-		std::thread([state]()
+		m_PreviewThread = std::thread([state]()
 			{
 				const EResult res = state->Task->Prepare();
 				// 폐기된 요청의 파싱 결과는 메인 스레드가 수거할 때까지 붙잡지 않고 작업 스레드에서 바로 해제한다
@@ -145,7 +208,7 @@ namespace Editor
 					state->Task.reset();
 				state->Result.store(res, std::memory_order_relaxed);
 				state->Completed.store(true, std::memory_order_release);
-			}).detach();
+			});
 	}
 
 	void ModelImportModal::CancelAsyncPreview()
@@ -153,10 +216,12 @@ namespace Editor
 		if (!m_AsyncPreview) return;
 
 		// 완료된 결과는 즉시 해제하고, 진행 중이면 취소 표시만 남겨 완료 시점에 버린다
-		if (m_AsyncPreview->Completed.load(std::memory_order_acquire))
-			m_AsyncPreview.reset();
-		else
-			m_AsyncPreview->Cancelled.store(true, std::memory_order_release);
+		m_AsyncPreview->Cancelled.store(true, std::memory_order_release);
+		if (m_PreviewThread.joinable())
+		{
+			m_PreviewThread.join();
+		}
+		m_AsyncPreview.reset();
 	}
 
 	bool ModelImportModal::BeginPreviewBuild(std::unique_ptr<ModelImportTask> completedTask, bool focusCamera)
@@ -480,7 +545,11 @@ namespace Editor
 		{
 			// 닫힌 뒤 끝난 프리뷰 파싱은 결과를 버리고 상태를 해제한다
 			if (m_AsyncPreview && m_AsyncPreview->Completed.load(std::memory_order_acquire))
+			{
+				if (m_PreviewThread.joinable())
+					m_PreviewThread.join();
 				m_AsyncPreview.reset();
+			}
 			return;
 		}
 
@@ -515,6 +584,8 @@ namespace Editor
 
 		if (m_AsyncPreview && m_AsyncPreview->Completed.load(std::memory_order_acquire))
 		{
+			if (m_PreviewThread.joinable())
+				m_PreviewThread.join();
 			auto completed = std::move(m_AsyncPreview);
 			if (m_PreviewReloadRequested || completed->Cancelled.load(std::memory_order_acquire))
 			{
@@ -737,10 +808,54 @@ namespace Editor
 
 	void ModelImportModal::DrawTransformOptions()
 	{
+		ImGui::TextWrapped("DCC Preset");
+		const char* presetLabels[] = {
+			"Custom",
+			"Blender (glTF/FBX)",
+			"Unreal FBX (cm -> m, Z-Up)",
+			"Unity / Mixamo FBX"
+		};
+		int currentPreset = static_cast<int>(m_Desc.DccPreset);
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::Combo("###ModelImport.DccPresetCombo", &currentPreset, presetLabels, IM_ARRAYSIZE(presetLabels)))
+		{
+			ApplyDccPreset(static_cast<EModelImportDccPreset>(currentPreset));
+			UpdatePreviewTransform();
+			m_PreviewReloadRequested = true;
+		}
+
+		// One-click quick DCC preset buttons
+		const struct { const char* Name; EModelImportDccPreset Preset; } quickPresets[] = {
+			{ "Blender", EModelImportDccPreset::Blender },
+			{ "Unreal (cm->m)", EModelImportDccPreset::Unreal },
+			{ "Unity / Mixamo", EModelImportDccPreset::Unity }
+		};
+		for (size_t i = 0; i < IM_ARRAYSIZE(quickPresets); ++i)
+		{
+			if (i > 0) ImGui::SameLine();
+			const bool isSelected = (m_Desc.DccPreset == quickPresets[i].Preset);
+			if (isSelected)
+				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+			if (ImGui::SmallButton(quickPresets[i].Name))
+			{
+				ApplyDccPreset(quickPresets[i].Preset);
+				UpdatePreviewTransform();
+				m_PreviewReloadRequested = true;
+			}
+			if (isSelected)
+				ImGui::PopStyleColor();
+		}
+
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+
 		ImGui::TextWrapped("%s", LOCAL_CSTR("ModelImport.Scale"));
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		bool transformChanged = ImGui::DragFloat("###ModelImport.Scale", &m_Desc.UniformScale, 0.01f, 0.0001f, 1000.0f,
 			"%.4f", ImGuiSliderFlags_AlwaysClamp);
+		if (transformChanged)
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
 
 		struct ScalePreset
 		{
@@ -762,6 +877,7 @@ namespace Editor
 			if (ImGui::SmallButton(label.c_str()))
 			{
 				m_Desc.UniformScale = preset.Scale;
+				m_Desc.DccPreset = EModelImportDccPreset::Custom;
 				transformChanged = true;
 			}
 		}
@@ -777,16 +893,28 @@ namespace Editor
 			if (axesFitOnOneLine && axis != 0)
 				ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
 			ImGui::SetNextItemWidth(axesFitOnOneLine ? axisWidth : -FLT_MIN);
-			transformChanged |= ImGui::DragFloat(axisIds[axis], &m_Desc.RotationOffset[axis], 1.0f, -360.0f, 360.0f, axisFormats[axis]);
+			const bool rotChanged = ImGui::DragFloat(axisIds[axis], &m_Desc.RotationOffset[axis], 1.0f, -360.0f, 360.0f, axisFormats[axis]);
+			if (rotChanged)
+			{
+				m_Desc.DccPreset = EModelImportDccPreset::Custom;
+				transformChanged = true;
+			}
 		}
 
-		transformChanged |= ImGui::Checkbox(LOCAL_LABEL("ModelImport.Pitch180").c_str(), &m_Desc.FlipPitch);
-		transformChanged |= ImGui::Checkbox(LOCAL_LABEL("ModelImport.Yaw180").c_str(), &m_Desc.FlipHeading);
+		const bool pitchChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Pitch180").c_str(), &m_Desc.FlipPitch);
+		const bool yawChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Yaw180").c_str(), &m_Desc.FlipHeading);
+		if (pitchChanged || yawChanged)
+		{
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
+			transformChanged = true;
+		}
+
 		if (ImGui::SmallButton(LOCAL_LABEL("ModelImport.Reset").c_str()))
 		{
 			m_Desc.RotationOffset = {};
 			m_Desc.FlipPitch = false;
 			m_Desc.FlipHeading = false;
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
 			transformChanged = true;
 		}
 		if (transformChanged)
@@ -802,6 +930,7 @@ namespace Editor
 
 				if (enabled) m_Desc.PostProcessFlags |= flag;
 				else m_Desc.PostProcessFlags &= ~flag;
+				m_Desc.DccPreset = EModelImportDccPreset::Custom;
 				m_PreviewReloadRequested = true;
 				return true;
 			};

@@ -26,7 +26,7 @@ class ModelImportModal final : public IImGui
 {
 public:
 	ModelImportModal();
-	virtual ~ModelImportModal() override = default;
+	virtual ~ModelImportModal() override;
 
 	static ModelImportModal* Get() { return s_Instance; }
 
@@ -77,6 +77,8 @@ private:
 	void DrawTransformOptions();
 	void DrawTextureReferences();
 	void DrawAlbedoThumbnail(size_t materialIndex, float maxEdge);
+	void ApplyDccPreset(EModelImportDccPreset preset);
+	void LoadSavedImportOptions();
 
 private:
 	inline static ModelImportModal* s_Instance = nullptr;
@@ -92,6 +94,7 @@ private:
 	std::filesystem::path m_DestDir;
 	ModelImportDesc m_Desc;
 
+	std::thread m_PreviewThread;
 	std::shared_ptr<AsyncPreviewState> m_AsyncPreview;
 	std::unique_ptr<ModelImportTask> m_BuildingTask;
 	Engine::ModelCreateDesc m_BuildingModelDesc;

@@ -5,6 +5,9 @@
 #include "TriggerEvent.h"
 #include "HitResult.h"
 #include "Ray.h"
+#include "BoundingSphere.h"
+#include "BoundingBox.h"
+#include "Capsule.h"
 #include "PhysicsSettings.h"
 #include <functional>
 
@@ -21,6 +24,35 @@ struct ENGINE_API SceneRaycastHit
 struct ENGINE_API RaycastQuery
 {
 	f32 maxDistance = FLT_MAX;
+	uint32 layerMask = 0xFFFFFFFFu;
+	bool includeTrigger = false;
+	entt::entity ignoreEntity = entt::null;
+};
+
+struct ENGINE_API SceneSweepHit
+{
+	entt::entity Entity = entt::null;
+	HitResult Hit;
+};
+using SweepHit = SceneSweepHit;
+
+struct ENGINE_API SweepQuery
+{
+	f32 maxDistance = FLT_MAX;
+	uint32 layerMask = 0xFFFFFFFFu;
+	bool includeTrigger = false;
+	entt::entity ignoreEntity = entt::null;
+};
+
+struct ENGINE_API SceneOverlapHit
+{
+	entt::entity Entity = entt::null;
+	HitResult Hit;
+};
+using OverlapHit = SceneOverlapHit;
+
+struct ENGINE_API OverlapQuery
+{
 	uint32 layerMask = 0xFFFFFFFFu;
 	bool includeTrigger = false;
 	entt::entity ignoreEntity = entt::null;
@@ -70,6 +102,46 @@ public:
 		RaycastQuery query{};
 		query.maxDistance = maxDistance;
 		return RaycastAll(scene, ray, query);
+	}
+public:
+	// ── 씬 레벨 3D 스윕(Sweep) API ──
+	static bool Sweep(const Scene& scene, const BoundingSphere& sphere, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query);
+	static bool Sweep(const Scene& scene, const BoundingBox& box, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query);
+	static bool Sweep(const Scene& scene, const Capsule& capsule, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query);
+
+	static std::vector<SceneSweepHit> SweepAll(const Scene& scene, const BoundingSphere& sphere, const vec3& direction, const SweepQuery& query);
+	static std::vector<SceneSweepHit> SweepAll(const Scene& scene, const BoundingBox& box, const vec3& direction, const SweepQuery& query);
+	static std::vector<SceneSweepHit> SweepAll(const Scene& scene, const Capsule& capsule, const vec3& direction, const SweepQuery& query);
+
+	static bool SweepSphere(const Scene& scene, const vec3& center, f32 radius, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+	{
+		return Sweep(scene, BoundingSphere(center, radius), direction, outHit, query);
+	}
+	static bool SweepBox(const Scene& scene, const vec3& center, const vec3& halfExtents, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+	{
+		return Sweep(scene, BoundingBox(center - halfExtents, center + halfExtents), direction, outHit, query);
+	}
+	static bool SweepCapsule(const Scene& scene, const vec3& bottom, const vec3& top, f32 radius, const vec3& direction, SceneSweepHit& outHit, const SweepQuery& query)
+	{
+		return Sweep(scene, Capsule(bottom, top, radius), direction, outHit, query);
+	}
+
+	// ── 씬 레벨 3D 오버랩(OverlapAll) API ──
+	static std::vector<SceneOverlapHit> OverlapAll(const Scene& scene, const BoundingSphere& sphere, const OverlapQuery& query);
+	static std::vector<SceneOverlapHit> OverlapAll(const Scene& scene, const BoundingBox& box, const OverlapQuery& query);
+	static std::vector<SceneOverlapHit> OverlapAll(const Scene& scene, const Capsule& capsule, const OverlapQuery& query);
+
+	static std::vector<SceneOverlapHit> OverlapSphereAll(const Scene& scene, const vec3& center, f32 radius, const OverlapQuery& query)
+	{
+		return OverlapAll(scene, BoundingSphere(center, radius), query);
+	}
+	static std::vector<SceneOverlapHit> OverlapBoxAll(const Scene& scene, const vec3& center, const vec3& halfExtents, const OverlapQuery& query)
+	{
+		return OverlapAll(scene, BoundingBox(center - halfExtents, center + halfExtents), query);
+	}
+	static std::vector<SceneOverlapHit> OverlapCapsuleAll(const Scene& scene, const vec3& bottom, const vec3& top, f32 radius, const OverlapQuery& query)
+	{
+		return OverlapAll(scene, Capsule(bottom, top, radius), query);
 	}
 };
 END

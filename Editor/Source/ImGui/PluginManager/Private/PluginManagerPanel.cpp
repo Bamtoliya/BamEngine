@@ -14,6 +14,7 @@
 #include "NotificationManager.h"
 #include "IconsFontAwesome7.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 #include <imgui.h>
 #include <algorithm>
 #include <cctype>
@@ -146,13 +147,18 @@ EPluginStatus PluginManagerPanel::DetermineModuleStatus(const PluginModuleItem& 
 {
 	if (item.HostIndex)
 	{
+		const auto& host = ImGuiManager::Get().GetPluginHost();
+		const auto& entry = host.GetEntry(*item.HostIndex);
+		if (host.IsPluginSourceBuilding() && host.GetBuildingPluginId() == entry.Id)
+			return EPluginStatus::Compiling;
+
 		const auto* builder = FindBuilderForPluginItem(item);
 		if (builder && builder->IsCompiling())
 			return EPluginStatus::Compiling;
 		if (builder && builder->GetStatus() == EModuleBuildStatus::Failed)
 			return EPluginStatus::Failed;
 
-		const auto status = ImGuiManager::Get().GetPluginHost().GetStatus(*item.HostIndex);
+		const auto status = host.GetStatus(*item.HostIndex);
 		if (status.LastActionFailed)
 			return EPluginStatus::Failed;
 		return status.IsLoaded ? EPluginStatus::Loaded : EPluginStatus::Unloaded;
@@ -648,6 +654,11 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 		const auto index = *item.HostIndex;
 		const auto& entry = host.GetEntry(index);
 		const auto status = host.GetStatus(index);
+		const bool hasSource = !entry.PackageDirectory.empty() &&
+			std::filesystem::exists(entry.PackageDirectory / "CMakeLists.txt");
+		const bool isBuildingThis = host.IsPluginSourceBuilding() && host.GetBuildingPluginId() == entry.Id;
+		const bool isAnySourceBuilding = host.IsPluginSourceBuilding();
+
 #if defined(_WIN32)
 		if (!entry.PackageDirectory.empty() && toolbar.Icon("OpenPackageDirectory", ICON_FA_FOLDER_OPEN, "EditorCommon.ShowInExplorer"))
 		{
@@ -663,6 +674,34 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 		{
 			if (status.IsLoaded && toolbar.Icon("Unload", ICON_FA_EJECT, "PluginManager.Unload"))
 				host.Request(index, EPluginHostAction::Unload);
+
+			if (hasSource)
+			{
+				ImGui::BeginDisabled(isAnySourceBuilding);
+				const char* buildLabel = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
+				if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, buildLabel))
+					host.BuildAndReloadPluginSource(entry.Id);
+				ImGui::EndDisabled();
+
+				if (isBuildingThis)
+					ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.StatusCompiling"));
+				else if (status.LastActionFailed)
+					ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+				else
+					ImGui::TextWrapped("%s", LOCAL_CSTR("PluginManager.PackageMissingBinary"));
+				return;
+			}
+
+			// Content-only plugin without binary
+			const bool hasContent = !entry.PackageDirectory.empty() &&
+				(std::filesystem::exists(entry.PackageDirectory / "Content") ||
+				 std::filesystem::exists(entry.PackageDirectory / "plugin.json"));
+			if (hasContent && entry.BinaryPath.empty())
+			{
+				if (!status.IsLoaded && toolbar.Icon("Load", ICON_FA_PLAY, "PluginManager.Load"))
+					host.Request(index, EPluginHostAction::Load);
+				return;
+			}
 
 			const char* messageKey = "PluginManager.PackageUnavailable";
 			switch (entry.Status)
@@ -697,9 +736,9 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			return;
 		}
 		auto* builder = FindBuilderForPluginItem(item);
-		const bool compiling = builder && builder->IsCompiling();
+		const bool compiling = (builder && builder->IsCompiling()) || isBuildingThis;
 
-		ImGui::BeginDisabled(compiling);
+		ImGui::BeginDisabled(compiling || isAnySourceBuilding);
 		if (status.IsLoaded)
 		{
 			if (toolbar.Icon("Reload", ICON_FA_ARROWS_ROTATE, "PluginManager.Reload"))
@@ -715,6 +754,12 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			const char* label = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
 			if (toolbar.Icon("Build", ICON_FA_HAMMER, label))
 				builder->RequestBuild();
+		}
+		else if (hasSource)
+		{
+			const char* label = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
+			if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, label))
+				host.BuildAndReloadPluginSource(entry.Id);
 		}
 		ImGui::EndDisabled();
 
@@ -735,8 +780,15 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			else if (buildStatus == EModuleBuildStatus::Succeeded)
 				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildSucceeded"));
 		}
+		else if (hasSource)
+		{
+			if (isBuildingThis)
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.StatusCompiling"));
+			else if (status.LastActionFailed)
+				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+		}
 
-		if (status.LastActionFailed)
+		if (status.LastActionFailed && !builder && !hasSource)
 			ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.LastPluginOperationFailed"));
 
 		return;
@@ -878,6 +930,13 @@ void PluginManagerPanel::DrawMetadataTable(const PluginModuleItem& item)
 			EditorUI::PropertyRow("PluginManager.PropOriginalDll");
 			const auto binary = WStrToStr(entry.BinaryPath.wstring());
 			ImGui::TextUnformatted(binary.empty() ? "-" : binary.c_str());
+
+			if (Engine::PlatformPath::HasPluginMount(entry.Id))
+			{
+				EditorUI::PropertyRow("EditorCommon.CopyUri");
+				const std::string uri = "Plugin://" + entry.Id + "/";
+				ImGui::TextUnformatted(uri.c_str());
+			}
 		}
 		else if (item.IsGameModule)
 		{
@@ -992,29 +1051,54 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 {
 	auto* builder = FindBuilderForPluginItem(item);
-	if (!builder)
-		return;
-	auto& buildMgr = *builder;
+	auto& host = ImGuiManager::Get().GetPluginHost();
+	const bool isHostPlugin = item.HostIndex.has_value();
+	const bool hasSource = isHostPlugin &&
+		!host.GetEntry(*item.HostIndex).PackageDirectory.empty() &&
+		std::filesystem::exists(host.GetEntry(*item.HostIndex).PackageDirectory / "CMakeLists.txt");
+	const bool hasHostLogs = isHostPlugin && !host.GetPluginBuildLogs().empty();
 
-	EditorUI::ToolbarLayout toolbar;
+	if (!builder && !hasSource && !hasHostLogs)
+		return;
+
 	if (!ImGui::CollapsingHeader(LOCAL_CSTR("PluginManager.BuildConsoleHeader"), ImGuiTreeNodeFlags_DefaultOpen))
 		return;
 
-	// 상단 제어 바: [Copy Log], [Clear], [Retry Compile] (실패 시), [Auto-scroll]
-	if (toolbar.Icon("EditorCommon.Copy", ICON_FA_COPY, "EditorCommon.Copy"))
+	EditorUI::ToolbarLayout toolbar;
+	std::string outputText;
+	bool isCompiling = false;
+	bool isFailed = false;
+
+	if (builder)
 	{
-		ImGui::SetClipboardText(buildMgr.GetLastBuildOutput().c_str());
+		outputText = builder->GetLastBuildOutput();
+		isCompiling = builder->IsCompiling();
+		isFailed = (builder->GetStatus() == EModuleBuildStatus::Failed);
+	}
+	else if (isHostPlugin)
+	{
+		outputText = host.GetPluginBuildLogs();
+		isCompiling = host.IsPluginSourceBuilding() && (host.GetBuildingPluginId() == host.GetEntry(*item.HostIndex).Id);
+		isFailed = host.GetStatus(*item.HostIndex).LastActionFailed;
 	}
 
-	if (buildMgr.GetStatus() == EModuleBuildStatus::Failed && !buildMgr.IsCompiling())
+	// 상단 제어 바: [Copy Log], [Retry Compile] (실패 시), [Auto-scroll]
+	if (toolbar.Icon("EditorCommon.Copy", ICON_FA_COPY, "EditorCommon.Copy"))
+	{
+		ImGui::SetClipboardText(outputText.c_str());
+	}
+
+	if (isFailed && !isCompiling)
 	{
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.20f, 0.20f, 0.9f));
 		if (toolbar.Icon("PluginManager.RetryCompile", ICON_FA_HAMMER, "PluginManager.RetryCompile"))
 		{
-			buildMgr.RequestBuild();
+			if (builder)
+				builder->RequestBuild();
+			else if (isHostPlugin)
+				host.BuildAndReloadPluginSource(host.GetEntry(*item.HostIndex).Id);
 		}
 		ImGui::PopStyleColor();
-
 	}
 
 	ImGui::Checkbox(LOCAL_CSTR("PluginManager.AutoScroll"), &m_AutoScrollLog);
@@ -1024,8 +1108,7 @@ void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 	// 콘솔 텍스트 차일드 윈도우
 	ImGui::BeginChild("##BuildOutputLog", ImVec2(0.0f, 180.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
 
-	const std::string& output = buildMgr.GetLastBuildOutput();
-	if (output.empty())
+	if (outputText.empty())
 	{
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
 		ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.NoBuildOutput"));
@@ -1033,7 +1116,7 @@ void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 	}
 	else
 	{
-		std::istringstream stream(output);
+		std::istringstream stream(outputText);
 		std::string line;
 		while (std::getline(stream, line))
 		{

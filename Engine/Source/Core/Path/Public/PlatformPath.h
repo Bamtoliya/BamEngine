@@ -59,8 +59,25 @@ namespace Engine
         static bool IsEditorUri(const std::string& uri);
         static bool IsProjectUri(const std::wstring& uri);
         static bool IsProjectUri(const std::string& uri);
+        static bool IsPluginUri(const std::wstring& uri);
+        static bool IsPluginUri(const std::string& uri);
+        static bool IsPluginUri(std::wstring_view uri);
+        static bool IsPluginUri(std::string_view uri);
         static bool IsVirtualUri(const std::wstring& uri);
         static bool IsVirtualUri(const std::string& uri);
+        static bool IsVirtualUri(std::wstring_view uri);
+        static bool IsVirtualUri(std::string_view uri);
+
+        // [플러그인 가상 마운트 URI 시스템 ("Plugin://<pluginId>/...")]
+        static void RegisterPluginMount(std::string_view pluginId, const std::filesystem::path& contentRoot);
+        static void UnregisterPluginMount(std::string_view pluginId);
+        static void ClearPluginMounts();
+        static bool HasPluginMount(std::string_view pluginId);
+        static std::filesystem::path GetPluginMountRoot(std::string_view pluginId);
+        static std::filesystem::path ResolvePluginUri(const std::wstring& uri);
+        static std::filesystem::path ResolvePluginUri(const std::string& uri);
+        static std::filesystem::path ResolvePluginUri(std::wstring_view uri);
+        static std::filesystem::path ResolvePluginUri(std::string_view uri);
 
         // 가상 URI 또는 상대/절대 경로를 물리 디스크 절대 경로로 안전하게 해석
         static std::filesystem::path ResolveUri(const std::filesystem::path& pathOrUri);

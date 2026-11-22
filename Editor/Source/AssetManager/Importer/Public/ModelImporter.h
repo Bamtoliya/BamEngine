@@ -63,8 +63,18 @@ enum class EModelImportOption : uint32
 
 ENABLE_BITMASK_OPERATORS(EModelImportOption);
 
+ENUM()
+enum class EModelImportDccPreset : uint32
+{
+	Custom = 0,
+	Blender, // Blender (glTF/FBX)
+	Unreal,  // Unreal FBX (cm -> m, Z-Up)
+	Unity,   // Unity / Mixamo FBX
+};
+
 struct ModelImportDesc
 {
+	EModelImportDccPreset DccPreset = EModelImportDccPreset::Custom;
 	EModelPostProcessFlag PostProcessFlags = EModelPostProcessFlag::Triangulate | EModelPostProcessFlag::FlipUVs | EModelPostProcessFlag::MakeLeftHanded | EModelPostProcessFlag::FlipWindingOrder;
 	EModelImportOption ImportOptions = EModelImportOption::Meshes | EModelImportOption::Skeleton | EModelImportOption::Animations | EModelImportOption::Materials;
 	float UniformScale = 1.0f;
@@ -107,6 +117,9 @@ public:
 	std::optional<EResult> FinalizeStep(ModelImportTask& task);
 	static Tools::ModelConversion::Options MakeConversionOptions(const ModelImportDesc& desc);
 	static std::filesystem::path ResolveExternalTexturePath(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationDirectory, std::string_view texturePathUtf8);
+	static bool SaveImportOptions(const std::filesystem::path& sidecarPath, const ModelImportDesc& desc);
+	static bool LoadImportOptions(const std::filesystem::path& sidecarPath, ModelImportDesc& outDesc);
+	static std::filesystem::path ResolveSidecarPath(const std::filesystem::path& modelOrSourcePath, const std::filesystem::path& destDir = {});
 private:
 	std::optional<EResult> FinalizeOneStep(ModelImportTask& task);
 };

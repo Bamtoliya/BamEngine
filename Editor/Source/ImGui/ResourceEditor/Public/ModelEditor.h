@@ -30,6 +30,11 @@ public:
 	bool CanSaveDocument() const;
 	EShortcutContext GetShortcutContext() const override { return EShortcutContext::ModelEditor; }
 	void SetTargetResource(const std::filesystem::path& assetPath) override;
+	bool BeginAsyncOpen(const std::filesystem::path& assetPath) override;
+	bool StepAsyncOpen(float maxTimeSeconds = 0.002f) override;
+	bool IsAsyncLoading() const override { return m_AsyncStage != EAsyncStage::None; }
+	void DrawAsyncLoadingOverlay() override;
+	void CancelAsyncOpen() override;
 	virtual void Update(f32 dt) override;
 	virtual void CaptureState(EditorWorkspace& workspace) const override;
 	virtual void RestoreState(const EditorWorkspace& workspace) override;
@@ -74,6 +79,23 @@ private:
 	// 리사이저블 분할 너비
 	float m_LeftPaneWidth = 420.0f;
 	char m_MaterialSlotSearch[64] = {};
+
+	// 비동기 열기 상태
+	enum class EAsyncStage
+	{
+		None,
+		WaitingBackground,
+		LoadingResource,
+		SettingUpPreview,
+		Finalizing,
+		Failed
+	};
+	EAsyncStage m_AsyncStage = EAsyncStage::None;
+	float m_AsyncProgress = 0.0f;
+	std::filesystem::path m_AsyncTargetPath;
+	std::chrono::steady_clock::time_point m_AsyncStartTime{};
+	std::chrono::steady_clock::time_point m_AsyncLoadStart{};
+	double m_AsyncLoadDurationMs = 0.0;
 };
 
 END

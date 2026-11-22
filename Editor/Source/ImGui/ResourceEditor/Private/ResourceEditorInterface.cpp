@@ -5,6 +5,12 @@
 #include "InputManager.h"
 #include "TimelineView.h"
 #include <utility>
+#include <algorithm>
+
+ResourceEditorInterface::~ResourceEditorInterface()
+{
+    CancelAsyncOpen();
+}
 
 void ResourceEditorInterface::SetOpen(bool open)
 {
@@ -30,6 +36,7 @@ bool ResourceEditorInterface::RestoreSavedChanges()
 
 void ResourceEditorInterface::CloseResourceDocument()
 {
+    CancelAsyncOpen();
     if (!RestoreSavedChanges()) return;
     ReleaseResourceDocument();
     m_PendingDiscardAction = {};
@@ -125,7 +132,42 @@ void ResourceEditorInterface::DrawResourceFrame()
     if (missingHeight > 0.0f)
         ImGui::Dummy(ImVec2(0.0f, missingHeight));
     ImGui::Separator();
-    DrawCustomContent();
+    if (IsAsyncLoading())
+    {
+        DrawAsyncLoadingOverlay();
+    }
+    else
+    {
+        DrawCustomContent();
+    }
+}
+
+void ResourceEditorInterface::DrawAsyncLoadingOverlay()
+{
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    if (avail.x <= 1.0f || avail.y <= 1.0f) return;
+
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        origin, ImVec2(origin.x + avail.x, origin.y + avail.y), IM_COL32(22, 24, 28, 255), 4.0f);
+
+    const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 320.0f);
+    const std::string filename = !m_TargetResourcePath.empty() ? WStrToStr(m_TargetResourcePath.filename().wstring()) : "";
+    const std::string pendingText = filename.empty()
+        ? LOCAL("ModelImport.PreviewPending")
+        : LOCAL("ModelImport.PreviewPending") + " (" + filename + ")";
+
+    const ImVec2 textSize = ImGui::CalcTextSize(pendingText.c_str());
+    const float blockHeight = textSize.y + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(12.0f, (avail.y - blockHeight) * 0.5f));
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(12.0f, (avail.x - textSize.x) * 0.5f));
+    ImGui::TextDisabled("%s", pendingText.c_str());
+
+    ImGui::Spacing();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(12.0f, (avail.x - barWidth) * 0.5f));
+    const float displayProgress = 0.15f + 0.35f * (0.5f + 0.5f * std::sin(static_cast<float>(ImGui::GetTime()) * 4.0f));
+    ImGui::ProgressBar(displayProgress, ImVec2(barWidth, 0.0f));
 }
 
 void ResourceEditorInterface::DrawCustomToolbar()

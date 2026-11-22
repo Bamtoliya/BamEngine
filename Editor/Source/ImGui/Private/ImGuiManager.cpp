@@ -38,6 +38,7 @@
 #include "ResourceHandleArchiveAdapter.h"
 #include "Scene.h"
 #include "ResourceEditorInterface.h"
+#include "AsyncResourceOpenService.h"
 #include "PluginResourceEditor.h"
 #include "TerrainEditor.h"
 #include "TilePalettePanel.h"
@@ -246,6 +247,7 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
+	AsyncResourceOpenService::Get().Shutdown();
 	m_SceneLoadState.reset();
 	ReleaseFrameTextures();
 	if (m_ImGuiContext)
@@ -308,6 +310,7 @@ void ImGuiManager::Free()
 
 void ImGuiManager::Update(f32 dt)
 {
+	AsyncResourceOpenService::Get().Update(0.002f);
 	Editor::Detail::UpdatePickerAssetCatalog();
 	m_PluginHost.Update(*this);
 	auto& settings = EditorSettingsService::Get();
@@ -795,11 +798,14 @@ void ImGuiManager::OpenPendingResourceEditor()
 	{
 		const auto openTarget = [editor, path] {
 			const auto started = std::chrono::steady_clock::now();
-			editor->SetTargetResource(path);
-			const auto elapsed = std::chrono::duration<double, std::milli>(
-				std::chrono::steady_clock::now() - started).count();
-			EDITOR_LOG_INFO("[ResourceOpenTiming] Editor {}: path={}, attempt={:.2f}ms",
-				WStrToStr(editor->GetName()), WStrToStr(path.wstring()), elapsed);
+			if (!AsyncResourceOpenService::Get().RequestOpen(editor, path))
+			{
+				editor->SetTargetResource(path);
+				const auto elapsed = std::chrono::duration<double, std::milli>(
+					std::chrono::steady_clock::now() - started).count();
+				EDITOR_LOG_INFO("[ResourceOpenTiming] Editor {}: path={}, attempt={:.2f}ms",
+					WStrToStr(editor->GetName()), WStrToStr(path.wstring()), elapsed);
+			}
 		};
 		if (editor->HasUnsavedResourceChanges())
 		{
