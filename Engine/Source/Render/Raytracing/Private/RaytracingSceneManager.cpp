@@ -7,6 +7,7 @@
 #include "RenderComponents.h"
 #include "SplineMeshComponent.h"
 #include "Mesh.h"
+#include "ResidentMeshLODs.h"
 #include "MaterialInterface.h"
 #include "Renderer.h"
 #include "Shader.h"
@@ -204,13 +205,12 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevel
 		}
 
 		// 이 뷰의 GBuffer가 고른 LOD와 같은 형상으로 차폐해 자기 그림자 오차를 막는다.
-		if (const auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(world, entity))
+		const auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(world, entity);
+		mesh = ResidentMeshLODs(mesh, lodGroup).Find(lodGroup ? lodGroup->viewLODs.Get(viewID) : 0);
+		if (!mesh)
 		{
-			const int32 lod = lodGroup->viewLODs.Get(viewID);
-			if (lod == 2 && lodGroup->lod2Mesh.Get())
-				mesh = lodGroup->lod2Mesh.Get();
-			else if (lod == 1 && lodGroup->lod1Mesh.Get())
-				mesh = lodGroup->lod1Mesh.Get();
+			++entry.PendingCasterCount;
+			continue;
 		}
 
 		if (!IsShadowCasterSupported(mesh, material))

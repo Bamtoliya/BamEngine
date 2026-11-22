@@ -235,6 +235,7 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 	m_RHITexture = texture;
 	m_CachedHeader = header;
 	m_TempData = std::move(pixelData);
+	MarkResident();
 	return EResult::Success;
 }
 
@@ -285,6 +286,7 @@ EResult Texture::InitializeFromDDSMemory(const vector<uint8>& ddsData)
 	m_RHITexture = texture;
 	m_CachedHeader = header;
 	m_TempData.assign(info.pixelData, info.pixelData + info.pixelDataSize);
+	MarkResident();
 	return EResult::Success;
 }
 
@@ -388,6 +390,20 @@ EResult Texture::UploadToGPU()
 	return m_RHITexture ? EResult::Success : EResult::Fail;
 }
 
+EResult Texture::AdoptPrepared(Resource& prepared)
+{
+	auto& source = static_cast<Texture&>(prepared);
+	const EResult result = source.UploadToGPU();
+	if (IsFailure(result)) return result;
+
+	// 임시 텍스처는 prepared와 함께 지연 해제된다.
+	std::swap(m_RHITexture, source.m_RHITexture);
+	std::swap(m_CachedHeader, source.m_CachedHeader);
+	std::swap(m_TempData, source.m_TempData);
+	m_PixelPerUnit = source.m_PixelPerUnit;
+	return EResult::Success;
+}
+
 #pragma region Bind
 EResult Texture::Bind(uint32 slot)
 {
@@ -400,6 +416,9 @@ EResult Texture::Bind(uint32 slot)
 #pragma region Save&Load
 archive::ArchiveResult Texture::WriteArchive(archive::IArchive& ar) const
 {
+	if (!IsSuccess(const_cast<Texture*>(this)->EnsureResident()))
+		return { archive::ArchiveErrorCode::InvalidOperation, "Texture.NotResident" };
+
 	uint32 byteCount = 0;
 	auto result = ValidateTextureHeader(m_CachedHeader, m_PixelPerUnit, byteCount);
 	if (!result)
@@ -583,6 +602,7 @@ archive::ArchiveResult Texture::ReadArchive(const archive::IArchive& ar)
 	m_TempData = std::move(pixelData);
 	m_PixelPerUnit = pixelPerUnit;
 	m_RHITexture = texture;
+	MarkResident();
 	IncreaseVersion();
 	return {};
 }
@@ -647,6 +667,7 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 				m_CachedHeader = replacement.m_CachedHeader;
 				m_TempData = std::move(replacement.m_TempData);
 				m_PixelPerUnit = replacement.m_PixelPerUnit;
+				MarkResident();
 				IncreaseVersion();
 				if (previous) previous->Release();
 				result = EResult::Success;

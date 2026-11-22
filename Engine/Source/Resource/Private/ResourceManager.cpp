@@ -98,6 +98,7 @@ IMPLEMENT_SINGLETON(ResourceManager)
 EResult ResourceManager::Initialize(void* arg)
 {
 	// 초기 용량 설정 (필요에 따라 조정)
+	m_OwnerThread = std::this_thread::get_id();
 	m_Resources.reserve(100);
 	RegisterExplicitLoader();
 	return EResult::Success;
@@ -276,6 +277,20 @@ Handle ResourceManager::RegisterPreparedResource(Resource* resource)
 		return existing;
 	}
 	return AddResourceInternal(hash, resource);
+}
+
+EResult ResourceManager::FulfillPendingResource(const wstring& key, Resource* prepared)
+{
+	EResult result = EResult::Success;
+	if (auto* target = GetResource(FindHandleByKey(key)); target && target->IsPending())
+		result = target->Fulfill(prepared);
+
+	if (prepared)
+	{
+		prepared->Free();
+		delete prepared;
+	}
+	return result;
 }
 
 EResult ResourceManager::DestroyResource(const Handle& handle)

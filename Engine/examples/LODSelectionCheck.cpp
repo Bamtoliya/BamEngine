@@ -34,6 +34,12 @@ int main()
     thresholds.HasLOD1 = false;
     Expect(SelectLODIndex(0.01f, 0, thresholds) == 0, "missing LODs must fall back to LOD0");
 
+    // 읽는 중인 LOD는 더 단순한 LOD, 그다음 더 자세한 LOD로 대신한다.
+    Expect(ResolveResidentLOD(0, 0b111) == 0 && ResolveResidentLOD(2, 0b111) == 2, "a resident LOD must be used as is");
+    Expect(ResolveResidentLOD(0, 0b100) == 2 && ResolveResidentLOD(0, 0b110) == 1, "a missing LOD must use the next coarser one");
+    Expect(ResolveResidentLOD(2, 0b011) == 1 && ResolveResidentLOD(1, 0b001) == 0, "a missing coarse LOD must use the next finer one");
+    Expect(ResolveResidentLOD(0, 0) == -1, "nothing must be drawn without a resident LOD");
+
     // 두 뷰가 번갈아 갱신해도 각 뷰의 LOD는 바뀌지 않는다.
     thresholds.HasLOD1 = thresholds.HasLOD2 = true;
     ViewLODState state;

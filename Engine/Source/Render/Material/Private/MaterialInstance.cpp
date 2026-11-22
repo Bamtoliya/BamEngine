@@ -187,7 +187,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
-		RHITexture* rhiTex = texture->GetRHITexture();
+		RHITexture* rhiTex = texture->GetAvailableRHITexture();
 		if (!rhiTex) continue;
 
 		if (IsFailure(rhi->BindTextureSampler(rhiTex, sampler, baseBinding.slot)))
@@ -210,7 +210,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
-		RHITexture* rhiTex = texture->GetRHITexture();
+		RHITexture* rhiTex = texture->GetAvailableRHITexture();
 		if (!rhiTex) continue;
 
 		if (IsFailure(rhi->BindTextureSampler(rhiTex, sampler, binding.slot)))

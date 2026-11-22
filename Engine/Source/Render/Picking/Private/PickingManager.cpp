@@ -7,6 +7,7 @@
 #include "RenderComponents.h"
 #include "TransformSystem.h"
 #include "Mesh.h"
+#include "ResidentMeshLODs.h"
 #include "MaterialInterface.h"
 #include "Sprite.h"
 #include "Collision.h"
@@ -214,7 +215,9 @@ Entity* PickingManager::PickEntityByRay(const Ray& ray, f32 maxDistance, HitResu
 					}
 					else
 					{
-						testMesh(mesh, transform.worldMatrix);
+						// 읽는 중인 메시를 기다리지 않고 화면에 보이는 LOD로 판정한다.
+						const ResidentMeshLODs lodMeshes(mesh, TryGetEnabledComponent<LODGroupComponent>(world, entity));
+						testMesh(lodMeshes.Find(0), transform.worldMatrix);
 					}
 				}
 			}

@@ -156,6 +156,7 @@ EResult Mesh::Bind(uint32 slot)
 {
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi) return EResult::Fail;
+	RequireResident();
 
 	// 캐싱된 배열을 그대로 던진다 → if문 0개, 루프 0개
 	if (m_ActiveBufferCount > 0)
@@ -177,10 +178,12 @@ static const InputLayoutDesc* s_StreamLayoutTable[] = {
 };
 const vector<InputLayoutDesc>& Mesh::GetInputLayoutDescs() const
 {
+	RequireResident();
 	return m_CachedInputLayouts;
 }
 const MeshRaycastBVH& Mesh::GetRaycastBVH() const
 {
+	RequireResident();
 	if (m_RaycastBVHVersion == m_GeometryVersion) return m_RaycastBVH;
 
 	MeshRaycastBVH result;
@@ -310,6 +313,7 @@ const MeshRaycastBVH& Mesh::GetRaycastBVH() const
 #pragma region Setter
 EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride)
 {
+	RequireResident();
 	const uint32 idx = static_cast<uint32>(stream);
 	if (idx >= static_cast<uint32>(EMeshStream::Max) || !data || count == 0 || stride == 0)
 		return EResult::InvalidArgument;
@@ -371,6 +375,7 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 
 EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 {
+	RequireResident();
 	if (!data || indexCount == 0 || (stride != sizeof(uint16) && stride != sizeof(uint32)))
 		return EResult::InvalidArgument;
 	if (indexCount > std::numeric_limits<uint32>::max() / stride)
@@ -400,9 +405,18 @@ EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 #pragma endregion
 
 #pragma region Save&Load
+archive::ArchiveResult Mesh::WriteArchive(archive::IArchive& ar) const
+{
+	// 내용을 읽지 못한 메시로 파일이나 스냅샷을 덮어쓰지 않는다.
+	if (!IsSuccess(const_cast<Mesh*>(this)->EnsureResident()))
+		return { archive::ArchiveErrorCode::InvalidOperation, "Mesh.NotResident" };
+	return Resource::WriteArchive(ar);
+}
+
 archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 {
 	Mesh candidate(*this);
+	candidate.MarkResident();
 	candidate.m_SkinBindingSignature = 0;
 
 	// 복사된 GPU 포인터의 소유권은 원본에 남긴다.
@@ -423,6 +437,14 @@ archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 	swap(m_ResourceType, candidate.m_ResourceType);
 	swap(m_Key, candidate.m_Key);
 	swap(m_Path, candidate.m_Path);
+	SwapContents(candidate);
+	MarkResident();
+	return {};
+}
+
+void Mesh::SwapContents(Mesh& candidate)
+{
+	using std::swap;
 	swap(m_Flags, candidate.m_Flags);
 	swap(m_Topology, candidate.m_Topology);
 	swap(m_StreamCounts, candidate.m_StreamCounts);
@@ -439,8 +461,18 @@ archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 	swap(m_CachedInputLayouts, candidate.m_CachedInputLayouts);
 	swap(m_SkinBindingSignature, candidate.m_SkinBindingSignature);
 	++m_GeometryVersion;
-	return {};
 }
+
+EResult Mesh::AdoptPrepared(Resource& prepared)
+{
+	auto& source = static_cast<Mesh&>(prepared);
+	const EResult result = source.UploadToGPU();
+	if (IsFailure(result)) return result;
+
+	SwapContents(source);
+	return EResult::Success;
+}
+
 EResult Mesh::Reload(const std::filesystem::path& filePath)
 {
 	return Resource::Reload(filePath);

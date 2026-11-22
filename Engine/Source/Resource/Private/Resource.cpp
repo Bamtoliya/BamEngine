@@ -1,10 +1,11 @@
-#include "Resource.h"
+﻿#include "Resource.h"
 #include "ReflectionRegistry.h"
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include "Logger.h"
 #include "PlatformPath.h"
+#include "ResourcePreloader.h"
 
 namespace
 {
@@ -174,3 +175,29 @@ EResult Resource::Reload(const std::filesystem::path& filePath)
 	archive::BeveArchive ar;
 	return reloadArchive(ar);
 }
+
+#pragma region Residency
+EResult Resource::EnsureResident()
+{
+	if (m_Residency == EResidency::Resident) return EResult::Success;
+	if (m_Residency == EResidency::Unavailable) return EResult::Fail;
+	return ResourcePreloader::LoadDetail(*this);
+}
+
+EResult Resource::Fulfill(Resource* prepared)
+{
+	if (m_Residency == EResidency::Resident) return EResult::Success;
+
+	const EResult result = prepared && prepared->GetTypeID() == GetTypeID() ? AdoptPrepared(*prepared) : EResult::Fail;
+	if (!IsSuccess(result))
+	{
+		m_Residency = EResidency::Unavailable;
+		ENGINE_LOG_ERROR("Resource detail load failed: key=\"{}\", path=\"{}\"", WStrToStr(m_Key), WStrToStr(m_Path));
+		return result;
+	}
+
+	m_Residency = EResidency::Resident;
+	IncreaseVersion();
+	return EResult::Success;
+}
+#pragma endregion

@@ -44,12 +44,15 @@ public:
 
 #pragma region Getter
 public:
-	RHITexture* GetRHITexture() const { return m_RHITexture; }
-	f32 GetWorldWidth() const { return m_RHITexture->GetWidth() / m_PixelPerUnit; }
-	f32 GetWorldHeight()const { return m_RHITexture->GetHeight() / m_PixelPerUnit; }
+	// 자리만 등록한 텍스처는 원본을 먼저 읽는다.
+	RHITexture* GetRHITexture() const { RequireResident(); return m_RHITexture; }
+	// 원본을 기다리지 않고 지금 있는 텍스처(임시 텍스처일 수 있음). 크기를 쓰지 않는 재질 바인딩에만 쓴다.
+	RHITexture* GetAvailableRHITexture() const { return m_RHITexture; }
+	f32 GetWorldWidth() const { return GetRHITexture()->GetWidth() / m_PixelPerUnit; }
+	f32 GetWorldHeight()const { return GetRHITexture()->GetHeight() / m_PixelPerUnit; }
 	f32 GetPixelPerUnit() const { return m_PixelPerUnit; }
-	const TextureBinaryHeader& GetCachedHeader() const { return m_CachedHeader; }
-	const vector<uint8>& GetTempData() const { return m_TempData; }
+	const TextureBinaryHeader& GetCachedHeader() const { RequireResident(); return m_CachedHeader; }
+	const vector<uint8>& GetTempData() const { RequireResident(); return m_TempData; }
 #pragma endregion
 
 #pragma region Setter
@@ -61,12 +64,13 @@ public:
 public:
 	void SetTempData(const vector<uint8>& data)
 	{
+		RequireResident();
 		m_TempData = data;
 		m_CachedHeader.dataSize = static_cast<uint32>(data.size());
 		if (m_CachedHeader.mipLevels == 0) m_CachedHeader.mipLevels = 1;
 		if (m_CachedHeader.arraySize == 0) m_CachedHeader.arraySize = 1;
 	}
-	void ClearTempData() { m_TempData.clear(); }
+	void ClearTempData() { RequireResident(); m_TempData.clear(); }
 #pragma endregion
 
 #pragma region Save&Load
@@ -77,6 +81,8 @@ public:
 	EResult ReloadFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
 	EResult UploadToGPU() override;
 	[[nodiscard]] size_t GetUploadByteSize() const override { return m_TempData.size(); }
+protected:
+	EResult AdoptPrepared(Resource& prepared) override;
 private:
 	[[nodiscard]] uint32 GetArchiveFormatVersion() const noexcept override { return 1; }
 #pragma endregion

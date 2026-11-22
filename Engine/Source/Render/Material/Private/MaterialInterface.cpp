@@ -847,7 +847,7 @@ EResult MaterialInterface::Bind(uint32 slot)
             : defaultSampler;
         if (!sampler) return EResult::Fail;
 
-        RHITexture* rhiTexture = texture->GetRHITexture();
+        RHITexture* rhiTexture = texture->GetAvailableRHITexture();
         if (!rhiTexture) continue;
 
         if (IsFailure(rhi->BindTextureSampler(rhiTexture, sampler, binding.slot)))

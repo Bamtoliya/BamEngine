@@ -8,6 +8,7 @@
 #include <archive/BeveArchive.h>
 #include <cwctype>
 #include <functional>
+#include <thread>
 
 BEGIN(Engine)
 
@@ -66,6 +67,10 @@ public:
 	// 같은 키가 이미 있으면 기존 핸들을, GPU 생성에 실패하면 빈 핸들을 반환하며 두 경우 모두 resource를 버린다.
 	// 키와 경로는 LoadFile이 정하는 값과 같아야 한다(ResolveFileKey).
 	Handle RegisterPreparedResource(Resource* resource);
+	// 자리만 등록한 리소스의 내용을 채운다. 그 사이 채워졌거나 사라졌으면 prepared를 버린다. 메인 스레드 전용.
+	EResult FulfillPendingResource(const wstring& key, Resource* prepared);
+	// 매니저를 만든 스레드인지
+	[[nodiscard]] bool IsOwnerThread() const { return std::this_thread::get_id() == m_OwnerThread; }
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
 #ifdef BAM_EDITOR
@@ -125,6 +130,7 @@ private:
 	shared_mutex m_PoolMutex;
 private:
 	unordered_map<wstring, function<Handle(wstring, wstring)>> m_LoaderRegistry;
+	std::thread::id m_OwnerThread;
 #pragma endregion
 };
 

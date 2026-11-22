@@ -31,6 +31,19 @@ namespace Engine
 		return 0;
 	}
 
+	// residentMask의 비트 n은 LOD n의 내용이 있다는 뜻이다. 고른 LOD가 없으면 더 단순한 LOD, 그다음 더 자세한 LOD를 쓴다.
+	// 표시할 LOD가 없으면 -1.
+	inline std::int32_t ResolveResidentLOD(std::int32_t lod, std::uint32_t residentMask)
+	{
+		constexpr std::int32_t LODCount = 3;
+		lod = std::clamp(lod, 0, LODCount - 1);
+		for (std::int32_t i = lod; i < LODCount; ++i)
+			if (residentMask & (1u << i)) return i;
+		for (std::int32_t i = lod - 1; i >= 0; --i)
+			if (residentMask & (1u << i)) return i;
+		return -1;
+	}
+
 	// 뷰(Geometry 패스 ID)별로 마지막에 고른 LOD. 저장하지 않는 런타임 상태다.
 	class ViewLODState
 	{

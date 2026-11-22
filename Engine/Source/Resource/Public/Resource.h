@@ -92,6 +92,34 @@ public:
 	[[nodiscard]] virtual size_t GetUploadByteSize() const { return 0; }
 #pragma endregion
 
+#pragma region Residency
+public:
+	// 자리만 먼저 등록한 리소스는 키와 경로만 있고 내용이 없다. 내용을 쓰는 접근자는 RequireResident로 먼저 채운다.
+	[[nodiscard]] bool IsResident() const { return m_Residency == EResidency::Resident; }
+	[[nodiscard]] bool IsPending() const { return m_Residency == EResidency::Pending; }
+	void MarkPending() { m_Residency = EResidency::Pending; }
+	// 내용이 없으면 파일에서 바로 읽는다. 메인 스레드 전용이며 읽지 못한 리소스는 다시 시도하지 않는다.
+	EResult EnsureResident();
+	// 따로 읽은 같은 리소스의 내용을 가져온다. nullptr이거나 실패하면 읽지 못한 리소스로 남긴다.
+	EResult Fulfill(Resource* prepared);
+protected:
+	// prepared의 GPU 객체까지 만든 뒤 내용을 맞바꾼다. 키·경로와 핸들은 유지한다.
+	virtual EResult AdoptPrepared(Resource& prepared) { return EResult::NotImplemented; }
+	void MarkResident() { m_Residency = EResidency::Resident; }
+	void RequireResident() const
+	{
+		if (m_Residency == EResidency::Pending) static_cast<void>(const_cast<Resource*>(this)->EnsureResident());
+	}
+private:
+	enum class EResidency : uint8
+	{
+		Resident,
+		Pending,
+		Unavailable
+	};
+	EResidency m_Residency = EResidency::Resident;
+#pragma endregion
+
 #pragma region Save&Load
 public:
 	[[nodiscard]] virtual reflection::ObjectView GetReflectedObjectView() noexcept

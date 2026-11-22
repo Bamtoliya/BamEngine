@@ -2,6 +2,7 @@
 
 #include "Engine_API.h"
 #include "ResourceReference.h"
+#include "Result.h"
 #include "Types.h"
 
 #include <chrono>
@@ -12,18 +13,32 @@
 
 namespace Engine
 {
+    class Resource;
+
     // 메시와 텍스처를 작업 스레드에서 읽고 해석한 뒤 메인 스레드에서 GPU에 올려 등록한다.
     // 재질은 파일을 훑어 참조하는 텍스처만 미리 읽는다. 재질·모델 등 나머지 리소스는 호출자가 기존 방식으로 로드하며,
     // 미리 읽지 못한 리소스도 기존 방식에서 다시 읽고 오류를 알린다.
+    // DeferDetail이면 대신 보여 줄 것이 있는 리소스는 자리만 먼저 등록하고 내용은 뒤로 미룬다.
     // Start·Update·소멸자는 메인 스레드에서만 호출한다.
     class ENGINE_API ResourcePreloader final
     {
     public:
+        struct Options
+        {
+            // 더 단순한 LOD가 함께 있는 메시와 재질이 쓰는 이미지 텍스처를 뒤로 미룬다.
+            bool DeferDetail = false;
+        };
+
         struct Stats
         {
             uint32 WorkerCount = 0;
             size_t ScheduledCount = 0;
             size_t FinishedCount = 0;
+            size_t PlaceholderCount = 0;    // 자리만 먼저 등록한 리소스
+            size_t DetailScheduledCount = 0;
+            size_t DetailFinishedCount = 0;
+            size_t DetailFailedCount = 0;
+            size_t CachedPlaceholderCount = 0; // 단색이 아닌 임시 텍스처
             size_t MeshCount = 0;
             size_t TextureCount = 0;
             size_t UploadBytes = 0;
@@ -46,12 +61,18 @@ namespace Engine
         ResourcePreloader& operator=(const ResourcePreloader&) = delete;
 
         void Start(std::span<const ResourceReference> references);
+        void Start(std::span<const ResourceReference> references, const Options& options);
         // 준비된 리소스를 기한까지 등록한다. 예약한 작업을 모두 마치면 true를 반환한다.
-        bool Update(std::chrono::steady_clock::time_point deadline, const LoadedCallback& onLoaded = {});
+        // 미룬 내용만 남은 뒤에는 기다리지 않고 준비된 것만 처리한다.
+        bool Update(std::chrono::steady_clock::time_point deadline, const LoadedCallback& onLoaded = {}, size_t maxUploadBytes = MaxUploadBytesPerUpdate);
+        // 미루지 않은 리소스를 모두 등록했는지
+        [[nodiscard]] bool IsInitialReady() const;
         [[nodiscard]] Stats GetStats() const;
 
         // 모두 마칠 때까지 기다린다. 이미 로드한 리소스가 대부분이면 스레드를 만들지 않는다.
         static void LoadBlocking(std::span<const ResourceReference> references);
+        // 자리만 등록한 리소스의 내용을 바로 읽는다. 메인 스레드 전용. Resource::EnsureResident가 쓴다.
+        static EResult LoadDetail(Resource& resource);
         // 작업 스레드가 리플렉션 등록 정보를 읽고 있는지. 모듈을 다시 불러오기 전에 확인한다.
         static bool IsAnyActive();
 

@@ -116,28 +116,29 @@ public:
 
 #pragma region Getter
 public:
-	RHIBuffer* GetStreamBuffer(EMeshStream stream) const { return m_VertexBuffers[(uint32)stream]; }
-	uint32 GetStreamCount(EMeshStream stream) const { return m_StreamCounts[(uint32)stream]; }
-	uint32 GetStreamStride(EMeshStream stream) const { return m_StreamStrides[(uint32)stream]; }
-	const vector<uint8>& GetRawStreamData(EMeshStream stream) const { return m_RawData[(uint32)stream]; }
-	const vector<uint8>& GetRawIndexData() const { return m_IndexRaw; }
-	uint32 GetIndexStride() const { return m_IndexStride; }
+	// 자리만 등록한 메시는 내용을 먼저 읽는다. 화면 표시는 IsResident로 확인해 기다리지 않는다.
+	RHIBuffer* GetStreamBuffer(EMeshStream stream) const { RequireResident(); return m_VertexBuffers[(uint32)stream]; }
+	uint32 GetStreamCount(EMeshStream stream) const { RequireResident(); return m_StreamCounts[(uint32)stream]; }
+	uint32 GetStreamStride(EMeshStream stream) const { RequireResident(); return m_StreamStrides[(uint32)stream]; }
+	const vector<uint8>& GetRawStreamData(EMeshStream stream) const { RequireResident(); return m_RawData[(uint32)stream]; }
+	const vector<uint8>& GetRawIndexData() const { RequireResident(); return m_IndexRaw; }
+	uint32 GetIndexStride() const { RequireResident(); return m_IndexStride; }
 	RHIBuffer* GetPositionBuffer() const { return GetStreamBuffer(EMeshStream::Position); }
 	RHIBuffer* GetMaterialBuffer() const { return GetStreamBuffer(EMeshStream::Material); }
 	RHIBuffer* GetSkinDataBuffer() const { return GetStreamBuffer(EMeshStream::SkinData); }
-	RHIBuffer* GetIndexBuffer() const { return m_IndexBuffer; }
+	RHIBuffer* GetIndexBuffer() const { RequireResident(); return m_IndexBuffer; }
 	uint32 GetVertexCount() const { return GetStreamCount(EMeshStream::Position); }
-	uint32 GetIndexCount() const { return m_IndexCount; }
-	uint32 GetActiveBufferCount() const { return m_ActiveBufferCount; }
+	uint32 GetIndexCount() const { RequireResident(); return m_IndexCount; }
+	uint32 GetActiveBufferCount() const { RequireResident(); return m_ActiveBufferCount; }
 public:
-	ETopology GetTopology() const { return m_Topology; }
+	ETopology GetTopology() const { RequireResident(); return m_Topology; }
 	uint64 GetGeometryVersion() const { return m_GeometryVersion; }
 public:
 	virtual const vector<InputLayoutDesc>& GetInputLayoutDescs() const;
-	bool IsDynamic() const { return HasFlag(m_Flags, EMeshFlag::Dynamic); }
+	bool IsDynamic() const { RequireResident(); return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 	const MeshRaycastBVH& GetRaycastBVH() const;
 public:
-	[[nodiscard]] bool IsSkinned() const { return m_VertexBuffers[(uint32)EMeshStream::SkinData] != nullptr; }
+	[[nodiscard]] bool IsSkinned() const { return GetStreamBuffer(EMeshStream::SkinData) != nullptr; }
 	[[nodiscard]] bool IsSkinCompatibleWith(const Skeleton& skeleton) const;
 #pragma endregion
 
@@ -157,25 +158,29 @@ public:
 
 #pragma region Bounds
 public:
-	vec3 GetMin() const { return m_BoundingBoxMin; }
-	vec3 GetMax() const { return m_BoundingBoxMax; }
-	vec3 GetCenter() const { return (m_BoundingBoxMin + m_BoundingBoxMax) * 0.5f; }
-	vec3 GetExtents() const { return (m_BoundingBoxMax - m_BoundingBoxMin) * 0.5f; }
+	vec3 GetMin() const { RequireResident(); return m_BoundingBoxMin; }
+	vec3 GetMax() const { RequireResident(); return m_BoundingBoxMax; }
+	vec3 GetCenter() const { return (GetMin() + GetMax()) * 0.5f; }
+	vec3 GetExtents() const { return (GetMax() - GetMin()) * 0.5f; }
 #pragma endregion
 
 #pragma region Save&Load
 public:
+	[[nodiscard]] archive::ArchiveResult WriteArchive(archive::IArchive& ar) const override;
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
 	EResult UploadToGPU() override;
 	[[nodiscard]] size_t GetUploadByteSize() const override;
 protected:
 	EResult OnPostLoad() override;
+	EResult AdoptPrepared(Resource& prepared) override;
 #pragma endregion
 
 private:
 	// 캐싱된 버퍼 배열을 다시 구축하는 내부 헬퍼
 	void RebuildCachedBuffers();
+	// 키·경로와 버전을 뺀 내용 전체를 맞바꾼다.
+	void SwapContents(Mesh& other);
 	uint64 m_GeometryVersion = 1;
 	mutable MeshRaycastBVH m_RaycastBVH;
 	mutable uint64 m_RaycastBVHVersion = 0;

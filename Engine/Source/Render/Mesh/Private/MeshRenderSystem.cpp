@@ -7,6 +7,7 @@
 #include "RenderCommands.h"
 #include "ResourceHandle.h"
 #include "Mesh.h"
+#include "ResidentMeshLODs.h"
 #include "Material.h"
 #include "Renderer.h"
 #include "RenderPass.h"
@@ -290,6 +291,11 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             if (!baseMesh || !material) continue;
 
             auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(scene->GetRegistry(), entity);
+            // 자세한 메시를 읽는 동안에는 준비된 LOD를 대신 그린다.
+            const ResidentMeshLODs lodMeshes(baseMesh, lodGroup);
+            const Mesh* boundsMesh = lodMeshes.Find(0);
+            if (!boundsMesh) continue;
+
             const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<StaticMeshRendererComponent>(scene, entity);
 
             // 정점에 배치가 구워진 메시도 올바르게 판정하도록 엔티티 위치가 아니라 경계 상자 중심에서 거리를 잰다.
@@ -299,8 +305,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             if (lodGroup)
             {
                 const mat4& worldMatrix = worldTransform.worldMatrix;
-                const vec3 boundsMin = baseMesh->GetMin();
-                const vec3 boundsMax = baseMesh->GetMax();
+                const vec3 boundsMin = boundsMesh->GetMin();
+                const vec3 boundsMax = boundsMesh->GetMax();
                 const float maxScale = glm::max(glm::length(vec3(worldMatrix[0])),
                     glm::max(glm::length(vec3(worldMatrix[1])), glm::length(vec3(worldMatrix[2]))));
                 lodCenter = vec3(worldMatrix * vec4((boundsMin + boundsMax) * 0.5f, 1.0f));
@@ -315,14 +321,14 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             // 같은 뷰의 GBuffer·포워드·그림자 패스와 TLAS가 같은 LOD를 쓰도록 뷰마다 한 번만 고른다.
             const auto selectLOD = [&](const PassTarget& target) -> int32
                 {
-                    if (!target.hasLODCamera) return 0;
+                    if (!target.hasLODCamera) return ResolveResidentLOD(0, lodMeshes.Mask);
                     const float coverage = ComputeScreenCoverage(lodRadius, target.projY, glm::distance(target.cameraPos, lodCenter));
                     if (target.viewIndex >= viewLODs.size())
-                        return SelectLODIndex(coverage, 0, lodThresholds);
+                        return ResolveResidentLOD(SelectLODIndex(coverage, 0, lodThresholds), lodMeshes.Mask);
                     int32& selected = viewLODs[target.viewIndex];
                     if (selected < 0)
                     {
-                        selected = SelectLODIndex(coverage, lodGroup->viewLODs.Get(target.viewID), lodThresholds);
+                        selected = ResolveResidentLOD(SelectLODIndex(coverage, lodGroup->viewLODs.Get(target.viewID), lodThresholds), lodMeshes.Mask);
                         lodGroup->viewLODs.Set(target.viewID, selected);
                     }
                     return selected;
@@ -340,9 +346,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
                 if (lodGroup)
                 {
-                    const int32 lod = selectLOD(target);
-                    if (lod == 2) activeMesh = lodGroup->lod2Mesh.Get();
-                    else if (lod == 1) activeMesh = lodGroup->lod1Mesh.Get();
+                    activeMesh = lodMeshes.Meshes[selectLOD(target)];
                 }
 
                 StaticDrawCommand command;
