@@ -76,7 +76,8 @@ public:
 	static void SetCurrentContext(Scene* scene, entt::entity entity, float dt);
 	static void ClearCurrentContext();
 
-#ifdef BAM_EDITOR
+	using NodeExecuteHook = std::function<void(const std::wstring& graphPath, GraphNodeId nodeId)>;
+#if BAM_EDITOR
 	void PrepareSceneGraphs(const Scene& scene);
 
 	// ── 디버깅 인터페이스 (에디터 계층 연동용) ──
@@ -84,18 +85,20 @@ public:
 	static const GraphExecutor* GetDebugExecutor(Scene* scene, entt::entity entity);
 
 	// 2. 노드 실행 직전 알림 훅 (에디터가 등록하여 중단점 체크 및 PIE Pause 수행)
-	using NodeExecuteHook = std::function<void(const std::wstring& graphPath, GraphNodeId nodeId)>;
 	static void SetNodeExecuteHook(NodeExecuteHook hook);
 	static void TriggerNodeExecuteHook(const std::wstring& graphPath, GraphNodeId nodeId);
+#else
+	void PrepareSceneGraphs(const Scene&) {}
+	static const GraphExecutor* GetDebugExecutor(Scene*, entt::entity) { return nullptr; }
+	static void SetNodeExecuteHook(NodeExecuteHook) {}
+	static void TriggerNodeExecuteHook(const std::wstring&, GraphNodeId) {}
 #endif
 
 private:
 	struct CachedGraph
 	{
 		Graph Data;
-#ifdef BAM_EDITOR
 		std::filesystem::file_time_type LastWriteTime{};
-#endif
 	};
 
 	GraphRegistry m_Registry;

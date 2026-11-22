@@ -9,6 +9,9 @@
 #include "TransformSystem.h"
 #include "TransformComponent.h"
 #include "GraphSystem.h"
+#include "AnimationSystem.h"
+#include "SystemManager.h"
+#include "Macro.h"
 #include "ReflectionRegistry.h"
 #include "Scene.h"
 #include "HealthComponent.h"
@@ -610,6 +613,21 @@ void CheckGameplayGraphNodes()
 	Expect(std::get<std::int64_t>(executor.GetResult()) == -1,
 		"Missing prefab/VFX/audio nodes did not fail safely.");
 }
+
+void CheckEditorStripContracts()
+{
+	static_assert(BAM_EDITOR == 0 || BAM_EDITOR == 1);
+	static_assert(BAM_SHIPPING == 0 || BAM_SHIPPING == 1);
+	Expect(GraphSystem::GetDebugExecutor(nullptr, entt::null) == nullptr,
+		"GetDebugExecutor null-safety contract violated.");
+	GraphSystem::SetNodeExecuteHook(nullptr);
+	GraphSystem::TriggerNodeExecuteHook(L"", 0);
+	int verifyCounter = 0;
+	BAM_VERIFY(++verifyCounter == 1);
+	Expect(verifyCounter == 1, "BAM_VERIFY must evaluate expression.");
+	BAM_NON_SHIPPING(verifyCounter += 0);
+	BAM_EDITOR_ONLY(verifyCounter += 0);
+}
 }
 
 int main()
@@ -633,6 +651,7 @@ int main()
 		CheckFailuresAndVectors(registry, reflection);
 		CheckGameplayComponents();
 		CheckGameplayGraphNodes();
+		CheckEditorStripContracts();
 		std::cout << "Graph math, execution and trace checks passed.\n";
 		return 0;
 	}

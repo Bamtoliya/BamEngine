@@ -10,7 +10,11 @@ struct LoggerState
     std::mutex OutputMutex;
     std::ofstream File;
     std::atomic<Engine::ELogLevel> MinLevel{
+#if BAM_SHIPPING
+        Engine::ELogLevel::Warn
+#else
         Engine::ELogLevel::Trace
+#endif
     };
 
     // Console 전달용 큐 보호
@@ -136,6 +140,7 @@ ENGINE_API void Logger::Write(ELogLevel level, std::string_view source, std::str
 
     const auto now = std::chrono::system_clock::now();
 
+#if BAM_EDITOR
     Engine::LogEntry entry;
     entry.Timestamp = now;
     entry.Level = level;
@@ -158,6 +163,7 @@ ENGINE_API void Logger::Write(ELogLevel level, std::string_view source, std::str
             ++state.DroppedCount;
         }
     }
+#endif
 
     const auto seconds =
         std::chrono::time_point_cast<std::chrono::seconds>(now);
@@ -180,6 +186,13 @@ ENGINE_API void Logger::Write(ELogLevel level, std::string_view source, std::str
     std::ostringstream threadId;
     threadId << std::this_thread::get_id();
 
+#if BAM_SHIPPING
+    const auto line = fmt::format(
+        "[{:%Y-%m-%d %H:%M:%S}.{:03}][{}][{}][{}][Thread:{}] {}\n",
+        localTime, milliseconds, GetLevelName(level), source, category,
+        threadId.str(), message);
+    (void)location;
+#else
     const auto line = fmt::format(
         "[{:%Y-%m-%d %H:%M:%S}.{:03}][{}][{}][{}][Thread:{}] {} ({}:{})\n",
         localTime, milliseconds, GetLevelName(level), source, category,
@@ -188,6 +201,7 @@ ENGINE_API void Logger::Write(ELogLevel level, std::string_view source, std::str
     // 첫 버전은 모든 레벨을 stderr로 모아 출력 순서를 유지합니다.
     std::fwrite(line.data(), 1, line.size(), stderr);
     std::fflush(stderr);
+#endif
 
     if (state.File.is_open())
     {

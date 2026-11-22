@@ -143,23 +143,24 @@ flowchart TD
   - `DebugVertex` 및 `m_DebugRenderer`를 감싸고 있던 `#ifdef _DEBUG` 분기를 제거하여 Release 에디터 빌드에서도 디버그 렌더링이 상시 정상 동작하도록 해결 완료.
 
 ### 4.5. 단언 매크로 및 디버그 스냅샷 격리
-- [ ] `Engine/Source/Core/Public/Macro.h` (43줄):
-  - 원시 C `assert()`를 엔진 표준 단언 체계로 정비 (남은 과제).
+- [x] `Engine/Source/Core/Public/Macro.h`:
+  - `BAM_ASSERT`, `BAM_VERIFY`, `BAM_NON_SHIPPING`, `BAM_EDITOR_ONLY` 표준 단언·전처리 가드 매크로 정비 및 `BAM_SHIPPING`/`BAM_EDITOR` 기본값(`0`) 정의 완료(정적 확인).
 - [x] `Engine/Source/Resource/Public/ResourceManager.h` 및 `Private/ResourceManager.cpp`:
-  - `GetDebugSnapshot()`에 `BAM_EDITOR` 가드가 있다(정적 확인). 최종 Client에서의 제거 여부는 아래 구성 검증과 별도다.
+  - `GetDebugSnapshot()`에 `BAM_EDITOR` 가드가 있다(정적 확인).
+  - 참고: `ResourceManager.h/.cpp`의 `#ifdef BAM_EDITOR` -> `#if BAM_EDITOR` 전환은 별도 동시 작업 파일과 겹쳐 후속 이관 항목으로 남긴다.
 
 ### 4.6. 빌드 옵션 반영과 잔여 검증
 
 - [x] 루트의 `BAMENGINE_WITH_EDITOR` 옵션으로 Editor 하위 프로젝트 추가를 제어한다.
-- [x] Engine은 옵션이 켜지면 `PUBLIC BAM_EDITOR=1`을 제공한다.
-- [ ] 같은 구성에서 Engine을 링크하는 Client에도 정의가 전파된다. Client 타깃 이름만으로 Editor API가 빠졌다고 판단하지 않는다.
-- [ ] 별도 Editor OFF 구성의 Engine·Client·프로젝트 모듈을 빌드하고 헤더/ABI 일치를 확인한다.
-- [ ] 엔진 내 에디터/디버그 전용 함수들을 식별하고, Client 빌드 시 No-Op 스텁 또는 `((void)0)` 매크로로 대체하여 링크 오류 없이 안전하게 실행되는지 검증한다.
-- [ ] 에디터 전용 인터페이스 반환 함수(예: 디버그 실행기, 핫리로드 리스너 등)의 호출부 널 안전성(`nullptr` 검사)을 전수 점검한다.
-- [ ] `BAM_SHIPPING` 정의, Shipping의 디버그 코드/로깅 제거 범위를 확정하고 검증한다.
+- [x] `Engine/CMakeLists.txt`는 `BAMENGINE_WITH_EDITOR=ON`이면 `PUBLIC BAM_EDITOR=1`, `OFF`이면 `PUBLIC BAM_EDITOR=0`을 명시 전파한다(정적 확인).
+- [x] 같은 구성에서 Engine을 링크하는 Editor·Client·모듈에도 `PUBLIC BAM_EDITOR` 정의가 일관 전파된다(Client 타깃 이름만으로 Editor API가 빠지지 않고 구성 옵션으로 결정).
+- [ ] 별도 `BAMENGINE_WITH_EDITOR=OFF` 및 `BAMENGINE_SHIPPING=ON` 구성의 Engine·Client·프로젝트 모듈을 빌드하고 헤더/ABI 일치를 확인한다(사용자 실행 검증 대기).
+- [x] 에디터/디버그 전용 엔진 API의 `#ifdef BAM_EDITOR` -> `#if BAM_EDITOR` 전환, Client(`BAM_EDITOR=0`)용 인라인 No-Op 스텁 추가 및 클래스 멤버 ABI 불변성 유지(`SystemManager`, `AnimationSystem`, `GraphSystem`, `Runtime`, `SceneManager` — 정적 정비 완료, `ResourceManager` 후속 이관).
+- [x] 에디터 전용 인터페이스 반환 함수(`GraphSystem::GetDebugExecutor` 등)의 `nullptr` 반환 계약 및 호출부(`GraphPanelExecution.cpp`) 널 안전성 점검 완료(정적 확인).
+- [x] `BAM_SHIPPING` 로깅 스트립 정책 적용(`Logger.h`: `Trace`/`Info` 컴파일 타임 제거 및 `std::source_location{}` 비노출, `Logger.cpp`: 기본 `MinLevel=Warn`, `!BAM_EDITOR` 에디터 콘솔 큐 비활성, `BAM_SHIPPING` 시 `stderr` 출력 및 위치 접미사 생략 — 정적 확인, 실빌드 검증 대기).
 - [ ] `DebugVertex` 등 다른 도구 코드의 제거 범위는 실제 소비자 기준으로 결정한다.
 
-2026-11-02 갱신은 소스 대조다. 새로운 빌드·테스트·최종 배포 바이너리 검사를 수행하지 않았다.
+2026-11-23 갱신은 소스·CMake 대조 및 정적 계약 정비다. 실빌드·테스트(`BAMENGINE_WITH_EDITOR=OFF`, `BAMENGINE_SHIPPING=ON` Client 빌드 포함) 및 최종 배포 바이너리 검사는 사용자 실행 검증을 따른다.
 관련 한계는 [코드·문서 점검](CodeDocumentationAudit-2026-11-02.md) 2.3절을 따른다.
 
 ---

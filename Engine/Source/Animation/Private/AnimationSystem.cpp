@@ -13,7 +13,7 @@
 #include "AnimationIK.h"
 #include "TransformComponent.h"
 #include "WorldTransformComponent.h"
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 #include "Logger.h"
 #include "ReflectionRegistry.h"
 #include "ResourceManager.h"
@@ -33,7 +33,7 @@ AnimationSystem* AnimationSystem::Create(void* arg)
 	return instance;
 }
 
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 void AnimationSystem::PrepareSceneControllerResources(const Scene& scene)
 {
 	if (!ReflectionRegistry::IsCreated() || !ResourceManager::IsCreated()) return;

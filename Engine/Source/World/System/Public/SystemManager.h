@@ -20,9 +20,12 @@ public:
 
 	// 마지막 Update의 페이즈 마스크. 에디터 실시간 프리뷰(Presentation만)와 게임 실행(Gameplay 포함)을 구분할 때 쓴다.
 	uint8 GetUpdatePhaseMask() const { return m_UpdatePhaseMask; }
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	void RequestUpdateTiming() { m_UpdateTimingRequested = true; }
 	bool IsUpdateTimingRequested() const { return m_UpdateTimingRequested; }
+#else
+	void RequestUpdateTiming() {}
+	bool IsUpdateTimingRequested() const { return false; }
 #endif
 public:
 	template<typename T, typename... Args>
@@ -40,9 +43,7 @@ private:
 	vector<ISystem*> m_Systems;
 	unordered_map<entt::id_type, ISystem*> m_SystemMap;
 	uint8 m_UpdatePhaseMask = static_cast<uint8>(ESystemPhase::All);
-#ifdef BAM_EDITOR
 	bool m_UpdateTimingRequested = false;
-#endif
 };
 
 #include "SystemManager.inl"

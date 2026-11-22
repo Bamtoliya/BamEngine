@@ -2,7 +2,7 @@
 
 #include "SceneManager.h"
 #include "ActionTimelineSystem.h"
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 #include "AnimationSystem.h"
 #include "GraphSystem.h"
 #include "SystemManager.h"
@@ -68,7 +68,7 @@ EResult SceneManager::OpenScene(Scene* newScene)
 
 	m_CurrentScene = newScene;
 	ActionTimelineSystem::PrepareSceneResources(*newScene);
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	AnimationSystem::PrepareSceneControllerResources(*newScene);
 	if (SystemManager::IsCreated())
 	{

@@ -13,7 +13,7 @@
 #include "FlagComponent.h"
 #include <chrono>
 #include <utility>
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 #include <string_view>
 #include <unordered_set>
 #endif
@@ -27,7 +27,7 @@ namespace
 	entt::entity s_CurrentEntity = entt::null;
 	float s_CurrentDeltaTime = 0.0f;
 	bool s_CurrentEntityDestroyRequested = false;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	GraphSystem::NodeExecuteHook s_NodeExecuteHook = nullptr;
 
 	void NotifyCurrentGraphNode(GraphNodeId node)
@@ -277,7 +277,7 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	const auto key = targetPath.wstring();
 	if (sourcePath) *sourcePath = key;
 	CachedGraph candidate;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	std::error_code timestampError;
 	candidate.LastWriteTime = std::filesystem::last_write_time(targetPath, timestampError);
 #endif
@@ -285,7 +285,7 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	const auto it = m_GraphCache.find(key);
 	if (it != m_GraphCache.end())
 	{
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 		if (!timestampError && it->second.LastWriteTime == candidate.LastWriteTime)
 			return &it->second.Data;
 		m_GraphCache.erase(it);
@@ -311,7 +311,7 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	return success ? &insertedIt->second.Data : nullptr;
 }
 
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 void GraphSystem::PrepareSceneGraphs(const Scene& scene)
 {
 	const auto& world = scene.GetRegistry();
@@ -372,7 +372,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				graphTemplate->RegisterVariableNodes(m_Registry);
 
 				newState.loadedPath = binding.graphFile;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 				newState.executor.SetNodeStepCallback(NotifyCurrentGraphNode);
 #endif
 				const auto diag = newState.executor.Load(*graphTemplate, m_Registry, sourceRegistry);
@@ -414,7 +414,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 					for (GraphNodeId startEntry : runtime->startNodes)
 					{
 						if (s_CurrentEntityDestroyRequested) break;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 						if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, startEntry);
 #endif
 
@@ -462,7 +462,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				for (GraphNodeId updateEntry : runtime->updateNodes)
 				{
 					if (!runtime->isValid || s_CurrentEntityDestroyRequested) break;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 					if (s_NodeExecuteHook) s_NodeExecuteHook(runtime->sourcePath, updateEntry);
 #endif
 
@@ -473,7 +473,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 						{
 							runtime->executor.Tick();
 
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 							// 와이어를 타고 진입하는 노드들도 훅에 통보
 							if (s_NodeExecuteHook)
 							{
@@ -519,7 +519,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 	}
 }
 
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 const GraphExecutor* GraphSystem::GetDebugExecutor(Scene* scene, entt::entity entity)
 {
 	if (!scene || entity == entt::null) return nullptr;
@@ -587,7 +587,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			const bool wasStarted = runtime.hasStarted;
 
 			runtime.executor.Clear();
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 			runtime.executor.SetNodeStepCallback(NotifyCurrentGraphNode);
 #endif
 

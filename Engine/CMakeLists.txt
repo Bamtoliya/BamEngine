@@ -72,6 +72,8 @@ target_compile_definitions(Engine PRIVATE
 
 if(BAMENGINE_WITH_EDITOR)
     target_compile_definitions(Engine PUBLIC BAM_EDITOR=1)
+else()
+    target_compile_definitions(Engine PUBLIC BAM_EDITOR=0)
 endif()
 
 set(_engine_glm_definitions

@@ -42,6 +42,23 @@ END
 
 /*****************************************************************************/
 
+#if BAM_SHIPPING
+#define BAM_LOG(Level, Source, Category, Format, ...)                                      \
+    do                                                                                    \
+    {                                                                                     \
+        if constexpr (::Engine::ELogLevel::Level >= ::Engine::ELogLevel::Warn)            \
+        {                                                                                 \
+            if (::Engine::Logger::IsEnabled(::Engine::ELogLevel::Level))                   \
+            {                                                                             \
+                ::Engine::Logger::Log(::Engine::ELogLevel::Level, Source, Category,         \
+                    std::source_location{}, Format __VA_OPT__(,) __VA_ARGS__);            \
+            }                                                                             \
+        }                                                                                 \
+    } while (false)
+
+#define ENGINE_LOG_TRACE(Format, ...) ((void)0)
+#define ENGINE_LOG_INFO(Format, ...) ((void)0)
+#else
 #define BAM_LOG(Level, Source, Category, Format, ...)                                      \
     do                                                                                    \
     {                                                                                     \
@@ -54,6 +71,8 @@ END
 
 #define ENGINE_LOG_TRACE(Format, ...) BAM_LOG(Trace, "Engine", "General", Format __VA_OPT__(,) __VA_ARGS__)
 #define ENGINE_LOG_INFO(Format, ...) BAM_LOG(Info, "Engine", "General", Format __VA_OPT__(,) __VA_ARGS__)
+#endif
+
 #define ENGINE_LOG_WARN(Format, ...) BAM_LOG(Warn, "Engine", "General", Format __VA_OPT__(,) __VA_ARGS__)
 #define ENGINE_LOG_ERROR(Format, ...) BAM_LOG(Error, "Engine", "General", Format __VA_OPT__(,) __VA_ARGS__)
 #define ENGINE_LOG_FATAL(Format, ...) BAM_LOG(Fatal, "Engine", "General", Format __VA_OPT__(,) __VA_ARGS__)

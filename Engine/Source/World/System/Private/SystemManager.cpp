@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "SystemManager.h"
 #include "Scene.h"
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 #include "Logger.h"
 #include <chrono>
 #include <typeinfo>
@@ -44,7 +44,7 @@ void SystemManager::FixedUpdate(entt::registry& registry, const vector<Scene*>& 
 void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt, uint8 phaseMask)
 {
 	m_UpdatePhaseMask = phaseMask;
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	const bool measure = std::exchange(m_UpdateTimingRequested, false);
 	using Clock = std::chrono::steady_clock;
 #endif
@@ -52,11 +52,11 @@ void SystemManager::Update(entt::registry& registry, const vector<Scene*>& activ
 	{
 		if (!system->IsActive() || !(system->GetExecutionPhases() & phaseMask)) continue;
 
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 		const auto start = measure ? Clock::now() : Clock::time_point{};
 #endif
 		system->OnUpdate(registry, activeScenes, dt);
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 		if (measure)
 		{
 			const double elapsed = std::chrono::duration<double, std::milli>(Clock::now() - start).count();

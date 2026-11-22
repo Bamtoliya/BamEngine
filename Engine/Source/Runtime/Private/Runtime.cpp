@@ -2,7 +2,7 @@
 #include "Runtime.h"
 #include "IBLManager.h"
 #include "Logger.h"
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 #include <chrono>
 #endif
 
@@ -126,17 +126,17 @@ void Runtime::Update(f32 dt, bool updateInput, uint8 phaseMask)
 {
 	if (updateInput) InputManager::Get().Update(dt);
 	auto& systems = SystemManager::Get();
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	const bool measure = systems.IsUpdateTimingRequested();
 	using Clock = std::chrono::steady_clock;
 	const auto audioStart = measure ? Clock::now() : Clock::time_point{};
 #endif
 	AudioManager::Get().Update(dt);
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	const auto scenesStart = measure ? Clock::now() : Clock::time_point{};
 #endif
 	const auto& activeScenes = SceneManager::Get().GetActiveScenes();
-#ifdef BAM_EDITOR
+#if BAM_EDITOR
 	if (measure)
 	{
 		using Milliseconds = std::chrono::duration<double, std::milli>;
