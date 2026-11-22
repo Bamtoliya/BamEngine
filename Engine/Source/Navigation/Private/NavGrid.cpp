@@ -118,6 +118,64 @@ bool NavGrid::ComputeColliderAABB(const ColliderComponent& col, const mat4& worl
 	return false;
 }
 
+bool NavGrid::CalculateSceneBounds(const Scene& scene, BoundingBox& outBounds)
+{
+	const auto& world = scene.GetRegistry();
+	auto colliderView = world.view<ColliderComponent>();
+
+	bool found = false;
+	vec3 minPt(std::numeric_limits<f32>::max());
+	vec3 maxPt(std::numeric_limits<f32>::lowest());
+
+	for (auto entity : colliderView)
+	{
+		if (!IsComponentEnabled<ColliderComponent>(world, entity))
+		{
+			continue;
+		}
+
+		const auto& col = colliderView.get<ColliderComponent>(entity);
+		const auto& settings = col.GetSettings();
+		if (!settings.Enabled || settings.IsTrigger)
+		{
+			continue;
+		}
+
+		if (const auto* flag = world.try_get<FlagComponent>(entity))
+		{
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+			{
+				continue;
+			}
+		}
+
+		mat4 worldMatrix = glm::identity<mat4>();
+		if (const auto* wt = world.try_get<WorldTransformComponent>(entity))
+		{
+			worldMatrix = wt->worldMatrix;
+		}
+		else if (const auto* t = world.try_get<TransformComponent>(entity))
+		{
+			worldMatrix = t->GetLocalMatrix();
+		}
+
+		BoundingBox aabb;
+		if (ComputeColliderAABB(col, worldMatrix, aabb))
+		{
+			minPt = glm::min(minPt, aabb.GetMin());
+			maxPt = glm::max(maxPt, aabb.GetMax());
+			found = true;
+		}
+	}
+
+	if (found)
+	{
+		outBounds = BoundingBox(minPt, maxPt);
+		return true;
+	}
+	return false;
+}
+
 void NavGrid::BakeObstaclesFromScene(const Scene& scene, f32 agentRadius)
 {
 	const auto& world = scene.GetRegistry();

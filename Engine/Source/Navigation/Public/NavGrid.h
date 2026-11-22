@@ -35,6 +35,7 @@ public:
 	[[nodiscard]] const vec3& GetOrigin() const { return m_Origin; }
 
 	void BakeObstaclesFromScene(const Scene& scene, f32 agentRadius = 0.4f);
+	[[nodiscard]] static bool CalculateSceneBounds(const Scene& scene, BoundingBox& outBounds);
 
 	[[nodiscard]] bool FindPath(
 		const vec3& startWorld,
