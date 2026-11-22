@@ -46,6 +46,9 @@ public:
 	void ToggleRealtime() { m_IsRealtime = !m_IsRealtime; }
 	void ToggleSnap() { ToggleGizmoSnap(); } // 기존 호출부 하위 호환
 	void ToggleGrid() { m_Grid.Toggle(); }
+	void ToggleNavGridOverlay() { m_DebugRenderer.ToggleShowNavGridOverlay(); }
+	void BakeSceneNavGrid();
+	bool HasActiveNavGrid() const;
 	void FocusSelectedEntity();
 
 	void SelectSplinePoint(Engine::Scene* scene, entt::entity entity, int index);

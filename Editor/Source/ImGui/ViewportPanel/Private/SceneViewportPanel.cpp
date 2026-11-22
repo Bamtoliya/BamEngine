@@ -36,6 +36,8 @@
 #include "EditorSettings.h"
 #include "PostProcessComponent.h"
 #include "NotificationManager.h"
+#include "NavGrid.h"
+#include "NavigationSystem.h"
 #include <archive/JsonArchive.h>
 #include "PrefabModeManager.h"
 #include "Model.h"
@@ -444,7 +446,10 @@ float SceneViewportPanel::GetCustomOptionsWidth() const
 	return CameraViewportPanel::GetCustomOptionsWidth() + MeasureOptionLabels({
 		LOCAL_CSTR("Viewport.GizmoMenu"), LOCAL_CSTR("Viewport.DebugMenu"), LOCAL_CSTR("PostProcess.MenuTitle"),
 		LOCAL_CSTR("Viewport.RenderPassesMenu"), LOCAL_CSTR("Viewport.Picking") }) +
-		EditorUI::GetIconButtonSize(ICON_FA_CLOCK, true).x + ImGui::GetStyle().ItemSpacing.x;
+		EditorUI::GetIconButtonSize(ICON_FA_CLOCK, true).x +
+		EditorUI::GetIconButtonSize(ICON_FA_MAP, true).x +
+		EditorUI::GetIconButtonSize(ICON_FA_HAMMER, true).x +
+		ImGui::GetStyle().ItemSpacing.x * 3.0f;
 }
 
 void SceneViewportPanel::DrawCustomOptions()
@@ -471,6 +476,21 @@ void SceneViewportPanel::DrawCustomOptions()
 	options.Active = m_IsRealtime;
 	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("Viewport.ToggleRealtime");
 	if (EditorUI::IconButton("Realtime", ICON_FA_CLOCK, "Viewport.RealtimeTooltip", options)) ToggleRealtime();
+
+	EditorUI::IconButtonOptions navOverlayOpt;
+	navOverlayOpt.Compact = true;
+	navOverlayOpt.Active = m_DebugRenderer.GetShowNavGridOverlay();
+	if (EditorUI::IconButton("NavGridOverlay", ICON_FA_MAP, "Show/Hide NavGrid Overlay", navOverlayOpt))
+	{
+		m_DebugRenderer.ToggleShowNavGridOverlay();
+	}
+
+	EditorUI::IconButtonOptions bakeOpt;
+	bakeOpt.Compact = true;
+	if (EditorUI::IconButton("BakeNavGrid", ICON_FA_HAMMER, "Bake NavGrid from Scene Colliders", bakeOpt))
+	{
+		BakeSceneNavGrid();
+	}
 
 	// 일반 씬 뷰포트 헤더바
 	DrawResolutionMenu();
@@ -773,6 +793,13 @@ void SceneViewportPanel::DrawDebugMenu()
 	{
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGrid").c_str(), nullptr, m_Grid.GetVisible());
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
+		ImGui::MenuItem("Show Gameplay Gizmos", nullptr, m_DebugRenderer.GetDrawGameplayGizmosPtr());
+		ImGui::Separator();
+		ImGui::MenuItem("Show NavGrid Overlay", nullptr, m_DebugRenderer.GetShowNavGridOverlayPtr());
+		if (ImGui::MenuItem(ICON_FA_HAMMER " Bake NavGrid (Scene)"))
+		{
+			BakeSceneNavGrid();
+		}
 		ImGui::EndMenu();
 	}
 }
@@ -2591,5 +2618,81 @@ void SceneViewportPanel::RequestProjectionMode(bool perspective)
 	*transform = next;
 	m_CameraController->SyncControlRotationFromTransform();
 	SetPerspective(perspective);
+}
+
+bool SceneViewportPanel::HasActiveNavGrid() const
+{
+	Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene) return false;
+
+	if (Engine::NavigationSystem::GetSceneNavGrid(scene))
+		return true;
+
+	if (const auto* ctxGrid = scene->GetRegistry().ctx().find<std::shared_ptr<Engine::NavGrid>>())
+		return ctxGrid->operator bool();
+
+	return false;
+}
+
+void SceneViewportPanel::BakeSceneNavGrid()
+{
+	Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene)
+	{
+		NotificationManager::Get().AddNotification(
+			"NavGrid", "No active scene found to bake NavGrid.", ELogLevel::Warn, 3.0f);
+		return;
+	}
+
+	BoundingBox sceneBounds;
+	int32 width = 64;
+	int32 height = 64;
+	f32 cellSize = 0.5f;
+	vec3 origin(-16.0f, 0.0f, -16.0f);
+
+	if (Engine::NavGrid::CalculateSceneBounds(*scene, sceneBounds))
+	{
+		constexpr f32 margin = 2.0f;
+		const vec3 minPt = sceneBounds.GetMin() - vec3(margin, 0.0f, margin);
+		const vec3 maxPt = sceneBounds.GetMax() + vec3(margin, 0.0f, margin);
+
+		const f32 spanX = maxPt.x - minPt.x;
+		const f32 spanZ = maxPt.z - minPt.z;
+
+		width = static_cast<int32>(std::ceil(spanX / cellSize));
+		height = static_cast<int32>(std::ceil(spanZ / cellSize));
+
+		width = std::clamp(width, 16, 512);
+		height = std::clamp(height, 16, 512);
+
+		origin = vec3(minPt.x, minPt.y, minPt.z);
+	}
+
+	auto navGrid = std::make_shared<Engine::NavGrid>(width, height, cellSize, origin);
+	navGrid->BakeObstaclesFromScene(*scene, 0.4f);
+
+	Engine::NavigationSystem::SetSceneNavGrid(scene, navGrid);
+
+	// 베이크 완료 시 오버레이 시각화 활성화
+	m_DebugRenderer.SetShowNavGridOverlay(true);
+
+	// 장애물 셀 카운트 집계
+	int32 obstacleCount = 0;
+	for (int32 z = 0; z < height; ++z)
+	{
+		for (int32 x = 0; x < width; ++x)
+		{
+			if (!navGrid->IsWalkable(x, z))
+			{
+				++obstacleCount;
+			}
+		}
+	}
+
+	const std::string msg = "NavGrid baked: " + std::to_string(width) + "x" + std::to_string(height) +
+		" cells (" + std::to_string(obstacleCount) + " obstacles, cell " + std::to_string(cellSize) + "m)";
+
+	NotificationManager::Get().AddNotification(
+		"NavGrid Bake", msg, ELogLevel::Info, 4.0f);
 }
 #pragma endregion
