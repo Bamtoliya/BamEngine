@@ -42,6 +42,10 @@ namespace Engine
         PROPERTY(META("Optional", true))
         std::string RenderPipelineProfilePath;
 
+        // 레이트레이싱 그림자: 0 조명 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+        std::int32_t RaytracedShadowMode = 0;
+
         PROPERTY(META("Optional", true))
         std::string ShaderSourceDirectory = "Engine/Resources/Shader/hlsl";
     };

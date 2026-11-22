@@ -123,10 +123,19 @@ void RenderMetricsWidget::DrawDetails() const
 
     // 하드웨어 기능 지원 (RHICapabilities 멤버 바인딩)
     ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.HardwareCapabilities"));
+    if (!m_Capabilities.AdapterName.empty())
+        MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.GraphicsAdapter", WStrToStr(m_Capabilities.AdapterName)).c_str());
+    if (m_Capabilities.HighestShaderModel != 0)
+        MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.ShaderModel", (m_Capabilities.HighestShaderModel >> 4) & 0xF, m_Capabilities.HighestShaderModel & 0xF).c_str());
     MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.ComputeShader", LOCAL(m_Capabilities.SupportsCompute ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
     MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.IndirectDraw", LOCAL(m_Capabilities.SupportsIndirectDraw ? "Metrics.Supported" : "Metrics.NotSupported")).c_str());
     MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.MeshShader", LOCAL(m_Capabilities.SupportsMeshShaders ? "Metrics.SupportedTier1Plus" : "Metrics.NotSupported")).c_str());
-    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.DXRRaytracing", LOCAL(m_Capabilities.SupportsRaytracing ? "Metrics.SupportedTier1_0Plus" : "Metrics.NotSupported")).c_str());
+    const char* raytracingKey = "Metrics.NotSupported";
+    if (m_Capabilities.SupportsInlineRaytracing)
+        raytracingKey = "Metrics.SupportedTier1_1Inline";
+    else if (m_Capabilities.SupportsRaytracing)
+        raytracingKey = "Metrics.SupportedTier1_0Plus";
+    MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.DXRRaytracing", LOCAL(raytracingKey)).c_str());
     MetricsCardUI::Bullet("%s", LOCAL_FMT("Metrics.DescriptorIndexing", LOCAL(m_Capabilities.SupportsDescriptorIndexing ? "Metrics.SupportedTier3" : "Metrics.Tier1Or2")).c_str());
 }
 

@@ -7,6 +7,11 @@
 #include "LightComponent.h"
 #include "LightManager.h"
 #include "PipelineManager.h"
+#include "RaytracingSceneManager.h"
+#include "RenderTarget.h"
+#include "RHI.h"
+#include "Shader.h"
+#include "PlatformPath.h"
 #include "RHIBuffer.h"
 #include "RHIPipeline.h"
 #include "RenderPassManager.h"
@@ -36,8 +41,10 @@ namespace
 		f32 ShadowAmbientFloor = 0.15f;
 		vec3 SkyZenithColor{ 0.18f, 0.42f, 0.85f };
 		f32 SkyIntensity = 1.0f;
+		uint32 UseRaytracedShadow = 0u; // 1: 첫 그림자 방향광에 레이트레이싱 마스크(t14)를 섀도맵과 min 합성
+		uint32 RaytracedShadowPad[3] = {};
 	};
-	static_assert(sizeof(DeferredLightingPassData) == 512);
+	static_assert(sizeof(DeferredLightingPassData) == 528);
 	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
 	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
 	static_assert(offsetof(DeferredLightingPassData, SunDirection) == 464);
@@ -48,6 +55,22 @@ namespace
 	static_assert(offsetof(DeferredLightingPassData, ShadowAmbientFloor) == 492);
 	static_assert(offsetof(DeferredLightingPassData, SkyZenithColor) == 496);
 	static_assert(offsetof(DeferredLightingPassData, SkyIntensity) == 508);
+	static_assert(offsetof(DeferredLightingPassData, UseRaytracedShadow) == 512);
+
+	// raytracedShadowMaskRTCS.hlsl의 RaytracedShadowParams (b1, space3)
+	struct RaytracedShadowParams
+	{
+		f32 NormalBias = 0.02f;
+		f32 DistanceBiasScale = 0.0005f;
+		f32 RayMaxDistance = 10000.0f;
+		uint32 Pad = 0u;
+	};
+	static_assert(sizeof(RaytracedShadowParams) == 16);
+
+	constexpr const wchar_t* RaytracedShadowShaderKey = L"Resources/Shader/RaytracedShadowMaskRTCS";
+	constexpr const wchar_t* RaytracedShadowShaderFile = L"raytracedShadowMaskRTCS.cso";
+	constexpr Engine::uint32 RaytracedShadowTLASSlot = MAX_MATERIAL_TEXTURE_SLOTS + 13; // t13, space3
+	constexpr Engine::uint32 RaytracedShadowMaskSlot = MAX_MATERIAL_TEXTURE_SLOTS + 14; // t14, space3 (lightingPS)
 }
 
 Engine::DeferredSceneRenderer::~DeferredSceneRenderer()
@@ -60,6 +83,9 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto*& buffer : m_LocalLightBuffer)
 		Safe_Release(buffer);
 	m_LightingPipeline = nullptr;
+	if (!m_RaytracedShadowMaskName.empty() && Engine::RenderTargetManager::IsCreated())
+		Engine::RenderTargetManager::Get().RemoveRenderTarget(m_RaytracedShadowMaskName);
+	m_RaytracedShadowMaskName.clear();
 }
 
 bool Engine::DeferredSceneRenderer::Initialize()
@@ -104,8 +130,18 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		sceneToQuery = Engine::SceneManager::Get().GetCurrentScene();
 	const Engine::SkyAtmosphereData skyData = BuildSkyAtmosphereData(sceneToQuery);
 
+	// 0. 레이트레이싱 그림자 사용 여부. 켜지면 방향광 캐스케이드에서는 TLAS가 맡는 캐스터를 그리지 않는다.
+	// 셰이더를 쓸 수 없으면 캐스터를 빼기 전에 섀도맵으로 되돌린다.
+	auto* lightingPass = rpm.GetRenderPassByID(passes.Lighting);
+	const bool useRaytracedShadow = sceneToQuery && lightingPass && lightingPass->IsEnabled() &&
+		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() &&
+		ShouldUseRaytracedShadow(sceneToQuery, passes.AcceptSceneMeshes) && GetRaytracedShadowPipeline();
+	m_RaytracedShadowActive = useRaytracedShadow;
+
 	// 1. ShadowPass & PointShadowPass 카메라 등록
 	auto* shadowPass = rpm.GetRenderPassByID(passes.DirectionalShadow);
+	if (shadowPass)
+		shadowPass->SetSkipsRaytracedShadowCasters(useRaytracedShadow);
 	if (shadowPass && shadowPass->IsEnabled())
 		renderer.RegisterViewportCamera(shadowPass);
 
@@ -135,9 +171,13 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	}
 
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
-	auto* lightingPass = rpm.GetRenderPassByID(passes.Lighting);
 	if (lightingPass && lightingPass->IsEnabled())
-		SubmitLightingPass(cameraBuffer, sceneToQuery, skyData, passes);
+	{
+		// 레이트레이싱 그림자를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
+		if (useRaytracedShadow)
+			RaytracingSceneManager::Get().RequestScene(sceneToQuery);
+		SubmitLightingPass(cameraBuffer, sceneToQuery, skyData, passes, useRaytracedShadow);
+	}
 }
 
 Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(Engine::Scene* scene)
@@ -213,7 +253,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 }
 
 void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, Scene* targetScene,
-	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes)
+	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow)
 {
 	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
 	Texture* defaultBRDFLUT = nullptr;
@@ -239,7 +279,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this, cameraBuffer, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
-			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes](f32, Engine::RenderPass*) -> Engine::EResult
+			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, useRaytracedShadow](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -368,7 +408,25 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				if (Engine::IsFailure(lightManager.Bind(0)))
 					return Engine::EResult::Fail;
 			}
+			// 7-1. 레이트레이싱 그림자 마스크 (G-Buffer·카메라·광원 버퍼 바인딩을 그대로 사용하는 Compute)
 			DeferredLightingPassData lightingData{};
+			if (useRaytracedShadow)
+			{
+				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, sourceNames[4]);
+				// Compute 파이프라인으로 바뀐 상태를 조명 파이프라인으로 되돌린다(같은 루트 시그니처라 그래픽 바인딩은 유지된다).
+				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
+					return Engine::EResult::Fail;
+				if (shadowMask && Engine::IsSuccess(rhi->BindTextureSampler(shadowMask, sampler, RaytracedShadowMaskSlot)))
+				{
+					lightingData.UseRaytracedShadow = 1u;
+				}
+				else if (!m_RaytracedShadowFailureLogged)
+				{
+					// 섀도맵 캐스케이드에서 TLAS 캐스터를 이미 제외했으므로 이번 프레임에는 해당 그림자가 빠진다.
+					ENGINE_LOG_ERROR("Raytraced shadow mask was not produced; casters handled by raytracing are missing from shadows this frame.");
+					m_RaytracedShadowFailureLogged = true;
+				}
+			}
 			if (lightManager.HasShadowCastingLights())
 				lightingData.Shadow = lightManager.GetShadowData(0u);
 			// 메인 씬만 타일 기반 컬링을 켜고, 독립 프리뷰는 타일 컬링 없이 전체 스튜디오 광원 순회
@@ -435,4 +493,125 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 		},
 		passes.Lighting
 	);
+}
+
+bool Engine::DeferredSceneRenderer::ShouldUseRaytracedShadow(Engine::Scene* scene, bool usesGlobalLights) const
+{
+	// 메인 뷰포트는 LightManager가 모은 활성 씬 전체의 광원을, 독립 프리뷰는 자기 씬의 광원만 사용한다.
+	std::vector<Engine::Scene*> scenes;
+	if (usesGlobalLights && Engine::SceneManager::IsCreated())
+		scenes = Engine::SceneManager::Get().GetActiveScenes();
+	else
+		scenes.push_back(scene);
+
+	for (Engine::Scene* lightScene : scenes)
+	{
+		if (!lightScene) continue;
+		const auto& world = lightScene->GetRegistry();
+		auto view = world.view<const Engine::LightComponent>();
+		for (const auto entity : view)
+		{
+			const auto& light = view.get<const Engine::LightComponent>(entity);
+			if (light.LightType != Engine::ELightType::Directional ||
+				!HasFlag(light.Flags, Engine::ELightFlags::CastShadows) ||
+				!HasFlag(light.Flags, Engine::ELightFlags::UseInDeferredRendering) ||
+				!IsComponentEnabled(world, entity, light) || !light.GetGPULightDesc().has_value())
+				continue;
+			return Engine::ResolveRaytracedShadow(light.RaytracedShadow, m_RaytracedShadowOverrides);
+		}
+	}
+	return false; // 그림자 방향광이 없으면 추적할 대상이 없다.
+}
+
+Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracedShadowPipeline()
+{
+	if (m_RaytracedShadowShaderMissing)
+		return nullptr;
+
+	// DXR 전용 셰이더라 시작 매니페스트·프로필 공용 로드에 기대지 않고 처음 사용할 때 DXIL을 직접 등록한다.
+	auto& resources = Engine::ResourceManager::Get();
+	auto handle = resources.GetResourceHandle<Engine::Shader>(RaytracedShadowShaderKey);
+	if (!handle.Get())
+	{
+		ShaderDesc desc{};
+		desc.Key = RaytracedShadowShaderKey;
+		desc.dxilPath = (PlatformPath::GetEngineResourceRoot() / "Shader" / "bin" / "dxil" / RaytracedShadowShaderFile).wstring();
+		desc.Path = desc.dxilPath;
+		desc.shaderType = EShaderType::Compute;
+		handle = resources.LoadResource<Engine::Shader>(&desc);
+	}
+
+	Engine::Shader* shader = handle.Get();
+	if (!shader || !shader->GetRHIShader())
+	{
+		ENGINE_LOG_ERROR("Raytraced shadow shader is not available: {}", WStrToStr(RaytracedShadowShaderFile));
+		m_RaytracedShadowShaderMissing = true;
+		return nullptr;
+	}
+
+	// 셰이더 핫 리로드로 RHI 셰이더가 바뀌어도 맞는 파이프라인을 쓰도록 매번 캐시에서 조회한다.
+	RHIPipelineDesc desc{};
+	desc.pipelineType = Engine::EPipelineType::Compute;
+	desc.computeShader = shader->GetRHIShader();
+	return Engine::PipelineManager::Get().GetOrCreatePipeline(desc);
+}
+
+Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracedShadowMask(const std::wstring& positionTargetName,
+	Engine::uint32 width, Engine::uint32 height)
+{
+	auto& targets = Engine::RenderTargetManager::Get();
+	const std::wstring name = positionTargetName + L"_RaytracedShadowMask";
+	if (!m_RaytracedShadowMaskName.empty() && m_RaytracedShadowMaskName != name)
+		targets.RemoveRenderTarget(m_RaytracedShadowMaskName);
+	m_RaytracedShadowMaskName = name;
+
+	Engine::RenderTarget* mask = targets.GetRenderTarget(name);
+	if (!mask)
+	{
+		// 가시성 0~1만 담으므로 R8. 렌더 타깃 목록·진단 뷰어에서 볼 수 있도록 RenderTargetManager에 등록한다.
+		Engine::RenderTargetDesc desc{};
+		desc.name = name;
+		desc.textureDesc.width = width;
+		desc.textureDesc.height = height;
+		desc.textureDesc.format = Engine::ETextureFormat::R8_UNORM;
+		desc.textureDesc.dimension = Engine::ETextureDimension::Texture2D;
+		desc.textureDesc.usage = Engine::ETextureUsage::Sampler | Engine::ETextureUsage::ComputeReadWrite;
+		mask = targets.CreateRenderTarget(&desc);
+	}
+	else if (mask->GetWidth() != width || mask->GetHeight() != height)
+	{
+		if (Engine::IsFailure(mask->Resize(width, height)))
+			return nullptr;
+	}
+	return mask && mask->GetTexture() ? mask : nullptr;
+}
+
+Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(Engine::RHI& rhi, Engine::Scene* scene,
+	const std::wstring& positionTargetName)
+{
+	if (!scene || !Engine::RaytracingSceneManager::IsCreated())
+		return nullptr;
+
+	Engine::RHIAccelerationStructure* topLevel = Engine::RaytracingSceneManager::Get().GetTopLevelAS(scene);
+	Engine::RenderTarget* position = Engine::RenderTargetManager::Get().GetRenderTarget(positionTargetName);
+	if (!topLevel || !position || !position->GetTexture())
+		return nullptr;
+
+	const Engine::uint32 width = position->GetWidth();
+	const Engine::uint32 height = position->GetHeight();
+	Engine::RenderTarget* mask = EnsureRaytracedShadowMask(positionTargetName, width, height);
+	Engine::RHIPipeline* pipeline = GetRaytracedShadowPipeline();
+	if (!mask || !pipeline)
+		return nullptr;
+
+	const RaytracedShadowParams params{};
+	if (Engine::IsFailure(rhi.BindPipeline(pipeline)) ||
+		Engine::IsFailure(rhi.BindConstantBuffer(&params, sizeof(params), 3)) ||
+		Engine::IsFailure(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot)) ||
+		Engine::IsFailure(rhi.BindComputeStorageTexture(mask->GetTexture(), 0)) ||
+		Engine::IsFailure(rhi.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u)))
+	{
+		return nullptr;
+	}
+	return mask->GetTexture();
 }

@@ -1,4 +1,5 @@
 ﻿#include "EditorSettingsService.h"
+#include "RaytracedShadowSettings.h"
 
 #include "ImGuiManager.h"
 #include "TimeManager.h"
@@ -616,6 +617,16 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorTargetFPS(std::int32_
 {
     EditorPreferences candidate = m_EditorPreferences;
     candidate.TargetFPS = fps;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetEditorRaytracedShadowMode(std::int32_t mode)
+{
+    if (!Engine::IsValidRaytracedShadowMode(mode))
+        return {};
+
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.RaytracedShadowMode = mode;
     return ApplyAndSavePreferences(candidate);
 }
 

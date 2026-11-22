@@ -69,6 +69,10 @@ EResult Runtime::Initialize(void* arg)
 	lightDesc.RHI = m_Renderer->GetRHI();
 	if (!create(m_LightManager, &lightDesc)) return fail("LightManager");
 
+	RaytracingSceneManagerDesc raytracingDesc = {};
+	raytracingDesc.RHI = m_Renderer->GetRHI();
+	if (!create(m_RaytracingSceneManager, &raytracingDesc)) return fail("RaytracingSceneManager");
+
 	if (!create(m_PickingManager)) return fail("PickingManager");
 
 	return EResult::Success;
@@ -98,6 +102,8 @@ void Runtime::Free()
 	Safe_Destroy(m_ResourceManager);
 	Safe_Destroy(m_AudioManager);
 	// ── 6. 렌더링 인프라 (RHI 리소스) ──
+	// 가속 구조 관리자는 메시 정점·인덱스 버퍼 참조를 보유하므로 RHI보다 먼저 해제한다.
+	Safe_Destroy(m_RaytracingSceneManager);
 	Safe_Destroy(m_LightManager);
 	Safe_Destroy(m_SamplerManager);
 	Safe_Destroy(m_PipelineManager);

@@ -612,6 +612,7 @@
         "PROP_RANGE": "범위",
         "PROP_RATIO": "비율",
         "PROP_RAYCAST_TARGET": "레이캐스트 타깃",
+        "PROP_RAYTRACED_SHADOW": "레이트레이싱 그림자",
         "PROP_REF_RESOLUTION_X": "기준 가상 해상도 X",
         "PROP_REF_RESOLUTION_Y": "기준 가상 해상도 Y",
         "PROP_RENDER": "렌더링",

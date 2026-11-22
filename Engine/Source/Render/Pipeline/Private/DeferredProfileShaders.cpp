@@ -8,6 +8,7 @@ std::vector<Engine::DeferredProfileShader> Engine::GetDeferredProfileShaders(con
 		{ L"FullscreenQuadVS", L"fullscreenQuadVS.cso", Stage::Vertex },
 		{ L"LightingPS", L"lightingPS.cso", Stage::Fragment },
 		{ L"Resources/Shader/tiledLightCullingCS", L"tiledLightCullingCS.cso", Stage::Compute },
+		{ L"Resources/Shader/RaytracedShadowMaskRTCS", L"raytracedShadowMaskRTCS.cso", Stage::Compute, true },
 		{ L"Resources/Shader/GBufferVS", L"gbufferVS.cso", Stage::Vertex },
 		{ L"Resources/Shader/GBufferPS", L"gbufferPS.cso", Stage::Fragment },
 		{ L"Resources/Shader/GBufferSkinningVS", L"gbufferSkinningVS.cso", Stage::Vertex },

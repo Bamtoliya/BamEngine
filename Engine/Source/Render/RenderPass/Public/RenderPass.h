@@ -38,6 +38,9 @@ public:
 	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None; }
 	bool IsEnabled() const { return m_Desc.isEnabled; }
 	bool UsesPointSpriteSampling() const { return m_PointSpriteSampling; }
+	// 방향광 그림자 패스: 레이트레이싱이 차폐를 맡는 캐스터를 캐스케이드에서 제외하는지(스포트 사분면은 그대로 그림)
+	bool SkipsRaytracedShadowCasters() const { return m_SkipsRaytracedShadowCasters; }
+	void SetSkipsRaytracedShadowCasters(bool skip) { m_SkipsRaytracedShadowCasters = skip; }
 #pragma endregion
 
 #pragma region Setter
@@ -115,6 +118,7 @@ private:
 	unordered_map<uint32, vector<uint8>> m_PassConstants;
 	unordered_map<uint32, wstring> m_PassTextures;
 	bool m_PointSpriteSampling = false;
+	bool m_SkipsRaytracedShadowCasters = false;
 #pragma endregion
 };
 END

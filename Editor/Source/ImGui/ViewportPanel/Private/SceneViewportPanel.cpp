@@ -44,6 +44,8 @@
 #include "SplineCurve.h"
 #include "ImGuiManager.h"
 #include "ContentBrowserDragPayload.h"
+#include "RaytracedShadowModeUI.h"
+#include "RHI.h"
 
 #pragma region Helper
 struct LightingPassData
@@ -295,6 +297,8 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 		option.Enabled = enabled;
 		renderPass->SetEnabled(enabled);
 	}
+
+	m_Pipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(state.RaytracedShadowMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -310,6 +314,7 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 			state.RenderPassStates[option.Name] = renderPass->IsEnabled();
 	}
 
+	state.RaytracedShadowMode = static_cast<int32>(m_Pipeline.GetRaytracedShadowMode());
 	return state;
 }
 #pragma endregion
@@ -789,6 +794,28 @@ void SceneViewportPanel::DrawRenderPassMenu()
 					renderPass->SetEnabled(pass.Enabled);
 			}
 		}
+
+		ImGui::Separator();
+		const auto* rhi = Renderer::Get().GetRHI();
+		const bool supportsRaytracing = rhi && rhi->GetCapabilities().SupportsInlineRaytracing;
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.RaytracedShadow").c_str(), supportsRaytracing))
+		{
+			const auto current = m_Pipeline.GetRaytracedShadowMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(RaytracedShadowModeKeys); ++index)
+			{
+				const auto mode = Engine::ToRaytracedShadowMode(index);
+				if (ImGui::MenuItem(LOCAL_LABEL(RaytracedShadowModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetRaytracedShadowMode(mode);
+			}
+			ImGui::Separator();
+			if (m_Pipeline.IsRaytracedShadowActive())
+				ImGui::TextDisabled("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowActive"));
+			else
+				ImGui::TextDisabled("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowInactive"));
+			ImGui::EndMenu();
+		}
+		if (!supportsRaytracing && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowUnsupported"));
 		ImGui::EndMenu();
 	}
 }

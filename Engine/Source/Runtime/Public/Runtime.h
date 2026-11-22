@@ -12,6 +12,7 @@
 #include "PipelineManager.h"
 #include "SamplerManager.h"
 #include "LightManager.h"
+#include "RaytracingSceneManager.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include "PickingManager.h"
@@ -78,6 +79,7 @@ private:
 	PipelineManager* m_PipelineManager = { nullptr };
 	SamplerManager* m_SamplerManager = { nullptr };
 	LightManager* m_LightManager = { nullptr };
+	RaytracingSceneManager* m_RaytracingSceneManager = { nullptr };
 	ResourceManager* m_ResourceManager = { nullptr };
 	SceneManager* m_SceneManager = { nullptr };
 	SystemManager* m_SystemManager = { nullptr };

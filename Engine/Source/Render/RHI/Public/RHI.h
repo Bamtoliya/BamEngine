@@ -28,6 +28,9 @@ class RHIShader;
 class RHISampler;
 class RHITexture;
 class RHIPipeline;
+class RHIAccelerationStructure;
+struct RHIRaytracingGeometryDesc;
+struct RHIRaytracingInstanceDesc;
 
 class RenderPass;
 
@@ -113,6 +116,9 @@ public:
     virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset);
     virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride = 80);
     virtual EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) { return EResult::NotImplemented; }
+    // Compute 셰이더의 쓰기용 2D 텍스처(RWTexture2D, u2~u5 space3)를 slot 0~3에 묶는다.
+    // 텍스처는 ETextureUsage::ComputeReadWrite로 생성해야 하며, 바인딩은 다음 Dispatch 한 번에만 적용된다.
+    virtual EResult BindComputeStorageTexture(RHITexture* texture, uint32 slot) { return EResult::NotImplemented; }
     // 프레임마다 바뀌는 정점 데이터를 링 버퍼에 복사해 slot에 묶는다. 지원하지 않는 백엔드는 NotImplemented.
     virtual EResult BindDynamicVertexBuffer(uint32 slot, const void* data, uint32 vertexCount, uint32 stride) { return EResult::NotImplemented; }
     virtual bool SupportsDynamicVertexBuffers() const { return false; }
@@ -156,7 +162,25 @@ public:
 public:
     virtual EResult Dispatch(uint32 threadGroupCountX, uint32 threadGroupCountY, uint32 threadGroupCountZ) { return EResult::NotImplemented; }
     virtual EResult ResourceBarrierUAV(RHIBuffer* buffer) { return EResult::NotImplemented; }
-#pragma endregion  
+    // 같은 텍스처를 연속된 Dispatch가 쓰고 읽을 때 사이에 기록한다. SRV로 읽기 전환은 바인딩 시 자동으로 처리된다.
+    virtual EResult ResourceBarrierUAV(RHITexture* texture) { return EResult::NotImplemented; }
+#pragma endregion
+
+#pragma region Raytracing
+public:
+    // 정적 삼각형 기하로 BLAS를 만들고 현재 프레임 커맨드 리스트에 빌드를 기록한다.
+    // 프레임 기록 중에만 호출할 수 있으며, 미지원 백엔드·장치는 nullptr를 반환한다.
+    virtual RHIAccelerationStructure* CreateBottomLevelAS(const RHIRaytracingGeometryDesc& desc) { return nullptr; }
+    // 인스턴스 목록으로 TLAS를 다시 빌드한다. topLevel이 nullptr이면 새로 만들고, 용량이 부족하면 내부 버퍼를 키운다.
+    // 인스턴스가 0개여도 유효한 빈 TLAS를 만든다.
+    virtual EResult BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount)
+    {
+        return EResult::NotImplemented;
+    }
+    // TLAS를 Compute 셰이더의 RaytracingAccelerationStructure(pass 텍스처 slot = MAX_MATERIAL_TEXTURE_SLOTS + n)로 묶는다.
+    // 바인딩은 다음 Dispatch 한 번에만 적용된다.
+    virtual EResult BindAccelerationStructure(RHIAccelerationStructure* topLevel, uint32 slot) { return EResult::NotImplemented; }
+#pragma endregion
 
 #pragma region Setter
     virtual EResult SetClearColor(vec4 color) BAM_PURE;

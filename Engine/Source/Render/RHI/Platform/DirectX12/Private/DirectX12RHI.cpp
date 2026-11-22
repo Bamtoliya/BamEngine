@@ -5,10 +5,53 @@
 #include "DirectX12Sampler.h"
 #include "DirectX12Texture.h"
 #include "DirectX12Pipeline.h"
+#include "DirectX12AccelerationStructure.h"
 #include "RenderTargetManager.h"
 #include "RenderPass.h"
 
 #pragma region Constructor&Destructor
+EResult DirectX12RHI::CreateDeviceOnHighPerformanceAdapter()
+{
+    // 내장 GPU와 외장 GPU가 함께 있는 환경에서 기본 어댑터(nullptr)가 내장 GPU로 잡히지 않도록
+    // 고성능 순서로 어댑터를 열거해 장치 생성에 성공한 첫 하드웨어 어댑터를 사용한다.
+    ComPtr<IDXGIFactory6> factory6;
+    if (SUCCEEDED(m_DXGIFactory.As(&factory6)))
+    {
+        ComPtr<IDXGIAdapter1> adapter;
+        for (UINT i = 0; factory6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)) != DXGI_ERROR_NOT_FOUND; ++i)
+        {
+            DXGI_ADAPTER_DESC1 desc = {};
+            if (FAILED(adapter->GetDesc1(&desc)) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0)
+                continue;
+
+            if (SUCCEEDED(D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_Device))))
+            {
+                m_Adapter = adapter;
+                break;
+            }
+        }
+    }
+
+    // IDXGIFactory6을 지원하지 않는 런타임에서는 기존 동작(기본 어댑터)을 유지한다.
+    if (!m_Device)
+    {
+        ENGINE_LOG_WARN("High-performance adapter selection is unavailable. Falling back to the default adapter.");
+        if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_Device))))
+            return EResult::Fail;
+    }
+
+    if (!m_Adapter)
+        m_DXGIFactory->EnumAdapterByLuid(m_Device->GetAdapterLuid(), IID_PPV_ARGS(&m_Adapter));
+
+    DXGI_ADAPTER_DESC1 desc = {};
+    if (m_Adapter && SUCCEEDED(m_Adapter->GetDesc1(&desc)))
+    {
+        m_Capabilities.AdapterName = desc.Description;
+        ENGINE_LOG_INFO("D3D12 device created on adapter: {} ({} MB dedicated VRAM)", WStrToStr(desc.Description), static_cast<uint64>(desc.DedicatedVideoMemory / (1024 * 1024)));
+    }
+    return EResult::Success;
+}
+
 EResult DirectX12RHI::Initialize(void* arg)
 {
     if (!arg)
@@ -36,8 +79,8 @@ EResult DirectX12RHI::Initialize(void* arg)
     if (FAILED(CreateDXGIFactory2(dxgiFactoryFlags, IID_PPV_ARGS(&m_DXGIFactory))))
         return EResult::Fail;
 
-    // 디바이스 생성 (D3D_FEATURE_LEVEL_11_0 이상 하드웨어 지원)
-    if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_Device))))
+    // 디바이스 생성 (D3D_FEATURE_LEVEL_11_0 이상, 고성능 어댑터 우선)
+    if (IsFailure(CreateDeviceOnHighPerformanceAdapter()))
         return EResult::Fail;
 
 #if defined(_DEBUG)
@@ -97,6 +140,10 @@ EResult DirectX12RHI::Initialize(void* arg)
 
     if (FAILED(m_CommandList->Close()))
         return EResult::Fail;
+
+    // DXR 인터페이스는 선택 사항이다. 실패해도 기존 래스터 경로는 계속 사용한다.
+    m_Device.As(&m_Device5);
+    m_CommandList.As(&m_CommandList4);
 
 	// Swap Chain 생성
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
@@ -187,7 +234,7 @@ EResult DirectX12RHI::Initialize(void* arg)
         srvRanges[2].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 2);      // Object SRV: t0, space2
         srvRanges[3].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 3);     // Pass SRV: t0-t15, space3
 
-        CD3DX12_ROOT_PARAMETER rootParameters[11];
+        CD3DX12_ROOT_PARAMETER rootParameters[12];
 
         // [0] Global CBV (b0, space0) — Root Descriptor (직접 GPU 주소 바인딩)
         rootParameters[0].InitAsConstantBufferView(0, 0, D3D12_SHADER_VISIBILITY_ALL);
@@ -223,6 +270,12 @@ EResult DirectX12RHI::Initialize(void* arg)
         rootParameters[9].InitAsUnorderedAccessView(0, 3, D3D12_SHADER_VISIBILITY_ALL);
         // [10] Pass UAV #1 (u1, space3) — Tile Light Index List 버퍼
         rootParameters[10].InitAsUnorderedAccessView(1, 3, D3D12_SHADER_VISIBILITY_ALL);
+
+        // [11] Compute Storage Texture UAV Table (u2-u5, space3) — RWTexture2D 쓰기 대상
+        // 루트 UAV는 버퍼만 가리킬 수 있으므로 텍스처 UAV는 디스크립터 테이블로 묶는다.
+        CD3DX12_DESCRIPTOR_RANGE computeUavRange;
+        computeUavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, UAV_TABLE_SIZE, 2, 3);
+        rootParameters[COMPUTE_UAV_TABLE_ROOT_INDEX].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILITY_ALL);
 
         CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc;
         rootSigDesc.Init(_countof(rootParameters), rootParameters, 0, nullptr,
@@ -458,6 +511,10 @@ EResult DirectX12RHI::BeginFrame()
     m_TextureUploadCursors[m_CurrentBackBufferIndex] = 0;
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
 	m_DynamicHeapCursor = 0;
+	std::fill(std::begin(m_ComputeStorageTextures), std::end(m_ComputeStorageTextures), nullptr);
+	m_ComputeAccelerationStructure = nullptr;
+	m_ComputeAccelerationStructureSlot = UINT32_MAX;
+	m_BuffersTransitionedThisFrame.clear();
 
 	// 다이내믹 CBV 링 버퍼 커서 초기화 (화이트보드 되감기)
 	m_DynamicBufferCursor = 0;
@@ -992,6 +1049,7 @@ EResult DirectX12RHI::UploadBufferData(RHIBuffer* buffer, const void* data, uint
     if (recordInFrame)
     {
         dxBuffer->SetCurrentState(targetState);
+        m_BuffersTransitionedThisFrame.insert(buffer);
         return EResult::Success;
     }
 
@@ -1601,6 +1659,20 @@ EResult DirectX12RHI::BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot)
     m_CommandList->SetComputeRootUnorderedAccessView(rootParamIndex, resource->GetGPUVirtualAddress());
     return EResult::Success;
 }
+EResult DirectX12RHI::BindComputeStorageTexture(RHITexture* texture, uint32 slot)
+{
+    if (!m_CommandList || !m_FrameRecording)
+        return EResult::Fail;
+    if (slot >= UAV_TABLE_SIZE)
+        return EResult::InvalidArgument;
+    if (texture && !HasFlag(texture->GetUsage(), ETextureUsage::ComputeReadWrite))
+    {
+        ENGINE_LOG_ERROR("Compute storage texture requires ETextureUsage::ComputeReadWrite.");
+        return EResult::InvalidArgument;
+    }
+    m_ComputeStorageTextures[slot] = texture;
+    return EResult::Success;
+}
 #pragma endregion
 
 #pragma region RenderPass
@@ -2029,7 +2101,9 @@ EResult DirectX12RHI::ApplyShaderResources()
 
     if (!m_CurrentRenderPass && !isCompute) return EResult::Fail;
 
-    if (m_DynamicHeapCursor > FRAME_SRV_DESCRIPTOR_COUNT - SRV_TABLE_SIZE)
+    // Compute는 SRV 테이블 뒤에 쓰기 텍스처 UAV 테이블(u2-u5)을 이어서 기록한다.
+    const uint32 requiredDescriptors = SRV_TABLE_SIZE + (isCompute ? UAV_TABLE_SIZE : 0);
+    if (m_DynamicHeapCursor > FRAME_SRV_DESCRIPTOR_COUNT - requiredDescriptors)
     {
         ENGINE_LOG_ERROR("Frame SRV table capacity exceeded.");
         return EResult::Fail;
@@ -2045,6 +2119,21 @@ EResult DirectX12RHI::ApplyShaderResources()
     {
         auto& view = views[slot];
         view.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+        // Compute의 TLAS SRV: 리소스 없이 GPU 주소로 지정한다(가속 구조는 상태 전환을 하지 않는다).
+        if (isCompute && m_ComputeAccelerationStructure && slot == m_ComputeAccelerationStructureSlot)
+        {
+            if (m_CurrentTextures[slot])
+            {
+                ENGINE_LOG_ERROR("A texture and an acceleration structure are bound to the same compute SRV slot.");
+                return EResult::InvalidArgument;
+            }
+            view.Format = DXGI_FORMAT_UNKNOWN;
+            view.ViewDimension = D3D12_SRV_DIMENSION_RAYTRACING_ACCELERATION_STRUCTURE;
+            view.RaytracingAccelerationStructure.Location =
+                static_cast<DirectX12AccelerationStructure*>(m_ComputeAccelerationStructure)->GetGPUAddress();
+            continue;
+        }
 
         // Lighting의 t6, space3은 Texture2D가 아니라 ByteAddressBuffer입니다.
         if (isLighting && slot == MAX_MATERIAL_TEXTURE_SLOTS + 6)
@@ -2182,6 +2271,51 @@ EResult DirectX12RHI::ApplyShaderResources()
         samplingTextures[slot] = texture;
     }
 
+    // Compute 쓰기 텍스처(u2-u5, space3) 검사. 빈 슬롯은 유효한 null UAV로 채운다.
+    ID3D12Resource* uavResources[UAV_TABLE_SIZE] = {};
+    DirectX12Texture* storageTextures[UAV_TABLE_SIZE] = {};
+    D3D12_UNORDERED_ACCESS_VIEW_DESC uavViews[UAV_TABLE_SIZE] = {};
+    if (isCompute)
+    {
+        for (uint32 slot = 0; slot < UAV_TABLE_SIZE; ++slot)
+        {
+            auto& uavView = uavViews[slot];
+            uavView.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+            uavView.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+
+            RHITexture* source = m_ComputeStorageTextures[slot];
+            if (!source) continue;
+
+            auto* texture = static_cast<DirectX12Texture*>(source);
+            for (const DirectX12Texture* sampled : samplingTextures)
+            {
+                if (sampled == texture)
+                {
+                    ENGINE_LOG_ERROR("A texture cannot be bound as both a compute SRV and a storage UAV in one dispatch.");
+                    return EResult::InvalidArgument;
+                }
+            }
+
+            auto* resource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
+            if (!resource) return EResult::Fail;
+
+            const auto resourceDesc = resource->GetDesc();
+            const bool isTex2D = resourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE2D
+                && resourceDesc.DepthOrArraySize == 1 && resourceDesc.SampleDesc.Count == 1;
+            if (!isTex2D || IsDepthFormat(ToDXGIFormat(texture->GetFormat())) ||
+                (resourceDesc.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) == 0)
+            {
+                ENGINE_LOG_ERROR("Compute storage texture must be a single-sample color Texture2D created with UAV access.");
+                return EResult::NotImplemented;
+            }
+
+            uavView.Format = resourceDesc.Format;
+            uavView.Texture2D.MipSlice = 0;
+            uavResources[slot] = resource;
+            storageTextures[slot] = texture;
+        }
+    }
+
     // 입력 검사가 끝난 뒤 필요한 상태 전환을 기록합니다.
     for (auto* texture : samplingTextures)
     {
@@ -2205,6 +2339,24 @@ EResult DirectX12RHI::ApplyShaderResources()
         texture->SetCurrentState(targetState);
     }
 
+    for (auto* texture : storageTextures)
+    {
+        if (!texture) continue;
+
+        const D3D12_RESOURCE_STATES before = texture->GetCurrentState();
+        if (before == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) continue;
+
+        D3D12_RESOURCE_BARRIER barrier = {};
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Transition.pResource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
+        barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        barrier.Transition.StateBefore = before;
+        barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+
+        m_CommandList->ResourceBarrier(1, &barrier);
+        texture->SetCurrentState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    }
+
     const uint32 tableIndex = m_SRVTableStartIndices[m_CurrentBackBufferIndex] + m_DynamicHeapCursor;
     const uint32 descriptorSize = m_Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
@@ -2219,8 +2371,15 @@ EResult DirectX12RHI::ApplyShaderResources()
 
     if (isCompute)
     {
+        for (uint32 slot = 0; slot < UAV_TABLE_SIZE; ++slot)
+        {
+            m_Device->CreateUnorderedAccessView(uavResources[slot], nullptr, &uavViews[slot], destination);
+            destination.ptr += descriptorSize;
+        }
+
         m_CommandList->SetComputeRootDescriptorTable(1, m_SrvAllocator->GetGPUHandle(tableIndex));
         m_CommandList->SetComputeRootDescriptorTable(7, m_SrvAllocator->GetGPUHandle(tableIndex + MAX_MATERIAL_TEXTURE_SLOTS));
+        m_CommandList->SetComputeRootDescriptorTable(COMPUTE_UAV_TABLE_ROOT_INDEX, m_SrvAllocator->GetGPUHandle(tableIndex + SRV_TABLE_SIZE));
     }
     else
     {
@@ -2228,7 +2387,7 @@ EResult DirectX12RHI::ApplyShaderResources()
         m_CommandList->SetGraphicsRootDescriptorTable(7, m_SrvAllocator->GetGPUHandle(tableIndex + MAX_MATERIAL_TEXTURE_SLOTS));
     }
 
-    m_DynamicHeapCursor += SRV_TABLE_SIZE;
+    m_DynamicHeapCursor += requiredDescriptors;
 
     return EResult::Success;
 }
@@ -2376,10 +2535,44 @@ EResult DirectX12RHI::Dispatch(uint32 threadGroupCountX, uint32 threadGroupCount
     if (threadGroupCountX == 0 || threadGroupCountY == 0 || threadGroupCountZ == 0)
         return EResult::InvalidArgument;
 
-    if (IsFailure(ApplyShaderResources()))
-        return EResult::Fail;
+    const EResult applyResult = ApplyShaderResources();
+    if (IsSuccess(applyResult))
+        m_CommandList->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
 
-    m_CommandList->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+    // 쓰기 텍스처·TLAS 바인딩은 이번 Dispatch에만 적용한다. 다음 Compute(예: 타일 컬링)가 이전 출력을 다시 쓰지 않게 한다.
+    std::fill(std::begin(m_ComputeStorageTextures), std::end(m_ComputeStorageTextures), nullptr);
+    m_ComputeAccelerationStructure = nullptr;
+    m_ComputeAccelerationStructureSlot = UINT32_MAX;
+    return IsSuccess(applyResult) ? EResult::Success : EResult::Fail;
+}
+RHIAccelerationStructure* DirectX12RHI::CreateBottomLevelAS(const RHIRaytracingGeometryDesc& desc)
+{
+    return DirectX12AccelerationStructure::CreateBottomLevel(this, desc);
+}
+EResult DirectX12RHI::BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount)
+{
+    return DirectX12AccelerationStructure::BuildTopLevel(this, topLevel, instances, instanceCount);
+}
+EResult DirectX12RHI::BindAccelerationStructure(RHIAccelerationStructure* topLevel, uint32 slot)
+{
+    if (!m_CommandList || !m_FrameRecording)
+        return EResult::Fail;
+    if (slot < MAX_MATERIAL_TEXTURE_SLOTS || slot >= SRV_TABLE_SIZE)
+        return EResult::InvalidArgument;
+    if (topLevel && (topLevel->GetType() != ERHIAccelerationStructureType::TopLevel || !topLevel->GetNativeHandle()))
+        return EResult::InvalidArgument;
+    m_ComputeAccelerationStructure = topLevel;
+    m_ComputeAccelerationStructureSlot = topLevel ? slot : UINT32_MAX;
+    return EResult::Success;
+}
+EResult DirectX12RHI::ResourceBarrierUAV(RHITexture* texture)
+{
+    if (!m_CommandList || !m_FrameRecording || !texture)
+        return EResult::Fail;
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+    barrier.UAV.pResource = static_cast<ID3D12Resource*>(texture->GetNativeHandle());
+    m_CommandList->ResourceBarrier(1, &barrier);
     return EResult::Success;
 }
 EResult DirectX12RHI::ResourceBarrierUAV(RHIBuffer* buffer)
@@ -2444,7 +2637,34 @@ void DirectX12RHI::InitializeCapabilities()
     // DXR (Raytracing) 지원 여부
     D3D12_FEATURE_DATA_D3D12_OPTIONS5 options5 = {};
     if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &options5, sizeof(options5))))
+    {
         m_Capabilities.SupportsRaytracing = (options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_0);
+        if (options5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1)
+            m_Capabilities.RaytracingTier = 11;
+        else if (m_Capabilities.SupportsRaytracing)
+            m_Capabilities.RaytracingTier = 10;
+    }
+
+    // 최고 Shader Model: 런타임이 모르는 버전을 요청하면 실패하므로 높은 버전부터 낮춰 가며 조회한다.
+    constexpr D3D_SHADER_MODEL shaderModelCandidates[] = {
+        D3D_SHADER_MODEL_6_7, D3D_SHADER_MODEL_6_6, D3D_SHADER_MODEL_6_5, D3D_SHADER_MODEL_6_4,
+        D3D_SHADER_MODEL_6_3, D3D_SHADER_MODEL_6_2, D3D_SHADER_MODEL_6_1, D3D_SHADER_MODEL_6_0 };
+    for (const D3D_SHADER_MODEL candidate : shaderModelCandidates)
+    {
+        D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { candidate };
+        if (SUCCEEDED(m_Device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel))))
+        {
+            m_Capabilities.HighestShaderModel = static_cast<uint32>(shaderModel.HighestShaderModel);
+            break;
+        }
+    }
+
+    // 인라인 RayQuery: DXR Tier 1.1 + Shader Model 6.5 + 가속 구조 생성·기록용 인터페이스.
+    m_Capabilities.SupportsInlineRaytracing = m_Device5 && m_CommandList4 && m_Capabilities.RaytracingTier >= 11 &&
+        m_Capabilities.HighestShaderModel >= static_cast<uint32>(D3D_SHADER_MODEL_6_5);
+
+    ENGINE_LOG_INFO("D3D12 raytracing tier: {}, highest shader model: 0x{:X}, inline raytracing: {}",
+        m_Capabilities.RaytracingTier, m_Capabilities.HighestShaderModel, m_Capabilities.SupportsInlineRaytracing);
 
     // Bindless (Descriptor Indexing) 지원 여부
     D3D12_FEATURE_DATA_D3D12_OPTIONS options = {};
@@ -2530,31 +2750,20 @@ void DirectX12RHI::EndMetricsFrame(bool renderSucceeded)
 RHIMemoryStats DirectX12RHI::QueryMemoryStats()
 {
     RHIMemoryStats stats{};
-    if (m_DXGIFactory)
+    // 열거 순서의 첫 어댑터가 아니라 실제로 장치를 생성한 어댑터의 메모리를 조회한다.
+    ComPtr<IDXGIAdapter3> adapter3;
+    if (m_Adapter && SUCCEEDED(m_Adapter.As(&adapter3)))
     {
-        ComPtr<IDXGIAdapter1> adapter;
-        for (UINT i = 0; m_DXGIFactory->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+        DXGI_QUERY_VIDEO_MEMORY_INFO localInfo{};
+        if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &localInfo)))
         {
-            DXGI_ADAPTER_DESC1 desc;
-            adapter->GetDesc1(&desc);
-            if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
-
-            ComPtr<IDXGIAdapter3> adapter3;
-            if (SUCCEEDED(adapter.As(&adapter3)))
-            {
-                DXGI_QUERY_VIDEO_MEMORY_INFO localInfo{};
-                if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &localInfo)))
-                {
-                    stats.DedicatedVRAMBudgetMB = localInfo.Budget / (1024 * 1024);
-                    stats.DedicatedVRAMUsageMB = localInfo.CurrentUsage / (1024 * 1024);
-                }
-                DXGI_QUERY_VIDEO_MEMORY_INFO nonLocalInfo{};
-                if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonLocalInfo)))
-                {
-                    stats.SharedSystemMemoryUsageMB = nonLocalInfo.CurrentUsage / (1024 * 1024);
-                }
-                break;
-            }
+            stats.DedicatedVRAMBudgetMB = localInfo.Budget / (1024 * 1024);
+            stats.DedicatedVRAMUsageMB = localInfo.CurrentUsage / (1024 * 1024);
+        }
+        DXGI_QUERY_VIDEO_MEMORY_INFO nonLocalInfo{};
+        if (SUCCEEDED(adapter3->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, &nonLocalInfo)))
+        {
+            stats.SharedSystemMemoryUsageMB = nonLocalInfo.CurrentUsage / (1024 * 1024);
         }
     }
 

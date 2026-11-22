@@ -72,6 +72,10 @@ namespace Engine
 		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_CASCADE_SPLIT_LAMBDA"), RANGE(0.1f, 1.0f, 0.05f))
 		f32 CascadeSplitLambda = 0.75f;
 
+		// 지원 장치에서 첫 그림자 방향광을 레이트레이싱한다. 프로젝트·그래픽·뷰포트 설정이 덮어쓸 수 있다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_RAYTRACED_SHADOW"), EDITCONDITION(LightType == Directional))
+		bool RaytracedShadow = false;
+
 		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_SKY"), DISPLAY_NAME("PROP_GROUND_COLOR"))
 		vec3 GroundColor{ 0.05f, 0.04f, 0.03f };
 

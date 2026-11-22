@@ -93,6 +93,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     if (IsFailure(m_RenderPipeline.Initialize(m_ProjectSettings.RenderPipelineProfilePath,
         rendererDesc.rhiDesc->width, rendererDesc.rhiDesc->height)))
         return Engine::EResult::Fail;
+    m_RenderPipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedShadowMode));
     if (IsFailure(InitializeSystems()))
         return Engine::EResult::Fail;
     if (loadModules)

@@ -71,6 +71,7 @@ public:
 	EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size) override;
 	EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset = 0) override;
 	EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) override;
+	EResult BindComputeStorageTexture(RHITexture* texture, uint32 slot) override;
 	EResult BindDynamicVertexBuffer(uint32 slot, const void* data, uint32 vertexCount, uint32 stride) override;
 	bool SupportsDynamicVertexBuffers() const override { return true; }
 #pragma endregion
@@ -140,6 +141,14 @@ public:
 public:
 	EResult Dispatch(uint32 threadGroupCountX, uint32 threadGroupCountY, uint32 threadGroupCountZ) override;
 	EResult ResourceBarrierUAV(RHIBuffer* buffer) override;
+	EResult ResourceBarrierUAV(RHITexture* texture) override;
+#pragma endregion
+
+#pragma region Raytracing
+public:
+	RHIAccelerationStructure* CreateBottomLevelAS(const RHIRaytracingGeometryDesc& desc) override;
+	EResult BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount) override;
+	EResult BindAccelerationStructure(RHIAccelerationStructure* topLevel, uint32 slot) override;
 #pragma endregion
 
 #pragma region Setter
@@ -156,6 +165,15 @@ public:
 public:
 	ID3D12CommandQueue* GetCommandQueue() const { return m_CommandQueue.Get(); }
 	ID3D12GraphicsCommandList* GetCommandList() const { return m_CommandList.Get(); }
+	// 런타임이 인터페이스를 제공하지 않으면 nullptr를 반환한다.
+	// DXR 사용 가능 여부는 인터페이스 존재가 아니라 GetCapabilities()의 SupportsInlineRaytracing으로 판정한다.
+	ID3D12Device5* GetDevice5() const { return m_Device5.Get(); }
+	ID3D12GraphicsCommandList4* GetCommandList4() const { return m_CommandList4.Get(); }
+	bool IsFrameRecording() const { return m_FrameRecording; }
+	// 버퍼는 커맨드 리스트 제출이 끝나면 COMMON으로 감쇠한다. 추적 상태가 실제 상태와 같은 것은
+	// 이번 프레임 커맨드 리스트에서 전환을 기록한 버퍼뿐이다(현재는 프레임 내 업로드).
+	bool IsBufferStateRecordedThisFrame(const RHIBuffer* buffer) const { return m_BuffersTransitionedThisFrame.contains(buffer); }
+	void MarkBufferStateRecordedThisFrame(const RHIBuffer* buffer) { m_BuffersTransitionedThisFrame.insert(buffer); }
 public:
 	DirectX12DescriptorAllocator* GetRTVAllocator() const { return m_RtvAllocator; }
 	DirectX12DescriptorAllocator* GetDSVAllocator() const { return m_DsvAllocator; }
@@ -163,6 +181,9 @@ public:
 	DirectX12DescriptorAllocator* GetSamplerAllocator() const { return m_SamplerAllocator; }
 public:
 	ID3D12RootSignature* GetGlobalRootSignature() const { return m_GlobalRootSignature.Get(); }
+	// 전역 루트 시그니처 구성이 바뀔 때마다 올린다. PSO 디스크 캐시 키에 섞여 이전 구성의 PSO를 불러오지 않게 한다.
+	// 2: [11] Compute Storage Texture UAV Table(u2-u5, space3) 추가
+	static constexpr uint32 GLOBAL_ROOT_SIGNATURE_LAYOUT_VERSION = 2;
 #pragma endregion
 
 
@@ -177,6 +198,9 @@ private:
 	void InitializeTimestampQueries();
 #pragma endregion
 
+private:
+	EResult CreateDeviceOnHighPerformanceAdapter();
+
 
 
 	
@@ -189,11 +213,14 @@ private:
 
 	//DirectX 12 Core
 	ComPtr<IDXGIFactory4> m_DXGIFactory;
+	ComPtr<IDXGIAdapter1> m_Adapter; // 장치를 생성한 어댑터 (메모리 통계 조회에도 사용)
 	ComPtr<ID3D12Device> m_Device;
+	ComPtr<ID3D12Device5> m_Device5; // DXR 가속 구조 생성용, 미지원 시 nullptr
 
 	ComPtr<ID3D12CommandQueue> m_CommandQueue;
 	ComPtr<ID3D12CommandAllocator> m_CommandAllocators[MAX_SWAPCHAIN_BUFFERS];
 	ComPtr<ID3D12GraphicsCommandList> m_CommandList;
+	ComPtr<ID3D12GraphicsCommandList4> m_CommandList4; // 같은 커맨드 리스트의 DXR 인터페이스, 미지원 시 nullptr
 
 	ComPtr<IDXGISwapChain3> m_SwapChain;
 
@@ -211,6 +238,15 @@ private:
 	vec4 m_ClearColor = { 0.3f, 0.3f, 0.3f, 1.0f };
 
 	static constexpr uint32 SRV_TABLE_SIZE = MAX_TEXTURE_SLOTS;
+	static constexpr uint32 UAV_TABLE_SIZE = MAX_COMPUTE_STORAGE_TEXTURE_SLOTS; // Root Param [11]: u2-u5, space3
+	static constexpr uint32 COMPUTE_UAV_TABLE_ROOT_INDEX = 11;
+	// 다음 Dispatch 한 번에만 적용되는 쓰기 텍스처. Dispatch와 프레임 시작 시 비운다(참조를 보유하지 않음).
+	RHITexture* m_ComputeStorageTextures[UAV_TABLE_SIZE] = {};
+	// 다음 Dispatch 한 번에만 적용되는 TLAS SRV(참조를 보유하지 않음). Dispatch와 프레임 시작 시 비운다.
+	RHIAccelerationStructure* m_ComputeAccelerationStructure = nullptr;
+	uint32 m_ComputeAccelerationStructureSlot = UINT32_MAX;
+	// 이번 프레임 커맨드 리스트에서 상태 전환을 기록한 버퍼(주소 비교만 하며 역참조하지 않는다). BeginFrame에서 비운다.
+	std::unordered_set<const RHIBuffer*> m_BuffersTransitionedThisFrame;
 	static constexpr uint32 FRAME_SRV_DESCRIPTOR_COUNT = SRV_TABLE_SIZE * 1024;
 	uint32 m_SRVTableStartIndices[MAX_SWAPCHAIN_BUFFERS] = {};
 

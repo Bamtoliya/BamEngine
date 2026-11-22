@@ -42,6 +42,9 @@ namespace Editor
             std::int32_t TargetFPS = 0;
         PROPERTY(META("Optional", true))
             bool VSync = true;
+        // 0 프로젝트 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+            std::int32_t RaytracedShadowMode = 0;
         PROPERTY(META("Optional", true))
             std::string CustomFontPath;
         PROPERTY(META("Optional", true))
@@ -134,6 +137,10 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         std::map<std::wstring, bool> RenderPassStates;
+
+        // 0 그래픽 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+        std::int32_t RaytracedShadowMode = 0;
     };
 
     STRUCT()

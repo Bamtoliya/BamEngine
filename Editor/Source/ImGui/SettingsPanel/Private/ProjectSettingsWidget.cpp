@@ -5,6 +5,7 @@
 #include "ImGuiManager.h"
 #include "LocalizationManager.h"
 #include "EditorUI.h"
+#include "RaytracedShadowModeUI.h"
 
 void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
 {
@@ -13,6 +14,7 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftStartupScenePath = project.StartupScenePath;
     m_DraftAssetDirectory = project.AssetDirectory;
     m_DraftShaderSourceDirectory = project.ShaderSourceDirectory;
+    m_DraftRaytracedShadow = project.RaytracedShadowMode;
     m_Dirty = false;
 }
 
@@ -25,6 +27,7 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.StartupScenePath = m_DraftStartupScenePath;
     project.AssetDirectory = m_DraftAssetDirectory;
     project.ShaderSourceDirectory = m_DraftShaderSourceDirectory;
+    project.RaytracedShadowMode = m_DraftRaytracedShadow;
 
     const auto result = settings.SaveProjectSettings(project);
     if (result == EEditorSettingsSaveStatus::Saved)
@@ -32,11 +35,27 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     ImGuiManager::Get().NotifySettingsChange({ result == EEditorSettingsSaveStatus::Saved, result });
 }
 
+void ProjectSettingsWidget::DrawRendering()
+{
+    if (!ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        return;
+
+    if (EditorUI::BeginPropertyTable("##ProjectRaytracingTable"))
+    {
+        EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
+        m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedShadow", m_DraftRaytracedShadow);
+        EditorUI::EndPropertyTable();
+    }
+    ImGui::Spacing();
+}
+
 void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
 {
     ImGui::TextUnformatted(LOCAL_CSTR("Settings.CategoryProjectSettings"));
     ImGui::Separator();
     ImGui::Spacing();
+
+    DrawRendering();
 
     if (!ImGui::CollapsingHeader(LOCAL_CSTR("Settings.ProjectMetadata"), ImGuiTreeNodeFlags_DefaultOpen))
         return;

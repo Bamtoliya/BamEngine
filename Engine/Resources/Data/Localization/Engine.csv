@@ -638,6 +638,7 @@
 ,PROP_RANGE,Range,범위
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
+,PROP_RAYTRACED_SHADOW,Raytraced Shadow,레이트레이싱 그림자
 ,PROP_REF_RESOLUTION_X,Ref Resolution X,기준 가상 해상도 X
 ,PROP_REF_RESOLUTION_Y,Ref Resolution Y,기준 가상 해상도 Y
 ,PROP_RENDER,Render,렌더링

@@ -119,10 +119,17 @@ EShaderType ShaderCompiler::DeduceShaderTypeFromPath(const std::filesystem::path
         return EShaderType::Vertex;
     if (stem.ends_with("PS") || stem.ends_with("_PS"))
         return EShaderType::Fragment;
-    if (stem.ends_with("CS") || stem.ends_with("_CS"))
+    if (stem.ends_with("CS") || stem.ends_with("_CS")) // RTCS도 Compute로 판정된다.
         return EShaderType::Compute;
 
     return EShaderType::Unknown;
+}
+
+bool ShaderCompiler::IsDirectX12OnlyShader(const std::filesystem::path& hlslPath)
+{
+    std::string stem = hlslPath.stem().string();
+    for (char& c : stem) c = static_cast<char>(toupper(c));
+    return stem.ends_with("RTCS");
 }
 
 ShaderCompileResult ShaderCompiler::Compile(
@@ -141,13 +148,19 @@ ShaderCompileResult ShaderCompiler::Compile(
     }
     const std::filesystem::path dxcPath = FindDxcPath();
     const std::string stem = hlslPath.stem().string();
-    // 셰이더 타겟 프로파일 결정
+    const bool directX12Only = IsDirectX12OnlyShader(hlslPath);
+    if (directX12Only && rhiType != ERHIType::DirectX12)
+    {
+        result.ErrorMessage = "DXR shader '" + hlslPath.filename().string() + "' supports only the DirectX12 backend.";
+        return result;
+    }
+    // 셰이더 타겟 프로파일 결정 (RTCS는 RayQuery를 위해 Shader Model 6.5)
     std::string profile;
     switch (shaderType)
     {
     case EShaderType::Vertex: profile = "vs_6_0"; break;
     case EShaderType::Fragment: profile = "ps_6_0"; break;
-    case EShaderType::Compute: profile = "cs_6_0"; break;
+    case EShaderType::Compute: profile = directX12Only ? "cs_6_5" : "cs_6_0"; break;
     default:
         result.ErrorMessage = "Unsupported shader type for: " + hlslPath.string();
         return result;

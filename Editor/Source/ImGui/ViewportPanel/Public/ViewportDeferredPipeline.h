@@ -32,6 +32,11 @@ public:
 	// 3. 매 프레임 렌더링 제출 (뷰포트 Update에서 호출)
 	void Submit(const CameraBuffer& cameraBuffer, Engine::Scene* targetScene = nullptr);
 
+	// 이 뷰포트의 레이트레이싱 그림자 덮어쓰기. 프로젝트·그래픽 설정은 Submit에서 매번 조회한다.
+	void SetRaytracedShadowMode(Engine::ERaytracedShadowMode mode) { m_RaytracedShadowMode = mode; }
+	[[nodiscard]] Engine::ERaytracedShadowMode GetRaytracedShadowMode() const { return m_RaytracedShadowMode; }
+	[[nodiscard]] bool IsRaytracedShadowActive() const { return m_SceneRenderer.IsRaytracedShadowActive(); }
+
 	// 4. 게터 (최종 조명 합성 완료 텍스처 및 주요 패스 정보)
 	[[nodiscard]] const std::wstring& GetFinalColorRTName() const { return m_LightingColorName; }
 	[[nodiscard]] const std::wstring& GetSceneColorCopyRTName() const { return m_SceneColorCopyName; }
@@ -68,6 +73,7 @@ private:
 	uint32 m_Width = 0;
 	uint32 m_Height = 0;
 	bool m_AcceptSceneMeshes = true;
+	Engine::ERaytracedShadowMode m_RaytracedShadowMode = Engine::ERaytracedShadowMode::Inherit;
 
 	// 타깃 목록은 기존 구성에서는 고정 슬롯 순서, 프로필 구성에서는 생성 순서를 따른다.
 	std::vector<std::wstring> m_OwnedRTNames;

@@ -47,6 +47,8 @@ struct LightingPassData
     float ShadowAmbientFloor;
     float3 SkyZenithColor;
     float SkyIntensity;
+    uint UseRaytracedShadow; // 1이면 첫 그림자 방향광에 레이트레이싱 마스크(t14)를 섀도맵과 min으로 합성
+    uint3 _RaytracedShadowPad;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -58,6 +60,8 @@ Texture2D gShadowDepth : register(t5, space3);
 TextureCube gPointShadowDepth : register(t7, space3);
 StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
 StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
+// 레이트레이싱 그림자 가시성(1 = 빛, 0 = 차폐). TLAS에 들어간 정적 불투명 캐스터만 반영한다.
+Texture2D<float> gRaytracedShadowMask : register(t14, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -727,6 +731,9 @@ float4 main(PS_INPUT input) : SV_TARGET
         {
             float3 lightDir = normalize(-light.Direction);
             float mainShadow = CalcShadowFactor(light, worldPosition, normal, input.Position.xy);
+            // 레이트레이싱이 켜지면 섀도맵에는 TLAS 미지원 캐스터(스킨드 등)만 남으므로 두 결과를 합친다.
+            if (gLightingData.UseRaytracedShadow != 0u)
+                mainShadow = min(mainShadow, gRaytracedShadowMask.Load(pixelCoord));
             float contactShadow = CalcContactShadow(worldPosition, normal, lightDir, input.Position.xy);
             // 접촉 그림자를 부드럽게 감쇠(최대 40% 차폐)하여 주 그림자와 자연스럽게 합성
             float rawShadow = min(mainShadow, lerp(0.4f, 1.0f, contactShadow));

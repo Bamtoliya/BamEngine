@@ -270,6 +270,10 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		? Engine::Renderer::Get().GetRHIType()
 		: Engine::ERHIType::DirectX12;
 
+	// DXR 전용(RTCS) 셰이더는 다른 백엔드에서 사용하지 않으므로 공용 헤더 변경에도 재컴파일 오류를 내지 않는다.
+	if (rhiType != Engine::ERHIType::DirectX12 && Engine::ShaderCompiler::IsDirectX12OnlyShader(hlslPath))
+		return;
+
 	const Engine::ShaderCompileResult result = Engine::ShaderCompiler::Compile(
 		hlslPath, shaderType, rhiType, "main", true);
 	if (!result.Success)

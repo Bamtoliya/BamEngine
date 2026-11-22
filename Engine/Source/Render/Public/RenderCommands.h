@@ -35,6 +35,8 @@ struct StaticDrawCommand
 	std::optional<BoundingBox> worldBounds{};
 	std::optional<HeightfieldDrawData> heightfield{};
 	std::shared_ptr<Mesh> ownedMesh;
+	// 레이트레이싱 그림자 TLAS가 차폐를 맡는 캐스터(RaytracingSceneManager::IsShadowCasterSupported)
+	bool raytracedShadowCaster = false;
 };
 
 // 프레임마다 CPU에서 만든 정점으로 그리는 지오메트리 (트레일·리본 등). 정점은 이미 월드 공간이다.

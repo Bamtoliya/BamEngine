@@ -612,6 +612,7 @@
         "PROP_RANGE": "Range",
         "PROP_RATIO": "Ratio",
         "PROP_RAYCAST_TARGET": "Raycast Target",
+        "PROP_RAYTRACED_SHADOW": "Raytraced Shadow",
         "PROP_REF_RESOLUTION_X": "Ref Resolution X",
         "PROP_REF_RESOLUTION_Y": "Ref Resolution Y",
         "PROP_RENDER": "Render",

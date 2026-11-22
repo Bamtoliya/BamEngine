@@ -13,6 +13,11 @@ namespace Client
         EResult Resize(uint32 width, uint32 height);
         void Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect);
         void Free();
+        // 프로젝트 설정의 레이트레이싱 그림자 모드. Client에는 그래픽·뷰포트 덮어쓰기가 없다.
+        void SetRaytracedShadowMode(Engine::ERaytracedShadowMode mode)
+        {
+            m_SceneRenderer.SetRaytracedShadowOverrides({ mode });
+        }
         bool UsesDeferredProfile() const { return m_PresentPass != Engine::INVALID_PASS_ID; }
 
     private:

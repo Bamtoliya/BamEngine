@@ -2,6 +2,7 @@
 #include "RenderTargetManager.h"
 #include "RenderTargetTypes.h"
 #include "RenderPassManager.h"
+#include "EditorSettingsService.h"
 #include <algorithm>
 
 ViewportDeferredPipeline::~ViewportDeferredPipeline()
@@ -257,6 +258,16 @@ EResult ViewportDeferredPipeline::Resize(uint32 width, uint32 height)
 
 void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::Scene* targetScene)
 {
+	Engine::RaytracedShadowOverrides overrides;
+	overrides.Viewport = m_RaytracedShadowMode;
+	if (EditorSettingsService::IsCreated())
+	{
+		const auto& settings = EditorSettingsService::Get();
+		overrides.Project = Engine::ToRaytracedShadowMode(settings.GetProjectSettings().RaytracedShadowMode);
+		overrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().RaytracedShadowMode);
+	}
+	m_SceneRenderer.SetRaytracedShadowOverrides(overrides);
+
 	m_SceneRenderer.Submit(cameraBuffer, targetScene, { m_ShadowPassID, m_PointShadowPassID, m_GeometryPassID,
 		m_LightingPassID, m_ForwardPassID, m_ForwardTransparentPassID, m_LightingInputs, m_PointShadowDepthName, m_AcceptSceneMeshes });
 }

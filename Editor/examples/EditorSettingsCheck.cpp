@@ -180,6 +180,7 @@ namespace
         scene.OrthographicSize = 128.0f;
         scene.CameraSpeed = 200.0f;
         scene.RenderPassStates = { { L"Shadow", false }, { L"Geometry", true } };
+        scene.RaytracedShadowMode = 2;
 
         auto& game = expected.ViewportStates[L"Game View"];
         game.ResolutionMode = 1;
@@ -215,7 +216,8 @@ namespace
         Check(restored.HasCamera && restored.CameraPosition == scene.CameraPosition &&
             restored.CameraRotation == scene.CameraRotation && restored.Perspective == scene.Perspective &&
             restored.FOV == scene.FOV && restored.OrthographicSize == scene.OrthographicSize &&
-            restored.CameraSpeed == scene.CameraSpeed && restored.RenderPassStates == scene.RenderPassStates,
+            restored.CameraSpeed == scene.CameraSpeed && restored.RenderPassStates == scene.RenderPassStates &&
+            restored.RaytracedShadowMode == scene.RaytracedShadowMode,
             "Scene viewport camera or render-pass settings changed.");
 
         const auto& restoredGame = loaded.ViewportStates.at(L"Game View");

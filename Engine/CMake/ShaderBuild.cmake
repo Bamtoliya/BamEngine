@@ -155,6 +155,18 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
             list(APPEND ALL_SHADER_OUTPUTS "${WGSL_OUT}")
         endif()
 
+    elseif(UPPER_NAME MATCHES "RTCS$")
+        # DXR 인라인 RayQuery Compute 셰이더: Shader Model 6.5, DXIL 전용 (SPIR-V·WGSL 미생성)
+        set(DXIL_OUT "${DXIL_OUT_DIR}/${SHADER_NAME_WE}.cso")
+
+        add_custom_command(
+            OUTPUT "${DXIL_OUT}"
+            COMMAND "${DXC_COMPILER}" -D _DX12_=1 -T cs_6_5 -E main -Fo "${DXIL_OUT}" "${SHADER_FILE}"
+            DEPENDS ${_shader_dependencies} "${CMAKE_CURRENT_LIST_FILE}"
+            COMMENT "Compiling ${SHADER_NAME_WE} (DXIL, RT CS)..."
+        )
+        list(APPEND ALL_SHADER_OUTPUTS "${DXIL_OUT}")
+
     elseif(UPPER_NAME MATCHES "CS$" OR UPPER_NAME MATCHES "_CS$")
         set(DXIL_OUT "${DXIL_OUT_DIR}/${SHADER_NAME_WE}.cso")
         set(SPIRV_OUT "${SPIRV_OUT_DIR}/${SHADER_NAME_WE}.spv")
@@ -178,7 +190,7 @@ foreach(SHADER_FILE ${HLSL_SOURCES})
         endif()
 
     else()
-        message(WARNING "Shader '${SHADER_NAME_WE}.hlsl' does not end with 'VS', 'PS', or 'CS'. Skipping compilation.")
+        message(WARNING "Shader '${SHADER_NAME_WE}.hlsl' does not end with 'VS', 'PS', 'CS', or 'RTCS'. Skipping compilation.")
     endif()
 endforeach()
 

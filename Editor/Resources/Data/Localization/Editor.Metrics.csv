@@ -14,6 +14,8 @@ Metrics,ComputeShader,Compute Shader: {},컴퓨트 셰이더: {}
 Metrics,Count,Count,개수
 Metrics,CurrentFrame,Current frame,현재 프레임
 Metrics,DXRRaytracing,DXR Raytracing: {},DXR 레이 트레이싱: {}
+Metrics,GraphicsAdapter,Graphics adapter: {},그래픽 어댑터: {}
+Metrics,ShaderModel,Highest shader model: {}.{},최고 셰이더 모델: {}.{}
 Metrics,DedicatedVRAM,Dedicated VRAM: {} MB,전용 VRAM: {} MB
 Metrics,DescriptorIndexing,Descriptor Indexing (Bindless): {},디스크립터 인덱싱 (바인드리스): {}
 Metrics,DetailMemory,Detailed Resource Memory Inspection,리소스 메모리 상세
@@ -97,6 +99,7 @@ Metrics,Succeeded,Succeeded: {},성공: {}
 Metrics,Supported,Supported,지원
 Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)
 Metrics,SupportedTier1_0Plus,Supported (Tier 1.0+),지원 (Tier 1.0 이상)
+Metrics,SupportedTier1_1Inline,Supported (Tier 1.1 with inline RayQuery),지원 (Tier 1.1 인라인 RayQuery)
 Metrics,SupportedTier3,Supported (Tier 3),지원 (Tier 3)
 Metrics,TaskHint,Outstanding includes running tasks and results not yet collected. Counts cover registered async tasks.,미수집·실행 중에는 실행 중인 작업과 아직 수집하지 않은 결과가 포함됩니다. 등록된 비동기 작업을 집계합니다.
 Metrics,TasksActiveDone,Tasks: %llu Active / %llu Done,작업: %llu개 진행 / %llu개 완료

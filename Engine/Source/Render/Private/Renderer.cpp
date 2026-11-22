@@ -24,6 +24,7 @@
 #include "MaterialInterface.h"
 //Light
 #include "LightManager.h"
+#include "RaytracingSceneManager.h"
 
 #include "SamplerManager.h"
 #include "SceneManager.h"
@@ -117,6 +118,11 @@ EResult Renderer::Render(f32 dt)
 	const EResult lightResult = LightManager::Get().UpdateLightBuffer();
 	if (IsFailure(lightResult))
 		return lightResult;
+
+	// 레이트레이싱 그림자용 BLAS/TLAS를 패스 실행 전에 빌드한다.
+	// 실패한 씬은 GetTopLevelAS가 nullptr를 반환해 기존 섀도맵 경로로 남으므로 프레임은 계속 진행한다.
+	if (RaytracingSceneManager::IsCreated())
+		RaytracingSceneManager::Get().BuildRequestedScenes();
 
 	auto& jobsPerPass = m_ViewportJobsPerPass;
 	for (auto& [passID, jobs] : jobsPerPass)
@@ -305,12 +311,25 @@ EResult Renderer::Render(f32 dt)
 				const auto skinnedIt = m_SkinnedDrawCommands.find(pid);
 				const bool hasStaticCasters = meshIt != m_StaticDrawCommands.end() && !meshIt->second.empty();
 				const bool hasSkinnedCasters = skinnedIt != m_SkinnedDrawCommands.end() && !skinnedIt->second.empty();
+				// 레이트레이싱 그림자가 켜진 방향광 패스: 캐스케이드에는 TLAS가 맡지 않는 캐스터만 그린다.
+				// 같은 아틀라스의 스포트 사분면은 전체 캐스터를 그대로 사용한다.
+				vector<StaticDrawCommand> rasterOnlyCasters;
+				const bool filterCascades = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedShadowCasters();
+				if (filterCascades)
+				{
+					std::copy_if(meshIt->second.begin(), meshIt->second.end(), std::back_inserter(rasterOnlyCasters),
+						[](const StaticDrawCommand& command) { return !command.raytracedShadowCaster; });
+				}
+				bool renderingCascade = false;
 				const auto renderShadowCasters = [&](const CameraBuffer& lightCamera) -> EResult
 				{
-					if (hasStaticCasters)
+					const vector<StaticDrawCommand>* staticCasters = hasStaticCasters ? &meshIt->second : nullptr;
+					if (renderingCascade && filterCascades)
+						staticCasters = &rasterOnlyCasters;
+					if (staticCasters && !staticCasters->empty())
 					{
 						const Frustum frustum = FrustumCuller::ExtractFrustum(lightCamera.viewProjMatrix);
-						const EResult result = RenderMeshes(meshIt->second, pass, &frustum);
+						const EResult result = RenderMeshes(*staticCasters, pass, &frustum);
 						if (IsFailure(result)) return result;
 					}
 					if (hasSkinnedCasters)
@@ -377,7 +396,9 @@ EResult Renderer::Render(f32 dt)
 								return viewportResult;
 							}
 
+							renderingCascade = true;
 							const EResult result = renderShadowCasters(cascadeCam);
+							renderingCascade = false;
 							if (IsFailure(result))
 							{
 								ENGINE_LOG_ERROR("Shadow mesh rendering failed for cascade: {}", c);
@@ -1184,6 +1205,8 @@ void Renderer::ClearFrameQueues()
 	for (auto& [passID, jobs] : m_ViewportJobsPerPass) jobs.clear();
 
 	m_ViewportCameras.clear();
+	if (RaytracingSceneManager::IsCreated())
+		RaytracingSceneManager::Get().ClearRequests();
 }
 
 EResult Renderer::EndFrame()
@@ -1236,6 +1259,8 @@ void Renderer::ClearAllRenderQueues()
 	m_DynamicGeometryDrawCommands.clear();
 	m_UIImageDrawCommands.clear();
 	m_ViewportJobsPerPass.clear();
+	if (RaytracingSceneManager::IsCreated())
+		RaytracingSceneManager::Get().ClearRequests();
 }
 
 void Renderer::ForgetRenderPass(RenderPassID passID)
@@ -1537,6 +1562,16 @@ void Renderer::EnsureDefaultShaders()
 	m_DefaultShadowDepthVS = getOrLoad(L"Resources/Shader/ShadowDepthVS");
 	m_DefaultShadowDepthSkinningVS = getOrLoad(L"Resources/Shader/ShadowDepthSkinningVS");
 	m_DefaultShadowDepthPS = getOrLoad(L"Resources/Shader/ShadowDepthPS");
+}
+Shader* Renderer::GetDefaultShadowDepthVertexShader()
+{
+	EnsureDefaultShaders();
+	return m_DefaultShadowDepthVS.Get();
+}
+Shader* Renderer::GetDefaultShadowDepthPixelShader()
+{
+	EnsureDefaultShaders();
+	return m_DefaultShadowDepthPS.Get();
 }
 Shader* Renderer::ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType)
 {

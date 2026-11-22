@@ -58,6 +58,10 @@ namespace
 				}
 			};
 
+		// 루트 시그니처가 바뀌면 같은 셰이더라도 다른 PSO이므로 키를 분리한다.
+		const uint32 rootSignatureVersion = DirectX12RHI::GLOBAL_ROOT_SIGNATURE_LAYOUT_VERSION;
+		hashCombine(&rootSignatureVersion, sizeof(rootSignatureVersion));
+
 		if (desc.pipelineType == EPipelineType::Compute)
 		{
 			if (desc.computeShader)

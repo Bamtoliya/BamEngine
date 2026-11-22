@@ -37,6 +37,10 @@ public:
     // 파일명 접미사(VS, PS 등)를 통해 셰이더 스테이지 자동 추론
     static EShaderType DeduceShaderTypeFromPath(const std::filesystem::path& hlslPath);
 
+    // 파일명이 RTCS로 끝나는 셰이더는 DXR 인라인 RayQuery를 사용하는 Compute 셰이더다.
+    // cs_6_5로 DXIL만 생성하며 SPIR-V·WGSL 경로는 지원하지 않는다.
+    static bool IsDirectX12OnlyShader(const std::filesystem::path& hlslPath);
+
 private:
     // 산출물이 소스(.hlsl) 및 인클루드 헤더(.hlsli)보다 최신인지 검사합니다.
     static bool IsUpToDate(const std::filesystem::path& hlslPath, const std::filesystem::path& outPath);

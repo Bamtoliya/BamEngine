@@ -5,6 +5,9 @@
 #include "ImGuiManager.h"
 #include "LocalizationManager.h"
 #include "NotificationManager.h"
+#include "RaytracedShadowModeUI.h"
+#include "Renderer.h"
+#include "RHI.h"
 #include "TimeManager.h"
 
 void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
@@ -14,10 +17,12 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftFullscreen = application.IsFullscreen();
     m_DraftTargetFPS = static_cast<std::int32_t>(Engine::TimeManager::Get().GetTargetFPS());
     m_DraftVSync = settings.GetEditorVSync().value_or(settings.GetPreferences().VSync);
+    m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
     m_VSyncDirty = false;
+    m_RaytracedShadowDirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -28,6 +33,14 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_TargetFPSDirty = false;
+    }
+
+    if (m_RaytracedShadowDirty)
+    {
+        const auto result = settings.SetEditorRaytracedShadowMode(m_DraftRaytracedShadow);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_RaytracedShadowDirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -196,6 +209,22 @@ void GraphicSettingsWidget::Draw()
 
         if (vsyncPending)
             ImGui::TextUnformatted(LOCAL_CSTR("GraphicsSettings.VSyncPending"));
+
+        ImGui::Spacing();
+    }
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        const auto* rhi = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHI() : nullptr;
+        const bool supported = rhi && rhi->GetCapabilities().SupportsInlineRaytracing;
+        if (EditorUI::BeginPropertyTable("##GraphicRaytracingTable", tableStyle))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
+            m_RaytracedShadowDirty |= DrawRaytracedShadowModeCombo("###RaytracedShadow", m_DraftRaytracedShadow);
+            EditorUI::EndPropertyTable();
+        }
+        if (!supported)
+            ImGui::TextWrapped("%s", LOCAL_CSTR("GraphicsSettings.RaytracedShadowUnsupported"));
 
         ImGui::Spacing();
     }

@@ -20,9 +20,13 @@ namespace Engine
         bool SupportsCompute = false;
         bool SupportsIndirectDraw = false;
         bool SupportsMeshShaders = false;
-        bool SupportsRaytracing = false;
+        bool SupportsRaytracing = false;          // DXR Tier 1.0 이상
+        bool SupportsInlineRaytracing = false;    // DXR Tier 1.1 이상 + Shader Model 6.5 이상 (RayQuery)
         bool SupportsDescriptorIndexing = false; // Bindless
         uint32 MaxComputeWorkGroupInvocations = 0;
+        uint32 RaytracingTier = 0;                // 10 = Tier 1.0, 11 = Tier 1.1, 0 = 미지원
+        uint32 HighestShaderModel = 0;            // 0x65 = Shader Model 6.5, 0 = 조회 실패
+        std::wstring AdapterName;                 // 장치를 생성한 그래픽 어댑터 이름
     };
 
     // GPU 비디오 메모리(VRAM) 및 디스크립터 통계

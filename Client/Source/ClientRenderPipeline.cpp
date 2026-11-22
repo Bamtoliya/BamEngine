@@ -45,6 +45,8 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
     const auto binRoot = PlatformPath::GetEngineResourceRoot() / "Shader" / "bin";
     for (const auto& shader : GetDeferredProfileShaders(profile))
     {
+        if (shader.DirectX12Only && rhiType != ERHIType::DirectX12)
+            continue;
         const std::wstring stemW = std::filesystem::path(shader.DxilFile).stem().wstring();
         ShaderDesc desc{};
         desc.Key = shader.Key;
