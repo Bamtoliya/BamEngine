@@ -329,16 +329,18 @@ EResult Renderer::Render(f32 dt)
 				if (filterCascades)
 				{
 					const Scene* casterScene = nullptr;
+					RenderPassID casterView = INVALID_PASS_ID;
 					const RaytracedCasterSet* tracedCasters = nullptr;
 					std::copy_if(meshIt->second.begin(), meshIt->second.end(), std::back_inserter(rasterOnlyCasters),
 						[&](const StaticDrawCommand& command)
 						{
 							if (!command.raytracedScene) return true;
-							if (command.raytracedScene != casterScene)
+							if (command.raytracedScene != casterScene || command.raytracedViewID != casterView)
 							{
 								casterScene = command.raytracedScene;
+								casterView = command.raytracedViewID;
 								tracedCasters = RaytracingSceneManager::IsCreated() ?
-									RaytracingSceneManager::Get().GetTopLevelCasters(casterScene) : nullptr;
+									RaytracingSceneManager::Get().GetTopLevelCasters(casterScene, casterView) : nullptr;
 							}
 							return !tracedCasters || !tracedCasters->Contains(command.raytracedEntityIndex);
 						});
@@ -1324,11 +1326,26 @@ void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID pas
 
 #pragma region Viewport Camera Management
 
-void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass, bool acceptsSceneSubmissions)
+void Renderer::RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass, bool acceptsSceneSubmissions, RenderPassID viewID)
 {
 	if (!renderPass) return;
 	ViewportCameraInfo viewport{ cameraBuffer, true, renderPass };
 	viewport.acceptsSceneSubmissions = acceptsSceneSubmissions;
+	if (viewID == INVALID_PASS_ID && renderPass->GetPassType() == ERenderPassType::Geometry)
+		viewID = renderPass->GetID();
+	viewport.viewID = viewID;
+	viewport.lodCamera = cameraBuffer;
+	viewport.hasLODCamera = true;
+	m_ViewportCameras.push_back(viewport);
+}
+
+void Renderer::RegisterShadowPassForView(RenderPass* renderPass, const CameraBuffer& viewCamera, RenderPassID viewID)
+{
+	if (!renderPass) return;
+	ViewportCameraInfo viewport{ {}, false, renderPass };
+	viewport.viewID = viewID;
+	viewport.lodCamera = viewCamera;
+	viewport.hasLODCamera = true;
 	m_ViewportCameras.push_back(viewport);
 }
 

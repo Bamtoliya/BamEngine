@@ -71,7 +71,7 @@ Metrics,Poor,[ POOR ],[ 낮음 ]
 Metrics,RHIDraws,RHI draw commands — heaviest frame in last 0.5 s,RHI 그리기 명령 — 최근 0.5초 중 가장 무거운 프레임
 Metrics,RaytracingFailed,Casters with BLAS failures (using shadow maps): {},BLAS 실패 캐스터 (섀도맵 사용): {}
 Metrics,RaytracingFallback,Casters using shadow maps: {},섀도맵을 쓰는 캐스터: {}
-Metrics,RaytracingInstances,Scenes: {} / instances: {},씬: {} / 인스턴스: {}
+Metrics,RaytracingInstances,TLAS (scene and view): {} / instances: {},TLAS (씬·뷰): {} / 인스턴스: {}
 Metrics,RaytracingMemory,BLAS: {} ({:.2f} MB) / TLAS: {:.2f} MB,BLAS: {} ({:.2f} MB) / TLAS: {:.2f} MB
 Metrics,RaytracingPending,Casters waiting for BLAS (using shadow maps): {},BLAS 대기 캐스터 (섀도맵 사용): {}
 Metrics,RaytracingStats,Raytracing acceleration structures:,레이트레이싱 가속 구조:

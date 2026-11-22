@@ -55,17 +55,18 @@ bool RaytracingSceneManager::IsSupported() const
 	return m_RHI && m_RHI->GetCapabilities().SupportsInlineRaytracing;
 }
 
-void RaytracingSceneManager::RequestScene(Scene* scene)
+void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID)
 {
 	if (!scene || !IsSupported())
 		return;
-	if (std::find(m_RequestedScenes.begin(), m_RequestedScenes.end(), scene) == m_RequestedScenes.end())
-		m_RequestedScenes.push_back(scene);
+	if (!IsSceneRequested(scene, viewID))
+		m_RequestedScenes.push_back({ scene, viewID });
 }
 
-bool RaytracingSceneManager::IsSceneRequested(const Scene* scene) const
+bool RaytracingSceneManager::IsSceneRequested(const Scene* scene, uint32 viewID) const
 {
-	return std::find(m_RequestedScenes.begin(), m_RequestedScenes.end(), scene) != m_RequestedScenes.end();
+	return std::any_of(m_RequestedScenes.begin(), m_RequestedScenes.end(),
+		[scene, viewID](const TopLevelRequest& request) { return request.Source == scene && request.ViewID == viewID; });
 }
 
 EResult RaytracingSceneManager::BuildRequestedScenes()
@@ -74,17 +75,17 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	m_BuildBudget.Reset();
 	Stats stats{};
 
-	for (auto& [scene, entry] : m_TopLevels)
+	for (auto& [key, entry] : m_TopLevels)
 		entry.BuiltThisFrame = false;
 
 	EResult frameResult = EResult::Success;
 	if (IsSupported())
 	{
-		for (Scene* scene : m_RequestedScenes)
+		for (const TopLevelRequest& request : m_RequestedScenes)
 		{
-			TopLevelEntry& entry = m_TopLevels[scene];
+			TopLevelEntry& entry = m_TopLevels[TopLevelKey{ request.Source, request.ViewID }];
 			entry.LastRequestedFrame = m_FrameCounter;
-			const EResult result = BuildScene(*scene, entry, stats);
+			const EResult result = BuildScene(*request.Source, request.ViewID, entry, stats);
 			entry.BuiltThisFrame = IsSuccess(result);
 			if (IsFailure(result))
 			{
@@ -102,11 +103,17 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	{
 		if (m_FrameCounter - it->second.LastRequestedFrame <= TopLevelRetentionFrames)
 		{
-			if (it->second.BuiltThisFrame)
+			// 프레임 제한으로 이번 프레임을 건너뛴 뷰의 값도 합쳐 통계와 로그가 프레임마다 오가지 않게 한다.
+			const TopLevelEntry& entry = it->second;
+			if (entry.AccelerationStructure)
 			{
-				stats.TopLevelBytes += it->second.AccelerationStructure ? it->second.AccelerationStructure->GetResultSizeInBytes() : 0;
-				++stats.SceneCount;
+				stats.TopLevelBytes += entry.AccelerationStructure->GetResultSizeInBytes();
+				++stats.TopLevelCount;
 			}
+			stats.InstanceCount += entry.InstanceCount;
+			stats.UnsupportedCasterCount += entry.UnsupportedCasterCount;
+			stats.PendingCasterCount += entry.PendingCasterCount;
+			stats.FailedCasterCount += entry.FailedCasterCount;
 			++it;
 			continue;
 		}
@@ -135,13 +142,13 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	// 예산을 나눠 쓰는 동안에는 시작과 끝만 기록한다.
 	const bool pending = stats.PendingCasterCount > 0;
 	const bool pendingChanged = pending != (m_LastStats.PendingCasterCount > 0);
-	const bool resultChanged = stats.BottomLevelBuiltThisFrame > 0 || stats.SceneCount != m_LastStats.SceneCount ||
+	const bool resultChanged = stats.BottomLevelBuiltThisFrame > 0 || stats.TopLevelCount != m_LastStats.TopLevelCount ||
 		stats.InstanceCount != m_LastStats.InstanceCount ||
 		stats.UnsupportedCasterCount != m_LastStats.UnsupportedCasterCount || stats.FailedCasterCount != m_LastStats.FailedCasterCount;
 	if (pendingChanged || (!pending && resultChanged))
 	{
-		ENGINE_LOG_INFO("Raytracing AS: {} scene(s), {} instance(s), {} BLAS ({} new, {:.2f} MB), TLAS {:.2f} MB, {} caster(s) left to shadow maps, {} pending, {} failed.",
-			stats.SceneCount, stats.InstanceCount, stats.BottomLevelCount, stats.BottomLevelBuiltThisFrame,
+		ENGINE_LOG_INFO("Raytracing AS: {} TLAS, {} instance(s), {} BLAS ({} new, {:.2f} MB), TLAS {:.2f} MB, {} caster(s) left to shadow maps, {} pending, {} failed.",
+			stats.TopLevelCount, stats.InstanceCount, stats.BottomLevelCount, stats.BottomLevelBuiltThisFrame,
 			static_cast<double>(stats.BottomLevelBytes) / (1024.0 * 1024.0), static_cast<double>(stats.TopLevelBytes) / (1024.0 * 1024.0),
 			stats.UnsupportedCasterCount, stats.PendingCasterCount, stats.FailedCasterCount);
 	}
@@ -150,27 +157,31 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	return frameResult;
 }
 
-RHIAccelerationStructure* RaytracingSceneManager::GetTopLevelAS(const Scene* scene) const
+RHIAccelerationStructure* RaytracingSceneManager::GetTopLevelAS(const Scene* scene, uint32 viewID) const
 {
-	const auto it = m_TopLevels.find(scene);
+	const auto it = m_TopLevels.find(TopLevelKey{ scene, viewID });
 	if (it == m_TopLevels.end() || !it->second.BuiltThisFrame)
 		return nullptr;
 	return it->second.AccelerationStructure;
 }
 
-const RaytracedCasterSet* RaytracingSceneManager::GetTopLevelCasters(const Scene* scene) const
+const RaytracedCasterSet* RaytracingSceneManager::GetTopLevelCasters(const Scene* scene, uint32 viewID) const
 {
-	const auto it = m_TopLevels.find(scene);
+	const auto it = m_TopLevels.find(TopLevelKey{ scene, viewID });
 	if (it == m_TopLevels.end() || !it->second.BuiltThisFrame || !it->second.AccelerationStructure)
 		return nullptr;
 	return &it->second.Casters;
 }
 
-EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, Stats& stats)
+EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, TopLevelEntry& entry, Stats& stats)
 {
 	auto& world = scene.GetRegistry();
 	m_InstanceScratch.clear();
 	entry.Casters.Begin();
+	entry.InstanceCount = 0;
+	entry.UnsupportedCasterCount = 0;
+	entry.PendingCasterCount = 0;
+	entry.FailedCasterCount = 0;
 
 	auto view = world.view<StaticMeshRendererComponent, WorldTransformComponent, FlagComponent>();
 	for (auto [entity, meshRenderer, worldTransform, flag] : view.each())
@@ -188,22 +199,23 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, S
 		// 스플라인 배치·변형 메시는 프레임마다 형상이 달라질 수 있어 섀도맵에 맡긴다.
 		if (TryGetEnabledComponent<SplineMeshComponent>(world, entity))
 		{
-			++stats.UnsupportedCasterCount;
+			++entry.UnsupportedCasterCount;
 			continue;
 		}
 
-		// 주 뷰포트(GBuffer)가 고른 LOD와 같은 형상으로 차폐해 자기 그림자 오차를 막는다.
+		// 이 뷰의 GBuffer가 고른 LOD와 같은 형상으로 차폐해 자기 그림자 오차를 막는다.
 		if (const auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(world, entity))
 		{
-			if (lodGroup->currentLODIndex == 2 && lodGroup->lod2Mesh.Get())
+			const int32 lod = lodGroup->viewLODs.Get(viewID);
+			if (lod == 2 && lodGroup->lod2Mesh.Get())
 				mesh = lodGroup->lod2Mesh.Get();
-			else if (lodGroup->currentLODIndex == 1 && lodGroup->lod1Mesh.Get())
+			else if (lod == 1 && lodGroup->lod1Mesh.Get())
 				mesh = lodGroup->lod1Mesh.Get();
 		}
 
 		if (!IsShadowCasterSupported(mesh, material))
 		{
-			++stats.UnsupportedCasterCount;
+			++entry.UnsupportedCasterCount;
 			continue;
 		}
 
@@ -212,7 +224,7 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, S
 		const EBottomLevelState state = GetOrBuildBottomLevel(*mesh, stats, bottomLevel);
 		if (state != EBottomLevelState::Ready)
 		{
-			++(state == EBottomLevelState::Pending ? stats.PendingCasterCount : stats.FailedCasterCount);
+			++(state == EBottomLevelState::Pending ? entry.PendingCasterCount : entry.FailedCasterCount);
 			continue;
 		}
 
@@ -232,13 +244,13 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, TopLevelEntry& entry, S
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
 			continue;
 		if (skinnedRenderer.castShadow)
-			++stats.UnsupportedCasterCount;
+			++entry.UnsupportedCasterCount;
 	}
 
 	const EResult result = m_RHI->BuildTopLevelAS(entry.AccelerationStructure, m_InstanceScratch.data(),
 		static_cast<uint32>(m_InstanceScratch.size()));
 	if (IsSuccess(result))
-		stats.InstanceCount += static_cast<uint32>(m_InstanceScratch.size());
+		entry.InstanceCount = static_cast<uint32>(m_InstanceScratch.size());
 	return result;
 }
 #pragma endregion

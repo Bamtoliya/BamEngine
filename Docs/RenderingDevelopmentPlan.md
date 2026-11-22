@@ -44,7 +44,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
   - **텍스처 밉맵 상태 (2026-11-08 정적 반영):** `stb_image_resize2` 기반 CPU 밉맵 체인 생성, `DirectX12RHI` 다중 서브리소스 업로드 및 `TextureMipmapCheck` 테스트가 추가되었다(S2-D 1차 반영). 오프라인 BC7/DDS 텍스처 베이킹은 후속 범위이며, 실제 GPU 앨리어싱·프레임 비용 비교는 실측 확인이 필요하다.
 - **S3 (정적 메시 인스턴싱, 다중 패스 독립 LOD 및 GPU 스키닝 제출 — 구현 및 배칭 실측 완료)**:
   - `InstanceData`(`worldMatrix`, `normalMatrix`, `pickingID`), `LODGroupComponent`가 추가되었다.
-  - `MeshRenderSystem::OnSubmit()`에서 `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`) 기준으로 독립적인 화면 덮개 비율(Screen Coverage) + 히스테리시스 LOD를 평가·제출하며, 주 뷰포트(`isPrimaryGeometry`)일 때만 `lodGroup->currentLODIndex`를 갱신하여 보조 패스로 인한 LOD 상태 오염을 차단했다.
+  - `MeshRenderSystem::OnSubmit()`에서 `PassTarget` 구조체를 통해 활성 뷰포트/패스별 고유 카메라(위치, `projY`) 기준으로 독립적인 화면 덮개 비율(Screen Coverage) + 히스테리시스 LOD를 평가·제출하며, 뷰마다 LOD 상태를 따로 두고 같은 뷰의 그림자 패스도 그 LOD를 쓴다(2026-11-22, 거리는 경계 상자 중심 기준).
   - `Renderer::RenderMeshes()`가 `BindInstanceBuffer()` 및 인덱스/비인덱스 여부에 따라 `DrawIndexedInstanced()` / `DrawInstanced()` 배칭 드로우를 수행하며, 인덱스 31만 개 추가 시에도 드로우콜(56 -> 57회)이 유지됨을 실측 검증했다.
   - `SkinnedMeshRendererComponent`와 `AnimatorComponent::finalBoneMatrices`를 연결한 GPU 스키닝 구조화 버퍼 제출(`SubmitSkinned` / `RenderSkinnedMeshes`)도 구축되었다.
 - **S4 (Compute 기반 및 Tiled Light Culling — 구현 및 실측 검증 완료)**:
@@ -290,7 +290,7 @@ IBL처럼 비교적 독립적인 화질 개선은 측정·바인딩 기반이 �
 **그림자 1차 상태 (2026-11-22):** 첫 그림자 방향광의 하드 섀도를 코드에 반영했다. 반사, 소프트 섀도와 디노이징은 미구현이다. [구현 기록](ImplementationLog.md)
 
 - **경로 선택.** 차폐 여부만 필요하므로 셰이더 테이블과 히트 그룹이 필요한 DXR 파이프라인 대신 Compute 인라인 RayQuery(Tier 1.1, SM 6.5)를 쓴다. 마스크를 별도 텍스처로 만들어 조명과 분리해 보고 잴 수 있게 했다.
-- **가속 구조.** 메시별 BLAS를 캐시하고, 렌더되는 씬마다 TLAS를 매 프레임 다시 빌드한다. LOD는 주 뷰포트의 `currentLODIndex`를 따른다. 새 BLAS는 프레임당 16개 또는 삼각형 100만 개까지 빌드한다(측정 전 시작값).
+- **가속 구조.** 메시별 BLAS를 캐시하고, 렌더되는 씬과 뷰의 조합마다 TLAS를 매 프레임 다시 빌드한다. LOD는 그 뷰의 GBuffer가 고른 LOD를 따른다. 새 BLAS는 프레임당 16개 또는 삼각형 100만 개까지 빌드한다(측정 전 시작값).
 - **미지원 형상.** 스킨드·동적·스플라인 메시, 지형, 불투명이 아닌 재질(Masked 포함, 섀도맵이 알파 기준값을 적용), 엔진 기본이 아닌 그림자 셰이더를 쓰는 재질은 기존 섀도맵이 담당한다. 최종 값은 `min(RT 마스크, 섀도맵)`이다. 스포트·점광원은 섀도맵만 쓴다.
 - **대기와 실패.** 이번 프레임 TLAS에 들어간 캐스터만 방향광 캐스케이드에서 제외한다. BLAS 대기·실패 캐스터와 TLAS 빌드에 실패한 씬은 섀도맵이 담당한다.
 - **사용 여부.** 조명(기본 꺼짐) → 프로젝트 → 그래픽 → 뷰포트 순서로 뒤의 설정이 앞을 덮어쓴다. Client는 조명과 프로젝트 설정만 쓴다.

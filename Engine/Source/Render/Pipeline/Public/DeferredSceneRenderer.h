@@ -49,7 +49,7 @@ private:
 
 	// 레이트레이싱 그림자 마스크를 G-Buffer 크기로 계산한다. 성공하면 마스크 텍스처를 반환한다.
 	// 조명 파이프라인 대신 Compute 파이프라인을 바인딩하므로 호출 후 조명 파이프라인을 다시 바인딩해야 한다.
-	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, const std::wstring& positionTargetName);
+	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName);
 	class RenderTarget* EnsureRaytracedShadowMask(const std::wstring& positionTargetName, uint32 width, uint32 height);
 	RHIPipeline* GetRaytracedShadowPipeline();
 

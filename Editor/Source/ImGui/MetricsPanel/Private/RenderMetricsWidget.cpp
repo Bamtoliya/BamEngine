@@ -135,14 +135,14 @@ void RenderMetricsWidget::DrawDetails() const
     }
     ImGui::Text("%s", LOCAL_FMT("Metrics.AllocatedDescriptors", mem.AllocatedDescriptors).c_str());
 
-    if (Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().GetLastStats().SceneCount > 0)
+    if (Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().GetLastStats().TopLevelCount > 0)
     {
         const auto& raytracing = Engine::RaytracingSceneManager::Get().GetLastStats();
         constexpr double bytesPerMB = 1024.0 * 1024.0;
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.RaytracingStats"));
-        ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingInstances", raytracing.SceneCount, raytracing.InstanceCount).c_str());
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingInstances", raytracing.TopLevelCount, raytracing.InstanceCount).c_str());
         ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingMemory", raytracing.BottomLevelCount,
             static_cast<double>(raytracing.BottomLevelBytes) / bytesPerMB, static_cast<double>(raytracing.TopLevelBytes) / bytesPerMB).c_str());
         ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingFallback", raytracing.UnsupportedCasterCount).c_str());

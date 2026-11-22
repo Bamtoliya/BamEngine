@@ -38,6 +38,7 @@ struct StaticDrawCommand
 	// TLAS를 요청한 씬의 그림자 캐스터일 때만 설정한다. 이번 프레임 TLAS에 들어갔는지는 렌더 시점에
 	// RaytracingSceneManager::GetTopLevelCasters로 확인한다.
 	const class Scene* raytracedScene = { nullptr };
+	uint32 raytracedViewID = 0;
 	uint32 raytracedEntityIndex = 0;
 };
 

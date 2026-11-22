@@ -125,11 +125,14 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
     struct PassTarget
     {
         RenderPass* pass = nullptr;
+        RenderPassID viewID = INVALID_PASS_ID;
         vec3 cameraPos = vec3(0.0f);
         float projY = 1.0f;
-        bool isPrimaryGeometry = false;
+        bool hasLODCamera = false;
+        size_t viewIndex = SIZE_MAX; // views의 인덱스. 뷰에 속하지 않는 패스는 SIZE_MAX
     };
     vector<PassTarget> targets;
+    vector<RenderPassID> views;
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
@@ -152,14 +155,25 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         {
             PassTarget target;
             target.pass = pass;
-            target.cameraPos = viewport.cameraBuffer.cameraPosition;
-            target.projY = glm::max(std::abs(viewport.cameraBuffer.projMatrix[1][1]), 0.1f);
-            target.isPrimaryGeometry = (passType == ERenderPassType::Geometry);
+            target.hasLODCamera = viewport.hasLODCamera;
+            if (viewport.hasLODCamera)
+            {
+                target.cameraPos = viewport.lodCamera.cameraPosition;
+                target.projY = glm::max(std::abs(viewport.lodCamera.projMatrix[1][1]), 0.1f);
+                target.viewID = viewport.viewID;
+            }
+            if (target.viewID != INVALID_PASS_ID)
+            {
+                const auto found = std::find(views.begin(), views.end(), target.viewID);
+                target.viewIndex = static_cast<size_t>(found - views.begin());
+                if (found == views.end()) views.push_back(target.viewID);
+            }
             targets.push_back(target);
         }
     }
 
     if (targets.empty()) return;
+    vector<int32> viewLODs(views.size(), -1);
 
     // 2. 씬 엔티티 순회 및 패스별 독립 LOD 메시 제출
     for (Scene* scene : activeScenes)
@@ -168,7 +182,11 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
         auto& sceneWorld = scene->GetRegistry();
         // TLAS를 빌드할 씬의 캐스터만 섀도맵 제외 후보로 표시한다. 함께 활성화된 다른 씬은 섀도맵에 남는다.
-        const bool sceneRaytraced = RaytracingSceneManager::IsCreated() && RaytracingSceneManager::Get().IsSceneRequested(scene);
+        const auto isRaytraced = [scene](RenderPassID viewID)
+            {
+                return viewID != INVALID_PASS_ID && RaytracingSceneManager::IsCreated() &&
+                    RaytracingSceneManager::Get().IsSceneRequested(scene, viewID);
+            };
         SplineMeshDeformCache::Prune(sceneWorld);
         auto& splineMeshes = sceneWorld.ctx().emplace<SplineMeshSceneCache>();
 
@@ -274,6 +292,42 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             auto* lodGroup = TryGetEnabledComponent<LODGroupComponent>(scene->GetRegistry(), entity);
             const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<StaticMeshRendererComponent>(scene, entity);
 
+            // 정점에 배치가 구워진 메시도 올바르게 판정하도록 엔티티 위치가 아니라 경계 상자 중심에서 거리를 잰다.
+            vec3 lodCenter(0.0f);
+            float lodRadius = 0.0f;
+            LODThresholds lodThresholds;
+            if (lodGroup)
+            {
+                const mat4& worldMatrix = worldTransform.worldMatrix;
+                const vec3 boundsMin = baseMesh->GetMin();
+                const vec3 boundsMax = baseMesh->GetMax();
+                const float maxScale = glm::max(glm::length(vec3(worldMatrix[0])),
+                    glm::max(glm::length(vec3(worldMatrix[1])), glm::length(vec3(worldMatrix[2]))));
+                lodCenter = vec3(worldMatrix * vec4((boundsMin + boundsMax) * 0.5f, 1.0f));
+                lodRadius = glm::length(boundsMax - boundsMin) * 0.5f * maxScale;
+                lodThresholds.LOD1Coverage = lodGroup->lod1ScreenCoverage;
+                lodThresholds.LOD2Coverage = lodGroup->lod2ScreenCoverage;
+                lodThresholds.HysteresisMargin = lodGroup->hysteresisMargin;
+                lodThresholds.HasLOD1 = lodGroup->lod1Mesh.Get() != nullptr;
+                lodThresholds.HasLOD2 = lodGroup->lod2Mesh.Get() != nullptr;
+                std::fill(viewLODs.begin(), viewLODs.end(), -1);
+            }
+            // 같은 뷰의 GBuffer·포워드·그림자 패스와 TLAS가 같은 LOD를 쓰도록 뷰마다 한 번만 고른다.
+            const auto selectLOD = [&](const PassTarget& target) -> int32
+                {
+                    if (!target.hasLODCamera) return 0;
+                    const float coverage = ComputeScreenCoverage(lodRadius, target.projY, glm::distance(target.cameraPos, lodCenter));
+                    if (target.viewIndex >= viewLODs.size())
+                        return SelectLODIndex(coverage, 0, lodThresholds);
+                    int32& selected = viewLODs[target.viewIndex];
+                    if (selected < 0)
+                    {
+                        selected = SelectLODIndex(coverage, lodGroup->viewLODs.Get(target.viewID), lodThresholds);
+                        lodGroup->viewLODs.Set(target.viewID, selected);
+                    }
+                    return selected;
+                };
+
             for (const auto& target : targets)
             {
                 if (target.pass->GetPassType() == ERenderPassType::Shadow && !meshRenderer.castShadow)
@@ -284,37 +338,11 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
                 Mesh* activeMesh = baseMesh;
 
-                // LODGroupComponent가 있을 경우 해당 패스 카메라 시점 기준으로 독립 LOD 평가
                 if (lodGroup)
                 {
-                    const vec3 objectPos = vec3(worldTransform.worldMatrix[3]);
-                    const float distance = glm::max(glm::distance(target.cameraPos, objectPos), 0.001f);
-                    const float maxScale = glm::max(glm::length(vec3(worldTransform.worldMatrix[0])),
-                        glm::max(glm::length(vec3(worldTransform.worldMatrix[1])), glm::length(vec3(worldTransform.worldMatrix[2]))));
-                    const float localRadius = glm::length(baseMesh->GetMin() - baseMesh->GetMax()) * 0.5f;
-                    const float worldRadius = glm::max(localRadius * maxScale, 0.01f);
-                    const float coverage = glm::clamp((worldRadius * target.projY) / distance, 0.0f, 1.0f);
-                    const float margin = lodGroup->hysteresisMargin;
-                    const int32 current = lodGroup->currentLODIndex;
-
-                    float lod2Thresh = lodGroup->lod2ScreenCoverage;
-                    if (current == 2) lod2Thresh += margin;
-                    float lod1Thresh = lodGroup->lod1ScreenCoverage;
-                    if (current == 1) lod1Thresh += margin;
-
-                    int32 targetLOD = 0;
-                    if (lodGroup->lod2Mesh.Get() && coverage <= lod2Thresh)
-                        targetLOD = 2;
-                    else if (lodGroup->lod1Mesh.Get() && coverage <= lod1Thresh)
-                        targetLOD = 1;
-
-                    // 주 에디터 메인 카메라에서만 컴포넌트의 영속 관찰 상태 갱신
-                    if (target.isPrimaryGeometry) lodGroup->currentLODIndex = targetLOD;
-
-                    if (targetLOD == 2 && lodGroup->lod2Mesh.Get())
-                        activeMesh = lodGroup->lod2Mesh.Get();
-                    else if (targetLOD == 1 && lodGroup->lod1Mesh.Get())
-                        activeMesh = lodGroup->lod1Mesh.Get();
+                    const int32 lod = selectLOD(target);
+                    if (lod == 2) activeMesh = lodGroup->lod2Mesh.Get();
+                    else if (lod == 1) activeMesh = lodGroup->lod1Mesh.Get();
                 }
 
                 StaticDrawCommand command;
@@ -331,9 +359,10 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 }
 
                 command.pickingId = pickingId;
-                if (sceneRaytraced && target.pass->GetPassType() == ERenderPassType::Shadow)
+                if (target.pass->GetPassType() == ERenderPassType::Shadow && isRaytraced(target.viewID))
                 {
                     command.raytracedScene = scene;
+                    command.raytracedViewID = target.viewID;
                     command.raytracedEntityIndex = static_cast<uint32>(entt::to_entity(entity));
                 }
                 renderer.SubmitStatic(command, target.pass->GetID());

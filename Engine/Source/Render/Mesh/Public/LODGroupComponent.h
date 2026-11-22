@@ -2,6 +2,7 @@
 
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
+#include "LODSelection.h"
 
 namespace Engine
 {
@@ -27,7 +28,7 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_HYSTERESIS_MARGIN"), RANGE(0.005f, 0.1f, 0.005f))
 		float hysteresisMargin = 0.02f; // 경계 진동 방지 마진 (2%)
 
-		// 런타임 상태 (0: 기본 LOD 0, 1: LOD 1, 2: LOD 2)
-		int32 currentLODIndex = 0;
+		// 런타임 상태: 뷰별로 마지막에 고른 LOD (0: 기본, 1: LOD 1, 2: LOD 2)
+		ViewLODState viewLODs;
 	};
 }

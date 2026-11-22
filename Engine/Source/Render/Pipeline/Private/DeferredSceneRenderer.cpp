@@ -143,23 +143,23 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	if (shadowPass)
 		shadowPass->SetSkipsRaytracedShadowCasters(useRaytracedShadow);
 	if (shadowPass && shadowPass->IsEnabled())
-		renderer.RegisterViewportCamera(shadowPass);
+		renderer.RegisterShadowPassForView(shadowPass, cameraBuffer, passes.Geometry);
 
 	auto* pointShadowPass = rpm.GetRenderPassByID(passes.PointShadow);
 	if (pointShadowPass && pointShadowPass->IsEnabled())
-		renderer.RegisterViewportCamera(pointShadowPass);
+		renderer.RegisterShadowPassForView(pointShadowPass, cameraBuffer, passes.Geometry);
 
 	// 2. GeometryPass 카메라 등록 (씬 메쉬들이 GBuffer에 렌더링됨)
 	auto* geomPass = rpm.GetRenderPassByID(passes.Geometry);
 	if (geomPass && geomPass->IsEnabled())
-		renderer.RegisterViewportCamera(cameraBuffer, geomPass, passes.AcceptSceneMeshes);
+		renderer.RegisterViewportCamera(cameraBuffer, geomPass, passes.AcceptSceneMeshes, passes.Geometry);
 
 	// 3. ForwardPass & ForwardTransparentPass 카메라 등록 (스카이 데이터 상수버퍼 slot 3 주입)
 	auto* forwardPass = rpm.GetRenderPassByID(passes.ForwardOpaque);
 	if (forwardPass && forwardPass->IsEnabled())
 	{
 		forwardPass->SetPassConstantStruct(3, skyData);
-		renderer.RegisterViewportCamera(cameraBuffer, forwardPass, passes.AcceptSceneMeshes);
+		renderer.RegisterViewportCamera(cameraBuffer, forwardPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
 
 	auto* forwardTransPass = rpm.GetRenderPassByID(passes.ForwardTransparent);
@@ -167,7 +167,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	{
 		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 1, passes.LightingInputs[1]);
 		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, passes.LightingInputs[4]);
-		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass, passes.AcceptSceneMeshes);
+		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
 
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
@@ -175,7 +175,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	{
 		// 레이트레이싱 그림자를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
 		if (useRaytracedShadow)
-			RaytracingSceneManager::Get().RequestScene(sceneToQuery);
+			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry);
 		SubmitLightingPass(cameraBuffer, sceneToQuery, skyData, passes, useRaytracedShadow);
 	}
 }
@@ -279,7 +279,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this, cameraBuffer, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
-			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, useRaytracedShadow](f32, Engine::RenderPass*) -> Engine::EResult
+			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -414,7 +414,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			{
 				// 조명 패스 안에서 실행되므로 추적 비용을 별도 구간으로 잰다(조명 시간에도 포함된다).
 				rhi->BeginPassMetrics(sourceNames[4] + L"_RaytracedShadowMask");
-				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, sourceNames[4]);
+				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, viewID, sourceNames[4]);
 				rhi->EndPassMetrics();
 				// Compute 파이프라인으로 바뀐 상태를 조명 파이프라인으로 되돌린다(같은 루트 시그니처라 그래픽 바인딩은 유지된다).
 				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
@@ -590,12 +590,12 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracedShadowMask(c
 }
 
 Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(Engine::RHI& rhi, Engine::Scene* scene,
-	const std::wstring& positionTargetName)
+	RenderPassID viewID, const std::wstring& positionTargetName)
 {
 	if (!scene || !Engine::RaytracingSceneManager::IsCreated())
 		return nullptr;
 
-	Engine::RHIAccelerationStructure* topLevel = Engine::RaytracingSceneManager::Get().GetTopLevelAS(scene);
+	Engine::RHIAccelerationStructure* topLevel = Engine::RaytracingSceneManager::Get().GetTopLevelAS(scene, viewID);
 	Engine::RenderTarget* position = Engine::RenderTargetManager::Get().GetRenderTarget(positionTargetName);
 	if (!topLevel || !position || !position->GetTexture())
 		return nullptr;
