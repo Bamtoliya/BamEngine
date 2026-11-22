@@ -444,7 +444,7 @@ namespace
 
 		// 1. Attacker entity at (0, 0, 0) with active hitbox
 		const auto attacker = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(attacker).Position = Engine::vec3(0.0f);
+		world.emplace<Engine::TransformComponent>(attacker).position = Engine::vec3(0.0f);
 		world.emplace<Engine::FlagComponent>(attacker);
 		auto& attackerHitbox = world.emplace<Engine::HitboxComponent>(attacker);
 		attackerHitbox.damage = 25.0f;
@@ -455,7 +455,7 @@ namespace
 
 		// 2. Enemy entity at (1.5, 0, 0) with Health and RigidBody
 		const auto enemy = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(enemy).Position = Engine::vec3(1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::TransformComponent>(enemy).position = Engine::vec3(1.5f, 0.0f, 0.0f);
 		world.emplace<Engine::FlagComponent>(enemy);
 		auto& enemyHealth = world.emplace<Engine::HealthComponent>(enemy);
 		enemyHealth.maxHealth = 100.0f;
@@ -465,7 +465,7 @@ namespace
 
 		// 3. Friendly entity at (-1.5, 0, 0) with Health and matching teamTag
 		const auto ally = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(ally).Position = Engine::vec3(-1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::TransformComponent>(ally).position = Engine::vec3(-1.5f, 0.0f, 0.0f);
 		world.emplace<Engine::FlagComponent>(ally);
 		auto& allyHealth = world.emplace<Engine::HealthComponent>(ally);
 		allyHealth.maxHealth = 100.0f;
@@ -498,7 +498,7 @@ namespace
 		// Destroy on hit test
 		attackerHitbox.SetActive(false);
 		const auto proj = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(proj).Position = Engine::vec3(1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::TransformComponent>(proj).position = Engine::vec3(1.5f, 0.0f, 0.0f);
 		world.emplace<Engine::FlagComponent>(proj);
 		auto& projHitbox = world.emplace<Engine::HitboxComponent>(proj);
 		projHitbox.damage = 10.0f;
@@ -601,7 +601,7 @@ namespace
 
 		// Object A at (2, 0, 0): Chest, range 3.0, oneShot = true
 		const auto objA = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(objA).Position = Engine::vec3(2.0f, 0.0f, 0.0f);
+		world.emplace<Engine::TransformComponent>(objA).position = Engine::vec3(2.0f, 0.0f, 0.0f);
 		world.emplace<Engine::FlagComponent>(objA);
 		auto& intA = world.emplace<Engine::InteractableComponent>(objA);
 		intA.interactRange = 3.0f;
@@ -610,7 +610,7 @@ namespace
 
 		// Object B at (5, 0, 0): NPC, range 2.0
 		const auto objB = scene->CreateEntity().GetEntityHandle();
-		world.emplace<Engine::TransformComponent>(objB).Position = Engine::vec3(5.0f, 0.0f, 0.0f);
+		world.emplace<Engine::TransformComponent>(objB).position = Engine::vec3(5.0f, 0.0f, 0.0f);
 		world.emplace<Engine::FlagComponent>(objB);
 		auto& intB = world.emplace<Engine::InteractableComponent>(objB);
 		intB.interactRange = 2.0f;

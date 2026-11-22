@@ -34,7 +34,7 @@ namespace
 		}
 		if (const auto* t = world.try_get<TransformComponent>(entity))
 		{
-			return t->Position;
+			return t->position;
 		}
 		return vec3(0.0f);
 	}
@@ -321,7 +321,7 @@ void GameplayCombatSystem::ProcessRegistryCombat(entt::registry& world, f32 dt, 
 				hitbox.SetActive(false);
 				if (auto* flag = world.try_get<FlagComponent>(hitboxEntity))
 				{
-					flag->active = false;
+					flag->SetActive(false);
 				}
 				break;
 			}

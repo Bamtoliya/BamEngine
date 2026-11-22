@@ -170,8 +170,8 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 
 						if (auto* transform = world.try_get<TransformComponent>(entity))
 						{
-							transform->TranslateLocal(delta.deltaPosition);
-							transform->SetLocalRotation(transform->rotation * delta.deltaRotation);
+							(void)transform->TranslateLocal(delta.deltaPosition);
+							(void)transform->SetLocalRotation(transform->rotation * delta.deltaRotation);
 						}
 
 						if (static_cast<size_t>(rootBoneIdx) < animator.localBonePose.size())
