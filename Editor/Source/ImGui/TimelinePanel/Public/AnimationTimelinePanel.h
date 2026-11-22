@@ -24,11 +24,13 @@ enum class ETimelineSelectionType : uint8
 {
 	None,
 	NotifyMarker,
-	CameraShot
+	CameraShot,
+	CameraCut,
+	CameraSpline
 };
 
-// 트랙 항목 드래그 방식: 전체 이동 또는 지속형 노티파이의 끝점 조절
-enum class ETimelineItemDrag : uint8 { Move, ResizeEnd };
+// 트랙 항목 드래그 방식: 전체 이동 또는 지속형 노티파이/카메라 구간의 시작/끝점 조절
+enum class ETimelineItemDrag : uint8 { Move, ResizeStart, ResizeEnd };
 
 struct TimelineSelection
 {
@@ -96,6 +98,8 @@ private:
 	{
 		std::vector<Engine::TimelineNotifyTrack> NotifyTracks;
 		std::vector<Engine::TimelineCameraTrack> CameraTracks;
+		std::vector<Engine::TimelineCameraCutSection> CameraCutTracks;
+		std::vector<Engine::TimelineCameraSplineSection> CameraSplineTracks;
 		std::string ModelPath;
 		std::string ClipName;
 		float Duration = 0.0f;
@@ -135,10 +139,14 @@ private:
 	void DrawInspector();
 	void DrawNotifyInspector(Engine::AnimNotifyData& notify);
 	void DrawCameraShotInspector(Engine::TimelineCameraTrack& camShot);
+	void DrawCameraCutInspector(Engine::TimelineCameraCutSection& cutSection);
+	void DrawCameraSplineInspector(Engine::TimelineCameraSplineSection& splineSection);
 
 	void DrawAnimPoseTrack(struct ImDrawList* drawList, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 	void DrawNotifyTrackRow(struct ImDrawList* drawList, int trackIdx, Engine::TimelineNotifyTrack& track, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 	void DrawCameraTrackRow(struct ImDrawList* drawList, int camIdx, Engine::TimelineCameraTrack& camTrack, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
+	void DrawCameraCutTrackRow(struct ImDrawList* drawList, int cutIdx, Engine::TimelineCameraCutSection& cutSection, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
+	void DrawCameraSplineTrackRow(struct ImDrawList* drawList, int splineIdx, Engine::TimelineCameraSplineSection& splineSection, const struct ImVec2& trackMin, const struct ImVec2& trackMax, float timelineWidth);
 
 	float TimeToScreenX(float time, float timelineMinX, float timelineWidth) const;
 	float ScreenXToTime(float screenX, float timelineMinX, float timelineWidth) const;
@@ -203,6 +211,7 @@ private:
 	TimelineSelection m_Selection;
 	bool m_IsDraggingItem = false;
 	float m_DragTimeOffset = 0.0f;
+	float m_DragItemDuration = 0.0f;
 	ETimelineItemDrag m_ItemDragMode = ETimelineItemDrag::Move;
 	int m_RenamingTrackIndex = -1;
 	char m_RenameBuf[64] = {};
@@ -220,6 +229,8 @@ private:
 	// 트랙 컨테이너
 	std::vector<Engine::TimelineNotifyTrack> m_NotifyTracks;
 	std::vector<Engine::TimelineCameraTrack> m_CameraTracks;
+	std::vector<Engine::TimelineCameraCutSection> m_CameraCutTracks;
+	std::vector<Engine::TimelineCameraSplineSection> m_CameraSplineTracks;
 
 	// 알림 토스트 & 복합 VFX 프리뷰
 	std::string m_LastTriggeredNotifyName;
