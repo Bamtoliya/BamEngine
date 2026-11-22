@@ -8,15 +8,19 @@
 #include "SystemManager.h"
 #endif
 #include <archive/ArchiveInterface.h>
+#include <archive/JsonArchive.h>
 #include "LightManager.h"
 #include "PrefabInstanceComponent.h"
+#include "ScenePersistenceComponent.h"
+#include "WorldComponents.h"
 #include "PlatformPath.h"
 #include <chrono>
+#include <functional>
 
 #pragma region Constructor&Destructor
 IMPLEMENT_SINGLETON(SceneManager)
 
-EResult SceneManager::Initialize(void* arg)
+EResult SceneManager::Initialize(void* /*arg*/)
 {
 	return EResult::Success;
 }
@@ -25,6 +29,7 @@ void SceneManager::Free()
 {
 	m_CurrentScene = nullptr;
 	m_ActiveScenes.clear();
+	m_AdditiveScenes.clear();
 
 	for (auto& scene : m_Scenes)
 	{
@@ -47,6 +52,11 @@ EResult SceneManager::OpenScene(Scene* newScene)
 	if (addResult != EResult::Success)
 		return addResult;
 
+	if (m_CurrentScene)
+	{
+		TransferPersistentEntities(*m_CurrentScene, *newScene);
+	}
+
 	const EResult closeResult = CloseScene();
 	if (closeResult != EResult::Success)
 	{
@@ -68,6 +78,17 @@ EResult SceneManager::OpenScene(Scene* newScene)
 #endif
 	return EResult::Success;
 }
+
+EResult SceneManager::ChangeScene(Scene* newScene)
+{
+	return OpenScene(newScene);
+}
+
+EResult SceneManager::ChangeScene(archive::IArchive& ar, const wstring& filePath)
+{
+	return LoadScene(ar, filePath);
+}
+
 EResult SceneManager::CloseScene()
 {
 	if (!m_CurrentScene)
@@ -81,6 +102,7 @@ EResult SceneManager::CloseScene()
 
 	return EResult::Success;
 }
+
 EResult SceneManager::NewScene(void* arg)
 {
 	Scene* newScene = Scene::Create(arg);
@@ -115,6 +137,7 @@ EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath,
 
 	return EResult::Success;
 }
+
 EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& filePath, Entity*& outRootEntity, Entity* parent)
 {
 	if (filePath.empty() || outRootEntity != nullptr)
@@ -144,6 +167,7 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 
 	return EResult::Success;
 }
+
 EResult SceneManager::AddScene(Scene* scene)
 {
 	if (!scene) return EResult::InvalidArgument;
@@ -163,6 +187,7 @@ EResult SceneManager::AddScene(Scene* scene)
 	Safe_AddRef(scene);
 	return EResult::Success;
 }
+
 EResult SceneManager::RemoveScene(Scene* scene)
 {
 	auto it = std::find(m_Scenes.begin(), m_Scenes.end(), scene);
@@ -173,12 +198,21 @@ EResult SceneManager::RemoveScene(Scene* scene)
 	if (m_CurrentScene == scene)
 		m_CurrentScene = nullptr;
 
+	for (auto addIt = m_AdditiveScenes.begin(); addIt != m_AdditiveScenes.end(); )
+	{
+		if (addIt->second == scene)
+			addIt = m_AdditiveScenes.erase(addIt);
+		else
+			++addIt;
+	}
+
 	m_ActiveScenes.clear();
 	m_Scenes.erase(it);
 
 	Safe_Release(scene);
 	return EResult::Success;
 }
+
 vector<Scene*> SceneManager::GetActiveScenes()
 {
 	m_ActiveScenes.clear();
@@ -192,6 +226,294 @@ vector<Scene*> SceneManager::GetActiveScenes()
 	}
 
 	return m_ActiveScenes;
+}
+#pragma endregion
+
+#pragma region Additive SubScene Streaming
+EResult SceneManager::LoadSceneAdditive(const std::filesystem::path& scenePath, const std::string& subSceneName)
+{
+	if (subSceneName.empty() || scenePath.empty())
+		return EResult::InvalidArgument;
+
+	if (m_AdditiveScenes.find(subSceneName) != m_AdditiveScenes.end())
+	{
+		ENGINE_LOG_WARN("Additive scene already loaded with name: {}", subSceneName);
+		return EResult::Fail;
+	}
+
+	std::filesystem::path targetPath = scenePath;
+	if (targetPath.is_relative())
+		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+
+	if (!std::filesystem::exists(targetPath))
+	{
+		const std::string ext = targetPath.extension().string();
+		if (ext == ".json")
+		{
+			const std::string stem = targetPath.stem().string();
+			if (!stem.ends_with(".bamscene"))
+			{
+				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
+				if (std::filesystem::exists(candidatePath))
+					targetPath = candidatePath;
+			}
+		}
+	}
+
+	if (!std::filesystem::exists(targetPath))
+	{
+		ENGINE_LOG_ERROR("Additive scene file not found: {}", targetPath.string());
+		return EResult::Fail;
+	}
+
+	archive::JsonArchive ar;
+	auto result = ar.LoadFromFile(targetPath);
+	if (!result)
+	{
+		ENGINE_LOG_ERROR("Additive scene archive load failed: {}", targetPath.string());
+		return EResult::Fail;
+	}
+
+	Scene* subScene = nullptr;
+	result = Scene::CreateFromArchive(ar, subScene);
+	if (!result || !subScene)
+	{
+		ENGINE_LOG_ERROR("Additive scene create from archive failed: {}", targetPath.string());
+		return EResult::Fail;
+	}
+
+	subScene->SetName(StrToWStr(subSceneName));
+	const EResult regRes = RegisterAdditiveScene(subSceneName, subScene);
+	Safe_Release(subScene);
+
+	return regRes;
+}
+
+EResult SceneManager::RegisterAdditiveScene(const std::string& subSceneName, Scene* scene)
+{
+	if (subSceneName.empty() || !scene)
+		return EResult::InvalidArgument;
+
+	if (m_AdditiveScenes.find(subSceneName) != m_AdditiveScenes.end())
+		return EResult::Fail;
+
+	const EResult addResult = AddScene(scene);
+	if (addResult != EResult::Success)
+		return addResult;
+
+	scene->SetActive(true);
+	m_AdditiveScenes[subSceneName] = scene;
+	return EResult::Success;
+}
+
+EResult SceneManager::UnloadAdditiveScene(const std::string& subSceneName)
+{
+	auto it = m_AdditiveScenes.find(subSceneName);
+	if (it == m_AdditiveScenes.end())
+		return EResult::Fail;
+
+	Scene* scene = it->second;
+	m_AdditiveScenes.erase(it);
+
+	return RemoveScene(scene);
+}
+
+EResult SceneManager::UnloadAllAdditiveScenes()
+{
+	std::vector<std::string> names;
+	names.reserve(m_AdditiveScenes.size());
+	for (const auto& [name, scene] : m_AdditiveScenes)
+		names.push_back(name);
+
+	EResult lastResult = EResult::Success;
+	for (const auto& name : names)
+	{
+		const EResult r = UnloadAdditiveScene(name);
+		if (r != EResult::Success)
+			lastResult = r;
+	}
+
+	return lastResult;
+}
+
+Scene* SceneManager::GetAdditiveScene(const std::string& subSceneName)
+{
+	auto it = m_AdditiveScenes.find(subSceneName);
+	if (it != m_AdditiveScenes.end())
+		return it->second;
+
+	return nullptr;
+}
+
+std::vector<std::string> SceneManager::GetAdditiveSceneNames() const
+{
+	std::vector<std::string> names;
+	names.reserve(m_AdditiveScenes.size());
+	for (const auto& [name, scene] : m_AdditiveScenes)
+		names.push_back(name);
+
+	return names;
+}
+#pragma endregion
+
+#pragma region Persistent Entities
+EResult SceneManager::MarkDontDestroyOnLoad(Scene& scene, entt::entity entity, std::string_view group)
+{
+	if (!scene.GetRegistry().valid(entity))
+		return EResult::InvalidArgument;
+
+	auto& comp = scene.GetRegistry().emplace_or_replace<ScenePersistenceComponent>(entity);
+	comp.persistAcrossSceneLoads = true;
+	comp.persistentGroup = std::string(group);
+
+	return EResult::Success;
+}
+
+EResult SceneManager::UnmarkDontDestroyOnLoad(Scene& scene, entt::entity entity)
+{
+	if (!scene.GetRegistry().valid(entity))
+		return EResult::InvalidArgument;
+
+	if (scene.GetRegistry().all_of<ScenePersistenceComponent>(entity))
+	{
+		scene.GetRegistry().remove<ScenePersistenceComponent>(entity);
+	}
+
+	return EResult::Success;
+}
+
+EResult SceneManager::TransferPersistentEntities(Scene& fromScene, Scene& toScene)
+{
+	if (&fromScene == &toScene)
+		return EResult::Success;
+
+	auto& fromRegistry = fromScene.GetRegistry();
+	auto& toRegistry = toScene.GetRegistry();
+
+	auto view = fromRegistry.view<ScenePersistenceComponent>();
+	if (view.empty())
+		return EResult::Success;
+
+	std::vector<entt::entity> candidates;
+	for (auto entity : view)
+	{
+		const auto& comp = view.get<ScenePersistenceComponent>(entity);
+		if (comp.persistAcrossSceneLoads)
+		{
+			candidates.push_back(entity);
+		}
+	}
+
+	if (candidates.empty())
+		return EResult::Success;
+
+	std::vector<entt::entity> persistentRoots;
+	for (auto entity : candidates)
+	{
+		bool hasPersistentAncestor = false;
+		if (const auto* hierarchy = fromRegistry.try_get<HierarchyComponent>(entity))
+		{
+			entt::entity parent = hierarchy->parent;
+			while (parent != entt::null && fromRegistry.valid(parent))
+			{
+				if (const auto* parentPersist = fromRegistry.try_get<ScenePersistenceComponent>(parent))
+				{
+					if (parentPersist->persistAcrossSceneLoads)
+					{
+						hasPersistentAncestor = true;
+						break;
+					}
+				}
+				const auto* parentHierarchy = fromRegistry.try_get<HierarchyComponent>(parent);
+				parent = parentHierarchy ? parentHierarchy->parent : entt::null;
+			}
+		}
+
+		if (!hasPersistentAncestor)
+		{
+			persistentRoots.push_back(entity);
+		}
+	}
+
+	for (auto rootHandle : persistentRoots)
+	{
+		Entity* fromEntity = fromScene.FindEntity(rootHandle);
+		if (!fromEntity)
+			continue;
+
+		bool transferredViaPrefab = false;
+
+		// 1. Prefab archive transfer
+		archive::JsonArchive writer;
+		auto writeRes = fromScene.WritePrefabArchive(writer, *fromEntity);
+		if (writeRes)
+		{
+			std::string jsonStr;
+			auto encRes = writer.ToJson(jsonStr);
+			if (encRes)
+			{
+				archive::JsonArchive reader;
+				auto decRes = reader.Parse(jsonStr);
+				if (decRes)
+				{
+					Entity* outRootEntity = nullptr;
+					auto instRes = toScene.InstantiatePrefabArchive(reader, outRootEntity, nullptr);
+					if (instRes && outRootEntity)
+					{
+						transferredViaPrefab = true;
+
+						const auto* origComp = fromRegistry.try_get<ScenePersistenceComponent>(rootHandle);
+						if (origComp)
+						{
+							toRegistry.emplace_or_replace<ScenePersistenceComponent>(
+								outRootEntity->GetEntityHandle(), *origComp);
+						}
+					}
+				}
+			}
+		}
+
+		// 2. Fallback to manual recursive transfer if reflection/prefab unavailable
+		if (!transferredViaPrefab)
+		{
+			std::function<void(entt::entity, Entity*)> copySubtree = [&](entt::entity srcHandle, Entity* destParent)
+			{
+				Entity* newEntity = &toScene.CreateEntity();
+				const auto newHandle = newEntity->GetEntityHandle();
+
+				if (const auto* name = fromRegistry.try_get<NameComponent>(srcHandle))
+					toRegistry.emplace_or_replace<NameComponent>(newHandle, *name);
+				if (const auto* tag = fromRegistry.try_get<TagComponent>(srcHandle))
+					toRegistry.emplace_or_replace<TagComponent>(newHandle, *tag);
+				if (const auto* transform = fromRegistry.try_get<TransformComponent>(srcHandle))
+					toRegistry.emplace_or_replace<TransformComponent>(newHandle, *transform);
+				if (const auto* worldTransform = fromRegistry.try_get<WorldTransformComponent>(srcHandle))
+					toRegistry.emplace_or_replace<WorldTransformComponent>(newHandle, *worldTransform);
+				if (const auto* flag = fromRegistry.try_get<FlagComponent>(srcHandle))
+					toRegistry.emplace_or_replace<FlagComponent>(newHandle, *flag);
+				if (const auto* persist = fromRegistry.try_get<ScenePersistenceComponent>(srcHandle))
+					toRegistry.emplace_or_replace<ScenePersistenceComponent>(newHandle, *persist);
+
+				if (destParent)
+				{
+					static_cast<void>(toScene.ReparentEntity(*newEntity, destParent));
+				}
+
+				if (const auto* hier = fromRegistry.try_get<HierarchyComponent>(srcHandle))
+				{
+					for (auto childHandle : hier->children)
+					{
+						if (fromRegistry.valid(childHandle))
+							copySubtree(childHandle, newEntity);
+					}
+				}
+			};
+
+			copySubtree(rootHandle, nullptr);
+		}
+	}
+
+	return EResult::Success;
 }
 #pragma endregion
 
@@ -215,6 +537,7 @@ EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
 	}
 	return EResult::Success;
 }
+
 EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 {
 	if (filePath.empty())
