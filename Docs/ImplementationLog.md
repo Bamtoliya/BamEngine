@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 에디터 카메라 Near·Far 조절
+
+- 카메라 뷰포트 메뉴에서 뷰포트별 Near·Far를 조절하고 작업 공간에 저장한다. 설정의 카메라 조작에서는 기본값을 바꿔 카메라 뷰포트 전체에 적용한다.
+- 다른 설정을 적용할 때는 뷰포트별 값을 유지한다. 잘못된 값은 적용하지 않고 이전 값을 유지한다. 프리뷰 카메라는 대상 크기로 자동 설정하므로 제외했다.
+- `EditorSettingsCheck`에 저장·복원과 잘못된 거리 사례를 추가했다. 사용자가 CTest 통과와 Near·Far 동작을 확인했다.
+
 ### [2026-11-22] 뷰포트별 LOD와 TLAS
 
 - **결함.** 모든 Geometry 패스가 LOD 상태 하나를 덮어써 두 뷰포트를 함께 열면 히스테리시스가 깨지고 BLAS 대기가 15Hz로 반복됐다. LOD 거리는 엔티티 원점에서 재어, 배치가 정점에 구워진 Sponza의 LOD 물체 341개 중 340개가 같은 거리로 판정됐다. 섀도 패스는 카메라 없이 LOD를 골랐다.

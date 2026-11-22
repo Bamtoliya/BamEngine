@@ -146,6 +146,19 @@ namespace
             SamePreferences(legacy, Editor::EditorPreferences{}),
             "Missing optional fields did not retain defaults.");
 
+        Check(legacy.HasValidValues() && legacy.CameraNearPlane == 0.1f && legacy.CameraFarPlane == 1000.0f,
+            "Missing clip planes did not retain defaults.");
+        auto clip = legacy;
+        clip.CameraNearPlane = 10.0f;
+        clip.CameraFarPlane = 5.0f;
+        Check(!clip.HasValidValues(), "A far plane in front of the near plane was accepted.");
+        clip.CameraNearPlane = 0.0f;
+        clip.CameraFarPlane = 1000.0f;
+        Check(!clip.HasValidValues(), "A zero near plane was accepted.");
+        clip.CameraNearPlane = 0.05f;
+        clip.CameraFarPlane = 50000.0f;
+        Check(clip.HasValidValues(), "A valid clip range was rejected.");
+
         const auto futurePath = root / "future.json";
         WriteText(futurePath, R"({"Settings":{"SchemaVersion":999}})");
         Editor::EditorPreferences future;
@@ -179,6 +192,8 @@ namespace
         scene.FOV = 75.0f;
         scene.OrthographicSize = 128.0f;
         scene.CameraSpeed = 200.0f;
+        scene.NearPlane = 0.05f;
+        scene.FarPlane = 20000.0f;
         scene.RenderPassStates = { { L"Shadow", false }, { L"Geometry", true } };
         scene.RaytracedShadowMode = 2;
 
@@ -216,7 +231,8 @@ namespace
         Check(restored.HasCamera && restored.CameraPosition == scene.CameraPosition &&
             restored.CameraRotation == scene.CameraRotation && restored.Perspective == scene.Perspective &&
             restored.FOV == scene.FOV && restored.OrthographicSize == scene.OrthographicSize &&
-            restored.CameraSpeed == scene.CameraSpeed && restored.RenderPassStates == scene.RenderPassStates &&
+            restored.CameraSpeed == scene.CameraSpeed && restored.NearPlane == scene.NearPlane &&
+            restored.FarPlane == scene.FarPlane && restored.RenderPassStates == scene.RenderPassStates &&
             restored.RaytracedShadowMode == scene.RaytracedShadowMode,
             "Scene viewport camera or render-pass settings changed.");
 

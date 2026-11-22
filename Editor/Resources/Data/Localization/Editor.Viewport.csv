@@ -9,8 +9,11 @@ Viewport,Anchors,Anchors,앵커
 Viewport,AspectRatio,Aspect Ratio,종횡비
 Viewport,BringToFront,Bring to Front,맨 앞으로
 Viewport,BypassSnap,Hold Alt to bypass snapping.,Alt를 누르면 스냅을 일시 해제합니다.
+Viewport,CameraClipHint,A smaller near plane or larger far plane lowers depth precision.,Near가 작거나 Far가 클수록 깊이 정밀도가 낮아집니다.
 Viewport,CameraFOV,FOV,시야각 (FOV)
+Viewport,CameraFarPlane,Far Plane,원거리 평면 (Far)
 Viewport,CameraMenu,Camera,카메라
+Viewport,CameraNearPlane,Near Plane,근거리 평면 (Near)
 Viewport,CameraOptics,Camera Optics,카메라 광학
 Viewport,CameraOrthographicSize,Size,직교 크기
 Viewport,CameraPosition,Position,위치

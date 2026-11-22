@@ -1266,6 +1266,17 @@ void ImGuiManager::ApplyCameraPreferences(float speed, float fov)
 	}
 	PreviewViewportWidget::ApplyGlobalCameraPreferences(speed, fov);
 }
+
+// 프리뷰 카메라는 대상 크기로 Near·Far를 자동 설정하므로 뷰포트 패널에만 적용한다.
+void ImGuiManager::ApplyCameraClipPlanes(float nearPlane, float farPlane)
+{
+	for (auto* panel : m_ImGuiPanels)
+	{
+		auto* cameraPanel = dynamic_cast<CameraViewportPanel*>(panel);
+		if (cameraPanel && !cameraPanel->SetCameraClipPlanes(nearPlane, farPlane))
+			BAM_LOG(Warn, "Editor", "Viewport", "Camera clip planes could not be applied: near={}, far={}", nearPlane, farPlane);
+	}
+}
 #pragma endregion
 
 #pragma region Workspace

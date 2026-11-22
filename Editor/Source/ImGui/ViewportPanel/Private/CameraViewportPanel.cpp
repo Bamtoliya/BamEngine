@@ -18,16 +18,25 @@ EResult CameraViewportPanel::OnInitialize(void* arg)
 
 	float defaultFov = 60.0f;
 	float defaultSpeed = 100.0f;
+	float defaultNear = 0.1f;
+	float defaultFar = 1000.0f;
 	if (EditorSettingsService::IsCreated())
 	{
 		const auto& prefs = EditorSettingsService::Get().GetPreferences();
 		defaultFov = prefs.CameraFOV;
 		defaultSpeed = prefs.CameraSpeed;
+		if (EditorPreferences::IsValidClipPlanes(prefs.CameraNearPlane, prefs.CameraFarPlane))
+		{
+			defaultNear = prefs.CameraNearPlane;
+			defaultFar = prefs.CameraFarPlane;
+		}
 	}
 
 	Engine::CameraComponent cameraSettings{};
 	cameraSettings.CameraType = desc->IsPerspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
 	cameraSettings.FOV = defaultFov;
+	cameraSettings.NearPlane = defaultNear;
+	cameraSettings.FarPlane = defaultFar;
 	cameraSettings.AspectRatio = static_cast<f32>(desc->RenderTargetWidth) / static_cast<f32>(desc->RenderTargetHeight);
 	cameraSettings.OrthographicSize = static_cast<f32>(desc->RenderTargetHeight);
 
@@ -141,6 +150,19 @@ void CameraViewportPanel::DrawCameraMenu()
 			ImGui::MenuItem(LOCAL_LABEL("Viewport.PixelPerfectView").c_str(), nullptr, &m_PixelPerfectViewEnabled, IsOrthographic());
 		}
 
+		// Near·Far 거리 (m). Near가 작고 Far가 클수록 먼 곳의 깊이 정밀도가 낮아진다.
+		constexpr auto clipFlags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic;
+		float nearPlane = camera->NearPlane;
+		float farPlane = camera->FarPlane;
+		if (ImGui::DragFloat(LOCAL_LABEL("Viewport.CameraNearPlane").c_str(), &nearPlane, 0.01f, EditorPreferences::MinCameraNearPlane,
+			farPlane - EditorPreferences::MinCameraClipRange, "%.3f m", clipFlags))
+			SetCameraClipPlanes(nearPlane, farPlane);
+		ImGui::SetItemTooltip("%s", LOCAL_CSTR("Viewport.CameraClipHint"));
+		if (ImGui::DragFloat(LOCAL_LABEL("Viewport.CameraFarPlane").c_str(), &farPlane, std::max(1.0f, farPlane * 0.01f),
+			camera->NearPlane + EditorPreferences::MinCameraClipRange, EditorPreferences::MaxCameraFarPlane, "%.1f m", clipFlags))
+			SetCameraClipPlanes(camera->NearPlane, farPlane);
+		ImGui::SetItemTooltip("%s", LOCAL_CSTR("Viewport.CameraClipHint"));
+
 		// 4. 카메라 이동 속도 조절
 		float speed = m_CameraController->GetCameraSpeed();
 		if (ImGui::SliderFloat(LOCAL_LABEL("Viewport.CameraSpeed").c_str(), &speed, 1.0f, 500.0f))
@@ -201,6 +223,27 @@ void CameraViewportPanel::ApplyCameraPreferences(float speed, float fov)
 		if (camera->CameraType == Engine::ECameraType::Perspective)
 			m_CameraController->RefreshMatrices();
 	}
+}
+
+bool CameraViewportPanel::SetCameraClipPlanes(float nearPlane, float farPlane)
+{
+	auto* camera = m_CameraController ? m_CameraController->GetCameraComponent() : nullptr;
+	if (!camera) return true;
+	if (!EditorPreferences::IsValidClipPlanes(nearPlane, farPlane)) return false;
+
+	const float previousNear = camera->NearPlane;
+	const float previousFar = camera->FarPlane;
+	camera->NearPlane = nearPlane;
+	camera->FarPlane = farPlane;
+	camera->InvalidateCache();
+	m_CameraController->RefreshMatrices();
+	if (m_CameraController->GetCameraBuffer()) return true;
+
+	camera->NearPlane = previousNear;
+	camera->FarPlane = previousFar;
+	camera->InvalidateCache();
+	m_CameraController->RefreshMatrices();
+	return false;
 }
 #pragma endregion
 
@@ -270,6 +313,11 @@ void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 	camera->CameraType = state.Perspective ? Engine::ECameraType::Perspective : Engine::ECameraType::Orthographic;
 	camera->FOV = state.FOV;
 	camera->OrthographicSize = state.OrthographicSize;
+	if (EditorPreferences::IsValidClipPlanes(state.NearPlane, state.FarPlane))
+	{
+		camera->NearPlane = state.NearPlane;
+		camera->FarPlane = state.FarPlane;
+	}
 
 	m_CameraController->SetCameraSpeed(state.CameraSpeed);
 	m_CameraController->SyncControlRotationFromTransform();
@@ -308,6 +356,8 @@ ViewportWorkspace CameraViewportPanel::CaptureViewportState() const
 	state.FOV = camera->FOV;
 	state.OrthographicSize = camera->OrthographicSize;
 	state.CameraSpeed = m_CameraController->GetCameraSpeed();
+	state.NearPlane = camera->NearPlane;
+	state.FarPlane = camera->FarPlane;
 
 	return state;
 }

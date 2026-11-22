@@ -64,6 +64,10 @@ namespace Editor
         PROPERTY(META("Optional", true))
             float CameraFOV = 60.0f;
         PROPERTY(META("Optional", true))
+            float CameraNearPlane = 0.1f;
+        PROPERTY(META("Optional", true))
+            float CameraFarPlane = 1000.0f;
+        PROPERTY(META("Optional", true))
             float GizmoSnapTranslation = 1.0f;
         PROPERTY(META("Optional", true))
             float GizmoSnapRotation = 15.0f;
@@ -72,6 +76,14 @@ namespace Editor
         static constexpr float MaxPreviewLightIntensity = 10.0f;
         PROPERTY(META("Optional", true))
             std::array<float, 3> PreviewLightIntensity{ 3.0f, 1.2f, 1.5f };
+        static constexpr float MinCameraNearPlane = 0.001f;
+        static constexpr float MaxCameraFarPlane = 1000000.0f;
+        static constexpr float MinCameraClipRange = 0.01f;
+        [[nodiscard]] static bool IsValidClipPlanes(float nearPlane, float farPlane)
+        {
+            return std::isfinite(nearPlane) && std::isfinite(farPlane) && nearPlane >= MinCameraNearPlane &&
+                farPlane <= MaxCameraFarPlane && farPlane - nearPlane >= MinCameraClipRange;
+        }
         [[nodiscard]] bool HasValidValues() const
         {
             for (const float intensity : PreviewLightIntensity)
@@ -87,6 +99,7 @@ namespace Editor
                 (!std::isfinite(FontSize) || (FontSize >= 10.0f && FontSize <= 48.0f)) &&
                 (!std::isfinite(CameraSpeed) || CameraSpeed > 0.0f) &&
                 (!std::isfinite(CameraFOV) || (CameraFOV >= 10.0f && CameraFOV <= 140.0f)) &&
+                IsValidClipPlanes(CameraNearPlane, CameraFarPlane) &&
                 (!std::isfinite(GizmoSnapTranslation) || GizmoSnapTranslation > 0.0f) &&
                 (!std::isfinite(GizmoSnapRotation) || GizmoSnapRotation > 0.0f) &&
                 (!std::isfinite(GizmoSnapScale) || GizmoSnapScale > 0.0f);
@@ -134,6 +147,12 @@ namespace Editor
 
         PROPERTY(META("Optional", true))
         float CameraSpeed = 100.0f;
+
+        PROPERTY(META("Optional", true))
+        float NearPlane = 0.1f;
+
+        PROPERTY(META("Optional", true))
+        float FarPlane = 1000.0f;
 
         PROPERTY(META("Optional", true))
         std::map<std::wstring, bool> RenderPassStates;

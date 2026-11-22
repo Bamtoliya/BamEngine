@@ -23,6 +23,8 @@ public:
 private:
     f32 m_DraftCameraSpeed = 100.0f;
     f32 m_DraftCameraFOV = 60.0f;
+    f32 m_DraftCameraNearPlane = 0.1f;
+    f32 m_DraftCameraFarPlane = 1000.0f;
     f32 m_DraftGizmoSnapTranslation = 1.0f;
     f32 m_DraftGizmoSnapRotation = 15.0f;
     f32 m_DraftGizmoSnapScale = 0.1f;

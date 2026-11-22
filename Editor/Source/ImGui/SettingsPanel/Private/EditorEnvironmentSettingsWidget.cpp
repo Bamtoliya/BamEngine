@@ -63,6 +63,8 @@ void EditorEnvironmentSettingsWidget::ReloadDraft(const EditorPreferences& prefe
 
     m_DraftCameraSpeed = preferences.CameraSpeed;
     m_DraftCameraFOV = preferences.CameraFOV;
+    m_DraftCameraNearPlane = preferences.CameraNearPlane;
+    m_DraftCameraFarPlane = preferences.CameraFarPlane;
     m_DraftPreviewLightIntensity = preferences.PreviewLightIntensity;
     m_EditorDirty = false;
     m_PreviewLightingDirty = false;
@@ -75,6 +77,8 @@ void EditorEnvironmentSettingsWidget::ResetToDefaults(const EditorPreferences& d
     m_DraftGizmoSnapScale = defaults.GizmoSnapScale;
     m_DraftCameraSpeed = defaults.CameraSpeed;
     m_DraftCameraFOV = defaults.CameraFOV;
+    m_DraftCameraNearPlane = defaults.CameraNearPlane;
+    m_DraftCameraFarPlane = defaults.CameraFarPlane;
     m_DraftPreviewLightIntensity = defaults.PreviewLightIntensity;
     m_EditorDirty = true;
     m_PreviewLightingDirty = true;
@@ -84,6 +88,8 @@ void EditorEnvironmentSettingsWidget::WriteDraft(EditorPreferences& candidate) c
 {
     candidate.CameraSpeed = m_DraftCameraSpeed;
     candidate.CameraFOV = m_DraftCameraFOV;
+    candidate.CameraNearPlane = m_DraftCameraNearPlane;
+    candidate.CameraFarPlane = m_DraftCameraFarPlane;
     candidate.GizmoSnapTranslation = m_DraftGizmoSnapTranslation;
     candidate.GizmoSnapRotation = m_DraftGizmoSnapRotation;
     candidate.GizmoSnapScale = m_DraftGizmoSnapScale;
@@ -172,6 +178,22 @@ void EditorEnvironmentSettingsWidget::Draw()
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (ImGui::SliderFloat("###CameraFOV", &m_DraftCameraFOV, 30.0f, 120.0f, "%.0f deg"))
                 m_EditorDirty = true;
+
+            // Camera Near·Far
+            constexpr auto clipFlags = ImGuiSliderFlags_AlwaysClamp | ImGuiSliderFlags_Logarithmic;
+            EditorUI::PropertyRow("Viewport.CameraNearPlane");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::DragFloat("###CameraNearPlane", &m_DraftCameraNearPlane, 0.01f, EditorPreferences::MinCameraNearPlane,
+                m_DraftCameraFarPlane - EditorPreferences::MinCameraClipRange, "%.3f m", clipFlags))
+                m_EditorDirty = true;
+            ImGui::SetItemTooltip("%s", LOCAL_CSTR("Viewport.CameraClipHint"));
+
+            EditorUI::PropertyRow("Viewport.CameraFarPlane");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::DragFloat("###CameraFarPlane", &m_DraftCameraFarPlane, std::max(1.0f, m_DraftCameraFarPlane * 0.01f),
+                m_DraftCameraNearPlane + EditorPreferences::MinCameraClipRange, EditorPreferences::MaxCameraFarPlane, "%.1f m", clipFlags))
+                m_EditorDirty = true;
+            ImGui::SetItemTooltip("%s", LOCAL_CSTR("Viewport.CameraClipHint"));
 
             EditorUI::EndPropertyTable();
         }

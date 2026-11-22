@@ -142,6 +142,7 @@ private:
 public:
 	void NotifySettingsChange(const EditorSettingsChangeResult& result);
 	void ApplyCameraPreferences(float speed, float fov);
+	void ApplyCameraClipPlanes(float nearPlane, float farPlane);
 #pragma endregion
 
 

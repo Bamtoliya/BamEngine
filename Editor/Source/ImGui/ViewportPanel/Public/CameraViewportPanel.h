@@ -53,6 +53,8 @@ public:
 	void SetPerspective(bool perspective = true);
 	void SetOrthographic(bool orthographic = true);
 	void ApplyCameraPreferences(float speed, float fov);
+	// 카메라가 없으면 적용할 대상이 없으므로 true. 값이 잘못됐거나 투영을 만들 수 없으면 이전 값을 유지하고 false.
+	bool SetCameraClipPlanes(float nearPlane, float farPlane);
 	[[nodiscard]] EditorCameraController* GetCameraController() const { return m_CameraController; }
 #pragma endregion
 

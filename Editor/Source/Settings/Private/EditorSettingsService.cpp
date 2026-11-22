@@ -496,6 +496,9 @@ bool EditorSettingsService::ApplyPreferences(const EditorPreferences& preference
     m_ImGuiManager->ApplyTheme(preferences.Theme);
     m_TimeManager->SetTargetFPS(static_cast<uint32>(preferences.TargetFPS));
     m_ImGuiManager->ApplyCameraPreferences(preferences.CameraSpeed, preferences.CameraFOV);
+    // 다른 설정을 적용할 때 뷰포트별로 조절한 거리를 되돌리지 않도록 값이 바뀐 경우에만 적용한다.
+    if (preferences.CameraNearPlane != m_EditorPreferences.CameraNearPlane || preferences.CameraFarPlane != m_EditorPreferences.CameraFarPlane)
+        m_ImGuiManager->ApplyCameraClipPlanes(preferences.CameraNearPlane, preferences.CameraFarPlane);
 
     m_EditorPreferences = preferences;
     return true;
