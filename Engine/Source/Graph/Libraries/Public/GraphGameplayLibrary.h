@@ -38,6 +38,7 @@
 #include "AudioMixer.h"
 #include "SceneManager.h"
 #include "ScenePersistenceComponent.h"
+#include "PakArchive.h"
 
 namespace Engine
 {
@@ -85,6 +86,22 @@ namespace Engine
 		static void MarkDontDestroyOnLoad(int64 entityId, const std::string& group);
 		static void MarkDontDestroyOnLoad(Scene& scene, entt::entity entity, const std::string& group);
 		static bool UnloadAdditiveScene(const std::string& subSceneName);
+
+		// Network RPC & Diagnostics
+		static bool SendServerRpc(int64 netId, const std::string& rpcName, const std::string& payloadText);
+		static bool SendMulticastRpc(int64 netId, const std::string& rpcName, const std::string& payloadText);
+		static bool IsNetworkServer();
+		static bool IsNetworkClient();
+		static float GetNetworkSimulatedLatencyMs();
+
+		// Camera Sequencer (ActionTimeline)
+		static bool PlayCameraSequence(int64 entityId, float startTime);
+		static void StopCameraSequence(int64 entityId);
+		static bool IsCameraSequencePlaying(int64 entityId);
+
+		// PakArchive Mount
+		static bool IsPakMounted();
+		static bool HasPakEntry(const std::string& uri);
 	};
 }
 
@@ -928,5 +945,74 @@ namespace Engine::GraphGameplay
 	inline bool UnloadAdditive(std::string subSceneName)
 	{
 		return GraphGameplayLibrary::UnloadAdditiveScene(subSceneName);
+	}
+
+	// ── 네트워크 RPC & 상태 노드 (Network) ──
+	FUNCTION(GRAPH_CALLABLE("Net.SendServerRpc"), DISPLAY_NAME("Send Server RPC"), CATEGORY("Network"),
+		GRAPH_PIN_DEFAULT("netId", 0), GRAPH_PIN_DEFAULT("rpcName", ""), GRAPH_PIN_DEFAULT("payloadText", ""))
+	inline bool SendServerRpc(std::int64_t netId, std::string rpcName, std::string payloadText)
+	{
+		return GraphGameplayLibrary::SendServerRpc(netId, rpcName, payloadText);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Net.SendMulticastRpc"), DISPLAY_NAME("Send Multicast RPC"), CATEGORY("Network"),
+		GRAPH_PIN_DEFAULT("netId", 0), GRAPH_PIN_DEFAULT("rpcName", ""), GRAPH_PIN_DEFAULT("payloadText", ""))
+	inline bool SendMulticastRpc(std::int64_t netId, std::string rpcName, std::string payloadText)
+	{
+		return GraphGameplayLibrary::SendMulticastRpc(netId, rpcName, payloadText);
+	}
+
+	FUNCTION(GRAPH_PURE("Net.IsServer"), DISPLAY_NAME("Is Network Server"), CATEGORY("Network"))
+	inline bool IsNetworkServer()
+	{
+		return GraphGameplayLibrary::IsNetworkServer();
+	}
+
+	FUNCTION(GRAPH_PURE("Net.IsClient"), DISPLAY_NAME("Is Network Client"), CATEGORY("Network"))
+	inline bool IsNetworkClient()
+	{
+		return GraphGameplayLibrary::IsNetworkClient();
+	}
+
+	FUNCTION(GRAPH_PURE("Net.GetSimulatedLatency"), DISPLAY_NAME("Get Simulated Latency (ms)"), CATEGORY("Network"))
+	inline float GetSimulatedLatency()
+	{
+		return GraphGameplayLibrary::GetNetworkSimulatedLatencyMs();
+	}
+
+	// ── 카메라 시퀀서 제어 노드 (Camera) ──
+	FUNCTION(GRAPH_CALLABLE("CameraSequencer.Play"), DISPLAY_NAME("Play Camera Sequence"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("startTime", 0.0f))
+	inline bool PlayCameraSequence(std::int64_t entityId, float startTime)
+	{
+		return GraphGameplayLibrary::PlayCameraSequence(entityId, startTime);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("CameraSequencer.Stop"), DISPLAY_NAME("Stop Camera Sequence"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline void StopCameraSequence(std::int64_t entityId)
+	{
+		GraphGameplayLibrary::StopCameraSequence(entityId);
+	}
+
+	FUNCTION(GRAPH_PURE("CameraSequencer.IsPlaying"), DISPLAY_NAME("Is Camera Sequence Playing"), CATEGORY("Camera"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline bool IsCameraSequencePlaying(std::int64_t entityId)
+	{
+		return GraphGameplayLibrary::IsCameraSequencePlaying(entityId);
+	}
+
+	// ── 리소스 팩 마운트 조회 노드 (Resource) ──
+	FUNCTION(GRAPH_PURE("Pak.IsMounted"), DISPLAY_NAME("Is Pak Mounted"), CATEGORY("Resource"))
+	inline bool IsPakMounted()
+	{
+		return GraphGameplayLibrary::IsPakMounted();
+	}
+
+	FUNCTION(GRAPH_PURE("Pak.HasEntry"), DISPLAY_NAME("Has Pak Entry"), CATEGORY("Resource"),
+		GRAPH_PIN_DEFAULT("uri", ""))
+	inline bool HasPakEntry(std::string uri)
+	{
+		return GraphGameplayLibrary::HasPakEntry(uri);
 	}
 }

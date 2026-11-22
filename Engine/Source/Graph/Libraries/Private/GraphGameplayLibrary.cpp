@@ -9,6 +9,10 @@
 #include "AudioManager.h"
 #include "AudioMixer.h"
 #include "SceneManager.h"
+#include "SystemManager.h"
+#if !defined(__EMSCRIPTEN__)
+#include "NetworkSystem.h"
+#endif
 #include <limits>
 
 namespace Engine
@@ -333,5 +337,130 @@ namespace Engine
 		if (!SceneManager::IsCreated() || subSceneName.empty()) return false;
 		const EResult result = SceneManager::Get().UnloadAdditiveScene(subSceneName);
 		return (result == EResult::Success);
+	}
+
+	// ── Network RPC & Diagnostics ──
+	namespace
+	{
+		bool DispatchGraphRpc(int64 netId, const std::string& rpcName, const std::string& payloadText, Network::ERpcTarget target)
+		{
+#if !defined(__EMSCRIPTEN__)
+			if (netId <= 0 || rpcName.empty() || !SystemManager::IsCreated()) return false;
+			auto* netSystem = SystemManager::Get().GetSystem<NetworkSystem>();
+			if (!netSystem) return false;
+
+			Network::RpcMessage msg{};
+			msg.netId = static_cast<Network::NetId>(netId);
+			msg.rpcNameHash = Network::HashRpcName(rpcName);
+			msg.target = target;
+			msg.senderClientId = netSystem->GetDriver().GetLocalClientId();
+			msg.payload.assign(payloadText.begin(), payloadText.end());
+			return netSystem->SendRpc(msg);
+#else
+			(void)netId;
+			(void)rpcName;
+			(void)payloadText;
+			(void)target;
+			return false;
+#endif
+		}
+	}
+
+	bool GraphGameplayLibrary::SendServerRpc(int64 netId, const std::string& rpcName, const std::string& payloadText)
+	{
+		return DispatchGraphRpc(netId, rpcName, payloadText, Network::ERpcTarget::Server);
+	}
+
+	bool GraphGameplayLibrary::SendMulticastRpc(int64 netId, const std::string& rpcName, const std::string& payloadText)
+	{
+		return DispatchGraphRpc(netId, rpcName, payloadText, Network::ERpcTarget::Multicast);
+	}
+
+	bool GraphGameplayLibrary::IsNetworkServer()
+	{
+#if !defined(__EMSCRIPTEN__)
+		if (!SystemManager::IsCreated()) return false;
+		const auto* netSystem = SystemManager::Get().GetSystem<NetworkSystem>();
+		return netSystem && netSystem->GetDriver().IsServer();
+#else
+		return false;
+#endif
+	}
+
+	bool GraphGameplayLibrary::IsNetworkClient()
+	{
+#if !defined(__EMSCRIPTEN__)
+		if (!SystemManager::IsCreated()) return false;
+		const auto* netSystem = SystemManager::Get().GetSystem<NetworkSystem>();
+		return netSystem && netSystem->GetDriver().IsClient();
+#else
+		return false;
+#endif
+	}
+
+	float GraphGameplayLibrary::GetNetworkSimulatedLatencyMs()
+	{
+#if !defined(__EMSCRIPTEN__)
+		if (!SystemManager::IsCreated()) return 0.0f;
+		const auto* netSystem = SystemManager::Get().GetSystem<NetworkSystem>();
+		return netSystem ? netSystem->GetDriver().GetSimSettings().simulatedLatencyMs : 0.0f;
+#else
+		return 0.0f;
+#endif
+	}
+
+	// ── Camera Sequencer (ActionTimeline) ──
+	bool GraphGameplayLibrary::PlayCameraSequence(int64 entityId, float startTime)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || !scene->IsActive() || scene->IsPaused()) return false;
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null) return false;
+		auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(reg, target);
+		if (!timeline) return false;
+		timeline->Play();
+		if (startTime > 0.0f)
+		{
+			timeline->currentTime = startTime;
+			timeline->prevTime = startTime;
+		}
+		return true;
+	}
+
+	void GraphGameplayLibrary::StopCameraSequence(int64 entityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene) return;
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null) return;
+		if (auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(reg, target))
+		{
+			timeline->Stop();
+		}
+	}
+
+	bool GraphGameplayLibrary::IsCameraSequencePlaying(int64 entityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene) return false;
+		const auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null) return false;
+		const auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(reg, target);
+		return timeline && timeline->isPlaying;
+	}
+
+	// ── PakArchive Mount ──
+	bool GraphGameplayLibrary::IsPakMounted()
+	{
+		return PakMountManager::Get().GetMountedPakCount() > 0;
+	}
+
+	bool GraphGameplayLibrary::HasPakEntry(const std::string& uri)
+	{
+		if (uri.empty()) return false;
+		return PakMountManager::Get().HasEntry(uri);
 	}
 }

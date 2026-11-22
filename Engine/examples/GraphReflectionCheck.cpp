@@ -343,6 +343,60 @@ void CheckExpandedGameplayNodes()
 	Expect(unloadSubScenePin && unloadSubScenePin->Type == Type::String, "Scene.UnloadAdditive subSceneName pin invalid.");
 	const auto* unloadResult = graph.FindPin("Scene.UnloadAdditive", "result");
 	Expect(unloadResult && unloadResult->Type == Type::Bool, "Scene.UnloadAdditive result pin invalid.");
+
+	// 5. Network RPC & Diagnostics Nodes
+	const auto* sendServerRpc = graph.Find("Net.SendServerRpc");
+	Expect(sendServerRpc != nullptr && sendServerRpc->Category == "Network", "Net.SendServerRpc node missing or wrong category.");
+	Expect(graph.FindPin("Net.SendServerRpc", "exec") != nullptr, "Net.SendServerRpc missing exec pin.");
+	const auto* rpcNetIdPin = graph.FindPin("Net.SendServerRpc", "netId");
+	const auto* rpcNamePin = graph.FindPin("Net.SendServerRpc", "rpcName");
+	const auto* rpcPayloadPin = graph.FindPin("Net.SendServerRpc", "payloadText");
+	const auto* rpcResultPin = graph.FindPin("Net.SendServerRpc", "result");
+	Expect(rpcNetIdPin && rpcNetIdPin->Type == Type::Int, "Net.SendServerRpc netId pin invalid.");
+	Expect(rpcNamePin && rpcNamePin->Type == Type::String, "Net.SendServerRpc rpcName pin invalid.");
+	Expect(rpcPayloadPin && rpcPayloadPin->Type == Type::String, "Net.SendServerRpc payloadText pin invalid.");
+	Expect(rpcResultPin && rpcResultPin->Type == Type::Bool, "Net.SendServerRpc result pin invalid.");
+
+	const auto* sendMulticastRpc = graph.Find("Net.SendMulticastRpc");
+	Expect(sendMulticastRpc != nullptr && sendMulticastRpc->Category == "Network", "Net.SendMulticastRpc node missing.");
+	Expect(graph.FindPin("Net.SendMulticastRpc", "exec") != nullptr, "Net.SendMulticastRpc missing exec pin.");
+
+	const auto* isServer = graph.Find("Net.IsServer");
+	Expect(isServer != nullptr && isServer->Category == "Network" && !graph.FindPin("Net.IsServer", "exec"),
+		"Net.IsServer pure node invalid.");
+	const auto* isClient = graph.Find("Net.IsClient");
+	Expect(isClient != nullptr && isClient->Category == "Network" && !graph.FindPin("Net.IsClient", "exec"),
+		"Net.IsClient pure node invalid.");
+	const auto* simLatency = graph.Find("Net.GetSimulatedLatency");
+	Expect(simLatency != nullptr && simLatency->Category == "Network" && !graph.FindPin("Net.GetSimulatedLatency", "exec"),
+		"Net.GetSimulatedLatency pure node invalid.");
+	const auto* simLatencyResult = graph.FindPin("Net.GetSimulatedLatency", "result");
+	Expect(simLatencyResult && simLatencyResult->Type == Type::Float, "Net.GetSimulatedLatency result pin invalid.");
+
+	// 6. Camera Sequencer Nodes
+	const auto* camSeqPlay = graph.Find("CameraSequencer.Play");
+	Expect(camSeqPlay != nullptr && camSeqPlay->Category == "Camera", "CameraSequencer.Play node missing.");
+	Expect(graph.FindPin("CameraSequencer.Play", "exec") != nullptr, "CameraSequencer.Play missing exec pin.");
+	const auto* camSeqStartPin = graph.FindPin("CameraSequencer.Play", "startTime");
+	Expect(camSeqStartPin && camSeqStartPin->Type == Type::Float, "CameraSequencer.Play startTime pin invalid.");
+
+	const auto* camSeqStop = graph.Find("CameraSequencer.Stop");
+	Expect(camSeqStop != nullptr && camSeqStop->Category == "Camera", "CameraSequencer.Stop node missing.");
+	const auto* camSeqPlaying = graph.Find("CameraSequencer.IsPlaying");
+	Expect(camSeqPlaying != nullptr && camSeqPlaying->Category == "Camera" && !graph.FindPin("CameraSequencer.IsPlaying", "exec"),
+		"CameraSequencer.IsPlaying pure node invalid.");
+
+	// 7. PakArchive Mount Nodes
+	const auto* pakMounted = graph.Find("Pak.IsMounted");
+	Expect(pakMounted != nullptr && pakMounted->Category == "Resource" && !graph.FindPin("Pak.IsMounted", "exec"),
+		"Pak.IsMounted pure node invalid.");
+	const auto* pakHasEntry = graph.Find("Pak.HasEntry");
+	Expect(pakHasEntry != nullptr && pakHasEntry->Category == "Resource" && !graph.FindPin("Pak.HasEntry", "exec"),
+		"Pak.HasEntry pure node invalid.");
+	const auto* pakUriPin = graph.FindPin("Pak.HasEntry", "uri");
+	const auto* pakResultPin = graph.FindPin("Pak.HasEntry", "result");
+	Expect(pakUriPin && pakUriPin->Type == Type::String, "Pak.HasEntry uri pin invalid.");
+	Expect(pakResultPin && pakResultPin->Type == Type::Bool, "Pak.HasEntry result pin invalid.");
 }
 }
 
