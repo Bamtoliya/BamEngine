@@ -155,14 +155,25 @@ void BuildProfilePanel::Draw()
             ImGui::TextUnformatted(LOCAL_CSTR("BuildProfile.WindowsRelease"));
 
             EditorUI::PropertyRow("BuildProfile.Format");
-            ImGui::TextUnformatted(LOCAL_CSTR("BuildProfile.Folder"));
+            if (m_PackAssetsIntoBamPak)
+                ImGui::Text("%s + .bampak", LOCAL_CSTR("BuildProfile.Folder"));
+            else
+                ImGui::TextUnformatted(LOCAL_CSTR("BuildProfile.Folder"));
+
+            const bool running = m_ClientBuild.GetStatus() == ClientBuildJob::Status::Running;
+
+            EditorUI::PropertyLabel("BamPak Packaging",
+                "Pack Engine and Project assets into Content/Engine.bampak and Content/Project.bampak with Config/PackageManifest.json.");
+            EditorUI::PropertyValue();
+            ImGui::BeginDisabled(running);
+            ImGui::Checkbox("Pack assets into .bampak archives##PackAssetsIntoBamPak", &m_PackAssetsIntoBamPak);
+            ImGui::EndDisabled();
 
             EditorUI::PropertyRow("BuildProfile.RenderPipelineProfile");
             const auto& profile = EditorSettingsService::Get().GetProjectSettings().RenderPipelineProfilePath;
             ImGui::TextWrapped("%s", profile.empty() ? LOCAL_CSTR("EditorCommon.None") : profile.c_str());
 
             EditorUI::PropertyRow("Settings.StartupScene");
-            const bool running = m_ClientBuild.GetStatus() == ClientBuildJob::Status::Running;
             ImGui::BeginDisabled(running);
 
             if (ImGui::Button(LOCAL_LABEL("Settings.BrowseScene").c_str()))
@@ -309,6 +320,67 @@ void BuildProfilePanel::DrawSceneReferenceCheck()
 void BuildProfilePanel::Update(f32)
 {
     m_ClientBuild.Update();
+    if (m_ClientBuild.GetStatus() == ClientBuildJob::Status::Succeeded)
+    {
+        const auto& exportedDir = m_ClientBuild.GetExportedDirectory();
+        if (!exportedDir.empty() && m_LastPakSummaryDirectory != exportedDir)
+        {
+            m_LastPakSummaryDirectory = exportedDir;
+            m_LastPakSummary = ReadClientPackageManifestSummary(exportedDir);
+        }
+    }
+}
+
+void BuildProfilePanel::DrawBamPakSummary() const
+{
+    if (!m_LastPakSummary.has_value())
+        return;
+
+    const auto& manifest = *m_LastPakSummary;
+    std::uint64_t totalEntries = 0;
+    std::uint64_t totalBytes = 0;
+    for (const auto& pak : manifest.Paks)
+    {
+        totalEntries += pak.EntryCount;
+        totalBytes += pak.ByteSize;
+    }
+
+    ImGui::Spacing();
+    if (EditorUI::BeginPropertyTable("##BamPakSummary"))
+    {
+        EditorUI::PropertyLabel("BamPak Summary");
+        EditorUI::PropertyValue();
+        ImGui::Text("%zu archive(s) / %llu entries / %llu bytes",
+            manifest.Paks.size(),
+            static_cast<unsigned long long>(totalEntries),
+            static_cast<unsigned long long>(totalBytes));
+
+        EditorUI::PropertyLabel("Integrity Check");
+        EditorUI::PropertyValue();
+        if (manifest.IntegrityVerified)
+            ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "Verified");
+        else
+            ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Failed");
+
+        for (const auto& pak : manifest.Paks)
+        {
+            EditorUI::PropertyLabel(pak.Path.c_str());
+            EditorUI::PropertyValue();
+            ImGui::Text("%llu entries / %llu bytes / 0x%016llX",
+                static_cast<unsigned long long>(pak.EntryCount),
+                static_cast<unsigned long long>(pak.ByteSize),
+                static_cast<unsigned long long>(pak.Hash64));
+        }
+
+        if (!manifest.DirectFileExceptions.empty())
+        {
+            EditorUI::PropertyLabel("Direct-File Exceptions");
+            EditorUI::PropertyValue();
+            ImGui::Text("%zu file(s) preserved on disk", manifest.DirectFileExceptions.size());
+        }
+
+        EditorUI::EndPropertyTable();
+    }
 }
 
 void BuildProfilePanel::DrawClientBuild()
@@ -337,6 +409,7 @@ void BuildProfilePanel::DrawClientBuild()
             ClientPackageRequest request{ m_StartupScene, m_OutputDirectory, m_PackageDirectoryName, m_ProgramName };
             request.AdditionalScenes = m_AdditionalScenes;
             request.AdditionalAssets = m_AdditionalAssets;
+            request.PackAssetsIntoBamPak = m_PackAssetsIntoBamPak;
             request.Destination = InspectClientPackageDestination(projectRoot, request);
             if (request.Destination.ExistingPackage)
             {
@@ -378,6 +451,8 @@ void BuildProfilePanel::DrawClientBuild()
             EDITOR_LOG_WARN("Could not open exported folder: {}", Engine::WStrToStr(exportedDirectory.wstring()));
     }
 
+    DrawBamPakSummary();
+
     const auto& output = m_ClientBuild.GetOutput();
     if (m_BuildLogText.size() != output.size())
     {
@@ -416,6 +491,8 @@ void BuildProfilePanel::DrawClientBuild()
 void BuildProfilePanel::StartExport(ClientPackageRequest request)
 {
     const auto& settings = EditorSettingsService::Get();
+    m_LastPakSummary.reset();
+    m_LastPakSummaryDirectory.clear();
     m_ClientBuild.Start(settings.GetProjectRoot(), std::move(request));
     m_ScrollBuildLogToEnd = true;
     m_BuildLogText.clear();

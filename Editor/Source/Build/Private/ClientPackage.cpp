@@ -8,6 +8,7 @@
 #include "Functions.h"
 #include "InputActionSettings.h"
 #include "InputManager.h"
+#include "PakArchive.h"
 #include "PlatformPath.h"
 #include "ReflectionRegistry.h"
 #include "Renderer.h"
@@ -578,10 +579,381 @@ namespace
                 throw std::runtime_error("Required render profile resource is missing or empty: " + DisplayPath(path));
         }
     }
+
+    Engine::EPakPayloadFormat DetectPakPayloadFormat(const fs::path& path)
+    {
+        const auto extension = Engine::ToLowerStr(DisplayPath(path.extension()));
+        if (extension == ".json")
+            return Engine::EPakPayloadFormat::Json;
+        if (extension == ".beve")
+            return Engine::EPakPayloadFormat::Beve;
+        if (extension == ".dxil")
+            return Engine::EPakPayloadFormat::Dxil;
+        if (extension == ".dds")
+            return Engine::EPakPayloadFormat::Dds;
+        return Engine::EPakPayloadFormat::Raw;
+    }
+
+    bool IsDirectFileException(const fs::path& path)
+    {
+        const auto extension = Engine::ToLowerStr(DisplayPath(path.extension()));
+        constexpr std::string_view exceptionExtensions[] = { ".ogg", ".wav", ".mp3", ".ttf", ".otf" };
+        return std::ranges::find(exceptionExtensions, std::string_view(extension)) != std::end(exceptionExtensions);
+    }
+
+    std::uint64_t ComputeFileHash64(const fs::path& path)
+    {
+        std::ifstream input(path, std::ios::binary);
+        if (!input.is_open())
+            throw std::runtime_error("Could not open archive for hashing: " + DisplayPath(path));
+
+        constexpr std::uint64_t FnvOffsetBasis = 14695981039346656037ULL;
+        constexpr std::uint64_t FnvPrime = 1099511628211ULL;
+        std::uint64_t hash = FnvOffsetBasis;
+
+        constexpr std::size_t ChunkSize = 64 * 1024;
+        std::vector<std::uint8_t> buffer(ChunkSize);
+
+        while (input.good())
+        {
+            input.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(ChunkSize));
+            const std::streamsize bytesRead = input.gcount();
+            if (bytesRead <= 0)
+                break;
+
+            for (std::streamsize i = 0; i < bytesRead; ++i)
+            {
+                hash ^= static_cast<std::uint64_t>(buffer[static_cast<std::size_t>(i)]);
+                hash *= FnvPrime;
+            }
+        }
+
+        if (input.bad())
+            throw std::runtime_error("I/O error while hashing archive: " + DisplayPath(path));
+
+        return hash;
+    }
+
+    void CollectDirectoryIntoPak(const fs::path& sourceRoot, const fs::path& stagingRoot, std::string_view mountPrefix,
+        Engine::PakWriter& writer, std::vector<std::string>& directExceptions, std::vector<fs::path>& packedFiles)
+    {
+        std::error_code ec;
+        if (!fs::exists(sourceRoot, ec) || !fs::is_directory(sourceRoot, ec))
+            return;
+
+        struct StagedFileCandidate
+        {
+            std::string Uri;
+            fs::path PhysicalPath;
+        };
+        std::vector<StagedFileCandidate> candidates;
+
+        for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
+        {
+            const auto& filePath = entry->path();
+            const DWORD attributes = GetFileAttributesW(filePath.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES)
+                throw fs::filesystem_error("Could not inspect staged resource for .bampak", filePath,
+                    std::error_code(static_cast<int>(GetLastError()), std::system_category()));
+
+            if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                entry.disable_recursion_pending();
+                continue;
+            }
+
+            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+                continue;
+
+            const auto relativeToRoot = filePath.lexically_relative(sourceRoot);
+            if (IsDirectFileException(filePath))
+            {
+                const auto relativeToStaging = filePath.lexically_relative(stagingRoot);
+                directExceptions.push_back(DisplayPath(relativeToStaging));
+                continue;
+            }
+
+            const std::string rawUri = std::string(mountPrefix) + DisplayPath(relativeToRoot);
+            std::string normalizedUri;
+            if (!Engine::NormalizePakUri(rawUri, normalizedUri))
+                throw std::runtime_error("Invalid URI for .bampak entry: " + rawUri);
+
+            candidates.push_back({ std::move(normalizedUri), filePath });
+        }
+
+        std::sort(candidates.begin(), candidates.end(), [](const StagedFileCandidate& lhs, const StagedFileCandidate& rhs)
+            {
+                return lhs.Uri < rhs.Uri;
+            });
+
+        for (const auto& candidate : candidates)
+        {
+            const Engine::EResult addRes = writer.AddFile(
+                candidate.Uri, candidate.PhysicalPath, DetectPakPayloadFormat(candidate.PhysicalPath));
+            if (addRes != Engine::EResult::Success)
+                throw std::runtime_error("Could not add entry to .bampak: " + candidate.Uri);
+            packedFiles.push_back(candidate.PhysicalPath);
+        }
+    }
+
+    void PruneEmptyDirectories(const fs::path& root)
+    {
+        std::error_code ec;
+        if (!fs::exists(root, ec) || !fs::is_directory(root, ec))
+            return;
+
+        std::vector<fs::path> directories;
+        for (const auto& entry : fs::recursive_directory_iterator(root, ec))
+        {
+            if (entry.is_directory(ec))
+                directories.push_back(entry.path());
+        }
+
+        std::sort(directories.begin(), directories.end(), [](const fs::path& lhs, const fs::path& rhs)
+            {
+                return lhs.wstring().size() > rhs.wstring().size();
+            });
+
+        for (const auto& dir : directories)
+        {
+            if (fs::is_empty(dir, ec) && !ec)
+                fs::remove(dir, ec);
+        }
+
+        if (fs::is_empty(root, ec) && !ec)
+            fs::remove(root, ec);
+    }
+
+    void VerifyPakArchive(const fs::path& pakPath, std::uint64_t expectedEntryCount,
+        const std::vector<std::string>& requiredUris, const fs::path& stagingRoot)
+    {
+        Engine::PakReader reader;
+        const Engine::EResult mountRes = reader.Mount(pakPath);
+        if (mountRes != Engine::EResult::Success)
+            throw std::runtime_error("Failed to mount .bampak for integrity verification: " + DisplayPath(pakPath));
+
+        if (static_cast<std::uint64_t>(reader.GetEntries().size()) != expectedEntryCount)
+        {
+            reader.Unmount();
+            throw std::runtime_error(fmt::format(
+                ".bampak entry count mismatch for {}: expected {}, actual {}",
+                DisplayPath(pakPath), expectedEntryCount, reader.GetEntries().size()));
+        }
+
+        std::unordered_set<std::string> verifiedLowerUris;
+        std::vector<std::uint8_t> verifyBytes;
+        for (const auto& uri : requiredUris)
+        {
+            if (uri.empty())
+                continue;
+
+            std::string normalized;
+            if (!Engine::NormalizePakUri(uri, normalized))
+            {
+                reader.Unmount();
+                throw std::runtime_error("Invalid required URI during .bampak verification: " + uri);
+            }
+
+            const std::string lower = Engine::ToLowerPakUri(normalized);
+            if (!verifiedLowerUris.insert(lower).second)
+                continue;
+
+            // Direct-file exceptions (audio/fonts) remain staged on disk rather than inside .bampak.
+            fs::path exceptionPath;
+            if (normalized.starts_with("Engine://"))
+                exceptionPath = stagingRoot / "Engine" / "Resources" / Engine::Utf8ToPath(normalized.substr(9));
+            else if (normalized.starts_with("Project://"))
+                exceptionPath = stagingRoot / "Assets" / Engine::Utf8ToPath(normalized.substr(10));
+
+            std::error_code ec;
+            if (!exceptionPath.empty() && IsDirectFileException(exceptionPath) && fs::is_regular_file(exceptionPath, ec))
+                continue;
+
+            if (!reader.Contains(normalized))
+            {
+                reader.Unmount();
+                throw std::runtime_error("Required entry missing from .bampak (" + DisplayPath(pakPath) + "): " + normalized);
+            }
+
+            const Engine::EResult readRes = reader.ReadEntry(normalized, verifyBytes);
+            if (readRes != Engine::EResult::Success)
+            {
+                reader.Unmount();
+                throw std::runtime_error("Integrity verification failed for .bampak entry (" + DisplayPath(pakPath) + "): " + normalized);
+            }
+        }
+
+        reader.Unmount();
+    }
 }
 
 namespace Editor
 {
+    std::optional<ClientPackageManifest> ReadClientPackageManifestSummary(const fs::path& packageDirectory)
+    {
+        if (packageDirectory.empty())
+            return std::nullopt;
+
+        std::error_code ec;
+        const auto manifestPath = packageDirectory / "Config" / "PackageManifest.json";
+        if (!fs::is_regular_file(manifestPath, ec) || ec)
+            return std::nullopt;
+
+        try
+        {
+            auto text = ReadPackageConfigFile(manifestPath);
+            if (text.starts_with("\xef\xbb\xbf"))
+                text.erase(0, 3);
+
+            if (glz::validate_json(text))
+                return std::nullopt;
+
+            ClientPackageManifest manifest;
+            if (glz::read_json(manifest, text) || manifest.SchemaVersion == 0)
+                return std::nullopt;
+            return manifest;
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+    }
+
+    ClientPackageManifest BuildClientPakArchives(const ClientPakBuildOptions& options,
+        const std::function<void(std::string_view)>& onOutput)
+    {
+        const auto emit = [&](std::string_view text)
+            {
+                if (onOutput) onOutput(text);
+            };
+
+        const auto& staging = options.StagingDirectory;
+        std::error_code ec;
+        if (staging.empty() || !fs::is_directory(staging, ec))
+            throw std::runtime_error("Invalid staging directory for .bampak packaging: " + DisplayPath(staging));
+
+        const auto stagedEngine = staging / "Engine" / "Resources";
+        const auto stagedAssets = staging / "Assets";
+        const auto contentDirectory = staging / "Content";
+        fs::create_directories(contentDirectory);
+
+        Engine::PakWriter engineWriter;
+        Engine::PakWriter projectWriter;
+        std::vector<std::string> directExceptions;
+        std::vector<fs::path> packedLooseFiles;
+
+        CollectDirectoryIntoPak(stagedEngine, staging, "Engine://", engineWriter, directExceptions, packedLooseFiles);
+        CollectDirectoryIntoPak(stagedAssets, staging, "Project://", projectWriter, directExceptions, packedLooseFiles);
+
+        const auto enginePakPath = contentDirectory / "Engine.bampak";
+        const auto projectPakPath = contentDirectory / "Project.bampak";
+
+        emit(fmt::format("Writing Content/Engine.bampak ({} entries)...\n", engineWriter.GetEntryCount()));
+        if (engineWriter.WriteToFile(enginePakPath) != Engine::EResult::Success)
+            throw std::runtime_error("Failed to write Content/Engine.bampak: " + DisplayPath(enginePakPath));
+
+        emit(fmt::format("Writing Content/Project.bampak ({} entries)...\n", projectWriter.GetEntryCount()));
+        if (projectWriter.WriteToFile(projectPakPath) != Engine::EResult::Success)
+            throw std::runtime_error("Failed to write Content/Project.bampak: " + DisplayPath(projectPakPath));
+
+        std::vector<std::string> requiredEngineUris = options.RequiredEngineUris;
+        std::vector<std::string> requiredProjectUris = options.RequiredProjectUris;
+
+        const auto routeRequiredUri = [&](const std::string& uri)
+            {
+                if (uri.empty())
+                    return;
+                std::string normalized;
+                if (!Engine::NormalizePakUri(uri, normalized))
+                    return;
+                if (normalized.starts_with("Engine://"))
+                    requiredEngineUris.push_back(std::move(normalized));
+                else if (normalized.starts_with("Project://"))
+                    requiredProjectUris.push_back(std::move(normalized));
+            };
+
+        routeRequiredUri(options.StartupSceneUri);
+        routeRequiredUri(options.StartupManifestUri);
+        routeRequiredUri(options.RenderPipelineProfileUri);
+
+        emit("Verifying .bampak archives (header, index, required entries)...\n");
+        VerifyPakArchive(enginePakPath, static_cast<std::uint64_t>(engineWriter.GetEntryCount()), requiredEngineUris, staging);
+        VerifyPakArchive(projectPakPath, static_cast<std::uint64_t>(projectWriter.GetEntryCount()), requiredProjectUris, staging);
+
+        ClientPakArchiveEntry enginePakEntry;
+        enginePakEntry.Path = "Content/Engine.bampak";
+        enginePakEntry.MountScheme = "Engine://";
+        enginePakEntry.FormatVersion = Engine::PAK_FORMAT_VERSION;
+        enginePakEntry.EntryCount = static_cast<std::uint64_t>(engineWriter.GetEntryCount());
+        enginePakEntry.ByteSize = static_cast<std::uint64_t>(fs::file_size(enginePakPath));
+        enginePakEntry.Hash64 = ComputeFileHash64(enginePakPath);
+        enginePakEntry.IntegrityVerified = true;
+
+        ClientPakArchiveEntry projectPakEntry;
+        projectPakEntry.Path = "Content/Project.bampak";
+        projectPakEntry.MountScheme = "Project://";
+        projectPakEntry.FormatVersion = Engine::PAK_FORMAT_VERSION;
+        projectPakEntry.EntryCount = static_cast<std::uint64_t>(projectWriter.GetEntryCount());
+        projectPakEntry.ByteSize = static_cast<std::uint64_t>(fs::file_size(projectPakPath));
+        projectPakEntry.Hash64 = ComputeFileHash64(projectPakPath);
+        projectPakEntry.IntegrityVerified = true;
+
+        if (options.PrunePackedLooseFiles)
+        {
+            for (const auto& file : packedLooseFiles)
+            {
+                std::error_code removeErr;
+                fs::remove(file, removeErr);
+            }
+            PruneEmptyDirectories(stagedEngine);
+            PruneEmptyDirectories(staging / "Engine");
+            PruneEmptyDirectories(stagedAssets);
+        }
+
+        std::sort(directExceptions.begin(), directExceptions.end());
+        directExceptions.erase(std::unique(directExceptions.begin(), directExceptions.end()), directExceptions.end());
+
+        ClientPackageManifest manifest;
+        manifest.SchemaVersion = 1;
+        manifest.StartupSceneUri = options.StartupSceneUri;
+        manifest.StartupManifestUri = options.StartupManifestUri;
+        manifest.RenderPipelineProfileUri = options.RenderPipelineProfileUri;
+        manifest.BootstrapFiles.push_back("Config/Project.json");
+        if (options.HasInputActionsConfig || fs::is_regular_file(staging / "Config" / "InputActions.json", ec))
+            manifest.BootstrapFiles.push_back("Config/InputActions.json");
+        std::sort(manifest.BootstrapFiles.begin(), manifest.BootstrapFiles.end());
+        manifest.DirectFileExceptions = std::move(directExceptions);
+        manifest.Paks.push_back(std::move(enginePakEntry));
+        manifest.Paks.push_back(std::move(projectPakEntry));
+        manifest.IntegrityVerified = true;
+
+        std::string manifestJson;
+        if (glz::write_json(manifest, manifestJson))
+            throw std::runtime_error("Could not serialize Config/PackageManifest.json.");
+
+        const auto configDirectory = staging / "Config";
+        fs::create_directories(configDirectory);
+        const auto manifestPath = configDirectory / "PackageManifest.json";
+        std::ofstream manifestFile;
+        manifestFile.exceptions(std::ios::failbit | std::ios::badbit);
+        manifestFile.open(manifestPath, std::ios::binary | std::ios::trunc);
+        manifestFile << manifestJson << '\n';
+        manifestFile.close();
+
+        const auto verifiedManifest = ReadClientPackageManifestSummary(staging);
+        if (!verifiedManifest || !verifiedManifest->IntegrityVerified || verifiedManifest->Paks.size() != manifest.Paks.size())
+            throw std::runtime_error("Staged Config/PackageManifest.json failed round-trip validation.");
+
+        emit(fmt::format("  Content/Engine.bampak: {} entries / {} bytes (FNV64: 0x{:016X})\n",
+            manifest.Paks[0].EntryCount, manifest.Paks[0].ByteSize, manifest.Paks[0].Hash64));
+        emit(fmt::format("  Content/Project.bampak: {} entries / {} bytes (FNV64: 0x{:016X})\n",
+            manifest.Paks[1].EntryCount, manifest.Paks[1].ByteSize, manifest.Paks[1].Hash64));
+        emit(fmt::format("  Direct-file exceptions preserved: {}\n", manifest.DirectFileExceptions.size()));
+        emit("Wrote and verified Config/PackageManifest.json.\n");
+
+        return manifest;
+    }
+
     ClientPackageDestination InspectClientPackageDestination(const fs::path& projectRoot, const ClientPackageRequest& request)
     {
         if (request.OutputParent.empty() || request.StartupScene.empty())
@@ -871,6 +1243,50 @@ namespace Editor
         marker.open(staging / PackageMarker, std::ios::binary);
         marker << "BamEngine Windows Client\n" << request.ProgramName << ".exe\n";
         marker.close();
+
+        if (request.PackAssetsIntoBamPak)
+        {
+            emit("\n[BamPak Packaging]\n");
+            ClientPakBuildOptions pakOptions;
+            pakOptions.StagingDirectory = staging;
+            pakOptions.StartupSceneUri = "Project://" + DisplayPath(startupSceneRelative);
+            pakOptions.StartupManifestUri =
+                std::string(startupPipeline.InEngine ? "Engine://" : "Project://") + DisplayPath(startupPipeline.RelativePath);
+            if (!packageProfile.RelativePath.empty())
+            {
+                pakOptions.RenderPipelineProfileUri =
+                    std::string(packageProfile.InEngine ? "Engine://" : "Project://") + DisplayPath(packageProfile.RelativePath);
+            }
+
+            for (const auto& relative : profileResources)
+                pakOptions.RequiredEngineUris.push_back("Engine://" + DisplayPath(relative));
+            for (const auto& file : startupPipeline.Files)
+            {
+                const bool inProject = IsWithin(file, assetRoot);
+                const auto relative = RelativeToInput(file, inProject ? assetRoot : engineRoot);
+                if (inProject)
+                    pakOptions.RequiredProjectUris.push_back("Project://" + DisplayPath(relative));
+                else
+                    pakOptions.RequiredEngineUris.push_back("Engine://" + DisplayPath(relative));
+            }
+            for (const auto& uri : request.AdditionalScenes)
+                pakOptions.RequiredProjectUris.push_back(uri);
+
+            pakOptions.HasInputActionsConfig = fs::is_regular_file(stagedInput);
+            pakOptions.PrunePackedLooseFiles = true;
+
+            const auto manifest = BuildClientPakArchives(pakOptions, emit);
+            std::uint64_t totalEntries = 0;
+            std::uint64_t totalBytes = 0;
+            for (const auto& pak : manifest.Paks)
+            {
+                totalEntries += pak.EntryCount;
+                totalBytes += pak.ByteSize;
+            }
+            emit(fmt::format("BamPak summary: {} archives, {} entries, {} bytes, integrity: {}\n",
+                manifest.Paks.size(), totalEntries, totalBytes,
+                manifest.IntegrityVerified ? "VERIFIED" : "FAILED"));
+        }
 
         output += "\n[Package inventory]\n";
         output += "Current collection policy: full runtime resource scan. Listed paths are examples.\n";

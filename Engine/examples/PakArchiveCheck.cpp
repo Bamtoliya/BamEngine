@@ -409,6 +409,127 @@ static int TestPakMountManager(const fs::path& tempDir)
 }
 
 // -----------------------------------------------------------------------------
+// 테스트 7: 스테이징 2-팩(Engine.bampak + Project.bampak) 패키징 및 마운트 왕복 검증
+// -----------------------------------------------------------------------------
+static int TestTwoPakStagingRoundTrip(const fs::path& tempDir)
+{
+    const fs::path stagingDir = tempDir / "TwoPakStaging";
+    const fs::path stagedEngine = stagingDir / "Engine" / "Resources";
+    const fs::path stagedAssets = stagingDir / "Assets";
+    const fs::path stagedConfig = stagingDir / "Config";
+    const fs::path contentDir = stagingDir / "Content";
+
+    fs::create_directories(stagedEngine / "Shader" / "bin" / "dxil");
+    fs::create_directories(stagedEngine / "Material");
+    fs::create_directories(stagedAssets / "Scenes");
+    fs::create_directories(stagedAssets / "Textures");
+    fs::create_directories(stagedAssets / "Audio");
+    fs::create_directories(stagedConfig);
+    fs::create_directories(contentDir);
+
+    const std::vector<uint8_t> dxilBytes = { 0x44, 0x58, 0x42, 0x43, 0x10, 0x20, 0x30, 0x40 };
+    const std::string uiMatJson = R"({"Material":"UIMaterial","Blend":"Alpha"})";
+    const std::string introSceneJson = R"({"Scene":"Intro","Entities":["Camera","Player"]})";
+    const std::vector<uint8_t> ddsBytes = { 0x44, 0x44, 0x53, 0x20, 0x7C, 0x00, 0x00, 0x00, 0xAA, 0xBB };
+    const std::vector<uint8_t> oggBytes = { 0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0x01, 0x02 };
+
+    auto writeBinary = [](const fs::path& path, const void* data, size_t size) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+    };
+
+    const fs::path dxilPath = stagedEngine / "Shader" / "bin" / "dxil" / "DefaultPS.dxil";
+    const fs::path uiMatPath = stagedEngine / "Material" / "UIMaterial.bammat.json";
+    const fs::path introScenePath = stagedAssets / "Scenes" / "Intro.bamscene.json";
+    const fs::path heroTexPath = stagedAssets / "Textures" / "Hero.dds";
+    const fs::path themeAudioPath = stagedAssets / "Audio" / "Theme.ogg";
+
+    writeBinary(dxilPath, dxilBytes.data(), dxilBytes.size());
+    writeBinary(uiMatPath, uiMatJson.data(), uiMatJson.size());
+    writeBinary(introScenePath, introSceneJson.data(), introSceneJson.size());
+    writeBinary(heroTexPath, ddsBytes.data(), ddsBytes.size());
+    writeBinary(themeAudioPath, oggBytes.data(), oggBytes.size());
+
+    // Engine.bampak 작성 (Engine:// 리소스)
+    const fs::path enginePakPath = contentDir / "Engine.bampak";
+    {
+        PakWriter engineWriter;
+        EXPECT_EQ(engineWriter.AddFile("Engine://Shader/bin/dxil/DefaultPS.dxil", dxilPath, EPakPayloadFormat::Dxil), EResult::Success);
+        EXPECT_EQ(engineWriter.AddFile("Engine://Material/UIMaterial.bammat.json", uiMatPath, EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(engineWriter.GetEntryCount(), 2);
+        EXPECT_EQ(engineWriter.WriteToFile(enginePakPath), EResult::Success);
+    }
+
+    // Project.bampak 작성 (Project:// 리소스, 스트리밍 오디오 .ogg는 직접 파일 예외로 제외)
+    const fs::path projectPakPath = contentDir / "Project.bampak";
+    {
+        PakWriter projectWriter;
+        EXPECT_EQ(projectWriter.AddFile("Project://Scenes/Intro.bamscene.json", introScenePath, EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(projectWriter.AddFile("Project://Textures/Hero.dds", heroTexPath, EPakPayloadFormat::Dds), EResult::Success);
+        EXPECT_EQ(projectWriter.GetEntryCount(), 2);
+        EXPECT_EQ(projectWriter.WriteToFile(projectPakPath), EResult::Success);
+    }
+
+    // 개별 PakReader 사전 무결성 검증
+    {
+        PakReader engineReader;
+        EXPECT_EQ(engineReader.Mount(enginePakPath), EResult::Success);
+        EXPECT_EQ(engineReader.GetEntries().size(), 2);
+        EXPECT_TRUE(engineReader.Contains("Engine://Shader/bin/dxil/DefaultPS.dxil"));
+        EXPECT_TRUE(engineReader.Contains("Engine://Material/UIMaterial.bammat.json"));
+        engineReader.Unmount();
+
+        PakReader projectReader;
+        EXPECT_EQ(projectReader.Mount(projectPakPath), EResult::Success);
+        EXPECT_EQ(projectReader.GetEntries().size(), 2);
+        EXPECT_TRUE(projectReader.Contains("Project://Scenes/Intro.bamscene.json"));
+        EXPECT_TRUE(projectReader.Contains("Project://Textures/Hero.dds"));
+        projectReader.Unmount();
+    }
+
+    // PakMountManager 2-팩 통합 마운트 및 TryReadBytes 왕복 검증
+    PakMountManager mountMgr;
+    EXPECT_EQ(mountMgr.MountPak(enginePakPath), EResult::Success);
+    EXPECT_EQ(mountMgr.MountPak(projectPakPath), EResult::Success);
+    EXPECT_EQ(mountMgr.GetMountedPakCount(), 2);
+
+    const PakEntryInfo* dxilEntry = mountMgr.FindEntry("Engine://Shader/bin/dxil/DefaultPS.dxil");
+    EXPECT_TRUE(dxilEntry != nullptr);
+    EXPECT_EQ(dxilEntry->PayloadFormat, EPakPayloadFormat::Dxil);
+
+    const PakEntryInfo* sceneEntry = mountMgr.FindEntry("project://scenes/intro.bamscene.json");
+    EXPECT_TRUE(sceneEntry != nullptr);
+    EXPECT_EQ(sceneEntry->PayloadFormat, EPakPayloadFormat::Json);
+
+    const PakEntryInfo* ddsEntry = mountMgr.FindEntry("Project://Textures/Hero.dds");
+    EXPECT_TRUE(ddsEntry != nullptr);
+    EXPECT_EQ(ddsEntry->PayloadFormat, EPakPayloadFormat::Dds);
+
+    std::vector<uint8_t> readBytes;
+    EXPECT_EQ(mountMgr.TryReadBytes("Engine://Shader/bin/dxil/DefaultPS.dxil", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, dxilBytes);
+
+    EXPECT_EQ(mountMgr.TryReadBytes("Engine://Material/UIMaterial.bammat.json", readBytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBytes.data()), readBytes.size()), uiMatJson);
+
+    EXPECT_EQ(mountMgr.TryReadBytes("Project://Scenes/Intro.bamscene.json", readBytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBytes.data()), readBytes.size()), introSceneJson);
+
+    EXPECT_EQ(mountMgr.TryReadBytes("Project://Textures/Hero.dds", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, ddsBytes);
+
+    // 직접 파일 예외(.ogg)는 팩에 포함되지 않고 디스크에 유지됨을 확인
+    EXPECT_FALSE(mountMgr.HasEntry("Project://Audio/Theme.ogg"));
+    EXPECT_TRUE(fs::is_regular_file(themeAudioPath));
+
+    mountMgr.UnmountAll();
+    EXPECT_EQ(mountMgr.GetMountedPakCount(), 0);
+
+    std::cout << "[PASS] TestTwoPakStagingRoundTrip" << std::endl;
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
 // 진입점
 // -----------------------------------------------------------------------------
 int main()
@@ -436,6 +557,7 @@ int main()
     if (int res = TestDeterminism(tempDir); res != 0) return res;
     if (int res = TestCorruptionDefense(tempDir); res != 0) return res;
     if (int res = TestPakMountManager(tempDir); res != 0) return res;
+    if (int res = TestTwoPakStagingRoundTrip(tempDir); res != 0) return res;
 
     std::cout << "=== All PakArchiveCheck Tests Passed Successfully! ===" << std::endl;
     return 0;
