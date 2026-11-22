@@ -3,6 +3,8 @@
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
 #include <vector>
+#include <array>
+#include <unordered_map>
 #include <cstddef>
 
 struct DirectX12RHIDesc : public RHIDesc
@@ -249,6 +251,31 @@ private:
 	std::unordered_set<const RHIBuffer*> m_BuffersTransitionedThisFrame;
 	static constexpr uint32 FRAME_SRV_DESCRIPTOR_COUNT = SRV_TABLE_SIZE * 1024;
 	uint32 m_SRVTableStartIndices[MAX_SWAPCHAIN_BUFFERS] = {};
+	// 같은 프레임에서 리소스 조합이 같은 그래픽스 드로우는 SRV 테이블을 공유한다. 드로우마다 새 테이블을 쓰면
+	// 캐스케이드처럼 드로우가 많은 프레임이 FRAME_SRV_DESCRIPTOR_COUNT를 넘는다.
+	// 뷰 설정은 리소스·텍스처·조명 패스 여부로 정해진다. 해제된 리소스는 프레임이 끝날 때까지 지연되므로 주소가 겹치지 않는다.
+	struct SRVTableKey
+	{
+		std::array<ID3D12Resource*, SRV_TABLE_SIZE> Resources{};
+		std::array<const class DirectX12Texture*, SRV_TABLE_SIZE> Textures{};
+		bool IsLighting = false;
+		bool operator==(const SRVTableKey&) const = default;
+	};
+	struct SRVTableKeyHash
+	{
+		size_t operator()(const SRVTableKey& key) const
+		{
+			size_t seed = key.IsLighting ? 1u : 0u;
+			const auto combine = [&seed](const void* value)
+				{
+					seed ^= std::hash<const void*>()(value) + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2);
+				};
+			for (const auto* resource : key.Resources) combine(resource);
+			for (const auto* texture : key.Textures) combine(texture);
+			return seed;
+		}
+	};
+	std::unordered_map<SRVTableKey, uint32, SRVTableKeyHash> m_FrameSRVTables; // 값은 힙 안의 테이블 시작 인덱스
 
 	DirectX12DescriptorAllocator* m_RtvAllocator = nullptr; // 렌더타겟용 주차장
 	DirectX12DescriptorAllocator* m_DsvAllocator = nullptr; // 뎁스용 주차장

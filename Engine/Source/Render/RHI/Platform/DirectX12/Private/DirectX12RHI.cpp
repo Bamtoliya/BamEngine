@@ -518,6 +518,7 @@ EResult DirectX12RHI::BeginFrame()
     m_TextureUploadCursors[m_CurrentBackBufferIndex] = 0;
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
 	m_DynamicHeapCursor = 0;
+	m_FrameSRVTables.clear();
 	std::fill(std::begin(m_ComputeStorageTextures), std::end(m_ComputeStorageTextures), nullptr);
 	m_ComputeAccelerationStructure = nullptr;
 	m_ComputeAccelerationStructureSlot = UINT32_MAX;
@@ -2110,12 +2111,6 @@ EResult DirectX12RHI::ApplyShaderResources()
 
     // Compute는 SRV 테이블 뒤에 쓰기 텍스처 UAV 테이블(u2-u5)을 이어서 기록한다.
     const uint32 requiredDescriptors = SRV_TABLE_SIZE + (isCompute ? UAV_TABLE_SIZE : 0);
-    if (m_DynamicHeapCursor > FRAME_SRV_DESCRIPTOR_COUNT - requiredDescriptors)
-    {
-        ENGINE_LOG_ERROR("Frame SRV table capacity exceeded.");
-        return EResult::Fail;
-    }
-
     ID3D12Resource* resources[SRV_TABLE_SIZE] = {};
     DirectX12Texture* samplingTextures[SRV_TABLE_SIZE] = {};
     D3D12_SHADER_RESOURCE_VIEW_DESC views[SRV_TABLE_SIZE] = {};
@@ -2323,6 +2318,23 @@ EResult DirectX12RHI::ApplyShaderResources()
         }
     }
 
+    // Compute 테이블은 TLAS·UAV가 이어지고 Dispatch 수가 적어 매번 새로 기록한다.
+    SRVTableKey tableKey;
+    auto cachedTable = m_FrameSRVTables.end();
+    if (!isCompute)
+    {
+        std::copy(std::begin(resources), std::end(resources), tableKey.Resources.begin());
+        std::copy(std::begin(samplingTextures), std::end(samplingTextures), tableKey.Textures.begin());
+        tableKey.IsLighting = isLighting;
+        cachedTable = m_FrameSRVTables.find(tableKey);
+    }
+    const bool reuseTable = cachedTable != m_FrameSRVTables.end();
+    if (!reuseTable && m_DynamicHeapCursor > FRAME_SRV_DESCRIPTOR_COUNT - requiredDescriptors)
+    {
+        ENGINE_LOG_ERROR("Frame SRV table capacity exceeded.");
+        return EResult::Fail;
+    }
+
     // 입력 검사가 끝난 뒤 필요한 상태 전환을 기록합니다.
     for (auto* texture : samplingTextures)
     {
@@ -2364,16 +2376,20 @@ EResult DirectX12RHI::ApplyShaderResources()
         texture->SetCurrentState(D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     }
 
-    const uint32 tableIndex = m_SRVTableStartIndices[m_CurrentBackBufferIndex] + m_DynamicHeapCursor;
+    const uint32 tableIndex = reuseTable ? cachedTable->second
+        : m_SRVTableStartIndices[m_CurrentBackBufferIndex] + m_DynamicHeapCursor;
     const uint32 descriptorSize = m_Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     D3D12_CPU_DESCRIPTOR_HANDLE destination = m_SrvAllocator->GetHeap()->GetCPUDescriptorHandleForHeapStart();
     destination.ptr += static_cast<SIZE_T>(tableIndex) * descriptorSize;
 
-    for (uint32 slot = 0; slot < SRV_TABLE_SIZE; ++slot)
+    if (!reuseTable)
     {
-        m_Device->CreateShaderResourceView(resources[slot], &views[slot], destination);
-        destination.ptr += descriptorSize;
+        for (uint32 slot = 0; slot < SRV_TABLE_SIZE; ++slot)
+        {
+            m_Device->CreateShaderResourceView(resources[slot], &views[slot], destination);
+            destination.ptr += descriptorSize;
+        }
     }
 
     if (isCompute)
@@ -2394,7 +2410,12 @@ EResult DirectX12RHI::ApplyShaderResources()
         m_CommandList->SetGraphicsRootDescriptorTable(7, m_SrvAllocator->GetGPUHandle(tableIndex + MAX_MATERIAL_TEXTURE_SLOTS));
     }
 
-    m_DynamicHeapCursor += requiredDescriptors;
+    if (!reuseTable)
+    {
+        m_DynamicHeapCursor += requiredDescriptors;
+        if (!isCompute)
+            m_FrameSRVTables.emplace(tableKey, tableIndex);
+    }
 
     return EResult::Success;
 }
