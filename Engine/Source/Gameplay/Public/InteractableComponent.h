@@ -11,8 +11,6 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
-		static constexpr auto ComponentEnableMember = &InteractableComponent::enabled;
-
 		PROPERTY(EDITABLE, RANGE(0.1f, 1000.0f))
 		f32 interactRange = 2.5f;
 
@@ -21,6 +19,8 @@ namespace Engine
 
 		PROPERTY(EDITABLE)
 		bool enabled = true;
+
+		static constexpr auto ComponentEnableMember = &InteractableComponent::enabled;
 
 		PROPERTY(EDITABLE)
 		bool oneShot = false;

@@ -251,10 +251,10 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
-		static constexpr auto ComponentEnableMember = &AnimationIKComponent::enabled;
-
 		PROPERTY(EDITABLE, ALLOW_MISSING)
 		bool enabled = true;
+
+		static constexpr auto ComponentEnableMember = &AnimationIKComponent::enabled;
 
 		PROPERTY(EDITABLE, ALLOW_MISSING)
 		std::vector<TwoBoneIKChain> twoBoneChains;

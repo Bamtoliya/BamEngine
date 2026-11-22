@@ -14,8 +14,6 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
-		static constexpr auto ComponentEnableMember = &HitboxComponent::active;
-
 		PROPERTY(EDITABLE, RANGE(0.0f, 100000.0f))
 		f32 damage = 10.0f;
 
@@ -30,6 +28,8 @@ namespace Engine
 
 		PROPERTY(EDITABLE)
 		bool active = true;
+
+		static constexpr auto ComponentEnableMember = &HitboxComponent::active;
 
 		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.05f, 100.0f))
 		f32 fallbackRadius = 1.0f;
