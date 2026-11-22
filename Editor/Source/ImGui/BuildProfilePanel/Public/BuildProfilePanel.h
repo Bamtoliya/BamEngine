@@ -22,6 +22,7 @@ private:
     void DrawPackageEntries(const char* labelKey, std::vector<std::string>& entries, bool scenes);
     void DrawSceneReferenceCheck();
     void DrawClientBuild();
+    void DrawBamPakSummary() const;
     void DrawReplacePackageDialog();
     void StartExport(ClientPackageRequest request);
 
@@ -31,6 +32,9 @@ private:
     std::filesystem::path m_OutputDirectory;
     std::string m_PackageDirectoryName = ClientPackageRequest::DefaultDirectoryName;
     std::string m_ProgramName = ClientPackageRequest::DefaultProgramName;
+    bool m_PackAssetsIntoBamPak = false;
+    std::optional<ClientPackageManifest> m_LastPakSummary;
+    std::filesystem::path m_LastPakSummaryDirectory;
     std::optional<ClientPackageRequest> m_PendingReplacement;
     std::vector<AssetReferenceIssue> m_SceneReferenceIssues;
     bool m_HasSceneReferenceResult = false;

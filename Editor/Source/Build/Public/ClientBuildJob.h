@@ -40,10 +40,37 @@ namespace Editor
         ClientPackageDestination Destination;
         std::vector<std::string> AdditionalScenes;
         std::vector<std::string> AdditionalAssets;
+        bool PackAssetsIntoBamPak = false;
+    };
+
+    struct ClientPakArchiveEntry
+    {
+        std::string Path;
+        std::string MountScheme;
+        std::uint32_t FormatVersion = 1;
+        std::uint64_t EntryCount = 0;
+        std::uint64_t ByteSize = 0;
+        std::uint64_t Hash64 = 0;
+        bool IntegrityVerified = false;
+    };
+
+    struct ClientPackageManifest
+    {
+        std::uint32_t SchemaVersion = 1;
+        std::string StartupSceneUri;
+        std::string StartupManifestUri;
+        std::string RenderPipelineProfileUri;
+        std::vector<std::string> BootstrapFiles;
+        std::vector<std::string> DirectFileExceptions;
+        std::vector<ClientPakArchiveEntry> Paks;
+        bool IntegrityVerified = false;
     };
 
     ClientPackageDestination InspectClientPackageDestination(const std::filesystem::path& projectRoot,
         const ClientPackageRequest& request);
+
+    [[nodiscard]] std::optional<ClientPackageManifest> ReadClientPackageManifestSummary(
+        const std::filesystem::path& packageDirectory);
 
     class ClientBuildJob final
     {
