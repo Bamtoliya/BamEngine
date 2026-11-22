@@ -6,30 +6,98 @@
 #include "ResourceReference.h"
 #include "Runtime.h"
 
+#include <array>
+#include <filesystem>
+#include <string>
+#include <string_view>
+#include <system_error>
+
 namespace archive_resource
 {
-    inline Engine::Handle ResolveResourceHandle(Engine::ResourceManager& manager,
-        const std::wstring& assetKey, const std::wstring& assetPath)
+    namespace detail
     {
-        auto handle = manager.FindHandleByKey(assetKey);
-        if (manager.IsValid(handle)) return handle;
-        handle = manager.FindHandleByFilePath(assetKey);
-        if (manager.IsValid(handle)) return handle;
-        if (!assetPath.empty())
-        {
-            handle = manager.FindHandleByKey(assetPath);
-            if (manager.IsValid(handle)) return handle;
-            handle = manager.FindHandleByFilePath(assetPath);
-            if (manager.IsValid(handle)) return handle;
-        }
-
-        static const std::array<std::wstring_view, 10> candidateExtensions = {
+        inline constexpr std::array<std::wstring_view, 10> kCandidateResourceExtensions = {
             L".bammat.json", L".bammat",
             L".bammatinst.json", L".bammatinst",
             L".bamsprite.json", L".bamsprite",
             L".bammesh.json", L".bammesh",
             L".json", L".beve"
         };
+
+        inline bool HasBamExtension(const std::filesystem::path& path)
+        {
+            return path.extension().wstring().rfind(L".bam", 0) == 0;
+        }
+
+        inline Engine::Handle TryFindLoadedByKeyOrPath(Engine::ResourceManager& manager,
+            const std::wstring& candidate, bool allowFilePathLookup)
+        {
+            auto found = manager.FindHandleByKey(candidate);
+            if (!manager.IsValid(found) && allowFilePathLookup)
+                found = manager.FindHandleByFilePath(candidate);
+            return found;
+        }
+
+        inline Engine::Handle TryLoadWithCandidateExtensions(Engine::ResourceManager& manager,
+            const std::wstring& baseUri)
+        {
+            for (const std::wstring_view ext : kCandidateResourceExtensions)
+            {
+                const std::wstring candidateUri = baseUri + std::wstring(ext);
+                const auto candidatePath = Engine::PlatformPath::ResolveUri(candidateUri);
+                if (std::filesystem::exists(candidatePath))
+                {
+                    const auto handle = manager.LoadFile(candidateUri);
+                    if (manager.IsValid(handle))
+                        return handle;
+                }
+            }
+            return {};
+        }
+
+        inline Engine::Handle TryResolveLegacyResourcesPath(Engine::ResourceManager& manager,
+            const std::wstring& rawPath)
+        {
+            if (rawPath.empty()) return {};
+
+            std::wstring replaced = rawPath;
+            const auto replaceSegment = [&](std::wstring_view from, std::wstring_view to) -> bool
+            {
+                const size_t pos = replaced.find(from);
+                if (pos == std::wstring::npos) return false;
+                replaced.replace(pos, from.size(), to);
+                return true;
+            };
+
+            bool modified = replaceSegment(L"/Resources/", L"/Assets/") || replaceSegment(L"\\Resources\\", L"\\Assets\\");
+            if (!modified && replaced.rfind(L"Resources/", 0) == 0)
+            {
+                replaced.replace(0, 10, L"Assets/");
+                modified = true;
+            }
+            if (!modified) return {};
+
+            const auto candidatePath = Engine::PlatformPath::ResolveUri(replaced);
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(candidatePath, error)) return {};
+
+            const auto virtualUri = Engine::PlatformPath::ToVirtualUri(candidatePath);
+            const auto loaded = manager.LoadFile(virtualUri);
+            return manager.IsValid(loaded) ? loaded : Engine::Handle{};
+        }
+    }
+
+    inline Engine::Handle ResolveResourceHandle(Engine::ResourceManager& manager,
+        const std::wstring& assetKey, const std::wstring& assetPath)
+    {
+        // 1. 정확한 키 또는 파일 경로로 이미 로드된 리소스 탐색
+        if (auto handle = detail::TryFindLoadedByKeyOrPath(manager, assetKey, true); manager.IsValid(handle))
+            return handle;
+        if (!assetPath.empty())
+        {
+            if (auto handle = detail::TryFindLoadedByKeyOrPath(manager, assetPath, true); manager.IsValid(handle))
+                return handle;
+        }
 
         // 키가 가리키는 파일이 그대로 있으면 확장자를 바꾼 후보의 파일 경로 탐색은 건너뛴다(키 탐색은 유지).
         // 처음 로드하는 리소스마다 후보 수만큼 전체 리소스를 훑는 비용을 막는다.
@@ -40,47 +108,38 @@ namespace archive_resource
             hasExactFile = std::filesystem::is_regular_file(Engine::PlatformPath::ResolveUri(assetKey), error);
         }
 
-        // 1. 이미 로드된 리소스 중 확장자가 붙은 키 또는 파일 경로 탐색
-        const auto findLoaded = [&](const std::wstring& candidate) -> Engine::Handle
-            {
-                auto found = manager.FindHandleByKey(candidate);
-                if (!manager.IsValid(found) && !hasExactFile)
-                    found = manager.FindHandleByFilePath(candidate);
-                return found;
-            };
-        for (const auto& ext : candidateExtensions)
+        for (const std::wstring_view ext : detail::kCandidateResourceExtensions)
         {
-            handle = findLoaded(assetKey + std::wstring(ext));
-            if (manager.IsValid(handle)) return handle;
+            const std::wstring candidate = assetKey + std::wstring(ext);
+            if (auto handle = detail::TryFindLoadedByKeyOrPath(manager, candidate, !hasExactFile); manager.IsValid(handle))
+                return handle;
         }
 
         const std::filesystem::path keyPath(assetKey);
-        const std::wstring keyExt = keyPath.extension().wstring();
-        if (keyExt.rfind(L".bam", 0) == 0)
+        if (detail::HasBamExtension(keyPath))
         {
             std::filesystem::path stripped = keyPath;
             stripped.replace_extension();
             for (const auto& candidate : { stripped.wstring(), assetKey + L".json", assetKey + L".beve" })
             {
-                handle = findLoaded(candidate);
-                if (manager.IsValid(handle)) return handle;
+                if (auto handle = detail::TryFindLoadedByKeyOrPath(manager, candidate, !hasExactFile); manager.IsValid(handle))
+                    return handle;
             }
         }
 
-        // 가상 URI 키는 현재 프로젝트 기준으로 풀리므로 저장 당시의 AssetPath보다 먼저 쓴다.
+        // 2. 가상 URI 키는 현재 프로젝트 기준으로 풀리므로 저장 당시의 AssetPath보다 먼저 로드한다.
         // 절대 AssetPath는 다른 체크아웃이나 옮기기 전 위치의 파일을 가리킬 수 있다.
         if (hasExactFile)
         {
-            handle = manager.LoadFile(assetKey);
-            if (manager.IsValid(handle)) return handle;
+            if (auto handle = manager.LoadFile(assetKey); manager.IsValid(handle))
+                return handle;
         }
 
-        // 2. assetPath가 있으면 파일 로드 시도
+        // 3. assetPath / assetKey 기준 디스크 파일 탐색 및 자동 로드
         if (!assetPath.empty())
         {
             const auto fsPath = Engine::PlatformPath::ResolveUri(assetPath);
-            const std::wstring pathExt = fsPath.extension().wstring();
-            if (pathExt.rfind(L".bam", 0) == 0)
+            if (detail::HasBamExtension(fsPath))
             {
                 if (std::filesystem::exists(fsPath.wstring() + L".json"))
                     return manager.LoadFile(assetPath + L".json");
@@ -89,84 +148,33 @@ namespace archive_resource
             }
             if (std::filesystem::exists(fsPath))
             {
-                handle = manager.LoadFile(assetPath);
-                if (manager.IsValid(handle)) return handle;
+                if (auto handle = manager.LoadFile(assetPath); manager.IsValid(handle))
+                    return handle;
             }
-            for (const auto& ext : candidateExtensions)
-            {
-                const auto candidateWithExt = Engine::PlatformPath::ResolveUri(assetPath + std::wstring(ext));
-                if (std::filesystem::exists(candidateWithExt))
-                {
-                    handle = manager.LoadFile(assetPath + std::wstring(ext));
-                    if (manager.IsValid(handle)) return handle;
-                }
-            }
+            if (auto handle = detail::TryLoadWithCandidateExtensions(manager, assetPath); manager.IsValid(handle))
+                return handle;
         }
-        // 3. assetPath가 비어있고 assetKey만 있을 때, 디스크 파일 탐색 및 자동 로드
+
         if (!assetKey.empty())
         {
             const auto keyFsPath = Engine::PlatformPath::ResolveUri(assetKey);
             std::error_code error;
             if (std::filesystem::is_regular_file(keyFsPath, error))
             {
-                handle = manager.LoadFile(assetKey);
-                if (manager.IsValid(handle)) return handle;
+                if (auto handle = manager.LoadFile(assetKey); manager.IsValid(handle))
+                    return handle;
             }
-            for (const auto& ext : candidateExtensions)
-            {
-                const auto candidateWithExt = Engine::PlatformPath::ResolveUri(assetKey + std::wstring(ext));
-                if (std::filesystem::exists(candidateWithExt))
-                {
-                    handle = manager.LoadFile(assetKey + std::wstring(ext));
-                    if (manager.IsValid(handle)) return handle;
-                }
-            }
-        }
-
-        for (const auto& ext : candidateExtensions)
-        {
-            const auto candidatePath = Engine::PlatformPath::ResolveUri(assetKey + std::wstring(ext));
-            if (std::filesystem::exists(candidatePath))
-            {
-                handle = manager.LoadFile(assetKey + std::wstring(ext));
-                if (manager.IsValid(handle)) return handle;
-            }
+            if (auto handle = detail::TryLoadWithCandidateExtensions(manager, assetKey); manager.IsValid(handle))
+                return handle;
         }
 
         // 4. 레거시 Resources/ -> Assets/ 경로 폴백 (과거 절대/상대 경로로 저장된 .bammodel/.bammesh 복구)
-        const auto tryResolveLegacyResourcesPath = [&](const std::wstring& rawPath) -> Engine::Handle
-            {
-                if (rawPath.empty()) return {};
-                std::wstring replaced = rawPath;
-                const auto replaceSegment = [&](const std::wstring& from, const std::wstring& to) -> bool
-                    {
-                        const size_t pos = replaced.find(from);
-                        if (pos == std::wstring::npos) return false;
-                        replaced.replace(pos, from.size(), to);
-                        return true;
-                    };
+        if (auto fallback = detail::TryResolveLegacyResourcesPath(manager, assetPath); manager.IsValid(fallback))
+            return fallback;
+        if (auto fallback = detail::TryResolveLegacyResourcesPath(manager, assetKey); manager.IsValid(fallback))
+            return fallback;
 
-                bool modified = replaceSegment(L"/Resources/", L"/Assets/") || replaceSegment(L"\\Resources\\", L"\\Assets\\");
-                if (!modified && replaced.rfind(L"Resources/", 0) == 0)
-                {
-                    replaced.replace(0, 10, L"Assets/");
-                    modified = true;
-                }
-                if (!modified) return {};
-
-                const auto candidatePath = Engine::PlatformPath::ResolveUri(replaced);
-                std::error_code error;
-                if (!std::filesystem::is_regular_file(candidatePath, error)) return {};
-
-                const auto virtualUri = Engine::PlatformPath::ToVirtualUri(candidatePath);
-                const auto loaded = manager.LoadFile(virtualUri);
-                return manager.IsValid(loaded) ? loaded : Engine::Handle{};
-            };
-
-        if (auto fallback = tryResolveLegacyResourcesPath(assetPath); manager.IsValid(fallback)) return fallback;
-        if (auto fallback = tryResolveLegacyResourcesPath(assetKey); manager.IsValid(fallback)) return fallback;
-
-        return handle;
+        return {};
     }
 
     inline archive::ArchiveResult WriteResourceReferences(archive::IArchive& ar, std::string_view key,
