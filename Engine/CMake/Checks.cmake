@@ -190,6 +190,7 @@ foreach(sprint_c_check IN ITEMS
     AudioMixerCheck
     NetworkRpcCheck
     SceneStreamingCheck
+    RLSimulationCheck
 )
     add_executable(${sprint_c_check} examples/${sprint_c_check}.cpp)
     target_link_libraries(${sprint_c_check} PRIVATE BamEngine::Engine)
