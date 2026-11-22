@@ -5,6 +5,7 @@
 #include "Animation.h"
 #include "AnimationSceneQuery.h"
 #include "AnimatorComponent.h"
+#include "CameraComponent.h"
 #include "ComponentEnable.h"
 #include "HierarchyComponent.h"
 #include "CompositeVFXComponent.h"
@@ -12,13 +13,18 @@
 #include "FlagComponent.h"
 #include "Model.h"
 #include "ModelInstanceComponent.h"
+#include "NameComponent.h"
+#include "ReflectionRegistry.h"
 #include "ResourceManager.h"
 #include "Scene.h"
 #include "Skeleton.h"
 #include "SkinnedMeshRendererComponent.h"
+#include "SplineComponent.h"
+#include "SplineCurve.h"
 #include "TransformComponent.h"
 #include "TransformSystem.h"
 #include "WorldTransformComponent.h"
+#include <archive/JsonArchive.h>
 #include "GameplayCombatSystem.h"
 #include "HealthComponent.h"
 #include "HitboxComponent.h"
@@ -715,6 +721,355 @@ namespace
 
 		return passed;
 	}
+
+	bool CheckCameraCutTrackAndRestore()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		{
+			Engine::TimelineCameraCutSection cut;
+			cut.TrackName = "BossIntroCut";
+			cut.IsActive = true;
+			cut.StartTime = 0.0f;
+			cut.EndTime = 0.6f;
+			cut.TargetCameraName = "CutCam";
+			cut.LocalPositionOffset = Engine::vec3(0.0f, 1.0f, 2.0f);
+			cut.LocalEulerRotationOffset = Engine::vec3(0.0f, 0.0f, 0.0f);
+			cut.TargetFOV = 35.0f;
+			cut.BlendInDuration = 0.2f;
+
+			Engine::ActionTimelineCreateDesc desc;
+			desc.Duration = 0.6f;
+			desc.CameraCutTracks.push_back(cut);
+			auto asset = Engine::ResourceManager::Get().AddResource(
+				L"TimelineCameraCutAsset", Engine::ActionTimelineAsset::Create(&desc));
+
+			ScenePtr scene(Engine::Scene::Create());
+			TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+			if (!asset.IsValid() || !scene || !system)
+				return Check(false, "Camera cut test setup failed.");
+
+			scene->SetActive(true);
+			auto& world = scene->GetRegistry();
+
+			// 1) 원래 메인 카메라
+			const auto mainCamEntity = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::NameComponent>(mainCamEntity).name = L"MainCam";
+			auto& mainTrans = world.get_or_emplace<Engine::TransformComponent>(mainCamEntity);
+			auto& mainWorld = world.get_or_emplace<Engine::WorldTransformComponent>(mainCamEntity);
+			(void)mainTrans.SetLocalPosition(Engine::vec3(0.0f, 2.0f, -5.0f));
+			(void)mainTrans.SetEulerRotation(Engine::vec3(0.0f, 0.0f, 0.0f));
+			(void)Engine::TransformSystem::UpdateRootWorld(mainTrans, mainWorld);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(mainCamEntity);
+			auto& mainCam = world.emplace<Engine::CameraComponent>(mainCamEntity);
+			mainCam.FOV = 60.0f;
+			mainCam.IsMainCamera = true;
+
+			// 2) 시네마틱 컷 타깃 카메라
+			const auto cutCamEntity = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::NameComponent>(cutCamEntity).name = L"CutCam";
+			auto& cutTrans = world.get_or_emplace<Engine::TransformComponent>(cutCamEntity);
+			auto& cutWorld = world.get_or_emplace<Engine::WorldTransformComponent>(cutCamEntity);
+			const Engine::vec3 cutBasePos(10.0f, 4.0f, 5.0f);
+			const Engine::vec3 cutBaseEuler(0.0f, 90.0f, 0.0f);
+			(void)cutTrans.SetLocalPosition(cutBasePos);
+			(void)cutTrans.SetEulerRotation(cutBaseEuler);
+			(void)Engine::TransformSystem::UpdateRootWorld(cutTrans, cutWorld);
+			const Engine::quat cutBaseRot = cutTrans.rotation;
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(cutCamEntity);
+			auto& cutCam = world.emplace<Engine::CameraComponent>(cutCamEntity);
+			cutCam.FOV = 45.0f;
+			cutCam.IsMainCamera = false;
+
+			const Engine::vec3 expectedTargetPos = cutBasePos + cutBaseRot * cut.LocalPositionOffset;
+
+			// 3) 타임라인 소유자
+			const auto owner = scene->CreateEntity().GetEntityHandle();
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(owner);
+			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
+			timeline.timelineAsset = asset;
+			timeline.Play();
+
+			// 틱 1: t = 0.1s (BlendInDuration 0.2s의 50% 지점)
+			system->OnUpdate(world, { scene.get() }, 0.1f);
+			const Engine::vec3 expectedMidPos = glm::mix(Engine::vec3(0.0f, 2.0f, -5.0f), expectedTargetPos, 0.5f);
+			passed &= Check(cutCam.IsMainCamera && !mainCam.IsMainCamera,
+				"Camera Cut section must switch IsMainCamera to the target camera.");
+			passed &= Check(glm::distance(cutTrans.position, expectedMidPos) <= 1.0e-3f,
+				"Camera Cut must blend position midway during BlendInDuration.");
+			passed &= Check(std::abs(cutCam.FOV - 47.5f) <= 1.0e-3f,
+				"Camera Cut must blend FOV midway from previous main camera FOV to TargetFOV.");
+
+			// 틱 2: t = 0.25s (BlendIn 완료)
+			system->OnUpdate(world, { scene.get() }, 0.15f);
+			passed &= Check(glm::distance(cutTrans.position, expectedTargetPos) <= 1.0e-3f,
+				"Camera Cut must reach target offset position after BlendInDuration.");
+			passed &= Check(std::abs(cutCam.FOV - 35.0f) <= 1.0e-3f,
+				"Camera Cut must reach TargetFOV after BlendInDuration.");
+
+			// 4) 중도 취소(Stop) 후 원래 카메라 상태 무손실 복원 검증
+			timeline.Stop();
+			system->OnUpdate(world, { scene.get() }, 0.016f);
+			passed &= Check(mainCam.IsMainCamera && !cutCam.IsMainCamera,
+				"Stopping timeline must restore original IsMainCamera flags.");
+			passed &= Check(std::abs(mainCam.FOV - 60.0f) <= 1.0e-4f && std::abs(cutCam.FOV - 45.0f) <= 1.0e-4f,
+				"Stopping timeline must restore original FOV on both cameras.");
+			passed &= Check(glm::distance(mainTrans.position, Engine::vec3(0.0f, 2.0f, -5.0f)) <= 1.0e-4f &&
+				glm::distance(cutTrans.position, cutBasePos) <= 1.0e-4f,
+				"Stopping timeline must restore original camera positions.");
+
+			// 5) 자연 종료 후 무손실 복원 검증
+			timeline.Play();
+			system->OnUpdate(world, { scene.get() }, 0.25f);
+			passed &= Check(cutCam.IsMainCamera && std::abs(cutCam.FOV - 35.0f) <= 1.0e-3f,
+				"Replaying timeline must re-apply Camera Cut.");
+			system->OnUpdate(world, { scene.get() }, 0.4f);
+			passed &= Check(mainCam.IsMainCamera && !cutCam.IsMainCamera &&
+				std::abs(mainCam.FOV - 60.0f) <= 1.0e-4f && std::abs(cutCam.FOV - 45.0f) <= 1.0e-4f &&
+				glm::distance(cutTrans.position, cutBasePos) <= 1.0e-4f,
+				"Natural timeline end must restore original camera states losslessly.");
+
+			// 6) 컴포넌트 제거(OnActionTimelineComponentDestroy) 시 즉시 복원 검증
+			timeline.Play();
+			system->OnUpdate(world, { scene.get() }, 0.25f);
+			passed &= Check(cutCam.IsMainCamera, "Third playback must switch to CutCam before removal.");
+			world.remove<Engine::ActionTimelineComponent>(owner);
+			passed &= Check(mainCam.IsMainCamera && !cutCam.IsMainCamera &&
+				std::abs(cutCam.FOV - 45.0f) <= 1.0e-4f &&
+				glm::distance(cutTrans.position, cutBasePos) <= 1.0e-4f,
+				"Removing ActionTimelineComponent must immediately restore camera states.");
+		}
+		return passed;
+	}
+
+	bool CheckCameraSplinePathAndLookAt()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		{
+			Engine::TimelineCameraSplineSection lookAtSection;
+			lookAtSection.TrackName = "SplineLookAt";
+			lookAtSection.IsActive = true;
+			lookAtSection.StartTime = 0.0f;
+			lookAtSection.EndTime = 0.5f;
+			lookAtSection.SplineEntityName = "CamSpline";
+			lookAtSection.StartT = 0.0f;
+			lookAtSection.EndT = 1.0f;
+			lookAtSection.LookAtTargetName = "HeroTarget";
+			lookAtSection.FollowTangent = false;
+			lookAtSection.TargetFOV = 50.0f;
+
+			Engine::TimelineCameraSplineSection tangentSection;
+			tangentSection.TrackName = "SplineTangent";
+			tangentSection.IsActive = true;
+			tangentSection.StartTime = 0.5f;
+			tangentSection.EndTime = 1.0f;
+			tangentSection.SplineEntityName = "CamSpline";
+			tangentSection.StartT = 0.0f;
+			tangentSection.EndT = 1.0f;
+			tangentSection.LookAtTargetName = "";
+			tangentSection.FollowTangent = true;
+
+			Engine::ActionTimelineCreateDesc desc;
+			desc.Duration = 1.0f;
+			desc.CameraSplineTracks.push_back(lookAtSection);
+			desc.CameraSplineTracks.push_back(tangentSection);
+			auto asset = Engine::ResourceManager::Get().AddResource(
+				L"TimelineCameraSplineAsset", Engine::ActionTimelineAsset::Create(&desc));
+
+			ScenePtr scene(Engine::Scene::Create());
+			TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+			if (!asset.IsValid() || !scene || !system)
+				return Check(false, "Camera spline test setup failed.");
+
+			scene->SetActive(true);
+			auto& world = scene->GetRegistry();
+
+			// 메인 카메라
+			const auto camEntity = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::NameComponent>(camEntity).name = L"MainCam";
+			auto& camTrans = world.get_or_emplace<Engine::TransformComponent>(camEntity);
+			auto& camWorld = world.get_or_emplace<Engine::WorldTransformComponent>(camEntity);
+			(void)camTrans.SetLocalPosition(Engine::vec3(0.0f));
+			(void)camTrans.SetEulerRotation(Engine::vec3(0.0f));
+			(void)Engine::TransformSystem::UpdateRootWorld(camTrans, camWorld);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(camEntity);
+			auto& cam = world.emplace<Engine::CameraComponent>(camEntity);
+			cam.FOV = 60.0f;
+			cam.IsMainCamera = true;
+
+			// 스플라인 엔티티 (월드 오프셋 (1, 2, 3))
+			const auto splineEntity = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::NameComponent>(splineEntity).name = L"CamSpline";
+			auto& splineTrans = world.get_or_emplace<Engine::TransformComponent>(splineEntity);
+			auto& splineWorld = world.get_or_emplace<Engine::WorldTransformComponent>(splineEntity);
+			(void)splineTrans.SetLocalPosition(Engine::vec3(1.0f, 2.0f, 3.0f));
+			(void)Engine::TransformSystem::UpdateRootWorld(splineTrans, splineWorld);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(splineEntity);
+			auto& spline = world.emplace<Engine::SplineComponent>(splineEntity);
+			spline.Closed = false;
+			spline.Points = {
+				Engine::SplinePoint{ Engine::vec3(0.0f, 0.0f, 0.0f), 0.0f },
+				Engine::SplinePoint{ Engine::vec3(0.0f, 0.0f, 10.0f), 0.0f },
+				Engine::SplinePoint{ Engine::vec3(10.0f, 0.0f, 10.0f), 0.0f }
+			};
+
+			// Look-At 타깃 엔티티
+			const auto targetEntity = scene->CreateEntity().GetEntityHandle();
+			world.get_or_emplace<Engine::NameComponent>(targetEntity).name = L"HeroTarget";
+			auto& targetTrans = world.get_or_emplace<Engine::TransformComponent>(targetEntity);
+			auto& targetWorld = world.get_or_emplace<Engine::WorldTransformComponent>(targetEntity);
+			const Engine::vec3 heroWorldPos(5.0f, 2.0f, 8.0f);
+			(void)targetTrans.SetLocalPosition(heroWorldPos);
+			(void)Engine::TransformSystem::UpdateRootWorld(targetTrans, targetWorld);
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(targetEntity);
+
+			// 기대 스플라인 샘플 (t = 0.5)
+			const std::vector<Engine::vec3> ctrlPts = {
+				Engine::vec3(0.0f, 0.0f, 0.0f),
+				Engine::vec3(0.0f, 0.0f, 10.0f),
+				Engine::vec3(10.0f, 0.0f, 10.0f)
+			};
+			Engine::SplineSample expectedSample{};
+			passed &= Check(Engine::SplineCurve::Evaluate(ctrlPts, false, 0.5, expectedSample),
+				"SplineCurve::Evaluate must succeed at t = 0.5.");
+			const Engine::vec3 expectedWorldPos = Engine::vec3(1.0f, 2.0f, 3.0f) + expectedSample.Position;
+
+			// 타임라인 재생
+			const auto owner = scene->CreateEntity().GetEntityHandle();
+			std::ignore = world.get_or_emplace<Engine::FlagComponent>(owner);
+			auto& timeline = world.emplace<Engine::ActionTimelineComponent>(owner);
+			timeline.timelineAsset = asset;
+			timeline.Play();
+
+			// 틱 1: t = 0.25s (섹션 1 중간 -> spline t = 0.5, HeroTarget 주시)
+			system->OnUpdate(world, { scene.get() }, 0.25f);
+			const Engine::vec3 expectedLookDir = glm::normalize(heroWorldPos - expectedWorldPos);
+			const Engine::vec3 actualLookFwd = glm::normalize(camTrans.GetLocalForward());
+			passed &= Check(glm::distance(camTrans.position, expectedWorldPos) <= 1.0e-3f,
+				"Spline camera must move along the spline world path at t = 0.5.");
+			passed &= Check(glm::dot(actualLookFwd, expectedLookDir) >= 0.999f,
+				"Spline camera with LookAtTargetName must orient its forward (+Z) toward the target.");
+			passed &= Check(std::abs(cam.FOV - 50.0f) <= 1.0e-3f,
+				"Spline camera must apply TargetFOV when specified.");
+
+			// 틱 2: t = 0.75s (섹션 2 중간 -> spline t = 0.5, 접선 방향 바라보기)
+			system->OnUpdate(world, { scene.get() }, 0.5f);
+			const Engine::vec3 expectedTangentDir = glm::normalize(expectedSample.Tangent);
+			const Engine::vec3 actualTangentFwd = glm::normalize(camTrans.GetLocalForward());
+			passed &= Check(glm::distance(camTrans.position, expectedWorldPos) <= 1.0e-3f,
+				"Second spline section must sample the spline path accurately.");
+			passed &= Check(glm::dot(actualTangentFwd, expectedTangentDir) >= 0.999f,
+				"Spline camera with FollowTangent must orient its forward (+Z) along the spline tangent.");
+
+			// 틱 3: t = 1.05s -> 자연 종료 시 원래 위치·회전·FOV 복원
+			system->OnUpdate(world, { scene.get() }, 0.3f);
+			passed &= Check(glm::distance(camTrans.position, Engine::vec3(0.0f)) <= 1.0e-4f &&
+				std::abs(cam.FOV - 60.0f) <= 1.0e-4f &&
+				glm::dot(glm::normalize(camTrans.GetLocalForward()), Engine::vec3(0.0f, 0.0f, 1.0f)) >= 0.999f,
+				"Ending spline camera timeline must restore original camera transform and FOV.");
+		}
+		return passed;
+	}
+
+	bool CheckCameraSequencerArchiveBackwardCompatibility()
+	{
+		struct ReflectionScope
+		{
+			bool Created = Engine::ReflectionRegistry::Create() != nullptr;
+			~ReflectionScope()
+			{
+				if (Created) Engine::ReflectionRegistry::Destroy();
+			}
+		};
+
+		ReflectionScope reflection;
+		ResourceManagerScope resources;
+		if (!reflection.Created || !resources.Created)
+			return Check(false, "ReflectionRegistry or ResourceManager creation failed.");
+
+		bool passed = true;
+		{
+			Engine::ActionTimelineCreateDesc desc;
+			desc.Duration = 2.0f;
+			Engine::TimelineCameraCutSection cut;
+			cut.TrackName = "IntroCut";
+			cut.StartTime = 0.1f;
+			cut.EndTime = 0.9f;
+			cut.TargetCameraName = "CutCam";
+			cut.LocalPositionOffset = Engine::vec3(1.0f, 2.0f, 3.0f);
+			cut.TargetFOV = 42.0f;
+			cut.BlendInDuration = 0.25f;
+			desc.CameraCutTracks.push_back(cut);
+
+			Engine::TimelineCameraSplineSection spline;
+			spline.TrackName = "OrbitPath";
+			spline.StartTime = 0.9f;
+			spline.EndTime = 1.9f;
+			spline.SplineEntityName = "OrbitSpline";
+			spline.StartT = 0.2f;
+			spline.EndT = 0.8f;
+			spline.LookAtTargetName = "Boss";
+			desc.CameraSplineTracks.push_back(spline);
+
+			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> srcAsset(Engine::ActionTimelineAsset::Create(&desc));
+			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> dstAsset(Engine::ActionTimelineAsset::Create(nullptr));
+			if (!srcAsset || !dstAsset)
+				return Check(false, "Failed to create ActionTimelineAsset for archive test.");
+
+			archive::JsonArchive writeAr;
+			std::string serialized;
+			passed &= Check(static_cast<bool>(srcAsset->WriteArchive(writeAr)), "WriteArchive must succeed.");
+			passed &= Check(static_cast<bool>(writeAr.ToJson(serialized)), "JsonArchive::ToJson must succeed.");
+
+			archive::JsonArchive readAr;
+			passed &= Check(static_cast<bool>(readAr.Parse(serialized)), "JsonArchive::Parse must succeed.");
+			passed &= Check(static_cast<bool>(dstAsset->ReadArchive(readAr)), "ReadArchive must succeed.");
+			passed &= Check(dstAsset->GetCameraCutTracks().size() == 1 &&
+				dstAsset->GetCameraCutTracks()[0] == cut,
+				"CameraCutTracks must round-trip cleanly through JsonArchive.");
+			passed &= Check(dstAsset->GetCameraSplineTracks().size() == 1 &&
+				dstAsset->GetCameraSplineTracks()[0] == spline,
+				"CameraSplineTracks must round-trip cleanly through JsonArchive.");
+
+			// 구버전 JSON(m_CameraCutTracks, m_CameraSplineTracks 누락) 하위 호환 로드 검증
+			Engine::ActionTimelineCreateDesc legacyDesc;
+			legacyDesc.Duration = 1.5f;
+			legacyDesc.ClipName = "Idle";
+			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> legacySrc(Engine::ActionTimelineAsset::Create(&legacyDesc));
+			std::unique_ptr<Engine::ActionTimelineAsset, ReleaseBase> legacyAsset(Engine::ActionTimelineAsset::Create(nullptr));
+			if (!legacySrc || !legacyAsset)
+				return Check(false, "Failed to create legacy ActionTimelineAsset.");
+
+			archive::JsonArchive legacyWriteAr;
+			std::string legacyJson;
+			passed &= Check(static_cast<bool>(legacySrc->WriteArchive(legacyWriteAr)), "Legacy WriteArchive must succeed.");
+			passed &= Check(static_cast<bool>(legacyWriteAr.ToJson(legacyJson)), "Legacy ToJson must succeed.");
+
+			const auto replaceKey = [](std::string& doc, const std::string& from, const std::string& to)
+			{
+				const auto pos = doc.find(from);
+				if (pos != std::string::npos)
+					doc.replace(pos, from.size(), to);
+			};
+			replaceKey(legacyJson, "\"m_CameraCutTracks\"", "\"m_IgnoredLegacyCut\"");
+			replaceKey(legacyJson, "\"m_CameraSplineTracks\"", "\"m_IgnoredLegacySpline\"");
+
+			archive::JsonArchive legacyReadAr;
+			passed &= Check(static_cast<bool>(legacyReadAr.Parse(legacyJson)), "Legacy JSON parse must succeed.");
+			passed &= Check(static_cast<bool>(legacyAsset->ReadArchive(legacyReadAr)),
+				"Legacy ActionTimelineAsset without camera sequencer tracks must load without error.");
+			passed &= Check(legacyAsset->GetCameraCutTracks().empty() &&
+				legacyAsset->GetCameraSplineTracks().empty() &&
+				std::abs(legacyAsset->GetDuration() - 1.5f) <= 1.0e-4f,
+				"Legacy asset must default missing camera sequencer tracks to empty.");
+		}
+		return passed;
+	}
 }
 
 int main()
@@ -784,6 +1139,9 @@ int main()
 	passed &= CheckTimelineHitboxWindow();
 	passed &= CheckInteractableQueries();
 	passed &= CheckRuntimeSystemManifestRegistersCombat();
+	passed &= CheckCameraCutTrackAndRestore();
+	passed &= CheckCameraSplinePathAndLookAt();
+	passed &= CheckCameraSequencerArchiveBackwardCompatibility();
 
 	return passed ? 0 : 1;
 }

@@ -27,6 +27,8 @@ EResult ActionTimelineAsset::Initialize(void* arg)
 			m_NotifyTracks = desc->NotifyTracks;
 			for (auto& track : m_NotifyTracks) track.Kind = ResolveTrackKind(track);
 			m_CameraTracks = desc->CameraTracks;
+			m_CameraCutTracks = desc->CameraCutTracks;
+			m_CameraSplineTracks = desc->CameraSplineTracks;
 		}
 	}
 	return EResult::Success;
@@ -36,6 +38,8 @@ void ActionTimelineAsset::Free()
 {
 	m_NotifyTracks.clear();
 	m_CameraTracks.clear();
+	m_CameraCutTracks.clear();
+	m_CameraSplineTracks.clear();
 }
 
 void ActionTimelineAsset::PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,

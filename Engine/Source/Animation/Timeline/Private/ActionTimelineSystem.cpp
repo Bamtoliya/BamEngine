@@ -4,6 +4,8 @@
 #include "AnimatorComponent.h"
 #include "SkinnedMeshRendererComponent.h"
 #include "CameraComponent.h"
+#include "SplineComponent.h"
+#include "SplineCurve.h"
 #include "TransformComponent.h"
 #include "TransformSystem.h"
 #include "WorldTransformComponent.h"
@@ -30,6 +32,7 @@
 #include "ActionTimelineEvents.h"
 #include "ActionTimelinePlayback.h"
 #include "SystemManager.h"
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <tuple>
@@ -248,12 +251,540 @@ namespace
 		animator->timelineSavedPlaying = false;
 	}
 
+	void OnActionTimelineComponentDestroy(entt::registry& world, entt::entity entity);
+
+	quat QuaternionFromEulerDegrees(const vec3& degrees)
+	{
+		if (!std::isfinite(degrees.x) || !std::isfinite(degrees.y) || !std::isfinite(degrees.z))
+			return quat(1.0f, 0.0f, 0.0f, 0.0f);
+		return glm::normalize(glm::quat(glm::radians(degrees)));
+	}
+
+	quat MakeLookRotationLH(const vec3& forwardDir, const vec3& worldUp)
+	{
+		const float fwdLen = glm::length(forwardDir);
+		if (!std::isfinite(fwdLen) || fwdLen <= 1.0e-6f)
+			return quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+		const vec3 forward = forwardDir / fwdLen;
+		vec3 up = worldUp;
+		const float upLen = glm::length(up);
+		if (!std::isfinite(upLen) || upLen <= 1.0e-6f)
+			up = vec3(0.0f, 1.0f, 0.0f);
+		else
+			up /= upLen;
+
+		if (std::abs(glm::dot(forward, up)) > 0.999f)
+			up = (std::abs(forward.z) < 0.99f) ? vec3(0.0f, 0.0f, 1.0f) : vec3(1.0f, 0.0f, 0.0f);
+
+		vec3 right = glm::cross(up, forward);
+		const float rightLen = glm::length(right);
+		if (!std::isfinite(rightLen) || rightLen <= 1.0e-6f)
+			return quat(1.0f, 0.0f, 0.0f, 0.0f);
+		right /= rightLen;
+
+		const vec3 orthoUp = glm::normalize(glm::cross(forward, right));
+		const mat3 basis(right, orthoUp, forward);
+		return glm::normalize(glm::quat_cast(basis));
+	}
+
+	entt::entity FindEntityByName(const entt::registry& world, const std::string& utf8Name)
+	{
+		if (utf8Name.empty()) return entt::null;
+		const std::wstring targetW = StrToWStr(utf8Name);
+		for (auto entity : world.view<const NameComponent>())
+		{
+			if (const auto* flag = world.try_get<FlagComponent>(entity);
+				flag && HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+			if (world.get<const NameComponent>(entity).name == targetW)
+				return entity;
+		}
+		return entt::null;
+	}
+
+	entt::entity FindCameraEntityByName(const entt::registry& world, const std::string& utf8Name)
+	{
+		if (utf8Name.empty()) return entt::null;
+		const std::wstring targetW = StrToWStr(utf8Name);
+		for (auto entity : world.view<const NameComponent, const CameraComponent>())
+		{
+			if (!IsComponentEnabled<CameraComponent>(world, entity)) continue;
+			if (const auto* flag = world.try_get<FlagComponent>(entity);
+				flag && HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+			if (world.get<const NameComponent>(entity).name == targetW)
+				return entity;
+		}
+		return entt::null;
+	}
+
+	entt::entity FindActiveMainCameraEntity(const entt::registry& world, entt::entity timelineOwner)
+	{
+		entt::entity fallbackCamera = entt::null;
+		for (auto camEntity : world.view<const CameraComponent>())
+		{
+			if (!IsComponentEnabled<CameraComponent>(world, camEntity)) continue;
+			if (const auto* flag = world.try_get<FlagComponent>(camEntity);
+				flag && HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+			if (fallbackCamera == entt::null)
+				fallbackCamera = camEntity;
+			if (world.get<const CameraComponent>(camEntity).IsMainCamera)
+				return camEntity;
+		}
+		if (timelineOwner != entt::null && world.valid(timelineOwner) &&
+			TryGetEnabledComponent<CameraComponent>(world, timelineOwner) != nullptr)
+			return timelineOwner;
+		return fallbackCamera;
+	}
+
+	bool GetEntityWorldPose(const entt::registry& world, entt::entity entity, vec3& outPos, quat& outRot)
+	{
+		if (entity == entt::null || !world.valid(entity)) return false;
+
+		mat4 worldMat(1.0f);
+		if (TransformSystem::TryGetWorldMatrix(world, entity, worldMat))
+		{
+			outPos = vec3(worldMat[3]);
+			vec3 c0 = vec3(worldMat[0]);
+			vec3 c1 = vec3(worldMat[1]);
+			vec3 c2 = vec3(worldMat[2]);
+			const float l0 = glm::length(c0);
+			const float l1 = glm::length(c1);
+			const float l2 = glm::length(c2);
+			if (l0 > 1.0e-6f && l1 > 1.0e-6f && l2 > 1.0e-6f)
+			{
+				const mat3 rotMat(c0 / l0, c1 / l1, c2 / l2);
+				outRot = glm::normalize(glm::quat_cast(rotMat));
+				return true;
+			}
+		}
+
+		if (const auto* trans = world.try_get<TransformComponent>(entity))
+		{
+			outPos = trans->position;
+			outRot = trans->rotation;
+			return true;
+		}
+		return false;
+	}
+
+	void ComputeSavedWorldPose(const entt::registry& world, const TimelineCameraSavedState& saved, vec3& outPos, quat& outRot)
+	{
+		outPos = saved.savedPosition;
+		outRot = saved.savedRotation;
+		if (!saved.hasTransform || !world.valid(saved.cameraEntity)) return;
+
+		const auto* hierarchy = world.try_get<HierarchyComponent>(saved.cameraEntity);
+		const entt::entity parent = hierarchy ? hierarchy->parent : entt::null;
+		if (parent == entt::null || !world.valid(parent)) return;
+
+		mat4 parentWorld(1.0f);
+		if (!TransformSystem::TryGetWorldMatrix(world, parent, parentWorld)) return;
+
+		TransformComponent savedTrans;
+		(void)savedTrans.SetLocalPosition(saved.savedPosition);
+		(void)savedTrans.RestoreLocalRotation(saved.savedRotation, saved.savedEulerRotation);
+		if (const auto* current = world.try_get<TransformComponent>(saved.cameraEntity))
+		{
+			(void)savedTrans.SetLocalScale(current->scale);
+			savedTrans.absolute = current->absolute;
+		}
+
+		mat4 composed(1.0f);
+		if (TransformSystem::TryComposeWorld(savedTrans, parentWorld, composed))
+		{
+			outPos = vec3(composed[3]);
+			vec3 c0 = vec3(composed[0]);
+			vec3 c1 = vec3(composed[1]);
+			vec3 c2 = vec3(composed[2]);
+			const float l0 = glm::length(c0);
+			const float l1 = glm::length(c1);
+			const float l2 = glm::length(c2);
+			if (l0 > 1.0e-6f && l1 > 1.0e-6f && l2 > 1.0e-6f)
+				outRot = glm::normalize(glm::quat_cast(mat3(c0 / l0, c1 / l1, c2 / l2)));
+		}
+	}
+
+	void ApplyCameraWorldPose(entt::registry& world, entt::entity camEntity, const vec3& worldPos, const quat& worldRot)
+	{
+		if (camEntity == entt::null || !world.valid(camEntity)) return;
+		auto* trans = world.try_get<TransformComponent>(camEntity);
+		if (!trans) return;
+
+		TransformComponent candidate = *trans;
+		bool localAssigned = false;
+
+		const auto* hierarchy = world.try_get<HierarchyComponent>(camEntity);
+		const entt::entity parent = hierarchy ? hierarchy->parent : entt::null;
+		if (parent != entt::null && world.valid(parent))
+		{
+			mat4 parentWorld(1.0f);
+			if (TransformSystem::TryGetWorldMatrix(world, parent, parentWorld))
+			{
+				const mat4 desiredWorld = glm::translate(mat4(1.0f), worldPos) *
+					glm::mat4_cast(glm::normalize(worldRot)) *
+					glm::scale(mat4(1.0f), candidate.scale);
+				glm::dmat4 localMat(1.0);
+				if (TransformSystem::TryGetLocalMatrix(parentWorld, candidate.absolute, desiredWorld, localMat) &&
+					TransformSystem::TryAssignLocalMatrix(candidate, localMat))
+				{
+					localAssigned = true;
+				}
+			}
+		}
+
+		if (!localAssigned)
+		{
+			(void)candidate.SetLocalPosition(worldPos);
+			(void)candidate.SetLocalRotation(worldRot);
+		}
+
+		if (!TransformSystem::TryCommitTransform(world, camEntity, candidate))
+		{
+			(void)trans->SetLocalPosition(candidate.position);
+			(void)trans->SetLocalRotation(candidate.rotation);
+			if (auto* wt = world.try_get<WorldTransformComponent>(camEntity))
+				(void)TransformSystem::UpdateRootWorld(*trans, *wt);
+		}
+	}
+
+	bool SaveCameraStateIfNeeded(entt::registry& world, ActionTimelineComponent& timeline, entt::entity camEntity, TimelineCameraSavedState& outSaved)
+	{
+		if (camEntity == entt::null || !world.valid(camEntity)) return false;
+		for (const auto& existing : timeline.savedCameraStates)
+		{
+			if (existing.cameraEntity == camEntity)
+			{
+				outSaved = existing;
+				return true;
+			}
+		}
+
+		const auto* cam = world.try_get<CameraComponent>(camEntity);
+		if (!cam) return false;
+
+		TimelineCameraSavedState state;
+		state.cameraEntity = camEntity;
+		state.savedFOV = cam->FOV;
+		state.savedIsMainCamera = cam->IsMainCamera;
+		if (const auto* trans = world.try_get<TransformComponent>(camEntity))
+		{
+			state.hasTransform = true;
+			state.savedPosition = trans->position;
+			state.savedRotation = trans->rotation;
+			state.savedEulerRotation = trans->eulerRotation;
+		}
+		timeline.savedCameraStates.push_back(state);
+		timeline.cameraOverrideActive = true;
+		timeline.cameraOverrideSerial = timeline.playSerial;
+		outSaved = state;
+		return true;
+	}
+
+	void EndCameraOverride(entt::registry& world, ActionTimelineComponent& timeline)
+	{
+		if (!timeline.cameraOverrideActive) return;
+
+		for (const auto& saved : timeline.savedCameraStates)
+		{
+			if (saved.cameraEntity == entt::null || !world.valid(saved.cameraEntity)) continue;
+			if (auto* cam = world.try_get<CameraComponent>(saved.cameraEntity))
+			{
+				cam->FOV = saved.savedFOV;
+				cam->IsMainCamera = saved.savedIsMainCamera;
+				cam->InvalidateCache();
+			}
+			if (saved.hasTransform)
+			{
+				if (auto* trans = world.try_get<TransformComponent>(saved.cameraEntity))
+				{
+					TransformComponent candidate = *trans;
+					(void)candidate.SetLocalPosition(saved.savedPosition);
+					(void)candidate.RestoreLocalRotation(saved.savedRotation, saved.savedEulerRotation);
+					if (!TransformSystem::TryCommitTransform(world, saved.cameraEntity, candidate))
+					{
+						(void)trans->SetLocalPosition(saved.savedPosition);
+						(void)trans->RestoreLocalRotation(saved.savedRotation, saved.savedEulerRotation);
+						if (auto* wt = world.try_get<WorldTransformComponent>(saved.cameraEntity))
+							(void)TransformSystem::UpdateRootWorld(*trans, *wt);
+					}
+				}
+			}
+		}
+
+		timeline.savedCameraStates.clear();
+		timeline.activeCameraCutBlend = {};
+		timeline.activeCameraSplineBlend = {};
+		timeline.cameraOverrideActive = false;
+		timeline.cameraOverrideSerial = 0;
+	}
+
+	void EvaluateCameraSequencerTracks(entt::registry& world, entt::entity entity, ActionTimelineComponent& timeline,
+		const ActionTimelineAsset& asset, f32 dt)
+	{
+		bool anyCameraTrackActive = false;
+		entt::entity activeCutCamera = entt::null;
+
+		// ── 4-1. Camera Cut Track (카메라 전환 / 로컬 오프셋 / 블렌드 인) ──
+		const auto& cutTracks = asset.GetCameraCutTracks();
+		int32 activeCutIdx = -1;
+		for (int32 i = 0; i < static_cast<int32>(cutTracks.size()); ++i)
+		{
+			const auto& cut = cutTracks[i];
+			if (!cut.IsActive || cut.EndTime < cut.StartTime) continue;
+			if (timeline.currentTime >= cut.StartTime && timeline.currentTime <= cut.EndTime)
+				activeCutIdx = i;
+		}
+
+		if (activeCutIdx >= 0)
+		{
+			const auto& cut = cutTracks[static_cast<size_t>(activeCutIdx)];
+			const entt::entity prevMainCam = FindActiveMainCameraEntity(world, entity);
+			const entt::entity targetCam = !cut.TargetCameraName.empty()
+				? FindCameraEntityByName(world, cut.TargetCameraName)
+				: prevMainCam;
+
+			if (targetCam != entt::null && world.valid(targetCam))
+			{
+				anyCameraTrackActive = true;
+				activeCutCamera = targetCam;
+
+				// 섹션 진입 시 블렌드 시작 포즈 캡처
+				if (timeline.activeCameraCutBlend.activeSectionIndex != activeCutIdx)
+				{
+					timeline.activeCameraCutBlend = {};
+					timeline.activeCameraCutBlend.activeSectionIndex = activeCutIdx;
+					const entt::entity blendFromCam = (prevMainCam != entt::null) ? prevMainCam : targetCam;
+					vec3 startPos(0.0f);
+					quat startRot(1.0f, 0.0f, 0.0f, 0.0f);
+					if (GetEntityWorldPose(world, blendFromCam, startPos, startRot))
+					{
+						timeline.activeCameraCutBlend.startPosition = startPos;
+						timeline.activeCameraCutBlend.startRotation = startRot;
+						timeline.activeCameraCutBlend.hasStartPose = true;
+					}
+					if (const auto* fromCamComp = world.try_get<CameraComponent>(blendFromCam))
+						timeline.activeCameraCutBlend.startFOV = fromCamComp->FOV;
+				}
+
+				TimelineCameraSavedState savedTarget{};
+				if (SaveCameraStateIfNeeded(world, timeline, targetCam, savedTarget))
+				{
+					// 지정된 타깃 카메라로 MainCamera 플래그 전환
+					if (!cut.TargetCameraName.empty())
+					{
+						for (auto camEntity : world.view<CameraComponent>())
+						{
+							if (camEntity == targetCam) continue;
+							auto& otherCam = world.get<CameraComponent>(camEntity);
+							if (otherCam.IsMainCamera)
+							{
+								TimelineCameraSavedState savedOther{};
+								(void)SaveCameraStateIfNeeded(world, timeline, camEntity, savedOther);
+								otherCam.IsMainCamera = false;
+								otherCam.InvalidateCache();
+							}
+						}
+						if (auto* targetCamComp = world.try_get<CameraComponent>(targetCam))
+							targetCamComp->IsMainCamera = true;
+					}
+
+					vec3 basePos(0.0f);
+					quat baseRot(1.0f, 0.0f, 0.0f, 0.0f);
+					ComputeSavedWorldPose(world, savedTarget, basePos, baseRot);
+
+					const vec3 targetPos = basePos + baseRot * cut.LocalPositionOffset;
+					const quat targetRot = glm::normalize(baseRot * QuaternionFromEulerDegrees(cut.LocalEulerRotationOffset));
+					const float targetFOV = (cut.TargetFOV > 0.0f) ? cut.TargetFOV : savedTarget.savedFOV;
+
+					float alpha = 1.0f;
+					if (cut.BlendInDuration > 1.0e-6f && timeline.activeCameraCutBlend.hasStartPose)
+						alpha = std::clamp((timeline.currentTime - cut.StartTime) / cut.BlendInDuration, 0.0f, 1.0f);
+
+					const vec3 finalPos = timeline.activeCameraCutBlend.hasStartPose
+						? glm::mix(timeline.activeCameraCutBlend.startPosition, targetPos, alpha) : targetPos;
+					const quat finalRot = timeline.activeCameraCutBlend.hasStartPose
+						? glm::normalize(glm::slerp(timeline.activeCameraCutBlend.startRotation, targetRot, alpha)) : targetRot;
+					const float finalFOV = timeline.activeCameraCutBlend.hasStartPose
+						? glm::mix(timeline.activeCameraCutBlend.startFOV, targetFOV, alpha) : targetFOV;
+
+					ApplyCameraWorldPose(world, targetCam, finalPos, finalRot);
+					if (auto* targetCamComp = world.try_get<CameraComponent>(targetCam))
+					{
+						targetCamComp->FOV = finalFOV;
+						targetCamComp->InvalidateCache();
+					}
+				}
+			}
+		}
+		else
+		{
+			timeline.activeCameraCutBlend = {};
+		}
+
+		// ── 4-2. Spline Camera Path & Look-At Tracking Track ──
+		const auto& splineTracks = asset.GetCameraSplineTracks();
+		int32 activeSplineIdx = -1;
+		for (int32 i = 0; i < static_cast<int32>(splineTracks.size()); ++i)
+		{
+			const auto& sec = splineTracks[i];
+			if (!sec.IsActive || sec.EndTime < sec.StartTime || sec.SplineEntityName.empty()) continue;
+			if (timeline.currentTime >= sec.StartTime && timeline.currentTime <= sec.EndTime)
+				activeSplineIdx = i;
+		}
+
+		if (activeSplineIdx >= 0)
+		{
+			const auto& sec = splineTracks[static_cast<size_t>(activeSplineIdx)];
+			const entt::entity splineEntity = FindEntityByName(world, sec.SplineEntityName);
+			const auto* splineComp = (splineEntity != entt::null)
+				? TryGetEnabledComponent<SplineComponent>(world, splineEntity) : nullptr;
+			const entt::entity camEntity = (activeCutCamera != entt::null)
+				? activeCutCamera : FindActiveMainCameraEntity(world, entity);
+
+			if (splineComp && splineComp->IsValid() && camEntity != entt::null && world.valid(camEntity))
+			{
+				anyCameraTrackActive = true;
+
+				if (timeline.activeCameraSplineBlend.activeSectionIndex != activeSplineIdx)
+				{
+					timeline.activeCameraSplineBlend = {};
+					timeline.activeCameraSplineBlend.activeSectionIndex = activeSplineIdx;
+					vec3 startPos(0.0f);
+					quat startRot(1.0f, 0.0f, 0.0f, 0.0f);
+					if (GetEntityWorldPose(world, camEntity, startPos, startRot))
+					{
+						timeline.activeCameraSplineBlend.startPosition = startPos;
+						timeline.activeCameraSplineBlend.startRotation = startRot;
+						timeline.activeCameraSplineBlend.hasStartPose = true;
+					}
+					if (const auto* camComp = world.try_get<CameraComponent>(camEntity))
+						timeline.activeCameraSplineBlend.startFOV = camComp->FOV;
+				}
+
+				TimelineCameraSavedState savedCam{};
+				if (SaveCameraStateIfNeeded(world, timeline, camEntity, savedCam))
+				{
+					std::vector<vec3> points;
+					points.reserve(splineComp->Points.size());
+					for (const auto& pt : splineComp->Points)
+						points.push_back(pt.Position);
+
+					const float sectionDuration = sec.EndTime - sec.StartTime;
+					const float progress = (sectionDuration > 1.0e-6f)
+						? std::clamp((timeline.currentTime - sec.StartTime) / sectionDuration, 0.0f, 1.0f) : 1.0f;
+					const float clampedStartT = std::clamp(sec.StartT, 0.0f, 1.0f);
+					const float clampedEndT = std::clamp(sec.EndT, 0.0f, 1.0f);
+					const f64 param = static_cast<f64>(glm::mix(clampedStartT, clampedEndT, progress));
+
+					SplineSample sample{};
+					if (SplineCurve::Evaluate(points, splineComp->Closed, param, sample))
+					{
+						mat4 splineWorld(1.0f);
+						(void)TransformSystem::TryGetWorldMatrix(world, splineEntity, splineWorld);
+
+						const vec3 targetPos = vec3(splineWorld * vec4(sample.Position, 1.0f));
+						vec3 worldTangent = mat3(splineWorld) * sample.Tangent;
+						if (clampedEndT < clampedStartT)
+							worldTangent = -worldTangent;
+
+						vec3 curPos(0.0f);
+						quat targetRot(1.0f, 0.0f, 0.0f, 0.0f);
+						(void)GetEntityWorldPose(world, camEntity, curPos, targetRot);
+
+						if (!sec.LookAtTargetName.empty())
+						{
+							const entt::entity lookTarget = FindEntityByName(world, sec.LookAtTargetName);
+							vec3 lookPos(0.0f);
+							quat lookRot(1.0f, 0.0f, 0.0f, 0.0f);
+							if (GetEntityWorldPose(world, lookTarget, lookPos, lookRot))
+							{
+								const vec3 dir = lookPos - targetPos;
+								if (glm::length(dir) > 1.0e-5f)
+									targetRot = MakeLookRotationLH(dir, vec3(0.0f, 1.0f, 0.0f));
+							}
+						}
+						else if (sec.FollowTangent && glm::length(worldTangent) > 1.0e-5f)
+						{
+							targetRot = MakeLookRotationLH(worldTangent, vec3(0.0f, 1.0f, 0.0f));
+						}
+
+						auto* camComp = world.try_get<CameraComponent>(camEntity);
+						const float baseFOV = camComp ? camComp->FOV : savedCam.savedFOV;
+						const float targetFOV = (sec.TargetFOV > 0.0f) ? sec.TargetFOV : baseFOV;
+
+						float alpha = 1.0f;
+						if (sec.BlendInDuration > 1.0e-6f && timeline.activeCameraSplineBlend.hasStartPose)
+							alpha = std::clamp((timeline.currentTime - sec.StartTime) / sec.BlendInDuration, 0.0f, 1.0f);
+
+						const vec3 finalPos = timeline.activeCameraSplineBlend.hasStartPose
+							? glm::mix(timeline.activeCameraSplineBlend.startPosition, targetPos, alpha) : targetPos;
+						const quat finalRot = timeline.activeCameraSplineBlend.hasStartPose
+							? glm::normalize(glm::slerp(timeline.activeCameraSplineBlend.startRotation, targetRot, alpha)) : targetRot;
+						const float finalFOV = timeline.activeCameraSplineBlend.hasStartPose
+							? glm::mix(timeline.activeCameraSplineBlend.startFOV, targetFOV, alpha) : targetFOV;
+
+						ApplyCameraWorldPose(world, camEntity, finalPos, finalRot);
+						if (camComp)
+						{
+							camComp->FOV = finalFOV;
+							camComp->InvalidateCache();
+						}
+					}
+				}
+			}
+		}
+		else
+		{
+			timeline.activeCameraSplineBlend = {};
+		}
+
+		// ── 4-3. 기존 카메라 샷 연출 (Camera Shots: FOV 보간 및 콜백) ──
+		const auto& cameraTracks = asset.GetCameraTracks();
+		for (const auto& camShot : cameraTracks)
+		{
+			if (!camShot.IsActive) continue;
+			const float shotStart = camShot.StartTime;
+			const float shotEnd = camShot.StartTime + camShot.Duration;
+
+			if (timeline.currentTime >= shotStart && timeline.currentTime <= shotEnd)
+			{
+				anyCameraTrackActive = true;
+				const float progress = (camShot.Duration > 0.0f) ? (timeline.currentTime - shotStart) / camShot.Duration : 1.0f;
+				for (const auto& cb : timeline.shotCallbacks) { if (cb) cb(entity, camShot, progress); }
+
+				auto camView = world.view<CameraComponent>();
+				for (auto camEntity : camView)
+				{
+					if (!IsComponentEnabled<CameraComponent>(world, camEntity)) continue;
+					auto& cam = camView.get<CameraComponent>(camEntity);
+					if (cam.IsMainCamera)
+					{
+						TimelineCameraSavedState savedShotCam{};
+						(void)SaveCameraStateIfNeeded(world, timeline, camEntity, savedShotCam);
+						cam.FOV = glm::mix(cam.FOV, camShot.TargetFOV, std::clamp(dt * 8.0f, 0.0f, 1.0f));
+						cam.InvalidateCache();
+					}
+				}
+			}
+		}
+
+		// 활성 카메라 트랙이 모두 끝난 구간에 진입하면 원래 카메라 상태로 복원한다.
+		if (!anyCameraTrackActive && timeline.cameraOverrideActive)
+		{
+			EndCameraOverride(world, timeline);
+		}
+	}
+
 	void OnActionTimelineComponentDestroy(entt::registry& world, entt::entity entity)
 	{
 		auto& timeline = world.get<ActionTimelineComponent>(entity);
 		const auto* asset = timeline.timelineAsset.Get();
 		const float blendOutTime = asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
 		EndAnimatorOverride(world, entity, timeline, blendOutTime);
+		EndCameraOverride(world, timeline);
 		ReleaseHeldVFXForOwner(world, entity);
 		if (auto* hitbox = world.try_get<HitboxComponent>(entity))
 		{
@@ -569,6 +1100,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				const auto* existingAsset = timeline.timelineAsset.Get();
 				const float blendOutTime = existingAsset ? existingAsset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
 				EndAnimatorOverride(world, entity, timeline, blendOutTime);
+				EndCameraOverride(world, timeline);
 				ReleaseHeldVFXForOwner(world, entity);
 				continue;
 			}
@@ -580,6 +1112,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			// 1. 에셋 경로 변경 시 자동 로드 동기화
 			if (timeline.timelinePath != timeline.loadedTimelinePath)
 			{
+				EndCameraOverride(world, timeline);
 				timeline.loadedTimelinePath = timeline.timelinePath;
 				++timeline.playSerial; // 다른 타임라인으로 바뀌면 이전 지속형 VFX를 해제한다
 				timeline.currentTime = 0.0f;
@@ -606,7 +1139,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			const entt::entity animatorEntity = asset && (timeline.isPlaying || timeline.animatorOverrideEntity != entt::null)
 				? FindAnimatorEntityInHierarchy(world, entity) : entt::entity(entt::null);
 
-			// 세션이 끝났으면 Animator를 타임라인 이전 상태로 되돌린다. 일시정지(같은 세션, 끝나기 전)는 마지막 포즈를 유지한다.
+			// 세션이 끝났으면 Animator/Camera를 타임라인 이전 상태로 되돌린다. 일시정지(같은 세션, 끝나기 전)는 마지막 상태를 유지한다.
 			if (timeline.animatorOverrideEntity != entt::null)
 			{
 				const bool sessionChanged = timeline.animatorOverrideSerial != timeline.playSerial;
@@ -614,6 +1147,13 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				if (!asset || timeline.animatorOverrideEntity != animatorEntity ||
 					(!timeline.isPlaying && (sessionChanged || finished)))
 					EndAnimatorOverride(world, entity, timeline, asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime);
+			}
+			if (timeline.cameraOverrideActive)
+			{
+				const bool sessionChanged = timeline.cameraOverrideSerial != timeline.playSerial;
+				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
+				if (!asset || sessionChanged || (!timeline.isPlaying && finished))
+					EndCameraOverride(world, timeline);
 			}
 			if (!asset || !timeline.isPlaying) continue;
 
@@ -806,33 +1346,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				}
 			}
 
-			// 4. 카메라 샷 연출 (Camera Shots)
-			const auto& cameraTracks = asset->GetCameraTracks();
-			for (const auto& camShot : cameraTracks)
+			// 4. 카메라 시퀀서 (Camera Cut / Spline Path & Look-At / Camera Shots)
+			if (playbackStep.Finished)
 			{
-				if (!camShot.IsActive) continue;
-				const float shotStart = camShot.StartTime;
-				const float shotEnd = camShot.StartTime + camShot.Duration;
-
-				if (timeline.currentTime >= shotStart && timeline.currentTime <= shotEnd)
-				{
-					const float progress = (camShot.Duration > 0.0f) ? (timeline.currentTime - shotStart) / camShot.Duration : 1.0f;
-					for (const auto& cb : timeline.shotCallbacks) { if (cb) cb(entity, camShot, progress); }
-
-					// 씬의 메인 카메라 검색 및 FOV / Shake 보정
-					auto camView = world.view<CameraComponent>();
-					for (auto camEntity : camView)
-					{
-						if (!IsComponentEnabled<CameraComponent>(world, camEntity)) continue;
-						auto& cam = camView.get<CameraComponent>(camEntity);
-						if (cam.IsMainCamera)
-						{
-							// 목표 FOV로 부드럽게 보간
-							cam.FOV = glm::mix(cam.FOV, camShot.TargetFOV, dt * 8.0f);
-							cam.InvalidateCache();
-						}
-					}
-				}
+				EndCameraOverride(world, timeline);
+			}
+			else
+			{
+				EvaluateCameraSequencerTracks(world, entity, timeline, *asset, dt);
 			}
 		}
 

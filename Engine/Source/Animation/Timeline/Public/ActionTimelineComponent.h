@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "Engine_API.h"
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "ActionTimelineAsset.h"
@@ -10,6 +11,26 @@
 
 namespace Engine
 {
+	// 타임라인 카메라 시퀀서 런타임 스냅샷 (직렬화 대상 아님)
+	struct TimelineCameraSavedState
+	{
+		entt::entity cameraEntity = entt::null;
+		vec3 savedPosition = vec3(0.0f);
+		quat savedRotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
+		vec3 savedEulerRotation = vec3(0.0f);
+		f32 savedFOV = 60.0f;
+		bool savedIsMainCamera = false;
+		bool hasTransform = false;
+	};
+
+	struct TimelineCameraBlendState
+	{
+		int32 activeSectionIndex = -1;
+		vec3 startPosition = vec3(0.0f);
+		quat startRotation = quat(1.0f, 0.0f, 0.0f, 0.0f);
+		f32 startFOV = 60.0f;
+		bool hasStartPose = false;
+	};
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_ACTION_TIMELINE"), CATEGORY("CATEGORY_RENDER"))
 	struct ActionTimelineComponent
 	{
@@ -54,6 +75,13 @@ namespace Engine
 		// animatorOverrideEntity: 넘겨받은 Animator 엔티티(자신 또는 자식 모델 루트). null이면 넘겨받지 않은 상태다.
 		entt::entity animatorOverrideEntity = entt::null;
 		uint32 animatorOverrideSerial = 0;
+
+		// 카메라 시퀀서 오버라이드 추적 (런타임 전용). 종료·Stop·에셋 교체·비활성·컴포넌트 제거 시 원래 상태로 무손실 복원한다.
+		bool cameraOverrideActive = false;
+		uint32 cameraOverrideSerial = 0;
+		std::vector<TimelineCameraSavedState> savedCameraStates;
+		TimelineCameraBlendState activeCameraCutBlend;
+		TimelineCameraBlendState activeCameraSplineBlend;
 
 		// ── 게임플레이 이벤트 콜백 (사용 중단 예정) ──
 		// 해제 수단이 없어 핫리로드되는 모듈에서 쓰면 안전하지 않다. 이벤트 노티파이는 ActionTimelineEvents로 구독한다.
