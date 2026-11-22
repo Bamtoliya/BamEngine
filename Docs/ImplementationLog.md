@@ -2,6 +2,94 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 신규 6대 핵심 엔진 시스템 구축 (스프린트 C)
+
+- **.bampak 리소스 패키징 아카이브 (`954722eb`, `c5f714e6`)**:
+  - **포맷·구현.** 고속 에셋 패키징 및 가상 마운트를 위한 독자 바이너리 `.bampak` 포맷(16바이트 고정 매직/버전 헤더, 엔트리 메타데이터 테이블, 압축/비압축 청크 블록)을 정의했다. 결정적(Deterministic) 아카이브 생성기 `PakWriter`, SHA-256 해시 기반 무결성 검증 및 빠른 오프셋 인덱싱 `PakReader`, 가상 파일시스템 마운트 계층 `PakMountManager`를 구현했다.
+  - **검사.** `PakArchiveCheck`에 결정적 패킹 바이트 일치, 변조 패킷 감지, 0바이트/대용량 파일 읽기, 중복 마운트 우선순위 격리를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `PakArchiveCheck` 통과를 확인했다 (`c5f714e6`).
+
+- **SaveGame 원자적 슬롯 저장 및 체크포인트 시스템 (`cde74e5e`, `81b8dea9`, `c5f714e6`)**:
+  - **안전성·구현.** 게임플레이 진행 상태 저장을 담당하는 `SaveGameManager`를 구축했다. 저장 도중 프로세스 비정상 종료 시 세이브 파일 파손을 방지하기 위해 임시 파일(`.tmp`) 기록 후 `MoveFileExW(MOVEFILE_REPLACE_EXISTING)` 기반 원자적 교체(Atomic Swap) 메커니즘을 적용했다.
+  - **메타데이터·체크포인트.** 슬롯 메타데이터 헤더(타임스탬프, 플레이타임, 레벨명) 사전 조회와 게임플레이 체크포인트 캡처/복원 파이프라인을 지원한다. Glaze DTO 구조체 외부 링키지 보정(`81b8dea9`)으로 경고를 해소했다.
+  - **검사.** `SaveGameCheck`에 원자적 교체 실패 시 롤백, 메타데이터 추출, 다중 슬롯 관리, 손상 세이브 파일 복구 거부 사례를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `SaveGameCheck` 통과를 확인했다.
+
+- **NavGrid 8방향 A* 내비게이션 및 AI 인지 시스템 (`f6c10c5c`, `7bb639ac`)**:
+  - **알고리즘·구현.** 런타임 그리드 기반 AI 경로 탐색을 위한 `NavGrid` 및 8방향 A* 알고리즘을 구현했다. 대각선 이동 시 장애물 모서리를 뚫지 않도록 코너 컷팅 방지(Corner Cutting Guard)를 적용하고, 불필요한 지그재그 경로를 선분 가시성 검사로 매끄럽게 펴는 Raycast 직선화 스무딩(Path Smoothing)을 구현했다.
+  - **ECS 컴포넌트·시스템.** `NavAgentComponent`(이동 속도, 회전, 웨이포인트 추적), `AIPerceptionComponent`(시야각/가시거리 기반 타깃 감지), `NavigationSystem`을 구축하고 `RuntimeSystemManifest`에 등록했다.
+  - **검사.** `NavigationAICheck`에 장애물 우회, 코너 컷 방지, 스무딩 전후 웨이포인트 수 감소, 시야각 감지 사례를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `NavigationAICheck` 통과를 확인했다.
+
+- **AudioMixer 5대 버스 라우팅 및 3D 거리 감쇠 시스템 (`1dc93466`, `dc6b1284`, `c5f714e6`)**:
+  - **버스 계층·믹서.** 사운드 계층 제어를 위한 `AudioMixer` 5대 버스(`Master`, `BGM`, `SFX`, `UI`, `Voice`) 라우팅 트리를 구축했다. 버스별 독립 볼륨 게인, Mute/Solo, 선형/로그 볼륨 페이드(Fade In/Out/Crossfade)를 구현했다.
+  - **3D 공간 음향·동기화.** 3D 공간 음향 거리 감쇠(Linear/Inverse Rolloff, 최소/최대 가청 거리) 및 영속적 오디오 믹서 설정 직렬화/역직렬화를 지원하며, FMOD ChannelGroup과 실시간으로 동기화된다.
+  - **검사.** `AudioMixerCheck`에 버스 계층 게인 곱연산, 페이드 시간 도달, 3D 거리별 감쇠 수치, Mute 전파 사례를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `AudioMixerCheck` 통과를 확인했다 (`dc6b1284`, `c5f714e6`).
+
+- **NetworkRpc 원격 프로시저 호출 및 Dead Reckoning 외삽 (`d42de8a8`, `671d6ae6`)**:
+  - **RPC 프레임워크.** 멀티플레이어 환경을 위한 RPC 프레임워크(`Server`, `Client`, `Multicast` RPC 속성 및 페이로드 바이너리 직렬화/라우팅)를 구축했다.
+  - **스냅샷 보간·외삽.** 네트워크 지연 환경에서 자연스러운 위치 동기화를 보장하기 위해 Dead Reckoning 기반 물리 스냅샷 외삽(Extrapolation) 및 과거 프레임 보간(Snapshot Interpolation)을 구현했다.
+  - **진단 시뮬레이터.** 네트워크 불량 환경 테스트를 위한 패킷 지연(Latency Jitter) 및 패킷 손실(Packet Loss) 시뮬레이터를 내장했다.
+  - **검사.** `NetworkRpcCheck`에 RPC 바인딩 및 디스패치, 스냅샷 외삽 위치 추정 정밀도, 지연 시뮬레이터 버퍼링 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `NetworkRpcCheck` 통과를 확인했다 (`671d6ae6`).
+
+- **ScenePersistenceComponent 및 Additive 서브씬 스트리밍 (`89d584e2`, `c5f714e6`)**:
+  - **영속성·스트리밍.** 씬 전환 시 플레이어·매니저 등 핵심 엔티티를 보존하는 `ScenePersistenceComponent` (`DontDestroyOnLoad`)를 구현했다. 씬 전환 시 영속 엔티티를 전용 불변 씬으로 자동 이관한다.
+  - **Additive 씬·비동기 로더.** 다중 씬 동시 로드 및 메모리 분할을 위한 Additive 서브씬 비동기 스트리밍(`LoadSceneAdditive`, `UnloadSceneAdditive`) 및 `AsyncResourceLoader` 프레임 분할 비동기 리소스 로딩을 지원한다.
+  - **검사.** `SceneStreamingCheck`에 씬 전환 후 영속 엔티티 유지, Additive 씬 엔티티 분리 및 언로드 시 정리, 비동기 로딩 큐 완료 사례를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `SceneStreamingCheck` 통과를 확인했다.
+
+### [2026-11-22] 물리 KCC·머티리얼 캐싱 및 리소스 비동기 확장 (후보 그룹 A & B-2)
+
+- **키네마틱 캐릭터 컨트롤러(KCC) 지면 착지 및 경사로 안정화 (`68213696`, `5b3d775b`, `671d6ae6`)**:
+  - **결함.** 체공 낙하(`!IsGrounded && Velocity.y < 0`) 중 과도한 스냅 거리로 인해 공중 1m 높이에서 바닥으로 조기 순간이동 흡착되는 현상, 30도 경사로 이동 시 캡슐 스윕 마진 부족으로 인한 메시 파고듦, 45도/60도 급경사 끝단 $\to$ 평지 진입 시 수직 속도 불연속으로 인한 단차 충격(턱 현상)이 있었다.
+  - **수정.** 낙하 중 `snapMargin`을 최소화하고 캡슐 하단 스윕 기반 2단계 착지 확정을 도입했다. 접촉 표면 법선 방향 `SkinWidth` 최소 분리 오프셋을 보정하여 메시 침투를 제거했다. 급경사 $\to$ 평지 전환 프레임에서 연착륙(`IsSoftLanding`) 수직 스냅 속도 제한(Clamping) 및 법선 보간을 적용했다.
+  - **검사.** `KinematicCharacterCheck`에 공중 낙하 착지, 30도 경사로 침투 방지, 연착륙 슬라이드 수직 감속 예산 공제 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `KinematicCharacterCheck` 통과를 확인했다 (`5b3d775b`, `671d6ae6`).
+
+- **머티리얼 상수 버퍼 블롭 캐싱 및 렌더러 PSO 우선 정렬 (`9b17e906`)**:
+  - **성능.** 드로우콜마다 머티리얼 파라미터를 문자열/맵으로 탐색하여 상수 버퍼를 갱신하던 CPU 오버헤드를 해소하기 위해 `MaterialInterface` / `MaterialInstance`에 바이트 블롭 버전 캐싱(`m_ConstantsBlob`, `m_ConstantsBlobVersion`)을 도입했다.
+  - **무할당 해석·정렬.** 단일 순회 무할당(Zero-allocation) 파라미터 해석으로 CPU 오버헤드를 최소화하고, `Renderer` 드로우 패스에 PSO-First 정렬을 도입하여 불필요한 파이프라인/루트 시그니처/섀도 바인딩 중복 전환을 제거했다.
+  - **검사.** `ShaderGraphCheck`에 상수 버퍼 바이트 블롭 일치 및 파라미터 갱신 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `ShaderGraphCheck` 통과를 확인했다.
+
+- **4대 리소스 편집기 비동기 로딩 확장 (`3fdfff6f`)**:
+  - `AsyncResourceOpenService`를 `MaterialEditor`, `TextureEditor`, `VFXEditorPanel`, `SpriteEditor` 4대 리소스 편집기로 전면 확산했다. 대용량 텍스처나 복합 머티리얼/VFX 오픈 시 에디터 UI 블로킹 없이 백그라운드에서 안전하게 로드 완료 후 탭을 활성화한다.
+
+- **GameplayCombatSystem 런타임 등록 및 디버그 기즈모 (`e3e00bd0`)**:
+  - `GameplayCombatSystem`을 `RuntimeSystemManifest`에 공식 등록하여 Standalone 및 PIE 런타임 실행을 보장했다.
+  - 에디터 뷰포트에서 `HitboxComponent`와 `InteractableComponent`의 공격 범위 및 상호작용 반경을 시각화하는 와이어프레임 디버그 기즈모 렌더링을 지원한다.
+
+### [2026-11-22] 티어 1 엔진-에디터 핵심 기능 연동 (스프린트 A & B)
+
+- **ECS UI 위젯 런타임 렌더링·프리셋 및 상호작용 (`a89ff0ea`, `1f81de09`, `5b3d775b`)**:
+  - **런타임·상호작용.** `UIRenderSystem` 런타임 위젯 렌더링 및 프리셋 연결을 완료했다(`a89ff0ea`). 열린 `UIDropdownComponent` 팝업의 최상단 HitTest 판정 및 배경 클릭 차단(Modal Overlay), `UITextInputComponent` 런타임 키 입력·텍스트 처리·IME 라우팅 연동을 반영했다(`1f81de09`, `5b3d775b`).
+  - **검사.** `UIInteractionCheck`에 드롭다운 열림/닫힘 클릭 차단, 텍스트 입력 포커스 및 초기 입력 억제 해제 사례를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `UIInteractionCheck` 통과를 확인했다.
+
+- **Shader Graph 범용 TextureSample 노드 및 텍스처 바인딩 동기화 (`c58c2980`, `633b5e58`)**:
+  - **멀티슬롯·채널 분리.** Shader Graph에 범용 `Shader.TextureSample` 노드 멀티슬롯(`0..7`) 바인딩 지원 및 채널 분리 출력(`rgba`, `rgb`, `r`, `g`, `b`, `a`)을 추가했다.
+  - **동기화.** `MaterialInterface::SyncTextureBindings` 연동으로 그래프 노드의 텍스처 슬롯/경로와 머티리얼 인터페이스를 실시간 동기화했다.
+  - **검사.** `ShaderGraphCheck`에 텍스처 샘플링 HLSL 코드 생성, 채널 분리 스위즐, 불투명도 마스크 일치 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `ShaderGraphCheck` 통과를 확인했다.
+
+- **3D 모델 임포트 모달 실시간 60FPS 프리뷰 및 Phase 6 폴더 정리 (`76e18180`)**:
+  - **프리뷰·정리.** `ModelImportModal` 내 임베디드 3D 뷰포트 위젯에서 회전 오프셋 및 스케일 슬라이더 조작 시 60FPS 무지연 실시간 트랜스폼 동기화 피드백을 제공한다. Phase 6 `ModelSubfolderHelper` 기반 서브폴더 자동 분류(모델 전용 폴더 및 머티리얼/메시 하위 디렉터리 분리 생성)를 완성했다.
+  - **검사.** `VirtualPathCheck`에 모델 서브폴더 경로 해석 및 프리뷰 트랜스폼 갱신 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `VirtualPathCheck` 통과를 확인했다.
+
+- **전투 시스템 및 액션 타임라인 히트박스 노티파이 연동 (`24288084`, `952b112a`)**:
+  - **전투 판정·노티파이.** `GameplayCombatSystem` 전투/히트박스 스윙 판정, 단일 공격 내 중복 피격 방지(피격자 해시셋 캐싱), 넉백 벡터 계산 및 상호작용 질의를 구현했다. `ActionTimelineSystem`의 `"HitboxOn"` / `"HitboxOff"` 노티파이 이벤트와 히트박스 활성화 창(Window) 수명을 연동했다.
+  - **검사.** `ActionTimelinePlaybackCheck`에 타임라인 노티파이 히트박스 On/Off 활성화 및 피격 판정 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `ActionTimelinePlaybackCheck` 통과를 확인했다.
+
+- **Foot Ground IK 지면 적응 및 비주얼 스크립팅 노드 (`6789ff06`, `7c4fd12c`)**:
+  - **IK 접지·골반 보정.** `AnimationIKComponent` 기반 Foot Ground IK 지면 레이캐스트 접지, 좌우 발 높이차에 따른 골반(Pelvis) 높이 보정을 구현했다. 비주얼 스크립팅 IK 노드 라이브러리(`GraphGameplayLibrary`)를 등록했다.
+  - **검사.** `BlendTree2DCheck`에 IK 지면 레이캐스트 접지 및 골반 보정 검사를 추가했다.
+  - **확인된 결과.** 사용자가 CTest `BlendTree2DCheck` 통과를 확인했다.
+
+
 ### [2026-11-22] Volumetric Cloud가 보이지 않던 문제
 
 - **결함.** 시작 시 로드한 하늘 재질은 `Engine://Material/SkyMaterial.bammat.json` 키로 등록되는데 GameModule은 `Resources/...` 키로 찾아, 구름 노이즈 텍스처를 재질에 연결하지 못했다. 빈 텍스처를 읽어 구름 밀도가 항상 0이었다. 구름 텍스처도 찾지 못해 실행할 때마다 다시 만들고 저장했다.
