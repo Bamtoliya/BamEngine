@@ -31,6 +31,13 @@
 #include "ActionTimelineComponent.h"
 #include "FlagComponent.h"
 #include "AnimationIK.h"
+#include "SaveGameManager.h"
+#include "NavAgentComponent.h"
+#include "AIPerceptionComponent.h"
+#include "NavigationSystem.h"
+#include "AudioMixer.h"
+#include "SceneManager.h"
+#include "ScenePersistenceComponent.h"
 
 namespace Engine
 {
@@ -47,6 +54,37 @@ namespace Engine
 		static void SetTwoBoneIKTarget(Scene& scene, uint64 entityId, int32 chainIndex, vec3 targetPos, float weight = 1.0f);
 		static void SetLookAtIKTarget(Scene& scene, uint64 entityId, int32 targetIndex, vec3 targetPos, float weight = 1.0f);
 		static void SetFootGroundIKEnabled(Scene& scene, uint64 entityId, bool enabled, float footHeightOffset = 0.05f);
+
+		// SaveGame
+		static bool WriteCheckpointSlot(const std::string& slotName, const std::string& checkpointId);
+		static bool WriteCheckpointSlot(Scene& scene, entt::entity entity, const std::string& slotName, const std::string& checkpointId);
+		static bool LoadCheckpointSlot(const std::string& slotName);
+		static bool LoadCheckpointSlot(Scene& scene, entt::entity entity, const std::string& slotName);
+		static bool HasSlot(const std::string& slotName);
+		static bool DeleteSlot(const std::string& slotName);
+
+		// Navigation & AI
+		static void SetNavDestination(int64 entityId, float x, float y, float z);
+		static void SetNavDestination(Scene& scene, entt::entity entity, const vec3& dest);
+		static void StopNav(int64 entityId);
+		static void StopNav(Scene& scene, entt::entity entity);
+		static bool HasReachedNavDestination(int64 entityId);
+		static bool HasReachedNavDestination(const Scene& scene, entt::entity entity);
+		static int64 GetAIDetectedTarget(int64 entityId);
+		static int64 GetAIDetectedTarget(const Scene& scene, entt::entity entity);
+		static bool HasAILineOfSight(int64 entityId);
+		static bool HasAILineOfSight(const Scene& scene, entt::entity entity);
+
+		// AudioMixer
+		static void SetBusVolume(const std::string& busName, float volume);
+		static float GetBusVolume(const std::string& busName);
+		static void SetBusMuted(const std::string& busName, bool muted);
+		static void FadeBusVolume(const std::string& busName, float targetVolume, float duration);
+
+		// SceneStreaming
+		static void MarkDontDestroyOnLoad(int64 entityId, const std::string& group);
+		static void MarkDontDestroyOnLoad(Scene& scene, entt::entity entity, const std::string& group);
+		static bool UnloadAdditiveScene(const std::string& subSceneName);
 	};
 }
 
@@ -781,5 +819,114 @@ namespace Engine::GraphGameplay
 	inline void SetFootGroundIKEnabled(std::int64_t entityId, bool enabled, float footHeightOffset = 0.05f)
 	{
 		if (entityId >= 0) GraphGameplayLibrary::SetFootGroundIKEnabled(static_cast<uint64>(entityId), enabled, footHeightOffset);
+	}
+
+	// ── 세이브 게임 노드 (SaveGame) ──
+	FUNCTION(GRAPH_CALLABLE("Save.WriteCheckpointSlot"), DISPLAY_NAME("Write Checkpoint Slot"), CATEGORY("SaveGame"),
+		GRAPH_PIN_DEFAULT("slotName", ""), GRAPH_PIN_DEFAULT("checkpointId", ""))
+	inline bool WriteCheckpointSlot(std::string slotName, std::string checkpointId)
+	{
+		return GraphGameplayLibrary::WriteCheckpointSlot(slotName, checkpointId);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Save.LoadCheckpointSlot"), DISPLAY_NAME("Load Checkpoint Slot"), CATEGORY("SaveGame"),
+		GRAPH_PIN_DEFAULT("slotName", ""))
+	inline bool LoadCheckpointSlot(std::string slotName)
+	{
+		return GraphGameplayLibrary::LoadCheckpointSlot(slotName);
+	}
+
+	FUNCTION(GRAPH_PURE("Save.HasSlot"), DISPLAY_NAME("Has Slot"), CATEGORY("SaveGame"),
+		GRAPH_PIN_DEFAULT("slotName", ""))
+	inline bool HasSlot(std::string slotName)
+	{
+		return GraphGameplayLibrary::HasSlot(slotName);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Save.DeleteSlot"), DISPLAY_NAME("Delete Slot"), CATEGORY("SaveGame"),
+		GRAPH_PIN_DEFAULT("slotName", ""))
+	inline bool DeleteSlot(std::string slotName)
+	{
+		return GraphGameplayLibrary::DeleteSlot(slotName);
+	}
+
+	// ── 내비게이션 & AI 노드 (Navigation / AI) ──
+	FUNCTION(GRAPH_CALLABLE("Nav.SetDestination"), DISPLAY_NAME("Set Destination"), CATEGORY("Navigation"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("x", 0.0f), GRAPH_PIN_DEFAULT("y", 0.0f), GRAPH_PIN_DEFAULT("z", 0.0f))
+	inline void SetDestination(std::int64_t entityId, float x, float y, float z)
+	{
+		GraphGameplayLibrary::SetNavDestination(entityId, x, y, z);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Nav.Stop"), DISPLAY_NAME("Stop Navigation"), CATEGORY("Navigation"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline void StopNavigation(std::int64_t entityId)
+	{
+		GraphGameplayLibrary::StopNav(entityId);
+	}
+
+	FUNCTION(GRAPH_PURE("Nav.HasReachedDestination"), DISPLAY_NAME("Has Reached Destination"), CATEGORY("Navigation"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline bool HasReachedDestination(std::int64_t entityId)
+	{
+		return GraphGameplayLibrary::HasReachedNavDestination(entityId);
+	}
+
+	FUNCTION(GRAPH_PURE("AI.GetDetectedTarget"), DISPLAY_NAME("Get Detected Target"), CATEGORY("AI"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline std::int64_t GetDetectedTarget(std::int64_t entityId)
+	{
+		return GraphGameplayLibrary::GetAIDetectedTarget(entityId);
+	}
+
+	FUNCTION(GRAPH_PURE("AI.HasLineOfSight"), DISPLAY_NAME("Has Line Of Sight"), CATEGORY("AI"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline bool HasLineOfSight(std::int64_t entityId)
+	{
+		return GraphGameplayLibrary::HasAILineOfSight(entityId);
+	}
+
+	// ── 오디오 믹서 노드 (Audio) ──
+	FUNCTION(GRAPH_CALLABLE("Audio.SetBusVolume"), DISPLAY_NAME("Set Bus Volume"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("busName", "Master"), GRAPH_PIN_DEFAULT("volume", 1.0f))
+	inline void SetBusVolume(std::string busName, float volume)
+	{
+		GraphGameplayLibrary::SetBusVolume(busName, volume);
+	}
+
+	FUNCTION(GRAPH_PURE("Audio.GetBusVolume"), DISPLAY_NAME("Get Bus Volume"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("busName", "Master"))
+	inline float GetBusVolume(std::string busName)
+	{
+		return GraphGameplayLibrary::GetBusVolume(busName);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Audio.SetBusMuted"), DISPLAY_NAME("Set Bus Muted"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("busName", "Master"), GRAPH_PIN_DEFAULT("muted", false))
+	inline void SetBusMuted(std::string busName, bool muted)
+	{
+		GraphGameplayLibrary::SetBusMuted(busName, muted);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Audio.FadeBusVolume"), DISPLAY_NAME("Fade Bus Volume"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("busName", "Master"), GRAPH_PIN_DEFAULT("targetVolume", 1.0f), GRAPH_PIN_DEFAULT("duration", 1.0f))
+	inline void FadeBusVolume(std::string busName, float targetVolume, float duration)
+	{
+		GraphGameplayLibrary::FadeBusVolume(busName, targetVolume, duration);
+	}
+
+	// ── 씬 스트리밍 및 영속성 노드 (Scene) ──
+	FUNCTION(GRAPH_CALLABLE("Scene.MarkDontDestroyOnLoad"), DISPLAY_NAME("Mark Don't Destroy On Load"), CATEGORY("Scene"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("group", "Global"))
+	inline void MarkDontDestroyOnLoad(std::int64_t entityId, std::string group)
+	{
+		GraphGameplayLibrary::MarkDontDestroyOnLoad(entityId, group);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Scene.UnloadAdditive"), DISPLAY_NAME("Unload Additive Scene"), CATEGORY("Scene"),
+		GRAPH_PIN_DEFAULT("subSceneName", ""))
+	inline bool UnloadAdditive(std::string subSceneName)
+	{
+		return GraphGameplayLibrary::UnloadAdditiveScene(subSceneName);
 	}
 }
