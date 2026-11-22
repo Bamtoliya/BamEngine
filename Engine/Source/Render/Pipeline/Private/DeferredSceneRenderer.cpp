@@ -1,4 +1,5 @@
 ﻿#include "DeferredSceneRenderer.h"
+#include "CloudResources.h"
 #include "ComponentEnable.h"
 
 #include "IBLManager.h"
@@ -129,6 +130,8 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	if (!sceneToQuery && Engine::SceneManager::IsCreated())
 		sceneToQuery = Engine::SceneManager::Get().GetCurrentScene();
 	const Engine::SkyAtmosphereData skyData = BuildSkyAtmosphereData(sceneToQuery);
+	if (skyData.Cloud.EnableClouds != 0u)
+		CloudResources::Prepare();
 
 	// 0. 레이트레이싱 그림자 사용 여부. 켜지면 방향광 캐스케이드에서는 TLAS가 맡는 캐스터를 그리지 않는다.
 	// 셰이더를 쓸 수 없으면 캐스터를 빼기 전에 섀도맵으로 되돌린다.
@@ -469,8 +472,8 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				}
 			}
 			auto& rm = Engine::ResourceManager::Get();
-			auto shapeHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudBaseShape3D.bamtex");
-			auto weatherHandle = rm.GetResourceHandle<Engine::Texture>(L"Resources/Texture/CloudWeatherMap2D.bamtex");
+			auto shapeHandle = rm.GetResourceHandle<Engine::Texture>(CloudResources::BaseShapeKey);
+			auto weatherHandle = rm.GetResourceHandle<Engine::Texture>(CloudResources::WeatherMapKey);
 			auto* shapeTexture = shapeHandle.Get();
 			auto* weatherTexture = weatherHandle.Get();
 			if (shapeTexture && weatherTexture)

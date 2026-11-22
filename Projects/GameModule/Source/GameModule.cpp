@@ -138,8 +138,7 @@ public:
 			REGISTER_MODULE_COMPONENTS(GameModule);
 		}
 
-		// 2. 리소스 초기화 및 시스템 등록
-		SkyAtmosphereSystem::InitializeResources();
+		// 2. 시스템 등록
 		BAM_LOG(Info, "GameModule", "Lifecycle", "[GameModule] Registering Systems...");
 		Engine::SystemManager::Get().AddSystem<SkyAtmosphereSystem>();
 		Engine::SystemManager::Get().AddSystem<BaselineJumpVFXSystem>();

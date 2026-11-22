@@ -21,7 +21,7 @@ flowchart LR
 ```
 
 - 하늘은 `SkyMaterial`(`atmosphereSkyPS`)을 쓰는 **메시가 있어야** 그려진다. `SkyAtmosphereComponent`만 있으면 하늘은 보이지 않고 조명 값만 바뀐다.
-- `SkyAtmosphereSystem`과 구름 노이즈 텍스처 생성은 엔진이 아니라 **GameModule**에 있다. 모듈이 없으면 시간 흐름, 광원 회전 동기화, 구름 텍스처 준비가 동작하지 않는다.
+- `SkyAtmosphereSystem`은 엔진이 아니라 **GameModule**에 있다. 모듈이 없으면 시간 흐름과 광원 회전 동기화가 동작하지 않는다. 구름 노이즈 텍스처는 엔진의 `CloudResources`가 구름을 처음 그릴 때 준비해 하늘 재질에 연결한다.
 - 각 요소는 씬에서 **처음 찾은 활성 컴포넌트 하나**를 쓴다. 순서는 레지스트리 순회 순서이며 사용자가 정할 수 없다.
 
 ## 2. 태양 방향은 누가 정하는가
@@ -170,7 +170,8 @@ Fog는 **G-Buffer에 그린 불투명 면에만** 적용된다. 하늘, 구름, 
 | 10 | 낮음 | 태양 계산 중복 | `SkyAtmosphereSystem`과 `BuildSkyAtmosphereData` |
 | 11 | 수정함 (2026-11-22) | 이름·편집 항목 혼동 | 표시 이름을 실제 쓰임에 맞추고, 광원 종류와 `CastShadows`에 따라 관련 없는 항목을 숨긴다. `HorizonBlend`도 숨긴다 |
 | 12 | 수정함 (2026-11-22) | 구름 값이 두 컴포넌트에 중복 | Volumetric Cloud로 통일하고 이전 문서를 변환한다 (4.6절) |
-| 13 | 낮음 | 엔진 기능이 GameModule에 있음 | `SkyAtmosphereSystem`과 구름 텍스처. 모듈이 없는 Client에서 동작하지 않음 |
+| 13 | 일부 수정 (2026-11-22) | 엔진 기능이 GameModule에 있음 | 구름 텍스처 준비는 엔진 `CloudResources`로 옮겼다. `SkyAtmosphereSystem`은 GameModule에 남아 있다 |
+| 14 | 수정함 (2026-11-22) | Volumetric Cloud를 추가해도 구름이 보이지 않음 | 시작 시 로드한 하늘 재질의 키는 `Engine://Material/SkyMaterial.bammat.json`인데 GameModule은 `Resources/...` 키로 찾아 텍스처를 연결하지 못했다. 구름 텍스처도 같은 이유로 실행할 때마다 다시 만들었다 |
 
 ## 7. 현재 구조에서의 권장 설정
 

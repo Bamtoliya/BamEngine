@@ -2,6 +2,13 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] Volumetric Cloud가 보이지 않던 문제
+
+- **결함.** 시작 시 로드한 하늘 재질은 `Engine://Material/SkyMaterial.bammat.json` 키로 등록되는데 GameModule은 `Resources/...` 키로 찾아, 구름 노이즈 텍스처를 재질에 연결하지 못했다. 빈 텍스처를 읽어 구름 밀도가 항상 0이었다. 구름 텍스처도 찾지 못해 실행할 때마다 다시 만들고 저장했다.
+- **수정.** 엔진의 `CloudResources`가 활성 Volumetric Cloud가 있을 때 텍스처를 불러오거나 만들고 하늘 재질에 연결한다. 재질을 다시 불러와도 복구한다. GameModule의 초기화는 제거했다.
+- **검사.** `CloudResourcesCheck`에 키 일치, 연결과 복구를 추가했다.
+- **확인된 결과.** 사용자가 CTest 통과와 구름 표시를 확인했다. 수정 뒤 실행 로그에서 구름 텍스처의 재생성과 핫 리로드가 사라졌다. GameModule이 없는 Client는 확인하지 않았다.
+
 ### [2026-11-22] 환경 조명의 구름 설정과 이름 정리
 
 - **통일.** Sky Atmosphere의 구름 변수 5개를 없애고 Volumetric Cloud에서만 설정한다. 활성 Volumetric Cloud가 없으면 구름을 그리지 않는다.
