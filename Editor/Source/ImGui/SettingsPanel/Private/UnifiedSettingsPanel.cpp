@@ -15,6 +15,7 @@ UnifiedSettingsPanel::UnifiedSettingsPanel()
 bool UnifiedSettingsPanel::IsAnyDirty() const
 {
     return m_General.IsDirty() || m_Theme.IsDirty() || m_Graphics.IsDirty() ||
+        m_AudioMixer.IsDirty() ||
         m_EditorEnvironment.IsDirty() || m_Workspace.IsDirty() ||
         m_ProjectSettings.IsDirty() || m_InputActions.IsDirty();
 }
@@ -52,6 +53,7 @@ void UnifiedSettingsPanel::ResetDrafts()
     m_General.ReloadDraft(preferences);
     m_Theme.ReloadDraft(preferences);
     m_Graphics.ReloadDraft(settings);
+    m_AudioMixer.ReloadDraft();
     m_EditorEnvironment.ReloadDraft(preferences);
     m_Workspace.ReloadDraft(settings);
     m_ProjectSettings.ReloadDraft(settings);
@@ -67,6 +69,7 @@ void UnifiedSettingsPanel::ResetToDefaults()
     const EditorPreferences defaults;
     m_General.ResetToDefaults(defaults);
     m_Theme.ResetToDefaults(defaults);
+    m_AudioMixer.ResetToDefaults();
     m_EditorEnvironment.ResetToDefaults(defaults);
 }
 
@@ -99,6 +102,7 @@ void UnifiedSettingsPanel::ApplySettings()
     }
 
     m_Graphics.Apply(settings);
+    m_AudioMixer.Apply();
     m_Workspace.SaveWorkspace(settings);
     m_ProjectSettings.Apply(settings);
     m_Workspace.ApplyViewportDrafts(settings);
@@ -239,6 +243,7 @@ void UnifiedSettingsPanel::DrawSidebar()
         drawCategoryItem(EUnifiedSettingsCategory::General, ICON_FA_GEAR, "Settings.CategoryGeneral");
         drawCategoryItem(EUnifiedSettingsCategory::Theme, ICON_FA_PALETTE, "Settings.CategoryTheme");
         drawCategoryItem(EUnifiedSettingsCategory::Graphic, ICON_FA_DESKTOP, "Settings.CategoryGraphic");
+        drawCategoryItem(EUnifiedSettingsCategory::Audio, ICON_FA_VOLUME_HIGH, "AudioPreview.Title");
         ImGui::TreePop();
     }
 
@@ -267,6 +272,7 @@ void UnifiedSettingsPanel::DrawContentArea()
     case EUnifiedSettingsCategory::General: m_General.Draw(); break;
     case EUnifiedSettingsCategory::Theme: m_Theme.Draw(); break;
     case EUnifiedSettingsCategory::Graphic: m_Graphics.Draw(); break;
+    case EUnifiedSettingsCategory::Audio: m_AudioMixer.Draw(); break;
     case EUnifiedSettingsCategory::Editor: m_EditorEnvironment.Draw(); break;
     case EUnifiedSettingsCategory::Workspace: m_Workspace.Draw(EditorSettingsService::Get()); break;
     case EUnifiedSettingsCategory::Shortcuts: m_Shortcuts.Draw(m_SearchFilter); break;

@@ -12,6 +12,9 @@
 #include "SpringArmComponent.h"
 #include "HitboxComponent.h"
 #include "InteractableComponent.h"
+#include "NavAgentComponent.h"
+#include "AIPerceptionComponent.h"
+#include "NavGrid.h"
 #include "SelectionManager.h"
 #include "TransformSystem.h"
 #include "Mesh.h"
@@ -565,6 +568,157 @@ void DebugRenderer::RegisterGameplayDebug(const CameraBuffer& cameraBuffer)
 		DrawSphere(worldPos, interactable.interactRange, sphereColor);
 		DrawCircleXZ(worldPos, interactable.interactRange * 1.01f, ringColor);
 	}
+
+	// 3. NavAgentComponent 디버그 시각화 (반경 링, 목적지, 경로 웨이포인트)
+	for (auto [entity, navAgent] : registry.view<NavAgentComponent>().each())
+	{
+		if (const auto* flag = registry.try_get<FlagComponent>(entity))
+		{
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+		}
+
+		if (!IsComponentEnabled<NavAgentComponent>(registry, entity))
+			continue;
+
+		const auto* wt = registry.try_get<WorldTransformComponent>(entity);
+		const auto* tr = registry.try_get<TransformComponent>(entity);
+		const vec3 worldPos = wt ? vec3(wt->worldMatrix[3]) : (tr ? tr->position : vec3(0.0f));
+
+		const float maxRadius = std::max(navAgent.agentRadius, navAgent.stoppingDistance) + 2.0f;
+		const BoundingBox agentBounds(worldPos - vec3(maxRadius), worldPos + vec3(maxRadius));
+		if (!FrustumCuller::TestBoundingBox(frustum, agentBounds) && !isSelected(entity))
+			continue;
+
+		// agentRadius와 stoppingDistance를 XZ 수평 링으로 표시
+		if (std::isfinite(navAgent.agentRadius) && navAgent.agentRadius > 0.0f)
+		{
+			DrawCircleXZ(worldPos, navAgent.agentRadius, vec4(0.2f, 0.75f, 1.0f, 0.85f));
+		}
+		if (std::isfinite(navAgent.stoppingDistance) && navAgent.stoppingDistance > 0.0f)
+		{
+			DrawCircleXZ(worldPos, navAgent.stoppingDistance, vec4(1.0f, 0.85f, 0.2f, 0.75f));
+		}
+
+		// path 웨이포인트가 존재하면 현재 위치 -> path[currentWaypointIndex] -> ... -> 최종 목적지 경로선 및 마커 시각화
+		if (!navAgent.path.empty() && navAgent.currentWaypointIndex < navAgent.path.size())
+		{
+			const vec4 pathColor(0.2f, 0.95f, 0.35f, 1.0f);
+			const vec4 waypointColor(1.0f, 0.9f, 0.2f, 0.95f);
+			const vec4 destColor(1.0f, 0.3f, 0.2f, 1.0f);
+
+			vec3 prevPos = worldPos;
+			for (size_t i = navAgent.currentWaypointIndex; i < navAgent.path.size(); ++i)
+			{
+				const vec3 waypoint = navAgent.path[i];
+				DrawLine(prevPos, waypoint, pathColor);
+				DrawSphere(waypoint, 0.08f, waypointColor);
+				prevPos = waypoint;
+			}
+
+			const vec3 finalDest = navAgent.path.back();
+			DrawSphere(finalDest, 0.15f, destColor);
+			DrawCircleXZ(finalDest, navAgent.stoppingDistance > 0.0f ? navAgent.stoppingDistance : 0.25f, destColor);
+		}
+		else if (navAgent.hasDestination)
+		{
+			const vec4 destColor(1.0f, 0.35f, 0.2f, 0.95f);
+			DrawLine(worldPos, navAgent.targetPosition, vec4(0.9f, 0.9f, 0.3f, 0.65f));
+			DrawSphere(navAgent.targetPosition, 0.15f, destColor);
+			DrawCircleXZ(navAgent.targetPosition, navAgent.stoppingDistance > 0.0f ? navAgent.stoppingDistance : 0.25f, destColor);
+		}
+	}
+
+	// 4. AIPerceptionComponent 디버그 시각화 (시야각 FOV, 청각 반경, 타깃 연결선)
+	for (auto [entity, aiPerception] : registry.view<AIPerceptionComponent>().each())
+	{
+		if (const auto* flag = registry.try_get<FlagComponent>(entity))
+		{
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+		}
+
+		if (!IsComponentEnabled<AIPerceptionComponent>(registry, entity))
+			continue;
+
+		const auto* wt = registry.try_get<WorldTransformComponent>(entity);
+		const auto* tr = registry.try_get<TransformComponent>(entity);
+		const vec3 worldPos = wt ? vec3(wt->worldMatrix[3]) : (tr ? tr->position : vec3(0.0f));
+
+		const bool hasTarget = (aiPerception.detectedTarget != entt::null && registry.valid(aiPerception.detectedTarget));
+		const float maxRange = std::max(aiPerception.sightRange, aiPerception.hearingRange) + 2.0f;
+		const BoundingBox perceptionBounds(worldPos - vec3(maxRange), worldPos + vec3(maxRange));
+		if (!FrustumCuller::TestBoundingBox(frustum, perceptionBounds) && !isSelected(entity))
+		{
+			if (!hasTarget)
+				continue;
+		}
+
+		// 엔티티 전방 벡터 (WorldTransformComponent 또는 TransformComponent::rotation * vec3(0,0,1))
+		vec3 forward(0.0f, 0.0f, 1.0f);
+		if (wt && glm::dot(vec3(wt->worldMatrix[2]), vec3(wt->worldMatrix[2])) > 1e-6f)
+		{
+			forward = glm::normalize(vec3(wt->worldMatrix[2]));
+		}
+		else if (tr)
+		{
+			forward = glm::normalize(tr->rotation * vec3(0.0f, 0.0f, 1.0f));
+		}
+		vec3 forwardXZ(forward.x, 0.0f, forward.z);
+		if (glm::dot(forwardXZ, forwardXZ) > 1e-6f)
+			forwardXZ = glm::normalize(forwardXZ);
+		else
+			forwardXZ = vec3(0.0f, 0.0f, 1.0f);
+
+		// 시야각 (FOV) 좌·우 경계선과 호(Arc) 시각화 (타깃 감지 시 적색/주황색, 미감지 시 황색/하늘색)
+		const vec4 fovColor = hasTarget ? vec4(1.0f, 0.3f, 0.15f, 0.95f) : vec4(0.2f, 0.85f, 1.0f, 0.85f);
+		if (std::isfinite(aiPerception.sightRange) && aiPerception.sightRange > 0.0f &&
+			std::isfinite(aiPerception.sightHalfAngleDegrees) && aiPerception.sightHalfAngleDegrees > 0.0f)
+		{
+			const float halfRad = glm::radians(glm::clamp(aiPerception.sightHalfAngleDegrees, 0.0f, 180.0f));
+			const float baseAngle = std::atan2(forwardXZ.x, forwardXZ.z);
+			const float leftAngle = baseAngle - halfRad;
+			const float rightAngle = baseAngle + halfRad;
+
+			const vec3 leftDir(std::sin(leftAngle), 0.0f, std::cos(leftAngle));
+			const vec3 rightDir(std::sin(rightAngle), 0.0f, std::cos(rightAngle));
+
+			const vec3 leftEnd = worldPos + leftDir * aiPerception.sightRange;
+			const vec3 rightEnd = worldPos + rightDir * aiPerception.sightRange;
+
+			DrawLine(worldPos, leftEnd, fovColor);
+			DrawLine(worldPos, rightEnd, fovColor);
+			DrawArcXZ(worldPos, aiPerception.sightRange, leftAngle, rightAngle, fovColor, 24);
+		}
+
+		// hearingRange > 0.0f이면 점선 원으로 청각 반경 표시
+		if (std::isfinite(aiPerception.hearingRange) && aiPerception.hearingRange > 0.0f)
+		{
+			const vec4 hearingColor = hasTarget ? vec4(1.0f, 0.55f, 0.2f, 0.65f) : vec4(0.65f, 0.45f, 0.95f, 0.65f);
+			constexpr uint32 hearingSegments = 32;
+			const float hearingStep = glm::two_pi<float>() / static_cast<float>(hearingSegments);
+			for (uint32 i = 0; i < hearingSegments; i += 2)
+			{
+				const float a0 = hearingStep * static_cast<float>(i);
+				const float a1 = hearingStep * static_cast<float>(i + 1);
+				const vec3 p0 = worldPos + vec3(std::cos(a0) * aiPerception.hearingRange, 0.0f, std::sin(a0) * aiPerception.hearingRange);
+				const vec3 p1 = worldPos + vec3(std::cos(a1) * aiPerception.hearingRange, 0.0f, std::sin(a1) * aiPerception.hearingRange);
+				DrawLine(p0, p1, hearingColor);
+			}
+		}
+
+		// detectedTarget != entt::null이고 유효하면 에이전트 위치에서 타깃 위치까지 감지 연결선 표시
+		if (hasTarget)
+		{
+			const auto* targetWt = registry.try_get<WorldTransformComponent>(aiPerception.detectedTarget);
+			const auto* targetTr = registry.try_get<TransformComponent>(aiPerception.detectedTarget);
+			const vec3 targetPos = targetWt ? vec3(targetWt->worldMatrix[3]) : (targetTr ? targetTr->position : aiPerception.lastKnownTargetPos);
+
+			const vec4 targetLineColor = aiPerception.hasLineOfSight ? vec4(1.0f, 0.2f, 0.15f, 1.0f) : vec4(1.0f, 0.6f, 0.2f, 0.85f);
+			DrawLine(worldPos + vec3(0.0f, 0.3f, 0.0f), targetPos + vec3(0.0f, 0.3f, 0.0f), targetLineColor);
+			DrawSphere(targetPos + vec3(0.0f, 0.3f, 0.0f), 0.12f, targetLineColor);
+		}
+	}
 }
 #pragma region Draw Functions
 void DebugRenderer::DrawLine(const vec3& start, const vec3& end, const vec4& color)
@@ -656,6 +810,20 @@ void DebugRenderer::DrawCircleXZ(const vec3& center, float radius, const vec4& c
 		DrawLine(
 			center + vec3(std::cos(a0) * radius, 0.0f, std::sin(a0) * radius),
 			center + vec3(std::cos(a1) * radius, 0.0f, std::sin(a1) * radius), color);
+	}
+}
+
+void DebugRenderer::DrawArcXZ(const vec3& center, float radius, float startAngleRad, float endAngleRad, const vec4& color, uint32 segments)
+{
+	if (segments == 0 || radius <= 0.0f) return;
+	const float step = (endAngleRad - startAngleRad) / static_cast<float>(segments);
+	for (uint32 i = 0; i < segments; ++i)
+	{
+		const float a0 = startAngleRad + step * static_cast<float>(i);
+		const float a1 = startAngleRad + step * static_cast<float>(i + 1);
+		DrawLine(
+			center + vec3(std::sin(a0) * radius, 0.0f, std::cos(a0) * radius),
+			center + vec3(std::sin(a1) * radius, 0.0f, std::cos(a1) * radius), color);
 	}
 }
 #pragma endregion
