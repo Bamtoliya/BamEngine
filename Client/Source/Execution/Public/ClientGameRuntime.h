@@ -32,6 +32,8 @@ namespace Client
         Engine::EResult LoadProjectSettings();
         Engine::EResult InitializeSystems();
         Engine::EResult LoadStartupScene();
+        void TryMountPackages();
+        void TryLoadAudioMixerSettings();
         void SubmitRenderPipeline(Engine::f32 dt, Engine::uint32 width, Engine::uint32 height);
         bool ValidateStartupGraphs();
 

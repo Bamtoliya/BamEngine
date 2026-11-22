@@ -4,6 +4,8 @@
 #include <archive/JsonArchive.h>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "AsyncResourceLoader.h"
+#include "AudioManager.h"
 #include "BuiltInPrimitiveMeshes.h"
 #include "CameraComponent.h"
 #include "ComponentEnable.h"
@@ -15,6 +17,7 @@
 #include "GraphBindingComponent.h"
 #include "InputActionSettings.h"
 #include "LocalizationManager.h"
+#include "PakArchive.h"
 #include "PixelPerfectCameraComponent.h"
 #include "PlatformPath.h"
 #include "StartupResourceLoader.h"
@@ -59,6 +62,12 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     m_Runtime = Engine::Runtime::Create(&runtimeDesc);
     if (!m_Runtime)
         return Engine::EResult::Fail;
+
+    if (!Engine::AsyncResourceLoader::IsCreated())
+        Engine::AsyncResourceLoader::Create();
+
+    TryMountPackages();
+    TryLoadAudioMixerSettings();
 
     if (onStageChanged)
         onStageChanged(ClientStartupStage::Resources);
@@ -114,6 +123,11 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
 {
     if (!m_Runtime)
         return Engine::EResult::InvalidArgument;
+
+    if (Engine::AsyncResourceLoader::IsCreated())
+    {
+        Engine::AsyncResourceLoader::Get().StepMainThread(2.0);
+    }
 
     auto* rhi = Engine::Renderer::Get().GetRHI();
     if (!rhi)
@@ -185,6 +199,12 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
 
 void Client::ClientGameRuntime::Free()
 {
+    if (Engine::AsyncResourceLoader::IsCreated())
+    {
+        Engine::AsyncResourceLoader::Destroy();
+    }
+    Engine::PakMountManager::Get().UnmountAll();
+
     if (!m_Runtime && !Engine::ReflectionRegistry::IsCreated())
         return;
 
@@ -293,17 +313,46 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
         return Engine::EResult::InvalidArgument;
     }
 
-    const std::filesystem::path scenePath =
-        Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
-    if (!std::filesystem::exists(scenePath))
+    archive::JsonArchive ar;
+    Engine::EResult result = Engine::EResult::Fail;
+
+    std::string sceneUri = m_ProjectSettings.StartupScenePath;
+    if (!sceneUri.starts_with("Project://") && !sceneUri.starts_with("Engine://"))
     {
-        BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}",
-            scenePath.string());
-        return Engine::EResult::FileNotFound;
+        sceneUri = "Project://" + sceneUri;
     }
 
-    archive::JsonArchive ar;
-    const Engine::EResult result = Engine::SceneManager::Get().LoadScene(ar, scenePath.wstring());
+    std::vector<uint8_t> sceneBytes;
+    if (Engine::PakMountManager::Get().HasEntry(sceneUri) &&
+        Engine::PakMountManager::Get().TryReadBytes(sceneUri, sceneBytes) == Engine::EResult::Success)
+    {
+        std::string_view jsonView(reinterpret_cast<const char*>(sceneBytes.data()), sceneBytes.size());
+        auto decodeRes = ar.Decode(jsonView);
+        if (decodeRes)
+        {
+            Engine::Scene* candidate = nullptr;
+            auto createRes = Engine::Scene::CreateFromArchive(ar, candidate);
+            if (createRes && candidate)
+            {
+                result = Engine::SceneManager::Get().OpenScene(candidate);
+                Safe_Release(candidate);
+            }
+        }
+    }
+    else
+    {
+        const std::filesystem::path scenePath =
+            Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
+        if (!std::filesystem::exists(scenePath))
+        {
+            BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}",
+                scenePath.string());
+            return Engine::EResult::FileNotFound;
+        }
+
+        result = Engine::SceneManager::Get().LoadScene(ar, scenePath.wstring());
+    }
+
     if (result != Engine::EResult::Success)
     {
         BAM_LOG(Error, "Client", "Startup", "Failed to load startup scene: {}", Engine::ResultToString(result));
@@ -312,8 +361,120 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
 #if defined(_WIN32)
     Engine::CrashHandler::SetActiveScenePath(m_ProjectSettings.StartupScenePath);
 #endif
-    BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", scenePath.string());
+    BAM_LOG(Info, "Client", "Startup", "Loaded startup scene: {}", m_ProjectSettings.StartupScenePath);
     return Engine::EResult::Success;
+}
+
+void Client::ClientGameRuntime::TryMountPackages()
+{
+    std::error_code ec;
+    std::filesystem::path manifestPath;
+
+    for (const auto& base : {
+             m_ProjectRoot,
+             Engine::PlatformPath::GetProjectRoot(),
+             Engine::PlatformPath::GetExecutableDirectory(),
+             std::filesystem::current_path()
+         })
+    {
+        if (base.empty())
+            continue;
+
+        const auto candidate = base / "Config" / "PackageManifest.json";
+        if (std::filesystem::exists(candidate, ec) && std::filesystem::is_regular_file(candidate, ec))
+        {
+            manifestPath = candidate;
+            break;
+        }
+    }
+
+    if (!manifestPath.empty())
+    {
+        std::string startupSceneUri;
+        const auto mountRes = Engine::PakMountManager::Get().MountFromPackageManifest(manifestPath, &startupSceneUri);
+        if (mountRes == Engine::EResult::Success)
+        {
+            BAM_LOG(Info, "Client", "Startup", "Successfully mounted packages from manifest: {}", manifestPath.string());
+            if (!startupSceneUri.empty() && m_ProjectSettings.StartupScenePath.empty())
+            {
+                m_ProjectSettings.StartupScenePath = startupSceneUri;
+            }
+        }
+        else
+        {
+            BAM_LOG(Warn, "Client", "Startup", "Failed to mount packages from manifest: {} ({})",
+                manifestPath.string(), Engine::ResultToString(mountRes));
+        }
+    }
+    else
+    {
+        const auto checkAndMount = [](const std::filesystem::path& pakPath)
+        {
+            std::error_code err;
+            if (std::filesystem::exists(pakPath, err) && std::filesystem::is_regular_file(pakPath, err))
+            {
+                if (Engine::PakMountManager::Get().MountPak(pakPath) == Engine::EResult::Success)
+                {
+                    BAM_LOG(Info, "Client", "Startup", "Mounted standalone pak: {}", pakPath.string());
+                }
+            }
+        };
+
+        for (const auto& base : {
+                 m_ProjectRoot,
+                 Engine::PlatformPath::GetProjectRoot(),
+                 Engine::PlatformPath::GetExecutableDirectory(),
+                 std::filesystem::current_path()
+             })
+        {
+            if (base.empty())
+                continue;
+
+            checkAndMount(base / "Content" / "Engine.bampak");
+            checkAndMount(base / "Content" / "Project.bampak");
+            if (Engine::PakMountManager::Get().GetMountedPakCount() > 0)
+                break;
+        }
+    }
+}
+
+void Client::ClientGameRuntime::TryLoadAudioMixerSettings()
+{
+    if (!Engine::AudioManager::IsCreated())
+        return;
+
+    std::error_code ec;
+    std::filesystem::path mixerConfigPath;
+
+    for (const auto& base : {
+             m_ProjectRoot,
+             Engine::PlatformPath::GetProjectRoot(),
+             Engine::PlatformPath::GetExecutableDirectory(),
+             std::filesystem::current_path()
+         })
+    {
+        if (base.empty())
+            continue;
+
+        const auto candidate = base / "Config" / "AudioMixer.json";
+        if (std::filesystem::exists(candidate, ec) && std::filesystem::is_regular_file(candidate, ec))
+        {
+            mixerConfigPath = candidate;
+            break;
+        }
+    }
+
+    if (!mixerConfigPath.empty())
+    {
+        if (Engine::AudioManager::Get().GetMixer().LoadSettings(mixerConfigPath))
+        {
+            BAM_LOG(Info, "Client", "Audio", "Loaded audio mixer settings from {}", mixerConfigPath.string());
+        }
+        else
+        {
+            BAM_LOG(Warn, "Client", "Audio", "Failed to load audio mixer settings from {}", mixerConfigPath.string());
+        }
+    }
 }
 
 void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
