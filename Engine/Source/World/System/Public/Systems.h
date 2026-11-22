@@ -29,3 +29,4 @@
 #include "ThirdPersonControllerSystem.h"
 #include "SplineFollowSystem.h"
 #include "GameplayCombatSystem.h"
+#include "NavigationSystem.h"
