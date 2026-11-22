@@ -105,6 +105,8 @@ namespace Engine::Network
             m_Transport.reset();
         }
 
+        ClearSimulatedQueues();
+
         m_Mode = ENetworkMode::Standalone;
         m_LocalClientId = InvalidClientId;
         m_CurrentTime = 0.0f;
@@ -112,9 +114,12 @@ namespace Engine::Network
 
     void NetworkDriver::Update(float deltaTime)
     {
-        if (m_Mode == ENetworkMode::Standalone || !m_Transport) return;
-
         m_CurrentTime += deltaTime;
+
+        // 지연 시뮬레이터 큐 먼저 틱
+        ProcessSimulatedQueues(m_CurrentTime);
+
+        if (m_Mode == ENetworkMode::Standalone || !m_Transport) return;
 
         PollIncomingPackets();
         UpdateHeartbeat(deltaTime);
@@ -123,6 +128,8 @@ namespace Engine::Network
 
     void NetworkDriver::PollIncomingPackets()
     {
+        if (!m_Transport) return;
+
         std::uint8_t buffer[2048] = { 0 };
         NetworkAddress senderAddr;
         std::size_t bytesReceived = 0;
@@ -133,26 +140,200 @@ namespace Engine::Network
             ENetworkResult res = m_Transport->ReceiveFrom(buffer, sizeof(buffer), senderAddr, bytesReceived);
             if (res == ENetworkResult::Success && bytesReceived > 0)
             {
-                if (IsServer())
+                if (m_SimSettings.IsActive())
                 {
-                    ClientId cid = FindClientIdByAddress(senderAddr);
-                    if (cid != InvalidClientId)
+                    if (ShouldDropPacket())
                     {
-                        m_Connections[cid].OnPacketReceived(m_CurrentTime, bytesReceived);
+                        continue; // 패킷 손실 시뮬레이션: 드롭
+                    }
+
+                    float delay = CalculateSimulatedDelaySeconds();
+                    if (delay > 0.0f)
+                    {
+                        SimulatedDelayedPacket delayed;
+                        delayed.buffer.assign(buffer, buffer + bytesReceived);
+                        delayed.address = senderAddr;
+                        delayed.deliverTime = m_CurrentTime + delay;
+                        delayed.isOutgoing = false;
+                        m_SimulatedIncomingQueue.push_back(std::move(delayed));
+                        continue;
                     }
                 }
-                else if (IsClient() && senderAddr == m_ServerConnection.GetAddress())
-                {
-                    m_ServerConnection.OnPacketReceived(m_CurrentTime, bytesReceived);
-                }
 
-                m_Dispatcher.DispatchPacket(buffer, bytesReceived, senderAddr);
+                DeliverPacket(buffer, bytesReceived, senderAddr);
             }
             else
             {
                 break; // 읽을 데이터 없음 (WouldBlock) 또는 소켓 에러
             }
         }
+    }
+
+    void NetworkDriver::DeliverPacket(const std::uint8_t* data, std::size_t size, const NetworkAddress& sender)
+    {
+        if (!data || size == 0) return;
+
+        if (IsServer())
+        {
+            ClientId cid = FindClientIdByAddress(sender);
+            if (cid != InvalidClientId)
+            {
+                m_Connections[cid].OnPacketReceived(m_CurrentTime, size);
+            }
+        }
+        else if (IsClient() && sender == m_ServerConnection.GetAddress())
+        {
+            m_ServerConnection.OnPacketReceived(m_CurrentTime, size);
+        }
+
+        m_Dispatcher.DispatchPacket(data, size, sender);
+    }
+
+    void NetworkDriver::DeliverOutgoingPacket(const SimulatedDelayedPacket& packet)
+    {
+        if (!m_Transport || packet.buffer.empty()) return;
+
+        std::size_t sent = 0;
+        ENetworkResult res = m_Transport->SendTo(packet.buffer.data(), packet.buffer.size(), packet.address, sent);
+        if (res == ENetworkResult::Success)
+        {
+            if (packet.targetClientId != InvalidClientId)
+            {
+                auto it = m_Connections.find(packet.targetClientId);
+                if (it != m_Connections.end())
+                {
+                    it->second.OnPacketSent(m_CurrentTime, sent);
+                }
+            }
+            else if (IsClient())
+            {
+                m_ServerConnection.OnPacketSent(m_CurrentTime, sent);
+            }
+        }
+    }
+
+    void NetworkDriver::ProcessSimulatedQueues(float currentTime)
+    {
+        // 1. 수신 지연 큐 처리
+        if (!m_SimulatedIncomingQueue.empty())
+        {
+            std::vector<SimulatedDelayedPacket> remaining;
+            for (auto& packet : m_SimulatedIncomingQueue)
+            {
+                if (currentTime >= packet.deliverTime)
+                {
+                    DeliverPacket(packet.buffer.data(), packet.buffer.size(), packet.address);
+                }
+                else
+                {
+                    remaining.push_back(std::move(packet));
+                }
+            }
+            m_SimulatedIncomingQueue = std::move(remaining);
+        }
+
+        // 2. 송신 지연 큐 처리
+        if (!m_SimulatedOutgoingQueue.empty())
+        {
+            std::vector<SimulatedDelayedPacket> remaining;
+            for (auto& packet : m_SimulatedOutgoingQueue)
+            {
+                if (currentTime >= packet.deliverTime)
+                {
+                    DeliverOutgoingPacket(packet);
+                }
+                else
+                {
+                    remaining.push_back(std::move(packet));
+                }
+            }
+            m_SimulatedOutgoingQueue = std::move(remaining);
+        }
+    }
+
+    void NetworkDriver::ClearSimulatedQueues()
+    {
+        m_SimulatedIncomingQueue.clear();
+        m_SimulatedOutgoingQueue.clear();
+    }
+
+    float NetworkDriver::RandomFloat01()
+    {
+        m_SimRngState = m_SimRngState * 1664525u + 1013904223u;
+        return static_cast<float>(m_SimRngState >> 8) / 16777216.0f;
+    }
+
+    bool NetworkDriver::ShouldDropPacket()
+    {
+        if (m_SimSettings.simulatedPacketLossPercent <= 0.0f) return false;
+        if (m_SimSettings.simulatedPacketLossPercent >= 100.0f) return true;
+        return (RandomFloat01() * 100.0f) < m_SimSettings.simulatedPacketLossPercent;
+    }
+
+    float NetworkDriver::CalculateSimulatedDelaySeconds()
+    {
+        float delaySec = std::max(0.0f, m_SimSettings.simulatedLatencyMs) / 1000.0f;
+        if (m_SimSettings.simulatedJitterMs > 0.0f)
+        {
+            float jitterSec = (RandomFloat01() * 2.0f - 1.0f) * (m_SimSettings.simulatedJitterMs / 1000.0f);
+            delaySec = std::max(0.0f, delaySec + jitterSec);
+        }
+        return delaySec;
+    }
+
+    bool NetworkDriver::SimulateReceivePacket(const std::uint8_t* data, std::size_t size, const NetworkAddress& sender)
+    {
+        if (!data || size == 0) return false;
+
+        if (m_SimSettings.IsActive())
+        {
+            if (ShouldDropPacket()) return false;
+
+            float delay = CalculateSimulatedDelaySeconds();
+            if (delay > 0.0f)
+            {
+                SimulatedDelayedPacket delayed;
+                delayed.buffer.assign(data, data + size);
+                delayed.address = sender;
+                delayed.deliverTime = m_CurrentTime + delay;
+                delayed.isOutgoing = false;
+                m_SimulatedIncomingQueue.push_back(std::move(delayed));
+                return true;
+            }
+        }
+
+        DeliverPacket(data, size, sender);
+        return true;
+    }
+
+    bool NetworkDriver::SimulateSendPacket(const std::uint8_t* data, std::size_t size, const NetworkAddress& target)
+    {
+        if (!data || size == 0) return false;
+
+        if (m_SimSettings.IsActive())
+        {
+            if (ShouldDropPacket()) return false;
+
+            float delay = CalculateSimulatedDelaySeconds();
+            if (delay > 0.0f)
+            {
+                SimulatedDelayedPacket delayed;
+                delayed.buffer.assign(data, data + size);
+                delayed.address = target;
+                delayed.deliverTime = m_CurrentTime + delay;
+                delayed.isOutgoing = true;
+                m_SimulatedOutgoingQueue.push_back(std::move(delayed));
+                return true;
+            }
+        }
+
+        if (m_Transport)
+        {
+            std::size_t sent = 0;
+            return m_Transport->SendTo(data, size, target, sent) == ENetworkResult::Success;
+        }
+
+        return true;
     }
 
     void NetworkDriver::UpdateHeartbeat(float deltaTime)
@@ -209,6 +390,24 @@ namespace Engine::Network
         std::size_t totalSize = 0;
         const std::uint8_t* data = writer.FinalizePacket(totalSize);
 
+        if (m_SimSettings.IsActive())
+        {
+            if (ShouldDropPacket()) return true;
+
+            float delay = CalculateSimulatedDelaySeconds();
+            if (delay > 0.0f)
+            {
+                SimulatedDelayedPacket delayed;
+                delayed.buffer.assign(data, data + totalSize);
+                delayed.address = it->second.GetAddress();
+                delayed.deliverTime = m_CurrentTime + delay;
+                delayed.targetClientId = clientId;
+                delayed.isOutgoing = true;
+                m_SimulatedOutgoingQueue.push_back(std::move(delayed));
+                return true;
+            }
+        }
+
         std::size_t sent = 0;
         ENetworkResult res = m_Transport->SendTo(data, totalSize, it->second.GetAddress(), sent);
         if (res == ENetworkResult::Success)
@@ -229,6 +428,24 @@ namespace Engine::Network
         {
             if (cid == ignoreClient || conn.GetState() != EConnectionState::Connected) continue;
 
+            if (m_SimSettings.IsActive())
+            {
+                if (ShouldDropPacket()) continue;
+
+                float delay = CalculateSimulatedDelaySeconds();
+                if (delay > 0.0f)
+                {
+                    SimulatedDelayedPacket delayed;
+                    delayed.buffer.assign(data, data + totalSize);
+                    delayed.address = conn.GetAddress();
+                    delayed.deliverTime = m_CurrentTime + delay;
+                    delayed.targetClientId = cid;
+                    delayed.isOutgoing = true;
+                    m_SimulatedOutgoingQueue.push_back(std::move(delayed));
+                    continue;
+                }
+            }
+
             std::size_t sent = 0;
             if (m_Transport->SendTo(data, totalSize, conn.GetAddress(), sent) == ENetworkResult::Success)
             {
@@ -243,12 +460,71 @@ namespace Engine::Network
         std::size_t totalSize = 0;
         const std::uint8_t* data = writer.FinalizePacket(totalSize);
 
+        if (m_SimSettings.IsActive())
+        {
+            if (ShouldDropPacket()) return true;
+
+            float delay = CalculateSimulatedDelaySeconds();
+            if (delay > 0.0f)
+            {
+                SimulatedDelayedPacket delayed;
+                delayed.buffer.assign(data, data + totalSize);
+                delayed.address = m_ServerConnection.GetAddress();
+                delayed.deliverTime = m_CurrentTime + delay;
+                delayed.targetClientId = ServerClientId;
+                delayed.isOutgoing = true;
+                m_SimulatedOutgoingQueue.push_back(std::move(delayed));
+                return true;
+            }
+        }
+
         std::size_t sent = 0;
         ENetworkResult res = m_Transport->SendTo(data, totalSize, m_ServerConnection.GetAddress(), sent);
         if (res == ENetworkResult::Success)
         {
             m_ServerConnection.OnPacketSent(m_CurrentTime, sent);
             return true;
+        }
+        return false;
+    }
+
+    bool NetworkDriver::SendRpc(const RpcMessage& message, ClientId targetClientId)
+    {
+        PacketWriter writer(EPacketId::RPCMessage);
+        RpcMessage msgCopy = message;
+
+        if (IsClient())
+        {
+            msgCopy.senderClientId = m_LocalClientId;
+            NetworkRpcRegistry::EncodeRpc(msgCopy, writer);
+            return SendToServer(writer);
+        }
+        else if (IsServer())
+        {
+            msgCopy.senderClientId = ServerClientId;
+            NetworkRpcRegistry::EncodeRpc(msgCopy, writer);
+
+            if (msgCopy.target == ERpcTarget::Multicast)
+            {
+                Broadcast(writer, targetClientId);
+                return true;
+            }
+            else if (msgCopy.target == ERpcTarget::Client)
+            {
+                if (targetClientId != InvalidClientId)
+                {
+                    return SendToClient(targetClientId, writer);
+                }
+                else
+                {
+                    Broadcast(writer);
+                    return true;
+                }
+            }
+            else
+            {
+                return false;
+            }
         }
         return false;
     }

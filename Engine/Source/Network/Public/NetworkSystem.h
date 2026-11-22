@@ -4,6 +4,7 @@
 #include "NetworkDriver.h"
 #include "NetworkIdentityComponent.h"
 #include "NetworkTransformComponent.h"
+#include "NetworkRpc.h"
 #include <memory>
 #include <unordered_map>
 
@@ -28,6 +29,11 @@ public:
     Network::NetworkDriver& GetDriver() { return *m_Driver; }
     const Network::NetworkDriver& GetDriver() const { return *m_Driver; }
 
+    // RPC 레지스트리 접근자 및 RPC 송신
+    Network::NetworkRpcRegistry& GetRpcRegistry() { return m_RpcRegistry; }
+    const Network::NetworkRpcRegistry& GetRpcRegistry() const { return m_RpcRegistry; }
+    bool SendRpc(const Network::RpcMessage& message, Network::ClientId targetClientId = Network::InvalidClientId);
+
     // NetId <-> entt::entity 등록 및 조회
     void RegisterEntity(Network::NetId netId, entt::entity entity);
     void UnregisterEntity(Network::NetId netId);
@@ -42,9 +48,11 @@ private:
     void UpdateClientInterpolation(entt::registry& registry, f32 dt);
 
     void HandleSyncTransform(const Network::PacketHeader& header, Network::PacketReader& reader, entt::registry& registry);
+    void HandleRpcMessage(const Network::PacketHeader& header, Network::PacketReader& reader);
 
 private:
     std::unique_ptr<Network::NetworkDriver> m_Driver;
+    Network::NetworkRpcRegistry m_RpcRegistry;
     std::unordered_map<Network::NetId, entt::entity> m_NetIdToEntity;
     Network::NetId m_NextServerNetId = 1;
 };

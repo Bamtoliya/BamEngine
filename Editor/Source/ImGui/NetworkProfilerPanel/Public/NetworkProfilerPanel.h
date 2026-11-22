@@ -23,9 +23,11 @@ public:
     bool RestorePluginState(const void* state, std::size_t stateSize);
     void Draw();
     void Update(float dt);
+
 private:
     void DrawSessionControl(Engine::NetworkSystem* netSystem);
     void DrawTrafficMetrics(Engine::NetworkSystem* netSystem);
+    void DrawSimulationControls(Engine::NetworkSystem* netSystem);
     void DrawPingGraph(Engine::NetworkSystem* netSystem);
     void DrawConnectedClientsTable(Engine::NetworkSystem* netSystem);
 
