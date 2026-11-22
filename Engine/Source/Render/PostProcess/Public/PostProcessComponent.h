@@ -14,16 +14,16 @@ namespace Engine
         bool IsEnabled = true;
         static constexpr auto ComponentEnableMember = &PostProcessComponent::IsEnabled;
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UNBOUND"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UNBOUND"), VISIBLE(false))
         bool IsUnbound = true; // 전역 볼륨 여부 (true면 씬 전체에 적용)
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PRIORITY"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PRIORITY"), VISIBLE(false))
         f32 Priority = 0.0f; // 볼륨 간 우선순위
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_PRESET_NAME"))
         string PresetName = "Cinematic"; // 적용할 프리셋 이름 (Resources/Config/PostProcess/Presets/*.json)
 
-        PROPERTY(READONLY, DISPLAY_NAME("PROP_PIPELINE_SETTINGS"), ALLOW_MISSING)
+        PROPERTY(READONLY, DISPLAY_NAME("PROP_PIPELINE_SETTINGS"), ALLOW_MISSING, VISIBLE(false))
         string PipelineSettings; // 씬 파일에 인라인으로 저장/복원되는 실시간 파이프라인 JSON 데이터
     };
 }

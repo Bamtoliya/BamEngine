@@ -29,7 +29,7 @@ namespace Engine
             vec3 SocketOffset = vec3(0.0f, 0.3f, 0.0f);
 
         // 벽 충돌 감지용 구체 프로브 반지름
-        PROPERTY(EDITABLE, RANGE(0.01, 1.0), DISPLAY_NAME("PROP_PROBE_RADIUS"))
+        PROPERTY(EDITABLE, RANGE(0.01, 1.0), DISPLAY_NAME("PROP_PROBE_RADIUS"), EDITCONDITION(DoCollisionTest))
             f32 ProbeRadius = 0.25f;
 
         // 벽 가림 시 카메라를 앞으로 당길지 여부
@@ -41,14 +41,14 @@ namespace Engine
             bool EnableCameraLag = true;
 
         // 위치 지연 추종 속도
-        PROPERTY(EDITABLE, RANGE(0.1, 50.0), DISPLAY_NAME("PROP_CAMERA_LAG_SPEED"))
+        PROPERTY(EDITABLE, RANGE(0.1, 50.0), DISPLAY_NAME("PROP_CAMERA_LAG_SPEED"), EDITCONDITION(EnableCameraLag))
             f32 CameraLagSpeed = 12.0f;
 
         // 장애물 해제 시 카메라 암 길이 복귀 보간 속도
         PROPERTY(EDITABLE, RANGE(1.0, 50.0), DISPLAY_NAME("PROP_ZOOM_LAG_SPEED"), ALLOW_MISSING)
             f32 ZoomLagSpeed = 12.0f;
         // 충돌 시 카메라 최소 허용 거리 (m)
-        PROPERTY(EDITABLE, RANGE(0.1, 5.0), DISPLAY_NAME("PROP_MIN_ARM_LENGTH"), ALLOW_MISSING)
+        PROPERTY(EDITABLE, RANGE(0.1, 5.0), DISPLAY_NAME("PROP_MIN_ARM_LENGTH"), ALLOW_MISSING, EDITCONDITION(DoCollisionTest))
             f32 MinArmLength = 0.3f;
 
         // 상하 회전 각도 제한 (Pitch Min / Max)
@@ -66,7 +66,7 @@ namespace Engine
             f32 Yaw = 0.0f;
 
         // 충돌 검사 대상 레이어 마스크
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLLISION_MASK"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_COLLISION_MASK"), EDITCONDITION(DoCollisionTest))
             uint32 CollisionMask = 0xFFFFFFFFu;
 
         // ── 런타임 상태 (직렬화 제외) ──

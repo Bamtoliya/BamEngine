@@ -550,6 +550,7 @@
         "PROP_LOD2_SCREEN_COVERAGE": "LOD 2 Screen Coverage",
         "PROP_LOOP": "Loop",
         "PROP_LOOP_BLEND_DURATION": "Loop Blend Duration (s)",
+        "PROP_LOWER_AMBIENT_COLOR": "Lower Ambient Color",
         "PROP_MASS": "Mass",
         "PROP_MATERIAL_HANDLE": "Material Handle",
         "PROP_MATRIX": "Matrix",

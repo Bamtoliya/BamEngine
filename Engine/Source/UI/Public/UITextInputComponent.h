@@ -91,7 +91,7 @@ namespace Engine
         PROPERTY(EDITABLE)
         std::string placeholder;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         std::string imeComposition;
 
         PROPERTY(EDITABLE)
@@ -106,13 +106,13 @@ namespace Engine
         PROPERTY(EDITABLE)
         bool readOnly = false;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         bool isFocused = false;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         std::size_t cursorByteIndex = 0;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         std::size_t selectionAnchorByteIndex = 0;
 
         PROPERTY(EDITABLE, COLOR_PROPERTY)

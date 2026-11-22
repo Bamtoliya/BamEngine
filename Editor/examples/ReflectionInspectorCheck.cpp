@@ -1,6 +1,7 @@
 ﻿#include "Engine_Includes.h"
 #include "ReflectionInspectorSupport.h"
 #include "ReflectionPropertyDrawer.h"
+#include "EditCondition.h"
 #include "InputManager.h"
 #include "ReflectionRegistry.h"
 #include "WorldComponents.h"
@@ -9,6 +10,7 @@
 #include <imgui.h>
 #include <archive/JsonArchive.h>
 #include <iostream>
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <utility>
@@ -16,6 +18,7 @@
 #include "ResourcePicker.h"
 #include "PlatformPath.h"
 #include "RectTransformComponent.h"
+#include "ParticleEffect.h"
 
 namespace Editor::Detail
 {
@@ -641,6 +644,139 @@ namespace
         return true;
     }
 
+    bool CheckEditConditionSyntax()
+    {
+        const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+        const auto* type = registry.FindType<Engine::LightComponent>();
+        const auto* emitterType = registry.FindType<Engine::ParticleEmitterComponent>();
+        if (!type || !emitterType) return Fail("EDITCONDITION test types are missing.");
+
+        Engine::LightComponent light;
+        light.LightType = ELightType::Spot;
+        light.Flags = ELightFlags::AffectDiffuse;
+        const auto run = [&](std::string_view text)
+            {
+                return Editor::EditConditionParser(text, *type, reflection::ObjectView::From(light), &registry).Run();
+            };
+
+        const std::pair<const char*, bool> cases[] =
+        {
+            { "IsEnabled", true }, { "!IsEnabled", false }, { "!!IsEnabled", true }, { "IsEnabled == false", false },
+            { "LightType == Spot", true }, { "LightType==ELightType::Spot", true }, { "LightType != Spot", false },
+            { "LightType == Point || LightType == Spot", true }, { "LightType == Point && IsEnabled", false },
+            // '&&'가 '||'보다 먼저 묶인다.
+            { "IsEnabled || IsEnabled && !IsEnabled", true }, { "(IsEnabled || IsEnabled) && !IsEnabled", false },
+            { "Flags & AffectDiffuse", true }, { "Flags & CastShadows", false }, { "!(Flags & CastShadows)", true },
+            { "Flags & AffectDiffuse && LightType == Spot", true }, { "IsEnabled && Flags & CastShadows", false },
+            { "Intensity == 1.0", true }, { "Intensity != 1", false }
+        };
+        for (const auto& [text, expected] : cases)
+        {
+            const auto result = run(text);
+            if (!result.Error.empty() || result.Met != expected)
+            {
+                std::cerr << "EDITCONDITION(" << text << "): " << result.Error << '\n';
+                return Fail("EDITCONDITION evaluation failed.");
+            }
+        }
+
+        // 해석할 수 없는 조건은 속성을 숨기지 않고 오류를 알린다.
+        for (const auto* text : { "Missing", "\"IsEnabled\"", "LightType == Nope", "Flags & Nope", "LightType", "IsEnabled &&",
+            "(IsEnabled", "IsEnabled)", "IsEnabled IsEnabled", "Intensity == Spot", "IsEnabled == maybe", "Flags &" })
+        {
+            const auto result = run(text);
+            if (result.Error.empty() || !result.Met)
+            {
+                std::cerr << "EDITCONDITION(" << text << ")\n";
+                return Fail("An invalid EDITCONDITION was accepted or hid its property.");
+            }
+        }
+
+        Engine::ParticleEmitterComponent emitter;
+        const auto hasBurst = [&]()
+            {
+                return Editor::EditConditionParser("burstCount != 0", *emitterType,
+                    reflection::ObjectView::From(emitter), &registry).Run();
+            };
+        if (hasBurst().Met || !hasBurst().Error.empty()) return Fail("An integer EDITCONDITION did not read zero.");
+        emitter.burstCount = 3;
+        if (!hasBurst().Met) return Fail("An integer EDITCONDITION did not read a nonzero value.");
+        return true;
+    }
+
+    bool CheckLightPropertyVisibility()
+    {
+        const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
+        const auto* type = registry.FindType<Engine::LightComponent>();
+        Engine::LightComponent light;
+        const auto shown = [&](const char* name)
+            {
+                const auto* property = type ? type->FindProperty(name) : nullptr;
+                if (!property) return false;
+                const auto result = Editor::EvaluateEditCondition(*property, *type, reflection::ObjectView::From(light), &registry);
+                return result.Error.empty() && result.Met;
+            };
+
+        for (const auto lightType : { ELightType::Point, ELightType::Directional, ELightType::Spot, ELightType::Sky })
+        {
+            for (const bool castShadows : { false, true })
+            {
+                light.LightType = lightType;
+                light.Flags = castShadows ? ELightFlags::AffectDiffuse | ELightFlags::CastShadows : ELightFlags::AffectDiffuse;
+                const bool sky = lightType == ELightType::Sky;
+                const bool directional = lightType == ELightType::Directional;
+                const bool local = lightType == ELightType::Point || lightType == ELightType::Spot;
+
+                if (shown("GroundColor") != sky || shown("IndirectIntensity") != sky)
+                    return Fail("Sky light properties are visible on another light type.");
+                if (shown("Range") != local || shown("AttenuationMode") != local || shown("AttenuationCoefficients") != local)
+                    return Fail("Attenuation visibility does not match the light type.");
+                if (shown("ShadowStrength") != (castShadows && !sky) ||
+                    shown("ShadowMaxDistance") != (castShadows && directional) ||
+                    shown("RaytracedShadow") != (castShadows && directional) ||
+                    shown("ShadowBias") != (castShadows && (directional || lightType == ELightType::Spot)))
+                    return Fail("Shadow visibility does not match the light type and CastShadows.");
+            }
+        }
+
+        light.LightType = ELightType::Point;
+        light.AttenuationMode = EAttenuationMode::InverseSquare;
+        if (shown("AttenuationCoefficients")) return Fail("Unused attenuation coefficients are visible.");
+        return true;
+    }
+
+    bool CheckRegisteredEditConditions()
+    {
+        const auto& registry = Engine::ReflectionRegistry::Get();
+        const auto check = [&](const reflection::TypeInfo& type, const reflection::ObjectView& object)
+            {
+                for (const auto& property : type.Properties)
+                {
+                    const auto result = Editor::EvaluateEditCondition(property, type, object, &registry.GetRegistry());
+                    if (result.Error.empty()) continue;
+                    std::cerr << type.QualifiedName << '.' << property.Name << ": " << result.Error << '\n';
+                    return false;
+                }
+                return true;
+            };
+
+        for (const auto& entry : registry.GetComponentEntries())
+        {
+            if (!entry.ReflectionType || std::ranges::none_of(entry.ReflectionType->Properties,
+                [](const auto& property) { return property.Metadata.Find("EditCondition") != nullptr; })) continue;
+
+            const auto object = entry.Default ? entry.Default() : reflection::ObjectView{};
+            if (!object.IsValid()) return Fail("A component with EDITCONDITION has no default object.");
+            if (!check(*entry.ReflectionType, object)) return Fail("A component has an invalid EDITCONDITION.");
+        }
+
+        Engine::ParticleEmitterData emitter;
+        const auto* emitterType = registry.GetRegistry().FindType<Engine::ParticleEmitterData>();
+        if (!emitterType || !check(*emitterType, reflection::ObjectView::From(emitter)))
+            return Fail("ParticleEmitterData has an invalid EDITCONDITION.");
+        return true;
+    }
+
     bool CheckDrawers()
     {
         const auto& registry = Engine::ReflectionRegistry::Get().GetRegistry();
@@ -734,6 +870,7 @@ int main()
         !Engine::ReflectionRegistry::Create() || !Engine::InputManager::Create()) return 1;
     if (!CheckPayloads() || !CheckResourceTypes() || !CheckColliderValidation() ||
         !CheckJointArchiveBoundary() || !CheckCommonValueWrites() || !CheckCommonEnumWrites() ||
+        !CheckEditConditionSyntax() || !CheckLightPropertyVisibility() || !CheckRegisteredEditConditions() ||
         !CheckDrawers()) return 1;
     std::cout << "Inspector resource, reflection, validation, and draw checks passed.\n";
     return 0;

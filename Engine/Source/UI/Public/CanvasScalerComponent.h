@@ -23,16 +23,16 @@ namespace Engine
         PROPERTY(EDITABLE)
         ECanvasScaleMode scaleMode = ECanvasScaleMode::ConstantPixelSize;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, EDITCONDITION(scaleMode == ScaleWithScreenSize))
         glm::vec2 referenceResolution{ 1920.0f, 1080.0f };
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, EDITCONDITION(scaleMode == ScaleWithScreenSize))
         float matchWidthOrHeight = 0.5f; // 0.0f = match width, 1.0f = match height
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, EDITCONDITION(scaleMode != ScaleWithScreenSize))
         float scaleFactor = 1.0f;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         float referencePixelsPerUnit = 100.0f;
 
         [[nodiscard]] float ComputeScaleFactor(glm::vec2 viewportSize) const

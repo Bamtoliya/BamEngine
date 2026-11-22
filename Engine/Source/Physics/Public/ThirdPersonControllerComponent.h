@@ -35,7 +35,7 @@ namespace Engine
             bool OrientRotationToMovement = true;
 
         // 캐릭터 회전 보간 속도 (deg/s)
-        PROPERTY(EDITABLE, RANGE(1.0, 30.0), DISPLAY_NAME("PROP_ROTATION_SMOOTH_SPEED"))
+        PROPERTY(EDITABLE, RANGE(1.0, 30.0), DISPLAY_NAME("PROP_ROTATION_SMOOTH_SPEED"), EDITCONDITION(OrientRotationToMovement))
             f32 RotationSmoothSpeed = 12.0f;
 
         // 입력 활성화 여부

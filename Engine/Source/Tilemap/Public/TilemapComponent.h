@@ -77,7 +77,7 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ORDER_IN_LAYER"))
 		int32 orderInLayer = 0;
 
-		PROPERTY()
+		PROPERTY(VISIBLE(false))
 		std::vector<SavedTile> savedTiles;
 
 		PROPERTY(ALLOW_MISSING)

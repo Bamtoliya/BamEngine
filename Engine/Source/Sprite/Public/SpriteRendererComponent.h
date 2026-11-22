@@ -53,14 +53,14 @@ namespace Engine
 		ESpriteBillboardMode billboardMode = ESpriteBillboardMode::None;
 
 		// ── 9-Slice / Tiled 전용 크기 ──
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SIZE"), EDITCONDITION(drawMode == Sliced || drawMode == Tiled))
 		vec2 size = vec2(1.0f, 1.0f);
 
 		// ── Filled 모드 전용 설정 ──
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_METHOD"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_METHOD"), EDITCONDITION(drawMode == Filled))
 		ESpriteFillMethod fillMethod = ESpriteFillMethod::Horizontal;
 
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_AMOUNT"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FILL_AMOUNT"), EDITCONDITION(drawMode == Filled))
 		f32 fillAmount = 1.0f; // 0.0 ~ 1.0
 
 		// ── 2D 정렬 순서 ──
@@ -72,13 +72,13 @@ namespace Engine
 
 		PROPERTY(EDITABLE, COLOR_PROPERTY, DISPLAY_NAME("PROP_COLOR"))
 		vec4 color = vec4(1.f);
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TILING"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_TILING"), EDITCONDITION(drawMode != Sliced))
 		vec2 tiling = vec2(1.f);
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET"), EDITCONDITION(drawMode != Sliced))
 		vec2 offset = vec2(0.f);
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLIPX"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLIPX"), EDITCONDITION(drawMode != Sliced))
 		bool flipX = false;
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLIPY"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FLIPY"), EDITCONDITION(drawMode != Sliced))
 		bool flipY = false;
 	};
 }

@@ -162,7 +162,7 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SHAPE"))
         ColliderShape m_Shape = BoxShape{};
 
-		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"))
+		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"), VISIBLE(false))
         bool m_Dirty = true;
     };
 }

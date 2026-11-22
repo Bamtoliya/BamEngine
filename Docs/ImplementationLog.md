@@ -2,6 +2,15 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 인스펙터의 조건부 표시와 미사용 속성 정리
+
+- **조건식.** `EDITCONDITION`에 `&&`, `||`, 괄호, 비트 플래그(`Flags & CastShadows`), 숫자 비교를 추가했다. 평가는 `EditCondition.h`로 분리했다. 해석할 수 없는 조건은 속성을 숨기지 않고 경고를 한 번 남긴다(지침에만 있고 구현되지 않았던 동작).
+- **조건부 표시.** Light, Fog, Camera, SpringArm, RigidBody, CharacterController, ThirdPersonController, SpriteRenderer, AudioSource, Animator, IK, 파티클, CanvasScaler, NetworkTransform의 현재 설정에서 효과가 없는 속성을 숨긴다. 값과 저장 형식은 바꾸지 않았다.
+- **숨김.** 런타임이 읽지 않는 속성(`LightingLayerMask`, 관절 `EnableCollision`, `upscaleRT`, `referencePixelsPerUnit`, `SyncScale`, 후처리 `IsUnbound`·`Priority`)과 실행 중 내부 값을 `VISIBLE(false)`로 숨겼다. 비트 플래그의 일부 항목은 `META("HiddenEntries", ...)`로 숨긴다.
+- **검사.** `ReflectionInspectorCheck`에 문법, 잘못된 조건, 광원 종류별 표시와 등록된 컴포넌트의 모든 조건 검사를 추가했다.
+- **확인된 결과.** 사용자가 CTest 통과와 화면을 확인했다.
+- **남은 한계.** 다른 컴포넌트의 상태나 리소스 지정 여부는 조건으로 쓸 수 없다. Sky Light의 `Flags`에는 효과 없는 `CastShadows`가 보인다.
+
 ### [2026-11-22] Sky Light 방향 수정과 환경 조명 문서
 
 - **결함.** Sky Light의 반구 위쪽이 엔티티 전방(+Z)이어서, 회전하지 않은 Sky Light의 하늘색이 옆면에 들어왔다.

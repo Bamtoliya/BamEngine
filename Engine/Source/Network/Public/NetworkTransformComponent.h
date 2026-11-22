@@ -17,11 +17,11 @@ namespace Engine
             float SyncRate = 20.0f;
 
         // 위치 변화 감지 임계치 (단위: 미터, 1cm 이상 이동 시 전송)
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_POS_THRESHOLD"), STEP(0.01))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_POS_THRESHOLD"), STEP(0.01), EDITCONDITION(SyncPosition))
             float PositionThreshold = 0.01f;
 
         // 회전 변화 감지 임계치 (단위: 라디안, 약 0.5도)
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ROT_THRESHOLD"), STEP(0.01))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ROT_THRESHOLD"), STEP(0.01), EDITCONDITION(SyncRotation))
             float RotationThreshold = 0.0087f;
 
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SYNC_POSITION"))
@@ -30,7 +30,7 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SYNC_ROTATION"))
             bool SyncRotation = true;
 
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SYNC_SCALE"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SYNC_SCALE"), VISIBLE(false))
             bool SyncScale = false; // 기본적으로 스케일은 고정 에셋이 많으므로 대역폭 절약
 
         // 클라이언트 수신측 LERP 보간 추종 속도

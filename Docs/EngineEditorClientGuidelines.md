@@ -634,7 +634,11 @@ Editor는 프로젝트의 대상 플랫폼과 빌드 구성을 선택하고
   - 그 밖의 편집 속성은 `CATEGORY`를 지정하고, 키는 `CATEGORY_` 접두사로 `Engine.csv`에 둔다(예: `CATEGORY_VFX_TIMING`). 명시적 카테고리만 접을 수 있는 노드로 그린다.
   - 구조체 전체가 하나의 의미 단위면(예: `CurveKey`) `CATEGORY`를 붙이지 않는다.
   - 기존 엔진 타입에는 `CATEGORY_` 접두사가 없는 키(`"Animation"`, `"Physics"` 등)가 남아 있으며, 정리는 별도 작업으로 남긴다.
-- **조건부 표시(`EDITCONDITION`)**: 인자는 매크로가 문자열로 변환하므로 따옴표 없이 쓴다(`EDITCONDITION(useScaleCurve)`, `EDITCONDITION(LightType == Spot)`). `EDITCONDITION("useScaleCurve")`처럼 따옴표를 넣으면 대상 속성을 찾지 못해 항상 표시되며, 드로어는 이 경우 타입·속성별로 한 번 `EDITOR_LOG_WARN` 경고를 남긴다.
+- **조건부 표시(`EDITCONDITION`)**: 현재 값에서 효과가 없는 속성은 숨긴다. 값은 지우지 않으며 저장 형식도 바뀌지 않는다. 인자는 매크로가 문자열로 변환하므로 따옴표 없이 쓴다.
+  - 지원 식(`EditCondition.h`): bool `Name`·`!Name`, 비교 `Name == 값`·`Name != 값`(enum·bool·숫자), 비트 플래그 `Flags & CastShadows`, `&&`·`||`·괄호. 우선순위는 C++과 같이 `&&`가 `||`보다 먼저다. 크기 비교와 다른 컴포넌트 참조는 지원하지 않는다.
+  - 숨겨진 속성을 기준으로 삼을 때는 상위 조건까지 함께 쓴다(`EDITCONDITION(AutoUpdateAnimator && ScalePlayRateWithSpeed)`).
+  - 해석할 수 없는 조건(없는 속성·열거자, 따옴표 사용 등)은 속성을 계속 표시하고 타입·속성별로 한 번 `EDITOR_LOG_WARN` 경고를 남긴다. 등록된 컴포넌트의 조건은 `ReflectionInspectorCheck`가 검사한다.
+- **사용하지 않는 속성**: 런타임이 아직 읽지 않는 값과 실행 중 내부 상태는 `VISIBLE(false)`로 숨기고, 기능을 구현할 때 표시한다. 비트 플래그의 일부 항목만 숨길 때는 속성에 `META("HiddenEntries", "A|B")`를 쓴다. 디버깅에 쓰는 읽기 전용 값(속도, 접지 여부, 재생 시간 등)은 유지한다.
 
 ### 4. 도구 모음 및 액션 버튼 (Toolbars & Action Buttons)
 - **아이콘 버튼 규격**: 일반 툴바는 `EditorUI::GetIconButtonSize()`로 프레임 높이와 실제 글리프·패딩을 함께 반영한다. 표/리스트 행은 `SmallIconButton`의 작은 규격을 사용하며 열의 예약 폭도 같은 크기로 구한다. 고정 높이 영역은 버튼 크기 변경과 함께 영역 높이를 갱신한다.

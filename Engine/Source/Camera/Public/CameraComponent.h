@@ -24,7 +24,7 @@ namespace Engine
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CAMERA_TYPE"))
 		ECameraType CameraType = ECameraType::Perspective;
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FOV"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FOV"), EDITCONDITION(CameraType == Perspective))
 		f32 FOV = 60.f;
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ASPECT_RATIO"))
 		f32 AspectRatio = 16.f / 9.f;
@@ -32,7 +32,7 @@ namespace Engine
 		f32 NearPlane = 0.1f;
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FAR_PLANE"))
 		f32 FarPlane = 1000.f;
-		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ORTHOGRAPHIC_SIZE"))
+		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ORTHOGRAPHIC_SIZE"), EDITCONDITION(CameraType == Orthographic))
 		f32 OrthographicSize = 10.f;
 		PROPERTY(READONLY)
 		bool IsMainCamera = false;

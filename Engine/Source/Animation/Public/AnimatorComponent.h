@@ -68,17 +68,17 @@ namespace Engine
 		PROPERTY(EDITABLE, ALLOW_MISSING)
 		bool applyRootMotion = false;
 
-		PROPERTY(EDITABLE, ALLOW_MISSING)
+		PROPERTY(EDITABLE, ALLOW_MISSING, EDITCONDITION(applyRootMotion))
 		std::string rootMotionBoneName;
 
-		PROPERTY(READONLY, NOSERIALIZE)
+		PROPERTY(READONLY, NOSERIALIZE, VISIBLE(false))
 		vec3 lastRootMotionDeltaPos = vec3(0.0f);
 
-		PROPERTY(READONLY, NOSERIALIZE)
+		PROPERTY(READONLY, NOSERIALIZE, VISIBLE(false))
 		quat lastRootMotionDeltaRot = glm::identity<quat>();
 
 		// 셰이더 및 스키닝에 사용할 최종 뼈 변환 행렬 목록
-		PROPERTY(READONLY, NOSERIALIZE)
+		PROPERTY(READONLY, NOSERIALIZE, VISIBLE(false))
 		std::vector<mat4> finalBoneMatrices;
 
 		std::vector<BoneLocalPose> localBonePose;

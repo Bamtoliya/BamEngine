@@ -21,7 +21,7 @@ namespace Engine
         PROPERTY(EDITABLE)
         int selectedIndex = -1;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         bool isOpen = false;
 
         PROPERTY(EDITABLE)
@@ -30,7 +30,7 @@ namespace Engine
         PROPERTY(EDITABLE)
         float itemHeight = 24.0f;
 
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, VISIBLE(false))
         float scrollOffset = 0.0f;
 
         PROPERTY(EDITABLE)

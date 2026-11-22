@@ -27,7 +27,7 @@ namespace Engine
 
         PROPERTY(EDITABLE, RANGE(0.0, 1.0e12), DISPLAY_NAME("PROP_REST_LENGTH"))
         f32 RestLength = 1.f;
-        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLE_COLLISION"))
+        PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ENABLE_COLLISION"), VISIBLE(false))
         bool EnableCollision = false;
     };
 }

@@ -818,18 +818,10 @@ void ParticleEditorPanel::DrawEmitterInspector()
 	auto before = CaptureSnapshot();
 	bool changed = false;
 
-	// 단일 EDITCONDITION으로 표현할 수 없는 복합 조건과, 이름 목록이 필요한 부모 이미터는 공용 표에서 뺀다.
+	// 이름 목록이 필요한 부모 이미터는 공용 표에서 빼고 직접 그린다.
 	const bool continuous = emitter->triggerMode == Engine::EParticleEmitterTrigger::Continuous;
 	ReflectionObjectEditSettings settings;
-	auto& hidden = settings.HiddenProperties;
-	hidden.insert("parentEmitterIndex");
-	if (continuous) hidden.insert("inheritVelocityRatio");
-	if (emitter->burstCount == 0) hidden.insert("burstInterval");
-	if (emitter->collisionMode == Engine::EParticleCollisionMode::None)
-	{
-		hidden.insert("restitution");
-		hidden.insert("minBounceSpeed");
-	}
+	settings.HiddenProperties.insert("parentEmitterIndex");
 
 	if (!continuous && EditorUI::BeginPropertyTable("ParticleParentEmitter", EditorUI::InspectorPropertyTableStyle()))
 	{

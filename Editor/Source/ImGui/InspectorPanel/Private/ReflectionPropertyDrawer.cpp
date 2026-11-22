@@ -15,6 +15,7 @@
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
 #include "ReflectionInspectorSupport.h"
+#include "EditCondition.h"
 #include "PhysicsComponent.h"
 #include <imgui_stdlib.h>
 #include <archive/Unicode.h>
@@ -26,6 +27,7 @@
 #include "FloatCurve.h"
 #include "UITextComponent.h"
 #include <algorithm>
+#include <unordered_set>
 #include <vector>
 #pragma push_macro("new")
 #undef new
@@ -160,6 +162,9 @@ namespace
 			// QualifiedName.Name 키가 등록되어 있으면 해당 번역을 쓰고, 없으면 C++ 식별자 이름(name)을 그대로 반환
 			return localized == key ? name : localized;
 		};
+        // HiddenEntries에 '|'로 나열한 항목은 값은 유지하고 표시만 하지 않는다.
+        const auto hiddenEntries = "|" + Editor::InspectorMetadataText(property.Metadata, "HiddenEntries") + "|";
+        const auto isHiddenEntry = [&](const std::string& name) { return hiddenEntries.find("|" + name + "|") != std::string::npos; };
         std::string label = entry ? enumText(entry->Name) : std::to_string(bits);
         const auto* metadata = enumeration.Metadata.Find("Bitmask");
         const auto* flag = metadata ? std::get_if<bool>(metadata) : nullptr;
@@ -171,9 +176,10 @@ namespace
             {
                 const auto mask = std::visit([](auto number) { return static_cast<std::uint64_t>(number); }, item.Value);
                 if (!mask || (mask & (mask - 1)) || (bits & mask) != mask) continue;
+                covered |= mask;
+                if (isHiddenEntry(item.Name)) continue;
                 if (!label.empty()) label += " | ";
                 label += enumText(item.Name);
-                covered |= mask;
             }
             if (covered != bits || label.empty())
             {
@@ -187,6 +193,7 @@ namespace
         {
             for (const auto& item : enumeration.Entries)
             {
+                if (isHiddenEntry(item.Name)) continue;
                 const auto mask = std::visit([](auto number) { return static_cast<std::uint64_t>(number); },
                     item.Value);
                 bool selected = flag && *flag ? (mask == 0 ? candidate == 0 : (candidate & mask) == mask) :
@@ -796,74 +803,17 @@ namespace
 
 namespace
 {
-	std::string_view TrimCondition(std::string_view str)
-	{
-		const auto start = str.find_first_not_of(" \t\r\n");
-		if (start == std::string_view::npos) return {};
-		const auto end = str.find_last_not_of(" \t\r\n");
-		return str.substr(start, end - start + 1);
-	}
-
-	bool EvaluateEditCondition(const reflection::PropertyInfo& property, const reflection::TypeInfo& type,
+	bool IsEditConditionMet(const reflection::PropertyInfo& property, const reflection::TypeInfo& type,
 		const reflection::ObjectView& object, const reflection::Registry* registry)
 	{
-		const auto* meta = property.Metadata.Find("EditCondition");
-		const auto* condStr = meta ? std::get_if<std::string>(meta) : nullptr;
-		if (!condStr || condStr->empty()) return true;
-
-		std::string_view cond = *condStr;
-		std::string_view left, right;
-		bool isEquals = true;
-
-		if (const auto pos = cond.find("=="); pos != std::string_view::npos)
+		const auto result = Editor::EvaluateEditCondition(property, type, object, registry);
+		if (!result.Error.empty())
 		{
-			left = TrimCondition(cond.substr(0, pos));
-			right = TrimCondition(cond.substr(pos + 2));
-			isEquals = true;
+			static std::unordered_set<std::string> s_Reported;
+			if (s_Reported.insert(type.QualifiedName + "." + property.Name).second)
+				EDITOR_LOG_WARN("Invalid EDITCONDITION on {}.{}: {}", type.QualifiedName, property.Name, result.Error);
 		}
-		else if (const auto pos = cond.find("!="); pos != std::string_view::npos)
-		{
-			left = TrimCondition(cond.substr(0, pos));
-			right = TrimCondition(cond.substr(pos + 2));
-			isEquals = false;
-		}
-		else
-		{
-			// "IsEnabled" 또는 "!IsEnabled" 단일 bool 조건식
-			bool negate = false;
-			if (cond.starts_with('!')) { negate = true; cond = cond.substr(1); }
-			const auto* targetProp = type.FindProperty(TrimCondition(cond));
-			if (!targetProp) return true;
-			const auto read = targetProp->TryReadValue(object);
-			if (!read) return true;
-			const auto* bVal = read.Value.Get<bool>();
-			return bVal ? (*bVal != negate) : true;
-		}
-
-		const auto* targetProp = type.FindProperty(left);
-		if (!targetProp) return true;
-		const auto read = targetProp->TryReadValue(object);
-		if (!read) return true;
-
-		// ELightType::Spot 같은 형태에서 식별자("Spot")만 추출
-		if (const auto colon = right.rfind("::"); colon != std::string_view::npos) right = right.substr(colon + 2);
-
-		bool matches = false;
-		if (const auto* enumeration = registry ? registry->FindEnum(read.Value) : nullptr)
-		{
-			const auto currentVal = enumeration->ReadValue(read.Value);
-			const auto* entry = enumeration->FindEntry(right);
-			if (currentVal && entry)
-			{
-				matches = std::visit([](auto a, auto b) { return std::cmp_equal(a, b); }, entry->Value, *currentVal);
-			}
-		}
-		else if (const auto* bVal = read.Value.Get<bool>())
-		{
-			matches = (*bVal == (right == "true" || right == "1"));
-		}
-
-		return isEquals ? matches : !matches;
+		return result.Met;
 	}
 }
 
@@ -887,7 +837,7 @@ namespace
 
 			const bool applicable = std::all_of(objects.begin(), objects.end(), [&](const auto& object)
 				{
-					return EvaluateEditCondition(property, type, object, registry);
+					return IsEditConditionMet(property, type, object, registry);
 				});
 			if (!applicable) continue;
 
@@ -1406,7 +1356,7 @@ namespace Editor
 				if (&property == headerProperty) return false;
 				if (editSettings && editSettings->HiddenProperties.contains(property.Name)) return false;
 				if (!GetReflectionDrawerBoolMetadata(property.Metadata, "Visible", true)) return false;
-				return EvaluateEditCondition(property, type, object, registry);
+				return IsEditConditionMet(property, type, object, registry);
 			};
 		const auto categoryOf = [](const reflection::PropertyInfo& property) { return InspectorMetadataText(property.Metadata, "Category", "EditorCommon.General"); };
 

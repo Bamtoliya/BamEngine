@@ -139,7 +139,7 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SHAPE"))
         Collider2DShape m_Shape = Box2DShape{};
 
-		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"))
+		PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_DIRTY"), VISIBLE(false))
         bool m_Dirty = true;
     };
 }
