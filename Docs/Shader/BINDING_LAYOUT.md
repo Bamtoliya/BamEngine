@@ -104,8 +104,12 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `t0.., space5` | `raytracing.hlsli` | `ByteAddressBuffer` 배열. 정점·인덱스 버퍼와 인스턴스 표. 번호는 `RHI::GetBindlessIndex(RHIBuffer*)` |
 | `s0, space4` | `raytracing.hlsli` | 정적 샘플러 |
 | `t13, space3` | `raytracedReflectionRTCS` | TLAS. 그림자와 공유하며 광선 마스크로 구분 |
-| `u2, space3` | `raytracedReflectionRTCS` | RGBA16F 반사. rgb는 밝기, a는 합성 비율 |
+| `u2, space3` | `raytracedReflectionRTCS` | RGBA16F 추적 결과. rgb는 비율을 곱한 밝기, a는 합성 비율 |
+| `u3, space3` | `raytracedReflectionRTCS` | R16F 닿은 거리 |
+| `u2`·`u3, space3` | `raytracedReflectionTemporalRTCS` | RGBA16F 누적 결과와 표면(카메라 거리, 법선, 누적 횟수) |
+| `u2, space3` | `raytracedReflectionFilterRTCS` | RGBA16F 필터 결과. `lightingPS`가 읽음 |
 | `b1, space3` | `raytracedReflectionRTCS` | `RaytracedReflectionParams` 64바이트 |
+| `b1, space3` | `raytracedReflectionTemporalRTCS`, `raytracedReflectionFilterRTCS` | `ReflectionDenoiseParams` 112바이트. 앞 패스의 출력은 번호로 읽음 |
 | `t15, space3` | `lightingPS` | 반사. `LightingPassData.UseRaytracedReflections`가 1일 때만 읽음 |
 
 `space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(80바이트)는 `raytracing.hlsli`의 `RaytracedInstance`와,

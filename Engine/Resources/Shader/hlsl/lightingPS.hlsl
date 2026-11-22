@@ -66,7 +66,7 @@ StructuredBuffer<uint2> gTileLightGrid : register(t8, space3);
 StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
 // 광원별 레이트레이싱 그림자 가시성(1 = 빛, 0 = 차폐). TLAS에 들어간 정적 불투명 캐스터만 반영한다.
 Texture2D<float4> gRaytracedShadowMask : register(t14, space3);
-// 거울 방향 반사(rgb)와 합성 비율(a). 비율이 0이면 기존 환경광 반사를 쓴다.
+// 합성 비율을 곱한 반사(rgb)와 합성 비율(a). 비율이 0이면 기존 환경광 반사를 쓴다.
 Texture2D<float4> gRaytracedReflection : register(t15, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
@@ -822,8 +822,8 @@ float4 main(PS_INPUT input) : SV_TARGET
     if (gLightingData.UseRaytracedReflections != 0u)
     {
         float4 reflection = gRaytracedReflection.Load(pixelCoord);
-        raytracedSpecular = reflection.rgb * EnvBRDFApprox(f0, roughness, normalDotView) * reflection.a;
-        specularIBL *= 1.0f - reflection.a;
+        raytracedSpecular = reflection.rgb * EnvBRDFApprox(f0, roughness, normalDotView);
+        specularIBL *= 1.0f - saturate(reflection.a);
     }
 
     float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion + raytracedSpecular;

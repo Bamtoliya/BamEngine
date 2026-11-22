@@ -80,15 +80,41 @@ namespace
 	constexpr Engine::uint32 RaytracedShadowTLASSlot = MAX_MATERIAL_TEXTURE_SLOTS + 13; // t13, space3
 	constexpr Engine::uint32 RaytracedShadowMaskSlot = MAX_MATERIAL_TEXTURE_SLOTS + 14; // t14, space3 (lightingPS)
 
+	// 이보다 매끈한 면은 거울 방향만 추적하고 누적하지 않는다.
+	constexpr f32 ReflectionMirrorRoughness = 0.1f;
+	constexpr f32 ReflectionRoughnessFadeEnd = 0.6f;
+
+	// reflection.hlsli의 ReflectionDenoiseParams (b1, space3)
+	struct ReflectionDenoiseParams
+	{
+		mat4 PrevViewProjection{ 1.0f };
+		vec3 PrevCameraPosition{ 0.0f };
+		uint32 HistoryState = 0u; // 0 이력 없음, 1 카메라가 움직임, 2 카메라가 멈춤
+		uint32 InputTexture = Engine::RHI::INVALID_BINDLESS_INDEX;
+		uint32 HitDistanceTexture = Engine::RHI::INVALID_BINDLESS_INDEX;
+		uint32 HistoryTexture = Engine::RHI::INVALID_BINDLESS_INDEX;
+		uint32 GeometryTexture = Engine::RHI::INVALID_BINDLESS_INDEX;
+		f32 MirrorRoughness = ReflectionMirrorRoughness;
+		f32 RoughnessFadeEnd = ReflectionRoughnessFadeEnd;
+		f32 MaxHistory = 64.0f;
+		uint32 FrameIndex = 0u;
+	};
+	static_assert(sizeof(ReflectionDenoiseParams) == 112);
+
+	constexpr const wchar_t* ReflectionTemporalShaderKey = L"Resources/Shader/RaytracedReflectionTemporalRTCS";
+	constexpr const wchar_t* ReflectionTemporalShaderFile = L"raytracedReflectionTemporalRTCS.cso";
+	constexpr const wchar_t* ReflectionFilterShaderKey = L"Resources/Shader/RaytracedReflectionFilterRTCS";
+	constexpr const wchar_t* ReflectionFilterShaderFile = L"raytracedReflectionFilterRTCS.cso";
+
 	// raytracedReflectionRTCS.hlsl의 RaytracedReflectionParams (b1, space3)
 	struct RaytracedReflectionParams
 	{
 		f32 NormalBias = 0.02f;
 		f32 DistanceBiasScale = 0.0005f;
 		f32 RayMaxDistance = 10000.0f;
-		// 광선 하나로 표현할 수 있는 매끈한 면만 추적한다. 측정 전 시작값이다.
-		f32 RoughnessFadeStart = 0.2f;
-		f32 RoughnessFadeEnd = 0.4f;
+		// 아주 거친 면은 표본 하나로 안정되지 않고 환경광과 차이도 작아 추적하지 않는다. 측정 전 시작값이다.
+		f32 RoughnessFadeStart = 0.45f;
+		f32 RoughnessFadeEnd = ReflectionRoughnessFadeEnd;
 		uint32 InstanceTable = Engine::RHI::INVALID_BINDLESS_INDEX;
 		uint32 SunLight = INVALID_SHADOW_LIGHT;
 		f32 PixelSpread = 0.001f;
@@ -96,7 +122,8 @@ namespace
 		f32 IBLIntensity = 1.0f;
 		uint32 HasIBLMaps = 0u;
 		uint32 MaxHitLights = 64u;
-		uint32 Pad[2] = {};
+		uint32 FrameIndex = 0u;
+		f32 MirrorRoughness = ReflectionMirrorRoughness;
 	};
 	static_assert(sizeof(RaytracedReflectionParams) == 64);
 	static_assert(offsetof(RaytracedReflectionParams, SkyZenith) == 32);
@@ -116,12 +143,16 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto*& buffer : m_LocalLightBuffer)
 		Safe_Release(buffer);
 	m_LightingPipeline = nullptr;
-	for (auto* name : { &m_RaytracedShadowMaskName, &m_RaytracedReflectionName })
-	{
-		if (!name->empty() && Engine::RenderTargetManager::IsCreated())
-			Engine::RenderTargetManager::Get().RemoveRenderTarget(*name);
-		name->clear();
-	}
+	const auto removeTarget = [](std::wstring& name)
+		{
+			if (!name.empty() && Engine::RenderTargetManager::IsCreated())
+				Engine::RenderTargetManager::Get().RemoveRenderTarget(name);
+			name.clear();
+		};
+	removeTarget(m_RaytracedShadowMaskName);
+	for (auto& name : m_ReflectionTargetNames)
+		removeTarget(name);
+	m_ReflectionHistory.Reset();
 }
 
 bool Engine::DeferredSceneRenderer::Initialize()
@@ -190,6 +221,9 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		ResolveRaytracedShadow(false, m_RaytracedReflectionOverrides) && rhi && rhi->GetCapabilities().SupportsBindlessResources &&
 		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() && GetRaytracedReflectionPipeline();
 	m_RaytracedReflectionActive = useRaytracedReflection;
+	// 껐다 켜면 오래된 결과를 이어 쓰지 않는다.
+	if (!useRaytracedReflection)
+		m_ReflectionHistory.Reset();
 
 	// 1. ShadowPass & PointShadowPass 카메라 등록
 	auto* shadowPass = rpm.GetRenderPassByID(passes.DirectionalShadow);
@@ -690,27 +724,86 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedReflection(E
 
 	const Engine::uint32 width = position->GetWidth();
 	const Engine::uint32 height = position->GetHeight();
-	// 색과 합성 비율을 담는다.
-	Engine::RenderTarget* target = EnsureRaytracingTarget(positionTargetName + L"_RaytracedReflection",
-		Engine::ETextureFormat::R16G16B16A16_FLOAT, width, height, m_RaytracedReflectionName);
-	Engine::RHIPipeline* pipeline = GetRaytracedReflectionPipeline();
-	if (!target || !pipeline)
+	struct TargetInfo { const wchar_t* Suffix; Engine::ETextureFormat Format; };
+	static constexpr TargetInfo targetInfos[ReflectionTargetCount] = {
+		{ L"_ReflectionTrace", Engine::ETextureFormat::R16G16B16A16_FLOAT },        // 비율을 곱한 색, 합성 비율
+		{ L"_ReflectionDistance", Engine::ETextureFormat::R16_FLOAT },
+		{ L"_ReflectionAccumulated0", Engine::ETextureFormat::R16G16B16A16_FLOAT },
+		{ L"_ReflectionAccumulated1", Engine::ETextureFormat::R16G16B16A16_FLOAT },
+		{ L"_ReflectionGeometry0", Engine::ETextureFormat::R16G16B16A16_FLOAT },     // 카메라 거리, 법선, 누적 횟수
+		{ L"_ReflectionGeometry1", Engine::ETextureFormat::R16G16B16A16_FLOAT },
+		{ L"_RaytracedReflection", Engine::ETextureFormat::R16G16B16A16_FLOAT },
+	};
+	std::array<Engine::RHITexture*, ReflectionTargetCount> textures{};
+	for (int index = 0; index < ReflectionTargetCount; ++index)
+	{
+		Engine::RenderTarget* target = EnsureRaytracingTarget(positionTargetName + targetInfos[index].Suffix, targetInfos[index].Format,
+			width, height, m_ReflectionTargetNames[index]);
+		if (!target)
+			return nullptr;
+		textures[index] = target->GetTexture();
+	}
+
+	Engine::RHIPipeline* tracePipeline = GetRaytracedReflectionPipeline();
+	Engine::RHIPipeline* temporalPipeline = GetRaytracingPipeline(ReflectionTemporalShaderKey, ReflectionTemporalShaderFile, m_ReflectionTemporalShaderMissing);
+	Engine::RHIPipeline* filterPipeline = GetRaytracingPipeline(ReflectionFilterShaderKey, ReflectionFilterShaderFile, m_ReflectionFilterShaderMissing);
+	if (!tracePipeline || !temporalPipeline || !filterPipeline)
 		return nullptr;
 
+	const auto frame = m_ReflectionHistory.Begin(camera, scene, width, height);
+	const auto dispatch = [&](const wchar_t* name, Engine::RHIPipeline* pipeline, const auto& constants, std::initializer_list<Engine::RHITexture*> outputs, bool traces)
+		{
+			rhi.BeginPassMetrics(positionTargetName + name);
+			bool succeeded = Engine::IsSuccess(rhi.BindPipeline(pipeline)) && Engine::IsSuccess(rhi.BindConstantBuffer(&constants, sizeof(constants), 3));
+			if (succeeded && traces)
+				succeeded = Engine::IsSuccess(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot));
+			Engine::uint32 slot = 0;
+			for (auto* output : outputs)
+				succeeded = succeeded && Engine::IsSuccess(rhi.BindComputeStorageTexture(output, slot++));
+			succeeded = succeeded && Engine::IsSuccess(rhi.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u));
+			rhi.EndPassMetrics();
+			return succeeded;
+		};
+
+	// 1. 추적
 	params.SunLight = inputs.SunLight;
 	params.SkyZenith = inputs.SkyZenith;
 	params.IBLIntensity = inputs.IBLIntensity;
 	params.HasIBLMaps = inputs.HasIBLMaps ? 1u : 0u;
 	params.PixelSpread = 2.0f / (glm::max(std::abs(camera.projMatrix[1][1]), 0.1f) * static_cast<Engine::f32>(glm::max(height, 1u)));
-	if (Engine::IsFailure(rhi.BindPipeline(pipeline)) ||
-		Engine::IsFailure(rhi.BindConstantBuffer(&params, sizeof(params), 3)) ||
-		Engine::IsFailure(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot)) ||
-		Engine::IsFailure(rhi.BindComputeStorageTexture(target->GetTexture(), 0)) ||
-		Engine::IsFailure(rhi.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u)))
-	{
+	params.FrameIndex = frame.FrameIndex;
+	if (!dispatch(L"_ReflectionTracePass", tracePipeline, params, { textures[ReflectionTrace], textures[ReflectionDistance] }, true))
 		return nullptr;
+
+	// 2. 시간 누적. 앞 패스가 쓴 텍스처의 번호를 얻을 때 읽기 상태로 바뀐다.
+	Engine::RHITexture* accumulated = textures[ReflectionAccumulated0 + frame.WriteIndex];
+	Engine::RHITexture* geometry = textures[ReflectionGeometry0 + frame.WriteIndex];
+	ReflectionDenoiseParams denoise{};
+	denoise.PrevViewProjection = frame.PrevViewProjection;
+	denoise.PrevCameraPosition = frame.PrevCameraPosition;
+	denoise.HistoryState = !frame.Valid ? 0u : (frame.CameraMoved ? 1u : 2u);
+	denoise.FrameIndex = frame.FrameIndex;
+	denoise.InputTexture = rhi.GetBindlessIndex(textures[ReflectionTrace]);
+	denoise.HitDistanceTexture = rhi.GetBindlessIndex(textures[ReflectionDistance]);
+	denoise.HistoryTexture = rhi.GetBindlessIndex(textures[ReflectionAccumulated0 + frame.ReadIndex]);
+	denoise.GeometryTexture = rhi.GetBindlessIndex(textures[ReflectionGeometry0 + frame.ReadIndex]);
+	for (const Engine::uint32 index : { denoise.InputTexture, denoise.HitDistanceTexture, denoise.HistoryTexture, denoise.GeometryTexture })
+	{
+		if (index == Engine::RHI::INVALID_BINDLESS_INDEX)
+			return nullptr;
 	}
-	return target->GetTexture();
+	if (!dispatch(L"_ReflectionTemporalPass", temporalPipeline, denoise, { accumulated, geometry }, false))
+		return nullptr;
+
+	// 3. 공간 필터. 결과를 누적에 되먹이지 않아 시간이 지나도 더 번지지 않는다.
+	denoise.InputTexture = rhi.GetBindlessIndex(accumulated);
+	denoise.GeometryTexture = rhi.GetBindlessIndex(geometry);
+	if (denoise.InputTexture == Engine::RHI::INVALID_BINDLESS_INDEX || denoise.GeometryTexture == Engine::RHI::INVALID_BINDLESS_INDEX ||
+		!dispatch(L"_ReflectionFilterPass", filterPipeline, denoise, { textures[ReflectionFiltered] }, false))
+		return nullptr;
+
+	m_ReflectionHistory.Commit();
+	return textures[ReflectionFiltered];
 }
 
 Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(Engine::RHI& rhi, Engine::Scene* scene,

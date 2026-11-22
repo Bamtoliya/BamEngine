@@ -5,6 +5,7 @@
 #include "RenderTargetTypes.h"
 #include "RHITextureTypes.h"
 #include "RaytracedShadowSettings.h"
+#include "ReflectionHistory.h"
 #include "ShadowLightAssignment.h"
 #include <array>
 
@@ -65,7 +66,7 @@ private:
 	// 조명 파이프라인 대신 Compute 파이프라인을 바인딩하므로 호출 후 조명 파이프라인을 다시 바인딩해야 한다.
 	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const RaytracedShadowAssignment& lights);
-	// 반사를 G-Buffer 크기로 계산한다. 조건과 주의는 그림자 마스크와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다.
+	// 반사를 G-Buffer 크기로 추적하고 누적·필터한 결과를 반환한다. 조건과 주의는 그림자 마스크와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다.
 	class RHITexture* DispatchRaytracedReflection(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const struct RaytracedReflectionInputs& inputs);
 	// 이 렌더러가 소유하는 Compute 쓰기 타깃. ownedName에 이름을 기록하고 크기가 바뀌면 다시 만든다.
@@ -87,8 +88,13 @@ private:
 
 	RaytracedShadowOverrides m_RaytracedReflectionOverrides;
 	bool m_RaytracedReflectionActive = false;
-	std::wstring m_RaytracedReflectionName;
+	// 추적 결과, 닿은 거리, 누적 결과와 표면(각각 두 장을 번갈아 쓴다), 필터 결과
+	enum EReflectionTarget { ReflectionTrace, ReflectionDistance, ReflectionAccumulated0, ReflectionAccumulated1, ReflectionGeometry0, ReflectionGeometry1, ReflectionFiltered, ReflectionTargetCount };
+	std::array<std::wstring, ReflectionTargetCount> m_ReflectionTargetNames;
+	ReflectionHistory m_ReflectionHistory;
 	bool m_RaytracedReflectionShaderMissing = false;
+	bool m_ReflectionTemporalShaderMissing = false;
+	bool m_ReflectionFilterShaderMissing = false;
 	bool m_RaytracedReflectionFailureLogged = false;
 };
 

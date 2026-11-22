@@ -1,13 +1,16 @@
 // 레이트레이싱 반사 (DXR 인라인 RayQuery, cs_6_5, DirectX12 전용)
-// 매끈한 면에서 거울 방향으로 광선을 하나 쏘아 닿은 면의 밝기(rgb)와 합성 비율(a)을 기록한다.
-// 거칠기가 커지거나 닿은 면이 없으면 비율이 0이 되어 lightingPS가 기존 환경광 반사를 쓴다.
+// 픽셀마다 광선을 하나 쏜다. 매끈한 면은 거울 방향으로, 거친 면은 GGX 분포에서 뽑은 방향으로 쏘고 이후 패스가 누적·필터한다.
+// rgb는 닿은 면의 밝기에 합성 비율을 곱한 값, a는 합성 비율이다. 너무 거칠거나 닿은 면이 없으면 비율이 0이 되어 환경광 반사를 쓴다.
 // 닿은 면은 확산 직접광, 그림자 광선 하나(대표 방향광), 환경광, 발광만 계산한다. 정반사 하이라이트와 법선 맵은 쓰지 않는다.
 #include "common.hlsli"
 #include "light.hlsli"
 #include "raytracing.hlsli"
+#include "reflection.hlsli"
 
 static const float PI = 3.14159265359f;
 static const uint INVALID_LIGHT = 0xFFFFFFFFu;
+// 강한 빛 하나가 누적 결과를 오래 흐리지 않게 자른다.
+static const float MAX_REFLECTION_RADIANCE = 64.0f;
 
 struct RaytracedReflectionParams
 {
@@ -23,7 +26,8 @@ struct RaytracedReflectionParams
 	float IBLIntensity;
 	uint HasIBLMaps;
 	uint MaxHitLights;         // 닿은 면에서 확인할 광원 수
-	uint2 Pad;
+	uint FrameIndex;
+	float MirrorRoughness;     // 이보다 매끈하면 거울 방향만 쏜다
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -33,6 +37,8 @@ Texture2D gPosition : register(t4, space3);
 TextureCube gIrradianceMap : register(t10, space3);
 RaytracingAccelerationStructure gSceneTLAS : register(t13, space3);
 RWTexture2D<float4> gReflection : register(u2, space3);
+// 닿은 곳까지의 거리. 닿지 않았으면 REFLECTION_MISS_DISTANCE, 추적하지 않은 픽셀은 REFLECTION_NOT_TRACED
+RWTexture2D<float> gHitDistance : register(u3, space3);
 ConstantBuffer<RaytracedReflectionParams> gParams : register(b1, space3);
 
 // 광선이 닿은 곳. RayQuery는 함수 인자로 넘기지 않고 필요한 값만 꺼내 쓴다.
@@ -224,6 +230,40 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 	return direct + ambientColor * irradiance * gParams.IBLIntensity * ambientOcclusion + emission;
 }
 
+// 보이는 미세면만 뽑는 GGX 표본(Heitz 2018). view와 결과는 법선이 +Z인 공간이다.
+float3 SampleVisibleNormal(float3 view, float alpha, float2 random)
+{
+	const float3 stretched = normalize(float3(alpha * view.x, alpha * view.y, view.z));
+	const float lengthSquared = stretched.x * stretched.x + stretched.y * stretched.y;
+	const float3 t1 = lengthSquared > 0.0f ? float3(-stretched.y, stretched.x, 0.0f) / sqrt(lengthSquared) : float3(1.0f, 0.0f, 0.0f);
+	const float3 t2 = cross(stretched, t1);
+	const float radius = sqrt(random.x);
+	const float phi = 2.0f * PI * random.y;
+	const float p1 = radius * cos(phi);
+	const float blend = 0.5f * (1.0f + stretched.z);
+	const float p2 = lerp(sqrt(max(0.0f, 1.0f - p1 * p1)), radius * sin(phi), blend);
+	const float3 normal = p1 * t1 + p2 * t2 + sqrt(max(0.0f, 1.0f - p1 * p1 - p2 * p2)) * stretched;
+	return normalize(float3(alpha * normal.x, alpha * normal.y, max(0.0f, normal.z)));
+}
+
+float3 SampleReflectionDirection(float3 toSurface, float3 normal, float roughness, uint2 pixel)
+{
+	const float3 mirror = reflect(toSurface, normal);
+	if (roughness < gParams.MirrorRoughness)
+		return mirror;
+
+	const float3 up = abs(normal.z) < 0.999f ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
+	const float3 tangent = normalize(cross(up, normal));
+	const float3 bitangent = cross(normal, tangent);
+	const float3 view = float3(dot(-toSurface, tangent), dot(-toSurface, bitangent), max(dot(-toSurface, normal), 0.001f));
+	// 픽셀마다 다른 시작값에서 프레임마다 고르게 퍼지는 수열을 쓴다.
+	const float2 random = frac(HashPixel(pixel) + (float)(gParams.FrameIndex % 1024u) * float2(0.7548776662f, 0.5698402910f));
+	const float3 halfVector = SampleVisibleNormal(normalize(view), roughness * roughness, random);
+	const float3 direction = reflect(toSurface, halfVector.x * tangent + halfVector.y * bitangent + halfVector.z * normal);
+	// 표면 아래로 향하는 표본은 거울 방향으로 바꾼다.
+	return dot(direction, normal) > 0.0f ? normalize(direction) : mirror;
+}
+
 [numthreads(8, 8, 1)]
 void main(uint3 dispatchId : SV_DispatchThreadID)
 {
@@ -234,6 +274,7 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 
 	const int3 pixel = int3(dispatchId.xy, 0);
 	float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float hitDistance = REFLECTION_NOT_TRACED;
 
 	const float4 normalSample = gNormal.Load(pixel);
 	const uint packedData = UnpackShadingData(normalSample.a);
@@ -247,7 +288,8 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 		const float3 worldPosition = gPosition.Load(pixel).xyz;
 		const float3 toSurface = worldPosition - commonData.CameraPos;
 		const float cameraDistance = length(toSurface);
-		const float3 direction = reflect(toSurface / max(cameraDistance, 1e-4f), normal);
+		const float3 direction = SampleReflectionDirection(toSurface / max(cameraDistance, 1e-4f), normal, roughness, dispatchId.xy);
+		hitDistance = REFLECTION_MISS_DISTANCE;
 
 		RayDesc ray;
 		ray.Origin = worldPosition + normal * (gParams.NormalBias + cameraDistance * gParams.DistanceBiasScale);
@@ -268,9 +310,14 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 			hit.ObjectToWorld = query.CommittedObjectToWorld3x4();
 			hit.WorldToObject = query.CommittedWorldToObject3x4();
 			const float3 radiance = ShadeHit(hit, ray.Origin, direction, cameraDistance);
-			result = float4(any(isnan(radiance)) || any(isinf(radiance)) ? float3(0.0f, 0.0f, 0.0f) : min(radiance, 1000.0f), weight);
+			const bool invalid = any(isnan(radiance)) || any(isinf(radiance));
+			const float brightest = max(radiance.r, max(radiance.g, radiance.b));
+			const float3 clamped = radiance * min(1.0f, MAX_REFLECTION_RADIANCE / max(brightest, 1e-4f));
+			result = float4(invalid ? float3(0.0f, 0.0f, 0.0f) : clamped * weight, weight);
+			hitDistance = min(hit.Distance, REFLECTION_MISS_DISTANCE);
 		}
 	}
 
 	gReflection[dispatchId.xy] = result;
+	gHitDistance[dispatchId.xy] = hitDistance;
 }

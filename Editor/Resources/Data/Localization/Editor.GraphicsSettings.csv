@@ -6,7 +6,7 @@ GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.
 GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
 GraphicsSettings,RaytracedReflection,Raytraced Reflections,레이트레이싱 반사
 GraphicsSettings,RaytracedReflectionActive,Current: raytraced,현재: 레이트레이싱
-GraphicsSettings,RaytracedReflectionHint,Order: project -> graphics -> viewport. Off by default. Only smooth surfaces are traced.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 매끈한 면만 추적합니다.
+GraphicsSettings,RaytracedReflectionHint,Order: project -> graphics -> viewport. Off by default. Very rough surfaces are not traced.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 아주 거친 면은 추적하지 않습니다.
 GraphicsSettings,RaytracedReflectionInactive,Current: environment reflections,현재: 환경광 반사
 GraphicsSettings,RaytracedReflectionUnsupported,This device does not support DXR inline raytracing with indexed resources. Environment reflections are used.,이 장치는 반사에 필요한 DXR 인라인 레이트레이싱과 리소스 번호 접근을 지원하지 않아 환경광 반사를 사용합니다.
 GraphicsSettings,RaytracedShadow,Raytraced Shadows,레이트레이싱 그림자

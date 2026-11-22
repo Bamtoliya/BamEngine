@@ -732,7 +732,7 @@
         "GraphicsSettings.NoViewport": "No supported viewport is available.",
         "GraphicsSettings.RaytracedReflection": "Raytraced Reflections",
         "GraphicsSettings.RaytracedReflectionActive": "Current: raytraced",
-        "GraphicsSettings.RaytracedReflectionHint": "Order: project -> graphics -> viewport. Off by default. Only smooth surfaces are traced.",
+        "GraphicsSettings.RaytracedReflectionHint": "Order: project -> graphics -> viewport. Off by default. Very rough surfaces are not traced.",
         "GraphicsSettings.RaytracedReflectionInactive": "Current: environment reflections",
         "GraphicsSettings.RaytracedReflectionUnsupported": "This device does not support DXR inline raytracing with indexed resources. Environment reflections are used.",
         "GraphicsSettings.RaytracedShadow": "Raytraced Shadows",
