@@ -2,6 +2,7 @@
 #include "RHI.h"
 #include "DirectX12Types.h"
 #include "DirectX12DescriptorAllocator.h"
+#include "GpuHeapPageAllocator.h"
 #include <vector>
 #include <array>
 #include <unordered_map>
@@ -94,7 +95,11 @@ public:
 
 #pragma region MyRegion
 public:
-	void DeferRelease(ID3D12Object* object);
+	// heapAllocation이 있으면 객체를 놓은 뒤 그 페이지도 돌려준다.
+	void DeferRelease(ID3D12Object* object, const GpuHeapAllocation& heapAllocation = {});
+	// 정적 지오메트리 힙에 버퍼를 만든다. 큰 버퍼거나 만들 수 없으면 false이며 호출자가 독립 메모리를 쓴다.
+	bool CreatePlacedGeometryBuffer(const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState,
+		ComPtr<ID3D12Resource>& outResource, GpuHeapAllocation& outAllocation);
 	ENGINE_API void DeferDescriptorFree(DirectX12DescriptorAllocator* allocator, uint32 index);
 	ENGINE_API EResult WaitForGPU();
 private:
@@ -301,10 +306,18 @@ private:
 	std::unordered_set<std::wstring> m_PipelineNames;
 	bool m_PipelineLibraryDirty = false;
 
+	// 배치된 버퍼보다 나중에 파괴되도록 지연 해제 목록보다 먼저 선언한다.
+	static constexpr UINT64 GEOMETRY_HEAP_PAGE_SIZE = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT; // 64KB
+	static constexpr UINT64 GEOMETRY_HEAP_SIZE = 32ull * 1024 * 1024;
+	static constexpr UINT64 MAX_PLACED_GEOMETRY_SIZE = 8ull * 1024 * 1024;
+	std::vector<ComPtr<ID3D12Heap>> m_GeometryHeaps;
+	GpuHeapPageAllocator m_GeometryPages{ static_cast<uint32>(GEOMETRY_HEAP_SIZE / GEOMETRY_HEAP_PAGE_SIZE) };
+
 	struct DeferredReleaseEntry
 	{
 		uint64 fenceValue = 0;
 		ComPtr<ID3D12Object> object;
+		GpuHeapAllocation heapAllocation;
 		DirectX12DescriptorAllocator* descriptorAllocator = nullptr;
 		uint32 descriptorIndex = UINT32_MAX;
 	};

@@ -1761,10 +1761,10 @@ void ImGuiManager::UpdateSceneLoad()
 		{
 			const auto& before = state.PreparedBufferBaseline;
 			const auto& after = state.PreparedBufferStats;
-			BAM_LOG(Info, "Editor", "Document", "Scene load GPU buffers: {} created in {:.0f} ms, {} upload(s) in {:.0f} ms, {} upload heap(s)",
+			BAM_LOG(Info, "Editor", "Document", "Scene load GPU buffers: {} created in {:.0f} ms, {} upload(s) in {:.0f} ms, {} upload heap(s), {} geometry heap(s)",
 				after.CreateCount - before.CreateCount, after.CreateMilliseconds - before.CreateMilliseconds,
 				after.UploadCount - before.UploadCount, after.UploadMilliseconds - before.UploadMilliseconds,
-				after.UploadHeapCount - before.UploadHeapCount);
+				after.UploadHeapCount - before.UploadHeapCount, after.GeometryHeapCount - before.GeometryHeapCount);
 		}
 		for (const auto& [extension, timing] : state.ResourceTimings)
 			BAM_LOG(Info, "Editor", "Document", "Scene load resources: {} x{} = {:.0f} ms", extension, timing.Count, timing.Milliseconds);

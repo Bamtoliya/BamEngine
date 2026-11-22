@@ -44,6 +44,7 @@ namespace Engine
         uint64 CreateCount = 0;
         uint64 UploadCount = 0;
         uint64 UploadHeapCount = 0;
+        uint64 GeometryHeapCount = 0;
         f64 CreateMilliseconds = 0.0;
         f64 UploadMilliseconds = 0.0;
     };

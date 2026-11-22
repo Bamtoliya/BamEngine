@@ -1935,7 +1935,43 @@ EResult DirectX12RHI::ClearDepthSlice(RHITexture* depthStencil, uint32 sliceInde
 #pragma endregion
 
 #pragma region MyRegion
-void DirectX12RHI::DeferRelease(ID3D12Object* object)
+bool DirectX12RHI::CreatePlacedGeometryBuffer(const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState,
+    ComPtr<ID3D12Resource>& outResource, GpuHeapAllocation& outAllocation)
+{
+    if (!m_Device || desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || desc.Width == 0 || desc.Width > MAX_PLACED_GEOMETRY_SIZE)
+        return false;
+
+    const auto pageCount = static_cast<uint32>((desc.Width + GEOMETRY_HEAP_PAGE_SIZE - 1) / GEOMETRY_HEAP_PAGE_SIZE);
+    auto allocation = m_GeometryPages.Allocate(pageCount);
+    if (!allocation)
+    {
+        D3D12_HEAP_DESC heapDesc = {};
+        heapDesc.SizeInBytes = GEOMETRY_HEAP_SIZE;
+        heapDesc.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+        heapDesc.Flags = D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS; // Heap Tier 1 장치도 지원한다.
+        ComPtr<ID3D12Heap> heap;
+        if (FAILED(m_Device->CreateHeap(&heapDesc, IID_PPV_ARGS(&heap))))
+            return false;
+
+        const uint32 index = m_GeometryPages.AddHeap();
+        if (index >= m_GeometryHeaps.size()) m_GeometryHeaps.resize(index + 1);
+        m_GeometryHeaps[index] = std::move(heap);
+        ++m_BufferUploadStats.GeometryHeapCount;
+        allocation = m_GeometryPages.Allocate(pageCount);
+        if (!allocation) return false;
+    }
+
+    if (FAILED(m_Device->CreatePlacedResource(m_GeometryHeaps[allocation->Heap].Get(), UINT64(allocation->FirstPage) * GEOMETRY_HEAP_PAGE_SIZE,
+        &desc, initialState, nullptr, IID_PPV_ARGS(&outResource))))
+    {
+        m_GeometryPages.Free(*allocation);
+        return false;
+    }
+    outAllocation = *allocation;
+    return true;
+}
+
+void DirectX12RHI::DeferRelease(ID3D12Object* object, const GpuHeapAllocation& heapAllocation)
 {
     if (!object) return;
 
@@ -1943,6 +1979,7 @@ void DirectX12RHI::DeferRelease(ID3D12Object* object)
     auto& entry = m_DeferredReleases.back();
     entry.fenceValue = m_CurrentFenceValue + 1;
     entry.object = object;
+    entry.heapAllocation = heapAllocation;
 }
 
 void DirectX12RHI::DeferDescriptorFree(DirectX12DescriptorAllocator* allocator, uint32 index)
@@ -2009,15 +2046,30 @@ void DirectX12RHI::CollectDeferredReleases()
     const uint64 completedValue = m_Fence->GetCompletedValue();
     if (completedValue == UINT64_MAX) return;
 
-    std::erase_if(m_DeferredReleases, [completedValue](const DeferredReleaseEntry& entry)
+    std::vector<GpuHeapAllocation> releasedPages;
+    std::erase_if(m_DeferredReleases, [completedValue, &releasedPages](const DeferredReleaseEntry& entry)
         {
             if (entry.fenceValue > completedValue) return false;
 
             if (entry.descriptorAllocator)
                 entry.descriptorAllocator->Free(entry.descriptorIndex);
+            if (entry.heapAllocation.IsValid())
+                releasedPages.push_back(entry.heapAllocation);
 
             return true;
         });
+
+    // 배치된 버퍼를 놓은 뒤에 페이지를 돌려준다. 빈 힙은 하나만 남긴다.
+    for (const auto& pages : releasedPages)
+    {
+        if (!m_GeometryPages.Free(pages))
+        {
+            ENGINE_LOG_ERROR("Geometry heap pages were released twice. Heap: {}, page: {}", pages.Heap, pages.FirstPage);
+            continue;
+        }
+        if (m_GeometryPages.IsHeapEmpty(pages.Heap) && m_GeometryPages.GetEmptyHeapCount() > 1 && m_GeometryPages.RemoveHeap(pages.Heap))
+            m_GeometryHeaps[pages.Heap].Reset();
+    }
 }
 #pragma endregion
 

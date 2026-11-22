@@ -1,6 +1,7 @@
 ﻿#pragma once 
 
 #include "RHIBuffer.h"
+#include "GpuHeapPageAllocator.h"
 
 BEGIN(Engine)
 class DirectX12Buffer final : public RHIBuffer
@@ -39,6 +40,7 @@ protected:
 	EResult UploadRangeInternal(const void* data, uint32 size, uint32 offset) override;
 private:
 	ComPtr<ID3D12Resource> m_Buffer;
+	GpuHeapAllocation m_HeapAllocation; // 정적 지오메트리 힙에 배치했을 때만 유효
 	void* m_MappedData = nullptr;
 	D3D12_RESOURCE_STATES m_CurrentState = D3D12_RESOURCE_STATE_COMMON;
 };

@@ -55,7 +55,9 @@ EResult DirectX12Buffer::Initialize(const DESC& desc)
 	resourceDesc.SampleDesc.Quality = 0;
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	resourceDesc.Flags = resourceFlags;
-	if (FAILED(device->CreateCommittedResource(
+	// 정적 정점·인덱스 버퍼는 큰 힙에 배치한다. 버퍼마다 GPU 메모리를 새로 잡으면 로딩이 크게 느려진다.
+	const bool placed = isStaticGeometryBuffer && dxRHI->CreatePlacedGeometryBuffer(resourceDesc, initialState, m_Buffer, m_HeapAllocation);
+	if (!placed && FAILED(device->CreateCommittedResource(
 		&heapProps,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
@@ -110,8 +112,9 @@ void DirectX12Buffer::Free()
 	m_MappedData = nullptr;
 
 	if (m_RHI)
-		static_cast<DirectX12RHI*>(m_RHI)->DeferRelease(m_Buffer.Get());
+		static_cast<DirectX12RHI*>(m_RHI)->DeferRelease(m_Buffer.Get(), m_HeapAllocation);
 
+	m_HeapAllocation = {};
 	m_Buffer.Reset();
 	__super::Free();
 }
