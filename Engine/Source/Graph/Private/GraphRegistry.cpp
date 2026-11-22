@@ -407,7 +407,13 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Shader.TextureSample", shader, {
 			{ "slot", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TextureSlot" },
 			{ "uv", Direction::Input, Type::Float2, std::array<float, 2>{}, {}, "Graph.PinName.TextureUV" },
-			{ "rgba", Direction::Output, Type::Float4, {} } } },
+			{ "name", Direction::Input, Type::String, std::string{}, {}, "Graph.PinName.TextureName" },
+			{ "rgba", Direction::Output, Type::Float4, {}, {}, "Graph.PinName.RGBA" },
+			{ "rgb", Direction::Output, Type::Float3, {}, {}, "Graph.PinName.RGB" },
+			{ "r", Direction::Output, Type::Float, {}, {}, "Graph.PinName.R" },
+			{ "g", Direction::Output, Type::Float, {}, {}, "Graph.PinName.G" },
+			{ "b", Direction::Output, Type::Float, {}, {}, "Graph.PinName.B" },
+			{ "a", Direction::Output, Type::Float, {}, {}, "Graph.PinName.A" } } },
 		{ "Shader.MaterialOutput", { EGraphDomain::Shader }, {
 			// [VS Stage Input]
 			{ "worldPositionOffset", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 0.0f } },
@@ -453,7 +459,10 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{
 			definition.Category = "Texture";
 			definition.DisplayName = "Graph.Node.TextureSample";
-			definition.Pins.front().LiteralOnly = true;
+			for (auto& pin : definition.Pins)
+			{
+				if (pin.Key == "slot" || pin.Key == "name") pin.LiteralOnly = true;
+			}
 		}
 	}
 	for (auto& definition : definitions)

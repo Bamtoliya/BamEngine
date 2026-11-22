@@ -217,6 +217,13 @@
 ,Graph.PinName.TextureUV,UV,UV
 ,Graph.PinName.UV0,UV0,UV0
 ,Graph.PinName.UV1,UV1,UV1
+,Graph.PinName.RGBA,RGBA,RGBA
+,Graph.PinName.RGB,RGB,RGB
+,Graph.PinName.R,R,R
+,Graph.PinName.G,G,G
+,Graph.PinName.B,B,B
+,Graph.PinName.A,A,A
+,Graph.PinName.TextureName,Texture Name,텍스처 이름
 ,Heal,,
 ,Input,Input,입력
 ,Input pin is missing.,Input pin is missing.,입력 핀이 없습니다.

@@ -347,6 +347,8 @@ namespace Editor
 			for (const auto pass : stalePasses)
 				m_Material->RemovePassShader(pass);
 			m_Material->SetBufferLayout(std::move(layout));
+			auto texDescriptors = Engine::ShaderGraphCompiler::CollectTextureDescriptors(m_ShaderGraph.Data);
+			m_Material->SyncTextureBindings(texDescriptors);
 			m_Material->SetVertexShaderHandle(vs);
 			m_Material->SetPixelShaderHandle(ps);
 			m_LiveVertexShader = std::move(vs);

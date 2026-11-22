@@ -497,6 +497,116 @@ int main()
 			}
 		}
 
+		// ── 10. Shader.TextureSample 다중 노드, 채널 분리(RGBA/RGB/R/G/B/A), 커스텀 UV 및 메타데이터 수집/동기화 검증 ──
+		{
+			Graph multiTexGraph{ EGraphDomain::Shader };
+			const auto out = Add(multiTexGraph, registry, "Shader.MaterialOutput");
+
+			// 1) Albedo (Slot 0, Default UV0, RGBA 출력)
+			const auto albedoSample = Add(multiTexGraph, registry, "Shader.TextureSample");
+			Accept(multiTexGraph.SetInputValue(registry, { albedoSample, "slot" }, std::int64_t{ 0 }));
+			Accept(multiTexGraph.SetInputValue(registry, { albedoSample, "name" }, std::string("BaseAlbedo")));
+			Accept(multiTexGraph.Connect(registry, { albedoSample, "rgba" }, { out, "baseColor" }));
+
+			// 2) Normal (Slot 1, Connected Custom Scaled UV, RGB 출력)
+			const auto normalSample = Add(multiTexGraph, registry, "Shader.TextureSample");
+			Accept(multiTexGraph.SetInputValue(registry, { normalSample, "slot" }, std::int64_t{ 1 }));
+			Accept(multiTexGraph.SetInputValue(registry, { normalSample, "name" }, std::string("NormalTexture")));
+			const auto uv0Node = Add(multiTexGraph, registry, "Shader.TexCoord0");
+			const auto uvScaleNode = Add(multiTexGraph, registry, "Math.MultiplyFloat2");
+			Accept(multiTexGraph.SetInputValue(registry, { uvScaleNode, "b" }, std::array<float, 2>{ 2.0f, 2.0f }));
+			Accept(multiTexGraph.Connect(registry, { uv0Node, "uv" }, { uvScaleNode, "a" }));
+			Accept(multiTexGraph.Connect(registry, { uvScaleNode, "result" }, { normalSample, "uv" }));
+			Accept(multiTexGraph.Connect(registry, { normalSample, "rgb" }, { out, "normal" }));
+
+			// 3) PBR (Slot 2, Connected UV1, R/G/B/A 개별 채널 분리 출력)
+			const auto pbrSample = Add(multiTexGraph, registry, "Shader.TextureSample");
+			Accept(multiTexGraph.SetInputValue(registry, { pbrSample, "slot" }, std::int64_t{ 2 }));
+			Accept(multiTexGraph.SetInputValue(registry, { pbrSample, "name" }, std::string("PbrPacked")));
+			const auto uv1Node = Add(multiTexGraph, registry, "Shader.TexCoord1");
+			Accept(multiTexGraph.Connect(registry, { uv1Node, "uv" }, { pbrSample, "uv" }));
+			Accept(multiTexGraph.Connect(registry, { pbrSample, "r" }, { out, "roughness" }));
+			Accept(multiTexGraph.Connect(registry, { pbrSample, "g" }, { out, "metallic" }));
+			Accept(multiTexGraph.Connect(registry, { pbrSample, "b" }, { out, "cavity" }));
+			Accept(multiTexGraph.Connect(registry, { pbrSample, "a" }, { out, "opacityMask" }));
+
+			// 4) Emissive (Slot 3, Default UV0, RGB 출력)
+			const auto emissiveSample = Add(multiTexGraph, registry, "Shader.TextureSample");
+			Accept(multiTexGraph.SetInputValue(registry, { emissiveSample, "slot" }, std::int64_t{ 3 }));
+			Accept(multiTexGraph.SetInputValue(registry, { emissiveSample, "name" }, std::string("EmissiveMap")));
+			Accept(multiTexGraph.Connect(registry, { emissiveSample, "rgb" }, { out, "emissive" }));
+
+			// 5) 동일 슬롯(Slot 0) 다중 노드 참조 검증용 Detail Albedo 노드
+			const auto detailAlbedoSample = Add(multiTexGraph, registry, "Shader.TextureSample");
+			Accept(multiTexGraph.SetInputValue(registry, { detailAlbedoSample, "slot" }, std::int64_t{ 0 }));
+			Accept(multiTexGraph.SetInputValue(registry, { detailAlbedoSample, "name" }, std::string("DetailAlbedo")));
+
+			// HLSL 코드 생성 검증
+			std::string multiPs;
+			std::string multiFt;
+			Accept(ShaderGraphCompiler::GenerateGBufferMaterialHlsl(multiTexGraph, registry, multiPs));
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(multiTexGraph, registry, multiFt));
+
+			// Space 1 및 t0~t3, s0~s3 바인딩 레지스터 검증
+			for (const auto* shader : { &multiPs, &multiFt })
+			{
+				Expect(shader->find("register(t0, space1)") != std::string::npos &&
+					shader->find("register(s0, space1)") != std::string::npos, "Slot 0 binding mismatch.");
+				Expect(shader->find("register(t1, space1)") != std::string::npos &&
+					shader->find("register(s1, space1)") != std::string::npos, "Slot 1 binding mismatch.");
+				Expect(shader->find("register(t2, space1)") != std::string::npos &&
+					shader->find("register(s2, space1)") != std::string::npos, "Slot 2 binding mismatch.");
+				Expect(shader->find("register(t3, space1)") != std::string::npos &&
+					shader->find("register(s3, space1)") != std::string::npos, "Slot 3 binding mismatch.");
+
+				Expect(shader->find("SampleGraphTexture0(float2 uv)") != std::string::npos, "Missing SampleGraphTexture0 helper.");
+				Expect(shader->find("SampleGraphTexture1(float2 uv)") != std::string::npos, "Missing SampleGraphTexture1 helper.");
+				Expect(shader->find("SampleGraphTexture2(float2 uv)") != std::string::npos, "Missing SampleGraphTexture2 helper.");
+				Expect(shader->find("SampleGraphTexture3(float2 uv)") != std::string::npos, "Missing SampleGraphTexture3 helper.");
+			}
+
+			// GBuffer PS 표현식 검증
+			Expect(multiPs.find("SampleGraphTexture0(input.TexCoord)") != std::string::npos,
+				"Albedo sample must default to input.TexCoord (UV0).");
+			Expect(multiPs.find("(SampleGraphTexture1((input.TexCoord * float2(2.00000000e+00f, 2.00000000e+00f)))).rgb") != std::string::npos,
+				"Normal sample must use connected custom scaled UV and .rgb swizzle.");
+			Expect(multiPs.find("(SampleGraphTexture2(input.TexCoord1)).r") != std::string::npos,
+				"Roughness must use SampleGraphTexture2(input.TexCoord1).r.");
+			Expect(multiPs.find("(SampleGraphTexture2(input.TexCoord1)).g") != std::string::npos,
+				"Metallic must use SampleGraphTexture2(input.TexCoord1).g.");
+			Expect(multiPs.find("(SampleGraphTexture2(input.TexCoord1)).b") != std::string::npos,
+				"Cavity must use SampleGraphTexture2(input.TexCoord1).b.");
+			Expect(multiPs.find("clip(((SampleGraphTexture2(input.TexCoord1)).a) - 0.5f);") != std::string::npos,
+				"OpacityMask must use SampleGraphTexture2(input.TexCoord1).a in clip expression.");
+			Expect(multiPs.find("(SampleGraphTexture3(input.TexCoord)).rgb") != std::string::npos,
+				"Emissive must use SampleGraphTexture3(input.TexCoord).rgb.");
+
+			// 텍스처 파라미터 / 슬롯 메타데이터 수집(CollectTextureDescriptors / CollectTextureParameters) 검증
+			const auto descriptors = ShaderGraphCompiler::CollectTextureDescriptors(multiTexGraph);
+			const auto params = ShaderGraphCompiler::CollectTextureParameters(multiTexGraph);
+			Expect(descriptors.size() == 4, "Must collect exactly 4 deduplicated texture slot descriptors.");
+			Expect(descriptors == params, "CollectTextureDescriptors and CollectTextureParameters must match.");
+
+			Expect(descriptors[0].Slot == 0 && descriptors[0].Name == "BaseAlbedo", "Slot 0 descriptor mismatch.");
+			Expect(descriptors[1].Slot == 1 && descriptors[1].Name == "NormalTexture", "Slot 1 descriptor mismatch.");
+			Expect(descriptors[2].Slot == 2 && descriptors[2].Name == "PbrPacked", "Slot 2 descriptor mismatch.");
+			Expect(descriptors[3].Slot == 3 && descriptors[3].Name == "EmissiveMap", "Slot 3 descriptor mismatch.");
+
+			// MaterialInterface 동기화 검증
+			TestMaterial syncMat;
+			syncMat.SyncTextureBindings(descriptors);
+			Expect(syncMat.GetTextureBindings().size() == 4, "Material must contain 4 texture bindings.");
+			Expect(syncMat.HasTextureBindingBySlot(0), "Material missing slot 0 binding.");
+			Expect(syncMat.HasTextureBindingBySlot(1), "Material missing slot 1 binding.");
+			Expect(syncMat.HasTextureBindingBySlot(2), "Material missing slot 2 binding.");
+			Expect(syncMat.HasTextureBindingBySlot(3), "Material missing slot 3 binding.");
+			Expect(syncMat.HasTextureBinding("BaseAlbedo"), "Material missing BaseAlbedo binding by name.");
+			Expect(syncMat.HasTextureBinding("NormalTexture"), "Material missing NormalTexture binding by name.");
+			Expect(syncMat.HasTextureBinding("PbrPacked"), "Material missing PbrPacked binding by name.");
+			Expect(syncMat.HasTextureBinding("EmissiveMap"), "Material missing EmissiveMap binding by name.");
+			Expect(syncMat.GetTextureDescriptors().size() == 4, "GetTextureDescriptors mismatch.");
+		}
+
 		std::cout << "Shader graph checks passed.\n";
 		return 0;
 	}
