@@ -4,6 +4,37 @@
 #include <fstream>
 #include <mutex>
 #include <system_error>
+#include <glaze/glaze.hpp>
+
+namespace Engine::PakDetail
+{
+    struct ManifestPakEntry
+    {
+        std::string Path;
+        std::string RelativePath;
+        std::string MountScheme;
+        uint32_t FormatVersion = 1;
+        uint64_t EntryCount = 0;
+        uint64_t ByteSize = 0;
+        uint64_t TotalBytes = 0;
+        uint64_t Hash64 = 0;
+        uint64_t FileHash64 = 0;
+        bool IntegrityVerified = false;
+    };
+
+    struct ManifestConfig
+    {
+        uint32_t SchemaVersion = 1;
+        std::string StartupSceneUri;
+        std::string StartupManifestUri;
+        std::string RenderPipelineProfileUri;
+        std::vector<std::string> BootstrapFiles;
+        std::vector<std::string> DirectFileExceptions;
+        std::vector<ManifestPakEntry> Paks;
+        std::vector<ManifestPakEntry> PakArchives;
+        bool IntegrityVerified = false;
+    };
+}
 
 BEGIN(Engine)
 
@@ -767,6 +798,144 @@ size_t PakMountManager::GetMountedPakCount() const noexcept
 const std::vector<std::unique_ptr<PakReader>>& PakMountManager::GetReaders() const noexcept
 {
     return m_readers;
+}
+
+PakMountManager& PakMountManager::Get() noexcept
+{
+    static PakMountManager s_instance;
+    return s_instance;
+}
+
+EResult PakMountManager::MountFromPackageManifest(
+    const std::filesystem::path& manifestPath,
+    std::string* outStartupSceneUri)
+{
+    std::error_code ec;
+    if (!std::filesystem::exists(manifestPath, ec) || !std::filesystem::is_regular_file(manifestPath, ec))
+    {
+        return EResult::FileNotFound;
+    }
+
+    std::ifstream file(manifestPath, std::ios::binary);
+    if (!file.is_open())
+    {
+        return EResult::AccessDenied;
+    }
+
+    std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    if (text.starts_with("\xef\xbb\xbf"))
+    {
+        text.erase(0, 3);
+    }
+
+    PakDetail::ManifestConfig manifest;
+    if (glz::read_json(manifest, text))
+    {
+        return EResult::Fail;
+    }
+
+    if (manifest.SchemaVersion == 0)
+    {
+        return EResult::Fail;
+    }
+
+    if (outStartupSceneUri)
+    {
+        *outStartupSceneUri = manifest.StartupSceneUri;
+    }
+
+    std::vector<PakDetail::ManifestPakEntry> allEntries;
+    allEntries.reserve(manifest.Paks.size() + manifest.PakArchives.size());
+    for (auto& entry : manifest.Paks)
+    {
+        allEntries.push_back(std::move(entry));
+    }
+    for (auto& entry : manifest.PakArchives)
+    {
+        allEntries.push_back(std::move(entry));
+    }
+
+    if (allEntries.empty())
+    {
+        return EResult::Fail;
+    }
+
+    const std::filesystem::path manifestDir = manifestPath.parent_path();
+    const std::filesystem::path packageRoot = (manifestDir.filename() == "Config")
+        ? manifestDir.parent_path()
+        : manifestDir;
+
+    const size_t initialReaderCount = m_readers.size();
+
+    for (const auto& pakEntry : allEntries)
+    {
+        const std::string& relPathStr = !pakEntry.RelativePath.empty() ? pakEntry.RelativePath : pakEntry.Path;
+        if (relPathStr.empty())
+        {
+            while (m_readers.size() > initialReaderCount)
+            {
+                m_readers.pop_back();
+            }
+            return EResult::InvalidArgument;
+        }
+
+        std::filesystem::path pakFilePath = packageRoot / std::filesystem::u8path(relPathStr);
+        if (!std::filesystem::exists(pakFilePath, ec))
+        {
+            if (std::filesystem::exists(manifestDir / std::filesystem::u8path(relPathStr), ec))
+            {
+                pakFilePath = manifestDir / std::filesystem::u8path(relPathStr);
+            }
+            else
+            {
+                while (m_readers.size() > initialReaderCount)
+                {
+                    m_readers.pop_back();
+                }
+                return EResult::FileNotFound;
+            }
+        }
+
+        const EResult mountRes = MountPak(pakFilePath);
+        if (mountRes != EResult::Success)
+        {
+            while (m_readers.size() > initialReaderCount)
+            {
+                m_readers.pop_back();
+            }
+            return mountRes;
+        }
+
+        if (pakEntry.EntryCount > 0)
+        {
+            if (m_readers.empty() || m_readers.back()->GetEntries().size() != pakEntry.EntryCount)
+            {
+                while (m_readers.size() > initialReaderCount)
+                {
+                    m_readers.pop_back();
+                }
+                return EResult::Fail;
+            }
+        }
+
+        const uint64 expectedBytes = pakEntry.TotalBytes != 0 ? pakEntry.TotalBytes : pakEntry.ByteSize;
+        if (expectedBytes > 0)
+        {
+            const uint64 actualBytes = std::filesystem::file_size(pakFilePath, ec);
+            if (ec || actualBytes != expectedBytes)
+            {
+                while (m_readers.size() > initialReaderCount)
+                {
+                    m_readers.pop_back();
+                }
+                return EResult::Fail;
+            }
+        }
+    }
+
+    return EResult::Success;
 }
 
 END

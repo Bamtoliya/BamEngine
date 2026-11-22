@@ -151,6 +151,22 @@ public:
     // 팩 파일 마운트 추가
     [[nodiscard]] EResult MountPak(const std::filesystem::path& pakPath);
 
+    // 패키지 매니페스트 기반 자동 마운트 및 검증
+    [[nodiscard]] EResult MountFromPackageManifest(
+        const std::filesystem::path& manifestPath,
+        std::string* outStartupSceneUri = nullptr);
+
+    // 패키지 매니페스트 기반 자동 마운트 및 검증 (편의 별칭)
+    [[nodiscard]] inline EResult MountFromManifestFile(
+        const std::filesystem::path& manifestPath,
+        std::string* outStartupSceneUri = nullptr)
+    {
+        return MountFromPackageManifest(manifestPath, outStartupSceneUri);
+    }
+
+    // 전역 싱글턴 인스턴스 접근
+    [[nodiscard]] static PakMountManager& Get() noexcept;
+
     // 모든 마운트 해제
     void UnmountAll();
 

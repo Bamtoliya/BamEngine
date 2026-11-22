@@ -530,6 +530,157 @@ static int TestTwoPakStagingRoundTrip(const fs::path& tempDir)
 }
 
 // -----------------------------------------------------------------------------
+// 테스트 8: Config/PackageManifest.json 기반 패키지 자동 마운트 검증
+// -----------------------------------------------------------------------------
+static int TestMountFromPackageManifest(const fs::path& tempDir)
+{
+    const fs::path testRoot = tempDir / "ManifestMountTest";
+    const fs::path configDir = testRoot / "Config";
+    const fs::path contentDir = testRoot / "Content";
+
+    std::error_code ec;
+    fs::create_directories(configDir, ec);
+    fs::create_directories(contentDir, ec);
+
+    const fs::path enginePakPath = contentDir / "Engine.bampak";
+    const fs::path projectPakPath = contentDir / "Project.bampak";
+    const fs::path manifestPath = configDir / "PackageManifest.json";
+
+    const std::vector<uint8_t> shaderDxil = { 0x44, 0x58, 0x42, 0x43, 0xAA, 0xBB, 0xCC, 0xDD };
+    const std::string defaultMat = "{\"Material\":\"Default\"}";
+    const std::string titleScene = "{\"Scene\":\"TitleScene\",\"Version\":1}";
+    const std::vector<uint8_t> titleTex = { 0x44, 0x44, 0x53, 0x20, 0x01, 0x02, 0x03, 0x04 };
+
+    // 1. Engine.bampak 생성
+    {
+        PakWriter engineWriter;
+        EXPECT_EQ(engineWriter.AddEntry("Engine://Shaders/Standard.dxil", shaderDxil, EPakPayloadFormat::Dxil), EResult::Success);
+        EXPECT_EQ(engineWriter.AddEntry("Engine://Materials/Default.bammat.json",
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(defaultMat.data()), defaultMat.size()),
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(engineWriter.GetEntryCount(), 2);
+        EXPECT_EQ(engineWriter.WriteToFile(enginePakPath), EResult::Success);
+    }
+
+    // 2. Project.bampak 생성
+    {
+        PakWriter projectWriter;
+        EXPECT_EQ(projectWriter.AddEntry("Project://Scenes/Title.bamscene.json",
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(titleScene.data()), titleScene.size()),
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(projectWriter.AddEntry("Project://Textures/Title.dds", titleTex, EPakPayloadFormat::Dds), EResult::Success);
+        EXPECT_EQ(projectWriter.GetEntryCount(), 2);
+        EXPECT_EQ(projectWriter.WriteToFile(projectPakPath), EResult::Success);
+    }
+
+    const uint64 enginePakSize = fs::file_size(enginePakPath);
+    const uint64 projectPakSize = fs::file_size(projectPakPath);
+
+    // 3. Config/PackageManifest.json 작성
+    {
+        std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
+        out << "{\n"
+            << "  \"SchemaVersion\": 1,\n"
+            << "  \"StartupSceneUri\": \"Project://Scenes/Title.bamscene.json\",\n"
+            << "  \"StartupManifestUri\": \"Engine://Data/Startup/Manifest.json\",\n"
+            << "  \"RenderPipelineProfileUri\": \"Engine://RenderPipeline/Deferred.json\",\n"
+            << "  \"BootstrapFiles\": [\"Config/Project.json\"],\n"
+            << "  \"Paks\": [\n"
+            << "    {\n"
+            << "      \"Path\": \"Content/Engine.bampak\",\n"
+            << "      \"MountScheme\": \"Engine://\",\n"
+            << "      \"FormatVersion\": 1,\n"
+            << "      \"EntryCount\": 2,\n"
+            << "      \"ByteSize\": " << enginePakSize << ",\n"
+            << "      \"Hash64\": 0,\n"
+            << "      \"IntegrityVerified\": true\n"
+            << "    },\n"
+            << "    {\n"
+            << "      \"Path\": \"Content/Project.bampak\",\n"
+            << "      \"MountScheme\": \"Project://\",\n"
+            << "      \"FormatVersion\": 1,\n"
+            << "      \"EntryCount\": 2,\n"
+            << "      \"ByteSize\": " << projectPakSize << ",\n"
+            << "      \"Hash64\": 0,\n"
+            << "      \"IntegrityVerified\": true\n"
+            << "    }\n"
+            << "  ],\n"
+            << "  \"IntegrityVerified\": true\n"
+            << "}\n";
+    }
+
+    // 4. MountFromPackageManifest 검증
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 0);
+
+    std::string startupSceneUri;
+    EXPECT_EQ(PakMountManager::Get().MountFromPackageManifest(manifestPath, &startupSceneUri), EResult::Success);
+    EXPECT_EQ(startupSceneUri, "Project://Scenes/Title.bamscene.json");
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 2);
+
+    // 5. 통합 엔트리 조회 및 데이터 검증
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Engine://Shaders/Standard.dxil"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Engine://Materials/Default.bammat.json"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Scenes/Title.bamscene.json"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Textures/Title.dds"));
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://NonExistent.png"));
+
+    std::vector<uint8_t> readBytes;
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Engine://Shaders/Standard.dxil", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, shaderDxil);
+
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Engine://Materials/Default.bammat.json", readBytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBytes.data()), readBytes.size()), defaultMat);
+
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Project://Scenes/Title.bamscene.json", readBytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBytes.data()), readBytes.size()), titleScene);
+
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Project://Textures/Title.dds", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, titleTex);
+
+    // 6. UnmountAll 검증
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 0);
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Scenes/Title.bamscene.json"));
+
+    // 7. PakArchives / RelativePath / TotalBytes 포맷 호환 검증 및 MountFromManifestFile 별칭 검증
+    const fs::path altManifestPath = configDir / "AltPackageManifest.json";
+    {
+        std::ofstream out(altManifestPath, std::ios::binary | std::ios::trunc);
+        out << "{\n"
+            << "  \"SchemaVersion\": 1,\n"
+            << "  \"StartupSceneUri\": \"Project://Scenes/Title.bamscene.json\",\n"
+            << "  \"PakArchives\": [\n"
+            << "    {\n"
+            << "      \"RelativePath\": \"Content/Engine.bampak\",\n"
+            << "      \"EntryCount\": 2,\n"
+            << "      \"TotalBytes\": " << enginePakSize << ",\n"
+            << "      \"FileHash64\": 12345\n"
+            << "    },\n"
+            << "    {\n"
+            << "      \"RelativePath\": \"Content/Project.bampak\",\n"
+            << "      \"EntryCount\": 2,\n"
+            << "      \"TotalBytes\": " << projectPakSize << ",\n"
+            << "      \"FileHash64\": 67890\n"
+            << "    }\n"
+            << "  ]\n"
+            << "}\n";
+    }
+
+    startupSceneUri.clear();
+    EXPECT_EQ(PakMountManager::Get().MountFromManifestFile(altManifestPath, &startupSceneUri), EResult::Success);
+    EXPECT_EQ(startupSceneUri, "Project://Scenes/Title.bamscene.json");
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 2);
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Engine://Shaders/Standard.dxil"));
+
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 0);
+
+    std::cout << "[PASS] TestMountFromPackageManifest" << std::endl;
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
 // 진입점
 // -----------------------------------------------------------------------------
 int main()
@@ -558,6 +709,7 @@ int main()
     if (int res = TestCorruptionDefense(tempDir); res != 0) return res;
     if (int res = TestPakMountManager(tempDir); res != 0) return res;
     if (int res = TestTwoPakStagingRoundTrip(tempDir); res != 0) return res;
+    if (int res = TestMountFromPackageManifest(tempDir); res != 0) return res;
 
     std::cout << "=== All PakArchiveCheck Tests Passed Successfully! ===" << std::endl;
     return 0;
