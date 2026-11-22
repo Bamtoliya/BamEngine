@@ -38,8 +38,8 @@ void Engine::RuntimeUIInput::Clear()
 bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIPointerInput& input, bool* wheelConsumed)
 {
     if (wheelConsumed) *wheelConsumed = false;
-    auto& actions = InputManager::Get();
-    actions.EvaluateActionMap("GameUI", input.focused);
+    InputManager* actions = InputManager::IsCreated() ? &InputManager::Get() : nullptr;
+    if (actions) actions->EvaluateActionMap("GameUI", input.focused);
     for (const auto& canvas : m_Canvases)
         ClearFrameEvents(*canvas.scene);
 
@@ -121,19 +121,19 @@ bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIP
     if (current.down) m_BlocksGameplayPress = blocked;
     const bool suppressGameplay = m_BlocksGameplayPress;
     if (!input.held) m_BlocksGameplayPress = false;
-    if (input.focused && !input.held && !input.down && !input.up)
+    if (actions && input.focused && !input.held && !input.down && !input.up)
     {
         const bool hasFocusedInput = HasFocusedTextInput();
         if (hasFocusedInput)
         {
             UIKeyModifiers mods;
-            mods.shift = actions.IsShiftPressed();
-            mods.ctrl = actions.IsCtrlPressed();
-            mods.alt = actions.IsAltPressed();
+            mods.shift = actions->IsShiftPressed();
+            mods.ctrl = actions->IsCtrlPressed();
+            mods.alt = actions->IsAltPressed();
 
             const auto pollKey = [&](EKeyCode code, EUIKey uiKey)
             {
-                if (actions.IsKeyButtonDown(code) || actions.IsKeyButtonRepeated(code))
+                if (actions->IsKeyButtonDown(code) || actions->IsKeyButtonRepeated(code))
                     ForwardKeyInput(uiKey, mods);
             };
 
@@ -155,17 +155,17 @@ bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIP
                 pollKey(EKeyCode::X, EUIKey::X);
             }
         }
-        else if (actions.IsKeyButtonDown(EKeyCode::Escape) && HasOpenDropdown())
+        else if (actions->IsKeyButtonDown(EKeyCode::Escape) && HasOpenDropdown())
         {
             ForwardKeyInput(EUIKey::Escape);
         }
         else
         {
-            const int direction = static_cast<int>(actions.WasActionPressed("GameUI", "NextButton")) -
-                static_cast<int>(actions.WasActionPressed("GameUI", "PreviousButton"));
-            const bool submit = actions.WasActionPressed("GameUI", "ActivateButton");
-            const int adjust = static_cast<int>(actions.WasActionPressed("GameUI", "IncreaseValue")) -
-                static_cast<int>(actions.WasActionPressed("GameUI", "DecreaseValue"));
+            const int direction = static_cast<int>(actions->WasActionPressed("GameUI", "NextButton")) -
+                static_cast<int>(actions->WasActionPressed("GameUI", "PreviousButton"));
+            const bool submit = actions->WasActionPressed("GameUI", "ActivateButton");
+            const int adjust = static_cast<int>(actions->WasActionPressed("GameUI", "IncreaseValue")) -
+                static_cast<int>(actions->WasActionPressed("GameUI", "DecreaseValue"));
             if (direction != 0 || submit || adjust != 0)
             {
                 const auto focused = std::ranges::find_if(m_Canvases, [](const auto& canvas)

@@ -120,8 +120,9 @@ namespace Engine
 
 	f32 AudioMixer::Compute3DAttenuation(f32 distance, f32 minDistance, f32 maxDistance, bool linearRolloff)
 	{
+		if (maxDistance <= minDistance) return 0.0f;
 		if (distance <= minDistance) return 1.0f;
-		if (distance >= maxDistance || maxDistance <= minDistance) return 0.0f;
+		if (distance >= maxDistance) return 0.0f;
 
 		const f32 range = maxDistance - minDistance;
 		const f32 t = (distance - minDistance) / range;

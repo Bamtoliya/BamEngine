@@ -46,7 +46,7 @@ static int TestUriNormalization()
     EXPECT_EQ(out, "Project://Textures/Hero.png");
 
     // 역슬래시 변환 및 스키마 대소문자 정규화
-    EXPECT_TRUE(NormalizePakUri("project:\\Textures\\Sub\\Hero.dds", out));
+    EXPECT_TRUE(NormalizePakUri("project:\\\\Textures\\Sub\\Hero.dds", out));
     EXPECT_EQ(out, "Project://Textures/Sub/Hero.dds");
 
     EXPECT_TRUE(NormalizePakUri("ENGINE://Shaders/Standard.dxil", out));

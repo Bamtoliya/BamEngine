@@ -22,9 +22,19 @@ namespace
 
 	struct ScopeCleanup
 	{
+		ScopeCleanup()
+		{
+			if (!ReflectionRegistry::IsCreated())
+				ReflectionRegistry::Create();
+			if (!ResourceManager::IsCreated())
+				ResourceManager::Create();
+			if (!SceneManager::IsCreated())
+				SceneManager::Create();
+		}
 		~ScopeCleanup()
 		{
-			SceneManager::Destroy();
+			if (SceneManager::IsCreated())
+				SceneManager::Destroy();
 			AsyncResourceLoader::Destroy();
 			if (ResourceManager::IsCreated())
 				ResourceManager::Destroy();

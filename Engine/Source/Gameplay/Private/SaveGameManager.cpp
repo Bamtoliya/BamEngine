@@ -154,7 +154,7 @@ namespace Engine
         MetadataWrapperDto wrapper;
         wrapper.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
 
-        const auto ec = glz::read_json(wrapper, json);
+        const auto ec = glz::read<glz::opts{ .error_on_unknown_keys = false }>(wrapper, json);
         if (ec || wrapper.metadata.formatVersion == 0 || wrapper.metadata.formatVersion > SaveGameData::CurrentFormatVersion)
         {
             return false;

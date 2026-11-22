@@ -490,7 +490,7 @@ namespace
         if (!scene) return false;
         scene->SetActive(true);
         const auto floor = AddSurface(*scene, floorShape, vec3(0.0f), vec3(20.0f, 1.0f, 20.0f));
-        const auto ramp = AddSurface(*scene, BoxShape{}, vec3(0.0f, 0.15f, 0.0f), vec3(1.6f, 0.2f, 4.0f), 12.0f);
+        const auto ramp = AddSurface(*scene, BoxShape{}, vec3(0.0f, 0.26f, 0.0f), vec3(1.6f, 0.2f, 4.0f), 12.0f);
         if (floor == entt::null || ramp == entt::null) return false;
 
         auto& world = scene->GetRegistry();
