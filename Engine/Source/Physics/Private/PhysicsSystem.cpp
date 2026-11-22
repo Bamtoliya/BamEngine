@@ -1878,7 +1878,8 @@ static bool TestOverlapColliderSphere(const BoundingSphere& sphere, const Collid
         if (!IsMatrixAxisAligned(colliderWorld))
         {
             const BoundingBox localBox(-halfSize, halfSize);
-            return Collision::Intersects(localBox, sphere, colliderWorld, outHit);
+            const Capsule sphereAsCapsule(sphere.center, sphere.center, sphere.radius);
+            return Collision::Intersects(sphereAsCapsule, localBox, colliderWorld, outHit);
         }
         else
         {
