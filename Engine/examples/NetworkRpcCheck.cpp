@@ -176,6 +176,10 @@ namespace
         // 클라이언트 모드로 세팅 (로컬 클라이언트 ID = 2)
         netSys->GetDriver().SetNetworkMode(ENetworkMode::Client, 2);
 
+        // 패킷 핸들러 지연 바인딩을 위해 초기 틱 1회 실행
+        vector<Scene*> scenes;
+        netSys->OnUpdate(world, scenes, 0.0f);
+
         // 1단계: 첫 번째 스냅샷 수신 (최초 상태는 보간 없이 즉시 순간이동)
         {
             PacketWriter writer(EPacketId::SyncTransform);
@@ -213,7 +217,6 @@ namespace
         }
 
         // 3단계: 일반 보간 틱 진행 (dt = 0.02s < 0.05s)
-        vector<Scene*> scenes;
         netSys->OnUpdate(world, scenes, 0.02f);
         // 위치가 10.0f에서 11.0f 방향으로 이동했는지 확인
         assert(trans.position.x > 10.0f && trans.position.x < 11.0f);

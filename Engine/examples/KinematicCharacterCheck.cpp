@@ -506,39 +506,49 @@ namespace
 
         const auto& transform = world.get<TransformComponent>(character);
         const f32 maxSoftDrop = glm::max(0.005f, 3.5f * dt) + 0.002f;
+
+        // 1) 먼저 12도 경사로에 안정적으로 접지시킨다.
         bool touchedRamp = false;
+        for (int i = 0; i < 10; ++i)
+        {
+            system.OnUpdate(world, { scene.get() }, dt);
+            if (controller.IsGrounded && controller.GroundEntity == ramp &&
+                glm::abs(controller.GroundAngle - 12.0f) <= 1.0f)
+            {
+                touchedRamp = true;
+                break;
+            }
+        }
+        if (!touchedRamp)
+            return false;
+
+        // 2) 경사로 접지 상태(12도)에서 평지 상공 0.20m 지점으로 직접 전이시켜
+        //    보간 각도가 5도 미만으로 내려간 뒤에도 바닥 도달까지 수직 스냅 클램핑이 지속되는지 검증한다.
+        if (!SetPosition(world, character, vec3(3.0f, 0.20f, 0.0f)))
+            return false;
+
         int floorSoftFrames = 0;
+        bool sawLowAngleSoftLanding = false;
 
         for (f32 elapsed = 0.0f; elapsed < 2.0f; elapsed += dt)
         {
             const f32 previousY = transform.position.y;
-            controller.Move(vec3(1.0f, 0.0f, 0.0f));
             system.OnUpdate(world, { scene.get() }, dt);
 
-            if (transform.position.y < -0.001f)
+            if (transform.position.y < -0.001f || controller.GroundEntity != floor)
                 return false;
 
-            if (!touchedRamp)
-            {
-                if (controller.IsGrounded && controller.GroundEntity == ramp &&
-                    glm::abs(controller.GroundAngle - 12.0f) <= 1.0f)
-                {
-                    touchedRamp = true;
-                }
-                continue;
-            }
+            ++floorSoftFrames;
+            if (previousY - transform.position.y > maxSoftDrop)
+                return false;
 
-            if (controller.GroundEntity == floor)
+            if (controller.IsSoftLanding && controller.GroundAngle < 5.0f)
+                sawLowAngleSoftLanding = true;
+
+            if (controller.IsGrounded && glm::abs(transform.position.y) <= 0.002f &&
+                controller.GroundAngle < 1.0f && !controller.IsSoftLanding)
             {
-                ++floorSoftFrames;
-                const f32 frameMaxDrop = (floorSoftFrames == 1) ? (6.5f * dt + 0.015f) : maxSoftDrop;
-                if (previousY - transform.position.y > frameMaxDrop)
-                    return false;
-                if (controller.IsGrounded && glm::abs(transform.position.y) <= 0.002f &&
-                    controller.GroundAngle < 1.0f && !controller.IsSoftLanding)
-                {
-                    return floorSoftFrames >= 2;
-                }
+                return floorSoftFrames >= 3 && sawLowAngleSoftLanding;
             }
         }
         return false;
