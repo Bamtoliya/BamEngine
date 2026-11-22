@@ -20,6 +20,12 @@ namespace Engine
         bool Update(const std::vector<Scene*>& scenes, const UIPointerInput& input, bool* wheelConsumed = nullptr);
         void Clear();
 
+        bool ForwardKeyInput(EUIKey key, UIKeyModifiers mods = {}, std::string* clipboardOut = nullptr, std::string_view clipboardIn = {});
+        bool ForwardTextInput(std::string_view utf8Text);
+        bool ForwardImeComposition(std::string_view composition, bool commit = false);
+        bool HasFocusedTextInput() const;
+        bool HasOpenDropdown() const;
+
     private:
         struct CanvasInput
         {

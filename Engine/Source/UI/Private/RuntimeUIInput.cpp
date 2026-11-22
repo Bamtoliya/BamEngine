@@ -123,26 +123,65 @@ bool Engine::RuntimeUIInput::Update(const std::vector<Scene*>& scenes, const UIP
     if (!input.held) m_BlocksGameplayPress = false;
     if (input.focused && !input.held && !input.down && !input.up)
     {
-        const int direction = static_cast<int>(actions.WasActionPressed("GameUI", "NextButton")) -
-            static_cast<int>(actions.WasActionPressed("GameUI", "PreviousButton"));
-        const bool submit = actions.WasActionPressed("GameUI", "ActivateButton");
-        const int adjust = static_cast<int>(actions.WasActionPressed("GameUI", "IncreaseValue")) -
-            static_cast<int>(actions.WasActionPressed("GameUI", "DecreaseValue"));
-        if (direction != 0 || submit || adjust != 0)
+        const bool hasFocusedInput = HasFocusedTextInput();
+        if (hasFocusedInput)
         {
-            const auto focused = std::ranges::find_if(m_Canvases, [](const auto& canvas)
+            UIKeyModifiers mods;
+            mods.shift = actions.IsShiftPressed();
+            mods.ctrl = actions.IsCtrlPressed();
+            mods.alt = actions.IsAltPressed();
+
+            const auto pollKey = [&](EKeyCode code, EUIKey uiKey)
             {
-                return canvas.events->m_KeyboardFocus.entity != entt::null;
-            });
-            if (focused != m_Canvases.end())
+                if (actions.IsKeyButtonDown(code) || actions.IsKeyButtonRepeated(code))
+                    ForwardKeyInput(uiKey, mods);
+            };
+
+            pollKey(EKeyCode::Backspace, EUIKey::Backspace);
+            pollKey(EKeyCode::Delete, EUIKey::Delete);
+            pollKey(EKeyCode::Left, EUIKey::Left);
+            pollKey(EKeyCode::Right, EUIKey::Right);
+            pollKey(EKeyCode::Home, EUIKey::Home);
+            pollKey(EKeyCode::End, EUIKey::End);
+            pollKey(EKeyCode::Enter, EUIKey::Enter);
+            pollKey(EKeyCode::NumpadEnter, EUIKey::Enter);
+            pollKey(EKeyCode::Escape, EUIKey::Escape);
+
+            if (mods.ctrl)
             {
-                if (direction != 0 || submit) focused->events->Navigate(direction, submit);
-                if (adjust != 0) focused->events->AdjustFocusedSlider(adjust);
+                pollKey(EKeyCode::A, EUIKey::A);
+                pollKey(EKeyCode::C, EUIKey::C);
+                pollKey(EKeyCode::V, EUIKey::V);
+                pollKey(EKeyCode::X, EUIKey::X);
             }
-            else if (direction != 0)
+        }
+        else if (actions.IsKeyButtonDown(EKeyCode::Escape) && HasOpenDropdown())
+        {
+            ForwardKeyInput(EUIKey::Escape);
+        }
+        else
+        {
+            const int direction = static_cast<int>(actions.WasActionPressed("GameUI", "NextButton")) -
+                static_cast<int>(actions.WasActionPressed("GameUI", "PreviousButton"));
+            const bool submit = actions.WasActionPressed("GameUI", "ActivateButton");
+            const int adjust = static_cast<int>(actions.WasActionPressed("GameUI", "IncreaseValue")) -
+                static_cast<int>(actions.WasActionPressed("GameUI", "DecreaseValue"));
+            if (direction != 0 || submit || adjust != 0)
             {
-                for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
-                    if (it->events->Navigate(direction, submit)) break;
+                const auto focused = std::ranges::find_if(m_Canvases, [](const auto& canvas)
+                {
+                    return canvas.events->m_KeyboardFocus.entity != entt::null;
+                });
+                if (focused != m_Canvases.end())
+                {
+                    if (direction != 0 || submit) focused->events->Navigate(direction, submit);
+                    if (adjust != 0) focused->events->AdjustFocusedSlider(adjust);
+                }
+                else if (direction != 0)
+                {
+                    for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+                        if (it->events->Navigate(direction, submit)) break;
+                }
             }
         }
     }
@@ -178,4 +217,77 @@ bool Engine::RuntimeUIInput::UpdateCanvases(const UIPointerInput& input)
         canvas.events->Update(canvasInput);
     }
     return blocksGameplay;
+}
+
+bool Engine::RuntimeUIInput::HasFocusedTextInput() const
+{
+    return std::ranges::any_of(m_Canvases, [](const auto& canvas)
+    {
+        return canvas.events && canvas.events->HasFocusedTextInput();
+    });
+}
+
+bool Engine::RuntimeUIInput::HasOpenDropdown() const
+{
+    return std::ranges::any_of(m_Canvases, [](const auto& canvas)
+    {
+        return canvas.events && canvas.events->HasOpenDropdown();
+    });
+}
+
+bool Engine::RuntimeUIInput::ForwardKeyInput(EUIKey key, UIKeyModifiers mods, std::string* clipboardOut, std::string_view clipboardIn)
+{
+    if (key == EUIKey::Escape)
+    {
+        for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+        {
+            if (it->events && it->events->HasOpenDropdown())
+            {
+                if (it->events->HandleKeyInput(key, mods, clipboardOut, clipboardIn)) return true;
+            }
+        }
+    }
+
+    for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+    {
+        if (it->events && it->events->HasFocusedTextInput())
+        {
+            if (it->events->HandleKeyInput(key, mods, clipboardOut, clipboardIn)) return true;
+        }
+    }
+
+    if (key == EUIKey::Escape)
+    {
+        for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+        {
+            if (it->events && it->events->HandleKeyInput(key, mods, clipboardOut, clipboardIn)) return true;
+        }
+    }
+
+    return false;
+}
+
+bool Engine::RuntimeUIInput::ForwardTextInput(std::string_view utf8Text)
+{
+    if (utf8Text.empty()) return false;
+    for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+    {
+        if (it->events && it->events->HasFocusedTextInput())
+        {
+            if (it->events->HandleTextInput(utf8Text)) return true;
+        }
+    }
+    return false;
+}
+
+bool Engine::RuntimeUIInput::ForwardImeComposition(std::string_view composition, bool commit)
+{
+    for (auto it = m_Canvases.rbegin(); it != m_Canvases.rend(); ++it)
+    {
+        if (it->events && it->events->HasFocusedTextInput())
+        {
+            if (it->events->HandleImeComposition(composition, commit)) return true;
+        }
+    }
+    return false;
 }

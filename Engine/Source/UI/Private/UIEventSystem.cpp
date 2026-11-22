@@ -81,6 +81,43 @@ Engine::UIEventSystem::Target Engine::UIEventSystem::HitTest(const glm::vec2& po
     const auto* canvas = TryGetEnabledComponent<CanvasComponent>(world, m_Canvas.entity);
     if (!canvas || point.x < 0.0f || point.y < 0.0f || point.x >= canvas->referenceResolution.x ||
         point.y >= canvas->referenceResolution.y) return {};
+    for (auto index = layouts.size(); index > 0; --index)
+    {
+        const auto& layout = layouts[index - 1];
+        const auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, layout.entity);
+        if (dropdown && dropdown->interactable && dropdown->isOpen && !dropdown->options.empty() &&
+            layout.visible && layout.size.y > 0.0f)
+        {
+            const float popupHeight = dropdown->GetPopupHeight();
+            if (popupHeight > 0.0f)
+            {
+                const float determinant = glm::determinant(layout.renderMatrix);
+                if (std::isfinite(determinant) && determinant != 0.0f)
+                {
+                    bool clipped = false;
+                    if (const auto& clip = layout.clipRect)
+                    {
+                        if (point.x < clip->x || point.y < clip->y || point.x >= clip->z || point.y >= clip->w)
+                            clipped = true;
+                    }
+                    if (!clipped)
+                    {
+                        const glm::vec2 local(glm::inverse(layout.renderMatrix) * glm::vec4(point, 0.0f, 1.0f));
+                        const float maxLocalY = 1.0f + (popupHeight / layout.size.y);
+                        if (std::isfinite(local.x) && std::isfinite(local.y) &&
+                            local.x >= 0.0f && local.x <= 1.0f &&
+                            local.y >= 1.0f && local.y <= maxLocalY)
+                        {
+                            blocked = true;
+                            const auto* id = world.try_get<IDComponent>(layout.entity);
+                            const Target target{ layout.entity, id ? id->id : 0 };
+                            return CanInteract(target, layouts) ? target : Target{};
+                        }
+                    }
+                }
+            }
+        }
+    }
     const auto overlays = UIClipLayout::GetScrollbarOverlays(world, layouts);
     auto overlay = overlays.rbegin();
     for (auto index = layouts.size(); index > 0; --index)
@@ -271,6 +308,19 @@ bool Engine::UIEventSystem::ApplyWidgetValue(UIPointerEvent& event)
         toggle->checked = event.value != 0.0f;
         return true;
     }
+    if (auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, event.target))
+    {
+        if (!dropdown->interactable) return false;
+        event.previousValue = static_cast<float>(dropdown->selectedIndex);
+        const int newIndex = static_cast<int>(event.value);
+        if (newIndex == dropdown->selectedIndex) return false;
+        dropdown->SelectIndex(newIndex);
+        if (auto* textComp = world.try_get<UITextComponent>(event.target))
+        {
+            textComp->text = std::string(dropdown->GetSelectedLabel());
+        }
+        return true;
+    }
     return false;
 }
 
@@ -357,6 +407,12 @@ bool Engine::UIEventSystem::Update(const UIPointerInput& input)
     }
     else if (input.down && m_Pressed.entity == entt::null)
     {
+        if (target.entity == entt::null && scrollbar.entity == entt::null)
+        {
+            auto& reg = m_Scene->GetRegistry();
+            CloseAllDropdowns(reg);
+            SetTextInputFocus(reg, entt::null);
+        }
         if (scrollbar.entity != entt::null)
         {
             m_Scrollbar = scrollbar;
@@ -434,7 +490,42 @@ void Engine::UIEventSystem::Dispatch(const std::vector<UIPointerEvent>& events)
             }
             if (auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(reg, event.target))
             {
-                dropdown->ToggleOpen();
+                std::vector<UIElementLayout> clickLayouts;
+                if (UILayout::Build(reg, m_Canvas.entity, clickLayouts))
+                {
+                    const auto layoutIt = std::ranges::find(clickLayouts, event.target, &UIElementLayout::entity);
+                    if (layoutIt != clickLayouts.end() && layoutIt->size.y > 0.0f)
+                    {
+                        const auto& layout = *layoutIt;
+                        const glm::vec2 local(glm::inverse(layout.renderMatrix) * glm::vec4(event.position, 0.0f, 1.0f));
+                        const float popupHeight = dropdown->GetPopupHeight();
+                        const float localY = (local.y - 1.0f) * layout.size.y;
+
+                        if (dropdown->isOpen && local.x >= 0.0f && local.x <= 1.0f && localY >= 0.0f && localY < popupHeight)
+                        {
+                            const int hitIndex = dropdown->HitTestOptionIndex(localY);
+                            if (hitIndex >= 0)
+                            {
+                                const int oldIndex = dropdown->selectedIndex;
+                                dropdown->SelectIndex(hitIndex);
+                                if (auto* textComp = reg.try_get<UITextComponent>(event.target))
+                                {
+                                    textComp->text = std::string(dropdown->GetSelectedLabel());
+                                }
+                                UIPointerEvent valEvent = event;
+                                valEvent.type = EUIPointerEventType::ValueChanged;
+                                valEvent.previousValue = static_cast<float>(oldIndex);
+                                valEvent.value = static_cast<float>(hitIndex);
+                                m_OnPointerEvent.Broadcast(valEvent);
+                            }
+                        }
+                        else if (local.x >= 0.0f && local.x <= 1.0f && local.y >= 0.0f && local.y <= 1.0f)
+                        {
+                            dropdown->ToggleOpen();
+                            CloseAllDropdowns(reg, event.target);
+                        }
+                    }
+                }
             }
             else
             {
@@ -476,4 +567,182 @@ glm::vec4 Engine::UIEventSystem::GetButtonTint(const entt::registry& world, entt
     if (state && state->hovered) return state->pressed ? button->pressedColor : button->hoveredColor;
     if (state && state->keyboardFocused) return button->hoveredColor;
     return button->normalColor;
+}
+
+std::pair<entt::entity, Engine::UITextInputComponent*> Engine::UIEventSystem::GetFocusedTextInput(
+    entt::registry& world, const std::vector<UIElementLayout>& layouts) const
+{
+    if (m_KeyboardFocus.entity != entt::null)
+    {
+        auto* input = TryGetEnabledComponent<UITextInputComponent>(world, m_KeyboardFocus.entity);
+        if (input && input->isFocused) return { m_KeyboardFocus.entity, input };
+    }
+    for (const auto& layout : layouts)
+    {
+        auto* input = TryGetEnabledComponent<UITextInputComponent>(world, layout.entity);
+        if (input && input->isFocused) return { layout.entity, input };
+    }
+    return { entt::null, nullptr };
+}
+
+bool Engine::UIEventSystem::HasFocusedTextInput() const
+{
+    if (!m_Scene || !Exists(m_Canvas)) return false;
+    auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+    return GetFocusedTextInput(world, layouts).second != nullptr;
+}
+
+bool Engine::UIEventSystem::HasOpenDropdown() const
+{
+    if (!m_Scene || !Exists(m_Canvas)) return false;
+    const auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+    for (const auto& layout : layouts)
+    {
+        const auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, layout.entity);
+        if (dropdown && dropdown->isOpen) return true;
+    }
+    return false;
+}
+
+bool Engine::UIEventSystem::HandleKeyInput(EUIKey key, UIKeyModifiers mods, std::string* clipboardOut, std::string_view clipboardIn)
+{
+    if (m_Processing || !m_Scene->IsActive() || m_Scene->IsPaused() || !Exists(m_Canvas)) return false;
+    UIProcessingScope scope(m_Processing);
+    auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+
+    if (key == EUIKey::Escape)
+    {
+        bool handled = false;
+        for (const auto& layout : layouts)
+        {
+            if (auto* drop = TryGetEnabledComponent<UIDropdownComponent>(world, layout.entity))
+            {
+                if (drop->isOpen)
+                {
+                    drop->Close();
+                    handled = true;
+                }
+            }
+        }
+        auto [targetEntity, textInput] = GetFocusedTextInput(world, layouts);
+        if (textInput && textInput->isFocused)
+        {
+            HandleTextInputKey(*textInput, EUIKey::Escape, mods, clipboardOut, clipboardIn);
+            SetTextInputFocus(world, entt::null);
+            SetKeyboardFocus({});
+            handled = true;
+        }
+        return handled;
+    }
+
+    auto [targetEntity, textInput] = GetFocusedTextInput(world, layouts);
+    if (!textInput || !textInput->isFocused) return false;
+
+    const std::string oldText = textInput->text;
+    const bool result = HandleTextInputKey(*textInput, key, mods, clipboardOut, clipboardIn);
+    if (result)
+    {
+        if (!textInput->isFocused)
+        {
+            SetTextInputFocus(world, entt::null);
+            SetKeyboardFocus({});
+        }
+
+        if (textInput->text != oldText)
+        {
+            if (auto* textComp = world.try_get<UITextComponent>(targetEntity)) textComp->text = textInput->text;
+
+            const auto* id = world.try_get<IDComponent>(targetEntity);
+            UIPointerEvent event{
+                EUIPointerEventType::ValueChanged, targetEntity, id ? id->id : 0,
+                m_Canvas.entity, m_Canvas.id, m_Position, glm::vec2(0.0f), true,
+                static_cast<float>(oldText.size()), static_cast<float>(textInput->text.size())
+            };
+            m_OnPointerEvent.Broadcast(event);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool Engine::UIEventSystem::HandleTextInput(std::string_view utf8Text)
+{
+    if (m_Processing || !m_Scene->IsActive() || m_Scene->IsPaused() || !Exists(m_Canvas) || utf8Text.empty())
+        return false;
+    UIProcessingScope scope(m_Processing);
+    auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+
+    auto [targetEntity, textInput] = GetFocusedTextInput(world, layouts);
+    if (!textInput || !textInput->isFocused || textInput->readOnly) return false;
+
+    const std::string oldText = textInput->text;
+    if (textInput->InsertUtf8(utf8Text))
+    {
+        if (auto* textComp = world.try_get<UITextComponent>(targetEntity)) textComp->text = textInput->text;
+
+        const auto* id = world.try_get<IDComponent>(targetEntity);
+        UIPointerEvent event{
+            EUIPointerEventType::ValueChanged, targetEntity, id ? id->id : 0,
+            m_Canvas.entity, m_Canvas.id, m_Position, glm::vec2(0.0f), true,
+            static_cast<float>(oldText.size()), static_cast<float>(textInput->text.size())
+        };
+        m_OnPointerEvent.Broadcast(event);
+        return true;
+    }
+    return false;
+}
+
+bool Engine::UIEventSystem::HandleImeComposition(std::string_view composition, bool commit)
+{
+    if (m_Processing || !m_Scene->IsActive() || m_Scene->IsPaused() || !Exists(m_Canvas)) return false;
+    UIProcessingScope scope(m_Processing);
+    auto& world = m_Scene->GetRegistry();
+    std::vector<UIElementLayout> layouts;
+    if (!UILayout::Build(world, m_Canvas.entity, layouts)) return false;
+
+    auto [targetEntity, textInput] = GetFocusedTextInput(world, layouts);
+    if (!textInput || !textInput->isFocused || textInput->readOnly) return false;
+
+    const auto* id = world.try_get<IDComponent>(targetEntity);
+    if (commit)
+    {
+        const std::string oldText = textInput->text;
+        bool modified = false;
+        if (!composition.empty())
+        {
+            textInput->CancelImeComposition();
+            modified = textInput->InsertUtf8(composition);
+        }
+        else if (!textInput->imeComposition.empty())
+        {
+            textInput->CommitImeComposition();
+            modified = (textInput->text != oldText);
+        }
+        if (modified)
+        {
+            if (auto* textComp = world.try_get<UITextComponent>(targetEntity)) textComp->text = textInput->text;
+
+            UIPointerEvent event{
+                EUIPointerEventType::ValueChanged, targetEntity, id ? id->id : 0,
+                m_Canvas.entity, m_Canvas.id, m_Position, glm::vec2(0.0f), true,
+                static_cast<float>(oldText.size()), static_cast<float>(textInput->text.size())
+            };
+            m_OnPointerEvent.Broadcast(event);
+            return true;
+        }
+        return false;
+    }
+    else
+    {
+        textInput->SetImeComposition(composition);
+        return true;
+    }
 }

@@ -3,6 +3,7 @@
 #include "UILayout.h"
 #include "Delegate.h"
 #include "Macro.h"
+#include "UIAdvancedWidgetRuntime.h"
 #include <optional>
 
 BEGIN(Engine)
@@ -60,6 +61,12 @@ public:
     bool HasPointerCapture() const { return m_Pressed.entity != entt::null || m_Scrollbar.entity != entt::null; }
     static glm::vec4 GetButtonTint(const entt::registry& world, entt::entity entity);
 
+    bool HandleKeyInput(EUIKey key, UIKeyModifiers mods = {}, std::string* clipboardOut = nullptr, std::string_view clipboardIn = {});
+    bool HandleTextInput(std::string_view utf8Text);
+    bool HandleImeComposition(std::string_view composition, bool commit = false);
+    bool HasFocusedTextInput() const;
+    bool HasOpenDropdown() const;
+
 private:
     friend class RuntimeUIInput;
     struct Target
@@ -68,6 +75,8 @@ private:
         uint64 id = 0;
         bool operator==(const Target&) const = default;
     };
+    std::pair<entt::entity, UITextInputComponent*> GetFocusedTextInput(
+        entt::registry& world, const std::vector<UIElementLayout>& layouts) const;
     bool Exists(Target target) const;
     bool CanInteract(Target target, const std::vector<UIElementLayout>& layouts) const;
     Target HitTest(const glm::vec2& point, const std::vector<UIElementLayout>& layouts, bool& blocked,
