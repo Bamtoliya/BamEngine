@@ -391,6 +391,158 @@ namespace
         return true;
     }
 
+    bool CheckAirborneFallNoEarlySnap(KinematicCharacterSystem& system, const ColliderShape& floorShape, f32 floorCenterY, f32 dt)
+    {
+        std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+        if (!scene) return false;
+        scene->SetActive(true);
+        auto& world = scene->GetRegistry();
+        const auto floor = scene->CreateEntity().GetEntityHandle();
+        const auto character = scene->CreateEntity().GetEntityHandle();
+        if (!SetPosition(world, floor, vec3(0.0f, floorCenterY, 0.0f)) ||
+            !SetPosition(world, character, vec3(0.0f, 1.0f, 0.0f)) ||
+            !world.emplace<ColliderComponent>(floor).SetShape(floorShape))
+            return false;
+
+        auto& controller = world.emplace<CharacterControllerComponent>(character);
+        controller.AutoUpdateAnimator = false;
+        controller.IsGrounded = false;
+        controller.Velocity = vec3(0.0f, -2.0f, 0.0f);
+        const auto& transform = world.get<TransformComponent>(character);
+
+        int airborneFrames = 0;
+        for (f32 elapsed = 0.0f; elapsed < 2.0f; elapsed += dt)
+        {
+            const f32 previousY = transform.position.y;
+            const f32 fallDistance = glm::max(0.0f, -(controller.Velocity.y + controller.Gravity * dt) * dt);
+            system.OnUpdate(world, { scene.get() }, dt);
+
+            if (controller.IsGrounded)
+            {
+                return airborneFrames >= 2 &&
+                    previousY <= fallDistance + 0.001f &&
+                    glm::abs(transform.position.y) <= 0.001f &&
+                    controller.GroundEntity == floor &&
+                    controller.Velocity.y == 0.0f;
+            }
+            if (controller.GroundEntity != entt::null ||
+                transform.position.y >= previousY ||
+                transform.position.y < previousY - fallDistance - 0.001f ||
+                transform.position.y < -0.001f)
+                return false;
+            ++airborneFrames;
+        }
+        return false;
+    }
+
+    bool CheckRamp30NoPenetration(KinematicCharacterSystem& system, f32 dt)
+    {
+        std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+        if (!scene) return false;
+        scene->SetActive(true);
+        const auto ramp = AddSurface(*scene, BoxShape{}, vec3(0.0f), vec3(4.0f, 0.2f, 12.0f), 30.0f);
+        if (ramp == entt::null) return false;
+
+        auto& world = scene->GetRegistry();
+        const auto character = scene->CreateEntity().GetEntityHandle();
+        auto& controller = world.emplace<CharacterControllerComponent>(character);
+        controller.AutoUpdateAnimator = false;
+
+        const auto& rampTransform = world.get<TransformComponent>(ramp);
+        const vec3 normal = rampTransform.rotation * vec3(0.0f, 1.0f, 0.0f);
+        const vec3 top = rampTransform.position + normal * 0.1f;
+        const vec3 start = top + normal * controller.Radius - controller.GetWorldCapsule(vec3(0.0f)).pointA;
+        if (!SetPosition(world, character, start)) return false;
+
+        const auto& transform = world.get<TransformComponent>(character);
+        const vec3 downhill = glm::normalize(vec3(normal.x, 0.0f, normal.z));
+        const vec3 lateral = glm::normalize(glm::cross(vec3(0.0f, 1.0f, 0.0f), downhill));
+
+        for (f32 elapsed = 0.0f; elapsed < 1.0f; elapsed += dt)
+        {
+            const f32 previousY = transform.position.y;
+            vec3 moveDir = -downhill;
+            if (elapsed >= 0.8f)
+                moveDir = glm::normalize(downhill + lateral);
+            else if (elapsed >= 0.4f)
+                moveDir = downhill;
+
+            controller.Move(moveDir);
+            system.OnUpdate(world, { scene.get() }, dt);
+
+            const auto capsule = controller.GetWorldCapsule(transform.position);
+            const f32 separation = glm::dot(normal, capsule.pointA - top) - capsule.radius;
+            if (!controller.IsGrounded || controller.GroundEntity != ramp ||
+                separation < -0.002f || separation > 0.01f)
+                return false;
+
+            if (elapsed < 0.4f && transform.position.y <= previousY)
+                return false;
+            if (elapsed >= 0.4f && elapsed < 0.8f && transform.position.y >= previousY)
+                return false;
+        }
+        return true;
+    }
+
+    bool CheckSoftLandingContinuationClamp(KinematicCharacterSystem& system, const MeshShape& floorShape, f32 dt)
+    {
+        std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+        if (!scene) return false;
+        scene->SetActive(true);
+        const auto floor = AddSurface(*scene, floorShape, vec3(0.0f), vec3(20.0f, 1.0f, 20.0f));
+        const auto ramp = AddSurface(*scene, BoxShape{}, vec3(0.0f, 0.15f, 0.0f), vec3(1.6f, 0.2f, 4.0f), 12.0f);
+        if (floor == entt::null || ramp == entt::null) return false;
+
+        auto& world = scene->GetRegistry();
+        const auto character = scene->CreateEntity().GetEntityHandle();
+        auto& controller = world.emplace<CharacterControllerComponent>(character);
+        controller.AutoUpdateAnimator = false;
+
+        const auto& rampTransform = world.get<TransformComponent>(ramp);
+        const vec3 normal = rampTransform.rotation * vec3(0.0f, 1.0f, 0.0f);
+        const vec3 top = rampTransform.position + normal * 0.1f;
+        const vec3 start = top + normal * controller.Radius - controller.GetWorldCapsule(vec3(0.0f)).pointA;
+        if (!SetPosition(world, character, start)) return false;
+
+        const auto& transform = world.get<TransformComponent>(character);
+        const f32 maxSoftDrop = glm::max(0.005f, 3.5f * dt) + 0.002f;
+        bool touchedRamp = false;
+        int floorSoftFrames = 0;
+
+        for (f32 elapsed = 0.0f; elapsed < 2.0f; elapsed += dt)
+        {
+            const f32 previousY = transform.position.y;
+            controller.Move(vec3(1.0f, 0.0f, 0.0f));
+            system.OnUpdate(world, { scene.get() }, dt);
+
+            if (transform.position.y < -0.001f)
+                return false;
+
+            if (!touchedRamp)
+            {
+                if (controller.IsGrounded && controller.GroundEntity == ramp &&
+                    glm::abs(controller.GroundAngle - 12.0f) <= 1.0f)
+                {
+                    touchedRamp = true;
+                }
+                continue;
+            }
+
+            if (controller.GroundEntity == floor)
+            {
+                ++floorSoftFrames;
+                if (previousY - transform.position.y > maxSoftDrop)
+                    return false;
+                if (controller.IsGrounded && glm::abs(transform.position.y) <= 0.002f &&
+                    controller.GroundAngle < 1.0f && !controller.IsSoftLanding)
+                {
+                    return floorSoftFrames >= 2;
+                }
+            }
+        }
+        return false;
+    }
+
     bool CheckMovingPlatformInheritance(KinematicCharacterSystem& system, f32 dt)
     {
         std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
@@ -780,6 +932,22 @@ int main()
         if (!CheckRampToFloorSoftLanding(*system, meshFloor, dt))
         {
             std::cerr << "Ramp-to-floor transition dropped abruptly or penetrated the floor. dt=" << dt << '\n';
+            return 1;
+        }
+        if (!CheckAirborneFallNoEarlySnap(*system, boxFloor, -0.5f, dt) ||
+            !CheckAirborneFallNoEarlySnap(*system, meshFloor, 0.0f, dt))
+        {
+            std::cerr << "Airborne fall snapped early before reaching the floor. dt=" << dt << '\n';
+            return 1;
+        }
+        if (!CheckRamp30NoPenetration(*system, dt))
+        {
+            std::cerr << "30-degree ramp traversal penetrated or detached from the ramp surface. dt=" << dt << '\n';
+            return 1;
+        }
+        if (!CheckSoftLandingContinuationClamp(*system, meshFloor, dt))
+        {
+            std::cerr << "Soft landing vertical snap clamping aborted early on ramp-to-floor transition. dt=" << dt << '\n';
             return 1;
         }
         if (!CheckMovingPlatformInheritance(*system, dt))

@@ -92,6 +92,7 @@ namespace Engine
         bool IsRunning = false;
         bool JumpRequested = false;
         bool IsStepping = false;
+        bool IsSoftLanding = false;
         vec3 GroundNormal = vec3(0.0f, 1.0f, 0.0f);
         f32 GroundAngle = 0.0f;
 
