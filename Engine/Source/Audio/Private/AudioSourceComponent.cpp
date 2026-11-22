@@ -10,6 +10,7 @@ namespace Engine
 
 	AudioSourceComponent::AudioSourceComponent(const AudioSourceComponent& other)
 		: clip(other.clip)
+		, bus(other.bus)
 		, volume(other.volume)
 		, pitch(other.pitch)
 		, loop(other.loop)
@@ -33,6 +34,7 @@ namespace Engine
 		{
 			StopImmediate();
 			clip = other.clip;
+			bus = other.bus;
 			volume = other.volume;
 			pitch = other.pitch;
 			loop = other.loop;
@@ -53,6 +55,7 @@ namespace Engine
 
 	AudioSourceComponent::AudioSourceComponent(AudioSourceComponent&& other) noexcept
 		: clip(std::move(other.clip))
+		, bus(other.bus)
 		, volume(other.volume)
 		, pitch(other.pitch)
 		, loop(other.loop)
@@ -78,6 +81,7 @@ namespace Engine
 		{
 			StopImmediate();
 			clip = std::move(other.clip);
+			bus = other.bus;
 			volume = other.volume;
 			pitch = other.pitch;
 			loop = other.loop;

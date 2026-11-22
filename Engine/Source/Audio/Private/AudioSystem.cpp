@@ -168,7 +168,11 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 				{
 					if (source.m_Channel) source.m_Channel->stop();
 
-					FMOD::ChannelGroup* group = clipRes->IsStream() ? AudioManager::Get().GetBGMGroup() : AudioManager::Get().GetSFXGroup();
+					FMOD::ChannelGroup* group = AudioManager::Get().GetBusGroup(source.bus);
+					if (!group)
+					{
+						group = clipRes->IsStream() ? AudioManager::Get().GetBGMGroup() : AudioManager::Get().GetSFXGroup();
+					}
 					FMOD_RESULT res = fmodSystem->playSound(clipRes->GetFMODSound(), group, true, &source.m_Channel);
 					if (res == FMOD_OK && source.m_Channel)
 					{
@@ -210,6 +214,14 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 			FMOD_RESULT res = source.m_Channel->isPlaying(&isPlaying);
 			if (res == FMOD_OK && isPlaying)
 			{
+				FMOD::ChannelGroup* targetGroup = AudioManager::Get().GetBusGroup(source.bus);
+				FMOD::ChannelGroup* currentGroup = nullptr;
+				source.m_Channel->getChannelGroup(&currentGroup);
+				if (targetGroup && currentGroup != targetGroup)
+				{
+					source.m_Channel->setChannelGroup(targetGroup);
+				}
+
 				source.m_Channel->setVolume(source.volume);
 				source.m_Channel->setPitch(source.pitch);
 				if (source.is3D)

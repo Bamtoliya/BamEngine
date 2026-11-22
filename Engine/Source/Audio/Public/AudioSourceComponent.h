@@ -3,6 +3,7 @@
 #include "ComponentAnnotations.h"
 #include "ResourceHandle.h"
 #include "AudioClip.h"
+#include "AudioMixer.h"
 
 namespace FMOD
 {
@@ -30,6 +31,9 @@ namespace Engine
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_AUDIO_CLIP"))
 		ResourceHandle<AudioClip> clip;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_AUDIO_BUS"))
+		EAudioBus bus = EAudioBus::SFX;
 
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_VOLUME"))
 		f32 volume = 1.f;
