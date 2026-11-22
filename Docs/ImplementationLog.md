@@ -2,6 +2,15 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 병렬 기능 스프린트(티어 1~3) 및 회귀 수정·전체 CTest 통과
+
+- **빌드·워커 격리 및 씬 로딩 모달 (`a388afbe`, `9516c6cb`, `5edd0f99`, `471f1fe3`)**: `BamAssetWorker` Phase 4 장애 격리 검증(`AssetWorkerFaultIsolationCheck`)·임포트 푸터 진행률 집계(`ImportProgressScope`)와 비차단 단계형 씬 로딩 모달(`SceneLoadState`, 150ms 지연 표시)을 구현하고, 타임라인/에디터 독립 헤더·소멸자 누락 빌드 오류를 수정했다.
+- **셰이더·게임플레이·Shipping 기반 (`c6c559ad`, `251d0030`, `4ab87326`)**: Shader Graph 노드 팔레트 확장 및 `Normal`/`OpacityMask` 핀 연결, 게임플레이 핵심 컴포넌트(`HealthComponent`, `HitboxComponent`, `InteractableComponent`) 및 그래프 노드 추가, `BAM_SHIPPING` 가드·공용 `RuntimeSystemManifest`·클라이언트 모듈 로드 오류 처리를 반영했다.
+- **프리팹·ECS UI·애니메이션 2차 병렬 스프린트 (`bdeb7b13`: `5cbb786e`, `e25fe2ec`, `8cf6970a`)**: 프리팹 내부 `entt::entity` 참조 리맵·Apply All/Unpack/Undo 계약 완성, ECS UI 실전 위젯(`CanvasScalerComponent`, `UITextInputComponent` IME, `UIDropdownComponent`, `UIMultilineTextLayout`), 2-Bone/Look-At IK·Root Motion·`AnimatorGraphPanel` 다중 레이어/PIE 실시간 동기화를 반영했다.
+- **2D 배칭·물리·비동기 열기·플러그인 3차 병렬 스프린트 (`5ad214a5`: `006fea59`, `dd090d7b`, `ca744c96`)**: 2D 스프라이트·타일맵 실제 GPU 배칭 및 아틀라스 베이킹·`SpatialBroadphase`·`PhysicsSystem::Sweep`/`OverlapAll` API, `AsyncResourceOpenService`·`ModelEditor` DCC 프리셋/옵션 영속화(사이드카), `Plugin://` 가상 URI 마운트·원클릭 CMake 플러그인 소스 빌드/게시를 구현했다.
+- **빌드·CTest 회귀 수정 및 작업 트리 정리 (`1d71d773`, `4e9ff13b`, `dbdaa188`, `44539364`, `e0eebb53`, `61f4594f`)**: Sphere-OBB 오버랩 래핑, `PlatformPath` 오버로드 모호성, `SpriteBatchKey` 집계 순서, 2D Box 브로드페이즈 월드 AABB 변환(`ComputePhysicsShapeWorldAABB2D`), `KinematicCharacterCheck`/`UIInteractionCheck`/`UILayoutCheck`/`AnimatorGraphPanel`/`ReflectionArchiveCheck` 결함을 수정하고 프로젝트 로캘 카탈로그·UI 텍스트/설정 변경을 논리 커밋으로 정리했다.
+- **검증 현황**: 사용자가 `x64-ninja-debug` 전체 빌드 및 전체 CTest 통과를 확인했다. `x64-release`, `BAMENGINE_WITH_EDITOR=OFF` 독립 Client, PIE·실환경 UI/GPU 수동 검증은 후속 검증 범위다.
+
 ### [2026-11-22] DXR 방향광 그림자 1차
 
 - **장치와 셰이더.** D3D12 장치를 고성능 어댑터에서 만들고 DXR Tier와 최고 Shader Model을 조회한다. VRAM 통계도 실제 장치의 어댑터를 사용한다. `RTCS` 셰이더는 `cs_6_5` DXIL만 생성한다.
@@ -14,6 +23,33 @@ This document tracks implementation details, architectural decisions, and techni
 - **계측 관찰.** 사용자가 메트릭 패널에서 가속 구조 빌드와 Scene·Game View 마스크 항목이 표시되고, 레이트레이싱을 끄면 사라지는 것을 확인했다. 계측 수정 후 화면 한 장에서 가속 구조는 CPU 0.38ms·GPU 0.08ms, Game View 마스크는 CPU 0.06ms·GPU 0.04ms, Scene View 마스크는 CPU 0.08ms·GPU 0.04ms였다. 빌드 구성, 해상도와 씬을 통제하지 않은 평활값이며 섀도맵과의 성능 비교가 아니다.
 - **GPU 시간 0 표시 수정.** 수정 전에는 마스크 GPU 시간이 0.00ms, 가속 구조가 0.02ms로 보였다. 타임스탬프를 회수할 때마다 모든 패스 결과를 지워, 프레임 제한으로 그 프레임에 제출하지 않은 뷰포트의 패스가 0으로 조회됐다. 패스별 마지막 결과를 유지하고 600회 회수 동안 갱신되지 않은 항목만 지우게 했으며, 이후 위 값이 표시됐다. GPU 합계는 회수한 프레임에서 실행한 최상위 패스만 더하므로 패스별 값의 합과 다를 수 있다.
 - **미검증.** 계측 변경 후의 CTest 결과, 성능 비교, 설정 네 곳의 조합별 화면 확인 기록, `x64-release`와 독립 Client 패키지, 다른 GPU·SDL GPU 대체 경로는 확인하지 않았다. 실험 씬 `Assets/Scenes/DXRShadowLab.bamscene.json`은 Git 밖에 있다.
+
+### [2026-11-22] UI 텍스트 번역 사용 체크박스
+
+- 체크를 끄면 텍스트 원문을 그리며, 로캘 키 값은 유지한다. 인스펙터는 체크가 켜져 있을 때만 키 입력란을 표시한다.
+- 캔버스와 인스펙터에서 새로 추가한 UIText는 번역을 끈 상태로 시작한다. 체크 상태가 없는 이전 레코드는 기존 로캘 키를 계속 적용한다.
+- UILayoutCheck에 이전 레코드 기본값과 체크 해제 상태의 키 보존 사례를 추가했다. 빌드·CTest·에디터 실행은 사용자 확인 대기다. [로캘 텍스트 사용](UIEditorFoundation.md#로캘-텍스트-사용)
+
+### [2026-11-22] 기존 UI 텍스트 씬 호환과 프로젝트 번역
+
+- UIText의 글꼴과 세로 정렬을 선택적 Archive 필드로 지정했다. 두 필드가 없는 이전 레코드를 기본값으로 복원하는 사례를 UILayoutCheck에 추가했다.
+- UI 텍스트 인스펙터에서 설치 글꼴을 검색하고 선택한다. 결과는 UI 뷰 캔버스에 표시한다.
+- 프로젝트 카탈로그를 Engine·Editor 사전과 별도로 읽고, 프로젝트 설정에 가져오기·다시 읽기와 파일 변경 감지를 연결했다. Windows Client 시작과 내보내기에 카탈로그를 포함하며 샘플 재시작 문구는 프로젝트 Game.csv로 옮겼다.
+- 호출부와 UTF-8 CSV 원본을 정적으로 확인했다. 빌드·CTest·실환경 핫로드와 독립 Client 표시는 사용자 확인 대기다. [UI 편집기](UIEditorFoundation.md)
+
+### [2026-11-22] UI 뷰 편집과 텍스트 로캘 개선
+
+- 텍스트 상자를 UI 뷰에서 직접 선택·이동하고 네 모서리 크기 조절을 할 수 있다. 텍스트에는 Windows 설치 글꼴 이름과 세로 정렬을 추가했다.
+- UI 뷰의 메뉴 툴바와 퀵액세스 바를 나눴다. 캔버스 배율과 상호작용·화면 맞춤 동작을 퀵액세스에서 사용한다.
+- Engine CSV에서 이전 그룹을 상속했던 번역을 원래 키로 복구하고, Rect Transform의 크기와 배율 라벨을 구분했다. 로캘 텍스트 사용법을 UI 문서에 기록했다.
+- 빌드, 생성 로캘과 Editor 실행 확인은 사용자 검증 대기다. [UI 편집기](UIEditorFoundation.md)
+
+
+### [2026-11-22] 게임 UI 병합 후 MSVC 빌드 오류 수정
+
+- UI 텍스트는 공개 로캘 조회에 대체 문구를 전달한다. 번역을 찾지 못하면 인스펙터의 텍스트를 표시한다.
+- Canvas 입력 라우터는 이벤트 처리기의 단독 소유자다. 복사 생성과 복사 대입을 금지해 MSVC에서 DLL 내보내기 시 삭제된 벡터 원소 복사를 생성하지 않게 했다.
+- 사용자가 제공한 MSVC 오류와 호출부를 대조했다. 수정 후 빌드와 실행 검증은 사용자 확인 대기다.
 
 ### [2026-11-22] 엔진 통계 대시보드 반응형 배치
 

@@ -1,6 +1,6 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-20)
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-22)
 - 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile 및 독립 클라이언트 패키징/종료 수명주기 안정화에 이어, 2026-11-19~11-20 머티리얼 에디터 언리얼 엔진 스타일 3-Pane 레이아웃 개편, 셰이더 그래프 독립 소유권 완전 전환, 썸네일 일체형 리소스 피커 및 파라미터/패스별 셰이더 UI 완성, 프리팹 Revert All 안전성 강화(외부 엔티티 참조 방어 검증), D3D12 파이프라인 생성 안정화 및 `SceneArchiveCheck` 픽스 후 `x64-ninja-debug` CTest 44개 전체 통과(44/44 Passed)를 반영 완료했다.
 - 최신 근거: [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md), [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md), 최신 커밋선(`fcda4887` -> `1cd11857` -> `11abec04` -> `c2058594`), [ImplementationLog.md](ImplementationLog.md) 2026-11-20 항목. **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
@@ -627,10 +627,13 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 - 2026-11-07 기준 CMake Debug 빌드 및 CTest 전체 29개(29/29 Passed) 통과 확인 완료; 2026-11-14 `spirv_cross_*` 순서 수정 후 `x64-debug` CTest 36/36 통과, `B01~B03` 코드 반영 후 CTest 36/36 통과, `B05` 가드 4건 검증 완료, 2026-11-15 `A06 본체` 타일 컬링 초과 폴백 및 `MAX_LIGHTS 1024` 반영 후 `x64-debug` 빌드 및 CTest 36/36 통과 확인 완료; 2026-11-15 2D Phase 5 스프라이트 인스턴싱 드로우콜 배칭 및 Unlit 머티리얼·Fallback, 패키징 에셋 검증 픽스, 런타임 종료 수명주기 크래시 해결 후 `x64-debug` CTest 36/36 통과 및 독립 패키지 클라이언트 정상 종료 확인 완료; 2026-11-15 에디터 비정상 종료 진단(CrashHandler/미니덤프/`.crash.json`), 2단계 작업 복원(RecoveryManager/세션 락/복원 모달/무손실 씬 복원) 실환경 검증 및 프로젝트 루트 기준 경로 일원화 완료; 2026-11-15 복합 비주얼 이펙트(후보 B) 뷰포트 스카이박스 누출 차단, 타임라인 0.1x 줌아웃/패닝, 프리뷰 모션, D3D12 클리어 예외 해결, 3단계 배경 프리셋 및 차콜 PBR 바닥 슬래브(블룸 포화 제거 & 플래시 반사 극대화) 실환경 검증 완료(`x64-release`·실 오디오/UI/GPU 수동 비교·Emscripten/Tint 실 툴체인 및 Phase 5 환경 고도화는 미검증).
 - 2026-11-19 `x64-ninja-debug`(Ninja 단일 구성) 모두 빌드 후 CTest 44개 전체 통과를 사용자가 확인했다.
 - 2026-11-20 `fcda4887`~`c2058594` 커밋(프리팹 Revert All 안전성 강화, D3D12 파이프라인 생성 안정화, 머티리얼 에디터 완전 통합/3분할 구축, 설계 문서화 2건) 및 `SceneArchiveCheck` 핫픽스(`AddSpatialEntity`를 통한 트랜스폼 컴포넌트 보장) 후 `x64-ninja-debug` 모두 빌드 및 CTest 44개 전체 통과(`44/44 Passed`)를 사용자가 확인했다.
+- 2026-11-22 병렬 기능 스프린트(`a388afbe`~`61f4594f`: 셰이더 그래프 핀/노드 확장, 게임플레이 컴포넌트/노드, `BAM_SHIPPING` 가드·`RuntimeSystemManifest`, 프리팹 내부 `entt::entity` 리맵/계약, ECS 게임 UI 확장, 애니메이션 IK/Root Motion/PIE 동기화, 2D GPU 배칭·아틀라스·`SpatialBroadphase`·씬 `Sweep`/`OverlapAll`, `AsyncResourceOpenService`·DCC 프리셋 영속화, `Plugin://` 가상 URI·CMake 소스 빌드/게시, 프로젝트 로캘 카탈로그 및 UI 텍스트 폰트·번역 토글) 및 회귀 수정(`dbdaa188`, `e0eebb53`) 후 `x64-ninja-debug` 전체 빌드 및 전체 CTest 통과를 사용자가 확인했다. (`x64-release`, `BAMENGINE_WITH_EDITOR=OFF` 독립 Client, PIE·실환경 UI/GPU 수동 검증은 후속 검증 범위.)
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
 
-### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-20 갱신)
+### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-22 갱신)
+
+2026-11-22 병렬 스프린트(`a388afbe`~`61f4594f`)를 통해 Render M3 DXR 1차, Shader Graph `Normal`/`OpacityMask` 핀·노드, `HealthComponent`/`HitboxComponent`/`InteractableComponent`, `BAM_SHIPPING` 가드·`RuntimeSystemManifest`, 프리팹 내부 `entt::entity` 리맵·계약, ECS UI 위젯 확장, IK·Root Motion·AnimatorGraph PIE 동기화, 2D GPU 배칭·`SpatialBroadphase`·씬 `Sweep`/`OverlapAll`, `ModelEditor` 비동기 열기·DCC 프리셋, `Plugin://` 및 원클릭 CMake 빌드/게시, 프로젝트 로캘 카탈로그가 코드에 반영되었고 `x64-ninja-debug` 전체 빌드·CTest 통과를 확인했다. 이후 우선 남은 코어-에디터 연결 과제는 (1) 신규 ECS UI 위젯(`CanvasScalerComponent`, `UITextInputComponent`, `UIDropdownComponent`, `UIMultilineTextLayout`)의 `UIRenderSystem`/에디터 프리셋 연결, (2) Shader Graph 범용 `TextureSample` 노드, (3) `ModelImportModal` 실시간 3D 프리뷰 임베딩 및 Phase 6 폴더 정리, (4) `AsyncResourceOpenService` 타 리소스 편집기 확산과 `MaterialFeatureFlags`/DXR M3 반사 확장이다.
 
 2026-11-22 사용자 선택으로 Render M3의 DXR 방향광 그림자 1차를 진행했다. 구현 범위와 남은 검증은 [RenderingDevelopmentPlan](RenderingDevelopmentPlan.md#m3-dxr-그림자--반사)을 따른다.
 
