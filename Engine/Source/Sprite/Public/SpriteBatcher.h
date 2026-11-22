@@ -23,12 +23,12 @@ namespace Engine
 
 	struct SpriteBatchKey
 	{
-		int32 sortingLayerID = 0;
-		int32 orderInLayer = 0;
 		MaterialInterface* material = nullptr;
 		Texture* texture = nullptr;
-		Mesh* mesh = nullptr;
 		uint32 passID = 0;
+		int32 sortingLayerID = 0;
+		int32 orderInLayer = 0;
+		Mesh* mesh = nullptr;
 
 		bool operator==(const SpriteBatchKey& other) const
 		{

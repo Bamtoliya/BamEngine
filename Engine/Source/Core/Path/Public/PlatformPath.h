@@ -59,12 +59,8 @@ namespace Engine
         static bool IsEditorUri(const std::string& uri);
         static bool IsProjectUri(const std::wstring& uri);
         static bool IsProjectUri(const std::string& uri);
-        static bool IsPluginUri(const std::wstring& uri);
-        static bool IsPluginUri(const std::string& uri);
         static bool IsPluginUri(std::wstring_view uri);
         static bool IsPluginUri(std::string_view uri);
-        static bool IsVirtualUri(const std::wstring& uri);
-        static bool IsVirtualUri(const std::string& uri);
         static bool IsVirtualUri(std::wstring_view uri);
         static bool IsVirtualUri(std::string_view uri);
 
@@ -74,8 +70,6 @@ namespace Engine
         static void ClearPluginMounts();
         static bool HasPluginMount(std::string_view pluginId);
         static std::filesystem::path GetPluginMountRoot(std::string_view pluginId);
-        static std::filesystem::path ResolvePluginUri(const std::wstring& uri);
-        static std::filesystem::path ResolvePluginUri(const std::string& uri);
         static std::filesystem::path ResolvePluginUri(std::wstring_view uri);
         static std::filesystem::path ResolvePluginUri(std::string_view uri);
 

@@ -33,7 +33,7 @@ namespace Engine
 	{
 		if (!material || !texture) return;
 
-		const SpriteBatchKey key{ sortingLayerID, orderInLayer, material, texture, mesh, passID };
+		const SpriteBatchKey key{ material, texture, passID, sortingLayerID, orderInLayer, mesh };
 		auto& bucket = m_Buckets[key];
 
 		const vec2 origin = -pivot * size;
@@ -97,12 +97,12 @@ namespace Engine
 		if (!command.material || !command.texture) return;
 
 		const SpriteBatchKey key{
-			command.sortingLayerID,
-			command.orderInLayer,
 			command.material,
 			command.texture,
-			command.mesh,
-			passID
+			passID,
+			command.sortingLayerID,
+			command.orderInLayer,
+			command.mesh
 		};
 		auto& bucket = m_Buckets[key];
 		bucket.commands.push_back(command);

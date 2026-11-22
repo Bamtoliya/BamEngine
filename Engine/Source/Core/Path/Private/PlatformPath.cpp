@@ -334,16 +334,6 @@ namespace Engine
         return StartsWithIgnoreCase(uri, "project://") || StartsWithIgnoreCase(uri, "asset://");
     }
 
-    bool PlatformPath::IsPluginUri(const std::wstring& uri)
-    {
-        return StartsWithIgnoreCase(uri, L"plugin://");
-    }
-
-    bool PlatformPath::IsPluginUri(const std::string& uri)
-    {
-        return StartsWithIgnoreCase(uri, "plugin://");
-    }
-
     bool PlatformPath::IsPluginUri(std::wstring_view uri)
     {
         return StartsWithIgnoreCase(uri, L"plugin://");
@@ -352,16 +342,6 @@ namespace Engine
     bool PlatformPath::IsPluginUri(std::string_view uri)
     {
         return StartsWithIgnoreCase(uri, "plugin://");
-    }
-
-    bool PlatformPath::IsVirtualUri(const std::wstring& uri)
-    {
-        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri) || IsPluginUri(uri);
-    }
-
-    bool PlatformPath::IsVirtualUri(const std::string& uri)
-    {
-        return IsEngineUri(uri) || IsEditorUri(uri) || IsProjectUri(uri) || IsPluginUri(uri);
     }
 
     bool PlatformPath::IsVirtualUri(std::wstring_view uri)
@@ -484,16 +464,6 @@ namespace Engine
         if (!IsPluginUri(uri)) return {};
         std::wstring wstr(uri.begin(), uri.end());
         return ResolvePluginUri(std::wstring_view(wstr));
-    }
-
-    std::filesystem::path PlatformPath::ResolvePluginUri(const std::wstring& uri)
-    {
-        return ResolvePluginUri(std::wstring_view(uri));
-    }
-
-    std::filesystem::path PlatformPath::ResolvePluginUri(const std::string& uri)
-    {
-        return ResolvePluginUri(std::string_view(uri));
     }
 
     std::filesystem::path PlatformPath::ResolveUri(const std::wstring& pathOrUri)
