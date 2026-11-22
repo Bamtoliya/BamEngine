@@ -185,7 +185,25 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 
 			Engine::UpdateAnimatorSkinning(animator, *skeleton, dt);
 
-			if (const auto* ikComp = world.try_get<AnimationIKComponent>(entity))
+			if (animator.applyRootMotion)
+			{
+				int32 rootBoneIdx = 0;
+				if (!animator.rootMotionBoneName.empty())
+				{
+					std::wstring wname(animator.rootMotionBoneName.begin(), animator.rootMotionBoneName.end());
+					uint32 idx = skeleton->GetBoneIndex(wname);
+					if (idx != UINT32_MAX) rootBoneIdx = static_cast<int32>(idx);
+				}
+
+				if (static_cast<size_t>(rootBoneIdx) < animator.localBonePose.size())
+				{
+					animator.localBonePose[rootBoneIdx].Position = vec3(0.0f);
+					animator.localBonePose[rootBoneIdx].Rotation = glm::identity<quat>();
+					Engine::AnimationEvaluator::BuildSkinningMatrices(*skeleton, animator.localBonePose, animator.finalBoneMatrices);
+				}
+			}
+
+			if (auto* ikComp = TryGetEnabledComponent<AnimationIKComponent>(world, entity))
 			{
 				if (ikComp->enabled)
 				{
@@ -197,6 +215,11 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 					else if (const auto* tr = world.try_get<TransformComponent>(entity))
 					{
 						worldMatrix = tr->GetLocalMatrix();
+					}
+
+					if (ikComp->enableFootGroundIK)
+					{
+						UpdateFootGroundIK(*scene, entity, *skeleton, animator.localBonePose, animator.finalBoneMatrices, *ikComp, worldMatrix, dt);
 					}
 
 					ApplyAnimationIK(*skeleton, animator.localBonePose, animator.finalBoneMatrices, *ikComp, worldMatrix);

@@ -4,6 +4,9 @@
 #include "ComponentAnnotations.h"
 #include "Skeleton.h"
 #include "AnimationEvaluator.h"
+#include "Scene.h"
+#include "PhysicsSystem.h"
+#include <entt/entity/entity.hpp>
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -11,6 +14,7 @@
 
 namespace Engine
 {
+	using BonePose = BoneLocalPose;
 	struct TwoBoneIKSolution
 	{
 		vec3 newMidPos = vec3(0.0f);
@@ -247,6 +251,8 @@ namespace Engine
 	{
 		REFLECT_BODY()
 
+		static constexpr auto ComponentEnableMember = &AnimationIKComponent::enabled;
+
 		PROPERTY(EDITABLE, ALLOW_MISSING)
 		bool enabled = true;
 
@@ -255,7 +261,241 @@ namespace Engine
 
 		PROPERTY(EDITABLE, ALLOW_MISSING)
 		std::vector<LookAtIKTarget> lookAtTargets;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		bool enableFootGroundIK = false;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		int32 leftFootChainIndex = 0;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		int32 rightFootChainIndex = 1;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		std::string pelvisBoneName;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		f32 footHeightOffset = 0.05f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		f32 raycastUpOffset = 0.5f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		f32 raycastDownDistance = 1.2f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		f32 maxPelvisOffset = 0.4f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		f32 pelvisSmoothSpeed = 10.0f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING)
+		uint32 groundLayerMask = 0xFFFFFFFF;
+
+		PROPERTY(READONLY, NOSERIALIZE)
+		f32 currentPelvisOffset = 0.0f;
 	};
+
+	inline void UpdateFootGroundIK(
+		const Scene& scene,
+		entt::entity entity,
+		const Skeleton& skeleton,
+		std::vector<BoneLocalPose>& localPose,
+		std::vector<mat4>& globalPose,
+		AnimationIKComponent& ikComp,
+		const mat4& entityWorldMatrix,
+		f32 dt)
+	{
+		const auto& bones = skeleton.GetBones();
+		if (bones.empty() || localPose.size() != bones.size())
+			return;
+
+		if (globalPose.size() != bones.size())
+			globalPose.resize(bones.size());
+
+		// Forward kinematics: build model-space global pose from local poses
+		for (size_t i = 0; i < bones.size(); ++i)
+		{
+			const mat4 localM = glm::translate(mat4(1.0f), localPose[i].Position) *
+				glm::toMat4(localPose[i].Rotation) * glm::scale(mat4(1.0f), localPose[i].Scale);
+			const int32 parent = bones[i].ParentIndex;
+			if (parent >= 0 && static_cast<size_t>(parent) < i)
+				globalPose[i] = globalPose[parent] * localM;
+			else
+				globalPose[i] = localM;
+		}
+
+		float minFootDelta = 0.0f;
+		bool anyHit = false;
+
+		const int32 footIndices[2] = { ikComp.leftFootChainIndex, ikComp.rightFootChainIndex };
+		for (int32 chainIdx : footIndices)
+		{
+			if (chainIdx < 0 || static_cast<size_t>(chainIdx) >= ikComp.twoBoneChains.size())
+				continue;
+
+			auto& chain = ikComp.twoBoneChains[chainIdx];
+			if (!chain.enabled)
+				continue;
+
+			const std::wstring wEnd(chain.endBoneName.begin(), chain.endBoneName.end());
+			const uint32 endBoneIdx = skeleton.GetBoneIndex(wEnd);
+			if (endBoneIdx >= bones.size())
+				continue;
+
+			const vec3 footWorldPos = vec3(entityWorldMatrix * globalPose[endBoneIdx][3]);
+
+			const vec3 rayOrigin = footWorldPos + vec3(0.0f, ikComp.raycastUpOffset, 0.0f);
+			const vec3 rayDir = vec3(0.0f, -1.0f, 0.0f);
+			const Ray ray(rayOrigin, rayDir);
+
+			RaycastQuery query{};
+			query.maxDistance = ikComp.raycastUpOffset + ikComp.raycastDownDistance;
+			query.layerMask = ikComp.groundLayerMask;
+			query.includeTrigger = false;
+			query.ignoreEntity = entity;
+
+			SceneRaycastHit hit{};
+			if (PhysicsSystem::Raycast(scene, ray, hit, query) && hit.Hit.hasHit)
+			{
+				const float desiredY = hit.Hit.point.y + ikComp.footHeightOffset;
+				chain.targetPosition = vec3(footWorldPos.x, desiredY, footWorldPos.z);
+				chain.targetInWorldSpace = true;
+
+				const float delta = desiredY - footWorldPos.y;
+				if (!anyHit || delta < minFootDelta)
+				{
+					minFootDelta = delta;
+					anyHit = true;
+				}
+			}
+		}
+
+		const float targetPelvisOffset = anyHit ? std::clamp(minFootDelta, -ikComp.maxPelvisOffset, 0.0f) : 0.0f;
+		if (dt > 0.0f && ikComp.pelvisSmoothSpeed > 0.0f)
+		{
+			const float alpha = std::clamp(dt * ikComp.pelvisSmoothSpeed, 0.0f, 1.0f);
+			ikComp.currentPelvisOffset = glm::mix(ikComp.currentPelvisOffset, targetPelvisOffset, alpha);
+		}
+		else
+		{
+			ikComp.currentPelvisOffset = targetPelvisOffset;
+		}
+
+		uint32 pelvisIdx = UINT32_MAX;
+		if (!ikComp.pelvisBoneName.empty())
+		{
+			const std::wstring wPelvis(ikComp.pelvisBoneName.begin(), ikComp.pelvisBoneName.end());
+			pelvisIdx = skeleton.GetBoneIndex(wPelvis);
+		}
+		if (pelvisIdx >= localPose.size())
+		{
+			pelvisIdx = 0;
+		}
+		if (pelvisIdx < localPose.size())
+		{
+			localPose[pelvisIdx].Position.y += ikComp.currentPelvisOffset;
+		}
+	}
+
+	inline void UpdateFootGroundIK(
+		const Scene& scene,
+		entt::entity entity,
+		const Skeleton& skeleton,
+		std::vector<mat4>& localPose,
+		std::vector<mat4>& globalPose,
+		AnimationIKComponent& ikComp,
+		const mat4& entityWorldMatrix,
+		f32 dt)
+	{
+		const auto& bones = skeleton.GetBones();
+		if (bones.empty() || localPose.size() != bones.size())
+			return;
+
+		if (globalPose.size() != bones.size())
+			globalPose.resize(bones.size());
+
+		for (size_t i = 0; i < bones.size(); ++i)
+		{
+			const int32 parent = bones[i].ParentIndex;
+			if (parent >= 0 && static_cast<size_t>(parent) < i)
+				globalPose[i] = globalPose[parent] * localPose[i];
+			else
+				globalPose[i] = localPose[i];
+		}
+
+		float minFootDelta = 0.0f;
+		bool anyHit = false;
+
+		const int32 footIndices[2] = { ikComp.leftFootChainIndex, ikComp.rightFootChainIndex };
+		for (int32 chainIdx : footIndices)
+		{
+			if (chainIdx < 0 || static_cast<size_t>(chainIdx) >= ikComp.twoBoneChains.size())
+				continue;
+
+			auto& chain = ikComp.twoBoneChains[chainIdx];
+			if (!chain.enabled)
+				continue;
+
+			const std::wstring wEnd(chain.endBoneName.begin(), chain.endBoneName.end());
+			const uint32 endBoneIdx = skeleton.GetBoneIndex(wEnd);
+			if (endBoneIdx >= bones.size())
+				continue;
+
+			const vec3 footWorldPos = vec3(entityWorldMatrix * globalPose[endBoneIdx][3]);
+
+			const vec3 rayOrigin = footWorldPos + vec3(0.0f, ikComp.raycastUpOffset, 0.0f);
+			const vec3 rayDir = vec3(0.0f, -1.0f, 0.0f);
+			const Ray ray(rayOrigin, rayDir);
+
+			RaycastQuery query{};
+			query.maxDistance = ikComp.raycastUpOffset + ikComp.raycastDownDistance;
+			query.layerMask = ikComp.groundLayerMask;
+			query.includeTrigger = false;
+			query.ignoreEntity = entity;
+
+			SceneRaycastHit hit{};
+			if (PhysicsSystem::Raycast(scene, ray, hit, query) && hit.Hit.hasHit)
+			{
+				const float desiredY = hit.Hit.point.y + ikComp.footHeightOffset;
+				chain.targetPosition = vec3(footWorldPos.x, desiredY, footWorldPos.z);
+				chain.targetInWorldSpace = true;
+
+				const float delta = desiredY - footWorldPos.y;
+				if (!anyHit || delta < minFootDelta)
+				{
+					minFootDelta = delta;
+					anyHit = true;
+				}
+			}
+		}
+
+		const float targetPelvisOffset = anyHit ? std::clamp(minFootDelta, -ikComp.maxPelvisOffset, 0.0f) : 0.0f;
+		if (dt > 0.0f && ikComp.pelvisSmoothSpeed > 0.0f)
+		{
+			const float alpha = std::clamp(dt * ikComp.pelvisSmoothSpeed, 0.0f, 1.0f);
+			ikComp.currentPelvisOffset = glm::mix(ikComp.currentPelvisOffset, targetPelvisOffset, alpha);
+		}
+		else
+		{
+			ikComp.currentPelvisOffset = targetPelvisOffset;
+		}
+
+		uint32 pelvisIdx = UINT32_MAX;
+		if (!ikComp.pelvisBoneName.empty())
+		{
+			const std::wstring wPelvis(ikComp.pelvisBoneName.begin(), ikComp.pelvisBoneName.end());
+			pelvisIdx = skeleton.GetBoneIndex(wPelvis);
+		}
+		if (pelvisIdx >= localPose.size())
+		{
+			pelvisIdx = 0;
+		}
+		if (pelvisIdx < localPose.size())
+		{
+			localPose[pelvisIdx][3].y += ikComp.currentPelvisOffset;
+		}
+	}
 
 	inline void ApplyAnimationIK(
 		const Skeleton& skeleton,

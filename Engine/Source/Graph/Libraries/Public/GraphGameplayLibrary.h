@@ -29,7 +29,25 @@
 #include "ThirdPersonControllerComponent.h"
 #include "ActionTimelineComponent.h"
 #include "FlagComponent.h"
+#include "AnimationIK.h"
 
+namespace Engine
+{
+	class ENGINE_API GraphGameplayLibrary
+	{
+	public:
+		static void SetAnimationIKEnabled(uint64 entityId, bool enabled);
+		static void SetTwoBoneIKTarget(uint64 entityId, int32 chainIndex, vec3 targetPos, float weight = 1.0f);
+		static void SetLookAtIKTarget(uint64 entityId, int32 targetIndex, vec3 targetPos, float weight = 1.0f);
+		static void SetFootGroundIKEnabled(uint64 entityId, bool enabled, float footHeightOffset = 0.05f);
+
+		// Overloads taking an explicit Scene reference (for testing and direct script invocations)
+		static void SetAnimationIKEnabled(Scene& scene, uint64 entityId, bool enabled);
+		static void SetTwoBoneIKTarget(Scene& scene, uint64 entityId, int32 chainIndex, vec3 targetPos, float weight = 1.0f);
+		static void SetLookAtIKTarget(Scene& scene, uint64 entityId, int32 targetIndex, vec3 targetPos, float weight = 1.0f);
+		static void SetFootGroundIKEnabled(Scene& scene, uint64 entityId, bool enabled, float footHeightOffset = 0.05f);
+	};
+}
 
 namespace Engine::GraphGameplay
 {
@@ -729,5 +747,38 @@ namespace Engine::GraphGameplay
 
 		const auto* health = TryGetEnabledComponent<HealthComponent>(reg, target);
 		return health ? health->currentHealth : 0.0f;
+	}
+
+	// ── Animation IK 제어 노드 ──
+	FUNCTION(GRAPH_CALLABLE("AnimationIK.SetEnabled"), DISPLAY_NAME("Set Animation IK Enabled"), CATEGORY("Animation/IK"),
+		GRAPH_PIN_DEFAULT("entityId", 0), GRAPH_PIN_DEFAULT("enabled", true))
+	inline void SetAnimationIKEnabled(std::int64_t entityId, bool enabled)
+	{
+		if (entityId >= 0) GraphGameplayLibrary::SetAnimationIKEnabled(static_cast<uint64>(entityId), enabled);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("AnimationIK.SetTwoBoneIKTarget"), DISPLAY_NAME("Set Two-Bone IK Target"), CATEGORY("Animation/IK"),
+		GRAPH_PIN_DEFAULT("entityId", 0), GRAPH_PIN_DEFAULT("chainIndex", 0),
+		GRAPH_PIN_DEFAULT("targetX", 0.0f), GRAPH_PIN_DEFAULT("targetY", 0.0f), GRAPH_PIN_DEFAULT("targetZ", 0.0f),
+		GRAPH_PIN_DEFAULT("weight", 1.0f))
+	inline void SetTwoBoneIKTarget(std::int64_t entityId, std::int64_t chainIndex, float targetX, float targetY, float targetZ, float weight = 1.0f)
+	{
+		if (entityId >= 0) GraphGameplayLibrary::SetTwoBoneIKTarget(static_cast<uint64>(entityId), static_cast<int32>(chainIndex), vec3(targetX, targetY, targetZ), weight);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("AnimationIK.SetLookAtIKTarget"), DISPLAY_NAME("Set Look-At IK Target"), CATEGORY("Animation/IK"),
+		GRAPH_PIN_DEFAULT("entityId", 0), GRAPH_PIN_DEFAULT("targetIndex", 0),
+		GRAPH_PIN_DEFAULT("targetX", 0.0f), GRAPH_PIN_DEFAULT("targetY", 0.0f), GRAPH_PIN_DEFAULT("targetZ", 0.0f),
+		GRAPH_PIN_DEFAULT("weight", 1.0f))
+	inline void SetLookAtIKTarget(std::int64_t entityId, std::int64_t targetIndex, float targetX, float targetY, float targetZ, float weight = 1.0f)
+	{
+		if (entityId >= 0) GraphGameplayLibrary::SetLookAtIKTarget(static_cast<uint64>(entityId), static_cast<int32>(targetIndex), vec3(targetX, targetY, targetZ), weight);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("AnimationIK.SetFootGroundIKEnabled"), DISPLAY_NAME("Set Foot Ground IK Enabled"), CATEGORY("Animation/IK"),
+		GRAPH_PIN_DEFAULT("entityId", 0), GRAPH_PIN_DEFAULT("enabled", true), GRAPH_PIN_DEFAULT("footHeightOffset", 0.05f))
+	inline void SetFootGroundIKEnabled(std::int64_t entityId, bool enabled, float footHeightOffset = 0.05f)
+	{
+		if (entityId >= 0) GraphGameplayLibrary::SetFootGroundIKEnabled(static_cast<uint64>(entityId), enabled, footHeightOffset);
 	}
 }
