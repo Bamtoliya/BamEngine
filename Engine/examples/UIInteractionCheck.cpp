@@ -1,4 +1,6 @@
 ﻿#include "UIEventSystem.h"
+#include "UIComponents.h"
+#include "UILayout.h"
 #include "UIEllipseMaskComponent.h"
 #include "UIWidgetComponents.h"
 #include "CanvasScalerComponent.h"
@@ -724,6 +726,82 @@ int main()
             std::abs(centerResult.lines[1].offset.x - 30.0f) > 1e-3f ||
             std::abs(centerResult.lines[1].offset.y - 50.0f) > 1e-3f)
             return Fail("WrapMultilineText Center / Middle alignment offsets failed.");
+    }
+
+    {
+        // 1. UITextComponent multiline and word wrap validation
+        UITextComponent textComp;
+        textComp.text = "Line1\nLine2";
+        if (UILayout::IsValid(textComp))
+            return Fail("Single-line UITextComponent unexpectedly accepted newlines.");
+
+        textComp.multiline = true;
+        if (!UILayout::IsValid(textComp))
+            return Fail("Multiline UITextComponent rejected newlines.");
+
+        textComp.multiline = false;
+        textComp.wordWrap = true;
+        if (!UILayout::IsValid(textComp))
+            return Fail("Word-wrapped UITextComponent rejected newlines.");
+
+        // 2. CanvasScaler effective size integer rounding and layout validity
+        Fixture scalerFixture;
+        auto& reg = scalerFixture.scene->GetRegistry();
+        auto& scaler = reg.emplace<CanvasScalerComponent>(scalerFixture.canvas);
+        scaler.scaleMode = ECanvasScaleMode::ScaleWithScreenSize;
+        scaler.referenceResolution = { 1920.0f, 1080.0f };
+        scaler.matchWidthOrHeight = 0.5f;
+
+        if (!UpdateCanvasScaler(reg, scalerFixture.canvas, { 1366.0f, 768.0f }))
+            return Fail("UpdateCanvasScaler failed for arbitrary screen size.");
+        const auto& canvasComp = reg.get<CanvasComponent>(scalerFixture.canvas);
+        if (!UILayout::IsValid(canvasComp))
+            return Fail("CanvasComponent referenceResolution after scaler was not valid integer resolution.");
+        std::vector<UIElementLayout> layouts;
+        if (!UILayout::Build(reg, scalerFixture.canvas, layouts))
+            return Fail("UILayout::Build failed on Canvas scaled by CanvasScalerComponent.");
+
+        // 3. SetTextInputFocus multi-entity test
+        Fixture inputFixture;
+        auto& inputReg = inputFixture.scene->GetRegistry();
+        const auto entityA = inputFixture.scene->CreateEntity().GetEntityHandle();
+        const auto entityB = inputFixture.scene->CreateEntity().GetEntityHandle();
+        auto& inputA = inputReg.emplace<UITextInputComponent>(entityA);
+        auto& inputB = inputReg.emplace<UITextInputComponent>(entityB);
+
+        SetTextInputFocus(inputReg, entityA);
+        if (!inputA.isFocused || inputB.isFocused)
+            return Fail("SetTextInputFocus entityA failed.");
+
+        SetTextInputFocus(inputReg, entityB);
+        if (inputA.isFocused || !inputB.isFocused)
+            return Fail("SetTextInputFocus switch to entityB failed.");
+
+        SetTextInputFocus(inputReg, entt::null);
+        if (inputA.isFocused || inputB.isFocused)
+            return Fail("SetTextInputFocus clear focus failed.");
+
+        // 4. CloseAllDropdowns multi-entity test
+        Fixture dropFixture;
+        auto& dropReg = dropFixture.scene->GetRegistry();
+        const auto dropEntityA = dropFixture.scene->CreateEntity().GetEntityHandle();
+        const auto dropEntityB = dropFixture.scene->CreateEntity().GetEntityHandle();
+        auto& dropA = dropReg.emplace<UIDropdownComponent>(dropEntityA);
+        auto& dropB = dropReg.emplace<UIDropdownComponent>(dropEntityB);
+        dropA.options = { "A1", "A2" };
+        dropB.options = { "B1", "B2" };
+        dropA.Open();
+        dropB.Open();
+        if (!dropA.isOpen || !dropB.isOpen)
+            return Fail("UIDropdown Open failed.");
+
+        CloseAllDropdowns(dropReg, dropEntityA);
+        if (!dropA.isOpen || dropB.isOpen)
+            return Fail("CloseAllDropdowns with exceptEntity failed.");
+
+        CloseAllDropdowns(dropReg);
+        if (dropA.isOpen || dropB.isOpen)
+            return Fail("CloseAllDropdowns all failed.");
     }
 
     std::cout << "UI pointer interaction, transient archive, advanced widgets and delegate checks passed.\n";

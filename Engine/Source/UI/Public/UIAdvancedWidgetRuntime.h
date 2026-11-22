@@ -256,7 +256,12 @@ namespace Engine
         auto* canvas = world.try_get<CanvasComponent>(canvasEntity);
         if (!scaler || !canvas) return false;
 
-        canvas->referenceResolution = scaler->ComputeEffectiveDesignSize(viewportSize);
-        return true;
+        const glm::vec2 effective = scaler->ComputeEffectiveDesignSize(viewportSize);
+        if (effective.x > 0.0f && effective.y > 0.0f && std::isfinite(effective.x) && std::isfinite(effective.y))
+        {
+            canvas->referenceResolution = glm::clamp(glm::round(effective), glm::vec2(1.0f), glm::vec2(8192.0f));
+            return true;
+        }
+        return false;
     }
 }

@@ -48,5 +48,9 @@ namespace Engine
         EUITextAlignment alignment = EUITextAlignment::Center;
         PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_UI_TEXT_VERTICAL_ALIGNMENT"))
         EUITextVerticalAlignment verticalAlignment = EUITextVerticalAlignment::Middle;
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_UI_TEXT_MULTILINE"))
+        bool multiline = false;
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_UI_TEXT_WORD_WRAP"))
+        bool wordWrap = false;
     };
 }

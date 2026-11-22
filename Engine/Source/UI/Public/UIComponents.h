@@ -13,3 +13,6 @@
 #include "UIEllipseMaskComponent.h"
 #include "UIAlphaMaskComponent.h"
 #include "UIScrollComponent.h"
+#include "CanvasScalerComponent.h"
+#include "UITextInputComponent.h"
+#include "UIDropdownComponent.h"

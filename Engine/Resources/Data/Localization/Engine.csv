@@ -752,8 +752,10 @@
 ,PROP_UI_TEXT,Text,텍스트
 ,PROP_UI_TEXT_ALIGNMENT,Horizontal Alignment,가로 정렬
 ,PROP_UI_TEXT_LOCALE_KEY,Localization Key,로캘 키
+,PROP_UI_TEXT_MULTILINE,Multiline,여러 줄
 ,PROP_UI_TEXT_USE_LOCALIZATION,Use translation,번역 사용
 ,PROP_UI_TEXT_VERTICAL_ALIGNMENT,Vertical Alignment,세로 정렬
+,PROP_UI_TEXT_WORD_WRAP,Word wrap,단어 줄바꿈
 ,PROP_UI_VALUE,Value,값
 ,PROP_UI_VALUE_MAX,Maximum,최댓값
 ,PROP_UI_VALUE_MIN,Minimum,최솟값
@@ -898,7 +900,9 @@
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
 ,STRUCT_UI_ALPHA_MASK,UI Image Mask,UI 이미지 마스크
+,STRUCT_UI_CANVAS_SCALER,UI Canvas Scaler,UI 캔버스 스케일러
 ,STRUCT_UI_CLIP,UI Clip,UI 클리핑
+,STRUCT_UI_DROPDOWN,UI Dropdown,UI 드롭다운
 ,STRUCT_UI_ELLIPSE_MASK,UI Ellipse Mask,UI 타원 마스크
 ,STRUCT_UI_INTERACTION_STATE,UI Interaction State,UI 상호작용 상태
 ,STRUCT_UI_LAYOUT_GROUP,UI Layout Group,UI 레이아웃 그룹
@@ -907,6 +911,7 @@
 ,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
 ,STRUCT_UI_SLIDER,UI Slider,UI 슬라이더
 ,STRUCT_UI_TEXT,UI Text,UI 텍스트
+,STRUCT_UI_TEXT_INPUT,UI Text Input,UI 텍스트 입력
 ,STRUCT_UI_TOGGLE,UI Toggle,UI 토글
 ,STRUCT_VOLUMETRIC_CLOUD,Volumetric Cloud,볼류메트릭 클라우드
 ,STRUCT_WORLD_TRANSFORM,World Transform,월드 트랜스폼

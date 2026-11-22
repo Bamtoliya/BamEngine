@@ -10,7 +10,7 @@
 
 namespace Engine
 {
-    STRUCT(COMPONENT, CATEGORY("CATEGORY_UI"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_UI_DROPDOWN"), CATEGORY("CATEGORY_UI"))
     struct UIDropdownComponent
     {
         REFLECT_BODY()

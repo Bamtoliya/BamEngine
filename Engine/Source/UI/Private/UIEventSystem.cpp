@@ -1,6 +1,9 @@
 ﻿#include "UIEventSystem.h"
 #include "UIClipLayout.h"
 #include "UIWidgetComponents.h"
+#include "UITextInputComponent.h"
+#include "UIDropdownComponent.h"
+#include "UIAdvancedWidgetRuntime.h"
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "WorldComponents.h"
@@ -11,7 +14,9 @@ namespace
     bool IsInteractiveWidget(const entt::registry& world, entt::entity entity)
     {
         return Engine::TryGetEnabledComponent<Engine::UISliderComponent>(world, entity) ||
-            Engine::TryGetEnabledComponent<Engine::UIToggleComponent>(world, entity);
+            Engine::TryGetEnabledComponent<Engine::UIToggleComponent>(world, entity) ||
+            Engine::TryGetEnabledComponent<Engine::UITextInputComponent>(world, entity) ||
+            Engine::TryGetEnabledComponent<Engine::UIDropdownComponent>(world, entity);
     }
 
     struct UIProcessingScope
@@ -52,8 +57,13 @@ bool Engine::UIEventSystem::CanInteract(Target target, const std::vector<UIEleme
     const auto* image = TryGetEnabledComponent<UIImageComponent>(world, target.entity);
     const auto* slider = TryGetEnabledComponent<UISliderComponent>(world, target.entity);
     const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(world, target.entity);
+    const auto* textInput = TryGetEnabledComponent<UITextInputComponent>(world, target.entity);
+    const auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, target.entity);
     const bool interactive = slider ? slider->interactable && UIWidgetRange::IsValid(*slider)
-        : toggle ? toggle->interactable : button && button->interactable && UILayout::IsValid(*button);
+        : toggle ? toggle->interactable
+        : textInput ? true
+        : dropdown ? dropdown->interactable
+        : button && button->interactable && UILayout::IsValid(*button);
     if (!interactive || !image || !UILayout::IsValid(*image)) return false;
     return std::ranges::any_of(layouts, [&](const auto& layout)
     {
@@ -406,12 +416,29 @@ void Engine::UIEventSystem::Dispatch(const std::vector<UIPointerEvent>& events)
         m_OnPointerEvent.Broadcast(event);
         if (event.type == EUIPointerEventType::Click && Exists({ event.target, event.targetId }))
         {
-            const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(m_Scene->GetRegistry(), event.target);
+            auto& reg = m_Scene->GetRegistry();
+            const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(reg, event.target);
             if (toggle)
             {
                 event.type = EUIPointerEventType::ValueChanged;
                 event.value = toggle->checked ? 0.0f : 1.0f;
                 Dispatch({ event });
+            }
+            if (TryGetEnabledComponent<UITextInputComponent>(reg, event.target))
+            {
+                SetTextInputFocus(reg, event.target);
+            }
+            else
+            {
+                SetTextInputFocus(reg, entt::null);
+            }
+            if (auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(reg, event.target))
+            {
+                dropdown->ToggleOpen();
+            }
+            else
+            {
+                CloseAllDropdowns(reg);
             }
         }
     }
@@ -430,10 +457,15 @@ glm::vec4 Engine::UIEventSystem::GetButtonTint(const entt::registry& world, entt
     const auto* button = TryGetEnabledComponent<UIButtonComponent>(world, entity);
     const auto* slider = TryGetEnabledComponent<UISliderComponent>(world, entity);
     const auto* toggle = TryGetEnabledComponent<UIToggleComponent>(world, entity);
+    const auto* textInput = TryGetEnabledComponent<UITextInputComponent>(world, entity);
+    const auto* dropdown = TryGetEnabledComponent<UIDropdownComponent>(world, entity);
     const auto* state = world.try_get<UIInteractionStateComponent>(entity);
-    if (slider || toggle)
+    if (slider || toggle || textInput || dropdown)
     {
-        const bool enabled = slider ? slider->interactable && UIWidgetRange::IsValid(*slider) : toggle->interactable;
+        const bool enabled = slider ? slider->interactable && UIWidgetRange::IsValid(*slider)
+            : toggle ? toggle->interactable
+            : dropdown ? dropdown->interactable
+            : true;
         if (!enabled) return { 0.5f, 0.5f, 0.5f, 0.5f };
         if (state && state->pressed) return { 0.7f, 0.7f, 0.7f, 1.0f };
         if (state && (state->hovered || state->keyboardFocused)) return { 0.9f, 0.9f, 0.9f, 1.0f };

@@ -15,7 +15,7 @@ namespace Engine
         ConstantPhysicalSize
     };
 
-    STRUCT(COMPONENT, CATEGORY("CATEGORY_UI"))
+    STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_UI_CANVAS_SCALER"), CATEGORY("CATEGORY_UI"))
     struct CanvasScalerComponent
     {
         REFLECT_BODY()
