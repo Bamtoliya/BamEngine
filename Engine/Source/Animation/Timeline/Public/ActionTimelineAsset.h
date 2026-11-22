@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include "Engine_API.h"
 #include "Resource.h"
 #include "ResourceHandle.h"
 #include <string>
@@ -16,7 +17,9 @@ enum class ETimelineTrackType : uint8
 {
 	Notify,        // 파티클, 사운드, 커스텀 이벤트 마커 트랙
 	CameraShot,    // 카메라 줌인, 타깃 본 추적, 셰이크 트랙
-	TimeDilation   // 역경직 / 슬로우 모션 트랙 (확장용)
+	TimeDilation,  // 역경직 / 슬로우 모션 트랙 (확장용)
+	CameraCut,     // 시네마틱 카메라 컷/블렌드 트랙
+	CameraSpline   // 스플라인 카메라 경로 및 Look-At 추적 트랙
 };
 
 ENUM()
@@ -143,6 +146,95 @@ struct ENGINE_API TimelineCameraTrack
 	bool operator==(const TimelineCameraTrack& other) const = default;
 };
 
+// 3. 시네마틱 카메라 컷/블렌드 구간 (Camera Cut Track)
+STRUCT()
+struct ENGINE_API TimelineCameraCutSection
+{
+	REFLECT_BODY()
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_NAME"))
+	std::string TrackName = "Camera Cut";
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_ENABLED"))
+	bool IsActive = true;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 600.0, 0.01), DISPLAY_NAME("PROP_START_TIME"))
+	float StartTime = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 600.0, 0.01))
+	float EndTime = 1.0f;
+
+	// 전환할 씬 카메라 엔티티 이름 (NameComponent 매칭). 비어있으면 현재 활성 메인 카메라에 오프셋을 적용한다.
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	std::string TargetCameraName = "";
+
+	// 대상 카메라 기준 로컬 위치 오프셋
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	vec3 LocalPositionOffset = vec3(0.0f);
+
+	// 대상 카메라 기준 로컬 오일러 회전 오프셋 (도)
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	vec3 LocalEulerRotationOffset = vec3(0.0f);
+
+	// 0보다 크면 해당 FOV(도)로 블렌딩한다. 0 이하이면 대상 카메라의 원래 FOV를 유지한다.
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 179.0, 0.5), DISPLAY_NAME("PROP_TARGET_FOV"))
+	float TargetFOV = 0.0f;
+
+	// 진입 블렌드 인 시간(초). 0이면 즉시 컷 전환한다.
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 60.0, 0.01))
+	float BlendInDuration = 0.0f;
+
+	bool operator==(const TimelineCameraCutSection& other) const = default;
+};
+
+// 4. 스플라인 카메라 경로 및 Look-At 추적 구간 (Spline Camera Path Track)
+STRUCT()
+struct ENGINE_API TimelineCameraSplineSection
+{
+	REFLECT_BODY()
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_NAME"))
+	std::string TrackName = "Camera Spline";
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_ENABLED"))
+	bool IsActive = true;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 600.0, 0.01), DISPLAY_NAME("PROP_START_TIME"))
+	float StartTime = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 600.0, 0.01))
+	float EndTime = 1.0f;
+
+	// 경로로 사용할 SplineComponent 소유 엔티티 이름 (NameComponent 매칭)
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	std::string SplineEntityName = "";
+
+	// 스플라인 시작/종료 정규화 진행도 (0.0 ~ 1.0)
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 1.0, 0.01))
+	float StartT = 0.0f;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 1.0, 0.01))
+	float EndT = 1.0f;
+
+	// 선택적 주시 대상 엔티티 이름 (NameComponent 매칭). 비어있고 FollowTangent가 true면 스플라인 접선 방향을 바라본다.
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	std::string LookAtTargetName = "";
+
+	// LookAtTargetName이 비어있을 때 스플라인 접선 방향 바라보기 여부
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+	bool FollowTangent = true;
+
+	// 0보다 크면 해당 FOV(도)로 블렌딩한다.
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 179.0, 0.5), DISPLAY_NAME("PROP_TARGET_FOV"))
+	float TargetFOV = 0.0f;
+
+	// 진입 블렌드 인 시간(초). 0이면 즉시 경로 포즈를 적용한다.
+	PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 60.0, 0.01))
+	float BlendInDuration = 0.0f;
+
+	bool operator==(const TimelineCameraSplineSection& other) const = default;
+};
+
 struct ActionTimelineCreateDesc : public ResourceCreateDesc
 {
 	std::string ModelPath;
@@ -150,6 +242,8 @@ struct ActionTimelineCreateDesc : public ResourceCreateDesc
 	float Duration = 1.0f;
 	std::vector<TimelineNotifyTrack> NotifyTracks;
 	std::vector<TimelineCameraTrack> CameraTracks;
+	std::vector<TimelineCameraCutSection> CameraCutTracks;
+	std::vector<TimelineCameraSplineSection> CameraSplineTracks;
 };
 
 // 최상위 복합 액션 타임라인 에셋
@@ -201,6 +295,12 @@ public:
 	const std::vector<TimelineCameraTrack>& GetCameraTracks() const { return m_CameraTracks; }
 	std::vector<TimelineCameraTrack>& GetCameraTracks() { return m_CameraTracks; }
 
+	const std::vector<TimelineCameraCutSection>& GetCameraCutTracks() const { return m_CameraCutTracks; }
+	std::vector<TimelineCameraCutSection>& GetCameraCutTracks() { return m_CameraCutTracks; }
+
+	const std::vector<TimelineCameraSplineSection>& GetCameraSplineTracks() const { return m_CameraSplineTracks; }
+	std::vector<TimelineCameraSplineSection>& GetCameraSplineTracks() { return m_CameraSplineTracks; }
+
 protected:
 	// 공용 리소스 로드·핫 리로드·LoadFromFile이 모두 ReadArchive를 거치므로, 이전 파일의 트랙 종류 판정을 여기서 한 번 수행한다.
 	EResult OnPostLoad() override;
@@ -223,6 +323,12 @@ private:
 
 	PROPERTY(EDITABLE)
 		std::vector<TimelineCameraTrack> m_CameraTracks;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		std::vector<TimelineCameraCutSection> m_CameraCutTracks;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		std::vector<TimelineCameraSplineSection> m_CameraSplineTracks;
 };
 
 END
