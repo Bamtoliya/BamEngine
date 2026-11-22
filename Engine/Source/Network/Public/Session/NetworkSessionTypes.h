@@ -44,4 +44,24 @@ namespace Engine::Network
         std::uint32_t ProtocolVersion = 1;  // 프로토콜 호환성 버전
         std::uint16_t ServerPort = 7777;    // 기본 수신 포트
     };
+
+    // 인위적 지연 및 패킷 손실 시뮬레이션 설정
+    struct NetworkSimSettings
+    {
+        float simulatedLatencyMs = 0.0f;        // 추가 지연 시간 (밀리초)
+        float simulatedJitterMs = 0.0f;         // 지연 시간 지터 편차 (밀리초)
+        float simulatedPacketLossPercent = 0.0f; // 패킷 손실 확률 (0% ~ 100%)
+
+        void Reset()
+        {
+            simulatedLatencyMs = 0.0f;
+            simulatedJitterMs = 0.0f;
+            simulatedPacketLossPercent = 0.0f;
+        }
+
+        [[nodiscard]] bool IsActive() const
+        {
+            return simulatedLatencyMs > 0.0f || simulatedJitterMs > 0.0f || simulatedPacketLossPercent > 0.0f;
+        }
+    };
 }

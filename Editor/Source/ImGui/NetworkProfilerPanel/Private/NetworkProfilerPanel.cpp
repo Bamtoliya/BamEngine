@@ -117,6 +117,9 @@ void NetworkProfilerPanel::Draw()
     DrawTrafficMetrics(netSystem);
     ImGui::Separator();
 
+    DrawSimulationControls(netSystem);
+    ImGui::Separator();
+
     if (netSystem->GetDriver().IsClient())
     {
         DrawPingGraph(netSystem);
@@ -180,6 +183,29 @@ void NetworkProfilerPanel::DrawTrafficMetrics(Engine::NetworkSystem* netSystem)
     ImGui::BulletText(LOCAL_CSTR("NetworkProfiler.OutboundKbS"), m_BytesSentPerSec / 1024.0f);
     ImGui::SameLine(240);
     ImGui::BulletText(LOCAL_CSTR("NetworkProfiler.InboundKbS"), m_BytesReceivedPerSec / 1024.0f);
+}
+
+void NetworkProfilerPanel::DrawSimulationControls(Engine::NetworkSystem* netSystem)
+{
+    auto& driver = netSystem->GetDriver();
+    auto& sim = driver.GetSimSettings();
+
+    ImGui::TextUnformatted("Network Simulation (Lag & Packet Drop):");
+
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::SliderFloat("Simulated Latency (ms)##NetSim", &sim.simulatedLatencyMs, 0.0f, 500.0f, "%.1f ms");
+
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::SliderFloat("Simulated Jitter (ms)##NetSim", &sim.simulatedJitterMs, 0.0f, 100.0f, "%.1f ms");
+
+    ImGui::SetNextItemWidth(180.0f);
+    ImGui::SliderFloat("Packet Loss (%)##NetSim", &sim.simulatedPacketLossPercent, 0.0f, 50.0f, "%.1f %%");
+
+    ImGui::SameLine();
+    if (ImGui::Button("Reset##NetSim", ImVec2(80, 24)))
+    {
+        sim.Reset();
+    }
 }
 
 void NetworkProfilerPanel::DrawPingGraph(Engine::NetworkSystem* netSystem)
