@@ -26,7 +26,7 @@
 
 namespace Engine
 {
-    namespace
+    namespace SaveGameDetail
     {
         struct SaveSlotMetadataDto
         {
@@ -55,6 +55,13 @@ namespace Engine
         {
             SaveSlotMetadataDto metadata{};
         };
+    }
+
+    namespace
+    {
+        using SaveGameDetail::SaveSlotMetadataDto;
+        using SaveGameDetail::SaveGameDataDto;
+        using SaveGameDetail::MetadataWrapperDto;
 
         std::string GetCurrentTimestampIso8601()
         {
@@ -197,12 +204,12 @@ namespace Engine
             auto metaResult = ar.ReadObject("metadata", outData.metadata,
                 [](archive::IArchive& metaAr, SaveSlotMetadata& meta) -> archive::ArchiveResult {
                     bool hasField = false;
-                    if (metaAr.HasField("slotName", hasField); hasField) metaAr.Read("slotName", meta.slotName);
-                    if (metaAr.HasField("sceneUri", hasField); hasField) metaAr.Read("sceneUri", meta.sceneUri);
-                    if (metaAr.HasField("checkpointId", hasField); hasField) metaAr.Read("checkpointId", meta.checkpointId);
-                    if (metaAr.HasField("timestampIso8601", hasField); hasField) metaAr.Read("timestampIso8601", meta.timestampIso8601);
-                    if (metaAr.HasField("playTimeSeconds", hasField); hasField) metaAr.Read("playTimeSeconds", meta.playTimeSeconds);
-                    if (metaAr.HasField("formatVersion", hasField); hasField) metaAr.Read("formatVersion", meta.formatVersion);
+                    if ((void)metaAr.HasField("slotName", hasField); hasField) (void)metaAr.Read("slotName", meta.slotName);
+                    if ((void)metaAr.HasField("sceneUri", hasField); hasField) (void)metaAr.Read("sceneUri", meta.sceneUri);
+                    if ((void)metaAr.HasField("checkpointId", hasField); hasField) (void)metaAr.Read("checkpointId", meta.checkpointId);
+                    if ((void)metaAr.HasField("timestampIso8601", hasField); hasField) (void)metaAr.Read("timestampIso8601", meta.timestampIso8601);
+                    if ((void)metaAr.HasField("playTimeSeconds", hasField); hasField) (void)metaAr.Read("playTimeSeconds", meta.playTimeSeconds);
+                    if ((void)metaAr.HasField("formatVersion", hasField); hasField) (void)metaAr.Read("formatVersion", meta.formatVersion);
                     return {};
                 });
             if (!metaResult) return metaResult;
@@ -214,15 +221,15 @@ namespace Engine
         }
 
         bool hasField = false;
-        if (ar.HasField("playerPosition", hasField); hasField) archive_glm::ReadVec3(ar, "playerPosition", outData.playerPosition);
-        if (ar.HasField("playerEulerRotation", hasField); hasField) archive_glm::ReadVec3(ar, "playerEulerRotation", outData.playerEulerRotation);
-        if (ar.HasField("playerHealth", hasField); hasField) ar.Read("playerHealth", outData.playerHealth);
-        if (ar.HasField("playerMaxHealth", hasField); hasField) ar.Read("playerMaxHealth", outData.playerMaxHealth);
+        if ((void)ar.HasField("playerPosition", hasField); hasField) (void)archive_glm::ReadVec3(ar, "playerPosition", outData.playerPosition);
+        if ((void)ar.HasField("playerEulerRotation", hasField); hasField) (void)archive_glm::ReadVec3(ar, "playerEulerRotation", outData.playerEulerRotation);
+        if ((void)ar.HasField("playerHealth", hasField); hasField) (void)ar.Read("playerHealth", outData.playerHealth);
+        if ((void)ar.HasField("playerMaxHealth", hasField); hasField) (void)ar.Read("playerMaxHealth", outData.playerMaxHealth);
 
-        if (ar.HasField("intFlags", hasField); hasField) ar.ReadMap("intFlags", outData.intFlags);
-        if (ar.HasField("floatFlags", hasField); hasField) ar.ReadMap("floatFlags", outData.floatFlags);
-        if (ar.HasField("boolFlags", hasField); hasField) ar.ReadMap("boolFlags", outData.boolFlags);
-        if (ar.HasField("stringFlags", hasField); hasField) ar.ReadMap("stringFlags", outData.stringFlags);
+        if ((void)ar.HasField("intFlags", hasField); hasField) (void)ar.ReadMap("intFlags", outData.intFlags);
+        if ((void)ar.HasField("floatFlags", hasField); hasField) (void)ar.ReadMap("floatFlags", outData.floatFlags);
+        if ((void)ar.HasField("boolFlags", hasField); hasField) (void)ar.ReadMap("boolFlags", outData.boolFlags);
+        if ((void)ar.HasField("stringFlags", hasField); hasField) (void)ar.ReadMap("stringFlags", outData.stringFlags);
 
         return {};
     }
@@ -539,8 +546,8 @@ namespace Engine
 
         if (auto* transform = registry.try_get<TransformComponent>(playerEntity))
         {
-            transform->SetLocalPosition(data.playerPosition);
-            transform->SetEulerRotation(data.playerEulerRotation);
+            (void)transform->SetLocalPosition(data.playerPosition);
+            (void)transform->SetEulerRotation(data.playerEulerRotation);
         }
 
         if (auto* health = registry.try_get<HealthComponent>(playerEntity))
