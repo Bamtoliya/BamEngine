@@ -54,6 +54,8 @@ MaterialInstance* MaterialInstance::Clone(void* arg)
 
 void MaterialInstance::Free()
 {
+	m_CachedBaseMaterialPtr = nullptr;
+	m_CachedBaseConstantVersion = 0;
 	__super::Free();
 }
 #pragma endregion
@@ -122,6 +124,24 @@ void MaterialInstance::BuildConstantBufferBlob(vector<uint8>& outBlob) const
 	ApplyCustomParametersToBlob(outBlob, effectiveLayout);
 }
 
+const vector<uint8>& MaterialInstance::GetOrBuildConstantBufferBlob(uint32 liveTextureFlagMask) const
+{
+	const Material* baseMat = GetBaseMaterial();
+	const uint64 baseVersion = baseMat ? baseMat->GetConstantVersion() : 0;
+
+	if (m_CachedConstantBlob.empty() || m_CachedConstantVersion != m_ConstantVersion ||
+		m_CachedTextureFlagMask != liveTextureFlagMask ||
+		m_CachedBaseMaterialPtr != baseMat || m_CachedBaseConstantVersion != baseVersion)
+	{
+		BuildConstantBufferBlob(m_CachedConstantBlob);
+		m_CachedConstantVersion = m_ConstantVersion;
+		m_CachedTextureFlagMask = liveTextureFlagMask;
+		m_CachedBaseMaterialPtr = baseMat;
+		m_CachedBaseConstantVersion = baseVersion;
+	}
+	return m_CachedConstantBlob;
+}
+
 EResult MaterialInstance::Bind(uint32 slot)
 {
 	if (!m_BaseMaterialHandle) return EResult::Fail;
@@ -136,7 +156,20 @@ EResult MaterialInstance::Bind(uint32 slot)
 	if (!m_TextureBindings.empty() && FindTextureBindingIndexBySlot(m_TextureBindings[0].slot) < 0)
 		RebuildTextureBindingCache();
 
+	const auto flagForSlot = [](uint32 texSlot) -> uint32
+	{
+		switch (texSlot)
+		{
+		case 0: return static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse);
+		case 1: return static_cast<uint32>(EMaterialFeatureFlags::HasNormal);
+		case 2: return static_cast<uint32>(EMaterialFeatureFlags::HasPBR);
+		case 3: return static_cast<uint32>(EMaterialFeatureFlags::HasEmissive);
+		default: return 0u;
+		}
+	};
+
 	bool slotBound[4] = { false, false, false, false };
+	uint32 liveTextureFlagMask = 0u;
 
 	// 1단계: Base Material의 텍스처 슬롯 순회 (인스턴스 오버라이드가 없는 경우만)
 	for (auto& baseBinding : baseMaterial->GetTextureBindings())
@@ -147,13 +180,17 @@ EResult MaterialInstance::Bind(uint32 slot)
 		Texture* texture = baseBinding.texture.Get();
 		if (!texture) continue;
 
+		liveTextureFlagMask |= flagForSlot(baseBinding.slot);
+
 		RHISampler* sampler = baseBinding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(baseBinding.samplerDesc)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
 		RHITexture* rhiTex = texture->GetRHITexture();
-		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, baseBinding.slot)))
+		if (!rhiTex) continue;
+
+		if (IsFailure(rhi->BindTextureSampler(rhiTex, sampler, baseBinding.slot)))
 			return EResult::Fail;
 
 		if (baseBinding.slot < 4)
@@ -166,13 +203,17 @@ EResult MaterialInstance::Bind(uint32 slot)
 		Texture* texture = binding.texture.Get();
 		if (!texture) continue;
 
+		liveTextureFlagMask |= flagForSlot(binding.slot);
+
 		RHISampler* sampler = binding.hasCustomSampler
 			? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
 		RHITexture* rhiTex = texture->GetRHITexture();
-		if (rhiTex && IsFailure(rhi->BindTextureSampler(rhiTex, sampler, binding.slot)))
+		if (!rhiTex) continue;
+
+		if (IsFailure(rhi->BindTextureSampler(rhiTex, sampler, binding.slot)))
 			return EResult::Fail;
 
 		if (binding.slot < 4)
@@ -183,18 +224,18 @@ EResult MaterialInstance::Bind(uint32 slot)
 	for (uint32 s = 0; s < 4; ++s)
 	{
 		if (!slotBound[s])
-			rhi->BindTexture(nullptr, s);
+			(void)rhi->BindTexture(nullptr, s);
 	}
 
-	// 4단계: 머티리얼 상수 버퍼 바인딩 (동적 바이트 블롭 지원)
-	vector<uint8> constantBlob;
-	BuildConstantBufferBlob(constantBlob);
+	// 4단계: 캐시된 머티리얼 상수 버퍼 바인딩 (무할당 재사용)
+	const vector<uint8>& constantBlob = GetOrBuildConstantBufferBlob(liveTextureFlagMask);
 	return rhi->BindConstantBuffer(constantBlob.data(), static_cast<uint32>(constantBlob.size()), slot);
 }
 
 void MaterialInstance::SetBaseMaterial(const ResourceHandle<Material>& material)
 {
 	m_BaseMaterialHandle = material;
+	MarkConstantBlobDirty();
 }
 
 #pragma region Shader
@@ -286,6 +327,7 @@ void MaterialInstance::SetBlendMode(EBlendMode mode)
 {
 	m_BlendMode = mode;
 	AddFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode);
+	MarkConstantBlobDirty();
 }
 
 void MaterialInstance::SetCullMode(ECullMode mode)

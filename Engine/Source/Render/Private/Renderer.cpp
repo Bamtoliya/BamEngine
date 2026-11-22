@@ -215,24 +215,53 @@ EResult Renderer::Render(f32 dt)
 			{
 				std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
 					{
-						if (a.mesh != b.mesh)
-							return std::less<Mesh*>{}(a.mesh, b.mesh);
 						if (a.material && b.material)
 						{
+							const bool aMasked = (a.material->GetBlendMode() == EBlendMode::Masked);
+							const bool bMasked = (b.material->GetBlendMode() == EBlendMode::Masked);
+							if (aMasked != bMasked)
+								return aMasked < bMasked;
 							if (a.material->GetCullMode() != b.material->GetCullMode())
 								return a.material->GetCullMode() < b.material->GetCullMode();
 							if (a.material->GetFrontFace() != b.material->GetFrontFace())
 								return a.material->GetFrontFace() < b.material->GetFrontFace();
+							if (aMasked && a.material != b.material)
+								return std::less<MaterialInterface*>{}(a.material, b.material);
 						}
+						if (a.mesh != b.mesh)
+							return std::less<Mesh*>{}(a.mesh, b.mesh);
 						return std::less<MaterialInterface*>{}(a.material, b.material);
 					});
 			}
 			else
 			{
-				std::sort(commands.begin(), commands.end(), [](const StaticDrawCommand& a, const StaticDrawCommand& b)
+				std::sort(commands.begin(), commands.end(), [passType](const StaticDrawCommand& a, const StaticDrawCommand& b)
 					{
 						if (a.material != b.material)
+						{
+							if (a.material && b.material)
+							{
+								const Shader* aPS = a.material->GetPixelShader(passType);
+								const Shader* bPS = b.material->GetPixelShader(passType);
+								if (aPS != bPS) return std::less<const Shader*>{}(aPS, bPS);
+
+								const Shader* aVS = a.material->GetVertexShader(passType);
+								const Shader* bVS = b.material->GetVertexShader(passType);
+								if (aVS != bVS) return std::less<const Shader*>{}(aVS, bVS);
+
+								if (a.material->GetBlendMode() != b.material->GetBlendMode())
+									return a.material->GetBlendMode() < b.material->GetBlendMode();
+								if (a.material->GetCullMode() != b.material->GetCullMode())
+									return a.material->GetCullMode() < b.material->GetCullMode();
+								if (a.material->GetFillMode() != b.material->GetFillMode())
+									return a.material->GetFillMode() < b.material->GetFillMode();
+								if (a.material->GetDepthMode() != b.material->GetDepthMode())
+									return a.material->GetDepthMode() < b.material->GetDepthMode();
+								if (a.material->GetFrontFace() != b.material->GetFrontFace())
+									return a.material->GetFrontFace() < b.material->GetFrontFace();
+							}
 							return std::less<MaterialInterface*>{}(a.material, b.material);
+						}
 						return std::less<Mesh*>{}(a.mesh, b.mesh);
 					});
 			}
@@ -628,6 +657,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 	const ERenderPassType passType = renderPass->GetPassType();
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
+	RHIPipeline* lastPipeline = nullptr;
 
 	MaterialInterface* batchMaterial = nullptr;
 	Mesh* batchMesh = nullptr;
@@ -639,9 +669,14 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			if (instanceBatch.empty() || !batchMesh || !batchMaterial)
 				return EResult::Success;
 
-			if (batchMaterial != lastMaterial || batchMesh != lastMesh)
+			const bool sameMeshPipelineSignature = (batchMaterial == lastMaterial && lastMesh != nullptr && lastPipeline != nullptr &&
+				batchMesh->IsSkinned() == lastMesh->IsSkinned() &&
+				batchMesh->GetTopology() == lastMesh->GetTopology() &&
+				batchMesh->GetInputLayoutDescs() == lastMesh->GetInputLayoutDescs());
+
+			if (!sameMeshPipelineSignature)
 			{
-				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc);
+				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc, &lastPipeline);
 				if (bindResult != EResult::Success)
 				{
 					// [결함 격리]: 특정 머티리얼 오류로 전체 프레임 렌더링이 멈추지 않도록 해당 배치만 스킵
@@ -651,7 +686,10 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			}
 			if (batchMaterial != lastMaterial)
 			{
-				if (batchMaterial->Bind(2) != EResult::Success)
+				const bool needsMaterialBind = (passType != ERenderPassType::Shadow) ||
+					UsesMaskedShadow(batchMesh, batchMaterial) ||
+					batchMaterial->HasPassShader(ERenderPassType::Shadow);
+				if (needsMaterialBind && batchMaterial->Bind(2) != EResult::Success)
 				{
 					instanceBatch.clear();
 					return EResult::Success;
@@ -701,7 +739,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 
 			if (material != lastMaterial || mesh != lastMesh)
 			{
-				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc)))
+				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc, &lastPipeline)))
 					return EResult::Fail;
 			}
 
@@ -1545,7 +1583,7 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	return EResult::Success;
 }
 
-EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, RHIPipeline** inOutLastPipeline)
 {
 	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc);
 	if (result != EResult::Success)
@@ -1560,7 +1598,12 @@ EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERen
 	}
 	auto* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
 	if (!pipeline) return EResult::Fail;
-	return m_RHI->BindPipeline(pipeline);
+	if (inOutLastPipeline && *inOutLastPipeline == pipeline)
+		return EResult::Success;
+	const EResult bindResult = m_RHI->BindPipeline(pipeline);
+	if (IsSuccess(bindResult) && inOutLastPipeline)
+		*inOutLastPipeline = pipeline;
+	return bindResult;
 }
 
 EResult Renderer::ValidateMeshMaterial(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass)

@@ -2,6 +2,7 @@
 #include "MaterialInterface.h"
 #include "Vertex.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <locale>
@@ -606,6 +607,46 @@ int main()
 			Expect(syncMat.HasTextureBinding("PbrPacked"), "Material missing PbrPacked binding by name.");
 			Expect(syncMat.HasTextureBinding("EmissiveMap"), "Material missing EmissiveMap binding by name.");
 			Expect(syncMat.GetTextureDescriptors().size() == 4, "GetTextureDescriptors mismatch.");
+		}
+
+		// ── 11. MaterialInterface 단일 순회 상수 해석 우선순위 및 상수 버퍼 캐시 무효화 검증 ──
+		{
+			TestMaterial cachedMat;
+			cachedMat.SetFloat4("color", Engine::vec4(0.1f, 0.2f, 0.3f, 1.0f));
+			cachedMat.SetFloat4("BaseColor", Engine::vec4(0.8f, 0.6f, 0.4f, 1.0f));
+			cachedMat.SetFloat3("emissive", Engine::vec3(0.1f, 0.1f, 0.1f));
+			cachedMat.SetFloat3("EmissiveColor", Engine::vec3(1.0f, 0.5f, 0.25f));
+			cachedMat.SetFloat("roughness", 0.35f);
+			cachedMat.SetFloat("METALLIC", 0.75f);
+			cachedMat.SetFloat("Cavity", 0.6f);
+			cachedMat.SetFloat("ao", 0.9f);
+
+			const auto& blob1 = cachedMat.GetOrBuildConstantBufferBlob(0u);
+			Expect(blob1.size() >= sizeof(Engine::MaterialConstants), "Constant buffer blob must hold MaterialConstants.");
+			Engine::MaterialConstants mc1{};
+			std::memcpy(&mc1, blob1.data(), sizeof(mc1));
+			Expect(std::abs(mc1.baseColor.r - 0.8f) < 1e-5f, "BaseColor must take precedence over Color.");
+			Expect(std::abs(mc1.emissiveColor.r - 1.0f) < 1e-5f && std::abs(mc1.emissiveColor.g - 0.5f) < 1e-5f,
+				"EmissiveColor must take precedence over Emissive.");
+			Expect(std::abs(mc1.roughness - 0.35f) < 1e-5f && std::abs(mc1.metallic - 0.75f) < 1e-5f &&
+				std::abs(mc1.cavity - 0.6f) < 1e-5f && std::abs(mc1.ao - 0.9f) < 1e-5f,
+				"Single-pass case-insensitive scalar parameters must populate MaterialConstants accurately.");
+
+			// 동일 버전/마스크 재호출 시 캐시된 버퍼를 그대로 반환해야 함
+			const uint8_t* cachedPtr = blob1.data();
+			const auto& blobHit = cachedMat.GetOrBuildConstantBufferBlob(0u);
+			Expect(blobHit.data() == cachedPtr, "Cache hit must reuse the same constant buffer allocation.");
+
+			// 파라미터 및 블렌드 모드 변경 시 캐시 무효화 및 재반영 검증
+			cachedMat.SetFloat("roughness", 0.85f);
+			cachedMat.SetBlendMode(Engine::EBlendMode::Masked);
+			cachedMat.SetAlphaCutoff(0.4f);
+			const auto& blob2 = cachedMat.GetOrBuildConstantBufferBlob(0u);
+			Engine::MaterialConstants mc2{};
+			std::memcpy(&mc2, blob2.data(), sizeof(mc2));
+			Expect(std::abs(mc2.roughness - 0.85f) < 1e-5f, "Parameter update must invalidate constant buffer cache.");
+			Expect((mc2.materialFlags >> Engine::MATERIAL_ALPHA_CUTOFF_SHIFT) > 0u,
+				"Masked blend mode and alpha cutoff update must invalidate constant buffer cache.");
 		}
 
 		std::cout << "Shader graph checks passed.\n";

@@ -3,13 +3,42 @@
 #include "SamplerManager.h"
 #include "ResourceManager.h"
 #include "Renderer.h"
+#include <string_view>
+
+namespace
+{
+	bool EqualsIgnoreCaseAscii(std::string_view a, std::string_view b)
+	{
+		if (a.size() != b.size()) return false;
+		for (size_t i = 0; i < a.size(); ++i)
+		{
+			unsigned char ca = static_cast<unsigned char>(a[i]);
+			unsigned char cb = static_cast<unsigned char>(b[i]);
+			if (ca >= 'A' && ca <= 'Z') ca = static_cast<unsigned char>(ca + ('a' - 'A'));
+			if (cb >= 'A' && cb <= 'Z') cb = static_cast<unsigned char>(cb + ('a' - 'A'));
+			if (ca != cb) return false;
+		}
+		return true;
+	}
+
+	uint32 FeatureFlagForTextureSlot(uint32 slot)
+	{
+		switch (slot)
+		{
+		case 0: return static_cast<uint32>(EMaterialFeatureFlags::HasDiffuse);
+		case 1: return static_cast<uint32>(EMaterialFeatureFlags::HasNormal);
+		case 2: return static_cast<uint32>(EMaterialFeatureFlags::HasPBR);
+		case 3: return static_cast<uint32>(EMaterialFeatureFlags::HasEmissive);
+		default: return 0u;
+		}
+	}
+}
 
 const MaterialParameterEntry* MaterialBufferLayout::Find(const string& name) const
 {
-	const string targetLower = Engine::ToLowerStr(name);
 	for (const auto& entry : Entries)
 	{
-		if (Engine::ToLowerStr(entry.Name) == targetLower)
+		if (EqualsIgnoreCaseAscii(entry.Name, name))
 			return &entry;
 	}
 	return nullptr;
@@ -25,6 +54,10 @@ void MaterialInterface::Free()
 	m_ShaderGraphPath.clear();
 	m_BufferLayout.Clear();
 	m_TextureDescriptors.clear();
+	m_CachedConstantBlob.clear();
+	m_CachedConstantVersion = 0;
+	m_CachedTextureFlagMask = UINT32_MAX;
+	MarkConstantBlobDirty();
 }
 
 EResult MaterialInterface::Reload(const std::filesystem::path& filePath)
@@ -58,6 +91,7 @@ void MaterialInterface::RebuildTextureBindingCache()
         m_TextureNameToIndex[binding.name] = i;
         m_TextureSlotToIndex[binding.slot] = i;
     }
+    MarkConstantBlobDirty();
 }
 
 int32 MaterialInterface::FindTextureBindingIndexByName(const string& name) const
@@ -150,48 +184,56 @@ void MaterialInterface::AddFloat(const string& name, f32 defaultValue, float min
 {
     uint32 offset = CalculateNextOffset(sizeof(f32), 4);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float, &defaultValue, sizeof(f32), offset, min, max, localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddFloat2(const string& name, const vec2& defaultValue, float min, float max, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(vec2), 8);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float2, &defaultValue, sizeof(vec2), offset, min, max, localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddFloat3(const string& name, const vec3& defaultValue, float min, float max, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(vec3), 16);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float3, &defaultValue, sizeof(vec3), offset, min, max, localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddColor3(const string& name, const vec3& defaultColor, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(vec3), 16);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float3, &defaultColor, sizeof(vec3), offset, 0.0f, 1.0f, localKey, true);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddFloat4(const string& name, const vec4& defaultValue, float min, float max, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(vec4), 16);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float4, &defaultValue, sizeof(vec4), offset, min, max, localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddColor4(const string& name, const vec4& defaultColor, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(vec4), 16);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Float4, &defaultColor, sizeof(vec4), offset, 0.0f, 1.0f, localKey, true);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddInt(const string& name, int32 defaultValue, int32 min, int32 max, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(int32), 4);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Int, &defaultValue, sizeof(int32), offset, static_cast<float>(min), static_cast<float>(max), localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::AddBool(const string& name, bool defaultValue, const string& localKey)
 {
     uint32 offset = CalculateNextOffset(sizeof(bool), 4);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Bool, &defaultValue, sizeof(bool), offset, 0.0f, 1.0f, localKey, false);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::SetFloat(const string& name, f32 value)
@@ -201,6 +243,7 @@ void MaterialInterface::SetFloat(const string& name, f32 value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddFloat(name, value);
@@ -213,6 +256,7 @@ void MaterialInterface::SetFloat2(const string& name, const vec2& value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddFloat2(name, value);
@@ -225,6 +269,7 @@ void MaterialInterface::SetFloat3(const string& name, const vec3& value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddFloat3(name, value);
@@ -237,6 +282,7 @@ void MaterialInterface::SetFloat4(const string& name, const vec4& value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddFloat4(name, value);
@@ -249,6 +295,7 @@ void MaterialInterface::SetInt(const string& name, int32 value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddInt(name, value);
@@ -261,6 +308,7 @@ void MaterialInterface::SetBool(const string& name, bool value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     AddBool(name, value);
@@ -273,17 +321,22 @@ void MaterialInterface::SetMatrix(const string& name, const mat4& value)
     {
         if (it->second.data.size() >= sizeof(value))
             memcpy(it->second.data.data(), &value, sizeof(value));
+        MarkConstantBlobDirty();
         return;
     }
     uint32 offset = CalculateNextOffset(sizeof(mat4), 16);
     m_Parameters[name] = MaterialParameter(EMaterialParameterType::Matrix, &value, sizeof(mat4), offset);
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::ResetParameter(const string& name)
 {
     auto it = m_Parameters.find(name);
     if (it != m_Parameters.end() && !it->second.defaultValue.empty())
+    {
         it->second.data = it->second.defaultValue;
+        MarkConstantBlobDirty();
+    }
 }
 
 void MaterialInterface::ResetAllParameters()
@@ -293,13 +346,14 @@ void MaterialInterface::ResetAllParameters()
         if (!param.defaultValue.empty())
             param.data = param.defaultValue;
     }
+    MarkConstantBlobDirty();
 }
 
 std::optional<f32> MaterialInterface::FindAlphaCutoffParameter() const
 {
     for (const auto& [key, param] : m_Parameters)
     {
-        if (param.type == EMaterialParameterType::Float && param.data.size() >= sizeof(f32) && Engine::ToLowerStr(key) == "alphacutoff")
+        if (param.type == EMaterialParameterType::Float && param.data.size() >= sizeof(f32) && EqualsIgnoreCaseAscii(key, "AlphaCutoff"))
             return *reinterpret_cast<const f32*>(param.data.data());
     }
     return std::nullopt;
@@ -314,7 +368,7 @@ void MaterialInterface::SetAlphaCutoff(f32 cutoff)
 {
     for (const auto& [key, param] : m_Parameters)
     {
-        if (param.type == EMaterialParameterType::Float && Engine::ToLowerStr(key) == "alphacutoff")
+        if (param.type == EMaterialParameterType::Float && EqualsIgnoreCaseAscii(key, "AlphaCutoff"))
         {
             const string existing = key;
             SetFloat(existing, cutoff);
@@ -327,48 +381,43 @@ void MaterialInterface::SetAlphaCutoff(f32 cutoff)
 
 void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants) const
 {
-    // 대소문자 구분 없이 파라미터를 찾는 헬퍼 람다
-    const auto findParamCaseInsensitive = [this](const string& name) -> const MaterialParameter*
-        {
-            const std::string targetLower = Engine::ToLowerStr(name);
-            for (const auto& [key, param] : m_Parameters)
-            {
-                if (Engine::ToLowerStr(key) == targetLower)
-                    return &param;
-            }
-            return nullptr;
-        };
+    if (m_Parameters.empty()) return;
 
-    // 1. BaseColor (baseColor, BaseColor, Color 지원)
-    if (const auto* baseColor = findParamCaseInsensitive("BaseColor"))
+    const MaterialParameter* baseColorParam = nullptr;
+    const MaterialParameter* colorParam = nullptr;
+    const MaterialParameter* emissiveColorParam = nullptr;
+    const MaterialParameter* emissionParam = nullptr;
+    const MaterialParameter* emissiveParam = nullptr;
+
+    // 단일 순회 + 무할당 대소문자 무시 비교로 드로우콜당 문자열 할당 제거
+    for (const auto& [key, param] : m_Parameters)
     {
-        if (baseColor->data.size() >= sizeof(vec4))
-            outConstants.baseColor = *reinterpret_cast<const vec4*>(baseColor->data.data());
+        if (EqualsIgnoreCaseAscii(key, "BaseColor"))
+            baseColorParam = &param;
+        else if (EqualsIgnoreCaseAscii(key, "Color"))
+            colorParam = &param;
+        else if (EqualsIgnoreCaseAscii(key, "Roughness") && param.data.size() >= sizeof(float))
+            outConstants.roughness = *reinterpret_cast<const float*>(param.data.data());
+        else if (EqualsIgnoreCaseAscii(key, "Metallic") && param.data.size() >= sizeof(float))
+            outConstants.metallic = *reinterpret_cast<const float*>(param.data.data());
+        else if (EqualsIgnoreCaseAscii(key, "Cavity") && param.data.size() >= sizeof(float))
+            outConstants.cavity = *reinterpret_cast<const float*>(param.data.data());
+        else if (EqualsIgnoreCaseAscii(key, "AO") && param.data.size() >= sizeof(float))
+            outConstants.ao = *reinterpret_cast<const float*>(param.data.data());
+        else if (EqualsIgnoreCaseAscii(key, "EmissiveColor"))
+            emissiveColorParam = &param;
+        else if (EqualsIgnoreCaseAscii(key, "Emission"))
+            emissionParam = &param;
+        else if (EqualsIgnoreCaseAscii(key, "Emissive"))
+            emissiveParam = &param;
     }
-    else if (const auto* color = findParamCaseInsensitive("Color"))
-    {
-        if (color->data.size() >= sizeof(vec4))
-            outConstants.baseColor = *reinterpret_cast<const vec4*>(color->data.data());
-    }
 
-    // 2. Roughness, Metallic, Cavity, AO (소문자/대문자 모두 지원)
-    if (const auto* p = findParamCaseInsensitive("Roughness"); p && p->data.size() >= sizeof(float))
-        outConstants.roughness = *reinterpret_cast<const float*>(p->data.data());
+    if (baseColorParam && baseColorParam->data.size() >= sizeof(vec4))
+        outConstants.baseColor = *reinterpret_cast<const vec4*>(baseColorParam->data.data());
+    else if (colorParam && colorParam->data.size() >= sizeof(vec4))
+        outConstants.baseColor = *reinterpret_cast<const vec4*>(colorParam->data.data());
 
-    if (const auto* p = findParamCaseInsensitive("Metallic"); p && p->data.size() >= sizeof(float))
-        outConstants.metallic = *reinterpret_cast<const float*>(p->data.data());
-
-    if (const auto* p = findParamCaseInsensitive("Cavity"); p && p->data.size() >= sizeof(float))
-        outConstants.cavity = *reinterpret_cast<const float*>(p->data.data());
-
-    if (const auto* p = findParamCaseInsensitive("AO"); p && p->data.size() >= sizeof(float))
-        outConstants.ao = *reinterpret_cast<const float*>(p->data.data());
-
-    // 3. Emissive (EmissiveColor, Emission, Emissive 지원)
-    const auto* emissive = findParamCaseInsensitive("EmissiveColor");
-    if (!emissive) emissive = findParamCaseInsensitive("Emission");
-    if (!emissive) emissive = findParamCaseInsensitive("Emissive");
-
+    const MaterialParameter* emissive = emissiveColorParam ? emissiveColorParam : (emissionParam ? emissionParam : emissiveParam);
     if (emissive)
     {
         if (emissive->data.size() >= sizeof(vec4))
@@ -380,14 +429,13 @@ void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants)
 
 void MaterialInterface::ApplyCustomParametersToBlob(vector<uint8>& outBlob, const MaterialBufferLayout& layout) const
 {
-    if (!layout.HasCustomParameters()) return;
+    if (!layout.HasCustomParameters() || m_Parameters.empty()) return;
 
-    const auto findParamCaseInsensitive = [this](const string& name) -> const MaterialParameter*
+    const auto findParamCaseInsensitive = [this](std::string_view name) -> const MaterialParameter*
     {
-        const std::string targetLower = Engine::ToLowerStr(name);
         for (const auto& [key, param] : m_Parameters)
         {
-            if (Engine::ToLowerStr(key) == targetLower)
+            if (EqualsIgnoreCaseAscii(key, name))
                 return &param;
         }
         return nullptr;
@@ -428,6 +476,18 @@ void MaterialInterface::BuildConstantBufferBlob(vector<uint8>& outBlob) const
     ApplyCustomParametersToBlob(outBlob, m_BufferLayout);
 }
 
+const vector<uint8>& MaterialInterface::GetOrBuildConstantBufferBlob(uint32 liveTextureFlagMask) const
+{
+    if (m_CachedConstantBlob.empty() || m_CachedConstantVersion != m_ConstantVersion ||
+        m_CachedTextureFlagMask != liveTextureFlagMask)
+    {
+        BuildConstantBufferBlob(m_CachedConstantBlob);
+        m_CachedConstantVersion = m_ConstantVersion;
+        m_CachedTextureFlagMask = liveTextureFlagMask;
+    }
+    return m_CachedConstantBlob;
+}
+
 #pragma endregion
 
 #pragma region Texture Binding Interface
@@ -437,6 +497,7 @@ void MaterialInterface::SetTexture(const string& name, const ResourceHandle<Text
     if (index >= 0)
     {
         m_TextureBindings[index].texture = texture;
+        MarkConstantBlobDirty();
         return;
     }
 
@@ -455,6 +516,7 @@ void MaterialInterface::SetTextureBySlot(uint32 slot, const ResourceHandle<Textu
     if (index >= 0)
     {
         m_TextureBindings[index].texture = texture;
+        MarkConstantBlobDirty();
         return;
     }
 
@@ -479,6 +541,7 @@ void MaterialInterface::SetTextureBinding(const string& name, uint32 slot, const
             m_TextureBindings[nameIndex].name = name;
             m_TextureBindings[nameIndex].slot = slot;
             m_TextureBindings[nameIndex].texture = texture;
+            MarkConstantBlobDirty();
             return;
         }
 
@@ -649,6 +712,7 @@ void MaterialInterface::ClearTextureBindings()
     m_TextureBindings.clear();
     m_TextureNameToIndex.clear();
     m_TextureSlotToIndex.clear();
+    MarkConstantBlobDirty();
 }
 
 void MaterialInterface::SyncTextureBindings(const vector<MaterialTextureDescriptor>& descriptors)
@@ -768,12 +832,15 @@ EResult MaterialInterface::Bind(uint32 slot)
 
     auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
     bool slotBound[4] = { false, false, false, false };
+    uint32 liveTextureFlagMask = 0u;
 
     // 1. 등록된 텍스처 바인딩
     for (auto& binding : m_TextureBindings)
     {
         Texture* texture = binding.texture.Get();
         if (!texture) continue;
+
+        liveTextureFlagMask |= FeatureFlagForTextureSlot(binding.slot);
 
         RHISampler* sampler = binding.hasCustomSampler
             ? SamplerManager::Get().GetOrCreateSampler(binding.samplerDesc)
@@ -794,12 +861,11 @@ EResult MaterialInterface::Bind(uint32 slot)
     for (uint32 s = 0; s < 4; ++s)
     {
         if (!slotBound[s])
-            rhi->BindTexture(nullptr, s);
+            (void)rhi->BindTexture(nullptr, s);
     }
 
-    // 3. 머티리얼 상수 버퍼(동적 바이트 블롭 또는 48바이트 기본 MaterialConstants) 바인딩 (slot = 2 -> b0, space3)
-    vector<uint8> constantBlob;
-    BuildConstantBufferBlob(constantBlob);
+    // 3. 캐시된 머티리얼 상수 버퍼 바인딩 (무할당 재사용, 변경 시에만 재구성)
+    const vector<uint8>& constantBlob = GetOrBuildConstantBufferBlob(liveTextureFlagMask);
     return rhi->BindConstantBuffer(constantBlob.data(), static_cast<uint32>(constantBlob.size()), slot);
 }
 #pragma endregion

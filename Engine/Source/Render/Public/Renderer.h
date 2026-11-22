@@ -106,7 +106,7 @@ public:
 #pragma region Binding
 private:
 	EResult PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDesc& desc);
-	EResult BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc);
+	EResult BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, class RHIPipeline** inOutLastPipeline = nullptr);
 	EResult PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc);
 public:
 	EResult BindMeshPipeline(class Mesh*, class MaterialInterface*, class RenderPass*);

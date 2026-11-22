@@ -240,8 +240,23 @@ public:
 public:
 	const unordered_map<string, MaterialParameter>& GetParameters() const { return m_Parameters; }
 	bool HasParameter(const string& name) const { return m_Parameters.find(name) != m_Parameters.end(); }
-	bool RemoveParameter(const string& name) { return m_Parameters.erase(name) > 0; }
-	void ClearParameters() { m_Parameters.clear(); }
+	bool RemoveParameter(const string& name)
+	{
+		if (m_Parameters.erase(name) > 0)
+		{
+			MarkConstantBlobDirty();
+			return true;
+		}
+		return false;
+	}
+	void ClearParameters()
+	{
+		if (!m_Parameters.empty())
+		{
+			m_Parameters.clear();
+			MarkConstantBlobDirty();
+		}
+	}
 
 	// 셰이더 레이아웃 순서대로 파라미터를 등록하는 자동 오프셋 누적 API (메타데이터 지원)
 	void AddFloat(const string& name, f32 defaultValue = 0.0f, float min = 0.0f, float max = 1.0f, const string& localKey = "");
@@ -265,12 +280,16 @@ public:
 public:
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const;
 	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const;
+	virtual const vector<uint8>& GetOrBuildConstantBufferBlob(uint32 liveTextureFlagMask) const;
+
+	uint64 GetConstantVersion() const { return m_ConstantVersion; }
+	void MarkConstantBlobDirty() { ++m_ConstantVersion; }
 
 	// Masked 재질이 이 값보다 알파가 작은 픽셀을 버린다. "AlphaCutoff" 파라미터로 저장하며 없으면 DEFAULT_ALPHA_CUTOFF.
 	virtual f32 GetAlphaCutoff() const;
 	void SetAlphaCutoff(f32 cutoff);
 
-	void SetBufferLayout(const MaterialBufferLayout& layout) { m_BufferLayout = layout; }
+	void SetBufferLayout(const MaterialBufferLayout& layout) { m_BufferLayout = layout; MarkConstantBlobDirty(); }
 	const MaterialBufferLayout& GetBufferLayout() const { return m_BufferLayout; }
 
 	template<typename T>
@@ -344,7 +363,7 @@ public:
 	virtual ECompareOp GetDepthCompareOp() const { return m_DepthCompareOp; }
 public:
 	virtual void SetPrimaryPassType(ERenderPassType passType) { m_PrimaryPassType = passType; }
-	virtual void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; }
+	virtual void SetBlendMode(EBlendMode mode) { m_BlendMode = mode; MarkConstantBlobDirty(); }
 	virtual void SetCullMode(ECullMode mode) { m_CullMode = mode; }
 	virtual void SetFrontFace(EFrontFace mode) { m_FrontFace = mode; }
 	virtual void SetFillMode(EFillMode mode) { m_FillMode = mode; }
@@ -359,7 +378,7 @@ public:
 	ResourceHandle<Shader> GetVertexShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_VertexShaderHandle; };
 	ResourceHandle<Shader> GetPixelShaderHandle(ERenderPassType passType = ERenderPassType::Geometry) const { return m_PixelShaderHandle; };
 	virtual string GetShaderGraphPath() const { return m_ShaderGraphPath; }
-	virtual void SetShaderGraphPath(const string& path) { m_ShaderGraphPath = path; }
+	virtual void SetShaderGraphPath(const string& path) { m_ShaderGraphPath = path; MarkConstantBlobDirty(); }
 	bool HasShaderGraph() const { return !m_ShaderGraphPath.empty(); }
 public:
 	virtual void SetVertexShaderHandle(const ResourceHandle<Shader>& shader) { m_VertexShaderHandle = shader; }
@@ -421,6 +440,13 @@ private:
 	MaterialBufferLayout m_BufferLayout = {};
 	PROPERTY()
 	vector<MaterialTextureDescriptor> m_TextureDescriptors = {};
+
+protected:
+	// 비직렬화 상수 버퍼 캐시: 드로우콜마다 동적 할당 및 파라미터 문자열 재스캔을 방지한다.
+	uint64 m_ConstantVersion = 1;
+	mutable uint64 m_CachedConstantVersion = 0;
+	mutable uint32 m_CachedTextureFlagMask = UINT32_MAX;
+	mutable vector<uint8> m_CachedConstantBlob;
 #pragma endregion
 };
 END

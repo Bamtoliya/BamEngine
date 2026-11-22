@@ -48,6 +48,7 @@ public:
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const override;
 	virtual f32 GetAlphaCutoff() const override;
 	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const override;
+	virtual const vector<uint8>& GetOrBuildConstantBufferBlob(uint32 liveTextureFlagMask) const override;
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion
 
@@ -78,7 +79,7 @@ public:
 	virtual void SetFrontFace(EFrontFace mode) override;
 public:
 	void ClearPrimaryPassTypeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::PrimaryPassType); }
-	void ClearBlendModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode); }
+	void ClearBlendModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::BlendMode); MarkConstantBlobDirty(); }
 	void ClearCullModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::CullMode); }
 	void ClearFillModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FillMode); }
 	void ClearDepthModeOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::DepthMode); }
@@ -86,7 +87,7 @@ public:
 	void ClearFrontFaceOverride() { RemoveFlag(m_OverrideFlags, EPipelineOverrideFlag::FrontFace); }
 public:
 	EPipelineOverrideFlag GetPipelineOverrideFlags() const { return m_OverrideFlags; }
-	void SetPipelineOverrideFlags(EPipelineOverrideFlag flags) { m_OverrideFlags = flags; }
+	void SetPipelineOverrideFlags(EPipelineOverrideFlag flags) { m_OverrideFlags = flags; MarkConstantBlobDirty(); }
 #pragma endregion
 
 
@@ -107,6 +108,8 @@ private:
 private:
 	PROPERTY()
 	EPipelineOverrideFlag m_OverrideFlags = EPipelineOverrideFlag::None;
+	mutable const Material* m_CachedBaseMaterialPtr = nullptr;
+	mutable uint64 m_CachedBaseConstantVersion = 0;
 #pragma endregion
 };
 END
