@@ -3,6 +3,9 @@
 #include "RHI.h"
 #include "RenderPass.h"
 #include "RenderPassManager.h"
+#include "RaytracingSceneManager.h"
+#include <map>
+#include <unordered_set>
 #include "MetricsCardUI.h"
 
 void RenderMetricsWidget::Update(f32 dt)
@@ -80,21 +83,35 @@ void RenderMetricsWidget::DrawDetails() const
             ImGui::TableHeadersRow();
 
             const ImVec4 staleColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+            const auto drawPassRow = [&](const PassStat& stat)
+                {
+                    const bool stale = (m_ElapsedTime - stat.LastSeenTime) > PassStaleSeconds;
+
+                    if (stale) ImGui::PushStyleColor(ImGuiCol_Text, staleColor);
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(stat.DisplayName.c_str());
+                    ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", stat.CPUTimeMs);
+                    ImGui::TableSetColumnIndex(2); ImGui::Text("%.2f", stat.GPUTimeMs);
+                    if (stale) ImGui::PopStyleColor();
+                };
+
+            std::unordered_set<std::wstring> registeredNames;
             for (const auto* renderPass : Engine::RenderPassManager::Get().GetAllRenderPasses())
             {
-                const auto found = m_PassStats.find(renderPass->GetName());
-                if (found == m_PassStats.end()) continue;
-
-                const auto& stat = found->second;
-                const bool stale = (m_ElapsedTime - stat.LastSeenTime) > PassStaleSeconds;
-
-                if (stale) ImGui::PushStyleColor(ImGuiCol_Text, staleColor);
-                ImGui::TableNextRow();
-                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(stat.DisplayName.c_str());
-                ImGui::TableSetColumnIndex(1); ImGui::Text("%.2f", stat.CPUTimeMs);
-                ImGui::TableSetColumnIndex(2); ImGui::Text("%.2f", stat.GPUTimeMs);
-                if (stale) ImGui::PopStyleColor();
+                registeredNames.insert(renderPass->GetName());
+                if (const auto found = m_PassStats.find(renderPass->GetName()); found != m_PassStats.end())
+                    drawPassRow(found->second);
             }
+
+            // 렌더 패스로 등록되지 않은 계측 구간(가속 구조 빌드, 그림자 마스크 등)은 이름순으로 뒤에 표시한다.
+            std::map<std::wstring, const PassStat*> extraStats;
+            for (const auto& [name, stat] : m_PassStats)
+            {
+                if (!registeredNames.contains(name))
+                    extraStats.emplace(name, &stat);
+            }
+            for (const auto& [name, stat] : extraStats)
+                drawPassRow(*stat);
             ImGui::EndTable();
         }
     }
@@ -117,6 +134,21 @@ void RenderMetricsWidget::DrawDetails() const
         ImGui::Text("%s", LOCAL_FMT("Metrics.DedicatedVRAM", mem.DedicatedVRAMUsageMB).c_str());
     }
     ImGui::Text("%s", LOCAL_FMT("Metrics.AllocatedDescriptors", mem.AllocatedDescriptors).c_str());
+
+    if (Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().GetLastStats().SceneCount > 0)
+    {
+        const auto& raytracing = Engine::RaytracingSceneManager::Get().GetLastStats();
+        constexpr double bytesPerMB = 1024.0 * 1024.0;
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.RaytracingStats"));
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingInstances", raytracing.SceneCount, raytracing.InstanceCount).c_str());
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingMemory", raytracing.BottomLevelCount,
+            static_cast<double>(raytracing.BottomLevelBytes) / bytesPerMB, static_cast<double>(raytracing.TopLevelBytes) / bytesPerMB).c_str());
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.RaytracingFallback", raytracing.UnsupportedCasterCount).c_str());
+        if (raytracing.FailedCasterCount > 0)
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_FMT("Metrics.RaytracingFailed", raytracing.FailedCasterCount).c_str());
+    }
 
     ImGui::Spacing();
     ImGui::Separator();

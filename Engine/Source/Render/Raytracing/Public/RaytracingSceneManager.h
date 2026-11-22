@@ -41,6 +41,7 @@ public:
 	bool IsSceneRequested(const Scene* scene) const;
 	// 빌드 전에 프레임이 중단되면 해제된 씬 포인터가 다음 프레임에 남지 않도록 프레임 큐와 함께 비운다.
 	void ClearRequests() { m_RequestedScenes.clear(); }
+	bool HasRequests() const { return !m_RequestedScenes.empty(); }
 	// 요청된 씬의 BLAS를 준비하고 TLAS를 다시 빌드한다. 요청되지 않은 씬의 TLAS는 해제하고 요청 목록을 비운다.
 	EResult BuildRequestedScenes();
 	// 이번 프레임에 빌드된 씬의 TLAS. 요청되지 않았거나 빌드에 실패했으면 nullptr.
@@ -103,6 +104,7 @@ private:
 private:
 	RHI* m_RHI = nullptr;
 	uint64 m_FrameCounter = 0;
+	uint64 m_LastBuildFrame = 0;
 	std::vector<Scene*> m_RequestedScenes;
 	std::unordered_map<const Scene*, TopLevelEntry> m_TopLevels;
 	// 키의 정점·인덱스 버퍼는 참조를 보유한다. 메시가 해제된 뒤 같은 주소가 재사용되어 다른 기하를 가리키는 일을 막는다.

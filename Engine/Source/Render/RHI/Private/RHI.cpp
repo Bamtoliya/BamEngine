@@ -213,6 +213,7 @@ void RHI::BeginMetricsFrame()
 {
 	m_CurrentFrameMetrics = {};
 	m_CurrentFrameMetrics.PassMetrics.reserve(16);
+	m_PassTimers.clear(); // 이전 프레임이 패스 도중 실패한 경우를 정리한다.
 	m_FrameStartTime = std::chrono::high_resolution_clock::now();
 }
 void RHI::EndMetricsFrame(bool renderSucceeded)
@@ -226,19 +227,20 @@ void RHI::EndMetricsFrame(bool renderSucceeded)
 }
 void RHI::BeginPassMetrics(const std::wstring& passName)
 {
-	m_CurrentPassName = passName;
-	m_CurrentPassStartTime = std::chrono::high_resolution_clock::now();
+	m_PassTimers.push_back({ passName, std::chrono::high_resolution_clock::now() });
 }
 void RHI::EndPassMetrics()
 {
+	if (m_PassTimers.empty())
+		return;
 	const auto now = std::chrono::high_resolution_clock::now();
-	const f32 passCpuMs = std::chrono::duration<f32, std::milli>(now - m_CurrentPassStartTime).count();
+	const f32 passCpuMs = std::chrono::duration<f32, std::milli>(now - m_PassTimers.back().StartTime).count();
 	RHIPassMetric passMetric{};
-	passMetric.PassName = m_CurrentPassName;
+	passMetric.PassName = std::move(m_PassTimers.back().Name);
 	passMetric.CPUTimeMs = passCpuMs;
 	passMetric.GPUTimeMs = 0.0f; // 기본 백엔드는 0, D3D12에서 타임스탬프 결과 주입
 	m_CurrentFrameMetrics.PassMetrics.push_back(passMetric);
-	m_CurrentPassName.clear();
+	m_PassTimers.pop_back();
 }
 void RHI::RecordDraw(uint32 vertexCount)
 {

@@ -412,7 +412,10 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			DeferredLightingPassData lightingData{};
 			if (useRaytracedShadow)
 			{
+				// 조명 패스 안에서 실행되므로 추적 비용을 별도 구간으로 잰다(조명 시간에도 포함된다).
+				rhi->BeginPassMetrics(sourceNames[4] + L"_RaytracedShadowMask");
 				Engine::RHITexture* shadowMask = DispatchRaytracedShadowMask(*rhi, targetScene, sourceNames[4]);
+				rhi->EndPassMetrics();
 				// Compute 파이프라인으로 바뀐 상태를 조명 파이프라인으로 되돌린다(같은 루트 시그니처라 그래픽 바인딩은 유지된다).
 				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 					return Engine::EResult::Fail;

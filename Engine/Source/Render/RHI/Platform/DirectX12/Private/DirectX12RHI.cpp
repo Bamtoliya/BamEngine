@@ -495,7 +495,8 @@ EResult DirectX12RHI::BeginFrame()
                     {
                         const f32 ms = static_cast<f32>(end - start) / static_cast<f32>(m_TimestampFrequency) * 1000.0f;
                         m_LastGPUTimestampResults[passQuery.passName] = ms;
-                        totalGpuMs += ms;
+                        if (passQuery.depth == 0)
+                            totalGpuMs += ms;
                     }
                 }
             }
@@ -507,6 +508,8 @@ EResult DirectX12RHI::BeginFrame()
 
     m_TimestampQueryCount = 0;
     m_ActivePassQueries.clear();
+    m_OpenPassQueries.clear();
+    m_OpenTimestampCount = 0;
 
     m_TextureUploadCursors[m_CurrentBackBufferIndex] = 0;
 	m_BackBuffer = m_SwapChainBuffers[m_CurrentBackBufferIndex];
@@ -2708,7 +2711,9 @@ void DirectX12RHI::BeginPassMetrics(const std::wstring& passName)
 {
     RHI::BeginPassMetrics(passName);
 
-    if (m_CommandList && m_TimestampQueryHeap && (m_TimestampQueryCount + 2 <= MAX_TIMESTAMP_QUERIES))
+    // 열린 구간마다 종료 쿼리 하나를 남겨 두어 중첩되어도 종료 시각을 기록할 수 있게 한다.
+    uint32 openIndex = UINT32_MAX;
+    if (m_CommandList && m_TimestampQueryHeap && (m_TimestampQueryCount + m_OpenTimestampCount + 2 <= MAX_TIMESTAMP_QUERIES))
     {
         const uint32 startIndex = m_TimestampQueryCount++;
         m_CommandList->EndQuery(m_TimestampQueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, startIndex);
@@ -2716,17 +2721,27 @@ void DirectX12RHI::BeginPassMetrics(const std::wstring& passName)
         PassQueryRange range{};
         range.passName = passName;
         range.startIndex = startIndex;
+        range.depth = static_cast<uint32>(m_OpenPassQueries.size());
+        openIndex = static_cast<uint32>(m_ActivePassQueries.size());
         m_ActivePassQueries.push_back(range);
+        ++m_OpenTimestampCount;
     }
+    m_OpenPassQueries.push_back(openIndex);
 }
 
 void DirectX12RHI::EndPassMetrics()
 {
-    if (m_CommandList && m_TimestampQueryHeap && !m_ActivePassQueries.empty() && (m_TimestampQueryCount < MAX_TIMESTAMP_QUERIES))
+    if (m_OpenPassQueries.empty())
+        return;
+
+    const uint32 openIndex = m_OpenPassQueries.back();
+    m_OpenPassQueries.pop_back();
+    if (openIndex != UINT32_MAX)
     {
         const uint32 endIndex = m_TimestampQueryCount++;
         m_CommandList->EndQuery(m_TimestampQueryHeap.Get(), D3D12_QUERY_TYPE_TIMESTAMP, endIndex);
-        m_ActivePassQueries.back().endIndex = endIndex;
+        m_ActivePassQueries[openIndex].endIndex = endIndex;
+        --m_OpenTimestampCount;
     }
 
     RHI::EndPassMetrics();

@@ -272,14 +272,18 @@ private:
 	std::vector<DeferredReleaseEntry> m_DeferredReleases;
 
 #pragma region Frame Metrics
-	static constexpr uint32 MAX_TIMESTAMP_QUERIES = 64;
+	static constexpr uint32 MAX_TIMESTAMP_QUERIES = 128;
 	ComPtr<ID3D12QueryHeap> m_TimestampQueryHeap;
 	ComPtr<ID3D12Resource> m_TimestampReadbackBuffers[MAX_SWAPCHAIN_BUFFERS];
 	uint64 m_TimestampFrequency = 0;
 	uint32 m_TimestampQueryCount = 0;
 	uint32 m_ResolvedQueryCounts[MAX_SWAPCHAIN_BUFFERS] = {};
-	struct PassQueryRange { std::wstring passName; uint32 startIndex = 0; uint32 endIndex = 0; };
+	// depth 0은 최상위 패스, 1 이상은 바깥 패스 시간에 이미 포함된 세부 구간이다.
+	struct PassQueryRange { std::wstring passName; uint32 startIndex = 0; uint32 endIndex = 0; uint32 depth = 0; };
 	std::vector<PassQueryRange> m_ActivePassQueries;
+	// 열린 구간의 m_ActivePassQueries 인덱스. 쿼리를 배정받지 못한 구간은 UINT32_MAX다.
+	std::vector<uint32> m_OpenPassQueries;
+	uint32 m_OpenTimestampCount = 0;
 	std::vector<PassQueryRange> m_CompletedPassQueries[MAX_SWAPCHAIN_BUFFERS];
 	std::unordered_map<std::wstring, f32> m_LastGPUTimestampResults;
 	f32 m_LastTotalGPUTimeMs = 0.0f;

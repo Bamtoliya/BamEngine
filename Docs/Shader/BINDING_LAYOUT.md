@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-10-30 (`DirectX12RHI::CreateRootSignature` 및 현행 HLSL 셰이더 바인딩 반영)
+- 최종 갱신: 2026-11-22 (Compute 쓰기 텍스처 UAV 테이블 `[11]` 추가, 루트 파라미터 가시성 정정)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -24,7 +24,7 @@ GLSL `layout(set = 2, binding = 0)`.
 | `0` | Global / Per-frame camera data | `[0]` Root CBV (`b0, space0`) | `b0`: `CommonVSData` / `CameraBuffer` (RHI CBV slot `0`) |
 | `1` | Material textures, LUTs, and material samplers | `[1]` SRV Table (`t0-t15, space1`)<br>`[2]` Sampler Table (`s0-s7, space1`) | `t0-t15`: Material SRVs (or Cloud `shapeNoiseTex`/`weatherMapTex` in LightingPass)<br>`s0-s7`: Material Samplers (RHI texture slots `0..15`) |
 | `2` | Per-object draw constants and instancing buffer | `[3]` Root CBV (`b0, space2`)<br>`[4]` Root SRV (`t0, space2`) | `b0`: `ObjectData` / `SceneUBO` (RHI CBV slot `1`)<br>`t0`: `StructuredBuffer<InstanceData> g_Instances` (`BindInstanceBuffer`) |
-| `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` / GeometryPass `MaterialConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`) ... |
+| `3` | Pass-specific constants, G-Buffer/Shadow/Light SRVs, Samplers, and Compute UAVs | `[5]` Root CBV (`b0, space3`)<br>`[6]` Root CBV (`b1, space3`)<br>`[7]` SRV Table (`t0-t15, space3`)<br>`[8]` Sampler Table (`s0-s7, space3`)<br>`[9]` Root UAV (`u0, space3`)<br>`[10]` Root UAV (`u1, space3`)<br>`[11]` UAV Table (`u2-u5, space3`) | `b0`: `FogData` / PostProcess params / `CullingConstants` / GeometryPass `MaterialConstants` (RHI CBV slot `2`)<br>`b1`: `LightingPassData` / Shadow / Sky data (RHI CBV slot `3`) ...<br>`u0`/`u1`: Compute 버퍼 UAV (`BindComputeStorageBuffer`)<br>`u2-u5`: Compute `RWTexture2D` (`BindComputeStorageTexture` slot `0..3`, D3D12 전용) |
 
 > **Note on Skinning & Backend Parity (2026-10-30)**:
 > - **2026-11-06 정정:** 현재 `skinningVS.hlsl`의 `boneMatrices`는 `t0, space2`를 사용한다. `Renderer.cpp`는 본 행렬을 `BindInstanceBuffer(..., sizeof(mat4))`로 제출하고 D3D12 root parameter `[4]`가 이를 받는다. 같은 슬롯은 정적 인스턴싱의 `InstanceData`에도 사용되므로 드로우의 셰이더와 stride 계약을 맞춘다. 두 데이터의 동시 사용 지원을 의미하지 않는다. 과거 `t0, space0` 미연결 설명을 현재 상태로 적용하지 않는다.
@@ -61,19 +61,39 @@ passSrvRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 16, 0, 3);    // t0-t15, spac
 CD3DX12_DESCRIPTOR_RANGE passSampRange;
 passSampRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER, 8, 0, 3);// s0-s7, space3
 
-CD3DX12_ROOT_PARAMETER rootParams[11];
+CD3DX12_DESCRIPTOR_RANGE computeUavRange;
+computeUavRange.Init(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 4, 2, 3);  // u2-u5, space3
+
+CD3DX12_ROOT_PARAMETER rootParams[12];
 rootParams[0].InitAsConstantBufferView(0, 0);                    // b0, space0 (Global CBV)
 rootParams[1].InitAsDescriptorTable(1, &matSrvRange, D3D12_SHADER_VISIBILITY_ALL);
 rootParams[2].InitAsDescriptorTable(1, &matSampRange, D3D12_SHADER_VISIBILITY_ALL);
 rootParams[3].InitAsConstantBufferView(0, 2);                    // b0, space2 (Object CBV)
-rootParams[4].InitAsShaderResourceView(0, 2);                    // t0, space2 (Instance SRV)
+rootParams[4].InitAsShaderResourceView(0, 2, D3D12_SHADER_VISIBILITY_VERTEX); // t0, space2 (Instance SRV)
 rootParams[5].InitAsConstantBufferView(0, 3);                    // b0, space3 (Pass CBV #0)
 rootParams[6].InitAsConstantBufferView(1, 3);                    // b1, space3 (Pass CBV #1)
 rootParams[7].InitAsDescriptorTable(1, &passSrvRange, D3D12_SHADER_VISIBILITY_ALL);
-rootParams[8].InitAsDescriptorTable(1, &passSampRange, D3D12_SHADER_VISIBILITY_ALL);
+rootParams[8].InitAsDescriptorTable(1, &passSampRange, D3D12_SHADER_VISIBILITY_PIXEL);
 rootParams[9].InitAsUnorderedAccessView(0, 3);                   // u0, space3 (Pass UAV #0)
 rootParams[10].InitAsUnorderedAccessView(1, 3);                  // u1, space3 (Pass UAV #1)
+rootParams[11].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILITY_ALL); // u2-u5, space3
 ```
+
+> **2026-11-22 갱신:** `[4]`는 VERTEX, `[8]`은 PIXEL 가시성이다(이전 문서의 ALL 표기는 코드와 달랐다).
+> `[11]`은 Compute Dispatch마다 SRV 테이블 뒤에 4개 UAV 디스크립터로 기록되며, 빈 슬롯은 null UAV다.
+> 쓰기 텍스처 바인딩은 다음 `Dispatch` 한 번에만 적용된다. 구성이 바뀌면 `DirectX12RHI::GLOBAL_ROOT_SIGNATURE_LAYOUT_VERSION`을 올려 PSO 디스크 캐시 키를 분리한다.
+
+### 레이트레이싱 그림자 바인딩 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t13, space3` | `raytracedShadowMaskRTCS` | TLAS (`BindAccelerationStructure`, 다음 `Dispatch` 한 번에만 적용) |
+| `u2, space3` | `raytracedShadowMaskRTCS` | R8 그림자 마스크 출력 (`BindComputeStorageTexture` slot `0`) |
+| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.UseRaytracedShadow`가 1일 때만 읽음 |
+
+파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
+`LightingPassData`는 528바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
 
 ## Change Checklist
 

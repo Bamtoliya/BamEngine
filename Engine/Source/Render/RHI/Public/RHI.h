@@ -272,8 +272,13 @@ protected:
     RHIFrameMetrics m_LastFrameMetrics{};
 
     std::chrono::high_resolution_clock::time_point m_FrameStartTime;
-    std::chrono::high_resolution_clock::time_point m_CurrentPassStartTime;
-    std::wstring m_CurrentPassName;
+    // 패스 안의 세부 구간(예: 조명 패스 안의 그림자 마스크)을 따로 재기 위한 중첩 스택
+    struct PassTimer
+    {
+        std::wstring Name;
+        std::chrono::high_resolution_clock::time_point StartTime;
+    };
+    std::vector<PassTimer> m_PassTimers;
 #pragma endregion
 };
 

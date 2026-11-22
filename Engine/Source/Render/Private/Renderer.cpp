@@ -122,7 +122,13 @@ EResult Renderer::Render(f32 dt)
 	// 레이트레이싱 그림자용 BLAS/TLAS를 패스 실행 전에 빌드한다.
 	// 실패한 씬은 GetTopLevelAS가 nullptr를 반환해 기존 섀도맵 경로로 남으므로 프레임은 계속 진행한다.
 	if (RaytracingSceneManager::IsCreated())
-		RaytracingSceneManager::Get().BuildRequestedScenes();
+	{
+		auto& raytracing = RaytracingSceneManager::Get();
+		const bool measure = raytracing.HasRequests();
+		if (measure) m_RHI->BeginPassMetrics(L"RaytracingAccelerationStructures");
+		raytracing.BuildRequestedScenes();
+		if (measure) m_RHI->EndPassMetrics();
+	}
 
 	auto& jobsPerPass = m_ViewportJobsPerPass;
 	for (auto& [passID, jobs] : jobsPerPass)

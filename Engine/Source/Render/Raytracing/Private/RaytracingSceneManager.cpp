@@ -122,8 +122,14 @@ EResult RaytracingSceneManager::BuildRequestedScenes()
 	}
 
 	// 빌드한 프레임의 통계만 보관한다. 새 BLAS가 생기거나 수집 결과가 바뀐 경우에만 기록해 로그를 반복하지 않는다.
+	// 오래 빌드하지 않았으면(레이트레이싱 꺼짐) 지난 통계를 현재 값처럼 보이지 않게 비운다.
 	if (!builtAnyScene)
+	{
+		if (m_FrameCounter - m_LastBuildFrame > TopLevelRetentionFrames)
+			m_LastStats = {};
 		return frameResult;
+	}
+	m_LastBuildFrame = m_FrameCounter;
 
 	if (stats.BottomLevelBuiltThisFrame > 0 || stats.SceneCount != m_LastStats.SceneCount ||
 		stats.InstanceCount != m_LastStats.InstanceCount ||
