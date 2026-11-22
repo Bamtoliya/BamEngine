@@ -32,6 +32,7 @@
 #include "PickingManager.h"
 
 #include "TimeManager.h"
+#include "PlatformPath.h"
 #include <algorithm>
 
 IMPLEMENT_SINGLETON(Renderer)
@@ -73,6 +74,9 @@ void Renderer::Free()
 	m_DefaultShadowDepthVS = {};
 	m_DefaultShadowDepthSkinningVS = {};
 	m_DefaultShadowDepthPS = {};
+	m_MaskedShadowDepthVS = {};
+	m_MaskedShadowDepthSkinningVS = {};
+	m_MaskedShadowDepthPS = {};
 
 	m_RenderPassManager = nullptr;
 
@@ -747,6 +751,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 		// 1) 메시가 달라진 경우 무조건 플러시
 		// 2) 일반 패스(Geometry 등): 머티리얼이 달라지면 플러시
 		// 3) 섀도우 패스: 깊이 전용 렌더링이므로 CullMode와 FrontFace가 일치하면 서로 다른 머티리얼이라도 단일 인스턴스 배치로 병합 허용
+		//    단, 텍스처로 구멍을 내는 Masked 재질은 머티리얼이 다르면 병합하지 않음
 		// 4) 동적 링 버퍼 오버플로 방지를 위한 최대 배치 인스턴스 수(1024) 도달 시 분할 플러시
 		const bool isShadowPass = (passType == ERenderPassType::Shadow);
 		bool needsFlush = false;
@@ -768,6 +773,11 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 				{
 					if (material->GetCullMode() != batchMaterial->GetCullMode() ||
 						material->GetFrontFace() != batchMaterial->GetFrontFace())
+					{
+						needsFlush = true;
+					}
+					else if (material != batchMaterial &&
+						(UsesMaskedShadow(mesh, material) || UsesMaskedShadow(batchMesh, batchMaterial)))
 					{
 						needsFlush = true;
 					}
@@ -1414,6 +1424,11 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 		if (!vs) vs = isSkinned ? m_DefaultShadowDepthSkinningVS.Get() : m_DefaultShadowDepthVS.Get();
 		if (!ps) ps = m_DefaultShadowDepthPS.Get();
 	}
+	if (passType == ERenderPassType::Shadow && UsesMaskedShadow(mesh, material))
+	{
+		vs = mesh->IsSkinned() ? m_MaskedShadowDepthSkinningVS.Get() : m_MaskedShadowDepthVS.Get();
+		ps = m_MaskedShadowDepthPS.Get();
+	}
 
 	if (!vs || !ps || !vs->GetRHIShader() || !ps->GetRHIShader()) return EResult::InvalidArgument;
 	if (vs->GetShaderType() != EShaderType::Vertex || ps->GetShaderType() != EShaderType::Fragment)
@@ -1581,6 +1596,48 @@ void Renderer::EnsureDefaultShaders()
 	m_DefaultShadowDepthVS = getOrLoad(L"Resources/Shader/ShadowDepthVS");
 	m_DefaultShadowDepthSkinningVS = getOrLoad(L"Resources/Shader/ShadowDepthSkinningVS");
 	m_DefaultShadowDepthPS = getOrLoad(L"Resources/Shader/ShadowDepthPS");
+
+	// 시작 매니페스트와 재질 에셋이 참조하지 않는 셰이더라 바이너리 경로로 직접 등록한다.
+	const auto binRoot = PlatformPath::GetEngineResourceRoot() / "Shader" / "bin";
+	const auto getOrRegister = [&](const wchar_t* key, const std::wstring& stem, EShaderType type) -> ResourceHandle<Shader>
+		{
+			auto handle = rm.GetResourceHandle<Shader>(key);
+			if (handle.IsValid() && handle.Get()) return handle;
+			ShaderDesc desc{};
+			desc.Key = key;
+			desc.dxilPath = (binRoot / "dxil" / (stem + L".cso")).wstring();
+			desc.spirvPath = (binRoot / "spirv" / (stem + L".spv")).wstring();
+			desc.wgslPath = (binRoot / "wgsl" / (stem + L".wgsl")).wstring();
+			desc.Path = m_RHIType == ERHIType::DirectX12 ? desc.dxilPath :
+				(m_RHIType == ERHIType::WebGPU ? desc.wgslPath : desc.spirvPath);
+			desc.shaderType = type;
+			return rm.LoadResource<Shader>(&desc);
+		};
+	m_MaskedShadowDepthVS = getOrRegister(L"Resources/Shader/ShadowDepthMaskedVS", L"shadowDepthMaskedVS", EShaderType::Vertex);
+	m_MaskedShadowDepthSkinningVS = getOrRegister(L"Resources/Shader/ShadowDepthMaskedSkinningVS", L"shadowDepthMaskedSkinningVS", EShaderType::Vertex);
+	m_MaskedShadowDepthPS = getOrRegister(L"Resources/Shader/ShadowDepthMaskedPS", L"shadowDepthMaskedPS", EShaderType::Fragment);
+}
+bool Renderer::UsesMaskedShadow(Mesh* mesh, MaterialInterface* material)
+{
+	if (!mesh || !material || material->GetBlendMode() != EBlendMode::Masked || !mesh->GetMaterialBuffer())
+		return false;
+	EnsureDefaultShaders();
+	const auto matches = [](const Shader* shader, const Shader* defaultShader)
+		{
+			return shader && defaultShader && (shader == defaultShader || shader->GetKey() == defaultShader->GetKey());
+		};
+	// 셰이더 그래프처럼 알파 식이 다른 픽셀 셰이더나 전용 그림자 셰이더를 쓰는 재질은 기존 경로를 유지한다.
+	if (!matches(material->GetPixelShader(ERenderPassType::Geometry), m_DefaultGBufferPS.Get()))
+		return false;
+	const Shader* shadowVS = material->GetVertexShader(ERenderPassType::Shadow);
+	const Shader* shadowPS = material->GetPixelShader(ERenderPassType::Shadow);
+	if (shadowVS && !matches(shadowVS, m_DefaultShadowDepthVS.Get()) && !matches(shadowVS, m_DefaultShadowDepthSkinningVS.Get()))
+		return false;
+	if (shadowPS && !matches(shadowPS, m_DefaultShadowDepthPS.Get()))
+		return false;
+	const Shader* maskedVS = mesh->IsSkinned() ? m_MaskedShadowDepthSkinningVS.Get() : m_MaskedShadowDepthVS.Get();
+	const Shader* maskedPS = m_MaskedShadowDepthPS.Get();
+	return maskedVS && maskedVS->GetRHIShader() && maskedPS && maskedPS->GetRHIShader();
 }
 Shader* Renderer::GetDefaultShadowDepthVertexShader()
 {

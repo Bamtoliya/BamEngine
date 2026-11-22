@@ -791,6 +791,46 @@ namespace
         if (Engine::IsFailure(rm.SaveToJsonFile(miHandle.Get(), L"test-mi.bammatinst.json")))
             return Fail("MaterialInstance JSON archive save failed.");
 
+        // Masked 알파 기준값: 블렌드 모드와 기준값의 인스턴스 상속·오버라이드
+        {
+            const auto encodedCutoff = [](const Engine::MaterialInterface& material)
+            {
+                Engine::MaterialConstants constants;
+                material.BuildMaterialConstants(constants);
+                return constants.materialFlags >> Engine::MATERIAL_ALPHA_CUTOFF_SHIFT;
+            };
+
+            Engine::MaterialDesc maskedDesc{};
+            maskedDesc.Key = L"test-masked-mat.bammat.json";
+            maskedDesc.Path = L"test-masked-mat.bammat.json";
+            auto maskedHandle = rm.AddResource<Engine::Material>(maskedDesc.Key, Engine::Material::Create(&maskedDesc));
+            MaterialInstanceDesc maskedInstanceDesc{};
+            maskedInstanceDesc.Key = L"test-masked-mi.bammatinst.json";
+            maskedInstanceDesc.Path = L"test-masked-mi.bammatinst.json";
+            maskedInstanceDesc.BaseMaterialHandle = maskedHandle;
+            auto maskedInstance = rm.AddResource<Engine::MaterialInstance>(maskedInstanceDesc.Key, Engine::MaterialInstance::Create(&maskedInstanceDesc));
+            if (!maskedHandle.IsValid() || !maskedInstance.IsValid()) return Fail("Masked material creation failed.");
+
+            if (encodedCutoff(*maskedHandle.Get()) != 0u || encodedCutoff(*maskedInstance.Get()) != 0u)
+                return Fail("Opaque materials must not encode an alpha cutoff.");
+            maskedHandle->SetBlendMode(Engine::EBlendMode::Masked);
+            if (encodedCutoff(*maskedHandle.Get()) != 128u || encodedCutoff(*maskedInstance.Get()) != 128u)
+                return Fail("Masked materials must default to a 0.5 alpha cutoff.");
+            maskedHandle->SetAlphaCutoff(0.2f);
+            if (encodedCutoff(*maskedHandle.Get()) != 51u || encodedCutoff(*maskedInstance.Get()) != 51u)
+                return Fail("Instances must inherit the base alpha cutoff.");
+            maskedInstance->SetAlphaCutoff(0.8f);
+            if (encodedCutoff(*maskedHandle.Get()) != 51u || encodedCutoff(*maskedInstance.Get()) != 204u)
+                return Fail("Instances must override the base alpha cutoff.");
+            maskedInstance->SetBlendMode(Engine::EBlendMode::Opaque);
+            if (encodedCutoff(*maskedInstance.Get()) != 0u)
+                return Fail("An opaque instance override must clear the inherited alpha cutoff.");
+            if (Engine::PackMaterialAlphaCutoff(0xFFFFFFFFu, false, 0.5f) != 0x00FFFFFFu ||
+                Engine::PackMaterialAlphaCutoff(1u, true, 0.0f) != 0x01000001u ||
+                Engine::PackMaterialAlphaCutoff(1u, true, 2.0f) != 0xFF000001u)
+                return Fail("Alpha cutoff packing must preserve the feature flags and clamp its range.");
+        }
+
         SkeletonCreateDesc skelDesc{};
         skelDesc.Key = L"test-skel.bamskel.json";
         skelDesc.Path = L"test-skel.bamskel.json";

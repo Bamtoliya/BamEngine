@@ -15,6 +15,9 @@ std::vector<Engine::DeferredProfileShader> Engine::GetDeferredProfileShaders(con
 		{ L"Resources/Shader/ShadowDepthVS", L"shadowDepthVS.cso", Stage::Vertex },
 		{ L"Resources/Shader/ShadowDepthPS", L"shadowDepthPS.cso", Stage::Fragment },
 		{ L"Resources/Shader/ShadowDepthSkinningVS", L"shadowDepthSkinningVS.cso", Stage::Vertex },
+		{ L"Resources/Shader/ShadowDepthMaskedVS", L"shadowDepthMaskedVS.cso", Stage::Vertex },
+		{ L"Resources/Shader/ShadowDepthMaskedPS", L"shadowDepthMaskedPS.cso", Stage::Fragment },
+		{ L"Resources/Shader/ShadowDepthMaskedSkinningVS", L"shadowDepthMaskedSkinningVS.cso", Stage::Vertex },
 		{ L"Resources/Shader/UIVS", L"uiVS.cso", Stage::Vertex },
 		{ L"Resources/Shader/UIPS", L"uiPS.cso", Stage::Fragment },
 		{ L"ClientPresentPS", L"clientPresentPS.cso", Stage::Fragment }

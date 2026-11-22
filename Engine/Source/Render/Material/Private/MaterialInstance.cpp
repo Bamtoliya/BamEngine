@@ -91,6 +91,16 @@ void MaterialInstance::BuildMaterialConstants(MaterialConstants& outConstants) c
 		if (binding.texture.Get()) outConstants.materialFlags |= flagForSlot(binding.slot);
 	// 3. 인스턴스 자신의 파라미터 오버라이드 반영
 	ApplyParameterConstants(outConstants);
+	// 블렌드 모드와 알파 기준값은 인스턴스 오버라이드를 반영한 값으로 다시 담는다.
+	outConstants.materialFlags = PackMaterialAlphaCutoff(outConstants.materialFlags,
+		GetBlendMode() == EBlendMode::Masked, GetAlphaCutoff());
+}
+
+f32 MaterialInstance::GetAlphaCutoff() const
+{
+	if (const auto cutoff = FindAlphaCutoffParameter()) return *cutoff;
+	const auto* base = GetBaseMaterial();
+	return base ? base->GetAlphaCutoff() : DEFAULT_ALPHA_CUTOFF;
 }
 
 void MaterialInstance::BuildConstantBufferBlob(vector<uint8>& outBlob) const

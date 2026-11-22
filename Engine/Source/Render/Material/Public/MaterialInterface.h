@@ -77,6 +77,19 @@ struct MaterialConstants
 };
 static_assert(sizeof(MaterialConstants) == 48, "MaterialConstants must be 48 bytes (aligned to 16 bytes)");
 
+// Masked 재질의 알파 기준값을 materialFlags의 상위 8비트에 담는다. 0은 Masked가 아니라는 뜻이며
+// shading_flags.hlsli의 GetAlphaDiscardThreshold와 일치해야 한다.
+inline constexpr uint32 MATERIAL_ALPHA_CUTOFF_SHIFT = 24u;
+inline constexpr f32 DEFAULT_ALPHA_CUTOFF = 0.5f;
+constexpr uint32 PackMaterialAlphaCutoff(uint32 materialFlags, bool masked, f32 cutoff)
+{
+	materialFlags &= (1u << MATERIAL_ALPHA_CUTOFF_SHIFT) - 1u;
+	if (!masked) return materialFlags;
+	const f32 clamped = cutoff >= 0.0f ? (cutoff <= 1.0f ? cutoff : 1.0f) : 0.0f; // NaN은 0으로 처리
+	const uint32 encoded = static_cast<uint32>(clamped * 255.0f + 0.5f);
+	return materialFlags | ((encoded > 0u ? encoded : 1u) << MATERIAL_ALPHA_CUTOFF_SHIFT);
+}
+
 ENUM()
 enum class EMaterialParameterType
 {
@@ -253,6 +266,10 @@ public:
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const;
 	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const;
 
+	// Masked 재질이 이 값보다 알파가 작은 픽셀을 버린다. "AlphaCutoff" 파라미터로 저장하며 없으면 DEFAULT_ALPHA_CUTOFF.
+	virtual f32 GetAlphaCutoff() const;
+	void SetAlphaCutoff(f32 cutoff);
+
 	void SetBufferLayout(const MaterialBufferLayout& layout) { m_BufferLayout = layout; }
 	const MaterialBufferLayout& GetBufferLayout() const { return m_BufferLayout; }
 
@@ -274,6 +291,7 @@ public:
 protected:
 	friend class MaterialInstance;
 	void ApplyParameterConstants(MaterialConstants& outConstants) const;
+	std::optional<f32> FindAlphaCutoffParameter() const;
 	void ApplyCustomParametersToBlob(vector<uint8>& outBlob, const MaterialBufferLayout& layout) const;
 
 private:

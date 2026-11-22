@@ -53,7 +53,7 @@ PS_OUTPUT main(PS_INPUT input)
 	{
 		diffuse *= diffuseMap.Sample(materialSampler, input.TexCoord);
 	}
-	if (diffuse.a < 0.01f)
+	if (diffuse.a < GetAlphaDiscardThreshold(gMaterial.materialFlags))
 		discard;
 
 	// 2. 법선 계산 (Normal)

@@ -103,7 +103,9 @@ flowchart TD
 | :--- | :--- | :--- |
 | `shadowDepthVS.hlsl` | Vertex | 방향성/포인트/스팟 라이트 뷰-프로젝션 깊이 투영 |
 | `shadowDepthSkinningVS.hlsl` | Vertex | 스키닝 캐릭터의 라이트 공간 깊이 투영 (본 트랜스폼 적용) |
-| `shadowDepthPS.hlsl` | Pixel | 알파 클립(마스킹) 머티리얼을 위한 그림자 뎁스 픽셀 셰이더 |
+| `shadowDepthPS.hlsl` | Pixel | 불투명 재질의 깊이 전용 그림자 픽셀 셰이더 (텍스처를 읽지 않음) |
+| `shadowDepthMaskedVS.hlsl` / `shadowDepthMaskedSkinningVS.hlsl` | Vertex | Masked 재질의 정적·스킨드 그림자. UV와 정점 색을 함께 전달 |
+| `shadowDepthMaskedPS.hlsl` | Pixel | 재질 알파 기준값으로 픽셀을 버리는 Masked 그림자 픽셀 셰이더 |
 | `terrainShadowDepthVS.hlsl` | Vertex | 지형 표면의 라이트 공간 깊이 투영 |
 
 #### (3) 라이팅 및 컴퓨트 패스 (Deferred Lighting & Sky)

@@ -19,6 +19,15 @@ static const uint FLAG_HAS_NORMAL_MAP       = 1u << 1u; // 슬롯 1: Normal Map
 static const uint FLAG_HAS_PBR_MAP          = 1u << 2u; // 슬롯 2: PBR Map (Roughness/Metallic/Cavity/AO)
 static const uint FLAG_HAS_EMISSIVE_MAP     = 1u << 3u; // 슬롯 3: Emissive Map
 
+// 상위 8비트는 Masked 재질의 알파 기준값(1~255). 0이면 Masked가 아니다(C++ PackMaterialAlphaCutoff와 일치).
+static const uint MATERIAL_ALPHA_CUTOFF_SHIFT = 24u;
+static const float MIN_ALPHA_DISCARD = 0.01f;
+
+float GetAlphaDiscardThreshold(uint materialFlags)
+{
+	return max(MIN_ALPHA_DISCARD, (float)(materialFlags >> MATERIAL_ALPHA_CUTOFF_SHIFT) / 255.0f);
+}
+
 float PackShadingData(uint shadingModel, uint flags)
 {
 	return (float)((shadingModel & SHADING_MODEL_MASK) | (flags & ~SHADING_MODEL_MASK));

@@ -549,6 +549,21 @@ void MaterialEditor::DrawPipelineSettings()
 			m_History.MarkEdited();
 		}
 
+		// 1-1. Masked 알파 기준값 (GBuffer와 섀도맵이 같은 값으로 픽셀을 버린다)
+		if (m_Material->GetBlendMode() == Engine::EBlendMode::Masked)
+		{
+			float alphaCutoff = m_Material->GetAlphaCutoff();
+			EditorUI::PropertyRow("MaterialEditor.AlphaCutoff");
+			ImGui::SetNextItemWidth(-FLT_MIN);
+			if (ImGui::SliderFloat("###AlphaCutoff", &alphaCutoff, 0.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp))
+			{
+				m_Material->SetAlphaCutoff(alphaCutoff);
+				m_Material->IncreaseVersion();
+				m_History.MarkEdited();
+				m_PreviewDirtyTimer = 0.2f;
+			}
+		}
+
 		// 2. 컬링 모드 (ECullMode)
 		constexpr Engine::ECullMode cullValues[] = {
 			Engine::ECullMode::None,
@@ -1232,7 +1247,7 @@ void MaterialEditor::DrawParameters()
 					{
 						const auto lower = Engine::ToLowerStr(name);
 						const bool builtIn = lower == "basecolor" || lower == "roughness" || lower == "metallic" ||
-							lower == "cavity" || lower == "ao" || lower == "emissive" || lower == "emissivecolor";
+							lower == "cavity" || lower == "ao" || lower == "emissive" || lower == "emissivecolor" || lower == "alphacutoff";
 						const auto [type, initial] = ReadGraphParameterDefault(param);
 						if (!builtIn && type != Engine::EGraphPinType::Execution &&
 							ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.ExposeParameter").c_str()) &&

@@ -295,6 +295,36 @@ void MaterialInterface::ResetAllParameters()
     }
 }
 
+std::optional<f32> MaterialInterface::FindAlphaCutoffParameter() const
+{
+    for (const auto& [key, param] : m_Parameters)
+    {
+        if (param.type == EMaterialParameterType::Float && param.data.size() >= sizeof(f32) && Engine::ToLowerStr(key) == "alphacutoff")
+            return *reinterpret_cast<const f32*>(param.data.data());
+    }
+    return std::nullopt;
+}
+
+f32 MaterialInterface::GetAlphaCutoff() const
+{
+    return FindAlphaCutoffParameter().value_or(DEFAULT_ALPHA_CUTOFF);
+}
+
+void MaterialInterface::SetAlphaCutoff(f32 cutoff)
+{
+    for (const auto& [key, param] : m_Parameters)
+    {
+        if (param.type == EMaterialParameterType::Float && Engine::ToLowerStr(key) == "alphacutoff")
+        {
+            const string existing = key;
+            SetFloat(existing, cutoff);
+            return;
+        }
+    }
+    AddFloat("AlphaCutoff", DEFAULT_ALPHA_CUTOFF);
+    SetFloat("AlphaCutoff", cutoff);
+}
+
 void MaterialInterface::ApplyParameterConstants(MaterialConstants& outConstants) const
 {
     // 대소문자 구분 없이 파라미터를 찾는 헬퍼 람다
@@ -727,6 +757,8 @@ void MaterialInterface::BuildMaterialConstants(MaterialConstants& outConstants) 
     }
 
     ApplyParameterConstants(outConstants);
+    outConstants.materialFlags = PackMaterialAlphaCutoff(outConstants.materialFlags,
+        GetBlendMode() == EBlendMode::Masked, GetAlphaCutoff());
 }
 
 EResult MaterialInterface::Bind(uint32 slot)

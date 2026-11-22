@@ -46,6 +46,7 @@ public:
 
 #pragma region Bind
 	virtual void BuildMaterialConstants(MaterialConstants& outConstants) const override;
+	virtual f32 GetAlphaCutoff() const override;
 	virtual void BuildConstantBufferBlob(vector<uint8>& outBlob) const override;
 	virtual EResult Bind(uint32 slot) override;
 #pragma endregion

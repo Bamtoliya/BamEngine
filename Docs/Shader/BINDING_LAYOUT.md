@@ -95,6 +95,12 @@ rootParams[11].InitAsDescriptorTable(1, &computeUavRange, D3D12_SHADER_VISIBILIT
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
 `LightingPassData`는 528바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
 
+### 재질 알파 기준값
+
+재질 상수 `materialFlags`(`b0, space3`)의 상위 8비트는 Masked 재질의 알파 기준값이다(1~255, 0은 Masked 아님).
+`PackMaterialAlphaCutoff`(`MaterialInterface.h`)와 `GetAlphaDiscardThreshold`(`shading_flags.hlsli`)가 일치해야 한다.
+`shadowDepthMaskedPS`는 `gbufferPS`와 같은 재질 상수, `t0`·`s0, space1`을 읽는다.
+
 ## Change Checklist
 
 When adding or moving a binding:

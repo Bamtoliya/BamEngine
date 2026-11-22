@@ -123,6 +123,8 @@ public:
 	class Shader* GetDefaultShadowDepthPixelShader();
 private:
 	void EnsureDefaultShaders();
+	// 섀도 패스에서 알파 기준값을 적용할 수 있는 재질인지. 알파 식을 아는 엔진 기본 GBufferPS를 쓰는 Masked 재질만 지원한다.
+	bool UsesMaskedShadow(Mesh* mesh, MaterialInterface* material);
 	class Shader* ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType);
 #pragma endregion
 
@@ -159,6 +161,9 @@ private:
 	ResourceHandle<Shader> m_DefaultShadowDepthVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthSkinningVS;
 	ResourceHandle<Shader> m_DefaultShadowDepthPS;
+	ResourceHandle<Shader> m_MaskedShadowDepthVS;
+	ResourceHandle<Shader> m_MaskedShadowDepthSkinningVS;
+	ResourceHandle<Shader> m_MaskedShadowDepthPS;
 #pragma endregion
 };
 END

@@ -1000,6 +1000,7 @@
         "MaterialEditor.GraphSaveFailedDetail": "그래프 저장 실패 {}: {}",
         "MaterialEditor.BaseMaterialMissing": "원본 머티리얼이 없습니다. 아래에서 원본 머티리얼을 선택하세요.",
         "MaterialEditor.BaseMaterialSlot": "원본 머티리얼",
+        "MaterialEditor.AlphaCutoff": "알파 기준값",
         "MaterialEditor.BlendMode": "블렌드 모드",
         "MaterialEditor.ColorType": "{} (색상)",
         "MaterialEditor.CullMode": "컬링 모드",

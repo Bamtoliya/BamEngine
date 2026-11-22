@@ -1000,6 +1000,7 @@
         "MaterialEditor.GraphSaveFailedDetail": "Failed to save graph {}: {}",
         "MaterialEditor.BaseMaterialMissing": "Base material is missing. Select a base material below.",
         "MaterialEditor.BaseMaterialSlot": "Base Material",
+        "MaterialEditor.AlphaCutoff": "Alpha Cutoff",
         "MaterialEditor.BlendMode": "Blend Mode",
         "MaterialEditor.ColorType": "{} (Color)",
         "MaterialEditor.CullMode": "Cull Mode",
