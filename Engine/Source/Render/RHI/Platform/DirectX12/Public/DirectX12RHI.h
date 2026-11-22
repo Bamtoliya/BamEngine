@@ -285,7 +285,11 @@ private:
 	std::vector<uint32> m_OpenPassQueries;
 	uint32 m_OpenTimestampCount = 0;
 	std::vector<PassQueryRange> m_CompletedPassQueries[MAX_SWAPCHAIN_BUFFERS];
-	std::unordered_map<std::wstring, f32> m_LastGPUTimestampResults;
+	// 프레임 제한 뷰포트는 매 프레임 제출하지 않으므로 패스별 마지막 결과를 유지하고, 오래 갱신되지 않은 항목만 지운다.
+	struct GPUTimestampResult { f32 TimeMs = 0.0f; uint64 ReadbackIndex = 0; };
+	static constexpr uint64 TIMESTAMP_RESULT_RETENTION = 600;
+	std::unordered_map<std::wstring, GPUTimestampResult> m_LastGPUTimestampResults;
+	uint64 m_TimestampReadbackIndex = 0;
 	f32 m_LastTotalGPUTimeMs = 0.0f;
 #pragma endregion
 

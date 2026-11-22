@@ -483,7 +483,7 @@ EResult DirectX12RHI::BeginFrame()
         uint64* timestampData = nullptr;
         if (SUCCEEDED(m_TimestampReadbackBuffers[frameIdx]->Map(0, &readRange, reinterpret_cast<void**>(&timestampData))))
         {
-            m_LastGPUTimestampResults.clear();
+            ++m_TimestampReadbackIndex;
             f32 totalGpuMs = 0.0f;
             for (const auto& passQuery : m_CompletedPassQueries[frameIdx])
             {
@@ -494,13 +494,17 @@ EResult DirectX12RHI::BeginFrame()
                     if (end >= start)
                     {
                         const f32 ms = static_cast<f32>(end - start) / static_cast<f32>(m_TimestampFrequency) * 1000.0f;
-                        m_LastGPUTimestampResults[passQuery.passName] = ms;
+                        m_LastGPUTimestampResults[passQuery.passName] = { ms, m_TimestampReadbackIndex };
                         if (passQuery.depth == 0)
                             totalGpuMs += ms;
                     }
                 }
             }
             m_LastTotalGPUTimeMs = totalGpuMs;
+            std::erase_if(m_LastGPUTimestampResults, [this](const auto& result)
+                {
+                    return m_TimestampReadbackIndex - result.second.ReadbackIndex > TIMESTAMP_RESULT_RETENTION;
+                });
             m_TimestampReadbackBuffers[frameIdx]->Unmap(0, nullptr);
         }
         m_ResolvedQueryCounts[frameIdx] = 0;
@@ -2751,7 +2755,7 @@ void DirectX12RHI::EndPassMetrics()
     {
         auto& metric = m_CurrentFrameMetrics.PassMetrics.back();
         if (auto it = m_LastGPUTimestampResults.find(metric.PassName); it != m_LastGPUTimestampResults.end())
-            metric.GPUTimeMs = it->second;
+            metric.GPUTimeMs = it->second.TimeMs;
     }
 }
 
