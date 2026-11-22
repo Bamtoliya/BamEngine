@@ -1016,10 +1016,11 @@ namespace
 			spline.LookAtTargetName = "Boss";
 			desc.CameraSplineTracks.push_back(spline);
 
+			Engine::ActionTimelineCreateDesc emptyDesc;
 			auto* srcAsset = Engine::ResourceManager::Get().AddResource(
 				L"CamSeqArchiveSrc", Engine::ActionTimelineAsset::Create(&desc)).Get();
 			auto* dstAsset = Engine::ResourceManager::Get().AddResource(
-				L"CamSeqArchiveDst", Engine::ActionTimelineAsset::Create(nullptr)).Get();
+				L"CamSeqArchiveDst", Engine::ActionTimelineAsset::Create(&emptyDesc)).Get();
 			if (!srcAsset || !dstAsset)
 				return Check(false, "Failed to create ActionTimelineAsset for archive test.");
 
@@ -1045,7 +1046,7 @@ namespace
 			auto* legacySrc = Engine::ResourceManager::Get().AddResource(
 				L"CamSeqLegacySrc", Engine::ActionTimelineAsset::Create(&legacyDesc)).Get();
 			auto* legacyAsset = Engine::ResourceManager::Get().AddResource(
-				L"CamSeqLegacyDst", Engine::ActionTimelineAsset::Create(nullptr)).Get();
+				L"CamSeqLegacyDst", Engine::ActionTimelineAsset::Create(&emptyDesc)).Get();
 			if (!legacySrc || !legacyAsset)
 				return Check(false, "Failed to create legacy ActionTimelineAsset.");
 
