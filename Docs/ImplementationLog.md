@@ -2,6 +2,12 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 셰이더 노드의 문자열 설정 핀 허용
+
+- **결함.** `c58c2980`이 `Shader.TextureSample`에 문자열 핀 `name`을 추가했지만 등록 규칙이 셰이더 노드의 문자열 핀을 모두 거부했다. `RegisterBuiltins`가 실패해 기본 그래프 노드가 등록되지 않았고 `AssetReferenceCheck` 52번이 실패했다.
+- **수정.** 연결할 수 없는(`LiteralOnly`) 문자열 입력만 허용한다. 연결 가능한 문자열 핀은 계속 거부한다.
+- **확인된 결과.** 이후 시작 로그에 등록 오류가 없었고 사용자가 CTest 통과를 보고했다. TextureSample 노드의 이름 입력 화면은 확인하지 않았다.
+
 ### [2026-11-22] DXR 그림자 누락 방지와 BLAS 빌드 예산
 
 - **결함.** 섀도맵 제외 여부를 메시·재질 종류로만 정해, BLAS 생성이 실패한 메시와 TLAS 빌드가 실패한 씬의 그림자가 섀도맵과 레이트레이싱 양쪽에서 빠질 수 있었다.

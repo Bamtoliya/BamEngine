@@ -50,8 +50,10 @@ namespace Engine
 				}
 				if (pin.Type != EGraphPinType::Object && !pin.ObjectType.empty())
 					return invalid(pin.Key, "Only object pins can specify an object type.");
-				if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object || pin.Type == EGraphPinType::String))
-					return invalid(pin.Key, "Shader nodes cannot declare execution, object, or string pins.");
+				// 연결할 수 없는 문자열 입력은 HLSL로 내보내지 않는 노드 설정값(텍스처 이름 등)이므로 허용한다.
+				const bool literalString = pin.Type == EGraphPinType::String && pin.Direction == EGraphPinDirection::Input && pin.LiteralOnly;
+				if (shader && (pin.Type == EGraphPinType::Execution || pin.Type == EGraphPinType::Object || (pin.Type == EGraphPinType::String && !literalString)))
+					return invalid(pin.Key, "Shader nodes cannot declare execution, object, or connectable string pins.");
 				if (!std::holds_alternative<std::monostate>(pin.DefaultValue))
 				{
 					if (pin.Direction != EGraphPinDirection::Input ||
