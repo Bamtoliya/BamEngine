@@ -11,6 +11,7 @@ enum class EUnifiedSettingsCategory
     General,
     Theme,
     Graphic,
+    Audio,
     Editor,
     Workspace,
     Shortcuts,
@@ -59,6 +60,7 @@ private:
     GeneralSettingsWidget m_General;
     ThemeSettingsWidget m_Theme;
     GraphicSettingsWidget m_Graphics;
+    AudioMixerSettingsWidget m_AudioMixer;
     EditorEnvironmentSettingsWidget m_EditorEnvironment;
     WorkspaceSettingsWidget m_Workspace;
     ShortcutSettingsWidget m_Shortcuts;

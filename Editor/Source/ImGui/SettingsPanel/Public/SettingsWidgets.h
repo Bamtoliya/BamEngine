@@ -5,6 +5,7 @@
 #include "GraphicSettingsWidget.h"
 #include "InputActionSettingsWidget.h"
 #include "ProjectSettingsWidget.h"
+#include "SettingsPanel.h"
 #include "ShortcutSettingsWidget.h"
 #include "ThemeSettingsWidget.h"
 #include "WorkspaceSettingsWidget.h"

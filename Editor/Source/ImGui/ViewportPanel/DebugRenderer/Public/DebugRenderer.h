@@ -26,6 +26,7 @@ public:
 	void DrawBox(const vec3& center, const vec3& extent, const vec4& color, const mat4& transform = mat4(1.0f));
 	void DrawSphere(const vec3& center, float radius, const vec4& color);
 	void DrawCircleXZ(const vec3& center, float radius, const vec4& color);
+	void DrawArcXZ(const vec3& center, float radius, float startAngleRad, float endAngleRad, const vec4& color, uint32 segments = 24);
 
 public:
 	bool* GetDrawCollidersPtr() { return &m_DrawColliders; }
