@@ -26,6 +26,8 @@
 #include "RigidBodyComponent.h"
 #include "CharacterControllerComponent.h"
 #include "TagComponent.h"
+#include "RuntimeSystemManifest.h"
+#include "SystemManager.h"
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -641,6 +643,78 @@ namespace
 
 		return passed;
 	}
+
+	struct SystemManagerScope
+	{
+		bool Created = static_cast<bool>(Engine::SystemManager::Create());
+		~SystemManagerScope()
+		{
+			if (Created) Engine::SystemManager::Destroy();
+		}
+	};
+
+	bool CheckRuntimeSystemManifestRegistersCombat()
+	{
+		SystemManagerScope systems;
+		if (!systems.Created)
+			return Check(false, "SystemManager creation failed in CheckRuntimeSystemManifestRegistersCombat.");
+
+		bool passed = true;
+		auto& systemManager = Engine::SystemManager::Get();
+		passed &= Check(Engine::RegisterCommonRuntimeSystems(systemManager) == Engine::EResult::Success,
+			"RegisterCommonRuntimeSystems must succeed.");
+
+		auto* registeredCombat = systemManager.GetSystem<Engine::GameplayCombatSystem>();
+		passed &= Check(registeredCombat != nullptr,
+			"RegisterCommonRuntimeSystems must register GameplayCombatSystem.");
+		if (registeredCombat)
+		{
+			passed &= Check(registeredCombat->GetExecutionPhases() == static_cast<Engine::uint8>(Engine::ESystemPhase::Gameplay),
+				"GameplayCombatSystem must execute in ESystemPhase::Gameplay.");
+		}
+
+		// 페이즈 마스크 가드 검증: 다른 시스템 싱글톤 의존성을 피하기 위해 GameplayCombatSystem만 단독 유지한다.
+		systemManager.ClearSystems();
+		auto* isolatedCombat = systemManager.AddSystem<Engine::GameplayCombatSystem>();
+		ScenePtr scene(Engine::Scene::Create());
+		if (!isolatedCombat || !scene)
+			return Check(false, "Failed to setup isolated GameplayCombatSystem phase guard check.");
+
+		scene->SetActive(true);
+		auto& world = scene->GetRegistry();
+
+		const auto attacker = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(attacker).position = Engine::vec3(0.0f);
+		world.emplace<Engine::FlagComponent>(attacker);
+		auto& hitbox = world.emplace<Engine::HitboxComponent>(attacker);
+		hitbox.damage = 25.0f;
+		hitbox.fallbackRadius = 3.0f;
+		hitbox.active = true;
+
+		const auto enemy = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(enemy).position = Engine::vec3(1.0f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(enemy);
+		auto& health = world.emplace<Engine::HealthComponent>(enemy);
+		health.maxHealth = 100.0f;
+		health.currentHealth = 100.0f;
+
+		// Presentation 전용 페이즈에서는 전투가 실행되지 않아야 한다.
+		systemManager.Update(world, { scene.get() }, 0.016f, static_cast<Engine::uint8>(Engine::ESystemPhase::Presentation));
+		passed &= Check(health.currentHealth == 100.0f,
+			"GameplayCombatSystem must not apply damage during Presentation-only phase.");
+
+		// OnUpdate 직접 호출 시에도 SystemManager의 마지막 페이즈 마스크에 Gameplay가 없으면 차단된다.
+		isolatedCombat->OnUpdate(world, { scene.get() }, 0.016f);
+		passed &= Check(health.currentHealth == 100.0f,
+			"GameplayCombatSystem::OnUpdate must honor SystemManager Gameplay phase mask.");
+
+		// Gameplay 페이즈에서는 정상적으로 피해를 적용한다.
+		systemManager.Update(world, { scene.get() }, 0.016f, static_cast<Engine::uint8>(Engine::ESystemPhase::Gameplay));
+		passed &= Check(health.currentHealth == 75.0f,
+			"GameplayCombatSystem must apply damage during Gameplay phase.");
+
+		return passed;
+	}
 }
 
 int main()
@@ -709,6 +783,7 @@ int main()
 	passed &= CheckGameplayCombat();
 	passed &= CheckTimelineHitboxWindow();
 	passed &= CheckInteractableQueries();
+	passed &= CheckRuntimeSystemManifestRegistersCombat();
 
 	return passed ? 0 : 1;
 }

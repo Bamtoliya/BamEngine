@@ -11,6 +11,7 @@
 #include "HierarchyComponent.h"
 #include "TagComponent.h"
 #include "PhysicsSystem.h"
+#include "SystemManager.h"
 #include "ColliderComponent.h"
 #include "RigidBodyComponent.h"
 #include "CharacterControllerComponent.h"
@@ -84,6 +85,11 @@ EResult GameplayCombatSystem::Initialize(void* arg)
 
 void GameplayCombatSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& activeScenes, f32 dt)
 {
+	// 편집 모드(Presentation 전용) 등 Gameplay 페이즈가 비활성일 때는 전투/피해 처리를 차단한다.
+	if (SystemManager::IsCreated() &&
+		(SystemManager::Get().GetUpdatePhaseMask() & static_cast<uint8>(ESystemPhase::Gameplay)) == 0)
+		return;
+
 	if (activeScenes.empty())
 	{
 		ProcessRegistryCombat(registry, dt, nullptr);
@@ -92,7 +98,7 @@ void GameplayCombatSystem::OnUpdate(entt::registry& registry, const vector<Scene
 	{
 		for (Scene* scene : activeScenes)
 		{
-			if (scene)
+			if (scene && scene->IsActive() && !scene->IsPaused())
 			{
 				ProcessSceneCombat(*scene, dt);
 			}
