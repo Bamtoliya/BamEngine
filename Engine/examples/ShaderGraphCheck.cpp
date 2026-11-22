@@ -576,7 +576,8 @@ int main()
 				"Metallic must use SampleGraphTexture2(input.TexCoord1).g.");
 			Expect(multiPs.find("(SampleGraphTexture2(input.TexCoord1)).b") != std::string::npos,
 				"Cavity must use SampleGraphTexture2(input.TexCoord1).b.");
-			Expect(multiPs.find("clip(((SampleGraphTexture2(input.TexCoord1)).a) - 0.5f);") != std::string::npos,
+			Expect(multiPs.find("float opacityMask = (SampleGraphTexture2(input.TexCoord1)).a;") != std::string::npos &&
+				multiPs.find("clip(opacityMask - 0.5f);") != std::string::npos,
 				"OpacityMask must use SampleGraphTexture2(input.TexCoord1).a in clip expression.");
 			Expect(multiPs.find("(SampleGraphTexture3(input.TexCoord)).rgb") != std::string::npos,
 				"Emissive must use SampleGraphTexture3(input.TexCoord).rgb.");
