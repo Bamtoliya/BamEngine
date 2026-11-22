@@ -1,6 +1,7 @@
 ﻿#include "Graph.h"
 #include "GraphReflection.h"
 #include "GraphReflectionCheck.gen.h"
+#include "ReflectionRegistry.h"
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -204,6 +205,145 @@ void CheckPropertyFailures()
 	Accept(RegisterReflectedGraphNodes(graph, reflection));
 	Expect(graph.GetTypes(EGraphDomain::Logic).empty(), "Unannotated function was exposed.");
 }
+
+void CheckExpandedGameplayNodes()
+{
+	struct ReflectionScope
+	{
+		bool created = false;
+		ReflectionScope()
+		{
+			if (!ReflectionRegistry::IsCreated())
+			{
+				Expect(ReflectionRegistry::Create() != nullptr, "Failed to create ReflectionRegistry.");
+				created = true;
+			}
+		}
+		~ReflectionScope()
+		{
+			if (created) ReflectionRegistry::Destroy();
+		}
+	} reflectionScope;
+
+	const auto& engineReflection = ReflectionRegistry::Get().GetRegistry();
+	GraphRegistry graph;
+	Accept(graph.RegisterBuiltins());
+	Accept(RegisterReflectedGraphNodes(graph, engineReflection));
+
+	// 1. SaveGame Nodes
+	const auto* writeCheckpoint = graph.Find("Save.WriteCheckpointSlot");
+	Expect(writeCheckpoint != nullptr, "Save.WriteCheckpointSlot node missing.");
+	Expect(writeCheckpoint->Category == "SaveGame", "Save.WriteCheckpointSlot wrong category.");
+	Expect(graph.FindPin("Save.WriteCheckpointSlot", "exec") != nullptr, "Save.WriteCheckpointSlot missing exec pin.");
+	Expect(graph.FindPin("Save.WriteCheckpointSlot", "then") != nullptr, "Save.WriteCheckpointSlot missing then pin.");
+	const auto* slotNamePin = graph.FindPin("Save.WriteCheckpointSlot", "slotName");
+	Expect(slotNamePin && slotNamePin->Type == Type::String, "Save.WriteCheckpointSlot slotName pin invalid.");
+	const auto* checkpointIdPin = graph.FindPin("Save.WriteCheckpointSlot", "checkpointId");
+	Expect(checkpointIdPin && checkpointIdPin->Type == Type::String, "Save.WriteCheckpointSlot checkpointId pin invalid.");
+	const auto* writeResultPin = graph.FindPin("Save.WriteCheckpointSlot", "result");
+	Expect(writeResultPin && writeResultPin->Type == Type::Bool && writeResultPin->Direction == Direction::Output,
+		"Save.WriteCheckpointSlot result pin invalid.");
+
+	const auto* loadCheckpoint = graph.Find("Save.LoadCheckpointSlot");
+	Expect(loadCheckpoint != nullptr, "Save.LoadCheckpointSlot node missing.");
+	Expect(graph.FindPin("Save.LoadCheckpointSlot", "slotName") != nullptr, "Save.LoadCheckpointSlot slotName pin missing.");
+	const auto* loadResultPin = graph.FindPin("Save.LoadCheckpointSlot", "result");
+	Expect(loadResultPin && loadResultPin->Type == Type::Bool, "Save.LoadCheckpointSlot result pin invalid.");
+
+	const auto* hasSlot = graph.Find("Save.HasSlot");
+	Expect(hasSlot != nullptr, "Save.HasSlot node missing.");
+	Expect(!graph.FindPin("Save.HasSlot", "exec"), "Save.HasSlot is pure; should not have exec pin.");
+	const auto* hasSlotResult = graph.FindPin("Save.HasSlot", "result");
+	Expect(hasSlotResult && hasSlotResult->Type == Type::Bool, "Save.HasSlot result pin invalid.");
+
+	const auto* deleteSlot = graph.Find("Save.DeleteSlot");
+	Expect(deleteSlot != nullptr, "Save.DeleteSlot node missing.");
+	Expect(graph.FindPin("Save.DeleteSlot", "exec") != nullptr, "Save.DeleteSlot missing exec pin.");
+	const auto* deleteResult = graph.FindPin("Save.DeleteSlot", "result");
+	Expect(deleteResult && deleteResult->Type == Type::Bool, "Save.DeleteSlot result pin invalid.");
+
+	// 2. Navigation & AI Nodes
+	const auto* setDest = graph.Find("Nav.SetDestination");
+	Expect(setDest != nullptr, "Nav.SetDestination node missing.");
+	Expect(setDest->Category == "Navigation", "Nav.SetDestination wrong category.");
+	const auto* navEntityPin = graph.FindPin("Nav.SetDestination", "entityId");
+	Expect(navEntityPin && navEntityPin->Type == Type::Int, "Nav.SetDestination entityId pin invalid.");
+	const auto* navXPin = graph.FindPin("Nav.SetDestination", "x");
+	Expect(navXPin && navXPin->Type == Type::Float, "Nav.SetDestination x pin invalid.");
+	const auto* navYPin = graph.FindPin("Nav.SetDestination", "y");
+	Expect(navYPin && navYPin->Type == Type::Float, "Nav.SetDestination y pin invalid.");
+	const auto* navZPin = graph.FindPin("Nav.SetDestination", "z");
+	Expect(navZPin && navZPin->Type == Type::Float, "Nav.SetDestination z pin invalid.");
+
+	const auto* stopNav = graph.Find("Nav.Stop");
+	Expect(stopNav != nullptr, "Nav.Stop node missing.");
+	Expect(stopNav->Category == "Navigation", "Nav.Stop wrong category.");
+
+	const auto* reachedNav = graph.Find("Nav.HasReachedDestination");
+	Expect(reachedNav != nullptr, "Nav.HasReachedDestination node missing.");
+	Expect(!graph.FindPin("Nav.HasReachedDestination", "exec"), "Nav.HasReachedDestination is pure.");
+	const auto* reachedResult = graph.FindPin("Nav.HasReachedDestination", "result");
+	Expect(reachedResult && reachedResult->Type == Type::Bool, "Nav.HasReachedDestination result pin invalid.");
+
+	const auto* getTarget = graph.Find("AI.GetDetectedTarget");
+	Expect(getTarget != nullptr, "AI.GetDetectedTarget node missing.");
+	Expect(getTarget->Category == "AI", "AI.GetDetectedTarget wrong category.");
+	Expect(!graph.FindPin("AI.GetDetectedTarget", "exec"), "AI.GetDetectedTarget is pure.");
+	const auto* targetResult = graph.FindPin("AI.GetDetectedTarget", "result");
+	Expect(targetResult && targetResult->Type == Type::Int, "AI.GetDetectedTarget result pin invalid.");
+
+	const auto* hasLos = graph.Find("AI.HasLineOfSight");
+	Expect(hasLos != nullptr, "AI.HasLineOfSight node missing.");
+	Expect(hasLos->Category == "AI", "AI.HasLineOfSight wrong category.");
+	Expect(!graph.FindPin("AI.HasLineOfSight", "exec"), "AI.HasLineOfSight is pure.");
+	const auto* losResult = graph.FindPin("AI.HasLineOfSight", "result");
+	Expect(losResult && losResult->Type == Type::Bool, "AI.HasLineOfSight result pin invalid.");
+
+	// 3. AudioMixer Nodes
+	const auto* setBusVol = graph.Find("Audio.SetBusVolume");
+	Expect(setBusVol != nullptr, "Audio.SetBusVolume node missing.");
+	Expect(setBusVol->Category == "Audio", "Audio.SetBusVolume wrong category.");
+	const auto* busNamePin = graph.FindPin("Audio.SetBusVolume", "busName");
+	Expect(busNamePin && busNamePin->Type == Type::String, "Audio.SetBusVolume busName pin invalid.");
+	const auto* busVolPin = graph.FindPin("Audio.SetBusVolume", "volume");
+	Expect(busVolPin && busVolPin->Type == Type::Float, "Audio.SetBusVolume volume pin invalid.");
+
+	const auto* getBusVol = graph.Find("Audio.GetBusVolume");
+	Expect(getBusVol != nullptr, "Audio.GetBusVolume node missing.");
+	Expect(getBusVol->Category == "Audio", "Audio.GetBusVolume wrong category.");
+	Expect(!graph.FindPin("Audio.GetBusVolume", "exec"), "Audio.GetBusVolume is pure.");
+	const auto* getBusVolResult = graph.FindPin("Audio.GetBusVolume", "result");
+	Expect(getBusVolResult && getBusVolResult->Type == Type::Float, "Audio.GetBusVolume result pin invalid.");
+
+	const auto* setBusMuted = graph.Find("Audio.SetBusMuted");
+	Expect(setBusMuted != nullptr, "Audio.SetBusMuted node missing.");
+	const auto* mutedPin = graph.FindPin("Audio.SetBusMuted", "muted");
+	Expect(mutedPin && mutedPin->Type == Type::Bool, "Audio.SetBusMuted muted pin invalid.");
+
+	const auto* fadeBusVol = graph.Find("Audio.FadeBusVolume");
+	Expect(fadeBusVol != nullptr, "Audio.FadeBusVolume node missing.");
+	const auto* targetVolPin = graph.FindPin("Audio.FadeBusVolume", "targetVolume");
+	Expect(targetVolPin && targetVolPin->Type == Type::Float, "Audio.FadeBusVolume targetVolume pin invalid.");
+	const auto* durPin = graph.FindPin("Audio.FadeBusVolume", "duration");
+	Expect(durPin && durPin->Type == Type::Float, "Audio.FadeBusVolume duration pin invalid.");
+
+	// 4. SceneStreaming Nodes
+	const auto* markPersistent = graph.Find("Scene.MarkDontDestroyOnLoad");
+	Expect(markPersistent != nullptr, "Scene.MarkDontDestroyOnLoad node missing.");
+	Expect(markPersistent->Category == "Scene", "Scene.MarkDontDestroyOnLoad wrong category.");
+	const auto* sceneEntityPin = graph.FindPin("Scene.MarkDontDestroyOnLoad", "entityId");
+	Expect(sceneEntityPin && sceneEntityPin->Type == Type::Int, "Scene.MarkDontDestroyOnLoad entityId pin invalid.");
+	const auto* groupPin = graph.FindPin("Scene.MarkDontDestroyOnLoad", "group");
+	Expect(groupPin && groupPin->Type == Type::String, "Scene.MarkDontDestroyOnLoad group pin invalid.");
+
+	const auto* unloadAdditive = graph.Find("Scene.UnloadAdditive");
+	Expect(unloadAdditive != nullptr, "Scene.UnloadAdditive node missing.");
+	Expect(unloadAdditive->Category == "Scene", "Scene.UnloadAdditive wrong category.");
+	const auto* unloadSubScenePin = graph.FindPin("Scene.UnloadAdditive", "subSceneName");
+	Expect(unloadSubScenePin && unloadSubScenePin->Type == Type::String, "Scene.UnloadAdditive subSceneName pin invalid.");
+	const auto* unloadResult = graph.FindPin("Scene.UnloadAdditive", "result");
+	Expect(unloadResult && unloadResult->Type == Type::Bool, "Scene.UnloadAdditive result pin invalid.");
+}
 }
 
 int main()
@@ -213,6 +353,7 @@ int main()
 		CheckGenerated();
 		CheckFailures();
 		CheckPropertyFailures();
+		CheckExpandedGameplayNodes();
 		std::cout << "Graph reflection checks passed.\n";
 		return 0;
 	}
