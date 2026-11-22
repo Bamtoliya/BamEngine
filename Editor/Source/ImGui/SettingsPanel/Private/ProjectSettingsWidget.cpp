@@ -9,6 +9,7 @@
 #include "AssetHotReloadManager.h"
 #include "HotReloadManager.h"
 #include "PlatformPath.h"
+#include "ResourceStreamer.h"
 
 namespace
 {
@@ -60,6 +61,7 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftAssetDirectory = project.AssetDirectory;
     m_DraftShaderSourceDirectory = project.ShaderSourceDirectory;
     m_DraftRaytracedShadow = project.RaytracedShadowMode;
+    m_DraftStreamingBudget = project.ResourceStreamingBudgetMB;
     m_Dirty = false;
 }
 
@@ -73,6 +75,7 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.AssetDirectory = m_DraftAssetDirectory;
     project.ShaderSourceDirectory = m_DraftShaderSourceDirectory;
     project.RaytracedShadowMode = m_DraftRaytracedShadow;
+    project.ResourceStreamingBudgetMB = m_DraftStreamingBudget;
 
     const auto result = settings.SaveProjectSettings(project);
     if (result == EEditorSettingsSaveStatus::Saved)
@@ -95,16 +98,30 @@ void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
 
 void ProjectSettingsWidget::DrawRendering()
 {
-    if (!ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-        return;
-
-    if (EditorUI::BeginPropertyTable("##ProjectRaytracingTable"))
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
-        m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedShadow", m_DraftRaytracedShadow);
-        EditorUI::EndPropertyTable();
+        if (EditorUI::BeginPropertyTable("##ProjectRaytracingTable"))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.RaytracedShadow");
+            m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedShadow", m_DraftRaytracedShadow);
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
     }
-    ImGui::Spacing();
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionStreaming").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##ProjectStreamingTable"))
+        {
+            constexpr int32 minBudget = static_cast<int32>(Engine::ResourceStreamer::MinBudgetMB);
+            constexpr int32 maxBudget = static_cast<int32>(Engine::ResourceStreamer::MaxBudgetMB);
+            EditorUI::PropertyRow("GraphicsSettings.StreamingBudget");
+            m_Dirty |= ImGui::DragInt("###ProjectStreamingBudget", &m_DraftStreamingBudget, 8.0f, minBudget, maxBudget, "%d MB", ImGuiSliderFlags_AlwaysClamp);
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::TextWrapped("%s", LOCAL_CSTR("GraphicsSettings.StreamingBudgetHint"));
+        ImGui::Spacing();
+    }
 }
 
 void ProjectSettingsWidget::DrawMetadata(const EditorSettingsService& settings)

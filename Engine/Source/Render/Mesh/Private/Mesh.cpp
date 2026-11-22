@@ -308,6 +308,59 @@ const MeshRaycastBVH& Mesh::GetRaycastBVH() const
 
 	return publish();
 }
+f32 Mesh::GetUVDensity() const
+{
+	RequireResident();
+	if (m_UVDensity >= 0.0f) return m_UVDensity;
+	m_UVDensity = 0.0f;
+
+	const auto& positions = m_RawData[static_cast<uint32>(EMeshStream::Position)];
+	const auto& materials = m_RawData[static_cast<uint32>(EMeshStream::Material)];
+	const uint32 vertexCount = m_StreamCounts[static_cast<uint32>(EMeshStream::Position)];
+	const uint32 positionStride = m_StreamStrides[static_cast<uint32>(EMeshStream::Position)];
+	if (m_Topology != ETopology::TriangleList || vertexCount < 3 || positionStride < sizeof(vec3) ||
+		positions.size() < static_cast<uint64>(vertexCount) * positionStride ||
+		m_StreamStrides[static_cast<uint32>(EMeshStream::Material)] != sizeof(VertexMaterial) ||
+		materials.size() < static_cast<uint64>(vertexCount) * sizeof(VertexMaterial)) return m_UVDensity;
+
+	const bool indexed = m_IndexCount > 0;
+	if (indexed && ((m_IndexStride != sizeof(uint16) && m_IndexStride != sizeof(uint32)) ||
+		m_IndexRaw.size() < static_cast<uint64>(m_IndexCount) * m_IndexStride)) return m_UVDensity;
+
+	const auto readIndex = [&](uint32 at) -> uint32
+		{
+			if (!indexed) return at;
+			uint32 value = 0;
+			std::memcpy(&value, m_IndexRaw.data() + static_cast<sizet>(at) * m_IndexStride, m_IndexStride);
+			return value;
+		};
+	f64 worldArea = 0.0;
+	f64 uvArea = 0.0;
+	const uint32 triangleCount = (indexed ? m_IndexCount : vertexCount) / 3;
+	for (uint32 triangle = 0; triangle < triangleCount; ++triangle)
+	{
+		vec3 p[3];
+		vec2 uv[3];
+		bool valid = true;
+		for (uint32 corner = 0; corner < 3; ++corner)
+		{
+			const uint32 vertex = readIndex(triangle * 3 + corner);
+			if (vertex >= vertexCount) { valid = false; break; }
+			std::memcpy(&p[corner], positions.data() + static_cast<sizet>(vertex) * positionStride, sizeof(vec3));
+			std::memcpy(&uv[corner], materials.data() + static_cast<sizet>(vertex) * sizeof(VertexMaterial) + offsetof(VertexMaterial, texCoord), sizeof(vec2));
+		}
+		if (!valid) continue;
+		const f64 world = glm::length(glm::cross(p[1] - p[0], p[2] - p[0]));
+		const vec2 a = uv[1] - uv[0];
+		const vec2 b = uv[2] - uv[0];
+		const f64 mapped = std::abs(a.x * b.y - a.y * b.x);
+		if (!std::isfinite(world) || !std::isfinite(mapped)) continue;
+		worldArea += world;
+		uvArea += mapped;
+	}
+	if (worldArea > 0.0 && uvArea > 0.0) m_UVDensity = static_cast<f32>(std::sqrt(uvArea / worldArea));
+	return m_UVDensity;
+}
 #pragma endregion
 
 #pragma region Setter
@@ -354,6 +407,7 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 		if (!buffer) return EResult::Fail;
 	}
 
+	m_UVDensity = -1.0f;
 	Safe_Release(m_VertexBuffers[idx]);
 	m_VertexBuffers[idx] = buffer;
 	m_RawData[idx] = std::move(raw);
@@ -393,6 +447,7 @@ EResult Mesh::SetIndexBuffer(void* data, uint32 indexCount, uint32 stride)
 		if (!buffer) return EResult::Fail;
 	}
 
+	m_UVDensity = -1.0f;
 	Safe_Release(m_IndexBuffer);
 	m_IndexBuffer = buffer;
 	m_IndexRaw = std::move(raw);
@@ -442,9 +497,27 @@ archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 	return {};
 }
 
+void Mesh::ReleaseContents()
+{
+	const auto signature = m_SkinBindingSignature;
+	Free();
+	m_SkinBindingSignature = signature;
+	m_StreamCounts = {};
+	m_StreamStrides = {};
+	m_IndexCount = 0;
+	m_IndexStride = 0;
+	m_ActiveBufferCount = 0;
+	m_UVDensity = -1.0f;
+	// vector::clear는 메모리를 돌려주지 않는다.
+	for (auto& raw : m_RawData) raw.shrink_to_fit();
+	m_IndexRaw.shrink_to_fit();
+	MarkPending();
+}
+
 void Mesh::SwapContents(Mesh& candidate)
 {
 	using std::swap;
+	swap(m_UVDensity, candidate.m_UVDensity);
 	swap(m_Flags, candidate.m_Flags);
 	swap(m_Topology, candidate.m_Topology);
 	swap(m_StreamCounts, candidate.m_StreamCounts);

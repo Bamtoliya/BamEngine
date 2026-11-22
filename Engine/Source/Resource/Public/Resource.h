@@ -100,6 +100,9 @@ public:
 	void MarkPending() { m_Residency = EResidency::Pending; }
 	// 내용이 없으면 파일에서 바로 읽는다. 메인 스레드 전용이며 읽지 못한 리소스는 다시 시도하지 않는다.
 	EResult EnsureResident();
+	// 스트리밍이 관리하는 번호. 0이면 관리하지 않는다.
+	[[nodiscard]] uint32 GetStreamSlot() const { return m_StreamSlot; }
+	void SetStreamSlot(uint32 slot) { m_StreamSlot = slot; }
 	// 따로 읽은 같은 리소스의 내용을 가져온다. nullptr이거나 실패하면 읽지 못한 리소스로 남긴다.
 	EResult Fulfill(Resource* prepared);
 protected:
@@ -118,6 +121,7 @@ private:
 		Unavailable
 	};
 	EResidency m_Residency = EResidency::Resident;
+	uint32 m_StreamSlot = 0;
 #pragma endregion
 
 #pragma region Save&Load

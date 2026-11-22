@@ -101,6 +101,12 @@ Metrics,Resources,Resources,리소스
 Metrics,ServerPort,Server: Port %u,서버: 포트 %u
 Metrics,SmoothedRttMs,Smoothed RTT: %.2f ms,평활 왕복 지연: %.2f ms
 Metrics,StatusConnected,Status: Connected,상태: 연결됨
+Metrics,StreamingFailed,Failed to load: {},읽지 못함: {}
+Metrics,StreamingMemory,Memory: {:.1f} / {:.0f} MB,메모리: {:.1f} / {:.0f} MB
+Metrics,StreamingResources,Meshes: {} / {} · Full-size textures: {} / {},메시: {} / {} · 최대 크기 텍스처: {} / {}
+Metrics,StreamingStats,Resource streaming:,리소스 스트리밍:
+Metrics,StreamingUnmet,Limited by the budget: {},한도 때문에 줄인 수: {}
+Metrics,StreamingWork,Loading: {} · Loaded: {} · Reduced: {},읽는 중: {} · 읽음: {} · 내림: {}
 Metrics,Succeeded,Succeeded: {},성공: {}
 Metrics,Supported,Supported,지원
 Metrics,SupportedTier1Plus,Supported (Tier 1+),지원 (Tier 1 이상)

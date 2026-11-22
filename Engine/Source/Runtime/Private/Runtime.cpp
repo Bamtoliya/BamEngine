@@ -51,6 +51,7 @@ EResult Runtime::Initialize(void* arg)
 	if (!create(m_InputManager)) return fail("InputManager");
 	if (!create(m_AudioManager)) return fail("AudioManager");
 	if (!create(m_ResourceManager)) return fail("ResourceManager");
+	if (!create(m_ResourceStreamer)) return fail("ResourceStreamer");
 	if (!create(m_SceneManager)) return fail("SceneManager");
 	if (!create(m_SystemManager)) return fail("SystemManager");
 	if (!create(m_LocalizationManager)) return fail("LocalizationManager");
@@ -85,6 +86,8 @@ void Runtime::Free()
 	{
 		m_Renderer->ClearAllRenderQueues();
 	}
+	// 파일을 읽는 작업 스레드를 씬과 모듈보다 먼저 멈춘다.
+	Safe_Destroy(m_ResourceStreamer);
 	Safe_Destroy(m_PickingManager);
 	// ── 1. 씬 (모든 외부 참조가 해제되어 SceneManager에서 즉시 소멸됨) ──
 	Safe_Destroy(m_SceneManager);
@@ -186,6 +189,9 @@ EResult Runtime::Render(f32 dt)
 		renderer.ClearFrameQueues();
 		return finish(beginResult);
 	}
+
+	// 업로드를 이번 프레임 명령에 기록하고, 이어지는 제출에서 다음 요청을 모은다.
+	if (m_ResourceStreamer) m_ResourceStreamer->Update();
 
 	SystemManager::Get().Sumbit(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
 

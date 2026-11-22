@@ -19,7 +19,6 @@ class AssetPathRelocation;
 class PluginResourceEditor;
 struct EditorSettingsChangeResult;
 struct SceneLoadState;
-struct SceneStreamState;
 struct ImGuiManagerDesc
 {
 	SDL_Window* Window = { nullptr };
@@ -184,8 +183,6 @@ private:
 	bool RequestSceneAction(ESceneDocumentAction action, std::filesystem::path path = {});
 	bool BeginSceneLoad(const std::filesystem::path& path);
 	void UpdateSceneLoad();
-	void EndSceneLoad();
-	void UpdateSceneStreams();
 	void DrawSceneLoadingModal();
 	bool ContinueQuitRequest();
 	vector<ResourceEditorInterface*> CollectUnsavedResourceEditors() const;
@@ -206,7 +203,6 @@ private:
 	bool m_RendererBackendInitialized = false;
 	std::unique_ptr<EditorDocumentController> m_DocumentController;
 	std::unique_ptr<SceneLoadState> m_SceneLoadState;
-	std::vector<std::unique_ptr<SceneStreamState>> m_SceneStreams; // 씬을 연 뒤 이어 읽는 자세한 리소스
 	std::unordered_set<Engine::RHITexture*> m_FrameTextures;
 private:
 	PluginHost m_PluginHost;

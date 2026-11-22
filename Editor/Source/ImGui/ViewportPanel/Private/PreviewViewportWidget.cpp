@@ -11,6 +11,7 @@
 #include "PreviewCameraDefaults.h"
 #include "Scene.h"
 #include "Entity.h"
+#include "ResourceStreamer.h"
 #include "Mesh.h"
 #include "Renderer.h"
 #include "RenderTargetManager.h"
@@ -401,6 +402,8 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 			Engine::StaticDrawCommand cmd{};
 			cmd.mesh = mesh;
 			cmd.material = mat;
+			// 씬이 요청한 밉과 상관없이 미리보기에는 가장 자세한 밉을 쓴다.
+			if (Engine::ResourceStreamer::IsCreated()) Engine::ResourceStreamer::Get().RequestMaterial(*mat, 0.0f, 1.0f);
 			cmd.worldMatrix = transComp.worldMatrix;
 			cmd.pickingId = 0;
 			Engine::Renderer::Get().SubmitStatic(cmd, meshPass(*mat));
@@ -434,6 +437,8 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 			Engine::SkinnedDrawCommand cmd{};
 			cmd.mesh = mesh;
 			cmd.material = mat;
+			// 씬이 요청한 밉과 상관없이 미리보기에는 가장 자세한 밉을 쓴다.
+			if (Engine::ResourceStreamer::IsCreated()) Engine::ResourceStreamer::Get().RequestMaterial(*mat, 0.0f, 1.0f);
 			if (mat) mat->BuildMaterialConstants(cmd.materialConstants);
 			cmd.worldMatrix = renderWorldMatrix;
 			cmd.boneMatrices = boneMatrices;

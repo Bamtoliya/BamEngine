@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "RenderPassManager.h"
 #include "RaytracingSceneManager.h"
+#include "ResourceStreamer.h"
 #include <map>
 #include <unordered_set>
 #include "MetricsCardUI.h"
@@ -134,6 +135,24 @@ void RenderMetricsWidget::DrawDetails() const
         ImGui::Text("%s", LOCAL_FMT("Metrics.DedicatedVRAM", mem.DedicatedVRAMUsageMB).c_str());
     }
     ImGui::Text("%s", LOCAL_FMT("Metrics.AllocatedDescriptors", mem.AllocatedDescriptors).c_str());
+
+    if (Engine::ResourceStreamer::IsCreated() && Engine::ResourceStreamer::Get().HasEntries())
+    {
+        const auto streaming = Engine::ResourceStreamer::Get().GetStats();
+        constexpr double bytesPerMB = 1024.0 * 1024.0;
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_CSTR("Metrics.StreamingStats"));
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.StreamingMemory", static_cast<double>(streaming.UsedBytes) / bytesPerMB,
+            static_cast<double>(streaming.BudgetBytes) / bytesPerMB).c_str());
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.StreamingResources", streaming.LoadedMeshCount, streaming.MeshCount,
+            streaming.FullTextureCount, streaming.TextureCount).c_str());
+        ImGui::TextUnformatted(LOCAL_FMT("Metrics.StreamingWork", streaming.InFlightCount, streaming.LoadCount, streaming.ReduceCount).c_str());
+        if (streaming.UnmetCount > 0)
+            ImGui::TextUnformatted(LOCAL_FMT("Metrics.StreamingUnmet", streaming.UnmetCount).c_str());
+        if (streaming.FailedCount > 0)
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.2f, 1.0f), "%s", LOCAL_FMT("Metrics.StreamingFailed", streaming.FailedCount).c_str());
+    }
 
     if (Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().GetLastStats().TopLevelCount > 0)
     {

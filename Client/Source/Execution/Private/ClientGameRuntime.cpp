@@ -5,6 +5,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "AsyncResourceLoader.h"
+#include "ResourceStreamer.h"
 #include "AudioManager.h"
 #include "BuiltInPrimitiveMeshes.h"
 #include "CameraComponent.h"
@@ -104,6 +105,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     if (IsFailure(m_RenderPipeline.Initialize(m_ProjectSettings.RenderPipelineProfilePath,
         rendererDesc.rhiDesc->width, rendererDesc.rhiDesc->height)))
         return Engine::EResult::Fail;
+    Engine::ResourceStreamer::Get().SetBudgetMB(static_cast<Engine::uint32>((std::max)(m_ProjectSettings.ResourceStreamingBudgetMB, 0)));
     m_RenderPipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedShadowMode));
     if (IsFailure(InitializeSystems()))
         return Engine::EResult::Fail;

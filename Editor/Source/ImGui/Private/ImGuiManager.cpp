@@ -38,6 +38,7 @@
 #include "ResourceManager.h"
 #include "ResourceHandleArchiveAdapter.h"
 #include "ResourcePreloader.h"
+#include "ResourceStreamer.h"
 #include "Scene.h"
 #include "ResourceEditorInterface.h"
 #include "AsyncResourceOpenService.h"
@@ -71,16 +72,6 @@
 #pragma endregion
 
 BEGIN(Editor)
-// 씬을 연 뒤에도 남은 자세한 메시와 텍스처를 이어 읽는다. 자리만 등록한 리소스가 남지 않도록 끝날 때까지 유지한다.
-struct SceneStreamState
-{
-	std::unique_ptr<Engine::ResourcePreloader> Preloader;
-	std::string DisplayName;
-	std::chrono::steady_clock::time_point StartTime{};
-	double MainMilliseconds = 0.0;
-	double LongestUpdateMilliseconds = 0.0;
-};
-
 struct SceneLoadState
 {
 	enum class EStage
@@ -302,7 +293,6 @@ void ImGuiManager::Free()
 {
 	AsyncResourceOpenService::Get().Shutdown();
 	m_SceneLoadState.reset();
-	m_SceneStreams.clear();
 	ReleaseFrameTextures();
 	if (m_ImGuiContext)
 		ImGui::SetCurrentContext(m_ImGuiContext);
@@ -450,6 +440,11 @@ void ImGuiManager::Draw()
 	DrawResourceQuitConfirmation();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
+	if (Engine::ResourceStreamer::IsCreated() && EditorSettingsService::IsCreated())
+	{
+		const auto budget = EditorSettingsService::Get().GetProjectSettings().ResourceStreamingBudgetMB;
+		Engine::ResourceStreamer::Get().SetBudgetMB(static_cast<uint32>((std::max)(budget, 0)));
+	}
 	UpdateSceneLoad();
 	DrawSceneLoadingModal();
 	// 시작 씬 로드가 끝나기 전에 복원하면 뒤늦은 로드가 복원 결과를 덮어쓴다.
@@ -1630,59 +1625,14 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 	return true;
 }
 
-void ImGuiManager::EndSceneLoad()
-{
-	if (m_SceneLoadState && m_SceneLoadState->Preloader)
-	{
-		auto stream = std::make_unique<SceneStreamState>();
-		stream->Preloader = std::move(m_SceneLoadState->Preloader);
-		stream->DisplayName = m_SceneLoadState->DisplayName;
-		stream->StartTime = std::chrono::steady_clock::now();
-		m_SceneStreams.push_back(std::move(stream));
-	}
-	m_SceneLoadState.reset();
-}
-
-void ImGuiManager::UpdateSceneStreams()
-{
-	// 편집 중인 화면이 멈추지 않도록 프레임마다 조금씩 올린다.
-	constexpr auto kStreamBudget = std::chrono::milliseconds(3);
-	constexpr size_t kStreamUploadBytes = 16u * 1024u * 1024u;
-	for (auto it = m_SceneStreams.begin(); it != m_SceneStreams.end();)
-	{
-		auto& stream = **it;
-		const auto begin = std::chrono::steady_clock::now();
-		const bool finished = stream.Preloader->Update(begin + kStreamBudget, {}, kStreamUploadBytes);
-		const auto end = std::chrono::steady_clock::now();
-		const double elapsed = std::chrono::duration<double, std::milli>(end - begin).count();
-		stream.MainMilliseconds += elapsed;
-		stream.LongestUpdateMilliseconds = (std::max)(stream.LongestUpdateMilliseconds, elapsed);
-		if (!finished)
-		{
-			++it;
-			continue;
-		}
-
-		const auto stats = stream.Preloader->GetStats();
-		if (stats.DetailScheduledCount > 0)
-		{
-			BAM_LOG(Info, "Editor", "Document", "Scene streaming finished: {} | {} deferred resource(s), {} failed, {} cached placeholder(s), {:.0f} ms after open, main {:.0f} ms (longest update {:.1f})",
-				stream.DisplayName, stats.DetailScheduledCount, stats.DetailFailedCount, stats.CachedPlaceholderCount,
-				std::chrono::duration<double, std::milli>(end - stream.StartTime).count(), stream.MainMilliseconds, stream.LongestUpdateMilliseconds);
-		}
-		it = m_SceneStreams.erase(it);
-	}
-}
-
 void ImGuiManager::UpdateSceneLoad()
 {
-	UpdateSceneStreams();
 	if (!m_SceneLoadState)
 		return;
 
 	if (!PIEManager::Get().IsEditing())
 	{
-		EndSceneLoad();
+		m_SceneLoadState.reset();
 		return;
 	}
 
@@ -1693,7 +1643,7 @@ void ImGuiManager::UpdateSceneLoad()
 			logContext, static_cast<int32>(archiveError.Code), archiveError.Field);
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 			LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
-		EndSceneLoad();
+		m_SceneLoadState.reset();
 	};
 
 	if (state.Stage == SceneLoadState::EStage::ReadingArchive)
@@ -1725,16 +1675,14 @@ void ImGuiManager::UpdateSceneLoad()
 			state.PreloadStart = batchStart;
 			state.PreparedBufferBaseline = Engine::Renderer::Get().GetRHI()->GetBufferUploadStats();
 			state.Preloader = std::make_unique<Engine::ResourcePreloader>();
-			Engine::ResourcePreloader::Options options;
-			options.DeferDetail = true;
-			state.Preloader->Start(state.Resources, options);
+			state.Preloader->Start(state.Resources);
 		}
 		if (!state.Preloaded)
 		{
 			state.Preloaded = state.Preloader->Update(batchStart + frameBudget, [&state](const std::wstring& key, double milliseconds)
 				{
 					state.RecordResource({ key, key }, milliseconds);
-				}) || state.Preloader->IsInitialReady();
+				});
 			if (!state.Preloaded)
 				return;
 			state.PreparedBufferStats = Engine::Renderer::Get().GetRHI()->GetBufferUploadStats();
@@ -1799,7 +1747,7 @@ void ImGuiManager::UpdateSceneLoad()
 			BAM_LOG(Error, "Editor", "Document", "Scene open failed: result={}", ResultToString(openResult));
 			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 				LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
-			EndSceneLoad();
+			m_SceneLoadState.reset();
 			return;
 		}
 
@@ -1811,8 +1759,8 @@ void ImGuiManager::UpdateSceneLoad()
 		if (state.Preloader)
 		{
 			const auto stats = state.Preloader->GetStats();
-			BAM_LOG(Info, "Editor", "Document", "Scene load workers: {} thread(s), {} mesh(es), {} texture(s), {} deferred, {:.0f} MB | worker {:.0f} ms (slowest {:.0f}), main {:.0f} ms (mesh {:.0f}, texture {:.0f}), wall {:.0f} ms",
-				stats.WorkerCount, stats.MeshCount, stats.TextureCount, stats.PlaceholderCount, static_cast<double>(stats.UploadBytes) / (1024.0 * 1024.0),
+			BAM_LOG(Info, "Editor", "Document", "Scene load workers: {} thread(s), {} mesh(es), {} texture(s), {} deferred ({} cached), {:.0f} MB | worker {:.0f} ms (slowest {:.0f}), main {:.0f} ms (mesh {:.0f}, texture {:.0f}), wall {:.0f} ms",
+				stats.WorkerCount, stats.MeshCount, stats.TextureCount, stats.PlaceholderCount, stats.CachedPlaceholderCount, static_cast<double>(stats.UploadBytes) / (1024.0 * 1024.0),
 				stats.WorkerMilliseconds, stats.SlowestWorkerMilliseconds, stats.MainMilliseconds,
 				stats.MeshMainMilliseconds, stats.TextureMainMilliseconds, state.PreparedWallMilliseconds);
 		}
@@ -1833,7 +1781,7 @@ void ImGuiManager::UpdateSceneLoad()
 		Application::Get().AdoptSceneDocument(state.RequestedPath);
 		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 			LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(state.RequestedPath.wstring())), ELogLevel::Info);
-		EndSceneLoad();
+		m_SceneLoadState.reset();
 	}
 }
 

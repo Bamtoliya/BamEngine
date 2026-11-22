@@ -2,9 +2,10 @@
 #include "Mesh.h"
 #include "PlatformPath.h"
 #include "ResourceManager.h"
+#include "ResourceStreamer.h"
 #include "ResourceUpload.h"
 #include "Texture.h"
-#include "TexturePlaceholderCache.h"
+#include "TextureMipCache.h"
 
 #include <archive/BeveArchive.h>
 #include <archive/JsonArchive.h>
@@ -23,7 +24,6 @@ namespace Engine
         constexpr uint32 MaxPreloadWorkers = 8;
         // 등록을 기다리는 CPU 데이터가 이보다 많으면 작업 스레드가 쉰다.
         constexpr size_t MaxPendingPreloadBytes = 256u * 1024u * 1024u;
-        constexpr size_t MaxPendingDetailBytes = 128u * 1024u * 1024u;
         // 새로 읽을 리소스가 이보다 적으면 스레드를 만들지 않는다.
         constexpr size_t MinBlockingPreloadCount = 16;
 
@@ -217,15 +217,6 @@ namespace Engine
             bool FromMaterial = false;
         };
 
-        // 자리만 등록한 리소스의 내용 읽기
-        struct DetailJob
-        {
-            std::wstring Key;
-            std::filesystem::path Path;
-            EPreloadKind Kind = EPreloadKind::Other;
-            bool StorePlaceholder = false;
-        };
-
         struct FinishedJob
         {
             std::wstring Key;
@@ -234,17 +225,16 @@ namespace Engine
             EPreloadKind Kind = EPreloadKind::Other;
             bool Placeholder = false;
             bool CachedPlaceholder = false;
+            std::filesystem::path Path;              // Placeholder일 때 스트리머에 넘긴다
+            uint64 EstimatedBytes = 0;
+            ResourceStreamer::TextureInfo StreamInfo;
         };
 
         mutable std::mutex Mutex;
         std::condition_variable WorkerSignal;
         std::condition_variable MainSignal;
         std::deque<Job> Pending;
-        std::deque<DetailJob> Details;
-        std::deque<FinishedJob> FinishedDetails;
         std::unordered_set<std::wstring> MeshKeys; // 소문자. DeferDetail일 때만 채우고 작업 중에는 바꾸지 않는다.
-        size_t DetailBytes = 0;
-        uint32 RunningInitial = 0;
         bool DeferDetail = false;
         std::unordered_set<std::wstring> ScheduledKeys;
         std::deque<FinishedJob> Finished;
@@ -255,12 +245,8 @@ namespace Engine
         Stats Values;
         bool Active = false;
 
-        [[nodiscard]] bool IsWorkDone() const { return Pending.empty() && Details.empty() && Running == 0; }
-        [[nodiscard]] bool IsInitialWorkDone() const { return Pending.empty() && RunningInitial == 0; }
-        [[nodiscard]] bool IsInitialDone() const { return IsInitialWorkDone() && Finished.empty(); }
-        [[nodiscard]] bool IsAllDone() const { return IsWorkDone() && Finished.empty() && FinishedDetails.empty(); }
-        [[nodiscard]] bool CanRunInitial() const { return !Pending.empty() && PendingBytes < MaxPendingPreloadBytes; }
-        [[nodiscard]] bool CanRunDetail() const { return Pending.empty() && !Details.empty() && DetailBytes < MaxPendingDetailBytes; }
+        [[nodiscard]] bool IsWorkDone() const { return Pending.empty() && Running == 0; }
+        [[nodiscard]] bool CanRun() const { return !Pending.empty() && PendingBytes < MaxPendingPreloadBytes; }
 
         void Run()
         {
@@ -269,7 +255,7 @@ namespace Engine
             {
                 WorkerSignal.wait(lock, [this]
                     {
-                        return Cancelled || IsWorkDone() || CanRunInitial() || CanRunDetail();
+                        return Cancelled || IsWorkDone() || CanRun();
                     });
                 if (Cancelled || IsWorkDone())
                 {
@@ -278,36 +264,26 @@ namespace Engine
                     return;
                 }
 
-                if (CanRunDetail())
-                {
-                    RunDetail(lock);
-                    continue;
-                }
-
                 const Job request = std::move(Pending.front());
                 Pending.pop_front();
                 ++Running;
-                ++RunningInitial;
                 lock.unlock();
 
                 FinishedJob job;
                 std::vector<DiscoveredTexture> discovered;
-                std::optional<DetailJob> detail;
                 const auto begin = std::chrono::steady_clock::now();
                 try
                 {
-                    Process(request, job, discovered, detail);
+                    Process(request, job, discovered);
                 }
                 catch (const std::exception& error)
                 {
                     ENGINE_LOG_WARN("Resource preload failed: key=\"{}\", error={}", WStrToStr(request.Reference.AssetKey), error.what());
-                    detail.reset();
                 }
                 const f64 elapsed = std::chrono::duration<f64, std::milli>(std::chrono::steady_clock::now() - begin).count();
 
                 lock.lock();
                 --Running;
-                --RunningInitial;
                 Values.WorkerMilliseconds += elapsed;
                 Values.SlowestWorkerMilliseconds = std::max(Values.SlowestWorkerMilliseconds, elapsed);
                 ++Values.FinishedCount;
@@ -316,57 +292,12 @@ namespace Engine
                 for (auto& texture : discovered) Pending.push_front({ std::move(texture.Reference), texture.Slot, true });
                 if (job.Prepared)
                 {
-                    if (detail)
-                    {
-                        ++Values.DetailScheduledCount;
-                        Details.push_back(std::move(*detail));
-                    }
                     PendingBytes += job.Bytes;
                     Finished.push_back(std::move(job));
                 }
                 WorkerSignal.notify_all();
                 MainSignal.notify_all();
             }
-        }
-
-        void RunDetail(std::unique_lock<std::mutex>& lock)
-        {
-            const DetailJob request = std::move(Details.front());
-            Details.pop_front();
-            ++Running;
-            lock.unlock();
-
-            FinishedJob job;
-            job.Key = request.Key;
-            job.Kind = request.Kind;
-            const auto begin = std::chrono::steady_clock::now();
-            try
-            {
-                job.Prepared = PreparePreloadFile(request.Kind, request.Key, request.Path);
-                if (job.Prepared && request.StorePlaceholder)
-                {
-                    const auto& texture = static_cast<const Texture&>(*job.Prepared);
-                    if (const auto placeholder = TexturePlaceholderCache::Extract(texture.GetCachedHeader(), texture.GetTempData()))
-                        static_cast<void>(TexturePlaceholderCache::Store(request.Key, request.Path, *placeholder));
-                }
-            }
-            catch (const std::exception& error)
-            {
-                ENGINE_LOG_WARN("Resource detail load failed: key=\"{}\", error={}", WStrToStr(request.Key), error.what());
-            }
-            if (job.Prepared) job.Bytes = job.Prepared->GetUploadByteSize();
-            const f64 elapsed = std::chrono::duration<f64, std::milli>(std::chrono::steady_clock::now() - begin).count();
-
-            lock.lock();
-            --Running;
-            ++Values.DetailFinishedCount;
-            Values.WorkerMilliseconds += elapsed;
-            Values.SlowestWorkerMilliseconds = std::max(Values.SlowestWorkerMilliseconds, elapsed);
-            DetailBytes += job.Bytes;
-            // 읽지 못해도 메인 스레드가 자리를 '읽지 못함'으로 바꾸도록 알린다.
-            FinishedDetails.push_back(std::move(job));
-            WorkerSignal.notify_all();
-            MainSignal.notify_all();
         }
 
         // 이 메시를 읽는 동안 대신 그릴, 더 단순한 LOD가 함께 있는지
@@ -379,30 +310,44 @@ namespace Engine
             return false;
         }
 
-        void PreparePlaceholder(const Job& request, const std::filesystem::path& path, FinishedJob& job, std::optional<DetailJob>& detail)
+        // 자리만 등록할 리소스를 만든다. 미룰 수 없으면 false.
+        static bool PreparePlaceholder(const Job& request, const std::filesystem::path& path, FinishedJob& job)
         {
-            DetailJob next{ job.Key, path, job.Kind, false };
             if (job.Kind == EPreloadKind::Mesh)
             {
+                std::error_code error;
+                job.EstimatedBytes = std::filesystem::file_size(path, error);
+                if (error) return false;
                 job.Prepared = Mesh::CreateEmpty();
-                job.Prepared->SetKey(job.Key);
             }
             else
             {
-                auto placeholder = TexturePlaceholderCache::Load(job.Key, path);
+                auto& info = job.StreamInfo;
+                if (const auto layout = TextureMipCache::ReadLayout(job.Key, path)) info.Layout = *layout;
+                else if (Texture::ReadImageSize(path, info.Layout.Width, info.Layout.Height))
+                    info.Layout.MipLevels = Texture::CalculateMipLevels(info.Layout.Width, info.Layout.Height);
+                // 처음 보여 주는 크기보다 크지 않으면 나눠 읽을 것이 없다.
+                if (!info.Layout.IsValid() || (std::max)(info.Layout.Width, info.Layout.Height) <= TextureMipCache::PlaceholderSize) return false;
+
+                info.FirstMip = info.Layout.FindMipForSize(TextureMipCache::PlaceholderSize);
+                auto placeholder = TextureMipCache::Load(job.Key, path, info.FirstMip);
                 job.CachedPlaceholder = placeholder.has_value();
-                next.StorePlaceholder = !placeholder;
-                if (!placeholder) placeholder = TexturePlaceholderCache::MakeSolid(request.MaterialSlot);
+                if (!placeholder)
+                {
+                    placeholder = TextureMipCache::MakeSolid(request.MaterialSlot);
+                    info.FirstMip = info.Layout.MipLevels;
+                }
                 job.Prepared = Texture::Create(placeholder->Header, placeholder->Pixels);
-                job.Prepared->SetKey(job.Key);
             }
+            job.Prepared->SetKey(job.Key);
             job.Prepared->SetPath(path.wstring());
             job.Prepared->MarkPending();
+            job.Path = path;
             job.Placeholder = true;
-            detail = std::move(next);
+            return true;
         }
 
-        void Process(const Job& request, FinishedJob& job, std::vector<DiscoveredTexture>& discovered, std::optional<DetailJob>& detail)
+        void Process(const Job& request, FinishedJob& job, std::vector<DiscoveredTexture>& discovered)
         {
             const auto path = ResolvePreloadFile(request.Reference);
             if (path.empty()) return;
@@ -419,9 +364,8 @@ namespace Engine
 
             if (job.Kind == EPreloadKind::Material)
                 discovered = ScanMaterialTextures(path);
-            else if (DeferDetail && (job.Kind == EPreloadKind::Mesh ? HasCoarserLOD(job.Key) : request.FromMaterial && IsImageTexture(path)))
-                PreparePlaceholder(request, path, job, detail);
-            else
+            else if (!DeferDetail || !(job.Kind == EPreloadKind::Mesh ? HasCoarserLOD(job.Key) : request.FromMaterial && IsImageTexture(path)) ||
+                !PreparePlaceholder(request, path, job))
                 job.Prepared = PreparePreloadFile(job.Kind, job.Key, path);
             if (job.Prepared) job.Bytes = job.Prepared->GetUploadByteSize();
         }
@@ -457,21 +401,15 @@ namespace Engine
     ResourcePreloader::~ResourcePreloader()
     {
         m_State->Stop();
-        for (const auto* jobs : { &m_State->Finished, &m_State->FinishedDetails })
-            for (const auto& job : *jobs) DiscardPreparedResource(job.Prepared);
+        for (const auto& job : m_State->Finished) DiscardPreparedResource(job.Prepared);
     }
 
     void ResourcePreloader::Start(std::span<const ResourceReference> references)
     {
-        Start(references, Options{});
-    }
-
-    void ResourcePreloader::Start(std::span<const ResourceReference> references, const Options& options)
-    {
         auto& state = *m_State;
         if (state.Active || !state.Workers.empty() || references.empty() || !ResourceManager::IsCreated()) return;
 
-        state.DeferDetail = options.DeferDetail;
+        state.DeferDetail = ResourceStreamer::IsCreated();
         if (state.DeferDetail)
         {
             // 참조 이름만 비교한다. 파일 키와 표기가 다르면 미루지 않고 처음에 모두 읽는다.
@@ -513,7 +451,7 @@ namespace Engine
         }
     }
 
-    bool ResourcePreloader::Update(std::chrono::steady_clock::time_point deadline, const LoadedCallback& onLoaded, size_t maxUploadBytes)
+    bool ResourcePreloader::Update(std::chrono::steady_clock::time_point deadline, const LoadedCallback& onLoaded)
     {
         auto& state = *m_State;
         if (!ResourceManager::IsCreated())
@@ -523,39 +461,31 @@ namespace Engine
         }
         auto& manager = ResourceManager::Get();
 
-        const bool wasInitialReady = IsInitialReady();
         size_t uploadedBytes = 0;
         while (true)
         {
             State::FinishedJob job;
-            bool isDetail = false;
             {
                 std::unique_lock lock(state.Mutex);
-                if (!state.IsInitialDone())
+                state.MainSignal.wait_until(lock, deadline, [&state] { return !state.Finished.empty() || state.IsWorkDone(); });
+                if (state.Finished.empty())
                 {
-                    state.MainSignal.wait_until(lock, deadline, [&state] { return !state.Finished.empty() || state.IsInitialWorkDone(); });
-                    if (state.Finished.empty() && !state.IsInitialWorkDone()) return false;
-                }
-                // 처음 준비가 끝난 호출에서는 미룬 내용을 처리하지 않고 돌아가 화면을 먼저 열게 한다.
-                isDetail = state.Finished.empty();
-                auto& finished = isDetail ? state.FinishedDetails : state.Finished;
-                if (isDetail && (finished.empty() || !wasInitialReady))
-                {
-                    if (!state.IsAllDone()) return false;
+                    if (!state.IsWorkDone()) return false;
                     break;
                 }
-                job = std::move(finished.front());
-                finished.pop_front();
-                (isDetail ? state.DetailBytes : state.PendingBytes) -= job.Bytes;
+                job = std::move(state.Finished.front());
+                state.Finished.pop_front();
+                state.PendingBytes -= job.Bytes;
             }
             state.WorkerSignal.notify_all();
 
             const auto begin = std::chrono::steady_clock::now();
-            bool failed = false;
-            if (isDetail)
-                failed = !IsSuccess(manager.FulfillPendingResource(job.Key, job.Prepared));
-            else
-                static_cast<void>(manager.RegisterPreparedResource(job.Prepared));
+            const Handle handle = manager.RegisterPreparedResource(job.Prepared);
+            if (job.Placeholder && ResourceStreamer::IsCreated())
+            {
+                if (job.Kind == EPreloadKind::Mesh) ResourceStreamer::Get().AddMesh(handle, job.Path, job.EstimatedBytes);
+                else ResourceStreamer::Get().AddTexture(handle, job.Path, job.StreamInfo);
+            }
             const auto end = std::chrono::steady_clock::now();
             const f64 elapsed = std::chrono::duration<f64, std::milli>(end - begin).count();
             uploadedBytes += job.Bytes;
@@ -564,23 +494,21 @@ namespace Engine
                 state.Values.MainMilliseconds += elapsed;
                 (job.Kind == EPreloadKind::Mesh ? state.Values.MeshMainMilliseconds : state.Values.TextureMainMilliseconds) += elapsed;
                 state.Values.UploadBytes += job.Bytes;
-                if (failed) ++state.Values.DetailFailedCount;
-                else if (job.Placeholder) ++state.Values.PlaceholderCount;
+                if (job.Placeholder) ++state.Values.PlaceholderCount;
                 else ++(job.Kind == EPreloadKind::Mesh ? state.Values.MeshCount : state.Values.TextureCount);
                 if (job.CachedPlaceholder) ++state.Values.CachedPlaceholderCount;
             }
             if (onLoaded) onLoaded(job.Key, elapsed);
-            if (end >= deadline || uploadedBytes >= maxUploadBytes) return false;
+            if (end >= deadline || uploadedBytes >= MaxUploadBytesPerUpdate) return false;
         }
 
         state.JoinWorkers();
         return true;
     }
 
-    bool ResourcePreloader::IsInitialReady() const
+    Resource* ResourcePreloader::PrepareFile(const std::wstring& key, const std::filesystem::path& path)
     {
-        const std::lock_guard lock(m_State->Mutex);
-        return m_State->IsInitialDone();
+        return PreparePreloadFile(ClassifyPreloadFile(path), key, path);
     }
 
     EResult ResourcePreloader::LoadDetail(Resource& resource)
@@ -595,7 +523,7 @@ namespace Engine
         try
         {
             const auto path = PlatformPath::ResolveUri(resource.GetPath());
-            prepared = PreparePreloadFile(ClassifyPreloadFile(path), resource.GetKey(), path);
+            prepared = PrepareFile(resource.GetKey(), path);
         }
         catch (const std::exception& error)
         {
@@ -632,6 +560,6 @@ namespace Engine
 
     bool ResourcePreloader::IsAnyActive()
     {
-        return s_ActivePreloaders.load() > 0;
+        return s_ActivePreloaders.load() > 0 || (ResourceStreamer::IsCreated() && ResourceStreamer::Get().IsBusy());
     }
 }

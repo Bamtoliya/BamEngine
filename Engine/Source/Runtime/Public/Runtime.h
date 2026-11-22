@@ -5,6 +5,7 @@
 #include "TimeManager.h"
 #include "InputManager.h"
 #include "ResourceManager.h"
+#include "ResourceStreamer.h"
 #include "SystemManager.h"
 #include "SceneManager.h"
 #include "RenderPassManager.h"
@@ -81,6 +82,7 @@ private:
 	LightManager* m_LightManager = { nullptr };
 	RaytracingSceneManager* m_RaytracingSceneManager = { nullptr };
 	ResourceManager* m_ResourceManager = { nullptr };
+	ResourceStreamer* m_ResourceStreamer = { nullptr };
 	SceneManager* m_SceneManager = { nullptr };
 	SystemManager* m_SystemManager = { nullptr };
 	LocalizationManager* m_LocalizationManager = { nullptr };

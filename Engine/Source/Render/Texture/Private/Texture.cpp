@@ -98,6 +98,34 @@ uint32 Texture::CalculateMipLevels(uint32 width, uint32 height)
 	return levels;
 }
 
+bool Texture::ReadImageSize(const std::filesystem::path& path, uint32& width, uint32& height)
+{
+	std::ifstream file(path, std::ios::binary);
+	if (!file) return false;
+
+	stbi_io_callbacks callbacks{};
+	callbacks.read = [](void* user, char* data, int size) -> int
+		{
+			auto& stream = *static_cast<std::ifstream*>(user);
+			stream.read(data, size);
+			return static_cast<int>(stream.gcount());
+		};
+	callbacks.skip = [](void* user, int count)
+		{
+			auto& stream = *static_cast<std::ifstream*>(user);
+			stream.clear();
+			stream.seekg(count, std::ios::cur);
+		};
+	callbacks.eof = [](void* user) -> int { return static_cast<std::ifstream*>(user)->eof() ? 1 : 0; };
+	int imageWidth = 0;
+	int imageHeight = 0;
+	int channels = 0;
+	if (!stbi_info_from_callbacks(&callbacks, &file, &imageWidth, &imageHeight, &channels) || imageWidth <= 0 || imageHeight <= 0) return false;
+	width = static_cast<uint32>(imageWidth);
+	height = static_cast<uint32>(imageHeight);
+	return true;
+}
+
 #pragma region Constructor&Destructor
 EResult Texture::Initialize(void* arg)
 {
@@ -388,6 +416,37 @@ EResult Texture::UploadToGPU()
 
 	m_RHITexture = rhi->CreateTexture(textureDesc);
 	return m_RHITexture ? EResult::Success : EResult::Fail;
+}
+
+EResult Texture::ApplyStreamedMips(const TextureMipData& mips)
+{
+	if (!IsPending()) return EResult::Fail;
+
+	if (RHI* rhi = GetResourceUploadRHI())
+	{
+		RHITextureDesc textureDesc{};
+		textureDesc.width = mips.Header.width;
+		textureDesc.height = mips.Header.height;
+		textureDesc.depth = mips.Header.depth;
+		textureDesc.mipLevels = mips.Header.mipLevels;
+		textureDesc.arraySize = mips.Header.arraySize;
+		textureDesc.format = mips.Header.format;
+		textureDesc.dimension = mips.Header.dimension;
+		textureDesc.usage = ETextureUsage::Sampler;
+		textureDesc.data = const_cast<uint8*>(mips.Pixels.data());
+		textureDesc.dataSize = static_cast<uint32>(mips.Pixels.size());
+		RHITexture* texture = rhi->CreateTexture(textureDesc);
+		if (!texture) return EResult::Fail;
+
+		// 이전 텍스처는 GPU 사용이 끝난 뒤 해제된다.
+		Safe_Release(m_RHITexture);
+		m_RHITexture = texture;
+	}
+	m_CachedHeader = mips.Header;
+	m_TempData.clear();
+	m_TempData.shrink_to_fit();
+	IncreaseVersion();
+	return EResult::Success;
 }
 
 EResult Texture::AdoptPrepared(Resource& prepared)

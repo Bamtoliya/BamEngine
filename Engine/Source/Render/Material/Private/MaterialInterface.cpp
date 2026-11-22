@@ -2,6 +2,7 @@
 #include "MaterialInterface.h"
 #include "SamplerManager.h"
 #include "ResourceManager.h"
+#include "ResourceStreamer.h"
 #include "Renderer.h"
 #include <string_view>
 
@@ -847,6 +848,7 @@ EResult MaterialInterface::Bind(uint32 slot)
             : defaultSampler;
         if (!sampler) return EResult::Fail;
 
+        ResourceStreamer::NoteBound(*texture);
         RHITexture* rhiTexture = texture->GetAvailableRHITexture();
         if (!rhiTexture) continue;
 

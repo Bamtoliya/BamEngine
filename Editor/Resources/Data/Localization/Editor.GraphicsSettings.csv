@@ -15,6 +15,9 @@ GraphicsSettings,RaytracedShadowUnsupported,This device does not support DXR inl
 GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
 GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
 GraphicsSettings,SectionRaytracing,Raytracing,레이트레이싱
+GraphicsSettings,SectionStreaming,Resource Streaming,리소스 스트리밍
+GraphicsSettings,StreamingBudget,Memory Budget,메모리 한도
+GraphicsSettings,StreamingBudgetHint,GPU memory for streamed meshes and textures. Less important ones are reduced only when the budget is exceeded.,스트리밍하는 메시와 텍스처의 GPU 메모리입니다. 한도를 넘을 때만 덜 중요한 것부터 줄입니다.
 GraphicsSettings,TargetViewport,Target Viewport,대상 뷰포트
 GraphicsSettings,Title,Graphics Settings,그래픽 설정
 GraphicsSettings,VSync,VSync,VSync

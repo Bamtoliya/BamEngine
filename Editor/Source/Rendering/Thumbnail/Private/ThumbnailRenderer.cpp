@@ -10,6 +10,7 @@
 #include "LightComponent.h"
 #include "TransformSystem.h"
 #include "LightSystem.h"
+#include "ResourceStreamer.h"
 #include "ResourceManager.h"
 #include "RenderTargetManager.h"
 #include "RenderTarget.h"
@@ -209,6 +210,7 @@ bool ThumbnailRenderer::SubmitMaterial(Engine::MaterialInterface* material)
 
 	Engine::StaticDrawCommand cmd{};
 	cmd.mesh = mesh;
+	if (material) Engine::ResourceStreamer::EnsureMaterialTextures(*material);
 	cmd.material = material;
 	cmd.worldMatrix = transComp->worldMatrix;
 	cmd.pickingId = 0;
@@ -300,6 +302,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	{
 		Engine::SkinnedDrawCommand cmd{};
 		cmd.mesh = mesh;
+		if (material) Engine::ResourceStreamer::EnsureMaterialTextures(*material);
 		cmd.material = material;
 		if (material) material->BuildMaterialConstants(cmd.materialConstants);
 		cmd.worldMatrix = mat4(1.0f);
@@ -311,6 +314,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	{
 		Engine::StaticDrawCommand cmd{};
 		cmd.mesh = mesh;
+		if (material) Engine::ResourceStreamer::EnsureMaterialTextures(*material);
 		cmd.material = material;
 		cmd.worldMatrix = mat4(1.0f);
 		cmd.pickingId = 0;
@@ -411,6 +415,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 			{
 				Engine::SkinnedDrawCommand cmd{};
 				cmd.mesh = mesh;
+				if (material) Engine::ResourceStreamer::EnsureMaterialTextures(*material);
 				cmd.material = material;
 				if (material) material->BuildMaterialConstants(cmd.materialConstants);
 				cmd.worldMatrix = m_BindPoseMatrices.empty() ? worldTransforms[i] : placementMatrix;
@@ -422,6 +427,7 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 			{
 				Engine::StaticDrawCommand cmd{};
 				cmd.mesh = mesh;
+				if (material) Engine::ResourceStreamer::EnsureMaterialTextures(*material);
 				cmd.material = material;
 				cmd.worldMatrix = worldTransforms[i];
 				cmd.pickingId = 0;
@@ -518,6 +524,7 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 		if (!submitted) SubmitFrame(*camera);
 		Engine::StaticDrawCommand cmd{};
 		cmd.mesh = mesh;
+		if (mat) Engine::ResourceStreamer::EnsureMaterialTextures(*mat);
 		cmd.material = mat;
 		cmd.worldMatrix = wt.worldMatrix;
 		cmd.pickingId = 0;
@@ -542,6 +549,7 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 		if (!submitted) SubmitFrame(*camera);
 		Engine::SkinnedDrawCommand cmd{};
 		cmd.mesh = mesh;
+		if (mat) Engine::ResourceStreamer::EnsureMaterialTextures(*mat);
 		cmd.material = mat;
 		if (mat) mat->BuildMaterialConstants(cmd.materialConstants);
 		cmd.worldMatrix = wt.worldMatrix;

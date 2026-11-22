@@ -18,6 +18,7 @@ private:
     void DrawRendering();
 
     int32 m_DraftRaytracedShadow = 0;
+    int32 m_DraftStreamingBudget = 0;
 
     string m_DraftProjectName;
     string m_DraftStartupScenePath;

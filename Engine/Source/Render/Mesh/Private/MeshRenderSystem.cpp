@@ -13,6 +13,11 @@
 #include "RenderPass.h"
 #include "PickingManager.h"
 #include "ResourceManager.h"
+#include "ResourceStreamer.h"
+#include "RHI.h"
+#include "RHITexture.h"
+#include "Shader.h"
+#include "StreamingDemand.h"
 #include "FrustumCuller.h"
 #include "SplineMeshDeformCache.h"
 #include "AnimationSceneQuery.h"
@@ -134,6 +139,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
     };
     vector<PassTarget> targets;
     vector<RenderPassID> views;
+    vector<StreamingView> streamingViews; // views와 같은 순서
+    const auto* backBuffer = renderer.GetRHI() ? renderer.GetRHI()->GetBackBuffer() : nullptr;
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
     {
@@ -167,7 +174,20 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             {
                 const auto found = std::find(views.begin(), views.end(), target.viewID);
                 target.viewIndex = static_cast<size_t>(found - views.begin());
-                if (found == views.end()) views.push_back(target.viewID);
+                if (found == views.end())
+                {
+                    views.push_back(target.viewID);
+                    StreamingView streamingView;
+                    streamingView.CameraPosition = target.cameraPos;
+                    // 원근 투영의 w 부호로 뷰 공간의 앞 방향(+Z 또는 -Z)을 정한다.
+                    const bool forwardIsNegativeZ = viewport.lodCamera.projMatrix[2][3] < 0.0f;
+                    streamingView.Forward = vec3(viewport.lodCamera.invViewMatrix[2]) * (forwardIsNegativeZ ? -1.0f : 1.0f);
+                    streamingView.ProjectionScaleY = target.projY;
+                    // 뷰포트는 창보다 크지 않으므로 창 높이를 쓰면 부족하게 올리지 않는다.
+                    if (backBuffer) streamingView.ViewHeight = static_cast<f32>(backBuffer->GetHeight());
+                    streamingView.Orthographic = viewport.lodCamera.projMatrix[3][3] == 1.0f;
+                    streamingViews.push_back(streamingView);
+                }
             }
             targets.push_back(target);
         }
@@ -175,6 +195,19 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
     if (targets.empty()) return;
     vector<int32> viewLODs(views.size(), -1);
+
+    auto* streamer = ResourceStreamer::IsCreated() && ResourceStreamer::Get().HasEntries() ? &ResourceStreamer::Get() : nullptr;
+    // UV를 그대로 쓰는 엔진 기본 셰이더인지. 다른 셰이더는 UV를 바꿀 수 있어 가장 자세한 밉을 요청한다.
+    unordered_map<const Shader*, bool> plainUVShaders;
+    const auto usesPlainUV = [&plainUVShaders](const MaterialInterface& material)
+        {
+            const Shader* shader = material.GetPixelShader(ERenderPassType::Geometry);
+            const EBlendMode blendMode = material.GetBlendMode();
+            if (!shader || (blendMode != EBlendMode::Opaque && blendMode != EBlendMode::Masked) || !material.GetShaderGraphPath().empty()) return false;
+            const auto [found, inserted] = plainUVShaders.try_emplace(shader, false);
+            if (inserted) found->second = ToLowerWStr(shader->GetKey()).ends_with(L"gbufferps");
+            return found->second;
+        };
 
     // 2. 씬 엔티티 순회 및 패스별 독립 LOD 메시 제출
     for (Scene* scene : activeScenes)
@@ -294,7 +327,12 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             // 자세한 메시를 읽는 동안에는 준비된 LOD를 대신 그린다.
             const ResidentMeshLODs lodMeshes(baseMesh, lodGroup);
             const Mesh* boundsMesh = lodMeshes.Find(0);
-            if (!boundsMesh) continue;
+            if (!boundsMesh)
+            {
+                // 대신 그릴 것이 없는 메시는 크기를 모르므로 가장 먼저 읽는다.
+                if (streamer && baseMesh) streamer->RequestMesh(*baseMesh, 1.0f);
+                continue;
+            }
 
             const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<StaticMeshRendererComponent>(scene, entity);
 
@@ -317,6 +355,37 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 lodThresholds.HasLOD1 = lodGroup->lod1Mesh.Get() != nullptr;
                 lodThresholds.HasLOD2 = lodGroup->lod2Mesh.Get() != nullptr;
                 std::fill(viewLODs.begin(), viewLODs.end(), -1);
+            }
+            if (streamer)
+            {
+                BoundingBox worldBounds;
+                const bool hasBounds = BoundingBox(boundsMesh->GetMin(), boundsMesh->GetMax()).TryTransformToAABB(worldTransform.worldMatrix, worldBounds);
+                const mat4& matrix = worldTransform.worldMatrix;
+                const float scale = glm::max(glm::length(vec3(matrix[0])), glm::max(glm::length(vec3(matrix[1])), glm::length(vec3(matrix[2]))));
+                const float uvDensity = hasBounds && usesPlainUV(*material) ? boundsMesh->GetUVDensity() : 0.0f;
+                for (size_t viewIndex = 0; viewIndex < streamingViews.size(); ++viewIndex)
+                {
+                    const auto& streamingView = streamingViews[viewIndex];
+                    if (!hasBounds)
+                    {
+                        streamer->RequestMesh(*baseMesh, 1.0f);
+                        streamer->RequestMaterial(*material, 0.0f, 1.0f);
+                        continue;
+                    }
+                    const vec3 center = worldBounds.Center();
+                    const float coverage = ComputeScreenCoverage(glm::length(worldBounds.Extent()), streamingView.ProjectionScaleY,
+                        streamingView.Orthographic ? 1.0f : glm::distance(streamingView.CameraPosition, center));
+                    const float priority = ComputeStreamingPriority(streamingView, worldBounds, coverage);
+                    // 준비된 LOD로 바꾸기 전의, 화면에 필요한 LOD를 요청한다.
+                    const Mesh* wantedMesh = baseMesh;
+                    if (lodGroup)
+                    {
+                        const float lodCoverage = ComputeScreenCoverage(lodRadius, streamingView.ProjectionScaleY, glm::distance(streamingView.CameraPosition, lodCenter));
+                        wantedMesh = lodMeshes.Meshes[SelectLODIndex(lodCoverage, lodGroup->viewLODs.Get(views[viewIndex]), lodThresholds)];
+                    }
+                    streamer->RequestMesh(*wantedMesh, priority);
+                    streamer->RequestMaterial(*material, ComputePixelsPerUV(streamingView, worldBounds, scale, uvDensity), priority);
+                }
             }
             // 같은 뷰의 GBuffer·포워드·그림자 패스와 TLAS가 같은 LOD를 쓰도록 뷰마다 한 번만 고른다.
             const auto selectLOD = [&](const PassTarget& target) -> int32

@@ -279,20 +279,6 @@ Handle ResourceManager::RegisterPreparedResource(Resource* resource)
 	return AddResourceInternal(hash, resource);
 }
 
-EResult ResourceManager::FulfillPendingResource(const wstring& key, Resource* prepared)
-{
-	EResult result = EResult::Success;
-	if (auto* target = GetResource(FindHandleByKey(key)); target && target->IsPending())
-		result = target->Fulfill(prepared);
-
-	if (prepared)
-	{
-		prepared->Free();
-		delete prepared;
-	}
-	return result;
-}
-
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {
 	if (!handle.IsValid()) return EResult::InvalidArgument;

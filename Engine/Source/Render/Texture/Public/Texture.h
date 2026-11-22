@@ -3,6 +3,7 @@
 #include "RHITexture.h"
 #include "TextureBinaryHeader.h"
 #include "Resource.h"
+#include "TextureMipCache.h"
 
 BEGIN(Engine)
 struct TextureCreateDesc : public ResourceCreateDesc
@@ -29,6 +30,8 @@ public:
 	virtual ~Texture() = default;
 public:
 	static uint32 CalculateMipLevels(uint32 width, uint32 height);
+	// 픽셀을 해석하지 않고 이미지 크기만 읽는다.
+	static bool ReadImageSize(const std::filesystem::path& path, uint32& width, uint32& height);
 	static Texture* Create(void* arg = nullptr);
 	static Texture* Create(const TextureBinaryHeader& header, const vector<uint8>& pixelData, const wstring& key = L"");
 	static Texture* CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key = L"");
@@ -80,6 +83,8 @@ public:
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
 	EResult ReloadFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
 	EResult UploadToGPU() override;
+	// 자리만 등록한 텍스처의 GPU 텍스처를 일부 밉으로 바꾼다. CPU 픽셀은 보관하지 않으며 여전히 자리만 등록한 상태다.
+	EResult ApplyStreamedMips(const TextureMipData& mips);
 	[[nodiscard]] size_t GetUploadByteSize() const override { return m_TempData.size(); }
 protected:
 	EResult AdoptPrepared(Resource& prepared) override;

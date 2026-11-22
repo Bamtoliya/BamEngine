@@ -4,6 +4,7 @@
 #include "SamplerManager.h"
 #include "Renderer.h"
 #include "ResourceManager.h"
+#include "ResourceStreamer.h"
 
 #pragma region Constructor&Destructor
 EResult MaterialInstance::Initialize(void* arg)
@@ -187,6 +188,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
+		ResourceStreamer::NoteBound(*texture);
 		RHITexture* rhiTex = texture->GetAvailableRHITexture();
 		if (!rhiTex) continue;
 
@@ -210,6 +212,7 @@ EResult MaterialInstance::Bind(uint32 slot)
 			: defaultSampler;
 		if (!sampler) return EResult::Fail;
 
+		ResourceStreamer::NoteBound(*texture);
 		RHITexture* rhiTex = texture->GetAvailableRHITexture();
 		if (!rhiTex) continue;
 

@@ -137,6 +137,8 @@ public:
 	virtual const vector<InputLayoutDesc>& GetInputLayoutDescs() const;
 	bool IsDynamic() const { RequireResident(); return HasFlag(m_Flags, EMeshFlag::Dynamic); }
 	const MeshRaycastBVH& GetRaycastBVH() const;
+	// 로컬 길이 1에 해당하는 평균 UV 길이. UV가 없거나 계산할 수 없으면 0.
+	f32 GetUVDensity() const;
 public:
 	[[nodiscard]] bool IsSkinned() const { return GetStreamBuffer(EMeshStream::SkinData) != nullptr; }
 	[[nodiscard]] bool IsSkinCompatibleWith(const Skeleton& skeleton) const;
@@ -170,6 +172,8 @@ public:
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 	EResult Reload(const std::filesystem::path& filePath = {}) override;
 	EResult UploadToGPU() override;
+	// 파일에서 다시 읽을 수 있는 내용을 CPU와 GPU에서 내리고 자리만 남긴다.
+	void ReleaseContents();
 	[[nodiscard]] size_t GetUploadByteSize() const override;
 protected:
 	EResult OnPostLoad() override;
@@ -184,6 +188,7 @@ private:
 	uint64 m_GeometryVersion = 1;
 	mutable MeshRaycastBVH m_RaycastBVH;
 	mutable uint64 m_RaycastBVHVersion = 0;
+	mutable f32 m_UVDensity = -1.0f; // 음수면 아직 계산하지 않음
 
 #pragma region Variable
 protected:
