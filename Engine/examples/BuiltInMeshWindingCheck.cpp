@@ -1,6 +1,7 @@
 ﻿#include "ResourceManager.h"
 #include "BuiltInPrimitiveMeshes.h"
 #include "Mesh.h"
+#include "MeshWinding.h"
 #include "Vertex.h"
 #include "TerrainUtility.h"
 #include <cstring>
@@ -82,5 +83,20 @@ int main()
 		(ok ? std::cout : std::cerr) << (ok ? "[ OK ] " : "[FAIL] ") << target.Name << " CW=" << result.Clockwise << " CCW=" << result.CounterClockwise << " Degenerate=" << result.Degenerate << '\n';
 		if (!ok) ++failures;
 	}
+
+	// 축을 홀수 번 뒤집으면 앞면 방향을 바꾸고, 짝수 번이면 그대로 둔다.
+	const auto expect = [&failures](bool condition, const char* message)
+		{
+			if (condition) return;
+			std::cerr << "[FAIL] " << message << '\n';
+			++failures;
+		};
+	const auto scale = [](float x, float y, float z) { return glm::scale(mat4(1.0f), vec3(x, y, z)); };
+	const mat4 moved = glm::translate(mat4(1.0f), vec3(3.0f, -2.0f, 5.0f)) * glm::rotate(mat4(1.0f), 1.1f, glm::normalize(vec3(1.0f, 2.0f, 3.0f)));
+	expect(!IsMirroredTransform(mat4(1.0f)) && !IsMirroredTransform(moved) && !IsMirroredTransform(moved * scale(2.0f, 0.5f, 3.0f)), "plain transforms must keep the winding");
+	expect(IsMirroredTransform(scale(-1.0f, 1.0f, 1.0f)) && IsMirroredTransform(moved * scale(1.0f, -2.0f, 1.0f)) && IsMirroredTransform(scale(-1.0f, -1.0f, -1.0f)), "an odd number of flips must reverse the winding");
+	expect(!IsMirroredTransform(moved * scale(-1.0f, -1.0f, 1.0f)) && !IsMirroredTransform(scale(0.0f, 1.0f, 1.0f)), "an even number of flips or a flat transform must keep the winding");
+	expect(ResolveFrontFace(EFrontFace::Clockwise, false) == EFrontFace::Clockwise && ResolveFrontFace(EFrontFace::Clockwise, true) == EFrontFace::CounterClockwise &&
+		ResolveFrontFace(EFrontFace::CounterClockwise, true) == EFrontFace::Clockwise, "mirrored draws must use the opposite front face");
 	return failures == 0 ? 0 : 1;
 }

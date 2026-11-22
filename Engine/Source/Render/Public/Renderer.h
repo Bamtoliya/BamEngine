@@ -106,8 +106,9 @@ public:
 #pragma region Binding
 private:
 	EResult PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDesc& desc);
-	EResult BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, class RHIPipeline** inOutLastPipeline = nullptr);
-	EResult PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc);
+	// mirrored면 월드 행렬이 감긴 방향을 뒤집으므로 재질의 앞면 방향을 반대로 쓴다.
+	EResult BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, class RHIPipeline** inOutLastPipeline = nullptr, bool mirrored = false);
+	EResult PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, bool mirrored = false);
 public:
 	EResult BindMeshPipeline(class Mesh*, class MaterialInterface*, class RenderPass*);
 	EResult ValidateMeshMaterial(Mesh* mesh, MaterialInterface* material, RenderPass* renderPass);

@@ -19,6 +19,7 @@
 //Resource
 #include "ResourceManager.h"
 #include "Mesh.h"
+#include "MeshWinding.h"
 #include "Shader.h"
 #include "Texture.h"
 #include "MaterialInterface.h"
@@ -231,6 +232,8 @@ EResult Renderer::Render(f32 dt)
 						}
 						if (a.mesh != b.mesh)
 							return std::less<Mesh*>{}(a.mesh, b.mesh);
+						if (a.mirrored != b.mirrored)
+							return a.mirrored < b.mirrored;
 						return std::less<MaterialInterface*>{}(a.material, b.material);
 					});
 			}
@@ -263,7 +266,9 @@ EResult Renderer::Render(f32 dt)
 							}
 							return std::less<MaterialInterface*>{}(a.material, b.material);
 						}
-						return std::less<Mesh*>{}(a.mesh, b.mesh);
+						if (a.mesh != b.mesh)
+							return std::less<Mesh*>{}(a.mesh, b.mesh);
+						return a.mirrored < b.mirrored;
 					});
 			}
 		}
@@ -665,8 +670,11 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 	Mesh* lastMesh = nullptr;
 	RHIPipeline* lastPipeline = nullptr;
 
+	bool lastMirrored = false;
+
 	MaterialInterface* batchMaterial = nullptr;
 	Mesh* batchMesh = nullptr;
+	bool batchMirrored = false;
 	vector<InstanceData> instanceBatch;
 	instanceBatch.reserve(128);
 
@@ -676,19 +684,21 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 				return EResult::Success;
 
 			const bool sameMeshPipelineSignature = (batchMaterial == lastMaterial && lastMesh != nullptr && lastPipeline != nullptr &&
+				batchMirrored == lastMirrored &&
 				batchMesh->IsSkinned() == lastMesh->IsSkinned() &&
 				batchMesh->GetTopology() == lastMesh->GetTopology() &&
 				batchMesh->GetInputLayoutDescs() == lastMesh->GetInputLayoutDescs());
 
 			if (!sameMeshPipelineSignature)
 			{
-				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc, &lastPipeline);
+				const auto bindResult = BindMeshPipeline(batchMesh, batchMaterial, passType, pipelineDesc, &lastPipeline, batchMirrored);
 				if (bindResult != EResult::Success)
 				{
 					// [결함 격리]: 특정 머티리얼 오류로 전체 프레임 렌더링이 멈추지 않도록 해당 배치만 스킵
 					instanceBatch.clear();
 					return EResult::Success;
 				}
+				lastMirrored = batchMirrored;
 			}
 			if (batchMaterial != lastMaterial)
 			{
@@ -743,10 +753,11 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			batchMaterial = nullptr;
 			batchMesh = nullptr;
 
-			if (material != lastMaterial || mesh != lastMesh)
+			if (material != lastMaterial || mesh != lastMesh || command.mirrored != lastMirrored)
 			{
-				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc, &lastPipeline)))
+				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc, &lastPipeline, command.mirrored)))
 					return EResult::Fail;
+				lastMirrored = command.mirrored;
 			}
 
 			if (material != lastMaterial)
@@ -804,7 +815,8 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 
 		if (batchMesh)
 		{
-			if (mesh != batchMesh)
+			// 감긴 방향이 다르면 앞면 방향이 다른 파이프라인이 필요하다.
+			if (mesh != batchMesh || command.mirrored != batchMirrored)
 			{
 				needsFlush = true;
 			}
@@ -843,11 +855,13 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 
 			batchMaterial = material;
 			batchMesh = mesh;
+			batchMirrored = command.mirrored;
 		}
 		else if (!batchMesh)
 		{
 			batchMaterial = material;
 			batchMesh = mesh;
+			batchMirrored = command.mirrored;
 		}
 
 		InstanceData inst{};
@@ -870,15 +884,18 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 	const ERenderPassType passType = renderPass->GetPassType();
 	MaterialInterface* lastMaterial = nullptr;
 	Mesh* lastMesh = nullptr;
+	bool lastMirrored = false;
 	static const vector<mat4> s_IdentityBones(256, glm::identity<mat4>());
 
 	for (auto& command : commands)
 	{
 		if (!command.mesh || !command.material) continue;
-		if (command.material != lastMaterial || command.mesh != lastMesh)
+		const bool mirrored = IsMirroredTransform(command.worldMatrix);
+		if (command.material != lastMaterial || command.mesh != lastMesh || mirrored != lastMirrored)
 		{
-			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc)))
+			if (IsFailure(BindMeshPipeline(command.mesh, command.material, passType, pipelineDesc, nullptr, mirrored)))
 				return EResult::Fail;
+			lastMirrored = mirrored;
 		}
 		if (command.material != lastMaterial)
 		{
@@ -1348,7 +1365,8 @@ void Renderer::ForgetRenderPass(RenderPassID passID)
 //Entity Submit
 void Renderer::SubmitStatic(const StaticDrawCommand& command, RenderPassID passID)
 {
-	m_StaticDrawCommands[passID].push_back(command);
+	auto& submitted = m_StaticDrawCommands[passID].emplace_back(command);
+	submitted.mirrored = IsMirroredTransform(submitted.worldMatrix);
 }
 void Renderer::SubmitSkinned(const SkinnedDrawCommand& command, RenderPassID passID)
 {
@@ -1471,7 +1489,7 @@ EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDes
 	return EResult::Success;
 }
 
-EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc)
+EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, bool mirrored)
 {
 	if (!m_RHI || !material) return EResult::InvalidArgument;
 	Shader* vs = ResolveVertexShader(mesh, material, passType);
@@ -1578,7 +1596,7 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	}
 	desc.vertexShader = vs->GetRHIShader();
 	desc.pixelShader = ps->GetRHIShader();
-	desc.frontFace = material->GetFrontFace();
+	desc.frontFace = ResolveFrontFace(material->GetFrontFace(), mirrored);
 	desc.cullMode = material->GetCullMode();
 	desc.fillMode = material->GetFillMode();
 	desc.blendState = material->GetBlendState();
@@ -1589,9 +1607,9 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	return EResult::Success;
 }
 
-EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, RHIPipeline** inOutLastPipeline)
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, RHIPipeline** inOutLastPipeline, bool mirrored)
 {
-	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc);
+	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc, mirrored);
 	if (result != EResult::Success)
 	{
 		static std::unordered_set<std::string> s_LoggedInvalidMaterials;
