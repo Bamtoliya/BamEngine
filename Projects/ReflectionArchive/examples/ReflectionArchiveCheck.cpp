@@ -119,7 +119,7 @@ namespace
         itemType.Properties.push_back(reflection::MakeProperty<&Item::Label>("Label", "std::string"));
         itemType.Properties.push_back(reflection::MakeProperty<&Item::Weight>("Weight", "float"));
         itemType.Properties.push_back(reflection::MakeProperty<&Item::NestedOpt>("NestedOpt", "std::optional<int32_t>"));
-        static_cast<void>(registry.RegisterType(std::move(itemType)));
+        static_cast<void>(registry.Register(std::move(itemType)));
 
         outBundleType = reflection::TypeInfo::For<OptionalBundle>("test::OptionalBundle");
         outBundleType.Properties.push_back(reflection::MakeProperty<&OptionalBundle::OptInt>("OptInt", "std::optional<int32_t>"));

@@ -155,7 +155,8 @@ void AnimatorGraphPanel::DrawCustomContent()
 		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
 	Engine::AnimatorComponent* canvasAnimator = nullptr;
-	if (auto* pie = PIEManager::Get(); pie && (pie->IsPlaying() || pie->IsPaused()))
+	auto& pie = PIEManager::Get();
+	if (PIEManager::IsCreated() && (pie.IsPlaying() || pie.IsPaused()))
 	{
 		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
 		const auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
@@ -764,7 +765,7 @@ void AnimatorGraphPanel::RenameParameter(const std::string& oldName, const std::
 void AnimatorGraphPanel::DrawLayersTab()
 {
 	Engine::AnimatorComponent* targetAnimator = nullptr;
-	const bool isPIE = PIEManager::Get() && (PIEManager::Get()->IsPlaying() || PIEManager::Get()->IsPaused());
+	const bool isPIE = PIEManager::IsCreated() && (PIEManager::Get().IsPlaying() || PIEManager::Get().IsPaused());
 	if (isPIE)
 	{
 		auto* scene = Engine::SceneManager::Get().GetCurrentScene();
@@ -894,9 +895,10 @@ void AnimatorGraphPanel::DrawLayersTab()
 void AnimatorGraphPanel::DrawPreviewParameters()
 {
 	bool isPIE = false;
-	if (auto* pie = PIEManager::Get())
+	if (PIEManager::IsCreated())
 	{
-		isPIE = pie->IsPlaying() || pie->IsPaused();
+		auto& pie = PIEManager::Get();
+		isPIE = pie.IsPlaying() || pie.IsPaused();
 	}
 
 	ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
@@ -1064,9 +1066,10 @@ void AnimatorGraphPanel::DrawCanvas()
 	const Engine::AnimatorRuntimeState* observedRuntime = nullptr;
 
 	bool isPIE = false;
-	if (auto* pie = PIEManager::Get())
+	if (PIEManager::IsCreated())
 	{
-		isPIE = pie->IsPlaying() || pie->IsPaused();
+		auto& pie = PIEManager::Get();
+		isPIE = pie.IsPlaying() || pie.IsPaused();
 	}
 
 	if (isPIE)
