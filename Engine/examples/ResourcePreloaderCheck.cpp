@@ -261,7 +261,7 @@ int main()
         Expect(rock->IsPending() && rock->GetGeometryVersion() != geometryVersion && rock->GetUploadByteSize() == 0, "released meshes must drop their contents");
         Expect(rock->GetMin().x == 7.0f && manager.FindHandleByKey(L"Project://Rock.bammesh") == rockHandle, "released meshes must load again");
         material->Free();
-        delete material;
+		manager.DestroyResource(material);
     }
     ResourceStreamer::Destroy();
     Expect(!ResourcePreloader::IsAnyActive() && find(L"Project://Rock_LOD1.bammesh")->GetStreamSlot() == 0, "a destroyed streamer must leave resources alone");
