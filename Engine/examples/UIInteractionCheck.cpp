@@ -1,4 +1,5 @@
 ﻿#include "UIEventSystem.h"
+#include "RuntimeUIInput.h"
 #include "UIComponents.h"
 #include "UILayout.h"
 #include "UIEllipseMaskComponent.h"
@@ -802,6 +803,152 @@ int main()
         CloseAllDropdowns(dropReg);
         if (dropA.isOpen || dropB.isOpen)
             return Fail("CloseAllDropdowns all failed.");
+
+        // 5. UIDropdownComponent popup hit-testing, selection, ValueChanged, and behind-button blocking
+        Fixture dropdownFixture;
+        auto& dropRegFixture = dropdownFixture.scene->GetRegistry();
+
+        const auto behindButton = dropdownFixture.Add(dropdownFixture.canvas, true);
+        auto& behindRect = dropRegFixture.get<RectTransformComponent>(behindButton);
+        behindRect.anchoredPosition = { 10.0f, 40.0f };
+        behindRect.sizeDelta = { 120.0f, 60.0f };
+
+        const auto dropdownEntity = dropdownFixture.Add(dropdownFixture.canvas, false);
+        auto& dropRect = dropRegFixture.get<RectTransformComponent>(dropdownEntity);
+        dropRect.anchoredPosition = { 10.0f, 10.0f };
+        dropRect.sizeDelta = { 120.0f, 30.0f };
+
+        auto& dropdown = dropRegFixture.emplace<UIDropdownComponent>(dropdownEntity);
+        dropdown.options = { "Apple", "Banana", "Cherry" };
+        dropdown.itemHeight = 24.0f;
+        dropdown.maxVisibleItems = 5;
+        dropdown.selectedIndex = -1;
+        dropdown.placeholder = "Select Fruit";
+        auto& dropText = dropRegFixture.emplace<UITextComponent>(dropdownEntity);
+        dropText.text = "";
+        dropText.fontPixels = 16;
+
+        UIEventSystem dropSystem(*dropdownFixture.scene, dropdownFixture.canvas);
+        std::vector<UIPointerEvent> dropEvents;
+        dropSystem.OnPointerEvent().AddLambda([&](const auto& ev) { dropEvents.push_back(ev); });
+
+        // Step 1: Dropdown is closed. Click at { 30.0f, 50.0f } which is on behindButton.
+        Feed(dropSystem, { 30.0f, 50.0f }, true, true);
+        Feed(dropSystem, { 30.0f, 50.0f }, false, false, true);
+        if (dropEvents.empty() || dropEvents.back().target != behindButton)
+            return Fail("Clicking button when dropdown is closed failed to hit behindButton.");
+        dropEvents.clear();
+
+        // Step 2: Click dropdown header at { 30.0f, 25.0f } to open it.
+        Feed(dropSystem, { 30.0f, 25.0f }, true, true);
+        Feed(dropSystem, { 30.0f, 25.0f }, false, false, true);
+        if (!dropdown.isOpen)
+            return Fail("Clicking dropdown header failed to open it.");
+        dropEvents.clear();
+
+        // Step 3: Click option 1 ("Banana") at { 30.0f, 75.0f } inside the popup area.
+        // This coordinate overlaps behindButton, but the popup must block it!
+        Feed(dropSystem, { 30.0f, 75.0f }, true, true);
+        Feed(dropSystem, { 30.0f, 75.0f }, false, false, true);
+
+        if (dropdown.isOpen)
+            return Fail("Selecting dropdown option did not close popup.");
+        if (dropdown.selectedIndex != 1)
+            return Fail("Selecting dropdown option 1 failed.");
+        if (dropText.text != "Banana")
+            return Fail("Dropdown option selection did not update sibling UITextComponent.");
+
+        for (const auto& ev : dropEvents)
+        {
+            if (ev.target == behindButton)
+                return Fail("Open dropdown popup leaked click to button behind it.");
+        }
+
+        auto valEvIt = std::ranges::find_if(dropEvents, [](const auto& ev)
+        {
+            return ev.type == EUIPointerEventType::ValueChanged;
+        });
+        if (valEvIt == dropEvents.end() || valEvIt->target != dropdownEntity ||
+            valEvIt->previousValue != -1.0f || valEvIt->value != 1.0f)
+            return Fail("Dropdown ValueChanged event mismatch on option selection.");
+        dropEvents.clear();
+
+        // Step 4: Re-open dropdown, then click empty space { 300.0f, 200.0f } to close it.
+        Feed(dropSystem, { 30.0f, 25.0f }, true, true);
+        Feed(dropSystem, { 30.0f, 25.0f }, false, false, true);
+        if (!dropdown.isOpen)
+            return Fail("Re-opening dropdown header failed.");
+        Feed(dropSystem, { 300.0f, 200.0f }, true, true);
+        if (dropdown.isOpen)
+            return Fail("Clicking empty space did not close open dropdown.");
+
+        // 6. UITextInputComponent focus, HandleTextInput, HandleKeyInput, and HandleImeComposition
+        Fixture inputTestFixture;
+        auto& inReg = inputTestFixture.scene->GetRegistry();
+        const auto textEntity = inputTestFixture.Add(inputTestFixture.canvas, false);
+        auto& inRect = inReg.get<RectTransformComponent>(textEntity);
+        inRect.anchoredPosition = { 20.0f, 20.0f };
+        inRect.sizeDelta = { 200.0f, 40.0f };
+
+        auto& textInput = inReg.emplace<UITextInputComponent>(textEntity);
+        textInput.placeholder = "Type here...";
+        auto& textCompIn = inReg.emplace<UITextComponent>(textEntity);
+        textCompIn.text = "";
+
+        UIEventSystem inputSystem(*inputTestFixture.scene, inputTestFixture.canvas);
+        std::vector<UIPointerEvent> textEvents;
+        inputSystem.OnPointerEvent().AddLambda([&](const auto& ev) { textEvents.push_back(ev); });
+
+        // Click text input to focus
+        Feed(inputSystem, { 30.0f, 30.0f }, true, true);
+        Feed(inputSystem, { 30.0f, 30.0f }, false, false, true);
+        if (!textInput.isFocused)
+            return Fail("Clicking UITextInputComponent failed to focus.");
+        textEvents.clear();
+
+        // HandleTextInput("Hello")
+        if (!inputSystem.HandleTextInput("Hello"))
+            return Fail("HandleTextInput failed.");
+        if (textInput.text != "Hello" || textCompIn.text != "Hello")
+            return Fail("HandleTextInput text mismatch.");
+        if (textEvents.empty() || textEvents.back().type != EUIPointerEventType::ValueChanged)
+            return Fail("HandleTextInput did not emit ValueChanged event.");
+        textEvents.clear();
+
+        // HandleKeyInput(EUIKey::Backspace)
+        if (!inputSystem.HandleKeyInput(EUIKey::Backspace))
+            return Fail("HandleKeyInput Backspace failed.");
+        if (textInput.text != "Hell" || textCompIn.text != "Hell")
+            return Fail("Backspace text mismatch.");
+        if (textEvents.empty() || textEvents.back().type != EUIPointerEventType::ValueChanged)
+            return Fail("Backspace did not emit ValueChanged event.");
+        textEvents.clear();
+
+        // HandleImeComposition("한", true)
+        if (!inputSystem.HandleImeComposition("한", true))
+            return Fail("HandleImeComposition commit failed.");
+        if (textInput.text != "Hell한" || textCompIn.text != "Hell한")
+            return Fail("IME commit text mismatch.");
+        if (textEvents.empty() || textEvents.back().type != EUIPointerEventType::ValueChanged)
+            return Fail("HandleImeComposition did not emit ValueChanged event.");
+        textEvents.clear();
+
+        // RuntimeUIInput forwarding
+        RuntimeUIInput runtimeInput;
+        std::vector<Scene*> scenes{ inputTestFixture.scene.get() };
+        runtimeInput.Update(scenes, { { 0.1f, 0.1f }, true, true, false, false, false });
+        if (!runtimeInput.HasFocusedTextInput())
+            return Fail("RuntimeUIInput HasFocusedTextInput failed.");
+
+        if (!runtimeInput.ForwardTextInput("!"))
+            return Fail("RuntimeUIInput ForwardTextInput failed.");
+        if (textInput.text != "Hell한!")
+            return Fail("RuntimeUIInput ForwardTextInput text mismatch.");
+
+        if (!runtimeInput.ForwardKeyInput(EUIKey::Escape))
+            return Fail("RuntimeUIInput ForwardKeyInput Escape failed.");
+        if (textInput.isFocused)
+            return Fail("Escape did not unfocus UITextInputComponent.");
     }
 
     std::cout << "UI pointer interaction, transient archive, advanced widgets and delegate checks passed.\n";
