@@ -10,8 +10,13 @@
 #include "WorldComponents.h"
 #include "PhysicsComponent.h"
 #include "SpringArmComponent.h"
+#include "HitboxComponent.h"
+#include "InteractableComponent.h"
+#include "SelectionManager.h"
 #include "TransformSystem.h"
 #include "Mesh.h"
+#include <algorithm>
+#include <cmath>
 
 void DebugRenderer::Initialize(const wstring& prefix)
 {
@@ -60,6 +65,8 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 {
 	if (m_DrawColliders)
 		RegisterColliderDebug(cameraBuffer);
+	if (m_DrawGameplayGizmos)
+		RegisterGameplayDebug(cameraBuffer);
 
 	if (m_Vertices.empty() || colorRTName.empty()) return;
 
@@ -412,6 +419,153 @@ void DebugRenderer::RegisterColliderDebug(const CameraBuffer& cameraBuffer)
 		}
 	}
 }
+
+void DebugRenderer::RegisterGameplayDebug(const CameraBuffer& cameraBuffer)
+{
+	Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene) return;
+	auto& registry = scene->GetRegistry();
+	if (!m_DrawColliders)
+		TransformSystem::UpdateHierarchy(registry);
+
+	const Frustum frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
+	const auto isVisibleInFrustum = [&](const vec3& localCenter, const vec3& localExtent, const mat4& worldMatrix)
+		{
+			const BoundingBox localBounds(localCenter - localExtent, localCenter + localExtent);
+			BoundingBox worldBounds;
+			if (!localBounds.TryTransformToAABB(worldMatrix, worldBounds))
+				return true;
+			return FrustumCuller::TestBoundingBox(frustum, worldBounds);
+		};
+
+	vector<entt::entity> selectedHandles;
+	if (SelectionManager::IsCreated())
+	{
+		const auto selectedEntities = SelectionManager::Get().GetSelectedEntities();
+		selectedHandles.reserve(selectedEntities.size());
+		for (Entity* selected : selectedEntities)
+		{
+			if (selected && selected->GetScene() == scene)
+				selectedHandles.push_back(selected->GetEntityHandle());
+		}
+	}
+	const auto isSelected = [&](entt::entity entity) -> bool
+		{
+			return std::find(selectedHandles.begin(), selectedHandles.end(), entity) != selectedHandles.end();
+		};
+
+	// 1. HitboxComponent 영역 디버그 시각화
+	for (auto [entity, hitbox] : registry.view<HitboxComponent>().each())
+	{
+		if (const auto* flag = registry.try_get<FlagComponent>(entity))
+		{
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+		}
+
+		const bool selected = isSelected(entity);
+		const bool isActive = hitbox.active && IsComponentEnabled<HitboxComponent>(registry, entity);
+		if (!m_DrawColliders && !isActive && !selected)
+			continue;
+
+		const vec4 color = isActive
+			? vec4(1.0f, 0.22f, 0.12f, 1.0f)
+			: (selected ? vec4(0.75f, 0.35f, 0.20f, 0.55f) : vec4(0.50f, 0.24f, 0.16f, 0.30f));
+
+		const auto* wt = registry.try_get<WorldTransformComponent>(entity);
+		const auto* tr = registry.try_get<TransformComponent>(entity);
+		const mat4 worldMatrix = wt ? wt->worldMatrix : (tr ? glm::translate(mat4(1.0f), tr->position) : mat4(1.0f));
+		const vec3 worldPos = wt ? vec3(wt->worldMatrix[3]) : (tr ? tr->position : vec3(0.0f));
+		const f32 maxScale = wt
+			? glm::max(glm::max(glm::length(vec3(worldMatrix[0])), glm::length(vec3(worldMatrix[1]))),
+				glm::length(vec3(worldMatrix[2])))
+			: 1.0f;
+
+		bool drewColliderShape = false;
+		if (const auto* collider = registry.try_get<ColliderComponent>(entity))
+		{
+			const vec3 offset = collider->GetOffset();
+			std::visit([&](const auto& shape)
+				{
+					using ShapeType = std::decay_t<decltype(shape)>;
+					if constexpr (std::is_same_v<ShapeType, BoxShape>)
+					{
+						drewColliderShape = true;
+						const vec3 extent = shape.Size * 0.5f;
+						if (isVisibleInFrustum(offset, extent, worldMatrix))
+							DrawBox(offset, extent, color, worldMatrix);
+					}
+					else if constexpr (std::is_same_v<ShapeType, SphereShape>)
+					{
+						drewColliderShape = true;
+						const vec3 extent(shape.Radius);
+						if (isVisibleInFrustum(offset, extent, worldMatrix))
+							DrawSphere(vec3(worldMatrix * vec4(offset, 1.0f)), shape.Radius * maxScale, color);
+					}
+					else if constexpr (std::is_same_v<ShapeType, CapsuleShape>)
+					{
+						drewColliderShape = true;
+						const f32 halfHeight = shape.Height * 0.5f;
+						const vec3 extent(shape.Radius, halfHeight, shape.Radius);
+						if (!isVisibleInFrustum(offset, extent, worldMatrix)) return;
+						const f32 halfSegment = glm::max(0.0f, halfHeight - shape.Radius);
+						const vec3 topLocal = offset + vec3(0.0f, halfSegment, 0.0f);
+						const vec3 bottomLocal = offset - vec3(0.0f, halfSegment, 0.0f);
+						DrawSphere(vec3(worldMatrix * vec4(topLocal, 1.0f)), shape.Radius * maxScale, color);
+						DrawSphere(vec3(worldMatrix * vec4(bottomLocal, 1.0f)), shape.Radius * maxScale, color);
+						const vec3 sideOffsets[4] = {
+							vec3(shape.Radius, 0.0f, 0.0f), vec3(-shape.Radius, 0.0f, 0.0f),
+							vec3(0.0f, 0.0f, shape.Radius), vec3(0.0f, 0.0f, -shape.Radius)
+						};
+						for (const vec3& side : sideOffsets)
+						{
+							DrawLine(vec3(worldMatrix * vec4(topLocal + side, 1.0f)),
+								vec3(worldMatrix * vec4(bottomLocal + side, 1.0f)), color);
+						}
+					}
+				}, collider->GetShape());
+		}
+
+		if (!drewColliderShape && std::isfinite(hitbox.fallbackRadius) && hitbox.fallbackRadius > 0.0f)
+		{
+			const BoundingBox worldBounds(worldPos - vec3(hitbox.fallbackRadius), worldPos + vec3(hitbox.fallbackRadius));
+			if (FrustumCuller::TestBoundingBox(frustum, worldBounds))
+				DrawSphere(worldPos, hitbox.fallbackRadius, color);
+		}
+	}
+
+	// 2. InteractableComponent 상호작용 반경 디버그 시각화
+	for (auto [entity, interactable] : registry.view<InteractableComponent>().each())
+	{
+		if (const auto* flag = registry.try_get<FlagComponent>(entity))
+		{
+			if (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead))
+				continue;
+		}
+
+		const bool selected = isSelected(entity);
+		if (!m_DrawColliders && !selected)
+			continue;
+
+		if (!std::isfinite(interactable.interactRange) || interactable.interactRange <= 0.0f)
+			continue;
+
+		const auto* wt = registry.try_get<WorldTransformComponent>(entity);
+		const auto* tr = registry.try_get<TransformComponent>(entity);
+		const vec3 worldPos = wt ? vec3(wt->worldMatrix[3]) : (tr ? tr->position : vec3(0.0f));
+
+		const BoundingBox worldBounds(worldPos - vec3(interactable.interactRange), worldPos + vec3(interactable.interactRange));
+		if (!FrustumCuller::TestBoundingBox(frustum, worldBounds))
+			continue;
+
+		const bool available = IsComponentEnabled<InteractableComponent>(registry, entity) && interactable.CanInteract();
+		const vec4 sphereColor = available ? vec4(0.15f, 0.88f, 0.70f, 0.85f) : vec4(0.45f, 0.45f, 0.48f, 0.45f);
+		const vec4 ringColor = available ? vec4(0.25f, 1.0f, 0.82f, 1.0f) : vec4(0.55f, 0.55f, 0.58f, 0.60f);
+
+		DrawSphere(worldPos, interactable.interactRange, sphereColor);
+		DrawCircleXZ(worldPos, interactable.interactRange * 1.01f, ringColor);
+	}
+}
 #pragma region Draw Functions
 void DebugRenderer::DrawLine(const vec3& start, const vec3& end, const vec4& color)
 {
@@ -488,6 +642,20 @@ void DebugRenderer::DrawSphere(const vec3& center, float radius, const vec4& col
 		DrawLine(
 			center + vec3(0.f, cos(a0) * radius, sin(a0) * radius),
 			center + vec3(0.f, cos(a1) * radius, sin(a1) * radius), color);
+	}
+}
+
+void DebugRenderer::DrawCircleXZ(const vec3& center, float radius, const vec4& color)
+{
+	constexpr uint32 segments = 32;
+	const float step = glm::two_pi<float>() / static_cast<float>(segments);
+	for (uint32 i = 0; i < segments; ++i)
+	{
+		const float a0 = step * static_cast<float>(i);
+		const float a1 = step * static_cast<float>(i + 1);
+		DrawLine(
+			center + vec3(std::cos(a0) * radius, 0.0f, std::sin(a0) * radius),
+			center + vec3(std::cos(a1) * radius, 0.0f, std::sin(a1) * radius), color);
 	}
 }
 #pragma endregion
