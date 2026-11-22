@@ -2,6 +2,7 @@
 
 #include "PluginApproval.h"
 #include "PluginCatalog.h"
+#include "PluginSourceBuilder.h"
 
 #include <cstddef>
 #include <memory>
@@ -23,6 +24,7 @@ namespace Editor
     {
         bool IsLoaded = false;
         bool LastActionFailed = false;
+        bool IsContentMounted = false;
     };
 
     struct PluginHostPanel
@@ -58,6 +60,13 @@ namespace Editor
         const PluginApprovalPrompt* GetApprovalPrompt() const;
         void ResolveApproval(bool approved);
 
+        // One-click plugin source build, safe staging & reload
+        bool BuildAndReloadPluginSource(const std::string& pluginId);
+        bool IsPluginSourceBuilding() const;
+        std::string GetPluginBuildLogs() const;
+        const std::string& GetBuildingPluginId() const { return m_PendingBuildPluginId; }
+        bool IsPluginContentMounted(std::size_t index) const;
+
     private:
         struct Entry
         {
@@ -65,6 +74,7 @@ namespace Editor
             std::shared_ptr<PluginPanelModule> Module;
             std::optional<EPluginHostAction> PendingAction;
             bool LastActionFailed = false;
+            bool IsContentMounted = false;
         };
 
         bool Load(Entry& entry, ImGuiManager& gui);
@@ -79,5 +89,7 @@ namespace Editor
         std::vector<Entry> m_Entries;
         std::optional<PluginApprovalPrompt> m_ApprovalPrompt;
         bool m_ApprovalConfirmed = false;
+        PluginSourceBuilder m_SourceBuilder;
+        std::string m_PendingBuildPluginId;
     };
 }
