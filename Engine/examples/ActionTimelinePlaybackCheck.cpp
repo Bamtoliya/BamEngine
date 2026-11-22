@@ -19,6 +19,13 @@
 #include "TransformComponent.h"
 #include "TransformSystem.h"
 #include "WorldTransformComponent.h"
+#include "GameplayCombatSystem.h"
+#include "HealthComponent.h"
+#include "HitboxComponent.h"
+#include "InteractableComponent.h"
+#include "RigidBodyComponent.h"
+#include "CharacterControllerComponent.h"
+#include "TagComponent.h"
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -424,6 +431,216 @@ namespace
 		}
 		return passed;
 	}
+
+	bool CheckGameplayCombat()
+	{
+		bool passed = true;
+		ScenePtr scene(Engine::Scene::Create());
+		if (!scene)
+			return Check(false, "Scene creation failed in CheckGameplayCombat.");
+
+		scene->SetActive(true);
+		auto& world = scene->GetRegistry();
+
+		// 1. Attacker entity at (0, 0, 0) with active hitbox
+		const auto attacker = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(attacker).Position = Engine::vec3(0.0f);
+		world.emplace<Engine::FlagComponent>(attacker);
+		auto& attackerHitbox = world.emplace<Engine::HitboxComponent>(attacker);
+		attackerHitbox.damage = 25.0f;
+		attackerHitbox.knockbackForce = 10.0f;
+		attackerHitbox.fallbackRadius = 3.0f;
+		attackerHitbox.teamTag = "PlayerTeam";
+		attackerHitbox.active = true;
+
+		// 2. Enemy entity at (1.5, 0, 0) with Health and RigidBody
+		const auto enemy = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(enemy).Position = Engine::vec3(1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(enemy);
+		auto& enemyHealth = world.emplace<Engine::HealthComponent>(enemy);
+		enemyHealth.maxHealth = 100.0f;
+		enemyHealth.currentHealth = 100.0f;
+		auto& enemyRb = world.emplace<Engine::RigidBodyComponent>(enemy);
+		enemyRb.LinearVelocity = Engine::vec3(0.0f);
+
+		// 3. Friendly entity at (-1.5, 0, 0) with Health and matching teamTag
+		const auto ally = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(ally).Position = Engine::vec3(-1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(ally);
+		auto& allyHealth = world.emplace<Engine::HealthComponent>(ally);
+		allyHealth.maxHealth = 100.0f;
+		allyHealth.currentHealth = 100.0f;
+		auto& allyHitbox = world.emplace<Engine::HitboxComponent>(ally);
+		allyHitbox.teamTag = "PlayerTeam";
+		allyHitbox.active = false;
+
+		// Frame 1: active hitbox damages enemy once, skips friendly teamTag, applies knockback
+		Engine::GameplayCombatSystem::ProcessSceneCombat(*scene, 0.016f);
+		passed &= Check(enemyHealth.currentHealth == 75.0f, "Enemy must take 25 damage on first combat frame.");
+		passed &= Check(allyHealth.currentHealth == 100.0f, "Friendly entity with matching teamTag must skip damage (no friendly fire).");
+		passed &= Check(enemyRb.LinearVelocity.x > 0.0f, "Knockback must apply positive X linear velocity away from attacker.");
+		passed &= Check(attackerHitbox.HasHit(enemy), "Attacker hitbox must record hit on enemy for deduplication.");
+
+		// Frame 2: swing deduplication across multiple frames
+		Engine::GameplayCombatSystem::ProcessSceneCombat(*scene, 0.016f);
+		passed &= Check(enemyHealth.currentHealth == 75.0f, "Enemy must NOT take damage again in the same swing (swing deduplication).");
+
+		// Reset swing: SetActive(false) -> SetActive(true) resets hit list
+		attackerHitbox.SetActive(false);
+		passed &= Check(attackerHitbox.hitEntitiesInSwing.empty(), "SetActive(false) must clear swing hits.");
+		attackerHitbox.SetActive(true);
+		passed &= Check(attackerHitbox.hitEntitiesInSwing.empty(), "SetActive(true) must clear swing hits.");
+
+		// Frame 3: second swing damages enemy again
+		Engine::GameplayCombatSystem::ProcessSceneCombat(*scene, 0.016f);
+		passed &= Check(enemyHealth.currentHealth == 50.0f, "Enemy must take damage again on new swing after SetActive toggle.");
+
+		// Destroy on hit test
+		attackerHitbox.SetActive(false);
+		const auto proj = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(proj).Position = Engine::vec3(1.5f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(proj);
+		auto& projHitbox = world.emplace<Engine::HitboxComponent>(proj);
+		projHitbox.damage = 10.0f;
+		projHitbox.fallbackRadius = 2.0f;
+		projHitbox.destroyOnHit = true;
+		projHitbox.active = true;
+
+		Engine::GameplayCombatSystem::ProcessSceneCombat(*scene, 0.016f);
+		passed &= Check(enemyHealth.currentHealth == 40.0f, "Projectile must damage enemy.");
+		passed &= Check(!projHitbox.active, "destroyOnHit hitbox must deactivate after dealing damage.");
+
+		return passed;
+	}
+
+	bool CheckTimelineHitboxWindow()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		ScenePtr scene(Engine::Scene::Create());
+		TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+		if (!scene || !system)
+			return Check(false, "Scene or ActionTimelineSystem creation failed.");
+
+		scene->SetActive(true);
+
+		// Create timeline asset with "HitboxOn" at 0.2s and "HitboxOff" at 0.6s
+		Engine::ActionTimelineCreateDesc desc;
+		desc.Duration = 1.0f;
+
+		Engine::TimelineNotifyTrack notifyTrack;
+		notifyTrack.TrackName = "Combat Track";
+		notifyTrack.Kind = Engine::ETimelineNotifyTrackKind::Event;
+
+		Engine::AnimNotifyData notifyOn;
+		notifyOn.Name = "HitboxOn";
+		notifyOn.EventTag = "HitboxOn";
+		notifyOn.TriggerTime = 0.2f;
+		notifyOn.Type = Engine::EAnimNotifyType::CustomEvent;
+		notifyTrack.Notifies.push_back(notifyOn);
+
+		Engine::AnimNotifyData notifyOff;
+		notifyOff.Name = "HitboxOff";
+		notifyOff.EventTag = "HitboxOff";
+		notifyOff.TriggerTime = 0.6f;
+		notifyOff.Type = Engine::EAnimNotifyType::CustomEvent;
+		notifyTrack.Notifies.push_back(notifyOff);
+
+		desc.NotifyTracks.push_back(notifyTrack);
+
+		auto assetHandle = Engine::ResourceManager::Get().AddResource(
+			L"TimelineHitboxWindowAsset", Engine::ActionTimelineAsset::Create(&desc));
+		if (!assetHandle.IsValid())
+			return Check(false, "ActionTimelineAsset creation failed.");
+
+		auto& world = scene->GetRegistry();
+		const auto entity = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::WorldTransformComponent>(entity);
+		world.emplace<Engine::FlagComponent>(entity);
+
+		auto& timeline = world.emplace<Engine::ActionTimelineComponent>(entity);
+		timeline.timelineAsset = assetHandle;
+
+		auto& hitbox = world.emplace<Engine::HitboxComponent>(entity);
+		hitbox.active = false;
+		hitbox.damage = 20.0f;
+
+		timeline.Play();
+
+		// Tick 1: dt = 0.1s -> currentTime = 0.1s (< 0.2s). Hitbox must still be inactive.
+		system->OnUpdate(world, { scene.get() }, 0.1f);
+		passed &= Check(!hitbox.active, "Hitbox must remain inactive before 0.2s HitboxOn notify.");
+
+		// Tick 2: dt = 0.15s -> currentTime = 0.25s (> 0.2s). HitboxOn notify fires!
+		system->OnUpdate(world, { scene.get() }, 0.15f);
+		passed &= Check(hitbox.active, "Hitbox must be active after crossing 0.2s HitboxOn notify.");
+
+		// Simulate a hit during active window
+		hitbox.RecordHit(entity);
+		passed &= Check(hitbox.HasHit(entity), "Hitbox should record hit during swing.");
+
+		// Tick 3: dt = 0.4s -> currentTime = 0.65s (> 0.6s). HitboxOff notify fires!
+		system->OnUpdate(world, { scene.get() }, 0.4f);
+		passed &= Check(!hitbox.active, "Hitbox must be deactivated after crossing 0.6s HitboxOff notify.");
+		passed &= Check(hitbox.hitEntitiesInSwing.empty(), "Hitbox swing hits must be cleared on deactivation.");
+
+		return passed;
+	}
+
+	bool CheckInteractableQueries()
+	{
+		bool passed = true;
+		ScenePtr scene(Engine::Scene::Create());
+		if (!scene)
+			return Check(false, "Scene creation failed in CheckInteractableQueries.");
+
+		scene->SetActive(true);
+		auto& world = scene->GetRegistry();
+
+		// Object A at (2, 0, 0): Chest, range 3.0, oneShot = true
+		const auto objA = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(objA).Position = Engine::vec3(2.0f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(objA);
+		auto& intA = world.emplace<Engine::InteractableComponent>(objA);
+		intA.interactRange = 3.0f;
+		intA.interactTag = "Chest";
+		intA.oneShot = true;
+
+		// Object B at (5, 0, 0): NPC, range 2.0
+		const auto objB = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::TransformComponent>(objB).Position = Engine::vec3(5.0f, 0.0f, 0.0f);
+		world.emplace<Engine::FlagComponent>(objB);
+		auto& intB = world.emplace<Engine::InteractableComponent>(objB);
+		intB.interactRange = 2.0f;
+		intB.interactTag = "NPC";
+
+		// From (0, 0, 0): nearest interactable is objA (dist 2.0 <= 3.0)
+		const auto nearestFromOrigin = Engine::GameplayCombatSystem::FindNearestInteractable(*scene, Engine::vec3(0.0f));
+		passed &= Check(nearestFromOrigin == objA, "FindNearestInteractable from origin must find objA.");
+
+		// Tag filter "NPC" from origin (dist 5.0 > 2.0 range) -> none
+		const auto npcFromOrigin = Engine::GameplayCombatSystem::FindNearestInteractable(*scene, Engine::vec3(0.0f), "NPC");
+		passed &= Check(npcFromOrigin == entt::null, "NPC from origin is out of range, must return null.");
+
+		// From (4.5, 0, 0): nearest NPC is objB (dist 0.5 <= 2.0)
+		const auto npcNear = Engine::GameplayCombatSystem::FindNearestInteractable(*scene, Engine::vec3(4.5f, 0.0f, 0.0f), "NPC");
+		passed &= Check(npcNear == objB, "FindNearestInteractable near objB with 'NPC' tag must find objB.");
+
+		// TryInteractNearest on objA (oneShot): first interaction succeeds and marks consumed
+		entt::entity interacted = entt::null;
+		const bool firstInteract = Engine::GameplayCombatSystem::TryInteractNearest(*scene, Engine::vec3(0.0f), &interacted, "Chest");
+		passed &= Check(firstInteract && interacted == objA, "First interaction on oneShot chest must succeed.");
+		passed &= Check(intA.consumed, "OneShot chest must be consumed after interaction.");
+
+		// Second interaction on oneShot chest must fail
+		interacted = entt::null;
+		const bool secondInteract = Engine::GameplayCombatSystem::TryInteractNearest(*scene, Engine::vec3(0.0f), &interacted, "Chest");
+		passed &= Check(!secondInteract && interacted == entt::null, "Subsequent interaction on consumed oneShot chest must fail.");
+
+		return passed;
+	}
 }
 
 int main()
@@ -489,6 +706,9 @@ int main()
 	passed &= CheckParticleNotifySpawnAndAutoDestroy();
 	passed &= CheckAnimatorOverrideLifecycle();
 	passed &= CheckHeldVFXReleaseLifecycle();
+	passed &= CheckGameplayCombat();
+	passed &= CheckTimelineHitboxWindow();
+	passed &= CheckInteractableQueries();
 
 	return passed ? 0 : 1;
 }

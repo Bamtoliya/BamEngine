@@ -9,6 +9,7 @@
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
 #include "HierarchyComponent.h"
+#include "HitboxComponent.h"
 #include "ResourceManager.h"
 #include "AudioManager.h"
 #include "AudioClip.h"
@@ -254,6 +255,10 @@ namespace
 		const float blendOutTime = asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
 		EndAnimatorOverride(world, entity, timeline, blendOutTime);
 		ReleaseHeldVFXForOwner(world, entity);
+		if (auto* hitbox = world.try_get<HitboxComponent>(entity))
+		{
+			hitbox->SetActive(false);
+		}
 	}
 
 	void EnsureDestroyHook(entt::registry& world)
@@ -667,6 +672,48 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 						if (notify.Type == EAnimNotifyType::CustomEvent)
 							pendingEvents.push_back({ scene, entity, notify.EventTag, notify.Name, notify.TriggerTime, notifyPlaySerial });
 
+						// (1-2) 히트박스 노티파이 창 (HitboxOn / HitboxOff)
+						const bool isHitboxOn = (notify.EventTag == "HitboxOn" || notify.EventTag == "Hitbox.Enable" ||
+							notify.Name == "HitboxOn" || notify.Name == "Hitbox.Enable");
+						const bool isHitboxOff = (notify.EventTag == "HitboxOff" || notify.EventTag == "Hitbox.Disable" ||
+							notify.Name == "HitboxOff" || notify.Name == "Hitbox.Disable");
+						if (isHitboxOn)
+						{
+							if (auto* hitbox = world.try_get<HitboxComponent>(entity))
+							{
+								hitbox->SetActive(true);
+							}
+							if (const auto* hier = world.try_get<HierarchyComponent>(entity))
+							{
+								for (entt::entity child : hier->children)
+								{
+									if (world.valid(child))
+									{
+										if (auto* childHitbox = world.try_get<HitboxComponent>(child))
+											childHitbox->SetActive(true);
+									}
+								}
+							}
+						}
+						else if (isHitboxOff)
+						{
+							if (auto* hitbox = world.try_get<HitboxComponent>(entity))
+							{
+								hitbox->SetActive(false);
+							}
+							if (const auto* hier = world.try_get<HierarchyComponent>(entity))
+							{
+								for (entt::entity child : hier->children)
+								{
+									if (world.valid(child))
+									{
+										if (auto* childHitbox = world.try_get<HitboxComponent>(child))
+											childHitbox->SetActive(false);
+									}
+								}
+							}
+						}
+
 						// (2) 소리 노티파이 (Audio FX)
 						if (notify.Type == EAnimNotifyType::Sound && !notify.SoundPath.empty())
 						{
@@ -723,6 +770,35 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 									hold.ownerEntity = entity;
 									hold.playSerial = timeline.playSerial;
 									hold.releaseElapsed = timeline.playElapsed + notify.Duration;
+								}
+							}
+						}
+					}
+
+					// 지속형 히트박스 노티파이 창 (TriggerTime + Duration 끝나는 시점 검출)
+					if (notify.Duration > 0.0f)
+					{
+						const bool isHitboxWindowStart = (notify.EventTag == "HitboxOn" || notify.EventTag == "Hitbox.Enable" ||
+							notify.Name == "HitboxOn" || notify.Name == "Hitbox.Enable");
+						if (isHitboxWindowStart)
+						{
+							const std::size_t endCrossings = CountActionTimelineCrossings(playbackStep, notify.TriggerTime + notify.Duration);
+							if (endCrossings > 0)
+							{
+								if (auto* hitbox = world.try_get<HitboxComponent>(entity))
+								{
+									hitbox->SetActive(false);
+								}
+								if (const auto* hier = world.try_get<HierarchyComponent>(entity))
+								{
+									for (entt::entity child : hier->children)
+									{
+										if (world.valid(child))
+										{
+											if (auto* childHitbox = world.try_get<HitboxComponent>(child))
+												childHitbox->SetActive(false);
+										}
+									}
 								}
 							}
 						}
