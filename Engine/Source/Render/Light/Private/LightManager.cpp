@@ -80,8 +80,7 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 	auto* header = reinterpret_cast<LightBufferHeader*>(data.data());
 	auto* gpuLights = reinterpret_cast<GPULight*>(data.data() + headerSize);
 	uint32 currentLightIndex = 0;
-	m_ShadowCameraBuffers.clear();
-	m_ShadowData.clear();
+	m_DirectionalShadow.reset();
 	m_HasSpotShadow = false;
 	m_HasPointShadow = false;
 	m_SpotShadowParams = vec4(0.0f);
@@ -112,21 +111,12 @@ EResult LightManager::UpdateLightBuffer(Scene* targetScene)
 			}
 			if (light.LightType == ELightType::Directional)
 			{
-				if (auto optShadowData = light.GetShadowData())
-				{
-					std::array<CameraBuffer, MAX_SHADOW_CASCADES> cascadeCams{};
-					for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
-					{
-						if (auto optShadowCam = light.GetShadowCameraBuffer(c))
-							cascadeCams[c] = optShadowCam.value();
-					}
-					m_ShadowCameraBuffers.push_back(cascadeCams);
-					m_ShadowData.push_back(optShadowData.value());
-				}
+				if (!m_DirectionalShadow)
+					m_DirectionalShadow = light.GetDirectionalShadowSettings();
 			}
 			else if (light.LightType == ELightType::Spot && !m_HasSpotShadow && HasFlag(light.Flags, ELightFlags::CastShadows))
 			{
-				if (auto optCam = light.GetShadowCameraBuffer(0))
+				if (auto optCam = light.GetSpotShadowCameraBuffer())
 				{
 					m_SpotShadowCameraBuffer = optCam.value();
 					m_SpotShadowViewProj = optCam.value().viewProjMatrix;
@@ -196,11 +186,12 @@ EResult LightManager::EnsureBuffer()
 	return EResult::Success;
 }
 
-CameraBuffer LightManager::GetShadowCameraBuffer(uint32 cascadeIndex, uint32 lightIndex) const
+bool LightManager::BuildDirectionalCascades(const CameraBuffer* view, DirectionalShadowCascades& outCascades) const
 {
-	if (lightIndex < m_ShadowCameraBuffers.size() && cascadeIndex < MAX_SHADOW_CASCADES)
-		return m_ShadowCameraBuffers[lightIndex][cascadeIndex];
-	return CameraBuffer{};
+	if (!m_DirectionalShadow) return false;
+	if (BuildDirectionalShadowCascades(*m_DirectionalShadow, view, outCascades)) return true;
+	// 카메라 행렬이 잘못된 뷰는 광원 위치 기준 범위를 사용한다.
+	return view && BuildDirectionalShadowCascades(*m_DirectionalShadow, nullptr, outCascades);
 }
 
 CameraBuffer LightManager::GetPointShadowCameraBuffer(uint32 faceIndex) const
@@ -210,10 +201,17 @@ CameraBuffer LightManager::GetPointShadowCameraBuffer(uint32 faceIndex) const
 	return CameraBuffer{};
 }
 
-LightShadowData LightManager::GetShadowData(uint32 lightIndex) const
+LightShadowData LightManager::GetShadowData(const CameraBuffer& view) const
 {
 	LightShadowData data{};
-	if (lightIndex < m_ShadowData.size()) data = m_ShadowData[lightIndex];
+	DirectionalShadowCascades cascades;
+	if (BuildDirectionalCascades(&view, cascades))
+	{
+		for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+			data.LightViewProjMatrices[c] = cascades.Cameras[c].viewProjMatrix;
+		data.CascadeSplits = cascades.Splits;
+		data.ShadowParams = m_DirectionalShadow->ShadowParams;
+	}
 
 	if (m_HasSpotShadow)
 	{

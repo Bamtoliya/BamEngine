@@ -54,6 +54,7 @@ foreach(check_target IN ITEMS
     LODSelectionCheck
     SkyLightDirectionCheck
     CloudResourcesCheck
+    DirectionalShadowCascadeCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)
@@ -182,26 +183,4 @@ endif()
 if(BUILD_TESTING)
     add_test(NAME TiledLightingCheck COMMAND TiledLightingCheck)
 endif()
-
-foreach(sprint_c_check IN ITEMS
-    PakArchiveCheck
-    SaveGameCheck
-    NavigationAICheck
-    AudioMixerCheck
-    NetworkRpcCheck
-    SceneStreamingCheck
-    RLSimulationCheck
-)
-    add_executable(${sprint_c_check} examples/${sprint_c_check}.cpp)
-    target_link_libraries(${sprint_c_check} PRIVATE BamEngine::Engine)
-    set_target_properties(${sprint_c_check} PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
-
-    if(MSVC)
-        target_compile_options(${sprint_c_check} PRIVATE /utf-8 /Zc:preprocessor)
-    endif()
-
-    if(BUILD_TESTING)
-        add_test(NAME ${sprint_c_check} COMMAND ${sprint_c_check})
-    endif()
-endforeach()
 

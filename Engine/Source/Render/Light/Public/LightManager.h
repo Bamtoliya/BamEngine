@@ -3,6 +3,8 @@
 #include "RHI.h"
 #include "Light.h"
 #include "CameraBuffer.h"
+#include "DirectionalShadowCascades.h"
+#include <optional>
 
 #define MAX_LIGHTS 1024
 
@@ -40,13 +42,15 @@ private:
 
 #pragma region Shadow
 public:
-	bool HasShadowCastingLights() const { return !m_ShadowCameraBuffers.empty() || m_HasSpotShadow || m_HasPointShadow; }
+	bool HasShadowCastingLights() const { return m_DirectionalShadow.has_value() || m_HasSpotShadow || m_HasPointShadow; }
 	bool HasSpotShadow() const { return m_HasSpotShadow; }
 	bool HasPointShadow() const { return m_HasPointShadow; }
-	CameraBuffer GetShadowCameraBuffer(uint32 cascadeIndex = 0, uint32 lightIndex = 0) const;
+	bool HasDirectionalShadow() const { return m_DirectionalShadow.has_value(); }
+	// 첫 그림자 방향광의 캐스케이드. 그림자 패스와 조명 패스는 같은 뷰의 카메라를 넘겨야 한다.
+	bool BuildDirectionalCascades(const CameraBuffer* view, DirectionalShadowCascades& outCascades) const;
 	CameraBuffer GetSpotShadowCameraBuffer() const { return m_SpotShadowCameraBuffer; }
 	CameraBuffer GetPointShadowCameraBuffer(uint32 faceIndex = 0) const;
-	LightShadowData GetShadowData(uint32 lightIndex = 0) const;
+	LightShadowData GetShadowData(const CameraBuffer& view) const;
 #pragma endregion
 
 #pragma region Tiled Lighting
@@ -65,8 +69,7 @@ private:
 private:
 	class RHIBuffer* m_LightBuffers[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_BufferDirty[MAX_SWAPCHAIN_BUFFERS] = {};
-	vector<std::array<CameraBuffer, MAX_SHADOW_CASCADES>> m_ShadowCameraBuffers;
-	vector<LightShadowData> m_ShadowData;
+	std::optional<DirectionalShadowSettings> m_DirectionalShadow;
 
 	class RHIBuffer* m_TileLightGridBuffer = nullptr;
 	class RHIBuffer* m_TileLightIndexBuffer = nullptr;

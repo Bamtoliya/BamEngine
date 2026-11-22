@@ -141,7 +141,8 @@ EResult Renderer::Render(f32 dt)
 	for (const auto& viewportInfo : m_ViewportCameras)
 	{
 		if (!viewportInfo.renderPass) continue;
-		jobsPerPass[viewportInfo.renderPass->GetID()].push_back({ viewportInfo.cameraBuffer, viewportInfo.hasCamera });
+		jobsPerPass[viewportInfo.renderPass->GetID()].push_back({ viewportInfo.cameraBuffer, viewportInfo.hasCamera,
+			viewportInfo.lodCamera, viewportInfo.hasLODCamera });
 	}
 
 	const vector<RenderPass*>& renderPasses = m_RenderPassManager->GetAllRenderPasses();
@@ -430,10 +431,12 @@ EResult Renderer::Render(f32 dt)
 						const uint32 halfW = rtWidth / 2;
 						const uint32 halfH = rtHeight / 2;
 
-						// 1) Directional Light CSM (사분면 0, 1, 2)
-						for (uint32 c = 0; c < MAX_SHADOW_CASCADES; ++c)
+						// 1) Directional Light CSM (사분면 0, 1, 2). 캐스케이드는 이 패스를 등록한 뷰의 카메라를 덮는다.
+						DirectionalShadowCascades cascades;
+						const bool hasCascades = LightManager::Get().BuildDirectionalCascades(job.hasViewCamera ? &job.viewCamera : nullptr, cascades);
+						for (uint32 c = 0; hasCascades && c < MAX_SHADOW_CASCADES; ++c)
 						{
-							CameraBuffer cascadeCam = LightManager::Get().GetShadowCameraBuffer(c);
+							CameraBuffer cascadeCam = cascades.Cameras[c];
 							cascadeCam.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
 							if (IsFailure(m_RHI->BindConstantBuffer(&cascadeCam, sizeof(CameraBuffer), 0)))
 							{

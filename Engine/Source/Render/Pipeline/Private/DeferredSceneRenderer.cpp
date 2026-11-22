@@ -431,7 +431,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				}
 			}
 			if (lightManager.HasShadowCastingLights())
-				lightingData.Shadow = lightManager.GetShadowData(0u);
+				lightingData.Shadow = lightManager.GetShadowData(cameraBuffer);
 			// 메인 씬만 타일 기반 컬링을 켜고, 독립 프리뷰는 타일 컬링 없이 전체 스튜디오 광원 순회
 			lightingData.UseTiledCulling = useTiledCulling ? 1u : 0u;
 			// skyData로부터 태양 방향 및 구름, 대기 조명 데이터 주입

@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] 뷰별 방향광 캐스케이드
+
+- **결함.** 캐스케이드를 첫 Geometry 카메라 하나로만 계산해, 뷰포트가 둘이면 한쪽의 섀도맵이 다른 카메라 기준이었다. 떨림을 막는 텍셀 맞춤도 효과가 없었다.
+- **수정.** 그림자 패스와 조명 패스가 자기 뷰의 카메라로 캐스케이드를 만든다. 계산은 `DirectionalShadowCascades.h`로 분리했고, 고정된 광원 축에서 텍셀에 맞추며 직교 카메라도 지원한다.
+- **검사.** `DirectionalShadowCascadeCheck`를 추가했다.
+- **확인된 결과.** 사용자가 검사와 화면 통과를 확인했다.
+- **남은 한계.** 바운딩 구보다 태양 쪽에 있는 캐스터는 잘릴 수 있다.
+
 ### [2026-11-22] 신규 6대 핵심 엔진 시스템 구축 (스프린트 C)
 
 - **.bampak 리소스 패키징 아카이브 (`954722eb`, `c5f714e6`)**:

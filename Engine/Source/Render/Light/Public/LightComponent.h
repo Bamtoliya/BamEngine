@@ -4,6 +4,7 @@
 #include "Types.h"
 #include "LightTypes.h"
 #include "Light.h"
+#include "DirectionalShadowCascades.h"
 #include "CameraBuffer.h"
 
 #include <optional>
@@ -99,25 +100,19 @@ namespace Engine
 		}
 
 		[[nodiscard]]
-		std::optional<CameraBuffer> GetShadowCameraBuffer(uint32 cascadeIndex = 0) const
+		std::optional<CameraBuffer> GetSpotShadowCameraBuffer() const
 		{
-			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid || cascadeIndex >= MAX_SHADOW_CASCADES)
+			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid || LightType != ELightType::Spot)
 				return std::nullopt;
-			return m_ShadowCameraBuffers[cascadeIndex];
+			return m_SpotShadowCameraBuffer;
 		}
 
 		[[nodiscard]]
-		std::optional<LightShadowData> GetShadowData() const
+		std::optional<DirectionalShadowSettings> GetDirectionalShadowSettings() const
 		{
-			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid)
+			if (!IsEnabled || !m_IsCacheValid || !m_IsShadowCacheValid || LightType != ELightType::Directional)
 				return std::nullopt;
-
-			LightShadowData data{};
-			for (uint32 i = 0; i < MAX_SHADOW_CASCADES; ++i)
-				data.LightViewProjMatrices[i] = m_ShadowViewProjMatrices[i];
-			data.CascadeSplits = m_CascadeSplits;
-			data.ShadowParams = m_ShadowParams;
-			return data;
+			return m_DirectionalShadow;
 		}
 
 		[[nodiscard]]
@@ -140,9 +135,8 @@ namespace Engine
 		CameraBuffer m_PointShadowCameraBuffers[6]{};
 		mat4 m_PointShadowViewProjMatrices[6]{};
 
-		mat4 m_ShadowViewProjMatrices[MAX_SHADOW_CASCADES]{ mat4(1.f), mat4(1.f), mat4(1.f) };
-		CameraBuffer m_ShadowCameraBuffers[MAX_SHADOW_CASCADES]{};
-		vec4 m_CascadeSplits{ 10.0f, 35.0f, 100.0f, 0.0f };
+		DirectionalShadowSettings m_DirectionalShadow{};
+		CameraBuffer m_SpotShadowCameraBuffer{};
 		vec4 m_ShadowParams{ 0.f };
 
 		bool m_IsCacheValid = false;

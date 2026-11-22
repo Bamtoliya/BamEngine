@@ -38,7 +38,7 @@ struct ViewportCameraInfo
 	entt::entity uiCanvas = entt::null;
 	bool filterUICanvas = false;
 	bool acceptsSceneSubmissions = true;
-	// LOD를 고르는 뷰(Geometry 패스 ID)와 그 카메라. 같은 뷰의 그림자·포워드 패스가 같은 LOD를 쓰게 한다.
+	// LOD와 방향광 캐스케이드를 정하는 뷰(Geometry 패스 ID)와 그 카메라. 같은 뷰의 그림자·포워드 패스가 같은 값을 쓰게 한다.
 	RenderPassID viewID = INVALID_PASS_ID;
 	CameraBuffer lodCamera = {};
 	bool hasLODCamera = false;
@@ -94,7 +94,7 @@ public:
 	// viewID를 생략하면 Geometry 패스는 자기 ID를 뷰로 쓰고, 다른 패스는 자기 카메라로 이력 없이 LOD를 고른다.
 	void RegisterViewportCamera(const CameraBuffer& cameraBuffer, RenderPass* renderPass, bool acceptsSceneSubmissions = true,
 		RenderPassID viewID = INVALID_PASS_ID);
-	// 자체 카메라가 없는 그림자 패스를 뷰의 카메라와 함께 등록한다. 카메라는 LOD 선택에만 쓴다.
+	// 자체 카메라가 없는 그림자 패스를 뷰의 카메라와 함께 등록한다. 카메라는 LOD 선택과 방향광 캐스케이드에 쓴다.
 	void RegisterShadowPassForView(RenderPass* renderPass, const CameraBuffer& viewCamera, RenderPassID viewID);
 	void RegisterViewportCamera(RenderPass* renderPass);
 	void RegisterUICanvas(class Scene* scene, entt::entity canvas, RenderPass* renderPass);
@@ -157,6 +157,9 @@ private:
 	{
 		CameraBuffer cameraBuffer = {};
 		bool hasCamera = false;
+		// 자체 카메라가 없는 그림자 패스가 덮을 뷰의 카메라
+		CameraBuffer viewCamera = {};
+		bool hasViewCamera = false;
 	};
 
 	vector<ViewportCameraInfo> m_ViewportCameras;
