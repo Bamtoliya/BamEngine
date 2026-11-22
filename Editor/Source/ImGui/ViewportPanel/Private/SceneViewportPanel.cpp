@@ -2653,8 +2653,8 @@ void SceneViewportPanel::BakeSceneNavGrid()
 	if (Engine::NavGrid::CalculateSceneBounds(*scene, sceneBounds))
 	{
 		constexpr f32 margin = 2.0f;
-		const vec3 minPt = sceneBounds.GetMin() - vec3(margin, 0.0f, margin);
-		const vec3 maxPt = sceneBounds.GetMax() + vec3(margin, 0.0f, margin);
+		const vec3 minPt = sceneBounds.min - vec3(margin, 0.0f, margin);
+		const vec3 maxPt = sceneBounds.max + vec3(margin, 0.0f, margin);
 
 		const f32 spanX = maxPt.x - minPt.x;
 		const f32 spanZ = maxPt.z - minPt.z;

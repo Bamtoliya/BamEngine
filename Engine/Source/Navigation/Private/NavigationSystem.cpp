@@ -222,13 +222,13 @@ void NavigationSystem::ProcessRegistry(entt::registry& world, f32 dt, const Scen
 				const vec2 newXZ = currentXZ + moveDir * moveStep;
 				agent.velocity = vec3(moveDir.x * agent.moveSpeed, 0.0f, moveDir.y * agent.moveSpeed);
 
-				transform.SetLocalPosition(vec3(newXZ.x, transform.position.y, newXZ.y));
+				(void)transform.SetLocalPosition(vec3(newXZ.x, transform.position.y, newXZ.y));
 
 				// 진행 방향을 향하도록 Yaw 회전 갱신 (+Z 전방 기준)
 				if (glm::length2(moveDir) > 1e-4f)
 				{
 					const f32 yawRad = std::atan2(moveDir.x, moveDir.y);
-					transform.SetEulerRotation(vec3(0.0f, glm::degrees(yawRad), 0.0f));
+					(void)transform.SetEulerRotation(vec3(0.0f, glm::degrees(yawRad), 0.0f));
 				}
 
 				// 최상위 엔티티인 경우 월드 변환 행렬 동기화

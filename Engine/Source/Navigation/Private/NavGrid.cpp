@@ -162,8 +162,8 @@ bool NavGrid::CalculateSceneBounds(const Scene& scene, BoundingBox& outBounds)
 		BoundingBox aabb;
 		if (ComputeColliderAABB(col, worldMatrix, aabb))
 		{
-			minPt = glm::min(minPt, aabb.GetMin());
-			maxPt = glm::max(maxPt, aabb.GetMax());
+			minPt = glm::min(minPt, aabb.min);
+			maxPt = glm::max(maxPt, aabb.max);
 			found = true;
 		}
 	}
