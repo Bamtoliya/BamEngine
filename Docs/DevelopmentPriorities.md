@@ -1,8 +1,8 @@
 # 통합 개발 우선순위와 완료 기준
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-22)
-- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile 및 독립 클라이언트 패키징/종료 수명주기 안정화에 이어, 2026-11-19~11-20 머티리얼 에디터 언리얼 엔진 스타일 3-Pane 레이아웃 개편, 셰이더 그래프 독립 소유권 완전 전환, 썸네일 일체형 리소스 피커 및 파라미터/패스별 셰이더 UI 완성, 프리팹 Revert All 안전성 강화(외부 엔티티 참조 방어 검증), D3D12 파이프라인 생성 안정화 및 `SceneArchiveCheck` 픽스 후 `x64-ninja-debug` CTest 44개 전체 통과(44/44 Passed)를 반영 완료했다.
-- 최신 근거: [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md), [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md), 최신 커밋선(`fcda4887` -> `1cd11857` -> `11abec04` -> `c2058594`), [ImplementationLog.md](ImplementationLog.md) 2026-11-20 항목. **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-23)
+- 상태: 2026-11-05~11-07 우선순위 0~1(CrashHandler·Recovery, A01~A10 후속) 및 2026-11-08~11-15 리소스/에셋 경로 분리, 2D 확장(Phase 1~5), 파티클 물리·CompositeVFX(Phase 1~4), 3줄 리소스 편집기·공용 UI·PluginHost, Render Pipeline Profile 및 독립 클라이언트 패키징/종료 수명주기 안정화, 2026-11-19~11-22 머티리얼 에디터/셰이더 그래프·KCC·신규 6대 엔진 시스템(스프린트 C)에 이어, 2026-11-23 스프린트 D(카메라 시퀀서·RL 벡터화·`.bampak` 2-팩 패키징·노드/기즈모), 그룹 1(카메라 트랙 UI·독립 Client `.bampak` 부트스트랩·NavGrid 베이크/오버레이), 그룹 A(1~3: 비주얼 스크립팅 확장·RL 커리큘럼/SaveGame·`BAM_EDITOR`/`BAM_SHIPPING` 스텁/스트립), 그룹 B-4(`ResolveResourceHandle` 리팩터링) 및 렌더링·스트리밍 개선(`57fafba5`~`a7547fb7`)이 `main`(`c18c8ea2`)에 반영되었다.
+- 최신 근거: [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md), [MaterialGraphSynchronizationAndStageDesign.md](MaterialGraphSynchronizationAndStageDesign.md), [MaterialPrimaryPassTypeDesign.md](MaterialPrimaryPassTypeDesign.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md), [CodeRefactoringPlan.md](CodeRefactoringPlan.md), 최신 커밋선(`c2058594` $\to$ `c5f714e6` $\to$ `40c91851` $\to$ `c18c8ea2`), [ImplementationLog.md](ImplementationLog.md) 2026-11-23 항목. **현재 작업 선택은 11절을 우선한다.** 위 상태와 10절의 과거 완료 표시는 당시 기록이며 미검증 빌드/실행 항목(x64-release·독립 Shipping Client·`RLSimulationCheck` 실패 해소·Emscripten 툴체인·실 크래시·수동 비교)을 해소한 뜻이 아니다.
 - 공통 기준: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)
 - 분류와 이관: [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md), [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md)
 
@@ -83,12 +83,13 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
   - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`의 `m_DebugRenderer` 및 `Engine/Source/Core/Public/Structs/Vertex.h`의 `DebugVertex`, `Engine/Source/System/Graph/Public/GraphSystem.h`의 디버그 실행기 조회에서 `#ifdef _DEBUG` 분기가 제거되어 Release 에디터에서도 디버그 드로우와 그래프 디버깅이 상시 정상 제공된다 (반영 완료).
   - `Engine/Source/Graph/Public/GraphGameplayLibrary.h`의 `std::cout` 사용이 제거되고 `BAM_LOG` 로깅 시스템으로 전환 완료되었다.
   - `Engine/Source/Render/RHI/Platform/DirectX12/Private/DirectX12RHI.cpp` 내 3곳의 `OutputDebugStringA` + `std::terminate()` 호출이 안전한 에러 로깅(`BAM_LOG_ERROR`) 및 `EResult::Fail` 반환으로 교체 완료되었다 (2026-11-01 반영 완료).
-  - **2026-11-02 추가 정적 확인**:
-    - `BAMENGINE_WITH_EDITOR` 옵션과 Engine의 `PUBLIC BAM_EDITOR=1` 정의, GraphSystem 디버그 훅 및 ResourceManager 스냅샷 가드가 있다.
-    - `LocalizationManager.cpp` 및 `ReflectionRegistry.cpp`의 과거 표준 스트림 출력 위치는 `BAM_LOG`로 전환되어 있다.
+  - **2026-11-23 추가 정적 정비 (`2489e74e`)**:
+    - `Engine/CMakeLists.txt`에 `BAMENGINE_WITH_EDITOR=OFF` 시 `PUBLIC BAM_EDITOR=0` 명시 전파를 추가했다.
+    - `SystemManager`, `AnimationSystem`, `GraphSystem`, `Runtime`, `SceneManager`의 `#ifdef BAM_EDITOR`를 `#if BAM_EDITOR`로 전환하고, `BAM_EDITOR=0`용 인라인 No-Op 스텁·`nullptr` 반환 계약 및 클래스 멤버 ABI 불변성을 정비했다(`ResourceManager.h/.cpp`는 동시 작업 회피를 위해 후속 이관 항목으로 유지).
+    - `Logger.h/.cpp`에 `BAM_SHIPPING` 시 `Trace`/`Info` 컴파일 타임 제거·`std::source_location{}` 비노출·`stderr`/위치 생략, `!BAM_EDITOR` 콘솔 큐 비활성을 적용하고, `GraphExecutionCheck` 계약 검사를 추가했다.
   - **남은 항목**:
-    - Editor 포함 구성의 Client도 매크로를 전달받는 점을 고려한 별도 Editor OFF 빌드·ABI 검증.
-    - `BAM_SHIPPING` 정책·정의와 최종 제거 범위, 기존 단언/디버그 코드의 후속 정리.
+    - `ResourceManager.h/.cpp` `#ifdef BAM_EDITOR` 후속 이관.
+    - 별도 `BAMENGINE_WITH_EDITOR=OFF` 및 `BAMENGINE_SHIPPING=ON` 구성의 Engine·Client·프로젝트 모듈 실빌드/ABI 검증.
 - **조치 기준**:
   - [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md) 8절 및 [BuildConfigurationAndPreprocessing.md](BuildConfigurationAndPreprocessing.md) 4절에 따라 타깃 매크로 정의와 표준 스트림 정리를 마무리한다.
 - 완료 기준: 영향 타깃에서 필요한 정의가 제공되고 `std::terminate` 및 표준 스트림 직접 호출이 제거된다.
@@ -647,15 +648,21 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
   - `AudioMixerCheck` (`AudioMixer` 5대 버스 유효 게인·페이드·3D 거리 감쇠·FMOD 채널 그룹 동기화)
   - `NetworkRpcCheck` (`NetworkRpc` Server/Client/Multicast RPC, Dead Reckoning 스냅샷 외삽, 지연/손실 시뮬레이터)
   - `SceneStreamingCheck` (`ScenePersistenceComponent` `DontDestroyOnLoad`, Additive 서브씬 스트리밍, `AsyncResourceLoader`)
+- 2026-11-23 스프린트 D · 그룹 1 · 그룹 A(1~3) · 그룹 B-4 (`2b2ffbf9`..`c18c8ea2`) 및 렌더링·리소스 스트리밍(`57fafba5`..`a7547fb7`) 구현과 단위 체크 확장까지 반영되었으나, **사용자 실행에서 `RLSimulationCheck` 실패(5초)가 보고되어 상세 로그 확인 및 수정이 필요**하며 `GraphReflectionCheck`, `GraphExecutionCheck`, `SceneArchiveCheck`/`SceneReflectionCheck`, `BAMENGINE_WITH_EDITOR=OFF` + `BAMENGINE_SHIPPING=ON` 독립 Client 빌드 및 UI/PIE 수동 확인은 사용자 실행 검증 대기 상태다([ImplementationLog](ImplementationLog.md) 2026-11-23 항목).
 - 기준 커밋, 미커밋 범위, 구성, 검사 이름과 실제 실행 개수, 실패 시나리오, UI/GPU 미검증을 기록한다.
 - 소스 전면 이동·싱글턴 전면 교체·모든 문서의 장기 목표 구현을 완료 조건으로 추가하지 않는다.
 
-### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-22 갱신)
+### 11.6 차기 우선순위 개발 후보 로드맵 (2026-11-23 갱신)
 
-2026-11-22 후속 집중 스프린트를 통해 다음 3개 영역이 전면 구현되고 단위 검증(12개 CTest 타깃)을 통과했다:
+2026-11-22~11-23 후속 집중 스프린트를 통해 다음 영역들이 `main`에 구현·병합되었다:
 1. **티어 1 스프린트 A & B**: ECS UI 위젯 런타임 렌더링·프리셋 및 열린 드롭다운 팝업 HitTest/배경 차단·TextInput 런타임 입력/IME(`UIInteractionCheck`), Shader Graph 범용 `TextureSample` 0..7 슬롯·채널 분리·`SyncTextureBindings`(`ShaderGraphCheck`), `ModelImportModal` 60FPS 실시간 프리뷰 트랜스폼 및 Phase 6 서브폴더 구성(`VirtualPathCheck`), `GameplayCombatSystem` 중복 피격 방지/넉백 및 `ActionTimelineSystem` 노티파이 연동(`ActionTimelinePlaybackCheck`), `AnimationIKComponent` Foot Ground IK 접지·골반 보정 및 비주얼 스크립팅 노드(`BlendTree2DCheck`).
 2. **후보 그룹 A & B-2**: `AsyncResourceOpenService` 4대 리소스 편집기(Material, Texture, VFX, Sprite) 전면 확산(`3fdfff6f`), `GameplayCombatSystem` 런타임 매니페스트 등록 및 뷰포트 디버그 기즈모(`e3e00bd0`), KCC 체공 낙하 조기 스냅 억제·30도 경사로 법선 분리 오프셋·경사→평지 연착륙 클램핑(`KinematicCharacterCheck`), B-2 머티리얼 상수 버퍼 블롭 버전 캐싱·단일 순회 무할당 파라미터 해석 및 렌더러 PSO 우선 정렬(`9b17e906`, `ShaderGraphCheck`).
 3. **신규 6대 핵심 엔진 시스템 (스프린트 C)**: `.bampak` 리소스 팩 아카이브 포맷·결정적 `PakWriter`·무결성 `PakReader`·`PakMountManager`(`PakArchiveCheck`), `SaveGameManager` 원자적 슬롯 저장(`.tmp` + `MoveFileExW`)·메타데이터·체크포인트 캡처/복원(`SaveGameCheck`), `NavGrid` 8방향 A* 코너 컷 방지·직선화 스무딩·`NavAgentComponent`·`AIPerceptionComponent`·`NavigationSystem`(`NavigationAICheck`), `AudioMixer` 5대 버스 유효 게인·페이드·3D 거리 감쇠·FMOD 채널 그룹 동기화(`AudioMixerCheck`), `NetworkRpc` Server/Client/Multicast RPC·Dead Reckoning 외삽·지연/손실 시뮬레이터(`NetworkRpcCheck`), `ScenePersistenceComponent` `DontDestroyOnLoad`·Additive 서브씬 스트리밍·`AsyncResourceLoader`(`SceneStreamingCheck`).
+4. **스프린트 D · 그룹 1 · 그룹 A(1~3) · 그룹 B-4 (`2b2ffbf9`..`c18c8ea2`, 실빌드/테스트 검증 대기 포함)**:
+   - 시네마틱 카메라 컷/스플라인 시퀀서 트랙 및 `AnimationTimelinePanel` 저작 UI(`2b2ffbf9`, `06487b72`), `.bampak` 2-팩 패키징 및 독립 `ClientGameRuntime` 자동 마운트·오디오 믹서/비동기 로더 부트(`b2419fbd`, `ffdc7b09`), `NavGrid` 원클릭 베이크·셀 오버레이(`f0d67432`, `d81847c1`, `40c91851`).
+   - 비주얼 스크립팅 노드 확장 총 25종(`3263d3a5` 15종 + `97c69d29` 10종), `SceneRLEnvironment`·`VectorizedRLEnvironment`·`RLServer` `VEC_*` 프로토콜 + 동적 장애물 커리큘럼·다중 웨이포인트·`SaveGame` 스냅샷(`e66c3e76`, `8f9f3154` — **`RLSimulationCheck` 실패(5초) 원인 확인 필요**).
+   - `BAM_EDITOR=0/1`·No-Op 스텁·`BAM_SHIPPING` 로깅 스트립(`2489e74e`, `BuildConfigurationAndPreprocessing.md`), `ResolveResourceHandle` 리팩터링 파일럿 1단계(`c18c8ea2`, `CodeRefactoringPlan.md`).
+   - 차기 후속 우선순위: (1) `RLSimulationCheck` 실패(5초) 로그 확인 및 수정·미검증 CTest(`GraphReflectionCheck`, `GraphExecutionCheck`, `SceneArchiveCheck`, `SceneReflectionCheck`, `BAMENGINE_WITH_EDITOR=OFF` + `BAMENGINE_SHIPPING=ON` Client) 검증, (2) 그룹 B-5 에디터 UX 일관성 점검(`SettingsPanel`/`BuildProfilePanel`/`AnimationTimelinePanel`), (3) `ResourceManager.h/.cpp` `#if BAM_EDITOR` 후속 이관.
 
 2026-11-22 사용자 선택으로 Render M3의 DXR 방향광 그림자 1차를 진행했다. 구현 범위와 남은 검증은 [RenderingDevelopmentPlan](RenderingDevelopmentPlan.md#m3-dxr-그림자--반사)을 따른다.
 

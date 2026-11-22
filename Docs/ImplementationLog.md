@@ -2,6 +2,38 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-23] 스프린트 D · 그룹 1 · 그룹 A(1~3) · 그룹 B-4 구현 및 정비 동기화
+
+- **스프린트 D — 제작 도구·RL 벡터화·`.bampak` 2-팩 패키징·노드/기즈모 확장 (`2b2ffbf9`, `e66c3e76`, `b2419fbd`, `3263d3a5`, `f0d67432`, `4ef7a77b`, `69388cf8`, `a5863567`)**:
+  - **시네마틱 카메라 시퀀서.** `ActionTimelineAsset` / `ActionTimelineSystem`에 카메라 컷(Camera Cut) 및 스플라인 경로/Look-At 시퀀서 트랙을 추가했다(`2b2ffbf9`, `ActionTimelinePlaybackCheck` 픽스 `69388cf8`, `a5863567`).
+  - **RL 시뮬레이션·벡터화.** `SceneRLEnvironment`, `VectorizedRLEnvironment`, `RLServer` `VEC_INFO`/`VEC_RESET`/`VEC_STEP` 배치 프로토콜을 구현하고 `RLSimulationCheck` CTest를 등록했다(`e66c3e76`, `4ef7a77b`).
+  - **`.bampak` 2-팩 패키징.** `ClientPackage.cpp`와 `BuildProfilePanel.cpp`에 `Engine.bampak` / `Project.bampak` 2-팩 분할 생성 및 `Config/PackageManifest.json` 매니페스트 출력을 연동했다(`b2419fbd`, `PakArchiveCheck` `69388cf8`).
+  - **노드 및 에디터 UI/기즈모.** `GraphGameplayLibrary`에 SaveGame/Nav/AI/AudioMixer/SceneStreaming 노드 15종을 확장하고(`3263d3a5`), `DebugRenderer` Nav/AI 기즈모 및 `SettingsPanel`/`UnifiedSettingsPanel` 오디오 믹서 버스 컨트롤 UI를 연동했다(`f0d67432`).
+
+- **그룹 1 (스프린트 E) — 에디터 저작 UI·Client `.bampak` 부트·NavGrid 베이크 (`06487b72`, `ffdc7b09`, `d81847c1`, `40c91851`)**:
+  - `AnimationTimelinePanel`에 카메라 컷/스플라인 트랙 저작 UI를 구현했다(`06487b72`).
+  - 독립 `ClientGameRuntime` 시작 시 `PakMountManager` 기반 `.bampak` 자동 마운트, `Config/AudioMixer.json` 자동 로드, 매 프레임 `AsyncResourceLoader::StepMainThread` 틱 구동을 연결했다(`ffdc7b09`).
+  - `SceneViewportPanel` 원클릭 `BakeSceneNavGrid()` 및 `DebugRenderer` `NavGrid` 셀 오버레이를 추가하고 `BoundingBox::min/max`·`NavigationSystem` `C4834` 경고를 수정했다(`d81847c1`, `40c91851`).
+
+- **그룹 A-1 — 비주얼 스크립팅 `NetworkRPC`·`CameraSequencer`·`PakMount` 노드 확장 (`97c69d29`)**:
+  - `GraphGameplayLibrary.h/.cpp`에 네트워크 RPC 송신·모드·지연 조회 5종, 카메라 시퀀서 재생/정지/상태 조회 3종, `.bampak` 마운트·엔트리 조회 2종(총 10종) 노드를 추가하고 `GraphReflectionCheck`에 핀·카테고리 검증 섹션을 추가했다.
+
+- **그룹 A-2 — RL 물리 환경 커리큘럼·다중 웨이포인트·`SaveGame` 스냅샷 연동 (`8f9f3154`)**:
+  - `SceneRLEnvironment`에 `EnableMovingObstacle`(Kinematic 사인파 패트롤), `SetCurriculumLevel(0..2+)`, `Waypoints` 순차 전이(`"waypoint"` → `"goal"`), `SaveGameManager` 슬롯 스냅샷 저장/복원(`SaveSnapshotToSlot`, `LoadSnapshotFromSlot`) 및 `AutoSaveBestEpisode` 자동 저장을 구현하고 `RLSimulationCheck`에 3개 검증 함수를 추가했다.
+
+- **그룹 A-3 — 클라이언트 `BAM_SHIPPING` 스트립 · No-Op 스텁 · `BuildConfigurationAndPreprocessing` 마감 (`2489e74e`)**:
+  - `Engine/CMakeLists.txt`에서 `BAMENGINE_WITH_EDITOR=OFF`일 때도 `PUBLIC BAM_EDITOR=0`을 명시 전파했다.
+  - `SystemManager`, `AnimationSystem`, `GraphSystem`, `Runtime`, `SceneManager`의 `#ifdef BAM_EDITOR`를 `#if BAM_EDITOR`로 전환하고, `BAM_EDITOR=0`용 인라인 No-Op 스텁 및 `GetDebugExecutor` `nullptr` 계약과 클래스 멤버 ABI 불변성을 정비했다(`ResourceManager.h/.cpp`는 동시 작업 파일과 겹쳐 후속 이관 항목으로 남김).
+  - `Logger.h/.cpp`에 `BAM_SHIPPING` 시 `Trace`/`Info` 컴파일 타임 제거, `std::source_location{}` 비노출, 기본 `MinLevel=Warn`, `stderr` 출력 및 위치 접미사 생략, `!BAM_EDITOR` 콘솔 큐 비활성을 적용했고, `GraphExecutionCheck`에 `CheckEditorStripContracts()`를 추가하며 `BuildConfigurationAndPreprocessing.md` §4.5~§4.6을 갱신했다.
+
+- **그룹 B-4 — `ResolveResourceHandle` 리팩터링 파일럿 (`c18c8ea2`)**:
+  - `ResourceHandleArchiveAdapter.h`의 `ResolveResourceHandle` 정책 상수 테이블(`kCandidateResourceExtensions`)과 4개 헬퍼(`HasBamExtension`, `TryFindLoadedByKeyOrPath`, `TryLoadWithCandidateExtensions`, `TryResolveLegacyResourcesPath`)를 `detail` 네임스페이스로 추출하고 중복 2차 순회 루프를 제거했다(탐색 순서·공개 API 보존). `CodeRefactoringPlan.md` 후보 8 상태를 갱신했다.
+
+- **확인된 결과.** 정적 코드/설정 대조 및 문서·체크 반영을 완료했다(2026-11-23).
+- **실패 및 확인하지 못한 것.**
+  - 사용자 CTest 실행 보고에서 `RLSimulationCheck` 실패(5초)가 확인되어 상세 실패 로그(`ctest --output-on-failure`) 확인 및 수정이 대기 중이다.
+  - `GraphReflectionCheck`(A-1), `GraphExecutionCheck`(A-3), `SceneArchiveCheck`/`SceneReflectionCheck`(B-4), `ActionTimelinePlaybackCheck`/`PakArchiveCheck`/`NavigationAICheck`/`AudioMixerCheck`/`NetworkRpcCheck`/`SceneStreamingCheck` 최신 헤드 재검증, 그리고 `BAMENGINE_WITH_EDITOR=OFF` + `BAMENGINE_SHIPPING=ON` 독립 Client 실빌드 및 에디터 UI 수동 확인은 미수행(사용자 실행 검증 대기)이다.
+
 ### [2026-11-23] 레이트레이싱 반사 2차: 거친 면과 디노이즈
 
 - **추적.** 거칠기 0.1 미만은 거울 방향, 그 이상은 GGX 분포에서 뽑은 방향으로 쏜다. 0.45부터 줄여 0.6에서 추적하지 않는다.
