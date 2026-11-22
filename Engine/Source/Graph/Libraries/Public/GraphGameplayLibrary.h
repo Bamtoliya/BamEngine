@@ -27,6 +27,7 @@
 #include "AnimatorComponent.h"
 #include "AnimationSceneQuery.h"
 #include "ThirdPersonControllerComponent.h"
+#include "SpringArmComponent.h"
 #include "ActionTimelineComponent.h"
 #include "FlagComponent.h"
 #include "AnimationIK.h"

@@ -457,19 +457,19 @@ int main()
 		const auto floorEntity = scene->CreateEntity().GetEntityHandle();
 		auto& floorTrans = world.get_or_emplace<TransformComponent>(floorEntity);
 		auto& floorWorldTrans = world.get_or_emplace<WorldTransformComponent>(floorEntity);
-		floorTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
+		(void)floorTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
 		TransformSystem::UpdateRootWorld(floorTrans, floorWorldTrans);
 
 		auto& floorCol = world.emplace<ColliderComponent>(floorEntity);
 		BoxShape floorBox{};
 		floorBox.Size = vec3(10.0f, 0.4f, 10.0f); // Top is at y = 0.0 + 0.2 = +0.2f
-		floorCol.SetShape(floorBox);
+		(void)floorCol.SetShape(floorBox);
 
 		// Character entity
 		const auto charEntity = scene->CreateEntity().GetEntityHandle();
 		auto& charTrans = world.get_or_emplace<TransformComponent>(charEntity);
 		auto& charWorldTrans = world.get_or_emplace<WorldTransformComponent>(charEntity);
-		charTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
+		(void)charTrans.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
 		TransformSystem::UpdateRootWorld(charTrans, charWorldTrans);
 
 		auto& ikComp = world.emplace<AnimationIKComponent>(charEntity);
@@ -576,7 +576,7 @@ int main()
 
 		// 6. Test uneven/lower ground pelvis offset
 		// Move floor lower: top at y = -0.1f -> expected desiredY = -0.05f -> delta = -0.05f
-		floorTrans.SetLocalPosition(vec3(0.0f, -0.3f, 0.0f)); // center -0.3, size 0.4 -> top = -0.1f
+		(void)floorTrans.SetLocalPosition(vec3(0.0f, -0.3f, 0.0f)); // center -0.3, size 0.4 -> top = -0.1f
 		TransformSystem::UpdateRootWorld(floorTrans, floorWorldTrans);
 
 		// Reset local pose
