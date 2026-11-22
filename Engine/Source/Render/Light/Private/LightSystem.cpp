@@ -117,16 +117,18 @@ void LightSystem::UpdateLights(entt::registry& registry)
 			continue;
 
 		const vec3 position(transform->worldMatrix[3]);
-		vec3 direction(transform->worldMatrix[2]);
+		// Sky Light의 방향은 하늘 쪽(엔티티의 위)이고, 나머지 광원은 빛이 나아가는 쪽(엔티티의 전방)이다.
+		const bool isSkyLight = light.LightType == ELightType::Sky;
+		vec3 direction(transform->worldMatrix[isSkyLight ? 1 : 2]);
 		const f32 directionLength = glm::length(direction);
 
 		if (!std::isfinite(directionLength) || directionLength <= 0.000001f)
 		{
-			if (light.LightType != ELightType::Point)
+			if (light.LightType != ELightType::Point && !isSkyLight)
 				continue;
 
-			// Point 광원에서는 방향을 사용하지 않습니다.
-			direction = vec3(0.f, 0.f, 1.f);
+			// Point 광원에서는 방향을 사용하지 않습니다. Sky Light는 월드 위쪽을 사용합니다.
+			direction = isSkyLight ? vec3(0.f, 1.f, 0.f) : vec3(0.f, 0.f, 1.f);
 		}
 		else
 		{

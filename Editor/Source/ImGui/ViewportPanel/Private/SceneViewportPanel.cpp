@@ -1130,7 +1130,9 @@ void SceneViewportPanel::DrawLightOverlay()
 			lightIcon = ICON_FA_CLOUD_SUN;
 			drawDir = true;
 			dirLen = 3.0f;
-			forward *= -1.0f;
+			// 하늘(엔티티의 위)에서 내려오는 빛의 방향을 표시한다.
+			forward = vec3(tr.worldMatrix[1]);
+			forward = glm::dot(forward, forward) < 0.000001f ? vec3(0.0f, -1.0f, 0.0f) : -glm::normalize(forward);
 			break;
 		case ELightType::Point:
 		default:

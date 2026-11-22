@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-22] Sky Light 방향 수정과 환경 조명 문서
+
+- **결함.** Sky Light의 반구 위쪽이 엔티티 전방(+Z)이어서, 회전하지 않은 Sky Light의 하늘색이 옆면에 들어왔다.
+- **수정.** Sky Light에는 엔티티의 위(+Y)를 넘긴다. 회전하면 반구도 기운다. Scene View의 방향 표시도 맞췄다. 셰이더는 바꾸지 않았다.
+- **검사.** `SkyLightDirectionCheck`에 회전, 크기, 잘못된 축과 다른 광원의 방향 유지를 추가했다.
+- **문서.** Directional Light·Sky Light·Sky Atmosphere·Fog·Volumetric Cloud의 관계, 변수 사용 여부와 문제를 [환경 조명 정리](EnvironmentLightingReference.md)에 기록했다.
+- **확인된 결과.** 사용자가 CTest 통과와 회전 반응을 확인했다. `DXRShadowLab`에서 Directional Light를 끈 화면의 색은 바닥(200, 212, 222), 기둥 옆면(158, 173, 188)으로 위를 보는 면이 더 밝았다. 강도를 올린 화면이며 아래를 보는 면은 확인하지 않았다.
+
 ### [2026-11-22] 에디터 카메라 Near·Far 조절
 
 - 카메라 뷰포트 메뉴에서 뷰포트별 Near·Far를 조절하고 작업 공간에 저장한다. 설정의 카메라 조작에서는 기본값을 바꿔 카메라 뷰포트 전체에 적용한다.
