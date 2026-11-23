@@ -99,6 +99,8 @@ protected:
 protected:
 	void DrawLightOverlay();
 	void DrawCameraOverlay();
+	// 데칼·프로브 GI 볼륨은 자기 표면이 없어 메시 피킹으로 고를 수 없으므로 상자 중심에 아이콘을 두고 그 아이콘으로 고른다.
+	void DrawVolumeOverlay();
 	void DrawSelectionLocked();
 #pragma endregion
 
@@ -147,6 +149,8 @@ private:
 	void DrawSelectedSpline(Engine::Scene* scene);
 	// 선택한 DecalComponent의 투영 상자와 투영 방향(상자의 로컬 z)
 	void DrawSelectedDecal(Engine::Scene* scene);
+	// 선택한 프로브 GI 볼륨의 상자와 프로브 위치(벽 밖으로 옮기기 전)
+	void DrawSelectedProbeVolume(Engine::Scene* scene);
 	bool DrawSplinePointEditor(bool imageHovered);
 	void ResetSplinePointSelection();
 	void StopSplinePointDrag();
@@ -229,6 +233,7 @@ protected:
 protected:
 	bool m_ShowLightOverlay = { true };
 	bool m_ShowCameraOverlay = { true };
+	bool m_ShowVolumeOverlay = { true };
 private:
 	SceneEditSnapshot m_SculptBeforeSnapshot{};
 	bool m_IsSculptStrokeActive = false;

@@ -1301,6 +1301,22 @@ void Engine::DeferredSceneRenderer::SubmitDecalPass(const CameraBuffer& sceneCam
 	}
 	SortDecals(m_Decals);
 
+	// 자리만 등록된 텍스처는 처음 읽을 때 GPU에 올리는데, 렌더 패스 안에서는 올릴 수 없다(DirectX12RHI::UploadTextureData).
+	// 그리기 명령을 기록하기 전인 지금 올린다. 읽지 못한 텍스처는 다시 시도하지 않으므로 빼고 색만 칠한다.
+	for (DecalDrawData& decal : m_Decals)
+	{
+		for (Texture** texture : { &decal.BaseColorTexture, &decal.NormalTexture, &decal.PBRTexture })
+		{
+			if (*texture && IsFailure((*texture)->EnsureResident()))
+				*texture = nullptr;
+		}
+	}
+	auto white = Engine::ResourceManager::Get().GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png");
+	if (!white.Get())
+		white = Engine::ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
+	if (white.Get())
+		static_cast<void>(white->EnsureResident());
+
 	auto& targets = Engine::RenderTargetManager::Get();
 	const std::wstring& diffuseName = passes.LightingInputs[0];
 	const std::wstring& normalName = passes.LightingInputs[1];

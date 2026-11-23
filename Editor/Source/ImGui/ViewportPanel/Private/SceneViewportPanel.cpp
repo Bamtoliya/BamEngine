@@ -18,6 +18,7 @@
 #include "WorldComponents.h"
 #include "RenderComponents.h"
 #include "DecalProjection.h"
+#include "ProbeGrid.h"
 #include "Light.h"
 #include "TimeManager.h"
 #include "SkyAtmosphereComponent.h"
@@ -431,6 +432,7 @@ void SceneViewportPanel::Update(f32 dt)
 
 		DrawSelectedSpline(activeScene);
 		DrawSelectedDecal(activeScene);
+		DrawSelectedProbeVolume(activeScene);
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 	}
 
@@ -647,6 +649,7 @@ void SceneViewportPanel::DrawCustomViewport()
 	{
 		DrawLightOverlay();
 		DrawCameraOverlay();
+		DrawVolumeOverlay();
 	}
 	DrawSelectionLocked();
 
@@ -1420,6 +1423,55 @@ void SceneViewportPanel::DrawCameraOverlay()
 	}
 }
 
+void SceneViewportPanel::DrawVolumeOverlay()
+{
+	if (!m_ShowVolumeOverlay || !m_CameraController)
+		return;
+
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	ImFont* font = ImGui::GetFont();
+	if (!cameraBuffer.has_value() || !drawList || !activeScene || !font)
+		return;
+
+	auto& registry = activeScene->GetRegistry();
+	// 꺼진 것도 다시 켤 수 있게 흐린 색으로 그리고 고를 수 있게 둔다(PickOverlayEntity와 같은 조건).
+	const auto drawIcon = [&](const mat4& worldMatrix, bool enabled, ImU32 color, const char* icon)
+		{
+			const vec3 worldPos = vec3(worldMatrix[3]);
+			ImVec2 screenPos;
+			if (!WorldToViewportScreen(worldPos, cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screenPos))
+				return;
+
+			const ImU32 ringColor = enabled ? color : IM_COL32(120, 120, 130, 255);
+			const float dist = glm::length(worldPos - cameraBuffer->cameraPosition);
+			const float distanceScale = glm::mix(1.9f, 0.75f, glm::clamp((dist - 2.0f) / (40.0f - 2.0f), 0.0f, 1.0f));
+			const float iconFontSize = ImGui::GetFontSize() * 1.6f * distanceScale;
+			const ImVec2 iconSize = font->CalcTextSizeA(iconFontSize, FLT_MAX, 0.0f, icon);
+			const float fillRadius = glm::max(iconSize.x, iconSize.y) * 0.5f + 4.0f;
+
+			drawList->AddCircleFilled(screenPos, fillRadius, IM_COL32(0, 0, 0, 140));
+			drawList->AddCircle(screenPos, fillRadius + 2.0f, ringColor, 0, glm::max(1.5f, 2.0f * distanceScale));
+			drawList->AddText(font, iconFontSize, ImVec2(screenPos.x - iconSize.x * 0.5f, screenPos.y - iconSize.y * 0.5f), ringColor, icon);
+		};
+
+	auto decals = registry.view<Engine::DecalComponent, WorldTransformComponent, FlagComponent>();
+	for (auto entity : decals)
+	{
+		if (IsSceneOverlayVisible(decals.get<FlagComponent>(entity)))
+			drawIcon(decals.get<WorldTransformComponent>(entity).worldMatrix, IsComponentEnabled<Engine::DecalComponent>(registry, entity),
+				IM_COL32(190, 90, 240, 255), ICON_FA_STAMP);
+	}
+	auto volumes = registry.view<Engine::ProbeGIVolumeComponent, WorldTransformComponent, FlagComponent>();
+	for (auto entity : volumes)
+	{
+		if (IsSceneOverlayVisible(volumes.get<FlagComponent>(entity)))
+			drawIcon(volumes.get<WorldTransformComponent>(entity).worldMatrix, IsComponentEnabled<Engine::ProbeGIVolumeComponent>(registry, entity),
+				IM_COL32(110, 230, 140, 255), ICON_FA_CUBES_STACKED);
+	}
+}
+
 void SceneViewportPanel::DrawSelectionLocked()
 {
 	// 선택 잠금 상태인지 확인
@@ -1700,7 +1752,7 @@ bool SceneViewportPanel::ScreenPosToRay(const ImVec2& mousePos, Engine::Ray& ray
 }
 Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 {
-	if ((!m_ShowLightOverlay && !m_ShowCameraOverlay) || !m_CameraController) return nullptr;
+	if ((!m_ShowLightOverlay && !m_ShowCameraOverlay && !m_ShowVolumeOverlay) || !m_CameraController) return nullptr;
 	const std::optional<CameraBuffer> cameraBuffer = const_cast<SceneViewportPanel*>(this)->GetActiveCameraBuffer();
 	if (!cameraBuffer.has_value()) return nullptr;
 	Scene* activeScene = SceneManager::Get().GetCurrentScene();
@@ -1768,6 +1820,22 @@ Entity* SceneViewportPanel::PickOverlayEntity(const ImVec2& mousePos) const
 				continue;
 			if (!IsComponentEnabled<CameraComponent>(registry, entity)) continue;
 			testOverlayIcon(entity, tr.worldMatrix, ICON_FA_CAMERA, 1.7f);
+		}
+	}
+	if (m_ShowVolumeOverlay)
+	{
+		// DrawVolumeOverlay와 같은 조건. 꺼진 것도 고를 수 있다.
+		auto decals = registry.view<Engine::DecalComponent, WorldTransformComponent, FlagComponent>();
+		for (auto entity : decals)
+		{
+			if (IsSceneOverlayVisible(decals.get<FlagComponent>(entity)))
+				testOverlayIcon(entity, decals.get<WorldTransformComponent>(entity).worldMatrix, ICON_FA_STAMP, 1.6f);
+		}
+		auto volumes = registry.view<Engine::ProbeGIVolumeComponent, WorldTransformComponent, FlagComponent>();
+		for (auto entity : volumes)
+		{
+			if (IsSceneOverlayVisible(volumes.get<FlagComponent>(entity)))
+				testOverlayIcon(entity, volumes.get<WorldTransformComponent>(entity).worldMatrix, ICON_FA_CUBES_STACKED, 1.6f);
 		}
 	}
 	return closestEntity;
@@ -2229,6 +2297,44 @@ void SceneViewportPanel::DrawSelectedDecal(Engine::Scene* scene)
 	m_DebugRenderer.DrawLine(center, tip, arrowColor);
 	m_DebugRenderer.DrawLine(tip, side, arrowColor);
 	m_DebugRenderer.DrawLine(tip, otherSide, arrowColor);
+}
+
+void SceneViewportPanel::DrawSelectedProbeVolume(Engine::Scene* scene)
+{
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !selected || selected->GetScene() != scene)
+		return;
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	if (!world.valid(entity))
+		return;
+
+	const auto* volume = world.try_get<Engine::ProbeGIVolumeComponent>(entity);
+	mat4 worldMatrix;
+	if (!volume || !Engine::TransformSystem::TryGetWorldMatrix(world, entity, worldMatrix))
+		return;
+
+	// 렌더러와 같은 규칙(ProbeGrid::MakeGrid)으로 만든다. 회전·배율은 쓰지 않는 월드 축 정렬 상자다.
+	const auto grid = Engine::ProbeGrid::MakeGrid(vec3(worldMatrix[3]), volume->Size, volume->ProbeCountX, volume->ProbeCountY, volume->ProbeCountZ);
+	const vec3 size = grid.Spacing * vec3(static_cast<f32>(grid.Counts.X - 1u), static_cast<f32>(grid.Counts.Y - 1u), static_cast<f32>(grid.Counts.Z - 1u));
+	const bool enabled = IsComponentEnabled<Engine::ProbeGIVolumeComponent>(world, entity);
+	const vec4 boxColor = enabled ? vec4(0.45f, 0.9f, 0.55f, 1.0f) : vec4(0.45f, 0.45f, 0.5f, 1.0f);
+	m_DebugRenderer.DrawBox(vec3(0.0f), size * 0.5f, boxColor, glm::translate(mat4(1.0f), grid.Origin + size * 0.5f));
+
+	// 프로브마다 작은 십자를 그린다. 선 예산(DebugRenderer 8192개)을 다른 표시와 나눠 쓰므로 많으면 생략한다.
+	constexpr Engine::uint32 maxMarkedProbes = 2048u;
+	const Engine::uint32 probeCount = grid.Counts.X * grid.Counts.Y * grid.Counts.Z;
+	if (probeCount > maxMarkedProbes)
+		return;
+	const f32 arm = glm::min(grid.Spacing.x, glm::min(grid.Spacing.y, grid.Spacing.z)) * 0.08f;
+	const vec4 probeColor = enabled ? vec4(0.75f, 1.0f, 0.8f, 1.0f) : boxColor;
+	for (Engine::uint32 index = 0; index < probeCount; ++index)
+	{
+		const vec3 position = Engine::ProbeGrid::ProbePosition(grid, Engine::ProbeGrid::ToCoord(grid.Counts, index));
+		m_DebugRenderer.DrawLine(position - vec3(arm, 0.0f, 0.0f), position + vec3(arm, 0.0f, 0.0f), probeColor);
+		m_DebugRenderer.DrawLine(position - vec3(0.0f, 0.0f, arm), position + vec3(0.0f, 0.0f, arm), probeColor);
+	}
 }
 
 void SceneViewportPanel::DrawSelectedSpline(Engine::Scene* scene)
