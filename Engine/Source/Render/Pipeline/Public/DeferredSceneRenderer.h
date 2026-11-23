@@ -30,6 +30,17 @@ struct RaytracedReflectionInputs
 	bool HasIBLMaps = false;
 };
 
+// 이번 프레임에 쓰는 프로브 GI 볼륨(ProbeGIVolumeComponent에서 범위를 자른 값)
+struct ProbeGIVolumeData
+{
+	ProbeGrid::GridDesc Grid{};
+	uint32 RaysPerProbe = 128u;
+	int32 ProbesPerFrame = 512;
+	f32 Hysteresis = 0.97f;
+	f32 Intensity = 1.0f;
+	f32 BlendDistance = 1.0f;
+};
+
 struct DeferredScenePassBindings
 {
 	RenderPassID DirectionalShadow;
@@ -65,7 +76,7 @@ public:
 	void SetTemporalAAOverrides(const RaytracedShadowOverrides& overrides) { m_TemporalAAOverrides = overrides; }
 	bool IsTemporalAAActive() const { return m_TemporalAAActive; }
 	// 프로브 GI도 기본이 꺼짐이고 같은 순서로 덮어쓴다. 켜져 있어도 활성 ProbeGIVolumeComponent가 없거나 장치가 반사를 지원하지 않으면 쓰지 않는다.
-	// 1단계: 사용 여부와 격자만 정하고 GPU 작업은 하지 않는다.
+	// 2단계: 프로브를 광선으로 갱신해 아틀라스(렌더 타깃 목록의 <위치 타깃>_ProbeGIIrradiance·_ProbeGIDistance)에 쓴다. 조명에는 아직 쓰지 않는다.
 	void SetProbeGIOverrides(const RaytracedShadowOverrides& overrides) { m_ProbeGIOverrides = overrides; }
 	bool IsProbeGIActive() const { return m_ProbeGIActive; }
 	// 이번 프레임 깊이 타깃의 지터(NDC). 후처리 뒤에 깊이를 비교하는 오버레이가 같은 화면 위치의 깊이를 계산할 때 쓴다. TAA를 쓰지 않으면 0이다.
@@ -80,7 +91,7 @@ private:
 	// sceneCamera는 G-Buffer를 그린 카메라다. G-Buffer를 화면 좌표로 다시 찾는 계산은 이 카메라를 써야 맞는다.
 	void SubmitLightingPass(const CameraBuffer& camera, const CameraBuffer& sceneCamera, Scene* scene, const SkyAtmosphereData& sky,
 		const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection, EAmbientOcclusionMode ambientOcclusion,
-		const vec2& previousJitterNDC);
+		const vec2& previousJitterNDC, bool useProbeGI);
 
 	// 레이트레이싱 그림자 마스크를 G-Buffer 크기로 계산한다. 성공하면 마스크 텍스처를 반환한다.
 	// denoise가 참이면(크기가 있는 광원이 있음) 누적·필터까지 거친 결과를 반환한다. camera는 지터가 없는 카메라다.
@@ -94,6 +105,10 @@ private:
 	// 조건과 주의는 그림자 마스크와 같으며, G-Buffer와 광원 버퍼를 먼저 바인딩해야 한다. camera는 지터가 없는 카메라다.
 	class RHITexture* DispatchAmbientOcclusion(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const CameraBuffer& sceneCamera, EAmbientOcclusionMode mode, const vec2& previousJitterNDC);
+	// 이번 프레임 차례의 프로브를 추적하고 조도·거리 아틀라스에 섞는다. 모두 기록하면 true다.
+	// 조건과 주의는 반사와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다. env는 닿은 면과 하늘의 환경광이다.
+	bool DispatchProbeGIUpdate(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
+		const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env);
 	// 이 렌더러가 소유하는 타깃. ownedName에 이름을 기록하고 크기가 바뀌면 다시 만든다. 기본은 Compute 쓰기용이다.
 	class RenderTarget* EnsureOwnedTarget(const std::wstring& name, ETextureFormat format, uint32 width, uint32 height, std::wstring& ownedName,
 		ETextureUsage usage = ETextureUsage::Sampler | ETextureUsage::ComputeReadWrite, const vec4& clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -112,8 +127,8 @@ private:
 	RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
 	// 이 뷰포트의 조명 버퍼에 들어갈 그림자 광원
 	ShadowLightSet CollectViewShadowLights(Scene* scene, bool usesGlobalLights) const;
-	// 계층에서 활성인 엔티티의 첫 활성 ProbeGIVolumeComponent로 격자를 만든다. 없으면 false다.
-	static bool FindProbeGIVolume(Scene* scene, ProbeGrid::GridDesc& grid);
+	// 계층에서 활성인 엔티티의 첫 활성 ProbeGIVolumeComponent로 격자와 갱신 값을 만든다. 없으면 false다.
+	static bool FindProbeGIVolume(Scene* scene, ProbeGIVolumeData& volume);
 
 	RaytracedShadowOverrides m_RaytracedShadowOverrides;
 	bool m_RaytracedShadowActive = false;
@@ -143,8 +158,16 @@ private:
 
 	RaytracedShadowOverrides m_ProbeGIOverrides;
 	bool m_ProbeGIActive = false;
-	// 마지막 Submit에서 고른 볼륨의 격자. 활성이 아니면 의미가 없다.
-	ProbeGrid::GridDesc m_ProbeGIGrid{};
+	// 마지막 Submit에서 고른 볼륨. 활성이 아니면 의미가 없다.
+	ProbeGIVolumeData m_ProbeGIVolume{};
+	ProbeGrid::ProbeUpdateSchedule m_ProbeGISchedule;
+	// 광선 결과(열 = 광선, 행 = 갱신 순서), 조도 아틀라스, 거리 아틀라스
+	enum EProbeGITarget { ProbeGIRayData, ProbeGIIrradiance, ProbeGIDistance, ProbeGITargetCount };
+	std::array<std::wstring, ProbeGITargetCount> m_ProbeGITargetNames;
+	bool m_ProbeGITraceShaderMissing = false;
+	bool m_ProbeGIIrradianceShaderMissing = false;
+	bool m_ProbeGIDistanceShaderMissing = false;
+	bool m_ProbeGIFailureLogged = false;
 
 	RaytracedShadowOverrides m_TemporalAAOverrides;
 	bool m_TemporalAAActive = false;

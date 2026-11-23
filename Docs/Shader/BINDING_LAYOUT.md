@@ -162,9 +162,21 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 `t13`은 그래픽 패스에서는 AO 텍스처, Compute에서는 TLAS가 쓴다. 조명 명령은 AO 디스패치 전에 `t13`~`t15`를 비우고, 그림자·반사 Compute가 끝난 뒤 그리기 직전에 AO를 `t13`에 묶으며, 그린 뒤 다시 비운다.
 `screenSpaceAmbientOcclusionCS`와 `ambientOcclusionTemporalCS`는 `cs_6_0`이라 SPIR-V도 생성되지만 실행 경로는 DirectX12뿐이다(쓰기 텍스처 `u2`가 D3D12 전용).
 
-### 프로브 GI 바인딩 (D3D12 전용, 계획)
+### 프로브 GI 바인딩 (D3D12 전용)
 
-2026-11-23 1단계는 바인딩을 추가하지 않았다. 조명 패스의 `t0~t15, space3`은 모두 쓰이므로(`t6`은 광원 버퍼) 3단계에서 `lightingPS`는 `space1`의 빈 슬롯(`t2`~`t4`, 구름이 `t0`·`t1`을 씀)에 조도·거리 아틀라스와 프로브 상태를 묶을 예정이다. 2단계 갱신 Compute는 반사와 같은 `t13`(TLAS), `space4`·`space5`, `u2`~`u5`를 쓴다. 확정되면 이 절을 표로 바꾼다.
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t13, space3` | `probeGITraceRTCS` | TLAS. 반사와 같은 광선 마스크(`RAYTRACING_MASK_REFLECTION`, 그림자 `RAYTRACING_MASK_REFLECTION_SHADOW`) |
+| `t10`·`t11, space3` | `probeGITraceRTCS` | 조명 패스가 묶은 조도·미리 거른 환경 맵. `HasIBLMaps`가 1일 때만 읽음 |
+| `t6, space3` | `probeGITraceRTCS` | 광원 버퍼(조명 패스가 묶음) |
+| `t0.., space4`·`space5` | `probeGI*RTCS` | 번호로 읽는 텍스처·버퍼(닿은 면 재질, 섞기 패스의 광선 결과) |
+| `u2, space3` | `probeGITraceRTCS` | RGBA16F 광선 결과. 열 = 광선, 행 = 이번 프레임 갱신 순서. rgb 밝기, a 거리(뒷면은 음수) |
+| `u2, space3` | `probeGIBlendIrradianceRTCS` | RGBA16F 조도 아틀라스. 프로브마다 10×10 칸(8×8 + 테두리) |
+| `u2, space3` | `probeGIBlendDistanceRTCS` | RGBA16F 거리 아틀라스. 프로브마다 18×18 칸(16×16 + 테두리), rg = 거리, 거리 제곱 |
+| `b1, space3` | `probeGI*RTCS` | `ProbeGIUpdateParams` 160바이트(`probeGI.hlsli`) |
+
+아틀라스에서 프로브 (x, y, z)의 칸은 열 `x + y × 개수X`, 행 `z`이며 `ProbeGrid.h`와 `probeGI.hlsli`가 같은 규칙을 쓴다.
+3단계에서 `lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) `space1`의 빈 슬롯(`t2`~`t4`, 구름이 `t0`·`t1`을 씀)에 아틀라스를 묶을 예정이다.
 
 ### 재질 알파 기준값
 

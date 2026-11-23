@@ -210,10 +210,69 @@ namespace
     void CheckMemory()
     {
         const auto estimate = ProbeGrid::EstimateMemory(ProbeGrid::ClampCounts(16, 8, 16), 128u, 512u);
-        // 조도 1280×160×8, 거리 2304×288×4, 광선 128×512×8, 상태 2048×8
-        Expect(estimate.Irradiance == 1638400u && estimate.Distance == 2654208u && estimate.RayData == 524288u && estimate.ProbeData == 16384u,
+        // 조도 1280×160×8, 거리 2304×288×8, 광선 128×512×8, 상태 2048×8
+        Expect(estimate.Irradiance == 1638400u && estimate.Distance == 5308416u && estimate.RayData == 524288u && estimate.ProbeData == 16384u,
             "the default memory estimate changed");
         Expect(estimate.Total() < 8u * 1024u * 1024u, "the default grid must fit in 8 MB per view");
+    }
+
+    void CheckRayRotation()
+    {
+        bool orthonormal = true;
+        for (uint64 frame = 0; frame < 64u; ++frame)
+        {
+            const mat3 rotation = ProbeGrid::RandomRayRotation(frame);
+            const mat3 identity = glm::transpose(rotation) * rotation;
+            for (int column = 0; column < 3; ++column)
+                orthonormal &= Near(identity[column], vec3(column == 0 ? 1.0f : 0.0f, column == 1 ? 1.0f : 0.0f, column == 2 ? 1.0f : 0.0f), 1e-4f);
+            orthonormal &= glm::determinant(rotation) > 0.999f;
+        }
+        Expect(orthonormal, "ray rotations must be proper rotations");
+        Expect(ProbeGrid::RandomRayRotation(7u) == ProbeGrid::RandomRayRotation(7u), "the same frame must give the same rotation");
+        Expect(!Near(ProbeGrid::RandomRayRotation(7u)[0], ProbeGrid::RandomRayRotation(8u)[0], 1e-3f), "consecutive frames must rotate differently");
+    }
+
+    void CheckUpdateSchedule()
+    {
+        const int sceneA = 0;
+        const int sceneB = 0;
+        const auto grid = ProbeGrid::MakeGrid(vec3(0.0f), vec3(4.0f), 2, 2, 3); // 12개
+        ProbeGrid::ProbeUpdateSchedule schedule;
+
+        const auto first = schedule.Begin(grid, &sceneA, 5);
+        Expect(first.Clear && first.FirstProbe == 0u && first.UpdateCount == 5u && first.FreshCount == 5u && first.Index == 0u,
+            "the first frame clears and updates fresh probes");
+        // 기록에 실패하면 다음 프레임도 처음부터 다시 비운다.
+        Expect(schedule.Begin(grid, &sceneA, 5).Clear, "an uncommitted clear must be repeated");
+        schedule.Commit();
+
+        const auto second = schedule.Begin(grid, &sceneA, 5);
+        Expect(!second.Clear && second.FirstProbe == 5u && second.FreshCount == 5u && second.Index == 1u, "the second frame continues");
+        schedule.Commit();
+        const auto third = schedule.Begin(grid, &sceneA, 5);
+        Expect(third.FirstProbe == 10u && third.FreshCount == 2u, "only the probes not yet visited are fresh");
+        schedule.Commit();
+        const auto fourth = schedule.Begin(grid, &sceneA, 5);
+        Expect(fourth.FirstProbe == 3u && fourth.FreshCount == 0u, "after one cycle every probe blends with its history");
+        // 실패한 프레임은 같은 프로브를 다시 갱신한다.
+        Expect(schedule.Begin(grid, &sceneA, 5).FirstProbe == 3u, "an uncommitted frame must be repeated");
+        schedule.Commit();
+
+        Expect(schedule.Begin(grid, &sceneB, 5).Clear, "another scene must clear the atlases");
+        schedule.Commit();
+        Expect(schedule.Begin(grid, &sceneB, 6).Clear, "another budget must restart the cycle");
+        schedule.Commit();
+        auto moved = grid;
+        moved.Origin.x += 0.5f;
+        Expect(schedule.Begin(moved, &sceneB, 6).Clear, "a moved volume must clear the atlases");
+        schedule.Commit();
+        auto denser = ProbeGrid::MakeGrid(vec3(0.0f), vec3(4.0f), 3, 2, 3);
+        const auto resized = schedule.Begin(denser, &sceneB, 6);
+        Expect(resized.Clear && resized.UpdateCount == 6u, "another grid size must clear the atlases");
+        schedule.Commit();
+        schedule.Reset();
+        Expect(schedule.Begin(denser, &sceneB, 6).Clear, "a reset must clear the atlases");
+        Expect(ProbeGrid::ProbeUpdateSchedule{}.Begin(grid, &sceneA, 99).UpdateCount == 12u, "the budget never exceeds the probe count");
     }
 }
 
@@ -230,6 +289,8 @@ int main()
     CheckSchedule();
     CheckRayDirections();
     CheckMemory();
+    CheckRayRotation();
+    CheckUpdateSchedule();
 
     if (g_Failures == 0)
         std::printf("ProbeGridCheck passed\n");

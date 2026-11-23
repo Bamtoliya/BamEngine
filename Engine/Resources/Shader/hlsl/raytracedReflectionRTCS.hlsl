@@ -5,6 +5,7 @@
 #include "common.hlsli"
 #include "light.hlsli"
 #include "raytracing.hlsli"
+#include "raytracingSurface.hlsli"
 #include "reflection.hlsli"
 
 static const float PI = 3.14159265359f;
@@ -79,23 +80,6 @@ float TraceShadow(float3 origin, float3 direction)
 	return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
 }
 
-// 광선이 닿은 곳에서 픽셀 하나가 덮는 넓이에 맞는 밉
-float SelectMip(uint width, uint height, uint levels, float uvArea, float worldArea, float coneWidth)
-{
-	const float texels = uvArea * (float)width * (float)height;
-	if (texels <= 0.0f || worldArea <= 0.0f)
-		return 0.0f;
-	return clamp(0.5f * log2(texels / worldArea) + log2(max(coneWidth, 1e-5f)), 0.0f, (float)levels - 1.0f);
-}
-
-float4 SampleInstanceTexture(uint textureIndex, float2 uv, float uvArea, float worldArea, float coneWidth)
-{
-	uint width, height, levels;
-	gBindlessTextures[NonUniformResourceIndex(textureIndex)].GetDimensions(0u, width, height, levels);
-	const float mip = SelectMip(width, height, levels, uvArea, worldArea, coneWidth);
-	return gBindlessTextures[NonUniformResourceIndex(textureIndex)].SampleLevel(gBindlessSampler, uv, mip);
-}
-
 // 아래 네 함수는 lightingPS.hlsl과 같은 식이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
 float DistributionGGX(float3 normal, float3 halfVector, float roughness)
 {
@@ -129,91 +113,19 @@ float3 EnvBRDFApprox(float3 f0, float roughness, float normalDotView)
 float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primaryDistance)
 {
 	const RaytracedInstance instance = LoadRaytracedInstance(gParams.InstanceTable, hit.InstanceIndex);
-	const uint3 indices = LoadTriangleIndices(instance, hit.PrimitiveIndex);
-	const float3 weights = GetBarycentricWeights(hit.Barycentrics);
-	const float3x4 objectToWorld = hit.ObjectToWorld;
-	const float3x4 worldToObject = hit.WorldToObject;
-	ByteAddressBuffer positions = gBindlessBuffers[NonUniformResourceIndex(instance.PositionBuffer)];
-	ByteAddressBuffer materials = gBindlessBuffers[NonUniformResourceIndex(instance.MaterialBuffer)];
-
-	const float3 p0 = asfloat(positions.Load3(indices.x * instance.PositionStride));
-	const float3 p1 = asfloat(positions.Load3(indices.y * instance.PositionStride));
-	const float3 p2 = asfloat(positions.Load3(indices.z * instance.PositionStride));
-	const float3 edge1 = mul((float3x3)objectToWorld, p1 - p0);
-	const float3 edge2 = mul((float3x3)objectToWorld, p2 - p0);
-	const float3 faceCross = cross(edge1, edge2);
-	const float worldArea = length(faceCross);
-
-	const float2 uv0 = LoadVertexUV(instance, indices.x);
-	const float2 uv1 = LoadVertexUV(instance, indices.y);
-	const float2 uv2 = LoadVertexUV(instance, indices.z);
-	const float2 uv = uv0 * weights.x + uv1 * weights.y + uv2 * weights.z;
-	const float2 uvEdge1 = uv1 - uv0;
-	const float2 uvEdge2 = uv2 - uv0;
-	const float uvArea = abs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
-
-	float3 normal = float3(0.0f, 0.0f, 0.0f);
-	float3 tangent = float3(0.0f, 0.0f, 0.0f);
-	float4 vertexColor = float4(0.0f, 0.0f, 0.0f, 0.0f);
-	for (uint corner = 0u; corner < 3u; ++corner)
-	{
-		const uint address = indices[corner] * instance.MaterialStride;
-		normal += asfloat(materials.Load3(address + VERTEX_NORMAL_OFFSET)) * weights[corner];
-		tangent += asfloat(materials.Load3(address + VERTEX_TANGENT_OFFSET)) * weights[corner];
-		vertexColor += asfloat(materials.Load4(address + VERTEX_COLOR_OFFSET)) * weights[corner];
-	}
-	// 법선은 역행렬의 전치로, 접선은 행렬 그대로 변환한다(gbufferVS와 같다).
-	// 역행렬의 전치는 음수 배율에서도 바깥을 향하므로 gbufferVS의 행렬식 부호 보정과 같은 방향이 된다.
-	normal = mul(normal, (float3x3)worldToObject);
-	const float normalLength = length(normal);
-	const float3 faceNormal = worldArea > 0.0f ? faceCross / worldArea : -direction;
-	normal = normalLength > 1e-6f ? normal / normalLength : faceNormal;
-	// 뒷면에서 본 면은 법선 맵을 적용한 뒤 뒤집는다. G-Buffer와 같은 접선 공간을 쓰기 위함이다.
-	const bool backFace = dot(normal, direction) > 0.0f;
-
 	const float hitDistance = hit.Distance;
-	const float3 position = origin + direction * hitDistance;
-	const float coneWidth = gParams.PixelSpread * (primaryDistance + hitDistance) / max(abs(dot(normal, direction)), 0.1f);
+	// 밉은 카메라에서 픽셀 하나가 퍼진 너비로 고른다.
+	const HitSurface surface = LoadHitSurface(instance, hit.PrimitiveIndex, hit.Barycentrics, hit.ObjectToWorld, hit.WorldToObject,
+		origin, direction, hitDistance, gParams.PixelSpread * (primaryDistance + hitDistance));
+	const float3 position = surface.Position;
+	const float3 normal = surface.Normal;
 	// 그림자 광선의 시작점은 법선 맵과 무관한 정점 법선 방향으로 띄운다.
-	const float3 surfaceNormal = backFace ? -normal : normal;
-
-	// gbufferPS와 같은 법선 맵 처리. 접선이 없거나 법선과 평행하면 정점 법선을 쓴다.
-	if (instance.NormalTexture != INVALID_BINDLESS_INDEX)
-	{
-		tangent = mul((float3x3)objectToWorld, tangent);
-		tangent -= dot(tangent, normal) * normal;
-		const float tangentLength = length(tangent);
-		if (tangentLength > 1e-6f)
-		{
-			const float3 T = tangent / tangentLength;
-			const float3x3 TBN = float3x3(T, cross(normal, T), normal);
-			const float4 normalSample = SampleInstanceTexture(instance.NormalTexture, uv, uvArea, worldArea, coneWidth);
-			const float3 tangentNormal = normalSample.xyz * 2.0f - 1.0f;
-			if (normalSample.z > 0.45f && abs(length(tangentNormal) - 1.0f) < 0.4f)
-				normal = normalize(mul(tangentNormal, TBN));
-		}
-	}
-	if (backFace)
-		normal = -normal;
-
-	float3 albedo = instance.BaseColor.rgb * vertexColor.rgb;
-	if (instance.BaseColorTexture != INVALID_BINDLESS_INDEX)
-		albedo *= SampleInstanceTexture(instance.BaseColorTexture, uv, uvArea, worldArea, coneWidth).rgb;
-
-	float roughness = clamp(instance.Roughness, 0.04f, 1.0f);
-	float metallic = saturate(instance.Metallic);
-	float ambientOcclusion = saturate(instance.AmbientOcclusion);
-	if (instance.PbrTexture != INVALID_BINDLESS_INDEX)
-	{
-		const float4 pbr = SampleInstanceTexture(instance.PbrTexture, uv, uvArea, worldArea, coneWidth);
-		roughness = clamp(pbr.r, 0.04f, 1.0f);
-		metallic = saturate(pbr.g);
-		ambientOcclusion = pbr.a > 0.01f ? pbr.a : ambientOcclusion;
-	}
-
-	float3 emission = instance.EmissiveColor;
-	if (instance.EmissiveTexture != INVALID_BINDLESS_INDEX)
-		emission = SampleInstanceTexture(instance.EmissiveTexture, uv, uvArea, worldArea, coneWidth).rgb;
+	const float3 surfaceNormal = surface.SurfaceNormal;
+	const float3 albedo = surface.Albedo;
+	const float roughness = surface.Roughness;
+	const float metallic = surface.Metallic;
+	const float ambientOcclusion = surface.AmbientOcclusion;
+	const float3 emission = surface.Emission;
 
 	// 반사 광선을 거슬러 원래 면(또는 카메라) 쪽을 보는 방향
 	const float3 viewDirection = -direction;
@@ -244,29 +156,14 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 			if (!affectsDiffuse)
 				continue;
 			hasSkyLight = true;
-			const float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
-			const float up = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
-			skyIrradiance += lerp(max(light.AttenuationCoeff, 0.0f), max(light.Color, 0.0f), up) * indirect;
+			skyIrradiance += EvaluateSkyLight(light, normal);
 			continue;
 		}
 
 		float3 toLight;
-		float attenuation = 1.0f;
-		if (lightType == LIGHT_TYPE_DIRECTIONAL)
-		{
-			toLight = normalize(-light.Direction);
-		}
-		else
-		{
-			const float3 delta = light.Position - position;
-			const float lightDistance = length(delta);
-			if (lightDistance < 0.0001f || lightDistance > light.Range)
-				continue;
-			toLight = delta / lightDistance;
-			attenuation = CalcAttenuation(light, lightDistance);
-			if (lightType == LIGHT_TYPE_SPOT)
-				attenuation *= CalcSpotFade(light, toLight);
-		}
+		float attenuation;
+		if (!EvaluateLightIncidence(light, lightType, position, toLight, attenuation))
+			continue;
 
 		const float normalDotLight = dot(normal, toLight);
 		if (normalDotLight <= 0.0f || attenuation <= 0.0f)

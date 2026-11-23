@@ -246,7 +246,91 @@ namespace Engine::ProbeGrid
 		return vec3(std::cos(phi) * radius, y, std::sin(phi) * radius);
 	}
 
-	// GPU 메모리 계산값(바이트). 조도 RGBA16F, 거리 RG16F(평균·제곱 평균), 광선 결과 RGBA16F(밝기·거리), 프로브 상태 RGBA16F(이동·상태).
+	// 프레임마다 광선 묶음을 돌리는 무작위 회전(균일한 회전 분포, Shoemake 1992). 같은 프레임 번호는 같은 회전이다.
+	inline mat3 RandomRayRotation(uint64 frameIndex)
+	{
+		uint64 state = frameIndex * 0x9E3779B97F4A7C15ull + 0x632BE59BD9B4E019ull;
+		const auto next = [&state]()
+			{
+				// splitmix64의 상위 24비트로 [0, 1) 값을 만든다.
+				state += 0x9E3779B97F4A7C15ull;
+				uint64 z = state;
+				z = (z ^ (z >> 30u)) * 0xBF58476D1CE4E5B9ull;
+				z = (z ^ (z >> 27u)) * 0x94D049BB133111EBull;
+				z ^= z >> 31u;
+				return static_cast<f32>(z >> 40u) / static_cast<f32>(1u << 24u);
+			};
+		constexpr f32 twoPi = 6.28318530717958647f;
+		const f32 u1 = next();
+		const f32 u2 = next();
+		const f32 u3 = next();
+		const f32 a = std::sqrt(1.0f - u1);
+		const f32 b = std::sqrt(u1);
+		// glm::quat 생성자 순서는 (w, x, y, z)다.
+		const quat rotation(b * std::cos(twoPi * u3), a * std::sin(twoPi * u2), a * std::cos(twoPi * u2), b * std::sin(twoPi * u3));
+		return glm::mat3_cast(glm::normalize(rotation));
+	}
+
+	// 프로브를 돌아가며 갱신하는 순서와 이력 초기화를 관리한다(뷰마다 하나).
+	// 격자·씬·갱신 수가 바뀌면 아틀라스를 비우고 처음부터 다시 돈다. 처음 한 바퀴의 프로브는 이전 값과 섞지 않는다.
+	class ProbeUpdateSchedule
+	{
+	public:
+		struct Frame
+		{
+			bool Clear = false;        // 이번 프레임에 아틀라스를 먼저 비운다
+			uint32 FirstProbe = 0u;    // 이번 프레임 첫 갱신 프로브. i번째는 (FirstProbe + i) % 전체
+			uint32 UpdateCount = 0u;   // 이번 프레임 갱신 수
+			uint32 FreshCount = 0u;    // 앞에서부터 이 수만큼은 처음 갱신하는 프로브다
+			uint64 Index = 0u;         // 초기화 뒤 몇 번째 프레임인지(광선 회전에 쓴다)
+		};
+
+		Frame Begin(const GridDesc& grid, const void* scene, int32 budget)
+		{
+			const uint32 total = grid.Counts.Total();
+			const uint32 clampedBudget = ClampUpdateBudget(budget, total);
+			if (scene != m_Scene || clampedBudget != m_Budget || grid.Counts != m_Grid.Counts ||
+				grid.Origin != m_Grid.Origin || grid.Spacing != m_Grid.Spacing)
+			{
+				m_Valid = false;
+				m_Scene = scene;
+				m_Budget = clampedBudget;
+				m_Grid = grid;
+			}
+			if (!m_Valid)
+				m_Counter = 0u;
+
+			Frame frame;
+			frame.Clear = !m_Valid;
+			frame.Index = m_Counter;
+			frame.UpdateCount = clampedBudget;
+			if (total == 0u)
+				return frame;
+			const uint64 visited = m_Counter * clampedBudget;
+			frame.FirstProbe = static_cast<uint32>(visited % total);
+			frame.FreshCount = visited < total ? static_cast<uint32>(std::min<uint64>(clampedBudget, total - visited)) : 0u;
+			return frame;
+		}
+
+		// 이번 프레임의 Dispatch를 모두 기록한 뒤 부른다. 부르지 않으면 다음 프레임이 같은 프로브를 처음부터 다시 갱신한다.
+		void Commit()
+		{
+			m_Valid = true;
+			++m_Counter;
+		}
+
+		void Reset() { m_Valid = false; }
+
+	private:
+		GridDesc m_Grid{};
+		const void* m_Scene = nullptr;
+		uint32 m_Budget = 0u;
+		uint64 m_Counter = 0u;
+		bool m_Valid = false;
+	};
+
+	// GPU 메모리 계산값(바이트). 조도 RGBA16F, 거리 RGBA16F(평균·제곱 평균. 이전 값을 UAV로 읽어 섞으므로 읽기가 보장되는 형식),
+	// 광선 결과 RGBA16F(밝기·거리), 프로브 상태 RGBA16F(4단계, 이동·상태).
 	struct MemoryEstimate
 	{
 		uint64 Irradiance = 0u;
@@ -263,7 +347,7 @@ namespace Engine::ProbeGrid
 		const AtlasSize distance = GetAtlasSize(counts, DistanceTexels);
 		MemoryEstimate estimate;
 		estimate.Irradiance = static_cast<uint64>(irradiance.Width) * irradiance.Height * 8u;
-		estimate.Distance = static_cast<uint64>(distance.Width) * distance.Height * 4u;
+		estimate.Distance = static_cast<uint64>(distance.Width) * distance.Height * 8u;
 		estimate.RayData = static_cast<uint64>(raysPerProbe) * updateBudget * 8u;
 		estimate.ProbeData = static_cast<uint64>(counts.Total()) * 8u;
 		return estimate;

@@ -668,6 +668,7 @@
 ,PROP_PROBE_COUNT_X,Probe Count X,X축 프로브 수
 ,PROP_PROBE_COUNT_Y,Probe Count Y,Y축 프로브 수
 ,PROP_PROBE_COUNT_Z,Probe Count Z,Z축 프로브 수
+,PROP_PROBE_HYSTERESIS,History Weight,이전 결과 비율
 ,PROP_PROBE_RADIUS,Probe Radius,프로브 반지름
 ,PROP_PROBE_RAYS,Rays per Probe,프로브당 광선 수
 ,PROP_RADIUS,Radius,반지름

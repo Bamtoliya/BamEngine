@@ -167,6 +167,50 @@ namespace
 	constexpr const wchar_t* RaytracedReflectionShaderFile = L"raytracedReflectionRTCS.cso";
 	constexpr Engine::uint32 RaytracedReflectionSlot = MAX_MATERIAL_TEXTURE_SLOTS + 15; // t15, space3 (lightingPS)
 
+	// probeGI.hlsli의 ProbeGIUpdateParams (b1, space3)
+	struct ProbeGIUpdateParams
+	{
+		vec3 GridOrigin{ 0.0f };
+		uint32 RaysPerProbe = 128u;
+		vec3 GridSpacing{ 1.0f };
+		uint32 ProbeCount = 0u;
+		std::array<uint32, 3> GridCounts{};
+		uint32 UpdateCount = 0u;
+		uint32 FirstProbe = 0u;
+		uint32 FreshCount = 0u;
+		uint32 InstanceTable = Engine::RHI::INVALID_BINDLESS_INDEX;
+		uint32 ClearAll = 0u;
+		// 광선 묶음 회전의 행(xyz)
+		vec4 RayRotation0{ 1.0f, 0.0f, 0.0f, 0.0f };
+		vec4 RayRotation1{ 0.0f, 1.0f, 0.0f, 0.0f };
+		vec4 RayRotation2{ 0.0f, 0.0f, 1.0f, 0.0f };
+		vec3 SkyZenith{ 0.0f };
+		f32 IBLIntensity = 1.0f;
+		uint32 HasIBLMaps = 0u;
+		// 닿은 면에서 확인할 광원 수. 그림자를 드리우는 광원마다 그림자 광선을 쏘므로 반사보다 적게 둔다. 측정 전 시작값이다.
+		uint32 MaxHitLights = 16u;
+		f32 NormalBias = 0.02f;
+		f32 RayMaxDistance = 10000.0f;
+		f32 Hysteresis = 0.97f;
+		f32 MaxProbeDistance = 1.0f;
+		uint32 RayDataTexture = Engine::RHI::INVALID_BINDLESS_INDEX;
+		// 거리는 방향이 아주 가까운 광선만 섞어 날카롭게 둔다(DDGI 기본값)
+		f32 DistanceExponent = 50.0f;
+	};
+	static_assert(sizeof(ProbeGIUpdateParams) == 160);
+	static_assert(offsetof(ProbeGIUpdateParams, GridCounts) == 32);
+	static_assert(offsetof(ProbeGIUpdateParams, RayRotation0) == 64);
+	static_assert(offsetof(ProbeGIUpdateParams, SkyZenith) == 112);
+	static_assert(offsetof(ProbeGIUpdateParams, HasIBLMaps) == 128);
+	static_assert(offsetof(ProbeGIUpdateParams, Hysteresis) == 144);
+
+	constexpr const wchar_t* ProbeGITraceShaderKey = L"Resources/Shader/ProbeGITraceRTCS";
+	constexpr const wchar_t* ProbeGITraceShaderFile = L"probeGITraceRTCS.cso";
+	constexpr const wchar_t* ProbeGIIrradianceShaderKey = L"Resources/Shader/ProbeGIBlendIrradianceRTCS";
+	constexpr const wchar_t* ProbeGIIrradianceShaderFile = L"probeGIBlendIrradianceRTCS.cso";
+	constexpr const wchar_t* ProbeGIDistanceShaderKey = L"Resources/Shader/ProbeGIBlendDistanceRTCS";
+	constexpr const wchar_t* ProbeGIDistanceShaderFile = L"probeGIBlendDistanceRTCS.cso";
+
 	// temporalAAPS.hlsl의 TemporalAAParams (b1, space3)
 	struct TemporalAAParams
 	{
@@ -329,6 +373,9 @@ void Engine::DeferredSceneRenderer::Free()
 	m_AmbientOcclusionActive = EAmbientOcclusionMode::Off;
 	m_AmbientOcclusionHistoryPath = EAmbientOcclusionMode::Off;
 	m_AmbientOcclusionPrevJitterNDC = vec2(0.0f);
+	for (auto& name : m_ProbeGITargetNames)
+		removeTarget(name);
+	m_ProbeGISchedule.Reset();
 	m_ProbeGIActive = false;
 }
 
@@ -406,11 +453,15 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		m_ReflectionHistory.Reset();
 
 	// 0-2. 프로브 GI 사용 여부. 반사와 같은 광선 조회 조건에 활성 볼륨이 있어야 한다. 독립 프리뷰는 제외한다.
-	// 1단계는 여기까지이며 TLAS 요청과 GPU 갱신은 2단계에서 연결한다.
-	m_ProbeGIActive = sceneToQuery && lightingPass && lightingPass->IsEnabled() && passes.AcceptSceneMeshes &&
+	// 갱신은 조명 명령 안에서 하며, 셰이더가 없거나 기록에 실패하면 그 프레임만 건너뛴다.
+	const bool useProbeGI = sceneToQuery && lightingPass && lightingPass->IsEnabled() && passes.AcceptSceneMeshes &&
 		ResolveRaytracedShadow(false, m_ProbeGIOverrides) && rhi && rhi->GetCapabilities().SupportsBindlessResources &&
 		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() &&
-		FindProbeGIVolume(sceneToQuery, m_ProbeGIGrid);
+		FindProbeGIVolume(sceneToQuery, m_ProbeGIVolume);
+	m_ProbeGIActive = useProbeGI;
+	// 껐다 켜면 오래된 아틀라스를 이어 쓰지 않는다.
+	if (!useProbeGI)
+		m_ProbeGISchedule.Reset();
 
 	// 1. ShadowPass & PointShadowPass 카메라 등록
 	auto* shadowPass = rpm.GetRenderPassByID(passes.DirectionalShadow);
@@ -481,10 +532,12 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
 	if (lightingPass && lightingPass->IsEnabled())
 	{
-		// 레이트레이싱 그림자·반사·AO를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
-		if (useRaytracedShadow || useRaytracedReflection || ambientOcclusion == EAmbientOcclusionMode::Raytraced)
-			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection);
-		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection, ambientOcclusion, previousJitterNDC);
+		// 레이트레이싱 그림자·반사·AO·프로브 GI를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
+		// 프로브 GI는 반사처럼 닿은 면의 재질을 읽으므로 인스턴스 표도 준비한다.
+		if (useRaytracedShadow || useRaytracedReflection || ambientOcclusion == EAmbientOcclusionMode::Raytraced || useProbeGI)
+			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection || useProbeGI);
+		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection, ambientOcclusion,
+			previousJitterNDC, useProbeGI);
 	}
 }
 
@@ -559,7 +612,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 
 void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, const CameraBuffer& sceneCamera, Scene* targetScene,
 	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection,
-	EAmbientOcclusionMode ambientOcclusion, const vec2& previousJitterNDC)
+	EAmbientOcclusionMode ambientOcclusion, const vec2& previousJitterNDC, bool useProbeGI)
 {
 	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
 	Texture* defaultBRDFLUT = nullptr;
@@ -586,7 +639,8 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this, cameraBuffer, sceneCamera, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
 			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow, useRaytracedReflection,
-			raytracedOverrides = m_RaytracedShadowOverrides, ambientOcclusion, previousJitterNDC](f32, Engine::RenderPass*) -> Engine::EResult
+			raytracedOverrides = m_RaytracedShadowOverrides, ambientOcclusion, previousJitterNDC, useProbeGI,
+			probeGIVolume = m_ProbeGIVolume](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -853,7 +907,25 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 					m_RaytracedReflectionFailureLogged = true;
 				}
 			}
-			// 8-2. 앰비언트 오클루전 결과 (t13). 그림자·반사 Compute가 TLAS를 쓰고 난 뒤에 묶는다.
+			// 8-2. 프로브 GI 갱신 (광원·환경광 바인딩을 그대로 사용하는 Compute). 2단계는 아틀라스만 갱신하고 조명에는 쓰지 않는다.
+			if (useProbeGI)
+			{
+				RaytracedReflectionInputs probeEnvironment;
+				probeEnvironment.SkyZenith = glm::max(lightingData.SkyZenithColor, vec3(0.05f)) * glm::max(lightingData.SkyIntensity, 0.2f);
+				probeEnvironment.IBLIntensity = lightingData.IBLIntensity;
+				probeEnvironment.HasIBLMaps = lightingData.HasIBLMaps != 0u;
+				rhi->BeginPassMetrics(sourceNames[4] + L"_ProbeGIUpdate");
+				const bool updated = DispatchProbeGIUpdate(*rhi, targetScene, viewID, sourceNames[4], probeGIVolume, probeEnvironment);
+				rhi->EndPassMetrics();
+				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
+					return Engine::EResult::Fail;
+				if (!updated && !m_ProbeGIFailureLogged)
+				{
+					ENGINE_LOG_ERROR("Probe GI was not updated this frame; the probes keep their previous values.");
+					m_ProbeGIFailureLogged = true;
+				}
+			}
+			// 8-3. 앰비언트 오클루전 결과 (t13). 그림자·반사·프로브 Compute가 TLAS를 쓰고 난 뒤에 묶는다.
 			if (ambientOcclusionTexture && Engine::IsSuccess(rhi->BindTextureSampler(ambientOcclusionTexture, sampler, AmbientOcclusionSlot)))
 				lightingData.UseAmbientOcclusion = 1u;
 			// 9. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
@@ -885,21 +957,137 @@ Engine::ShadowLightSet Engine::DeferredSceneRenderer::CollectViewShadowLights(En
 	return Engine::LightManager::CollectShadowLights(scenes);
 }
 
-bool Engine::DeferredSceneRenderer::FindProbeGIVolume(Engine::Scene* scene, ProbeGrid::GridDesc& grid)
+bool Engine::DeferredSceneRenderer::FindProbeGIVolume(Engine::Scene* scene, ProbeGIVolumeData& volume)
 {
 	if (!scene)
 		return false;
 	auto& registry = scene->GetRegistry();
-	for (auto [entity, volume, transform] : registry.view<Engine::ProbeGIVolumeComponent, Engine::WorldTransformComponent>().each())
+	for (auto [entity, component, transform] : registry.view<Engine::ProbeGIVolumeComponent, Engine::WorldTransformComponent>().each())
 	{
-		if (!IsComponentEnabled(registry, entity, volume))
+		if (!IsComponentEnabled(registry, entity, component))
 			continue;
 		if (const auto* flags = registry.try_get<Engine::FlagComponent>(entity); flags && !flags->IsActiveInHierarchy())
 			continue;
-		grid = ProbeGrid::MakeGrid(vec3(transform.worldMatrix[3]), volume.Size, volume.ProbeCountX, volume.ProbeCountY, volume.ProbeCountZ);
+		volume.Grid = ProbeGrid::MakeGrid(vec3(transform.worldMatrix[3]), component.Size, component.ProbeCountX, component.ProbeCountY, component.ProbeCountZ);
+		volume.RaysPerProbe = ProbeGrid::ClampRaysPerProbe(component.RaysPerProbe);
+		volume.ProbesPerFrame = component.ProbesPerFrame;
+		volume.Hysteresis = glm::clamp(component.Hysteresis, 0.0f, 0.99f);
+		volume.Intensity = glm::max(component.Intensity, 0.0f);
+		volume.BlendDistance = glm::max(component.BlendDistance, 0.0f);
 		return true;
 	}
 	return false;
+}
+
+bool Engine::DeferredSceneRenderer::DispatchProbeGIUpdate(Engine::RHI& rhi, Engine::Scene* scene, RenderPassID viewID,
+	const std::wstring& positionTargetName, const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env)
+{
+	if (!scene || !Engine::RaytracingSceneManager::IsCreated())
+		return false;
+	auto& raytracing = Engine::RaytracingSceneManager::Get();
+	Engine::RHIAccelerationStructure* topLevel = raytracing.GetTopLevelAS(scene, viewID);
+	const Engine::uint32 instanceTable = raytracing.GetInstanceTableIndex(scene, viewID);
+	if (!topLevel || instanceTable == Engine::RHI::INVALID_BINDLESS_INDEX)
+		return false;
+
+	Engine::RHIPipeline* tracePipeline = GetRaytracingPipeline(ProbeGITraceShaderKey, ProbeGITraceShaderFile, m_ProbeGITraceShaderMissing);
+	Engine::RHIPipeline* irradiancePipeline = GetRaytracingPipeline(ProbeGIIrradianceShaderKey, ProbeGIIrradianceShaderFile, m_ProbeGIIrradianceShaderMissing);
+	Engine::RHIPipeline* distancePipeline = GetRaytracingPipeline(ProbeGIDistanceShaderKey, ProbeGIDistanceShaderFile, m_ProbeGIDistanceShaderMissing);
+	if (!tracePipeline || !irradiancePipeline || !distancePipeline)
+		return false;
+
+	const ProbeGrid::GridCounts& counts = volume.Grid.Counts;
+	const auto frame = m_ProbeGISchedule.Begin(volume.Grid, scene, volume.ProbesPerFrame);
+	if (frame.UpdateCount == 0u)
+		return false;
+
+	// 아틀라스는 격자 크기, 광선 결과는 (광선 수 × 이번 프레임 갱신 수) 크기다. 크기가 바뀌면 다시 만들고 일정이 비우기부터 시작한다.
+	const ProbeGrid::AtlasSize irradianceSize = ProbeGrid::GetAtlasSize(counts, ProbeGrid::IrradianceTexels);
+	const ProbeGrid::AtlasSize distanceSize = ProbeGrid::GetAtlasSize(counts, ProbeGrid::DistanceTexels);
+	struct TargetInfo { const wchar_t* Suffix; Engine::uint32 Width; Engine::uint32 Height; };
+	const TargetInfo targetInfos[ProbeGITargetCount] = {
+		{ L"_ProbeGIRayData", volume.RaysPerProbe, frame.UpdateCount },
+		{ L"_ProbeGIIrradiance", irradianceSize.Width, irradianceSize.Height },
+		{ L"_ProbeGIDistance", distanceSize.Width, distanceSize.Height },
+	};
+	std::array<Engine::RHITexture*, ProbeGITargetCount> textures{};
+	for (int index = 0; index < ProbeGITargetCount; ++index)
+	{
+		const std::wstring name = positionTargetName + targetInfos[index].Suffix;
+		Engine::RenderTarget* existing = Engine::RenderTargetManager::Get().GetRenderTarget(name);
+		// 아틀라스를 새로 만들거나 크기를 바꾸면 내용이 정해지지 않으므로 처음부터 다시 채운다.
+		if (index != ProbeGIRayData && (!existing || existing->GetWidth() != targetInfos[index].Width || existing->GetHeight() != targetInfos[index].Height))
+			m_ProbeGISchedule.Reset();
+		Engine::RenderTarget* target = EnsureOwnedTarget(name, Engine::ETextureFormat::R16G16B16A16_FLOAT,
+			targetInfos[index].Width, targetInfos[index].Height, m_ProbeGITargetNames[index]);
+		if (!target)
+			return false;
+		textures[index] = target->GetTexture();
+	}
+	// 위에서 일정을 초기화했을 수 있으므로 다시 받는다(같은 프레임에 두 번 불러도 Commit 전에는 같은 값이다).
+	const auto scheduled = m_ProbeGISchedule.Begin(volume.Grid, scene, volume.ProbesPerFrame);
+
+	ProbeGIUpdateParams params{};
+	params.GridOrigin = volume.Grid.Origin;
+	params.GridSpacing = volume.Grid.Spacing;
+	params.GridCounts = { counts.X, counts.Y, counts.Z };
+	params.ProbeCount = counts.Total();
+	params.RaysPerProbe = volume.RaysPerProbe;
+	params.UpdateCount = scheduled.UpdateCount;
+	params.FirstProbe = scheduled.FirstProbe;
+	params.FreshCount = scheduled.FreshCount;
+	params.InstanceTable = instanceTable;
+	const mat3 rotation = ProbeGrid::RandomRayRotation(scheduled.Index);
+	params.RayRotation0 = vec4(rotation[0][0], rotation[1][0], rotation[2][0], 0.0f);
+	params.RayRotation1 = vec4(rotation[0][1], rotation[1][1], rotation[2][1], 0.0f);
+	params.RayRotation2 = vec4(rotation[0][2], rotation[1][2], rotation[2][2], 0.0f);
+	params.SkyZenith = env.SkyZenith;
+	params.IBLIntensity = env.IBLIntensity;
+	params.HasIBLMaps = env.HasIBLMaps ? 1u : 0u;
+	params.Hysteresis = volume.Hysteresis;
+	// DDGI처럼 대각선 간격의 1.5배까지만 거리를 기록한다. 그보다 먼 면은 가시성 검사에서 차이가 없다.
+	params.MaxProbeDistance = glm::length(volume.Grid.Spacing) * 1.5f;
+
+	const auto dispatch = [&](const wchar_t* name, Engine::RHIPipeline* pipeline, Engine::RHITexture* output, bool traces,
+		Engine::uint32 groupsX, Engine::uint32 groupsY)
+		{
+			rhi.BeginPassMetrics(positionTargetName + name);
+			bool succeeded = Engine::IsSuccess(rhi.BindPipeline(pipeline)) && Engine::IsSuccess(rhi.BindConstantBuffer(&params, sizeof(params), 3));
+			if (succeeded && traces)
+				succeeded = Engine::IsSuccess(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot));
+			succeeded = succeeded && Engine::IsSuccess(rhi.BindComputeStorageTexture(output, 0)) &&
+				Engine::IsSuccess(rhi.Dispatch(groupsX, groupsY, 1u));
+			rhi.EndPassMetrics();
+			return succeeded;
+		};
+
+	// 0. 새로 시작하면 모든 프로브 칸을 0으로 비운다(행 = 프로브 번호). 이어서 같은 아틀라스에 쓰므로 UAV 장벽을 둔다.
+	if (scheduled.Clear)
+	{
+		params.ClearAll = 1u;
+		for (const int index : { static_cast<int>(ProbeGIIrradiance), static_cast<int>(ProbeGIDistance) })
+		{
+			Engine::RHIPipeline* pipeline = index == ProbeGIIrradiance ? irradiancePipeline : distancePipeline;
+			if (!dispatch(L"_ProbeGIClear", pipeline, textures[index], false, params.ProbeCount, 1u) ||
+				Engine::IsFailure(rhi.ResourceBarrierUAV(textures[index])))
+				return false;
+		}
+		params.ClearAll = 0u;
+	}
+
+	// 1. 추적. 광선 32개씩 한 그룹, 행마다 프로브 하나.
+	if (!dispatch(L"_ProbeGITracePass", tracePipeline, textures[ProbeGIRayData], true, (params.RaysPerProbe + 31u) / 32u, params.UpdateCount))
+		return false;
+
+	// 2. 섞기. 앞 패스가 쓴 광선 결과의 번호를 얻을 때 읽기 상태로 바뀐다. 프로브 칸 하나가 스레드 그룹 하나다.
+	params.RayDataTexture = rhi.GetBindlessIndex(textures[ProbeGIRayData]);
+	if (params.RayDataTexture == Engine::RHI::INVALID_BINDLESS_INDEX ||
+		!dispatch(L"_ProbeGIIrradiancePass", irradiancePipeline, textures[ProbeGIIrradiance], false, params.UpdateCount, 1u) ||
+		!dispatch(L"_ProbeGIDistancePass", distancePipeline, textures[ProbeGIDistance], false, params.UpdateCount, 1u))
+		return false;
+
+	m_ProbeGISchedule.Commit();
+	return true;
 }
 
 Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracedShadowPipeline()
