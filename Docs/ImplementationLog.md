@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-23] 프로브 기반 동적 GI (M4 1~4단계)
+
+- **볼륨·설정(1단계).** `ProbeGIVolumeComponent`(엔티티 위치 중심의 월드 축 정렬 상자, 축별 프로브 수, 광선 수, 프레임당 갱신 수, 이력 비율, 세기, 경계 혼합 거리)와 격자·옥타헤드럴·아틀라스·갱신 일정·볼륨 거리·프로브 이동 규칙을 담은 `ProbeGrid.h`를 추가했다. 사용 여부는 기본 꺼짐이며 프로젝트 → 그래픽 → 뷰포트 순서로 덮어쓴다(Client는 프로젝트 설정).
+- **갱신(2단계).** 조명 패스 안에서 반사 다음에 Compute로 프로브 광선을 추적하고(`probeGITraceRTCS`), 조도·거리 아틀라스에 이력 비율로 섞는다(`probeGIBlend*RTCS`). 닿은 면의 재질 복원은 반사와 함께 쓰는 `raytracingSurface.hlsli`로 옮겼다.
+- **조명 적용(3단계).** `lightingPS`가 둘러싼 8개 프로브를 3선형·법선·체비쇼프 가중치로 읽어(`probeGISample.hlsli`) 볼륨 안의 확산 환경광을 바꾼다. 확산 IBL과 `ShadowAmbientFloor`는 볼륨 안에서 더하지 않고 AO는 곱한다. 씬 뷰 메뉴에 "GI만 보기"를 두었다.
+- **빛샘과 안정성(4단계).** 벽 속 프로브를 옮기거나 끄고(`probeGIRelocateRTCS`), 닿은 면이 볼륨 안이면 지난 프레임 프로브 조도를 써서 다중 반사를 만든다. 크게 바뀐 조도 텍셀은 이력 비율을 낮춘다. 뷰마다 카메라를 담거나 가장 가까운 볼륨을 쓴다.
+- **바인딩.** `lightingPS`는 `t2`·`t3`·`t4, space1`(조도·거리·상태), `LightingPassData` 624바이트. 갱신 상수 `ProbeGIUpdateParams` 192바이트. [BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)
+- **확인 중 고친 결함.** 볼륨이 여럿인 씬에서 저장 순서에 따라 다른 방 볼륨이 쓰여 GI가 보이지 않았다(4단계에서 카메라 기준 선택). 시험 씬 GI 상자의 볼륨이 벽보다 커서 바깥 줄 프로브가 방 밖에서 햇빛을 담아 샜다. 엔진 결함이 아니라 배치 문제로, 볼륨을 방 안쪽에 맞췄다(배치 지침은 [RenderingDevelopmentPlan.md](RenderingDevelopmentPlan.md) M4).
+- **검사.** `ProbeGridCheck`(격자·보간·옥타헤드럴·아틀라스·테두리·일정·회전·메모리·볼륨 거리·프로브 이동)를 추가하고 `EditorSettingsCheck`에 뷰포트 설정 저장을 더했다.
+- **확인된 결과.** 사용자가 에디터 씬 뷰에서 아틀라스 채움, 색 번짐, 볼륨 선택, 볼륨을 맞춘 뒤 빛샘이 없음을 확인했다.
+- **확인하지 못한 것.** 패스별 GPU 시간·메모리, 조명 변화 지연·깜빡임, 검사 실행 기록, Game View·Release·Client.
+- **남은 한계.** 뷰마다 볼륨 하나만 쓰고 씬 뷰·게임 뷰가 따로 갱신한다. 볼륨을 옮기면 처음부터 채운다. 간격보다 훨씬 얇은 벽, 한쪽 면만 있는 판, 간격의 0.45배보다 두꺼운 벽 속 프로브는 처리하지 못할 수 있다. 정반사 환경광은 하늘 환경 맵 그대로다. 임계값·바이어스·광선 수는 측정 전 값이다.
+
 ### [2026-11-23] 에셋 이동·이름 변경 차단 사유 표시와 작업 계획 재정립
 
 - **계획.** 지형 확장·그래프 바인딩 피커·이름 변경 실패·액션 3초 지연·디스토션·시퀀서 필요성을 점검했다. 작업 순서는 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7절, 지형 설계는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md)에 기록했다. 지형 높이·스플랫 데이터가 직렬화되지 않아 저장 후 사라지는 결함을 T1로 올렸다.
