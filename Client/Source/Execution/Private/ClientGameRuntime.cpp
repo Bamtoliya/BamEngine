@@ -110,6 +110,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     m_RenderPipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedReflectionMode));
     m_RenderPipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.TemporalAAMode));
     m_RenderPipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(m_ProjectSettings.AmbientOcclusionMode));
+    m_RenderPipeline.SetProbeGIMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.ProbeGIMode));
     if (IsFailure(InitializeSystems()))
         return Engine::EResult::Fail;
     if (loadModules)

@@ -13,6 +13,10 @@ GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
 GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
 GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
 GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
+GraphicsSettings,ProbeGI,Probe Global Illumination,프로브 전역 조명(GI)
+GraphicsSettings,ProbeGIActive,Current: on,현재: 켜짐
+GraphicsSettings,ProbeGIHint,Order: project -> graphics -> viewport. Off by default. Needs an active Probe GI Volume in the scene. Lighting does not use it yet.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 씬에 활성 프로브 GI 볼륨이 있어야 합니다. 아직 조명에는 반영하지 않습니다.
+GraphicsSettings,ProbeGIInactive,Current: off,현재: 꺼짐
 GraphicsSettings,RaytracedReflection,Raytraced Reflections,레이트레이싱 반사
 GraphicsSettings,RaytracedReflectionActive,Current: raytraced,현재: 레이트레이싱
 GraphicsSettings,RaytracedReflectionHint,Order: project -> graphics -> viewport. Off by default. Very rough surfaces are not traced.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 아주 거친 면은 추적하지 않습니다.

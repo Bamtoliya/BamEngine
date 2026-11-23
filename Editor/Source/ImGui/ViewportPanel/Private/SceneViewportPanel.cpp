@@ -305,6 +305,7 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 	m_Pipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(state.RaytracedReflectionMode));
 	m_Pipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(state.TemporalAAMode));
 	m_Pipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(state.AmbientOcclusionMode));
+	m_Pipeline.SetProbeGIMode(Engine::ToRaytracedShadowMode(state.ProbeGIMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -324,6 +325,7 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 	state.RaytracedReflectionMode = static_cast<int32>(m_Pipeline.GetRaytracedReflectionMode());
 	state.TemporalAAMode = static_cast<int32>(m_Pipeline.GetTemporalAAMode());
 	state.AmbientOcclusionMode = static_cast<int32>(m_Pipeline.GetAmbientOcclusionMode());
+	state.ProbeGIMode = static_cast<int32>(m_Pipeline.GetProbeGIMode());
 	return state;
 }
 #pragma endregion
@@ -863,6 +865,23 @@ void SceneViewportPanel::DrawRenderPassMenu()
 			ImGui::Separator();
 			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsRaytracedReflectionActive() ?
 				"GraphicsSettings.RaytracedReflectionActive" : "GraphicsSettings.RaytracedReflectionInactive"));
+			ImGui::EndMenu();
+		}
+		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedReflectionUnsupported"));
+		// 프로브 GI는 반사와 같은 광선 조회(TLAS·번호로 읽는 리소스)를 쓴다.
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.ProbeGI").c_str(), supportsReflection))
+		{
+			const auto current = m_Pipeline.GetProbeGIMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(RaytracedShadowModeKeys); ++index)
+			{
+				const auto mode = Engine::ToRaytracedShadowMode(index);
+				if (ImGui::MenuItem(LOCAL_LABEL(RaytracedShadowModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetProbeGIMode(mode);
+			}
+			ImGui::Separator();
+			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsProbeGIActive() ?
+				"GraphicsSettings.ProbeGIActive" : "GraphicsSettings.ProbeGIInactive"));
 			ImGui::EndMenu();
 		}
 		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))

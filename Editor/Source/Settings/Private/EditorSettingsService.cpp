@@ -664,6 +664,16 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorAmbientOcclusionMode(
     return ApplyAndSavePreferences(candidate);
 }
 
+EditorSettingsChangeResult EditorSettingsService::SetEditorProbeGIMode(std::int32_t mode)
+{
+    if (!Engine::IsValidRaytracedShadowMode(mode))
+        return {};
+
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.ProbeGIMode = mode;
+    return ApplyAndSavePreferences(candidate);
+}
+
 EditorSettingsChangeResult EditorSettingsService::SetEditorLanguage(ELocalizationLanguage language)
 {
     if (language != ELocalizationLanguage::English && language != ELocalizationLanguage::Korean)

@@ -456,6 +456,8 @@ bool ReflectionRegistry::RegisterComponentOperations()
     append.template operator()<SkyAtmosphereComponent>("Sky Atmosphere", "Rendering", &AddSpatialComponent<SkyAtmosphereComponent>);
     append.template operator()<TerrainComponent>("Terrain", "Rendering", &AddSpatialComponent<TerrainComponent>);
     append.template operator()<PostProcessComponent>("Post Process", "Rendering", &AddSpatialComponent<PostProcessComponent>);
+    // 볼륨 중심은 엔티티의 월드 위치다.
+    append.template operator()<ProbeGIVolumeComponent>("Probe GI Volume", "Rendering", &AddSpatialComponent<ProbeGIVolumeComponent>);
     append.template operator()<TriggerCallbackComponent>("Trigger Callback", "Physics", &AddSpatialComponent<TriggerCallbackComponent>);
     append.template operator()<NativeScriptComponent>("Native Script", "Core", &AddSpatialComponent<NativeScriptComponent>);
 

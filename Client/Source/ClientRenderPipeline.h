@@ -30,6 +30,10 @@ namespace Client
         {
             m_SceneRenderer.SetAmbientOcclusionOverrides({ mode });
         }
+        void SetProbeGIMode(Engine::ERaytracedShadowMode mode)
+        {
+            m_SceneRenderer.SetProbeGIOverrides({ mode });
+        }
         bool UsesDeferredProfile() const { return m_PresentPass != Engine::INVALID_PASS_ID; }
 
     private:
