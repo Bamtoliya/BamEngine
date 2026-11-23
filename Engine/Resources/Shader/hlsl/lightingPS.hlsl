@@ -632,7 +632,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     bool receiveShadow = (packedData & FLAG_RECEIVE_SHADOWS) != 0u;
 
     float3 albedo = diffuseSample.rgb;
-    float3 emission = gEmission.Load(pixelCoord).rgb;
+    float3 emission = clamp(gEmission.Load(pixelCoord).rgb, 0.0f, 65000.0f); // 부동소수점 타깃이라 NaN·무한대가 들어올 수 있다.
 
 	// [진단 & Unlit 처리]: 스프라이트는 원본 텍스처 색상 그대로 출력
     if (shadingModel == SHADING_MODEL_UNLIT)

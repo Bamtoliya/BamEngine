@@ -1,4 +1,5 @@
 ﻿#include "BloomEffect.h"
+#include "PostProcessPipeline.h"
 #include "ResourceManager.h"
 #include "PipelineManager.h"
 #include "Renderer.h"
@@ -6,6 +7,12 @@
 #include "RenderPassManager.h"
 #include "SamplerManager.h"
 #include "RHI.h"
+
+namespace
+{
+	// 번진 빛은 1보다 밝을 수 있고 알파를 쓰지 않는다.
+	constexpr ETextureFormat BloomFormat = ETextureFormat::R11G11B10_UFLOAT;
+}
 
 BloomEffect::BloomEffect()
 	: IPostProcessEffect(L"Bloom", "POST_PROCESS_BLOOM")
@@ -29,7 +36,7 @@ void BloomEffect::Initialize(const wstring& prefix)
 	Shader* vs = rm.GetResourceHandle<Shader>(L"FullscreenQuadVS").Get();
 	if (!vs || !vs->GetRHIShader()) return;
 
-	auto CreatePostPipeline = [&](const wstring& psKey, EBlendMode blendMode) -> RHIPipeline*
+	auto CreatePostPipeline = [&](const wstring& psKey, EBlendMode blendMode, ETextureFormat format) -> RHIPipeline*
 		{
 			Shader* ps = rm.GetResourceHandle<Shader>(psKey).Get();
 			if (!ps || !ps->GetRHIShader()) return nullptr;
@@ -39,7 +46,7 @@ void BloomEffect::Initialize(const wstring& prefix)
 			pd.vertexShader = vs->GetRHIShader();
 			pd.pixelShader = ps->GetRHIShader();
 			pd.colorAttachmentCount = 1;
-			pd.colorAttachmentFormats[0] = ETextureFormat::R8G8B8A8_UNORM;
+			pd.colorAttachmentFormats[0] = format;
 			pd.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
 			pd.depthStencilState.depthTestEnable = false;
 			pd.depthStencilState.depthWriteEnable = false;
@@ -50,10 +57,10 @@ void BloomEffect::Initialize(const wstring& prefix)
 			return PipelineManager::Get().GetOrCreatePipeline(pd);
 		};
 
-	m_PrefilterPipeline = CreatePostPipeline(L"PostProcess_BloomPrefilterPS", EBlendMode::None);
-	m_DownsamplePipeline = CreatePostPipeline(L"PostProcess_BloomDownsamplePS", EBlendMode::None);
-	m_UpsamplePipeline = CreatePostPipeline(L"PostProcess_BloomUpsamplePS", EBlendMode::Additive);
-	m_CompositePipeline = CreatePostPipeline(L"PostProcess_BloomCompositePS", EBlendMode::None);
+	m_PrefilterPipeline = CreatePostPipeline(L"PostProcess_BloomPrefilterPS", EBlendMode::None, BloomFormat);
+	m_DownsamplePipeline = CreatePostPipeline(L"PostProcess_BloomDownsamplePS", EBlendMode::None, BloomFormat);
+	m_UpsamplePipeline = CreatePostPipeline(L"PostProcess_BloomUpsamplePS", EBlendMode::Additive, BloomFormat);
+	m_CompositePipeline = CreatePostPipeline(L"PostProcess_BloomCompositePS", EBlendMode::None, PostProcessPipeline::HdrFormat);
 
 	// 1. 렌더타깃 이름 설정 및 선행 생성 (최초 256x256으로 객체 생성 보장)
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS; ++i)
@@ -192,7 +199,7 @@ void BloomEffect::CreateMipRenderTargets(uint32 baseWidth, uint32 baseHeight)
 		m_MipHeights[i] = h;
 
 		RenderTargetDesc desc = {
-			{ w, h, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, ETextureFormat::R8G8B8A8_UNORM,
+			{ w, h, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, BloomFormat,
 				ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) },
 			m_DownRTNames[i]
 		};

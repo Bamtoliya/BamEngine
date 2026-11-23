@@ -127,7 +127,7 @@ namespace Engine
                     { L"_Diffuse", ETextureFormat::R8G8B8A8_UNORM },
                     { L"_Normal", ETextureFormat::R16G16B16A16_FLOAT },
                     { L"_PBR", ETextureFormat::R8G8B8A8_UNORM },
-                    { L"_Emission", ETextureFormat::R8G8B8A8_UNORM },
+                    { L"_Emission", ETextureFormat::R11G11B10_UFLOAT },
                     { L"_Position", ETextureFormat::R32G32B32A32_FLOAT }
                 };
                 for (const auto& [suffix, format] : attachments)

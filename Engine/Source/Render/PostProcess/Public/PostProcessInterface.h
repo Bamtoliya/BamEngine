@@ -19,6 +19,8 @@ public:
 	virtual void Free() = 0;
 	virtual EResult SubmitPass(f32 dt, RenderPassID passID, const wstring& sourceRT) = 0;
 	virtual void SetEnabled(bool enable) { m_Enabled = enable; }
+	// 톤매핑 전이라 1보다 밝은 값을 쓰는 효과. PostProcessPipeline이 HDR 타깃에 쓰게 한다.
+	virtual bool WritesHdr() const { return false; }
 
 public:
 	const wstring& GetName() const { return m_Name; }

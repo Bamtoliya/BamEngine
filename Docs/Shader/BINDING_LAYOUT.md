@@ -136,3 +136,5 @@ When adding or moving a binding:
 5. Update descriptor-set creation/binding code for Vulkan and descriptor-heap
    binding code for D3D12.
 6. Rebuild and validate both shader backends.
+
+G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).

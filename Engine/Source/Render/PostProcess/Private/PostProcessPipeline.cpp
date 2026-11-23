@@ -282,12 +282,34 @@ EResult PostProcessPipeline::Resize(uint32 width, uint32 height)
 			succeeded = false;
 	}
 
+	if (!m_HdrRTName.empty())
+	{
+		auto* target = rtMgr.GetRenderTarget(m_HdrRTName);
+		if (!target || target->Resize(width, height) != EResult::Success)
+			succeeded = false;
+	}
+
 	if (!succeeded)
 		return EResult::Fail;
 
 	m_Width = width;
 	m_Height = height;
 	return EResult::Success;
+}
+
+const wstring& PostProcessPipeline::EnsureHdrTarget()
+{
+	if (!m_HdrRTName.empty() || m_Width == 0 || m_Height == 0)
+		return m_HdrRTName;
+
+	RenderTargetDesc desc = {
+		{ m_Width, m_Height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, HdrFormat,
+		  ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) },
+		m_Prefix + L"_PP_HDR"
+	};
+	if (RenderTargetManager::Get().CreateRenderTarget(&desc))
+		m_HdrRTName = desc.name;
+	return m_HdrRTName;
 }
 
 wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
@@ -314,7 +336,16 @@ wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 		if (!effect || !effect->IsEnabled() || slot >= m_PassIDs.size())
 			continue;
 
-		const wstring writeRT = m_PPRTNames[slot % 2];
+		wstring writeRT = m_PPRTNames[slot % 2];
+		if (effect->WritesHdr())
+		{
+			// 한 효과가 읽고 쓰는 타깃이 같을 수 없으므로 HDR 효과를 연달아 쓰려면 타깃이 더 필요하다.
+			writeRT = EnsureHdrTarget();
+			if (writeRT.empty() || writeRT == currentRT)
+				continue;
+		}
+		if (auto* pass = RenderPassManager::Get().GetRenderPassByID(m_PassIDs[slot]))
+			pass->SetColorAttachments({ writeRT });
 		effect->SubmitPass(dt, m_PassIDs[slot], currentRT);
 
 		currentRT = writeRT;
@@ -349,6 +380,9 @@ void PostProcessPipeline::Free()
 			RenderTargetManager::Get().RemoveRenderTarget(name);
 		name.clear();
 	}
+	if (!m_HdrRTName.empty() && RenderTargetManager::IsCreated())
+		RenderTargetManager::Get().RemoveRenderTarget(m_HdrRTName);
+	m_HdrRTName.clear();
 	m_Width = m_Height = 0;
 }
 

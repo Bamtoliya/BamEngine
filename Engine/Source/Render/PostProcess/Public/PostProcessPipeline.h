@@ -9,6 +9,8 @@ class ENGINE_API PostProcessPipeline
 {
 public:
 	static constexpr uint32 MAX_PP_PASSES = 16;
+	// 최종 출력은 썸네일 캡처와 화면 출력이 읽으므로 8비트로 두고, 톤매핑 전 효과만 이 형식에 쓴다.
+	static constexpr ETextureFormat HdrFormat = ETextureFormat::R16G16B16A16_FLOAT;
 
 public:
 	PostProcessPipeline() = default;
@@ -44,10 +46,15 @@ public:
 	void NotifySettingsChanged() { ++m_Version; }
 	void CopySettingsFrom(const PostProcessPipeline& other);
 private:
+	// 처음 쓸 때 만든다. 만들 수 없으면 빈 이름을 반환한다.
+	const wstring& EnsureHdrTarget();
+
+private:
 	wstring m_Prefix;
 	vector<IPostProcessEffect*> m_Effects;
 	vector<RenderPassID> m_PassIDs;
 	wstring m_PPRTNames[2];
+	wstring m_HdrRTName;
 
 	uint32 m_Width = 0;
 	uint32 m_Height = 0;
