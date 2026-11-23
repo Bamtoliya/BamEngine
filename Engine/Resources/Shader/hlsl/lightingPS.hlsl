@@ -863,12 +863,14 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 kd = (1.0f - f0) * (1.0f - metallic);
     float3 diffuseIBL = float3(0.0f, 0.0f, 0.0f);
     float3 specularIBL = float3(0.0f, 0.0f, 0.0f);
+    float3 skyDiffuseAmbient = float3(0.0f, 0.0f, 0.0f); // 프로브 GI 정반사 감쇠의 기준: 기존 하늘 확산 환경광(kd·알베도 제외)
 
     if (gLightingData.HasIBLMaps != 0u)
     {
         // ── 1. 큐브맵 텍스처 기반 고품질 Split-Sum PBR IBL ──
         float3 irradiance = gIrradianceMap.Sample(gBufferSampler, normal).rgb;
         diffuseIBL = kd * albedo * irradiance * gLightingData.IBLIntensity;
+        skyDiffuseAmbient = irradiance * gLightingData.IBLIntensity;
 
         float3 reflectDir = reflect(-viewDirection, normal);
         const float MAX_REFLECTION_LOD = 4.0f;
@@ -883,6 +885,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         // ── 2. 기존 반구형 수식 기반 SkyLight 보간 ──
         float3 specularBRDF = EnvBRDFApprox(f0, roughness, normalDotView);
         diffuseIBL = kd * albedo * skyDiffuseIrradiance * gLightingData.IBLIntensity;
+        skyDiffuseAmbient = skyDiffuseIrradiance * gLightingData.IBLIntensity;
         specularIBL = skySpecularRadiance * specularBRDF * gLightingData.IBLIntensity;
     }
     else
@@ -894,6 +897,7 @@ float4 main(PS_INPUT input) : SV_TARGET
         float upWeight = saturate(normal.y * 0.5f + 0.5f);
         float3 skyHemiDiffuse = lerp(ground, zenith, upWeight);
         diffuseIBL = kd * albedo * skyHemiDiffuse * gLightingData.IBLIntensity;
+        skyDiffuseAmbient = skyHemiDiffuse * gLightingData.IBLIntensity;
 
         float3 reflectDir = reflect(-viewDirection, normal);
         float reflUpWeight = saturate(reflectDir.y * 0.5f + 0.5f);
@@ -909,7 +913,8 @@ float4 main(PS_INPUT input) : SV_TARGET
 
     // ── 4-1. 프로브 GI: 볼륨 안에서는 확산 환경광을 프로브 조도로 바꾸고, 경계 밖으로 갈수록 기존 환경광과 섞는다. ──
     // 프로브의 광선이 하늘 가시성과 주변 면의 반사광을 함께 담으므로 확산 IBL을 더하지 않는다.
-    // 그림자 하한은 어두운 GI를 가리므로 볼륨 안에서는 쓰지 않는다. 정반사 환경광·레이트레이싱 반사는 그대로다.
+    // 그림자 하한은 어두운 GI를 가리므로 볼륨 안에서는 쓰지 않는다. 정반사 환경광은 아래처럼 조도비로 줄이고 레이트레이싱 반사는 그대로다.
+    // 6단계의 AO는 환경광 합 전체(정반사 포함)에 이미 곱해지므로 정반사 전용 오클루전(Lagarde 식)은 따로 넣지 않는다.
     const ProbeGILightingData probeGI = gLightingData.ProbeGI;
     if (probeGI.Enabled != 0u)
     {
@@ -919,6 +924,22 @@ float4 main(PS_INPUT input) : SV_TARGET
             const float3 probeIrradiance = SampleProbeIrradiance(probeGI, worldPosition, normal, viewDirection,
                 gProbeIrradianceAtlas, gProbeDistanceAtlas, gBufferSampler);
             diffuseIBL = lerp(diffuseIBL, kd * albedo * probeIrradiance * probeGI.Intensity, giWeight);
+
+            // 정반사 환경광의 하늘빛 감쇠(specular occlusion by irradiance ratio, 측정 전 시작값).
+            // 프로브 조도가 기존 하늘 확산 환경광보다 어두울수록 그 방향으로 하늘이 가려졌다고 보고 정반사 환경광을 같은 비율로 줄인다.
+            // 확산 조도의 밝기비는 반사 방향의 가시성이 아니라 법선 반구의 평균이므로 근사다(좁은 창 쪽을 보는 면은 과소 보정될 수 있음).
+            // 하한 0.1은 완전히 새까만 거울면을 막는 값이다(실내에서도 닫힌 방이 아니면 주변 면의 반사광이 남는다). 1을 넘기지 않아 밝히지는 않는다.
+            // giWeight로 섞으므로 BlendDistance 경계에서 연속이고, 하늘이 거의 0이면(비가 정의되지 않음) 적용하지 않는다.
+            // 프로브 GI가 꺼졌거나 이번 프레임 갱신이 없으면(Enabled = 0) 이 블록에 들어오지 않아 기존 결과와 같다.
+            const float3 lumaWeights = float3(0.2126f, 0.7152f, 0.0722f);
+            const float skyLuma = dot(skyDiffuseAmbient, lumaWeights);
+            if (skyLuma > 1e-4f)
+            {
+                const float irradianceRatio = saturate(dot(probeIrradiance * probeGI.Intensity, lumaWeights) / skyLuma);
+                const float specularOcclusion = max(irradianceRatio, 0.1f);
+                // RT 반사로 대체된 비율은 아래 5단계에서 (1 - reflection.a)로 빠지므로, 여기서는 환경광 정반사 전체에 곱해도 추적 결과에 영향이 없다.
+                specularIBL *= lerp(1.0f, specularOcclusion, giWeight);
+            }
         }
     }
 
