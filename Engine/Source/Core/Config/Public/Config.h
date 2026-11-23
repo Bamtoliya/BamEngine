@@ -54,6 +54,10 @@ namespace Engine
         PROPERTY(META("Optional", true))
         std::int32_t TemporalAAMode = 0;
 
+        // 앰비언트 오클루전: 0·1 끄기, 2 화면 공간, 3 레이트레이싱(쓸 수 없으면 화면 공간) (Engine::EAmbientOcclusionMode)
+        PROPERTY(META("Optional", true))
+        std::int32_t AmbientOcclusionMode = 0;
+
         // 스트리밍하는 메시와 텍스처의 GPU 메모리 한도(MB)
         PROPERTY(META("Optional", true))
         std::int32_t ResourceStreamingBudgetMB = 512;

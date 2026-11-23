@@ -50,8 +50,11 @@ namespace
 		uint32 SpotShadowLight = INVALID_SHADOW_LIGHT;
 		uint32 PointShadowLight = INVALID_SHADOW_LIGHT;
 		uint32 UseRaytracedReflections = 0u;
+		uint32 UseAmbientOcclusion = 0u; // 1이면 t13의 앰비언트 오클루전을 환경광에 곱한다
+		uint32 AmbientOcclusionPad[3] = {};
 	};
-	static_assert(sizeof(DeferredLightingPassData) == 544);
+	static_assert(sizeof(DeferredLightingPassData) == 560);
+	static_assert(offsetof(DeferredLightingPassData, UseAmbientOcclusion) == 544);
 	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
 	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
 	static_assert(offsetof(DeferredLightingPassData, SunDirection) == 464);
@@ -161,6 +164,55 @@ namespace
 	constexpr const wchar_t* MotionVectorSkinningVSFile = L"motionVectorSkinningVS.cso";
 	constexpr const wchar_t* MotionVectorPSKey = L"Resources/Shader/MotionVectorPS";
 	constexpr const wchar_t* MotionVectorPSFile = L"motionVectorPS.cso";
+
+	// ambientOcclusion.hlsli의 AmbientOcclusionParams (b1, space3)
+	struct AmbientOcclusionParams
+	{
+		mat4 PrevViewProjection{ 1.0f };
+		vec3 CameraPosition{ 0.0f };
+		f32 Radius = 0.5f;
+		vec3 ScreenRight{ 1.0f, 0.0f, 0.0f };
+		f32 PixelsPerMeter = 0.0f;
+		vec3 ScreenUp{ 0.0f, 1.0f, 0.0f };
+		f32 MaxRadiusPixels = 128.0f;
+		vec3 PrevCameraPosition{ 0.0f };
+		f32 Power = 1.0f;
+		vec2 PrevJitterUV{ 0.0f };
+		uint32 FrameIndex = 0u;
+		uint32 HistoryValid = 0u;
+		uint32 SliceCount = 2u;
+		uint32 StepCount = 6u;
+		uint32 RayCount = 2u;
+		f32 MaxHistory = 16.0f;
+		f32 NormalBias = 0.02f;
+		f32 DistanceBiasScale = 0.0005f;
+		vec2 Pad{ 0.0f };
+	};
+	static_assert(sizeof(AmbientOcclusionParams) == 176);
+	static_assert(offsetof(AmbientOcclusionParams, CameraPosition) == 64);
+	static_assert(offsetof(AmbientOcclusionParams, PrevJitterUV) == 128);
+	static_assert(offsetof(AmbientOcclusionParams, SliceCount) == 144);
+
+	// 화면 공간은 접촉부 음영, 레이트레이싱은 조금 더 넓은 차폐를 본다. 모두 측정 전 시작값이다.
+	constexpr f32 ScreenSpaceAORadius = 0.5f;
+	constexpr f32 ScreenSpaceAOPower = 1.5f;
+	constexpr f32 ScreenSpaceAOMaxHistory = 16.0f;
+	constexpr f32 ScreenSpaceAOMaxRadiusFraction = 0.1f; // 화면 높이 대비 최대 반경
+	constexpr f32 RaytracedAORadius = 1.0f;
+	constexpr uint32 RaytracedAORayCount = 2u;
+	constexpr f32 RaytracedAOMaxHistory = 32.0f;
+
+	constexpr const wchar_t* ScreenSpaceAOShaderKey = L"Resources/Shader/ScreenSpaceAmbientOcclusionCS";
+	constexpr const wchar_t* ScreenSpaceAOShaderFile = L"screenSpaceAmbientOcclusionCS.cso";
+	constexpr const wchar_t* RaytracedAOShaderKey = L"Resources/Shader/RaytracedAmbientOcclusionRTCS";
+	constexpr const wchar_t* RaytracedAOShaderFile = L"raytracedAmbientOcclusionRTCS.cso";
+	constexpr const wchar_t* AmbientOcclusionTemporalShaderKey = L"Resources/Shader/AmbientOcclusionTemporalCS";
+	constexpr const wchar_t* AmbientOcclusionTemporalShaderFile = L"ambientOcclusionTemporalCS.cso";
+	// lightingPS의 t13. Compute에서는 같은 번호에 TLAS를 묶으므로 그 전에 비운다.
+	constexpr Engine::uint32 AmbientOcclusionSlot = MAX_MATERIAL_TEXTURE_SLOTS + 13;
+	// 시간 누적 Compute의 입력(t14 이번 프레임 값, t15 이전 결과). 이후 그림자 마스크·반사가 같은 번호를 다시 묶는다.
+	constexpr Engine::uint32 AmbientOcclusionRawSlot = MAX_MATERIAL_TEXTURE_SLOTS + 14;
+	constexpr Engine::uint32 AmbientOcclusionHistorySlot = MAX_MATERIAL_TEXTURE_SLOTS + 15;
 }
 
 Engine::DeferredSceneRenderer::~DeferredSceneRenderer()
@@ -195,6 +247,12 @@ void Engine::DeferredSceneRenderer::Free()
 	m_MotionHistory.Reset();
 	m_TemporalAAActive = false;
 	m_TemporalJitterNDC = vec2(0.0f);
+	for (auto& name : m_AmbientOcclusionTargetNames)
+		removeTarget(name);
+	m_AmbientOcclusionHistory.Reset();
+	m_AmbientOcclusionActive = EAmbientOcclusionMode::Off;
+	m_AmbientOcclusionHistoryPath = EAmbientOcclusionMode::Off;
+	m_AmbientOcclusionPrevJitterNDC = vec2(0.0f);
 }
 
 bool Engine::DeferredSceneRenderer::Initialize()
@@ -307,13 +365,36 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		renderer.RegisterViewportCamera(sceneCamera, forwardTransPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
 
+	// 3-1. 앰비언트 오클루전 방식. 쓰기 텍스처가 필요한 Compute라 DirectX12만 지원하고, 독립 프리뷰와 직교 카메라는 제외한다.
+	const EAmbientOcclusionMode requestedOcclusion = ResolveAmbientOcclusion(m_AmbientOcclusionOverrides);
+	EAmbientOcclusionMode ambientOcclusion = EAmbientOcclusionMode::Off;
+	if (requestedOcclusion != EAmbientOcclusionMode::Off && sceneToQuery && lightingPass && lightingPass->IsEnabled() && passes.AcceptSceneMeshes &&
+		SupportsScreenSpaceAmbientOcclusion(cameraBuffer.projMatrix) && renderer.GetRHIType() == ERHIType::DirectX12)
+	{
+		const bool screenSpaceAvailable = GetRaytracingPipeline(ScreenSpaceAOShaderKey, ScreenSpaceAOShaderFile, m_ScreenSpaceAOShaderMissing) &&
+			GetRaytracingPipeline(AmbientOcclusionTemporalShaderKey, AmbientOcclusionTemporalShaderFile, m_AmbientOcclusionTemporalShaderMissing);
+		const bool raytracingAvailable = requestedOcclusion == EAmbientOcclusionMode::Raytraced &&
+			Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() &&
+			GetRaytracingPipeline(RaytracedAOShaderKey, RaytracedAOShaderFile, m_RaytracedAOShaderMissing);
+		ambientOcclusion = SelectAmbientOcclusionPath(requestedOcclusion, screenSpaceAvailable, raytracingAvailable);
+	}
+	// 실제로 쓴 방식은 조명 명령이 실행될 때 기록한다(TLAS가 없으면 화면 공간으로 바뀔 수 있다).
+	if (ambientOcclusion == EAmbientOcclusionMode::Off)
+	{
+		m_AmbientOcclusionActive = EAmbientOcclusionMode::Off;
+		m_AmbientOcclusionHistory.Reset();
+	}
+	// 이전 결과는 지난 프레임의 지터로 그린 G-Buffer 위치에 있다.
+	const vec2 previousJitterNDC = m_AmbientOcclusionPrevJitterNDC;
+	m_AmbientOcclusionPrevJitterNDC = m_TemporalJitterNDC;
+
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
 	if (lightingPass && lightingPass->IsEnabled())
 	{
-		// 레이트레이싱 그림자나 반사를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
-		if (useRaytracedShadow || useRaytracedReflection)
+		// 레이트레이싱 그림자·반사·AO를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
+		if (useRaytracedShadow || useRaytracedReflection || ambientOcclusion == EAmbientOcclusionMode::Raytraced)
 			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection);
-		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection);
+		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection, ambientOcclusion, previousJitterNDC);
 	}
 }
 
@@ -387,7 +468,8 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 }
 
 void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, const CameraBuffer& sceneCamera, Scene* targetScene,
-	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection)
+	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection,
+	EAmbientOcclusionMode ambientOcclusion, const vec2& previousJitterNDC)
 {
 	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
 	Texture* defaultBRDFLUT = nullptr;
@@ -414,7 +496,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this, cameraBuffer, sceneCamera, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
 			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow, useRaytracedReflection,
-			raytracedOverrides = m_RaytracedShadowOverrides](f32, Engine::RenderPass*) -> Engine::EResult
+			raytracedOverrides = m_RaytracedShadowOverrides, ambientOcclusion, previousJitterNDC](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -547,6 +629,26 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				if (Engine::IsFailure(lightManager.Bind(0)))
 					return Engine::EResult::Fail;
 			}
+			// 7-0. 앰비언트 오클루전 (G-Buffer·광원 버퍼 바인딩을 그대로 사용하는 Compute).
+			// 지난 프레임에 t13·t14·t15에 묶은 결과가 남아 있으면 TLAS나 쓰기 텍스처와 겹치므로 먼저 비운다.
+			for (const uint32 slot : { AmbientOcclusionSlot, AmbientOcclusionRawSlot, AmbientOcclusionHistorySlot })
+				(void)rhi->BindTexture(nullptr, slot);
+			Engine::RHITexture* ambientOcclusionTexture = nullptr;
+			if (ambientOcclusion != EAmbientOcclusionMode::Off)
+			{
+				ambientOcclusionTexture = DispatchAmbientOcclusion(*rhi, targetScene, viewID, sourceNames[4], camBuf, sceneCamBuf, ambientOcclusion, previousJitterNDC);
+				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
+					return Engine::EResult::Fail;
+				if (!ambientOcclusionTexture)
+				{
+					m_AmbientOcclusionActive = EAmbientOcclusionMode::Off;
+					if (!m_AmbientOcclusionFailureLogged)
+					{
+						ENGINE_LOG_ERROR("Ambient occlusion was not produced; only material occlusion is applied this frame.");
+						m_AmbientOcclusionFailureLogged = true;
+					}
+				}
+			}
 			// 7-1. 레이트레이싱 그림자 마스크 (G-Buffer·카메라·광원 버퍼 바인딩을 그대로 사용하는 Compute)
 			DeferredLightingPassData lightingData{};
 			const ShadowLightSet& shadowLights = acceptSceneMeshes ? lightManager.GetShadowLights() : localShadowLights;
@@ -657,6 +759,9 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 					m_RaytracedReflectionFailureLogged = true;
 				}
 			}
+			// 8-2. 앰비언트 오클루전 결과 (t13). 그림자·반사 Compute가 TLAS를 쓰고 난 뒤에 묶는다.
+			if (ambientOcclusionTexture && Engine::IsSuccess(rhi->BindTextureSampler(ambientOcclusionTexture, sampler, AmbientOcclusionSlot)))
+				lightingData.UseAmbientOcclusion = 1u;
 			// 9. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
 				return Engine::EResult::Fail;
@@ -666,6 +771,9 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			// 11. 풀스크린 쿼드 조명 합성 실행
 			if (Engine::IsFailure(rhi->Draw(3)))
 				return Engine::EResult::Fail;
+			// t13에 남은 AO가 다른 뷰포트의 TLAS 바인딩과 겹치지 않게 비운다(이미 기록한 Draw에는 영향이 없다).
+			if (ambientOcclusionTexture)
+				(void)rhi->BindTexture(nullptr, AmbientOcclusionSlot);
 			return Engine::EResult::Success;
 		},
 		passes.Lighting
@@ -1034,6 +1142,104 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedReflection(E
 
 	m_ReflectionHistory.Commit();
 	return textures[ReflectionFiltered];
+}
+
+Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchAmbientOcclusion(Engine::RHI& rhi, Engine::Scene* scene, RenderPassID viewID,
+	const std::wstring& positionTargetName, const CameraBuffer& camera, const CameraBuffer& sceneCamera, EAmbientOcclusionMode mode,
+	const vec2& previousJitterNDC)
+{
+	Engine::RenderTarget* position = Engine::RenderTargetManager::Get().GetRenderTarget(positionTargetName);
+	if (!scene || !position || !position->GetTexture())
+		return nullptr;
+
+	// TLAS 빌드에 실패했거나 셰이더가 없으면 이번 프레임은 화면 공간으로 계산한다.
+	Engine::RHIAccelerationStructure* topLevel = nullptr;
+	Engine::RHIPipeline* raytracedPipeline = nullptr;
+	if (mode == EAmbientOcclusionMode::Raytraced)
+	{
+		topLevel = Engine::RaytracingSceneManager::IsCreated() ? Engine::RaytracingSceneManager::Get().GetTopLevelAS(scene, viewID) : nullptr;
+		raytracedPipeline = topLevel ? GetRaytracingPipeline(RaytracedAOShaderKey, RaytracedAOShaderFile, m_RaytracedAOShaderMissing) : nullptr;
+		if (!raytracedPipeline)
+			mode = EAmbientOcclusionMode::ScreenSpace;
+	}
+	const bool raytraced = mode == EAmbientOcclusionMode::Raytraced;
+	Engine::RHIPipeline* occlusionPipeline = raytraced ? raytracedPipeline :
+		GetRaytracingPipeline(ScreenSpaceAOShaderKey, ScreenSpaceAOShaderFile, m_ScreenSpaceAOShaderMissing);
+	Engine::RHIPipeline* temporalPipeline = GetRaytracingPipeline(AmbientOcclusionTemporalShaderKey, AmbientOcclusionTemporalShaderFile, m_AmbientOcclusionTemporalShaderMissing);
+	if (!occlusionPipeline || !temporalPipeline)
+		return nullptr;
+
+	const Engine::uint32 width = position->GetWidth();
+	const Engine::uint32 height = position->GetHeight();
+	struct TargetInfo { const wchar_t* Suffix; Engine::ETextureFormat Format; };
+	static constexpr TargetInfo targetInfos[AmbientOcclusionTargetCount] = {
+		{ L"_AmbientOcclusionRaw", Engine::ETextureFormat::R32_FLOAT },               // 이번 프레임 가시성
+		{ L"_AmbientOcclusion0", Engine::ETextureFormat::R16G16B16A16_FLOAT },        // 가시성, 카메라 거리, 누적 횟수
+		{ L"_AmbientOcclusion1", Engine::ETextureFormat::R16G16B16A16_FLOAT },
+	};
+	std::array<Engine::RHITexture*, AmbientOcclusionTargetCount> textures{};
+	for (int index = 0; index < AmbientOcclusionTargetCount; ++index)
+	{
+		Engine::RenderTarget* target = EnsureOwnedTarget(positionTargetName + targetInfos[index].Suffix, targetInfos[index].Format,
+			width, height, m_AmbientOcclusionTargetNames[index]);
+		if (!target)
+			return nullptr;
+		textures[index] = target->GetTexture();
+	}
+
+	// 방식이 바뀌면 노이즈 성질이 달라 이전 결과를 이어 쓰지 않는다.
+	if (m_AmbientOcclusionHistoryPath != mode)
+		m_AmbientOcclusionHistory.Reset();
+	m_AmbientOcclusionHistoryPath = mode;
+	m_AmbientOcclusionActive = mode;
+	const auto frame = m_AmbientOcclusionHistory.Begin(camera, scene, width, height);
+
+	// 화면 방향과 반경은 G-Buffer를 그린 카메라 기준이다(지터는 방향과 크기를 바꾸지 않는다).
+	const ScreenAxes axes = GetScreenAxes(sceneCamera.viewMatrix, sceneCamera.projMatrix);
+	AmbientOcclusionParams params{};
+	params.PrevViewProjection = frame.PrevViewProjection;
+	params.CameraPosition = sceneCamera.cameraPosition;
+	params.Radius = raytraced ? RaytracedAORadius : ScreenSpaceAORadius;
+	params.ScreenRight = axes.Right;
+	params.PixelsPerMeter = PixelsPerMeterAtUnitDistance(sceneCamera.projMatrix, height);
+	params.ScreenUp = axes.Up;
+	params.MaxRadiusPixels = glm::max(ScreenSpaceAOMaxRadiusFraction * static_cast<f32>(height), 8.0f);
+	params.PrevCameraPosition = frame.PrevCameraPosition;
+	params.Power = raytraced ? 1.0f : ScreenSpaceAOPower;
+	params.PrevJitterUV = NDCOffsetToUV(previousJitterNDC);
+	params.FrameIndex = frame.FrameIndex;
+	params.HistoryValid = frame.Valid ? 1u : 0u;
+	params.RayCount = RaytracedAORayCount;
+	params.MaxHistory = raytraced ? RaytracedAOMaxHistory : ScreenSpaceAOMaxHistory;
+
+	// 1. 이번 프레임 값
+	rhi.BeginPassMetrics(positionTargetName + (raytraced ? L"_RaytracedAOPass" : L"_ScreenSpaceAOPass"));
+	bool succeeded = Engine::IsSuccess(rhi.BindPipeline(occlusionPipeline)) && Engine::IsSuccess(rhi.BindConstantBuffer(&params, sizeof(params), 3));
+	if (succeeded && raytraced)
+		succeeded = Engine::IsSuccess(rhi.BindAccelerationStructure(topLevel, RaytracedShadowTLASSlot));
+	succeeded = succeeded && Engine::IsSuccess(rhi.BindComputeStorageTexture(textures[AmbientOcclusionRaw], 0)) &&
+		Engine::IsSuccess(rhi.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u));
+	rhi.EndPassMetrics();
+	if (!succeeded)
+		return nullptr;
+
+	// 2. 공간 필터와 시간 누적. 입력은 t14·t15로 읽고 다음 Compute 전에 비운다.
+	Engine::RHITexture* history = textures[AmbientOcclusionHistory0 + frame.ReadIndex];
+	Engine::RHITexture* accumulated = textures[AmbientOcclusionHistory0 + frame.WriteIndex];
+	rhi.BeginPassMetrics(positionTargetName + L"_AmbientOcclusionTemporalPass");
+	succeeded = Engine::IsSuccess(rhi.BindPipeline(temporalPipeline)) && Engine::IsSuccess(rhi.BindConstantBuffer(&params, sizeof(params), 3)) &&
+		Engine::IsSuccess(rhi.BindTexture(textures[AmbientOcclusionRaw], AmbientOcclusionRawSlot)) &&
+		Engine::IsSuccess(rhi.BindTexture(history, AmbientOcclusionHistorySlot)) &&
+		Engine::IsSuccess(rhi.BindComputeStorageTexture(accumulated, 0)) &&
+		Engine::IsSuccess(rhi.Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u));
+	rhi.EndPassMetrics();
+	(void)rhi.BindTexture(nullptr, AmbientOcclusionRawSlot);
+	(void)rhi.BindTexture(nullptr, AmbientOcclusionHistorySlot);
+	if (!succeeded)
+		return nullptr;
+
+	m_AmbientOcclusionHistory.Commit();
+	return accumulated;
 }
 
 Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(Engine::RHI& rhi, Engine::Scene* scene,

@@ -1,4 +1,5 @@
 ﻿#include "GraphicSettingsWidget.h"
+#include "AmbientOcclusionModeUI.h"
 #include "EditorUI.h"
 #include "Application.h"
 #include "EditorSettingsService.h"
@@ -20,6 +21,7 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
     m_DraftRaytracedReflection = settings.GetPreferences().RaytracedReflectionMode;
     m_DraftTemporalAA = settings.GetPreferences().TemporalAAMode;
+    m_DraftAmbientOcclusion = settings.GetPreferences().AmbientOcclusionMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
@@ -27,6 +29,7 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_RaytracedShadowDirty = false;
     m_RaytracedReflectionDirty = false;
     m_TemporalAADirty = false;
+    m_AmbientOcclusionDirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -61,6 +64,14 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_TemporalAADirty = false;
+    }
+
+    if (m_AmbientOcclusionDirty)
+    {
+        const auto result = settings.SetEditorAmbientOcclusionMode(m_DraftAmbientOcclusion);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_AmbientOcclusionDirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -239,6 +250,17 @@ void GraphicSettingsWidget::Draw()
         {
             EditorUI::PropertyRow("GraphicsSettings.TemporalAA");
             m_TemporalAADirty |= DrawRaytracedShadowModeCombo("###TemporalAA", m_DraftTemporalAA, "GraphicsSettings.TemporalAAHint");
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionLighting").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##GraphicLightingTable", tableStyle))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.AmbientOcclusion");
+            m_AmbientOcclusionDirty |= DrawAmbientOcclusionModeCombo("###AmbientOcclusion", m_DraftAmbientOcclusion);
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();

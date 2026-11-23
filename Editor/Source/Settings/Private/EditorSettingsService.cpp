@@ -1,4 +1,5 @@
 ﻿#include "EditorSettingsService.h"
+#include "AmbientOcclusion.h"
 #include "RaytracedShadowSettings.h"
 
 #include "ImGuiManager.h"
@@ -650,6 +651,16 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorTemporalAAMode(std::i
 
     EditorPreferences candidate = m_EditorPreferences;
     candidate.TemporalAAMode = mode;
+    return ApplyAndSavePreferences(candidate);
+}
+
+EditorSettingsChangeResult EditorSettingsService::SetEditorAmbientOcclusionMode(std::int32_t mode)
+{
+    if (!Engine::IsValidAmbientOcclusionMode(mode))
+        return {};
+
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.AmbientOcclusionMode = mode;
     return ApplyAndSavePreferences(candidate);
 }
 
