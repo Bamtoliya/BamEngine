@@ -1,4 +1,4 @@
-#include "DeferredProfileShaders.h"
+﻿#include "DeferredProfileShaders.h"
 #include <algorithm>
 
 std::vector<Engine::DeferredProfileShader> Engine::GetDeferredProfileShaders(const RenderPipelineProfile& profile)
@@ -35,7 +35,12 @@ std::vector<Engine::DeferredProfileShader> Engine::GetDeferredProfileShaders(con
 			{ L"PostProcess_BloomPrefilterPS", L"bloomPrefilterPS.cso", Stage::Fragment },
 			{ L"PostProcess_BloomDownsamplePS", L"bloomDownsamplePS.cso", Stage::Fragment },
 			{ L"PostProcess_BloomUpsamplePS", L"bloomUpsamplePS.cso", Stage::Fragment },
-			{ L"PostProcess_BloomCompositePS", L"bloomCompositePS.cso", Stage::Fragment }
+			{ L"PostProcess_BloomCompositePS", L"bloomCompositePS.cso", Stage::Fragment },
+			{ L"PostProcess_DofPrefilterPS", L"dofPrefilterPS.cso", Stage::Fragment },
+			{ L"PostProcess_DofNearTilePS", L"dofNearTilePS.cso", Stage::Fragment },
+			{ L"PostProcess_DofNearDilatePS", L"dofNearDilatePS.cso", Stage::Fragment },
+			{ L"PostProcess_DofBlurPS", L"dofBlurPS.cso", Stage::Fragment },
+			{ L"PostProcess_DofCompositePS", L"dofCompositePS.cso", Stage::Fragment }
 		});
 	}
 	return shaders;
