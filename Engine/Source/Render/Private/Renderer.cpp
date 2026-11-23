@@ -360,43 +360,61 @@ EResult Renderer::Render(f32 dt)
 				// 레이트레이싱하는 광원의 섀도맵에는 이번 프레임 TLAS에 들어가지 못한 캐스터만 그린다.
 				// BLAS 대기·실패나 TLAS 빌드 실패 시에는 해당 캐스터가 섀도맵에 남아 그림자가 사라지지 않는다.
 				// 같은 아틀라스라도 레이트레이싱하지 않는 광원은 전체 캐스터를 그대로 사용한다.
+				// 정적·스킨드 캐스터 모두 같은 기준으로 거른다(스킨드 메시는 Compute 스키닝 BLAS로 TLAS에 들어간다).
 				vector<StaticDrawCommand> rasterOnlyCasters;
-				const bool filterCascades = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedShadowCasters();
-				const bool filterSpot = hasStaticCasters && !isCubeShadow && pass->SkipsRaytracedSpotCasters();
-				const bool filterPoint = hasStaticCasters && isCubeShadow && pass->SkipsRaytracedShadowCasters();
+				vector<SkinnedDrawCommand> rasterOnlySkinnedCasters;
+				const bool hasCasters = hasStaticCasters || hasSkinnedCasters;
+				const bool filterCascades = hasCasters && !isCubeShadow && pass->SkipsRaytracedShadowCasters();
+				const bool filterSpot = hasCasters && !isCubeShadow && pass->SkipsRaytracedSpotCasters();
+				const bool filterPoint = hasCasters && isCubeShadow && pass->SkipsRaytracedShadowCasters();
 				if (filterCascades || filterSpot || filterPoint)
 				{
 					const Scene* casterScene = nullptr;
 					RenderPassID casterView = INVALID_PASS_ID;
 					const RaytracedCasterSet* tracedCasters = nullptr;
-					std::copy_if(meshIt->second.begin(), meshIt->second.end(), std::back_inserter(rasterOnlyCasters),
-						[&](const StaticDrawCommand& command)
+					const auto isRasterOnly = [&](const Scene* scene, RenderPassID viewID, uint32 entityIndex)
 						{
-							if (!command.raytracedScene) return true;
-							if (command.raytracedScene != casterScene || command.raytracedViewID != casterView)
+							if (!scene) return true;
+							if (scene != casterScene || viewID != casterView)
 							{
-								casterScene = command.raytracedScene;
-								casterView = command.raytracedViewID;
+								casterScene = scene;
+								casterView = viewID;
 								tracedCasters = RaytracingSceneManager::IsCreated() ?
 									RaytracingSceneManager::Get().GetTopLevelCasters(casterScene, casterView) : nullptr;
 							}
-							return !tracedCasters || !tracedCasters->Contains(command.raytracedEntityIndex);
-						});
+							return !tracedCasters || !tracedCasters->Contains(entityIndex);
+						};
+					if (hasStaticCasters)
+					{
+						std::copy_if(meshIt->second.begin(), meshIt->second.end(), std::back_inserter(rasterOnlyCasters),
+							[&](const StaticDrawCommand& command)
+							{ return isRasterOnly(command.raytracedScene, command.raytracedViewID, command.raytracedEntityIndex); });
+					}
+					if (hasSkinnedCasters)
+					{
+						std::copy_if(skinnedIt->second.begin(), skinnedIt->second.end(), std::back_inserter(rasterOnlySkinnedCasters),
+							[&](const SkinnedDrawCommand& command)
+							{ return isRasterOnly(command.raytracedScene, command.raytracedViewID, command.raytracedEntityIndex); });
+					}
 				}
 				bool rasterOnly = false;
 				const auto renderShadowCasters = [&](const CameraBuffer& lightCamera) -> EResult
 				{
 					const vector<StaticDrawCommand>* staticCasters = hasStaticCasters ? &meshIt->second : nullptr;
+					vector<SkinnedDrawCommand>* skinnedCasters = hasSkinnedCasters ? &skinnedIt->second : nullptr;
 					if (rasterOnly)
+					{
 						staticCasters = &rasterOnlyCasters;
+						skinnedCasters = &rasterOnlySkinnedCasters;
+					}
 					if (staticCasters && !staticCasters->empty())
 					{
 						const Frustum frustum = FrustumCuller::ExtractFrustum(lightCamera.viewProjMatrix);
 						const EResult result = RenderMeshes(*staticCasters, pass, &frustum);
 						if (IsFailure(result)) return result;
 					}
-					if (hasSkinnedCasters)
-						return RenderSkinnedMeshes(dt, skinnedIt->second, pass->GetSortType(), pass);
+					if (skinnedCasters && !skinnedCasters->empty())
+						return RenderSkinnedMeshes(dt, *skinnedCasters, pass->GetSortType(), pass);
 					return EResult::Success;
 				};
 
@@ -1882,6 +1900,11 @@ Shader* Renderer::GetDefaultShadowDepthPixelShader()
 {
 	EnsureDefaultShaders();
 	return m_DefaultShadowDepthPS.Get();
+}
+Shader* Renderer::GetDefaultShadowDepthSkinningVertexShader()
+{
+	EnsureDefaultShaders();
+	return m_DefaultShadowDepthSkinningVS.Get();
 }
 Shader* Renderer::ResolveVertexShader(Mesh* mesh, MaterialInterface* material, ERenderPassType passType)
 {

@@ -69,6 +69,44 @@ namespace
 		return rhi && rhi->GetDevice5() && rhi->GetCommandList4() && rhi->IsFrameRecording() &&
 			rhi->GetCapabilities().SupportsInlineRaytracing;
 	}
+
+	// 입력 버퍼 범위를 확인하고 삼각형 기하 기술자를 채운다.
+	bool FillTriangleGeometry(const RHIRaytracingGeometryDesc& desc, D3D12_RAYTRACING_GEOMETRY_DESC& geometry)
+	{
+		auto* position = static_cast<DirectX12Buffer*>(desc.positionBuffer);
+		auto* index = static_cast<DirectX12Buffer*>(desc.indexBuffer);
+		if (!position || !position->GetNativeHandle() || desc.vertexCount == 0 || desc.vertexStride < sizeof(float) * 3)
+			return false;
+		if (static_cast<uint64>(desc.vertexCount - 1) * desc.vertexStride + sizeof(float) * 3 > position->GetSize())
+			return false;
+
+		if (index)
+		{
+			if (!index->GetNativeHandle() || (desc.indexStride != 2 && desc.indexStride != 4) ||
+				desc.indexCount == 0 || desc.indexCount % 3 != 0 ||
+				static_cast<uint64>(desc.indexCount) * desc.indexStride > index->GetSize())
+				return false;
+		}
+		else if (desc.vertexCount % 3 != 0)
+		{
+			return false;
+		}
+
+		geometry = {};
+		geometry.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+		geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+		geometry.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
+		geometry.Triangles.VertexCount = desc.vertexCount;
+		geometry.Triangles.VertexBuffer.StartAddress = static_cast<ID3D12Resource*>(position->GetNativeHandle())->GetGPUVirtualAddress();
+		geometry.Triangles.VertexBuffer.StrideInBytes = desc.vertexStride;
+		if (index)
+		{
+			geometry.Triangles.IndexFormat = desc.indexStride == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+			geometry.Triangles.IndexCount = desc.indexCount;
+			geometry.Triangles.IndexBuffer = static_cast<ID3D12Resource*>(index->GetNativeHandle())->GetGPUVirtualAddress();
+		}
+		return true;
+	}
 }
 
 void DirectX12AccelerationStructure::TransitionToShaderRead(DirectX12RHI& rhi, ID3D12GraphicsCommandList* commandList, DirectX12Buffer& buffer)
@@ -81,45 +119,21 @@ DirectX12AccelerationStructure* DirectX12AccelerationStructure::CreateBottomLeve
 	if (!CanUseRaytracing(rhi))
 		return nullptr;
 
+	D3D12_RAYTRACING_GEOMETRY_DESC geometry = {};
+	if (!FillTriangleGeometry(desc, geometry))
+		return nullptr;
 	auto* position = static_cast<DirectX12Buffer*>(desc.positionBuffer);
 	auto* index = static_cast<DirectX12Buffer*>(desc.indexBuffer);
-	if (!position || !position->GetNativeHandle() || desc.vertexCount == 0 || desc.vertexStride < sizeof(float) * 3)
-		return nullptr;
-	if (static_cast<uint64>(desc.vertexCount - 1) * desc.vertexStride + sizeof(float) * 3 > position->GetSize())
-		return nullptr;
-
-	if (index)
-	{
-		if (!index->GetNativeHandle() || (desc.indexStride != 2 && desc.indexStride != 4) ||
-			desc.indexCount == 0 || desc.indexCount % 3 != 0 ||
-			static_cast<uint64>(desc.indexCount) * desc.indexStride > index->GetSize())
-			return nullptr;
-	}
-	else if (desc.vertexCount % 3 != 0)
-	{
-		return nullptr;
-	}
 
 	ID3D12Device5* device = rhi->GetDevice5();
 	ID3D12GraphicsCommandList4* commandList = rhi->GetCommandList4();
 
-	D3D12_RAYTRACING_GEOMETRY_DESC geometry = {};
-	geometry.Type = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
-	geometry.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
-	geometry.Triangles.VertexFormat = DXGI_FORMAT_R32G32B32_FLOAT;
-	geometry.Triangles.VertexCount = desc.vertexCount;
-	geometry.Triangles.VertexBuffer.StartAddress = static_cast<ID3D12Resource*>(position->GetNativeHandle())->GetGPUVirtualAddress();
-	geometry.Triangles.VertexBuffer.StrideInBytes = desc.vertexStride;
-	if (index)
-	{
-		geometry.Triangles.IndexFormat = desc.indexStride == 2 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
-		geometry.Triangles.IndexCount = desc.indexCount;
-		geometry.Triangles.IndexBuffer = static_cast<ID3D12Resource*>(index->GetNativeHandle())->GetGPUVirtualAddress();
-	}
-
 	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
 	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
+	// 갱신할 기하는 매 프레임 갱신 비용이 커지지 않도록 빠른 빌드를 쓴다.
+	inputs.Flags = desc.allowUpdate ?
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE | D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD :
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_TRACE;
 	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
 	inputs.NumDescs = 1;
 	inputs.pGeometryDescs = &geometry;
@@ -129,10 +143,13 @@ DirectX12AccelerationStructure* DirectX12AccelerationStructure::CreateBottomLeve
 	if (prebuild.ResultDataMaxSizeInBytes == 0)
 		return nullptr;
 
+	// 갱신용 BLAS는 빌드와 갱신 중 큰 쪽으로 스크래치를 잡아 계속 보관한다.
+	const uint64 scratchSize = AlignAccelerationStructureSize(desc.allowUpdate ?
+		std::max(prebuild.ScratchDataSizeInBytes, prebuild.UpdateScratchDataSizeInBytes) : prebuild.ScratchDataSizeInBytes);
 	const uint64 resultSize = AlignAccelerationStructureSize(prebuild.ResultDataMaxSizeInBytes);
 	ComPtr<ID3D12Resource> result = CreateRaytracingBuffer(device, resultSize, D3D12_HEAP_TYPE_DEFAULT,
 		D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE);
-	ComPtr<ID3D12Resource> scratch = CreateRaytracingBuffer(device, AlignAccelerationStructureSize(prebuild.ScratchDataSizeInBytes),
+	ComPtr<ID3D12Resource> scratch = CreateRaytracingBuffer(device, scratchSize,
 		D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS, ScratchInitialState);
 	if (!result || !scratch)
 	{
@@ -150,13 +167,70 @@ DirectX12AccelerationStructure* DirectX12AccelerationStructure::CreateBottomLeve
 	build.ScratchAccelerationStructureData = scratch->GetGPUVirtualAddress();
 	commandList->BuildRaytracingAccelerationStructure(&build, 0, nullptr);
 
-	// 스크래치는 이번 프레임 GPU 작업이 끝나면 해제된다.
-	rhi->DeferRelease(scratch.Get());
-
 	auto* instance = new DirectX12AccelerationStructure(rhi, ERHIAccelerationStructureType::BottomLevel);
 	instance->m_Result = result;
 	instance->m_ResultSizeInBytes = resultSize;
+	if (desc.allowUpdate)
+	{
+		instance->m_Scratch = scratch;
+		instance->m_ScratchSizeInBytes = scratchSize;
+		instance->m_AllowUpdate = true;
+		instance->m_VertexCount = desc.vertexCount;
+		instance->m_IndexCount = index ? desc.indexCount : 0;
+	}
+	else
+	{
+		// 스크래치는 이번 프레임 GPU 작업이 끝나면 해제된다.
+		rhi->DeferRelease(scratch.Get());
+	}
 	return instance;
+}
+
+EResult DirectX12AccelerationStructure::UpdateBottomLevel(DirectX12RHI* rhi, RHIAccelerationStructure* bottomLevel,
+	const RHIRaytracingGeometryDesc& desc)
+{
+	if (!CanUseRaytracing(rhi))
+		return EResult::NotImplemented;
+	auto* blas = static_cast<DirectX12AccelerationStructure*>(bottomLevel);
+	if (!blas || blas->GetType() != ERHIAccelerationStructureType::BottomLevel || !blas->m_Result || !blas->m_Scratch || !blas->m_AllowUpdate)
+		return EResult::InvalidArgument;
+	// refit은 삼각형 구성을 바꾸지 못한다.
+	const uint32 indexCount = desc.indexBuffer ? desc.indexCount : 0;
+	if (desc.vertexCount != blas->m_VertexCount || indexCount != blas->m_IndexCount)
+		return EResult::InvalidArgument;
+
+	D3D12_RAYTRACING_GEOMETRY_DESC geometry = {};
+	if (!FillTriangleGeometry(desc, geometry))
+		return EResult::InvalidArgument;
+
+	ID3D12GraphicsCommandList4* commandList = rhi->GetCommandList4();
+	TransitionToBuildInput(*rhi, commandList, *static_cast<DirectX12Buffer*>(desc.positionBuffer));
+	if (desc.indexBuffer)
+		TransitionToBuildInput(*rhi, commandList, *static_cast<DirectX12Buffer*>(desc.indexBuffer));
+
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_INPUTS inputs = {};
+	inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+	inputs.Flags = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_ALLOW_UPDATE |
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PREFER_FAST_BUILD |
+		D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAG_PERFORM_UPDATE;
+	inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
+	inputs.NumDescs = 1;
+	inputs.pGeometryDescs = &geometry;
+
+	// 이전 프레임의 레이 쿼리는 같은 큐에서 먼저 끝난다. 같은 프레임 안의 앞선 빌드와 겹치지 않게 UAV 배리어를 둔다.
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrier.UAV.pResource = blas->m_Result.Get();
+	commandList->ResourceBarrier(1, &barrier);
+
+	// 제자리 갱신: 원본과 결과가 같은 버퍼다.
+	D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC build = {};
+	build.Inputs = inputs;
+	build.SourceAccelerationStructureData = blas->m_Result->GetGPUVirtualAddress();
+	build.DestAccelerationStructureData = blas->m_Result->GetGPUVirtualAddress();
+	build.ScratchAccelerationStructureData = blas->m_Scratch->GetGPUVirtualAddress();
+	commandList->BuildRaytracingAccelerationStructure(&build, 0, nullptr);
+	return EResult::Success;
 }
 
 EResult DirectX12AccelerationStructure::EnsureInstanceCapacity(DirectX12RHI* rhi, uint32 frameIndex, uint32 instanceCount)

@@ -164,6 +164,9 @@ public:
     virtual EResult ResourceBarrierUAV(RHIBuffer* buffer) { return EResult::NotImplemented; }
     // 같은 텍스처를 연속된 Dispatch가 쓰고 읽을 때 사이에 기록한다. SRV로 읽기 전환은 바인딩 시 자동으로 처리된다.
     virtual EResult ResourceBarrierUAV(RHITexture* texture) { return EResult::NotImplemented; }
+    // BindComputeStorageBuffer로 이번 프레임에 쓴 Storage 버퍼를 BLAS 빌드 입력과 번호 읽기(space5)가 읽을 수 있게 바꾼다.
+    // 같은 프레임에 다시 쓰지 않는 버퍼에만 쓴다. 다음 프레임에는 버퍼가 COMMON으로 돌아가 다시 쓸 수 있다.
+    virtual EResult TransitionStorageBufferToShaderRead(RHIBuffer* buffer) { return EResult::NotImplemented; }
 #pragma endregion
 
 #pragma region Bindless
@@ -180,6 +183,12 @@ public:
     // 정적 삼각형 기하로 BLAS를 만들고 현재 프레임 커맨드 리스트에 빌드를 기록한다.
     // 프레임 기록 중에만 호출할 수 있으며, 미지원 백엔드·장치는 nullptr를 반환한다.
     virtual RHIAccelerationStructure* CreateBottomLevelAS(const RHIRaytracingGeometryDesc& desc) { return nullptr; }
+    // allowUpdate로 만든 BLAS를 같은 개수의 새 정점으로 제자리 갱신(refit)한다. 삼각형 구성은 처음 빌드를 따른다.
+    // 정점·인덱스 수가 처음과 다르면 InvalidArgument이며, 호출자는 BLAS를 새로 만든다.
+    virtual EResult UpdateBottomLevelAS(RHIAccelerationStructure* bottomLevel, const RHIRaytracingGeometryDesc& desc)
+    {
+        return EResult::NotImplemented;
+    }
     // 인스턴스 목록으로 TLAS를 다시 빌드한다. topLevel이 nullptr이면 새로 만들고, 용량이 부족하면 내부 버퍼를 키운다.
     // 인스턴스가 0개여도 유효한 빈 TLAS를 만든다.
     virtual EResult BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount)

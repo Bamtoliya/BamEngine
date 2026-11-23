@@ -1,7 +1,7 @@
 // 레이트레이싱 반사 (DXR 인라인 RayQuery, cs_6_5, DirectX12 전용)
 // 픽셀마다 광선을 하나 쏜다. 매끈한 면은 거울 방향으로, 거친 면은 GGX 분포에서 뽑은 방향으로 쏘고 이후 패스가 누적·필터한다.
 // rgb는 닿은 면의 밝기에 합성 비율을 곱한 값, a는 합성 비율이다. 너무 거칠거나 닿은 면이 없으면 비율이 0이 되어 환경광 반사를 쓴다.
-// 닿은 면은 확산 직접광, 그림자 광선 하나(대표 방향광), 환경광, 발광만 계산한다. 정반사 하이라이트와 법선 맵은 쓰지 않는다.
+// 닿은 면은 법선 맵을 적용해 확산·정반사 직접광(GGX), 그림자 광선 하나(대표 방향광), 환경광, 발광을 계산한다.
 #include "common.hlsli"
 #include "light.hlsli"
 #include "raytracing.hlsli"
@@ -96,6 +96,36 @@ float4 SampleInstanceTexture(uint textureIndex, float2 uv, float uvArea, float w
 	return gBindlessTextures[NonUniformResourceIndex(textureIndex)].SampleLevel(gBindlessSampler, uv, mip);
 }
 
+// 아래 네 함수는 lightingPS.hlsl과 같은 식이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
+float DistributionGGX(float3 normal, float3 halfVector, float roughness)
+{
+	const float a2 = roughness * roughness * roughness * roughness;
+	const float normalDotHalf = max(dot(normal, halfVector), 0.0f);
+	const float denominator = normalDotHalf * normalDotHalf * (a2 - 1.0f) + 1.0f;
+	return a2 / (PI * denominator * denominator);
+}
+
+float GeometrySmith(float normalDotView, float normalDotLight, float roughness)
+{
+	const float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
+	return normalDotView / (normalDotView * (1.0f - k) + k) * normalDotLight / (normalDotLight * (1.0f - k) + k);
+}
+
+float3 FresnelSchlick(float cosTheta, float3 f0)
+{
+	return f0 + (1.0f - f0) * pow(saturate(1.0f - cosTheta), 5.0f);
+}
+
+float3 EnvBRDFApprox(float3 f0, float roughness, float normalDotView)
+{
+	const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+	const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+	const float4 r = roughness * c0 + c1;
+	const float a004 = min(r.x * r.x, exp2(-9.28f * normalDotView)) * r.x + r.y;
+	const float2 AB = float2(-1.04f, 1.04f) * a004 + r.zw;
+	return f0 * AB.x + AB.y;
+}
+
 float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primaryDistance)
 {
 	const RaytracedInstance instance = LoadRaytracedInstance(gParams.InstanceTable, hit.InstanceIndex);
@@ -123,24 +153,48 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 	const float uvArea = abs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
 
 	float3 normal = float3(0.0f, 0.0f, 0.0f);
+	float3 tangent = float3(0.0f, 0.0f, 0.0f);
 	float4 vertexColor = float4(0.0f, 0.0f, 0.0f, 0.0f);
 	for (uint corner = 0u; corner < 3u; ++corner)
 	{
 		const uint address = indices[corner] * instance.MaterialStride;
 		normal += asfloat(materials.Load3(address + VERTEX_NORMAL_OFFSET)) * weights[corner];
+		tangent += asfloat(materials.Load3(address + VERTEX_TANGENT_OFFSET)) * weights[corner];
 		vertexColor += asfloat(materials.Load4(address + VERTEX_COLOR_OFFSET)) * weights[corner];
 	}
-	// 법선은 역행렬의 전치로 변환한다.
+	// 법선은 역행렬의 전치로, 접선은 행렬 그대로 변환한다(gbufferVS와 같다).
+	// 역행렬의 전치는 음수 배율에서도 바깥을 향하므로 gbufferVS의 행렬식 부호 보정과 같은 방향이 된다.
 	normal = mul(normal, (float3x3)worldToObject);
 	const float normalLength = length(normal);
 	const float3 faceNormal = worldArea > 0.0f ? faceCross / worldArea : -direction;
 	normal = normalLength > 1e-6f ? normal / normalLength : faceNormal;
-	if (dot(normal, direction) > 0.0f)
-		normal = -normal;
+	// 뒷면에서 본 면은 법선 맵을 적용한 뒤 뒤집는다. G-Buffer와 같은 접선 공간을 쓰기 위함이다.
+	const bool backFace = dot(normal, direction) > 0.0f;
 
 	const float hitDistance = hit.Distance;
 	const float3 position = origin + direction * hitDistance;
 	const float coneWidth = gParams.PixelSpread * (primaryDistance + hitDistance) / max(abs(dot(normal, direction)), 0.1f);
+	// 그림자 광선의 시작점은 법선 맵과 무관한 정점 법선 방향으로 띄운다.
+	const float3 surfaceNormal = backFace ? -normal : normal;
+
+	// gbufferPS와 같은 법선 맵 처리. 접선이 없거나 법선과 평행하면 정점 법선을 쓴다.
+	if (instance.NormalTexture != INVALID_BINDLESS_INDEX)
+	{
+		tangent = mul((float3x3)objectToWorld, tangent);
+		tangent -= dot(tangent, normal) * normal;
+		const float tangentLength = length(tangent);
+		if (tangentLength > 1e-6f)
+		{
+			const float3 T = tangent / tangentLength;
+			const float3x3 TBN = float3x3(T, cross(normal, T), normal);
+			const float4 normalSample = SampleInstanceTexture(instance.NormalTexture, uv, uvArea, worldArea, coneWidth);
+			const float3 tangentNormal = normalSample.xyz * 2.0f - 1.0f;
+			if (normalSample.z > 0.45f && abs(length(tangentNormal) - 1.0f) < 0.4f)
+				normal = normalize(mul(tangentNormal, TBN));
+		}
+	}
+	if (backFace)
+		normal = -normal;
 
 	float3 albedo = instance.BaseColor.rgb * vertexColor.rgb;
 	if (instance.BaseColorTexture != INVALID_BINDLESS_INDEX)
@@ -161,10 +215,14 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 	if (instance.EmissiveTexture != INVALID_BINDLESS_INDEX)
 		emission = SampleInstanceTexture(instance.EmissiveTexture, uv, uvArea, worldArea, coneWidth).rgb;
 
-	// 금속은 확산 반사가 없으므로 환경광을 자기 색으로 반사한다.
+	// 반사 광선을 거슬러 원래 면(또는 카메라) 쪽을 보는 방향
+	const float3 viewDirection = -direction;
+	const float normalDotView = max(dot(normal, viewDirection), 0.0f);
+	const float3 f0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
 	const float3 diffuseColor = albedo * (1.0f - metallic);
-	const float3 ambientColor = diffuseColor + lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic) * (1.0f - 0.5f * roughness);
-	const float3 shadowOrigin = position + normal * (gParams.NormalBias + (primaryDistance + hitDistance) * gParams.DistanceBiasScale);
+	// 환경광의 정반사는 미리 거른 환경 맵이 없어 조도에 lightingPS와 같은 근사 BRDF를 곱한다.
+	const float3 ambientColor = diffuseColor + EnvBRDFApprox(f0, roughness, normalDotView);
+	const float3 shadowOrigin = position + surfaceNormal * (gParams.NormalBias + (primaryDistance + hitDistance) * gParams.DistanceBiasScale);
 
 	float3 direct = float3(0.0f, 0.0f, 0.0f);
 	float3 skyIrradiance = float3(0.0f, 0.0f, 0.0f);
@@ -173,12 +231,18 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 	for (uint lightIndex = 0u; lightIndex < lightCount; ++lightIndex)
 	{
 		const Light light = LoadLight(lightIndex);
-		if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED) || !HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
+		if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
+			continue;
+		const bool affectsDiffuse = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE);
+		const bool affectsSpecular = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_SPECULAR);
+		if (!affectsDiffuse && !affectsSpecular)
 			continue;
 
 		const uint lightType = GetLightType(light.PackedFlags);
 		if (lightType == LIGHT_TYPE_SKY)
 		{
+			if (!affectsDiffuse)
+				continue;
 			hasSkyLight = true;
 			const float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
 			const float up = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
@@ -211,7 +275,19 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 		float visibility = 1.0f;
 		if (lightIndex == gParams.SunLight && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
 			visibility = lerp(1.0f - light.ShadowStrength, 1.0f, TraceShadow(shadowOrigin, toLight));
-		direct += diffuseColor / PI * light.Color * light.Intensity * attenuation * normalDotLight * visibility;
+
+		// lightingPS의 CalcLight와 같은 Cook-Torrance 정반사와 확산 반사
+		const float3 halfVector = normalize(viewDirection + toLight);
+		const float3 fresnel = FresnelSchlick(max(dot(halfVector, viewDirection), 0.0f), f0);
+		const float3 radiance = light.Color * light.Intensity * attenuation * normalDotLight * visibility;
+		if (affectsDiffuse)
+			direct += (1.0f - fresnel) * diffuseColor / PI * radiance;
+		if (affectsSpecular)
+		{
+			const float ndf = DistributionGGX(normal, halfVector, roughness);
+			const float geometry = GeometrySmith(normalDotView, normalDotLight, roughness);
+			direct += ndf * geometry * fresnel / max(4.0f * normalDotView * normalDotLight, 0.0001f) * radiance;
+		}
 	}
 
 	float3 irradiance;
