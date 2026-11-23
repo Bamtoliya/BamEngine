@@ -493,7 +493,14 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     continue;
                 if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
                     continue;
-                renderer.SubmitSkinned(command, target.pass->GetID());
+                SkinnedDrawCommand targetCommand = command;
+                if (target.pass->GetPassType() == ERenderPassType::Shadow && isRaytraced(target.viewID))
+                {
+                    targetCommand.raytracedScene = scene;
+                    targetCommand.raytracedViewID = target.viewID;
+                    targetCommand.raytracedEntityIndex = static_cast<uint32>(entt::to_entity(entity));
+                }
+                renderer.SubmitSkinned(targetCommand, target.pass->GetID());
             }
         }
     }

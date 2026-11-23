@@ -51,6 +51,7 @@ foreach(check_target IN ITEMS
     BuiltInMeshWindingCheck
     RaytracedShadowSettingsCheck
     RaytracingBuildPolicyCheck
+    RaytracingSkinnedPolicyCheck
     LODSelectionCheck
     SkyLightDirectionCheck
     CloudResourcesCheck

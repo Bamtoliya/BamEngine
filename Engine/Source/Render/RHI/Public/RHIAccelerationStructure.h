@@ -23,6 +23,8 @@ struct RHIRaytracingGeometryDesc
 	RHIBuffer* indexBuffer = nullptr;
 	uint32 indexCount = 0;
 	uint32 indexStride = 0; // 2 또는 4
+	// 정점이 프레임마다 바뀌는 기하(스키닝)는 true로 만들고 RHI::UpdateBottomLevelAS로 갱신(refit)한다.
+	bool allowUpdate = false;
 };
 
 // TLAS 인스턴스: BLAS 하나와 월드 행렬. instanceID는 하위 24비트만 사용한다.

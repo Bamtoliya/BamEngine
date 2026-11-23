@@ -149,11 +149,13 @@ public:
 	EResult Dispatch(uint32 threadGroupCountX, uint32 threadGroupCountY, uint32 threadGroupCountZ) override;
 	EResult ResourceBarrierUAV(RHIBuffer* buffer) override;
 	EResult ResourceBarrierUAV(RHITexture* texture) override;
+	EResult TransitionStorageBufferToShaderRead(RHIBuffer* buffer) override;
 #pragma endregion
 
 #pragma region Raytracing
 public:
 	RHIAccelerationStructure* CreateBottomLevelAS(const RHIRaytracingGeometryDesc& desc) override;
+	EResult UpdateBottomLevelAS(RHIAccelerationStructure* bottomLevel, const RHIRaytracingGeometryDesc& desc) override;
 	EResult BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount) override;
 	EResult BindAccelerationStructure(RHIAccelerationStructure* topLevel, uint32 slot) override;
 #pragma endregion

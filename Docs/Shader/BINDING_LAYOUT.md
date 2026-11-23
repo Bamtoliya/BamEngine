@@ -112,7 +112,18 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `b1, space3` | `raytracedReflectionTemporalRTCS`, `raytracedReflectionFilterRTCS` | `ReflectionDenoiseParams` 112바이트. 앞 패스의 출력은 번호로 읽음 |
 | `t15, space3` | `lightingPS` | 반사. `LightingPassData.UseRaytracedReflections`가 1일 때만 읽음 |
 
-`space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(80바이트)는 `raytracing.hlsli`의 `RaytracedInstance`와,
+### 레이트레이싱용 스키닝 (D3D12 전용, 2026-11-23)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b1, space3` | `raytracedSkinningRTCS` | `RaytracedSkinningParams` 48바이트. 원본 위치·재질·스킨 버퍼와 뼈 표의 번호, 정점 수와 간격, 첫 뼈 위치 |
+| `t0.., space5` | `raytracedSkinningRTCS` | 원본 정점 버퍼와 뼈 행렬 표(열 우선 `mat4`, 메시당 256개) |
+| `u0, space3` | `raytracedSkinningRTCS` | 스키닝한 위치(`RWByteAddressBuffer`, 12바이트 간격). BLAS 입력 (`BindComputeStorageBuffer` slot `0`) |
+| `u1, space3` | `raytracedSkinningRTCS` | 스키닝한 `VertexMaterial`(원본 간격). 반사 셰이더가 번호로 읽음 (`BindComputeStorageBuffer` slot `1`) |
+
+출력 버퍼는 `ERHIBufferType::Storage`이며, 쓰기 뒤 `RHI::TransitionStorageBufferToShaderRead`로 읽기 상태로 바꾼 다음 BLAS를 refit한다.
+
+`space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(96바이트, 2026-11-23 법선 맵 번호 추가)는 `raytracing.hlsli`의 `RaytracedInstance`와,
 광선 마스크는 세 셰이더 파일의 상수와 일치해야 한다. 버퍼 번호는 최대 16,384개이며 버퍼가 해제되면 지연 반환한다.
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.

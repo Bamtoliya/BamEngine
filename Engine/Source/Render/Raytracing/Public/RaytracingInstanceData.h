@@ -30,7 +30,10 @@ namespace Engine
 		vec4 BaseColor{ 1.0f };
 		vec3 EmissiveColor{ 0.0f };
 		f32 AmbientOcclusion = 1.0f;
+		uint32 NormalTexture = 0xFFFFFFFFu;     // 재질에 법선 맵이 있을 때만(HasNormal). 접선은 MaterialBuffer에서 읽는다
+		uint32 Padding[3] = {};
 	};
-	static_assert(sizeof(RaytracingInstanceData) == 80);
+	static_assert(sizeof(RaytracingInstanceData) == 96);
 	static_assert(offsetof(RaytracingInstanceData, BaseColor) == 48);
+	static_assert(offsetof(RaytracingInstanceData, NormalTexture) == 80);
 }

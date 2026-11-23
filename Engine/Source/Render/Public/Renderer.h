@@ -149,6 +149,7 @@ public:
 	// 정적 메시 섀도 패스의 엔진 기본 셰이더. 재질의 그림자 셰이더가 기본값인지 판정할 때 사용한다.
 	class Shader* GetDefaultShadowDepthVertexShader();
 	class Shader* GetDefaultShadowDepthPixelShader();
+	class Shader* GetDefaultShadowDepthSkinningVertexShader();
 private:
 	void EnsureDefaultShaders();
 	// 섀도 패스에서 알파 기준값을 적용할 수 있는 재질인지. 알파 식을 아는 엔진 기본 GBufferPS를 쓰는 Masked 재질만 지원한다.
