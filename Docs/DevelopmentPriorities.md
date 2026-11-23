@@ -45,6 +45,7 @@ Engine·Render·Editor·Client 계획에서 무엇을 먼저 연결하고 무엇
 - [DiskCacheDevelopmentPlan.md](DiskCacheDevelopmentPlan.md): 썸네일 디스크 캐시 및 엔진 전반(셰이더, DDC, 지형/물리) 디스크 영속성 통합 개발 계획.
 - [MaterialShaderGraphIntegrationPlan.md](MaterialShaderGraphIntegrationPlan.md): 머티리얼-셰이더 그래프 통합, 원클릭 진입 및 실시간 3D 프리뷰(PBR Live Hot-Reload) 개발 계획.
 - [ResourceEditorAsyncOpenPlan.md](ResourceEditorAsyncOpenPlan.md): 리소스 편집기 창 우선 표시, 백그라운드 문서 준비, 패널 공유 프레임 예산과 요청 수명 계획.
+- [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md): 지형 데이터 저장·하이트맵 입출력·스플랫 레이어·팔레트·머티리얼 그래프 지형 도메인·지형 대응 내비게이션 계획.
 
 전체 작업 선택은 이 문서, 기능 내부의 구현 순서·실패 정책은 상세 계획을 따른다.
 새 사용자 결정이 우선하며 충돌이 생기면 이 문서와 해당 계획을 함께 갱신한다.
@@ -724,3 +725,21 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
    - **관련 파일**: `Tools/AssetWorker/main.cpp`, `AssetWorkerHost.h/.cpp`, `AssetManager.cpp`, `ToolBar.cpp`.
    - **2026-11-20 코드 반영**: `AssetWorkerSnapshotCheck`가 모델 snapshot을 `ReadModelSnapshot`으로 실제 소비하며, 독립 이미지 임포트와 모델 임포트의 내장/외부 텍스처 베이킹을 `IMPORT_TEXTURE`로 위임한다. `.bamtex`/`.dds`는 staging 후 함께 교체하고, 텍스처 진행률·취소·워커 사용 불가 시 인프로세스 폴백 및 슬롯별 압축 설정을 연결했다. 모델은 텍스처 작업 완료 후 커밋하며, 베이킹 실패·취소는 기존처럼 원본 텍스처를 사용한다. `AssetWorkerTextureCheck`가 PNG → BC7 및 실패 산출물 부재를 검사하도록 추가됐다.
    - **미검증/잔여**: 저장소 지침에 따라 AI는 빌드·테스트를 실행하지 않았다. 사용자 실행 대기: `cmake --build --preset x64-ninja-debug --target Editor BamAssetWorker AssetWorkerSnapshotCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetWorker(Model|Texture)Check$" --output-on-failure`. 모델의 내장/외부 텍스처 임포트, 출력 보존, 취소·폴백, 에디터 커밋 및 대형 에셋 프레임 실측은 실행 검증이 남아 있다.
+
+### 11.7 2026-11-23 사용자 요청 반영 작업 순서
+
+사용자가 요청한 지형 확장·그래프 바인딩 피커·이름 변경 실패·액션 3초 지연·디스토션·시퀀서 필요성을 점검하고 다음 순서로 재정립했다. 11.6의 P0 잔여(`RLSimulationCheck` 실패, 미실행 CTest)는 계속 우선한다.
+
+| 순서 | 작업 | 선행 | 완료 기준 | 상태 |
+|---|---|---|---|---|
+| 1-A | 콘텐츠 브라우저 이동·이름 변경 차단 사유 표시 | 없음 | 차단 시 모달에 구체적 원인(미저장 씬·편집기·프리팹 모드 등)과 대상 이름이 표시된다 | 코드 반영 / 빌드·실행 미검증 ([구현 기록](ImplementationLog.md)) |
+| 1-B | 액션 타임라인 종료 정책(`EndPolicy`), 종료 이벤트, 새 타임라인 기본값 | 없음 | 클립 없는 타임라인이 마지막 트랙 종료 시점에 끝나고 그래프가 종료 사유를 받는다 | 계획 |
+| 1-C | `GraphBindingComponent::graphFile` 로직 그래프 경로 피커 | 없음 | 로직 도메인 그래프만 표시되고 이동·이름 변경 후 참조가 유지된다 | 계획 |
+| T1~T4 | 지형 저장·레이어·그래프 도메인·내비게이션 | [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 4절 | 같은 문서 4절 | 계획 |
+| V1 | 디스토션 1단계: `ForwardTransparent` 그래프에 `Shader.ScreenUV`·`Shader.SceneColor` 노드 | 없음 | 강도 0에서 왜곡이 없고 화면 밖 UV는 왜곡 전 배경을 쓴다 | 계획 |
+| 보류 | 씬 단위 시퀀서 | 컷신 요구 확인 | — | 보류(P4) |
+
+- **이름 변경 실패 원인(정적 분석)**: 참조 스캔과 이동 가능 판정이 분리되어 있다. 참조가 0건이어도 `ImGuiManager::PrepareAssetFileChanges`가 미저장 리소스 편집기·미저장 씬·프리팹 모드·PIE·씬 로딩에서 거부하며, 모달은 원인을 구분하지 않았다. 확인 후 `ResourceManager::RelocateFileResources`가 모델 임포트 원본·셰이더 바이너리 경로를 가진 로드 리소스 때문에 거부할 수도 있다.
+- **3초 지연 원인(정적 분석)**: `ContentBrowserPanel::CreateEmptyTimeline`이 새 타임라인을 3초로 만들고, 클립을 지정할 때만 길이가 바뀐다. 종료 조건은 에셋 길이뿐이며 `ActionTimeline.Play`는 재생 중 재실행을 거부한다. 1-B에서 `Fixed`/`ClipLength`/`LastTrackEnd` 정책과 지속형 노티파이의 해제 규칙(경과·타임라인 종료·Stop/중단 시 히트박스 Off와 VFX Hold 해제)을 명시한다.
+- **디스토션**: 불투명 패스 후 `SceneColorCopy`가 이미 있어(`glassPS`) 그래프 노드 추가로 첫 결과를 낸다. 반투명끼리는 서로의 왜곡을 보지 못하는 제약이 있으며, 다수 중첩·파티클 대응이 필요하면 별도 디스토션 버퍼 후처리를 검토한다.
+- **시퀀서**: `ActionTimeline`이 이미 엔티티 단위 카메라 컷·스플라인 트랙을 가진다. 여러 엔티티 바인딩 컷신 요구가 생기기 전에는 새 시스템을 만들지 않고, 필요 시 ActionTimeline에 엔티티 바인딩 트랙을 확장하는 방향을 먼저 검토한다.

@@ -15,10 +15,10 @@
 #include "PreviewViewportWidget.h"
 #include "CommandHistory.h"
 #include "AssetReferenceValidator.h"
+#include "AssetPathRelocation.h"
 #include "ContentBrowserGridItem.h"
 
 BEGIN(Editor)
-class AssetPathRelocation;
 
 class ContentBrowserFileListener : public efsw::FileWatchListener
 {
@@ -147,9 +147,11 @@ private:
 		std::exception_ptr Error;
 	};
 	bool ReplayAssetMove(const AssetMoveBatch& batch, bool forward);
-	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references) const;
+	bool CanApplyAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
+		AssetMoveBlock* outBlock = nullptr) const;
 	bool PrepareAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
-		bool forward, AssetPathRelocation& relocation) const;
+		bool forward, AssetPathRelocation& relocation, AssetMoveBlock* outBlock = nullptr) const;
+	void DrawFileMoveBlockReason() const;
 	void QueueFileMove(const vector<filesystem::path>& paths, const filesystem::path& directory, bool fromClipboard);
 	void QueueAssetPathChanges(const vector<AssetPathMove>& moves, bool fromClipboard, bool rename);
 	void RemapBrowserPaths(const vector<FileMove>& moves, bool forward);
@@ -189,6 +191,7 @@ private:
 	vector<AssetReferenceEdit> m_MoveReferences;
 	bool m_MoveReferencesReady = false;
 	bool m_MoveDocumentsAvailable = false;
+	AssetMoveBlock m_MoveBlock;
 	std::future<MovePreparationResult> m_MovePreparation;
 	bool m_MovePreparationPending = false;
 	bool m_MovePreparationCancelled = false;

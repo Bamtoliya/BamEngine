@@ -60,7 +60,11 @@ bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>
         const Handle id(static_cast<uint32>(index), slot.Generation);
         const auto registered = nextIndex.find(RunTimeHash(NormalizePath(resource->GetKey())));
         if (registered == nextIndex.end() || registered->second != id)
+        {
+            ENGINE_LOG_WARN("Resource relocation index mismatch: key={}, path={}",
+                WStrToStr(resource->GetKey()), WStrToStr(resource->GetPath()));
             return false;
+        }
         identities.push_back({ resource, id, nextKey, nextPath });
         nextIndex.erase(registered);
     }

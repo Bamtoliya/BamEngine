@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-23] 에셋 이동·이름 변경 차단 사유 표시와 작업 계획 재정립
+
+- **계획.** 지형 확장·그래프 바인딩 피커·이름 변경 실패·액션 3초 지연·디스토션·시퀀서 필요성을 점검했다. 작업 순서는 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7절, 지형 설계는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md)에 기록했다. 지형 높이·스플랫 데이터가 직렬화되지 않아 저장 후 사라지는 결함을 T1로 올렸다.
+- **원인(정적 분석).** 참조가 0건이어도 `ImGuiManager::PrepareAssetFileChanges`가 미저장 리소스 편집기·미저장 씬·프리팹 모드·PIE·씬 로딩·경로를 쥔 편집기에서 이동을 거부했다. 확인 모달은 모든 경우에 같은 `MoveDocumentConflict` 문구를 보여 원인을 알 수 없었다.
+- **수정(1-A).** `EAssetMoveBlockReason`과 `AssetMoveBlock`(`AssetPathRelocation.h`)을 추가했다. `PrepareAssetFileChanges`가 첫 거부 사유와 대상 이름(편집기 표시 이름 또는 문서 파일명)을 돌려주고, `ContentBrowserPanel::DrawFileMoveBlockReason`이 사유별 로캘 문구를 표시한다. 참조 스캔이 실패한 경우에는 스캔 실패 문구만 보이도록 중복 문구를 없앴다. 거부 조건 자체는 바꾸지 않았다(문서의 미저장 검사는 기존 `PrepareAssetPathRelocation`과 같은 조건을 앞에서 먼저 판정한다).
+- **로그.** `ResourceManager::RelocateFileResources`가 로그 없이 실패하던 인덱스 불일치 경로에 경고 로그를 추가했다.
+- **로캘.** `Editor.ContentBrowser.csv`에 `ContentBrowser.MoveBlocked*` 8행을 추가했다. JSON은 `GenerateLocalization`이 생성한다.
+- **검증.** AI는 빌드·실행하지 않았다. 사용자 확인 대기: `cmake --build --preset x64-ninja-debug --target Editor`, 이후 에디터에서 (1) 씬을 수정해 저장하지 않은 채 참조 없는 에셋 이름 변경 → 미저장 문서 문구와 씬 파일명, (2) 머티리얼 편집기를 미저장 상태로 두고 이름 변경 → 편집기 이름, (3) 모두 저장한 뒤 이름 변경 → 모달 없이 즉시 변경, (4) 한국어·영어 전환 시 문구 확인.
+- **남은 한계.** 확인 버튼 이후 로드된 리소스(모델 임포트 원본·셰이더 바이너리)로 인한 거부는 기존처럼 `MoveLiveStateConflict` 알림과 로그로만 구분한다. 미저장 씬이 참조 없는 에셋 이동까지 막는 정책의 완화는 씬 메모리·Undo 스냅샷 경로 갱신과 저장 기준점 관계를 검토한 뒤 결정한다.
+
 ### [2026-11-23] 시간 누적 안티앨리어싱(TAA)과 모션 벡터
 
 - **지터.** 원근 카메라의 G-Buffer와 포워드 패스를 Halton(2,3) 8프레임 주기로 픽셀 안에서 옮겨 그린다. 조명과 타일 광원 컬링은 같은 카메라를, 그림자·반사·기즈모·피킹은 원래 카메라를 쓴다. 직교 카메라, 독립 프리뷰·썸네일, DirectX12 외 RHI는 제외한다.

@@ -297,7 +297,8 @@ void ContentBrowserPanel::ProcessMovePreparation()
 		m_MoveImpact = std::move(result.Impact);
 		m_MoveReferences = std::move(result.References);
 		m_MoveReferencesReady = result.ReferencesReady;
-		m_MoveDocumentsAvailable = m_MoveReferencesReady && CanApplyAssetMove(m_PendingFileMove, m_MoveReferences);
+		m_MoveDocumentsAvailable = m_MoveReferencesReady &&
+			CanApplyAssetMove(m_PendingFileMove, m_MoveReferences, &m_MoveBlock);
 		if (m_PendingRename && m_MoveReferencesReady && m_MoveDocumentsAvailable && m_MoveImpact.References.empty())
 			ConfirmFileMove();
 	}
@@ -1323,6 +1324,7 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 		m_MoveReferences.clear();
 		m_MoveReferencesReady = false;
 		m_MoveDocumentsAvailable = false;
+		m_MoveBlock = {};
 		m_MovePreparationCancelled = false;
 
 		if (onlyEmptyDirectories)
@@ -1332,7 +1334,7 @@ void ContentBrowserPanel::QueueAssetPathChanges(const vector<AssetPathMove>& pat
 			AssetManager::Get().RecordAssetReferenceTiming(
 				AssetReferenceTimingKind::MovePreparation, ImGui::GetFrameCount(), referenceStart);
 			m_MoveDocumentsAvailable = m_MoveReferencesReady &&
-				CanApplyAssetMove(m_PendingFileMove, m_MoveReferences);
+				CanApplyAssetMove(m_PendingFileMove, m_MoveReferences, &m_MoveBlock);
 			if (rename && m_MoveReferencesReady && m_MoveDocumentsAvailable && m_MoveImpact.References.empty())
 				ConfirmFileMove();
 			return;
@@ -1384,6 +1386,7 @@ void ContentBrowserPanel::ClearPendingFileMove()
 	m_MoveReferences.clear();
 	m_MoveReferencesReady = false;
 	m_MoveDocumentsAvailable = false;
+	m_MoveBlock = {};
 }
 
 void ContentBrowserPanel::ConfirmFileMove()
@@ -1458,7 +1461,7 @@ void ContentBrowserPanel::DrawFileMoveConfirmation()
 	if (!m_MovePreparationPending && !m_MoveReferencesReady)
 		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveReferenceScanFailed"));
 	if (!m_MovePreparationPending && !documentsAvailable)
-		ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveDocumentConflict"));
+		DrawFileMoveBlockReason();
 	const EditorUI::DialogAction actions[] = {
 		{ "EditorCommon.Cancel" },
 		{ titleKey, !m_MovePreparationPending && CanTransferTo(m_MoveDestination) &&
@@ -1620,14 +1623,42 @@ filesystem::path ContentBrowserPanel::CreateFileHistoryBatch() const
 }
 
 bool ContentBrowserPanel::CanApplyAssetMove(const vector<FileMove>& moves,
-	const vector<AssetReferenceEdit>& references) const
+	const vector<AssetReferenceEdit>& references, AssetMoveBlock* outBlock) const
 {
 	AssetPathRelocation relocation;
-	return PrepareAssetMove(moves, references, true, relocation);
+	return PrepareAssetMove(moves, references, true, relocation, outBlock);
+}
+
+void ContentBrowserPanel::DrawFileMoveBlockReason() const
+{
+	// 참조 스캔이 실패한 경우에는 MoveReferenceScanFailed 문구가 이미 원인을 설명한다.
+	if (!m_MoveBlock)
+	{
+		if (m_MoveReferencesReady)
+			ImGui::TextWrapped("%s", LOCAL_CSTR("ContentBrowser.MoveDocumentConflict"));
+		return;
+	}
+
+	const char* key = "ContentBrowser.MoveDocumentConflict";
+	switch (m_MoveBlock.Reason)
+	{
+	case EAssetMoveBlockReason::NotEditing: key = "ContentBrowser.MoveBlockedNotEditing"; break;
+	case EAssetMoveBlockReason::DocumentBusy: key = "ContentBrowser.MoveBlockedDocumentBusy"; break;
+	case EAssetMoveBlockReason::SceneLoading: key = "ContentBrowser.MoveBlockedSceneLoading"; break;
+	case EAssetMoveBlockReason::PrefabMode: key = "ContentBrowser.MoveBlockedPrefabMode"; break;
+	case EAssetMoveBlockReason::UnsavedResourceEditor: key = "ContentBrowser.MoveBlockedUnsavedEditor"; break;
+	case EAssetMoveBlockReason::UnsavedDocument: key = "ContentBrowser.MoveBlockedUnsavedDocument"; break;
+	case EAssetMoveBlockReason::DocumentRejected: key = "ContentBrowser.MoveBlockedDocumentRejected"; break;
+	case EAssetMoveBlockReason::EditorRetainsPath: key = "ContentBrowser.MoveBlockedEditorRetainsPath"; break;
+	case EAssetMoveBlockReason::None: break;
+	}
+
+	// 대상 이름이 없는 문구에도 같은 인자를 넘긴다. fmt는 사용하지 않은 추가 인자를 무시한다.
+	ImGui::TextWrapped("%s", LOCAL_FMT(key, m_MoveBlock.Subject).c_str());
 }
 
 bool ContentBrowserPanel::PrepareAssetMove(const vector<FileMove>& moves, const vector<AssetReferenceEdit>& references,
-	bool forward, AssetPathRelocation& relocation) const
+	bool forward, AssetPathRelocation& relocation, AssetMoveBlock* outBlock) const
 {
 	vector<Engine::FilePathChange> changes;
 	vector<filesystem::path> documents;
@@ -1639,7 +1670,7 @@ bool ContentBrowserPanel::PrepareAssetMove(const vector<FileMove>& moves, const 
 		documents.push_back(reference.AfterPath);
 	}
 	relocation = AssetPathRelocation(std::move(changes), std::move(documents));
-	return ImGuiManager::Get().PrepareAssetFileChanges(relocation);
+	return ImGuiManager::Get().PrepareAssetFileChanges(relocation, outBlock);
 }
 
 void ContentBrowserPanel::RemapBrowserPaths(const vector<FileMove>& moves, bool forward)

@@ -1956,19 +1956,44 @@ bool ImGuiManager::CanRepairAssetReferenceSource(const std::filesystem::path& so
 	return true;
 }
 
-bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) const
+bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation, AssetMoveBlock* outBlock) const
 {
-	if (!PIEManager::Get().IsEditing() || m_DocumentController->IsBusy() || IsSceneLoading() ||
-		!CollectUnsavedResourceEditors().empty())
+	if (outBlock) *outBlock = {};
+	const auto block = [outBlock](EAssetMoveBlockReason reason, std::string subject = {})
+	{
+		if (outBlock) *outBlock = { reason, std::move(subject) };
 		return false;
+	};
+	const auto documentName = [](const IEditorDocument& document)
+	{
+		const auto& path = document.GetPath();
+		return path.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(path.filename().wstring());
+	};
+
+	if (!PIEManager::Get().IsEditing())
+		return block(EAssetMoveBlockReason::NotEditing);
+	if (m_DocumentController->IsBusy())
+		return block(EAssetMoveBlockReason::DocumentBusy);
+	if (IsSceneLoading())
+		return block(EAssetMoveBlockReason::SceneLoading);
+	if (const auto editors = CollectUnsavedResourceEditors(); !editors.empty())
+	{
+		std::string names;
+		for (const auto* editor : editors)
+			names += (names.empty() ? "" : ", ") + editor->GetDisplayName();
+		return block(EAssetMoveBlockReason::UnsavedResourceEditor, names);
+	}
 	if (PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode())
-		return false;
+		return block(EAssetMoveBlockReason::PrefabMode);
 	auto& documents = Application::Get().GetDocuments();
 	for (const auto id : documents.GetDocumentIds())
 	{
 		auto* document = documents.Find(id);
 		if (!document) continue;
-		if (!document->PrepareAssetPathRelocation(relocation)) return false;
+		if (document->HasUnsavedChanges())
+			return block(EAssetMoveBlockReason::UnsavedDocument, documentName(*document));
+		if (!document->PrepareAssetPathRelocation(relocation))
+			return block(EAssetMoveBlockReason::DocumentRejected, documentName(*document));
 		if (dynamic_cast<SceneDocument*>(document) && relocation.Affects(document->GetPath()))
 		{
 			relocation.AfterCommit([document]() { Application::Get().RememberEditedScene(document->GetPath()); });
@@ -1978,7 +2003,8 @@ bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation) cons
 	for (auto* panel : m_ImGuiPanels)
 	{
 		auto* editor = dynamic_cast<ResourceEditorInterface*>(panel);
-		if (editor && !editor->PrepareAssetPathRelocation(relocation)) return false;
+		if (editor && !editor->PrepareAssetPathRelocation(relocation))
+			return block(EAssetMoveBlockReason::EditorRetainsPath, editor->GetDisplayName());
 		if (auto* references = dynamic_cast<AssetReferencePanel*>(panel))
 			references->PrepareAssetPathRelocation(relocation);
 	}

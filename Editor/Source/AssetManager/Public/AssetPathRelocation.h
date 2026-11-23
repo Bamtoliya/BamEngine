@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PlatformPath.h"
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -11,6 +12,28 @@ namespace Engine { struct TimelineNotifyTrack; }
 
 namespace Editor
 {
+    // Why the editor refused to prepare an asset move. Subject names the blocking editor or document for the dialog.
+    enum class EAssetMoveBlockReason : std::uint8_t
+    {
+        None,
+        NotEditing,
+        DocumentBusy,
+        SceneLoading,
+        PrefabMode,
+        UnsavedResourceEditor,
+        UnsavedDocument,
+        DocumentRejected,
+        EditorRetainsPath
+    };
+
+    struct AssetMoveBlock
+    {
+        EAssetMoveBlockReason Reason = EAssetMoveBlockReason::None;
+        std::string Subject;
+
+        explicit operator bool() const { return Reason != EAssetMoveBlockReason::None; }
+    };
+
     // Prepared on the UI thread, applied synchronously only after the disk and ResourceManager commit.
     // Owners captured by the updates must remain alive until Apply returns; discard the plan on any prepare failure.
     class AssetPathRelocation

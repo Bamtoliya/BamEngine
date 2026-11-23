@@ -83,6 +83,14 @@ ContentBrowser,MoveReferenceScanFailed,References could not be prepared complete
 ContentBrowser,MoveReferenceScanPending,Checking saved references. You can cancel this move while the check finishes in the background.,저장된 참조를 확인하고 있습니다. 검사는 백그라운드에서 계속되며 이동은 취소할 수 있습니다.
 ContentBrowser,MoveDocumentConflict,Save or discard edits and finish document operations. Exit prefab mode or release unsupported editors before retrying.,변경사항을 저장하거나 폐기하고 문서 작업을 마치세요. 프리팹 모드를 종료하거나 경로 동기화를 지원하지 않는 편집기를 해제한 뒤 다시 시도하세요.
 ContentBrowser,MoveLiveStateConflict,A loaded resource retains an unsupported path or conflicts with the destination. The files were not moved.,로드된 리소스에 자동 갱신을 지원하지 않는 경로가 있거나 목적지 캐시와 충돌합니다. 파일을 이동하지 않았습니다.
+ContentBrowser,MoveBlockedNotEditing,Stop Play mode before moving or renaming assets.,에셋을 이동하거나 이름을 바꾸기 전에 플레이 모드를 종료하세요.
+ContentBrowser,MoveBlockedDocumentBusy,A document save or load is in progress. Retry after it finishes.,문서 저장 또는 불러오기가 진행 중입니다. 끝난 뒤 다시 시도하세요.
+ContentBrowser,MoveBlockedSceneLoading,A scene is loading. Retry after loading finishes.,씬을 불러오는 중입니다. 로딩이 끝난 뒤 다시 시도하세요.
+ContentBrowser,MoveBlockedPrefabMode,Exit prefab mode before moving or renaming assets.,에셋을 이동하거나 이름을 바꾸기 전에 프리팹 모드를 종료하세요.
+ContentBrowser,MoveBlockedUnsavedEditor,Save or discard the unsaved resource editors first: {},저장하지 않은 리소스 편집기를 먼저 저장하거나 폐기하세요: {}
+ContentBrowser,MoveBlockedUnsavedDocument,Save or discard the unsaved document first: {}. An unsaved scene blocks every asset move even when nothing references the asset.,저장하지 않은 문서를 먼저 저장하거나 폐기하세요: {}. 저장하지 않은 씬이 있으면 참조가 없는 에셋도 이동할 수 없습니다.
+ContentBrowser,MoveBlockedDocumentRejected,The open document cannot update its asset paths right now: {}. Finish the current edit and retry.,열린 문서가 지금은 에셋 경로를 갱신할 수 없습니다: {}. 진행 중인 편집을 마친 뒤 다시 시도하세요.
+ContentBrowser,MoveBlockedEditorRetainsPath,An open editor uses the moved path: {}. Close the editor or its asset before retrying.,열린 편집기가 이동할 경로를 사용 중입니다: {}. 편집기나 해당 에셋을 닫은 뒤 다시 시도하세요.
 ContentBrowser,MoveEntityClipboardCleared,Entity copy data was cleared after the asset path change. Copy entities again before pasting.,에셋 경로 변경으로 엔티티 복사 내용을 비웠습니다. 붙여넣기 전에 엔티티를 다시 복사하세요.
 ContentBrowser,MoveReferenceChanged,Reference documents changed or could not be written. The move was cancelled; check the log and retry.,참조 문서가 변경되었거나 기록하지 못했습니다. 이동을 취소했습니다. 로그를 확인하고 다시 시도하세요.
 ContentBrowser,FileRename,Rename asset,에셋 이름 변경

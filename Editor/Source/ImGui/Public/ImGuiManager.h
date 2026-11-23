@@ -16,6 +16,7 @@ END
 BEGIN(Editor)
 class ResourceEditorInterface;
 class AssetPathRelocation;
+struct AssetMoveBlock;
 class PluginResourceEditor;
 struct EditorSettingsChangeResult;
 struct SceneLoadState;
@@ -169,7 +170,8 @@ public:
 	bool RequestQuit();
 	bool IsSceneLoading() const { return m_SceneLoadState != nullptr; }
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
-	bool PrepareAssetFileChanges(AssetPathRelocation& relocation) const;
+	// outBlock receives the first refusal reason so the caller can explain it; it is reset on success.
+	bool PrepareAssetFileChanges(AssetPathRelocation& relocation, AssetMoveBlock* outBlock = nullptr) const;
 	bool CanRepairAssetReferenceSource(const std::filesystem::path& sourceFile) const;
 	bool PreparePendingSceneSave();
 private:
