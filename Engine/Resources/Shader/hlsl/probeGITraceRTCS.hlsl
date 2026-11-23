@@ -2,12 +2,14 @@
 // 이번 프레임에 갱신할 프로브마다 광선을 RaysPerProbe개 쏜다. 결과 텍스처의 열은 광선, 행은 갱신 순서다.
 // rgb는 닿은 면이 광선 쪽으로 내보내는 밝기, a는 닿은 거리다. 뒷면에 닿으면 밝기 0과 음수 거리(-0.2 × 거리)를 써서
 // 벽 속 프로브를 구분할 수 있게 한다. 닿지 않으면 환경광과 RayMaxDistance를 쓴다.
-// 닿은 면은 확산 직접광(그림자를 드리우는 광원마다 그림자 광선 하나), 환경광, 발광만 계산한다. 다중 반사는 4단계에서 더한다.
+// 닿은 면은 확산 직접광(그림자를 드리우는 광원마다 그림자 광선 하나), 환경광, 발광을 계산한다.
+// 닿은 면이 볼륨 안이면 환경광 대신 이전 프레임의 프로브 조도를 써서 반사가 여러 번 이어지게 한다(다중 반사).
+// 광선은 벽 속에서 옮긴 프로브 위치(상태 텍스처의 rgb)에서 쏜다.
 #include "common.hlsli"
 #include "light.hlsli"
 #include "raytracing.hlsli"
 #include "raytracingSurface.hlsli"
-#include "probeGI.hlsli"
+#include "probeGISample.hlsli"
 
 static const float PI = 3.14159265359f;
 // 강한 빛 하나가 이력에 오래 남지 않게 자른다. 측정 전 시작값이다.
@@ -72,7 +74,7 @@ float3 EnvironmentRadiance(float3 direction)
 }
 
 // 닿은 면이 광선을 거슬러 내보내는 확산 밝기
-float3 ShadeProbeHit(HitSurface surface)
+float3 ShadeProbeHit(HitSurface surface, float3 rayDirection)
 {
 	const float3 diffuseColor = surface.Albedo * (1.0f - surface.Metallic);
 	const float3 shadowOrigin = surface.Position + surface.SurfaceNormal * gParams.NormalBias;
@@ -113,7 +115,7 @@ float3 ShadeProbeHit(HitSurface surface)
 		direct += diffuseColor / PI * light.Color * light.Intensity * attenuation * normalDotLight * visibility;
 	}
 
-	// 닿은 면의 환경광은 반사와 같은 기존 환경광이다. 4단계에서 이전 프레임의 프로브 조도로 바꾼다(다중 반사).
+	// 볼륨 밖이나 아직 쓸 프로브가 없으면 반사와 같은 기존 환경광을 쓴다.
 	float3 irradiance;
 	if (gParams.HasIBLMaps != 0u)
 		irradiance = gIrradianceMap.SampleLevel(gBindlessSampler, surface.Normal, 0.0f).rgb;
@@ -121,7 +123,34 @@ float3 ShadeProbeHit(HitSurface surface)
 		irradiance = skyIrradiance;
 	else
 		irradiance = lerp(gParams.SkyZenith * 0.25f, gParams.SkyZenith, saturate(surface.Normal.y * 0.5f + 0.5f));
-	return direct + diffuseColor * irradiance * gParams.IBLIntensity * surface.AmbientOcclusion + surface.Emission;
+	irradiance *= gParams.IBLIntensity;
+
+	// 다중 반사: 이전 프레임 아틀라스에서 닿은 면의 조도를 읽는다. 프로브 조도에는 하늘빛이 이미 들어 있다.
+	if (gParams.IrradianceTexture != INVALID_BINDLESS_INDEX)
+	{
+		ProbeGILightingData gi;
+		gi.GridOrigin = gParams.GridOrigin;
+		gi.Enabled = 1u;
+		gi.GridSpacing = gParams.GridSpacing;
+		gi.Intensity = 1.0f;
+		gi.GridCounts = gParams.GridCounts;
+		gi.BlendDistance = gParams.BlendDistance;
+		gi.NormalBias = gParams.SampleNormalBias;
+		gi.ViewBias = gParams.SampleViewBias;
+		gi.DebugView = 0u;
+		gi._Pad = 0u;
+		const float volumeWeight = ProbeVolumeWeight(gi, surface.Position);
+		if (volumeWeight > 0.0f)
+		{
+			bool valid;
+			const float3 probeIrradiance = SampleProbeIrradiance(gi, surface.Position, surface.Normal, -rayDirection,
+				gBindlessTextures[gParams.IrradianceTexture], gBindlessTextures[gParams.DistanceTexture], gBindlessTextures[gParams.ProbeDataTexture],
+				gBindlessSampler, valid);
+			if (valid)
+				irradiance = lerp(irradiance, probeIrradiance, volumeWeight);
+		}
+	}
+	return direct + diffuseColor * irradiance * surface.AmbientOcclusion + surface.Emission;
 }
 
 [numthreads(32, 1, 1)]
@@ -136,7 +165,9 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 	const float3 direction = ProbeRayDirection(rayIndex, gParams);
 
 	RayDesc ray;
-	ray.Origin = ProbeWorldPosition(probeIndex, gParams);
+	// 벽 속에서 옮긴 이동량을 더한다(relocate 패스가 쓰며, 이번 프레임 값은 다음 갱신부터 반영된다).
+	const float3 probeOffset = gBindlessTextures[gParams.ProbeDataTexture].Load(int3(ProbeDataTexel(probeIndex, gParams.GridCounts), 0)).xyz;
+	ray.Origin = ProbeWorldPosition(probeIndex, gParams) + probeOffset;
 	ray.Direction = direction;
 	ray.TMin = 0.0f;
 	ray.TMax = gParams.RayMaxDistance;
@@ -163,7 +194,7 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 		}
 		else
 		{
-			const float3 radiance = ShadeProbeHit(surface);
+			const float3 radiance = ShadeProbeHit(surface, direction);
 			const bool invalid = any(isnan(radiance)) || any(isinf(radiance));
 			const float brightest = max(radiance.r, max(radiance.g, radiance.b));
 			result = float4(invalid ? float3(0.0f, 0.0f, 0.0f) : radiance * min(1.0f, MAX_PROBE_RADIANCE / max(brightest, 1e-4f)), hitDistance);

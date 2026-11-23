@@ -32,6 +32,14 @@ struct ProbeGIUpdateParams
 	float MaxProbeDistance; // 거리 아틀라스에 기록하는 최대 거리(m)
 	uint RayDataTexture;    // 광선 결과 텍스처의 번호(섞는 패스에서 읽음)
 	float DistanceExponent; // 거리를 섞을 때 방향 가중치의 지수
+	uint ProbeDataTexture;  // 프로브 상태(rgb 이동량, a 사용 여부) 번호(추적 패스에서 읽음)
+	uint IrradianceTexture; // 다중 반사: 이전 조도·거리 아틀라스 번호. INVALID_BINDLESS_INDEX면 쓰지 않는다.
+	uint DistanceTexture;
+	float BlendDistance;    // 다중 반사에서 상자 밖으로 섞는 거리(m)
+	float SampleNormalBias; // 다중 반사에서 표본 위치를 띄우는 거리(m)
+	float SampleViewBias;
+	float ChangeThreshold;  // 섞기: 이전 값 대비 이 비율보다 크게 바뀌면 이력 비율을 낮춘다
+	float _Pad;
 };
 
 uint3 ProbeCoord(uint probeIndex, uint3 counts)
@@ -50,6 +58,13 @@ uint2 ProbeTileOrigin(uint probeIndex, uint3 counts, uint texels)
 {
 	const uint3 coord = ProbeCoord(probeIndex, counts);
 	return uint2(coord.x + coord.y * counts.x, coord.z) * (texels + 2u);
+}
+
+// 프로브 상태 텍스처의 텍셀. 아틀라스의 칸 배치와 같은 순서다(열 x + y × 개수X, 행 z).
+uint2 ProbeDataTexel(uint probeIndex, uint3 counts)
+{
+	const uint3 coord = ProbeCoord(probeIndex, counts);
+	return uint2(coord.x + coord.y * counts.x, coord.z);
 }
 
 float2 EncodeOctahedral(float3 direction)

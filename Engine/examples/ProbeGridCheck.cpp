@@ -274,6 +274,48 @@ namespace
         Expect(schedule.Begin(denser, &sceneB, 6).Clear, "a reset must clear the atlases");
         Expect(ProbeGrid::ProbeUpdateSchedule{}.Begin(grid, &sceneA, 99).UpdateCount == 12u, "the budget never exceeds the probe count");
     }
+
+    void CheckVolumeDistance()
+    {
+        const auto grid = ProbeGrid::MakeGrid(vec3(0.0f), vec3(4.0f), 3, 3, 3); // -2 ~ 2
+        Expect(Near(ProbeGrid::DistanceToVolume(grid, vec3(1.0f, -1.5f, 0.0f)), 0.0f), "points inside the box are at distance zero");
+        Expect(Near(ProbeGrid::DistanceToVolume(grid, vec3(5.0f, 0.0f, 0.0f)), 3.0f), "the distance to a face");
+        Expect(Near(ProbeGrid::DistanceToVolume(grid, vec3(5.0f, 6.0f, 0.0f)), 5.0f), "the distance to an edge");
+    }
+
+    void CheckRelocation()
+    {
+        const vec3 spacing(2.0f, 1.0f, 2.0f); // 가장 좁은 간격 1m → 앞면 최소 거리 0.2m, 이동 한도 (0.9, 0.45, 0.9)
+        ProbeGrid::ProbeRayStats open;
+        open.RayCount = 100u;
+        open.ClosestFrontfaceDistance = 3.0f;
+        open.ClosestFrontfaceDirection = vec3(1.0f, 0.0f, 0.0f);
+        const auto untouched = ProbeGrid::RelocateProbe({}, open, spacing);
+        Expect(untouched.Active && Near(untouched.Offset, vec3(0.0f)), "a probe in open space stays where it is");
+
+        ProbeGrid::ProbeRayStats insideWall = open;
+        insideWall.BackfaceCount = 40u;
+        insideWall.ClosestBackfaceDistance = 0.1f;
+        insideWall.ClosestBackfaceDirection = vec3(0.0f, 0.0f, 1.0f);
+        const auto moved = ProbeGrid::RelocateProbe({}, insideWall, spacing);
+        Expect(!moved.Active && Near(moved.Offset, vec3(0.0f, 0.0f, 0.2f)), "a probe inside a wall moves past the closest back face and is turned off");
+
+        ProbeGrid::ProbeRayStats fewBackfaces = insideWall;
+        fewBackfaces.BackfaceCount = 25u;
+        Expect(ProbeGrid::RelocateProbe({}, fewBackfaces, spacing).Active, "a quarter of back-face hits is not yet inside");
+
+        ProbeGrid::ProbeRayStats touching = open;
+        touching.ClosestFrontfaceDistance = 0.05f;
+        const auto pushed = ProbeGrid::RelocateProbe({ vec3(0.1f, 0.0f, 0.0f), true }, touching, spacing);
+        Expect(pushed.Active && Near(pushed.Offset, vec3(-0.05f, 0.0f, 0.0f)), "a probe too close to a surface moves away from it");
+
+        ProbeGrid::ProbeRayStats deep = insideWall;
+        deep.ClosestBackfaceDistance = 5.0f;
+        deep.ClosestBackfaceDirection = vec3(0.0f, 1.0f, 0.0f);
+        Expect(Near(ProbeGrid::RelocateProbe({}, deep, spacing).Offset, vec3(0.0f, 0.45f, 0.0f)), "offsets never leave the probe's own cell");
+        Expect(Near(ProbeGrid::RelocateProbe({ vec3(0.3f), true }, ProbeGrid::ProbeRayStats{}, spacing).Offset, vec3(0.3f)),
+            "a probe without rays keeps its offset");
+    }
 }
 
 int main()
@@ -291,6 +333,8 @@ int main()
     CheckMemory();
     CheckRayRotation();
     CheckUpdateSchedule();
+    CheckVolumeDistance();
+    CheckRelocation();
 
     if (g_Failures == 0)
         std::printf("ProbeGridCheck passed\n");

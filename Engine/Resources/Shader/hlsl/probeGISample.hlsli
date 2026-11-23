@@ -2,7 +2,8 @@
 // 둘러싼 8개 프로브의 조도를 3선형 가중치에 다음 두 가중치를 곱해 섞는다.
 // - 법선이 프로브 쪽을 향하는 정도: 면 뒤쪽 프로브의 영향을 줄인다.
 // - 체비쇼프 가시성: 거리 아틀라스의 평균·제곱 평균보다 멀리 있는 점은 프로브에서 가려졌다고 보고 줄인다(빛샘 방지).
-// 아직 한 번도 갱신하지 않은 프로브(조도 a = 0)는 쓰지 않는다.
+// 아직 한 번도 갱신하지 않은 프로브(조도 a = 0)와 벽 속으로 판단해 끈 프로브(상태 a = 0)는 쓰지 않는다.
+// 프로브 위치는 벽 속에서 옮긴 이동량(상태 rgb)을 더한 곳이다.
 #ifndef BAM_PROBE_GI_SAMPLE_HLSLI
 #define BAM_PROBE_GI_SAMPLE_HLSLI
 
@@ -44,9 +45,10 @@ float2 ProbeAtlasUV(uint probeIndex, uint3 counts, uint texels, float3 direction
 	return texel / atlasSize;
 }
 
-// position의 면이 normal 방향 반구에서 받는 간접 확산광(코사인 가중 평균 밝기). viewDirection은 면에서 카메라를 향한다.
+// position의 면이 normal 방향 반구에서 받는 간접 확산광(코사인 가중 평균 밝기). viewDirection은 면에서 카메라(또는 광선 시작점)를 향한다.
+// probeData는 프로브 상태(rgb 이동량, a 사용 여부)다. 쓸 수 있는 프로브가 하나도 없으면 valid가 false다.
 float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 normal, float3 viewDirection,
-	Texture2D<float4> irradianceAtlas, Texture2D<float4> distanceAtlas, SamplerState atlasSampler)
+	Texture2D<float4> irradianceAtlas, Texture2D<float4> distanceAtlas, Texture2D<float4> probeData, SamplerState atlasSampler, out bool valid)
 {
 	const float3 biasedPosition = position + normal * gi.NormalBias + viewDirection * gi.ViewBias;
 	const float3 local = (biasedPosition - gi.GridOrigin) / gi.GridSpacing;
@@ -61,7 +63,11 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 		const uint3 offset = uint3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u);
 		const uint3 coord = min(base + offset, gi.GridCounts - 1u);
 		const uint probeIndex = coord.x + coord.y * gi.GridCounts.x + coord.z * gi.GridCounts.x * gi.GridCounts.y;
-		const float3 probePosition = gi.GridOrigin + gi.GridSpacing * (float3)coord;
+		// 벽 속에서 옮긴 위치를 쓰고, 꺼진 프로브(아직 벽 속)는 섞지 않는다.
+		const float4 state = probeData.Load(int3(ProbeDataTexel(probeIndex, gi.GridCounts), 0));
+		if (state.a <= 0.0f)
+			continue;
+		const float3 probePosition = gi.GridOrigin + gi.GridSpacing * (float3)coord + state.xyz;
 
 		// 면 뒤쪽 프로브를 줄인다. 완전히 없애면 얇은 물체에서 끊기므로 0.2를 남긴다.
 		const float3 toProbe = normalize(probePosition - position);
@@ -94,7 +100,8 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 		sum += irradiance.rgb * weight;
 		totalWeight += weight;
 	}
-	return totalWeight > 1e-6f ? sum / totalWeight : float3(0.0f, 0.0f, 0.0f);
+	valid = totalWeight > 1e-6f;
+	return valid ? sum / totalWeight : float3(0.0f, 0.0f, 0.0f);
 }
 
 #endif

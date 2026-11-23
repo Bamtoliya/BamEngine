@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-23 (프로브 GI 아틀라스 `t2`·`t3, space1`, `LightingPassData` 624바이트)
+- 최종 갱신: 2026-11-23 (프로브 GI 아틀라스·상태 `t2`~`t4, space1`, `LightingPassData` 624바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -173,10 +173,11 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `u2, space3` | `probeGITraceRTCS` | RGBA16F 광선 결과. 열 = 광선, 행 = 이번 프레임 갱신 순서. rgb 밝기, a 거리(뒷면은 음수) |
 | `u2, space3` | `probeGIBlendIrradianceRTCS` | RGBA16F 조도 아틀라스. 프로브마다 10×10 칸(8×8 + 테두리) |
 | `u2, space3` | `probeGIBlendDistanceRTCS` | RGBA16F 거리 아틀라스. 프로브마다 18×18 칸(16×16 + 테두리), rg = 거리, 거리 제곱 |
-| `b1, space3` | `probeGI*RTCS` | `ProbeGIUpdateParams` 160바이트(`probeGI.hlsli`) |
+| `u2, space3` | `probeGIRelocateRTCS` | RGBA16F 프로브 상태. 텍셀 (x + y × 개수X, z), rgb 이동량(m), a 사용 여부 |
+| `b1, space3` | `probeGI*RTCS` | `ProbeGIUpdateParams` 192바이트(`probeGI.hlsli`). 추적은 상태·지난 프레임 아틀라스를 번호로 읽는다(다중 반사) |
 
 아틀라스에서 프로브 (x, y, z)의 칸은 열 `x + y × 개수X`, 행 `z`이며 `ProbeGrid.h`와 `probeGI.hlsli`가 같은 규칙을 쓴다.
-`lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) 재질 슬롯 `t2`(조도)·`t3`(거리) `space1`에 아틀라스를 묶는다(구름이 `t0`·`t1`을 씀). 재질 샘플러 표는 마지막으로 묶은 샘플러 하나만 믿을 수 있어 아틀라스는 `gBufferSampler`(`s0, space3`, 기본 선형)로 읽는다. `LightingPassData.ProbeGI`(`ProbeGILightingData`, 64바이트)의 `Enabled`가 1일 때만 읽고, 그리기 뒤 두 슬롯을 비운다.
+`lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) 재질 슬롯 `t2`(조도)·`t3`(거리)·`t4`(프로브 상태) `space1`에 묶는다(구름이 `t0`·`t1`을 씀). 재질 샘플러 표는 마지막으로 묶은 샘플러 하나만 믿을 수 있어 아틀라스는 `gBufferSampler`(`s0, space3`, 기본 선형)로 읽는다. `LightingPassData.ProbeGI`(`ProbeGILightingData`, 64바이트)의 `Enabled`가 1일 때만 읽고, 그리기 뒤 세 슬롯을 비운다.
 
 ### 재질 알파 기준값
 

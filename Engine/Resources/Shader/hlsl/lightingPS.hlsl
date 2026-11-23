@@ -83,6 +83,8 @@ SamplerState gCloudSampler : register(s0, space1);
 // 프로브 GI 조도·거리 아틀라스(probeGIBlend*RTCS가 씀). gBufferSampler(선형)로 읽는다.
 Texture2D<float4> gProbeIrradianceAtlas : register(t2, space1);
 Texture2D<float4> gProbeDistanceAtlas : register(t3, space1);
+// 프로브 상태(rgb 벽 속에서 옮긴 거리, a 사용 여부). probeGIRelocateRTCS가 쓴다.
+Texture2D<float4> gProbeData : register(t4, space1);
 
 static const float PI = 3.14159265359f;
 static const uint INVALID_LIGHT_INDEX = 0xFFFFFFFFu;
@@ -916,9 +918,12 @@ float4 main(PS_INPUT input) : SV_TARGET
         const float giWeight = ProbeVolumeWeight(probeGI, worldPosition);
         if (giWeight > 0.0f)
         {
+            bool probeValid;
             const float3 probeIrradiance = SampleProbeIrradiance(probeGI, worldPosition, normal, viewDirection,
-                gProbeIrradianceAtlas, gProbeDistanceAtlas, gBufferSampler);
-            diffuseIBL = lerp(diffuseIBL, kd * albedo * probeIrradiance * probeGI.Intensity, giWeight);
+                gProbeIrradianceAtlas, gProbeDistanceAtlas, gProbeData, gBufferSampler, probeValid);
+            // 둘러싼 프로브가 모두 꺼졌거나 아직 갱신 전이면 기존 환경광을 쓴다.
+            if (probeValid)
+                diffuseIBL = lerp(diffuseIBL, kd * albedo * probeIrradiance * probeGI.Intensity, giWeight);
         }
     }
 

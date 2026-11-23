@@ -1,7 +1,7 @@
 // 프로브 GI 아틀라스 섞기 (cs_6_5, DirectX12 전용). 포함하기 전에 PROBE_TEXELS와 PROBE_BLEND_DISTANCE를 정한다.
 // 스레드 그룹 하나가 프로브 칸 하나를 맡는다. 안쪽 텍셀마다 광선 결과를 방향 가중치로 평균 내 이전 값과 섞고,
 // 같은 그룹 안에서 테두리 텍셀을 채워 다른 Dispatch 없이 쌍선형 샘플이 이웃 칸으로 새지 않게 한다.
-// - 조도(PROBE_BLEND_DISTANCE 0): rgb = 코사인 가중 평균 밝기. 뒷면에 닿은 광선은 뺀다.
+// - 조도(PROBE_BLEND_DISTANCE 0): rgb = 코사인 가중 평균 밝기. 뒷면에 닿은 광선은 뺀다. 크게 바뀐 텍셀은 이력 비율을 낮춘다.
 // - 거리(PROBE_BLEND_DISTANCE 1): rg = 거리, 거리 제곱의 평균(체비쇼프 가시성 검사에 쓴다, 3단계).
 #include "raytracing.hlsli"
 #include "probeGI.hlsli"
@@ -42,7 +42,14 @@ float4 BlendTexel(uint row, uint2 local, float4 previous)
 
 	float4 result = sum / totalWeight;
 	result.a = 1.0f;
-	const float hysteresis = row < gParams.FreshCount ? 0.0f : gParams.Hysteresis;
+	float hysteresis = row < gParams.FreshCount ? 0.0f : gParams.Hysteresis;
+#if !PROBE_BLEND_DISTANCE
+	// 조명이 크게 바뀐 텍셀(이전 값 대비 ChangeThreshold배 이상)은 이력을 덜 남겨 빨리 따라간다. 노이즈 정도의 변화에는 그대로 둔다.
+	const float3 change = abs(result.rgb - previous.rgb);
+	const float previousBrightness = max(previous.r, max(previous.g, previous.b));
+	if (max(change.r, max(change.g, change.b)) > gParams.ChangeThreshold * max(previousBrightness, 0.05f))
+		hysteresis = max(hysteresis - 0.75f, 0.0f);
+#endif
 	return lerp(result, previous, hysteresis);
 }
 

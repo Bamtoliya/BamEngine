@@ -141,6 +141,70 @@ namespace Engine::ProbeGrid
 		return std::clamp(1.0f - farthest / blendDistance, 0.0f, 1.0f);
 	}
 
+	// 점에서 상자까지의 거리(m). 상자 안이면 0이다. 뷰마다 카메라를 담거나 가장 가까운 볼륨을 고를 때 쓴다.
+	inline f32 DistanceToVolume(const GridDesc& grid, const vec3& point)
+	{
+		const vec3 extent = grid.Spacing * vec3(static_cast<f32>(grid.Counts.X - 1u), static_cast<f32>(grid.Counts.Y - 1u), static_cast<f32>(grid.Counts.Z - 1u));
+		const vec3 outside = glm::max(glm::max(grid.Origin - point, point - (grid.Origin + extent)), vec3(0.0f));
+		return glm::length(outside);
+	}
+
+	// ── 벽 속 프로브 옮기기와 끄기 (DDGI의 Relocation·Classification, 4단계) ──
+	// 셰이더(probeGIRelocateRTCS)와 같은 규칙이다. 한쪽을 바꾸면 다른 쪽과 ProbeGridCheck도 맞춘다.
+	// 뒷면에 닿은 광선이 이 비율보다 많으면 벽 속으로 본다.
+	constexpr f32 BackfaceRatioThreshold = 0.25f;
+	// 앞면까지 이 거리(가장 좁은 간격에 대한 비율)보다 가까우면 면에서 떼어 낸다.
+	constexpr f32 MinFrontfaceDistanceRatio = 0.2f;
+	// 격자 위치에서 축마다 간격의 이 비율까지만 옮긴다. 이웃 셀로 넘어가면 보간이 깨진다.
+	constexpr f32 MaxProbeOffsetRatio = 0.45f;
+
+	// 한 프로브의 광선 결과 요약. 거리는 실제 거리(m)이며 닿은 것이 없으면 아주 큰 값이다.
+	struct ProbeRayStats
+	{
+		uint32 RayCount = 0u;
+		uint32 BackfaceCount = 0u;
+		f32 ClosestBackfaceDistance = 1e27f;
+		vec3 ClosestBackfaceDirection{ 0.0f };
+		f32 ClosestFrontfaceDistance = 1e27f;
+		vec3 ClosestFrontfaceDirection{ 0.0f };
+	};
+
+	struct ProbeState
+	{
+		vec3 Offset{ 0.0f };  // 격자 위치에서 옮긴 거리(m)
+		bool Active = true;   // false면 조명과 다중 반사에서 쓰지 않는다
+	};
+
+	inline f32 MinSpacing(const vec3& spacing)
+	{
+		return std::min(spacing.x, std::min(spacing.y, spacing.z));
+	}
+
+	// 이번 광선 결과로 프로브를 옮기고 사용 여부를 정한다. 결과는 다음 갱신의 광선부터 반영된다.
+	inline ProbeState RelocateProbe(const ProbeState& current, const ProbeRayStats& stats, const vec3& spacing)
+	{
+		ProbeState next = current;
+		if (stats.RayCount == 0u)
+			return next;
+		const f32 minFrontface = MinSpacing(spacing) * MinFrontfaceDistanceRatio;
+		const bool inside = static_cast<f32>(stats.BackfaceCount) > BackfaceRatioThreshold * static_cast<f32>(stats.RayCount);
+		if (inside)
+		{
+			// 가장 가까운 뒷면을 지나 벽 밖으로 나간다.
+			next.Offset += stats.ClosestBackfaceDirection * (stats.ClosestBackfaceDistance + minFrontface * 0.5f);
+		}
+		else if (stats.ClosestFrontfaceDistance < minFrontface)
+		{
+			// 면에 너무 붙어 있으면 반대쪽으로 뗀다.
+			next.Offset -= stats.ClosestFrontfaceDirection * (minFrontface - stats.ClosestFrontfaceDistance);
+		}
+		const vec3 limit = spacing * MaxProbeOffsetRatio;
+		next.Offset = glm::clamp(next.Offset, -limit, limit);
+		// 옮겨도 벽 속이면(벽이 간격보다 두꺼움) 쓰지 않는다. 다음 갱신에서 다시 판단한다.
+		next.Active = !inside;
+		return next;
+	}
+
 	// 단위 방향을 [-1, 1]² 옥타헤드럴 좌표로 바꾼다(위쪽 반구가 안쪽 마름모).
 	inline vec2 EncodeOctahedral(const vec3& direction)
 	{

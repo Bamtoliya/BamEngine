@@ -41,6 +41,14 @@ struct ProbeGIVolumeData
 	f32 BlendDistance = 1.0f;
 };
 
+// 이번 프레임에 갱신한 프로브 GI 텍스처. 조명 패스가 읽는다.
+struct ProbeGIAtlases
+{
+	class RHITexture* Irradiance = nullptr;
+	class RHITexture* Distance = nullptr;
+	class RHITexture* ProbeData = nullptr; // rgb 벽 속에서 옮긴 거리, a 사용 여부
+};
+
 struct DeferredScenePassBindings
 {
 	RenderPassID DirectionalShadow;
@@ -109,10 +117,10 @@ private:
 	// 조건과 주의는 그림자 마스크와 같으며, G-Buffer와 광원 버퍼를 먼저 바인딩해야 한다. camera는 지터가 없는 카메라다.
 	class RHITexture* DispatchAmbientOcclusion(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const CameraBuffer& sceneCamera, EAmbientOcclusionMode mode, const vec2& previousJitterNDC);
-	// 이번 프레임 차례의 프로브를 추적하고 조도·거리 아틀라스에 섞는다. 모두 기록하면 true와 두 아틀라스를 돌려준다.
-	// 조건과 주의는 반사와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다. env는 닿은 면과 하늘의 환경광이다.
+	// 이번 프레임 차례의 프로브를 추적하고, 벽 속 프로브를 옮기거나 끄고, 조도·거리 아틀라스에 섞는다. 모두 기록하면 true와 텍스처를 돌려준다.
+	// 조건과 주의는 반사와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다. env는 볼륨 밖 닿은 면과 하늘의 환경광이다.
 	bool DispatchProbeGIUpdate(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
-		const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env, class RHITexture*& irradianceAtlas, class RHITexture*& distanceAtlas);
+		const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env, ProbeGIAtlases& atlases);
 	// 이 렌더러가 소유하는 타깃. ownedName에 이름을 기록하고 크기가 바뀌면 다시 만든다. 기본은 Compute 쓰기용이다.
 	class RenderTarget* EnsureOwnedTarget(const std::wstring& name, ETextureFormat format, uint32 width, uint32 height, std::wstring& ownedName,
 		ETextureUsage usage = ETextureUsage::Sampler | ETextureUsage::ComputeReadWrite, const vec4& clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -131,8 +139,9 @@ private:
 	RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
 	// 이 뷰포트의 조명 버퍼에 들어갈 그림자 광원
 	ShadowLightSet CollectViewShadowLights(Scene* scene, bool usesGlobalLights) const;
-	// 계층에서 활성인 엔티티의 첫 활성 ProbeGIVolumeComponent로 격자와 갱신 값을 만든다. 없으면 false다.
-	static bool FindProbeGIVolume(Scene* scene, ProbeGIVolumeData& volume);
+	// 계층에서 활성인 엔티티의 활성 ProbeGIVolumeComponent 중 카메라를 담은 것(여럿이면 먼저 찾은 것),
+	// 없으면 카메라에서 가장 가까운 것으로 격자와 갱신 값을 만든다. 볼륨이 없으면 false다.
+	static bool FindProbeGIVolume(Scene* scene, const vec3& cameraPosition, ProbeGIVolumeData& volume);
 
 	RaytracedShadowOverrides m_RaytracedShadowOverrides;
 	bool m_RaytracedShadowActive = false;
@@ -166,10 +175,11 @@ private:
 	// 마지막 Submit에서 고른 볼륨. 활성이 아니면 의미가 없다.
 	ProbeGIVolumeData m_ProbeGIVolume{};
 	ProbeGrid::ProbeUpdateSchedule m_ProbeGISchedule;
-	// 광선 결과(열 = 광선, 행 = 갱신 순서), 조도 아틀라스, 거리 아틀라스
-	enum EProbeGITarget { ProbeGIRayData, ProbeGIIrradiance, ProbeGIDistance, ProbeGITargetCount };
+	// 광선 결과(열 = 광선, 행 = 갱신 순서), 조도 아틀라스, 거리 아틀라스, 프로브 상태(이동량·사용 여부)
+	enum EProbeGITarget { ProbeGIRayData, ProbeGIIrradiance, ProbeGIDistance, ProbeGIProbeData, ProbeGITargetCount };
 	std::array<std::wstring, ProbeGITargetCount> m_ProbeGITargetNames;
 	bool m_ProbeGITraceShaderMissing = false;
+	bool m_ProbeGIRelocateShaderMissing = false;
 	bool m_ProbeGIIrradianceShaderMissing = false;
 	bool m_ProbeGIDistanceShaderMissing = false;
 	bool m_ProbeGIFailureLogged = false;
