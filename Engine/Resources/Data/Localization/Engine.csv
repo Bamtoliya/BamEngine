@@ -32,6 +32,10 @@
 ,CATEGORY_CIRCLE,Circle,원
 ,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
 ,CATEGORY_CORE,Core,기본
+,CATEGORY_DECAL_BASE_COLOR,Base Color,기본 색
+,CATEGORY_DECAL_NORMAL,Normal,법선
+,CATEGORY_DECAL_PROJECTION,Projection,투영
+,CATEGORY_DECAL_SURFACE,Surface,표면
 ,CATEGORY_FOG_COLOR,Fog Color,안개 색상
 ,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
@@ -411,6 +415,18 @@
 ,PROP_CURRENT_TIME,Current Time,현재 재생 시간
 ,PROP_CURRENT_ZOOM,Current Zoom,현재 줌 배율
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
+,PROP_DECAL_BASE_COLOR_TEXTURE,Base Color Texture,기본 색 텍스처
+,PROP_DECAL_DEPTH_FADE,Depth Fade,깊이 페이드
+,PROP_DECAL_MAX_ANGLE,Max Surface Angle,최대 표면 각도
+,PROP_DECAL_METALLIC,Metallic,금속성
+,PROP_DECAL_NORMAL_OPACITY,Normal Opacity,법선 불투명도
+,PROP_DECAL_NORMAL_TEXTURE,Normal Texture,법선 텍스처
+,PROP_DECAL_OPACITY,Opacity,불투명도
+,PROP_DECAL_PBR_OPACITY,Surface Opacity,표면 불투명도
+,PROP_DECAL_PBR_TEXTURE,Surface Texture (R Roughness / G Metallic / B Cavity),표면 텍스처 (R 거칠기 / G 금속성 / B 캐비티)
+,PROP_DECAL_PROJECTION_DEPTH,Projection Depth,투영 깊이
+,PROP_DECAL_ROUGHNESS,Roughness,거칠기
+,PROP_DECAL_SIZE,Box Size,상자 크기
 ,PROP_DECAL_TRACKS,Decal Tracks,데칼 트랙
 ,PROP_DECAY_TIME,Decay Time,감쇠 시간
 ,PROP_DENSITY,Cloud Density,구름 밀도
@@ -628,6 +644,7 @@
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
 ,PROP_RAYTRACED_SHADOW,Raytraced Shadow,레이트레이싱 그림자
+,PROP_RECEIVE_DECALS,Receive Decals,데칼 받기
 ,PROP_REF_RESOLUTION_X,Ref Resolution X,기준 가상 해상도 X
 ,PROP_REF_RESOLUTION_Y,Ref Resolution Y,기준 가상 해상도 Y
 ,PROP_RENDER,Render,렌더링
@@ -853,6 +870,7 @@
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정
 ,STRUCT_COMPOSITE_VFX,Composite VFX,복합 비주얼 이펙트
 ,STRUCT_CURVE_KEY,Curve Key,커브 키
+,STRUCT_DECAL,Decal,데칼
 ,STRUCT_FLAG,Flag,플래그
 ,STRUCT_FLOAT_CURVE,Float Curve,실수 커브
 ,STRUCT_FOG,Fog,안개

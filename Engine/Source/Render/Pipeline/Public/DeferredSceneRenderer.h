@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CameraBuffer.h"
+#include "DecalProjection.h"
 #include "RenderPassTypes.h"
 #include "RenderTargetTypes.h"
 #include "RHITextureTypes.h"
@@ -82,6 +83,9 @@ private:
 		ETextureUsage usage = ETextureUsage::Sampler | ETextureUsage::ComputeReadWrite, const vec4& clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f));
 	// TAA를 쓸 수 있으면 타깃과 패스를 준비해 명령을 제출하고, 장면을 그릴 지터 카메라를 반환한다. 쓸 수 없으면 카메라를 그대로 반환한다.
 	CameraBuffer PrepareTemporalAA(const CameraBuffer& camera, Scene* scene, const DeferredScenePassBindings& passes);
+	// 이 뷰의 데칼을 모아 G-Buffer 뒤·조명 앞의 데칼 패스에 제출한다. 데칼이 없으면 패스를 꺼서 법선 복사도 하지 않는다.
+	// sceneCamera는 G-Buffer를 그린 카메라다(TAA 지터 포함).
+	void SubmitDecalPass(const CameraBuffer& sceneCamera, Scene* scene, const DeferredScenePassBindings& passes);
 	bool EnsureTemporalAAPasses(RenderPassID transparentPass, const std::wstring& prefix);
 	class Shader* GetOwnedShader(const wchar_t* shaderKey, const wchar_t* shaderFile, EShaderType type, bool& shaderMissing);
 	RHIPipeline* GetRaytracingPipeline(const wchar_t* shaderKey, const wchar_t* shaderFile, bool& shaderMissing);
@@ -122,6 +126,14 @@ private:
 	RenderPassID m_TemporalPassID = INVALID_PASS_ID;
 	bool m_TemporalShaderMissing = false;
 	bool m_TemporalFailureLogged = false;
+
+	RenderPassID m_DecalPassID = INVALID_PASS_ID;
+	// 데칼이 법선을 바꾸기 전의 G-Buffer 법선. 셰이딩 플래그와 표면 방향을 여기서 읽는다.
+	std::wstring m_DecalNormalCopyName;
+	std::vector<DecalDrawData> m_Decals;
+	bool m_DecalShaderMissing = false;
+	bool m_DecalFailureLogged = false;
+	bool m_DecalLimitLogged = false;
 };
 
 END

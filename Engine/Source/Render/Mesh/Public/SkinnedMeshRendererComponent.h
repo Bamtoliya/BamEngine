@@ -65,6 +65,9 @@ namespace Engine
 		ResourceHandle<Skeleton> skeletonHandle;
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CAST_SHADOW"))
 		bool castShadow = true;
+		// 끄면 DecalComponent와 VFX 데칼이 이 메시에 투영되지 않는다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_RECEIVE_DECALS"))
+		bool receiveDecals = true;
 
 		// 런타임 외형 교체 (플레이 중 장착한 외형: 씬 저장 X)
 		SkinnedRuntimeEquipment runtimeEquipment;

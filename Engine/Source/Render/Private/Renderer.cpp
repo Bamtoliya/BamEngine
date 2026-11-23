@@ -868,6 +868,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 		InstanceData inst{};
 		inst.worldMatrix = command.worldMatrix;
 		inst.pickingData.x = static_cast<float>(command.pickingId);
+		inst.pickingData.y = command.receiveDecals ? 0.0f : 1.0f;
 		instanceBatch.push_back(inst);
 	}
 
@@ -923,6 +924,7 @@ EResult Renderer::RenderSkinnedMeshes(f32 dt, vector<SkinnedDrawCommand>& comman
 		SceneUBO objectData{};
 		objectData.worldMatrix = command.worldMatrix;
 		objectData.pickingData.x = static_cast<float>(command.pickingId);
+		objectData.pickingData.y = command.receiveDecals ? 0.0f : 1.0f;
 		if (IsFailure(m_RHI->BindConstantBuffer(&objectData, sizeof(objectData), 1)))
 			return EResult::Fail;
 		// 2. 뼈 행렬 StructuredBuffer 바인딩 (최소 256개 본 크기 보장으로 GPU OOB 원천 차단)

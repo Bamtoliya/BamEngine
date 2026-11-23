@@ -4,6 +4,7 @@
 
 #include "IBLManager.h"
 #include "CompositeVFXSystem.h"
+#include "DecalCollector.h"
 #include "FogComponent.h"
 #include "LightComponent.h"
 #include "LightManager.h"
@@ -161,6 +162,47 @@ namespace
 	constexpr const wchar_t* MotionVectorSkinningVSFile = L"motionVectorSkinningVS.cso";
 	constexpr const wchar_t* MotionVectorPSKey = L"Resources/Shader/MotionVectorPS";
 	constexpr const wchar_t* MotionVectorPSFile = L"motionVectorPS.cso";
+
+	// decal.hlsli의 DecalParams (b1, space3)
+	struct DecalParams
+	{
+		mat4 BoxToWorld{ 1.0f };
+		mat4 WorldToBox{ 1.0f };
+		vec4 BaseColor{ 1.0f };
+		vec3 AxisX{ 1.0f, 0.0f, 0.0f };
+		f32 Opacity = 1.0f;
+		vec3 AxisY{ 0.0f, 1.0f, 0.0f };
+		f32 NormalOpacity = 1.0f;
+		vec3 AxisZ{ 0.0f, 0.0f, 1.0f };
+		f32 PBROpacity = 0.0f;
+		vec2 AngleFadeRange{ 0.0f, 1.0f };
+		f32 DepthFade = 0.1f;
+		f32 Roughness = 0.5f;
+		f32 Metallic = 0.0f;
+		uint32 TextureFlags = 0u;
+		vec2 Padding{ 0.0f };
+	};
+	static_assert(sizeof(DecalParams) == 224);
+	static_assert(offsetof(DecalParams, BaseColor) == 128);
+	static_assert(offsetof(DecalParams, AxisZ) == 176);
+	static_assert(offsetof(DecalParams, AngleFadeRange) == 192);
+	static_assert(offsetof(DecalParams, TextureFlags) == 212);
+
+	// decal.hlsli의 DECAL_HAS_*_TEXTURE
+	constexpr Engine::uint32 DecalHasBaseColorTexture = 1u << 0u;
+	constexpr Engine::uint32 DecalHasNormalTexture = 1u << 1u;
+	constexpr Engine::uint32 DecalHasPBRTexture = 1u << 2u;
+
+	constexpr const wchar_t* DecalVSKey = L"Resources/Shader/DecalVS";
+	constexpr const wchar_t* DecalVSFile = L"decalVS.cso";
+	constexpr const wchar_t* DecalPSKey = L"Resources/Shader/DecalPS";
+	constexpr const wchar_t* DecalPSFile = L"decalPS.cso";
+
+	vec3 NormalizedAxis(const vec3& axis)
+	{
+		const f32 lengthSquared = glm::dot(axis, axis);
+		return lengthSquared > 1e-12f ? axis / std::sqrt(lengthSquared) : vec3(0.0f);
+	}
 }
 
 Engine::DeferredSceneRenderer::~DeferredSceneRenderer()
@@ -173,7 +215,7 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto*& buffer : m_LocalLightBuffer)
 		Safe_Release(buffer);
 	m_LightingPipeline = nullptr;
-	for (RenderPassID* pass : { &m_TemporalPassID, &m_MotionPassID })
+	for (RenderPassID* pass : { &m_TemporalPassID, &m_MotionPassID, &m_DecalPassID })
 	{
 		if (*pass != INVALID_PASS_ID && Engine::RenderPassManager::IsCreated())
 			Engine::RenderPassManager::Get().RemoveRenderPass(*pass);
@@ -186,6 +228,8 @@ void Engine::DeferredSceneRenderer::Free()
 			name.clear();
 		};
 	removeTarget(m_RaytracedShadowMaskName);
+	removeTarget(m_DecalNormalCopyName);
+	m_Decals.clear();
 	for (auto& name : m_ReflectionTargetNames)
 		removeTarget(name);
 	m_ReflectionHistory.Reset();
@@ -290,6 +334,9 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	auto* geomPass = rpm.GetRenderPassByID(passes.Geometry);
 	if (geomPass && geomPass->IsEnabled())
 		renderer.RegisterViewportCamera(sceneCamera, geomPass, passes.AcceptSceneMeshes, passes.Geometry);
+
+	// 2-1. 데칼: G-Buffer 뒤·조명 앞. G-Buffer 위치를 화면 좌표로 다시 찾으므로 G-Buffer를 그린 카메라를 쓴다.
+	SubmitDecalPass(sceneCamera, sceneToQuery, passes);
 
 	// 3. ForwardPass & ForwardTransparentPass 카메라 등록 (스카이 데이터 상수버퍼 slot 3 주입)
 	auto* forwardPass = rpm.GetRenderPassByID(passes.ForwardOpaque);
@@ -762,6 +809,180 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureOwnedTarget(const std
 			return nullptr;
 	}
 	return target && target->GetTexture() ? target : nullptr;
+}
+
+void Engine::DeferredSceneRenderer::SubmitDecalPass(const CameraBuffer& sceneCamera, Engine::Scene* scene, const DeferredScenePassBindings& passes)
+{
+	auto& rpm = Engine::RenderPassManager::Get();
+	auto& renderer = Engine::Renderer::Get();
+	auto* decalPass = m_DecalPassID != INVALID_PASS_ID ? rpm.GetRenderPassByID(m_DecalPassID) : nullptr;
+	const auto disable = [&]()
+		{
+			if (decalPass)
+				decalPass->SetEnabled(false);
+		};
+
+	const auto* geometry = rpm.GetRenderPassByID(passes.Geometry);
+	if (!geometry || !geometry->IsEnabled() || renderer.GetRHIType() != ERHIType::DirectX12 || m_DecalShaderMissing)
+		return disable();
+
+	// 메인 뷰포트는 활성 씬 전체, 독립 프리뷰는 자기 씬의 데칼만 모은다(그림자 광원과 같은 규칙).
+	m_Decals.clear();
+	std::vector<Engine::Scene*> scenes;
+	if (passes.AcceptSceneMeshes && Engine::SceneManager::IsCreated())
+		scenes = Engine::SceneManager::Get().GetActiveScenes();
+	else if (scene)
+		scenes.push_back(scene);
+	for (Engine::Scene* source : scenes)
+	{
+		if (!source) continue;
+		CollectDecalComponents(*source, m_Decals);
+		CompositeVFXSystem::CollectDecals(*source, m_Decals);
+	}
+	if (m_Decals.empty())
+		return disable();
+	if (m_Decals.size() > MaxDecalsPerView && !m_DecalLimitLogged)
+	{
+		ENGINE_LOG_WARN("More than {} decals are in view; decals with the highest sort orders are skipped.", MaxDecalsPerView);
+		m_DecalLimitLogged = true;
+	}
+	SortDecals(m_Decals);
+
+	auto& targets = Engine::RenderTargetManager::Get();
+	const std::wstring& diffuseName = passes.LightingInputs[0];
+	const std::wstring& normalName = passes.LightingInputs[1];
+	const std::wstring& pbrName = passes.LightingInputs[2];
+	const std::wstring& positionName = passes.LightingInputs[4];
+	const auto* diffuse = targets.GetRenderTarget(diffuseName);
+	const auto* normal = targets.GetRenderTarget(normalName);
+	const auto* pbr = targets.GetRenderTarget(pbrName);
+	if (!diffuse || !normal || !pbr || !targets.GetRenderTarget(positionName))
+		return disable();
+	if (!EnsureOwnedTarget(normalName + L"_DecalNormalCopy", normal->GetFormat(), normal->GetWidth(), normal->GetHeight(), m_DecalNormalCopyName,
+		ETextureUsage::RenderTarget | ETextureUsage::Sampler))
+		return disable();
+
+	Engine::Shader* vs = GetOwnedShader(DecalVSKey, DecalVSFile, EShaderType::Vertex, m_DecalShaderMissing);
+	Engine::Shader* ps = GetOwnedShader(DecalPSKey, DecalPSFile, EShaderType::Fragment, m_DecalShaderMissing);
+	if (!vs || !ps)
+		return disable();
+
+	// 같은 우선순위에서는 나중에 등록한 패스가 뒤에 실행된다: G-Buffer → 데칼 → 조명(더 큰 우선순위)
+	if (!decalPass)
+	{
+		RenderPassDesc desc{};
+		desc.name = geometry->GetName() + L"_DecalPass";
+		desc.priority = geometry->GetPriority();
+		desc.loadOperation = ERenderPassLoadOperation::RPLO_Load;
+		desc.passType = ERenderPassType::PostProcess;
+		desc.acceptedBlendModes = EBlendMode::None;
+		m_DecalPassID = rpm.RegisterRenderPass(std::move(desc));
+		decalPass = m_DecalPassID != INVALID_PASS_ID ? rpm.GetRenderPassByID(m_DecalPassID) : nullptr;
+		if (!decalPass)
+			return;
+	}
+	decalPass->SetColorAttachments({ diffuseName, normalName, pbrName });
+	decalPass->SetPrePassCopy(normalName, m_DecalNormalCopyName);
+	decalPass->SetEnabled(true);
+
+	// 각 타깃의 RGB만 섞는다. a에는 하늘 판정(디퓨즈), 셰이딩 플래그(법선), AO(PBR)가 있다.
+	RHIPipelineDesc pipelineDesc{};
+	pipelineDesc.pipelineType = EPipelineType::Graphics;
+	pipelineDesc.vertexShader = vs->GetRHIShader();
+	pipelineDesc.pixelShader = ps->GetRHIShader();
+	pipelineDesc.colorAttachmentCount = 3;
+	pipelineDesc.colorAttachmentFormats[0] = diffuse->GetFormat();
+	pipelineDesc.colorAttachmentFormats[1] = normal->GetFormat();
+	pipelineDesc.colorAttachmentFormats[2] = pbr->GetFormat();
+	pipelineDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+	pipelineDesc.depthStencilState.depthTestEnable = false;
+	pipelineDesc.depthStencilState.depthWriteEnable = false;
+	pipelineDesc.topology = ETopology::TriangleList;
+	pipelineDesc.frontFace = EFrontFace::Clockwise;
+	pipelineDesc.blendState.enable = true;
+	pipelineDesc.blendState.srcColor = EBlendFactor::SrcAlpha;
+	pipelineDesc.blendState.dstColor = EBlendFactor::InvSrcAlpha;
+	pipelineDesc.blendState.colorBlendOp = EBlendOp::Add;
+	pipelineDesc.blendState.srcAlpha = EBlendFactor::Zero;
+	pipelineDesc.blendState.dstAlpha = EBlendFactor::One;
+	pipelineDesc.blendState.alphaBlendOp = EBlendOp::Add;
+	pipelineDesc.blendState.enableColorWriteMask = true;
+	pipelineDesc.blendState.colorWriteMask = EColorChannel::RGB;
+	// 바깥면을 버리고 안쪽 면만 그려 카메라가 상자 안에 있어도 한 번씩만 섞는다. 뒤집힌 상자는 반대쪽을 버린다.
+	pipelineDesc.cullMode = ECullMode::Front;
+	RHIPipeline* pipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+	pipelineDesc.cullMode = ECullMode::Back;
+	RHIPipeline* mirroredPipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+	if (!pipeline || !mirroredPipeline)
+		return disable();
+
+	renderer.SubmitCustomCommand([this, pipeline, mirroredPipeline, sceneCamera, decals = m_Decals, positionName,
+		normalCopyName = m_DecalNormalCopyName](f32, RenderPass*) -> EResult
+		{
+			auto* rhi = Renderer::Get().GetRHI();
+			auto& targetManager = RenderTargetManager::Get();
+			const auto* position = targetManager.GetRenderTarget(positionName);
+			const auto* normalCopy = targetManager.GetRenderTarget(normalCopyName);
+			SamplerDesc samplerDesc{};
+			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = ESamplerAddressMode::Clamp;
+			auto* sampler = SamplerManager::Get().GetOrCreateSampler(samplerDesc);
+			auto white = ResourceManager::Get().GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png");
+			if (!white.Get())
+				white = ResourceManager::Get().GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png");
+			RHITexture* fallback = white.Get() ? white->GetRHITexture() : nullptr;
+
+			CameraBuffer camera = sceneCamera;
+			camera.time = static_cast<f32>(TimeManager::Get().GetTotalTime());
+			RHIPipeline* bound = nullptr;
+			// 파이프라인을 바꾼 뒤에도 공통 입력이 묶여 있도록 다시 묶는다.
+			const auto bindPipeline = [&](RHIPipeline* next) -> bool
+				{
+					if (next == bound) return true;
+					bound = next;
+					return IsSuccess(rhi->BindPipeline(next)) && IsSuccess(rhi->BindConstantBuffer(&camera, sizeof(CameraBuffer), 0)) &&
+						IsSuccess(rhi->BindTextureSampler(position->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 0)) &&
+						IsSuccess(rhi->BindTextureSampler(normalCopy->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 1));
+				};
+
+			bool succeeded = rhi && sampler && fallback && position && position->GetTexture() && normalCopy && normalCopy->GetTexture();
+			for (const DecalDrawData& decal : decals)
+			{
+				if (!succeeded) break;
+				DecalParams params{};
+				if (!TryGetDecalWorldToBox(decal.BoxToWorld, params.WorldToBox))
+					continue;
+				params.BoxToWorld = decal.BoxToWorld;
+				params.BaseColor = decal.BaseColor;
+				params.AxisX = NormalizedAxis(vec3(decal.BoxToWorld[0]));
+				params.AxisY = NormalizedAxis(vec3(decal.BoxToWorld[1]));
+				params.AxisZ = NormalizedAxis(vec3(decal.BoxToWorld[2]));
+				params.Opacity = decal.Opacity;
+				params.NormalOpacity = decal.NormalOpacity;
+				params.PBROpacity = decal.PBROpacity;
+				params.AngleFadeRange = GetDecalAngleFadeRange(decal.MaxAngle);
+				params.DepthFade = decal.DepthFade;
+				params.Roughness = decal.Roughness;
+				params.Metallic = decal.Metallic;
+
+				const Texture* textures[3] = { decal.BaseColorTexture, decal.NormalTexture, decal.PBRTexture };
+				const uint32 textureFlags[3] = { DecalHasBaseColorTexture, DecalHasNormalTexture, DecalHasPBRTexture };
+				succeeded = bindPipeline(IsDecalBoxMirrored(decal.BoxToWorld) ? mirroredPipeline : pipeline);
+				for (uint32 slot = 0; succeeded && slot < 3; ++slot)
+				{
+					RHITexture* texture = textures[slot] ? textures[slot]->GetRHITexture() : nullptr;
+					if (texture)
+						params.TextureFlags |= textureFlags[slot];
+					succeeded = IsSuccess(rhi->BindTextureSampler(texture ? texture : fallback, sampler, slot));
+				}
+				succeeded = succeeded && IsSuccess(rhi->BindConstantBuffer(&params, sizeof(params), 3)) && IsSuccess(rhi->Draw(36));
+			}
+			if (!succeeded && !m_DecalFailureLogged)
+			{
+				ENGINE_LOG_ERROR("Decals were not drawn this frame.");
+				m_DecalFailureLogged = true;
+			}
+			return EResult::Success;
+		}, m_DecalPassID);
 }
 
 bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID transparentPass, const std::wstring& prefix)

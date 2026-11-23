@@ -9,6 +9,7 @@ BEGIN(Engine)
 
 class Scene;
 struct CompositeVFXComponent;
+struct DecalDrawData;
 class ENGINE_API CompositeVFXSystem : public ISystem
 {
 private:
@@ -29,6 +30,8 @@ public:
 	static void SubmitSceneVFX(Scene* scene, const CameraBuffer& cameraBuffer, uint32 targetPassId);
 	static void RefreshFlashLight(CompositeVFXComponent& vfxComp);
 	static uint32 CollectFlashLights(const Scene& scene, std::span<GPULight> output);
+	// 재생 중인 데칼 트랙을 투영 데칼로 output 뒤에 붙인다. 정렬 순서는 0이며 같은 순서의 DecalComponent 뒤에 그린다.
+	static void CollectDecals(const Scene& scene, std::vector<DecalDrawData>& output);
 
 private:
 	static void UpdateVFXEntity(Scene* scene, entt::entity entity, struct CompositeVFXComponent& vfxComp, const struct WorldTransformComponent& transform, f32 dt);

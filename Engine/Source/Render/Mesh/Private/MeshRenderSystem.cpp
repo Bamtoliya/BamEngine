@@ -317,8 +317,11 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
                         continue;
 
-                    for (const auto& command : commands)
+                    for (StaticDrawCommand command : commands)
+                    {
+                        command.receiveDecals = meshRenderer.receiveDecals;
                         renderer.SubmitStatic(command, target.pass->GetID());
+                    }
                 }
 
                 continue;
@@ -434,6 +437,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 }
 
                 command.pickingId = pickingId;
+                command.receiveDecals = meshRenderer.receiveDecals;
                 command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)) };
                 if (target.pass->GetPassType() == ERenderPassType::Shadow && isRaytraced(target.viewID))
                 {
@@ -485,6 +489,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             command.worldMatrix = renderWorldMatrix;
             command.boneMatrices = boneMatrices;
             command.pickingId = PickingManager::Get().RegisterPickingEntity<SkinnedMeshRendererComponent>(scene, entity);
+            command.receiveDecals = skinnedRenderer.receiveDecals;
             command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)) };
 
             for (const auto& target : targets)

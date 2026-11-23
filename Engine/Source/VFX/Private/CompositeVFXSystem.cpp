@@ -4,6 +4,7 @@
 #include "LightTypes.h"
 #include "SpriteRendererComponent.h"
 #include "CompositeEffect.h"
+#include "DecalProjection.h"
 #include "ParticleEffect.h"
 #include "ParticleSystem.h"
 #include "WorldComponents.h"
@@ -454,6 +455,58 @@ void CompositeVFXSystem::RefreshFlashLight(CompositeVFXComponent& vfxComp)
 	}
 }
 
+void CompositeVFXSystem::CollectDecals(const Scene& scene, std::vector<DecalDrawData>& output)
+{
+	auto& resourceManager = ResourceManager::Get();
+	auto view = scene.GetRegistry().view<const CompositeVFXComponent, const WorldTransformComponent, const FlagComponent>();
+	for (auto [entity, vfxComp, transform, flag] : view.each())
+	{
+		if (!IsComponentEnabled<CompositeVFXComponent>(scene.GetRegistry(), entity)) continue;
+		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+		const auto* effect = vfxComp.effectHandle.Get();
+		if (!effect || vfxComp.isFinished || vfxComp.isDraining) continue;
+
+		for (const auto& track : effect->GetDecalTracks())
+		{
+			if (!track.enabled || track.isMuted) continue;
+
+			const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
+			if (trackLocalTime < 0.0f || trackLocalTime >= track.duration) continue;
+
+			const f32 alpha = GetDecalTrackAlpha(trackLocalTime, track.duration, track.fadeStartTime);
+			if (alpha <= 0.0f) continue;
+
+			// 트랙 기본값(x축 90도 회전)은 상자의 z를 아래로 향하게 해 지면에 투영한다.
+			const mat4 localMatrix = glm::translate(mat4(1.0f), track.localPosition) * glm::mat4_cast(glm::quat(glm::radians(track.localRotation)));
+			DecalDrawData data;
+			data.BoxToWorld = MakeDecalBoxMatrix(transform.worldMatrix * localMatrix, vec3(track.size.x, track.size.y, track.projectionDepth));
+			mat4 worldToBox;
+			if (!TryGetDecalWorldToBox(data.BoxToWorld, worldToBox)) continue;
+
+			// 텍스처는 트랙, 재질의 첫 텍스처, 부드러운 원 순서로 고른다(기존 사각형 데칼과 같다).
+			Texture* texture = track.textureHandle.Get();
+			if (!texture)
+			{
+				if (const auto* material = track.materialHandle.Get())
+				{
+					const auto& bindings = material->GetTextureBindings();
+					if (!bindings.empty())
+						texture = bindings[0].texture.Get();
+				}
+			}
+			if (!texture)
+				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/Particle_SoftCircle.png").Get();
+
+			data.BaseColor = track.colorTint;
+			data.BaseColorTexture = texture;
+			data.Opacity = alpha;
+			data.NormalOpacity = 0.0f;
+			data.PBROpacity = 0.0f;
+			output.push_back(data);
+		}
+	}
+}
+
 Engine::uint32 CompositeVFXSystem::CollectFlashLights(const Scene& scene, std::span<GPULight> output)
 {
 	if (output.empty()) return 0;
@@ -813,68 +866,7 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			}
 		}
 
-		// ── 4. 지면 투영 데칼 트랙 렌더링 ──
-		const auto& decalTracks = effect->GetDecalTracks();
-		for (const auto& track : decalTracks)
-		{
-			if (!track.enabled || track.isMuted || vfxComp.isDraining) continue;
-
-			const f32 trackLocalTime = vfxComp.currentTime - track.startTime;
-			if (trackLocalTime < 0.0f || trackLocalTime >= track.duration) continue;
-
-			Mesh* mesh = defaultQuadMesh;
-			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
-			if (!mesh || !material) continue;
-
-			if ((acceptedBlendModes & material->GetBlendMode()) == EBlendMode::None)
-				continue;
-
-			// 페이드아웃 알파 계산
-			f32 alpha = 1.0f;
-			if (trackLocalTime > track.fadeStartTime)
-			{
-				const f32 fadeSpan = std::max(track.duration - track.fadeStartTime, 0.001f);
-				alpha = 1.0f - ((trackLocalTime - track.fadeStartTime) / fadeSpan);
-			}
-			alpha = std::clamp(alpha, 0.0f, 1.0f);
-
-			vec4 finalColor = track.colorTint;
-			finalColor.a *= alpha;
-
-			mat4 localMat = glm::translate(mat4(1.0f), track.localPosition) *
-				glm::mat4_cast(glm::quat(glm::radians(track.localRotation))) *
-				glm::scale(mat4(1.0f), vec3(track.size.x, track.size.y, 1.0f));
-			mat4 finalWorld = transform.worldMatrix * localMat;
-
-			Texture* texture = track.textureHandle.Get();
-			if (!texture)
-			{
-				const auto& texBindings = material->GetTextureBindings();
-				if (!texBindings.empty() && texBindings[0].texture.Get())
-					texture = texBindings[0].texture.Get();
-			}
-			if (!texture)
-			{
-				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/Particle_SoftCircle.png").Get();
-				if (!texture)
-					texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
-				if (!texture)
-					texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png").Get();
-			}
-
-			if (texture && texture->GetRHITexture() && mesh->GetIndexBuffer())
-			{
-				SpriteDrawCommand cmd;
-				cmd.mesh = mesh;
-				cmd.texture = texture;
-				cmd.material = material;
-				cmd.color = finalColor;
-				cmd.uvTransform = vec4(0.0f, 0.0f, 1.0f, 1.0f);
-				cmd.pickingId = pickingId;
-				cmd.worldMatrix = finalWorld;
-				renderer.SubmitSprite(cmd, targetPassId);
-			}
-		}
+		// ── 4. 지면 투영 데칼 트랙은 패스에 제출하지 않는다. DeferredSceneRenderer가 CollectDecals로 모아 G-Buffer에 투영한다. ──
 
 		// ── 5. 트레일 / 리본 트랙 렌더링 (동적 세그먼트 스트립) ──
 		const auto& trailTracks = effect->GetTrailTracks();

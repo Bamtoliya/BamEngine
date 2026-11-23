@@ -19,6 +19,8 @@ struct VS_OUTPUT
     float3 Tangent : TANGENT;
     float4 Color : COLOR0;
     nointerpolation float PickingId : TEXCOORD5;
+    // 1이면 데칼을 받지 않는다(PickingData.y). 맨 뒤에 두어 읽지 않는 픽셀 셰이더와도 연결된다.
+    nointerpolation float NoDecals : TEXCOORD6;
 };
 
 struct InstanceData
@@ -53,6 +55,7 @@ VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
     output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
     output.Color = input.Color;
     output.PickingId = g_Instances[instanceId].PickingData.x;
+    output.NoDecals = g_Instances[instanceId].PickingData.y;
 
     return output;
 }

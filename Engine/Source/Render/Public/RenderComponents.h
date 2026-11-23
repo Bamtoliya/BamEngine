@@ -8,6 +8,7 @@
 #include "SkinnedMeshRendererComponent.h"
 #include "SkyAtmosphereComponent.h"
 #include "FogComponent.h"
+#include "DecalComponent.h"
 #include "VolumetricCloudComponent.h"
 #include "TerrainComponent.h"
 #include "PostProcessComponent.h"
