@@ -654,6 +654,26 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection,
 	EAmbientOcclusionMode ambientOcclusion, const vec2& previousJitterNDC, bool useProbeGI)
 {
+	// 렌더 패스 안에서는 텍스처 업로드가 거부되고 실패한 리소스는 다시 시도하지 않는다.
+	// 람다가 처음 읽을 수 있는 IBL 큐브맵·BRDF LUT·구름 텍스처는 패스 밖인 제출 단계에서 미리 올린다.
+	if (targetScene)
+	{
+		auto& world = targetScene->GetRegistry();
+		for (auto [entity, sky] : world.view<SkyAtmosphereComponent>().each())
+		{
+			if (!IsComponentEnabled(world, entity, sky))
+				continue;
+			for (auto* texture : { sky.IrradianceMap.Get(), sky.PrefilteredMap.Get(), sky.BRDFLutMap.Get() })
+				if (texture) static_cast<void>(texture->EnsureResident());
+		}
+	}
+	if (ResourceManager::IsCreated())
+	{
+		auto& resources = ResourceManager::Get();
+		for (const auto& key : { CloudResources::BaseShapeKey, CloudResources::WeatherMapKey })
+			if (auto* texture = resources.GetResourceHandle<Texture>(key).Get()) static_cast<void>(texture->EnsureResident());
+	}
+
 	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
 	Texture* defaultBRDFLUT = nullptr;
 	if (targetScene)

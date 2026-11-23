@@ -6,6 +6,7 @@
 #include <vector>
 #include <array>
 #include <unordered_map>
+#include <unordered_set>
 #include <cstddef>
 
 struct DirectX12RHIDesc : public RHIDesc
@@ -261,6 +262,8 @@ private:
 	uint64 m_FrameFenceValues[MAX_SWAPCHAIN_BUFFERS] = {};
 	bool m_FrameRecording = false;
 	bool m_FrameFailed = false;
+	// 렌더 패스 안에서 업로드를 거부한 텍스처. 같은 텍스처의 오류 로그는 한 번만 남긴다.
+	std::unordered_set<const RHITexture*> m_PassUploadRejectedLogged;
 	HANDLE m_FenceEvent = nullptr;
 
 	HWND m_WindowHandle = nullptr;

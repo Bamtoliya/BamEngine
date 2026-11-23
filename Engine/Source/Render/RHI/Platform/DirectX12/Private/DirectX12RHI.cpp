@@ -1250,6 +1250,14 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
 
     const bool recordInFrame = m_FrameRecording;
 
+    // 렌더 패스가 열려 있으면 복사 명령을 기록할 수 없다. 원인을 바로 알 수 있도록 텍스처당 한 번 로그를 남긴다.
+    if (recordInFrame && m_CommandList && m_CurrentRenderPass && !m_FrameFailed &&
+        m_PassUploadRejectedLogged.insert(texture).second)
+    {
+        ENGINE_LOG_ERROR("UploadTextureData rejected inside render pass {} ({}x{}, {} mips, format {}): textures cannot be uploaded while a render pass is open. Call EnsureResident() on the Texture during the submit stage, before the pass lambda runs.",
+            m_CurrentRenderPass->GetID(), desc.width, desc.height, desc.mipLevels, static_cast<int>(desc.format));
+    }
+
     if (m_FrameFailed ||
         (recordInFrame && (!m_CommandList || m_CurrentRenderPass)))
         return EResult::Fail;
