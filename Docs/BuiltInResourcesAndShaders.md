@@ -129,6 +129,9 @@ flowchart TD
 | `fullscreenQuadVS.hlsl` | Vertex | 포스트 프로세스 패스 공용 풀스크린 삼각형/쿼드 생성 |
 | `postprocessPS.hlsl` | Pixel | 기본 포스트 프로세스 컴포짓 |
 | `postprocess_tonemappingPS.hlsl` | Pixel | ACES, Reinhard 등의 톤매핑 및 감마 보정 |
+| `autoExposureHistogramCS.hlsl` | Compute | 톤매핑 전 HDR 밝기의 64구간 log2 히스토그램 (D3D12 전용) |
+| `autoExposureAdaptCS.hlsl` | Compute | 극단값을 뺀 평균 밝기로 목표 노출을 구하고 이전 노출에서 시간에 걸쳐 옮김 (D3D12 전용) |
+| `autoExposurePS.hlsl` | Pixel | 장면 HDR 색에 자동 노출 `exp2(EV)`를 곱함 |
 | `bloomPrefilterPS.hlsl` | Pixel | 임계값(Threshold) 이상의 고휘도 픽셀 추출 |
 | `bloomDownsamplePS.hlsl` | Pixel | 13-tap 바이리니어 다운샘플링을 통한 밉 체인 블러 |
 | `bloomUpsamplePS.hlsl` | Pixel | 텐트 필터를 이용한 점진적 업샘플링 및 누적 |

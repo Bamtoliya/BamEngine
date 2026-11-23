@@ -25,6 +25,10 @@ public:
 
 	wstring Execute(f32 dt, const wstring& inputRT);
 	void AddEffect(IPostProcessEffect* effect);
+	// 모든 효과의 이전 프레임 값을 버린다(자동 노출 등).
+	void ResetHistory();
+	// 이번 프레임에 그릴 씬. 이전 프레임과 다른 씬이면 ResetHistory를 호출한다.
+	void SetHistoryScene(const void* scene);
 
 	vector<IPostProcessEffect*>& GetEffects() { return m_Effects; }
 	const vector<IPostProcessEffect*>& GetEffects() const { return m_Effects; }
@@ -47,14 +51,18 @@ public:
 	void CopySettingsFrom(const PostProcessPipeline& other);
 private:
 	// 처음 쓸 때 만든다. 만들 수 없으면 빈 이름을 반환한다.
-	const wstring& EnsureHdrTarget();
+	// 한 효과가 같은 타깃을 읽고 쓸 수 없으므로 HDR 효과가 이어지면 두 장을 번갈아 쓴다.
+	const wstring& EnsureHdrTarget(uint32 index);
+	// 저장된 목록에 없는 효과를 원래 순서상 바로 뒤에 오던 효과 앞에 끼운다.
+	void InsertMissingEffects(vector<IPostProcessEffect*>& ordered) const;
 
 private:
 	wstring m_Prefix;
 	vector<IPostProcessEffect*> m_Effects;
 	vector<RenderPassID> m_PassIDs;
 	wstring m_PPRTNames[2];
-	wstring m_HdrRTName;
+	wstring m_HdrRTNames[2];
+	const void* m_HistoryScene = nullptr;
 
 	uint32 m_Width = 0;
 	uint32 m_Height = 0;

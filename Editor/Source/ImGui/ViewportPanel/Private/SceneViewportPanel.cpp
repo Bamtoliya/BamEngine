@@ -1535,6 +1535,8 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 
 void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT)
 {
+	// 다른 씬의 자동 노출 등 이전 프레임 값을 이어 쓰지 않는다.
+	m_PostProcessChain.GetPipeline().SetHistoryScene(SceneManager::Get().GetCurrentScene());
 	if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
 	{
 		auto view = activeScene->GetRegistry().view<PostProcessComponent>();

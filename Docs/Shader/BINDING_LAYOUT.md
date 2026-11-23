@@ -103,6 +103,16 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 누적·필터는 크기(`Light.SourceSize`)가 있는 광원이 채널을 받았고 Resource Binding Tier 2 이상일 때만 실행한다.
 광원 버퍼 항목의 마지막 4바이트(오프셋 76)는 `SourceSize`이며 `Light.h`·`light.hlsli`·`light.glsl`이 같아야 한다.
 
+### 자동 노출 바인딩 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | `AutoExposureParams` 64바이트 (`autoExposure.hlsli`, RHI CBV slot `2`) |
+| `t0, space3` | `autoExposureHistogramCS` | 톤매핑 전 HDR 장면 색 (`BindTexture` slot `MAX_MATERIAL_TEXTURE_SLOTS`) |
+| `u0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | 64구간 `uint` 히스토그램 (`BindComputeStorageBuffer` slot `0`). 적응 패스가 읽은 뒤 비움 |
+| `u2, space3` | `autoExposureAdaptCS` | 1x1 `R32_FLOAT` 노출(EV). 이전 값을 읽고 새 값을 씀 (`BindComputeStorageTexture` slot `0`) |
+| `t0`·`t1, space3` | `autoExposurePS` | 장면 색과 노출 텍스처. 장면 색에 `exp2(EV)`를 곱함 |
+
 ### 레이트레이싱 반사와 번호로 읽는 리소스 (D3D12 전용)
 
 | Register | 셰이더 | 내용 |

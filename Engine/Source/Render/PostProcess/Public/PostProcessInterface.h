@@ -21,6 +21,8 @@ public:
 	virtual void SetEnabled(bool enable) { m_Enabled = enable; }
 	// 톤매핑 전이라 1보다 밝은 값을 쓰는 효과. PostProcessPipeline이 HDR 타깃에 쓰게 한다.
 	virtual bool WritesHdr() const { return false; }
+	// 이전 프레임 값을 쓰는 효과가 그 값을 버린다. 씬 전환·크기 변경에서 PostProcessPipeline이 호출한다.
+	virtual void ResetHistory() {}
 
 public:
 	const wstring& GetName() const { return m_Name; }
