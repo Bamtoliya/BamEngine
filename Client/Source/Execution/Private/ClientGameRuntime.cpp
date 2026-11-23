@@ -108,6 +108,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     Engine::ResourceStreamer::Get().SetBudgetMB(static_cast<Engine::uint32>((std::max)(m_ProjectSettings.ResourceStreamingBudgetMB, 0)));
     m_RenderPipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedShadowMode));
     m_RenderPipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedReflectionMode));
+    m_RenderPipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.TemporalAAMode));
     if (IsFailure(InitializeSystems()))
         return Engine::EResult::Fail;
     if (loadModules)

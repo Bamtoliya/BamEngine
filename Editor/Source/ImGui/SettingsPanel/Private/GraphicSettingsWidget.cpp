@@ -19,12 +19,14 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftVSync = settings.GetEditorVSync().value_or(settings.GetPreferences().VSync);
     m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
     m_DraftRaytracedReflection = settings.GetPreferences().RaytracedReflectionMode;
+    m_DraftTemporalAA = settings.GetPreferences().TemporalAAMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
     m_VSyncDirty = false;
     m_RaytracedShadowDirty = false;
     m_RaytracedReflectionDirty = false;
+    m_TemporalAADirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -51,6 +53,14 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_RaytracedReflectionDirty = false;
+    }
+
+    if (m_TemporalAADirty)
+    {
+        const auto result = settings.SetEditorTemporalAAMode(m_DraftTemporalAA);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_TemporalAADirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -220,6 +230,17 @@ void GraphicSettingsWidget::Draw()
         if (vsyncPending)
             ImGui::TextUnformatted(LOCAL_CSTR("GraphicsSettings.VSyncPending"));
 
+        ImGui::Spacing();
+    }
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionAntiAliasing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##GraphicAntiAliasingTable", tableStyle))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.TemporalAA");
+            m_TemporalAADirty |= DrawRaytracedShadowModeCombo("###TemporalAA", m_DraftTemporalAA, "GraphicsSettings.TemporalAAHint");
+            EditorUI::EndPropertyTable();
+        }
         ImGui::Spacing();
     }
 

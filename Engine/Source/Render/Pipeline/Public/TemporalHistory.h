@@ -5,8 +5,9 @@
 
 namespace Engine
 {
-	// 뷰 하나의 반사 누적 이력. 어느 텍스처를 읽고 쓸지와 이전 카메라를 이어 간다.
-	class ReflectionHistory
+	// 뷰 하나의 시간 누적 이력(반사, TAA). 어느 텍스처를 읽고 쓸지와 이전 카메라를 이어 간다.
+	// 카메라는 TAA 지터를 넣지 않은 값이어야 한다.
+	class TemporalHistory
 	{
 	public:
 		struct Frame

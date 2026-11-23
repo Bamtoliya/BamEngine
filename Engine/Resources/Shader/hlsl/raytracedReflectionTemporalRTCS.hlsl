@@ -60,11 +60,17 @@ bool SampleHistory(float2 uv, uint2 size, float expectedDistance, float distance
 	return true;
 }
 
-bool ProjectPrevious(float3 position, out float2 uv)
+// 이번 화면과 이전 화면의 투영 차이만큼 픽셀에서 옮긴다. TAA가 켜지면 G-Buffer가 픽셀 중심에서 조금씩 어긋난 위치를 담으므로
+// 이전 화면의 투영을 그대로 쓰면 멈춘 화면에서도 이력이 매 프레임 흐려진다.
+bool ProjectPrevious(float3 position, float2 pixelUV, out float2 uv)
 {
-	const float4 clip = mul(gParams.PrevViewProjection, float4(position, 1.0f));
-	uv = clip.w > 0.0f ? clip.xy / clip.w * float2(0.5f, -0.5f) + 0.5f : float2(-1.0f, -1.0f);
-	return clip.w > 0.0f;
+	const float4 current = mul(commonData.ViewProjection, float4(position, 1.0f));
+	const float4 previous = mul(gParams.PrevViewProjection, float4(position, 1.0f));
+	uv = float2(-1.0f, -1.0f);
+	if (current.w <= 0.0f || previous.w <= 0.0f)
+		return false;
+	uv = pixelUV + (previous.xy / previous.w - current.xy / current.w) * float2(0.5f, -0.5f);
+	return true;
 }
 
 [numthreads(8, 8, 1)]
@@ -76,6 +82,7 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 		return;
 
 	const int2 pixel = int2(dispatchId.xy);
+	const float2 pixelUV = (float2(dispatchId.xy) + 0.5f) / float2(size);
 	const float hitDistance = LoadBindless(gParams.HitDistanceTexture, pixel).r;
 	if (hitDistance < 0.0f)
 	{
@@ -105,10 +112,10 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 		if (smoothness > 0.5f && hitDistance < REFLECTION_MISS_DISTANCE)
 		{
 			const float3 viewDirection = (position - commonData.CameraPos) / max(cameraDistance, 1e-4f);
-			if (ProjectPrevious(position + viewDirection * hitDistance, uv))
+			if (ProjectPrevious(position + viewDirection * hitDistance, pixelUV, uv))
 				found = SampleHistory(uv, size, length(position - gParams.PrevCameraPosition), 0.15f, normal, history, historyLength);
 		}
-		if (!found && ProjectPrevious(position, uv))
+		if (!found && ProjectPrevious(position, pixelUV, uv))
 			found = SampleHistory(uv, size, length(position - gParams.PrevCameraPosition), 0.02f, normal, history, historyLength);
 
 		if (found)

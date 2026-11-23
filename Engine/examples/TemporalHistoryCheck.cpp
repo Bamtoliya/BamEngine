@@ -1,4 +1,4 @@
-﻿#include "ReflectionHistory.h"
+﻿#include "TemporalHistory.h"
 
 #include <cstdio>
 
@@ -11,7 +11,7 @@ namespace
     void Expect(bool condition, const char* message)
     {
         if (condition) return;
-        std::fprintf(stderr, "ReflectionHistoryCheck failed: %s\n", message);
+        std::fprintf(stderr, "TemporalHistoryCheck failed: %s\n", message);
         ++g_Failures;
     }
 
@@ -26,7 +26,7 @@ namespace
 
 int main()
 {
-    ReflectionHistory history;
+    TemporalHistory history;
     const int sceneA = 0;
     const int sceneB = 0;
 
@@ -52,15 +52,15 @@ int main()
     history.Commit();
     Expect(!history.Begin(Camera(1.0f), &sceneB, 800, 480).Valid, "another size must drop the history");
     history.Commit();
-    Expect(!history.Begin(Camera(1.0f + ReflectionHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "a camera cut must drop the history");
+    Expect(!history.Begin(Camera(1.0f + TemporalHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "a camera cut must drop the history");
     history.Commit();
-    Expect(history.Begin(Camera(1.5f + ReflectionHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "small camera moves must keep the history");
+    Expect(history.Begin(Camera(1.5f + TemporalHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "small camera moves must keep the history");
 
     // 중간 패스가 실패하면 다음 프레임이 반쯤 쓴 결과를 이어 쓰지 않는다.
-    Expect(!history.Begin(Camera(1.5f + ReflectionHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "an unfinished frame must not be reused");
+    Expect(!history.Begin(Camera(1.5f + TemporalHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "an unfinished frame must not be reused");
     history.Commit();
     history.Reset();
-    Expect(!history.Begin(Camera(1.5f + ReflectionHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "a reset must drop the history");
+    Expect(!history.Begin(Camera(1.5f + TemporalHistory::MaxCameraStep), &sceneB, 800, 480).Valid, "a reset must drop the history");
 
     return g_Failures == 0 ? 0 : 1;
 }

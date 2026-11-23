@@ -20,6 +20,7 @@
 #include "ResourceManager.h"
 #include "Mesh.h"
 #include "MeshWinding.h"
+#include "MotionHistory.h"
 #include "Shader.h"
 #include "Texture.h"
 #include "MaterialInterface.h"
@@ -1281,6 +1282,155 @@ EResult Renderer::RenderUIImages(const vector<UIImageDrawCommand>& commands, Ren
 			camera.viewProjMatrix = camera.projMatrix;
 			camera.invViewProjMatrix = camera.invProjMatrix;
 			return m_RHI->BindConstantBuffer(&camera, sizeof(camera), 0);
+		}
+	}
+	return EResult::Success;
+}
+
+EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistory& history, RenderPass* renderPass)
+{
+	if (!m_RHI || !renderPass) return EResult::InvalidArgument;
+
+	static const vector<StaticDrawCommand> noStatic;
+	static const vector<SkinnedDrawCommand> noSkinned;
+	const auto staticIt = m_StaticDrawCommands.find(info.geometryPass);
+	const auto skinnedIt = m_SkinnedDrawCommands.find(info.geometryPass);
+	const auto& staticCommands = staticIt != m_StaticDrawCommands.end() ? staticIt->second : noStatic;
+	const auto& skinnedCommands = skinnedIt != m_SkinnedDrawCommands.end() ? skinnedIt->second : noSkinned;
+
+	// 스킨드와 정적 컴포넌트를 함께 가진 엔티티를 구분한다.
+	constexpr uint64 skinnedKeyBit = 1ull << 63u;
+	history.Begin();
+	for (const auto& command : staticCommands)
+	{
+		if (command.objectId.IsValid()) history.Record(command.objectId.GetKey() & ~skinnedKeyBit, command.worldMatrix);
+	}
+	for (const auto& command : skinnedCommands)
+	{
+		if (command.objectId.IsValid()) history.Record(command.objectId.GetKey() | skinnedKeyBit, command.worldMatrix, command.boneMatrices);
+	}
+	history.End();
+
+	const auto isReady = [](const Shader* shader) { return shader && shader->GetRHIShader(); };
+	RHISampler* sampler = SamplerManager::Get().GetDefaultSampler();
+	if (!info.draw || !info.position || !sampler || !isReady(info.pixelShader))
+		return EResult::Success;
+
+	RHIPipelineDesc desc;
+	if (IsFailure(PreparePassPipelineDesc(renderPass, desc))) return EResult::Fail;
+	desc.pipelineType = EPipelineType::Graphics;
+	desc.pixelShader = info.pixelShader->GetRHIShader();
+	desc.cullMode = ECullMode::None;
+	desc.depthStencilState.depthTestEnable = false;
+	desc.depthStencilState.depthWriteEnable = false;
+
+	// motionVector.hlsli의 MotionConstants (b1, space3)
+	struct MotionConstants
+	{
+		mat4 jitteredViewProjection;
+		mat4 viewProjection;
+		mat4 previousViewProjection;
+	};
+	const MotionConstants constants{ info.jitteredViewProjection, info.viewProjection, info.previousViewProjection };
+
+	RHIPipeline* lastPipeline = nullptr;
+	const auto bindPipeline = [&](Shader* vertexShader, const Mesh& mesh, size_t layoutCount)
+		{
+			const auto& layouts = mesh.GetInputLayoutDescs();
+			if (layouts.size() < layoutCount) return false;
+			desc.vertexShader = vertexShader->GetRHIShader();
+			desc.inputLayouts.assign(layouts.begin(), layouts.begin() + layoutCount);
+			RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
+			if (!pipeline) return false;
+			if (pipeline == lastPipeline) return true;
+			if (IsFailure(m_RHI->BindPipeline(pipeline)) || IsFailure(m_RHI->BindConstantBuffer(&constants, sizeof(constants), 3)) ||
+				IsFailure(m_RHI->BindTextureSampler(info.position, sampler, MAX_MATERIAL_TEXTURE_SLOTS + 4)))
+				return false;
+			lastPipeline = pipeline;
+			return true;
+		};
+	const auto draw = [&](Mesh& mesh, uint32 instanceCount)
+		{
+			return mesh.GetIndexBuffer() ? m_RHI->DrawIndexedInstanced(mesh.GetIndexCount(), instanceCount) : m_RHI->DrawInstanced(mesh.GetVertexCount(), instanceCount);
+		};
+
+	// 인스턴스 링 버퍼는 다른 패스와 함께 쓰므로 한도를 두고, 넘친 물체는 카메라 이동만 반영한다.
+	constexpr uint32 maxStaticInstances = 16384u;
+	constexpr uint32 maxSkinnedDraws = 128u;
+	constexpr size_t maxBatch = 1024u;
+
+	if (isReady(info.staticVertexShader))
+	{
+		struct MotionInstance
+		{
+			mat4 world;
+			mat4 previousWorld;
+		};
+		vector<MotionInstance> batch;
+		Mesh* batchMesh = nullptr;
+		uint32 drawnInstances = 0;
+		const auto flush = [&]()
+			{
+				if (batch.empty()) return true;
+				const uint32 count = static_cast<uint32>(batch.size());
+				const bool drawn = bindPipeline(info.staticVertexShader, *batchMesh, 1u) && IsSuccess(batchMesh->Bind(0)) &&
+					IsSuccess(m_RHI->BindInstanceBuffer(batch.data(), count, sizeof(MotionInstance))) && IsSuccess(draw(*batchMesh, count));
+				drawnInstances += count;
+				batch.clear();
+				return drawn;
+			};
+
+		const Frustum frustum = FrustumCuller::ExtractFrustum(info.jitteredViewProjection);
+		for (const auto& command : staticCommands)
+		{
+			if (!command.mesh || command.heightfield || !command.objectId.IsValid()) continue;
+			const auto* previous = history.FindMoved(command.objectId.GetKey() & ~skinnedKeyBit);
+			if (!previous || command.mesh->IsDynamic() || command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
+			if (command.worldBounds && !FrustumCuller::TestBoundingBox(frustum, *command.worldBounds)) continue;
+			if (drawnInstances + batch.size() >= maxStaticInstances) break;
+
+			if (command.mesh != batchMesh || batch.size() >= maxBatch)
+			{
+				if (!flush()) return EResult::Fail;
+				batchMesh = command.mesh;
+			}
+			batch.push_back({ command.worldMatrix, previous->World });
+		}
+		if (!flush()) return EResult::Fail;
+	}
+
+	if (isReady(info.skinnedVertexShader))
+	{
+		constexpr size_t boneCount = 256u; // motionVectorSkinningVS의 BONE_COUNT
+		struct MotionObject
+		{
+			mat4 world;
+			mat4 previousWorld;
+		};
+		vector<mat4> bones(boneCount * 2u, mat4(1.0f));
+		const auto copyBones = [&](const vector<mat4>* source, size_t offset)
+			{
+				const size_t count = source ? std::min(source->size(), boneCount) : 0u;
+				if (count > 0u) std::copy_n(source->begin(), count, bones.begin() + offset);
+				std::fill(bones.begin() + offset + count, bones.begin() + offset + boneCount, mat4(1.0f));
+			};
+
+		uint32 drawCount = 0;
+		for (const auto& command : skinnedCommands)
+		{
+			if (!command.mesh || !command.objectId.IsValid()) continue;
+			const auto* previous = history.FindMoved(command.objectId.GetKey() | skinnedKeyBit);
+			if (!previous || command.mesh->IsDynamic() || !command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
+			if (drawCount >= maxSkinnedDraws) break;
+
+			if (!bindPipeline(info.skinnedVertexShader, *command.mesh, 3u)) continue;
+			copyBones(command.boneMatrices, 0u);
+			copyBones(&previous->Bones, boneCount);
+			const MotionObject object{ command.worldMatrix, previous->World };
+			if (IsFailure(m_RHI->BindConstantBuffer(&object, sizeof(object), 1)) || IsFailure(command.mesh->Bind(0)) ||
+				IsFailure(m_RHI->BindInstanceBuffer(bones.data(), static_cast<uint32>(bones.size()), sizeof(mat4))) || IsFailure(draw(*command.mesh, 1u)))
+				return EResult::Fail;
+			++drawCount;
 		}
 	}
 	return EResult::Success;

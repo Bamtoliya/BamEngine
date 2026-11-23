@@ -108,6 +108,7 @@ public:
     [[nodiscard]] EditorSettingsChangeResult SetEditorTargetFPS(std::int32_t fps);
     [[nodiscard]] EditorSettingsChangeResult SetEditorRaytracedShadowMode(std::int32_t mode);
     [[nodiscard]] EditorSettingsChangeResult SetEditorRaytracedReflectionMode(std::int32_t mode);
+    [[nodiscard]] EditorSettingsChangeResult SetEditorTemporalAAMode(std::int32_t mode);
     [[nodiscard]] EditorSettingsChangeResult SetEditorLanguage(ELocalizationLanguage language);
     [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapping(float translation, float rotation, float scale);
     [[nodiscard]] EditorSettingsChangeResult SetGizmoSnapTranslation(float snap);

@@ -19,6 +19,7 @@ private:
 
     int32 m_DraftRaytracedShadow = 0;
     int32 m_DraftRaytracedReflection = 0;
+    int32 m_DraftTemporalAA = 0;
     int32 m_DraftStreamingBudget = 0;
 
     string m_DraftProjectName;

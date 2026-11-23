@@ -22,6 +22,10 @@ namespace Client
         {
             m_SceneRenderer.SetRaytracedReflectionOverrides({ mode });
         }
+        void SetTemporalAAMode(Engine::ERaytracedShadowMode mode)
+        {
+            m_SceneRenderer.SetTemporalAAOverrides({ mode });
+        }
         bool UsesDeferredProfile() const { return m_PresentPass != Engine::INVALID_PASS_ID; }
 
     private:

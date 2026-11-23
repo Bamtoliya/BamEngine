@@ -302,6 +302,7 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 
 	m_Pipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(state.RaytracedShadowMode));
 	m_Pipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(state.RaytracedReflectionMode));
+	m_Pipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(state.TemporalAAMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -319,6 +320,7 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 
 	state.RaytracedShadowMode = static_cast<int32>(m_Pipeline.GetRaytracedShadowMode());
 	state.RaytracedReflectionMode = static_cast<int32>(m_Pipeline.GetRaytracedReflectionMode());
+	state.TemporalAAMode = static_cast<int32>(m_Pipeline.GetTemporalAAMode());
 	return state;
 }
 #pragma endregion
@@ -416,7 +418,7 @@ void SceneViewportPanel::Update(f32 dt)
 	if (cameraBuffer.has_value() && canDrawSceneOverlays)
 	{
 		if (*m_Grid.GetVisible())
-			m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6]);
+			m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6], m_Pipeline.GetTemporalJitterNDC());
 
 		DrawSelectedSpline(activeScene);
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
@@ -862,6 +864,20 @@ void SceneViewportPanel::DrawRenderPassMenu()
 		}
 		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedReflectionUnsupported"));
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.TemporalAA").c_str()))
+		{
+			const auto current = m_Pipeline.GetTemporalAAMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(RaytracedShadowModeKeys); ++index)
+			{
+				const auto mode = Engine::ToRaytracedShadowMode(index);
+				if (ImGui::MenuItem(LOCAL_LABEL(RaytracedShadowModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetTemporalAAMode(mode);
+			}
+			ImGui::Separator();
+			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsTemporalAAActive() ?
+				"GraphicsSettings.TemporalAAActive" : "GraphicsSettings.TemporalAAInactive"));
+			ImGui::EndMenu();
+		}
 		ImGui::EndMenu();
 	}
 }

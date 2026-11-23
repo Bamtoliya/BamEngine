@@ -215,6 +215,8 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
         if (!scene) continue;
 
         auto& sceneWorld = scene->GetRegistry();
+        // 다른 씬의 같은 엔티티 번호와 구분하기 위한 값. 0은 추적하지 않는 물체이므로 피한다.
+        const uint32 motionSceneId = static_cast<uint32>(std::hash<const Scene*>{}(scene)) | 1u;
         // TLAS를 빌드할 씬의 캐스터만 섀도맵 제외 후보로 표시한다. 함께 활성화된 다른 씬은 섀도맵에 남는다.
         const auto isRaytraced = [scene](RenderPassID viewID)
             {
@@ -432,6 +434,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 }
 
                 command.pickingId = pickingId;
+                command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)) };
                 if (target.pass->GetPassType() == ERenderPassType::Shadow && isRaytraced(target.viewID))
                 {
                     command.raytracedScene = scene;
@@ -482,6 +485,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
             command.worldMatrix = renderWorldMatrix;
             command.boneMatrices = boneMatrices;
             command.pickingId = PickingManager::Get().RegisterPickingEntity<SkinnedMeshRendererComponent>(scene, entity);
+            command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)) };
 
             for (const auto& target : targets)
             {

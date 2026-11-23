@@ -13,6 +13,14 @@ struct PS_OUTPUT
     float Depth : SV_Depth;
 };
 
+// Grid.cpp의 depthParams (b1, space3)
+struct GridDepthParams
+{
+    float2 JitterNDC; // 깊이 타깃을 그린 카메라의 TAA 지터. 끄면 0
+    float2 _pad;
+};
+ConstantBuffer<GridDepthParams> gDepthParams : register(b1, space3);
+
 float3 UnprojectPoint(float3 ndc)
 {
     float4x4 inverseViewProjection = commonData.InvViewProjection;
@@ -54,7 +62,12 @@ PS_OUTPUT main(PS_INPUT input)
     if (t < 0.0f) discard;
 
     float3 fragmentPosition = nearPoint + t * rayDirection;
-    float4 clipPosition = mul(commonData.ViewProjection, float4(fragmentPosition, 1.0f));
+    // 깊이 타깃의 이 픽셀에는 지터만큼 옮긴 방향의 면이 들어 있다. 같은 방향의 격자 깊이와 비교해야 바닥과 겹친 격자가 프레임마다 뒤집히지 않는다.
+    float3 depthNear = UnprojectPoint(float3(input.NDC - gDepthParams.JitterNDC, 0.0f));
+    float3 depthDirection = UnprojectPoint(float3(input.NDC - gDepthParams.JitterNDC, 1.0f)) - depthNear;
+    float depthT = -depthNear.y / depthDirection.y;
+    float3 depthPosition = depthT > 0.0f ? depthNear + depthT * depthDirection : fragmentPosition;
+    float4 clipPosition = mul(commonData.ViewProjection, float4(depthPosition, 1.0f));
     float4 grid1 = Grid3D(fragmentPosition, 1.0f, 1.0f, false);
     float4 grid10 = Grid3D(fragmentPosition, 0.1f, 2.5f, true);
     float4 grid100 = Grid3D(fragmentPosition, 0.01f, 5.0f, true);

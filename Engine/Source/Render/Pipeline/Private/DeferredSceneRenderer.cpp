@@ -23,6 +23,7 @@
 #include "Scene.h"
 #include "SceneManager.h"
 #include "SkyAtmosphereComponent.h"
+#include "TemporalAA.h"
 #include "TimeManager.h"
 #include "VolumetricCloudComponent.h"
 #include <glm/gtc/constants.hpp>
@@ -131,6 +132,35 @@ namespace
 	constexpr const wchar_t* RaytracedReflectionShaderKey = L"Resources/Shader/RaytracedReflectionRTCS";
 	constexpr const wchar_t* RaytracedReflectionShaderFile = L"raytracedReflectionRTCS.cso";
 	constexpr Engine::uint32 RaytracedReflectionSlot = MAX_MATERIAL_TEXTURE_SLOTS + 15; // t15, space3 (lightingPS)
+
+	// temporalAAPS.hlsl의 TemporalAAParams (b1, space3)
+	struct TemporalAAParams
+	{
+		mat4 ViewProjection{ 1.0f };
+		mat4 PreviousViewProjection{ 1.0f };
+		mat4 InvViewProjection{ 1.0f };
+		vec3 CameraPosition{ 0.0f };
+		uint32 HasHistory = 0u;
+		vec2 JitterPixels{ 0.0f };
+		// 이번 프레임을 섞는 비율. 작을수록 매끈하지만 잔상이 길다. 측정 전 시작값이다.
+		f32 StillBlend = 0.06f;
+		f32 MovingBlend = 0.15f;
+	};
+	static_assert(sizeof(TemporalAAParams) == 224);
+	static_assert(offsetof(TemporalAAParams, CameraPosition) == 192);
+	static_assert(offsetof(TemporalAAParams, JitterPixels) == 208);
+
+	// temporalAAPS.hlsl의 NO_MOTION
+	constexpr f32 NoMotion = 100.0f;
+
+	constexpr const wchar_t* TemporalAAShaderKey = L"Resources/Shader/TemporalAAPS";
+	constexpr const wchar_t* TemporalAAShaderFile = L"temporalAAPS.cso";
+	constexpr const wchar_t* MotionVectorVSKey = L"Resources/Shader/MotionVectorVS";
+	constexpr const wchar_t* MotionVectorVSFile = L"motionVectorVS.cso";
+	constexpr const wchar_t* MotionVectorSkinningVSKey = L"Resources/Shader/MotionVectorSkinningVS";
+	constexpr const wchar_t* MotionVectorSkinningVSFile = L"motionVectorSkinningVS.cso";
+	constexpr const wchar_t* MotionVectorPSKey = L"Resources/Shader/MotionVectorPS";
+	constexpr const wchar_t* MotionVectorPSFile = L"motionVectorPS.cso";
 }
 
 Engine::DeferredSceneRenderer::~DeferredSceneRenderer()
@@ -143,6 +173,12 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto*& buffer : m_LocalLightBuffer)
 		Safe_Release(buffer);
 	m_LightingPipeline = nullptr;
+	for (RenderPassID* pass : { &m_TemporalPassID, &m_MotionPassID })
+	{
+		if (*pass != INVALID_PASS_ID && Engine::RenderPassManager::IsCreated())
+			Engine::RenderPassManager::Get().RemoveRenderPass(*pass);
+		*pass = INVALID_PASS_ID;
+	}
 	const auto removeTarget = [](std::wstring& name)
 		{
 			if (!name.empty() && Engine::RenderTargetManager::IsCreated())
@@ -153,6 +189,12 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto& name : m_ReflectionTargetNames)
 		removeTarget(name);
 	m_ReflectionHistory.Reset();
+	for (auto& name : m_TemporalTargetNames)
+		removeTarget(name);
+	m_TemporalHistory.Reset();
+	m_MotionHistory.Reset();
+	m_TemporalAAActive = false;
+	m_TemporalJitterNDC = vec2(0.0f);
 }
 
 bool Engine::DeferredSceneRenderer::Initialize()
@@ -241,17 +283,20 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	if (pointShadowPass && pointShadowPass->IsEnabled())
 		renderer.RegisterShadowPassForView(pointShadowPass, cameraBuffer, passes.Geometry);
 
+	// 1-1. TAA를 쓰면 장면을 그리는 패스와 조명만 지터 카메라를 쓴다. 그림자·반사·기즈모는 원래 카메라를 쓴다.
+	const CameraBuffer sceneCamera = PrepareTemporalAA(cameraBuffer, sceneToQuery, passes);
+
 	// 2. GeometryPass 카메라 등록 (씬 메쉬들이 GBuffer에 렌더링됨)
 	auto* geomPass = rpm.GetRenderPassByID(passes.Geometry);
 	if (geomPass && geomPass->IsEnabled())
-		renderer.RegisterViewportCamera(cameraBuffer, geomPass, passes.AcceptSceneMeshes, passes.Geometry);
+		renderer.RegisterViewportCamera(sceneCamera, geomPass, passes.AcceptSceneMeshes, passes.Geometry);
 
 	// 3. ForwardPass & ForwardTransparentPass 카메라 등록 (스카이 데이터 상수버퍼 slot 3 주입)
 	auto* forwardPass = rpm.GetRenderPassByID(passes.ForwardOpaque);
 	if (forwardPass && forwardPass->IsEnabled())
 	{
 		forwardPass->SetPassConstantStruct(3, skyData);
-		renderer.RegisterViewportCamera(cameraBuffer, forwardPass, passes.AcceptSceneMeshes, passes.Geometry);
+		renderer.RegisterViewportCamera(sceneCamera, forwardPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
 
 	auto* forwardTransPass = rpm.GetRenderPassByID(passes.ForwardTransparent);
@@ -259,7 +304,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	{
 		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 1, passes.LightingInputs[1]);
 		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, passes.LightingInputs[4]);
-		renderer.RegisterViewportCamera(cameraBuffer, forwardTransPass, passes.AcceptSceneMeshes, passes.Geometry);
+		renderer.RegisterViewportCamera(sceneCamera, forwardTransPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
 
 	// 4. LightingPass 풀스크린 조명 커스텀 커맨드 제출
@@ -268,7 +313,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		// 레이트레이싱 그림자나 반사를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
 		if (useRaytracedShadow || useRaytracedReflection)
 			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection);
-		SubmitLightingPass(cameraBuffer, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection);
+		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection);
 	}
 }
 
@@ -341,7 +386,7 @@ Engine::SkyAtmosphereData Engine::DeferredSceneRenderer::BuildSkyAtmosphereData(
 	return skyData;
 }
 
-void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, Scene* targetScene,
+void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& cameraBuffer, const CameraBuffer& sceneCamera, Scene* targetScene,
 	const SkyAtmosphereData& skyData, const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection)
 {
 	// The first LUT lookup may upload pixels and must finish recording before the lighting pass begins.
@@ -367,7 +412,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 	}
 
 	Engine::Renderer::Get().SubmitCustomCommand(
-		[this, cameraBuffer, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
+		[this, cameraBuffer, sceneCamera, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
 			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow, useRaytracedReflection,
 			raytracedOverrides = m_RaytracedShadowOverrides](f32, Engine::RenderPass*) -> Engine::EResult
 		{
@@ -377,6 +422,8 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			if (!rhi || !sampler || !m_LightingPipeline) return Engine::EResult::Fail;
 			CameraBuffer camBuf = cameraBuffer;
 			camBuf.time = static_cast<f32>(Engine::TimeManager::Get().GetTotalTime());
+			CameraBuffer sceneCamBuf = sceneCamera;
+			sceneCamBuf.time = camBuf.time;
 			const auto& sourceNames = inputs;
 			auto& lightManager = Engine::LightManager::Get();
 			bool useTiledCulling = false;
@@ -386,13 +433,13 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 				if (auto* posRT = rtMgr.GetRenderTarget(sourceNames[4]))
 				{
 					if (auto* posTex = posRT->GetTexture())
-						useTiledCulling = Engine::IsSuccess(lightManager.DispatchLightCulling(camBuf, posTex));
+						useTiledCulling = Engine::IsSuccess(lightManager.DispatchLightCulling(sceneCamBuf, posTex));
 				}
 			}
 			// 2. 조명 그래픽스 파이프라인 바인딩 (모든 그래픽스 리소스 바인딩보다 먼저 실행하여 Root Signature 상태 확립)
 			if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 				return Engine::EResult::Fail;
-			// 3. 카메라 버퍼 바인딩 (slot 0 -> b0, space0)
+			// 3. 카메라 버퍼 바인딩 (slot 0 -> b0, space0). 반사 누적은 지터가 없는 카메라로 이전 화면을 찾는다.
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&camBuf, sizeof(CameraBuffer), 0)))
 				return Engine::EResult::Fail;
 			Engine::Scene* sceneToQuery = targetScene;
@@ -613,7 +660,10 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			// 9. 조명 패스 상수 버퍼 바인딩 (slot 3 -> b1, space3)
 			if (Engine::IsFailure(rhi->BindConstantBuffer(&lightingData, sizeof(lightingData), 3)))
 				return Engine::EResult::Fail;
-			// 10. 풀스크린 쿼드 조명 합성 실행
+			// 10. 조명은 접촉 그림자에서 G-Buffer 위치를 화면 좌표로 다시 찾으므로 G-Buffer를 그린 카메라로 바꾼다.
+			if (Engine::IsFailure(rhi->BindConstantBuffer(&sceneCamBuf, sizeof(CameraBuffer), 0)))
+				return Engine::EResult::Fail;
+			// 11. 풀스크린 쿼드 조명 합성 실행
 			if (Engine::IsFailure(rhi->Draw(3)))
 				return Engine::EResult::Fail;
 			return Engine::EResult::Success;
@@ -645,29 +695,9 @@ Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracedReflectionPipeli
 
 Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracingPipeline(const wchar_t* shaderKey, const wchar_t* shaderFile, bool& shaderMissing)
 {
-	if (shaderMissing)
+	Engine::Shader* shader = GetOwnedShader(shaderKey, shaderFile, EShaderType::Compute, shaderMissing);
+	if (!shader)
 		return nullptr;
-
-	// DXR 전용 셰이더라 시작 매니페스트·프로필 공용 로드에 기대지 않고 처음 사용할 때 DXIL을 직접 등록한다.
-	auto& resources = Engine::ResourceManager::Get();
-	auto handle = resources.GetResourceHandle<Engine::Shader>(shaderKey);
-	if (!handle.Get())
-	{
-		ShaderDesc desc{};
-		desc.Key = shaderKey;
-		desc.dxilPath = (PlatformPath::GetEngineResourceRoot() / "Shader" / "bin" / "dxil" / shaderFile).wstring();
-		desc.Path = desc.dxilPath;
-		desc.shaderType = EShaderType::Compute;
-		handle = resources.LoadResource<Engine::Shader>(&desc);
-	}
-
-	Engine::Shader* shader = handle.Get();
-	if (!shader || !shader->GetRHIShader())
-	{
-		ENGINE_LOG_ERROR("Raytracing shader is not available: {}", WStrToStr(shaderFile));
-		shaderMissing = true;
-		return nullptr;
-	}
 
 	// 셰이더 핫 리로드로 RHI 셰이더가 바뀌어도 맞는 파이프라인을 쓰도록 매번 캐시에서 조회한다.
 	RHIPipelineDesc desc{};
@@ -676,8 +706,36 @@ Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracingPipeline(const 
 	return Engine::PipelineManager::Get().GetOrCreatePipeline(desc);
 }
 
-Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracingTarget(const std::wstring& name, ETextureFormat format,
-	Engine::uint32 width, Engine::uint32 height, std::wstring& ownedName)
+Engine::Shader* Engine::DeferredSceneRenderer::GetOwnedShader(const wchar_t* shaderKey, const wchar_t* shaderFile, EShaderType type, bool& shaderMissing)
+{
+	if (shaderMissing)
+		return nullptr;
+
+	// DirectX12 전용 셰이더라 시작 매니페스트·프로필 공용 로드에 기대지 않고 처음 사용할 때 DXIL을 직접 등록한다.
+	auto& resources = Engine::ResourceManager::Get();
+	auto handle = resources.GetResourceHandle<Engine::Shader>(shaderKey);
+	if (!handle.Get())
+	{
+		ShaderDesc desc{};
+		desc.Key = shaderKey;
+		desc.dxilPath = (PlatformPath::GetEngineResourceRoot() / "Shader" / "bin" / "dxil" / shaderFile).wstring();
+		desc.Path = desc.dxilPath;
+		desc.shaderType = type;
+		handle = resources.LoadResource<Engine::Shader>(&desc);
+	}
+
+	Engine::Shader* shader = handle.Get();
+	if (!shader || !shader->GetRHIShader())
+	{
+		ENGINE_LOG_ERROR("Shader is not available: {}", WStrToStr(shaderFile));
+		shaderMissing = true;
+		return nullptr;
+	}
+	return shader;
+}
+
+Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureOwnedTarget(const std::wstring& name, ETextureFormat format,
+	Engine::uint32 width, Engine::uint32 height, std::wstring& ownedName, ETextureUsage usage, const vec4& clearColor)
 {
 	auto& targets = Engine::RenderTargetManager::Get();
 	if (!ownedName.empty() && ownedName != name)
@@ -694,7 +752,8 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracingTarget(cons
 		desc.textureDesc.height = height;
 		desc.textureDesc.format = format;
 		desc.textureDesc.dimension = Engine::ETextureDimension::Texture2D;
-		desc.textureDesc.usage = Engine::ETextureUsage::Sampler | Engine::ETextureUsage::ComputeReadWrite;
+		desc.textureDesc.usage = usage;
+		desc.textureDesc.clearColor = clearColor;
 		target = targets.CreateRenderTarget(&desc);
 	}
 	else if (target->GetWidth() != width || target->GetHeight() != height)
@@ -703,6 +762,177 @@ Engine::RenderTarget* Engine::DeferredSceneRenderer::EnsureRaytracingTarget(cons
 			return nullptr;
 	}
 	return target && target->GetTexture() ? target : nullptr;
+}
+
+bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID transparentPass, const std::wstring& prefix)
+{
+	auto& rpm = Engine::RenderPassManager::Get();
+	const auto* transparent = rpm.GetRenderPassByID(transparentPass);
+	if (!transparent)
+		return false;
+
+	// 같은 우선순위에서는 나중에 등록한 패스가 뒤에 실행된다: 반투명 → 모션 벡터 → TAA → 후처리
+	const auto ensure = [&](RenderPassID& id, const wchar_t* suffix, ERenderPassLoadOperation load)
+		{
+			if (id == INVALID_PASS_ID)
+			{
+				RenderPassDesc desc{};
+				desc.name = prefix + suffix;
+				desc.priority = transparent->GetPriority();
+				desc.loadOperation = load;
+				desc.passType = ERenderPassType::PostProcess;
+				desc.acceptedBlendModes = EBlendMode::None;
+				id = rpm.RegisterRenderPass(std::move(desc));
+			}
+			return id != INVALID_PASS_ID;
+		};
+	return ensure(m_MotionPassID, L"_MotionVectorPass", ERenderPassLoadOperation::RPLO_Clear) &&
+		ensure(m_TemporalPassID, L"_TemporalAAPass", ERenderPassLoadOperation::RPLO_Load);
+}
+
+CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer& camera, Engine::Scene* scene, const DeferredScenePassBindings& passes)
+{
+	// 쓰지 않는 동안의 이력은 다시 켤 때 이어 쓰지 않는다.
+	const auto disable = [&]() -> const CameraBuffer&
+		{
+			m_TemporalAAActive = false;
+			m_TemporalJitterNDC = vec2(0.0f);
+			m_TemporalHistory.Reset();
+			m_MotionHistory.Reset();
+			return camera;
+		};
+
+	auto& rpm = Engine::RenderPassManager::Get();
+	auto& renderer = Engine::Renderer::Get();
+	auto* transparent = rpm.GetRenderPassByID(passes.ForwardTransparent);
+	const auto* geometry = rpm.GetRenderPassByID(passes.Geometry);
+	const auto* lighting = rpm.GetRenderPassByID(passes.Lighting);
+	if (!scene || !passes.AcceptSceneMeshes || !ResolveRaytracedShadow(false, m_TemporalAAOverrides) || !SupportsTemporalAA(camera) ||
+		renderer.GetRHIType() != ERHIType::DirectX12 || !geometry || !geometry->IsEnabled() || !lighting || !lighting->IsEnabled() ||
+		!transparent || transparent->GetRenderTargetCount() == 0u || !transparent->HasPrePassCopy())
+		return disable();
+
+	// 반투명 패스가 쓰고 난 장면 복사 타깃을 이번 프레임의 입력으로 다시 쓴다.
+	const std::wstring colorName = transparent->GetRenderTargetName(0);
+	const std::wstring copyName = transparent->GetPrePassCopyDest();
+	auto& targets = Engine::RenderTargetManager::Get();
+	const auto* color = targets.GetRenderTarget(colorName);
+	if (!color || !targets.GetRenderTarget(copyName) || !targets.GetRenderTarget(passes.LightingInputs[0]) || !targets.GetRenderTarget(passes.LightingInputs[4]))
+		return disable();
+
+	Engine::Shader* resolvePS = GetOwnedShader(TemporalAAShaderKey, TemporalAAShaderFile, EShaderType::Fragment, m_TemporalShaderMissing);
+	Engine::Shader* motionVS = GetOwnedShader(MotionVectorVSKey, MotionVectorVSFile, EShaderType::Vertex, m_TemporalShaderMissing);
+	Engine::Shader* motionSkinningVS = GetOwnedShader(MotionVectorSkinningVSKey, MotionVectorSkinningVSFile, EShaderType::Vertex, m_TemporalShaderMissing);
+	Engine::Shader* motionPS = GetOwnedShader(MotionVectorPSKey, MotionVectorPSFile, EShaderType::Fragment, m_TemporalShaderMissing);
+	const auto fullscreenVS = Engine::ResourceManager::Get().GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
+	if (!resolvePS || !motionVS || !motionSkinningVS || !motionPS || !fullscreenVS.Get() || !fullscreenVS->GetRHIShader())
+		return disable();
+
+	const uint32 width = color->GetWidth();
+	const uint32 height = color->GetHeight();
+	struct TargetInfo { const wchar_t* Suffix; ETextureFormat Format; vec4 ClearColor; };
+	const TargetInfo targetInfos[TemporalTargetCount] = {
+		{ L"_MotionVectors", ETextureFormat::R16G16_FLOAT, vec4(NoMotion, NoMotion, 0.0f, 0.0f) },
+		{ L"_TemporalColor0", ETextureFormat::R16G16B16A16_FLOAT, vec4(0.0f) },
+		{ L"_TemporalColor1", ETextureFormat::R16G16B16A16_FLOAT, vec4(0.0f) },
+	};
+	for (int index = 0; index < TemporalTargetCount; ++index)
+	{
+		if (!EnsureOwnedTarget(colorName + targetInfos[index].Suffix, targetInfos[index].Format, width, height, m_TemporalTargetNames[index],
+			ETextureUsage::RenderTarget | ETextureUsage::Sampler, targetInfos[index].ClearColor))
+			return disable();
+	}
+	if (!EnsureTemporalAAPasses(passes.ForwardTransparent, colorName))
+		return disable();
+	auto* motionPass = rpm.GetRenderPassByID(m_MotionPassID);
+	auto* temporalPass = rpm.GetRenderPassByID(m_TemporalPassID);
+	if (!motionPass || !temporalPass)
+		return disable();
+
+	RHIPipelineDesc pipelineDesc{};
+	pipelineDesc.pipelineType = EPipelineType::Graphics;
+	pipelineDesc.vertexShader = fullscreenVS->GetRHIShader();
+	pipelineDesc.pixelShader = resolvePS->GetRHIShader();
+	pipelineDesc.colorAttachmentCount = 2;
+	pipelineDesc.colorAttachmentFormats[0] = color->GetFormat();
+	pipelineDesc.colorAttachmentFormats[1] = ETextureFormat::R16G16B16A16_FLOAT;
+	pipelineDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+	pipelineDesc.depthStencilState.depthTestEnable = false;
+	pipelineDesc.depthStencilState.depthWriteEnable = false;
+	pipelineDesc.topology = ETopology::TriangleList;
+	pipelineDesc.cullMode = ECullMode::None;
+	RHIPipeline* pipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+	if (!pipeline)
+		return disable();
+
+	const auto frame = m_TemporalHistory.Begin(camera, scene, width, height);
+	const vec2 jitter = TemporalJitterPixels(frame.FrameIndex);
+	const CameraBuffer jittered = MakeJitteredCamera(camera, jitter, width, height);
+	const std::wstring historyName = m_TemporalTargetNames[TemporalColor0 + frame.ReadIndex];
+	const std::wstring writeName = m_TemporalTargetNames[TemporalColor0 + frame.WriteIndex];
+	motionPass->SetColorAttachments({ m_TemporalTargetNames[TemporalMotion] });
+	temporalPass->SetColorAttachments({ colorName, writeName });
+	temporalPass->SetPrePassCopy(colorName, copyName);
+
+	// 1. 움직인 물체의 모션 벡터. 실패해도 카메라 이동만 반영하고 계속한다.
+	MotionVectorInfo motionInfo;
+	motionInfo.geometryPass = passes.Geometry;
+	motionInfo.jitteredViewProjection = jittered.viewProjMatrix;
+	motionInfo.viewProjection = camera.viewProjMatrix;
+	motionInfo.previousViewProjection = frame.PrevViewProjection;
+	motionInfo.staticVertexShader = motionVS;
+	motionInfo.skinnedVertexShader = motionSkinningVS;
+	motionInfo.pixelShader = motionPS;
+	motionInfo.draw = frame.Valid;
+	renderer.SubmitCustomCommand([this, motionInfo, positionName = passes.LightingInputs[4]](f32, RenderPass* pass) mutable -> EResult
+		{
+			const auto* position = RenderTargetManager::Get().GetRenderTarget(positionName);
+			motionInfo.position = position ? position->GetTexture() : nullptr;
+			if (IsFailure(Renderer::Get().RenderMotionVectors(motionInfo, m_MotionHistory, pass)) && !m_TemporalFailureLogged)
+			{
+				ENGINE_LOG_ERROR("Motion vectors were not drawn; moving objects are treated as static by temporal anti-aliasing.");
+				m_TemporalFailureLogged = true;
+			}
+			return EResult::Success;
+		}, m_MotionPassID);
+
+	// 2. 이전 결과와 섞어 장면 색과 다음 프레임의 이력에 함께 쓴다.
+	TemporalAAParams params{};
+	params.ViewProjection = camera.viewProjMatrix;
+	params.PreviousViewProjection = frame.PrevViewProjection;
+	params.InvViewProjection = camera.invViewProjMatrix;
+	params.CameraPosition = camera.cameraPosition;
+	params.HasHistory = frame.Valid ? 1u : 0u;
+	params.JitterPixels = jitter;
+	const std::array<std::wstring, 5> inputs{ passes.LightingInputs[0], copyName, historyName, m_TemporalTargetNames[TemporalMotion], passes.LightingInputs[4] };
+	renderer.SubmitCustomCommand([this, pipeline, params, inputs](f32, RenderPass*) -> EResult
+		{
+			auto* rhi = Renderer::Get().GetRHI();
+			SamplerDesc samplerDesc{};
+			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = ESamplerAddressMode::Clamp;
+			auto* sampler = SamplerManager::Get().GetOrCreateSampler(samplerDesc);
+			bool succeeded = rhi && sampler && IsSuccess(rhi->BindPipeline(pipeline)) && IsSuccess(rhi->BindConstantBuffer(&params, sizeof(params), 3));
+			for (uint32 index = 0; succeeded && index < inputs.size(); ++index)
+			{
+				const auto* input = RenderTargetManager::Get().GetRenderTarget(inputs[index]);
+				succeeded = input && input->GetTexture() && IsSuccess(rhi->BindTextureSampler(input->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + index));
+			}
+			succeeded = succeeded && IsSuccess(rhi->Draw(3));
+			if (succeeded)
+			{
+				m_TemporalHistory.Commit();
+			}
+			else if (!m_TemporalFailureLogged)
+			{
+				ENGINE_LOG_ERROR("Temporal anti-aliasing was not applied.");
+				m_TemporalFailureLogged = true;
+			}
+			return EResult::Success;
+		}, m_TemporalPassID);
+
+	m_TemporalAAActive = true;
+	m_TemporalJitterNDC = TemporalJitterNDC(jitter, width, height);
+	return jittered;
 }
 
 Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedReflection(Engine::RHI& rhi, Engine::Scene* scene, RenderPassID viewID,
@@ -737,7 +967,7 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedReflection(E
 	std::array<Engine::RHITexture*, ReflectionTargetCount> textures{};
 	for (int index = 0; index < ReflectionTargetCount; ++index)
 	{
-		Engine::RenderTarget* target = EnsureRaytracingTarget(positionTargetName + targetInfos[index].Suffix, targetInfos[index].Format,
+		Engine::RenderTarget* target = EnsureOwnedTarget(positionTargetName + targetInfos[index].Suffix, targetInfos[index].Format,
 			width, height, m_ReflectionTargetNames[index]);
 		if (!target)
 			return nullptr;
@@ -819,7 +1049,7 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(E
 
 	const Engine::uint32 width = position->GetWidth();
 	const Engine::uint32 height = position->GetHeight();
-	Engine::RenderTarget* mask = EnsureRaytracingTarget(positionTargetName + L"_RaytracedShadowMask",
+	Engine::RenderTarget* mask = EnsureOwnedTarget(positionTargetName + L"_RaytracedShadowMask",
 		Engine::ETextureFormat::R8G8B8A8_UNORM, width, height, m_RaytracedShadowMaskName); // 광원 최대 4개의 가시성을 채널마다 담는다.
 	Engine::RHIPipeline* pipeline = GetRaytracedShadowPipeline();
 	if (!mask || !pipeline)

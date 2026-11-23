@@ -67,7 +67,7 @@ void Grid::Free()
 
 }
 
-void Grid::SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName)
+void Grid::SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName, const vec2& depthJitterNDC)
 {
     if (m_GridPassID == INVALID_PASS_ID)
         return;
@@ -84,7 +84,7 @@ void Grid::SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, con
 
     // 람다의 매개변수로 RenderPass* 가 넘어오는 것을 적극 활용합니다!
     Renderer::Get().SubmitCustomCommand(
-        [this, isOrthographic, colorRTName, depthStencilName](f32 dt, RenderPass* renderPass)->EResult
+        [this, isOrthographic, colorRTName, depthStencilName, depthJitterNDC](f32 dt, RenderPass* renderPass)->EResult
         {
             if (!m_Visible) return EResult::Success;    
             if (!renderPass) return EResult::Fail;
@@ -122,6 +122,11 @@ void Grid::SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, con
             // PipelineManager 캐시에서 조회 → 없을 때만 실제 생성
             RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
             if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
+                return EResult::Fail;
+
+            // infiniteGridPS.hlsl의 GridDepthParams (b1, space3)
+            const vec4 depthParams(depthJitterNDC, 0.0f, 0.0f);
+            if (!isOrthographic && IsFailure(rhi->BindConstantBuffer(&depthParams, sizeof(depthParams), 3)))
                 return EResult::Fail;
 
             if (IsFailure(quadMesh->Bind(0)))

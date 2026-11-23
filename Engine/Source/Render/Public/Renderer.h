@@ -44,6 +44,22 @@ struct ViewportCameraInfo
 	bool hasLODCamera = false;
 };
 
+class MotionHistory;
+
+// 뷰 하나의 움직인 물체를 모션 벡터 타깃에 그리는 데 필요한 값
+struct MotionVectorInfo
+{
+	RenderPassID geometryPass = INVALID_PASS_ID;
+	mat4 jitteredViewProjection{ 1.0f }; // G-Buffer를 그린 행렬
+	mat4 viewProjection{ 1.0f };         // 지터를 뺀 이번 프레임
+	mat4 previousViewProjection{ 1.0f }; // 지터를 뺀 이전 프레임
+	class Shader* staticVertexShader = nullptr;
+	class Shader* skinnedVertexShader = nullptr;
+	class Shader* pixelShader = nullptr;
+	class RHITexture* position = nullptr; // G-Buffer 위치
+	bool draw = false; // false면 다음 프레임을 위해 변환만 기록한다.
+};
+
 class ENGINE_API Renderer final : public Base
 {
 	DECLARE_SINGLETON(Renderer)
@@ -72,6 +88,9 @@ private: //Entity Render
 	EResult RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>& commands, RenderPass* renderPass);
 	EResult RenderUIImages(const vector<UIImageDrawCommand>& commands, RenderPass* renderPass, uint32 width, uint32 height);
 	void ClearFrameQueues();
+public:
+	// 뷰의 Geometry 패스에 제출된 물체를 기록하고, 직전 프레임에서 움직인 물체만 renderPass에 그린다. 패스의 커스텀 명령 안에서 호출한다.
+	EResult RenderMotionVectors(const MotionVectorInfo& info, MotionHistory& history, RenderPass* renderPass);
 #pragma endregion
 
 #pragma region Queue Management

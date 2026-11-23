@@ -62,6 +62,7 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftShaderSourceDirectory = project.ShaderSourceDirectory;
     m_DraftRaytracedShadow = project.RaytracedShadowMode;
     m_DraftRaytracedReflection = project.RaytracedReflectionMode;
+    m_DraftTemporalAA = project.TemporalAAMode;
     m_DraftStreamingBudget = project.ResourceStreamingBudgetMB;
     m_Dirty = false;
 }
@@ -77,6 +78,7 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.ShaderSourceDirectory = m_DraftShaderSourceDirectory;
     project.RaytracedShadowMode = m_DraftRaytracedShadow;
     project.RaytracedReflectionMode = m_DraftRaytracedReflection;
+    project.TemporalAAMode = m_DraftTemporalAA;
     project.ResourceStreamingBudgetMB = m_DraftStreamingBudget;
 
     const auto result = settings.SaveProjectSettings(project);
@@ -100,6 +102,17 @@ void ProjectSettingsWidget::Draw(const EditorSettingsService& settings)
 
 void ProjectSettingsWidget::DrawRendering()
 {
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionAntiAliasing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##ProjectAntiAliasingTable"))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.TemporalAA");
+            m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectTemporalAA", m_DraftTemporalAA, "GraphicsSettings.TemporalAAHint");
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
     if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (EditorUI::BeginPropertyTable("##ProjectRaytracingTable"))

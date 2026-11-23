@@ -15,7 +15,8 @@ private:
 	void PrepareRenderPass(const wstring& prefix);
 public:
 	void Free();
-	void SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName);
+	// depthJitterNDC: 깊이 타깃을 그린 카메라의 TAA 지터. 격자 무늬는 원래 카메라로 그리고, 깊이만 깊이 타깃과 같은 화면 위치로 계산한다.
+	void SubmitGrid(const CameraBuffer& cameraBuffer, bool isOrthographic, const wstring& colorRTName, const wstring& depthStencilName, const vec2& depthJitterNDC = vec2(0.0f));
 public:
 	bool* GetVisible() { return &m_Visible; }
 	void Show() { m_Visible = true; }

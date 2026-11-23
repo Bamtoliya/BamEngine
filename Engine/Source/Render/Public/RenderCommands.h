@@ -10,10 +10,14 @@
 
 BEGIN(Engine)
 
+// 프레임이 바뀌어도 같은 물체를 가리키는 번호. sceneId가 0이면 프레임 사이의 움직임을 추적하지 않는다.
 struct RenderObjectId
 {
 	uint32 sceneId = 0;
 	uint32 entityId = 0;
+
+	bool IsValid() const { return sceneId != 0; }
+	uint64 GetKey() const { return (static_cast<uint64>(sceneId) << 32u) | entityId; }
 };
 
 struct HeightfieldDrawData

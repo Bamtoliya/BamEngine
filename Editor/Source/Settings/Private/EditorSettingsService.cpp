@@ -643,6 +643,16 @@ EditorSettingsChangeResult EditorSettingsService::SetEditorRaytracedReflectionMo
     return ApplyAndSavePreferences(candidate);
 }
 
+EditorSettingsChangeResult EditorSettingsService::SetEditorTemporalAAMode(std::int32_t mode)
+{
+    if (!Engine::IsValidRaytracedShadowMode(mode))
+        return {};
+
+    EditorPreferences candidate = m_EditorPreferences;
+    candidate.TemporalAAMode = mode;
+    return ApplyAndSavePreferences(candidate);
+}
+
 EditorSettingsChangeResult EditorSettingsService::SetEditorLanguage(ELocalizationLanguage language)
 {
     if (language != ELocalizationLanguage::English && language != ELocalizationLanguage::Korean)

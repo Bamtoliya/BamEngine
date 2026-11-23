@@ -137,4 +137,17 @@ When adding or moving a binding:
    binding code for D3D12.
 6. Rebuild and validate both shader backends.
 
-G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).
+### 모션 벡터와 TAA 바인딩 (D3D12 전용)
+
+| 바인딩 | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t0, space2` | `motionVectorVS` | 이번·이전 월드 행렬 쌍(128바이트) |
+| `b0, space2` | `motionVectorSkinningVS` | 이번·이전 월드 행렬 |
+| `t0, space2` | `motionVectorSkinningVS` | 이번 프레임 뼈 256개 뒤에 이전 프레임 256개 |
+| `b1, space3` | `motionVector*` | `MotionConstants` 192바이트 |
+| `t4, space3` | `motionVectorPS` | G-Buffer 위치 |
+| `b1, space3` | `temporalAAPS` | `TemporalAAParams` 224바이트 |
+| `t0`~`t4`, `s0`, `space3` | `temporalAAPS` | 디퓨즈, 장면 색 복사본, 이전 결과, 모션 벡터, 위치 |
+| `b1, space3` | `infiniteGridPS` | `GridDepthParams` 16바이트. 깊이 타깃의 TAA 지터(NDC), 끄면 0 |
+
+`temporalAAPS`는 `SV_Target0`에 HDR 장면 색, `SV_Target1`에 다음 프레임의 이력을 쓴다. G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).

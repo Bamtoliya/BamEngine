@@ -15,7 +15,7 @@ public:
 
     [[nodiscard]] bool IsDirty() const
     {
-        return m_WindowDirty || m_TargetFPSDirty || m_VSyncDirty || m_RaytracedShadowDirty || m_RaytracedReflectionDirty;
+        return m_WindowDirty || m_TargetFPSDirty || m_VSyncDirty || m_RaytracedShadowDirty || m_RaytracedReflectionDirty || m_TemporalAADirty;
     }
 
 private:
@@ -24,6 +24,7 @@ private:
     int32 m_DraftTargetFPS = 0;
     int32 m_DraftRaytracedShadow = 0;
     int32 m_DraftRaytracedReflection = 0;
+    int32 m_DraftTemporalAA = 0;
     bool m_DraftFullscreen = false;
     bool m_DraftVSync = true;
     bool m_WindowDirty = false;
@@ -31,5 +32,6 @@ private:
     bool m_VSyncDirty = false;
     bool m_RaytracedShadowDirty = false;
     bool m_RaytracedReflectionDirty = false;
+    bool m_TemporalAADirty = false;
 };
 END

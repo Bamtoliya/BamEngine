@@ -59,7 +59,8 @@ foreach(check_target IN ITEMS
     ResourcePreloaderCheck
     GpuHeapPageAllocatorCheck
     StreamingPolicyCheck
-    ReflectionHistoryCheck
+    TemporalHistoryCheck
+    TemporalAACheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)
