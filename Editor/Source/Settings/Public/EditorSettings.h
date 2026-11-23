@@ -51,6 +51,9 @@ namespace Editor
         // 0 프로젝트 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
         PROPERTY(META("Optional", true))
             std::int32_t TemporalAAMode = 0;
+        // 0 프로젝트 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+            std::int32_t ProbeGIMode = 0;
         PROPERTY(META("Optional", true))
             std::string CustomFontPath;
         PROPERTY(META("Optional", true))
@@ -174,6 +177,10 @@ namespace Editor
         // 0 그래픽 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
         PROPERTY(META("Optional", true))
         std::int32_t TemporalAAMode = 0;
+
+        // 0 그래픽 설정 따름, 1 켜기, 2 끄기 (Engine::ERaytracedShadowMode)
+        PROPERTY(META("Optional", true))
+        std::int32_t ProbeGIMode = 0;
     };
 
     STRUCT()

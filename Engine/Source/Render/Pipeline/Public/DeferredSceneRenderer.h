@@ -6,6 +6,7 @@
 #include "RHITextureTypes.h"
 #include "RaytracedShadowSettings.h"
 #include "MotionHistory.h"
+#include "ProbeGrid.h"
 #include "ShaderReflection.h"
 #include "ShadowLightAssignment.h"
 #include "TemporalHistory.h"
@@ -61,6 +62,10 @@ public:
 	// 시간 누적 안티앨리어싱도 기본이 꺼짐이고 같은 순서로 덮어쓴다.
 	void SetTemporalAAOverrides(const RaytracedShadowOverrides& overrides) { m_TemporalAAOverrides = overrides; }
 	bool IsTemporalAAActive() const { return m_TemporalAAActive; }
+	// 프로브 GI도 기본이 꺼짐이고 같은 순서로 덮어쓴다. 켜져 있어도 활성 ProbeGIVolumeComponent가 없거나 장치가 반사를 지원하지 않으면 쓰지 않는다.
+	// 1단계: 사용 여부와 격자만 정하고 GPU 작업은 하지 않는다.
+	void SetProbeGIOverrides(const RaytracedShadowOverrides& overrides) { m_ProbeGIOverrides = overrides; }
+	bool IsProbeGIActive() const { return m_ProbeGIActive; }
 	// 이번 프레임 깊이 타깃의 지터(NDC). 후처리 뒤에 깊이를 비교하는 오버레이가 같은 화면 위치의 깊이를 계산할 때 쓴다. TAA를 쓰지 않으면 0이다.
 	vec2 GetTemporalJitterNDC() const { return m_TemporalJitterNDC; }
 
@@ -92,6 +97,8 @@ private:
 	RHIBuffer* m_LocalLightBuffer[MAX_SWAPCHAIN_BUFFERS] = {};
 	// 이 뷰포트의 조명 버퍼에 들어갈 그림자 광원
 	ShadowLightSet CollectViewShadowLights(Scene* scene, bool usesGlobalLights) const;
+	// 계층에서 활성인 엔티티의 첫 활성 ProbeGIVolumeComponent로 격자를 만든다. 없으면 false다.
+	static bool FindProbeGIVolume(Scene* scene, ProbeGrid::GridDesc& grid);
 
 	RaytracedShadowOverrides m_RaytracedShadowOverrides;
 	bool m_RaytracedShadowActive = false;
@@ -109,6 +116,11 @@ private:
 	bool m_ReflectionTemporalShaderMissing = false;
 	bool m_ReflectionFilterShaderMissing = false;
 	bool m_RaytracedReflectionFailureLogged = false;
+
+	RaytracedShadowOverrides m_ProbeGIOverrides;
+	bool m_ProbeGIActive = false;
+	// 마지막 Submit에서 고른 볼륨의 격자. 활성이 아니면 의미가 없다.
+	ProbeGrid::GridDesc m_ProbeGIGrid{};
 
 	RaytracedShadowOverrides m_TemporalAAOverrides;
 	bool m_TemporalAAActive = false;

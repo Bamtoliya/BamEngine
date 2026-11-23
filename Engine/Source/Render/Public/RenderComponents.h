@@ -9,6 +9,7 @@
 #include "SkyAtmosphereComponent.h"
 #include "FogComponent.h"
 #include "VolumetricCloudComponent.h"
+#include "ProbeGIVolumeComponent.h"
 #include "TerrainComponent.h"
 #include "PostProcessComponent.h"
 #include "LODGroupComponent.h"

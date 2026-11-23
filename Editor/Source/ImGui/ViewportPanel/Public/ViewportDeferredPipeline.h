@@ -42,6 +42,9 @@ public:
 	void SetTemporalAAMode(Engine::ERaytracedShadowMode mode) { m_TemporalAAMode = mode; }
 	[[nodiscard]] Engine::ERaytracedShadowMode GetTemporalAAMode() const { return m_TemporalAAMode; }
 	[[nodiscard]] bool IsTemporalAAActive() const { return m_SceneRenderer.IsTemporalAAActive(); }
+	void SetProbeGIMode(Engine::ERaytracedShadowMode mode) { m_ProbeGIMode = mode; }
+	[[nodiscard]] Engine::ERaytracedShadowMode GetProbeGIMode() const { return m_ProbeGIMode; }
+	[[nodiscard]] bool IsProbeGIActive() const { return m_SceneRenderer.IsProbeGIActive(); }
 	[[nodiscard]] vec2 GetTemporalJitterNDC() const { return m_SceneRenderer.GetTemporalJitterNDC(); }
 
 	// 4. 게터 (최종 조명 합성 완료 텍스처 및 주요 패스 정보)
@@ -83,6 +86,7 @@ private:
 	Engine::ERaytracedShadowMode m_RaytracedShadowMode = Engine::ERaytracedShadowMode::Inherit;
 	Engine::ERaytracedShadowMode m_RaytracedReflectionMode = Engine::ERaytracedShadowMode::Inherit;
 	Engine::ERaytracedShadowMode m_TemporalAAMode = Engine::ERaytracedShadowMode::Inherit;
+	Engine::ERaytracedShadowMode m_ProbeGIMode = Engine::ERaytracedShadowMode::Inherit;
 
 	// 타깃 목록은 기존 구성에서는 고정 슬롯 순서, 프로필 구성에서는 생성 순서를 따른다.
 	std::vector<std::wstring> m_OwnedRTNames;

@@ -118,6 +118,10 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
 `LightingPassData`는 544바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
 
+### 프로브 GI 바인딩 (D3D12 전용, 계획)
+
+2026-11-23 1단계는 바인딩을 추가하지 않았다. 조명 패스의 `t0~t15, space3`은 모두 쓰이므로(`t6`은 광원 버퍼) 3단계에서 `lightingPS`는 `space1`의 빈 슬롯(`t2`~`t4`, 구름이 `t0`·`t1`을 씀)에 조도·거리 아틀라스와 프로브 상태를 묶을 예정이다. 2단계 갱신 Compute는 반사와 같은 `t13`(TLAS), `space4`·`space5`, `u2`~`u5`를 쓴다. 확정되면 이 절을 표로 바꾼다.
+
 ### 재질 알파 기준값
 
 재질 상수 `materialFlags`(`b0, space3`)의 상위 8비트는 Masked 재질의 알파 기준값이다(1~255, 0은 Masked 아님).

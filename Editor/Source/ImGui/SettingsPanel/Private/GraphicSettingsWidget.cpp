@@ -20,6 +20,7 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
     m_DraftRaytracedReflection = settings.GetPreferences().RaytracedReflectionMode;
     m_DraftTemporalAA = settings.GetPreferences().TemporalAAMode;
+    m_DraftProbeGI = settings.GetPreferences().ProbeGIMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
@@ -27,6 +28,7 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_RaytracedShadowDirty = false;
     m_RaytracedReflectionDirty = false;
     m_TemporalAADirty = false;
+    m_ProbeGIDirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -61,6 +63,14 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_TemporalAADirty = false;
+    }
+
+    if (m_ProbeGIDirty)
+    {
+        const auto result = settings.SetEditorProbeGIMode(m_DraftProbeGI);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_ProbeGIDirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -254,6 +264,8 @@ void GraphicSettingsWidget::Draw()
             m_RaytracedShadowDirty |= DrawRaytracedShadowModeCombo("###RaytracedShadow", m_DraftRaytracedShadow);
             EditorUI::PropertyRow("GraphicsSettings.RaytracedReflection");
             m_RaytracedReflectionDirty |= DrawRaytracedShadowModeCombo("###RaytracedReflection", m_DraftRaytracedReflection, "GraphicsSettings.RaytracedReflectionHint");
+            EditorUI::PropertyRow("GraphicsSettings.ProbeGI");
+            m_ProbeGIDirty |= DrawRaytracedShadowModeCombo("###ProbeGI", m_DraftProbeGI, "GraphicsSettings.ProbeGIHint");
             EditorUI::EndPropertyTable();
         }
         if (!supported)

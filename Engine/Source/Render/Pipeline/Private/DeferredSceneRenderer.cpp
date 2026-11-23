@@ -8,6 +8,9 @@
 #include "LightComponent.h"
 #include "LightManager.h"
 #include "PipelineManager.h"
+#include "FlagComponent.h"
+#include "ProbeGIVolumeComponent.h"
+#include "WorldTransformComponent.h"
 #include "RaytracingSceneManager.h"
 #include "RenderTarget.h"
 #include "RHI.h"
@@ -195,6 +198,7 @@ void Engine::DeferredSceneRenderer::Free()
 	m_MotionHistory.Reset();
 	m_TemporalAAActive = false;
 	m_TemporalJitterNDC = vec2(0.0f);
+	m_ProbeGIActive = false;
 }
 
 bool Engine::DeferredSceneRenderer::Initialize()
@@ -266,6 +270,13 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	// 껐다 켜면 오래된 결과를 이어 쓰지 않는다.
 	if (!useRaytracedReflection)
 		m_ReflectionHistory.Reset();
+
+	// 0-2. 프로브 GI 사용 여부. 반사와 같은 광선 조회 조건에 활성 볼륨이 있어야 한다. 독립 프리뷰는 제외한다.
+	// 1단계는 여기까지이며 TLAS 요청과 GPU 갱신은 2단계에서 연결한다.
+	m_ProbeGIActive = sceneToQuery && lightingPass && lightingPass->IsEnabled() && passes.AcceptSceneMeshes &&
+		ResolveRaytracedShadow(false, m_ProbeGIOverrides) && rhi && rhi->GetCapabilities().SupportsBindlessResources &&
+		Engine::RaytracingSceneManager::IsCreated() && Engine::RaytracingSceneManager::Get().IsSupported() &&
+		FindProbeGIVolume(sceneToQuery, m_ProbeGIGrid);
 
 	// 1. ShadowPass & PointShadowPass 카메라 등록
 	auto* shadowPass = rpm.GetRenderPassByID(passes.DirectionalShadow);
@@ -681,6 +692,23 @@ Engine::ShadowLightSet Engine::DeferredSceneRenderer::CollectViewShadowLights(En
 	else
 		scenes.push_back(scene);
 	return Engine::LightManager::CollectShadowLights(scenes);
+}
+
+bool Engine::DeferredSceneRenderer::FindProbeGIVolume(Engine::Scene* scene, ProbeGrid::GridDesc& grid)
+{
+	if (!scene)
+		return false;
+	auto& registry = scene->GetRegistry();
+	for (auto [entity, volume, transform] : registry.view<Engine::ProbeGIVolumeComponent, Engine::WorldTransformComponent>().each())
+	{
+		if (!IsComponentEnabled(registry, entity, volume))
+			continue;
+		if (const auto* flags = registry.try_get<Engine::FlagComponent>(entity); flags && !flags->IsActiveInHierarchy())
+			continue;
+		grid = ProbeGrid::MakeGrid(vec3(transform.worldMatrix[3]), volume.Size, volume.ProbeCountX, volume.ProbeCountY, volume.ProbeCountZ);
+		return true;
+	}
+	return false;
 }
 
 Engine::RHIPipeline* Engine::DeferredSceneRenderer::GetRaytracedShadowPipeline()
