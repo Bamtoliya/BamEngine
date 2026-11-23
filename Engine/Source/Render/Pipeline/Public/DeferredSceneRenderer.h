@@ -76,9 +76,13 @@ public:
 	void SetTemporalAAOverrides(const RaytracedShadowOverrides& overrides) { m_TemporalAAOverrides = overrides; }
 	bool IsTemporalAAActive() const { return m_TemporalAAActive; }
 	// 프로브 GI도 기본이 꺼짐이고 같은 순서로 덮어쓴다. 켜져 있어도 활성 ProbeGIVolumeComponent가 없거나 장치가 반사를 지원하지 않으면 쓰지 않는다.
-	// 2단계: 프로브를 광선으로 갱신해 아틀라스(렌더 타깃 목록의 <위치 타깃>_ProbeGIIrradiance·_ProbeGIDistance)에 쓴다. 조명에는 아직 쓰지 않는다.
+	// 프로브를 광선으로 갱신해 아틀라스(렌더 타깃 목록의 <위치 타깃>_ProbeGIIrradiance·_ProbeGIDistance)에 쓰고,
+	// 조명 패스가 볼륨 안의 확산 환경광을 프로브 조도로 바꾼다.
 	void SetProbeGIOverrides(const RaytracedShadowOverrides& overrides) { m_ProbeGIOverrides = overrides; }
 	bool IsProbeGIActive() const { return m_ProbeGIActive; }
+	// 켜면 프로브 GI를 쓰는 동안 간접 확산광만 출력한다(뷰포트 확인용, 저장하지 않음).
+	void SetProbeGIDebugView(bool enabled) { m_ProbeGIDebugView = enabled; }
+	bool IsProbeGIDebugView() const { return m_ProbeGIDebugView; }
 	// 이번 프레임 깊이 타깃의 지터(NDC). 후처리 뒤에 깊이를 비교하는 오버레이가 같은 화면 위치의 깊이를 계산할 때 쓴다. TAA를 쓰지 않으면 0이다.
 	vec2 GetTemporalJitterNDC() const { return m_TemporalJitterNDC; }
 	// 앰비언트 오클루전도 기본이 꺼짐이고 같은 순서로 덮어쓴다. 레이트레이싱을 쓸 수 없으면 화면 공간으로 되돌린다.
@@ -105,10 +109,10 @@ private:
 	// 조건과 주의는 그림자 마스크와 같으며, G-Buffer와 광원 버퍼를 먼저 바인딩해야 한다. camera는 지터가 없는 카메라다.
 	class RHITexture* DispatchAmbientOcclusion(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const CameraBuffer& sceneCamera, EAmbientOcclusionMode mode, const vec2& previousJitterNDC);
-	// 이번 프레임 차례의 프로브를 추적하고 조도·거리 아틀라스에 섞는다. 모두 기록하면 true다.
+	// 이번 프레임 차례의 프로브를 추적하고 조도·거리 아틀라스에 섞는다. 모두 기록하면 true와 두 아틀라스를 돌려준다.
 	// 조건과 주의는 반사와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다. env는 닿은 면과 하늘의 환경광이다.
 	bool DispatchProbeGIUpdate(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
-		const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env);
+		const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env, class RHITexture*& irradianceAtlas, class RHITexture*& distanceAtlas);
 	// 이 렌더러가 소유하는 타깃. ownedName에 이름을 기록하고 크기가 바뀌면 다시 만든다. 기본은 Compute 쓰기용이다.
 	class RenderTarget* EnsureOwnedTarget(const std::wstring& name, ETextureFormat format, uint32 width, uint32 height, std::wstring& ownedName,
 		ETextureUsage usage = ETextureUsage::Sampler | ETextureUsage::ComputeReadWrite, const vec4& clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -158,6 +162,7 @@ private:
 
 	RaytracedShadowOverrides m_ProbeGIOverrides;
 	bool m_ProbeGIActive = false;
+	bool m_ProbeGIDebugView = false;
 	// 마지막 Submit에서 고른 볼륨. 활성이 아니면 의미가 없다.
 	ProbeGIVolumeData m_ProbeGIVolume{};
 	ProbeGrid::ProbeUpdateSchedule m_ProbeGISchedule;

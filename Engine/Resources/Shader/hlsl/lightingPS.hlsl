@@ -3,6 +3,7 @@
 #include "shading_flags.hlsli"
 #include "fog.hlsli"
 #include "cloud.hlsli"
+#include "probeGISample.hlsli"
 
 struct PS_INPUT
 {
@@ -55,6 +56,7 @@ struct LightingPassData
     uint UseRaytracedReflections; // 1이면 t15의 반사를 환경광 반사 대신 합성한다
     uint UseAmbientOcclusion;     // 1이면 t13의 앰비언트 오클루전(r)을 환경광에 곱한다
     uint3 _AmbientOcclusionPad;
+    ProbeGILightingData ProbeGI;  // Enabled가 1이면 space1 t2·t3의 아틀라스로 볼륨 안의 확산 환경광을 바꾼다
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -78,6 +80,9 @@ ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
 Texture3D<float4> gCloudBaseShape : register(t0, space1);
 Texture2D<float4> gCloudWeatherMap : register(t1, space1);
 SamplerState gCloudSampler : register(s0, space1);
+// 프로브 GI 조도·거리 아틀라스(probeGIBlend*RTCS가 씀). gBufferSampler(선형)로 읽는다.
+Texture2D<float4> gProbeIrradianceAtlas : register(t2, space1);
+Texture2D<float4> gProbeDistanceAtlas : register(t3, space1);
 
 static const float PI = 3.14159265359f;
 static const uint INVALID_LIGHT_INDEX = 0xFFFFFFFFu;
@@ -902,6 +907,21 @@ float4 main(PS_INPUT input) : SV_TARGET
     float ambientFloor = max(gLightingData.ShadowAmbientFloor, 0.02f);
     diffuseIBL = max(diffuseIBL, kd * albedo * ambientFloor * gLightingData.IBLIntensity);
 
+    // ── 4-1. 프로브 GI: 볼륨 안에서는 확산 환경광을 프로브 조도로 바꾸고, 경계 밖으로 갈수록 기존 환경광과 섞는다. ──
+    // 프로브의 광선이 하늘 가시성과 주변 면의 반사광을 함께 담으므로 확산 IBL을 더하지 않는다.
+    // 그림자 하한은 어두운 GI를 가리므로 볼륨 안에서는 쓰지 않는다. 정반사 환경광·레이트레이싱 반사는 그대로다.
+    const ProbeGILightingData probeGI = gLightingData.ProbeGI;
+    if (probeGI.Enabled != 0u)
+    {
+        const float giWeight = ProbeVolumeWeight(probeGI, worldPosition);
+        if (giWeight > 0.0f)
+        {
+            const float3 probeIrradiance = SampleProbeIrradiance(probeGI, worldPosition, normal, viewDirection,
+                gProbeIrradianceAtlas, gProbeDistanceAtlas, gBufferSampler);
+            diffuseIBL = lerp(diffuseIBL, kd * albedo * probeIrradiance * probeGI.Intensity, giWeight);
+        }
+    }
+
     // ── 5. 레이트레이싱 반사: 추적한 만큼 환경광 반사를 대신한다. 실제 가림을 추적했으므로 AO는 곱하지 않는다. ──
     float3 raytracedSpecular = float3(0.0f, 0.0f, 0.0f);
     if (gLightingData.UseRaytracedReflections != 0u)
@@ -914,6 +934,10 @@ float4 main(PS_INPUT input) : SV_TARGET
     // ── 6. 앰비언트 오클루전: 환경광에만 재질 AO와 곱한다. 직접광과 레이트레이싱 반사는 이미 가림을 반영한다. ──
     if (gLightingData.UseAmbientOcclusion != 0u && (packedData & FLAG_APPLY_SSAO) != 0u)
         ambientOcclusion *= saturate(gAmbientOcclusion.Load(pixelCoord).r);
+
+    // "GI만 보기": 간접 확산광(볼륨 밖은 기존 환경광)만 안개 없이 출력한다.
+    if (probeGI.DebugView != 0u)
+        return float4(diffuseIBL * ambientOcclusion, diffuseSample.a);
 
     float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion + raytracedSpecular;
     float3 color = ambient + directLighting + emission;

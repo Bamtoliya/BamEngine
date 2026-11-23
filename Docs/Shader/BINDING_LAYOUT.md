@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-23 (앰비언트 오클루전 바인딩 추가, `LightingPassData` 560바이트)
+- 최종 갱신: 2026-11-23 (프로브 GI 아틀라스 `t2`·`t3, space1`, `LightingPassData` 624바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -144,7 +144,7 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 광선 마스크는 세 셰이더 파일의 상수와 일치해야 한다. 버퍼 번호는 최대 16,384개이며 버퍼가 해제되면 지연 반환한다.
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
-`LightingPassData`는 560바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다(2026-11-23 앰비언트 오클루전 추가로 544 → 560).
+`LightingPassData`는 624바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다(2026-11-23 앰비언트 오클루전 추가로 544 → 560, 프로브 GI 추가로 560 → 624).
 
 ### 앰비언트 오클루전 바인딩 (D3D12 전용)
 
@@ -176,7 +176,7 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `b1, space3` | `probeGI*RTCS` | `ProbeGIUpdateParams` 160바이트(`probeGI.hlsli`) |
 
 아틀라스에서 프로브 (x, y, z)의 칸은 열 `x + y × 개수X`, 행 `z`이며 `ProbeGrid.h`와 `probeGI.hlsli`가 같은 규칙을 쓴다.
-3단계에서 `lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) `space1`의 빈 슬롯(`t2`~`t4`, 구름이 `t0`·`t1`을 씀)에 아틀라스를 묶을 예정이다.
+`lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) 재질 슬롯 `t2`(조도)·`t3`(거리) `space1`에 아틀라스를 묶는다(구름이 `t0`·`t1`을 씀). 재질 샘플러 표는 마지막으로 묶은 샘플러 하나만 믿을 수 있어 아틀라스는 `gBufferSampler`(`s0, space3`, 기본 선형)로 읽는다. `LightingPassData.ProbeGI`(`ProbeGILightingData`, 64바이트)의 `Enabled`가 1일 때만 읽고, 그리기 뒤 두 슬롯을 비운다.
 
 ### 재질 알파 기준값
 

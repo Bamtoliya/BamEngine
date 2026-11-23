@@ -885,6 +885,11 @@ void SceneViewportPanel::DrawRenderPassMenu()
 					m_Pipeline.SetProbeGIMode(mode);
 			}
 			ImGui::Separator();
+			// 확인용 화면이라 저장하지 않는다. GI를 쓰지 않는 동안은 효과가 없다.
+			if (ImGui::MenuItem(LOCAL_LABEL("GraphicsSettings.ProbeGIDebugView").c_str(), nullptr, m_Pipeline.IsProbeGIDebugView()))
+				m_Pipeline.SetProbeGIDebugView(!m_Pipeline.IsProbeGIDebugView());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.ProbeGIDebugViewHint"));
 			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsProbeGIActive() ?
 				"GraphicsSettings.ProbeGIActive" : "GraphicsSettings.ProbeGIInactive"));
 			ImGui::EndMenu();

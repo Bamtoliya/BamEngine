@@ -45,6 +45,8 @@ public:
 	void SetProbeGIMode(Engine::ERaytracedShadowMode mode) { m_ProbeGIMode = mode; }
 	[[nodiscard]] Engine::ERaytracedShadowMode GetProbeGIMode() const { return m_ProbeGIMode; }
 	[[nodiscard]] bool IsProbeGIActive() const { return m_SceneRenderer.IsProbeGIActive(); }
+	void SetProbeGIDebugView(bool enabled) { m_SceneRenderer.SetProbeGIDebugView(enabled); }
+	[[nodiscard]] bool IsProbeGIDebugView() const { return m_SceneRenderer.IsProbeGIDebugView(); }
 	[[nodiscard]] vec2 GetTemporalJitterNDC() const { return m_SceneRenderer.GetTemporalJitterNDC(); }
 	void SetAmbientOcclusionMode(Engine::EAmbientOcclusionMode mode) { m_AmbientOcclusionMode = mode; }
 	[[nodiscard]] Engine::EAmbientOcclusionMode GetAmbientOcclusionMode() const { return m_AmbientOcclusionMode; }

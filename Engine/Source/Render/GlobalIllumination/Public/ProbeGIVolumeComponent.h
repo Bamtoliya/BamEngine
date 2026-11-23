@@ -7,7 +7,7 @@ namespace Engine
 {
 	// 프로브 GI 볼륨. 엔티티의 월드 위치를 중심으로 Size 크기의 월드 축 정렬 상자에 프로브 격자를 둔다.
 	// 회전과 배율은 쓰지 않는다. 계산 규칙은 ProbeGrid.h를 따른다.
-	// 2단계(2026-11-23)까지 프로브를 광선으로 갱신해 아틀라스에 쓴다. 조명 적용(3단계)은 아직 없다.
+	// 프로브를 광선으로 갱신하고(2단계), 조명 패스가 볼륨 안의 확산 환경광을 프로브 조도로 바꾼다(3단계, 2026-11-23).
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_PROBE_GI_VOLUME"), CATEGORY("CATEGORY_RENDER"))
 	struct ProbeGIVolumeComponent
 	{

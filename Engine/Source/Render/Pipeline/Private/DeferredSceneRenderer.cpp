@@ -35,6 +35,30 @@
 
 namespace
 {
+	// probeGISample.hlsli의 ProbeGILightingData (LightingPassData 끝, 64바이트)
+	struct ProbeGILightingData
+	{
+		vec3 GridOrigin{ 0.0f };
+		uint32 Enabled = 0u;
+		vec3 GridSpacing{ 1.0f };
+		f32 Intensity = 1.0f;
+		std::array<uint32, 3> GridCounts{ 2u, 2u, 2u };
+		f32 BlendDistance = 1.0f;
+		f32 NormalBias = 0.0f;
+		f32 ViewBias = 0.0f;
+		uint32 DebugView = 0u;
+		uint32 Pad = 0u;
+	};
+	static_assert(sizeof(ProbeGILightingData) == 64);
+	static_assert(offsetof(ProbeGILightingData, GridCounts) == 32);
+
+	// 표본 위치를 띄우는 거리. 가장 좁은 프로브 간격에 대한 비율이며 측정 전 시작값이다.
+	constexpr f32 ProbeGINormalBiasRatio = 0.1f;
+	constexpr f32 ProbeGIViewBiasRatio = 0.3f;
+	// lightingPS의 gProbeIrradianceAtlas(t2, space1)·gProbeDistanceAtlas(t3, space1)
+	constexpr Engine::uint32 ProbeGIIrradianceSlot = 2;
+	constexpr Engine::uint32 ProbeGIDistanceSlot = 3;
+
 	struct DeferredLightingPassData
 	{
 		LightShadowData Shadow{};
@@ -56,8 +80,10 @@ namespace
 		uint32 UseRaytracedReflections = 0u;
 		uint32 UseAmbientOcclusion = 0u; // 1이면 t13의 앰비언트 오클루전을 환경광에 곱한다
 		uint32 AmbientOcclusionPad[3] = {};
+		ProbeGILightingData ProbeGI{};
 	};
-	static_assert(sizeof(DeferredLightingPassData) == 560);
+	static_assert(sizeof(DeferredLightingPassData) == 624);
+	static_assert(offsetof(DeferredLightingPassData, ProbeGI) == 560);
 	static_assert(offsetof(DeferredLightingPassData, UseAmbientOcclusion) == 544);
 	static_assert(offsetof(DeferredLightingPassData, Shadow) == 0);
 	static_assert(offsetof(DeferredLightingPassData, Cloud) == 336);
@@ -640,7 +666,7 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 		[this, cameraBuffer, sceneCamera, targetScene, skyData, defaultBRDFLUT, inputs = passes.LightingInputs,
 			pointDepth = passes.PointShadowInput, acceptSceneMeshes = passes.AcceptSceneMeshes, viewID = passes.Geometry, useRaytracedShadow, useRaytracedReflection,
 			raytracedOverrides = m_RaytracedShadowOverrides, ambientOcclusion, previousJitterNDC, useProbeGI,
-			probeGIVolume = m_ProbeGIVolume](f32, Engine::RenderPass*) -> Engine::EResult
+			probeGIVolume = m_ProbeGIVolume, probeGIDebugView = m_ProbeGIDebugView](f32, Engine::RenderPass*) -> Engine::EResult
 		{
 			auto* rhi = Engine::Renderer::Get().GetRHI();
 			auto& rtMgr = Engine::RenderTargetManager::Get();
@@ -907,21 +933,43 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 					m_RaytracedReflectionFailureLogged = true;
 				}
 			}
-			// 8-2. 프로브 GI 갱신 (광원·환경광 바인딩을 그대로 사용하는 Compute). 2단계는 아틀라스만 갱신하고 조명에는 쓰지 않는다.
+			// 8-2. 프로브 GI 갱신 (광원·환경광 바인딩을 그대로 사용하는 Compute). 이번 프레임에 갱신한 아틀라스만 조명에 쓴다.
+			bool probeGIBound = false;
 			if (useProbeGI)
 			{
 				RaytracedReflectionInputs probeEnvironment;
 				probeEnvironment.SkyZenith = glm::max(lightingData.SkyZenithColor, vec3(0.05f)) * glm::max(lightingData.SkyIntensity, 0.2f);
 				probeEnvironment.IBLIntensity = lightingData.IBLIntensity;
 				probeEnvironment.HasIBLMaps = lightingData.HasIBLMaps != 0u;
+				Engine::RHITexture* irradianceAtlas = nullptr;
+				Engine::RHITexture* distanceAtlas = nullptr;
 				rhi->BeginPassMetrics(sourceNames[4] + L"_ProbeGIUpdate");
-				const bool updated = DispatchProbeGIUpdate(*rhi, targetScene, viewID, sourceNames[4], probeGIVolume, probeEnvironment);
+				const bool updated = DispatchProbeGIUpdate(*rhi, targetScene, viewID, sourceNames[4], probeGIVolume, probeEnvironment,
+					irradianceAtlas, distanceAtlas);
 				rhi->EndPassMetrics();
 				if (Engine::IsFailure(rhi->BindPipeline(m_LightingPipeline)))
 					return Engine::EResult::Fail;
-				if (!updated && !m_ProbeGIFailureLogged)
+				// 재질 슬롯 2·3(t2·t3, space1)에 기본 선형 샘플러로 묶는다. 셰이더는 gBufferSampler로 읽는다.
+				probeGIBound = updated && Engine::IsSuccess(rhi->BindTextureSampler(irradianceAtlas, sampler, ProbeGIIrradianceSlot)) &&
+					Engine::IsSuccess(rhi->BindTextureSampler(distanceAtlas, sampler, ProbeGIDistanceSlot));
+				if (probeGIBound)
 				{
-					ENGINE_LOG_ERROR("Probe GI was not updated this frame; the probes keep their previous values.");
+					const ProbeGrid::GridDesc& grid = probeGIVolume.Grid;
+					ProbeGILightingData& gi = lightingData.ProbeGI;
+					gi.Enabled = 1u;
+					gi.GridOrigin = grid.Origin;
+					gi.GridSpacing = grid.Spacing;
+					gi.GridCounts = { grid.Counts.X, grid.Counts.Y, grid.Counts.Z };
+					gi.Intensity = probeGIVolume.Intensity;
+					gi.BlendDistance = probeGIVolume.BlendDistance;
+					const f32 minSpacing = glm::min(grid.Spacing.x, glm::min(grid.Spacing.y, grid.Spacing.z));
+					gi.NormalBias = minSpacing * ProbeGINormalBiasRatio;
+					gi.ViewBias = minSpacing * ProbeGIViewBiasRatio;
+					gi.DebugView = probeGIDebugView ? 1u : 0u;
+				}
+				else if (!m_ProbeGIFailureLogged)
+				{
+					ENGINE_LOG_ERROR("Probe GI was not updated this frame; the previous ambient lighting is used instead.");
 					m_ProbeGIFailureLogged = true;
 				}
 			}
@@ -940,6 +988,12 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 			// t13에 남은 AO가 다른 뷰포트의 TLAS 바인딩과 겹치지 않게 비운다(이미 기록한 Draw에는 영향이 없다).
 			if (ambientOcclusionTexture)
 				(void)rhi->BindTexture(nullptr, AmbientOcclusionSlot);
+			// 다음 프레임 갱신 Compute가 같은 아틀라스에 쓰므로 읽기 바인딩을 남기지 않는다.
+			if (probeGIBound)
+			{
+				(void)rhi->BindTexture(nullptr, ProbeGIIrradianceSlot);
+				(void)rhi->BindTexture(nullptr, ProbeGIDistanceSlot);
+			}
 			return Engine::EResult::Success;
 		},
 		passes.Lighting
@@ -980,8 +1034,11 @@ bool Engine::DeferredSceneRenderer::FindProbeGIVolume(Engine::Scene* scene, Prob
 }
 
 bool Engine::DeferredSceneRenderer::DispatchProbeGIUpdate(Engine::RHI& rhi, Engine::Scene* scene, RenderPassID viewID,
-	const std::wstring& positionTargetName, const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env)
+	const std::wstring& positionTargetName, const ProbeGIVolumeData& volume, const RaytracedReflectionInputs& env,
+	Engine::RHITexture*& irradianceAtlas, Engine::RHITexture*& distanceAtlas)
 {
+	irradianceAtlas = nullptr;
+	distanceAtlas = nullptr;
 	if (!scene || !Engine::RaytracingSceneManager::IsCreated())
 		return false;
 	auto& raytracing = Engine::RaytracingSceneManager::Get();
@@ -1087,6 +1144,8 @@ bool Engine::DeferredSceneRenderer::DispatchProbeGIUpdate(Engine::RHI& rhi, Engi
 		return false;
 
 	m_ProbeGISchedule.Commit();
+	irradianceAtlas = textures[ProbeGIIrradiance];
+	distanceAtlas = textures[ProbeGIDistance];
 	return true;
 }
 
