@@ -33,7 +33,7 @@ struct Light
     float   SpotInnerCos;
     float   SpotOuterCos;
     float   SpotFalloff;
-    float   Pad1;
+    float   SourceSize;     // 방향광: 겉보기 반각의 탄젠트, 점·스포트: 반지름(m). 0이면 그림자 경계가 선명하다.
 };
 
 ByteAddressBuffer gLightBuffer : register(t6, space3);
@@ -57,7 +57,7 @@ Light LoadLight(uint lightIndex)
     light.SpotInnerCos = asfloat(gLightBuffer.Load(address + 64u));
     light.SpotOuterCos = asfloat(gLightBuffer.Load(address + 68u));
     light.SpotFalloff = asfloat(gLightBuffer.Load(address + 72u));
-    light.Pad1 = asfloat(gLightBuffer.Load(address + 76u));
+    light.SourceSize = asfloat(gLightBuffer.Load(address + 76u));
 
     return light;
 }

@@ -26,7 +26,8 @@ struct GPULight
 	Engine::f32 SpotInnerCos;
 	Engine::f32 SpotOuterCos;
 	Engine::f32 SpotFalloff;
-	Engine::f32 Pad1;
+	// 그림자 경계를 부드럽게 하는 광원 크기(LightSourceSize.h). 방향광은 겉보기 반각의 탄젠트, 점·스포트는 반지름(m).
+	Engine::f32 SourceSize;
 };
 
 struct LightBufferHeader
@@ -57,5 +58,6 @@ struct LightShadowData
 static_assert(sizeof(GPULight) == 80);
 static_assert(offsetof(GPULight, PackedFlags) == 44);
 static_assert(offsetof(GPULight, SpotInnerCos) == 64);
+static_assert(offsetof(GPULight, SourceSize) == 76);
 static_assert(sizeof(LightBufferHeader) == 16);
 static_assert(sizeof(LightShadowData) == 336);

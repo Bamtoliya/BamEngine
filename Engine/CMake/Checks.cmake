@@ -56,6 +56,7 @@ foreach(check_target IN ITEMS
     CloudResourcesCheck
     DirectionalShadowCascadeCheck
     ShadowLightAssignmentCheck
+    LightSourceSizeCheck
     ResourcePreloaderCheck
     GpuHeapPageAllocatorCheck
     StreamingPolicyCheck

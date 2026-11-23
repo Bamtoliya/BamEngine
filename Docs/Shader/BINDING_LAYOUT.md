@@ -92,9 +92,16 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | Register | 셰이더 | 내용 |
 | --- | --- | --- |
 | `t13, space3` | `raytracedShadowMaskRTCS` | TLAS (`BindAccelerationStructure`, 다음 `Dispatch` 한 번에만 적용) |
-| `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 그림자 마스크 출력. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`) |
-| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 32바이트. 채널별 광원 버퍼 인덱스 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 가시성. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`). 누적하지 않으면 최종 마스크, 누적하면 이번 프레임 추적 결과 |
+| `u3, space3` | `raytracedShadowMaskRTCS` | RGBA16F 채널별 반그림자 반지름(m). `WritePenumbra`가 1일 때만 씀 |
+| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 48바이트. 채널별 광원 버퍼 인덱스, 프레임 번호 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2`·`u3`·`u4, space3` | `raytracedShadowTemporalRTCS` | RGBA16F 누적 가시성, 누적 반그림자 반지름, 표면(카메라 거리, 법선, 누적 횟수) |
+| `u2, space3` | `raytracedShadowFilterRTCS` | RGBA8 최종 마스크 |
+| `b1, space3` | `raytracedShadowTemporalRTCS`, `raytracedShadowFilterRTCS` | `RaytracedShadowDenoiseParams` 128바이트(`raytracedShadow.hlsli`). 앞 패스의 출력은 번호(`space4`)로 읽음 |
 | `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.RaytracedShadowLights`의 채널과 광원 인덱스가 같을 때만 사용 |
+
+누적·필터는 크기(`Light.SourceSize`)가 있는 광원이 채널을 받았고 Resource Binding Tier 2 이상일 때만 실행한다.
+광원 버퍼 항목의 마지막 4바이트(오프셋 76)는 `SourceSize`이며 `Light.h`·`light.hlsli`·`light.glsl`이 같아야 한다.
 
 ### 레이트레이싱 반사와 번호로 읽는 리소스 (D3D12 전용)
 

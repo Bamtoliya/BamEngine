@@ -71,9 +71,10 @@ private:
 		const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection);
 
 	// 레이트레이싱 그림자 마스크를 G-Buffer 크기로 계산한다. 성공하면 마스크 텍스처를 반환한다.
+	// denoise가 참이면(크기가 있는 광원이 있음) 누적·필터까지 거친 결과를 반환한다. camera는 지터가 없는 카메라다.
 	// 조명 파이프라인 대신 Compute 파이프라인을 바인딩하므로 호출 후 조명 파이프라인을 다시 바인딩해야 한다.
 	class RHITexture* DispatchRaytracedShadowMask(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
-		const RaytracedShadowAssignment& lights);
+		const CameraBuffer& camera, const RaytracedShadowAssignment& lights, bool denoise);
 	// 반사를 G-Buffer 크기로 추적하고 누적·필터한 결과를 반환한다. 조건과 주의는 그림자 마스크와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다.
 	class RHITexture* DispatchRaytracedReflection(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const struct RaytracedReflectionInputs& inputs);
@@ -98,6 +99,15 @@ private:
 	std::wstring m_RaytracedShadowMaskName;
 	bool m_RaytracedShadowShaderMissing = false;
 	bool m_RaytracedShadowFailureLogged = false;
+	// 크기가 있는 광원의 추적 결과, 반그림자 반지름, 누적 결과·반지름·표면(각각 두 장을 번갈아 쓴다). 최종 결과는 m_RaytracedShadowMaskName이다.
+	enum EShadowTarget { ShadowTrace, ShadowPenumbra, ShadowAccumulated0, ShadowAccumulated1, ShadowPenumbraHistory0, ShadowPenumbraHistory1,
+		ShadowGeometry0, ShadowGeometry1, ShadowTargetCount };
+	std::array<std::wstring, ShadowTargetCount> m_ShadowTargetNames;
+	TemporalHistory m_ShadowHistory;
+	// 채널과 광원의 연결이 바뀌면 이전 결과가 다른 광원의 것이므로 버린다.
+	RaytracedShadowAssignment m_ShadowHistoryLights;
+	bool m_ShadowTemporalShaderMissing = false;
+	bool m_ShadowFilterShaderMissing = false;
 
 	RaytracedShadowOverrides m_RaytracedReflectionOverrides;
 	bool m_RaytracedReflectionActive = false;
