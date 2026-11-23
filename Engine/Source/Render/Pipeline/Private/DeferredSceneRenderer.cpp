@@ -159,8 +159,10 @@ namespace
 		f32 RoughnessFadeEnd = ReflectionRoughnessFadeEnd;
 		f32 MaxHistory = 64.0f;
 		uint32 FrameIndex = 0u;
+		uint32 MotionTexture = Engine::RHI::INVALID_BINDLESS_INDEX; // 이번 프레임의 모션 벡터(TAA가 켜져 있을 때만)
+		uint32 Padding[3]{};
 	};
-	static_assert(sizeof(ReflectionDenoiseParams) == 112);
+	static_assert(sizeof(ReflectionDenoiseParams) == 128);
 
 	constexpr const wchar_t* ReflectionTemporalShaderKey = L"Resources/Shader/RaytracedReflectionTemporalRTCS";
 	constexpr const wchar_t* ReflectionTemporalShaderFile = L"raytracedReflectionTemporalRTCS.cso";
@@ -263,6 +265,8 @@ namespace
 	constexpr const wchar_t* MotionVectorVSFile = L"motionVectorVS.cso";
 	constexpr const wchar_t* MotionVectorSkinningVSKey = L"Resources/Shader/MotionVectorSkinningVS";
 	constexpr const wchar_t* MotionVectorSkinningVSFile = L"motionVectorSkinningVS.cso";
+	constexpr const wchar_t* MotionVectorTerrainVSKey = L"Resources/Shader/MotionVectorTerrainVS";
+	constexpr const wchar_t* MotionVectorTerrainVSFile = L"motionVectorTerrainVS.cso";
 	constexpr const wchar_t* MotionVectorPSKey = L"Resources/Shader/MotionVectorPS";
 	constexpr const wchar_t* MotionVectorPSFile = L"motionVectorPS.cso";
 
@@ -1404,21 +1408,24 @@ void Engine::DeferredSceneRenderer::SubmitDecalPass(const CameraBuffer& sceneCam
 		}, m_DecalPassID);
 }
 
-bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID transparentPass, const std::wstring& prefix)
+bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID geometryPass, RenderPassID transparentPass, const std::wstring& prefix)
 {
 	auto& rpm = Engine::RenderPassManager::Get();
+	const auto* geometry = rpm.GetRenderPassByID(geometryPass);
 	const auto* transparent = rpm.GetRenderPassByID(transparentPass);
-	if (!transparent)
+	if (!geometry || !transparent)
 		return false;
 
-	// 같은 우선순위에서는 나중에 등록한 패스가 뒤에 실행된다: 반투명 → 모션 벡터 → TAA → 후처리
-	const auto ensure = [&](RenderPassID& id, const wchar_t* suffix, ERenderPassLoadOperation load)
+	// 같은 우선순위에서는 나중에 등록한 패스가 뒤에 실행된다.
+	// 모션 벡터는 G-Buffer 위치만 읽으므로 G-Buffer 직후(조명 앞)에 그린다. 조명 안의 레이트레이싱 반사 누적이 같은 프레임의
+	// 이동량을 읽기 위해서다: G-Buffer → 모션 벡터 → 조명 → … → 반투명 → TAA → 후처리
+	const auto ensure = [&](RenderPassID& id, const wchar_t* suffix, ERenderPassLoadOperation load, const RenderPass& priorityPass)
 		{
 			if (id == INVALID_PASS_ID)
 			{
 				RenderPassDesc desc{};
 				desc.name = prefix + suffix;
-				desc.priority = transparent->GetPriority();
+				desc.priority = priorityPass.GetPriority();
 				desc.loadOperation = load;
 				desc.passType = ERenderPassType::PostProcess;
 				desc.acceptedBlendModes = EBlendMode::None;
@@ -1426,8 +1433,8 @@ bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID transpar
 			}
 			return id != INVALID_PASS_ID;
 		};
-	return ensure(m_MotionPassID, L"_MotionVectorPass", ERenderPassLoadOperation::RPLO_Clear) &&
-		ensure(m_TemporalPassID, L"_TemporalAAPass", ERenderPassLoadOperation::RPLO_Load);
+	return ensure(m_MotionPassID, L"_MotionVectorPass", ERenderPassLoadOperation::RPLO_Clear, *geometry) &&
+		ensure(m_TemporalPassID, L"_TemporalAAPass", ERenderPassLoadOperation::RPLO_Load, *transparent);
 }
 
 CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer& camera, Engine::Scene* scene, const DeferredScenePassBindings& passes)
@@ -1464,6 +1471,8 @@ CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer
 	Engine::Shader* motionVS = GetOwnedShader(MotionVectorVSKey, MotionVectorVSFile, EShaderType::Vertex, m_TemporalShaderMissing);
 	Engine::Shader* motionSkinningVS = GetOwnedShader(MotionVectorSkinningVSKey, MotionVectorSkinningVSFile, EShaderType::Vertex, m_TemporalShaderMissing);
 	Engine::Shader* motionPS = GetOwnedShader(MotionVectorPSKey, MotionVectorPSFile, EShaderType::Fragment, m_TemporalShaderMissing);
+	// 지형 셰이더가 없어도 TAA는 켜 두고 움직인 지형만 카메라 이동으로 처리한다.
+	Engine::Shader* motionTerrainVS = GetOwnedShader(MotionVectorTerrainVSKey, MotionVectorTerrainVSFile, EShaderType::Vertex, m_MotionTerrainShaderMissing);
 	const auto fullscreenVS = Engine::ResourceManager::Get().GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
 	if (!resolvePS || !motionVS || !motionSkinningVS || !motionPS || !fullscreenVS.Get() || !fullscreenVS->GetRHIShader())
 		return disable();
@@ -1482,7 +1491,7 @@ CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer
 			ETextureUsage::RenderTarget | ETextureUsage::Sampler, targetInfos[index].ClearColor))
 			return disable();
 	}
-	if (!EnsureTemporalAAPasses(passes.ForwardTransparent, colorName))
+	if (!EnsureTemporalAAPasses(passes.Geometry, passes.ForwardTransparent, colorName))
 		return disable();
 	auto* motionPass = rpm.GetRenderPassByID(m_MotionPassID);
 	auto* temporalPass = rpm.GetRenderPassByID(m_TemporalPassID);
@@ -1522,6 +1531,7 @@ CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer
 	motionInfo.previousViewProjection = frame.PrevViewProjection;
 	motionInfo.staticVertexShader = motionVS;
 	motionInfo.skinnedVertexShader = motionSkinningVS;
+	motionInfo.terrainVertexShader = motionTerrainVS;
 	motionInfo.pixelShader = motionPS;
 	motionInfo.draw = frame.Valid;
 	renderer.SubmitCustomCommand([this, motionInfo, positionName = passes.LightingInputs[4]](f32, RenderPass* pass) mutable -> EResult
@@ -1657,6 +1667,13 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedReflection(E
 	denoise.HitDistanceTexture = rhi.GetBindlessIndex(textures[ReflectionDistance]);
 	denoise.HistoryTexture = rhi.GetBindlessIndex(textures[ReflectionAccumulated0 + frame.ReadIndex]);
 	denoise.GeometryTexture = rhi.GetBindlessIndex(textures[ReflectionGeometry0 + frame.ReadIndex]);
+	// TAA가 켜져 있으면 모션 벡터 패스가 조명 앞에서 이번 프레임의 이동량을 이미 그렸다. 얻지 못하면 카메라 이동만 반영한다.
+	if (m_TemporalAAActive && !m_TemporalTargetNames[TemporalMotion].empty())
+	{
+		const Engine::RenderTarget* motion = Engine::RenderTargetManager::Get().GetRenderTarget(m_TemporalTargetNames[TemporalMotion]);
+		if (motion && motion->GetTexture())
+			denoise.MotionTexture = rhi.GetBindlessIndex(motion->GetTexture());
+	}
 	for (const Engine::uint32 index : { denoise.InputTexture, denoise.HitDistanceTexture, denoise.HistoryTexture, denoise.GeometryTexture })
 	{
 		if (index == Engine::RHI::INVALID_BINDLESS_INDEX)

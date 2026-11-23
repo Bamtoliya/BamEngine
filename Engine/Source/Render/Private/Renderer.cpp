@@ -1321,9 +1321,20 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 	// 스킨드와 정적 컴포넌트를 함께 가진 엔티티를 구분한다.
 	constexpr uint64 skinnedKeyBit = 1ull << 63u;
 	history.Begin();
+	// 정점이 프레임마다 바뀔 수 있는 메시(동적 메시, 스플라인 변형 메시)는 형상 값을 함께 기록한다. 값이 바뀐 프레임은 이전 월드 행렬로
+	// 이동량을 구할 수 없으므로 FindMoved가 돌려주지 않는다(정점이 매 프레임 바뀌는 메시는 늘 제외). 정점을 GeometryVersion을
+	// 올리지 않고 바꾸는 메시는 알 수 없으므로 Mesh::SetStreamBuffer 같은 공개 API로만 바꿔야 한다.
+	const auto getMotionStamp = [](const StaticDrawCommand& command)
+		{
+			uint64 stamp = command.motionStamp;
+			if (command.mesh && (command.ownedMesh || command.mesh->IsDynamic()))
+				stamp = CombineMotionStamp(stamp, MakeMotionStamp(command.mesh, command.mesh->GetGeometryVersion()));
+			return stamp;
+		};
 	for (const auto& command : staticCommands)
 	{
-		if (command.objectId.IsValid()) history.Record(command.objectId.GetKey() & ~skinnedKeyBit, command.worldMatrix);
+		if (command.objectId.IsValid())
+			history.Record(command.objectId.GetKey() & ~skinnedKeyBit, command.worldMatrix, nullptr, getMotionStamp(command));
 	}
 	for (const auto& command : skinnedCommands)
 	{
@@ -1375,8 +1386,9 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 		};
 
 	// 인스턴스 링 버퍼는 다른 패스와 함께 쓰므로 한도를 두고, 넘친 물체는 카메라 이동만 반영한다.
-	constexpr uint32 maxStaticInstances = 16384u;
-	constexpr uint32 maxSkinnedDraws = 128u;
+	// 정적 인스턴스(스플라인 배치 인스턴스 포함) 16384개, 스킨드 128개, 지형 16개까지 그린다.
+	constexpr uint32 maxStaticInstances = MaxMotionStaticInstances;
+	constexpr uint32 maxSkinnedDraws = MaxMotionSkinnedDraws;
 	constexpr size_t maxBatch = 1024u;
 
 	if (isReady(info.staticVertexShader))
@@ -1405,7 +1417,7 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 		{
 			if (!command.mesh || command.heightfield || !command.objectId.IsValid()) continue;
 			const auto* previous = history.FindMoved(command.objectId.GetKey() & ~skinnedKeyBit);
-			if (!previous || command.mesh->IsDynamic() || command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
+			if (!previous || command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
 			if (command.worldBounds && !FrustumCuller::TestBoundingBox(frustum, *command.worldBounds)) continue;
 			if (drawnInstances + batch.size() >= maxStaticInstances) break;
 
@@ -1417,6 +1429,37 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 			batch.push_back({ command.worldMatrix, previous->World });
 		}
 		if (!flush()) return EResult::Fail;
+	}
+
+	// 지형. 높이맵으로 정점을 옮기므로 별도 정점 셰이더로 그리며, 높이 배열이 아니라 월드 행렬만 움직인 경우를 다룬다.
+	// 높이맵이 바뀐 프레임은 지형이 제출되지 않거나 형상 값이 달라 FindMoved에서 빠진다.
+	if (isReady(info.terrainVertexShader))
+	{
+		constexpr uint32 maxTerrainDraws = MaxMotionTerrainDraws;
+		struct TerrainMotionObject
+		{
+			mat4 world;
+			mat4 previousWorld;
+			vec4 heightfieldData; // x 최대 높이, yz 칸 간격 (terrainVS의 HeightfieldData와 같다)
+		};
+		uint32 drawCount = 0;
+		for (const auto& command : staticCommands)
+		{
+			if (!command.mesh || !command.heightfield || !command.objectId.IsValid()) continue;
+			const auto* previous = history.FindMoved(command.objectId.GetKey() & ~skinnedKeyBit);
+			const auto& heightfield = *command.heightfield;
+			if (!previous || !heightfield.heightmap || command.mesh->GetTopology() != ETopology::TriangleList) continue;
+			if (drawCount >= maxTerrainDraws) break;
+
+			if (!bindPipeline(info.terrainVertexShader, *command.mesh, 1u)) continue;
+			const TerrainMotionObject object{ command.worldMatrix, previous->World, vec4(heightfield.maxHeight, heightfield.cellSpacing.x, heightfield.cellSpacing.y, 0.0f) };
+			// 높이맵은 지형 G-Buffer 셰이더와 같은 슬롯(t1, space1)에 묶는다.
+			if (IsFailure(m_RHI->BindTextureSampler(heightfield.heightmap.get(), sampler, 1)) ||
+				IsFailure(m_RHI->BindConstantBuffer(&object, sizeof(object), 1)) || IsFailure(command.mesh->Bind(0)) ||
+				IsFailure(command.mesh->GetIndexBuffer() ? m_RHI->DrawIndexed(command.mesh->GetIndexCount()) : m_RHI->Draw(command.mesh->GetVertexCount())))
+				return EResult::Fail;
+			++drawCount;
+		}
 	}
 
 	if (isReady(info.skinnedVertexShader))

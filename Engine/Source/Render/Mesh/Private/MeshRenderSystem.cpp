@@ -22,6 +22,7 @@
 #include "SplineMeshDeformCache.h"
 #include "AnimationSceneQuery.h"
 #include "RaytracingSceneManager.h"
+#include "MotionHistory.h"
 
 namespace
 {
@@ -36,6 +37,8 @@ namespace
 
         bool Attempted = false;
         bool Ready = false;
+        // 월드 행렬을 뺀 배치(점·간격·설정)가 바뀔 때마다 올린다. 인스턴스 번호가 가리키는 위치가 달라지므로 모션 벡터의 이전 변환을 쓰지 않게 한다.
+        uint64 Revision = 0;
 
         std::vector<mat4> Matrices;
         std::vector<StaticDrawCommand> Commands;
@@ -55,13 +58,16 @@ namespace
         if (!spline.IsValid() || mesh.IsDynamic() || mesh.IsSkinned())
             return false;
 
-        const bool unchanged = cache.Attempted &&
+        const bool sameLayout = cache.Attempted &&
             cache.Points == spline.Points && cache.Closed == spline.Closed &&
-            cache.WorldMatrix == worldMatrix &&
             cache.Settings.Spacing == settings.Spacing &&
             cache.Settings.StartDistance == settings.StartDistance &&
             cache.Settings.InitialUp == settings.InitialUp &&
             cache.Settings.InstanceScale == settings.InstanceScale;
+        const bool unchanged = sameLayout && cache.WorldMatrix == worldMatrix;
+
+        if (!sameLayout)
+            ++cache.Revision;
 
         if (!unchanged)
         {
@@ -94,6 +100,7 @@ namespace
             command.worldMatrix = matrix;
             command.worldBounds = worldBounds;
             command.pickingId = pickingId;
+            command.motionStamp = MakeMotionStamp(&mesh, cache.Revision);
             cache.Commands.push_back(command);
         }
 
@@ -317,9 +324,13 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode()))
                         continue;
 
+                    // 배치 인스턴스와 변형 메시도 월드 행렬만 움직이면 모션 벡터를 만든다. 정점이 변하는 변형 메시는
+                    // 렌더러가 메시 주소와 GeometryVersion(ownedMesh)으로 형상이 바뀐 프레임을 가려낸다.
+                    uint32 instanceIndex = 0;
                     for (StaticDrawCommand command : commands)
                     {
                         command.receiveDecals = meshRenderer.receiveDecals;
+                        command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)), instanceIndex++ };
                         renderer.SubmitStatic(command, target.pass->GetID());
                     }
                 }

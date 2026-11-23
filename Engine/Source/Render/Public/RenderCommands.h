@@ -11,13 +11,19 @@
 BEGIN(Engine)
 
 // 프레임이 바뀌어도 같은 물체를 가리키는 번호. sceneId가 0이면 프레임 사이의 움직임을 추적하지 않는다.
+// 한 엔티티가 여러 드로우를 내는 경우(스플라인 메시의 배치 인스턴스)에는 subId로 드로우를 구분한다.
 struct RenderObjectId
 {
 	uint32 sceneId = 0;
 	uint32 entityId = 0;
+	uint32 subId = 0;
 
 	bool IsValid() const { return sceneId != 0; }
-	uint64 GetKey() const { return (static_cast<uint64>(sceneId) << 32u) | entityId; }
+	// subId가 0이면 (sceneId, entityId)만으로 정해지는 값과 같다.
+	uint64 GetKey() const
+	{
+		return ((static_cast<uint64>(sceneId) << 32u) | entityId) ^ (static_cast<uint64>(subId) * 0x9E3779B97F4A7C15ull);
+	}
 };
 
 struct HeightfieldDrawData
@@ -35,6 +41,9 @@ struct StaticDrawCommand
 	class MaterialInterface* material = { nullptr };
 	mat4 worldMatrix = { glm::identity<mat4>() };
 	RenderObjectId objectId{};
+	// 월드 행렬 밖에서 정점·배치가 바뀌었는지 알리는 값(MotionHistory.h의 MakeMotionStamp). 프레임 사이에 값이 바뀌면
+	// 이전 월드 행렬로 모션 벡터를 만들 수 없으므로 그 프레임은 움직임이 없는 것으로 본다. 0이면 형상이 변하지 않는다.
+	uint64 motionStamp = 0;
 	uint32 pickingId = 0;
 	std::optional<BoundingBox> worldBounds{};
 	std::optional<HeightfieldDrawData> heightfield{};

@@ -19,7 +19,13 @@ struct ReflectionDenoiseParams
 	float RoughnessFadeEnd;
 	float MaxHistory;
 	uint FrameIndex;
+	uint MotionTexture;         // 누적: 이번 프레임의 모션 벡터(TAA가 꺼져 있으면 INVALID_BINDLESS_INDEX)
+	uint3 Padding;
 };
+
+static const uint REFLECTION_INVALID_TEXTURE = 0xFFFFFFFFu;
+// 모션 벡터 타깃의 지우기 값(temporalAAPS의 NO_MOTION). 움직인 물체가 없는 픽셀이다.
+static const float REFLECTION_NO_MOTION = 100.0f;
 
 static const uint REFLECTION_HISTORY_NONE = 0u;
 static const uint REFLECTION_HISTORY_STATIC = 2u;
