@@ -17,6 +17,7 @@
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
+#include "DecalProjection.h"
 #include "Light.h"
 #include "TimeManager.h"
 #include "SkyAtmosphereComponent.h"
@@ -426,6 +427,7 @@ void SceneViewportPanel::Update(f32 dt)
 			m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6], m_Pipeline.GetTemporalJitterNDC());
 
 		DrawSelectedSpline(activeScene);
+		DrawSelectedDecal(activeScene);
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 	}
 
@@ -2182,6 +2184,43 @@ void SceneViewportPanel::FocusSelectedEntity()
 }
 
 #pragma region Spline
+void SceneViewportPanel::DrawSelectedDecal(Engine::Scene* scene)
+{
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !selected || selected->GetScene() != scene)
+		return;
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	if (!world.valid(entity))
+		return;
+
+	// 꺼진 데칼도 위치를 잡을 수 있게 흐린 색으로 그린다.
+	const auto* decal = world.try_get<Engine::DecalComponent>(entity);
+	mat4 worldMatrix;
+	if (!decal || !Engine::TransformSystem::TryGetWorldMatrix(world, entity, worldMatrix))
+		return;
+
+	const mat4 box = Engine::MakeDecalBoxMatrix(worldMatrix, decal->Size);
+	mat4 worldToBox;
+	if (!Engine::TryGetDecalWorldToBox(box, worldToBox))
+		return;
+
+	const bool enabled = IsComponentEnabled<Engine::DecalComponent>(world, entity);
+	const vec4 boxColor = enabled ? vec4(0.75f, 0.35f, 0.95f, 1.0f) : vec4(0.45f, 0.45f, 0.5f, 1.0f);
+	m_DebugRenderer.DrawBox(vec3(0.0f), vec3(0.5f), boxColor, box);
+
+	// 투영 방향: 상자 중심에서 +z 면까지의 화살표. 데칼은 양쪽 면을 모두 받으므로 방향은 텍스처의 앞쪽만 뜻한다.
+	const vec3 center(box[3]);
+	const vec3 tip = vec3(box * vec4(0.0f, 0.0f, 0.5f, 1.0f));
+	const vec3 side = vec3(box * vec4(0.15f, 0.0f, 0.35f, 1.0f));
+	const vec3 otherSide = vec3(box * vec4(-0.15f, 0.0f, 0.35f, 1.0f));
+	const vec4 arrowColor = enabled ? vec4(1.0f, 0.85f, 0.2f, 1.0f) : boxColor;
+	m_DebugRenderer.DrawLine(center, tip, arrowColor);
+	m_DebugRenderer.DrawLine(tip, side, arrowColor);
+	m_DebugRenderer.DrawLine(tip, otherSide, arrowColor);
+}
+
 void SceneViewportPanel::DrawSelectedSpline(Engine::Scene* scene)
 {
 	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();

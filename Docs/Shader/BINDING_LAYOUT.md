@@ -188,4 +188,18 @@ When adding or moving a binding:
 | `t0`~`t4`, `s0`, `space3` | `temporalAAPS` | 디퓨즈, 장면 색 복사본, 이전 결과, 모션 벡터, 위치 |
 | `b1, space3` | `infiniteGridPS` | `GridDepthParams` 16바이트. 깊이 타깃의 TAA 지터(NDC), 끄면 0 |
 
+### 디퍼드 데칼 바인딩 (D3D12 전용)
+
+| 바인딩 | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space0` | `decalVS` | G-Buffer를 그린 카메라(TAA를 켜면 지터 포함) |
+| `b1, space3` | `decalVS`, `decalPS` | `DecalParams` 224바이트(`decal.hlsli`). `DeferredSceneRenderer.cpp`의 `DecalParams`와 일치해야 한다 |
+| `t0`, `t1, space3` | `decalPS` | G-Buffer 위치, 데칼 패스 직전에 복사한 G-Buffer 법선(a에 셰이딩 플래그) |
+| `t0`~`t2`, `s0, space1` | `decalPS` | 기본 색, 접선 공간 법선, 표면(R 거칠기·G 금속성·B 캐비티) 텍스처. 없으면 흰 텍스처를 묶고 `TextureFlags`로 무시한다 |
+
+`decalPS`는 `SV_Target0~2`로 G-Buffer 디퓨즈·법선·PBR에 쓴다. 쓰기 마스크가 RGB라 각 타깃의 a는 바뀌지 않고, 출력 알파는 섞는 비율로만 쓰인다.
+`decalVS`는 정점 버퍼 없이 `Draw(36)`로 단위 상자를 만들며 상자 삼각형 순서는 `DecalProjection.h`의 `DecalBoxIndices`와 같다.
+G-Buffer 정점 셰이더(`gbufferVS`, `gbufferSkinningVS`, 셰이더 그래프 VS)는 마지막 출력 `NoDecals : TEXCOORD6`(인스턴스·오브젝트 `PickingData.y`)를 낸다.
+`gbufferPS`와 셰이더 그래프 G-Buffer PS는 이 값이 1이면 `FLAG_RECEIVE_DECALS`를 빼고 기록한다. 맨 뒤 출력이라 읽지 않는 픽셀 셰이더와도 연결된다.
+
 `temporalAAPS`는 `SV_Target0`에 HDR 장면 색, `SV_Target1`에 다음 프레임의 이력을 쓴다. G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).

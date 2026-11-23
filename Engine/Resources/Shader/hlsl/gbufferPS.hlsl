@@ -9,6 +9,7 @@ struct PS_INPUT
 	float3 Tangent : TANGENT;
 	float4 Color : COLOR0;
 	nointerpolation float PickingId : TEXCOORD5;
+	nointerpolation float NoDecals : TEXCOORD6; // 1이면 FLAG_RECEIVE_DECALS를 뺀다
 };
 
 struct PS_OUTPUT
@@ -97,7 +98,7 @@ PS_OUTPUT main(PS_INPUT input)
 		emission = emissionSample.rgb;
 	}
 
-	uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
+	uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_APPLY_SSAO | (input.NoDecals > 0.5f ? 0u : FLAG_RECEIVE_DECALS);
 
 	output.Diffuse = diffuse;
 	output.Normal = float4(worldNormal * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));

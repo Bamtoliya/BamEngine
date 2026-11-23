@@ -19,5 +19,8 @@ namespace Engine
 		ResourceHandle<MaterialInterface> materialHandle;
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_CAST_SHADOW"))
 		bool castShadow = true;
+		// 끄면 DecalComponent와 VFX 데칼이 이 메시에 투영되지 않는다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_RECEIVE_DECALS"))
+		bool receiveDecals = true;
 	};
 }

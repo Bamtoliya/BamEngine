@@ -17,6 +17,7 @@
 #include "CompositeVFXComponent.h"
 #include "LightComponent.h"
 #include "CompositeVFXSystem.h"
+#include "DecalProjection.h"
 #include "ResourceManager.h"
 #include "SpriteAnimation.h"
 #include "Sprite.h"
@@ -1447,9 +1448,10 @@ void VFXEditorPanel::DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec
 			}
 			else if constexpr (std::is_same_v<TrackType, Engine::VFXDecalTrack>)
 			{
-				const Engine::vec3 c = Engine::vec3(entityWorld * Engine::vec4(track.localPosition, 1.0f));
-				const Engine::vec3 halfExtent(track.size.x * 0.5f, 0.02f, track.size.y * 0.5f);
-				GizmoHelper::DrawWireBox(drawList, c, halfExtent, Engine::mat4(1.0f), viewProj, imageScreenPos, imageSize, IM_COL32(170, 90, 190, 200));
+				// CompositeVFXSystem::CollectDecals와 같은 투영 상자
+				const Engine::mat4 local = glm::translate(Engine::mat4(1.0f), track.localPosition) * glm::mat4_cast(glm::quat(glm::radians(track.localRotation)));
+				const Engine::mat4 box = Engine::MakeDecalBoxMatrix(entityWorld * local, Engine::vec3(track.size.x, track.size.y, track.projectionDepth));
+				GizmoHelper::DrawWireBox(drawList, Engine::vec3(box[3]), Engine::vec3(0.5f), box, viewProj, imageScreenPos, imageSize, IM_COL32(170, 90, 190, 200));
 			}
 			else if constexpr (std::is_same_v<TrackType, Engine::VFXParticleTrack>)
 			{

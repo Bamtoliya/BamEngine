@@ -46,6 +46,8 @@ struct StaticDrawCommand
 	uint32 raytracedEntityIndex = 0;
 	// 월드 행렬이 감긴 방향을 뒤집는지. Renderer::SubmitStatic이 정한다.
 	bool mirrored = false;
+	// false면 G-Buffer 셰이더가 FLAG_RECEIVE_DECALS를 빼고 기록한다(InstanceData pickingData.y = 1).
+	bool receiveDecals = true;
 };
 
 // 프레임마다 CPU에서 만든 정점으로 그리는 지오메트리 (트레일·리본 등). 정점은 이미 월드 공간이다.
@@ -75,6 +77,8 @@ struct SkinnedDrawCommand
 	const class Scene* raytracedScene = { nullptr };
 	uint32 raytracedViewID = 0;
 	uint32 raytracedEntityIndex = 0;
+	// false면 G-Buffer 셰이더가 FLAG_RECEIVE_DECALS를 빼고 기록한다(SceneUBO pickingData.y = 1).
+	bool receiveDecals = true;
 };
 
 struct SpriteDrawCommand
