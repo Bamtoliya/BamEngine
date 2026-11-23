@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-23 (프로브 GI 아틀라스·상태 `t2`~`t4, space1`, `LightingPassData` 624바이트)
+- 최종 갱신: 2026-11-24 (지형 모션 벡터 `motionVectorTerrainVS`, 반사 누적 `ReflectionDenoiseParams` 128바이트; 2026-11-23: 프로브 GI 아틀라스·상태 `t2`~`t4, space1`, `LightingPassData` 624바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -126,7 +126,8 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `u2`·`u3, space3` | `raytracedReflectionTemporalRTCS` | RGBA16F 누적 결과와 표면(카메라 거리, 법선, 누적 횟수) |
 | `u2, space3` | `raytracedReflectionFilterRTCS` | RGBA16F 필터 결과. `lightingPS`가 읽음 |
 | `b1, space3` | `raytracedReflectionRTCS` | `RaytracedReflectionParams` 64바이트 |
-| `b1, space3` | `raytracedReflectionTemporalRTCS`, `raytracedReflectionFilterRTCS` | `ReflectionDenoiseParams` 112바이트. 앞 패스의 출력은 번호로 읽음 |
+| `b1, space3` | `raytracedReflectionTemporalRTCS`, `raytracedReflectionFilterRTCS` | `ReflectionDenoiseParams` 128바이트(2026-11-24 `MotionTexture` 추가). 앞 패스의 출력은 번호로 읽음 |
+| `t0.., space4` (`MotionTexture` 번호) | `raytracedReflectionTemporalRTCS` | 이번 프레임의 `_MotionVectors`(RG16F). TAA가 꺼져 있거나 얻지 못하면 `0xFFFFFFFF`이며 이 경우 카메라 이동만 반영한다. 모션 벡터 패스가 G-Buffer 직후 조명 앞에서 그리므로 같은 프레임의 값이다 |
 | `t15, space3` | `lightingPS` | 반사. `LightingPassData.UseRaytracedReflections`가 1일 때만 읽음 |
 
 ### 레이트레이싱용 스키닝 (D3D12 전용, 2026-11-23)
@@ -204,6 +205,8 @@ When adding or moving a binding:
 | --- | --- | --- |
 | `t0, space2` | `motionVectorVS` | 이번·이전 월드 행렬 쌍(128바이트) |
 | `b0, space2` | `motionVectorSkinningVS` | 이번·이전 월드 행렬 |
+| `b0, space2` | `motionVectorTerrainVS` | 이번·이전 월드 행렬과 `HeightfieldData`(x 최대 높이, yz 칸 간격) 144바이트 (RHI CBV slot `1`) |
+| `t1, space1` | `motionVectorTerrainVS` | 지형 높이맵(`terrainVS`와 같은 슬롯, `BindTextureSampler` slot `1`) |
 | `t0, space2` | `motionVectorSkinningVS` | 이번 프레임 뼈 256개 뒤에 이전 프레임 256개 |
 | `b1, space3` | `motionVector*` | `MotionConstants` 192바이트 |
 | `t4, space3` | `motionVectorPS` | G-Buffer 위치 |

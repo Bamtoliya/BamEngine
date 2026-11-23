@@ -55,6 +55,7 @@ struct MotionVectorInfo
 	mat4 previousViewProjection{ 1.0f }; // 지터를 뺀 이전 프레임
 	class Shader* staticVertexShader = nullptr;
 	class Shader* skinnedVertexShader = nullptr;
+	class Shader* terrainVertexShader = nullptr; // 없으면 움직인 지형은 카메라 이동만 반영한다.
 	class Shader* pixelShader = nullptr;
 	class RHITexture* position = nullptr; // G-Buffer 위치
 	bool draw = false; // false면 다음 프레임을 위해 변환만 기록한다.

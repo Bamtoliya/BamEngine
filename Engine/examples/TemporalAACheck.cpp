@@ -1,9 +1,12 @@
 ﻿#include "MotionHistory.h"
+#include "RenderCommands.h"
 #include "TemporalAA.h"
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <vector>
 
 using namespace Engine;
 
@@ -136,6 +139,84 @@ namespace
         history.Reset();
         Expect(history.GetEntryCount() == 0, "a reset must drop every object");
     }
+
+    void CheckShapeStamp()
+    {
+        // 정점이 바뀔 수 있는 메시: 형상 값이 같은 동안만 월드 행렬 이동을 움직임으로 쓴다.
+        const int mesh = 0;
+        const int otherMesh = 0;
+        const uint64 stampV1 = MakeMotionStamp(&mesh, 1u);
+        Expect(stampV1 == MakeMotionStamp(&mesh, 1u), "the same shape must have the same stamp");
+        Expect(stampV1 != MakeMotionStamp(&mesh, 2u), "a new geometry version must change the stamp");
+        Expect(stampV1 != MakeMotionStamp(&otherMesh, 1u), "a different mesh must change the stamp");
+        Expect(MakeHeightfieldMotionStamp(&mesh, 10.0f, 1.0f, 1.0f) != MakeHeightfieldMotionStamp(&mesh, 20.0f, 1.0f, 1.0f), "a different height range must change the heightfield stamp");
+        Expect(MakeHeightfieldMotionStamp(&mesh, 10.0f, 1.0f, 1.0f) != MakeHeightfieldMotionStamp(&mesh, 10.0f, 1.0f, 2.0f), "a different cell size must change the heightfield stamp");
+        Expect(MakeHeightfieldMotionStamp(&mesh, 10.0f, 1.0f, 1.0f) == MakeHeightfieldMotionStamp(&mesh, 10.0f, 1.0f, 1.0f), "the same heightfield must have the same stamp");
+
+        MotionHistory history;
+        history.Begin();
+        history.Record(1, At(0.0f), nullptr, stampV1);
+        history.End();
+
+        history.Begin();
+        history.Record(1, At(1.0f), nullptr, stampV1);
+        const auto* moved = history.FindMoved(1);
+        Expect(moved && moved->World == At(0.0f), "a moved mesh with the same shape must have motion");
+        history.End();
+
+        // 정점이 바뀐 프레임은 이전 월드 행렬로 이동량을 구할 수 없다.
+        history.Begin();
+        history.Record(1, At(2.0f), nullptr, MakeMotionStamp(&mesh, 2u));
+        Expect(!history.FindMoved(1), "a changed shape must not have motion");
+        history.End();
+        // 다음 프레임에는 새 형상이 기준이 된다.
+        history.Begin();
+        history.Record(1, At(3.0f), nullptr, MakeMotionStamp(&mesh, 2u));
+        Expect(history.FindMoved(1) != nullptr, "the new shape must become the baseline");
+        history.End();
+
+        // 한 번호가 다른 형상으로 같은 프레임에 두 번 그려지면 모호하다.
+        history.Begin();
+        history.Record(1, At(4.0f), nullptr, stampV1);
+        history.Record(1, At(4.0f), nullptr, MakeMotionStamp(&mesh, 5u));
+        Expect(!history.FindMoved(1), "one id drawn with two shapes must be ambiguous");
+        history.End();
+    }
+
+    void CheckObjectKeys()
+    {
+        RenderObjectId base{ 7u, 42u };
+        Expect(base.GetKey() == ((static_cast<uint64>(7u) << 32u) | 42u), "a sub id of zero must keep the entity key");
+        Expect(!RenderObjectId{}.IsValid() && base.IsValid(), "a zero scene id must not be tracked");
+
+        // 한 엔티티의 스플라인 배치 인스턴스는 서로 다른 번호여야 각자 이전 변환을 찾는다.
+        std::vector<uint64> keys;
+        for (uint32 instance = 0; instance < 4096u; ++instance)
+            keys.push_back(RenderObjectId{ 7u, 42u, instance }.GetKey());
+        keys.push_back(RenderObjectId{ 7u, 43u }.GetKey());
+        std::sort(keys.begin(), keys.end());
+        Expect(std::adjacent_find(keys.begin(), keys.end()) == keys.end(), "instances of one entity must have distinct keys");
+
+        MotionHistory history;
+        history.Begin();
+        for (uint32 instance = 0; instance < 3u; ++instance)
+            history.Record(RenderObjectId{ 7u, 42u, instance }.GetKey(), At(static_cast<float>(instance)));
+        history.End();
+        history.Begin();
+        for (uint32 instance = 0; instance < 3u; ++instance)
+            history.Record(RenderObjectId{ 7u, 42u, instance }.GetKey(), At(static_cast<float>(instance) + (instance == 1u ? 1.0f : 0.0f)));
+        Expect(!history.FindMoved(RenderObjectId{ 7u, 42u, 0u }.GetKey()) && !history.FindMoved(RenderObjectId{ 7u, 42u, 2u }.GetKey()), "still instances must not have motion");
+        const auto* moved = history.FindMoved(RenderObjectId{ 7u, 42u, 1u }.GetKey());
+        Expect(moved && moved->World == At(1.0f), "each instance must keep its own previous transform");
+        history.End();
+    }
+
+    void CheckLimits()
+    {
+        // 인스턴스 링 버퍼를 다른 패스와 나눠 쓰므로 한도를 늘릴 때는 링 버퍼 크기와 함께 확인한다.
+        static_assert(MaxMotionStaticInstances == 16384u && MaxMotionSkinnedDraws == 128u && MaxMotionTerrainDraws == 16u);
+        Expect(MaxMotionTerrainDraws <= MaxMotionSkinnedDraws, "terrain draws are expensive and must stay below the skinned limit");
+    }
 }
 
 int main()
@@ -143,5 +224,8 @@ int main()
     CheckJitter();
     CheckCamera();
     CheckMotion();
+    CheckShapeStamp();
+    CheckObjectKeys();
+    CheckLimits();
     return g_Failures == 0 ? 0 : 1;
 }

@@ -129,7 +129,7 @@ private:
 	// 이 뷰의 데칼을 모아 G-Buffer 뒤·조명 앞의 데칼 패스에 제출한다. 데칼이 없으면 패스를 꺼서 법선 복사도 하지 않는다.
 	// sceneCamera는 G-Buffer를 그린 카메라다(TAA 지터 포함).
 	void SubmitDecalPass(const CameraBuffer& sceneCamera, Scene* scene, const DeferredScenePassBindings& passes);
-	bool EnsureTemporalAAPasses(RenderPassID transparentPass, const std::wstring& prefix);
+	bool EnsureTemporalAAPasses(RenderPassID geometryPass, RenderPassID transparentPass, const std::wstring& prefix);
 	class Shader* GetOwnedShader(const wchar_t* shaderKey, const wchar_t* shaderFile, EShaderType type, bool& shaderMissing);
 	RHIPipeline* GetRaytracingPipeline(const wchar_t* shaderKey, const wchar_t* shaderFile, bool& shaderMissing);
 	RHIPipeline* GetRaytracedShadowPipeline();
@@ -195,6 +195,7 @@ private:
 	RenderPassID m_MotionPassID = INVALID_PASS_ID;
 	RenderPassID m_TemporalPassID = INVALID_PASS_ID;
 	bool m_TemporalShaderMissing = false;
+	bool m_MotionTerrainShaderMissing = false;
 	bool m_TemporalFailureLogged = false;
 
 	AmbientOcclusionOverrides m_AmbientOcclusionOverrides;

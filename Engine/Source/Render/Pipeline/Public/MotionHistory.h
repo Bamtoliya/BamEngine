@@ -1,12 +1,40 @@
 ﻿#pragma once
 
 #include "Types.h"
+#include <bit>
+#include <cstdint>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 namespace Engine
 {
+	// 모션 벡터 패스가 뷰마다 그리는 물체의 한도. 인스턴스 링 버퍼를 다른 패스와 함께 쓰므로 넘친 물체는 카메라 이동만 반영한다.
+	inline constexpr uint32 MaxMotionStaticInstances = 16384u;
+	inline constexpr uint32 MaxMotionSkinnedDraws = 128u;
+	inline constexpr uint32 MaxMotionTerrainDraws = 16u;
+
+	// 월드 행렬 밖에서 물체의 형상(정점, 배치 인스턴스, 높이맵)이 바뀌었는지 비교하는 값. 값이 같으면 같은 형상으로 본다.
+	inline uint64 CombineMotionStamp(uint64 seed, uint64 value)
+	{
+		return seed ^ (value + 0x9E3779B97F4A7C15ull + (seed << 6u) + (seed >> 2u));
+	}
+
+	// 형상의 주인(메시, 텍스처 등)과 그 형상의 버전
+	inline uint64 MakeMotionStamp(const void* source, uint64 version)
+	{
+		return CombineMotionStamp(CombineMotionStamp(0ull, static_cast<uint64>(reinterpret_cast<std::uintptr_t>(source))), version);
+	}
+
+	// 높이맵 지형. 높이 배열이 바뀌면 지형은 그 프레임을 그리지 않으므로, 여기서는 텍스처와 크기만 비교한다.
+	inline uint64 MakeHeightfieldMotionStamp(const void* heightmap, f32 maxHeight, f32 cellSpacingX, f32 cellSpacingZ)
+	{
+		uint64 stamp = MakeMotionStamp(heightmap, 0ull);
+		stamp = CombineMotionStamp(stamp, std::bit_cast<uint32>(maxHeight));
+		stamp = CombineMotionStamp(stamp, std::bit_cast<uint32>(cellSpacingX));
+		return CombineMotionStamp(stamp, std::bit_cast<uint32>(cellSpacingZ));
+	}
+
 	// 뷰 하나가 마지막으로 그린 물체들의 변환. 뷰마다 그리는 주기가 달라 뷰별로 따로 둔다.
 	class MotionHistory
 	{

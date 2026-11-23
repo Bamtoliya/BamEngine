@@ -8,6 +8,7 @@
 #include "RenderPass.h"
 #include "PickingManager.h"
 #include "Texture.h"
+#include "MotionHistory.h"
 
 namespace
 {
@@ -378,6 +379,9 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 			command.mesh = mesh;
 			command.material = material;
 			command.worldMatrix = worldTransform.worldMatrix;
+			// 월드 행렬만 움직이는 지형의 모션 벡터를 위한 번호. 씬마다 엔티티 번호가 겹치므로 씬 주소로 구분한다(MeshRenderSystem과 같다).
+			command.objectId = { static_cast<uint32>(std::hash<const Scene*>{}(scene)) | 1u, static_cast<uint32>(entt::to_integral(entity)) };
+			command.motionStamp = MakeHeightfieldMotionStamp(terrain.HeightmapTexture.get(), terrain.MaxHeight, cellSpacing.x, cellSpacing.y);
 			command.pickingId = PickingManager::Get().RegisterPickingEntity<TerrainComponent>(scene, entity);
 			command.heightfield.emplace();
 			command.heightfield->gridMesh = terrain.GridMesh;
