@@ -43,6 +43,9 @@ public:
 	[[nodiscard]] Engine::ERaytracedShadowMode GetTemporalAAMode() const { return m_TemporalAAMode; }
 	[[nodiscard]] bool IsTemporalAAActive() const { return m_SceneRenderer.IsTemporalAAActive(); }
 	[[nodiscard]] vec2 GetTemporalJitterNDC() const { return m_SceneRenderer.GetTemporalJitterNDC(); }
+	void SetAmbientOcclusionMode(Engine::EAmbientOcclusionMode mode) { m_AmbientOcclusionMode = mode; }
+	[[nodiscard]] Engine::EAmbientOcclusionMode GetAmbientOcclusionMode() const { return m_AmbientOcclusionMode; }
+	[[nodiscard]] Engine::EAmbientOcclusionMode GetActiveAmbientOcclusion() const { return m_SceneRenderer.GetActiveAmbientOcclusion(); }
 
 	// 4. 게터 (최종 조명 합성 완료 텍스처 및 주요 패스 정보)
 	[[nodiscard]] const std::wstring& GetFinalColorRTName() const { return m_LightingColorName; }
@@ -83,6 +86,7 @@ private:
 	Engine::ERaytracedShadowMode m_RaytracedShadowMode = Engine::ERaytracedShadowMode::Inherit;
 	Engine::ERaytracedShadowMode m_RaytracedReflectionMode = Engine::ERaytracedShadowMode::Inherit;
 	Engine::ERaytracedShadowMode m_TemporalAAMode = Engine::ERaytracedShadowMode::Inherit;
+	Engine::EAmbientOcclusionMode m_AmbientOcclusionMode = Engine::EAmbientOcclusionMode::Inherit;
 
 	// 타깃 목록은 기존 구성에서는 고정 슬롯 순서, 프로필 구성에서는 생성 순서를 따른다.
 	std::vector<std::wstring> m_OwnedRTNames;

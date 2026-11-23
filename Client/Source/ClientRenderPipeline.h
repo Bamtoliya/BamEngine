@@ -26,6 +26,10 @@ namespace Client
         {
             m_SceneRenderer.SetTemporalAAOverrides({ mode });
         }
+        void SetAmbientOcclusionMode(Engine::EAmbientOcclusionMode mode)
+        {
+            m_SceneRenderer.SetAmbientOcclusionOverrides({ mode });
+        }
         bool UsesDeferredProfile() const { return m_PresentPass != Engine::INVALID_PASS_ID; }
 
     private:

@@ -53,6 +53,8 @@ struct LightingPassData
     uint SpotShadowLight;
     uint PointShadowLight;
     uint UseRaytracedReflections; // 1이면 t15의 반사를 환경광 반사 대신 합성한다
+    uint UseAmbientOcclusion;     // 1이면 t13의 앰비언트 오클루전(r)을 환경광에 곱한다
+    uint3 _AmbientOcclusionPad;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -68,6 +70,8 @@ StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
 Texture2D<float4> gRaytracedShadowMask : register(t14, space3);
 // 합성 비율을 곱한 반사(rgb)와 합성 비율(a). 비율이 0이면 기존 환경광 반사를 쓴다.
 Texture2D<float4> gRaytracedReflection : register(t15, space3);
+// 화면 공간·레이트레이싱 앰비언트 오클루전의 누적 결과(r = 가시성). Compute에서는 같은 번호에 TLAS를 묶는다.
+Texture2D<float4> gAmbientOcclusion : register(t13, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
@@ -906,6 +910,10 @@ float4 main(PS_INPUT input) : SV_TARGET
         raytracedSpecular = reflection.rgb * EnvBRDFApprox(f0, roughness, normalDotView);
         specularIBL *= 1.0f - saturate(reflection.a);
     }
+
+    // ── 6. 앰비언트 오클루전: 환경광에만 재질 AO와 곱한다. 직접광과 레이트레이싱 반사는 이미 가림을 반영한다. ──
+    if (gLightingData.UseAmbientOcclusion != 0u && (packedData & FLAG_APPLY_SSAO) != 0u)
+        ambientOcclusion *= saturate(gAmbientOcclusion.Load(pixelCoord).r);
 
     float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion + raytracedSpecular;
     float3 color = ambient + directLighting + emission;

@@ -6,6 +6,7 @@
 #include "LocalizationManager.h"
 #include "EditorUI.h"
 #include "RaytracedShadowModeUI.h"
+#include "AmbientOcclusionModeUI.h"
 #include "AssetHotReloadManager.h"
 #include "HotReloadManager.h"
 #include "PlatformPath.h"
@@ -63,6 +64,7 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftRaytracedShadow = project.RaytracedShadowMode;
     m_DraftRaytracedReflection = project.RaytracedReflectionMode;
     m_DraftTemporalAA = project.TemporalAAMode;
+    m_DraftAmbientOcclusion = project.AmbientOcclusionMode;
     m_DraftStreamingBudget = project.ResourceStreamingBudgetMB;
     m_Dirty = false;
 }
@@ -79,6 +81,7 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.RaytracedShadowMode = m_DraftRaytracedShadow;
     project.RaytracedReflectionMode = m_DraftRaytracedReflection;
     project.TemporalAAMode = m_DraftTemporalAA;
+    project.AmbientOcclusionMode = m_DraftAmbientOcclusion;
     project.ResourceStreamingBudgetMB = m_DraftStreamingBudget;
 
     const auto result = settings.SaveProjectSettings(project);
@@ -108,6 +111,17 @@ void ProjectSettingsWidget::DrawRendering()
         {
             EditorUI::PropertyRow("GraphicsSettings.TemporalAA");
             m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectTemporalAA", m_DraftTemporalAA, "GraphicsSettings.TemporalAAHint");
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionLighting").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##ProjectLightingTable"))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.AmbientOcclusion");
+            m_Dirty |= DrawAmbientOcclusionModeCombo("###ProjectAmbientOcclusion", m_DraftAmbientOcclusion);
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();

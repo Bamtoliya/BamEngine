@@ -47,6 +47,7 @@
 #include "ImGuiManager.h"
 #include "ContentBrowserDragPayload.h"
 #include "RaytracedShadowModeUI.h"
+#include "AmbientOcclusionModeUI.h"
 #include "RHI.h"
 
 #pragma region Helper
@@ -303,6 +304,7 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 	m_Pipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(state.RaytracedShadowMode));
 	m_Pipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(state.RaytracedReflectionMode));
 	m_Pipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(state.TemporalAAMode));
+	m_Pipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(state.AmbientOcclusionMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -321,6 +323,7 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 	state.RaytracedShadowMode = static_cast<int32>(m_Pipeline.GetRaytracedShadowMode());
 	state.RaytracedReflectionMode = static_cast<int32>(m_Pipeline.GetRaytracedReflectionMode());
 	state.TemporalAAMode = static_cast<int32>(m_Pipeline.GetTemporalAAMode());
+	state.AmbientOcclusionMode = static_cast<int32>(m_Pipeline.GetAmbientOcclusionMode());
 	return state;
 }
 #pragma endregion
@@ -876,6 +879,20 @@ void SceneViewportPanel::DrawRenderPassMenu()
 			ImGui::Separator();
 			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsTemporalAAActive() ?
 				"GraphicsSettings.TemporalAAActive" : "GraphicsSettings.TemporalAAInactive"));
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.AmbientOcclusion").c_str()))
+		{
+			const auto current = m_Pipeline.GetAmbientOcclusionMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(AmbientOcclusionModeKeys); ++index)
+			{
+				const auto mode = Engine::ToAmbientOcclusionMode(index);
+				// 레이트레이싱을 지원하지 않아도 고를 수 있다. 실행 시 화면 공간으로 되돌리고 아래 현재 상태에 표시한다.
+				if (ImGui::MenuItem(LOCAL_LABEL(AmbientOcclusionModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetAmbientOcclusionMode(mode);
+			}
+			ImGui::Separator();
+			ImGui::TextDisabled("%s", LOCAL_CSTR(GetAmbientOcclusionActiveKey(m_Pipeline.GetActiveAmbientOcclusion())));
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenu();

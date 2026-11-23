@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-22 (Compute 쓰기 텍스처 UAV 테이블 `[11]` 추가, 루트 파라미터 가시성 정정)
+- 최종 갱신: 2026-11-23 (앰비언트 오클루전 바인딩 추가, `LightingPassData` 560바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -134,7 +134,23 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 광선 마스크는 세 셰이더 파일의 상수와 일치해야 한다. 버퍼 번호는 최대 16,384개이며 버퍼가 해제되면 지연 반환한다.
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
-`LightingPassData`는 544바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
+`LightingPassData`는 560바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다(2026-11-23 앰비언트 오클루전 추가로 544 → 560).
+
+### 앰비언트 오클루전 바인딩 (D3D12 전용)
+
+조명 패스 안의 Compute 세 개가 G-Buffer(`t0`·`t1`·`t4`)와 광원 버퍼 바인딩을 그대로 쓴다. 상수는 `ambientOcclusion.hlsli`의 `AmbientOcclusionParams`(176바이트)이며 `DeferredSceneRenderer.cpp`의 같은 이름 구조와 일치해야 한다.
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b1, space3` | 세 Compute | `AmbientOcclusionParams` 176바이트 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2, space3` | `screenSpaceAmbientOcclusionCS`, `raytracedAmbientOcclusionRTCS` | R32F 이번 프레임 가시성 |
+| `t13, space3` | `raytracedAmbientOcclusionRTCS` | TLAS. 그림자 광선 마스크(`RAYTRACING_MASK_SHADOW`)만 추적 |
+| `t14`·`t15, space3` | `ambientOcclusionTemporalCS` | 이번 프레임 가시성, 이전 누적 결과. 디스패치 뒤 비우며 이후 그림자 마스크·반사가 다시 묶음 |
+| `u2, space3` | `ambientOcclusionTemporalCS` | RGBA16F 누적 결과(가시성, 카메라 거리, 누적 횟수). 두 장을 번갈아 씀 |
+| `t13, space3` | `lightingPS` | 누적 결과. `LightingPassData.UseAmbientOcclusion`이 1이고 G-Buffer에 `FLAG_APPLY_SSAO`가 있을 때만 환경광에 곱함 |
+
+`t13`은 그래픽 패스에서는 AO 텍스처, Compute에서는 TLAS가 쓴다. 조명 명령은 AO 디스패치 전에 `t13`~`t15`를 비우고, 그림자·반사 Compute가 끝난 뒤 그리기 직전에 AO를 `t13`에 묶으며, 그린 뒤 다시 비운다.
+`screenSpaceAmbientOcclusionCS`와 `ambientOcclusionTemporalCS`는 `cs_6_0`이라 SPIR-V도 생성되지만 실행 경로는 DirectX12뿐이다(쓰기 텍스처 `u2`가 D3D12 전용).
 
 ### 재질 알파 기준값
 

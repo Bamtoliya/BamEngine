@@ -198,6 +198,7 @@ namespace
         scene.RaytracedShadowMode = 2;
         scene.RaytracedReflectionMode = 1;
         scene.TemporalAAMode = 2;
+        scene.AmbientOcclusionMode = 3;
 
         auto& game = expected.ViewportStates[L"Game View"];
         game.ResolutionMode = 1;
@@ -237,7 +238,8 @@ namespace
             restored.FarPlane == scene.FarPlane && restored.RenderPassStates == scene.RenderPassStates &&
             restored.RaytracedShadowMode == scene.RaytracedShadowMode &&
             restored.RaytracedReflectionMode == scene.RaytracedReflectionMode &&
-            restored.TemporalAAMode == scene.TemporalAAMode,
+            restored.TemporalAAMode == scene.TemporalAAMode &&
+            restored.AmbientOcclusionMode == scene.AmbientOcclusionMode,
             "Scene viewport camera or render-pass settings changed.");
 
         const auto& restoredGame = loaded.ViewportStates.at(L"Game View");

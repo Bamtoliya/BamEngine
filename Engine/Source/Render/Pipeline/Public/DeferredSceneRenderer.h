@@ -1,5 +1,6 @@
 #pragma once
 
+#include "AmbientOcclusion.h"
 #include "CameraBuffer.h"
 #include "RenderPassTypes.h"
 #include "RenderTargetTypes.h"
@@ -63,12 +64,17 @@ public:
 	bool IsTemporalAAActive() const { return m_TemporalAAActive; }
 	// 이번 프레임 깊이 타깃의 지터(NDC). 후처리 뒤에 깊이를 비교하는 오버레이가 같은 화면 위치의 깊이를 계산할 때 쓴다. TAA를 쓰지 않으면 0이다.
 	vec2 GetTemporalJitterNDC() const { return m_TemporalJitterNDC; }
+	// 앰비언트 오클루전도 기본이 꺼짐이고 같은 순서로 덮어쓴다. 레이트레이싱을 쓸 수 없으면 화면 공간으로 되돌린다.
+	void SetAmbientOcclusionOverrides(const AmbientOcclusionOverrides& overrides) { m_AmbientOcclusionOverrides = overrides; }
+	// 마지막으로 실행한 방식(Off, ScreenSpace, Raytraced)
+	EAmbientOcclusionMode GetActiveAmbientOcclusion() const { return m_AmbientOcclusionActive; }
 
 private:
 	SkyAtmosphereData BuildSkyAtmosphereData(Scene* scene);
 	// sceneCamera는 G-Buffer를 그린 카메라다. G-Buffer를 화면 좌표로 다시 찾는 계산은 이 카메라를 써야 맞는다.
 	void SubmitLightingPass(const CameraBuffer& camera, const CameraBuffer& sceneCamera, Scene* scene, const SkyAtmosphereData& sky,
-		const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection);
+		const DeferredScenePassBindings& passes, bool useRaytracedShadow, bool useRaytracedReflection, EAmbientOcclusionMode ambientOcclusion,
+		const vec2& previousJitterNDC);
 
 	// 레이트레이싱 그림자 마스크를 G-Buffer 크기로 계산한다. 성공하면 마스크 텍스처를 반환한다.
 	// denoise가 참이면(크기가 있는 광원이 있음) 누적·필터까지 거친 결과를 반환한다. camera는 지터가 없는 카메라다.
@@ -78,6 +84,10 @@ private:
 	// 반사를 G-Buffer 크기로 추적하고 누적·필터한 결과를 반환한다. 조건과 주의는 그림자 마스크와 같으며, 광원·환경광 텍스처를 먼저 바인딩해야 한다.
 	class RHITexture* DispatchRaytracedReflection(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
 		const CameraBuffer& camera, const struct RaytracedReflectionInputs& inputs);
+	// 앰비언트 오클루전을 G-Buffer 크기로 계산하고 누적한 결과를 반환한다. TLAS나 셰이더가 없으면 레이트레이싱 대신 화면 공간으로 계산한다.
+	// 조건과 주의는 그림자 마스크와 같으며, G-Buffer와 광원 버퍼를 먼저 바인딩해야 한다. camera는 지터가 없는 카메라다.
+	class RHITexture* DispatchAmbientOcclusion(class RHI& rhi, Scene* scene, RenderPassID viewID, const std::wstring& positionTargetName,
+		const CameraBuffer& camera, const CameraBuffer& sceneCamera, EAmbientOcclusionMode mode, const vec2& previousJitterNDC);
 	// 이 렌더러가 소유하는 타깃. ownedName에 이름을 기록하고 크기가 바뀌면 다시 만든다. 기본은 Compute 쓰기용이다.
 	class RenderTarget* EnsureOwnedTarget(const std::wstring& name, ETextureFormat format, uint32 width, uint32 height, std::wstring& ownedName,
 		ETextureUsage usage = ETextureUsage::Sampler | ETextureUsage::ComputeReadWrite, const vec4& clearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f));
@@ -132,6 +142,21 @@ private:
 	RenderPassID m_TemporalPassID = INVALID_PASS_ID;
 	bool m_TemporalShaderMissing = false;
 	bool m_TemporalFailureLogged = false;
+
+	AmbientOcclusionOverrides m_AmbientOcclusionOverrides;
+	EAmbientOcclusionMode m_AmbientOcclusionActive = EAmbientOcclusionMode::Off;
+	// 이력을 쌓은 방식. 바뀌면 노이즈 성질이 달라 이력을 버린다.
+	EAmbientOcclusionMode m_AmbientOcclusionHistoryPath = EAmbientOcclusionMode::Off;
+	// 이전 프레임 G-Buffer의 TAA 지터(NDC)
+	vec2 m_AmbientOcclusionPrevJitterNDC{ 0.0f };
+	// 이번 프레임 값, 누적 결과(두 장을 번갈아 쓴다)
+	enum EAmbientOcclusionTarget { AmbientOcclusionRaw, AmbientOcclusionHistory0, AmbientOcclusionHistory1, AmbientOcclusionTargetCount };
+	std::array<std::wstring, AmbientOcclusionTargetCount> m_AmbientOcclusionTargetNames;
+	TemporalHistory m_AmbientOcclusionHistory;
+	bool m_ScreenSpaceAOShaderMissing = false;
+	bool m_RaytracedAOShaderMissing = false;
+	bool m_AmbientOcclusionTemporalShaderMissing = false;
+	bool m_AmbientOcclusionFailureLogged = false;
 };
 
 END
