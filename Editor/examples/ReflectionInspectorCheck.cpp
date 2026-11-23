@@ -734,6 +734,8 @@ namespace
                 if (shown("ShadowStrength") != (castShadows && !sky) ||
                     shown("ShadowMaxDistance") != (castShadows && directional) ||
                     shown("RaytracedShadow") != (castShadows && !sky) ||
+                    shown("SourceAngle") != (castShadows && directional) ||
+                    shown("SourceRadius") != (castShadows && local) ||
                     shown("ShadowBias") != (castShadows && (directional || lightType == ELightType::Spot)))
                     return Fail("Shadow visibility does not match the light type and CastShadows.");
             }

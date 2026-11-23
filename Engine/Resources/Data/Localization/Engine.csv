@@ -674,6 +674,8 @@
 ,PROP_SORTING_ORDER,Sorting Order,정렬 순서
 ,PROP_SOUND_PATH,Sound,사운드
 ,PROP_SOUND_TRACKS,Sound Tracks,사운드 트랙
+,PROP_SOURCE_ANGLE,Source Angle,광원 각도
+,PROP_SOURCE_RADIUS,Source Radius,광원 반지름
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
 ,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
