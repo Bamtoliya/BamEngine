@@ -7,7 +7,12 @@
 #include "PostProcessTypes.h"
 #include "BloomEffect.h"
 #include "AutoExposureEffect.h"
+#include "DepthOfFieldEffect.h"
+#include "PostProcessOrder.h"
 #include <archive/JsonArchive.h>
+
+// 슬롯 패스가 UI 패스(200)보다 먼저 실행되어야 한다.
+static_assert(PostProcessSlotPriority(PostProcessPipeline::MAX_PP_PASSES - 1) < 200u);
 
 PostProcessPipeline::~PostProcessPipeline()
 {
@@ -25,13 +30,19 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 	autoExposureEffect->SetEnabled(false);
 	AddEffect(autoExposureEffect);
 
-	// 블룸(Bloom) 등록 (톤매핑 직전에 배치)
+	// 1. 피사계 심도 등록. 노출을 맞춘 뒤 흐린다. 톤매핑 전 HDR 색으로 흐려야 밝은 점이 자연스럽게 번지고, 블룸이 흐린 결과를 다시 번지게 한다.
+	DepthOfFieldEffect* depthOfFieldEffect = new DepthOfFieldEffect();
+	depthOfFieldEffect->Initialize(prefix);
+	depthOfFieldEffect->SetEnabled(false);
+	AddEffect(depthOfFieldEffect);
+
+	// 2. 블룸(Bloom) 등록 (톤매핑 직전에 배치)
 	BloomEffect* bloomEffect = new BloomEffect();
 	bloomEffect->Initialize(prefix);
 	bloomEffect->SetEnabled(false);
 	AddEffect(bloomEffect);
 
-	// 1. 머티리얼 기반 톤매핑 등록
+	// 2. 머티리얼 기반 톤매핑 등록
 	auto toneMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/ToneMappingMaterial");
 	if (!toneMatHandle)
 	{
@@ -60,7 +71,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(toneEffect);
 	}
 
-	// 2. 머티리얼 기반 색상 조정 등록
+	// 3. 머티리얼 기반 색상 조정 등록
 	auto colorMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/ColorAdjustmentsMaterial");
 	if (!colorMatHandle)
 	{
@@ -90,7 +101,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(colorEffect);
 	}
 
-	// 3. 머티리얼 기반 비네팅 등록
+	// 4. 머티리얼 기반 비네팅 등록
 	auto vignetteMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/VignetteMaterial");
 	if (!vignetteMatHandle)
 	{
@@ -120,7 +131,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(vignetteEffect);
 	}
 
-	// 4. 머티리얼 기반 색수차(Chromatic Aberration) 등록
+	// 5. 머티리얼 기반 색수차(Chromatic Aberration) 등록
 	auto chromaticMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/ChromaticAberrationMaterial");
 	if (!chromaticMatHandle)
 	{
@@ -149,7 +160,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(chromaticEffect);
 	}
 
-	// 5. 머티리얼 기반 필름 그레인(Film Grain) 등록
+	// 6. 머티리얼 기반 필름 그레인(Film Grain) 등록
 	auto grainMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/FilmGrainMaterial");
 	if (!grainMatHandle)
 	{
@@ -179,7 +190,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(grainEffect);
 	}
 
-	// 6. 머티리얼 기반 렌즈 왜곡(Lens Distortion) 등록
+	// 7. 머티리얼 기반 렌즈 왜곡(Lens Distortion) 등록
 	auto lensMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/LensDistortionMaterial");
 	if (!lensMatHandle)
 	{
@@ -209,7 +220,7 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(lensEffect);
 	}
 
-	// 7. 머티리얼 기반 선명화(Sharpen) 등록
+	// 8. 머티리얼 기반 선명화(Sharpen) 등록
 	auto sharpenMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/SharpenMaterial");
 	if (!sharpenMatHandle)
 	{
@@ -268,7 +279,7 @@ void PostProcessPipeline::PrepareResources(uint32 width, uint32 height)
 			m_Prefix + L"_PPPass_" + std::to_wstring(pi), { m_PPRTNames[pi % 2] }, L"",
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.0f, 0.f, 0.f, -1.f), 130 + pi, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
+			vec4(0.0f, 0.f, 0.f, -1.f), PostProcessSlotPriority(pi), ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
 		m_PassIDs.push_back(rpID);
 	}
 }
@@ -341,36 +352,14 @@ void PostProcessPipeline::SetHistoryScene(const void* scene)
 	m_HistoryScene = scene;
 	ResetHistory();
 }
-
-void PostProcessPipeline::InsertMissingEffects(vector<IPostProcessEffect*>& ordered) const
-{
-	const auto contains = [&ordered](const IPostProcessEffect* effect)
-		{
-			return std::find(ordered.begin(), ordered.end(), effect) != ordered.end();
-		};
-	for (std::size_t index = 0; index < m_Effects.size(); ++index)
-	{
-		IPostProcessEffect* effect = m_Effects[index];
-		if (!effect || contains(effect))
-			continue;
-
-		// 예전에 저장한 설정에는 새로 추가한 효과가 없다. 맨 뒤(톤매핑 뒤)로 보내지 않고 원래 자리에 둔다.
-		auto position = ordered.end();
-		for (std::size_t next = index + 1; next < m_Effects.size(); ++next)
-		{
-			auto found = std::find(ordered.begin(), ordered.end(), m_Effects[next]);
-			if (found != ordered.end())
-			{
-				position = found;
-				break;
-			}
-		}
-		ordered.insert(position, effect);
-	}
 }
 
 wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 {
+	// 장면 입력은 이번 Execute에만 쓴다. 넘기지 않은 프레임에 오래된 G-Buffer 이름을 읽지 않게 한다.
+	const bool hasSceneInputs = m_HasSceneInputs && m_SceneInputs.IsValid();
+	m_HasSceneInputs = false;
+
 	// 활성화된 이펙트가 없으면 패스를 아예 타지 않고 입력 RT를 그대로 바이패스 (Zero-Cost)
 	bool hasAnyActiveEffect = false;
 	for (auto* effect : m_Effects)
@@ -385,6 +374,10 @@ wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 	if (!hasAnyActiveEffect)
 		return inputRT;
 
+	auto& passes = RenderPassManager::Get();
+	const PostProcessSceneInputs* sceneInputs = hasSceneInputs ? &m_SceneInputs : nullptr;
+	vector<RenderPassID> prePasses;
+	bool priorityChanged = false;
 	wstring currentRT = inputRT;
 	uint32 slot = 0;
 
@@ -401,15 +394,36 @@ wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 			if (writeRT.empty() || writeRT == currentRT)
 				continue;
 		}
-		if (auto* pass = RenderPassManager::Get().GetRenderPassByID(m_PassIDs[slot]))
+
+		// 보조 패스는 앞 슬롯 패스 뒤, 이 슬롯 패스 앞에서 실행되어야 앞 효과의 결과를 읽는다.
+		prePasses.clear();
+		effect->GetPrePasses(prePasses);
+		for (const RenderPassID id : prePasses)
+		{
+			auto* prePass = passes.GetRenderPassByID(id);
+			if (prePass && prePass->GetPriority() != PostProcessPrePassPriority(slot))
+			{
+				prePass->SetPriority(PostProcessPrePassPriority(slot));
+				priorityChanged = true;
+			}
+		}
+
+		if (auto* pass = passes.GetRenderPassByID(m_PassIDs[slot]))
 			pass->SetColorAttachments({ writeRT });
 		// 제출하지 못한 효과는 출력이 비어 있으므로 건너뛰고 앞 결과를 그대로 넘긴다.
-		if (IsFailure(effect->SubmitPass(dt, m_PassIDs[slot], currentRT)))
+		effect->SetSceneInputs(sceneInputs);
+		const EResult result = effect->SubmitPass(dt, m_PassIDs[slot], currentRT);
+		effect->SetSceneInputs(nullptr);
+		if (IsFailure(result))
 			continue;
 
 		currentRT = writeRT;
 		++slot;
 	}
+
+	// 정렬은 등록 때만 하므로 우선순위를 바꾼 프레임에만 다시 정렬한다.
+	if (priorityChanged)
+		passes.SortRenderPasses();
 
 	return currentRT;
 }
@@ -446,6 +460,7 @@ void PostProcessPipeline::Free()
 		name.clear();
 	}
 	m_HistoryScene = nullptr;
+	m_HasSceneInputs = false;
 	m_Width = m_Height = 0;
 }
 
@@ -702,8 +717,8 @@ archive::ArchiveResult PostProcessPipeline::ReadArchive(const archive::IArchive&
 	if (!result)
 		return result;
 
-	// 파일에 없는 기존 효과는 원래 순서상 자리에 유지한다.
-	InsertMissingEffects(reorderedEffects);
+	// 파일에 없는 효과(예전 프리셋 뒤에 추가된 효과)는 현재 순서에서 뒤따르는 효과 앞에 둔다.
+	reorderedEffects = MergeEffectOrder(m_Effects, std::move(reorderedEffects));
 
 	for (const auto& apply : pendingChanges)
 		apply();
@@ -793,7 +808,7 @@ void PostProcessPipeline::CopySettingsFrom(const PostProcessPipeline& other)
 			reorderedEffects.push_back(myEffect);
 		}
 	}
-	InsertMissingEffects(reorderedEffects);
+	reorderedEffects = MergeEffectOrder(m_Effects, std::move(reorderedEffects));
 	m_Effects.swap(reorderedEffects);
 	NotifySettingsChanged();
 }

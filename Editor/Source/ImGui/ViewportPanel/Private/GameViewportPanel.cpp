@@ -118,7 +118,11 @@ void GameViewportPanel::Update(f32 dt)
 	std::wstring currentRT = m_Pipeline.GetFinalColorRTName();
 
 	if (m_UseScenePostProcess && m_ScenePostProcess.Apply(m_PostProcessChain.GetPipeline(), activeScene))
+	{
+		// 피사계 심도가 읽는 장면 입력. 메인 카메라가 덮어쓰기를 켰으면 그 초점 값을 쓴다.
+		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, m_CameraDepthOfField });
 		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
+	}
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });
 	m_DisplayRTName = currentRT;
 
@@ -240,6 +244,7 @@ void GameViewportPanel::DrawCustomOptions()
 std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 {
 	m_UsePixelPerfectView = false;
+	m_CameraDepthOfField.reset();
 	if (m_RenderWidth == 0 || m_RenderHeight == 0)
 		return std::nullopt;
 
@@ -281,6 +286,7 @@ std::optional<CameraBuffer> GameViewportPanel::FindActiveGameCameraBuffer()
 			const auto* pixelPerfect = Engine::TryGetEnabledComponent<Engine::PixelPerfectCameraComponent>(registry, entity);
 			m_UsePixelPerfectView = camera.CameraType == Engine::ECameraType::Orthographic &&
 				pixelPerfect && pixelPerfect->assetsPPU > 0.0f;
+			m_CameraDepthOfField = camera.GetDepthOfFieldOverride();
 
 			return camera.GetCameraBuffer();
 		}

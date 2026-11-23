@@ -67,6 +67,7 @@ foreach(check_target IN ITEMS
     ProbeGridCheck
     DecalProjectionCheck
     AutoExposureCheck
+    DepthOfFieldCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)

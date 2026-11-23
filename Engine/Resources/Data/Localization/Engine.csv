@@ -105,6 +105,13 @@
 ,Connection must start at an output pin.,Connection must start at an output pin.,연결은 출력 핀에서 시작해야 합니다.
 ,Core,Core,기본
 ,Cos (Degrees),Cos (Degrees),코사인 (도)
+,DEPTH_OF_FIELD_FOCUS_DISTANCE,Focus Distance (m),초점 거리 (m)
+,DEPTH_OF_FIELD_FOCUS_RANGE,Focus Range (m),초점 범위 (m)
+,DEPTH_OF_FIELD_F_STOP,F-Stop,조리개 값
+,DEPTH_OF_FIELD_MAX_BLUR_RADIUS,Max Blur Radius (px),최대 흐림 반지름 (px)
+,DEPTH_OF_FIELD_MODE,"Mode (0: Focus Range, 1: Physical Lens)","모드 (0: 초점 범위, 1: 물리 렌즈)"
+,DEPTH_OF_FIELD_SENSOR_HEIGHT,Sensor Height (mm),센서 높이 (mm)
+,DEPTH_OF_FIELD_TRANSITION_RANGE,Transition Range (m),전환 거리 (m)
 ,DETAIL,Detail,세부 정보
 ,Data connections must be acyclic.,Data connections must be acyclic.,데이터 연결에는 순환이 없어야 합니다.
 ,Data input requires a link or value.,Data input requires a link or value.,데이터 입력에 연결 또는 값이 필요합니다.
@@ -123,6 +130,7 @@
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,ENUM_CAMERA_TYPE,Camera Type,카메라 타입
 ,ENUM_CURVE_INTERP_MODE,Curve Interpolation Mode,커브 보간 모드
+,ENUM_DEPTH_OF_FIELD_MODE,Depth of Field Mode,피사계 심도 모드
 ,ENUM_ENTITY_FLAG,Entity Flags,엔티티 플래그
 ,ENUM_FOG_TYPE,Fog Type,안개 타입
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
@@ -343,6 +351,7 @@
 ,POST_PROCESS_BLOOM,Bloom,블룸
 ,POST_PROCESS_CHROMATIC_ABERRATION,Chromatic Aberration,색수차
 ,POST_PROCESS_COLOR_ADJUSTMENTS,Color Adjustments,색상 조정
+,POST_PROCESS_DEPTH_OF_FIELD,Depth of Field,피사계 심도
 ,POST_PROCESS_FILM_GRAIN,Film Grain,필름 그레인
 ,POST_PROCESS_LENS_DISTORTION,Lens Distortion,렌즈 왜곡
 ,POST_PROCESS_SHARPEN,Sharpen,선명화
@@ -441,6 +450,7 @@
 ,PROP_DENSITY,Cloud Density,구름 밀도
 ,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
 ,PROP_DEPTH_MODE,Depth Mode,깊이 모드
+,PROP_DEPTH_OF_FIELD_MODE,Depth of Field Mode,피사계 심도 모드
 ,PROP_DETAIL_SIZE,Detail Noise Size,디테일 노이즈 크기
 ,PROP_DIRECTION,Direction,방향
 ,PROP_DIRTY,Dirty,갱신 필요
@@ -480,6 +490,9 @@
 ,PROP_FLIPY,FlipY,Y 반전
 ,PROP_FLOOR_HEIGHT,Floor Height,바닥 높이
 ,PROP_FOCUS_BONE,Focus Bone,포커스 본
+,PROP_FOCUS_DISTANCE,Focus Distance (m),초점 거리 (m)
+,PROP_FOCUS_RANGE,Focus Range (m),초점 범위 (m)
+,PROP_FOCUS_TRANSITION_RANGE,Focus Transition Range (m),초점 전환 거리 (m)
 ,PROP_FOG_BLEND_COLOR,Fog Blend Color,안개 혼합 색상
 ,PROP_FOG_COLOR,Fog Color,안개 색상
 ,PROP_FOG_DENSITY,Fog Density,안개 밀도
@@ -497,6 +510,7 @@
 ,PROP_FREQUENCY,Frequency,주파수
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
+,PROP_F_STOP,F-Stop,조리개 값
 ,PROP_GRAPH_FILE,Graph File,그래프 파일
 ,PROP_GRAVITY_2D,2D Gravity,2D 중력
 ,PROP_GRAVITY_3D,3D Gravity,3D 중력
@@ -584,6 +598,7 @@
 ,PROP_MATERIAL_HANDLE,Material Handle,마테리얼 핸들
 ,PROP_MATRIX,Matrix,매트릭스
 ,PROP_MAX,Max,최댓값
+,PROP_MAX_BLUR_RADIUS,Max Blur Radius (px),최대 흐림 반지름 (px)
 ,PROP_MAX_COLLISION_CHECKS,Max Checks Per Frame,프레임당 최대 충돌 검사 수
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
@@ -617,6 +632,7 @@
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
 ,PROP_OUT_TANGENT,Out Tangent,진출 탄젠트
+,PROP_OVERRIDE_DEPTH_OF_FIELD,Override Depth of Field,피사계 심도 덮어쓰기
 ,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PARENT_EMITTER_INDEX,Parent Emitter Index,부모 이미터 인덱스
@@ -679,6 +695,7 @@
 ,PROP_SCALE_PLAY_RATE_WITH_SPEED,Scale Play Rate With Speed,이동 속도 연동 재생 배속
 ,PROP_SCALE_START,Start Scale,시작 크기
 ,PROP_SEED,Random Seed,난수 시드
+,PROP_SENSOR_HEIGHT,Sensor Height (mm),센서 높이 (mm)
 ,PROP_SETTINGS,Settings,설정
 ,PROP_SHADER_GRAPH_PATH,Shader Graph,셰이더 그래프
 ,PROP_SHADOW_AMBIENT_FLOOR,Shadow Ambient Floor,그림자 음영 최저 밝기

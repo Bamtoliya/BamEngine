@@ -493,6 +493,7 @@ void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
     auto& registry = currentScene->GetRegistry();
     auto cameraView = registry.view<Engine::CameraComponent, Engine::FlagComponent>();
     std::optional<CameraBuffer> selectedBuffer;
+    std::optional<Engine::DepthOfFieldSettings> depthOfField;
     bool pixelPerfect = false;
     const Engine::f32 aspectRatio = static_cast<Engine::f32>(width) / static_cast<Engine::f32>(height);
 
@@ -518,6 +519,7 @@ void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
         if (!selectedBuffer || camera.IsMainCamera)
         {
             selectedBuffer = buffer;
+            depthOfField = camera.GetDepthOfFieldOverride();
             const auto* pixelCamera = Engine::TryGetEnabledComponent<Engine::PixelPerfectCameraComponent>(registry, entity);
             pixelPerfect = camera.CameraType == Engine::ECameraType::Orthographic && pixelCamera &&
                 pixelCamera->assetsPPU > 0.0f;
@@ -544,7 +546,7 @@ void Client::ClientGameRuntime::SubmitRenderPipeline(Engine::f32 dt,
     }
 
     selectedBuffer->time = static_cast<Engine::f32>(Engine::TimeManager::Get().GetTotalTime());
-    m_RenderPipeline.Submit(*selectedBuffer, *currentScene, dt, pixelPerfect);
+    m_RenderPipeline.Submit(*selectedBuffer, *currentScene, dt, pixelPerfect, depthOfField);
     if (m_RenderPipeline.UsesDeferredProfile())
     {
         for (auto* scene : Engine::SceneManager::Get().GetActiveScenes())

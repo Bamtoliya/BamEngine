@@ -7,6 +7,7 @@
 #include "RenderPassManager.h"
 #include "SamplerManager.h"
 #include "RHI.h"
+#include "PostProcessOrder.h"
 
 namespace
 {
@@ -67,27 +68,27 @@ void BloomEffect::Initialize(const wstring& prefix)
 		m_DownRTNames[i] = m_Prefix + L"_Bloom_Down_" + std::to_wstring(i);
 	CreateMipRenderTargets(256, 256);
 
-	// 2. 7개 서브 렌더패스 등록 (우선순위 121 ~ 127)
+	// 2. 7개 서브 렌더패스 등록. 실행 순서는 등록 순서이고, 우선순위는 PostProcessPipeline이 체인 위치에 맞춰 바꾼다.
 	auto& rpMgr = RenderPassManager::Get();
 
-	// 121: Prefilter Pass
+	// Prefilter Pass
 	m_PrefilterPassID = rpMgr.RegisterRenderPass(
 		m_Prefix + L"_Bloom_Prefilter", { m_DownRTNames[0] }, L"",
 		ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-		vec4(0.f, 0.f, 0.f, 1.f), 121, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
+		vec4(0.f, 0.f, 0.f, 1.f), PostProcessPrePassPriority(0), ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
 
-	// 122 ~ 124: Downsample Passes
+	// Downsample Passes
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS - 1; ++i)
 	{
 		m_DownPassIDs[i] = rpMgr.RegisterRenderPass(
 			m_Prefix + L"_Bloom_Down_" + std::to_wstring(i), { m_DownRTNames[i + 1] }, L"",
 			ERenderPassLoadOperation::RPLO_Clear, ERenderPassStoreOperation::RPSO_Store,
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.f, 0.f, 0.f, 1.f), 122 + i, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
+			vec4(0.f, 0.f, 0.f, 1.f), PostProcessPrePassPriority(0), ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::None);
 	}
 
-	// 125 ~ 127: Upsample Passes (RPLO_Load로 기존 타깃 밉에 가산 누적)
+	// Upsample Passes (RPLO_Load로 기존 타깃 밉에 가산 누적)
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS - 1; ++i)
 	{
 		const uint32 targetMip = (BLOOM_MIP_LEVELS - 2) - i; // 2 -> 1 -> 0
@@ -95,7 +96,7 @@ void BloomEffect::Initialize(const wstring& prefix)
 			m_Prefix + L"_Bloom_Up_" + std::to_wstring(i), { m_DownRTNames[targetMip] }, L"",
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 			ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
-			vec4(0.f, 0.f, 0.f, 1.f), 125 + i, ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::Additive);
+			vec4(0.f, 0.f, 0.f, 1.f), PostProcessPrePassPriority(0), ERenderSortType::None, ERenderPassType::PostProcess, EBlendMode::Additive);
 	}
 
 	// 3. 초기 상태에서는 서브 패스들을 모두 비활성화
@@ -117,6 +118,13 @@ void BloomEffect::SetEnabled(bool enabled)
 		if (auto* p = rpMgr.GetRenderPassByID(m_UpPassIDs[i]))
 			p->SetEnabled(enabled);
 	}
+}
+
+void BloomEffect::GetPrePasses(vector<RenderPassID>& outPasses) const
+{
+	outPasses.push_back(m_PrefilterPassID);
+	outPasses.insert(outPasses.end(), m_DownPassIDs.begin(), m_DownPassIDs.end());
+	outPasses.insert(outPasses.end(), m_UpPassIDs.begin(), m_UpPassIDs.end());
 }
 
 void BloomEffect::AddFloat(const string& name, f32 defaultVal, f32 minVal, f32 maxVal, const string& localKey)
@@ -226,7 +234,7 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 	clampDesc.AddressW = ESamplerAddressMode::Clamp;
 	RHISampler* clampSampler = SamplerManager::Get().GetOrCreateSampler(clampDesc);
 
-	// 1. Pass 121: Prefilter (sourceRT -> DownRT[0])
+	// 1. Prefilter (sourceRT -> DownRT[0])
 	Renderer::Get().SubmitCustomCommand(
 		[this, capturedSource = sourceRT, clampSampler](f32 dt, RenderPass* pass) -> EResult
 		{
@@ -242,7 +250,7 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 			return rhi->Draw(3);
 		}, m_PrefilterPassID);
 
-	// 2. Pass 122 ~ 124: Downsample Chain (DownRT[i] -> DownRT[i+1])
+	// 2. Downsample Chain (DownRT[i] -> DownRT[i+1])
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS - 1; ++i)
 	{
 		Renderer::Get().SubmitCustomCommand(
@@ -258,7 +266,7 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 			}, m_DownPassIDs[i]);
 	}
 
-	// 3. Pass 125 ~ 127: Upsample Chain (DownRT[read] -> DownRT[target] with Additive Blend)
+	// 3. Upsample Chain (DownRT[read] -> DownRT[target] with Additive Blend)
 	for (uint32 i = 0; i < BLOOM_MIP_LEVELS - 1; ++i)
 	{
 		const uint32 readMip = BLOOM_MIP_LEVELS - 1 - i; // 3 -> 2 -> 1
@@ -278,7 +286,7 @@ EResult BloomEffect::SubmitPass(f32 dt, RenderPassID passID, const wstring& sour
 			}, m_UpPassIDs[i]);
 	}
 
-	// 4. Pass 130 (메인 슬롯): Final Composite (sourceRT + DownRT[0] -> writeRT)
+	// 4. 메인 슬롯: Final Composite (sourceRT + DownRT[0] -> writeRT)
 	Renderer::Get().SubmitCustomCommand(
 		[this, capturedSource = sourceRT, clampSampler](f32 dt, RenderPass* pass) -> EResult
 		{

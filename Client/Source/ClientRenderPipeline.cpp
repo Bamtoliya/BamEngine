@@ -128,7 +128,8 @@ EResult Client::ClientRenderPipeline::Resize(uint32 width, uint32 height)
     return m_PostProcess.Resize(width, height);
 }
 
-void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect)
+void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect,
+    const std::optional<Engine::DepthOfFieldSettings>& depthOfField)
 {
     auto& renderer = Renderer::Get();
     auto& passes = RenderPassManager::Get();
@@ -148,7 +149,12 @@ void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Sc
 
     auto color = m_Passes.GetColorTarget();
     if (m_Passes.UsesScenePostProcess() && m_SceneSettings.Apply(m_PostProcess, &scene))
+    {
+        // 피사계 심도가 읽는 장면 입력(G-Buffer 위치·알베도)
+        const auto& inputs = m_Passes.GetLightingInputs();
+        m_PostProcess.SetSceneInputs({ inputs[4], inputs[0], camera, depthOfField });
         color = m_PostProcess.Execute(dt, color);
+    }
 
     auto* ui = passes.GetRenderPassByID(m_UIPass);
     ui->SetColorAttachments({ color });
