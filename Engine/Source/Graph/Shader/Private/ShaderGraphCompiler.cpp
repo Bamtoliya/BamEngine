@@ -892,6 +892,7 @@ float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
+nointerpolation float NoDecals : TEXCOORD6;
 };
 
 struct InstanceData
@@ -931,6 +932,7 @@ output.TexCoord1 = )" + uv1Expression + R"(;
 output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
 output.Color = input.Color;
 output.PickingId = g_Instances[instanceId].PickingData.x;
+output.NoDecals = g_Instances[instanceId].PickingData.y;
 
 return output;
 }
@@ -1147,6 +1149,7 @@ float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
+nointerpolation float NoDecals : TEXCOORD6;
 };
 
 struct PS_OUTPUT
@@ -1173,7 +1176,7 @@ float cavity = clamp()" + cavity + R"(, 0.0f, 1.0f);
 float ao = clamp()" + ao + R"(, 0.0f, 1.0f);
 float3 emission = )" + emissive + R"(;
 
-uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
+uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_APPLY_SSAO | (input.NoDecals > 0.5f ? 0u : FLAG_RECEIVE_DECALS);
 
 output.Diffuse = diffuse;
 output.Normal = float4(N * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));

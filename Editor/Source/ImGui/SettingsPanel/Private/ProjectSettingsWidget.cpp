@@ -6,6 +6,7 @@
 #include "LocalizationManager.h"
 #include "EditorUI.h"
 #include "RaytracedShadowModeUI.h"
+#include "AmbientOcclusionModeUI.h"
 #include "AssetHotReloadManager.h"
 #include "HotReloadManager.h"
 #include "PlatformPath.h"
@@ -63,6 +64,8 @@ void ProjectSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftRaytracedShadow = project.RaytracedShadowMode;
     m_DraftRaytracedReflection = project.RaytracedReflectionMode;
     m_DraftTemporalAA = project.TemporalAAMode;
+    m_DraftAmbientOcclusion = project.AmbientOcclusionMode;
+    m_DraftProbeGI = project.ProbeGIMode;
     m_DraftStreamingBudget = project.ResourceStreamingBudgetMB;
     m_Dirty = false;
 }
@@ -79,6 +82,8 @@ void ProjectSettingsWidget::Apply(EditorSettingsService& settings)
     project.RaytracedShadowMode = m_DraftRaytracedShadow;
     project.RaytracedReflectionMode = m_DraftRaytracedReflection;
     project.TemporalAAMode = m_DraftTemporalAA;
+    project.AmbientOcclusionMode = m_DraftAmbientOcclusion;
+    project.ProbeGIMode = m_DraftProbeGI;
     project.ResourceStreamingBudgetMB = m_DraftStreamingBudget;
 
     const auto result = settings.SaveProjectSettings(project);
@@ -113,6 +118,17 @@ void ProjectSettingsWidget::DrawRendering()
         ImGui::Spacing();
     }
 
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionLighting").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##ProjectLightingTable"))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.AmbientOcclusion");
+            m_Dirty |= DrawAmbientOcclusionModeCombo("###ProjectAmbientOcclusion", m_DraftAmbientOcclusion);
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
     if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         if (EditorUI::BeginPropertyTable("##ProjectRaytracingTable"))
@@ -121,6 +137,8 @@ void ProjectSettingsWidget::DrawRendering()
             m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedShadow", m_DraftRaytracedShadow);
             EditorUI::PropertyRow("GraphicsSettings.RaytracedReflection");
             m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectRaytracedReflection", m_DraftRaytracedReflection, "GraphicsSettings.RaytracedReflectionHint");
+            EditorUI::PropertyRow("GraphicsSettings.ProbeGI");
+            m_Dirty |= DrawRaytracedShadowModeCombo("###ProjectProbeGI", m_DraftProbeGI, "GraphicsSettings.ProbeGIHint");
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();

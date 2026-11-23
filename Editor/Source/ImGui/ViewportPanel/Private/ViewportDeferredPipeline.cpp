@@ -264,6 +264,10 @@ void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::
 	reflectionOverrides.Viewport = m_RaytracedReflectionMode;
 	Engine::RaytracedShadowOverrides temporalOverrides;
 	temporalOverrides.Viewport = m_TemporalAAMode;
+	Engine::AmbientOcclusionOverrides occlusionOverrides;
+	occlusionOverrides.Viewport = m_AmbientOcclusionMode;
+	Engine::RaytracedShadowOverrides probeGIOverrides;
+	probeGIOverrides.Viewport = m_ProbeGIMode;
 	if (EditorSettingsService::IsCreated())
 	{
 		const auto& settings = EditorSettingsService::Get();
@@ -273,10 +277,16 @@ void ViewportDeferredPipeline::Submit(const CameraBuffer& cameraBuffer, Engine::
 		reflectionOverrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().RaytracedReflectionMode);
 		temporalOverrides.Project = Engine::ToRaytracedShadowMode(settings.GetProjectSettings().TemporalAAMode);
 		temporalOverrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().TemporalAAMode);
+		occlusionOverrides.Project = Engine::ToAmbientOcclusionMode(settings.GetProjectSettings().AmbientOcclusionMode);
+		occlusionOverrides.Graphics = Engine::ToAmbientOcclusionMode(settings.GetPreferences().AmbientOcclusionMode);
+		probeGIOverrides.Project = Engine::ToRaytracedShadowMode(settings.GetProjectSettings().ProbeGIMode);
+		probeGIOverrides.Graphics = Engine::ToRaytracedShadowMode(settings.GetPreferences().ProbeGIMode);
 	}
 	m_SceneRenderer.SetRaytracedShadowOverrides(overrides);
 	m_SceneRenderer.SetRaytracedReflectionOverrides(reflectionOverrides);
 	m_SceneRenderer.SetTemporalAAOverrides(temporalOverrides);
+	m_SceneRenderer.SetAmbientOcclusionOverrides(occlusionOverrides);
+	m_SceneRenderer.SetProbeGIOverrides(probeGIOverrides);
 
 	m_SceneRenderer.Submit(cameraBuffer, targetScene, { m_ShadowPassID, m_PointShadowPassID, m_GeometryPassID,
 		m_LightingPassID, m_ForwardPassID, m_ForwardTransparentPassID, m_LightingInputs, m_PointShadowDepthName, m_AcceptSceneMeshes });

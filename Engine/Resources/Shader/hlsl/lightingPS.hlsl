@@ -3,6 +3,7 @@
 #include "shading_flags.hlsli"
 #include "fog.hlsli"
 #include "cloud.hlsli"
+#include "probeGISample.hlsli"
 
 struct PS_INPUT
 {
@@ -53,6 +54,9 @@ struct LightingPassData
     uint SpotShadowLight;
     uint PointShadowLight;
     uint UseRaytracedReflections; // 1이면 t15의 반사를 환경광 반사 대신 합성한다
+    uint UseAmbientOcclusion;     // 1이면 t13의 앰비언트 오클루전(r)을 환경광에 곱한다
+    uint3 _AmbientOcclusionPad;
+    ProbeGILightingData ProbeGI;  // Enabled가 1이면 space1 t2·t3의 아틀라스로 볼륨 안의 확산 환경광을 바꾼다
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -68,12 +72,17 @@ StructuredBuffer<uint>  gTileLightIndexList : register(t9, space3);
 Texture2D<float4> gRaytracedShadowMask : register(t14, space3);
 // 합성 비율을 곱한 반사(rgb)와 합성 비율(a). 비율이 0이면 기존 환경광 반사를 쓴다.
 Texture2D<float4> gRaytracedReflection : register(t15, space3);
+// 화면 공간·레이트레이싱 앰비언트 오클루전의 누적 결과(r = 가시성). Compute에서는 같은 번호에 TLAS를 묶는다.
+Texture2D<float4> gAmbientOcclusion : register(t13, space3);
 
 SamplerState gBufferSampler : register(s0, space3);
 ConstantBuffer<LightingPassData> gLightingData : register(b1, space3);
 Texture3D<float4> gCloudBaseShape : register(t0, space1);
 Texture2D<float4> gCloudWeatherMap : register(t1, space1);
 SamplerState gCloudSampler : register(s0, space1);
+// 프로브 GI 조도·거리 아틀라스(probeGIBlend*RTCS가 씀). gBufferSampler(선형)로 읽는다.
+Texture2D<float4> gProbeIrradianceAtlas : register(t2, space1);
+Texture2D<float4> gProbeDistanceAtlas : register(t3, space1);
 
 static const float PI = 3.14159265359f;
 static const uint INVALID_LIGHT_INDEX = 0xFFFFFFFFu;
@@ -218,10 +227,34 @@ float3 ApplyTileHeatmapDebug(float3 baseColor, uint count, float2 screenPos)
 	return lerp(baseColor, heatmap, 0.6f);
 }
 
-// 단일 캐스케이드에 대한 PCSS + Vogel Disk 16-Tap 샘플링
-float EvaluateCascadeShadow(uint cascadeIndex, float3 biasedWorldPos, float depthBias, float2 screenPos, float2x2 rot, float2 texelSize)
+// 섀도맵 PCSS의 필터 반지름 범위(텍셀). 광원 크기가 0이어도 계단 현상을 줄이려고 최소 반지름으로 거른다.
+static const float SHADOW_MIN_FILTER_TEXELS = 1.5f;
+// 이보다 넓은 반그림자는 이 폭으로 자른다. 가리는 물체 탐색 범위도 같다.
+static const float SHADOW_MAX_FILTER_TEXELS = 16.0f;
+// 점·스포트 섀도맵의 Near (LightSystem.cpp와 같다)
+static const float LOCAL_SHADOW_NEAR = 0.05f;
+
+// perspectiveLH_ZO 깊이를 광원에서의 거리(뷰 z)로 되돌린다.
+float LinearizeShadowDepth(float depth, float nearZ, float farZ)
 {
-	float4 lightClip = mul(gLightingData.Shadow.LightViewProjections[cascadeIndex], float4(biasedWorldPos, 1.0f));
+	return nearZ / max(1.0f - depth * (farZ - nearZ) / farZ, 1e-5f);
+}
+
+// 반그림자 반지름 식은 raytracedShadow.hlsli·LightSourceSize.h의 GetPenumbraRadius와 같다.
+float ShadowPenumbraRadius(bool directional, float sourceSize, float blockerDistance, float lightDistance)
+{
+	if (sourceSize <= 0.0f || blockerDistance <= 0.0f)
+		return 0.0f;
+	if (directional)
+		return blockerDistance * sourceSize;
+	return sourceSize * blockerDistance / max(lightDistance - blockerDistance, 1e-3f);
+}
+
+// 단일 캐스케이드에 대한 PCSS + Vogel Disk 16-Tap 샘플링. sourceSize는 광원 겉보기 반각의 탄젠트다.
+float EvaluateCascadeShadow(uint cascadeIndex, float3 biasedWorldPos, float depthBias, float2 screenPos, float2x2 rot, float2 texelSize, float sourceSize)
+{
+	const float4x4 lightViewProjection = gLightingData.Shadow.LightViewProjections[cascadeIndex];
+	float4 lightClip = mul(lightViewProjection, float4(biasedWorldPos, 1.0f));
 	float3 projection = lightClip.xyz / max(lightClip.w, 0.0001f);
 	projection.xy = projection.xy * 0.5f + 0.5f;
 	projection.y = 1.0f - projection.y;
@@ -238,17 +271,22 @@ float EvaluateCascadeShadow(uint cascadeIndex, float3 biasedWorldPos, float dept
 	float2 minUV = atlasOffset + texelSize * 1.5f;
 	float2 maxUV = atlasOffset + 0.5f - texelSize * 1.5f;
 
-	const float lightSizeUV = 0.0175f;
-	float2 searchRadius = texelSize * 8.0f;
-	float avgBlockerDepth = 0.0f;
-
-	if (!FindBlocker(atlasProj, depthBias, searchRadius, rot, minUV, maxUV, avgBlockerDepth))
+	float filterRadiusScale = texelSize.x * SHADOW_MIN_FILTER_TEXELS;
+	if (sourceSize > 0.0f)
 	{
-		return 1.0f;
-	}
+		float avgBlockerDepth = 0.0f;
+		if (!FindBlocker(atlasProj, depthBias, texelSize * SHADOW_MAX_FILTER_TEXELS, rot, minUV, maxUV, avgBlockerDepth))
+		{
+			return 1.0f;
+		}
 
-	float penumbraRatio = saturate((projection.z - avgBlockerDepth) / max(avgBlockerDepth, 0.0001f));
-	float filterRadiusScale = clamp(penumbraRatio * lightSizeUV, texelSize.x * 1.2f, texelSize.x * 8.0f);
+		// 직교 투영이라 월드 1m당 깊이와 아틀라스 UV 변화가 위치와 무관하다(아틀라스는 캐스케이드마다 절반 크기).
+		const float depthPerMeter = max(length(lightViewProjection[2].xyz), 1e-6f);
+		const float uvPerMeter = 0.25f * length(lightViewProjection[0].xyz);
+		const float blockerDistance = max(projection.z - avgBlockerDepth, 0.0f) / depthPerMeter;
+		filterRadiusScale = clamp(ShadowPenumbraRadius(true, sourceSize, blockerDistance, 0.0f) * uvPerMeter,
+			texelSize.x * SHADOW_MIN_FILTER_TEXELS, texelSize.x * SHADOW_MAX_FILTER_TEXELS);
+	}
 	float2 filterRadius = float2(filterRadiusScale, filterRadiusScale);
 
 	float visibility = 0.0f;
@@ -349,13 +387,14 @@ float CalcShadowFactor(Light light, float3 worldPosition, float3 normal, float2 
 	}
 
 	float blendStart = splitDist * (1.0f - blendBandRatio);
-	float shadow = EvaluateCascadeShadow(primaryCascade, biasedWorldPosition, depthBias, screenPos, rot, texelSize);
+	const float sourceSize = max(light.SourceSize, 0.0f);
+	float shadow = EvaluateCascadeShadow(primaryCascade, biasedWorldPosition, depthBias, screenPos, rot, texelSize, sourceSize);
 
 	// 1) 다음 캐스케이드와의 경계선 블렌딩 (Cascade 0 -> 1, Cascade 1 -> 2)
 	if (primaryCascade < 2 && viewDepth > blendStart)
 	{
 		float blendFactor = saturate((viewDepth - blendStart) / (splitDist - blendStart));
-		float nextShadow = EvaluateCascadeShadow(primaryCascade + 1, biasedWorldPosition, depthBias, screenPos, rot, texelSize);
+		float nextShadow = EvaluateCascadeShadow(primaryCascade + 1, biasedWorldPosition, depthBias, screenPos, rot, texelSize, sourceSize);
 		shadow = lerp(shadow, nextShadow, blendFactor);
 	}
 	// 2) 마지막 캐스케이드(원거리)에서의 최대 거리 페이드아웃 (Fade-out to Light)
@@ -426,8 +465,27 @@ float CalcSpotShadowFactor(Light light, float3 worldPosition, float3 normal, flo
 	sincos(randomAngle, sinA, cosA);
 	float2x2 rot = float2x2(cosA, -sinA, sinA, cosA);
 
+	// 광원 크기가 있으면 가리는 물체까지의 거리로 반그림자 폭을 정한다(PCSS).
+	float filterRadiusScale = texelSize.x * SHADOW_MIN_FILTER_TEXELS;
+	const float sourceSize = max(light.SourceSize, 0.0f);
+	if (sourceSize > 0.0f)
+	{
+		float avgBlockerDepth = 0.0f;
+		if (!FindBlocker(atlasProj, depthBias, texelSize * SHADOW_MAX_FILTER_TEXELS, rot, minUV, maxUV, avgBlockerDepth))
+		{
+			return 1.0f;
+		}
+
+		// 원근 투영의 w는 광원에서의 거리(뷰 z)이고, 받는 면에서 월드 1m는 아틀라스 UV로 0.25 * |행 0| / w다.
+		const float receiverDepth = lightClip.w;
+		const float blockerDepth = LinearizeShadowDepth(avgBlockerDepth, LOCAL_SHADOW_NEAR, max(light.Range, 0.1f));
+		const float uvPerMeter = 0.25f * length(gLightingData.Shadow.SpotViewProjection[0].xyz) / receiverDepth;
+		const float penumbra = ShadowPenumbraRadius(false, sourceSize, max(receiverDepth - blockerDepth, 0.0f), receiverDepth);
+		filterRadiusScale = clamp(penumbra * uvPerMeter, texelSize.x * SHADOW_MIN_FILTER_TEXELS, texelSize.x * SHADOW_MAX_FILTER_TEXELS);
+	}
+
 	// 16-Tap Vogel Disk PCF 필터링
-	float2 filterRadius = texelSize * 2.5f;
+	float2 filterRadius = float2(filterRadiusScale, filterRadiusScale);
 	float visibility = 0.0f;
 	for (int i = 0; i < 16; ++i)
 	{
@@ -480,8 +538,40 @@ float CalcPointShadowFactor(Light light, float3 worldPosition, float3 normal, fl
 		return 1.0f;
 	}
 	float projZ = (farZ / (farZ - nearZ)) * (1.0f - (nearZ / zView));
-	// 20-Tap PCF 필터링
-	float diskRadius = (1.0f + (currentDist / farZ)) / 80.0f;
+
+	// 큐브 한 면은 90도라 거리 zView에서 텍셀 하나가 2 * zView / 면 크기(m)다. 오프셋은 월드 거리(m)로 더한다.
+	uint faceWidth, faceHeight;
+	gPointShadowDepth.GetDimensions(faceWidth, faceHeight);
+	const float texelWorld = 2.0f * zView / max((float)faceWidth, 1.0f);
+	float filterWorld = texelWorld * SHADOW_MIN_FILTER_TEXELS;
+	const float sourceSize = max(light.SourceSize, 0.0f);
+	if (sourceSize > 0.0f)
+	{
+		// 가리는 물체 탐색. 꼭짓점 방향 8개를 쓴다.
+		const float searchWorld = texelWorld * SHADOW_MAX_FILTER_TEXELS;
+		float blockerDepthSum = 0.0f;
+		float blockerCount = 0.0f;
+		[unroll(8)]
+		for (int j = 0; j < 8; ++j)
+		{
+			const float sampleDepth = gPointShadowDepth.SampleLevel(gBufferSampler, dirFromLight + CUBE_SAMPLE_OFFSETS[j] * (searchWorld * 0.57735f), 0).r;
+			if (sampleDepth < projZ - depthBias)
+			{
+				blockerDepthSum += sampleDepth;
+				blockerCount += 1.0f;
+			}
+		}
+		if (blockerCount < 0.5f)
+		{
+			return 1.0f;
+		}
+		const float blockerDepth = LinearizeShadowDepth(blockerDepthSum / blockerCount, nearZ, farZ);
+		const float penumbra = ShadowPenumbraRadius(false, sourceSize, max(zView - blockerDepth, 0.0f), zView);
+		filterWorld = clamp(penumbra, texelWorld * SHADOW_MIN_FILTER_TEXELS, texelWorld * SHADOW_MAX_FILTER_TEXELS);
+	}
+
+	// 20-Tap PCF 필터링. 오프셋 길이가 1~1.73이라 옆 방향 반지름이 대략 filterWorld가 되도록 줄인다.
+	const float diskRadius = filterWorld * 0.7071f;
 	float visibility = 0.0f;
 	[unroll(20)]
 	for (int i = 0; i < 20; ++i)
@@ -817,6 +907,21 @@ float4 main(PS_INPUT input) : SV_TARGET
     float ambientFloor = max(gLightingData.ShadowAmbientFloor, 0.02f);
     diffuseIBL = max(diffuseIBL, kd * albedo * ambientFloor * gLightingData.IBLIntensity);
 
+    // ── 4-1. 프로브 GI: 볼륨 안에서는 확산 환경광을 프로브 조도로 바꾸고, 경계 밖으로 갈수록 기존 환경광과 섞는다. ──
+    // 프로브의 광선이 하늘 가시성과 주변 면의 반사광을 함께 담으므로 확산 IBL을 더하지 않는다.
+    // 그림자 하한은 어두운 GI를 가리므로 볼륨 안에서는 쓰지 않는다. 정반사 환경광·레이트레이싱 반사는 그대로다.
+    const ProbeGILightingData probeGI = gLightingData.ProbeGI;
+    if (probeGI.Enabled != 0u)
+    {
+        const float giWeight = ProbeVolumeWeight(probeGI, worldPosition);
+        if (giWeight > 0.0f)
+        {
+            const float3 probeIrradiance = SampleProbeIrradiance(probeGI, worldPosition, normal, viewDirection,
+                gProbeIrradianceAtlas, gProbeDistanceAtlas, gBufferSampler);
+            diffuseIBL = lerp(diffuseIBL, kd * albedo * probeIrradiance * probeGI.Intensity, giWeight);
+        }
+    }
+
     // ── 5. 레이트레이싱 반사: 추적한 만큼 환경광 반사를 대신한다. 실제 가림을 추적했으므로 AO는 곱하지 않는다. ──
     float3 raytracedSpecular = float3(0.0f, 0.0f, 0.0f);
     if (gLightingData.UseRaytracedReflections != 0u)
@@ -825,6 +930,14 @@ float4 main(PS_INPUT input) : SV_TARGET
         raytracedSpecular = reflection.rgb * EnvBRDFApprox(f0, roughness, normalDotView);
         specularIBL *= 1.0f - saturate(reflection.a);
     }
+
+    // ── 6. 앰비언트 오클루전: 환경광에만 재질 AO와 곱한다. 직접광과 레이트레이싱 반사는 이미 가림을 반영한다. ──
+    if (gLightingData.UseAmbientOcclusion != 0u && (packedData & FLAG_APPLY_SSAO) != 0u)
+        ambientOcclusion *= saturate(gAmbientOcclusion.Load(pixelCoord).r);
+
+    // "GI만 보기": 간접 확산광(볼륨 밖은 기존 환경광)만 안개 없이 출력한다.
+    if (probeGI.DebugView != 0u)
+        return float4(diffuseIBL * ambientOcclusion, diffuseSample.a);
 
     float3 ambient = (diffuseIBL + specularIBL) * ambientOcclusion + raytracedSpecular;
     float3 color = ambient + directLighting + emission;

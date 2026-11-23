@@ -18,6 +18,8 @@ private:
 public:
 	// 현재 프레임 커맨드 리스트에 BLAS 빌드를 기록한다. BLAS 간 UAV 배리어는 BuildTopLevel이 한 번에 기록한다.
 	static DirectX12AccelerationStructure* CreateBottomLevel(DirectX12RHI* rhi, const RHIRaytracingGeometryDesc& desc);
+	// allowUpdate로 만든 BLAS를 새 정점으로 제자리 갱신(refit)한다. 정점·인덱스 수는 처음 빌드와 같아야 한다.
+	static EResult UpdateBottomLevel(DirectX12RHI* rhi, RHIAccelerationStructure* bottomLevel, const RHIRaytracingGeometryDesc& desc);
 	static EResult BuildTopLevel(DirectX12RHI* rhi, RHIAccelerationStructure*& topLevel,
 		const RHIRaytracingInstanceDesc* instances, uint32 instanceCount);
 	virtual void Free() override;
@@ -31,9 +33,13 @@ private:
 private:
 	ComPtr<ID3D12Resource> m_Result;
 
-	// TLAS 전용: 재빌드마다 재사용하고 부족할 때만 키운다.
+	// TLAS: 재빌드마다 재사용하고 부족할 때만 키운다. 갱신용(allowUpdate) BLAS: 갱신마다 재사용한다.
 	ComPtr<ID3D12Resource> m_Scratch;
 	uint64 m_ScratchSizeInBytes = 0;
+	// 갱신용 BLAS의 처음 빌드 기하. refit은 같은 개수에서만 할 수 있다.
+	bool m_AllowUpdate = false;
+	uint32 m_VertexCount = 0;
+	uint32 m_IndexCount = 0;
 	// CPU가 쓰는 인스턴스 목록은 GPU가 이전 프레임 목록을 읽는 동안 덮어쓰지 않도록 프레임 슬롯별로 둔다.
 	ComPtr<ID3D12Resource> m_InstanceBuffers[MAX_SWAPCHAIN_BUFFERS];
 	void* m_InstanceMapped[MAX_SWAPCHAIN_BUFFERS] = {};

@@ -17,6 +17,7 @@ namespace Engine
     {
         uint32 LightIndex = INVALID_SHADOW_LIGHT;
         bool RaytracedRequested = false;
+        f32 SourceSize = 0.0f; // GPULight::SourceSize. 0보다 크면 경계가 부드럽다.
     };
 
     // 광원 버퍼 순서로 모은 그림자 광원과, 섀도맵을 가진 광원의 버퍼 인덱스.
@@ -64,5 +65,12 @@ namespace Engine
         assign([&](uint32 index) { return !set.HasShadowMap(index); });
         assign([&](uint32 index) { return index != set.CascadeLight && set.HasShadowMap(index); });
         return assignment;
+    }
+
+    // 추적하는 광원 중 크기가 있는 광원이 있는지. 그 광원은 표본이 프레임마다 달라 누적·필터가 필요하고,
+    // 없으면 추적 결과를 그대로 마스크로 쓴다.
+    [[nodiscard]] inline bool HasSoftRaytracedShadow(const ShadowLightSet& set, const RaytracedShadowAssignment& assignment)
+    {
+        return std::ranges::any_of(set.Lights, [&](const ShadowLight& light) { return light.SourceSize > 0.0f && assignment.Contains(light.LightIndex); });
     }
 }

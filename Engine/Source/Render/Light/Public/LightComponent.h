@@ -77,6 +77,14 @@ namespace Engine
 		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_RAYTRACED_SHADOW"), EDITCONDITION(LightType != Sky && (Flags & CastShadows)))
 		bool RaytracedShadow = false;
 
+		// 광원의 겉보기 지름(도). 클수록 가리는 물체에서 먼 그림자 경계가 넓게 흐려진다. 0이면 선명하다(실제 태양 약 0.53).
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SOURCE_ANGLE"), RANGE(0.0f, 10.0f, 0.05f), EDITCONDITION(LightType == Directional && (Flags & CastShadows)))
+		f32 SourceAngle = 0.0f;
+
+		// 빛을 내는 구의 반지름(m). 클수록 그림자 경계가 넓게 흐려진다. 0이면 선명하다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_SHADOW"), DISPLAY_NAME("PROP_SOURCE_RADIUS"), RANGE(0.0f, 5.0f, 0.01f), EDITCONDITION((LightType == Point || LightType == Spot) && (Flags & CastShadows)))
+		f32 SourceRadius = 0.0f;
+
 		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_SKY"), DISPLAY_NAME("PROP_LOWER_AMBIENT_COLOR"), EDITCONDITION(LightType == Sky))
 		vec3 GroundColor{ 0.05f, 0.04f, 0.03f };
 

@@ -26,12 +26,14 @@ struct RaytracedInstance
 	float4 BaseColor;
 	float3 EmissiveColor;
 	float AmbientOcclusion;
+	uint NormalTexture;
 };
-static const uint RAYTRACED_INSTANCE_STRIDE = 80u;
+static const uint RAYTRACED_INSTANCE_STRIDE = 96u;
 
-// VertexMaterial: 법선 0, UV 12, 정점 색 44
+// VertexMaterial: 법선 0, UV 12, 접선 20, 정점 색 44
 static const uint VERTEX_NORMAL_OFFSET = 0u;
 static const uint VERTEX_UV_OFFSET = 12u;
+static const uint VERTEX_TANGENT_OFFSET = 20u;
 static const uint VERTEX_COLOR_OFFSET = 44u;
 
 Texture2D<float4> gBindlessTextures[] : register(t0, space4);
@@ -63,6 +65,7 @@ RaytracedInstance LoadRaytracedInstance(uint tableIndex, uint instanceIndex)
 	instance.BaseColor = asfloat(table.Load4(address + 48u));
 	instance.EmissiveColor = asfloat(e.xyz);
 	instance.AmbientOcclusion = asfloat(e.w);
+	instance.NormalTexture = table.Load(address + 80u);
 	return instance;
 }
 

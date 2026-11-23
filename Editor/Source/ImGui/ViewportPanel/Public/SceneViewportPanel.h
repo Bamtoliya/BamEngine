@@ -145,6 +145,8 @@ private:
 #pragma region Spline
 private:
 	void DrawSelectedSpline(Engine::Scene* scene);
+	// 선택한 DecalComponent의 투영 상자와 투영 방향(상자의 로컬 z)
+	void DrawSelectedDecal(Engine::Scene* scene);
 	bool DrawSplinePointEditor(bool imageHovered);
 	void ResetSplinePointSelection();
 	void StopSplinePointDrag();

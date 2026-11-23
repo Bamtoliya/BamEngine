@@ -23,8 +23,14 @@ public:
 	void PrepareResources(uint32 width, uint32 height);
 	EResult Resize(uint32 width, uint32 height);
 
+	// 장면 입력은 다음 Execute 한 번에만 쓰이고 지워진다. 매 프레임 Execute 전에 넘긴다.
+	void SetSceneInputs(const PostProcessSceneInputs& inputs) { m_SceneInputs = inputs; m_HasSceneInputs = true; }
 	wstring Execute(f32 dt, const wstring& inputRT);
 	void AddEffect(IPostProcessEffect* effect);
+	// 모든 효과의 이전 프레임 값을 버린다(자동 노출 등).
+	void ResetHistory();
+	// 이번 프레임에 그릴 씬. 이전 프레임과 다른 씬이면 ResetHistory를 호출한다.
+	void SetHistoryScene(const void* scene);
 
 	vector<IPostProcessEffect*>& GetEffects() { return m_Effects; }
 	const vector<IPostProcessEffect*>& GetEffects() const { return m_Effects; }
@@ -47,14 +53,18 @@ public:
 	void CopySettingsFrom(const PostProcessPipeline& other);
 private:
 	// 처음 쓸 때 만든다. 만들 수 없으면 빈 이름을 반환한다.
-	const wstring& EnsureHdrTarget();
+	// HDR 효과가 연달아 오면 읽는 타깃과 쓰는 타깃이 달라야 하므로 두 개를 번갈아 쓴다.
+	const wstring& EnsureHdrTarget(uint32 index);
 
 private:
 	wstring m_Prefix;
 	vector<IPostProcessEffect*> m_Effects;
 	vector<RenderPassID> m_PassIDs;
 	wstring m_PPRTNames[2];
-	wstring m_HdrRTName;
+	wstring m_HdrRTNames[2];
+	const void* m_HistoryScene = nullptr;
+	PostProcessSceneInputs m_SceneInputs;
+	bool m_HasSceneInputs = false;
 
 	uint32 m_Width = 0;
 	uint32 m_Height = 0;

@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-22 (Compute 쓰기 텍스처 UAV 테이블 `[11]` 추가, 루트 파라미터 가시성 정정)
+- 최종 갱신: 2026-11-23 (프로브 GI 아틀라스 `t2`·`t3, space1`, `LightingPassData` 624바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -92,9 +92,26 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | Register | 셰이더 | 내용 |
 | --- | --- | --- |
 | `t13, space3` | `raytracedShadowMaskRTCS` | TLAS (`BindAccelerationStructure`, 다음 `Dispatch` 한 번에만 적용) |
-| `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 그림자 마스크 출력. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`) |
-| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 32바이트. 채널별 광원 버퍼 인덱스 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2, space3` | `raytracedShadowMaskRTCS` | RGBA8 가시성. 채널마다 광원 하나 (`BindComputeStorageTexture` slot `0`). 누적하지 않으면 최종 마스크, 누적하면 이번 프레임 추적 결과 |
+| `u3, space3` | `raytracedShadowMaskRTCS` | RGBA16F 채널별 반그림자 반지름(m). `WritePenumbra`가 1일 때만 씀 |
+| `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 48바이트. 채널별 광원 버퍼 인덱스, 프레임 번호 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2`·`u3`·`u4, space3` | `raytracedShadowTemporalRTCS` | RGBA16F 누적 가시성, 누적 반그림자 반지름, 표면(카메라 거리, 법선, 누적 횟수) |
+| `u2, space3` | `raytracedShadowFilterRTCS` | RGBA8 최종 마스크 |
+| `b1, space3` | `raytracedShadowTemporalRTCS`, `raytracedShadowFilterRTCS` | `RaytracedShadowDenoiseParams` 128바이트(`raytracedShadow.hlsli`). 앞 패스의 출력은 번호(`space4`)로 읽음 |
 | `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.RaytracedShadowLights`의 채널과 광원 인덱스가 같을 때만 사용 |
+
+누적·필터는 크기(`Light.SourceSize`)가 있는 광원이 채널을 받았고 Resource Binding Tier 2 이상일 때만 실행한다.
+광원 버퍼 항목의 마지막 4바이트(오프셋 76)는 `SourceSize`이며 `Light.h`·`light.hlsli`·`light.glsl`이 같아야 한다.
+
+### 자동 노출 바인딩 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | `AutoExposureParams` 64바이트 (`autoExposure.hlsli`, RHI CBV slot `2`) |
+| `t0, space3` | `autoExposureHistogramCS` | 톤매핑 전 HDR 장면 색 (`BindTexture` slot `MAX_MATERIAL_TEXTURE_SLOTS`) |
+| `u0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | 64구간 `uint` 히스토그램 (`BindComputeStorageBuffer` slot `0`). 적응 패스가 읽은 뒤 비움 |
+| `u2, space3` | `autoExposureAdaptCS` | 1x1 `R32_FLOAT` 노출(EV). 이전 값을 읽고 새 값을 씀 (`BindComputeStorageTexture` slot `0`) |
+| `t0`·`t1, space3` | `autoExposurePS` | 장면 색과 노출 텍스처. 장면 색에 `exp2(EV)`를 곱함 |
 
 ### 레이트레이싱 반사와 번호로 읽는 리소스 (D3D12 전용)
 
@@ -112,11 +129,54 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `b1, space3` | `raytracedReflectionTemporalRTCS`, `raytracedReflectionFilterRTCS` | `ReflectionDenoiseParams` 112바이트. 앞 패스의 출력은 번호로 읽음 |
 | `t15, space3` | `lightingPS` | 반사. `LightingPassData.UseRaytracedReflections`가 1일 때만 읽음 |
 
-`space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(80바이트)는 `raytracing.hlsli`의 `RaytracedInstance`와,
+### 레이트레이싱용 스키닝 (D3D12 전용, 2026-11-23)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b1, space3` | `raytracedSkinningRTCS` | `RaytracedSkinningParams` 48바이트. 원본 위치·재질·스킨 버퍼와 뼈 표의 번호, 정점 수와 간격, 첫 뼈 위치 |
+| `t0.., space5` | `raytracedSkinningRTCS` | 원본 정점 버퍼와 뼈 행렬 표(열 우선 `mat4`, 메시당 256개) |
+| `u0, space3` | `raytracedSkinningRTCS` | 스키닝한 위치(`RWByteAddressBuffer`, 12바이트 간격). BLAS 입력 (`BindComputeStorageBuffer` slot `0`) |
+| `u1, space3` | `raytracedSkinningRTCS` | 스키닝한 `VertexMaterial`(원본 간격). 반사 셰이더가 번호로 읽음 (`BindComputeStorageBuffer` slot `1`) |
+
+출력 버퍼는 `ERHIBufferType::Storage`이며, 쓰기 뒤 `RHI::TransitionStorageBufferToShaderRead`로 읽기 상태로 바꾼 다음 BLAS를 refit한다.
+
+`space4`·`space5`는 Compute에서만 묶는다. `RaytracingInstanceData`(96바이트, 2026-11-23 법선 맵 번호 추가)는 `raytracing.hlsli`의 `RaytracedInstance`와,
 광선 마스크는 세 셰이더 파일의 상수와 일치해야 한다. 버퍼 번호는 최대 16,384개이며 버퍼가 해제되면 지연 반환한다.
 
 파일명이 `RTCS`로 끝나는 셰이더는 `cs_6_5`로 컴파일하고 DXIL만 생성한다.
-`LightingPassData`는 544바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다.
+`LightingPassData`는 624바이트이며 `DeferredSceneRenderer.cpp`의 `DeferredLightingPassData`와 일치해야 한다(2026-11-23 앰비언트 오클루전 추가로 544 → 560, 프로브 GI 추가로 560 → 624).
+
+### 앰비언트 오클루전 바인딩 (D3D12 전용)
+
+조명 패스 안의 Compute 세 개가 G-Buffer(`t0`·`t1`·`t4`)와 광원 버퍼 바인딩을 그대로 쓴다. 상수는 `ambientOcclusion.hlsli`의 `AmbientOcclusionParams`(176바이트)이며 `DeferredSceneRenderer.cpp`의 같은 이름 구조와 일치해야 한다.
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b1, space3` | 세 Compute | `AmbientOcclusionParams` 176바이트 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
+| `u2, space3` | `screenSpaceAmbientOcclusionCS`, `raytracedAmbientOcclusionRTCS` | R32F 이번 프레임 가시성 |
+| `t13, space3` | `raytracedAmbientOcclusionRTCS` | TLAS. 그림자 광선 마스크(`RAYTRACING_MASK_SHADOW`)만 추적 |
+| `t14`·`t15, space3` | `ambientOcclusionTemporalCS` | 이번 프레임 가시성, 이전 누적 결과. 디스패치 뒤 비우며 이후 그림자 마스크·반사가 다시 묶음 |
+| `u2, space3` | `ambientOcclusionTemporalCS` | RGBA16F 누적 결과(가시성, 카메라 거리, 누적 횟수). 두 장을 번갈아 씀 |
+| `t13, space3` | `lightingPS` | 누적 결과. `LightingPassData.UseAmbientOcclusion`이 1이고 G-Buffer에 `FLAG_APPLY_SSAO`가 있을 때만 환경광에 곱함 |
+
+`t13`은 그래픽 패스에서는 AO 텍스처, Compute에서는 TLAS가 쓴다. 조명 명령은 AO 디스패치 전에 `t13`~`t15`를 비우고, 그림자·반사 Compute가 끝난 뒤 그리기 직전에 AO를 `t13`에 묶으며, 그린 뒤 다시 비운다.
+`screenSpaceAmbientOcclusionCS`와 `ambientOcclusionTemporalCS`는 `cs_6_0`이라 SPIR-V도 생성되지만 실행 경로는 DirectX12뿐이다(쓰기 텍스처 `u2`가 D3D12 전용).
+
+### 프로브 GI 바인딩 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t13, space3` | `probeGITraceRTCS` | TLAS. 반사와 같은 광선 마스크(`RAYTRACING_MASK_REFLECTION`, 그림자 `RAYTRACING_MASK_REFLECTION_SHADOW`) |
+| `t10`·`t11, space3` | `probeGITraceRTCS` | 조명 패스가 묶은 조도·미리 거른 환경 맵. `HasIBLMaps`가 1일 때만 읽음 |
+| `t6, space3` | `probeGITraceRTCS` | 광원 버퍼(조명 패스가 묶음) |
+| `t0.., space4`·`space5` | `probeGI*RTCS` | 번호로 읽는 텍스처·버퍼(닿은 면 재질, 섞기 패스의 광선 결과) |
+| `u2, space3` | `probeGITraceRTCS` | RGBA16F 광선 결과. 열 = 광선, 행 = 이번 프레임 갱신 순서. rgb 밝기, a 거리(뒷면은 음수) |
+| `u2, space3` | `probeGIBlendIrradianceRTCS` | RGBA16F 조도 아틀라스. 프로브마다 10×10 칸(8×8 + 테두리) |
+| `u2, space3` | `probeGIBlendDistanceRTCS` | RGBA16F 거리 아틀라스. 프로브마다 18×18 칸(16×16 + 테두리), rg = 거리, 거리 제곱 |
+| `b1, space3` | `probeGI*RTCS` | `ProbeGIUpdateParams` 160바이트(`probeGI.hlsli`) |
+
+아틀라스에서 프로브 (x, y, z)의 칸은 열 `x + y × 개수X`, 행 `z`이며 `ProbeGrid.h`와 `probeGI.hlsli`가 같은 규칙을 쓴다.
+`lightingPS`는 조명 패스의 `t0~t15, space3`이 모두 쓰이므로(`t6`은 광원 버퍼) 재질 슬롯 `t2`(조도)·`t3`(거리) `space1`에 아틀라스를 묶는다(구름이 `t0`·`t1`을 씀). 재질 샘플러 표는 마지막으로 묶은 샘플러 하나만 믿을 수 있어 아틀라스는 `gBufferSampler`(`s0, space3`, 기본 선형)로 읽는다. `LightingPassData.ProbeGI`(`ProbeGILightingData`, 64바이트)의 `Enabled`가 1일 때만 읽고, 그리기 뒤 두 슬롯을 비운다.
 
 ### 재질 알파 기준값
 
@@ -149,5 +209,19 @@ When adding or moving a binding:
 | `b1, space3` | `temporalAAPS` | `TemporalAAParams` 224바이트 |
 | `t0`~`t4`, `s0`, `space3` | `temporalAAPS` | 디퓨즈, 장면 색 복사본, 이전 결과, 모션 벡터, 위치 |
 | `b1, space3` | `infiniteGridPS` | `GridDepthParams` 16바이트. 깊이 타깃의 TAA 지터(NDC), 끄면 0 |
+
+### 디퍼드 데칼 바인딩 (D3D12 전용)
+
+| 바인딩 | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space0` | `decalVS` | G-Buffer를 그린 카메라(TAA를 켜면 지터 포함) |
+| `b1, space3` | `decalVS`, `decalPS` | `DecalParams` 224바이트(`decal.hlsli`). `DeferredSceneRenderer.cpp`의 `DecalParams`와 일치해야 한다 |
+| `t0`, `t1, space3` | `decalPS` | G-Buffer 위치, 데칼 패스 직전에 복사한 G-Buffer 법선(a에 셰이딩 플래그) |
+| `t0`~`t2`, `s0, space1` | `decalPS` | 기본 색, 접선 공간 법선, 표면(R 거칠기·G 금속성·B 캐비티) 텍스처. 없으면 흰 텍스처를 묶고 `TextureFlags`로 무시한다 |
+
+`decalPS`는 `SV_Target0~2`로 G-Buffer 디퓨즈·법선·PBR에 쓴다. 쓰기 마스크가 RGB라 각 타깃의 a는 바뀌지 않고, 출력 알파는 섞는 비율로만 쓰인다.
+`decalVS`는 정점 버퍼 없이 `Draw(36)`로 단위 상자를 만들며 상자 삼각형 순서는 `DecalProjection.h`의 `DecalBoxIndices`와 같다.
+G-Buffer 정점 셰이더(`gbufferVS`, `gbufferSkinningVS`, 셰이더 그래프 VS)는 마지막 출력 `NoDecals : TEXCOORD6`(인스턴스·오브젝트 `PickingData.y`)를 낸다.
+`gbufferPS`와 셰이더 그래프 G-Buffer PS는 이 값이 1이면 `FLAG_RECEIVE_DECALS`를 빼고 기록한다. 맨 뒤 출력이라 읽지 않는 픽셀 셰이더와도 연결된다.
 
 `temporalAAPS`는 `SV_Target0`에 HDR 장면 색, `SV_Target1`에 다음 프레임의 이력을 쓴다. G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).

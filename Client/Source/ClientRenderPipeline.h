@@ -11,7 +11,9 @@ namespace Client
     public:
         EResult Initialize(const std::string& profileUri, uint32 width, uint32 height);
         EResult Resize(uint32 width, uint32 height);
-        void Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect);
+        // depthOfField: 메인 카메라가 피사계 심도 초점 값을 덮어쓸 때만 값이 있다.
+        void Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect,
+            const std::optional<Engine::DepthOfFieldSettings>& depthOfField = std::nullopt);
         void Free();
         // 프로젝트 설정의 레이트레이싱 그림자 모드. Client에는 그래픽·뷰포트 덮어쓰기가 없다.
         void SetRaytracedShadowMode(Engine::ERaytracedShadowMode mode)
@@ -25,6 +27,14 @@ namespace Client
         void SetTemporalAAMode(Engine::ERaytracedShadowMode mode)
         {
             m_SceneRenderer.SetTemporalAAOverrides({ mode });
+        }
+        void SetAmbientOcclusionMode(Engine::EAmbientOcclusionMode mode)
+        {
+            m_SceneRenderer.SetAmbientOcclusionOverrides({ mode });
+        }
+        void SetProbeGIMode(Engine::ERaytracedShadowMode mode)
+        {
+            m_SceneRenderer.SetProbeGIOverrides({ mode });
         }
         bool UsesDeferredProfile() const { return m_PresentPass != Engine::INVALID_PASS_ID; }
 

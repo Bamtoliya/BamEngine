@@ -3,6 +3,7 @@
 #include "ComponentAnnotations.h"
 #include "Types.h"
 #include "CameraBuffer.h"
+#include "DepthOfField.h"
 #include <optional>
 #include "ComponentAnnotations.h"
 
@@ -36,7 +37,43 @@ namespace Engine
 		f32 OrthographicSize = 10.f;
 		PROPERTY(READONLY)
 		bool IsMainCamera = false;
+
+		// 켜면 이 카메라로 그리는 Game View·Client가 후처리의 피사계 심도 초점 값 대신 아래 값을 쓴다.
+		// 효과를 켜고 끄는 것은 후처리 설정이 정한다. 씬 뷰는 항상 후처리 값을 쓴다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_OVERRIDE_DEPTH_OF_FIELD"))
+		bool OverrideDepthOfField = false;
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_DEPTH_OF_FIELD_MODE"), EDITCONDITION(OverrideDepthOfField))
+		EDepthOfFieldMode DepthOfFieldMode = EDepthOfFieldMode::FocusRange;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.1, 200.0), DISPLAY_NAME("PROP_FOCUS_DISTANCE"), EDITCONDITION(OverrideDepthOfField))
+		f32 FocusDistance = 10.f;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 50.0), DISPLAY_NAME("PROP_FOCUS_RANGE"), EDITCONDITION(OverrideDepthOfField && DepthOfFieldMode == FocusRange))
+		f32 FocusRange = 4.f;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.1, 100.0), DISPLAY_NAME("PROP_FOCUS_TRANSITION_RANGE"), EDITCONDITION(OverrideDepthOfField && DepthOfFieldMode == FocusRange))
+		f32 FocusTransitionRange = 10.f;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.7, 22.0), DISPLAY_NAME("PROP_F_STOP"), EDITCONDITION(OverrideDepthOfField && DepthOfFieldMode == PhysicalLens))
+		f32 FStop = 2.8f;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(4.0, 60.0), DISPLAY_NAME("PROP_SENSOR_HEIGHT"), EDITCONDITION(OverrideDepthOfField && DepthOfFieldMode == PhysicalLens))
+		f32 SensorHeight = 24.f;
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 32.0), DISPLAY_NAME("PROP_MAX_BLUR_RADIUS"), EDITCONDITION(OverrideDepthOfField))
+		f32 MaxBlurRadius = 12.f;
 	public:
+		// 덮어쓰기를 켰을 때만 값이 있다.
+		[[nodiscard]]
+		std::optional<DepthOfFieldSettings> GetDepthOfFieldOverride() const
+		{
+			if (!OverrideDepthOfField)
+				return std::nullopt;
+			DepthOfFieldSettings settings;
+			settings.Mode = DepthOfFieldMode;
+			settings.FocusDistance = FocusDistance;
+			settings.FocusRange = FocusRange;
+			settings.TransitionRange = FocusTransitionRange;
+			settings.FStop = FStop;
+			settings.SensorHeight = SensorHeight;
+			settings.MaxBlurRadius = MaxBlurRadius;
+			return settings;
+		}
+
 		void InvalidateCache()
 		{
 			m_IsCacheValid = false;

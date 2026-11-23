@@ -56,6 +56,8 @@ private:
 	uint32 m_GameplayMouseButtons = 0;
 	Engine::RuntimeUIInput m_RuntimeUIInput;
 	bool m_UsePixelPerfectView = false;
+	// 찾은 카메라가 피사계 심도를 덮어쓸 때의 값(FindActiveGameCameraBuffer가 채운다)
+	std::optional<Engine::DepthOfFieldSettings> m_CameraDepthOfField;
 };
 
 END

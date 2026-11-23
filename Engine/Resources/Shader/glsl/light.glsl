@@ -31,7 +31,7 @@ struct GPULight
     float SpotInnerCos;
     float SpotOuterCos;
     float SpotFalloff;
-    float Pad1;
+    float SourceSize;
 };
 
 uint GetLightType(uint flags)

@@ -51,16 +51,23 @@ foreach(check_target IN ITEMS
     BuiltInMeshWindingCheck
     RaytracedShadowSettingsCheck
     RaytracingBuildPolicyCheck
+    RaytracingSkinnedPolicyCheck
     LODSelectionCheck
     SkyLightDirectionCheck
     CloudResourcesCheck
     DirectionalShadowCascadeCheck
     ShadowLightAssignmentCheck
+    LightSourceSizeCheck
     ResourcePreloaderCheck
     GpuHeapPageAllocatorCheck
     StreamingPolicyCheck
     TemporalHistoryCheck
     TemporalAACheck
+    AmbientOcclusionCheck
+    ProbeGridCheck
+    DecalProjectionCheck
+    AutoExposureCheck
+    DepthOfFieldCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
     target_link_libraries(${check_target} PRIVATE BamEngine::Engine)

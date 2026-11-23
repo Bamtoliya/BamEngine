@@ -71,6 +71,7 @@ flowchart TD
 
     subgraph PostProcessPass["5. Post-Processing Chain"]
         quadVS["fullscreenQuadVS"]
+        dofChain["Depth Of Field\n(Prefilter -> NearTile -> Dilate -> Far/Near Blur -> Composite)"]
         bloomChain["Bloom Chain\n(Prefilter -> Down -> Up -> Composite)"]
         colorGrading["ColorAdjustments / ToneMapping / Vignette"]
         lensEffects["FilmGrain / LensDistortion / Sharpen / Chromatic"]
@@ -129,6 +130,14 @@ flowchart TD
 | `fullscreenQuadVS.hlsl` | Vertex | 포스트 프로세스 패스 공용 풀스크린 삼각형/쿼드 생성 |
 | `postprocessPS.hlsl` | Pixel | 기본 포스트 프로세스 컴포짓 |
 | `postprocess_tonemappingPS.hlsl` | Pixel | ACES, Reinhard 등의 톤매핑 및 감마 보정 |
+| `autoExposureHistogramCS.hlsl` | Compute | 톤매핑 전 HDR 밝기의 64구간 log2 히스토그램 (D3D12 전용) |
+| `autoExposureAdaptCS.hlsl` | Compute | 극단값을 뺀 평균 밝기로 목표 노출을 구하고 이전 노출에서 시간에 걸쳐 옮김 (D3D12 전용) |
+| `autoExposurePS.hlsl` | Pixel | 장면 HDR 색에 자동 노출 `exp2(EV)`를 곱함 |
+| `dofPrefilterPS.hlsl` | Pixel | 피사계 심도: 절반 해상도 색과 CoC(G-Buffer 위치·알베도로 계산, 2×2 중 가장 앞쪽 값) |
+| `dofNearTilePS.hlsl` | Pixel | 피사계 심도: 8×8 타일마다 앞쪽 CoC 최댓값 |
+| `dofNearDilatePS.hlsl` | Pixel | 피사계 심도: 앞쪽 CoC 타일을 최대 흐림 반지름만큼 이웃으로 넓힘 |
+| `dofBlurPS.hlsl` | Pixel | 피사계 심도: 48탭 원판 흐림. 뒤쪽·앞쪽을 따로 모으고 앞쪽은 덮는 정도(a)를 함께 출력 |
+| `dofCompositePS.hlsl` | Pixel | 피사계 심도: 전체 해상도 CoC로 원래 화면, 뒤쪽 흐림, 앞쪽 흐림을 차례로 합성 (HDR 출력) |
 | `bloomPrefilterPS.hlsl` | Pixel | 임계값(Threshold) 이상의 고휘도 픽셀 추출 |
 | `bloomDownsamplePS.hlsl` | Pixel | 13-tap 바이리니어 다운샘플링을 통한 밉 체인 블러 |
 | `bloomUpsamplePS.hlsl` | Pixel | 텐트 필터를 이용한 점진적 업샘플링 및 누적 |

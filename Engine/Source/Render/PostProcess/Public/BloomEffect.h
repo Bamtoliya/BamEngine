@@ -22,6 +22,7 @@ public:
 	virtual EResult SubmitPass(f32 dt, RenderPassID passID, const wstring& sourceRT) override;
 	virtual void SetEnabled(bool enabled) override;
 	virtual bool WritesHdr() const override { return true; }
+	virtual void GetPrePasses(vector<RenderPassID>& outPasses) const override;
 
 public:
 	// 공통 파라미터 인터페이스 구현

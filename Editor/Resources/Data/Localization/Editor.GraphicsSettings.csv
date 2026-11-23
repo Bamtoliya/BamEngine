@@ -1,9 +1,24 @@
 Group,Key,English,Korean
+GraphicsSettings,AmbientOcclusion,Ambient Occlusion,앰비언트 오클루전
+GraphicsSettings,AmbientOcclusionActiveOff,Current: off,현재: 꺼짐
+GraphicsSettings,AmbientOcclusionActiveRaytraced,Current: raytraced,현재: 레이트레이싱
+GraphicsSettings,AmbientOcclusionActiveScreenSpace,Current: screen space,현재: 화면 공간
+GraphicsSettings,AmbientOcclusionHint,"Order: project -> graphics -> viewport. Off by default. Darkens only ambient light. Raytraced uses screen space when raytracing is unavailable. Previews and orthographic cameras are not affected.","적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 환경광만 어둡게 합니다. 레이트레이싱을 쓸 수 없으면 화면 공간으로 계산하며, 프리뷰와 직교 카메라에는 적용하지 않습니다."
+GraphicsSettings,AmbientOcclusionInherit,Inherit,상위 설정 따름
+GraphicsSettings,AmbientOcclusionOff,Off,끄기
+GraphicsSettings,AmbientOcclusionRaytraced,Raytraced,레이트레이싱
+GraphicsSettings,AmbientOcclusionScreenSpace,Screen Space (GTAO),화면 공간(GTAO)
 GraphicsSettings,ApplyUIScale,Apply UI Scale,UI 배율 적용
 GraphicsSettings,ApplyVSync,Apply and Save VSync,VSync 적용 및 저장
 GraphicsSettings,ApplyViewport,Apply and Save Viewport,뷰포트 적용 및 저장
 GraphicsSettings,InvalidWindowSize,Width must be 320-16384 and height 240-16384.,너비는 320-16384 높이는 240-16384 범위여야 합니다.
 GraphicsSettings,NoViewport,No supported viewport is available.,설정할 수 있는 뷰포트가 없습니다.
+GraphicsSettings,ProbeGI,Probe Global Illumination,프로브 전역 조명(GI)
+GraphicsSettings,ProbeGIActive,Current: on,현재: 켜짐
+GraphicsSettings,ProbeGIDebugView,Show Indirect Diffuse Only,GI만 보기
+GraphicsSettings,ProbeGIDebugViewHint,Shows only indirect diffuse light while probe GI is in use. Outside the volume it shows the previous ambient light. Not saved.,프로브 GI를 쓰는 동안 간접 확산광만 보여 줍니다. 볼륨 밖은 기존 환경광입니다. 저장하지 않습니다.
+GraphicsSettings,ProbeGIHint,Order: project -> graphics -> viewport. Off by default. Needs an active Probe GI Volume in the scene. Replaces diffuse ambient light inside the volume.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 씬에 활성 프로브 GI 볼륨이 있어야 합니다. 볼륨 안의 확산 환경광을 프로브 조도로 바꿉니다.
+GraphicsSettings,ProbeGIInactive,Current: off,현재: 꺼짐
 GraphicsSettings,RaytracedReflection,Raytraced Reflections,레이트레이싱 반사
 GraphicsSettings,RaytracedReflectionActive,Current: raytraced,현재: 레이트레이싱
 GraphicsSettings,RaytracedReflectionHint,Order: project -> graphics -> viewport. Off by default. Very rough surfaces are not traced.,적용 순서: 프로젝트 → 그래픽 → 뷰포트. 기본은 꺼짐이며 아주 거친 면은 추적하지 않습니다.
@@ -20,6 +35,7 @@ GraphicsSettings,RaytracedShadowUnsupported,This device does not support DXR inl
 GraphicsSettings,ReloadApplied,Reload Applied Values,현재 적용값 다시 불러오기
 GraphicsSettings,ReloadViewport,Reload Viewport Values,뷰포트 편집값 되돌리기
 GraphicsSettings,SectionAntiAliasing,Anti-Aliasing,안티앨리어싱
+GraphicsSettings,SectionLighting,Lighting,조명
 GraphicsSettings,SectionRaytracing,Raytracing,레이트레이싱
 GraphicsSettings,SectionStreaming,Resource Streaming,리소스 스트리밍
 GraphicsSettings,StreamingBudget,Memory Budget,메모리 한도

@@ -1,6 +1,7 @@
 ﻿#include "LightSystem.h"
 #include "ComponentEnable.h"
 #include "LightComponent.h"
+#include "LightSourceSize.h"
 #include "WorldTransformComponent.h"
 #include "FlagComponent.h"
 
@@ -139,6 +140,7 @@ void LightSystem::UpdateLights(entt::registry& registry)
 		result.Color = glm::max(light.Color, vec3(0.f));
 		result.Intensity = glm::max(light.Intensity, 0.f);
 		result.ShadowStrength = glm::clamp(light.ShadowStrength, 0.0f, 1.0f);
+		result.SourceSize = GetLightSourceSize(light.LightType, light.SourceAngle, light.SourceRadius);
 
 		// 실제 그림자 캐시가 만들어진 경우에만 아래에서 다시 설정합니다.
 		ELightFlags effectiveFlags = light.Flags & ~ELightFlags::CastShadows;

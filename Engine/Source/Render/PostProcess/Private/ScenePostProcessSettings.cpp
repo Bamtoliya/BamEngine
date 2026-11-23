@@ -13,6 +13,8 @@ bool Engine::ScenePostProcessSettings::CaptureDefaults(const PostProcessPipeline
 
 bool Engine::ScenePostProcessSettings::Apply(PostProcessPipeline& pipeline, Scene* scene)
 {
+	// 다른 씬의 자동 노출 등 이전 프레임 값을 이어 쓰지 않는다.
+	pipeline.SetHistoryScene(scene);
 	if (scene)
 	{
 		auto& world = scene->GetRegistry();

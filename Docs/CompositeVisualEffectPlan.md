@@ -236,6 +236,7 @@ flowchart TD
    - 카메라 씬 깊이($Z_{\text{scene}}$)와 파티클 픽셀 깊이($Z_{\text{particle}}$)의 차이를 계산하여 페이드 계수 $\text{saturate}((Z_{\text{scene}} - Z_{\text{particle}}) / \text{FadeDistance})$를 알파에 곱해주는 셰이더 기법 적용.
 2. **실시간 지면 투영 데칼 (Projected Decal):**
    - `DecalTrack`이 폭발 순간 지면 슬래브 및 장애물의 표면 굴곡을 따라 자연스럽게 그을음/크레이터 마크를 투영하고 서서히 페이드아웃되도록 렌더링 큐 연동.
+   - **2026-11-23 코드 반영(미검증):** 데칼 트랙은 사각형을 제출하지 않고 `CompositeVFXSystem::CollectDecals`로 디퍼드 데칼([렌더링 계획 S9](RenderingDevelopmentPlan.md#s9-디퍼드-데칼-상자-투영))에 들어간다. 상자는 `size`(x·y)와 새 `projectionDepth`(기본 1)이며 트랙 회전의 로컬 z가 투영 방향이다(기본 x축 90도는 아래). 텍스처는 트랙, 재질의 첫 텍스처, 부드러운 원 순서로 고르며 재질의 블렌드 모드는 더 이상 쓰지 않는다. 기본 색만 바꾸고 불투명 표면에만 붙는다.
 
 ### 8.3 뷰포트 3D 직접 조작 (Gizmo & Visual Helpers)
 1. **ImGuizmo 3D 인터랙티브 기즈모:**

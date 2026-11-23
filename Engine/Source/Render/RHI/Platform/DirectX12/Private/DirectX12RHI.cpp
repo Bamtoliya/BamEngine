@@ -2722,6 +2722,10 @@ RHIAccelerationStructure* DirectX12RHI::CreateBottomLevelAS(const RHIRaytracingG
 {
     return DirectX12AccelerationStructure::CreateBottomLevel(this, desc);
 }
+EResult DirectX12RHI::UpdateBottomLevelAS(RHIAccelerationStructure* bottomLevel, const RHIRaytracingGeometryDesc& desc)
+{
+    return DirectX12AccelerationStructure::UpdateBottomLevel(this, bottomLevel, desc);
+}
 EResult DirectX12RHI::BuildTopLevelAS(RHIAccelerationStructure*& topLevel, const RHIRaytracingInstanceDesc* instances, uint32 instanceCount)
 {
     return DirectX12AccelerationStructure::BuildTopLevel(this, topLevel, instances, instanceCount);
@@ -2818,6 +2822,29 @@ EResult DirectX12RHI::ResourceBarrierUAV(RHIBuffer* buffer)
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
     barrier.UAV.pResource = resource;
     m_CommandList->ResourceBarrier(1, &barrier);
+    return EResult::Success;
+}
+EResult DirectX12RHI::TransitionStorageBufferToShaderRead(RHIBuffer* buffer)
+{
+    if (!m_CommandList || !m_FrameRecording || !buffer || !buffer->GetNativeHandle() || buffer->GetBufferType() != ERHIBufferType::Storage)
+        return EResult::InvalidArgument;
+
+    // 루트 UAV로 쓴 버퍼는 COMMON에서 UNORDERED_ACCESS로 암시적 승격되어 있다(제출이 끝나면 COMMON으로 감쇠).
+    // 쓰기 상태에서 읽기 상태로는 명시적 전환이 필요하며, 전환이 앞선 쓰기의 완료도 보장한다.
+    auto* dxBuffer = static_cast<DirectX12Buffer*>(buffer);
+    constexpr D3D12_RESOURCE_STATES readState = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
+    if (IsBufferStateRecordedThisFrame(buffer) && dxBuffer->GetCurrentState() == readState)
+        return EResult::Success;
+
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = static_cast<ID3D12Resource*>(buffer->GetNativeHandle());
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    barrier.Transition.StateAfter = readState;
+    m_CommandList->ResourceBarrier(1, &barrier);
+    dxBuffer->SetCurrentState(readState);
+    MarkBufferStateRecordedThisFrame(buffer);
     return EResult::Success;
 }
 #pragma endregion

@@ -17,6 +17,11 @@
 ,"Asin input must be in [-1, 1].","Asin input must be in [-1, 1].","Asin 입력은 [-1, 1] 범위여야 합니다."
 ,Atan2 direction has zero length.,Atan2 direction has zero length.,Atan2 방향 벡터의 길이가 0입니다.
 ,Audio,Audio,오디오
+,AUTO_EXPOSURE_COMPENSATION,Compensation (EV),노출 보정 (EV)
+,AUTO_EXPOSURE_MAX_EV,Max Exposure (EV),최대 노출 (EV)
+,AUTO_EXPOSURE_MIN_EV,Min Exposure (EV),최소 노출 (EV)
+,AUTO_EXPOSURE_SPEED_TO_DARK,Adapt Speed (Darker),적응 속도 (어두워질 때)
+,AUTO_EXPOSURE_SPEED_TO_LIGHT,Adapt Speed (Brighter),적응 속도 (밝아질 때)
 ,BLOOM_INTENSITY,Intensity,강도
 ,BLOOM_SCATTER,Scatter,확산 반경
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
@@ -32,6 +37,10 @@
 ,CATEGORY_CIRCLE,Circle,원
 ,CATEGORY_CLOUD_SHAPE,Cloud Shape,구름 형태
 ,CATEGORY_CORE,Core,기본
+,CATEGORY_DECAL_BASE_COLOR,Base Color,기본 색
+,CATEGORY_DECAL_NORMAL,Normal,법선
+,CATEGORY_DECAL_PROJECTION,Projection,투영
+,CATEGORY_DECAL_SURFACE,Surface,표면
 ,CATEGORY_FOG_COLOR,Fog Color,안개 색상
 ,CATEGORY_FOG_PARAMETERS,Fog Parameters,안개 매개변수
 ,CATEGORY_FOG_PLACEMENT,Fog Placement,안개 배치
@@ -57,6 +66,9 @@
 ,CATEGORY_PHYSICS_2D,Physics 2D,2D 물리
 ,CATEGORY_PHYSICS_3D,Physics 3D,3D 물리
 ,CATEGORY_PIPELINE,Pipeline,파이프라인
+,CATEGORY_PROBE_GI_PLACEMENT,Probe Placement,프로브 배치
+,CATEGORY_PROBE_GI_SHADING,Indirect Lighting,간접광
+,CATEGORY_PROBE_GI_UPDATE,Probe Update,프로브 갱신
 ,CATEGORY_RAY,Ray,광선
 ,CATEGORY_RECT,Rect,사각 영역
 ,CATEGORY_RENDER,Rendering,렌더링
@@ -93,6 +105,13 @@
 ,Connection must start at an output pin.,Connection must start at an output pin.,연결은 출력 핀에서 시작해야 합니다.
 ,Core,Core,기본
 ,Cos (Degrees),Cos (Degrees),코사인 (도)
+,DEPTH_OF_FIELD_FOCUS_DISTANCE,Focus Distance (m),초점 거리 (m)
+,DEPTH_OF_FIELD_FOCUS_RANGE,Focus Range (m),초점 범위 (m)
+,DEPTH_OF_FIELD_F_STOP,F-Stop,조리개 값
+,DEPTH_OF_FIELD_MAX_BLUR_RADIUS,Max Blur Radius (px),최대 흐림 반지름 (px)
+,DEPTH_OF_FIELD_MODE,"Mode (0: Focus Range, 1: Physical Lens)","모드 (0: 초점 범위, 1: 물리 렌즈)"
+,DEPTH_OF_FIELD_SENSOR_HEIGHT,Sensor Height (mm),센서 높이 (mm)
+,DEPTH_OF_FIELD_TRANSITION_RANGE,Transition Range (m),전환 거리 (m)
 ,DETAIL,Detail,세부 정보
 ,Data connections must be acyclic.,Data connections must be acyclic.,데이터 연결에는 순환이 없어야 합니다.
 ,Data input requires a link or value.,Data input requires a link or value.,데이터 입력에 연결 또는 값이 필요합니다.
@@ -111,6 +130,7 @@
 ,ENUM_ATTENUATION_MODE,Attenuation Mode,감쇠 모드
 ,ENUM_CAMERA_TYPE,Camera Type,카메라 타입
 ,ENUM_CURVE_INTERP_MODE,Curve Interpolation Mode,커브 보간 모드
+,ENUM_DEPTH_OF_FIELD_MODE,Depth of Field Mode,피사계 심도 모드
 ,ENUM_ENTITY_FLAG,Entity Flags,엔티티 플래그
 ,ENUM_FOG_TYPE,Fog Type,안개 타입
 ,ENUM_LIGHT_FLAGS,Light Flags,조명 플래그
@@ -327,9 +347,11 @@
 ,PIN_INPUT_MAP_ID,Map ID,맵 ID
 ,PIN_INPUT_NEGATIVE_ACTION_ID,Negative Action ID,음의 방향 액션 ID
 ,PIN_INPUT_POSITIVE_ACTION_ID,Positive Action ID,양의 방향 액션 ID
+,POST_PROCESS_AUTO_EXPOSURE,Auto Exposure,자동 노출
 ,POST_PROCESS_BLOOM,Bloom,블룸
 ,POST_PROCESS_CHROMATIC_ABERRATION,Chromatic Aberration,색수차
 ,POST_PROCESS_COLOR_ADJUSTMENTS,Color Adjustments,색상 조정
+,POST_PROCESS_DEPTH_OF_FIELD,Depth of Field,피사계 심도
 ,POST_PROCESS_FILM_GRAIN,Film Grain,필름 그레인
 ,POST_PROCESS_LENS_DISTORTION,Lens Distortion,렌즈 왜곡
 ,POST_PROCESS_SHARPEN,Sharpen,선명화
@@ -411,11 +433,24 @@
 ,PROP_CURRENT_TIME,Current Time,현재 재생 시간
 ,PROP_CURRENT_ZOOM,Current Zoom,현재 줌 배율
 ,PROP_DAY_DURATION,Day Duration (s),하루 길이(초)
+,PROP_DECAL_BASE_COLOR_TEXTURE,Base Color Texture,기본 색 텍스처
+,PROP_DECAL_DEPTH_FADE,Depth Fade,깊이 페이드
+,PROP_DECAL_MAX_ANGLE,Max Surface Angle,최대 표면 각도
+,PROP_DECAL_METALLIC,Metallic,금속성
+,PROP_DECAL_NORMAL_OPACITY,Normal Opacity,법선 불투명도
+,PROP_DECAL_NORMAL_TEXTURE,Normal Texture,법선 텍스처
+,PROP_DECAL_OPACITY,Opacity,불투명도
+,PROP_DECAL_PBR_OPACITY,Surface Opacity,표면 불투명도
+,PROP_DECAL_PBR_TEXTURE,Surface Texture (R Roughness / G Metallic / B Cavity),표면 텍스처 (R 거칠기 / G 금속성 / B 캐비티)
+,PROP_DECAL_PROJECTION_DEPTH,Projection Depth,투영 깊이
+,PROP_DECAL_ROUGHNESS,Roughness,거칠기
+,PROP_DECAL_SIZE,Box Size,상자 크기
 ,PROP_DECAL_TRACKS,Decal Tracks,데칼 트랙
 ,PROP_DECAY_TIME,Decay Time,감쇠 시간
 ,PROP_DENSITY,Cloud Density,구름 밀도
 ,PROP_DEPTH_COMPARE_OP,Depth Compare Op,깊이 비교 연산
 ,PROP_DEPTH_MODE,Depth Mode,깊이 모드
+,PROP_DEPTH_OF_FIELD_MODE,Depth of Field Mode,피사계 심도 모드
 ,PROP_DETAIL_SIZE,Detail Noise Size,디테일 노이즈 크기
 ,PROP_DIRECTION,Direction,방향
 ,PROP_DIRTY,Dirty,갱신 필요
@@ -455,6 +490,9 @@
 ,PROP_FLIPY,FlipY,Y 반전
 ,PROP_FLOOR_HEIGHT,Floor Height,바닥 높이
 ,PROP_FOCUS_BONE,Focus Bone,포커스 본
+,PROP_FOCUS_DISTANCE,Focus Distance (m),초점 거리 (m)
+,PROP_FOCUS_RANGE,Focus Range (m),초점 범위 (m)
+,PROP_FOCUS_TRANSITION_RANGE,Focus Transition Range (m),초점 전환 거리 (m)
 ,PROP_FOG_BLEND_COLOR,Fog Blend Color,안개 혼합 색상
 ,PROP_FOG_COLOR,Fog Color,안개 색상
 ,PROP_FOG_DENSITY,Fog Density,안개 밀도
@@ -472,6 +510,7 @@
 ,PROP_FREQUENCY,Frequency,주파수
 ,PROP_FRICTION,Friction,마찰
 ,PROP_FRONT_FACE,Front Face,전면 방향
+,PROP_F_STOP,F-Stop,조리개 값
 ,PROP_GRAPH_FILE,Graph File,그래프 파일
 ,PROP_GRAVITY_2D,2D Gravity,2D 중력
 ,PROP_GRAVITY_3D,3D Gravity,3D 중력
@@ -559,6 +598,7 @@
 ,PROP_MATERIAL_HANDLE,Material Handle,마테리얼 핸들
 ,PROP_MATRIX,Matrix,매트릭스
 ,PROP_MAX,Max,최댓값
+,PROP_MAX_BLUR_RADIUS,Max Blur Radius (px),최대 흐림 반지름 (px)
 ,PROP_MAX_COLLISION_CHECKS,Max Checks Per Frame,프레임당 최대 충돌 검사 수
 ,PROP_MAX_DISTANCE,Max Distance,최대 감쇠 거리
 ,PROP_MAX_HEIGHT,Max Height,최대 높이
@@ -592,6 +632,7 @@
 ,PROP_ORIGIN,Origin,원점
 ,PROP_ORTHOGRAPHIC_SIZE,Orthographic Size,직교 투영 크기
 ,PROP_OUT_TANGENT,Out Tangent,진출 탄젠트
+,PROP_OVERRIDE_DEPTH_OF_FIELD,Override Depth of Field,피사계 심도 덮어쓰기
 ,PROP_OWNER_CLIENT_ID,Owner Client ID,소유자 클라이언트 ID
 ,PROP_PARAMETERS,Parameters,매개변수
 ,PROP_PARENT_EMITTER_INDEX,Parent Emitter Index,부모 이미터 인덱스
@@ -622,12 +663,20 @@
 ,PROP_PRESS_COLOR,Press Color,Press 색
 ,PROP_PRIMARY_PASS_TYPE,Primary Pass Type,기본 렌더 패스
 ,PROP_PRIORITY,Priority,우선순위
+,PROP_PROBES_PER_FRAME,Probes per Frame,프레임당 갱신 프로브 수
+,PROP_PROBE_BLEND_DISTANCE,Edge Blend Distance,경계 혼합 거리
+,PROP_PROBE_COUNT_X,Probe Count X,X축 프로브 수
+,PROP_PROBE_COUNT_Y,Probe Count Y,Y축 프로브 수
+,PROP_PROBE_COUNT_Z,Probe Count Z,Z축 프로브 수
+,PROP_PROBE_HYSTERESIS,History Weight,이전 결과 비율
 ,PROP_PROBE_RADIUS,Probe Radius,프로브 반지름
+,PROP_PROBE_RAYS,Rays per Probe,프로브당 광선 수
 ,PROP_RADIUS,Radius,반지름
 ,PROP_RANGE,Range,범위
 ,PROP_RATIO,Ratio,비율
 ,PROP_RAYCAST_TARGET,Raycast Target,레이캐스트 타깃
 ,PROP_RAYTRACED_SHADOW,Raytraced Shadow,레이트레이싱 그림자
+,PROP_RECEIVE_DECALS,Receive Decals,데칼 받기
 ,PROP_REF_RESOLUTION_X,Ref Resolution X,기준 가상 해상도 X
 ,PROP_REF_RESOLUTION_Y,Ref Resolution Y,기준 가상 해상도 Y
 ,PROP_RENDER,Render,렌더링
@@ -647,6 +696,7 @@
 ,PROP_SCALE_PLAY_RATE_WITH_SPEED,Scale Play Rate With Speed,이동 속도 연동 재생 배속
 ,PROP_SCALE_START,Start Scale,시작 크기
 ,PROP_SEED,Random Seed,난수 시드
+,PROP_SENSOR_HEIGHT,Sensor Height (mm),센서 높이 (mm)
 ,PROP_SETTINGS,Settings,설정
 ,PROP_SHADER_GRAPH_PATH,Shader Graph,셰이더 그래프
 ,PROP_SHADOW_AMBIENT_FLOOR,Shadow Ambient Floor,그림자 음영 최저 밝기
@@ -674,6 +724,8 @@
 ,PROP_SORTING_ORDER,Sorting Order,정렬 순서
 ,PROP_SOUND_PATH,Sound,사운드
 ,PROP_SOUND_TRACKS,Sound Tracks,사운드 트랙
+,PROP_SOURCE_ANGLE,Source Angle,광원 각도
+,PROP_SOURCE_RADIUS,Source Radius,광원 반지름
 ,PROP_SPEED_MAX,Initial Speed Max,최대 초기 속력
 ,PROP_SPEED_MIN,Initial Speed Min,최소 초기 속력
 ,PROP_SPLINE_ALIGN_TO_MOVEMENT,Face Movement Direction,이동 방향 바라보기
@@ -853,6 +905,7 @@
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정
 ,STRUCT_COMPOSITE_VFX,Composite VFX,복합 비주얼 이펙트
 ,STRUCT_CURVE_KEY,Curve Key,커브 키
+,STRUCT_DECAL,Decal,데칼
 ,STRUCT_FLAG,Flag,플래그
 ,STRUCT_FLOAT_CURVE,Float Curve,실수 커브
 ,STRUCT_FOG,Fog,안개
@@ -876,6 +929,7 @@
 ,STRUCT_PIXEL_PERFECT_CAMERA,Pixel Perfect Camera,픽셀 퍼펙트 카메라
 ,STRUCT_POST_PROCESS,Post Process,포스트 프로세스
 ,STRUCT_PREFAB_INSTANCE,Prefab Instance,프리팹 인스턴스
+,STRUCT_PROBE_GI_VOLUME,Probe GI Volume,프로브 GI 볼륨
 ,STRUCT_RAY,Ray,광선
 ,STRUCT_RECT,Rect,사각 영역
 ,STRUCT_RECT_TRANSFORM,Rect Transform,Rect 트랜스폼

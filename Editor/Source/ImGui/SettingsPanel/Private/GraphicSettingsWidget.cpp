@@ -1,4 +1,5 @@
 ﻿#include "GraphicSettingsWidget.h"
+#include "AmbientOcclusionModeUI.h"
 #include "EditorUI.h"
 #include "Application.h"
 #include "EditorSettingsService.h"
@@ -20,6 +21,8 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_DraftRaytracedShadow = settings.GetPreferences().RaytracedShadowMode;
     m_DraftRaytracedReflection = settings.GetPreferences().RaytracedReflectionMode;
     m_DraftTemporalAA = settings.GetPreferences().TemporalAAMode;
+    m_DraftAmbientOcclusion = settings.GetPreferences().AmbientOcclusionMode;
+    m_DraftProbeGI = settings.GetPreferences().ProbeGIMode;
 
     m_WindowDirty = false;
     m_TargetFPSDirty = false;
@@ -27,6 +30,8 @@ void GraphicSettingsWidget::ReloadDraft(const EditorSettingsService& settings)
     m_RaytracedShadowDirty = false;
     m_RaytracedReflectionDirty = false;
     m_TemporalAADirty = false;
+    m_AmbientOcclusionDirty = false;
+    m_ProbeGIDirty = false;
 }
 
 void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
@@ -61,6 +66,22 @@ void GraphicSettingsWidget::Apply(EditorSettingsService& settings)
         ImGuiManager::Get().NotifySettingsChange(result);
         if (result.Applied)
             m_TemporalAADirty = false;
+    }
+
+    if (m_AmbientOcclusionDirty)
+    {
+        const auto result = settings.SetEditorAmbientOcclusionMode(m_DraftAmbientOcclusion);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_AmbientOcclusionDirty = false;
+    }
+
+    if (m_ProbeGIDirty)
+    {
+        const auto result = settings.SetEditorProbeGIMode(m_DraftProbeGI);
+        ImGuiManager::Get().NotifySettingsChange(result);
+        if (result.Applied)
+            m_ProbeGIDirty = false;
     }
 
     if (m_WindowDirty && !settings.IsWindowChangePending() && !settings.IsVSyncChangePending())
@@ -244,6 +265,17 @@ void GraphicSettingsWidget::Draw()
         ImGui::Spacing();
     }
 
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionLighting").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (EditorUI::BeginPropertyTable("##GraphicLightingTable", tableStyle))
+        {
+            EditorUI::PropertyRow("GraphicsSettings.AmbientOcclusion");
+            m_AmbientOcclusionDirty |= DrawAmbientOcclusionModeCombo("###AmbientOcclusion", m_DraftAmbientOcclusion);
+            EditorUI::EndPropertyTable();
+        }
+        ImGui::Spacing();
+    }
+
     if (ImGui::CollapsingHeader(LOCAL_LABEL("GraphicsSettings.SectionRaytracing").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         const auto* rhi = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHI() : nullptr;
@@ -254,6 +286,8 @@ void GraphicSettingsWidget::Draw()
             m_RaytracedShadowDirty |= DrawRaytracedShadowModeCombo("###RaytracedShadow", m_DraftRaytracedShadow);
             EditorUI::PropertyRow("GraphicsSettings.RaytracedReflection");
             m_RaytracedReflectionDirty |= DrawRaytracedShadowModeCombo("###RaytracedReflection", m_DraftRaytracedReflection, "GraphicsSettings.RaytracedReflectionHint");
+            EditorUI::PropertyRow("GraphicsSettings.ProbeGI");
+            m_ProbeGIDirty |= DrawRaytracedShadowModeCombo("###ProbeGI", m_DraftProbeGI, "GraphicsSettings.ProbeGIHint");
             EditorUI::EndPropertyTable();
         }
         if (!supported)

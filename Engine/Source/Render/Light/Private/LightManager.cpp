@@ -179,7 +179,7 @@ void LightManager::AddShadowLight(ShadowLightSet& set, const LightComponent& lig
 	default: return;
 	}
 	if (*owner == INVALID_SHADOW_LIGHT) *owner = lightIndex;
-	set.Lights.push_back({ lightIndex, light.RaytracedShadow });
+	set.Lights.push_back({ lightIndex, light.RaytracedShadow, gpuLight.SourceSize });
 }
 
 ShadowLightSet LightManager::CollectShadowLights(std::span<Scene* const> scenes)

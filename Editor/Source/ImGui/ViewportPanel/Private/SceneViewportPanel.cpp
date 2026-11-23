@@ -17,6 +17,7 @@
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
+#include "DecalProjection.h"
 #include "Light.h"
 #include "TimeManager.h"
 #include "SkyAtmosphereComponent.h"
@@ -47,6 +48,7 @@
 #include "ImGuiManager.h"
 #include "ContentBrowserDragPayload.h"
 #include "RaytracedShadowModeUI.h"
+#include "AmbientOcclusionModeUI.h"
 #include "RHI.h"
 
 #pragma region Helper
@@ -303,6 +305,8 @@ void SceneViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 	m_Pipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(state.RaytracedShadowMode));
 	m_Pipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(state.RaytracedReflectionMode));
 	m_Pipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(state.TemporalAAMode));
+	m_Pipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(state.AmbientOcclusionMode));
+	m_Pipeline.SetProbeGIMode(Engine::ToRaytracedShadowMode(state.ProbeGIMode));
 }
 
 ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
@@ -321,6 +325,8 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 	state.RaytracedShadowMode = static_cast<int32>(m_Pipeline.GetRaytracedShadowMode());
 	state.RaytracedReflectionMode = static_cast<int32>(m_Pipeline.GetRaytracedReflectionMode());
 	state.TemporalAAMode = static_cast<int32>(m_Pipeline.GetTemporalAAMode());
+	state.AmbientOcclusionMode = static_cast<int32>(m_Pipeline.GetAmbientOcclusionMode());
+	state.ProbeGIMode = static_cast<int32>(m_Pipeline.GetProbeGIMode());
 	return state;
 }
 #pragma endregion
@@ -398,6 +404,9 @@ void SceneViewportPanel::Update(f32 dt)
 	// Lighting이 꺼진 경우 디버깅 화면으로 GBuffer_Diffuse(0번 인덱스)를 우회 표시
 	if (!isPassEnabled(m_LightingPassID) && !m_OwnedRTNames.empty())
 		currentRT = m_OwnedRTNames[0];
+	// 피사계 심도가 읽는 장면 입력. 씬 뷰는 카메라 덮어쓰기를 쓰지 않고 후처리 값만 쓴다.
+	if (cameraBuffer.has_value())
+		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, std::nullopt });
 	SubmitPostProcessPass(dt, ppSlot, currentRT);
 	if (isPassEnabled(m_UIOverlayPassID))
 		SubmitUIOverlayPass(currentRT);
@@ -421,6 +430,7 @@ void SceneViewportPanel::Update(f32 dt)
 			m_Grid.SubmitGrid(*cameraBuffer, IsOrthographic(), m_DisplayRTName, m_OwnedRTNames[6], m_Pipeline.GetTemporalJitterNDC());
 
 		DrawSelectedSpline(activeScene);
+		DrawSelectedDecal(activeScene);
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 	}
 
@@ -864,6 +874,28 @@ void SceneViewportPanel::DrawRenderPassMenu()
 		}
 		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
 			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedReflectionUnsupported"));
+		// 프로브 GI는 반사와 같은 광선 조회(TLAS·번호로 읽는 리소스)를 쓴다.
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.ProbeGI").c_str(), supportsReflection))
+		{
+			const auto current = m_Pipeline.GetProbeGIMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(RaytracedShadowModeKeys); ++index)
+			{
+				const auto mode = Engine::ToRaytracedShadowMode(index);
+				if (ImGui::MenuItem(LOCAL_LABEL(RaytracedShadowModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetProbeGIMode(mode);
+			}
+			ImGui::Separator();
+			// 확인용 화면이라 저장하지 않는다. GI를 쓰지 않는 동안은 효과가 없다.
+			if (ImGui::MenuItem(LOCAL_LABEL("GraphicsSettings.ProbeGIDebugView").c_str(), nullptr, m_Pipeline.IsProbeGIDebugView()))
+				m_Pipeline.SetProbeGIDebugView(!m_Pipeline.IsProbeGIDebugView());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.ProbeGIDebugViewHint"));
+			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsProbeGIActive() ?
+				"GraphicsSettings.ProbeGIActive" : "GraphicsSettings.ProbeGIInactive"));
+			ImGui::EndMenu();
+		}
+		if (!supportsReflection && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+			ImGui::SetTooltip("%s", LOCAL_CSTR("GraphicsSettings.RaytracedReflectionUnsupported"));
 		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.TemporalAA").c_str()))
 		{
 			const auto current = m_Pipeline.GetTemporalAAMode();
@@ -876,6 +908,20 @@ void SceneViewportPanel::DrawRenderPassMenu()
 			ImGui::Separator();
 			ImGui::TextDisabled("%s", LOCAL_CSTR(m_Pipeline.IsTemporalAAActive() ?
 				"GraphicsSettings.TemporalAAActive" : "GraphicsSettings.TemporalAAInactive"));
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu(LOCAL_LABEL("GraphicsSettings.AmbientOcclusion").c_str()))
+		{
+			const auto current = m_Pipeline.GetAmbientOcclusionMode();
+			for (int32 index = 0; index < IM_ARRAYSIZE(AmbientOcclusionModeKeys); ++index)
+			{
+				const auto mode = Engine::ToAmbientOcclusionMode(index);
+				// 레이트레이싱을 지원하지 않아도 고를 수 있다. 실행 시 화면 공간으로 되돌리고 아래 현재 상태에 표시한다.
+				if (ImGui::MenuItem(LOCAL_LABEL(AmbientOcclusionModeKeys[index]).c_str(), nullptr, current == mode))
+					m_Pipeline.SetAmbientOcclusionMode(mode);
+			}
+			ImGui::Separator();
+			ImGui::TextDisabled("%s", LOCAL_CSTR(GetAmbientOcclusionActiveKey(m_Pipeline.GetActiveAmbientOcclusion())));
 			ImGui::EndMenu();
 		}
 		ImGui::EndMenu();
@@ -1497,6 +1543,8 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 
 void SceneViewportPanel::SubmitPostProcessPass(f32 dt, uint32& slot, std::wstring& currentRT)
 {
+	// 다른 씬의 자동 노출 등 이전 프레임 값을 이어 쓰지 않는다.
+	m_PostProcessChain.GetPipeline().SetHistoryScene(SceneManager::Get().GetCurrentScene());
 	if (Scene* activeScene = SceneManager::Get().GetCurrentScene())
 	{
 		auto view = activeScene->GetRegistry().view<PostProcessComponent>();
@@ -2146,6 +2194,43 @@ void SceneViewportPanel::FocusSelectedEntity()
 }
 
 #pragma region Spline
+void SceneViewportPanel::DrawSelectedDecal(Engine::Scene* scene)
+{
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !selected || selected->GetScene() != scene)
+		return;
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	if (!world.valid(entity))
+		return;
+
+	// 꺼진 데칼도 위치를 잡을 수 있게 흐린 색으로 그린다.
+	const auto* decal = world.try_get<Engine::DecalComponent>(entity);
+	mat4 worldMatrix;
+	if (!decal || !Engine::TransformSystem::TryGetWorldMatrix(world, entity, worldMatrix))
+		return;
+
+	const mat4 box = Engine::MakeDecalBoxMatrix(worldMatrix, decal->Size);
+	mat4 worldToBox;
+	if (!Engine::TryGetDecalWorldToBox(box, worldToBox))
+		return;
+
+	const bool enabled = IsComponentEnabled<Engine::DecalComponent>(world, entity);
+	const vec4 boxColor = enabled ? vec4(0.75f, 0.35f, 0.95f, 1.0f) : vec4(0.45f, 0.45f, 0.5f, 1.0f);
+	m_DebugRenderer.DrawBox(vec3(0.0f), vec3(0.5f), boxColor, box);
+
+	// 투영 방향: 상자 중심에서 +z 면까지의 화살표. 데칼은 양쪽 면을 모두 받으므로 방향은 텍스처의 앞쪽만 뜻한다.
+	const vec3 center(box[3]);
+	const vec3 tip = vec3(box * vec4(0.0f, 0.0f, 0.5f, 1.0f));
+	const vec3 side = vec3(box * vec4(0.15f, 0.0f, 0.35f, 1.0f));
+	const vec3 otherSide = vec3(box * vec4(-0.15f, 0.0f, 0.35f, 1.0f));
+	const vec4 arrowColor = enabled ? vec4(1.0f, 0.85f, 0.2f, 1.0f) : boxColor;
+	m_DebugRenderer.DrawLine(center, tip, arrowColor);
+	m_DebugRenderer.DrawLine(tip, side, arrowColor);
+	m_DebugRenderer.DrawLine(tip, otherSide, arrowColor);
+}
+
 void SceneViewportPanel::DrawSelectedSpline(Engine::Scene* scene)
 {
 	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();

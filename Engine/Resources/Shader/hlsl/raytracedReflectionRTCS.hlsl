@@ -1,10 +1,11 @@
 // 레이트레이싱 반사 (DXR 인라인 RayQuery, cs_6_5, DirectX12 전용)
 // 픽셀마다 광선을 하나 쏜다. 매끈한 면은 거울 방향으로, 거친 면은 GGX 분포에서 뽑은 방향으로 쏘고 이후 패스가 누적·필터한다.
 // rgb는 닿은 면의 밝기에 합성 비율을 곱한 값, a는 합성 비율이다. 너무 거칠거나 닿은 면이 없으면 비율이 0이 되어 환경광 반사를 쓴다.
-// 닿은 면은 확산 직접광, 그림자 광선 하나(대표 방향광), 환경광, 발광만 계산한다. 정반사 하이라이트와 법선 맵은 쓰지 않는다.
+// 닿은 면은 법선 맵을 적용해 확산·정반사 직접광(GGX), 그림자 광선 하나(대표 방향광), 환경광, 발광을 계산한다.
 #include "common.hlsli"
 #include "light.hlsli"
 #include "raytracing.hlsli"
+#include "raytracingSurface.hlsli"
 #include "reflection.hlsli"
 
 static const float PI = 3.14159265359f;
@@ -79,92 +80,61 @@ float TraceShadow(float3 origin, float3 direction)
 	return query.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
 }
 
-// 광선이 닿은 곳에서 픽셀 하나가 덮는 넓이에 맞는 밉
-float SelectMip(uint width, uint height, uint levels, float uvArea, float worldArea, float coneWidth)
+// 아래 네 함수는 lightingPS.hlsl과 같은 식이다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
+float DistributionGGX(float3 normal, float3 halfVector, float roughness)
 {
-	const float texels = uvArea * (float)width * (float)height;
-	if (texels <= 0.0f || worldArea <= 0.0f)
-		return 0.0f;
-	return clamp(0.5f * log2(texels / worldArea) + log2(max(coneWidth, 1e-5f)), 0.0f, (float)levels - 1.0f);
+	const float a2 = roughness * roughness * roughness * roughness;
+	const float normalDotHalf = max(dot(normal, halfVector), 0.0f);
+	const float denominator = normalDotHalf * normalDotHalf * (a2 - 1.0f) + 1.0f;
+	return a2 / (PI * denominator * denominator);
 }
 
-float4 SampleInstanceTexture(uint textureIndex, float2 uv, float uvArea, float worldArea, float coneWidth)
+float GeometrySmith(float normalDotView, float normalDotLight, float roughness)
 {
-	uint width, height, levels;
-	gBindlessTextures[NonUniformResourceIndex(textureIndex)].GetDimensions(0u, width, height, levels);
-	const float mip = SelectMip(width, height, levels, uvArea, worldArea, coneWidth);
-	return gBindlessTextures[NonUniformResourceIndex(textureIndex)].SampleLevel(gBindlessSampler, uv, mip);
+	const float k = (roughness + 1.0f) * (roughness + 1.0f) / 8.0f;
+	return normalDotView / (normalDotView * (1.0f - k) + k) * normalDotLight / (normalDotLight * (1.0f - k) + k);
+}
+
+float3 FresnelSchlick(float cosTheta, float3 f0)
+{
+	return f0 + (1.0f - f0) * pow(saturate(1.0f - cosTheta), 5.0f);
+}
+
+float3 EnvBRDFApprox(float3 f0, float roughness, float normalDotView)
+{
+	const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+	const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+	const float4 r = roughness * c0 + c1;
+	const float a004 = min(r.x * r.x, exp2(-9.28f * normalDotView)) * r.x + r.y;
+	const float2 AB = float2(-1.04f, 1.04f) * a004 + r.zw;
+	return f0 * AB.x + AB.y;
 }
 
 float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primaryDistance)
 {
 	const RaytracedInstance instance = LoadRaytracedInstance(gParams.InstanceTable, hit.InstanceIndex);
-	const uint3 indices = LoadTriangleIndices(instance, hit.PrimitiveIndex);
-	const float3 weights = GetBarycentricWeights(hit.Barycentrics);
-	const float3x4 objectToWorld = hit.ObjectToWorld;
-	const float3x4 worldToObject = hit.WorldToObject;
-	ByteAddressBuffer positions = gBindlessBuffers[NonUniformResourceIndex(instance.PositionBuffer)];
-	ByteAddressBuffer materials = gBindlessBuffers[NonUniformResourceIndex(instance.MaterialBuffer)];
-
-	const float3 p0 = asfloat(positions.Load3(indices.x * instance.PositionStride));
-	const float3 p1 = asfloat(positions.Load3(indices.y * instance.PositionStride));
-	const float3 p2 = asfloat(positions.Load3(indices.z * instance.PositionStride));
-	const float3 edge1 = mul((float3x3)objectToWorld, p1 - p0);
-	const float3 edge2 = mul((float3x3)objectToWorld, p2 - p0);
-	const float3 faceCross = cross(edge1, edge2);
-	const float worldArea = length(faceCross);
-
-	const float2 uv0 = LoadVertexUV(instance, indices.x);
-	const float2 uv1 = LoadVertexUV(instance, indices.y);
-	const float2 uv2 = LoadVertexUV(instance, indices.z);
-	const float2 uv = uv0 * weights.x + uv1 * weights.y + uv2 * weights.z;
-	const float2 uvEdge1 = uv1 - uv0;
-	const float2 uvEdge2 = uv2 - uv0;
-	const float uvArea = abs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
-
-	float3 normal = float3(0.0f, 0.0f, 0.0f);
-	float4 vertexColor = float4(0.0f, 0.0f, 0.0f, 0.0f);
-	for (uint corner = 0u; corner < 3u; ++corner)
-	{
-		const uint address = indices[corner] * instance.MaterialStride;
-		normal += asfloat(materials.Load3(address + VERTEX_NORMAL_OFFSET)) * weights[corner];
-		vertexColor += asfloat(materials.Load4(address + VERTEX_COLOR_OFFSET)) * weights[corner];
-	}
-	// 법선은 역행렬의 전치로 변환한다.
-	normal = mul(normal, (float3x3)worldToObject);
-	const float normalLength = length(normal);
-	const float3 faceNormal = worldArea > 0.0f ? faceCross / worldArea : -direction;
-	normal = normalLength > 1e-6f ? normal / normalLength : faceNormal;
-	if (dot(normal, direction) > 0.0f)
-		normal = -normal;
-
 	const float hitDistance = hit.Distance;
-	const float3 position = origin + direction * hitDistance;
-	const float coneWidth = gParams.PixelSpread * (primaryDistance + hitDistance) / max(abs(dot(normal, direction)), 0.1f);
+	// 밉은 카메라에서 픽셀 하나가 퍼진 너비로 고른다.
+	const HitSurface surface = LoadHitSurface(instance, hit.PrimitiveIndex, hit.Barycentrics, hit.ObjectToWorld, hit.WorldToObject,
+		origin, direction, hitDistance, gParams.PixelSpread * (primaryDistance + hitDistance));
+	const float3 position = surface.Position;
+	const float3 normal = surface.Normal;
+	// 그림자 광선의 시작점은 법선 맵과 무관한 정점 법선 방향으로 띄운다.
+	const float3 surfaceNormal = surface.SurfaceNormal;
+	const float3 albedo = surface.Albedo;
+	const float roughness = surface.Roughness;
+	const float metallic = surface.Metallic;
+	const float ambientOcclusion = surface.AmbientOcclusion;
+	const float3 emission = surface.Emission;
 
-	float3 albedo = instance.BaseColor.rgb * vertexColor.rgb;
-	if (instance.BaseColorTexture != INVALID_BINDLESS_INDEX)
-		albedo *= SampleInstanceTexture(instance.BaseColorTexture, uv, uvArea, worldArea, coneWidth).rgb;
-
-	float roughness = clamp(instance.Roughness, 0.04f, 1.0f);
-	float metallic = saturate(instance.Metallic);
-	float ambientOcclusion = saturate(instance.AmbientOcclusion);
-	if (instance.PbrTexture != INVALID_BINDLESS_INDEX)
-	{
-		const float4 pbr = SampleInstanceTexture(instance.PbrTexture, uv, uvArea, worldArea, coneWidth);
-		roughness = clamp(pbr.r, 0.04f, 1.0f);
-		metallic = saturate(pbr.g);
-		ambientOcclusion = pbr.a > 0.01f ? pbr.a : ambientOcclusion;
-	}
-
-	float3 emission = instance.EmissiveColor;
-	if (instance.EmissiveTexture != INVALID_BINDLESS_INDEX)
-		emission = SampleInstanceTexture(instance.EmissiveTexture, uv, uvArea, worldArea, coneWidth).rgb;
-
-	// 금속은 확산 반사가 없으므로 환경광을 자기 색으로 반사한다.
+	// 반사 광선을 거슬러 원래 면(또는 카메라) 쪽을 보는 방향
+	const float3 viewDirection = -direction;
+	const float normalDotView = max(dot(normal, viewDirection), 0.0f);
+	const float3 f0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
 	const float3 diffuseColor = albedo * (1.0f - metallic);
-	const float3 ambientColor = diffuseColor + lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic) * (1.0f - 0.5f * roughness);
-	const float3 shadowOrigin = position + normal * (gParams.NormalBias + (primaryDistance + hitDistance) * gParams.DistanceBiasScale);
+	// 환경광의 정반사는 미리 거른 환경 맵이 없어 조도에 lightingPS와 같은 근사 BRDF를 곱한다.
+	const float3 ambientColor = diffuseColor + EnvBRDFApprox(f0, roughness, normalDotView);
+	const float3 shadowOrigin = position + surfaceNormal * (gParams.NormalBias + (primaryDistance + hitDistance) * gParams.DistanceBiasScale);
 
 	float3 direct = float3(0.0f, 0.0f, 0.0f);
 	float3 skyIrradiance = float3(0.0f, 0.0f, 0.0f);
@@ -173,36 +143,27 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 	for (uint lightIndex = 0u; lightIndex < lightCount; ++lightIndex)
 	{
 		const Light light = LoadLight(lightIndex);
-		if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED) || !HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE))
+		if (!HasLightFlag(light.PackedFlags, LIGHT_FLAG_USE_IN_DEFERRED))
+			continue;
+		const bool affectsDiffuse = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE);
+		const bool affectsSpecular = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_SPECULAR);
+		if (!affectsDiffuse && !affectsSpecular)
 			continue;
 
 		const uint lightType = GetLightType(light.PackedFlags);
 		if (lightType == LIGHT_TYPE_SKY)
 		{
+			if (!affectsDiffuse)
+				continue;
 			hasSkyLight = true;
-			const float indirect = max(light.Range, 0.0f) * max(light.Intensity, 0.0f);
-			const float up = saturate(dot(normal, normalize(light.Direction)) * 0.5f + 0.5f);
-			skyIrradiance += lerp(max(light.AttenuationCoeff, 0.0f), max(light.Color, 0.0f), up) * indirect;
+			skyIrradiance += EvaluateSkyLight(light, normal);
 			continue;
 		}
 
 		float3 toLight;
-		float attenuation = 1.0f;
-		if (lightType == LIGHT_TYPE_DIRECTIONAL)
-		{
-			toLight = normalize(-light.Direction);
-		}
-		else
-		{
-			const float3 delta = light.Position - position;
-			const float lightDistance = length(delta);
-			if (lightDistance < 0.0001f || lightDistance > light.Range)
-				continue;
-			toLight = delta / lightDistance;
-			attenuation = CalcAttenuation(light, lightDistance);
-			if (lightType == LIGHT_TYPE_SPOT)
-				attenuation *= CalcSpotFade(light, toLight);
-		}
+		float attenuation;
+		if (!EvaluateLightIncidence(light, lightType, position, toLight, attenuation))
+			continue;
 
 		const float normalDotLight = dot(normal, toLight);
 		if (normalDotLight <= 0.0f || attenuation <= 0.0f)
@@ -211,7 +172,19 @@ float3 ShadeHit(ReflectionHit hit, float3 origin, float3 direction, float primar
 		float visibility = 1.0f;
 		if (lightIndex == gParams.SunLight && HasLightFlag(light.PackedFlags, LIGHT_FLAG_CAST_SHADOWS))
 			visibility = lerp(1.0f - light.ShadowStrength, 1.0f, TraceShadow(shadowOrigin, toLight));
-		direct += diffuseColor / PI * light.Color * light.Intensity * attenuation * normalDotLight * visibility;
+
+		// lightingPS의 CalcLight와 같은 Cook-Torrance 정반사와 확산 반사
+		const float3 halfVector = normalize(viewDirection + toLight);
+		const float3 fresnel = FresnelSchlick(max(dot(halfVector, viewDirection), 0.0f), f0);
+		const float3 radiance = light.Color * light.Intensity * attenuation * normalDotLight * visibility;
+		if (affectsDiffuse)
+			direct += (1.0f - fresnel) * diffuseColor / PI * radiance;
+		if (affectsSpecular)
+		{
+			const float ndf = DistributionGGX(normal, halfVector, roughness);
+			const float geometry = GeometrySmith(normalDotView, normalDotLight, roughness);
+			direct += ndf * geometry * fresnel / max(4.0f * normalDotView * normalDotLight, 0.0001f) * radiance;
+		}
 	}
 
 	float3 irradiance;

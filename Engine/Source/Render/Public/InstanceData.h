@@ -5,7 +5,7 @@
 struct InstanceData
 {
 	Engine::mat4 worldMatrix; // 64 bytes
-	Engine::vec4 pickingData; // 16 bytes (x: pickingId)
+	Engine::vec4 pickingData; // 16 bytes (x: pickingId, y: 1이면 데칼을 받지 않음)
 };
 static_assert(sizeof(InstanceData) == 80, "InstanceData must be 80 bytes");
 
