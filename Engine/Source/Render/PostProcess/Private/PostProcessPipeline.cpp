@@ -6,6 +6,7 @@
 #include "RenderPassManager.h"
 #include "PostProcessTypes.h"
 #include "BloomEffect.h"
+#include "AutoExposureEffect.h"
 #include <archive/JsonArchive.h>
 
 PostProcessPipeline::~PostProcessPipeline()
@@ -18,7 +19,13 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 	m_Prefix = prefix;
 	ResourceManager& rm = ResourceManager::Get();
 
-	// 0. 블룸(Bloom) 등록 (톤매핑 직전에 배치)
+	// 0. 자동 노출 등록. 블룸 임계값이 노출을 맞춘 값에 적용되도록 블룸보다 앞에 둔다.
+	AutoExposureEffect* autoExposureEffect = new AutoExposureEffect();
+	autoExposureEffect->Initialize(prefix);
+	autoExposureEffect->SetEnabled(false);
+	AddEffect(autoExposureEffect);
+
+	// 블룸(Bloom) 등록 (톤매핑 직전에 배치)
 	BloomEffect* bloomEffect = new BloomEffect();
 	bloomEffect->Initialize(prefix);
 	bloomEffect->SetEnabled(false);
@@ -282,12 +289,17 @@ EResult PostProcessPipeline::Resize(uint32 width, uint32 height)
 			succeeded = false;
 	}
 
-	if (!m_HdrRTName.empty())
+	for (const auto& name : m_HdrRTNames)
 	{
-		auto* target = rtMgr.GetRenderTarget(m_HdrRTName);
+		if (name.empty())
+			continue;
+		auto* target = rtMgr.GetRenderTarget(name);
 		if (!target || target->Resize(width, height) != EResult::Success)
 			succeeded = false;
 	}
+
+	// 크기가 바뀐 화면의 밝기는 이전 프레임과 다를 수 있다.
+	ResetHistory();
 
 	if (!succeeded)
 		return EResult::Fail;
@@ -297,19 +309,64 @@ EResult PostProcessPipeline::Resize(uint32 width, uint32 height)
 	return EResult::Success;
 }
 
-const wstring& PostProcessPipeline::EnsureHdrTarget()
+const wstring& PostProcessPipeline::EnsureHdrTarget(uint32 index)
 {
-	if (!m_HdrRTName.empty() || m_Width == 0 || m_Height == 0)
-		return m_HdrRTName;
+	wstring& name = m_HdrRTNames[index % 2];
+	if (!name.empty() || m_Width == 0 || m_Height == 0)
+		return name;
 
 	RenderTargetDesc desc = {
 		{ m_Width, m_Height, 1, 1, 1, ETextureSampleCount::TextureSampleCount1, HdrFormat,
 		  ETextureDimension::Texture2D, ETextureUsage::RenderTarget | ETextureUsage::Sampler, nullptr, 0, false, vec4(0.f, 0.f, 0.f, 1.f) },
-		m_Prefix + L"_PP_HDR"
+		m_Prefix + (index % 2 == 0 ? L"_PP_HDR" : L"_PP_HDR_B")
 	};
 	if (RenderTargetManager::Get().CreateRenderTarget(&desc))
-		m_HdrRTName = desc.name;
-	return m_HdrRTName;
+		name = desc.name;
+	return name;
+}
+
+void PostProcessPipeline::ResetHistory()
+{
+	for (auto* effect : m_Effects)
+	{
+		if (effect)
+			effect->ResetHistory();
+	}
+}
+
+void PostProcessPipeline::SetHistoryScene(const void* scene)
+{
+	if (m_HistoryScene == scene)
+		return;
+	m_HistoryScene = scene;
+	ResetHistory();
+}
+
+void PostProcessPipeline::InsertMissingEffects(vector<IPostProcessEffect*>& ordered) const
+{
+	const auto contains = [&ordered](const IPostProcessEffect* effect)
+		{
+			return std::find(ordered.begin(), ordered.end(), effect) != ordered.end();
+		};
+	for (std::size_t index = 0; index < m_Effects.size(); ++index)
+	{
+		IPostProcessEffect* effect = m_Effects[index];
+		if (!effect || contains(effect))
+			continue;
+
+		// 예전에 저장한 설정에는 새로 추가한 효과가 없다. 맨 뒤(톤매핑 뒤)로 보내지 않고 원래 자리에 둔다.
+		auto position = ordered.end();
+		for (std::size_t next = index + 1; next < m_Effects.size(); ++next)
+		{
+			auto found = std::find(ordered.begin(), ordered.end(), m_Effects[next]);
+			if (found != ordered.end())
+			{
+				position = found;
+				break;
+			}
+		}
+		ordered.insert(position, effect);
+	}
 }
 
 wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
@@ -339,14 +396,16 @@ wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 		wstring writeRT = m_PPRTNames[slot % 2];
 		if (effect->WritesHdr())
 		{
-			// 한 효과가 읽고 쓰는 타깃이 같을 수 없으므로 HDR 효과를 연달아 쓰려면 타깃이 더 필요하다.
-			writeRT = EnsureHdrTarget();
+			// 한 효과가 읽고 쓰는 타깃이 같을 수 없으므로 앞 효과가 쓴 HDR 타깃이 아닌 쪽에 쓴다.
+			writeRT = EnsureHdrTarget(currentRT == m_HdrRTNames[0] ? 1 : 0);
 			if (writeRT.empty() || writeRT == currentRT)
 				continue;
 		}
 		if (auto* pass = RenderPassManager::Get().GetRenderPassByID(m_PassIDs[slot]))
 			pass->SetColorAttachments({ writeRT });
-		effect->SubmitPass(dt, m_PassIDs[slot], currentRT);
+		// 제출하지 못한 효과는 출력이 비어 있으므로 건너뛰고 앞 결과를 그대로 넘긴다.
+		if (IsFailure(effect->SubmitPass(dt, m_PassIDs[slot], currentRT)))
+			continue;
 
 		currentRT = writeRT;
 		++slot;
@@ -380,9 +439,13 @@ void PostProcessPipeline::Free()
 			RenderTargetManager::Get().RemoveRenderTarget(name);
 		name.clear();
 	}
-	if (!m_HdrRTName.empty() && RenderTargetManager::IsCreated())
-		RenderTargetManager::Get().RemoveRenderTarget(m_HdrRTName);
-	m_HdrRTName.clear();
+	for (auto& name : m_HdrRTNames)
+	{
+		if (!name.empty() && RenderTargetManager::IsCreated())
+			RenderTargetManager::Get().RemoveRenderTarget(name);
+		name.clear();
+	}
+	m_HistoryScene = nullptr;
 	m_Width = m_Height = 0;
 }
 
@@ -639,12 +702,8 @@ archive::ArchiveResult PostProcessPipeline::ReadArchive(const archive::IArchive&
 	if (!result)
 		return result;
 
-	// 파일에 없는 기존 효과는 원래 상대 순서대로 뒤에 유지한다.
-	for (auto* effect : m_Effects)
-	{
-		if (effect && std::find(reorderedEffects.begin(), reorderedEffects.end(), effect) == reorderedEffects.end())
-			reorderedEffects.push_back(effect);
-	}
+	// 파일에 없는 기존 효과는 원래 순서상 자리에 유지한다.
+	InsertMissingEffects(reorderedEffects);
 
 	for (const auto& apply : pendingChanges)
 		apply();
@@ -734,11 +793,7 @@ void PostProcessPipeline::CopySettingsFrom(const PostProcessPipeline& other)
 			reorderedEffects.push_back(myEffect);
 		}
 	}
-	for (auto* effect : m_Effects)
-	{
-		if (effect && std::find(reorderedEffects.begin(), reorderedEffects.end(), effect) == reorderedEffects.end())
-			reorderedEffects.push_back(effect);
-	}
+	InsertMissingEffects(reorderedEffects);
 	m_Effects.swap(reorderedEffects);
 	NotifySettingsChanged();
 }

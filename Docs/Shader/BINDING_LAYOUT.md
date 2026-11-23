@@ -96,6 +96,16 @@ rootParams[13].InitAsDescriptorTable(1, &bindlessBufferRange, D3D12_SHADER_VISIB
 | `b1, space3` | `raytracedShadowMaskRTCS` | `RaytracedShadowParams` 32바이트. 채널별 광원 버퍼 인덱스 포함 (이후 조명 패스가 같은 슬롯에 `LightingPassData`를 다시 묶음) |
 | `t14, space3` | `lightingPS` | 그림자 마스크. `LightingPassData.RaytracedShadowLights`의 채널과 광원 인덱스가 같을 때만 사용 |
 
+### 자동 노출 바인딩 (D3D12 전용)
+
+| Register | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | `AutoExposureParams` 64바이트 (`autoExposure.hlsli`, RHI CBV slot `2`) |
+| `t0, space3` | `autoExposureHistogramCS` | 톤매핑 전 HDR 장면 색 (`BindTexture` slot `MAX_MATERIAL_TEXTURE_SLOTS`) |
+| `u0, space3` | `autoExposureHistogramCS`, `autoExposureAdaptCS` | 64구간 `uint` 히스토그램 (`BindComputeStorageBuffer` slot `0`). 적응 패스가 읽은 뒤 비움 |
+| `u2, space3` | `autoExposureAdaptCS` | 1x1 `R32_FLOAT` 노출(EV). 이전 값을 읽고 새 값을 씀 (`BindComputeStorageTexture` slot `0`) |
+| `t0`·`t1, space3` | `autoExposurePS` | 장면 색과 노출 텍스처. 장면 색에 `exp2(EV)`를 곱함 |
+
 ### 레이트레이싱 반사와 번호로 읽는 리소스 (D3D12 전용)
 
 | Register | 셰이더 | 내용 |

@@ -17,6 +17,11 @@
 ,"Asin input must be in [-1, 1].","Asin input must be in [-1, 1].","Asin 입력은 [-1, 1] 범위여야 합니다."
 ,Atan2 direction has zero length.,Atan2 direction has zero length.,Atan2 방향 벡터의 길이가 0입니다.
 ,Audio,Audio,오디오
+,AUTO_EXPOSURE_COMPENSATION,Compensation (EV),노출 보정 (EV)
+,AUTO_EXPOSURE_MAX_EV,Max Exposure (EV),최대 노출 (EV)
+,AUTO_EXPOSURE_MIN_EV,Min Exposure (EV),최소 노출 (EV)
+,AUTO_EXPOSURE_SPEED_TO_DARK,Adapt Speed (Darker),적응 속도 (어두워질 때)
+,AUTO_EXPOSURE_SPEED_TO_LIGHT,Adapt Speed (Brighter),적응 속도 (밝아질 때)
 ,BLOOM_INTENSITY,Intensity,강도
 ,BLOOM_SCATTER,Scatter,확산 반경
 ,BLOOM_SOFT_KNEE,Soft Knee,전이 폭
@@ -327,6 +332,7 @@
 ,PIN_INPUT_MAP_ID,Map ID,맵 ID
 ,PIN_INPUT_NEGATIVE_ACTION_ID,Negative Action ID,음의 방향 액션 ID
 ,PIN_INPUT_POSITIVE_ACTION_ID,Positive Action ID,양의 방향 액션 ID
+,POST_PROCESS_AUTO_EXPOSURE,Auto Exposure,자동 노출
 ,POST_PROCESS_BLOOM,Bloom,블룸
 ,POST_PROCESS_CHROMATIC_ABERRATION,Chromatic Aberration,색수차
 ,POST_PROCESS_COLOR_ADJUSTMENTS,Color Adjustments,색상 조정
