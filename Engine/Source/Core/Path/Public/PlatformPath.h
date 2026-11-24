@@ -19,6 +19,14 @@ namespace Engine
         void Apply() noexcept { Path->swap(Replacement); }
     };
 
+    struct ContentMountDesc
+    {
+        std::string Name;
+        std::filesystem::path RootPath;
+        bool ReadOnly = true;
+        bool ShowUnderAssets = false;
+    };
+
     class ENGINE_API PlatformPath
     {
     public:
@@ -32,6 +40,10 @@ namespace Engine
             const std::vector<FilePathChange>& changes);
         static bool PrepareUtf8FilePathUpdate(std::string& path, const std::vector<FilePathChange>& changes,
             std::vector<Utf8FilePathUpdate>& updates, bool asUri = false);
+
+        // 엔진 루트 설정 및 조회 (미설정 시 프로젝트 루트로 폴백)
+        static void SetEngineRoot(const std::filesystem::path& root);
+        static const std::filesystem::path& GetEngineRoot();
 
         // 프로젝트 루트 설정 및 조회
         static void SetProjectRoot(const std::filesystem::path& root);
@@ -61,6 +73,8 @@ namespace Engine
         static bool IsProjectUri(const std::string& uri);
         static bool IsPluginUri(std::wstring_view uri);
         static bool IsPluginUri(std::string_view uri);
+        static bool IsMountUri(std::wstring_view uri);
+        static bool IsMountUri(std::string_view uri);
         static bool IsVirtualUri(std::wstring_view uri);
         static bool IsVirtualUri(std::string_view uri);
 
@@ -73,6 +87,17 @@ namespace Engine
         static std::filesystem::path ResolvePluginUri(std::wstring_view uri);
         static std::filesystem::path ResolvePluginUri(std::string_view uri);
 
+        // [외부 콘텐츠 폴더 가상 마운트 URI 시스템 ("Mount://<Alias>/...")]
+        static bool RegisterContentMount(const ContentMountDesc& desc);
+        static void UnregisterContentMount(std::string_view name);
+        static void ClearContentMounts();
+        static std::vector<ContentMountDesc> GetContentMounts();
+        static bool HasContentMount(std::string_view name);
+        static std::filesystem::path ResolveMountUri(std::wstring_view uri);
+        static std::filesystem::path ResolveMountUri(std::string_view uri);
+        static bool IsMountReadOnly(std::string_view nameOrUri);
+        static bool IsMountReadOnly(std::wstring_view nameOrUri);
+
         // 가상 URI 또는 상대/절대 경로를 물리 디스크 절대 경로로 안전하게 해석
         static std::filesystem::path ResolveUri(const std::filesystem::path& pathOrUri);
         static std::filesystem::path ResolveUri(const std::wstring& pathOrUri);
@@ -80,10 +105,10 @@ namespace Engine
         static std::filesystem::path ResolveUri(const wchar_t* pathOrUri) { return ResolveUri(std::wstring(pathOrUri ? pathOrUri : L"")); }
         static std::filesystem::path ResolveUri(const char* pathOrUri) { return ResolveUri(std::string(pathOrUri ? pathOrUri : "")); }
 
-        // 물리 디스크 경로를 가상 URI("Engine://...", "Project://...")로 안전하게 정규화
+        // 물리 디스크 경로를 가상 URI("Project://...", "Engine://...", "Plugin://...", "Mount://...")로 안전하게 정규화
         static std::wstring ToVirtualUri(const std::filesystem::path& physicalPath);
 
-        // 엔진 빌트인 읽기 전용 가드: 대상 경로가 Engine:// 이거나 EngineResourceRoot 하위인지 여부
+        // 읽기 전용 가드: Engine://, Editor://, ReadOnly Mount:// 또는 해당 루트 하위인지 여부
         static bool IsReadOnlyTarget(const std::filesystem::path& pathOrUri);
         static bool IsReadOnlyTarget(const std::wstring& pathOrUri);
         static bool IsReadOnlyTarget(const std::string& pathOrUri);

@@ -6,6 +6,8 @@
 #include "Material.h"
 #include "Mesh.h"
 #include "MaterialInstance.h"
+#include "ActionTimelineAsset.h"
+#include "TerrainLayerAsset.h"
 #include "Logger.h"
 #include "NotificationManager.h"
 #include "PlatformPath.h"
@@ -15,7 +17,7 @@
 
 namespace
 {
-	enum class EAssetReloadKind { Unsupported, Texture, Material, Mesh, Localization };
+	enum class EAssetReloadKind { Unsupported, Texture, Material, Mesh, ActionTimeline, TerrainLayer, Localization };
 
 	std::wstring LowerAscii(std::wstring value)
 	{
@@ -53,6 +55,14 @@ namespace
 
 		if (name.ends_with(L".bammesh") || name.ends_with(L".bammesh.json"))
 			return EAssetReloadKind::Mesh;
+
+		// 타임라인 패널은 별도 사본을 저장하므로, 씬이 이미 불러온 에셋은 파일 변경으로만 갱신된다.
+		if (name.ends_with(L".bamtimeline.json") || name.ends_with(L".bamtimeline") ||
+			name.ends_with(L".actiontimeline.json") || name.ends_with(L".actiontimeline"))
+			return EAssetReloadKind::ActionTimeline;
+
+		if (name.ends_with(L".bamterrainlayer.json") || name.ends_with(L".bamterrainlayer"))
+			return EAssetReloadKind::TerrainLayer;
 
 		if (IsLocalizationDirectory(path) || (IsLocalizationDirectory(path.parent_path()) && IsLocalizationFile(path)))
 			return EAssetReloadKind::Localization;
@@ -323,6 +333,8 @@ void AssetHotReloadManager::Update()
 		case EAssetReloadKind::Texture: ProcessModifiedTexture(file); break;
 		case EAssetReloadKind::Material: ProcessModifiedMaterial(file); break;
 		case EAssetReloadKind::Mesh: ProcessModifiedMesh(file); break;
+		case EAssetReloadKind::ActionTimeline: ProcessModifiedTimeline(file); break;
+		case EAssetReloadKind::TerrainLayer: ProcessModifiedTerrainLayer(file); break;
 		case EAssetReloadKind::Localization:
 			if (IsProjectLocalizationEvent(file)) reloadProject = true;
 			else ProcessModifiedLocalization(file);
@@ -457,6 +469,42 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 
 	if (!matched)
 		RequestThumbnailRefresh(materialPath);
+}
+
+void AssetHotReloadManager::ProcessModifiedTimeline(const std::filesystem::path& timelinePath)
+{
+	if (timelinePath.empty()) return;
+
+	// 이미 불러온 타임라인만 제자리에서 다시 읽는다. 재생 중인 컴포넌트는 같은 핸들을 쓰므로 다음 틱부터 새 길이·트랙을 따른다.
+	auto& manager = Engine::ResourceManager::Get();
+	for (const auto& handle : manager.GetResourceHandles<Engine::ActionTimelineAsset>())
+	{
+		auto* timeline = dynamic_cast<Engine::ActionTimelineAsset*>(manager.GetResource(handle));
+		if (timeline == nullptr || !MatchesResourceFile(*timeline, timelinePath) || !IsSuccess(timeline->Reload(timelinePath)))
+			continue;
+
+		NotificationManager::Get().AddNotification(LOCAL("Notification.TimelineHotReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(timelinePath.filename().wstring())),
+			ELogLevel::Info, 3.0f);
+	}
+}
+
+void AssetHotReloadManager::ProcessModifiedTerrainLayer(const std::filesystem::path& layerPath)
+{
+	if (layerPath.empty()) return;
+
+	// 레이어 편집기가 저장한 파일을 이미 불러온 런타임 에셋에 반영한다. 같은 에셋을 참조하는 모든 지형이 다음 프레임부터 새 설정을 본다.
+	auto& manager = Engine::ResourceManager::Get();
+	for (const auto& handle : manager.GetResourceHandles<Engine::TerrainLayerAsset>())
+	{
+		auto* layer = dynamic_cast<Engine::TerrainLayerAsset*>(manager.GetResource(handle));
+		if (layer == nullptr || !MatchesResourceFile(*layer, layerPath) || !IsSuccess(layer->Reload(layerPath)))
+			continue;
+
+		NotificationManager::Get().AddNotification(LOCAL("Notification.TerrainLayerHotReloaded"),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(layerPath.filename().wstring())),
+			ELogLevel::Info, 3.0f);
+	}
 }
 
 void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::path& locPath)

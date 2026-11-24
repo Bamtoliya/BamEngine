@@ -2,6 +2,10 @@
 #include "Macro.h"
 #include "PlatformPath.h"
 #include "ModuleManager.h"
+#include "ProjectDescriptor.h"
+#include "Functions.h"
+#include <algorithm>
+#include <cctype>
 #include "InputManager.h"
 #include "Logger.h"
 #if !BAM_SHIPPING
@@ -52,8 +56,14 @@ public:
         ClientStartupSplash splash;
         const bool splashVisible = splash.Show();
 
-        // 1. 프로젝트 루트를 가장 먼저 확정
+        // 1. 프로젝트 루트를 가장 먼저 확정하고 PlatformPath/CWD를 고정
         m_ProjectRoot = ResolveProjectRoot();
+        Engine::PlatformPath::SetProjectRoot(m_ProjectRoot);
+        std::error_code rootEc;
+        if (std::filesystem::exists(m_ProjectRoot / ".bam-client-package", rootEc) && !rootEc)
+            Engine::PlatformPath::SetEngineRoot(m_ProjectRoot);
+        rootEc.clear();
+        std::filesystem::current_path(m_ProjectRoot, rootEc);
 
         // 2. 로거를 프로젝트 루트 기준으로 안전하게 초기화
         const auto logPath = m_ProjectRoot / "Logs" / "Client.log";
@@ -61,6 +71,8 @@ public:
             return Engine::EResult::Fail;
 
         m_LoggerInitialized = true;
+        if (rootEc)
+            BAM_LOG(Warn, "Client", "Startup", "Could not set working directory to {}: {}", m_ProjectRoot.string(), rootEc.message());
         if (!splashVisible)
             BAM_LOG(Warn, "Client", "Startup", "The BamEngine startup screen could not be shown.");
 #if defined(_WIN32)
@@ -69,7 +81,10 @@ public:
 #endif
 
         if (const auto result = m_ClientRuntime.LoadProject(m_ProjectRoot); result != Engine::EResult::Success)
+        {
+            BAM_LOG(Error, "Client", "Startup", "LoadProject failed for '{}': {}", m_ProjectRoot.string(), Engine::ResultToString(result));
             return result;
+        }
 
         if (!SDL_Init(SDL_INIT_VIDEO))
         {
@@ -226,6 +241,55 @@ private:
     {
         const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
         std::error_code ec;
+
+        // 1. .bamproject에 선언된 프로젝트 전용 Runtime 모듈 우선 로드
+        auto projectFile = Engine::ProjectDescriptor::FindProjectFile(m_ProjectRoot);
+        if (projectFile.empty() && m_ProjectRoot != exeDir)
+            projectFile = Engine::ProjectDescriptor::FindProjectFile(exeDir);
+
+        Engine::ProjectDescriptor desc;
+        if (!projectFile.empty() && Engine::ProjectDescriptor::LoadFromFile(projectFile, desc) && !desc.Modules.empty())
+        {
+            for (const auto& mod : desc.ResolveModules(m_ProjectRoot))
+            {
+                std::string lowerType = mod.Type;
+                std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (!lowerType.empty() && lowerType != "runtime")
+                    continue;
+
+                const std::wstring modNameW = Engine::StrToWStr(mod.Name);
+                const std::filesystem::path dllName = modNameW + L".dll";
+                std::filesystem::path modulePath;
+                for (const auto& candidate : { exeDir / dllName, mod.BinaryPath, m_ProjectRoot / dllName })
+                {
+                    if (!candidate.empty() && std::filesystem::exists(candidate, ec) && !ec)
+                    {
+                        modulePath = candidate;
+                        break;
+                    }
+                    ec.clear();
+                }
+
+                if (modulePath.empty())
+                {
+                    BAM_LOG(Warn, "Client", "Module", "Project module '{}' DLL not found (optional); continuing.", mod.Name);
+                    continue;
+                }
+
+                const Engine::EResult result = Engine::ModuleManager::Get().LoadModule(modNameW, modulePath);
+                if (Engine::IsFailure(result))
+                {
+                    BAM_LOG(Error, "Client", "Module", "Failed to load project module '{}' from {}: {}",
+                        mod.Name, modulePath.string(), Engine::ResultToString(result));
+                    return result;
+                }
+                BAM_LOG(Info, "Client", "Module", "Loaded project module '{}' from {}", mod.Name, modulePath.string());
+            }
+            return Engine::EResult::Success;
+        }
+
+        // 2. 하위 호환: 기본 GameModule.dll 로드
         std::filesystem::path modulePath = exeDir / L"GameModule.dll";
         bool exists = std::filesystem::exists(modulePath, ec);
         if (ec)
@@ -266,11 +330,14 @@ private:
 private:
     std::filesystem::path ResolveProjectRoot() const
     {
-        const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        while (!exeDir.empty() && exeDir != exeDir.root_path() && exeDir.filename().empty())
+            exeDir = exeDir.parent_path();
+
         std::error_code ec;
-        // 1. 배포 환경: 실행 파일 옆에 패키지 마커(.bam-client-package) 또는 Config 폴더가 있는 경우
+        // 1. 배포 환경: 실행 파일 옆에 패키지 마커(.bam-client-package) 또는 Config/Project.json이 있는 경우
         if (std::filesystem::exists(exeDir / ".bam-client-package", ec) ||
-            std::filesystem::exists(exeDir / "Config", ec))
+            std::filesystem::exists(exeDir / "Config" / "Project.json", ec))
         {
             return exeDir;
         }
@@ -278,12 +345,13 @@ private:
         std::filesystem::path cur = exeDir;
         for (int i = 0; i < 7; ++i)
         {
+            ec.clear();
             if (std::filesystem::exists(cur / "Config" / "Project.json", ec) ||
                 std::filesystem::exists(cur / ".bam", ec))
             {
                 return cur;
             }
-            if (!cur.has_parent_path()) break;
+            if (!cur.has_parent_path() || cur.parent_path() == cur) break;
             cur = cur.parent_path();
         }
         return exeDir;

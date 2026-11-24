@@ -91,6 +91,12 @@ void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
 
     m_WatchedFileName = dllPath.filename().string();
     const std::filesystem::path watchDir = dllPath.parent_path();
+    std::error_code ec;
+    if (watchDir.empty() || !std::filesystem::is_directory(watchDir, ec))
+    {
+        EDITOR_LOG_INFO("[HotReload] Skipping watch (directory not created yet): {}", watchDir.string());
+        return;
+    }
 
     m_FileWatcher = new efsw::FileWatcher();
     m_FileListener = new ModuleHotReloadFileListener(this, m_WatchedFileName);
@@ -145,6 +151,7 @@ std::filesystem::path ModuleHotReloadManager::CreateShadowCopy(const std::filesy
         return {};
     }
 
+    std::filesystem::create_directories(m_ShadowDirectory, ec);
     m_ReloadIndex++;
     const std::wstring stem = srcDllPath.stem().wstring();
     const std::filesystem::path destDll = m_ShadowDirectory / (stem + L"_" + std::to_wstring(m_ReloadIndex) + L".dll");
@@ -244,6 +251,53 @@ EResult ModuleHotReloadManager::UnloadModule()
     return EResult::Success;
 }
 
+EResult ModuleHotReloadManager::UnloadAndStopWatching()
+{
+    StopWatching();
+    ClearPendingFiles();
+    const bool hadModule = (m_CurrentModule != nullptr || m_ModuleHandle != nullptr);
+    const EResult res = UnloadModule();
+    m_OriginalDllPath.clear();
+    m_WatchedFileName.clear();
+    m_State = EHotReloadState::Idle;
+    if (hadModule)
+        NotifyPostReloadCallbacks();
+    return res;
+}
+
+void ModuleHotReloadManager::Quiesce()
+{
+    StopWatching();
+    ClearPendingFiles();
+}
+
+void ModuleHotReloadManager::PrepareWatchForUnbuiltModule(const std::filesystem::path& dllPath)
+{
+    StopWatching();
+    ClearPendingFiles();
+    m_OriginalDllPath = dllPath;
+    m_State = EHotReloadState::Idle;
+    if (!m_OriginalDllPath.empty())
+        StartWatching(m_OriginalDllPath);
+}
+
+void ModuleHotReloadManager::SetShadowDirectory(const std::filesystem::path& shadowDir)
+{
+    if (shadowDir.empty())
+        return;
+    m_ShadowDirectory = shadowDir;
+    std::error_code ec;
+    std::filesystem::create_directories(m_ShadowDirectory, ec);
+}
+
+void ModuleHotReloadManager::NotifyPostReloadCallbacks()
+{
+    for (const auto& callback : m_PostReloadCallbacks)
+    {
+        if (callback) callback();
+    }
+}
+
 EResult ModuleHotReloadManager::ReloadModule()
 {
     if (m_OriginalDllPath.empty())
@@ -279,11 +333,7 @@ EResult ModuleHotReloadManager::ReloadModule()
         m_CurrentModule->OnPostHotReload();
 
     m_State = EHotReloadState::Idle;
-
-    for (const auto& callback : m_PostReloadCallbacks)
-    {
-        if (callback) callback();
-    }
+    NotifyPostReloadCallbacks();
 
     EDITOR_LOG_INFO("[HotReload] Module reloaded successfully (Version: {})", m_ReloadIndex);
     return EResult::Success;

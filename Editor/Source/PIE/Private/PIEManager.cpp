@@ -115,6 +115,7 @@ EResult PIEManager::SnapshotScene()
         return EResult::Fail;
     }
     m_Snapshot = std::move(snapshot);
+    m_TerrainSnapshot = Engine::TerrainDataFile::CaptureMemory(scene->GetRegistry());
     return EResult::Success;
 }
 EResult PIEManager::RestoreScene()
@@ -127,6 +128,9 @@ EResult PIEManager::RestoreScene()
         EDITOR_LOG_ERROR("[PIE] Scene restore failed: code={}, field={}", static_cast<int32>(restored.Code), restored.Field);
         return EResult::Fail;
     }
+    // 아카이브에는 지형 데이터 경로만 있으므로, PIE 전 메모리 사본을 먼저 되돌려 저장된 파일로 덮어쓰이지 않게 한다.
+    Engine::TerrainDataFile::RestoreMemory(candidate->GetRegistry(), std::move(m_TerrainSnapshot));
+    m_TerrainSnapshot = {};
     const auto result = SceneManager::Get().OpenScene(candidate);
     Safe_Release(candidate);
     if (result == EResult::Success)

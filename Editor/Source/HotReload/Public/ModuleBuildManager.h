@@ -29,16 +29,24 @@ public:
 
     // 수동 빌드 요청 (단축키 또는 버튼 클릭 시)
     bool RequestBuild();
+    void Quiesce();
+    void Reconfigure(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
+        const std::filesystem::path& sourceDir, const std::wstring& targetName,
+        const std::filesystem::path& cmakeSourceDir = {}, const std::filesystem::path& outputBinDir = {});
 
     // IHotReloader의 자동 갱신 메서드를 빌더 명칭에 맞게 연결
     [[nodiscard]] bool IsAutoCompileEnabled() const { return IsAutoReloadEnabled(); }
     void SetAutoCompileEnabled(bool enable) { SetAutoReload(enable); }
+    void SetTriggersGameModuleReload(bool enable) { m_TriggersGameModuleReload = enable; }
+    [[nodiscard]] bool TriggersGameModuleReload() const { return m_TriggersGameModuleReload; }
 
     [[nodiscard]] EModuleBuildStatus GetStatus() const { return m_Status; }
     [[nodiscard]] bool IsCompiling() const { return m_Status == EModuleBuildStatus::Compiling; }
+    [[nodiscard]] bool HasValidTarget() const;
     [[nodiscard]] const std::string& GetLastBuildOutput() const { return m_LastBuildOutput; }
     [[nodiscard]] bool IsLastBuildSuccessful() const { return m_LastBuildSuccess; }
     [[nodiscard]] const std::filesystem::path& GetSourceDirectory() const { return m_SourceDir; }
+    [[nodiscard]] const std::wstring& GetTargetName() const { return m_TargetName; }
 
     void SetBuildCompletedCallback(std::function<void(bool success, const std::string& output)> callback)
     {
@@ -56,7 +64,10 @@ private:
     std::filesystem::path m_ProjectRoot;
     std::filesystem::path m_BuildDir;
     std::filesystem::path m_SourceDir;
+    std::filesystem::path m_CMakeSourceDir;
+    std::filesystem::path m_OutputBinDir;
     std::wstring m_TargetName;
+    bool m_TriggersGameModuleReload = false;
 
     std::atomic<EModuleBuildStatus> m_Status = EModuleBuildStatus::Idle;
 

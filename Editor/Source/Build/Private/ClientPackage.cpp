@@ -10,6 +10,7 @@
 #include "InputManager.h"
 #include "PakArchive.h"
 #include "PlatformPath.h"
+#include "ProjectDescriptor.h"
 #include "ReflectionRegistry.h"
 #include "Renderer.h"
 #include "StartupResourceLoader.h"
@@ -22,10 +23,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cctype>
 #include <cwctype>
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 #include <vector>
 #include <stdexcept>
 #include <string_view>
@@ -40,11 +43,50 @@ namespace
     using Path = Engine::PlatformPath;
     using PackageJson = glz::generic_u64;
 
-    constexpr const wchar_t* RuntimeBinaries[] = {
-        L"Client.exe", L"Engine.dll", L"GameModule.dll", L"GameplayScore.dll", L"SDL3.dll", L"fmod.dll",
+    constexpr const wchar_t* CoreRuntimeBinaries[] = {
+        L"Client.exe", L"Engine.dll", L"GameplayScore.dll", L"SDL3.dll", L"fmod.dll",
         L"fmt.dll", L"lz4.dll"
     };
     constexpr auto PackageMarker = L".bam-client-package";
+
+    std::vector<std::pair<fs::path, fs::path>> CollectRuntimeBinarySources(
+        const fs::path& projectRoot, const fs::path& binDirectory, const fs::path& executableName,
+        fs::path& outProjectFileToStage)
+    {
+        std::vector<std::pair<fs::path, fs::path>> binaries;
+        for (const auto* name : CoreRuntimeBinaries)
+        {
+            const auto targetName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
+            binaries.emplace_back(binDirectory / name, targetName);
+        }
+
+        const fs::path projectFile = Engine::ProjectDescriptor::FindProjectFile(projectRoot);
+        Engine::ProjectDescriptor desc;
+        if (!projectFile.empty() && Engine::ProjectDescriptor::LoadFromFile(projectFile, desc) && !desc.Modules.empty())
+        {
+            outProjectFileToStage = projectFile;
+            std::error_code ec;
+            for (const auto& mod : desc.ResolveModules(projectRoot))
+            {
+                std::string lowerType = mod.Type;
+                std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (!lowerType.empty() && lowerType != "runtime")
+                    continue;
+
+                const fs::path dllName = Engine::Utf8ToPath(mod.Name).wstring() + L".dll";
+                const fs::path sourceDll = fs::is_regular_file(mod.BinaryPath, ec)
+                    ? mod.BinaryPath : (binDirectory / dllName);
+                binaries.emplace_back(sourceDll, dllName);
+            }
+        }
+        else
+        {
+            binaries.emplace_back(binDirectory / L"GameModule.dll", fs::path(L"GameModule.dll"));
+        }
+
+        return binaries;
+    }
 
     std::string DisplayPath(const fs::path& path)
     {
@@ -169,6 +211,33 @@ namespace
         return relative;
     }
 
+    struct MountedPackagePath
+    {
+        std::string MountName;
+        fs::path RelativePath;
+        fs::path StagedRelative;
+    };
+
+    std::optional<MountedPackagePath> TryResolveContentMountPath(const fs::path& file)
+    {
+        const auto uri = Path::ToVirtualUri(file);
+        if (!Path::IsMountUri(uri))
+            return std::nullopt;
+
+        const std::wstring_view view(uri);
+        constexpr std::wstring_view prefix = L"Mount://";
+        if (view.size() <= prefix.size())
+            return std::nullopt;
+        const auto afterScheme = view.substr(prefix.size());
+        const auto slash = afterScheme.find(L'/');
+        if (slash == std::wstring_view::npos || slash == 0 || slash + 1 >= afterScheme.size())
+            return std::nullopt;
+
+        const std::string mountName = Engine::WStrToStr(std::wstring(afterScheme.substr(0, slash)));
+        const fs::path relPath(afterScheme.substr(slash + 1));
+        return MountedPackagePath{ mountName, relPath, Engine::Utf8ToPath(mountName) / relPath };
+    }
+
     bool IsRuntimeResource(const fs::path& path)
     {
         const auto extension = Engine::ToLowerStr(DisplayPath(path.extension()));
@@ -229,13 +298,35 @@ namespace
                 UnclassifiedExamples.push_back(DisplayPath(relative));
         }
 
-        void Append(std::string_view label, std::string& output) const
+        void RecordExcluded(fs::path relative, std::uintmax_t size)
+        {
+            Excluded.Add(size);
+            if (ExcludedExamples.size() < ExampleLimit)
+                ExcludedExamples.push_back(DisplayPath(relative));
+        }
+
+        void Append(std::string_view label, std::string& output, bool dependencyBased = false) const
         {
             output += fmt::format("{}: {} files / {} bytes staged\n", label,
                 Identified.Count + Unclassified.Count, Identified.Bytes + Unclassified.Bytes);
             output += fmt::format("  Known dependencies: {} files / {} bytes\n", Identified.Count, Identified.Bytes);
             for (const auto& example : IdentifiedExamples)
                 output += "    " + example + '\n';
+            if (dependencyBased)
+            {
+                if (Unclassified.Count > 0)
+                {
+                    output += fmt::format("  Unclassified staged files: {} files / {} bytes\n",
+                        Unclassified.Count, Unclassified.Bytes);
+                    for (const auto& example : UnclassifiedExamples)
+                        output += "    " + example + '\n';
+                }
+                output += fmt::format("  Excluded unreferenced runtime resources: {} files / {} bytes\n",
+                    Excluded.Count, Excluded.Bytes);
+                for (const auto& example : ExcludedExamples)
+                    output += "    " + example + '\n';
+                return;
+            }
             output += fmt::format("  Dependencies not yet identified: {} files / {} bytes\n",
                 Unclassified.Count, Unclassified.Bytes);
             for (const auto& example : UnclassifiedExamples)
@@ -247,8 +338,10 @@ namespace
         std::map<fs::path, std::string_view, PathLess> Reasons;
         PackageFileStats Identified;
         PackageFileStats Unclassified;
+        PackageFileStats Excluded;
         std::vector<std::string> IdentifiedExamples;
         std::vector<std::string> UnclassifiedExamples;
+        std::vector<std::string> ExcludedExamples;
     };
 
     struct FileCopyTask
@@ -258,46 +351,9 @@ namespace
         fs::path Relative;
         std::uintmax_t Size = 0;
     };
-    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory,
-        bool includeProjectCatalogs = false)
+
+    void CopyFileTasksParallel(const std::vector<FileCopyTask>& tasks)
     {
-        fs::create_directories(targetRoot);
-        std::vector<FileCopyTask> tasks;
-        std::unordered_set<std::wstring> dirsToCreate;
-        dirsToCreate.insert(targetRoot.wstring());
-
-        for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
-        {
-            const auto& source = entry->path();
-            const DWORD attributes = GetFileAttributesW(source.c_str());
-            if (attributes == INVALID_FILE_ATTRIBUTES)
-                throw fs::filesystem_error("Could not read resource attributes", source,
-                    std::error_code(GetLastError(), std::system_category()));
-
-            if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
-            {
-                entry.disable_recursion_pending();
-                continue;
-            }
-
-            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
-            {
-                const auto relative = source.lexically_relative(sourceRoot);
-                const auto extension = Engine::ToLowerWStr(source.extension().wstring());
-                const bool projectCatalog = includeProjectCatalogs &&
-                    Engine::ToLowerWStr(relative.parent_path().generic_wstring()) == L"data/localization" &&
-                    (extension == L".csv" || extension == L".json");
-                if (!projectCatalog && !IsRuntimeResource(source)) continue;
-                if (projectCatalog) inventory.Expect(relative, "project localization");
-                const auto target = targetRoot / relative;
-                dirsToCreate.insert(target.parent_path().wstring());
-                tasks.push_back({ source, target, relative, entry->file_size() });
-            }
-        }
-
-        for (const auto& dir : dirsToCreate)
-            fs::create_directories(dir);
-
         if (tasks.empty())
             return;
 
@@ -355,6 +411,243 @@ namespace
             throw fs::filesystem_error("Could not copy package file", failedSource, failedTarget,
                 std::error_code(copyError.load(), std::system_category()));
         }
+    }
+
+    bool IsRegularNonReparseFile(const fs::path& path)
+    {
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+            (attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) == 0;
+    }
+
+    bool IsRegularNonReparseDirectory(const fs::path& path)
+    {
+        const DWORD attributes = GetFileAttributesW(path.c_str());
+        return attributes != INVALID_FILE_ATTRIBUTES &&
+            (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0 &&
+            (attributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0;
+    }
+
+    bool IsEditorOnlyEngineShader(const fs::path& fileName)
+    {
+        const auto lower = Engine::ToLowerStr(DisplayPath(fileName));
+        constexpr std::string_view editorShaders[] = {
+            "editorgridvs.cso", "editorgridps.cso", "infinitegridvs.cso", "infinitegridps.cso",
+            "infinitegrid2dps.cso", "materialpreviewps.cso", "viewport_channelps.cso"
+        };
+        return std::ranges::find(editorShaders, std::string_view(lower)) != std::end(editorShaders);
+    }
+
+    void CollectProjectLocalizationCatalogs(const fs::path& assetRoot, std::vector<fs::path>& outFiles,
+        PackageResourceInventory& projectInventory)
+    {
+        const auto locDir = assetRoot / "Data" / "Localization";
+        if (!IsRegularNonReparseDirectory(locDir))
+            return;
+
+        for (const auto& entry : fs::directory_iterator(locDir))
+        {
+            const auto& path = entry.path();
+            if (!IsRegularNonReparseFile(path))
+                continue;
+            const auto extension = Engine::ToLowerWStr(path.extension().wstring());
+            if (extension != L".csv" && extension != L".json")
+                continue;
+            const auto canonicalPath = fs::canonical(path);
+            if (!IsWithin(canonicalPath, assetRoot))
+                continue;
+            projectInventory.Expect(RelativeToInput(canonicalPath, assetRoot), "project localization");
+            outFiles.push_back(canonicalPath);
+        }
+    }
+
+    void CollectEssentialEngineResources(const fs::path& engineRoot, std::vector<fs::path>& outFiles,
+        PackageResourceInventory& engineInventory)
+    {
+        const auto addIfPresent = [&](const fs::path& relative, std::string_view reason)
+        {
+            const auto fullPath = engineRoot / relative;
+            if (!IsRegularNonReparseFile(fullPath))
+                return;
+            const auto canonicalPath = fs::canonical(fullPath);
+            if (!IsWithin(canonicalPath, engineRoot))
+                return;
+            engineInventory.Expect(RelativeToInput(canonicalPath, engineRoot), reason);
+            outFiles.push_back(canonicalPath);
+        };
+
+        const auto locDir = engineRoot / "Data" / "Localization";
+        if (IsRegularNonReparseDirectory(locDir))
+        {
+            for (const auto& entry : fs::directory_iterator(locDir))
+            {
+                const auto& path = entry.path();
+                if (!IsRegularNonReparseFile(path))
+                    continue;
+                if (Engine::ToLowerWStr(path.extension().wstring()) != L".json")
+                    continue;
+                const auto canonicalPath = fs::canonical(path);
+                if (!IsWithin(canonicalPath, engineRoot))
+                    continue;
+                engineInventory.Expect(RelativeToInput(canonicalPath, engineRoot), "engine localization");
+                outFiles.push_back(canonicalPath);
+            }
+        }
+
+        constexpr const wchar_t* essentialTextures[] = {
+            L"Texture/white1x1.png", L"Texture/white1x1.bamtex.json", L"Texture/black1x1.png",
+            L"Texture/blue1x1.png", L"Texture/green1x1.png", L"Texture/magenta1x1.png",
+            L"Texture/DefaultChecker.png", L"Texture/DefaultNormal.png", L"Texture/DefaultPBR.png",
+            L"Texture/MissingTexture.png", L"Texture/Particle_Ring.png", L"Texture/Particle_Smoke.png",
+            L"Texture/Particle_SoftCircle.png", L"Texture/Particle_Spark.png"
+        };
+        for (const auto* relative : essentialTextures)
+            addIfPresent(relative, "engine fallback resource");
+
+        constexpr const wchar_t* essentialMaterials[] = {
+            L"Material/DefaultMaterial.bammat.json", L"Material/MissingMaterial.bammat.json",
+            L"Material/UIMaterial.bammat.json", L"Material/SkinningMaterial.bammat.json",
+            L"Material/SkyMaterial.bammat.json", L"Material/SpriteMaterial.bammat.json",
+            L"Material/SpriteMaterial_AlphaBlend.bammat.json", L"Material/SpriteMaterialInstance.bammatinst.json",
+            L"Material/TransparentMaterial.bammat.json", L"Material/TerrainMaterial.bammat.json",
+            L"Material/ParticleMaterial_Additive.bammat.json", L"Material/ParticleMaterial_AlphaBlend.bammat.json",
+            L"Material/PostProcessDefaultMaterial.bammat.json", L"Material/GlassMaterial.bammat.json",
+            L"Material/WaterMaterial.bammat.json", L"Material/WaveMaterial.bammat.json"
+        };
+        for (const auto* relative : essentialMaterials)
+            addIfPresent(relative, "engine fallback resource");
+
+        const auto dxilDir = engineRoot / "Shader" / "bin" / "dxil";
+        if (IsRegularNonReparseDirectory(dxilDir))
+        {
+            for (const auto& entry : fs::directory_iterator(dxilDir))
+            {
+                const auto& path = entry.path();
+                if (!IsRegularNonReparseFile(path))
+                    continue;
+                if (Engine::ToLowerWStr(path.extension().wstring()) != L".cso")
+                    continue;
+                if (IsEditorOnlyEngineShader(path.filename()))
+                    continue;
+                const auto canonicalPath = fs::canonical(path);
+                if (!IsWithin(canonicalPath, engineRoot))
+                    continue;
+                engineInventory.Expect(RelativeToInput(canonicalPath, engineRoot), "engine runtime shader");
+                outFiles.push_back(canonicalPath);
+            }
+        }
+    }
+
+    void StageSelectedResources(const fs::path& sourceRoot, const fs::path& targetRoot,
+        const std::vector<fs::path>& selectedFiles, PackageResourceInventory& inventory,
+        std::set<fs::path, PackageResourceInventory::PathLess>& outStagedRelatives)
+    {
+        fs::create_directories(targetRoot);
+        std::vector<FileCopyTask> tasks;
+        std::unordered_set<std::wstring> dirsToCreate;
+        dirsToCreate.insert(targetRoot.wstring());
+
+        for (const auto& source : selectedFiles)
+        {
+            const auto relative = RelativeToInput(source, sourceRoot);
+            auto key = relative;
+            key.make_preferred();
+            if (!outStagedRelatives.insert(key).second)
+                continue;
+
+            if (!IsRegularNonReparseFile(source))
+                throw std::runtime_error("Selected package resource is missing or not a regular file: " + DisplayPath(source));
+
+            const auto target = targetRoot / relative;
+            dirsToCreate.insert(target.parent_path().wstring());
+            tasks.push_back({ source, target, relative, fs::file_size(source) });
+        }
+
+        for (const auto& dir : dirsToCreate)
+            fs::create_directories(dir);
+
+        CopyFileTasksParallel(tasks);
+
+        for (const auto& task : tasks)
+            inventory.Record(task.Relative, task.Size);
+    }
+
+    void CountExcludedRuntimeResources(const fs::path& sourceRoot,
+        const std::set<fs::path, PackageResourceInventory::PathLess>& stagedRelatives,
+        PackageResourceInventory& inventory, bool includeProjectCatalogs = false)
+    {
+        for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
+        {
+            const auto& source = entry->path();
+            const DWORD attributes = GetFileAttributesW(source.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES)
+                continue;
+
+            if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                entry.disable_recursion_pending();
+                continue;
+            }
+
+            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+                continue;
+
+            const auto relative = source.lexically_relative(sourceRoot);
+            const auto extension = Engine::ToLowerWStr(source.extension().wstring());
+            const bool projectCatalog = includeProjectCatalogs &&
+                Engine::ToLowerWStr(relative.parent_path().generic_wstring()) == L"data/localization" &&
+                (extension == L".csv" || extension == L".json");
+            if (!projectCatalog && !IsRuntimeResource(source))
+                continue;
+
+            auto key = relative;
+            key.make_preferred();
+            if (!stagedRelatives.contains(key))
+                inventory.RecordExcluded(relative, entry->file_size());
+        }
+    }
+
+    void CopyRuntimeResources(const fs::path& sourceRoot, const fs::path& targetRoot, PackageResourceInventory& inventory,
+        bool includeProjectCatalogs = false)
+    {
+        fs::create_directories(targetRoot);
+        std::vector<FileCopyTask> tasks;
+        std::unordered_set<std::wstring> dirsToCreate;
+        dirsToCreate.insert(targetRoot.wstring());
+
+        for (auto entry = fs::recursive_directory_iterator(sourceRoot); entry != fs::recursive_directory_iterator{}; ++entry)
+        {
+            const auto& source = entry->path();
+            const DWORD attributes = GetFileAttributesW(source.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES)
+                throw fs::filesystem_error("Could not read resource attributes", source,
+                    std::error_code(GetLastError(), std::system_category()));
+
+            if ((attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+            {
+                entry.disable_recursion_pending();
+                continue;
+            }
+
+            if ((attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+            {
+                const auto relative = source.lexically_relative(sourceRoot);
+                const auto extension = Engine::ToLowerWStr(source.extension().wstring());
+                const bool projectCatalog = includeProjectCatalogs &&
+                    Engine::ToLowerWStr(relative.parent_path().generic_wstring()) == L"data/localization" &&
+                    (extension == L".csv" || extension == L".json");
+                if (!projectCatalog && !IsRuntimeResource(source)) continue;
+                if (projectCatalog) inventory.Expect(relative, "project localization");
+                const auto target = targetRoot / relative;
+                dirsToCreate.insert(target.parent_path().wstring());
+                tasks.push_back({ source, target, relative, entry->file_size() });
+            }
+        }
+
+        for (const auto& dir : dirsToCreate)
+            fs::create_directories(dir);
+
+        CopyFileTasksParallel(tasks);
 
         for (const auto& task : tasks)
             inventory.Record(task.Relative, task.Size);
@@ -456,13 +749,23 @@ namespace
 
     fs::path ResolveAdditionalPackageFile(const std::string& uri, const fs::path& assetRoot, bool scene)
     {
-        if (!Path::IsProjectUri(uri))
-            throw std::runtime_error("Additional package entries must use Project://: " + uri);
+        const bool isProject = Path::IsProjectUri(uri);
+        const bool isMount = !scene && Path::IsMountUri(uri);
+        if (!isProject && !isMount)
+        {
+            throw std::runtime_error(scene
+                ? "Additional scene entries must use Project://: " + uri
+                : "Additional package entries must use Project:// or Mount://: " + uri);
+        }
 
         std::error_code error;
         const auto file = fs::canonical(Path::ResolveUri(uri), error);
-        if (error || !IsWithin(file, assetRoot) || !fs::is_regular_file(file, error))
-            throw std::runtime_error("Additional package file is missing or outside the project asset folder: " + uri);
+        if (error || !fs::is_regular_file(file, error))
+            throw std::runtime_error("Additional package file is missing or not a regular file: " + uri);
+        if (isProject && !IsWithin(file, assetRoot))
+            throw std::runtime_error("Additional package file is outside the project asset folder: " + uri);
+        if (isMount && !TryResolveContentMountPath(file))
+            throw std::runtime_error("Additional package file is outside registered content mounts: " + uri);
         if (scene && !Engine::ToLowerStr(DisplayPath(file.filename())).ends_with(".bamscene.json"))
             throw std::runtime_error("Additional scene must be a .bamscene.json file: " + uri);
         return file;
@@ -764,6 +1067,8 @@ namespace
                 exceptionPath = stagingRoot / "Engine" / "Resources" / Engine::Utf8ToPath(normalized.substr(9));
             else if (normalized.starts_with("Project://"))
                 exceptionPath = stagingRoot / "Assets" / Engine::Utf8ToPath(normalized.substr(10));
+            else if (normalized.starts_with("Mount://"))
+                exceptionPath = stagingRoot / "Mounts" / Engine::Utf8ToPath(normalized.substr(8));
 
             std::error_code ec;
             if (!exceptionPath.empty() && IsDirectFileException(exceptionPath) && fs::is_regular_file(exceptionPath, ec))
@@ -834,6 +1139,7 @@ namespace Editor
 
         const auto stagedEngine = staging / "Engine" / "Resources";
         const auto stagedAssets = staging / "Assets";
+        const auto stagedMounts = staging / "Mounts";
         const auto contentDirectory = staging / "Content";
         fs::create_directories(contentDirectory);
 
@@ -844,6 +1150,7 @@ namespace Editor
 
         CollectDirectoryIntoPak(stagedEngine, staging, "Engine://", engineWriter, directExceptions, packedLooseFiles);
         CollectDirectoryIntoPak(stagedAssets, staging, "Project://", projectWriter, directExceptions, packedLooseFiles);
+        CollectDirectoryIntoPak(stagedMounts, staging, "Mount://", projectWriter, directExceptions, packedLooseFiles);
 
         const auto enginePakPath = contentDirectory / "Engine.bampak";
         const auto projectPakPath = contentDirectory / "Project.bampak";
@@ -868,7 +1175,7 @@ namespace Editor
                     return;
                 if (normalized.starts_with("Engine://"))
                     requiredEngineUris.push_back(std::move(normalized));
-                else if (normalized.starts_with("Project://"))
+                else if (normalized.starts_with("Project://") || normalized.starts_with("Mount://"))
                     requiredProjectUris.push_back(std::move(normalized));
             };
 
@@ -908,6 +1215,7 @@ namespace Editor
             PruneEmptyDirectories(stagedEngine);
             PruneEmptyDirectories(staging / "Engine");
             PruneEmptyDirectories(stagedAssets);
+            PruneEmptyDirectories(stagedMounts);
         }
 
         std::sort(directExceptions.begin(), directExceptions.end());
@@ -979,6 +1287,14 @@ namespace Editor
             IsWithin(destination, engineRoot) || IsWithin(engineRoot, destination) ||
             IsWithin(destination, buildRoot) || IsWithin(buildRoot, destination))
             throw std::runtime_error("Export destination overlaps the project or package inputs: " + DisplayPath(destination));
+
+        for (const auto& mount : Path::GetContentMounts())
+        {
+            std::error_code mountEc;
+            const auto mountRoot = fs::canonical(mount.RootPath, mountEc);
+            if (!mountEc && (IsWithin(destination, mountRoot) || IsWithin(mountRoot, destination)))
+                throw std::runtime_error("Export destination overlaps an external content mount: " + DisplayPath(destination));
+        }
 
         return { destination, ReadPackageIdentity(destination) };
     }
@@ -1075,10 +1391,13 @@ namespace Editor
             emit(fmt::format("Explicit runtime asset: {}\n", uri));
         }
 
-        for (const auto* name : RuntimeBinaries)
+        const auto executableName = Engine::Utf8ToPath(request.ProgramName + ".exe");
+        fs::path projectFileToStage;
+        const auto runtimeBinarySources = CollectRuntimeBinarySources(projectRoot, binDirectory, executableName, projectFileToStage);
+        for (const auto& [sourcePath, targetName] : runtimeBinarySources)
         {
-            if (!fs::is_regular_file(binDirectory / name))
-                throw std::runtime_error("Required binary is missing: " + DisplayPath(binDirectory / name));
+            if (!fs::is_regular_file(sourcePath))
+                throw std::runtime_error("Required binary is missing: " + DisplayPath(sourcePath));
         }
 
         const auto startupSceneRelative = RelativeToInput(scene, assetRoot);
@@ -1091,10 +1410,21 @@ namespace Editor
 
         PackageResourceInventory projectInventory;
         PackageResourceInventory engineInventory;
+        PackageResourceInventory mountInventory;
+        const auto expectFile = [&](const fs::path& file, std::string_view reason)
+        {
+            if (IsWithin(file, assetRoot))
+                projectInventory.Expect(RelativeToInput(file, assetRoot), reason);
+            else if (IsWithin(file, engineRoot))
+                engineInventory.Expect(RelativeToInput(file, engineRoot), reason);
+            else if (const auto mounted = TryResolveContentMountPath(file))
+                mountInventory.Expect(mounted->StagedRelative, reason);
+        };
+
         projectInventory.Expect(startupSceneRelative, "startup scene");
         for (std::size_t i = 0; i < additionalFiles.size(); ++i)
         {
-            projectInventory.Expect(RelativeToInput(additionalFiles[i], assetRoot),
+            expectFile(additionalFiles[i],
                 i < request.AdditionalScenes.size() ? "additional scene" : "explicit runtime asset");
         }
         if (!packageProfile.RelativePath.empty())
@@ -1105,24 +1435,14 @@ namespace Editor
                 engineInventory.Expect(relative, "render pipeline dependency");
         }
         for (const auto& source : references)
-        {
-            const bool inProject = IsWithin(source, assetRoot);
-            auto& inventory = inProject ? projectInventory : engineInventory;
-            inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "startup scene dependency");
-        }
+            expectFile(source, "startup scene dependency");
         for (const auto& source : additionalSceneReferences)
-        {
-            const bool inProject = IsWithin(source, assetRoot);
-            auto& inventory = inProject ? projectInventory : engineInventory;
-            inventory.Expect(RelativeToInput(source, inProject ? assetRoot : engineRoot), "additional scene dependency");
-        }
+            expectFile(source, "additional scene dependency");
         references.insert(references.end(), additionalFiles.begin(), additionalFiles.end());
         references.insert(references.end(), additionalSceneReferences.begin(), additionalSceneReferences.end());
         for (const auto& file : startupPipeline.Files)
         {
-            const bool inProject = IsWithin(file, assetRoot);
-            auto& inventory = inProject ? projectInventory : engineInventory;
-            inventory.Expect(RelativeToInput(file, inProject ? assetRoot : engineRoot),
+            expectFile(file,
                 file == startupPipeline.ManifestPath ? "startup resource manifest" : "startup resource dependency");
         }
         const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -1133,48 +1453,135 @@ namespace Editor
 
         emit(fmt::format("Staging: {}\n", DisplayPath(staging)));
         emit("Staging runtime binaries...\n");
-        const auto executableName = Engine::Utf8ToPath(request.ProgramName + ".exe");
         PackageFileStats binaries;
-        for (const auto* name : RuntimeBinaries)
+        for (const auto& [sourcePath, targetName] : runtimeBinarySources)
         {
-            const auto fileName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
-            const auto target = staging / fileName;
-            CopyPackageFile(binDirectory / name, target);
+            const auto target = staging / targetName;
+            CopyPackageFile(sourcePath, target);
             binaries.Add(fs::file_size(target));
+        }
+        if (!projectFileToStage.empty() && fs::is_regular_file(projectFileToStage))
+        {
+            CopyPackageFile(projectFileToStage, staging / projectFileToStage.filename());
         }
 
         const auto stagedAssets = staging / "Assets";
         const auto stagedEngine = staging / "Engine" / "Resources";
-        emit("Staging project assets (parallel)...\n");
-        CopyRuntimeResources(assetRoot, stagedAssets, projectInventory, true);
-        emit("Staging engine resources (parallel)...\n");
-        CopyRuntimeResources(engineRoot, stagedEngine, engineInventory);
+        const auto stagedMounts = staging / "Mounts";
+        if (request.OnlyReferencedAssets)
+        {
+            std::vector<fs::path> selectedProjectFiles;
+            std::vector<fs::path> selectedEngineFiles;
+            std::vector<std::pair<fs::path, fs::path>> selectedMountFiles;
+
+            const auto routeFile = [&](const fs::path& file)
+            {
+                if (IsWithin(file, assetRoot))
+                    selectedProjectFiles.push_back(file);
+                else if (IsWithin(file, engineRoot))
+                    selectedEngineFiles.push_back(file);
+                else if (const auto mounted = TryResolveContentMountPath(file))
+                    selectedMountFiles.emplace_back(file, mounted->StagedRelative);
+            };
+
+            selectedProjectFiles.push_back(scene);
+            for (const auto& source : references)
+                routeFile(source);
+            for (const auto& source : startupPipeline.Files)
+                routeFile(source);
+            if (!packageProfile.RelativePath.empty())
+            {
+                const auto profileSource = (packageProfile.InEngine ? engineRoot : assetRoot) / packageProfile.RelativePath;
+                if (IsRegularNonReparseFile(profileSource))
+                    routeFile(fs::canonical(profileSource));
+                for (const auto& relative : profileResources)
+                    selectedEngineFiles.push_back(fs::canonical(engineRoot / relative));
+            }
+
+            CollectProjectLocalizationCatalogs(assetRoot, selectedProjectFiles, projectInventory);
+            CollectEssentialEngineResources(engineRoot, selectedEngineFiles, engineInventory);
+
+            std::set<fs::path, PackageResourceInventory::PathLess> stagedProjectRelatives;
+            std::set<fs::path, PackageResourceInventory::PathLess> stagedEngineRelatives;
+
+            emit("Staging referenced project assets (dependency-based, parallel)...\n");
+            StageSelectedResources(assetRoot, stagedAssets, selectedProjectFiles, projectInventory, stagedProjectRelatives);
+            emit("Staging required engine resources (dependency-based, parallel)...\n");
+            StageSelectedResources(engineRoot, stagedEngine, selectedEngineFiles, engineInventory, stagedEngineRelatives);
+
+            if (!selectedMountFiles.empty())
+            {
+                emit("Staging referenced external mount assets (dependency-based, parallel)...\n");
+                std::set<fs::path, PackageResourceInventory::PathLess> stagedMountRelatives;
+                std::vector<FileCopyTask> mountTasks;
+                std::unordered_set<std::wstring> mountDirs;
+                for (const auto& [source, stagedRelative] : selectedMountFiles)
+                {
+                    auto key = stagedRelative;
+                    key.make_preferred();
+                    if (!stagedMountRelatives.insert(key).second)
+                        continue;
+                    if (!IsRegularNonReparseFile(source))
+                        throw std::runtime_error("Selected external mount resource is missing or not a regular file: " + DisplayPath(source));
+                    const auto target = stagedMounts / stagedRelative;
+                    mountDirs.insert(target.parent_path().wstring());
+                    mountTasks.push_back({ source, target, stagedRelative, fs::file_size(source) });
+                }
+                for (const auto& dir : mountDirs)
+                    fs::create_directories(dir);
+                CopyFileTasksParallel(mountTasks);
+                for (const auto& task : mountTasks)
+                    mountInventory.Record(task.Relative, task.Size);
+            }
+
+            CountExcludedRuntimeResources(assetRoot, stagedProjectRelatives, projectInventory, true);
+            CountExcludedRuntimeResources(engineRoot, stagedEngineRelatives, engineInventory, false);
+        }
+        else
+        {
+            emit("Staging project assets (full scan, parallel)...\n");
+            CopyRuntimeResources(assetRoot, stagedAssets, projectInventory, true);
+            emit("Staging engine resources (full scan, parallel)...\n");
+            CopyRuntimeResources(engineRoot, stagedEngine, engineInventory);
+        }
+
+        const auto ensureStaged = [&](const fs::path& source)
+        {
+            if (IsWithin(source, assetRoot))
+            {
+                const auto relative = RelativeToInput(source, assetRoot);
+                const auto target = stagedAssets / relative;
+                if (!fs::is_regular_file(target))
+                {
+                    CopyPackageFile(source, target);
+                    projectInventory.Record(relative, fs::file_size(target));
+                }
+            }
+            else if (IsWithin(source, engineRoot))
+            {
+                const auto relative = RelativeToInput(source, engineRoot);
+                const auto target = stagedEngine / relative;
+                if (!fs::is_regular_file(target))
+                {
+                    CopyPackageFile(source, target);
+                    engineInventory.Record(relative, fs::file_size(target));
+                }
+            }
+            else if (const auto mounted = TryResolveContentMountPath(source))
+            {
+                const auto target = stagedMounts / mounted->StagedRelative;
+                if (!fs::is_regular_file(target))
+                {
+                    CopyPackageFile(source, target);
+                    mountInventory.Record(mounted->StagedRelative, fs::file_size(target));
+                }
+            }
+        };
 
         for (const auto& source : references)
-        {
-            const bool inProject = IsWithin(source, assetRoot);
-            const auto relative = RelativeToInput(source, inProject ? assetRoot : engineRoot);
-            const auto target = (inProject ? stagedAssets : stagedEngine) / relative;
-            if (!fs::is_regular_file(target))
-            {
-                CopyPackageFile(source, target);
-                auto& inventory = inProject ? projectInventory : engineInventory;
-                inventory.Record(relative, fs::file_size(target));
-            }
-        }
-
+            ensureStaged(source);
         for (const auto& source : startupPipeline.Files)
-        {
-            const bool inProject = IsWithin(source, assetRoot);
-            const auto relative = RelativeToInput(source, inProject ? assetRoot : engineRoot);
-            const auto target = (inProject ? stagedAssets : stagedEngine) / relative;
-            if (!fs::is_regular_file(target))
-            {
-                CopyPackageFile(source, target);
-                auto& inventory = inProject ? projectInventory : engineInventory;
-                inventory.Record(relative, fs::file_size(target));
-            }
-        }
+            ensureStaged(source);
 
         output += "Startup manifest: " + std::string(startupPipeline.InEngine ? "Engine://" : "Project://") +
             DisplayPath(startupPipeline.RelativePath) + '\n';
@@ -1271,6 +1678,16 @@ namespace Editor
             }
             for (const auto& uri : request.AdditionalScenes)
                 pakOptions.RequiredProjectUris.push_back(uri);
+            for (const auto& uri : request.AdditionalAssets)
+                pakOptions.RequiredProjectUris.push_back(uri);
+            for (const auto& source : references)
+            {
+                if (!IsWithin(source, assetRoot) && !IsWithin(source, engineRoot))
+                {
+                    if (const auto mounted = TryResolveContentMountPath(source))
+                        pakOptions.RequiredProjectUris.push_back("Mount://" + DisplayPath(mounted->StagedRelative));
+                }
+            }
 
             pakOptions.HasInputActionsConfig = fs::is_regular_file(stagedInput);
             pakOptions.PrunePackedLooseFiles = true;
@@ -1289,14 +1706,17 @@ namespace Editor
         }
 
         output += "\n[Package inventory]\n";
-        output += "Current collection policy: full runtime resource scan. Listed paths are examples.\n";
-        projectInventory.Append("Project assets", output);
-        engineInventory.Append("Engine resources", output);
-        output += fmt::format("Runtime binaries (fixed list): {} files / {} bytes\n", binaries.Count, binaries.Bytes);
-        for (const auto* name : RuntimeBinaries)
+        output += request.OnlyReferencedAssets
+            ? "Current collection policy: dependency-based selective packaging. Listed paths are examples.\n"
+            : "Current collection policy: full runtime resource scan. Listed paths are examples.\n";
+        projectInventory.Append("Project assets", output, request.OnlyReferencedAssets);
+        engineInventory.Append("Engine resources", output, request.OnlyReferencedAssets);
+        if (!Path::GetContentMounts().empty())
+            mountInventory.Append("External mount assets", output, request.OnlyReferencedAssets);
+        output += fmt::format("Runtime binaries: {} files / {} bytes\n", binaries.Count, binaries.Bytes);
+        for (const auto& [sourcePath, targetName] : runtimeBinarySources)
         {
-            const auto fileName = std::wstring_view(name) == L"Client.exe" ? executableName : fs::path(name);
-            output += "    " + DisplayPath(fileName) + '\n';
+            output += "    " + DisplayPath(targetName) + '\n';
         }
         emit(output);
         output.clear();

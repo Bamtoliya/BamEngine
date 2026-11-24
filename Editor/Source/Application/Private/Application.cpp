@@ -26,6 +26,7 @@
 #include "StartupResourceLoader.h"
 #include "HotReloadManager.h"
 #include "ModuleHotReloadManager.h"
+#include "ProjectSessionManager.h"
 #include "TerrainComponent.h"
 #include "NotificationManager.h"
 #include "CrashHandler.h"
@@ -141,19 +142,13 @@ EResult Application::Initialize(void* arg)
             });
     }
 
-    // 6. 게임 모듈 로드
-    wchar_t exePathBuf[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, exePathBuf, MAX_PATH);
-    const std::filesystem::path exeDir = std::filesystem::path(exePathBuf).parent_path();
-    const std::filesystem::path modulePath = exeDir / L"GameModule.dll";
-    if (std::filesystem::exists(modulePath))
-    {
-        HotReloadManager::Get().GetModuleReloader().LoadModule(modulePath);
-    }
-    else
-    {
-        BAM_LOG(Warn, "Editor", "HotReload", "GameModule.dll not found at: {}", modulePath.string());
-    }
+    // 6. 프로젝트 세션 동기화 및 게임 모듈 로드 (독립 프로젝트 Modules 또는 기본 GameModule.dll)
+    if (!ProjectSessionManager::IsCreated())
+        ProjectSessionManager::Create();
+    ProjectSessionManager::Get().SetWindow(m_Window);
+    HotReloadManager::Get().RebindForProject(
+        ProjectSessionManager::Get().GetActiveProjectRoot(),
+        ProjectSessionManager::Get().GetActiveDescriptor());
     ShortcutManager::Get().LoadFromFile();
 
     // 7. 마지막 작업 씬 복원
@@ -220,6 +215,9 @@ void Application::Free()
         PIEManager::Destroy();
         m_PIEManager = nullptr;
     }
+
+    if (ProjectSessionManager::IsCreated())
+        ProjectSessionManager::Destroy();
 
     HotReloadManager::Destroy();
 

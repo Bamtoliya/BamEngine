@@ -12,13 +12,89 @@
 #include "BaseViewportPanel.h"
 
 #include <SDL3/SDL_filesystem.h>
+#ifdef new
+#undef new
+#define BAM_RESTORE_DBG_NEW_SETTINGS
+#endif
+#include <glaze/glaze.hpp>
+#ifdef BAM_RESTORE_DBG_NEW_SETTINGS
+#undef BAM_RESTORE_DBG_NEW_SETTINGS
+#define new DBG_NEW
+#endif
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
 #include "PlatformPath.h"
 #include "InputActionSettings.h"
 #include "InputManager.h"
 #include "ReflectionRegistry.h"
 
+namespace Editor
+{
+    struct RecentProjectsDocument
+    {
+        std::uint32_t SchemaVersion = 1;
+        std::vector<RecentProjectEntry> Projects;
+    };
+}
+
 namespace
 {
+    std::filesystem::path ResolveRecentProjectsFilePath()
+    {
+        std::unique_ptr<char, decltype(&SDL_free)> directory(
+            SDL_GetPrefPath("BamEngine", "Editor"), &SDL_free);
+        if (directory && directory.get()[0] != '\0')
+        {
+            std::filesystem::path prefDir = std::filesystem::u8path(directory.get()).lexically_normal();
+            if (!prefDir.has_filename() && prefDir.has_parent_path())
+                prefDir = prefDir.parent_path();
+            const std::filesystem::path bamEngineDir = prefDir.has_parent_path() ? prefDir.parent_path() : prefDir;
+            return bamEngineDir / "RecentProjects.json";
+        }
+
+#ifdef _WIN32
+        char* appData = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&appData, &len, "APPDATA") == 0 && appData != nullptr)
+        {
+            const std::filesystem::path result = std::filesystem::u8path(appData) / "BamEngine" / "RecentProjects.json";
+            std::free(appData);
+            return result;
+        }
+#else
+        if (const char* home = std::getenv("HOME"))
+            return std::filesystem::u8path(home) / ".config" / "BamEngine" / "RecentProjects.json";
+#endif
+        return {};
+    }
+
+    std::string FormatUtcIso8601Now()
+    {
+        const auto now = std::chrono::system_clock::now();
+        const std::time_t rawTime = std::chrono::system_clock::to_time_t(now);
+        std::tm utcTm{};
+#ifdef _WIN32
+        ::gmtime_s(&utcTm, &rawTime);
+#else
+        ::gmtime_r(&rawTime, &utcTm);
+#endif
+        char buffer[32]{};
+        std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02dZ",
+            utcTm.tm_year + 1900, utcTm.tm_mon + 1, utcTm.tm_mday,
+            utcTm.tm_hour, utcTm.tm_min, utcTm.tm_sec);
+        return std::string(buffer);
+    }
+
+    std::string PathToUtf8(const std::filesystem::path& path)
+    {
+        const auto u8 = Engine::PlatformPath::Normalize(path).generic_u8string();
+        return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
+    }
+
     // 실패하면 기존 기본값을 유지하고 해당 파일의 덮어쓰기를 금지한다.
     template<typename T, typename Validator>
     bool ReadEditorSettingsFile(T& target, const std::filesystem::path& path,
@@ -177,7 +253,190 @@ bool EditorSettingsService::LoadForStartup(std::uint32_t defaultWidth, std::uint
                 value.HasValidWindowSize();
         }, "EditorWorkspace");
 
+    m_RecentProjectsPath = ResolveRecentProjectsFilePath();
+    LoadRecentProjects();
+
     return true;
+}
+
+bool EditorSettingsService::ReloadProjectSettings(const std::filesystem::path& projectRoot)
+{
+    if (projectRoot.empty())
+        return false;
+
+    m_ProjectRoot = Engine::PlatformPath::Normalize(projectRoot);
+
+    if (m_SettingsRegistry.FindType<EditorWorkspace>() == nullptr)
+    {
+        reflection::RegistrationResult registration;
+        if (!reflection_generated::Register_BamEditorSettings(m_SettingsRegistry, registration))
+        {
+            BAM_LOG(Error, "Editor", "Config",
+                "Editor settings registration failed during project reload: error={}, owner={}, member={}",
+                reflection::ToString(registration.Error), registration.Owner, registration.Member);
+            return false;
+        }
+    }
+
+    // Keep global EditorPreferences untouched; reset and reload only project-scoped settings.
+    m_ProjectSettings = {};
+    bool projectSettingsOk = true;
+    if (Engine::ReflectionRegistry::IsCreated())
+    {
+        projectSettingsOk = LoadProjectSettings(Engine::ReflectionRegistry::Get().GetRegistry());
+    }
+
+    Engine::InputActionSettings inputSettings;
+    if (LoadInputActionSettings(inputSettings) && Engine::InputManager::IsCreated())
+    {
+        Engine::InputManager::Get().SetInputActionSettings(inputSettings);
+    }
+
+    const std::int32_t prevWidth = m_EditorWorkspace.WindowWidth > 0 ? m_EditorWorkspace.WindowWidth : 1280;
+    const std::int32_t prevHeight = m_EditorWorkspace.WindowHeight > 0 ? m_EditorWorkspace.WindowHeight : 720;
+    const bool prevMaximized = m_EditorWorkspace.WindowMaximized;
+    const bool prevFullscreen = m_EditorWorkspace.WindowFullscreen;
+
+    m_EditorWorkspace = {};
+    m_EditorWorkspace.WindowWidth = prevWidth;
+    m_EditorWorkspace.WindowHeight = prevHeight;
+    m_EditorWorkspace.WindowMaximized = prevMaximized;
+    m_EditorWorkspace.WindowFullscreen = prevFullscreen;
+
+    std::error_code ec;
+    const std::filesystem::path configWorkspacePath = m_ProjectRoot / "Config" / "EditorWorkspace.json";
+    const std::filesystem::path legacyWorkspacePath = m_ProjectRoot / ".bam" / "User" / "Workspace.json";
+    m_EditorWorkspacePath = (!std::filesystem::exists(configWorkspacePath, ec) && std::filesystem::exists(legacyWorkspacePath, ec))
+        ? legacyWorkspacePath
+        : configWorkspacePath;
+
+    m_CanSaveEditorWorkspace = ReadEditorSettingsFile(
+        m_EditorWorkspace, m_EditorWorkspacePath, m_SettingsRegistry,
+        [](const EditorWorkspace& value)
+        {
+            return value.SchemaVersion == EditorWorkspace::CurrentSchemaVersion &&
+                value.HasValidWindowSize();
+        }, "EditorWorkspace");
+
+    return projectSettingsOk;
+}
+
+bool EditorSettingsService::LoadRecentProjects()
+{
+    if (m_RecentProjectsPath.empty())
+        m_RecentProjectsPath = ResolveRecentProjectsFilePath();
+    if (m_RecentProjectsPath.empty())
+        return false;
+
+    std::error_code ec;
+    if (!std::filesystem::exists(m_RecentProjectsPath, ec))
+    {
+        m_RecentProjects.clear();
+        return true;
+    }
+
+    std::ifstream file(m_RecentProjectsPath, std::ios::binary);
+    if (!file)
+        return false;
+
+    const std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    RecentProjectsDocument doc;
+    const auto parseError = glz::read<glz::opts{ .error_on_unknown_keys = false }>(doc, content);
+    if (parseError)
+    {
+        BAM_LOG(Warn, "Editor", "Config", "RecentProjects.json parse failed: {}", glz::format_error(parseError, content));
+        return false;
+    }
+
+    m_RecentProjects = std::move(doc.Projects);
+    if (m_RecentProjects.size() > MaxRecentProjects)
+        m_RecentProjects.resize(MaxRecentProjects);
+    return true;
+}
+
+bool EditorSettingsService::SaveRecentProjects() const
+{
+    const std::filesystem::path targetPath = m_RecentProjectsPath.empty() ? ResolveRecentProjectsFilePath() : m_RecentProjectsPath;
+    if (targetPath.empty())
+        return false;
+
+    std::error_code ec;
+    if (targetPath.has_parent_path())
+        std::filesystem::create_directories(targetPath.parent_path(), ec);
+
+    RecentProjectsDocument doc;
+    doc.SchemaVersion = 1;
+    doc.Projects = m_RecentProjects;
+
+    std::string buffer;
+    const auto writeError = glz::write<glz::opts{ .prettify = true }>(doc, buffer);
+    if (writeError)
+        return false;
+
+    std::ofstream file(targetPath, std::ios::binary | std::ios::trunc);
+    if (!file)
+        return false;
+    file.write(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    return file.good();
+}
+
+void EditorSettingsService::RecordRecentProject(const std::string& projectName, const std::filesystem::path& projectFileOrRoot)
+{
+    if (projectFileOrRoot.empty())
+        return;
+
+    if (m_RecentProjectsPath.empty())
+        m_RecentProjectsPath = ResolveRecentProjectsFilePath();
+
+    const std::filesystem::path normalized = Engine::PlatformPath::Normalize(projectFileOrRoot);
+    std::error_code ec;
+    const bool isDir = std::filesystem::is_directory(normalized, ec);
+    const std::filesystem::path projectRoot = isDir ? normalized : normalized.parent_path();
+
+    RecentProjectEntry entry;
+    entry.ProjectName = projectName.empty() ? projectRoot.filename().string() : projectName;
+    entry.ProjectFilePath = PathToUtf8(normalized);
+    entry.ProjectRoot = PathToUtf8(projectRoot);
+    entry.LastOpenedUtc = FormatUtcIso8601Now();
+
+    m_RecentProjects.erase(
+        std::remove_if(m_RecentProjects.begin(), m_RecentProjects.end(),
+            [&normalized, &projectRoot](const RecentProjectEntry& existing)
+            {
+                const std::filesystem::path existingFile = std::filesystem::u8path(existing.ProjectFilePath);
+                const std::filesystem::path existingRoot = std::filesystem::u8path(existing.ProjectRoot);
+                return Engine::PlatformPath::IsSamePath(existingFile, normalized) ||
+                    (!existingRoot.empty() && Engine::PlatformPath::IsSamePath(existingRoot, projectRoot));
+            }),
+        m_RecentProjects.end());
+
+    m_RecentProjects.insert(m_RecentProjects.begin(), std::move(entry));
+    if (m_RecentProjects.size() > MaxRecentProjects)
+        m_RecentProjects.resize(MaxRecentProjects);
+
+    SaveRecentProjects();
+}
+
+void EditorSettingsService::RemoveRecentProject(const std::filesystem::path& projectFileOrRoot)
+{
+    if (projectFileOrRoot.empty())
+        return;
+
+    const std::filesystem::path normalized = Engine::PlatformPath::Normalize(projectFileOrRoot);
+    const auto beforeSize = m_RecentProjects.size();
+    m_RecentProjects.erase(
+        std::remove_if(m_RecentProjects.begin(), m_RecentProjects.end(),
+            [&normalized](const RecentProjectEntry& existing)
+            {
+                const std::filesystem::path existingFile = std::filesystem::u8path(existing.ProjectFilePath);
+                const std::filesystem::path existingRoot = std::filesystem::u8path(existing.ProjectRoot);
+                return Engine::PlatformPath::IsSamePath(existingFile, normalized) ||
+                    Engine::PlatformPath::IsSamePath(existingRoot, normalized);
+            }),
+        m_RecentProjects.end());
+
+    if (m_RecentProjects.size() != beforeSize)
+        SaveRecentProjects();
 }
 
 bool EditorSettingsService::LoadProjectSettings(const reflection::Registry& registry)

@@ -4,6 +4,8 @@
 #include "AssetHotReloadManager.h"
 #include "ModuleBuildManager.h"
 #include "PlatformPath.h"
+#include "ProjectDescriptor.h"
+#include "Functions.h"
 #include "ImGuiManager.h"
 #include "PluginResourceEditor.h"
 
@@ -45,11 +47,14 @@ EResult HotReloadManager::Initialize(void*)
     if (!m_ShaderReloader) { Free(); return EResult::Fail; }
     m_AssetReloader = AssetHotReloadManager::Create();
     if (!m_AssetReloader) { Free(); return EResult::Fail; }
-    // 실제 프로젝트 루트와 CMake 빌드 디렉터리를 찾아 ModuleBuildManager 생성
-    const std::filesystem::path projectRoot = ResolveProjectRoot();
-    const std::filesystem::path buildDir = ResolveBuildDirectory(projectRoot);
+    // 실제 엔진/프로젝트 루트와 CMake 빌드 디렉터리를 찾아 ModuleBuildManager 생성
+    const std::filesystem::path engineRoot = Engine::PlatformPath::GetEngineRoot().empty()
+        ? ResolveProjectRoot() : Engine::PlatformPath::GetEngineRoot();
+    const std::filesystem::path projectRoot = engineRoot;
+    const std::filesystem::path buildDir = ResolveBuildDirectory(engineRoot);
     m_ModuleBuilder = ModuleBuildManager::Create(projectRoot, buildDir);
     if (!m_ModuleBuilder) { Free(); return EResult::Fail; }
+    m_ModuleBuilder->SetTriggersGameModuleReload(true);
     std::error_code ec;
     if (ImGuiManager::IsCreated() && std::filesystem::is_regular_file(buildDir / "CMakeCache.txt", ec))
     {
@@ -138,6 +143,104 @@ void HotReloadManager::Update()
     }
     for (const auto& [target, builder] : m_PluginBuilders)
         builder->Update();
+}
+
+void HotReloadManager::QuiesceProjectHotReload()
+{
+    if (m_ModuleBuilder)
+        m_ModuleBuilder->Quiesce();
+    if (m_ModuleReloader)
+        m_ModuleReloader->Quiesce();
+}
+
+void HotReloadManager::UnloadProjectModule()
+{
+    if (m_ModuleReloader)
+        m_ModuleReloader->UnloadAndStopWatching();
+}
+
+EResult HotReloadManager::RebindForProject(const std::filesystem::path& projectRoot,
+    const Engine::ProjectDescriptor& descriptor)
+{
+    const std::filesystem::path normProjectRoot = Engine::PlatformPath::Normalize(projectRoot);
+    const std::filesystem::path normEngineRoot = Engine::PlatformPath::Normalize(Engine::PlatformPath::GetEngineRoot());
+
+    if (m_ModuleReloader)
+    {
+        if (m_ModuleReloader->IsLoaded())
+            m_ModuleReloader->UnloadAndStopWatching();
+        if (!normProjectRoot.empty())
+            m_ModuleReloader->SetShadowDirectory(normProjectRoot / "Temp" / "HotReload");
+    }
+
+    std::error_code ec;
+    if (const auto runtimeMod = descriptor.ResolvePrimaryRuntimeModule(normProjectRoot))
+    {
+        const std::wstring targetW = Engine::StrToWStr(runtimeMod->Name);
+        if (m_ModuleBuilder)
+        {
+            m_ModuleBuilder->SetTriggersGameModuleReload(true);
+            m_ModuleBuilder->Reconfigure(normProjectRoot, runtimeMod->BuildDirectory, runtimeMod->SourceDirectory,
+                targetW, runtimeMod->CMakeSourceRoot, runtimeMod->BinaryPath.parent_path());
+        }
+
+        if (m_ModuleReloader)
+        {
+            if (std::filesystem::is_regular_file(runtimeMod->BinaryPath, ec))
+            {
+                const EResult loadRes = m_ModuleReloader->LoadModule(runtimeMod->BinaryPath);
+                if (loadRes == EResult::Success)
+                    m_ModuleReloader->NotifyPostReloadCallbacks();
+                return loadRes;
+            }
+            m_ModuleReloader->PrepareWatchForUnbuiltModule(runtimeMod->BinaryPath);
+            EDITOR_LOG_INFO("[HotReload] Project module '{}' DLL not built yet; watching: {}",
+                runtimeMod->Name, Engine::WStrToStr(runtimeMod->BinaryPath.wstring()));
+        }
+        return EResult::Success;
+    }
+
+    // Legacy single-root workspace fallback: projectRoot == engineRoot -> built-in GameModule
+    const bool isEngineRootProject = !normEngineRoot.empty() &&
+        (normProjectRoot.empty() || normProjectRoot == normEngineRoot);
+    if (isEngineRootProject)
+    {
+        const std::filesystem::path exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        const std::filesystem::path engineBuildDir = ResolveBuildDirectory(normEngineRoot);
+        if (m_ModuleBuilder)
+        {
+            m_ModuleBuilder->SetTriggersGameModuleReload(true);
+            m_ModuleBuilder->Reconfigure(normEngineRoot, engineBuildDir,
+                normEngineRoot / "Projects" / "GameModule" / "Source", L"GameModule", {}, exeDir);
+        }
+
+        const std::filesystem::path legacyDll = exeDir / L"GameModule.dll";
+        if (m_ModuleReloader)
+        {
+            if (std::filesystem::is_regular_file(legacyDll, ec))
+            {
+                const EResult loadRes = m_ModuleReloader->LoadModule(legacyDll);
+                if (loadRes == EResult::Success)
+                    m_ModuleReloader->NotifyPostReloadCallbacks();
+                return loadRes;
+            }
+            m_ModuleReloader->PrepareWatchForUnbuiltModule(legacyDll);
+            EDITOR_LOG_WARN("[HotReload] GameModule.dll not found at: {}", legacyDll.string());
+        }
+        return EResult::Success;
+    }
+
+    // Independent content-only project (no C++ modules declared)
+    if (m_ModuleBuilder)
+    {
+        m_ModuleBuilder->SetTriggersGameModuleReload(true);
+        m_ModuleBuilder->Reconfigure(normProjectRoot, {}, {}, L"", {}, {});
+    }
+    if (m_ModuleReloader)
+        m_ModuleReloader->UnloadAndStopWatching();
+
+    EDITOR_LOG_INFO("[HotReload] Active project \"{}\" declares no C++ runtime modules.", descriptor.ProjectName);
+    return EResult::Success;
 }
 
 #pragma region Getter

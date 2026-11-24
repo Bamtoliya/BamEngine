@@ -60,6 +60,14 @@ struct EditorViewportResolutionResult
     bool RenderTargetsValid = true;
 };
 
+struct RecentProjectEntry
+{
+    std::string ProjectName;
+    std::string ProjectFilePath;
+    std::string ProjectRoot;
+    std::string LastOpenedUtc;
+};
+
 class EditorSettingsService final : public Base
 {
     DECLARE_SINGLETON(EditorSettingsService)
@@ -73,10 +81,18 @@ public:
 #pragma endregion
 public:
     bool LoadForStartup(std::uint32_t defaultWidth, std::uint32_t defaultHeight);
+    bool ReloadProjectSettings(const std::filesystem::path& projectRoot);
     bool LoadProjectSettings(const reflection::Registry& registry);
     bool LoadInputActionSettings(Engine::InputActionSettings& out) const;
     EEditorSettingsSaveStatus SaveProjectSettings(const Engine::ProjectSettings& settings);
     EEditorSettingsSaveStatus SaveInputActionSettings(const Engine::InputActionSettings& settings) const;
+
+    bool LoadRecentProjects();
+    bool SaveRecentProjects() const;
+    void RecordRecentProject(const std::string& projectName, const std::filesystem::path& projectFileOrRoot);
+    void RemoveRecentProject(const std::filesystem::path& projectFileOrRoot);
+    [[nodiscard]] const std::vector<RecentProjectEntry>& GetRecentProjects() const { return m_RecentProjects; }
+    [[nodiscard]] const std::filesystem::path& GetRecentProjectsPath() const { return m_RecentProjectsPath; }
 
     void CaptureWindowState(const EditorApplicationState& state);
     void CaptureWorkspace(ImGuiManager& gui);
@@ -208,6 +224,10 @@ private:
 
     Engine::ProjectSettings m_ProjectSettings;
     std::filesystem::path m_ProjectRoot;
+
+    std::vector<RecentProjectEntry> m_RecentProjects;
+    std::filesystem::path m_RecentProjectsPath;
+    static constexpr std::size_t MaxRecentProjects = 16;
 
     ImGuiManager* m_ImGuiManager = nullptr;
     Engine::TimeManager* m_TimeManager = nullptr;

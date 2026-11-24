@@ -1,7 +1,10 @@
 ﻿#pragma once
 
 #include "HotReloaderInterface.h"
+#include <filesystem>
 #include <unordered_map>
+
+namespace Engine { struct ProjectDescriptor; }
 
 BEGIN(Editor)
 class ModuleHotReloadManager;
@@ -20,6 +23,9 @@ private:
 public:
     void Free() override;
     void Update();
+    void QuiesceProjectHotReload();
+    void UnloadProjectModule();
+    EResult RebindForProject(const std::filesystem::path& projectRoot, const Engine::ProjectDescriptor& descriptor);
 
 public:
     [[nodiscard]] ModuleHotReloadManager& GetModuleReloader();

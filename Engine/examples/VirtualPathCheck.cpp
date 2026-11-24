@@ -1,4 +1,5 @@
-#include "PlatformPath.h"
+﻿#include "PlatformPath.h"
+#include "ProjectDescriptor.h"
 #include "ModelSubfolderHelper.h"
 #include <iostream>
 #include <filesystem>
@@ -291,6 +292,203 @@ int main()
         std::ofstream(dummyFile) << "dummy";
         const auto uniqueFile1 = ModelSubfolderHelper::ResolveUniqueFilePath(dummyFile);
         EXPECT_EQ(uniqueFile1, PlatformPath::Normalize(testCollisionDir / "Item_1.bammodel"));
+    }
+
+    // 14. Phase 1: SetEngineRoot / GetEngineRoot vs GetProjectRoot 분리 검증
+    {
+        const fs::path customEngineRoot = PlatformPath::Normalize(tempRoot / "CustomEngineRoot");
+        const fs::path customProjectRoot1 = PlatformPath::Normalize(tempRoot / "CustomProjectRoot1");
+        const fs::path customProjectRoot2 = PlatformPath::Normalize(tempRoot / "CustomProjectRoot2");
+        fs::create_directories(customEngineRoot, ec);
+        fs::create_directories(customProjectRoot1, ec);
+        fs::create_directories(customProjectRoot2, ec);
+
+        // (1) EngineRoot 미설정 시 ProjectRoot로 폴백
+        PlatformPath::SetEngineRoot({});
+        PlatformPath::SetProjectRoot(customProjectRoot1);
+        EXPECT_EQ(PlatformPath::GetProjectRoot(), customProjectRoot1);
+        EXPECT_EQ(PlatformPath::GetEngineRoot(), customProjectRoot1);
+
+        // (2) EngineRoot 명시 설정 후 독립성 검증
+        PlatformPath::SetEngineRoot(customEngineRoot);
+        EXPECT_EQ(PlatformPath::GetEngineRoot(), customEngineRoot);
+        EXPECT_EQ(PlatformPath::GetProjectRoot(), customProjectRoot1);
+
+        // (3) ProjectRoot 전환 시 EngineRoot는 유지됨을 검증
+        PlatformPath::SetProjectRoot(customProjectRoot2);
+        EXPECT_EQ(PlatformPath::GetEngineRoot(), customEngineRoot);
+        EXPECT_EQ(PlatformPath::GetProjectRoot(), customProjectRoot2);
+    }
+
+    // 15. Phase 1: 외부 콘텐츠 폴더 가상 마운트 (Mount://<Alias>/...) 등록, 해석, 보호 검증
+    {
+        PlatformPath::ClearContentMounts();
+        EXPECT_TRUE(PlatformPath::GetContentMounts().empty());
+        EXPECT_FALSE(PlatformPath::HasContentMount("SharedKit"));
+
+        const fs::path externalKitRoot = PlatformPath::Normalize(tempRoot / "ExternalKit");
+        const fs::path externalAudioRoot = PlatformPath::Normalize(tempRoot / "ExternalAudio");
+        fs::create_directories(externalKitRoot / "Props", ec);
+        fs::create_directories(externalAudioRoot / "SFX", ec);
+
+        const fs::path mockBarrelFile = externalKitRoot / "Props/Barrel.bammodel";
+        const fs::path mockAudioFile = externalAudioRoot / "SFX/Explosion.wav";
+        std::ofstream(mockBarrelFile) << "model data";
+        std::ofstream(mockAudioFile) << "audio data";
+
+        // (1) 마운트 등록 및 조회 검증
+        ContentMountDesc kitMount;
+        kitMount.Name = "SharedKit";
+        kitMount.RootPath = externalKitRoot;
+        kitMount.ReadOnly = true;
+        kitMount.ShowUnderAssets = false;
+        EXPECT_TRUE(PlatformPath::RegisterContentMount(kitMount));
+        EXPECT_TRUE(PlatformPath::HasContentMount("SharedKit"));
+        EXPECT_TRUE(PlatformPath::HasContentMount("sharedkit"));
+
+        ContentMountDesc audioMount;
+        audioMount.Name = "AudioLib";
+        audioMount.RootPath = externalAudioRoot;
+        audioMount.ReadOnly = false;
+        audioMount.ShowUnderAssets = true;
+        EXPECT_TRUE(PlatformPath::RegisterContentMount(audioMount));
+        EXPECT_TRUE(PlatformPath::HasContentMount("AudioLib"));
+
+        const auto mounts = PlatformPath::GetContentMounts();
+        EXPECT_TRUE(mounts.size() == 2);
+
+        // (2) 가상 URI 판별 검증
+        EXPECT_TRUE(PlatformPath::IsMountUri(L"Mount://SharedKit/Props/Barrel.bammodel"));
+        EXPECT_TRUE(PlatformPath::IsMountUri("mount://audiolib/sfx/explosion.wav"));
+        EXPECT_TRUE(PlatformPath::IsVirtualUri(L"Mount://SharedKit/Props/Barrel.bammodel"));
+        EXPECT_TRUE(PlatformPath::IsVirtualUri("mount://audiolib/sfx/explosion.wav"));
+        EXPECT_FALSE(PlatformPath::IsMountUri(L"Project://Props/Barrel.bammodel"));
+        EXPECT_FALSE(PlatformPath::IsMountUri(L"Engine://Shader/test.hlsl"));
+
+        // (3) URI 해석 (ResolveMountUri & ResolveUri) 검증
+        const auto resolvedKit = PlatformPath::ResolveMountUri(L"Mount://SharedKit/Props/Barrel.bammodel");
+        EXPECT_EQ(resolvedKit, mockBarrelFile);
+        const auto resolvedKitGeneric = PlatformPath::ResolveUri(L"Mount://SharedKit/Props/Barrel.bammodel");
+        EXPECT_EQ(resolvedKitGeneric, mockBarrelFile);
+
+        const auto resolvedAudio = PlatformPath::ResolveMountUri("mount://AudioLib/SFX/Explosion.wav");
+        EXPECT_EQ(resolvedAudio, mockAudioFile);
+
+        // (4) 디렉터리 탈출 방어 검증
+        const auto escapedMount = PlatformPath::ResolveMountUri(L"Mount://SharedKit/../../Windows/System32/cmd.exe");
+        EXPECT_EQ(escapedMount, externalKitRoot);
+
+        // (5) ToVirtualUri 역변환 검증
+        const auto virtualKit = PlatformPath::ToVirtualUri(mockBarrelFile);
+        EXPECT_EQ(virtualKit, L"Mount://SharedKit/Props/Barrel.bammodel");
+        const auto virtualAudio = PlatformPath::ToVirtualUri(mockAudioFile);
+        EXPECT_EQ(virtualAudio, L"Mount://AudioLib/SFX/Explosion.wav");
+
+        // (6) 읽기 전용 가드 (IsReadOnlyTarget & IsMountReadOnly) 검증
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Mount://SharedKit/Props/Barrel.bammodel"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget("Mount://SharedKit/Props/Barrel.bammodel"));
+        EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(mockBarrelFile));
+        EXPECT_TRUE(PlatformPath::IsMountReadOnly("SharedKit"));
+        EXPECT_TRUE(PlatformPath::IsMountReadOnly(L"Mount://SharedKit/Props/Barrel.bammodel"));
+
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Mount://AudioLib/SFX/Explosion.wav"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget("Mount://AudioLib/SFX/Explosion.wav"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(mockAudioFile));
+        EXPECT_FALSE(PlatformPath::IsMountReadOnly("AudioLib"));
+        EXPECT_FALSE(PlatformPath::IsMountReadOnly(L"Mount://AudioLib/SFX/Explosion.wav"));
+
+        // (7) 마운트 해제 검증
+        PlatformPath::UnregisterContentMount("SharedKit");
+        EXPECT_FALSE(PlatformPath::HasContentMount("SharedKit"));
+        EXPECT_TRUE(PlatformPath::ResolveMountUri(L"Mount://SharedKit/Props/Barrel.bammodel").empty());
+        PlatformPath::ClearContentMounts();
+        EXPECT_TRUE(PlatformPath::GetContentMounts().empty());
+    }
+
+    // 16. Phase 1: ProjectDescriptor .bamproject 저장/로드 및 ScaffoldNewProject 격리 생성 검증
+    {
+        const fs::path testProjDir = PlatformPath::Normalize(tempRoot / "TestGameProj");
+        fs::create_directories(testProjDir, ec);
+        const fs::path testProjFile = testProjDir / "TestGame.bamproject";
+
+        // (1) .bamproject 직렬화 및 역직렬화 라운드트립 검증
+        ProjectDescriptor origDesc;
+        origDesc.ProjectName = "TestGame";
+        origDesc.AssetDirectory = "CustomAssets";
+        origDesc.ContentMounts.push_back({ "SharedLibrary", "D:/SharedLib", true, false });
+        origDesc.ContentMounts.push_back({ "LocalAudio", "../Audio", false, true });
+        origDesc.Modules.push_back({ "TestGameModule", "Runtime" });
+
+        std::string saveErr;
+        EXPECT_TRUE(ProjectDescriptor::SaveToFile(testProjFile, origDesc, &saveErr));
+        EXPECT_TRUE(fs::exists(testProjFile));
+
+        ProjectDescriptor loadedDesc;
+        std::string loadErr;
+        EXPECT_TRUE(ProjectDescriptor::LoadFromFile(testProjFile, loadedDesc, &loadErr));
+        EXPECT_TRUE(loadedDesc.SchemaVersion == ProjectDescriptor::CurrentSchemaVersion);
+        EXPECT_EQ(loadedDesc.ProjectName, "TestGame");
+        EXPECT_EQ(loadedDesc.AssetDirectory, "CustomAssets");
+        EXPECT_TRUE(loadedDesc.ContentMounts.size() == 2);
+        EXPECT_EQ(loadedDesc.ContentMounts[0].Name, "SharedLibrary");
+        EXPECT_EQ(loadedDesc.ContentMounts[0].Path, "D:/SharedLib");
+        EXPECT_TRUE(loadedDesc.ContentMounts[0].ReadOnly);
+        EXPECT_FALSE(loadedDesc.ContentMounts[0].ShowUnderAssets);
+        EXPECT_EQ(loadedDesc.ContentMounts[1].Name, "LocalAudio");
+        EXPECT_EQ(loadedDesc.ContentMounts[1].Path, "../Audio");
+        EXPECT_FALSE(loadedDesc.ContentMounts[1].ReadOnly);
+        EXPECT_TRUE(loadedDesc.ContentMounts[1].ShowUnderAssets);
+        EXPECT_TRUE(loadedDesc.Modules.size() == 1);
+        EXPECT_EQ(loadedDesc.Modules[0].Name, "TestGameModule");
+        EXPECT_EQ(loadedDesc.Modules[0].Type, "Runtime");
+
+        // (1-b) Phase 5: 프로젝트별 독립 C++ 모듈 소스/빌드/바이너리 경로 해석 검증
+        const auto resolvedModules = loadedDesc.ResolveModules(testProjDir);
+        EXPECT_TRUE(resolvedModules.size() == 1);
+        EXPECT_EQ(resolvedModules[0].Name, "TestGameModule");
+        EXPECT_EQ(resolvedModules[0].Type, "Runtime");
+        EXPECT_EQ(resolvedModules[0].CMakeSourceRoot, PlatformPath::Normalize(testProjDir / "Source"));
+        EXPECT_EQ(resolvedModules[0].SourceDirectory, PlatformPath::Normalize(testProjDir / "Source" / "TestGameModule"));
+        EXPECT_EQ(resolvedModules[0].BinaryPath, PlatformPath::Normalize(testProjDir / "Binaries" / "Win64" / "TestGameModule.dll"));
+
+        const auto primaryRuntime = loadedDesc.ResolvePrimaryRuntimeModule(testProjDir);
+        EXPECT_TRUE(primaryRuntime.has_value());
+        EXPECT_EQ(primaryRuntime->Name, "TestGameModule");
+
+        ProjectDescriptor emptyModDesc;
+        EXPECT_FALSE(emptyModDesc.ResolvePrimaryRuntimeModule(testProjDir).has_value());
+
+        // (2) 상대 경로 해석 도우미 검증
+        const auto resolvedAssetRoot = loadedDesc.ResolveAssetRoot(testProjDir);
+        EXPECT_EQ(resolvedAssetRoot, PlatformPath::Normalize(testProjDir / "CustomAssets"));
+
+        const auto resolvedMounts = loadedDesc.ResolveContentMounts(testProjDir);
+        EXPECT_TRUE(resolvedMounts.size() == 2);
+        EXPECT_EQ(resolvedMounts[0].Name, "SharedLibrary");
+        EXPECT_EQ(resolvedMounts[0].RootPath, PlatformPath::Normalize("D:/SharedLib"));
+        EXPECT_TRUE(resolvedMounts[0].ReadOnly);
+        EXPECT_EQ(resolvedMounts[1].Name, "LocalAudio");
+        EXPECT_EQ(resolvedMounts[1].RootPath, PlatformPath::Normalize(testProjDir / "../Audio"));
+        EXPECT_FALSE(resolvedMounts[1].ReadOnly);
+
+        // (3) FindProjectFile 검증
+        EXPECT_EQ(ProjectDescriptor::FindProjectFile(testProjDir), PlatformPath::Normalize(testProjFile));
+        EXPECT_EQ(ProjectDescriptor::FindProjectFile(testProjFile), PlatformPath::Normalize(testProjFile));
+
+        // (4) ScaffoldNewProject 격리 디렉터리 및 필수 파일 생성 검증
+        const fs::path scaffoldDir = PlatformPath::Normalize(tempRoot / "ScaffoldedGame");
+        fs::path createdProjFile;
+        std::string scaffoldErr;
+        EXPECT_TRUE(ProjectDescriptor::ScaffoldNewProject(scaffoldDir, "ScaffoldedGame", &createdProjFile, &scaffoldErr, EProjectTemplate::Empty));
+        EXPECT_TRUE(fs::exists(createdProjFile));
+        EXPECT_EQ(createdProjFile, PlatformPath::Normalize(scaffoldDir / "ScaffoldedGame.bamproject"));
+        EXPECT_TRUE(fs::exists(scaffoldDir / "Config" / "Project.json"));
+        EXPECT_TRUE(fs::exists(scaffoldDir / "Assets" / "Scenes" / "Main.bamscene.json"));
+
+        ProjectDescriptor scaffoldDesc;
+        EXPECT_TRUE(ProjectDescriptor::LoadFromFile(createdProjFile, scaffoldDesc, &loadErr));
+        EXPECT_EQ(scaffoldDesc.ProjectName, "ScaffoldedGame");
+        EXPECT_EQ(scaffoldDesc.AssetDirectory, "Assets");
     }
 
     std::cout << "[VirtualPathCheck] All virtual path and URI tests passed successfully!" << std::endl;

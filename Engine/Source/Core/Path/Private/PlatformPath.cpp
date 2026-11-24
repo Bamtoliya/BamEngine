@@ -12,10 +12,14 @@
 
 namespace Engine
 {
+    static std::filesystem::path s_EngineRoot;
     static std::filesystem::path s_ProjectRoot;
     static std::filesystem::path s_EngineResourceRoot;
     static std::filesystem::path s_EditorResourceRoot;
     static std::filesystem::path s_ProjectAssetRoot;
+    static bool s_EngineResourceRootExplicit = false;
+    static bool s_EditorResourceRootExplicit = false;
+    static bool s_ProjectAssetRootExplicit = false;
 
     struct PluginMountEntry
     {
@@ -24,6 +28,9 @@ namespace Engine
     };
     static std::mutex s_PluginMountMutex;
     static std::vector<PluginMountEntry> s_PluginMounts;
+
+    static std::mutex s_ContentMountMutex;
+    static std::vector<ContentMountDesc> s_ContentMounts;
 
     namespace
     {
@@ -47,6 +54,25 @@ namespace Engine
                     return false;
             }
             return true;
+        }
+
+        bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs)
+        {
+            return lhs.size() == rhs.size() && StartsWithIgnoreCase(lhs, rhs);
+        }
+
+        bool IsValidContentMountName(std::string_view name)
+        {
+            if (name.empty() || name == "." || name == "..") return false;
+            bool hasNonSpace = false;
+            for (char ch : name)
+            {
+                if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|')
+                    return false;
+                if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n')
+                    hasNonSpace = true;
+            }
+            return hasNonSpace;
         }
 
         bool IsSubpathOf(const std::filesystem::path& path, const std::filesystem::path& base)
@@ -90,9 +116,28 @@ namespace Engine
         }
     }
 
+    void PlatformPath::SetEngineRoot(const std::filesystem::path& root)
+    {
+        s_EngineRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
+        if (!s_EngineResourceRootExplicit) s_EngineResourceRoot.clear();
+        if (!s_EditorResourceRootExplicit) s_EditorResourceRoot.clear();
+    }
+
+    const std::filesystem::path& PlatformPath::GetEngineRoot()
+    {
+        if (!s_EngineRoot.empty()) return s_EngineRoot;
+        return GetProjectRoot();
+    }
+
     void PlatformPath::SetProjectRoot(const std::filesystem::path& root)
     {
-        s_ProjectRoot = Normalize(root);
+        s_ProjectRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
+        if (!s_ProjectAssetRootExplicit) s_ProjectAssetRoot.clear();
+        if (s_EngineRoot.empty())
+        {
+            if (!s_EngineResourceRootExplicit) s_EngineResourceRoot.clear();
+            if (!s_EditorResourceRootExplicit) s_EditorResourceRoot.clear();
+        }
     }
 
     const std::filesystem::path& PlatformPath::GetProjectRoot()
@@ -237,14 +282,16 @@ namespace Engine
 
     void PlatformPath::SetEngineResourceRoot(const std::filesystem::path& root)
     {
-        s_EngineResourceRoot = Normalize(root);
+        s_EngineResourceRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
+        s_EngineResourceRootExplicit = !root.empty();
     }
 
     const std::filesystem::path& PlatformPath::GetEngineResourceRoot()
     {
         if (s_EngineResourceRoot.empty())
         {
-            auto candidate = Normalize(GetProjectRoot() / "Engine/Resources");
+            const auto& engineRoot = GetEngineRoot();
+            auto candidate = Normalize(engineRoot / "Engine/Resources");
             std::error_code ec;
             if (std::filesystem::is_directory(candidate, ec))
             {
@@ -252,7 +299,7 @@ namespace Engine
             }
             else
             {
-                s_EngineResourceRoot = Normalize(GetProjectRoot() / "Resources");
+                s_EngineResourceRoot = Normalize(engineRoot / "Resources");
             }
         }
         return s_EngineResourceRoot;
@@ -260,22 +307,29 @@ namespace Engine
 
     void PlatformPath::SetEditorResourceRoot(const std::filesystem::path& root)
     {
-        s_EditorResourceRoot = Normalize(root);
+        s_EditorResourceRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
+        s_EditorResourceRootExplicit = !root.empty();
     }
 
     const std::filesystem::path& PlatformPath::GetEditorResourceRoot()
     {
         if (s_EditorResourceRoot.empty())
         {
-            auto candidate = Normalize(GetProjectRoot() / "Editor/Resources");
+            const auto& engineRoot = GetEngineRoot();
+            auto candidate = Normalize(engineRoot / "Editor/Resources");
             std::error_code ec;
             if (std::filesystem::is_directory(candidate, ec))
             {
                 s_EditorResourceRoot = candidate;
             }
+            else if (!s_EngineResourceRootExplicit && !s_ProjectAssetRootExplicit &&
+                     std::filesystem::is_directory(engineRoot / "Resources", ec))
+            {
+                s_EditorResourceRoot = Normalize(engineRoot / "Resources");
+            }
             else
             {
-                s_EditorResourceRoot = Normalize(GetProjectRoot() / "Resources");
+                s_EditorResourceRoot = candidate;
             }
         }
         return s_EditorResourceRoot;
@@ -283,7 +337,8 @@ namespace Engine
 
     void PlatformPath::SetProjectAssetRoot(const std::filesystem::path& root)
     {
-        s_ProjectAssetRoot = Normalize(root);
+        s_ProjectAssetRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
+        s_ProjectAssetRootExplicit = !root.empty();
     }
 
     const std::filesystem::path& PlatformPath::GetProjectAssetRoot()
@@ -344,16 +399,26 @@ namespace Engine
         return StartsWithIgnoreCase(uri, "plugin://");
     }
 
+    bool PlatformPath::IsMountUri(std::wstring_view uri)
+    {
+        return StartsWithIgnoreCase(uri, L"mount://");
+    }
+
+    bool PlatformPath::IsMountUri(std::string_view uri)
+    {
+        return StartsWithIgnoreCase(uri, "mount://");
+    }
+
     bool PlatformPath::IsVirtualUri(std::wstring_view uri)
     {
         return IsEngineUri(std::wstring(uri)) || IsEditorUri(std::wstring(uri)) ||
-            IsProjectUri(std::wstring(uri)) || IsPluginUri(uri);
+            IsProjectUri(std::wstring(uri)) || IsPluginUri(uri) || IsMountUri(uri);
     }
 
     bool PlatformPath::IsVirtualUri(std::string_view uri)
     {
         return IsEngineUri(std::string(uri)) || IsEditorUri(std::string(uri)) ||
-            IsProjectUri(std::string(uri)) || IsPluginUri(uri);
+            IsProjectUri(std::string(uri)) || IsPluginUri(uri) || IsMountUri(uri);
     }
 
     void PlatformPath::RegisterPluginMount(std::string_view pluginId, const std::filesystem::path& contentRoot)
@@ -466,6 +531,148 @@ namespace Engine
         return ResolvePluginUri(std::wstring_view(wstr));
     }
 
+    bool PlatformPath::RegisterContentMount(const ContentMountDesc& desc)
+    {
+        if (!IsValidContentMountName(desc.Name) || desc.RootPath.empty())
+            return false;
+
+        ContentMountDesc normalized = desc;
+        normalized.RootPath = Normalize(desc.RootPath);
+
+        const std::lock_guard lock(s_ContentMountMutex);
+        for (auto& mount : s_ContentMounts)
+        {
+            if (EqualsIgnoreCase(mount.Name, normalized.Name))
+            {
+                mount.RootPath = std::move(normalized.RootPath);
+                mount.ReadOnly = normalized.ReadOnly;
+                mount.ShowUnderAssets = normalized.ShowUnderAssets;
+                return true;
+            }
+        }
+        s_ContentMounts.push_back(std::move(normalized));
+        return true;
+    }
+
+    void PlatformPath::UnregisterContentMount(std::string_view name)
+    {
+        if (name.empty()) return;
+        const std::lock_guard lock(s_ContentMountMutex);
+        std::erase_if(s_ContentMounts, [name](const ContentMountDesc& m) {
+            return EqualsIgnoreCase(m.Name, name);
+        });
+    }
+
+    void PlatformPath::ClearContentMounts()
+    {
+        const std::lock_guard lock(s_ContentMountMutex);
+        s_ContentMounts.clear();
+    }
+
+    std::vector<ContentMountDesc> PlatformPath::GetContentMounts()
+    {
+        const std::lock_guard lock(s_ContentMountMutex);
+        return s_ContentMounts;
+    }
+
+    bool PlatformPath::HasContentMount(std::string_view name)
+    {
+        if (name.empty()) return false;
+        const std::lock_guard lock(s_ContentMountMutex);
+        for (const auto& mount : s_ContentMounts)
+        {
+            if (EqualsIgnoreCase(mount.Name, name))
+                return true;
+        }
+        return false;
+    }
+
+    std::filesystem::path PlatformPath::ResolveMountUri(std::wstring_view uri)
+    {
+        if (!IsMountUri(uri)) return {};
+        std::wstring_view rest = uri.substr(8);
+        if (rest.empty()) return {};
+
+        const size_t slashPos = rest.find_first_of(L"/\\");
+        std::wstring_view aliasW;
+        std::wstring_view subPathW;
+        if (slashPos == std::wstring_view::npos)
+        {
+            aliasW = rest;
+        }
+        else
+        {
+            aliasW = rest.substr(0, slashPos);
+            subPathW = rest.substr(slashPos + 1);
+        }
+
+        if (aliasW.empty()) return {};
+
+        const std::string alias = WStrToStr(std::wstring(aliasW));
+        std::filesystem::path mountRoot;
+        {
+            const std::lock_guard lock(s_ContentMountMutex);
+            for (const auto& mount : s_ContentMounts)
+            {
+                if (EqualsIgnoreCase(mount.Name, alias))
+                {
+                    mountRoot = mount.RootPath;
+                    break;
+                }
+            }
+        }
+
+        if (mountRoot.empty()) return {};
+
+        if (subPathW.empty()) return mountRoot;
+
+        const auto subPath = std::filesystem::path(subPathW);
+        const auto resolved = Normalize(mountRoot / subPath);
+
+        if (!IsSubpathOf(resolved, mountRoot) && !IsSamePath(resolved, mountRoot))
+        {
+            return mountRoot;
+        }
+        return resolved;
+    }
+
+    std::filesystem::path PlatformPath::ResolveMountUri(std::string_view uri)
+    {
+        if (!IsMountUri(uri)) return {};
+        const std::wstring wstr = Utf8ToPath(uri).wstring();
+        return ResolveMountUri(std::wstring_view(wstr));
+    }
+
+    bool PlatformPath::IsMountReadOnly(std::string_view nameOrUri)
+    {
+        if (nameOrUri.empty()) return false;
+
+        std::string_view alias = nameOrUri;
+        if (IsMountUri(nameOrUri))
+        {
+            std::string_view rest = nameOrUri.substr(8);
+            const size_t slashPos = rest.find_first_of("/\\");
+            alias = (slashPos == std::string_view::npos) ? rest : rest.substr(0, slashPos);
+        }
+
+        if (alias.empty()) return false;
+
+        const std::lock_guard lock(s_ContentMountMutex);
+        for (const auto& mount : s_ContentMounts)
+        {
+            if (EqualsIgnoreCase(mount.Name, alias))
+                return mount.ReadOnly;
+        }
+        return false;
+    }
+
+    bool PlatformPath::IsMountReadOnly(std::wstring_view nameOrUri)
+    {
+        if (nameOrUri.empty()) return false;
+        const std::string utf8 = WStrToStr(std::wstring(nameOrUri));
+        return IsMountReadOnly(std::string_view(utf8));
+    }
+
     std::filesystem::path PlatformPath::ResolveUri(const std::wstring& pathOrUri)
     {
         if (pathOrUri.empty()) return {};
@@ -507,6 +714,11 @@ namespace Engine
         if (IsPluginUri(pathOrUri))
         {
             return ResolvePluginUri(pathOrUri);
+        }
+
+        if (IsMountUri(pathOrUri))
+        {
+            return ResolveMountUri(pathOrUri);
         }
 
         const std::filesystem::path fsPath(pathOrUri);
@@ -560,8 +772,7 @@ namespace Engine
 
     std::filesystem::path PlatformPath::ResolveUri(const std::string& pathOrUri)
     {
-        std::wstring wstr(pathOrUri.begin(), pathOrUri.end());
-        return ResolveUri(wstr);
+        return ResolveUri(Utf8ToPath(pathOrUri).wstring());
     }
 
     std::wstring PlatformPath::ToVirtualUri(const std::filesystem::path& physicalPath)
@@ -573,16 +784,48 @@ namespace Engine
 
         const auto norm = physicalPath.is_absolute() ? Normalize(physicalPath) : ResolveUri(physicalPath);
 
-        // Check registered plugin content mounts first
+        const auto engineRoot = GetEngineResourceRoot();
+        const auto editorRoot = GetEditorResourceRoot();
+        const auto projectRoot = GetProjectAssetRoot();
+
+        // Priority order: Project:// -> Engine:// -> Editor:// -> Plugin:// -> Mount://<Name>/
+        if (projectRoot != engineRoot && (IsSubpathOf(norm, projectRoot) || IsSamePath(norm, projectRoot)))
+        {
+            auto rel = norm.lexically_relative(projectRoot);
+            const auto relW = rel.generic_wstring();
+            if (relW.empty() || relW == L".")
+                return L"Project://";
+            return L"Project://" + relW;
+        }
+
+        if (engineRoot != projectRoot && (IsSubpathOf(norm, engineRoot) || IsSamePath(norm, engineRoot)))
+        {
+            auto rel = norm.lexically_relative(engineRoot);
+            const auto relW = rel.generic_wstring();
+            if (relW.empty() || relW == L".")
+                return L"Engine://";
+            return L"Engine://" + relW;
+        }
+
+        if (editorRoot != projectRoot && (IsSubpathOf(norm, editorRoot) || IsSamePath(norm, editorRoot)))
+        {
+            auto rel = norm.lexically_relative(editorRoot);
+            const auto relW = rel.generic_wstring();
+            if (relW.empty() || relW == L".")
+                return L"Editor://";
+            return L"Editor://" + relW;
+        }
+
+        // Check registered plugin content mounts
         {
             const std::lock_guard lock(s_PluginMountMutex);
             for (const auto& mount : s_PluginMounts)
             {
                 if (mount.ContentRoot.empty()) continue;
-                if (IsSubpathOf(norm, mount.ContentRoot) || norm == mount.ContentRoot)
+                if (IsSubpathOf(norm, mount.ContentRoot) || IsSamePath(norm, mount.ContentRoot))
                 {
                     auto rel = norm.lexically_relative(mount.ContentRoot);
-                    std::wstring idW(mount.Id.begin(), mount.Id.end());
+                    const std::wstring idW = Utf8ToPath(mount.Id).wstring();
                     const auto relW = rel.generic_wstring();
                     if (relW.empty() || relW == L".")
                         return L"Plugin://" + idW;
@@ -591,26 +834,33 @@ namespace Engine
             }
         }
 
-        const auto engineRoot = GetEngineResourceRoot();
-        const auto editorRoot = GetEditorResourceRoot();
-        const auto projectRoot = GetProjectAssetRoot();
-
-        if (engineRoot != projectRoot && (IsSubpathOf(norm, engineRoot) || norm == engineRoot))
+        // Check registered external content mounts (prefer longest matching RootPath)
         {
-            auto rel = norm.lexically_relative(engineRoot);
-            return L"Engine://" + rel.generic_wstring();
-        }
-
-        if (editorRoot != projectRoot && (IsSubpathOf(norm, editorRoot) || norm == editorRoot))
-        {
-            auto rel = norm.lexically_relative(editorRoot);
-            return L"Editor://" + rel.generic_wstring();
-        }
-
-        if (projectRoot != engineRoot && (IsSubpathOf(norm, projectRoot) || norm == projectRoot))
-        {
-            auto rel = norm.lexically_relative(projectRoot);
-            return L"Project://" + rel.generic_wstring();
+            const std::lock_guard lock(s_ContentMountMutex);
+            const ContentMountDesc* bestMount = nullptr;
+            size_t bestRootLen = 0;
+            for (const auto& mount : s_ContentMounts)
+            {
+                if (mount.RootPath.empty()) continue;
+                if (IsSubpathOf(norm, mount.RootPath) || IsSamePath(norm, mount.RootPath))
+                {
+                    const size_t rootLen = mount.RootPath.generic_wstring().size();
+                    if (!bestMount || rootLen > bestRootLen)
+                    {
+                        bestMount = &mount;
+                        bestRootLen = rootLen;
+                    }
+                }
+            }
+            if (bestMount)
+            {
+                auto rel = norm.lexically_relative(bestMount->RootPath);
+                const std::wstring nameW = Utf8ToPath(bestMount->Name).wstring();
+                const auto relW = rel.generic_wstring();
+                if (relW.empty() || relW == L".")
+                    return L"Mount://" + nameW;
+                return L"Mount://" + nameW + L"/" + relW;
+            }
         }
 
         return ToProjectRelative(norm).generic_wstring();
@@ -623,8 +873,7 @@ namespace Engine
 
     bool PlatformPath::IsReadOnlyTarget(const std::string& pathOrUri)
     {
-        std::wstring wstr(pathOrUri.begin(), pathOrUri.end());
-        return IsReadOnlyTarget(wstr);
+        return IsReadOnlyTarget(Utf8ToPath(pathOrUri).wstring());
     }
 
     bool PlatformPath::IsReadOnlyTarget(const std::wstring& pathOrUri)
@@ -633,11 +882,13 @@ namespace Engine
             return true;
         if (IsProjectUri(pathOrUri))
             return false;
+        if (IsMountUri(pathOrUri))
+            return IsMountReadOnly(pathOrUri);
         if (IsPluginUri(pathOrUri))
         {
             const auto resolved = ResolvePluginUri(pathOrUri);
             const auto engineRoot = GetEngineResourceRoot();
-            if (IsSubpathOf(resolved, engineRoot) || resolved == engineRoot)
+            if (IsSubpathOf(resolved, engineRoot) || IsSamePath(resolved, engineRoot))
                 return true;
             return false;
         }
@@ -647,7 +898,7 @@ namespace Engine
         const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
 
-        if (IsSubpathOf(resolved, engineRoot) || resolved == engineRoot)
+        if (IsSubpathOf(resolved, engineRoot) || IsSamePath(resolved, engineRoot))
         {
             if (engineRoot != projectRoot)
                 return true;
@@ -655,9 +906,36 @@ namespace Engine
             return IsBuiltInRelativeResourcePath(rel.generic_wstring());
         }
 
-        if (IsSubpathOf(resolved, editorRoot) || resolved == editorRoot)
+        if (IsSubpathOf(resolved, editorRoot) || IsSamePath(resolved, editorRoot))
         {
             return true;
+        }
+
+        if (projectRoot != engineRoot && (IsSubpathOf(resolved, projectRoot) || IsSamePath(resolved, projectRoot)))
+        {
+            return false;
+        }
+
+        // Check registered external content mounts for physical paths (prefer longest matching RootPath)
+        {
+            const std::lock_guard lock(s_ContentMountMutex);
+            const ContentMountDesc* bestMount = nullptr;
+            size_t bestRootLen = 0;
+            for (const auto& mount : s_ContentMounts)
+            {
+                if (mount.RootPath.empty()) continue;
+                if (IsSubpathOf(resolved, mount.RootPath) || IsSamePath(resolved, mount.RootPath))
+                {
+                    const size_t rootLen = mount.RootPath.generic_wstring().size();
+                    if (!bestMount || rootLen > bestRootLen)
+                    {
+                        bestMount = &mount;
+                        bestRootLen = rootLen;
+                    }
+                }
+            }
+            if (bestMount)
+                return bestMount->ReadOnly;
         }
 
         return false;

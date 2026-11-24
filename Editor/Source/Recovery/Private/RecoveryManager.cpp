@@ -4,6 +4,7 @@
 #include "SceneDocument.h"
 #include "SceneManager.h"
 #include "Scene.h"
+#include "TerrainDataFile.h"
 #include <archive/JsonArchive.h>
 #include "Logger.h"
 #include "CrashHandler.h"
@@ -161,6 +162,10 @@ bool RecoveryManager::WriteSnapshotInternal(const std::filesystem::path& targetP
 	std::error_code ec;
 	std::filesystem::create_directories(targetPath.parent_path(), ec);
 
+	// 저장하지 않은 지형 편집을 스냅샷 옆 임시 파일로 남긴다. 원본 .bamterrain은 사용자가 씬을 저장할 때만 바뀐다.
+	// 사본을 쓰지 못해도 씬 스냅샷은 남긴다(그 지형은 복구 시 마지막 저장 파일을 쓴다).
+	const Engine::TerrainDataFile::ScopedRecoveryCopies terrainCopies(scene->GetRegistry(), targetPath.parent_path(),
+		targetPath.filename().stem().stem().wstring()); // AutoSave_<씬>.bamscene.json → AutoSave_<씬>
 	archive::JsonArchive writer;
 	if (!scene->WriteArchive(writer))
 		return false;

@@ -3,6 +3,7 @@
 #include "ModuleHotReloadManager.h"
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
+#include "PlatformPath.h"
 #include "Functions.h"
 #include <mutex>
 #include <windows.h>
@@ -130,21 +131,52 @@ private:
 EResult ModuleBuildManager::Initialize(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
     const std::filesystem::path& sourceDir, const std::wstring& targetName)
 {
+    m_TriggersGameModuleReload = (targetName == L"GameModule");
+    Reconfigure(projectRoot, buildDir, sourceDir, targetName);
+    return EResult::Success;
+}
+
+void ModuleBuildManager::Quiesce()
+{
+    StopWatching();
+    ClearPendingFiles();
+    if (m_BuildThread.joinable()) m_BuildThread.join();
+    m_HasNewResult.store(false);
+    m_Status.store(EModuleBuildStatus::Idle);
+}
+
+void ModuleBuildManager::Reconfigure(const std::filesystem::path& projectRoot, const std::filesystem::path& buildDir,
+    const std::filesystem::path& sourceDir, const std::wstring& targetName,
+    const std::filesystem::path& cmakeSourceDir, const std::filesystem::path& outputBinDir)
+{
+    Quiesce();
+
     m_ProjectRoot = projectRoot;
     m_BuildDir = buildDir;
-    m_SourceDir = m_ProjectRoot / sourceDir;
+    m_SourceDir = sourceDir.empty() ? std::filesystem::path{} : (sourceDir.is_absolute() ? sourceDir : (m_ProjectRoot / sourceDir));
+    m_CMakeSourceDir = cmakeSourceDir;
+    m_OutputBinDir = outputBinDir;
     m_TargetName = targetName;
 
-    if (std::filesystem::exists(m_SourceDir))
+    std::error_code ec;
+    if (!m_SourceDir.empty() && std::filesystem::exists(m_SourceDir, ec))
     {
         StartWatching(m_SourceDir);
     }
-    else
+    else if (!m_SourceDir.empty())
     {
         EDITOR_LOG_WARN("[ModuleBuildManager] Source directory not found: {}", WStrToStr(m_SourceDir.wstring()));
     }
+}
 
-    return EResult::Success;
+bool ModuleBuildManager::HasValidTarget() const
+{
+    if (m_TargetName.empty() || m_BuildDir.empty())
+        return false;
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(m_BuildDir / "CMakeCache.txt", ec))
+        return true;
+    return !m_CMakeSourceDir.empty() && std::filesystem::is_regular_file(m_CMakeSourceDir / "CMakeLists.txt", ec);
 }
 
 void ModuleBuildManager::Free()
@@ -217,7 +249,7 @@ void ModuleBuildManager::Update()
                 LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildSucceeded", WStrToStr(m_TargetName)), ELogLevel::Info, 3.0f);
 
             // 빌드가 완전히 끝났으므로 안전하게 모듈 핫로드 실행
-            if (m_TargetName == L"GameModule")
+            if (m_TriggersGameModuleReload)
                 HotReloadManager::Get().GetModuleReloader().ReloadModule();
         }
         else
@@ -240,6 +272,11 @@ void ModuleBuildManager::Update()
 bool ModuleBuildManager::RequestBuild()
 {
     if (m_Status == EModuleBuildStatus::Compiling) return false;
+    if (!HasValidTarget())
+    {
+        EDITOR_LOG_WARN("[ModuleBuildManager] No buildable C++ module target configured for the active project.");
+        return false;
+    }
 
     if (m_BuildThread.joinable()) m_BuildThread.join();
 
@@ -263,18 +300,102 @@ void ModuleBuildManager::ExecuteBuildAsync()
 #else
     constexpr auto config = L"Release";
 #endif
-    if (m_TargetName == L"GameModule")
+    if (m_TriggersGameModuleReload && !m_TargetName.empty())
     {
         // 디버거가 잡고 있는 PDB 때문에 링크가 막히지 않도록 이전 PDB 이름을 바꾼다.
-        // 다중 구성(Visual Studio)은 bin/<Config>, 단일 구성(Ninja)은 bin에 출력한다.
+        // 독립 프로젝트 모듈(Binaries/Win64), 다중 구성(Visual Studio bin/<Config>), 단일 구성(Ninja bin)을 모두 확인한다.
         std::error_code ec;
-        for (const auto& binDir : { m_BuildDir / "bin" / config, m_BuildDir / "bin" })
+        const std::wstring pdbName = m_TargetName + L".pdb";
+        for (const auto& binDir : { m_OutputBinDir, m_BuildDir / "bin" / config, m_BuildDir / "bin" })
         {
-            const auto pdbPath = binDir / "GameModule.pdb";
+            if (binDir.empty()) continue;
+            const auto pdbPath = binDir / pdbName;
             if (!std::filesystem::exists(pdbPath, ec)) continue;
-            const auto oldPdb = binDir / (L"GameModule_old_" + std::to_wstring(GetTickCount64()) + L".pdb");
+            const auto oldPdb = binDir / (m_TargetName + L"_old_" + std::to_wstring(GetTickCount64()) + L".pdb");
             std::filesystem::rename(pdbPath, oldPdb, ec);
             break;
+        }
+    }
+
+    const auto runCommand = [&](const std::wstring& appPath, const std::wstring& commandLine,
+        std::string& outCaptured, DWORD& outExitCode) -> bool
+    {
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+        sa.bInheritHandle = TRUE;
+
+        HANDLE hReadPipe = nullptr, hWritePipe = nullptr;
+        if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0))
+        {
+            outCaptured += "Failed to create the cmake output pipe.\n";
+            outExitCode = 1;
+            return false;
+        }
+        SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
+
+        STARTUPINFOW si{};
+        si.cb = sizeof(STARTUPINFOW);
+        si.hStdOutput = hWritePipe;
+        si.hStdError = hWritePipe;
+        si.dwFlags |= STARTF_USESTDHANDLES;
+
+        PROCESS_INFORMATION pi{};
+        std::vector<wchar_t> cmdBuffer(commandLine.begin(), commandLine.end());
+        cmdBuffer.push_back(L'\0');
+
+        const BOOL launched = CreateProcessW(appPath.c_str(), cmdBuffer.data(), nullptr, nullptr, TRUE,
+            CREATE_NO_WINDOW, nullptr, m_ProjectRoot.c_str(), &si, &pi);
+        CloseHandle(hWritePipe);
+
+        if (launched)
+        {
+            char buffer[512];
+            DWORD bytesRead = 0;
+            while (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) && bytesRead > 0)
+            {
+                buffer[bytesRead] = '\0';
+                outCaptured += buffer;
+            }
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            outExitCode = 1;
+            GetExitCodeProcess(pi.hProcess, &outExitCode);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+        else
+        {
+            outCaptured += "Failed to launch cmake process.\n";
+            outExitCode = 1;
+        }
+
+        CloseHandle(hReadPipe);
+        return launched != FALSE;
+    };
+
+    std::string capturedOutput;
+    std::error_code cacheEc;
+    if (!std::filesystem::is_regular_file(m_BuildDir / "CMakeCache.txt", cacheEc) &&
+        !m_CMakeSourceDir.empty() && std::filesystem::is_regular_file(m_CMakeSourceDir / "CMakeLists.txt", cacheEc))
+    {
+        std::wstring cfgCmd = L"\"";
+        cfgCmd += BAM_EDITOR_CMAKE_COMMAND;
+        cfgCmd += L"\" -S \"" + m_CMakeSourceDir.wstring() + L"\" -B \"" + m_BuildDir.wstring() + L"\"";
+        const auto engineRoot = Engine::PlatformPath::GetEngineRoot();
+        if (!engineRoot.empty())
+            cfgCmd += L" -DBAMENGINE_ROOT=\"" + engineRoot.wstring() + L"\"";
+        const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
+        if (std::filesystem::is_regular_file(exeDir.parent_path().parent_path() / "CMakeCache.txt", cacheEc))
+            cfgCmd += L" -DBAMENGINE_BUILD_DIR=\"" + exeDir.parent_path().parent_path().wstring() + L"\"";
+        else if (std::filesystem::is_regular_file(exeDir.parent_path() / "CMakeCache.txt", cacheEc))
+            cfgCmd += L" -DBAMENGINE_BUILD_DIR=\"" + exeDir.parent_path().wstring() + L"\"";
+
+        DWORD cfgExitCode = 1;
+        if (!runCommand(BAM_EDITOR_CMAKE_COMMAND, cfgCmd, capturedOutput, cfgExitCode) || cfgExitCode != 0)
+        {
+            m_PendingBuildOutput = std::move(capturedOutput);
+            m_PendingBuildSuccess = false;
+            m_HasNewResult = true;
+            return;
         }
     }
 
@@ -304,63 +425,9 @@ void ModuleBuildManager::ExecuteBuildAsync()
     }
 #endif
 
-    SECURITY_ATTRIBUTES sa{};
-    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-    sa.bInheritHandle = TRUE;
-
-    HANDLE hReadPipe = nullptr, hWritePipe = nullptr;
-    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0))
-    {
-        m_PendingBuildOutput = "Failed to create the cmake output pipe.";
-        m_PendingBuildSuccess = false;
-        m_HasNewResult = true;
-        return;
-    }
-    SetHandleInformation(hReadPipe, HANDLE_FLAG_INHERIT, 0);
-
-    STARTUPINFOW si{};
-    si.cb = sizeof(STARTUPINFOW);
-    si.hStdOutput = hWritePipe;
-    si.hStdError = hWritePipe;
-    si.dwFlags |= STARTF_USESTDHANDLES;
-
-    PROCESS_INFORMATION pi{};
-    std::vector<wchar_t> cmdBuffer(cmd.begin(), cmd.end());
-    cmdBuffer.push_back(L'\0');
-
-    std::string capturedOutput;
-    const BOOL success = CreateProcessW(application.c_str(), cmdBuffer.data(), nullptr, nullptr, TRUE,
-        CREATE_NO_WINDOW, nullptr, m_ProjectRoot.c_str(), &si, &pi);
-
-    CloseHandle(hWritePipe);
-
-    if (success)
-    {
-        char buffer[512];
-        DWORD bytesRead = 0;
-        while (ReadFile(hReadPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) && bytesRead > 0)
-        {
-            buffer[bytesRead] = '\0';
-            capturedOutput += buffer;
-        }
-
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        DWORD exitCode = 1;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
-
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-
-        m_PendingBuildSuccess = (exitCode == 0);
-    }
-    else
-    {
-        capturedOutput = "Failed to launch cmake process.";
-        m_PendingBuildSuccess = false;
-    }
-
-    CloseHandle(hReadPipe);
-
+    DWORD buildExitCode = 1;
+    const bool launched = runCommand(application, cmd, capturedOutput, buildExitCode);
+    m_PendingBuildSuccess = launched && (buildExitCode == 0);
     m_PendingBuildOutput = std::move(capturedOutput);
     m_HasNewResult = true;
 }

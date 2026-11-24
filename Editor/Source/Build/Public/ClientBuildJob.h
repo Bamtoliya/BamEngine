@@ -41,6 +41,7 @@ namespace Editor
         std::vector<std::string> AdditionalScenes;
         std::vector<std::string> AdditionalAssets;
         bool PackAssetsIntoBamPak = false;
+        bool OnlyReferencedAssets = true;
     };
 
     struct ClientPakArchiveEntry

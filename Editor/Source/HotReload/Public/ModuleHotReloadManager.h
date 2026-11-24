@@ -25,7 +25,12 @@ public:
 
     EResult LoadModule(const std::filesystem::path& dllPath);
     EResult UnloadModule();
+    EResult UnloadAndStopWatching();
     EResult ReloadModule();
+    void Quiesce();
+    void PrepareWatchForUnbuiltModule(const std::filesystem::path& dllPath);
+    void SetShadowDirectory(const std::filesystem::path& shadowDir);
+    void NotifyPostReloadCallbacks();
 
     [[nodiscard]] bool IsLoaded() const { return m_CurrentModule != nullptr; }
     [[nodiscard]] EHotReloadState GetState() const { return m_State; }

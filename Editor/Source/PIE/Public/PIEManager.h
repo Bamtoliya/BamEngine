@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Editor_Includes.h"
+#include "TerrainDataFile.h"
 #include <memory>
 
 namespace archive { class JsonArchive; }
@@ -38,6 +39,8 @@ private:
 private:
     EPlayState m_State = EPlayState::Edit;
     std::unique_ptr<archive::JsonArchive> m_Snapshot;
+    // 씬 아카이브에 들어가지 않는 지형 높이·스플랫(저장하지 않은 편집 포함). 복원한 씬에 엔티티 ID로 되돌린다.
+    Engine::TerrainDataFile::MemorySnapshot m_TerrainSnapshot;
 };
 
 END

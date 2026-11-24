@@ -27,6 +27,8 @@ private:
 	void ProcessModifiedTexture(const std::filesystem::path& texturePath);
 	void ProcessModifiedMaterial(const std::filesystem::path& materialPath);
 	void ProcessModifiedMesh(const std::filesystem::path& meshPath);
+	void ProcessModifiedTimeline(const std::filesystem::path& timelinePath);
+	void ProcessModifiedTerrainLayer(const std::filesystem::path& layerPath);
 	void ProcessModifiedLocalization(const std::filesystem::path& locPath);
 	std::filesystem::path ResolveTextureDirectory();
 
