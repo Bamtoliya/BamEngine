@@ -44,8 +44,7 @@ namespace archive_resource
             for (const std::wstring_view ext : kCandidateResourceExtensions)
             {
                 const std::wstring candidateUri = baseUri + std::wstring(ext);
-                const auto candidatePath = Engine::PlatformPath::ResolveUri(candidateUri);
-                if (std::filesystem::exists(candidatePath))
+                if (Engine::PakMountManager::Get().ExistsOrOnDisk(candidateUri))
                 {
                     const auto handle = manager.LoadFile(candidateUri);
                     if (manager.IsValid(handle))
@@ -78,8 +77,7 @@ namespace archive_resource
             if (!modified) return {};
 
             const auto candidatePath = Engine::PlatformPath::ResolveUri(replaced);
-            std::error_code error;
-            if (!std::filesystem::is_regular_file(candidatePath, error)) return {};
+            if (!Engine::PakMountManager::Get().ExistsOrOnDisk(candidatePath)) return {};
 
             const auto virtualUri = Engine::PlatformPath::ToVirtualUri(candidatePath);
             const auto loaded = manager.LoadFile(virtualUri);
@@ -104,8 +102,7 @@ namespace archive_resource
         bool hasExactFile = false;
         if (Engine::PlatformPath::IsVirtualUri(assetKey))
         {
-            std::error_code error;
-            hasExactFile = std::filesystem::is_regular_file(Engine::PlatformPath::ResolveUri(assetKey), error);
+            hasExactFile = Engine::PakMountManager::Get().ExistsOrOnDisk(assetKey);
         }
 
         for (const std::wstring_view ext : detail::kCandidateResourceExtensions)
@@ -135,18 +132,18 @@ namespace archive_resource
                 return handle;
         }
 
-        // 3. assetPath / assetKey 기준 디스크 파일 탐색 및 자동 로드
+        // 3. assetPath / assetKey 기준 팩·디스크 파일 탐색 및 자동 로드
         if (!assetPath.empty())
         {
             const auto fsPath = Engine::PlatformPath::ResolveUri(assetPath);
             if (detail::HasBamExtension(fsPath))
             {
-                if (std::filesystem::exists(fsPath.wstring() + L".json"))
+                if (Engine::PakMountManager::Get().ExistsOrOnDisk(assetPath + L".json"))
                     return manager.LoadFile(assetPath + L".json");
-                if (std::filesystem::exists(fsPath.wstring() + L".beve"))
+                if (Engine::PakMountManager::Get().ExistsOrOnDisk(assetPath + L".beve"))
                     return manager.LoadFile(assetPath + L".beve");
             }
-            if (std::filesystem::exists(fsPath))
+            if (Engine::PakMountManager::Get().ExistsOrOnDisk(assetPath))
             {
                 if (auto handle = manager.LoadFile(assetPath); manager.IsValid(handle))
                     return handle;
@@ -157,9 +154,7 @@ namespace archive_resource
 
         if (!assetKey.empty())
         {
-            const auto keyFsPath = Engine::PlatformPath::ResolveUri(assetKey);
-            std::error_code error;
-            if (std::filesystem::is_regular_file(keyFsPath, error))
+            if (Engine::PakMountManager::Get().ExistsOrOnDisk(assetKey))
             {
                 if (auto handle = manager.LoadFile(assetKey); manager.IsValid(handle))
                     return handle;

@@ -354,7 +354,7 @@ namespace
         if (!WriteFixture(scenario, R"({"Scene":{"Components":[
             {"Type":"Engine::ActionTimelineComponent","Data":{"timelinePath":"Resources/TimelineDependencies/Attack.actiontimeline.json"}},
             {"Type":"Custom::Component","Data":{"timelinePath":"Project://TimelineDependencies/Attack.actiontimeline.json"}}
-            ]}})") || !WriteFixture(model, "") || !WriteFixture(sound, "") || !WriteFixture(vfx, "")) return fail("fixture write");
+            ]}})") || !WriteFixture(model, "{}") || !WriteFixture(sound, "") || !WriteFixture(vfx, "{}")) return fail("fixture write");
 
         std::unique_ptr<Engine::Resource> fixture(Engine::ActionTimelineAsset::CreateEmpty());
         auto& source = static_cast<Engine::ActionTimelineAsset&>(*fixture);

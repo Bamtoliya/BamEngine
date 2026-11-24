@@ -62,12 +62,11 @@ namespace Engine
         // 참조가 가리키는 파일. 없으면 비어 있고, 그 참조는 호출자의 기존 로드가 처리한다.
         static std::filesystem::path ResolvePreloadFile(const ResourceReference& reference)
         {
-            std::error_code error;
             for (const auto* candidate : { &reference.AssetKey, &reference.AssetPath })
             {
                 if (candidate->empty()) continue;
                 auto path = PlatformPath::ResolveUri(*candidate);
-                if (std::filesystem::is_regular_file(path, error)) return path;
+                if (PakMountManager::Get().ExistsOrOnDisk(path)) return path;
             }
             return {};
         }
@@ -78,12 +77,12 @@ namespace Engine
             if (ToLowerWStr(path.extension().wstring()) == L".json")
             {
                 archive::JsonArchive json;
-                if (!json.LoadFromFile(path)) return false;
+                if (!PakMountManager::Get().LoadArchiveWithFallback(json, path)) return false;
                 read(json);
                 return true;
             }
             archive::BeveArchive beve;
-            if (!beve.LoadFromFile(path)) return false;
+            if (!PakMountManager::Get().LoadArchiveWithFallback(beve, path)) return false;
             read(beve);
             return true;
         }

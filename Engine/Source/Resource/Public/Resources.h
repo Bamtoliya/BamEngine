@@ -16,4 +16,5 @@
 #include "ParticleEffect.h"
 #include "SpriteAnimation.h"
 #include "CompositeEffect.h"
+#include "TerrainLayerAsset.h"
 #include "SpriteAtlas.h"

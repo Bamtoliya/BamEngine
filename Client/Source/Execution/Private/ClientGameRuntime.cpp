@@ -62,7 +62,35 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
         onStageChanged(ClientStartupStage::Graphics);
     m_Runtime = Engine::Runtime::Create(&runtimeDesc);
     if (!m_Runtime)
+    {
+        BAM_LOG(Error, "Client", "Startup", "Engine::Runtime::Create failed.");
         return Engine::EResult::Fail;
+    }
+
+    {
+        std::error_code mountEc;
+        if (std::filesystem::exists(m_ProjectRoot / ".bam-client-package", mountEc) && !mountEc)
+            Engine::PlatformPath::SetEngineRoot(m_ProjectRoot);
+
+        mountEc.clear();
+        const auto mountsDir = m_ProjectRoot / "Mounts";
+        if (std::filesystem::is_directory(mountsDir, mountEc) && !mountEc)
+        {
+            for (const auto& entry : std::filesystem::directory_iterator(mountsDir, mountEc))
+            {
+                if (mountEc) break;
+                if (entry.is_directory(mountEc) && !mountEc)
+                {
+                    Engine::ContentMountDesc mountDesc{};
+                    mountDesc.Name = Engine::WStrToStr(entry.path().filename().wstring());
+                    mountDesc.RootPath = entry.path();
+                    mountDesc.ReadOnly = true;
+                    mountDesc.ShowUnderAssets = false;
+                    Engine::PlatformPath::RegisterContentMount(mountDesc);
+                }
+            }
+        }
+    }
 
     if (!Engine::AsyncResourceLoader::IsCreated())
         Engine::AsyncResourceLoader::Create();
@@ -77,9 +105,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     bool registeredCatalog = false;
     for (const auto* uri : { L"Engine://Data/Localization/English.json", L"Engine://Data/Localization/Korean.json" })
     {
-        const auto path = Engine::PlatformPath::ResolveUri(uri);
-        std::error_code error;
-        if (std::filesystem::is_regular_file(path, error) && IsSuccess(localization.RegisterLocalizationData(path.wstring())))
+        if (Engine::PakMountManager::Get().ExistsOrOnDisk(uri) && IsSuccess(localization.RegisterLocalizationData(uri)))
             registeredCatalog = true;
     }
     if (registeredCatalog) localization.LoadData();
@@ -88,7 +114,11 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
 
     Engine::RegisterBuiltInPrimitiveMeshes(Engine::ResourceManager::Get());
     if (!Engine::StartupResourceLoader::LoadPipeline(m_ProjectSettings.StartupManifestPath))
+    {
+        BAM_LOG(Error, "Client", "Startup", "StartupResourceLoader::LoadPipeline failed for '{}'.",
+            m_ProjectSettings.StartupManifestPath);
         return Engine::EResult::Fail;
+    }
 
     Engine::InputActionSettings inputSettings;
     const auto inputPath = m_ProjectRoot / "Config" / "InputActions.json";
@@ -104,7 +134,11 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
 
     if (IsFailure(m_RenderPipeline.Initialize(m_ProjectSettings.RenderPipelineProfilePath,
         rendererDesc.rhiDesc->width, rendererDesc.rhiDesc->height)))
+    {
+        BAM_LOG(Error, "Client", "Startup", "ClientRenderPipeline::Initialize failed for '{}'.",
+            m_ProjectSettings.RenderPipelineProfilePath);
         return Engine::EResult::Fail;
+    }
     Engine::ResourceStreamer::Get().SetBudgetMB(static_cast<Engine::uint32>((std::max)(m_ProjectSettings.ResourceStreamingBudgetMB, 0)));
     m_RenderPipeline.SetRaytracedShadowMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedShadowMode));
     m_RenderPipeline.SetRaytracedReflectionMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.RaytracedReflectionMode));
@@ -112,13 +146,21 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     m_RenderPipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(m_ProjectSettings.AmbientOcclusionMode));
     m_RenderPipeline.SetProbeGIMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.ProbeGIMode));
     if (IsFailure(InitializeSystems()))
+    {
+        BAM_LOG(Error, "Client", "Startup", "InitializeSystems failed.");
         return Engine::EResult::Fail;
+    }
     if (loadModules)
         loadModules();
     if (onStageChanged)
         onStageChanged(ClientStartupStage::Scene);
-    if (IsFailure(LoadStartupScene()) || !ValidateStartupGraphs())
+    if (IsFailure(LoadStartupScene()))
         return Engine::EResult::Fail;
+    if (!ValidateStartupGraphs())
+    {
+        BAM_LOG(Error, "Client", "Startup", "ValidateStartupGraphs failed.");
+        return Engine::EResult::Fail;
+    }
 
     BAM_LOG(Info, "Client", "Application", "Client initialization finished successfully");
     return Engine::EResult::Success;
@@ -323,7 +365,7 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
     Engine::EResult result = Engine::EResult::Fail;
 
     std::string sceneUri = m_ProjectSettings.StartupScenePath;
-    if (!sceneUri.starts_with("Project://") && !sceneUri.starts_with("Engine://"))
+    if (!Engine::PlatformPath::IsVirtualUri(sceneUri))
     {
         sceneUri = "Project://" + sceneUri;
     }
@@ -334,11 +376,21 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
     {
         std::string_view jsonView(reinterpret_cast<const char*>(sceneBytes.data()), sceneBytes.size());
         auto decodeRes = ar.Decode(jsonView);
-        if (decodeRes)
+        if (!decodeRes)
+        {
+            BAM_LOG(Error, "Client", "Startup", "Failed to decode startup scene '{}' from pak: code={}, field={}",
+                sceneUri, static_cast<int>(decodeRes.Code), decodeRes.Field);
+        }
+        else
         {
             Engine::Scene* candidate = nullptr;
             auto createRes = Engine::Scene::CreateFromArchive(ar, candidate);
-            if (createRes && candidate)
+            if (!createRes || !candidate)
+            {
+                BAM_LOG(Error, "Client", "Startup", "Failed to instantiate startup scene '{}' from pak: code={}, field={}",
+                    sceneUri, static_cast<int>(createRes.Code), createRes.Field);
+            }
+            else
             {
                 result = Engine::SceneManager::Get().OpenScene(candidate);
                 Safe_Release(candidate);
@@ -347,8 +399,9 @@ Engine::EResult Client::ClientGameRuntime::LoadStartupScene()
     }
     else
     {
-        const std::filesystem::path scenePath =
-            Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
+        const std::filesystem::path scenePath = Engine::PlatformPath::IsVirtualUri(m_ProjectSettings.StartupScenePath)
+            ? Engine::PlatformPath::ResolveUri(m_ProjectSettings.StartupScenePath)
+            : Engine::PlatformPath::GetProjectAssetRoot() / std::filesystem::u8path(m_ProjectSettings.StartupScenePath);
         if (!std::filesystem::exists(scenePath))
         {
             BAM_LOG(Error, "Client", "Startup", "Configured startup scene file does not exist: {}",

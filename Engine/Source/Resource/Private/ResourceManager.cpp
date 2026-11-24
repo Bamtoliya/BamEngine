@@ -19,6 +19,13 @@ namespace
 		if (!uri.empty() && Engine::PlatformPath::IsVirtualUri(uri))
 			return NormalizePath(uri);
 
+		if (Engine::PakMountManager::Get().GetMountedPakCount() > 0)
+		{
+			const std::string pakUri = Engine::PakMountManager::ToPakUri(inputPath);
+			if (!pakUri.empty())
+				return NormalizePath(Engine::Utf8ToPath(pakUri).wstring());
+		}
+
 		namespace fs = std::filesystem;
 
 		std::error_code ec;
@@ -65,6 +72,34 @@ namespace
 				return false;
 		}
 		return true;
+	}
+
+	bool IsProjectOrMountScoped(const Engine::Resource& resource)
+	{
+		const std::wstring& key = resource.GetKey();
+		const std::wstring& path = resource.GetPath();
+
+		if (Engine::PlatformPath::IsEngineUri(key) || Engine::PlatformPath::IsEditorUri(key) || Engine::PlatformPath::IsPluginUri(key))
+			return false;
+		if (Engine::PlatformPath::IsEngineUri(path) || Engine::PlatformPath::IsEditorUri(path) || Engine::PlatformPath::IsPluginUri(path))
+			return false;
+
+		if (Engine::PlatformPath::IsProjectUri(key) || Engine::PlatformPath::IsMountUri(key))
+			return true;
+		if (Engine::PlatformPath::IsProjectUri(path) || Engine::PlatformPath::IsMountUri(path))
+			return true;
+
+		if (!path.empty())
+		{
+			const std::wstring virtualPath = Engine::PlatformPath::ToVirtualUri(Engine::PlatformPath::ResolveUri(path));
+			if (Engine::PlatformPath::IsEngineUri(virtualPath) || Engine::PlatformPath::IsEditorUri(virtualPath) ||
+				Engine::PlatformPath::IsPluginUri(virtualPath))
+				return false;
+			if (Engine::PlatformPath::IsProjectUri(virtualPath) || Engine::PlatformPath::IsMountUri(virtualPath))
+				return true;
+		}
+
+		return false;
 	}
 }
 
@@ -157,12 +192,13 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 			return existing;
 	}
 
-	fs::path absolutePath = PlatformPath::ResolveUri(filePath);
+	fs::path absolutePath = PlatformPath::ResolveUri(
+		(!relativePath.empty() && PlatformPath::IsVirtualUri(relativePath)) ? relativePath : filePath);
 	existing = FindHandleByFilePath(absolutePath.wstring());
 	if (existing.IsValid())
 		return existing;
 
-	if (!fs::exists(absolutePath))
+	if (!PakMountManager::Get().ExistsOrOnDisk(relativePath.empty() ? absolutePath : fs::path(relativePath)))
 	{
 		ENGINE_LOG_ERROR("Resource load failed: stage=file not found, key=\"{}\", path=\"{}\"", WStrToStr(relativePath), WStrToStr(absolutePath.wstring()));
 		return {};
@@ -233,6 +269,7 @@ void ResourceManager::RegisterExplicitLoader()
 	registerSimpleLoader.operator() < SpriteAnimation, SpriteAnimationCreateDesc > ({ L".spriteanim", L".bamspriteanim" });
 	registerSimpleLoader.operator() < ActionTimelineAsset, ActionTimelineCreateDesc > ({ L".bamtimeline", L".actiontimeline" });
 	registerSimpleLoader.operator() < CompositeEffect, CompositeEffectCreateDesc > ({ L".bamvfx", L".vfx" });
+	registerSimpleLoader.operator() < TerrainLayerAsset, TerrainLayerCreateDesc > ({ L".bamterrainlayer" });
 
 	const auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{
@@ -345,7 +382,39 @@ EResult ResourceManager::DestroyResource(Resource* resource)
 
 	return EResult::Success;
 }
-#ifdef BAM_EDITOR
+uint32 ResourceManager::UnloadProjectScopedResources()
+{
+	vector<Resource*> toDelete;
+	{
+		unique_lock lock(m_PoolMutex);
+		for (uint32 i = 0; i < static_cast<uint32>(m_Resources.size()); ++i)
+		{
+			const ResourceSlot& slot = m_Resources[i];
+			if (!slot.IsActive || !slot.Instance)
+				continue;
+
+			if (IsProjectOrMountScoped(*slot.Instance))
+			{
+				if (Resource* freed = FreeSlotInternal(i))
+					toDelete.push_back(freed);
+			}
+		}
+	}
+
+	for (Resource* res : toDelete)
+	{
+		if (res)
+		{
+			res->Free();
+			delete res;
+		}
+	}
+
+	const uint32 unloadedCount = static_cast<uint32>(toDelete.size());
+	ENGINE_LOG_INFO("[ResourceManager] Unloaded {} project/mount-scoped resources.", unloadedCount);
+	return unloadedCount;
+}
+#if BAM_EDITOR
 vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
 {
 	vector<ResourceDebugInfo> result;

@@ -102,7 +102,7 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
     ui.renderTargetNames = { m_Passes.GetColorTarget() };
     ui.sortType = ERenderSortType::FrontToBack;
     ui.acceptedBlendModes = EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend |
-        EBlendMode::Additive | EBlendMode::NonPremultiplied;
+        EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied;
     m_UIPass = passes.RegisterRenderPass(std::move(ui));
 
     RenderPassDesc output{};

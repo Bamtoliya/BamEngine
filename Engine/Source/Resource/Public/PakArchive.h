@@ -11,6 +11,12 @@
 #include <vector>
 #include <span>
 
+namespace archive
+{
+    class IArchive;
+    struct ArchiveResult;
+}
+
 BEGIN(Engine)
 
 // -----------------------------------------------------------------------------
@@ -191,6 +197,18 @@ public:
 
     // 마운트된 리더 목록 접근
     [[nodiscard]] const std::vector<std::unique_ptr<PakReader>>& GetReaders() const noexcept;
+
+    // 물리 경로 또는 가상 URI를 정규화된 팩 URI로 변환 (불가 시 빈 문자열)
+    [[nodiscard]] static std::string ToPakUri(const std::filesystem::path& pathOrUri);
+
+    // 마운트된 팩 우선, 없으면 디스크 파일 존재 여부 확인
+    [[nodiscard]] bool ExistsOrOnDisk(const std::filesystem::path& pathOrUri) const;
+
+    // 마운트된 팩 우선 읽기 (팩 내 엔트리 무결성 실패 시 디스크 폴백 금지), 팩 미존재 시 디스크 폴백
+    [[nodiscard]] EResult ReadBytesWithFallback(const std::filesystem::path& pathOrUri, std::vector<uint8_t>& outBytes) const;
+
+    // 마운트된 팩 우선 Archive 디코딩, 팩 미존재 시 디스크 폴백
+    [[nodiscard]] archive::ArchiveResult LoadArchiveWithFallback(archive::IArchive& ar, const std::filesystem::path& pathOrUri) const;
 
 private:
     std::vector<std::unique_ptr<PakReader>> m_readers;

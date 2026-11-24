@@ -1,9 +1,9 @@
 #include "AsyncResourceLoader.h"
 #include "ResourceManager.h"
 #include "PlatformPath.h"
+#include "PakArchive.h"
 #include "Logger.h"
 
-#include <fstream>
 #include <algorithm>
 
 BEGIN(Engine)
@@ -100,31 +100,21 @@ void AsyncResourceLoader::WorkerLoop()
 		req->state.store(EAsyncLoadState::ReadingDisk);
 
 		std::filesystem::path resolvedPath = req->filePath;
-		if (resolvedPath.is_relative())
+		if (!PlatformPath::IsVirtualUri(resolvedPath.wstring()) && resolvedPath.is_relative())
 			resolvedPath = PlatformPath::ResolveProjectRelative(resolvedPath);
 
-		std::error_code ec;
-		if (!std::filesystem::exists(resolvedPath, ec) || ec || std::filesystem::is_directory(resolvedPath, ec))
+		if (!PakMountManager::Get().ExistsOrOnDisk(resolvedPath))
 		{
 			req->errorMessage = "File not found or is directory";
 			req->state.store(EAsyncLoadState::Failed);
 			continue;
 		}
 
-		std::ifstream file(resolvedPath, std::ios::binary | std::ios::ate);
-		if (!file.is_open())
+		if (PakMountManager::Get().ReadBytesWithFallback(resolvedPath, req->preloadedBytes) != EResult::Success)
 		{
 			req->errorMessage = "Failed to open file";
 			req->state.store(EAsyncLoadState::Failed);
 			continue;
-		}
-
-		const auto fileSize = file.tellg();
-		if (fileSize > 0)
-		{
-			req->preloadedBytes.resize(static_cast<size_t>(fileSize));
-			file.seekg(0, std::ios::beg);
-			file.read(reinterpret_cast<char*>(req->preloadedBytes.data()), fileSize);
 		}
 
 		if (req->state.load() == EAsyncLoadState::Cancelled)
@@ -180,7 +170,7 @@ void AsyncResourceLoader::StepMainThread(f64 budgetMs)
 		}
 		else
 		{
-			if (!req->preloadedBytes.empty() || std::filesystem::exists(req->filePath))
+			if (!req->preloadedBytes.empty() || PakMountManager::Get().ExistsOrOnDisk(req->filePath))
 			{
 				req->resultHandle = Handle(static_cast<uint32>(req->id), 1);
 				req->state.store(EAsyncLoadState::Completed);

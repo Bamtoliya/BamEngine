@@ -38,14 +38,12 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	if (handle.IsValid())
 		return ResourceHandle<T>(handle);
 
-	std::filesystem::path fsPath(pathStr);
-	if (fsPath.is_relative())
-		fsPath = PlatformPath::ResolveProjectRelative(fsPath);
+	std::filesystem::path fsPath = PlatformPath::ResolveUri(pathStr);
 	wstring extension = fsPath.extension().wstring();
 	std::transform(extension.begin(), extension.end(), extension.begin(), ::towlower);
 	const auto loadArchive = [&](archive::IArchive& ar) -> ResourceHandle<T>
 		{
-			auto result = ar.LoadFromFile(fsPath);
+			auto result = PakMountManager::Get().LoadArchiveWithFallback(ar, fsPath);
 			if (!result)
 				return fail("archive file read");
 
@@ -70,6 +68,24 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 			const Handle resourceHandle = AddResourceInternal(hash, resource);
 			return ResourceHandle<T>(resourceHandle);
 		};
+
+	if (PakMountManager::Get().GetMountedPakCount() > 0)
+	{
+		const std::string pakUri = PakMountManager::ToPakUri(fsPath);
+		if (const PakEntryInfo* pakEntry = pakUri.empty() ? nullptr : PakMountManager::Get().FindEntry(pakUri))
+		{
+			if (pakEntry->PayloadFormat == EPakPayloadFormat::Json)
+			{
+				archive::JsonArchive ar;
+				return loadArchive(ar);
+			}
+			if (pakEntry->PayloadFormat == EPakPayloadFormat::Beve)
+			{
+				archive::BeveArchive ar;
+				return loadArchive(ar);
+			}
+		}
+	}
 
 	if (extension == L".json" || extension == L".spriteanim" || extension == L".actiontimeline" ||
 		extension == L".effect" || extension == L".bamvfx" || extension == L".vfx")

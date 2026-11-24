@@ -29,6 +29,7 @@ enum class EResourceType : uint32
 	ActionTimeline,
 	ParticleEffect,
 	CompositeEffect,
+	TerrainLayer, // 저장값은 정수이므로 새 값은 끝에만 추가한다
 };
 
 inline constexpr const char* GetResourceBinaryExtension(EResourceType type) noexcept

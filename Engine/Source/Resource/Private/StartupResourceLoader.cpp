@@ -69,13 +69,11 @@ namespace Engine::StartupResourceLoaderDetail
 
 	bool ReadStartupJsonFile(const std::filesystem::path& path, std::string& outContent)
 	{
-		std::ifstream file(path);
-		if (!file.is_open())
+		std::vector<uint8_t> bytes;
+		if (PakMountManager::Get().ReadBytesWithFallback(path, bytes) != EResult::Success)
 			return false;
 
-		std::stringstream buffer;
-		buffer << file.rdbuf();
-		outContent = buffer.str();
+		outContent.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 		return true;
 	}
 
@@ -101,7 +99,7 @@ namespace Engine::StartupResourceLoaderDetail
 	bool AppendStartupFile(const std::filesystem::path& path, std::string_view category,
 		std::vector<std::filesystem::path>& files, std::string& error)
 	{
-		if (!std::filesystem::is_regular_file(path))
+		if (!PakMountManager::Get().ExistsOrOnDisk(path))
 			return ReportStartupError(error, "Missing " + std::string(category) + " startup resource: " + path.string());
 
 		const auto normalized = path.lexically_normal();

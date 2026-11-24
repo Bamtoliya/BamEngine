@@ -4,6 +4,7 @@
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "PlatformPath.h"
+#include "PakArchive.h"
 #include <chrono>
 
 void AnimatorParameters::SetFloat(const std::string& name, float value)
@@ -555,8 +556,7 @@ std::filesystem::path AnimatorStateMachine::ResolveControllerPath(const std::fil
 	if (!PlatformPath::IsVirtualUri(path.wstring()))
 	{
 		const auto projectRelative = PlatformPath::ResolveProjectRelative(path);
-		std::error_code error;
-		if (std::filesystem::is_regular_file(projectRelative, error))
+		if (PakMountManager::Get().ExistsOrOnDisk(projectRelative))
 			return projectRelative;
 	}
 	return PlatformPath::ResolveUri(path);
@@ -569,7 +569,7 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 	const auto started = Clock::now();
 	const auto resolvedPath = ResolveControllerPath(Utf8ToPath(filePath));
 	archive::JsonArchive ar;
-	const auto loadRes = ar.LoadFromFile(resolvedPath);
+	const auto loadRes = PakMountManager::Get().LoadArchiveWithFallback(ar, resolvedPath);
 	if (!loadRes)
 	{
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, reference='{}', resolved='{}'",

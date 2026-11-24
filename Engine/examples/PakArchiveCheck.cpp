@@ -1,6 +1,10 @@
 #include "PakArchive.h"
+#include "PlatformPath.h"
+#include "TerrainDataFile.h"
 
+#include <archive/JsonArchive.h>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -681,6 +685,393 @@ static int TestMountFromPackageManifest(const fs::path& tempDir)
 }
 
 // -----------------------------------------------------------------------------
+// 테스트 9: 의존성 기반 패키징 검증 (참조된 에셋 포함, 미참조 제외, AdditionalAssets 포함)
+// -----------------------------------------------------------------------------
+static int TestDependencyBasedPackaging(const fs::path& tempDir)
+{
+    const fs::path rootDir = tempDir / "DependencyPackagingTest";
+    const fs::path projectAssetDir = rootDir / "ProjectSource" / "Assets";
+    const fs::path engineResourceDir = rootDir / "EngineSource" / "Resources";
+    const fs::path packageStagingDir = rootDir / "Staging";
+    const fs::path contentDir = packageStagingDir / "Content";
+    const fs::path configDir = packageStagingDir / "Config";
+    const fs::path stagedAssets = packageStagingDir / "Assets";
+
+    std::error_code ec;
+    fs::create_directories(projectAssetDir / "Scenes", ec);
+    fs::create_directories(projectAssetDir / "Textures", ec);
+    fs::create_directories(projectAssetDir / "Materials", ec);
+    fs::create_directories(projectAssetDir / "Audio", ec);
+    fs::create_directories(projectAssetDir / "Data", ec);
+
+    fs::create_directories(engineResourceDir / "Shaders", ec);
+    fs::create_directories(engineResourceDir / "Materials", ec);
+    fs::create_directories(engineResourceDir / "Textures", ec);
+
+    fs::create_directories(contentDir, ec);
+    fs::create_directories(configDir, ec);
+    fs::create_directories(stagedAssets / "Audio", ec);
+
+    auto writeBinary = [](const fs::path& path, const void* data, size_t size) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
+    };
+
+    // 1. 소스 에셋 준비
+    // (A) 참조되는 에셋 (Main -> Hero.dds, Hero.bammat.json -> Standard.dxil)
+    const std::string startupSceneJson =
+        "{\"Scene\":\"Main\",\"Textures\":[\"Project://Textures/Hero.dds\"],"
+        "\"Material\":\"Project://Materials/Hero.bammat.json\"}";
+    const std::vector<uint8_t> heroTexDds = { 0x44, 0x44, 0x53, 0x20, 0x01, 0x02, 0x03, 0x04 };
+    const std::string heroMatJson = "{\"Material\":\"Hero\",\"Shader\":\"Engine://Shaders/Standard.dxil\"}";
+    const std::vector<uint8_t> standardDxil = { 0x44, 0x58, 0x42, 0x43, 0xAA, 0xBB, 0xCC, 0xDD };
+    const std::string defaultMatJson = "{\"Material\":\"DefaultFallback\"}";
+
+    // (B) AdditionalAssets로 명시된 에셋
+    const std::string additionalConfigJson = "{\"GameMode\":\"HeroChallenge\",\"Version\":2}";
+    const std::vector<uint8_t> additionalBgmOgg = { 0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0xAA, 0xBB };
+
+    // (C) 미참조 에셋 (패키지에서 제외되어야 함)
+    const std::string unusedSceneJson = "{\"Scene\":\"UnusedTestLevel\"}";
+    const std::vector<uint8_t> unusedTexDds = { 0x44, 0x44, 0x53, 0x20, 0x99, 0x99, 0x99, 0x99 };
+    const std::string unusedMatJson = "{\"Material\":\"UnusedMat\"}";
+    const std::vector<uint8_t> unusedAudioOgg = { 0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0xFF, 0xFF };
+    const std::vector<uint8_t> unusedEngineTex = { 0x89, 0x50, 0x4E, 0x47, 0x00, 0x00, 0x00, 0x00 };
+
+    const fs::path mainScenePath = projectAssetDir / "Scenes" / "Main.bamscene.json";
+    const fs::path heroTexPath = projectAssetDir / "Textures" / "Hero.dds";
+    const fs::path heroMatPath = projectAssetDir / "Materials" / "Hero.bammat.json";
+    const fs::path addConfigPath = projectAssetDir / "Data" / "AdditionalConfig.json";
+    const fs::path addBgmPath = projectAssetDir / "Audio" / "AdditionalBGM.ogg";
+
+    const fs::path unusedScenePath = projectAssetDir / "Scenes" / "UnusedScene.bamscene.json";
+    const fs::path unusedTexPath = projectAssetDir / "Textures" / "UnusedTex.dds";
+    const fs::path unusedMatPath = projectAssetDir / "Materials" / "UnusedMat.bammat.json";
+    const fs::path unusedAudioPath = projectAssetDir / "Audio" / "UnusedAudio.ogg";
+
+    const fs::path standardDxilPath = engineResourceDir / "Shaders" / "Standard.dxil";
+    const fs::path defaultMatPath = engineResourceDir / "Materials" / "Default.bammat.json";
+    const fs::path unusedEngineTexPath = engineResourceDir / "Textures" / "UnusedEngineTex.png";
+
+    writeBinary(mainScenePath, startupSceneJson.data(), startupSceneJson.size());
+    writeBinary(heroTexPath, heroTexDds.data(), heroTexDds.size());
+    writeBinary(heroMatPath, heroMatJson.data(), heroMatJson.size());
+    writeBinary(addConfigPath, additionalConfigJson.data(), additionalConfigJson.size());
+    writeBinary(addBgmPath, additionalBgmOgg.data(), additionalBgmOgg.size());
+
+    writeBinary(unusedScenePath, unusedSceneJson.data(), unusedSceneJson.size());
+    writeBinary(unusedTexPath, unusedTexDds.data(), unusedTexDds.size());
+    writeBinary(unusedMatPath, unusedMatJson.data(), unusedMatJson.size());
+    writeBinary(unusedAudioPath, unusedAudioOgg.data(), unusedAudioOgg.size());
+
+    writeBinary(standardDxilPath, standardDxil.data(), standardDxil.size());
+    writeBinary(defaultMatPath, defaultMatJson.data(), defaultMatJson.size());
+    writeBinary(unusedEngineTexPath, unusedEngineTex.data(), unusedEngineTex.size());
+
+    // 2. 의존성 기반 수집 및 스테이징 시뮬레이션
+    // - 의존성 분석 결과:
+    //   Referenced: Main.bamscene.json, Textures/Hero.dds, Materials/Hero.bammat.json, Engine Shaders/Standard.dxil
+    //   AdditionalAssets: Data/AdditionalConfig.json, Audio/AdditionalBGM.ogg
+    //   Essential Engine Fallbacks: Materials/Default.bammat.json
+    //   Unreferenced (제외): UnusedScene, UnusedTex, UnusedMat, UnusedAudio, UnusedEngineTex
+    const fs::path enginePakPath = contentDir / "Engine.bampak";
+    const fs::path projectPakPath = contentDir / "Project.bampak";
+
+    // Engine.bampak 생성 (의존성 필수 리소스만 포함, 미참조 텍스처 제외)
+    {
+        PakWriter engineWriter;
+        EXPECT_EQ(engineWriter.AddFile("Engine://Shaders/Standard.dxil", standardDxilPath,
+            EPakPayloadFormat::Dxil), EResult::Success);
+        EXPECT_EQ(engineWriter.AddFile("Engine://Materials/Default.bammat.json", defaultMatPath,
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(engineWriter.GetEntryCount(), 2);
+        EXPECT_EQ(engineWriter.WriteToFile(enginePakPath), EResult::Success);
+    }
+
+    // Project.bampak 생성 (참조 씬/에셋 + AdditionalAssets 포함, 스트리밍 오디오는 직렬 파일 예외로 팩 제외)
+    {
+        PakWriter projectWriter;
+        EXPECT_EQ(projectWriter.AddFile("Project://Scenes/Main.bamscene.json", mainScenePath,
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(projectWriter.AddFile("Project://Textures/Hero.dds", heroTexPath,
+            EPakPayloadFormat::Dds), EResult::Success);
+        EXPECT_EQ(projectWriter.AddFile("Project://Materials/Hero.bammat.json", heroMatPath,
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(projectWriter.AddFile("Project://Data/AdditionalConfig.json", addConfigPath,
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(projectWriter.GetEntryCount(), 4);
+        EXPECT_EQ(projectWriter.WriteToFile(projectPakPath), EResult::Success);
+    }
+
+    // AdditionalAssets 중 스트리밍 오디오는 DirectFileExceptions로 디스크에 스테이징
+    const fs::path stagedAddBgmPath = stagedAssets / "Audio" / "AdditionalBGM.ogg";
+    fs::copy_file(addBgmPath, stagedAddBgmPath, fs::copy_options::overwrite_existing, ec);
+    EXPECT_FALSE(ec);
+
+    // 미참조 오디오는 스테이징되지 않음
+    const fs::path stagedUnusedAudioPath = stagedAssets / "Audio" / "UnusedAudio.ogg";
+    EXPECT_FALSE(fs::exists(stagedUnusedAudioPath));
+
+    // 3. PackageManifest.json 작성
+    const uint64 enginePakSize = fs::file_size(enginePakPath);
+    const uint64 projectPakSize = fs::file_size(projectPakPath);
+    const fs::path manifestPath = configDir / "PackageManifest.json";
+    {
+        std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
+        out << "{\n"
+            << "  \"SchemaVersion\": 1,\n"
+            << "  \"StartupSceneUri\": \"Project://Scenes/Main.bamscene.json\",\n"
+            << "  \"StartupManifestUri\": \"\",\n"
+            << "  \"RenderPipelineProfileUri\": \"\",\n"
+            << "  \"BootstrapFiles\": [\"Config/Project.json\"],\n"
+            << "  \"DirectFileExceptions\": [\"Assets/Audio/AdditionalBGM.ogg\"],\n"
+            << "  \"Paks\": [\n"
+            << "    {\n"
+            << "      \"Path\": \"Content/Engine.bampak\",\n"
+            << "      \"MountScheme\": \"Engine://\",\n"
+            << "      \"FormatVersion\": 1,\n"
+            << "      \"EntryCount\": 2,\n"
+            << "      \"ByteSize\": " << enginePakSize << ",\n"
+            << "      \"Hash64\": 0,\n"
+            << "      \"IntegrityVerified\": true\n"
+            << "    },\n"
+            << "    {\n"
+            << "      \"Path\": \"Content/Project.bampak\",\n"
+            << "      \"MountScheme\": \"Project://\",\n"
+            << "      \"FormatVersion\": 1,\n"
+            << "      \"EntryCount\": 4,\n"
+            << "      \"ByteSize\": " << projectPakSize << ",\n"
+            << "      \"Hash64\": 0,\n"
+            << "      \"IntegrityVerified\": true\n"
+            << "    }\n"
+            << "  ],\n"
+            << "  \"IntegrityVerified\": true\n"
+            << "}\n";
+    }
+
+    // 4. PakMountManager 마운트 및 검증
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 0);
+
+    std::string startupSceneUri;
+    EXPECT_EQ(PakMountManager::Get().MountFromPackageManifest(manifestPath, &startupSceneUri), EResult::Success);
+    EXPECT_EQ(startupSceneUri, "Project://Scenes/Main.bamscene.json");
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 2);
+
+    // (A) 참조된 에셋 포함 확인
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Scenes/Main.bamscene.json"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Textures/Hero.dds"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Materials/Hero.bammat.json"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Engine://Shaders/Standard.dxil"));
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Engine://Materials/Default.bammat.json"));
+
+    // (B) AdditionalAssets 포함 확인
+    EXPECT_TRUE(PakMountManager::Get().HasEntry("Project://Data/AdditionalConfig.json"));
+    // 직접 파일 예외인 AdditionalAssets 오디오는 팩에 없고 디스크에 존재
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Audio/AdditionalBGM.ogg"));
+    EXPECT_TRUE(fs::is_regular_file(stagedAddBgmPath));
+
+    // (C) 미참조 에셋 제외 확인 (팩 및 스테이징에 미존재)
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Scenes/UnusedScene.bamscene.json"));
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Textures/UnusedTex.dds"));
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Materials/UnusedMat.bammat.json"));
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Project://Audio/UnusedAudio.ogg"));
+    EXPECT_FALSE(PakMountManager::Get().HasEntry("Engine://Textures/UnusedEngineTex.png"));
+    EXPECT_FALSE(fs::exists(stagedUnusedAudioPath));
+
+    // (D) 데이터 페이로드 검증
+    std::vector<uint8_t> readBytes;
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Project://Textures/Hero.dds", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, heroTexDds);
+
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Project://Data/AdditionalConfig.json", readBytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBytes.data()), readBytes.size()), additionalConfigJson);
+
+    EXPECT_EQ(PakMountManager::Get().TryReadBytes("Engine://Shaders/Standard.dxil", readBytes), EResult::Success);
+    EXPECT_EQ(readBytes, standardDxil);
+
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().GetMountedPakCount(), 0);
+
+    std::cout << "[PASS] TestDependencyBasedPackaging" << std::endl;
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
+// 테스트 10: 엔진 로더 통합 경계 (pak 우선/디스크 폴백, Archive 디코딩, TerrainDataFile, 변조 폴백 차단)
+// -----------------------------------------------------------------------------
+static int TestLoaderPakFallbackAndTerrain(const fs::path& tempDir)
+{
+    const fs::path rootDir = tempDir / "LoaderIntegrationTest";
+    const fs::path assetsDir = rootDir / "Assets";
+    const fs::path engineResDir = rootDir / "Engine" / "Resources";
+    const fs::path pakPath = rootDir / "Project.bampak";
+    const fs::path corruptPakPath = rootDir / "CorruptOverride.bampak";
+
+    std::error_code ec;
+    fs::create_directories(assetsDir / "Data", ec);
+    fs::create_directories(assetsDir / "Terrains", ec);
+    fs::create_directories(engineResDir, ec);
+
+    const fs::path prevProjectRoot = PlatformPath::GetProjectRoot();
+    const fs::path prevAssetRoot = PlatformPath::GetProjectAssetRoot();
+    const fs::path prevEngineRoot = PlatformPath::GetEngineResourceRoot();
+
+    struct RootRestoreGuard
+    {
+        fs::path ProjectRoot;
+        fs::path AssetRoot;
+        fs::path EngineRoot;
+        ~RootRestoreGuard()
+        {
+            PakMountManager::Get().UnmountAll();
+            PlatformPath::SetProjectRoot(ProjectRoot);
+            PlatformPath::SetProjectAssetRoot(AssetRoot);
+            PlatformPath::SetEngineResourceRoot(EngineRoot);
+        }
+    } restoreGuard{ prevProjectRoot, prevAssetRoot, prevEngineRoot };
+
+    PlatformPath::SetProjectRoot(rootDir);
+    PlatformPath::SetProjectAssetRoot(assetsDir);
+    PlatformPath::SetEngineResourceRoot(engineResDir);
+
+    // 1. 디스크 전용 파일 및 오버라이드용 디스크 파일 작성
+    const std::string diskOnlyJson = R"({"Source":"DiskOnly","Value":42})";
+    const std::string diskOverrideJson = R"({"Source":"DiskVersion","Value":1})";
+    const std::string pakOverrideJson = R"({"Source":"PakVersion","Value":2})";
+    const std::string pakOnlyMatJson = R"({"MaterialName":"PakOnlyMat","Roughness":0.5})";
+
+    {
+        std::ofstream out(assetsDir / "Data" / "DiskOnly.json", std::ios::binary | std::ios::trunc);
+        out.write(diskOnlyJson.data(), static_cast<std::streamsize>(diskOnlyJson.size()));
+    }
+    {
+        std::ofstream out(assetsDir / "Data" / "Override.json", std::ios::binary | std::ios::trunc);
+        out.write(diskOverrideJson.data(), static_cast<std::streamsize>(diskOverrideJson.size()));
+    }
+
+    // 2. .bamterrain v2 파일 생성 후 pak에 넣고 디스크 원본 삭제
+    const fs::path tempTerrainPath = assetsDir / "Terrains" / "Test_Terrain.bamterrain";
+    TerrainDataContent expectedTerrain;
+    expectedTerrain.Resolution = 4; // (4+1)^2 = 25 samples
+    constexpr size_t sampleCount = 25;
+    expectedTerrain.Heights.resize(sampleCount);
+    expectedTerrain.Splat.resize(sampleCount * 4);
+    expectedTerrain.SplatExtra.resize(sampleCount * 4);
+    expectedTerrain.Attributes.resize(sampleCount);
+    for (size_t i = 0; i < sampleCount; ++i)
+    {
+        expectedTerrain.Heights[i] = static_cast<f32>(i) / static_cast<f32>(sampleCount - 1);
+        expectedTerrain.Splat[i * 4 + 0] = static_cast<uint8>(i * 10);
+        expectedTerrain.Splat[i * 4 + 1] = static_cast<uint8>(255 - i * 10);
+        expectedTerrain.Splat[i * 4 + 2] = 0;
+        expectedTerrain.Splat[i * 4 + 3] = 0;
+        expectedTerrain.SplatExtra[i * 4 + 0] = static_cast<uint8>(i);
+        expectedTerrain.SplatExtra[i * 4 + 1] = 0;
+        expectedTerrain.SplatExtra[i * 4 + 2] = 0;
+        expectedTerrain.SplatExtra[i * 4 + 3] = 0;
+        expectedTerrain.Attributes[i] = static_cast<uint8>(i % 3);
+    }
+    EXPECT_TRUE(TerrainDataFile::Write(tempTerrainPath, expectedTerrain));
+
+    // 3. Project.bampak 작성
+    {
+        PakWriter writer;
+        EXPECT_EQ(writer.AddEntry("Project://Materials/PakOnly.bammat.json",
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(pakOnlyMatJson.data()), pakOnlyMatJson.size()),
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(writer.AddEntry("Project://Data/Override.json",
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(pakOverrideJson.data()), pakOverrideJson.size()),
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(writer.AddFile("Project://Terrains/Test_Terrain.bamterrain", tempTerrainPath,
+            EPakPayloadFormat::Raw), EResult::Success);
+        EXPECT_EQ(writer.WriteToFile(pakPath), EResult::Success);
+    }
+
+    // 디스크 원본 지형 파일 삭제 -> 오직 pak에만 존재
+    fs::remove(tempTerrainPath, ec);
+    EXPECT_FALSE(fs::exists(tempTerrainPath));
+
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().MountPak(pakPath), EResult::Success);
+
+    // 4. ExistsOrOnDisk 검증 (가상 URI + 물리 경로 역매핑 + 디스크 폴백)
+    EXPECT_TRUE(PakMountManager::Get().ExistsOrOnDisk("Project://Materials/PakOnly.bammat.json"));
+    EXPECT_TRUE(PakMountManager::Get().ExistsOrOnDisk(PlatformPath::ResolveUri("Project://Materials/PakOnly.bammat.json")));
+    EXPECT_TRUE(PakMountManager::Get().ExistsOrOnDisk("Project://Data/DiskOnly.json"));
+    EXPECT_TRUE(PakMountManager::Get().ExistsOrOnDisk("Project://Terrains/Test_Terrain.bamterrain"));
+    EXPECT_FALSE(PakMountManager::Get().ExistsOrOnDisk("Project://Missing/DoesNotExist.json"));
+
+    // 5. ReadBytesWithFallback 검증 (pak 우선 오버라이드 + 디스크 폴백)
+    std::vector<uint8_t> bytes;
+    EXPECT_EQ(PakMountManager::Get().ReadBytesWithFallback("Project://Data/Override.json", bytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()), pakOverrideJson);
+
+    EXPECT_EQ(PakMountManager::Get().ReadBytesWithFallback("Project://Data/DiskOnly.json", bytes), EResult::Success);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size()), diskOnlyJson);
+
+    // 6. LoadArchiveWithFallback 검증 (pak 전용 JSON + 디스크 폴백 JSON)
+    {
+        archive::JsonArchive ar;
+        EXPECT_TRUE(static_cast<bool>(PakMountManager::Get().LoadArchiveWithFallback(ar, "Project://Materials/PakOnly.bammat.json")));
+        std::string matName;
+        EXPECT_TRUE(static_cast<bool>(ar.Read("MaterialName", matName)));
+        EXPECT_EQ(matName, "PakOnlyMat");
+    }
+    {
+        archive::JsonArchive ar;
+        EXPECT_TRUE(static_cast<bool>(PakMountManager::Get().LoadArchiveWithFallback(ar, "Project://Data/DiskOnly.json")));
+        int32 value = 0;
+        EXPECT_TRUE(static_cast<bool>(ar.Read("Value", value)));
+        EXPECT_EQ(value, 42);
+    }
+
+    // 7. TerrainDataFile::Read pak 로드 검증 (가상 URI 및 ResolveUri 물리 경로 모두)
+    for (const fs::path& queryPath : { fs::path("Project://Terrains/Test_Terrain.bamterrain"),
+                                       PlatformPath::ResolveUri("Project://Terrains/Test_Terrain.bamterrain") })
+    {
+        TerrainDataContent loaded;
+        EXPECT_TRUE(TerrainDataFile::Read(queryPath, loaded));
+        EXPECT_EQ(loaded.Resolution, expectedTerrain.Resolution);
+        EXPECT_EQ(loaded.Heights.size(), expectedTerrain.Heights.size());
+        EXPECT_EQ(loaded.Splat, expectedTerrain.Splat);
+        EXPECT_EQ(loaded.SplatExtra, expectedTerrain.SplatExtra);
+        EXPECT_EQ(loaded.Attributes, expectedTerrain.Attributes);
+        for (size_t i = 0; i < sampleCount; ++i)
+            EXPECT_TRUE(std::fabs(loaded.Heights[i] - expectedTerrain.Heights[i]) <= (1.0f / 65535.0f + 1e-6f));
+    }
+
+    // 8. 변조된 팩 엔트리가 디스크 정상 파일로 조용히 폴백되지 않는지 검증
+    {
+        PakWriter writer;
+        EXPECT_EQ(writer.AddEntry("Project://Data/Override.json",
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(pakOverrideJson.data()), pakOverrideJson.size()),
+            EPakPayloadFormat::Json), EResult::Success);
+        EXPECT_EQ(writer.WriteToFile(corruptPakPath), EResult::Success);
+
+        std::ifstream in(corruptPakPath, std::ios::binary);
+        std::vector<uint8_t> raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        raw[PAK_HEADER_SIZE] ^= 0xFF; // 페이로드 1바이트 변조
+        std::ofstream out(corruptPakPath, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
+    }
+
+    PakMountManager::Get().UnmountAll();
+    EXPECT_EQ(PakMountManager::Get().MountPak(corruptPakPath), EResult::Success);
+
+    EXPECT_NE(PakMountManager::Get().ReadBytesWithFallback("Project://Data/Override.json", bytes), EResult::Success);
+    {
+        archive::JsonArchive ar;
+        EXPECT_FALSE(static_cast<bool>(PakMountManager::Get().LoadArchiveWithFallback(ar, "Project://Data/Override.json")));
+    }
+
+    PakMountManager::Get().UnmountAll();
+    std::cout << "[PASS] TestLoaderPakFallbackAndTerrain" << std::endl;
+    return 0;
+}
+
+// -----------------------------------------------------------------------------
 // 진입점
 // -----------------------------------------------------------------------------
 int main()
@@ -710,6 +1101,8 @@ int main()
     if (int res = TestPakMountManager(tempDir); res != 0) return res;
     if (int res = TestTwoPakStagingRoundTrip(tempDir); res != 0) return res;
     if (int res = TestMountFromPackageManifest(tempDir); res != 0) return res;
+    if (int res = TestDependencyBasedPackaging(tempDir); res != 0) return res;
+    if (int res = TestLoaderPakFallbackAndTerrain(tempDir); res != 0) return res;
 
     std::cout << "=== All PakArchiveCheck Tests Passed Successfully! ===" << std::endl;
     return 0;

@@ -1,5 +1,8 @@
 #include "PakArchive.h"
+#include "PlatformPath.h"
+#include "Functions.h"
 
+#include <archive/ArchiveInterface.h>
 #include <algorithm>
 #include <fstream>
 #include <mutex>
@@ -936,6 +939,128 @@ EResult PakMountManager::MountFromPackageManifest(
     }
 
     return EResult::Success;
+}
+
+std::string PakMountManager::ToPakUri(const std::filesystem::path& pathOrUri)
+{
+    if (pathOrUri.empty())
+        return {};
+
+    const std::wstring virtualUri = PlatformPath::ToVirtualUri(pathOrUri);
+    if (!virtualUri.empty() && PlatformPath::IsVirtualUri(virtualUri))
+    {
+        std::string normalized;
+        if (NormalizePakUri(WStrToStr(virtualUri), normalized))
+            return normalized;
+    }
+
+    // When loose files are pruned (.bampak-only packaged Client), PlatformPath::ResolveUri falls back to
+    // <ProjectRoot>/<relative> for scheme-less paths like "Config/Startup/01_Textures.json" or "Resources/...".
+    // Probe mounted paks directly against Project:// and Engine:// (and stripped Resources/ prefix).
+    const auto& mountManager = PakMountManager::Get();
+    if (mountManager.GetMountedPakCount() == 0)
+        return {};
+
+    std::filesystem::path rel = pathOrUri.is_absolute() ? PlatformPath::ToProjectRelative(pathOrUri) : PlatformPath::Normalize(pathOrUri);
+    if (rel.empty() || rel.is_absolute())
+        return {};
+
+    std::string relStr = WStrToStr(rel.generic_wstring());
+    while (relStr.starts_with("./"))
+        relStr.erase(0, 2);
+    while (!relStr.empty() && relStr.front() == '/')
+        relStr.erase(0, 1);
+    if (relStr.empty())
+        return {};
+
+    const auto tryCandidate = [&mountManager](std::string_view candidate) -> std::string
+    {
+        std::string normalized;
+        if (NormalizePakUri(candidate, normalized) && mountManager.HasEntry(normalized))
+            return normalized;
+        return {};
+    };
+
+    if (auto found = tryCandidate("Project://" + relStr); !found.empty())
+        return found;
+    if (auto found = tryCandidate("Engine://" + relStr); !found.empty())
+        return found;
+
+    if (relStr.size() > 10 && ToLowerStr(relStr.substr(0, 10)) == "resources/")
+    {
+        const std::string stripped = relStr.substr(10);
+        if (auto found = tryCandidate("Project://" + stripped); !found.empty())
+            return found;
+        if (auto found = tryCandidate("Engine://" + stripped); !found.empty())
+            return found;
+    }
+
+    return {};
+}
+
+bool PakMountManager::ExistsOrOnDisk(const std::filesystem::path& pathOrUri) const
+{
+    if (pathOrUri.empty())
+        return false;
+
+    if (!m_readers.empty())
+    {
+        const std::string uri = ToPakUri(pathOrUri);
+        if (!uri.empty() && HasEntry(uri))
+            return true;
+    }
+
+    std::error_code ec;
+    return std::filesystem::is_regular_file(PlatformPath::ResolveUri(pathOrUri), ec);
+}
+
+EResult PakMountManager::ReadBytesWithFallback(const std::filesystem::path& pathOrUri, std::vector<uint8_t>& outBytes) const
+{
+    outBytes.clear();
+    if (pathOrUri.empty())
+        return EResult::InvalidArgument;
+
+    if (!m_readers.empty())
+    {
+        const std::string uri = ToPakUri(pathOrUri);
+        if (!uri.empty() && HasEntry(uri))
+            return TryReadBytes(uri, outBytes); // 팩 엔트리 무결성 실패 시 디스크로 폴백하지 않음
+    }
+
+    const std::filesystem::path physical = PlatformPath::ResolveUri(pathOrUri);
+    std::ifstream file(physical, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+        return EResult::FileNotFound;
+
+    const std::streamsize size = file.tellg();
+    if (size < 0)
+        return EResult::Fail;
+    if (size == 0)
+        return EResult::Success;
+
+    outBytes.resize(static_cast<size_t>(size));
+    file.seekg(0, std::ios::beg);
+    if (!file.read(reinterpret_cast<char*>(outBytes.data()), size))
+    {
+        outBytes.clear();
+        return EResult::Fail;
+    }
+    return EResult::Success;
+}
+
+archive::ArchiveResult PakMountManager::LoadArchiveWithFallback(archive::IArchive& ar, const std::filesystem::path& pathOrUri) const
+{
+    if (m_readers.empty())
+        return ar.LoadFromFile(PlatformPath::ResolveUri(pathOrUri));
+
+    std::vector<uint8_t> bytes;
+    const EResult res = ReadBytesWithFallback(pathOrUri, bytes);
+    if (res == EResult::FileNotFound)
+        return { archive::ArchiveErrorCode::FileOpenFailed, {} };
+    if (res != EResult::Success)
+        return { archive::ArchiveErrorCode::FileReadFailed, {} };
+
+    return ar.Decode(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
 }
 
 END

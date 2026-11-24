@@ -1,4 +1,5 @@
 ﻿#include "GraphFile.h"
+#include "PakArchive.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 
@@ -98,7 +99,7 @@ namespace Engine
 			return { EGraphFileStage::Deserialize, { archive::ArchiveErrorCode::UnsupportedType, "Engine::GraphData" } };
 
 		archive::JsonArchive reader;
-		const auto loaded = reader.LoadFromFile(path);
+		const auto loaded = PakMountManager::Get().LoadArchiveWithFallback(reader, path);
 		if (!loaded)
 			return { EGraphFileStage::Read, loaded };
 

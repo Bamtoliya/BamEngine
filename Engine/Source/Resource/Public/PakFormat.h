@@ -154,13 +154,15 @@ inline std::string ToLowerPakUri(std::string_view s)
         converted.push_back(ch == '\\' ? '/' : ch);
     }
 
-    // 2. 허용 마운트(Project://, Engine://) 스키마 검증
-    // 대소문자 무관하게 "project://" 또는 "engine://" 시작 확인
+    // 2. 허용 마운트(Project://, Engine://, Mount://) 스키마 검증
+    // 대소문자 무관하게 "project://", "engine://" 또는 "mount://" 시작 확인
     constexpr std::string_view PROJECT_PREFIX = "project://";
     constexpr std::string_view ENGINE_PREFIX = "engine://";
+    constexpr std::string_view MOUNT_PREFIX = "mount://";
 
     std::string schemePrefix;
     std::string_view remaining;
+    bool isMountScheme = false;
 
     auto startsWithIgnoreCase = [](std::string_view text, std::string_view prefix) -> bool {
         if (text.size() < prefix.size())
@@ -187,6 +189,12 @@ inline std::string ToLowerPakUri(std::string_view s)
     {
         schemePrefix = "Engine://";
         remaining = std::string_view(converted).substr(ENGINE_PREFIX.size());
+    }
+    else if (startsWithIgnoreCase(converted, MOUNT_PREFIX))
+    {
+        schemePrefix = "Mount://";
+        remaining = std::string_view(converted).substr(MOUNT_PREFIX.size());
+        isMountScheme = true;
     }
     else
     {
@@ -248,8 +256,8 @@ inline std::string ToLowerPakUri(std::string_view s)
         segments.push_back(segment);
     }
 
-    // 세그먼트가 하나도 없으면 빈 경로이므로 거부
-    if (segments.empty())
+    // 세그먼트가 하나도 없으면 빈 경로이므로 거부 (Mount://는 최소 <Alias>/<relPath> 2개 세그먼트 필요)
+    if (segments.empty() || (isMountScheme && segments.size() < 2))
     {
         return false;
     }

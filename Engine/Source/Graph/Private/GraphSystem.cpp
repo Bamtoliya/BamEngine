@@ -6,6 +6,7 @@
 #include "GraphBindingComponent.h"
 #include "Scene.h"
 #include "Logger.h"
+#include "PakArchive.h"
 #include "PlatformPath.h"
 #include "InputManager.h"
 #include "ActionTimelineComponent.h"
@@ -90,6 +91,14 @@ namespace
 		return entries;
 	}
 
+	std::vector<GraphNodeId> CollectTimelineEndEntries(const Graph& graph)
+	{
+		std::vector<GraphNodeId> entries;
+		for (const auto& node : graph.GetNodes())
+			if (node.Type == "Event.OnActionTimelineEnded") entries.push_back(node.Id);
+		return entries;
+	}
+
 	struct PendingTimelineEvents
 	{
 		std::wstring graphPath;
@@ -128,6 +137,66 @@ namespace
 			pending.tags.clear();
 		}
 		pending.tags.push_back(event.eventTag);
+	}
+
+	// 재생 종료는 끝난 세션의 알림이라 현재 세션 번호와 비교하지 않는다. 대신 그래프 파일과 씬 활성 회차가 그대로일 때만 전달한다.
+	struct PendingTimelineEnds
+	{
+		std::wstring graphPath;
+		uint64 sceneActivityRevision = 0;
+		std::vector<EActionTimelineEndReason> reasons;
+	};
+
+	using SceneTimelineEnds = std::unordered_map<entt::entity, PendingTimelineEnds>;
+
+	bool CanReceiveTimelineEnd(entt::registry& world, entt::entity entity)
+	{
+		if (!world.valid(entity) || !world.all_of<ActionTimelineComponent>(entity)) return false;
+		const auto* flag = world.try_get<FlagComponent>(entity);
+		return !flag || (flag->IsActiveInHierarchy() && !HasFlag(flag->effectiveFlags, EEntityFlag::Dead));
+	}
+
+	void QueueTimelineEnd(const ActionTimelineEndEvent& event)
+	{
+		if (!event.scene || !event.scene->IsActive() || event.scene->IsPaused()) return;
+		auto& world = event.scene->GetRegistry();
+		if (!CanReceiveTimelineEnd(world, event.entity)) return;
+		const auto* binding = TryGetEnabledComponent<GraphBindingComponent>(world, event.entity);
+		if (!binding || binding->graphFile.empty()) return;
+
+		auto& pending = world.ctx().emplace<SceneTimelineEnds>()[event.entity];
+		const auto activityRevision = event.scene->GetActivityRevision();
+		if (pending.graphPath != binding->graphFile || pending.sceneActivityRevision != activityRevision)
+		{
+			pending.graphPath = binding->graphFile;
+			pending.sceneActivityRevision = activityRevision;
+			pending.reasons.clear();
+		}
+		pending.reasons.push_back(event.reason);
+	}
+
+	void DispatchTimelineEnds(Scene& scene, entt::entity entity, GraphRuntimeState& runtime, const PendingTimelineEnds& pending)
+	{
+		if (pending.graphPath != runtime.loadedPath) return;
+		auto& world = scene.GetRegistry();
+		for (const auto reason : pending.reasons)
+		{
+			for (const auto node : runtime.timelineEndEntries)
+			{
+				const auto* binding = TryGetEnabledComponent<GraphBindingComponent>(world, entity);
+				if (s_CurrentEntityDestroyRequested || !binding || binding->graphFile != pending.graphPath ||
+					scene.GetActivityRevision() != pending.sceneActivityRevision || !CanReceiveTimelineEnd(world, entity)) return;
+				if (!runtime.executor.BeginTimelineEnded(node, static_cast<int64_t>(reason)).Succeeded()) continue;
+				runtime.executor.Resume();
+				while (runtime.executor.GetState() == EGraphExecutionState::Running)
+					runtime.executor.Tick();
+				if (runtime.executor.GetDiagnostic().Code == EGraphError::ExecutionLimit)
+				{
+					runtime.isValid = false;
+					return;
+				}
+			}
+		}
 	}
 
 	void DispatchTimelineEvents(Scene& scene, entt::entity entity, GraphRuntimeState& runtime,
@@ -203,6 +272,8 @@ void GraphSystem::Free()
 {
 	ActionTimelineEvents::Unsubscribe(m_TimelineEventHandle);
 	m_TimelineEventHandle = 0;
+	ActionTimelineEvents::UnsubscribeEnd(m_TimelineEndHandle);
+	m_TimelineEndHandle = 0;
 	m_GraphCache.clear();
 	ClearCurrentContext();
 	m_Initialized = false;
@@ -228,6 +299,10 @@ void GraphSystem::OnInitialize()
 		{
 			if (IsActive()) QueueTimelineEvent(event);
 		});
+	m_TimelineEndHandle = ActionTimelineEvents::SubscribeEnd([this](const ActionTimelineEndEvent& event)
+		{
+			if (IsActive()) QueueTimelineEnd(event);
+		});
 	m_Initialized = true;
 }
 
@@ -236,12 +311,11 @@ std::filesystem::path GraphSystem::ResolveGraphPath(const std::filesystem::path&
 	if (path.empty()) return {};
 	const auto findFile = [](std::filesystem::path candidate) -> std::filesystem::path
 	{
-		std::error_code error;
-		if (std::filesystem::is_regular_file(candidate, error)) return PlatformPath::Normalize(candidate);
+		if (PakMountManager::Get().ExistsOrOnDisk(candidate)) return PlatformPath::Normalize(candidate);
 		if (candidate.extension() == L".json" && candidate.stem().extension() != L".bamgraph")
 		{
 			candidate.replace_extension(L".bamgraph.json");
-			if (std::filesystem::is_regular_file(candidate, error)) return PlatformPath::Normalize(candidate);
+			if (PakMountManager::Get().ExistsOrOnDisk(candidate)) return PlatformPath::Normalize(candidate);
 		}
 		return {};
 	};
@@ -349,6 +423,8 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 		// 타임라인 시스템은 그래프보다 먼저 갱신되므로 첫 틱의 이벤트도 초기화 후 전달한다.
 		SceneTimelineEvents timelineEvents;
 		if (auto* pending = world.ctx().find<SceneTimelineEvents>()) timelineEvents.swap(*pending);
+		SceneTimelineEnds timelineEnds;
+		if (auto* pending = world.ctx().find<SceneTimelineEnds>()) timelineEnds.swap(*pending);
 		if (!scene->IsActive() || scene->IsPaused()) continue;
 
 		std::vector<entt::entity> destroyRequests;
@@ -392,6 +468,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				}
 				newState.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
 				newState.timelineEventEntries = CollectTimelineEventEntries(*graphTemplate);
+				newState.timelineEndEntries = CollectTimelineEndEntries(*graphTemplate);
 				const auto executorMs = Milliseconds(Clock::now() - executorStart).count();
 				if (executorMs >= 10.0)
 				{
@@ -430,6 +507,9 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 
 				if (const auto found = timelineEvents.find(entity); found != timelineEvents.end())
 					DispatchTimelineEvents(*scene, entity, *runtime, found->second, dt);
+				// 같은 프레임의 노티파이 이벤트를 먼저 보낸 뒤 종료를 보낸다(타임라인 시스템의 발행 순서와 같다).
+				if (const auto found = timelineEnds.find(entity); found != timelineEnds.end() && runtime->isValid)
+					DispatchTimelineEnds(*scene, entity, *runtime, found->second);
 
 				if (runtime->isValid && !s_CurrentEntityDestroyRequested && InputManager::IsCreated())
 				{
@@ -608,6 +688,7 @@ void GraphSystem::ReloadReflectedNodes(const std::vector<Scene*>& activeScenes)
 			runtime.sourcePath = std::move(sourcePath);
 			runtime.actionEventEntries = CollectActionEventEntries(*graphTemplate, m_Registry);
 			runtime.timelineEventEntries = CollectTimelineEventEntries(*graphTemplate);
+			runtime.timelineEndEntries = CollectTimelineEndEntries(*graphTemplate);
 			runtime.hasStarted = wasStarted;
 			runtime.isValid = true;
 		}

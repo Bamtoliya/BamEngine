@@ -4,6 +4,7 @@
 #include "ResourceMetrics.h"
 #include "Logger.h"
 #include "PlatformPath.h"
+#include "PakArchive.h"
 #include <archive/JsonArchive.h>
 #include <archive/BeveArchive.h>
 #include <cwctype>
@@ -71,9 +72,13 @@ public:
 	[[nodiscard]] bool IsOwnerThread() const { return std::this_thread::get_id() == m_OwnerThread; }
 	EResult DestroyResource(const Handle& handle);
 	EResult DestroyResource(Resource* resource);
-#ifdef BAM_EDITOR
+	// Unloads resources scoped to Project:// or Mount:// while preserving Engine://, Editor://, Plugin://, and built-in resources.
+	uint32 UnloadProjectScopedResources();
 public:
+#if BAM_EDITOR
 	vector<ResourceDebugInfo> GetDebugSnapshot();
+#else
+	inline vector<ResourceDebugInfo> GetDebugSnapshot() { return {}; }
 #endif
 #pragma endregion
 

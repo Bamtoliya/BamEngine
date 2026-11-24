@@ -14,28 +14,47 @@
 #include <unordered_set>
 #include <map>
 #include "Functions.h"
+#include <glaze/beve.hpp>
 #include <glaze/glaze.hpp>
 #include <set>
 #include <string_view>
 #include <tuple>
 #include <Windows.h>
 
+
 namespace Editor
 {
     namespace
     {
-        // 내장 리소스 및 셰이더 내부 심볼릭 식별자 (검증 제외 목록)
+        // 내장 리소스 및 셰이더 내부 심볼릭 식별자 (코드 생성 메모리 전용 리소스 포함, 검증 제외 목록)
         bool IsBuiltinResourceIdentifier(const std::string& pathStr)
         {
+            std::string normalized = pathStr;
+            std::replace(normalized.begin(), normalized.end(), '\\', '/');
+            const std::string lower = Engine::ToLowerStr(normalized);
+
             static const std::unordered_set<std::string> builtins = {
-                "FullscreenQuad", "FullscreenQuadVS", "LightingPS", "DefaultPS", "DefaultVS",
-                "SphereMesh", "QuadMesh", "CubeMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "WaterGridMesh", "__SkyMesh_Sphere__", "MaterialPreviewPS",
-                "ShadowDepthPS", "ShadowDepthVS", "ShadowDepthSkinningVS", "GBufferPS", "GBufferVS",
-                "GBufferSkinningVS", "SkyPS", "SkyVS", "TerrainPS", "TerrainVS", "UIPS", "UIVS"
+                "fullscreenquad", "fullscreenquadvs", "lightingps", "defaultps", "defaultvs",
+                "spheremesh", "quadmesh", "cubemesh", "planemesh", "cylindermesh", "capsulemesh",
+                "watergridmesh", "terraingridmesh", "splineteststrip", "__skymesh_sphere__",
+                "engine://mesh/quad", "engine://texture/defaultbrdflut",
+                "materialpreviewps", "clientpresentps", "viewportchannelps",
+                "shadowdepthps", "shadowdepthvs", "shadowdepthskinningvs", "gbufferps", "gbuffervs",
+                "gbufferskinningvs", "skyps", "skyvs", "terrainps", "terrainvs", "uips", "uivs",
+                "resources/material/tonemappingmaterial", "resources/material/coloradjustmentsmaterial",
+                "resources/material/vignettematerial", "resources/material/chromaticaberrationmaterial",
+                "resources/material/filmgrainmaterial", "resources/material/lensdistortionmaterial",
+                "resources/material/sharpenmaterial", "vfxpreviewgroundmatinst"
             };
 
-            if (builtins.contains(pathStr)) return true;
-            if (pathStr.starts_with("Resources/Shader/") && !pathStr.ends_with(".cso") && !pathStr.ends_with(".hlsl") && !pathStr.ends_with(".spv"))
+            if (builtins.contains(lower)) return true;
+            if (lower.starts_with("postprocess_") && !lower.ends_with(".cso") && !lower.ends_with(".hlsl") &&
+                !lower.ends_with(".spv") && !lower.ends_with(".wgsl"))
+                return true;
+            if (lower.starts_with("liveshader/"))
+                return true;
+            if (lower.starts_with("resources/shader/") && !lower.ends_with(".cso") && !lower.ends_with(".hlsl") &&
+                !lower.ends_with(".spv") && !lower.ends_with(".wgsl"))
                 return true;
 
             return false;
@@ -62,10 +81,30 @@ namespace Editor
             return !text.empty() && !glz::validate_json(text) && !glz::read_json(document, text) && document.is_object();
         }
 
+        bool IsBeveReferenceDocumentPath(const std::filesystem::path& path)
+        {
+            const auto extension = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+            return extension == ".bammatinst" || extension == ".bammat" || extension == ".bammodel" ||
+                extension == ".bamsprite" || extension == ".bamterrainlayer" ||
+                extension == ".bameffect" || extension == ".bamvfx" || extension == ".beve";
+        }
+
         bool ReadReferenceDocument(const std::filesystem::path& source, ReferenceJson& document)
         {
             std::string text;
-            return ReadTextFile(source, text) && ParseReferenceDocument(text, document);
+            if (!ReadTextFile(source, text))
+                return false;
+            if (IsBeveReferenceDocumentPath(source))
+            {
+                ReferenceJson candidate;
+                const auto error = glz::read_beve(candidate, text);
+                if (!error && error.count == text.size() && candidate.is_object())
+                {
+                    document = std::move(candidate);
+                    return true;
+                }
+            }
+            return ParseReferenceDocument(text, document);
         }
 
         template<typename Value, typename Visitor>
@@ -122,6 +161,8 @@ namespace Editor
                             visitPath("prefabAssetPath", ReferenceKind::DirectFile);
                         else if (*type == "Engine::GraphBindingComponent")
                             visitPath("graphFile", ReferenceKind::Graph);
+                        else if (*type == "Engine::TerrainComponent")
+                            visitPath("DataPath", ReferenceKind::DirectFile);
                     }
                 }
 
@@ -145,15 +186,33 @@ namespace Editor
             const auto& headerFields = header->second.get_object();
             const auto type = headerFields.find("ResourceType");
             const auto* tag = type == headerFields.end() ? nullptr : type->second.template get_if<std::uint64_t>();
-            if (!tag || *tag != static_cast<std::uint64_t>(Engine::EResourceType::ActionTimeline)) return;
+            if (!tag) return;
 
-            const auto visitPath = [&visit](auto& fields, const char* key)
+            const auto visitPath = [&visit](auto& fields, const char* key, ReferenceKind kind = ReferenceKind::DirectFile)
             {
                 const auto entry = fields.find(key);
                 if (entry == fields.end()) return;
                 const auto* path = entry->second.template get_if<std::string>();
-                if (path && !path->empty()) visit(fields, key, ReferenceKind::DirectFile);
+                if (path && !path->empty()) visit(fields, key, kind);
             };
+
+            if (*tag == static_cast<std::uint64_t>(Engine::EResourceType::Material) ||
+                *tag == static_cast<std::uint64_t>(Engine::EResourceType::MaterialInstance))
+            {
+                visitPath(root, "m_ShaderGraphPath", ReferenceKind::Graph);
+                return;
+            }
+
+            if (*tag == static_cast<std::uint64_t>(Engine::EResourceType::Shader))
+            {
+                visitPath(root, "m_DxilPath");
+                visitPath(root, "m_SpirvPath");
+                visitPath(root, "m_WgslPath");
+                return;
+            }
+
+            if (*tag != static_cast<std::uint64_t>(Engine::EResourceType::ActionTimeline)) return;
+
             visitPath(root, "m_ModelPath");
 
             const auto tracksField = root.find("m_NotifyTracks");
@@ -477,10 +536,6 @@ namespace Editor
         using Path = Engine::PlatformPath;
         using Issue = EAssetReferenceIssueType;
 
-        static const std::set<std::string> builtInMeshes = {
-            "QuadMesh", "CubeMesh", "SphereMesh", "PlaneMesh", "CylinderMesh", "CapsuleMesh", "WaterGridMesh"
-        };
-
         std::vector<AssetReferenceIssue> issues;
         if (referencedFiles)
             referencedFiles->clear();
@@ -509,6 +564,7 @@ namespace Editor
 
         std::vector<fs::path> pending{ scene };
         std::set<fs::path> visited;
+        std::set<fs::path> collected;
 
         while (!pending.empty())
         {
@@ -533,14 +589,14 @@ namespace Editor
             for (const auto& referenceField : ReadReferenceFields(document))
             {
                 const auto& [reference, kind] = referenceField.first;
-                if (builtInMeshes.contains(reference))
+                if (IsBuiltinResourceIdentifier(reference))
                     continue;
 
                 const auto rawPath = Engine::Utf8ToPath(reference);
                 if (!Path::IsVirtualUri(rawPath.wstring()) && rawPath.has_root_path())
                 {
                     const auto virtualUri = Path::ToVirtualUri(rawPath);
-                    if (!Path::IsProjectUri(virtualUri) && !Path::IsEngineUri(virtualUri))
+                    if (!Path::IsProjectUri(virtualUri) && !Path::IsEngineUri(virtualUri) && !Path::IsMountUri(virtualUri))
                     {
                         report(source, reference, Issue::ExternalAbsolutePath);
                         continue;
@@ -556,15 +612,16 @@ namespace Editor
                 }
 
                 const auto uri = Path::ToVirtualUri(file);
-                if (!Path::IsProjectUri(uri) && !Path::IsEngineUri(uri))
+                if (!Path::IsProjectUri(uri) && !Path::IsEngineUri(uri) && !Path::IsMountUri(uri))
                 {
                     report(source, reference, Issue::OutsideRuntimeRoots);
                     continue;
                 }
 
-                if (referencedFiles)
+                if (referencedFiles && collected.insert(file).second)
                     referencedFiles->push_back(file);
-                if (kind == ReferenceKind::AnimatorController || IsReferenceDocumentPath(file))
+                if (kind == ReferenceKind::AnimatorController || kind == ReferenceKind::Graph ||
+                    IsReferenceDocumentPath(file) || IsBeveReferenceDocumentPath(file))
                     pending.push_back(file);
             }
         }
@@ -576,7 +633,7 @@ namespace Editor
     {
         const auto extension = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
         return extension == ".json" || extension == ".animator" || extension == ".bamanimator" ||
-            extension == ".actiontimeline";
+            extension == ".actiontimeline" || extension == ".bamgraph";
     }
 
     namespace
@@ -698,17 +755,18 @@ namespace Editor
                     continue;
 
                 const bool isDirectory = fs::is_directory(status);
+                if (isDirectory)
+                {
+                    const auto dirName = entry->path().filename().wstring();
+                    if (dirName == L".git" || dirName == L"Temp" || dirName == L"Logs" || dirName == L"out")
+                        continue;
+                }
                 const bool isDocument = fs::is_regular_file(status) && IsReferenceDocumentPath(entry->path());
                 if (!isDirectory && !isDocument)
                     continue;
 
-                const auto source = fs::canonical(entry->path(), entryError);
-                if (entryError)
-                {
-                    if (index) index->Root.clear();
-                    ReportUnreadableDocument(entry->path(), scan);
-                    continue;
-                }
+                // directory is already canonical and symlinks are skipped above, so entry->path() is canonical.
+                const auto& source = entry->path();
                 if (!IsInAssetTree(source, root))
                     continue;
                 if (isDirectory && visited.insert(source).second)

@@ -44,6 +44,7 @@ struct ENGINE_API GraphRuntimeState
 
 	std::vector<ActionEventEntry> actionEventEntries;
 	std::unordered_map<std::string, std::vector<GraphNodeId>> timelineEventEntries;
+	std::vector<GraphNodeId> timelineEndEntries;
 };
 
 class ENGINE_API GraphSystem : public ISystem
@@ -105,6 +106,7 @@ private:
 	std::unordered_map<std::wstring, CachedGraph> m_GraphCache;
 	bool m_Initialized = false;
 	DelegateHandle m_TimelineEventHandle = 0;
+	DelegateHandle m_TimelineEndHandle = 0;
 };
 
 END
