@@ -3,6 +3,7 @@
 #include "Scene.h"
 #include "SceneEntityReference.h"
 #include "WorldComponents.h"
+#include "NavigationSystem.h"
 #include "Adapters/GlmArchiveAdapter.h"
 
 #pragma region Constructor&Destructor
@@ -31,6 +32,7 @@ Scene* Scene::Create(void* arg)
 
 void Scene::Free()
 {
+	NavigationSystem::RemoveSceneNavGrid(this);
 	ClearEntities();
 }
 #pragma endregion

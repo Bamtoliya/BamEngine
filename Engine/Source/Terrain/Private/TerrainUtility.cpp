@@ -7,6 +7,9 @@
 #include <stb_image_write.h>
 #include <filesystem>
 #include <fstream>
+#include <cmath>
+#include <cwctype>
+#include <vector>
 
 namespace
 {
@@ -24,6 +27,121 @@ namespace
 	{
 		return TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount) &&
 			terrain.HeightData.size() == sampleCount;
+	}
+
+	// ── 하이트맵 입출력 (16비트, UTF-8 경로) ──
+	// 파일은 넓은 문자 경로로 직접 읽고 쓴다. stb의 파일 함수는 char* 경로(ACP)를 써서 한글 경로에서 실패한다.
+	bool IsRawHeightmap(const std::filesystem::path& path)
+	{
+		auto ext = path.extension().wstring();
+		for (auto& ch : ext) ch = static_cast<wchar_t>(std::towlower(ch));
+		return ext == L".raw" || ext == L".r16";
+	}
+
+	bool ReadFileBytes(const std::filesystem::path& path, std::vector<unsigned char>& bytes)
+	{
+		std::ifstream file(path, std::ios::binary | std::ios::ate);
+		if (!file) return false;
+		const auto size = static_cast<std::streamoff>(file.tellg());
+		if (size <= 0 || size > (std::numeric_limits<int>::max)()) return false;
+		bytes.resize(static_cast<std::size_t>(size));
+		file.seekg(0);
+		return static_cast<bool>(file.read(reinterpret_cast<char*>(bytes.data()), size));
+	}
+
+	// 높이 이미지: 값은 0~1, 가로·세로가 다를 수 있다.
+	struct HeightImage
+	{
+		int Width = 0;
+		int Height = 0;
+		std::vector<float> Values;
+	};
+
+	bool DecodeHeightImage(const std::filesystem::path& path, HeightImage& image)
+	{
+		std::vector<unsigned char> bytes;
+		if (!ReadFileBytes(path, bytes)) return false;
+
+		if (IsRawHeightmap(path))
+		{
+			// RAW: 리틀 엔디언 uint16 정사각형(머리말 없음). 한 변은 파일 크기에서 구한다.
+			if (bytes.size() % 2 != 0) return false;
+			const std::size_t count = bytes.size() / 2;
+			const auto side = static_cast<std::size_t>(std::llround(std::sqrt(static_cast<double>(count))));
+			if (side < 2 || side * side != count) return false;
+			image.Width = image.Height = static_cast<int>(side);
+			image.Values.resize(count);
+			for (std::size_t i = 0; i < count; ++i)
+				image.Values[i] = static_cast<float>(bytes[i * 2] | (bytes[i * 2 + 1] << 8)) / 65535.0f;
+			return true;
+		}
+
+		// PNG 등: 8비트 이미지도 16비트로 넓혀 읽으므로 같은 경로로 처리한다.
+		int width = 0;
+		int height = 0;
+		int channels = 0;
+		stbi_us* pixels = stbi_load_16_from_memory(bytes.data(), static_cast<int>(bytes.size()), &width, &height, &channels, 1);
+		if (!pixels || width <= 0 || height <= 0)
+		{
+			if (pixels) stbi_image_free(pixels);
+			return false;
+		}
+		image.Width = width;
+		image.Height = height;
+		image.Values.resize(static_cast<std::size_t>(width) * height);
+		for (std::size_t i = 0; i < image.Values.size(); ++i)
+			image.Values[i] = static_cast<float>(pixels[i]) / 65535.0f;
+		stbi_image_free(pixels);
+		return true;
+	}
+
+	void AppendBigEndian32(std::vector<unsigned char>& out, uint32 value)
+	{
+		for (int shift = 24; shift >= 0; shift -= 8) out.push_back(static_cast<unsigned char>(value >> shift));
+	}
+
+	void AppendPngChunk(std::vector<unsigned char>& out, const char* type, const unsigned char* data, std::size_t size)
+	{
+		AppendBigEndian32(out, static_cast<uint32>(size));
+		const std::size_t typeStart = out.size();
+		out.insert(out.end(), type, type + 4);
+		if (size > 0) out.insert(out.end(), data, data + size);
+		const unsigned int crc = stbiw__crc32(out.data() + typeStart, static_cast<int>(size + 4));
+		AppendBigEndian32(out, crc);
+	}
+
+	// 16비트 그레이스케일 PNG(색 형식 0, 비트 깊이 16). stb_image_write는 8비트만 쓰므로 압축과 CRC만 빌려 직접 조립한다.
+	bool EncodeGray16Png(const std::vector<uint16>& samples, int side, std::vector<unsigned char>& png)
+	{
+		const std::size_t rowBytes = static_cast<std::size_t>(side) * 2 + 1;
+		std::vector<unsigned char> filtered(rowBytes * side);
+		for (int y = 0; y < side; ++y)
+		{
+			unsigned char* row = filtered.data() + rowBytes * y;
+			row[0] = 0; // 필터 없음
+			for (int x = 0; x < side; ++x)
+			{
+				const uint16 value = samples[static_cast<std::size_t>(y) * side + x];
+				row[1 + x * 2] = static_cast<unsigned char>(value >> 8);
+				row[2 + x * 2] = static_cast<unsigned char>(value & 0xFF);
+			}
+		}
+
+		int zlibSize = 0;
+		unsigned char* zlib = stbi_zlib_compress(filtered.data(), static_cast<int>(filtered.size()), &zlibSize, 8);
+		if (!zlib || zlibSize <= 0) return false;
+
+		static constexpr unsigned char signature[] = { 137, 80, 78, 71, 13, 10, 26, 10 };
+		png.assign(std::begin(signature), std::end(signature));
+		std::vector<unsigned char> header;
+		AppendBigEndian32(header, static_cast<uint32>(side));
+		AppendBigEndian32(header, static_cast<uint32>(side));
+		header.insert(header.end(), { 16, 0, 0, 0, 0 }); // 비트 깊이 16, 그레이스케일, 압축·필터·인터레이스 기본
+		AppendPngChunk(png, "IHDR", header.data(), header.size());
+		AppendPngChunk(png, "IDAT", zlib, static_cast<std::size_t>(zlibSize));
+		AppendPngChunk(png, "IEND", nullptr, 0);
+		STBIW_FREE(zlib);
+		return true;
 	}
 	// ── 1. 레이아웃 구조체 먼저 선언 ──
 	struct TerrainGridMeshLayout
@@ -315,31 +433,29 @@ bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitW
 			}
 		}
 	}
-	if (modified) terrain.MarkHeightDirty(PixelRect{ minX, minZ, maxX + 1, maxZ + 1 });
+	if (modified)
+	{
+		terrain.MarkHeightDirty(PixelRect{ minX, minZ, maxX + 1, maxZ + 1 });
+		terrain.IsDataDirty = true; // 씬 저장 때 데이터 파일을 다시 쓴다
+	}
 
 	return modified;
 }
 
 bool TerrainUtility::LoadHeightmapFromFile(TerrainComponent& terrain, const std::wstring& filePath)
 {
-	if (terrain.Resolution == 0) return false;
+	uint32 vertexAxisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TryGetHeightmapSize(terrain.Resolution, vertexAxisCount, sampleCount)) return false;
 
-	const std::string u8Path = std::filesystem::path(filePath).string();
-	int imgW = 0;
-	int imgH = 0;
-	int channels = 0;
-	// 1채널(그레이스케일)로 강제 변환하여 로드
-	unsigned char* pixels = stbi_load(u8Path.c_str(), &imgW, &imgH, &channels, 1);
-	if (!pixels || imgW <= 0 || imgH <= 0)
-	{
-		if (pixels) stbi_image_free(pixels);
-		return false;
-	}
+	HeightImage image;
+	if (!DecodeHeightImage(std::filesystem::path(filePath), image)) return false;
 
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
-	terrain.HeightData.resize(vertexAxisCount * vertexAxisCount);
-
-	// 이미지 해상도와 터레인 정점 그리드가 달라도 바이리니어(Bilinear) 샘플링으로 매끄럽게 리샘플링
+	// 이미지 해상도와 정점 그리드가 달라도 바이리니어 샘플링으로 맞춘다. 실패하면 기존 높이를 바꾸지 않는다.
+	std::vector<f32> heights(sampleCount);
+	const int imgW = image.Width;
+	const int imgH = image.Height;
+	const auto at = [&](int px, int py) { return image.Values[static_cast<std::size_t>(py) * imgW + px]; };
 	for (uint32 z = 0; z < vertexAxisCount; ++z)
 	{
 		const float v = static_cast<float>(z) / static_cast<float>(vertexAxisCount - 1);
@@ -355,19 +471,14 @@ bool TerrainUtility::LoadHeightmapFromFile(TerrainComponent& terrain, const std:
 			const int x0 = glm::clamp(static_cast<int>(srcX), 0, imgW - 1);
 			const int x1 = glm::clamp(x0 + 1, 0, imgW - 1);
 			const float tx = srcX - static_cast<float>(x0);
-
-			const float p00 = static_cast<float>(pixels[y0 * imgW + x0]) / 255.0f;
-			const float p10 = static_cast<float>(pixels[y0 * imgW + x1]) / 255.0f;
-			const float p01 = static_cast<float>(pixels[y1 * imgW + x0]) / 255.0f;
-			const float p11 = static_cast<float>(pixels[y1 * imgW + x1]) / 255.0f;
-
-			const float val = glm::mix(glm::mix(p00, p10, tx), glm::mix(p01, p11, tx), ty);
-			terrain.HeightData[z * vertexAxisCount + x] = val;
+			heights[static_cast<std::size_t>(z) * vertexAxisCount + x] =
+				glm::mix(glm::mix(at(x0, y0), at(x1, y0), tx), glm::mix(at(x0, y1), at(x1, y1), tx), ty);
 		}
 	}
 
-	stbi_image_free(pixels);
+	terrain.HeightData.swap(heights);
 	terrain.MarkHeightDirty();
+	terrain.IsDataDirty = true;
 	return true;
 }
 
@@ -377,81 +488,176 @@ bool TerrainUtility::SaveHeightmapToFile(const TerrainComponent& terrain, const 
 	std::size_t sampleCount = 0;
 	if (!TryGetHeightDataLayout(terrain, vertexAxisCount, sampleCount)) return false;
 
-	std::vector<unsigned char> outPixels(sampleCount);
+	std::vector<uint16> samples(sampleCount);
 	for (std::size_t i = 0; i < sampleCount; ++i)
 	{
 		const f32 height = terrain.HeightData[i];
 		if (!std::isfinite(height)) return false;
-		outPixels[i] = static_cast<unsigned char>(glm::clamp(height, 0.0f, 1.0f) * 255.0f);
+		samples[i] = static_cast<uint16>(std::lround(glm::clamp(height, 0.0f, 1.0f) * 65535.0f));
 	}
 
-	const std::string u8Path = std::filesystem::path(filePath).string();
-	const int side = static_cast<int>(vertexAxisCount);
-	return stbi_write_png(u8Path.c_str(), side, side, 1, outPixels.data(), side) != 0;
-}
-
-void TerrainUtility::ApplyPaint(TerrainComponent& terrain, const vec3& hitPoint, uint32 targetLayer, f32 radius, f32 intensity, f32 falloff)
-{
-	if (radius <= 0.0f || intensity <= 0.0f || targetLayer >= 4) return;
-
-	const uint32 vertexAxisCount = terrain.Resolution + 1;
-	const uint32 totalVertexCount = vertexAxisCount * vertexAxisCount;
-	if (terrain.SplatData.size() != totalVertexCount * 4)
+	// 확장자가 .raw·.r16이면 RAW(리틀 엔디언 uint16), 그 외에는 16비트 PNG로 쓴다.
+	const std::filesystem::path path(filePath);
+	std::vector<unsigned char> bytes;
+	if (IsRawHeightmap(path))
 	{
-		terrain.SplatData.assign(totalVertexCount * 4, 0);
-		// 기본적으로 Layer 0(잔디)을 255로 초기화
-		for (uint32 i = 0; i < totalVertexCount; ++i)
-			terrain.SplatData[i * 4 + 0] = 255;
-		terrain.IsSplatDirty = true;
-	}
-
-	const float halfW = terrain.Width * 0.5f;
-	const float halfL = terrain.Length * 0.5f;
-	const float localX = hitPoint.x + halfW;
-	const float localZ = hitPoint.z + halfL;
-
-	const float stepX = terrain.Width / static_cast<float>(terrain.Resolution);
-	const float stepZ = terrain.Length / static_cast<float>(terrain.Resolution);
-
-	const int32 minX = std::clamp(static_cast<int32>(std::floor((localX - radius) / stepX)), 0, static_cast<int32>(terrain.Resolution));
-	const int32 maxX = std::clamp(static_cast<int32>(std::ceil((localX + radius) / stepX)), 0, static_cast<int32>(terrain.Resolution));
-	const int32 minZ = std::clamp(static_cast<int32>(std::floor((localZ - radius) / stepZ)), 0, static_cast<int32>(terrain.Resolution));
-	const int32 maxZ = std::clamp(static_cast<int32>(std::ceil((localZ + radius) / stepZ)), 0, static_cast<int32>(terrain.Resolution));
-
-	for (int32 z = minZ; z <= maxZ; ++z)
-	{
-		for (int32 x = minX; x <= maxX; ++x)
+		bytes.resize(sampleCount * 2);
+		for (std::size_t i = 0; i < sampleCount; ++i)
 		{
-			const float vx = static_cast<float>(x) * stepX - halfW;
-			const float vz = static_cast<float>(z) * stepZ - halfL;
-			const float dist = std::sqrt((vx - hitPoint.x) * (vx - hitPoint.x) + (vz - hitPoint.z) * (vz - hitPoint.z));
-			if (dist > radius) continue;
-
-			const float t = dist / radius;
-			const float factor = std::pow(std::clamp(1.0f - t, 0.0f, 1.0f), std::max(0.01f, falloff));
-			const float delta = intensity * factor * 255.0f;
-
-			const uint32 pixelIndex = (z * vertexAxisCount + x) * 4;
-			float weights[4] = {
-				static_cast<float>(terrain.SplatData[pixelIndex + 0]),
-				static_cast<float>(terrain.SplatData[pixelIndex + 1]),
-				static_cast<float>(terrain.SplatData[pixelIndex + 2]),
-				static_cast<float>(terrain.SplatData[pixelIndex + 3])
-			};
-
-			weights[targetLayer] = std::clamp(weights[targetLayer] + delta, 0.0f, 255.0f);
-
-			// 레이어들의 합이 255를 유지하도록 정규화
-			float sum = weights[0] + weights[1] + weights[2] + weights[3];
-			if (sum > 0.0f)
-			{
-				for (int i = 0; i < 4; ++i)
-					terrain.SplatData[pixelIndex + i] = static_cast<uint8>(std::clamp((weights[i] / sum) * 255.0f, 0.0f, 255.0f));
-			}
+			bytes[i * 2] = static_cast<unsigned char>(samples[i] & 0xFF);
+			bytes[i * 2 + 1] = static_cast<unsigned char>(samples[i] >> 8);
 		}
 	}
+	else if (!EncodeGray16Png(samples, static_cast<int>(vertexAxisCount), bytes))
+	{
+		return false;
+	}
 
-	terrain.IsSplatDirty = true;
+	std::ofstream file(path, std::ios::binary | std::ios::trunc);
+	if (!file) return false;
+	file.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+	return static_cast<bool>(file.flush());
+}
+
+namespace
+{
+	// 정점당 channels바이트 배열을 최근접 샘플로 다른 해상도에 맞춘다.
+	bool ResampleNearest(const std::vector<uint8>& source, uint32 channels, uint32 targetResolution, std::vector<uint8>& result)
+	{
+		uint32 targetAxis = 0;
+		std::size_t targetCount = 0;
+		if (channels == 0 || source.size() % channels != 0 || !TryGetHeightmapSize(targetResolution, targetAxis, targetCount))
+			return false;
+		const std::size_t sourceCount = source.size() / channels;
+		const auto sourceAxis = static_cast<std::size_t>(std::llround(std::sqrt(static_cast<double>(sourceCount))));
+		if (sourceAxis < 2 || sourceAxis * sourceAxis != sourceCount) return false;
+		const std::size_t sourceResolution = sourceAxis - 1;
+
+		std::vector<uint8> candidate(targetCount * channels);
+		for (std::size_t z = 0; z < targetAxis; ++z)
+		{
+			const std::size_t sourceZ = (z * sourceResolution + targetResolution / 2) / targetResolution;
+			for (std::size_t x = 0; x < targetAxis; ++x)
+			{
+				const std::size_t sourceX = (x * sourceResolution + targetResolution / 2) / targetResolution;
+				std::copy_n(source.data() + (sourceZ * sourceAxis + sourceX) * channels, channels, candidate.data() + (z * targetAxis + x) * channels);
+			}
+		}
+		result.swap(candidate);
+		return true;
+	}
+
+	// 하나의 배열을 정해진 크기로 맞춘다. 비었거나 리샘플링할 수 없으면 기본값으로 채운다.
+	bool FitLayerPlane(std::vector<uint8>& data, uint32 channels, uint32 resolution, std::size_t sampleCount, uint8 firstChannelDefault)
+	{
+		if (data.size() == sampleCount * channels) return false;
+		if (data.empty() || !ResampleNearest(data, channels, resolution, data))
+		{
+			data.assign(sampleCount * channels, 0);
+			if (firstChannelDefault != 0)
+				for (std::size_t i = 0; i < sampleCount; ++i) data[i * channels] = firstChannelDefault;
+		}
+		return true;
+	}
+
+	// 브러시 반경 안의 정점을 돈다. visit(index, falloffFactor 0~1)가 값을 바꿨으면 true를 돌려준다.
+	template <typename Visit>
+	bool ForEachBrushVertex(const Engine::TerrainComponent& terrain, const glm::vec3& hitWorldPos, const glm::mat4& worldMatrix, float radius, float falloff, Visit&& visit)
+	{
+		uint32 axisCount = 0;
+		std::size_t sampleCount = 0;
+		if (!(radius > 0.0f) || !TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount) ||
+			!(terrain.Width > 0.0f) || !(terrain.Length > 0.0f))
+			return false;
+
+		const glm::vec3 local = glm::vec3(glm::inverse(worldMatrix) * glm::vec4(hitWorldPos, 1.0f));
+		if (!std::isfinite(local.x) || !std::isfinite(local.z)) return false;
+		const float halfW = terrain.Width * 0.5f;
+		const float halfL = terrain.Length * 0.5f;
+		const float stepX = terrain.Width / static_cast<float>(terrain.Resolution);
+		const float stepZ = terrain.Length / static_cast<float>(terrain.Resolution);
+		const int32 maxIndex = static_cast<int32>(terrain.Resolution);
+		const int32 minX = std::clamp(static_cast<int32>(std::floor((local.x + halfW - radius) / stepX)), 0, maxIndex);
+		const int32 maxX = std::clamp(static_cast<int32>(std::ceil((local.x + halfW + radius) / stepX)), 0, maxIndex);
+		const int32 minZ = std::clamp(static_cast<int32>(std::floor((local.z + halfL - radius) / stepZ)), 0, maxIndex);
+		const int32 maxZ = std::clamp(static_cast<int32>(std::ceil((local.z + halfL + radius) / stepZ)), 0, maxIndex);
+
+		bool modified = false;
+		for (int32 z = minZ; z <= maxZ; ++z)
+		{
+			for (int32 x = minX; x <= maxX; ++x)
+			{
+				const float dx = static_cast<float>(x) * stepX - halfW - local.x;
+				const float dz = static_cast<float>(z) * stepZ - halfL - local.z;
+				const float dist = std::sqrt(dx * dx + dz * dz);
+				if (dist > radius) continue;
+				const float factor = std::pow(std::clamp(1.0f - dist / radius, 0.0f, 1.0f), std::max(0.01f, falloff));
+				modified |= visit(static_cast<std::size_t>(z) * axisCount + static_cast<std::size_t>(x), factor);
+			}
+		}
+		return modified;
+	}
+}
+
+bool TerrainUtility::EnsureLayerData(TerrainComponent& terrain)
+{
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TryGetHeightmapSize(terrain.Resolution, axisCount, sampleCount)) return false;
+	const bool splatChanged = FitLayerPlane(terrain.SplatData, TerrainComponent::LayersPerPlane, terrain.Resolution, sampleCount, 255);
+	const bool extraChanged = FitLayerPlane(terrain.SplatDataExtra, TerrainComponent::LayersPerPlane, terrain.Resolution, sampleCount, 0);
+	const bool attributeChanged = FitLayerPlane(terrain.AttributeData, 1, terrain.Resolution, sampleCount, 0);
+	if (splatChanged) terrain.IsSplatDirty = true;
+	return splatChanged || extraChanged || attributeChanged;
+}
+
+bool TerrainUtility::ApplyPaint(TerrainComponent& terrain, const vec3& hitWorldPos, const glm::mat4& worldMatrix, uint32 targetLayer, f32 radius, f32 intensity, f32 falloff)
+{
+	if (!(intensity > 0.0f) || targetLayer >= TerrainComponent::MaxLayers) return false;
+	EnsureLayerData(terrain);
+
+	const bool modified = ForEachBrushVertex(terrain, hitWorldPos, worldMatrix, radius, falloff, [&](std::size_t index, float factor)
+		{
+			uint8* planes[2] = { terrain.SplatData.data() + index * 4, terrain.SplatDataExtra.data() + index * 4 };
+			float weights[TerrainComponent::MaxLayers];
+			for (uint32 layer = 0; layer < TerrainComponent::MaxLayers; ++layer)
+				weights[layer] = static_cast<float>(planes[layer / 4][layer % 4]);
+
+			weights[targetLayer] = std::clamp(weights[targetLayer] + intensity * factor * 255.0f, 0.0f, 255.0f);
+			float sum = 0.0f;
+			for (const float weight : weights) sum += weight;
+			if (!(sum > 0.0f)) return false;
+
+			bool changed = false;
+			for (uint32 layer = 0; layer < TerrainComponent::MaxLayers; ++layer)
+			{
+				const auto value = static_cast<uint8>(std::lround(std::clamp(weights[layer] / sum * 255.0f, 0.0f, 255.0f)));
+				uint8& stored = planes[layer / 4][layer % 4];
+				changed |= stored != value;
+				stored = value;
+			}
+			return changed;
+		});
+
+	if (modified)
+	{
+		terrain.IsSplatDirty = true;
+		terrain.IsDataDirty = true;
+	}
+	return modified;
+}
+
+bool TerrainUtility::ApplyAttributePaint(TerrainComponent& terrain, const vec3& hitWorldPos, const glm::mat4& worldMatrix, uint8 attribute, f32 radius)
+{
+	EnsureLayerData(terrain);
+	const bool modified = ForEachBrushVertex(terrain, hitWorldPos, worldMatrix, radius, 1.0f, [&](std::size_t index, float)
+		{
+			if (terrain.AttributeData[index] == attribute) return false;
+			terrain.AttributeData[index] = attribute;
+			return true;
+		});
+	if (modified) terrain.IsDataDirty = true;
+	return modified;
 }
 
 bool TerrainUtility::ResampleHeightData(const std::vector<f32>& source, uint32 sourceResolution,
@@ -502,6 +708,8 @@ bool TerrainUtility::ResampleHeightData(const std::vector<f32>& source, uint32 s
 
 bool TerrainUtility::TryGetGridLayout(uint32 resolution, uint32& axisCount, std::size_t& sampleCount)
 {
+	// 지형 데이터 상한: 분할 1024(정점 1025). 파일 읽기·쓰기와 리소스 생성이 모두 이 검사를 거친다.
+	if (resolution > TerrainComponent::MaxResolution) return false;
 	TerrainGridMeshLayout layout;
 	if (!TryGetTerrainGridMeshLayout(resolution, resolution, layout))
 		return false;

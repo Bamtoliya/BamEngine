@@ -9,6 +9,7 @@
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "ResourceHandleArchiveAdapter.h"
 #include "ResourcePreloader.h"
+#include "NavigationSystem.h"
 
 namespace Engine
 {
@@ -507,6 +508,7 @@ archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
         auto written = object.Write("Version", SceneArchiveVersion);
         if (written) written = object.Write("Name", m_Name);
         if (written) written = object.Write("Active", IsActive());
+        if (written && !m_NavGridPath.empty()) written = object.Write("NavGridPath", m_NavGridPath);
         if (!written) return written;
         return WriteEntityRecords(object, m_LocalRegistry, entities);
     });
@@ -535,6 +537,9 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         field = object.Read("Name", candidate->m_Name);
         bool active = true;
         if (field) field = object.Read("Active", active);
+        bool hasNavGridPath = false;
+        if (field) field = object.HasField("NavGridPath", hasNavGridPath);
+        if (field && hasNavGridPath) field = object.Read("NavGridPath", candidate->m_NavGridPath);
         if (!field) return field;
         candidate->SetActive(active);
         PreloadDocumentResources("Scene", resourceReferences);
@@ -556,6 +561,12 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
     }
     if (!TransformSystem::UpdateHierarchy(candidate->m_LocalRegistry))
         return { archive::ArchiveErrorCode::InvalidValue, "Entities.Transform" };
+    if (!candidate->m_NavGridPath.empty())
+    {
+        auto navGrid = std::make_shared<NavGrid>();
+        if (navGrid->LoadFromFile(NavGrid::ResolveDataPath(candidate->m_NavGridPath)))
+            NavigationSystem::SetSceneNavGrid(candidate.get(), std::move(navGrid));
+    }
     scene = candidate.release();
     return {};
 }

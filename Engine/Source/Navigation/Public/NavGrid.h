@@ -4,8 +4,10 @@
 #include "Types.h"
 #include "BoundingBox.h"
 #include <glm/glm.hpp>
-#include <vector>
+#include <filesystem>
 #include <memory>
+#include <string>
+#include <vector>
 
 BEGIN(Engine)
 
@@ -23,6 +25,12 @@ public:
 
 	void SetWalkable(int32 x, int32 z, bool walkable);
 	[[nodiscard]] bool IsWalkable(int32 x, int32 z) const;
+	void SetCellHeight(int32 x, int32 z, f32 height);
+	[[nodiscard]] f32 GetCellHeight(int32 x, int32 z) const;
+	void SetCellCost(int32 x, int32 z, f32 cost);
+	[[nodiscard]] f32 GetCellCost(int32 x, int32 z) const;
+	void SetMaxStepHeight(f32 maxStepHeight) { m_MaxStepHeight = maxStepHeight; }
+	[[nodiscard]] f32 GetMaxStepHeight() const { return m_MaxStepHeight; }
 	[[nodiscard]] bool IsValidCell(int32 x, int32 z) const;
 	void ResetWalkable(bool walkable = true);
 
@@ -34,8 +42,13 @@ public:
 	[[nodiscard]] f32 GetCellSize() const { return m_CellSize; }
 	[[nodiscard]] const vec3& GetOrigin() const { return m_Origin; }
 
-	void BakeObstaclesFromScene(const Scene& scene, f32 agentRadius = 0.4f);
+	void BakeObstaclesFromScene(const Scene& scene, f32 agentRadius = 0.4f, f32 maxSlopeDegrees = 45.0f, f32 maxStepHeight = 0.5f);
 	[[nodiscard]] static bool CalculateSceneBounds(const Scene& scene, BoundingBox& outBounds);
+
+	[[nodiscard]] bool SaveToFile(const std::filesystem::path& path) const;
+	[[nodiscard]] bool LoadFromFile(const std::filesystem::path& path);
+	[[nodiscard]] static std::filesystem::path MakeDefaultPath(const std::filesystem::path& scenePath);
+	[[nodiscard]] static std::filesystem::path ResolveDataPath(const std::string& navGridUri);
 
 	[[nodiscard]] bool FindPath(
 		const vec3& startWorld,
@@ -54,7 +67,10 @@ private:
 	int32 m_Height = 0;
 	f32 m_CellSize = 1.0f;
 	vec3 m_Origin = vec3(0.0f);
+	f32 m_MaxStepHeight = 0.5f;
 	std::vector<bool> m_Walkable;
+	std::vector<f32> m_CellHeights;
+	std::vector<f32> m_CellCosts;
 };
 
 END

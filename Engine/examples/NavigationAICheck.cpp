@@ -7,11 +7,13 @@
 #include "WorldTransformComponent.h"
 #include "TransformSystem.h"
 #include "ColliderComponent.h"
+#include "TerrainComponent.h"
 #include "TagComponent.h"
 
 #include <iostream>
 #include <memory>
 #include <cmath>
+#include <filesystem>
 
 namespace
 {
@@ -330,6 +332,125 @@ namespace
 
 		return true;
 	}
+
+	bool TestTerrainNavGridBakeAndPersistence()
+	{
+		std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+		if (!scene)
+		{
+			std::cerr << "Failed to create scene for terrain NavGrid test.\n";
+			return false;
+		}
+
+		auto& world = scene->GetRegistry();
+		const auto terrainEntity = scene->CreateEntity().GetEntityHandle();
+		auto& tr = world.get_or_emplace<TransformComponent>(terrainEntity);
+		auto& wt = world.get_or_emplace<WorldTransformComponent>(terrainEntity);
+		tr.SetLocalPosition(vec3(0.0f, 0.0f, 0.0f));
+		TransformSystem::UpdateRootWorld(tr, wt);
+
+		auto& terrain = world.emplace<TerrainComponent>(terrainEntity);
+		terrain.Width = 16.0f;
+		terrain.Length = 16.0f;
+		terrain.MaxHeight = 20.0f;
+		terrain.Resolution = 16;
+		const size_t axis = 17;
+		terrain.HeightData.assign(axis * axis, 0.0f);
+		terrain.AttributeData.assign(axis * axis, static_cast<uint8>(ETerrainAttribute::None));
+
+		// 상반부(vz 0..7): 중앙에 급경사 절벽(높이 10m -> 경사 > 45도)
+		for (size_t vz = 0; vz <= 7; ++vz)
+		{
+			terrain.HeightData[vz * axis + 8] = 0.5f;
+		}
+		// 중하반부(vz 8..13): 중앙에 Blocked 속성 영역, vz 14..16은 우회 통로로 개방
+		for (size_t vz = 8; vz <= 13; ++vz)
+		{
+			terrain.AttributeData[vz * axis + 7] = static_cast<uint8>(ETerrainAttribute::Blocked);
+			terrain.AttributeData[vz * axis + 8] = static_cast<uint8>(ETerrainAttribute::Blocked);
+		}
+
+		BoundingBox bounds;
+		if (!NavGrid::CalculateSceneBounds(*scene, bounds) || bounds.min.x > -7.9f || bounds.max.x < 7.9f)
+		{
+			std::cerr << "CalculateSceneBounds did not include terrain bounds.\n";
+			return false;
+		}
+
+		NavGrid grid(16, 16, 1.0f, vec3(-8.0f, 0.0f, -8.0f));
+		grid.BakeObstaclesFromScene(*scene, 0.4f, 45.0f, 0.5f);
+
+		// 급경사(cell 7,3)와 Blocked(cell 7,10)는 비통행, 평탄 영역(cell 3,3 / 12,3 / 7,15)은 통행 가능
+		if (grid.IsWalkable(7, 3))
+		{
+			std::cerr << "Steep terrain slope cell was unexpectedly walkable.\n";
+			return false;
+		}
+		if (grid.IsWalkable(7, 10))
+		{
+			std::cerr << "Blocked terrain attribute cell was unexpectedly walkable.\n";
+			return false;
+		}
+		if (!grid.IsWalkable(3, 3) || !grid.IsWalkable(12, 3) || !grid.IsWalkable(7, 15))
+		{
+			std::cerr << "Flat walkable terrain cells were unexpectedly blocked.\n";
+			return false;
+		}
+
+		const vec3 start(-4.5f, 0.0f, -4.5f);
+		const vec3 goal(4.5f, 0.0f, -4.5f);
+		std::vector<vec3> path;
+		if (!grid.FindPath(start, goal, path) || path.size() < 3)
+		{
+			std::cerr << "Failed to find detour path around steep slope and Blocked terrain.\n";
+			return false;
+		}
+
+		// 경로는 남쪽 우회 통로(z > 5.0)를 거쳐야 함
+		bool detouredSouth = false;
+		for (const auto& wp : path)
+		{
+			if (wp.z > 5.0f) detouredSouth = true;
+		}
+		if (!detouredSouth)
+		{
+			std::cerr << "Path did not detour around terrain obstacles.\n";
+			return false;
+		}
+
+		// UTF-8/한글 경로 저장 → 재로드 왕복 검증
+		const auto folder = std::filesystem::temp_directory_path() / L"BamNavGridT4Check";
+		std::error_code ec;
+		std::filesystem::remove_all(folder, ec);
+		std::filesystem::create_directories(folder, ec);
+		const auto filePath = folder / L"지형_네비.bamnavgrid";
+
+		if (!grid.SaveToFile(filePath))
+		{
+			std::cerr << "NavGrid::SaveToFile failed for UTF-8 path.\n";
+			return false;
+		}
+
+		NavGrid loaded;
+		if (!loaded.LoadFromFile(filePath) || loaded.GetWidth() != 16 || loaded.GetHeight() != 16 ||
+			loaded.IsWalkable(7, 3) || loaded.IsWalkable(7, 10) || !loaded.IsWalkable(7, 15))
+		{
+			std::cerr << "NavGrid::LoadFromFile did not restore baked terrain walkability.\n";
+			std::filesystem::remove_all(folder, ec);
+			return false;
+		}
+
+		std::vector<vec3> reloadedPath;
+		if (!loaded.FindPath(start, goal, reloadedPath) || reloadedPath.size() != path.size())
+		{
+			std::cerr << "Reloaded NavGrid produced a different path.\n";
+			std::filesystem::remove_all(folder, ec);
+			return false;
+		}
+
+		std::filesystem::remove_all(folder, ec);
+		return true;
+	}
 }
 
 int main()
@@ -352,6 +473,13 @@ int main()
 	if (!TestAIPerception())
 	{
 		std::cerr << "[NavigationAICheck] FAILED: AI perception\n";
+		return 1;
+	}
+
+	std::cout << "[NavigationAICheck] Running Terrain NavGrid bake & persistence tests...\n";
+	if (!TestTerrainNavGridBakeAndPersistence())
+	{
+		std::cerr << "[NavigationAICheck] FAILED: Terrain NavGrid bake & persistence\n";
 		return 1;
 	}
 

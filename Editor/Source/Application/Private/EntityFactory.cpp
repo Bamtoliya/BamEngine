@@ -369,6 +369,7 @@ Entity& EntityFactory::CreateTerrainEntity(Scene* scene, const wstring& name)
 {
 	Entity& entity = CreateEmptyEntity(scene, name);
 	auto& terrain = scene->AddComponent<TerrainComponent>(entity);
-	terrain.TerrainMaterial = ResourceManager::Get().GetResourceHandle<Material>(RESOURCE_PATH L"Material/TerrainMaterial");
+	// 키 조회(GetResourceHandle)는 미리 불러온 리소스만 찾으므로 파일에서 불러온다. 기본 머티리얼은 추적되는 엔진 리소스다.
+	terrain.TerrainMaterial = ResourceHandle<MaterialInterface>(ResourceManager::Get().LoadFile(TerrainComponent::DefaultMaterialUri));
 	return entity;
 }

@@ -51,7 +51,7 @@ private:
 	bool m_DrawColliders = { false };
 	bool m_DrawGameplayGizmos = { true };
 	bool m_ShowNavGridOverlay = { false };
-	uint32 m_MaxLines = 8192;
+	uint32 m_MaxLines = 65536;
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
 };
 END

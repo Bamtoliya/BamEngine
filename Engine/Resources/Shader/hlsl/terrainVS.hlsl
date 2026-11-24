@@ -29,7 +29,7 @@ struct ObjectData
 };
 
 ConstantBuffer<ObjectData> ubo : register(b0, space2);
-Texture2D<float> heightMap : register(t1, space1);
+Texture2D<float> heightMap : register(t8, space3); // 머티리얼 범위(t0~t7, space1) 밖. BINDING_LAYOUT.md "지형 바인딩"
 
 VS_OUTPUT main(VS_INPUT input, uint vertexId : SV_VertexID)
 {

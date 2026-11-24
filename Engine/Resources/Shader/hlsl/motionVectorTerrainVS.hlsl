@@ -9,7 +9,7 @@ struct TerrainMotionObject
 	float4 HeightfieldData; // x 최대 높이, yz 칸 간격
 };
 ConstantBuffer<TerrainMotionObject> gObject : register(b0, space2);
-Texture2D<float> gHeightMap : register(t1, space1);
+Texture2D<float> gHeightMap : register(t8, space3); // terrainVS와 같은 슬롯
 
 struct VS_INPUT
 {

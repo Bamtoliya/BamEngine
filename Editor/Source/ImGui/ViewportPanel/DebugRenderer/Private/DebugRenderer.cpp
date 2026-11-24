@@ -749,8 +749,10 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 	const mat4 invView = glm::inverse(cameraBuffer.viewMatrix);
 	const vec3 camPos = vec3(invView[3]);
 
-	// 카메라 주변 반경 50m 내 셀 순회로 버퍼 보호 및 고성능 보장
-	constexpr f32 c_OverlayRadius = 50.0f;
+	// 카메라 주변 반경 150m 내 셀 순회 (거리별 스트라이드로 원거리 버퍼 절약)
+	constexpr f32 c_OverlayRadius = 150.0f;
+	constexpr f32 c_NearDistSq = 40.0f * 40.0f;
+	constexpr f32 c_MidDistSq = 90.0f * 90.0f;
 	int32 camCellX = 0, camCellZ = 0;
 	navGrid->WorldToCell(camPos, camCellX, camCellZ);
 	const int32 radiusCells = static_cast<int32>(c_OverlayRadius / cellSize) + 1;
@@ -760,7 +762,6 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 	const int32 startZ = std::max(0, camCellZ - radiusCells);
 	const int32 endZ = std::min(height, camCellZ + radiusCells + 1);
 
-	const f32 groundY = origin.y + 0.03f;
 	const vec4 walkableLineColor(0.1f, 0.85f, 0.45f, 0.35f);
 	const vec4 obstacleColor(1.0f, 0.25f, 0.15f, 0.9f);
 
@@ -774,10 +775,27 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 				return;
 			}
 
-			const vec3 p00(origin.x + static_cast<f32>(x) * cellSize, groundY, origin.z + static_cast<f32>(z) * cellSize);
-			const vec3 p10(p00.x + cellSize, groundY, p00.z);
-			const vec3 p11(p00.x + cellSize, groundY, p00.z + cellSize);
-			const vec3 p01(p00.x, groundY, p00.z + cellSize);
+			const f32 cellWorldX = origin.x + static_cast<f32>(x) * cellSize;
+			const f32 cellWorldZ = origin.z + static_cast<f32>(z) * cellSize;
+			const f32 dx = cellWorldX - camPos.x;
+			const f32 dz = cellWorldZ - camPos.z;
+			const f32 distSq = dx * dx + dz * dz;
+
+			int32 stride = 1;
+			if (distSq > c_MidDistSq) stride = 4;
+			else if (distSq > c_NearDistSq) stride = 2;
+
+			if (stride > 1 && ((x % stride) != 0 || (z % stride) != 0))
+			{
+				continue;
+			}
+
+			const f32 stepSize = cellSize * static_cast<f32>(stride);
+			const f32 groundY = navGrid->GetCellHeight(x, z) + 0.05f;
+			const vec3 p00(cellWorldX, groundY, cellWorldZ);
+			const vec3 p10(p00.x + stepSize, groundY, p00.z);
+			const vec3 p11(p00.x + stepSize, groundY, p00.z + stepSize);
+			const vec3 p01(p00.x, groundY, p00.z + stepSize);
 
 			const BoundingBox cellBox(vec3(p00.x, groundY - 0.2f, p00.z), vec3(p11.x, groundY + 0.5f, p11.z));
 			if (!FrustumCuller::TestBoundingBox(frustum, cellBox))
@@ -791,20 +809,23 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 				// 보행 가능 셀: 반투명 녹색/청록색 격자 라인
 				DrawLine(p00, p10, walkableLineColor);
 				DrawLine(p00, p01, walkableLineColor);
-				if (x + 1 == endX || !navGrid->IsWalkable(x + 1, z))
+				if (x + stride >= endX || !navGrid->IsWalkable(x + 1, z))
 					DrawLine(p10, p11, walkableLineColor);
-				if (z + 1 == endZ || !navGrid->IsWalkable(x, z + 1))
+				if (z + stride >= endZ || !navGrid->IsWalkable(x, z + 1))
 					DrawLine(p01, p11, walkableLineColor);
 			}
 			else
 			{
-				// 장애물 셀: 선명한 적색 바닥 사각형 및 대각선 X자 표시
+				// 장애물 셀: 선명한 적색 바닥 사각형 (근거리에서는 대각선 X자 추가 표시)
 				DrawLine(p00, p10, obstacleColor);
 				DrawLine(p10, p11, obstacleColor);
 				DrawLine(p11, p01, obstacleColor);
 				DrawLine(p01, p00, obstacleColor);
-				DrawLine(p00, p11, obstacleColor);
-				DrawLine(p10, p01, obstacleColor);
+				if (stride == 1)
+				{
+					DrawLine(p00, p11, obstacleColor);
+					DrawLine(p10, p01, obstacleColor);
+				}
 			}
 		}
 	}

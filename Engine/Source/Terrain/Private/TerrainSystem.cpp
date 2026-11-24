@@ -3,6 +3,7 @@
 #include "TerrainComponent.h"
 #include "WorldComponents.h"
 #include "TerrainUtility.h"
+#include "TerrainDataFile.h"
 #include "ResourceManager.h"
 #include "Renderer.h"
 #include "RenderPass.h"
@@ -58,6 +59,45 @@ namespace
 	}
 }
 
+namespace
+{
+	// 레이어 에셋이 없거나 알베도가 없을 때의 색과 반복 길이. 0~2는 이전 고정 셰이더의 잔디·암석·흙 색, 반복 5m(이전 0.2배율)와 같다.
+	constexpr vec4 DefaultLayerTints[HeightfieldDrawData::MaxLayers] = {
+		{ 0.35f, 0.65f, 0.25f, 1.0f }, { 0.48f, 0.45f, 0.42f, 1.0f }, { 0.55f, 0.42f, 0.28f, 1.0f }, { 0.70f, 0.68f, 0.60f, 1.0f },
+		{ 0.30f, 0.45f, 0.70f, 1.0f }, { 0.80f, 0.75f, 0.45f, 1.0f }, { 0.60f, 0.35f, 0.55f, 1.0f }, { 0.85f, 0.85f, 0.90f, 1.0f } };
+	constexpr f32 DefaultLayerTiling = 5.0f;
+
+	RHITexture* GetFallbackLayerTexture()
+	{
+		static ResourceHandle<Texture> white;
+		static bool requested = false;
+		if (!requested)
+		{
+			requested = true;
+			white = ResourceManager::Get().GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png");
+			if (!white.Get()) white = ResourceHandle<Texture>(ResourceManager::Get().LoadFile(L"Engine://Texture/white1x1.png"));
+		}
+		return white.Get() ? white->GetRHITexture() : nullptr;
+	}
+
+	void FillTerrainLayerDrawData(const TerrainComponent& terrain, HeightfieldDrawData& draw)
+	{
+		// 흰 텍스처가 없으면 스플랫 텍스처라도 묶어 이전 드로우의 슬롯을 읽지 않게 한다.
+		RHITexture* fallback = GetFallbackLayerTexture();
+		if (!fallback) fallback = terrain.SplatmapTexture.get();
+		for (uint32 layer = 0; layer < HeightfieldDrawData::MaxLayers; ++layer)
+		{
+			const auto* asset = layer < terrain.Layers.size() ? terrain.Layers[layer].Layer.Get() : nullptr;
+			const Texture* albedo = asset ? asset->GetSettings().Albedo.Get() : nullptr;
+			RHITexture* texture = albedo ? albedo->GetRHITexture() : nullptr;
+			draw.layerTextures[layer] = texture ? texture : fallback;
+			draw.layerTints[layer] = texture ? vec4(1.0f) : DefaultLayerTints[layer];
+			const f32 tiling = asset ? asset->GetSettings().Tiling : DefaultLayerTiling;
+			draw.layerTiling[layer] = std::isfinite(tiling) && tiling > 0.01f ? tiling : DefaultLayerTiling;
+		}
+	}
+}
+
 EResult TerrainSystem::Initialize(void* arg)
 {
 	(void)arg;
@@ -82,6 +122,10 @@ TerrainSystem* TerrainSystem::Create(void* arg)
 
 bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 {
+	// 편집 모드에서는 OnUpdate(Gameplay 단계)가 돌지 않고 OnSubmit만 이 함수를 부르므로 데이터 동기화도 여기서 한다.
+	TerrainDataFile::LoadIfChanged(terrain);
+	TerrainUtility::EnsureLayerData(terrain);
+
 	uint32 axisCount = 0;
 	std::size_t sampleCount = 0;
 
@@ -114,9 +158,12 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 
 	const bool heightTextureMatches = textureMatches(terrain.HeightmapTexture, ETextureFormat::R32_FLOAT);
 	const bool splatTextureMatches = textureMatches(terrain.SplatmapTexture, ETextureFormat::R8G8B8A8_UNORM);
+	// 레이어 4~7 평면은 EnsureLayerData가 크기를 맞춘다. 크기가 맞을 때만 텍스처를 만든다.
+	const bool extraLayoutMatches = terrain.SplatDataExtra.size() == sampleCount * 4;
+	const bool extraTextureMatches = textureMatches(terrain.SplatmapExtraTexture, ETextureFormat::R8G8B8A8_UNORM);
 
 	if (heightLayoutMatches && splatLayoutMatches && meshMatches &&
-		heightTextureMatches && splatTextureMatches)
+		heightTextureMatches && splatTextureMatches && (!extraLayoutMatches || extraTextureMatches))
 		return true;
 
 	RHI* rhi = Renderer::Get().GetRHI();
@@ -223,6 +270,14 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 			return false;
 
 		candidate.IsSplatDirty = false;
+	}
+
+	if (extraLayoutMatches && !extraTextureMatches)
+	{
+		candidate.SplatmapExtraTexture = createTexture(ETextureFormat::R8G8B8A8_UNORM,
+			candidate.SplatDataExtra.data(), static_cast<uint32>(sampleCount * 4));
+		if (!candidate.SplatmapExtraTexture)
+			return false;
 	}
 
 	terrain = std::move(candidate);
@@ -346,9 +401,22 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
 			Mesh* mesh = terrain.GridMesh.get();
+			// 이전 씬의 구형 키(Resources/Material/TerrainMaterial)나 빈 핸들은 찾지 못하므로 엔진 기본 머티리얼로 그린다(컴포넌트 값은 바꾸지 않는다).
 			MaterialInterface* material = terrain.TerrainMaterial.Get();
+			if (!material)
+			{
+				static ResourceHandle<Material> defaultMaterial;
+				static bool defaultMaterialRequested = false; // 실패해도 매 프레임 다시 읽고 로그를 남기지 않게 한 번만 시도한다
+				if (!defaultMaterialRequested)
+				{
+					defaultMaterialRequested = true;
+					defaultMaterial = ResourceHandle<Material>(ResourceManager::Get().LoadFile(TerrainComponent::DefaultMaterialUri));
+				}
+				material = defaultMaterial.Get();
+			}
 
-			if (!mesh || !material || !terrain.HeightmapTexture || !terrain.SplatmapTexture ||
+			// 레이어 4~7 텍스처가 없으면 셰이더가 다른 드로우의 t5를 읽으므로 그리지 않는다(EnsureLayerData 후 바로 만들어진다).
+			if (!mesh || !material || !terrain.HeightmapTexture || !terrain.SplatmapTexture || !terrain.SplatmapExtraTexture ||
 				terrain.IsDirty || terrain.IsSplatDirty)
 				continue;
 
@@ -387,6 +455,8 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 			command.heightfield->gridMesh = terrain.GridMesh;
 			command.heightfield->heightmap = terrain.HeightmapTexture;
 			command.heightfield->splatmap = terrain.SplatmapTexture;
+			command.heightfield->splatmapExtra = terrain.SplatmapExtraTexture;
+			FillTerrainLayerDrawData(terrain, *command.heightfield);
 			command.heightfield->maxHeight = terrain.MaxHeight;
 			command.heightfield->cellSpacing = cellSpacing;
 
@@ -413,6 +483,14 @@ void TerrainSystem::UpdateTerrainSplatmap(TerrainComponent& terrain)
 	desc.usage = ETextureUsage::Sampler;
 	desc.data = terrain.SplatData.data();
 	desc.dataSize = static_cast<uint32>(terrain.SplatData.size());
-	if (IsSuccess(rhi->UploadTextureData(terrain.SplatmapTexture.get(), desc)))
+	bool uploaded = IsSuccess(rhi->UploadTextureData(terrain.SplatmapTexture.get(), desc));
+	// 레이어 4~7도 같은 표시로 함께 올린다(페인트는 두 평면을 한 번에 바꾼다).
+	if (uploaded && terrain.SplatmapExtraTexture && terrain.SplatDataExtra.size() == terrain.SplatData.size())
+	{
+		desc.data = terrain.SplatDataExtra.data();
+		desc.dataSize = static_cast<uint32>(terrain.SplatDataExtra.size());
+		uploaded = IsSuccess(rhi->UploadTextureData(terrain.SplatmapExtraTexture.get(), desc));
+	}
+	if (uploaded)
 		terrain.IsSplatDirty = false;
 }

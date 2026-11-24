@@ -2,6 +2,10 @@
 #include "Scene.h"
 #include "SceneManager.h"
 #include "AssetPathRelocation.h"
+#include "TerrainDataFile.h"
+#include "NavigationSystem.h"
+#include "PlatformPath.h"
+#include "Functions.h"
 #include <archive/JsonArchive.h>
 
 namespace
@@ -85,6 +89,20 @@ namespace Editor
         m_History.Flush();
         if (!m_History.CanMarkSaved())
             return Engine::EResult::Fail;
+
+        // 지형 데이터 파일을 먼저 쓴다. 새 지형은 여기서 DataPath가 정해지므로 씬 JSON보다 앞서야 한다.
+        if (!Engine::TerrainDataFile::SaveSceneTerrains(m_Scene->GetRegistry(), target))
+            return Engine::EResult::Fail;
+
+        if (auto navGrid = Engine::NavigationSystem::GetSceneNavGrid(m_Scene))
+        {
+            std::string navUri = m_Scene->GetNavGridPath();
+            if (navUri.empty())
+                navUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(Engine::NavGrid::MakeDefaultPath(target)));
+            if (!navGrid->SaveToFile(Engine::NavGrid::ResolveDataPath(navUri)))
+                return Engine::EResult::Fail;
+            m_Scene->SetNavGridPath(navUri);
+        }
 
         archive::JsonArchive writer;
         auto result = m_Scene->WriteArchive(writer);
