@@ -877,5 +877,9 @@ ctest --test-dir out/build/x64-ninja-debug -R "^RLSimulationCheck$" --output-on-
 | A-4 | `VFXBlendAndPassCheck` 및 `PureAdditive` 머티리얼 | 통과(`One/One` vs `SrcAlpha/One` 보존, `VFXPassHelper` 필터 일치) 및 머티리얼 에디터 드롭다운 한/영 표시 | 대기 |
 | B-1 | `VirtualPathCheck` 및 프로젝트 A↔B 전환·독립 모듈 핫리로드 | `ResolveModules`/`ResolvePrimaryRuntimeModule` 통과, 기존 루트 `GameModule.dll` 하위 호환, 외부 프로젝트 `Source/` 수정 시 자동 빌드·리로드 및 Client Export DLL 로드 확인 | 대기 |
 | B-2 | `raytracedShadowMaskRTCS.hlsl` 컴파일·`RaytracingSkinnedPolicyCheck` 및 `RenderingFeatureLab` | 셰이더 컴파일·`SortSkinnedByDistance` 통과, `Masked` 재질 DXR 그림자 알파 컷아웃 및 스킨드 32개 초과 시 근접 캐릭터 우선 유지 | 대기 |
+| M4-GI | Probe GI 코너 빛샘(다크룸·GI 박스 빨간/초록 벽 모서리) 및 얇은 벽 반대편 파란빛 흔들림 | `Sun`의 `ShadowBias`로 미해소 확인. `ProbeGIVolumeComponent`에 `NormalBias`/`ViewBias`/히스테리시스 파라미터 노출 및 DDGI Chebyshev 가시성·얇은 벽 보간 개선 필요 | 후속 과제 |
+| UI-Mount | 외부 폴더 연결 모달 `PropertyTable` Label 배경 영역과 세로 스플리터 불일치 수정 | 모달 내 라벨 배경 폭/행 높이와 세로 구분선 위치 정렬 일치 | 후속 과제 |
+| Thumb-HDR | `.hdr` Equirectangular 파일의 콘텐츠 브라우저/피커 2D 톤매핑 썸네일 생성 지원 | `.hdr` 에셋이 빈 아이콘이 아닌 톤매핑된 미리보기 썸네일로 표시된다 | 후속 과제 |
+| IBL-Capture | 인게임 특정 지점(카메라/엔티티 위치)에서 6면 HDR 렌더 → Equirectangular `.hdr` 캡처·저장 기능 | 선택한 기준점에서 생성한 `.hdr` 파일을 `SkyAtmosphereComponent` IBL 슬롯에 바로 적용 가능 | 후속 과제 |
 
 **커밋 전 주의:** 1-A는 커밋 `cda1467f`로 main에 있다. 1-B·1-C·T1(a~d)·T2(a~e)·T3(a~c)·T4·V1·B-5·Pak 로더 연결은 미커밋이다. 새 파일 `Engine/Source/Terrain/{Public,Private}/TerrainDataFile.*`·`TerrainLayerAsset.*`, `Editor/Source/ImGui/ResourceEditor/{Public,Private}/TerrainLayerEditor.*`, `Engine/Resources/Material/TerrainMaterial.bammat.json`, `Engine/Resources/Shader/hlsl/terrainLayers.hlsli`도 커밋 대상이다. 메인 워크트리에는 MultiProject/ProjectHub 변경과 `Engine.csv`의 타 작업 행이 혼재되어 있으므로 커밋 시 기능 단위로 선별 스테이징한다.

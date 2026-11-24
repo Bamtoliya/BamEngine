@@ -2,6 +2,28 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-25] HDR 큐브맵 IBL · DXR 스킨드 반사 · BEVE 참조 검증 · 프리뷰/인스턴스/프리셋 · 콘텐츠 브라우저 주소창
+
+- **요약**:
+  1. **IBL·Probe용 HDR 큐브 텍스처 지원 확장 (트랙 3-1)**:
+     - `DirectX12RHI::UploadTextureData`에 `TextureCube`(6면×밉 복사) 및 `R16G16B16A16_FLOAT`/`R32G32B32A32_FLOAT` 업로드를 추가하고, `IBLManager::ConvertEquirectangularToCubemap`·`Texture::InitializeFromHDRMemory`·`DDSLoader` HDR/큐브맵 파싱·`DeferredSceneRenderer` 단일 슬롯 폴백·`ResourcePicker` 2D SRV 바인딩 방어를 연동함.
+     - 실환경에서 `.hdr` 연결 시 IBL 반사 동작 확인 완료 (`.hdr` 2D 톤매핑 썸네일 미표시는 후속 과제로 분리).
+  2. **DXR M3 스킨드 메시 반사 수정**:
+     - `RaytracingSceneManager`(`IsSkinningSupported`, `IsReflectionSupported`, `IsShadowCasterSupported`)에서 임포트 스킨드 메시의 `EMeshFlag::Dynamic` 일괄 제외를 제거해 스킨드 메시(`Fox`)가 TLAS 및 DXR 반사·그림자에 포함되도록 수정.
+  3. **BEVE 참조 검증·엔진 리소스 임포트·내장 리소스 썸네일**:
+     - `AssetReferenceValidator::ReadReferenceDocument`에서 `BeveArchive`와 동일한 `archive::detail::ArchiveValue`로 BEVE를 디코딩한 뒤 JSON 변환해 `.bammatinst` 참조 검증 거짓 실패 해소.
+     - `ModelImporter::ResolveWritableDestinationDirectory`: `Engine://`/`Editor://` 등 읽기 전용 원본 모델 임포트/재임포트 시 `Assets/` 동일 상대 경로로 리다이렉트.
+     - `AssetCache`에 `FindInMemoryResource()`를 추가해 확장자/디스크 파일이 없는 코드 생성 내장 리소스(`CubeMesh`, `SphereMesh`, `PlaneMesh`, `CylinderMesh`, `CapsuleMesh`, `QuadMesh`, `DefaultMaterial`, `DefaultBRDFLut` 등)의 2D/3D 썸네일 생성·캐시 지원.
+  4. **머티리얼 에디터·엔티티 프리셋 (트랙 4-1)**:
+     - `MaterialPreviewRenderer`에서 `EPreviewMeshType::Quad`(`QuadMesh`)와 `Plane`(`PlaneMesh`)을 분리하고, `MaterialEditor` 툴바·메뉴에 `Create Instance`(`<Name>_Inst.bammatinst.json` 즉시 생성·오픈) 추가.
+     - `EntityFactory` 및 `HierarchyPanel`에 `Capsule`·`Camera`·기본 도형·라이트 프리셋 보완 및 `DefaultMaterial` 폴백 추가.
+  5. **콘텐츠 브라우저 외부 마운트 팝업·UTF-8 주소창 (트랙 3-4)**:
+     - `ContentBrowserPanel::DrawMountAddModal`에서 `OpenPopup(modalTitle.c_str())`와 `BeginPopupModal(modalTitle.c_str(), ...)` 해시 ID 불일치를 수정해 외부 폴더 연결 모달 정상 오픈 확인(Label 배경과 세로 스플리터 불일치는 후속 UI 과제로 분리).
+     - 주소창 브레드크럼 UTF-8(`WStrToStr`) 통일, 클릭/연필 버튼 시 `InputText` 전환, 미등록 외부 폴더 읽기 전용 탐색 및 `외부 마운트로 연결...` 컨텍스트 메뉴/상단 배너 연동.
+- **검증 상태**:
+  - 실환경에서 IBL `.hdr` 반사 및 외부 폴더 연결 모달 오픈 확인, AO/RT 그림자 깜빡임 재빌드 후 해소 확인, Probe GI 코너 빛샘은 `ShadowBias`로 미해소 확인([DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절에 후속 과제 기록).
+  - 최종 추가된 트랙 3(주소창·내장 썸네일)·엔진 리소스 임포트·`MaterialEditor` `Create Instance`·`EntityFactory` 프리셋의 전체 재빌드/회귀 확인은 후속 검증 대기.
+
 ### [2026-11-24] P2 차기 개발·트랙 1(스탠드얼론 Client/지형·머티리얼 실환경 수정)·트랙 2(에디터 UI/UX 공통화)·멀티 프로젝트 Phase 5·DXR M3 통합 반영
 
 - **요약**:
