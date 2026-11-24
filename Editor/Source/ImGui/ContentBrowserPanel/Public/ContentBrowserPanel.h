@@ -81,6 +81,8 @@ public:
 	const filesystem::path& GetEngineRootPath() const { return m_EngineRootPath; }
 	const filesystem::path& GetEditorRootPath() const { return m_EditorRootPath; }
 	const filesystem::path& GetActiveRootForPath(const filesystem::path& path) const;
+	bool IsExternalUnregisteredDirectory(const filesystem::path& path) const;
+	void OpenMountAddModal(const filesystem::path& initialPath = {});
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 #pragma endregion
 
@@ -208,7 +210,6 @@ private:
 private:
 	void DrawDirectoryTree(const filesystem::path& path, const filesystem::path& rootPath);
 	void DrawExternalMountsTree();
-	void OpenMountAddModal();
 	void DrawMountAddModal();
 #pragma endregion
 
@@ -221,6 +222,9 @@ private:
 	void DrawDirectoryGrid();
 	void GridViewContextMenu(const filesystem::path& path);
 	void AddressBar(float width);
+	void StartAddressBarEdit();
+	void NavigateToAddress(const char* inputBuffer);
+	void DrawExternalFolderNoticeBar();
 private:
 	bool SearchBar();
 private:
@@ -341,6 +345,10 @@ private:
 private:
 	// 폴더 트리 노드별 읽기 전용 여부 캐시 (경로 정규화 비용을 프레임마다 반복하지 않기 위함)
 	std::unordered_map<std::wstring, bool> m_ReadOnlyCache;
+private:
+	bool m_AddressBarEditing = false;
+	bool m_AddressBarSetFocus = false;
+	char m_AddressBarInputBuffer[1024] = {};
 private:
 	bool m_OpenMountAddModal = false;
 	char m_MountNameBuffer[128] = {};

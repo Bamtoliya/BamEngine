@@ -34,6 +34,18 @@
 
 using namespace std;
 
+static bool ContentBrowserPathWithin(const filesystem::path& path, const filesystem::path& root)
+{
+	if (root.empty())
+		return false;
+
+	const auto sameComponent = [](const auto& lhs, const auto& rhs)
+		{
+			return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
+		};
+	return std::mismatch(path.begin(), path.end(), root.begin(), root.end(), sameComponent).second == root.end();
+}
+
 #pragma region ContentBrowserFileListner
 void ContentBrowserFileListener::QueueReferenceChanges(AssetReferenceChanges changes)
 {
@@ -241,6 +253,59 @@ const filesystem::path& ContentBrowserPanel::GetActiveRootForPath(const filesyst
 			return m_EngineRootPath;
 	}
 	return m_RootPath;
+}
+
+bool ContentBrowserPanel::IsExternalUnregisteredDirectory(const filesystem::path& path) const
+{
+	if (path.empty())
+		return false;
+
+	const auto normPath = Engine::PlatformPath::Normalize(path);
+
+	if (!m_RootPath.empty())
+	{
+		const auto normRoot = Engine::PlatformPath::Normalize(m_RootPath);
+		if (normPath == normRoot)
+			return false;
+		const auto rel = normPath.lexically_relative(normRoot);
+		if (!rel.empty() && !rel.is_absolute() && !rel.native().starts_with(L".."))
+			return false;
+	}
+
+	if (!m_EngineRootPath.empty())
+	{
+		const auto normEngine = Engine::PlatformPath::Normalize(m_EngineRootPath);
+		if (normPath == normEngine)
+			return false;
+		const auto rel = normPath.lexically_relative(normEngine);
+		if (!rel.empty() && !rel.is_absolute() && !rel.native().starts_with(L".."))
+			return false;
+	}
+
+	if (!m_EditorRootPath.empty())
+	{
+		const auto normEditor = Engine::PlatformPath::Normalize(m_EditorRootPath);
+		if (normPath == normEditor)
+			return false;
+		const auto rel = normPath.lexically_relative(normEditor);
+		if (!rel.empty() && !rel.is_absolute() && !rel.native().starts_with(L".."))
+			return false;
+	}
+
+	const auto contentMounts = Engine::PlatformPath::GetContentMounts();
+	for (const auto& mount : contentMounts)
+	{
+		if (mount.RootPath.empty())
+			continue;
+		const auto normMount = Engine::PlatformPath::Normalize(mount.RootPath);
+		if (normPath == normMount)
+			return false;
+		const auto rel = normPath.lexically_relative(normMount);
+		if (!rel.empty() && !rel.is_absolute() && !rel.native().starts_with(L".."))
+			return false;
+	}
+
+	return true;
 }
 
 static void RequestAssetReferenceScanRefresh(AssetReferenceChanges changes = { true, {} })
@@ -530,7 +595,7 @@ bool ContentBrowserPanel::CanRenameTarget() const
 		m_DeletionPreparationPending)
 		return false;
 
-	if (Engine::PlatformPath::IsReadOnlyTarget(m_RenameTargetPath))
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_RenameTargetPath) || IsExternalUnregisteredDirectory(m_RenameTargetPath))
 		return false;
 
 	const auto& activeRoot = GetActiveRootForPath(m_RenameTargetPath);
@@ -757,7 +822,7 @@ void ContentBrowserPanel::DrawExternalMountsTree()
 	}
 }
 
-void ContentBrowserPanel::OpenMountAddModal()
+void ContentBrowserPanel::OpenMountAddModal(const filesystem::path& initialPath)
 {
 	m_OpenMountAddModal = true;
 	memset(m_MountNameBuffer, 0, sizeof(m_MountNameBuffer));
@@ -765,23 +830,39 @@ void ContentBrowserPanel::OpenMountAddModal()
 	m_MountReadOnly = true;
 	m_MountShowUnderAssets = false;
 	m_MountError.clear();
+
+	if (!initialPath.empty())
+	{
+		const std::string utf8Path = Engine::WStrToStr(initialPath.lexically_normal().wstring());
+		const size_t copyPathLen = std::min(utf8Path.size(), sizeof(m_MountPathBuffer) - 1);
+		memcpy(m_MountPathBuffer, utf8Path.data(), copyPathLen);
+		m_MountPathBuffer[copyPathLen] = '\0';
+
+		const auto fn = initialPath.filename().wstring();
+		const std::wstring folderName = fn.empty() ? initialPath.wstring() : fn;
+		const std::string utf8Name = Engine::WStrToStr(folderName);
+		const size_t copyNameLen = std::min(utf8Name.size(), sizeof(m_MountNameBuffer) - 1);
+		memcpy(m_MountNameBuffer, utf8Name.data(), copyNameLen);
+		m_MountNameBuffer[copyNameLen] = '\0';
+	}
 }
 
 void ContentBrowserPanel::DrawMountAddModal()
 {
 	constexpr const char* kPopupId = "MountExternalFolderPopup";
+	const std::string modalTitle = LOCAL("ContentBrowser.MountAddTitle") + "###" + kPopupId;
 	if (m_OpenMountAddModal)
 	{
-		ImGui::OpenPopup(kPopupId);
+		ImGui::OpenPopup(modalTitle.c_str());
 		m_OpenMountAddModal = false;
 	}
 
-	const std::string modalTitle = LOCAL("ContentBrowser.MountAddTitle") + "###" + kPopupId;
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
 
-	if (!ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+	bool open = true;
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_AlwaysAutoResize))
 		return;
 
 	if (EditorUI::BeginPropertyTable("MountAddTable"))
@@ -889,6 +970,11 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 	bool enterPressed = SearchBar();
 	ImGui::Separator();
 
+	if (IsExternalUnregisteredDirectory(m_CurrentDirectory))
+	{
+		DrawExternalFolderNoticeBar();
+	}
+
 	if (ImGui::BeginChild("GridArea", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_NoMove))
 	{
 		if (ImGui::IsWindowHovered() && InputManager::Get().IsCtrlPressed())
@@ -913,15 +999,49 @@ void ContentBrowserPanel::DrawDirectoryGrid()
 	ImGui::EndChild();
 }
 
+void ContentBrowserPanel::DrawExternalFolderNoticeBar()
+{
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.22f, 0.24f, 0.30f, 0.6f));
+	const float barHeight = ImGui::GetFrameHeight() + 6.0f;
+	if (ImGui::BeginChild("##ExternalNoticeBar", ImVec2(0.0f, barHeight), ImGuiChildFlags_Borders,
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+	{
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.4f, 1.0f), ICON_FA_CIRCLE_INFO " %s",
+			LOCAL_CSTR("ContentBrowser.ExternalReadOnlyNotice"));
+		ImGui::SameLine();
+		if (ImGui::Button((ICON_FA_LINK " " + LOCAL_LABEL("ContentBrowser.MountAsExternal")).c_str()))
+		{
+			OpenMountAddModal(m_CurrentDirectory);
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetTooltip("%s", LOCAL_CSTR("ContentBrowser.MountAsExternalHint"));
+		}
+	}
+	ImGui::EndChild();
+	ImGui::PopStyleColor();
+}
+
 void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 {
 	if (ImGui::BeginPopupContextWindow("GridContextMenu", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
 	{
-		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path) || IsExternalUnregisteredDirectory(path);
 		DrawFileClipboardMenu({}, path);
 		ACTION_MENU_ITEM((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("EditorCommon.Undo")).c_str(), "ContentBrowser.UndoFiles");
 		ACTION_MENU_ITEM((ICON_FA_ROTATE_RIGHT " " + LOCAL_LABEL("EditorCommon.Redo")).c_str(), "ContentBrowser.RedoFiles");
 		ImGui::Separator();
+
+		if (IsExternalUnregisteredDirectory(m_CurrentDirectory))
+		{
+			if (ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("ContentBrowser.MountAsExternal")).c_str()))
+			{
+				OpenMountAddModal(m_CurrentDirectory);
+			}
+			ImGui::Separator();
+		}
+
 		ImGui::BeginDisabled(isReadOnly || !CanUseFileCommands());
 		if (ImGui::BeginMenu((ICON_FA_PLUS " " + LOCAL_LABEL("EditorCommon.Create")).c_str()))
 		{
@@ -979,18 +1099,14 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 			ImGui::EndMenu();
 		}
 		ImGui::EndDisabled();
-		
 
 		ImGui::Separator();
 
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.ShowInExplorer")).c_str()))
 		{
-			// Windows 전용 명령 (ShellExecute)
-			ShellExecuteA(NULL, "open", path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+			ShellExecuteW(NULL, L"open", path.wstring().c_str(), NULL, NULL, SW_SHOWNORMAL);
 		}
 
-		
-		
 		ImGui::EndPopup();
 	}
 }
@@ -1000,12 +1116,21 @@ void ContentBrowserPanel::BackButton()
 {
 	const auto& activeRoot = GetActiveRootForPath(m_CurrentDirectory);
 	bool isRoot = (m_CurrentDirectory == activeRoot);
+	if (!isRoot)
+	{
+		const auto parent = m_CurrentDirectory.parent_path();
+		if (parent.empty() || parent == m_CurrentDirectory)
+			isRoot = true;
+	}
 
 	EditorUI::IconButtonOptions options;
 	options.Enabled = !isRoot;
 	if (EditorUI::IconButton("ContentBack", ICON_FA_ARROW_UP, "ContentBrowser.ParentFolder", options))
 	{
-		NavigateTo(m_CurrentDirectory.parent_path());
+		if (!isRoot)
+		{
+			NavigateTo(m_CurrentDirectory.parent_path());
+		}
 	}
 }
 
@@ -1061,11 +1186,128 @@ void ContentBrowserPanel::RefreshButton()
 	}
 }
 
+void ContentBrowserPanel::StartAddressBarEdit()
+{
+	m_AddressBarEditing = true;
+	m_AddressBarSetFocus = true;
+	const std::string utf8Path = Engine::WStrToStr(m_CurrentDirectory.lexically_normal().wstring());
+	const size_t copyLen = std::min(utf8Path.size(), sizeof(m_AddressBarInputBuffer) - 1);
+	memcpy(m_AddressBarInputBuffer, utf8Path.data(), copyLen);
+	m_AddressBarInputBuffer[copyLen] = '\0';
+}
+
+void ContentBrowserPanel::NavigateToAddress(const char* inputBuffer)
+{
+	if (!inputBuffer)
+		return;
+
+	std::string rawInput = inputBuffer;
+	const size_t start = rawInput.find_first_not_of(" \t\r\n");
+	if (start == std::string::npos)
+		return;
+	const size_t end = rawInput.find_last_not_of(" \t\r\n");
+	std::string trimmed = rawInput.substr(start, end - start + 1);
+
+	if (trimmed.size() >= 2 && ((trimmed.front() == '"' && trimmed.back() == '"') ||
+		(trimmed.front() == '\'' && trimmed.back() == '\'')))
+	{
+		trimmed = trimmed.substr(1, trimmed.size() - 2);
+	}
+
+	if (trimmed.empty())
+		return;
+
+	const std::wstring wideInput = Engine::StrToWStr(trimmed);
+	filesystem::path targetPath;
+
+	if (Engine::PlatformPath::IsVirtualUri(wideInput))
+	{
+		targetPath = Engine::PlatformPath::ResolveUri(wideInput);
+	}
+	else
+	{
+		filesystem::path rawPath(wideInput);
+		std::error_code ec;
+		if (rawPath.is_relative())
+		{
+			if (filesystem::exists(m_CurrentDirectory / rawPath, ec))
+				targetPath = m_CurrentDirectory / rawPath;
+			else if (filesystem::exists(m_RootPath / rawPath, ec))
+				targetPath = m_RootPath / rawPath;
+			else
+				targetPath = rawPath;
+		}
+		else
+		{
+			targetPath = rawPath;
+		}
+	}
+
+	if (targetPath.has_root_name() && !targetPath.has_root_directory() && targetPath.relative_path().empty())
+	{
+		targetPath += L"\\";
+	}
+
+	targetPath = targetPath.lexically_normal();
+
+	std::error_code ec;
+	if (filesystem::is_directory(targetPath, ec))
+	{
+		NavigateTo(targetPath);
+	}
+	else if (filesystem::is_regular_file(targetPath, ec))
+	{
+		NavigateTo(targetPath.parent_path());
+		m_RevealedAssetPath = targetPath;
+		m_RevealScrollPending = true;
+	}
+	else
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("ContentBrowser.Title"),
+			LOCAL("ContentBrowser.MountInvalidInput"),
+			ELogLevel::Warn, 3.0f);
+	}
+}
+
 void ContentBrowserPanel::AddressBar(float width)
 {
-	ImGui::BeginChild("##AddressBarChild", ImVec2(width, ImGui::GetFrameHeight()), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+	if (m_AddressBarEditing)
+	{
+		ImGui::SetNextItemWidth(width);
+		if (m_AddressBarSetFocus)
+		{
+			ImGui::SetKeyboardFocusHere();
+			m_AddressBarSetFocus = false;
+		}
 
-	// 브레드크럼 버튼의 기본 스타일을 투명하게 설정
+		const bool enterPressed = ImGui::InputText("##AddressBarInput", m_AddressBarInputBuffer, sizeof(m_AddressBarInputBuffer),
+			ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+
+		if (enterPressed)
+		{
+			NavigateToAddress(m_AddressBarInputBuffer);
+			m_AddressBarEditing = false;
+		}
+		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			m_AddressBarEditing = false;
+		}
+		else if (ImGui::IsItemDeactivated())
+		{
+			m_AddressBarEditing = false;
+		}
+		return;
+	}
+
+	const float editBtnWidth = ImGui::GetFrameHeight();
+	const float barWidth = std::max(1.0f, width - editBtnWidth - ImGui::GetStyle().ItemSpacing.x);
+
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4.0f, 0.0f));
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+	ImGui::BeginChild("##AddressBarChild", ImVec2(barWidth, ImGui::GetFrameHeight()), ImGuiChildFlags_Borders,
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
 	ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2.0f, 0.0f));
 
@@ -1073,42 +1315,84 @@ void ContentBrowserPanel::AddressBar(float width)
 	const bool isEngineRoot = (!m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath && activeRoot == m_EngineRootPath);
 	const bool isEditorRoot = (!m_EditorRootPath.empty() && activeRoot == m_EditorRootPath);
 
-	// 현재 경로를 분해하여 노드 리스트 생성
+	std::filesystem::path effectiveRoot = activeRoot;
+	std::string rootDisplayName;
+
+	if (isEngineRoot)
+	{
+		rootDisplayName = LOCAL("ContentBrowser.EngineResources");
+	}
+	else if (isEditorRoot)
+	{
+		rootDisplayName = LOCAL("ContentBrowser.EditorResources");
+	}
+	else
+	{
+		bool isMount = false;
+		const auto contentMounts = Engine::PlatformPath::GetContentMounts();
+		for (const auto& mount : contentMounts)
+		{
+			if (mount.RootPath.empty()) continue;
+			if (Engine::PlatformPath::IsSamePath(m_CurrentDirectory, mount.RootPath) ||
+				ContentBrowserPathWithin(m_CurrentDirectory, mount.RootPath))
+			{
+				effectiveRoot = mount.RootPath;
+				rootDisplayName = std::string(ICON_FA_LINK " ") + mount.Name;
+				isMount = true;
+				break;
+			}
+		}
+
+		if (!isMount)
+		{
+			if (IsExternalUnregisteredDirectory(m_CurrentDirectory))
+			{
+				std::filesystem::path cur = m_CurrentDirectory;
+				while (!cur.empty() && cur != cur.parent_path())
+				{
+					cur = cur.parent_path();
+				}
+				effectiveRoot = cur.empty() ? m_CurrentDirectory.root_path() : cur;
+				rootDisplayName = Engine::WStrToStr(effectiveRoot.wstring());
+				if (rootDisplayName.empty())
+					rootDisplayName = Engine::WStrToStr(m_CurrentDirectory.root_name().wstring());
+			}
+			else
+			{
+				rootDisplayName = LOCAL("ContentBrowser.Assets");
+			}
+		}
+	}
+
 	std::vector<std::filesystem::path> nodes;
 	std::filesystem::path current = m_CurrentDirectory;
-	while (current != activeRoot && !current.empty() && current != current.parent_path())
+	while (current != effectiveRoot && !current.empty() && current != current.parent_path())
 	{
 		nodes.push_back(current);
 		current = current.parent_path();
 	}
-	nodes.push_back(activeRoot);
-	std::reverse(nodes.begin(), nodes.end()); // Root부터 시작하도록 순서 뒤집기
+	nodes.push_back(effectiveRoot);
+	std::reverse(nodes.begin(), nodes.end());
 
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
 		std::string name;
 		if (i == 0)
 		{
-			if (isEngineRoot)
-				name = LOCAL("ContentBrowser.EngineResources");
-			else if (isEditorRoot)
-				name = LOCAL("ContentBrowser.EditorResources");
-			else
-				name = LOCAL("ContentBrowser.Assets");
+			name = rootDisplayName;
 		}
 		else
 		{
-			name = nodes[i].filename().string();
+			const auto fn = nodes[i].filename().wstring();
+			name = Engine::WStrToStr(fn.empty() ? nodes[i].wstring() : fn);
 		}
-		name += "###" + std::to_string(static_cast<int>(i));
+		name += "###AddressNode_" + std::to_string(static_cast<int>(i));
 
-		// 경로의 폴더 이름을 클릭하면 해당 경로로 즉시 이동
 		if (ImGui::Button(name.c_str()))
 		{
 			NavigateTo(nodes[i]);
 		}
 
-		// 마지막 노드가 아니라면 구분자(>) 추가
 		if (i < nodes.size() - 1)
 		{
 			ImGui::SameLine();
@@ -1119,7 +1403,31 @@ void ContentBrowserPanel::AddressBar(float width)
 
 	ImGui::PopStyleVar();
 	ImGui::PopStyleColor();
+
+	const float remainingWidth = ImGui::GetContentRegionAvail().x;
+	if (remainingWidth > 2.0f)
+	{
+		ImGui::SameLine();
+		if (ImGui::InvisibleButton("##AddressBarEmptyArea", ImVec2(remainingWidth, ImGui::GetFrameHeight())))
+		{
+			StartAddressBarEdit();
+		}
+		if (ImGui::IsItemHovered())
+		{
+			ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+			ImGui::SetTooltip("%s", LOCAL_CSTR("ContentBrowser.AddressBarEditHint"));
+		}
+	}
+
 	ImGui::EndChild();
+	ImGui::PopStyleColor();
+	ImGui::PopStyleVar();
+
+	ImGui::SameLine();
+	if (EditorUI::SmallIconButton("##AddressBarEditBtn", ICON_FA_PEN, "ContentBrowser.AddressBarEditHint"))
+	{
+		StartAddressBarEdit();
+	}
 }
 
 bool ContentBrowserPanel::SearchBar()
@@ -1276,18 +1584,6 @@ void ContentBrowserPanel::StoreSelectedFiles(bool cut)
 		m_FileClipboardPaths = std::move(paths);
 		m_FileClipboardCut = cut;
 	}
-}
-
-static bool ContentBrowserPathWithin(const filesystem::path& path, const filesystem::path& root)
-{
-	if (root.empty())
-		return false;
-
-	const auto sameComponent = [](const auto& lhs, const auto& rhs)
-		{
-			return CompareStringOrdinal(lhs.c_str(), -1, rhs.c_str(), -1, TRUE) == CSTR_EQUAL;
-		};
-	return std::mismatch(path.begin(), path.end(), root.begin(), root.end(), sameComponent).second == root.end();
 }
 
 static void CheckContentBrowserEntry(const filesystem::path& path)
@@ -2457,6 +2753,7 @@ void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_en
 	const auto& activeRoot = GetActiveRootForPath(m_CurrentDirectory);
 	const bool hideEngineContent = !m_ShowEngineContent &&
 		activeRoot != m_EngineRootPath && activeRoot != m_EditorRootPath;
+	const bool isExternalDir = IsExternalUnregisteredDirectory(m_CurrentDirectory);
 
 	for (size_t index = 0; index < source.size(); ++index)
 	{
@@ -2466,9 +2763,9 @@ void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_en
 		auto readOnlyIt = m_ReadOnlyCache.find(path.native());
 		if (readOnlyIt == m_ReadOnlyCache.end())
 			readOnlyIt = m_ReadOnlyCache.emplace(path.native(), Engine::PlatformPath::IsReadOnlyTarget(path)).first;
-		const bool isReadOnly = readOnlyIt->second;
+		const bool isReadOnly = readOnlyIt->second || isExternalDir;
 
-		if ((hideEngineContent && isReadOnly) || !PassesFilter(entry, m_FilterMask))
+		if ((!isExternalDir && hideEngineContent && readOnlyIt->second) || !PassesFilter(entry, m_FilterMask))
 			continue;
 
 		const auto previous = previousIds.find(path);
@@ -2774,7 +3071,7 @@ void ContentBrowserPanel::FileConfilictPopup()
 			auto& conflict = m_PendingConflicts.front();
 			
 			ImGui::Text("%s", localizationManager.GetText("ContentBrowser.FileConflictMessage").c_str());
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", conflict.Dest.filename().string().c_str());
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", Engine::WStrToStr(conflict.Dest.filename().wstring()).c_str());
 			ImGui::Separator();
 			if (m_PendingConflicts.size() > 1)
 			{
@@ -2855,6 +3152,8 @@ bool ContentBrowserPanel::RequestRevealAsset(const filesystem::path& resourcePat
 	m_SearchBuffer[0] = '\0';
 	m_LastSearchString.clear();
 	m_SearchResults.clear();
+	m_AddressBarEditing = false;
+	m_AddressBarInputBuffer[0] = '\0';
 	m_FilterMask = 0;
 
 	RequestRefresh();
@@ -2908,7 +3207,7 @@ void ContentBrowserPanel::RefreshCacheIfNeeded()
 }
 void ContentBrowserPanel::OnExteranalDropped(const vector<string>& droppedFiles)
 {
-	if (Engine::PlatformPath::IsReadOnlyTarget(m_CurrentDirectory))
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_CurrentDirectory) || IsExternalUnregisteredDirectory(m_CurrentDirectory))
 	{
 		NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
 			LOCAL("ContentBrowser.ReadOnlyProtected"), ELogLevel::Warn, 3.0f);
@@ -3339,6 +3638,8 @@ void ContentBrowserPanel::RestoreViewState(const std::string& relativeDirectory,
 	m_SearchBuffer[0] = '\0';
 	m_LastSearchString.clear();
 	m_SearchResults.clear();
+	m_AddressBarEditing = false;
+	m_AddressBarInputBuffer[0] = '\0';
 
 	if (relativeDirectory.empty())
 		return;

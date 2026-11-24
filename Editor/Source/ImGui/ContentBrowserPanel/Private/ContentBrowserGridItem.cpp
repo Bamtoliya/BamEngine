@@ -605,7 +605,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 			return;
 		}
 
-		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path);
+		const bool isReadOnly = Engine::PlatformPath::IsReadOnlyTarget(path) || browser.IsExternalUnregisteredDirectory(path);
 		browser.SetRenameTarget(path);
 		// 1. 최상단 [열기]: 더블클릭과 동일한 공통 동작
 		if (ImGui::MenuItem((ICON_FA_FOLDER_OPEN " " + LOCAL_LABEL("EditorCommon.Open")).c_str()))
@@ -639,6 +639,14 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				ShellExecuteW(nullptr, L"open", L"explorer.exe", param.c_str(), nullptr, SW_SHOWNORMAL);
 			}
 		}
+		if (isDir && browser.IsExternalUnregisteredDirectory(path))
+		{
+			ImGui::Separator();
+			if (ImGui::MenuItem((ICON_FA_LINK " " + LOCAL_LABEL("ContentBrowser.MountAsExternal")).c_str()))
+			{
+				browser.OpenMountAddModal(path);
+			}
+		}
 		ImGui::Separator();
 		// 4. [이름 변경], [경로 복사], [프로젝트 에셋으로 복사]
 		ImGui::BeginDisabled(isReadOnly);
@@ -667,9 +675,9 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				}
 				std::filesystem::create_directories(targetDir, copyEc);
 
-				std::string rawFilename = path.filename().string();
-				std::string stem = path.stem().string();
-				std::string ext = path.extension().string();
+				std::string rawFilename = Engine::WStrToStr(path.filename().wstring());
+				std::string stem = Engine::WStrToStr(path.stem().wstring());
+				std::string ext = Engine::WStrToStr(path.extension().wstring());
 				if (ToLowerAscii(rawFilename).ends_with(".bammat.json"))
 				{
 					stem = rawFilename.substr(0, rawFilename.size() - 12);
@@ -1144,7 +1152,8 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 	{
 		if (ImGui::MenuItem((ICON_FA_FILE_IMPORT " " + LOCAL_LABEL("ContentBrowser.Reimport")).c_str()))
 		{
-			AssetManager::Get().ImportAsync(path, path.parent_path());
+			const auto targetDir = ModelImporter::ResolveWritableDestinationDirectory(path, path.parent_path());
+			AssetManager::Get().ImportAsync(path, targetDir);
 		}
 		if (ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
 		{
