@@ -51,6 +51,7 @@ public:
 	void BakeSceneNavGrid();
 	bool HasActiveNavGrid() const;
 	void FocusSelectedEntity();
+	void RequestHDRCaptureFromCurrentLocation();
 
 	void SelectSplinePoint(Engine::Scene* scene, entt::entity entity, int index);
 private:
@@ -254,6 +255,30 @@ private:
 
 	std::optional<PerspectiveView> m_LastPerspectiveView;
 	std::optional<vec3> m_LastXYPosition;
+#pragma endregion
+
+#pragma region HDR Capture
+private:
+	void ProcessHDRCapture(Engine::Scene* activeScene);
+	void CancelHDRCapture();
+
+	struct HDRCaptureState
+	{
+		static constexpr uint32 FaceSize = 512;
+		static constexpr uint32 EquirectWidth = 1024;
+		static constexpr uint32 EquirectHeight = 512;
+
+		bool Active = false;
+		vec3 Origin{ 0.0f };
+		f32 FarPlane = 10000.0f;
+		std::wstring OutputPath;
+		Engine::Scene* TargetScene = nullptr;
+		int32 SubmittedFace = -1;
+		int32 NextFace = 0;
+		ViewportDeferredPipeline Pipeline;
+		std::array<std::vector<uint8>, 6> FacePixels;
+	};
+	HDRCaptureState m_HDRCapture;
 #pragma endregion
 
 };

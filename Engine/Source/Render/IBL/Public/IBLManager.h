@@ -4,6 +4,8 @@
 #include "Types.h"
 #include "ResourceHandle.h"
 #include "Texture.h"
+#include <array>
+#include <filesystem>
 #include <memory>
 
 BEGIN(Engine)
@@ -25,6 +27,18 @@ public:
 	// Equirectangular HDR(RGB32F) 이미지를 DirectX LH 6면 R16G16B16A16_FLOAT 큐브맵(밉체인 포함)으로 변환한다.
 	static bool ConvertEquirectangularToCubemap(const float* srcRGB, uint32 srcWidth, uint32 srcHeight,
 		uint32 faceSize, bool generateMips, TextureBinaryHeader& outHeader, std::vector<uint8>& outPixels);
+
+	// DirectX LH 6면(+X,-X,+Y,-Y,+Z,-Z) R16G16B16A16_FLOAT 선형 HDR 이미지를 Equirectangular RGB32F로 역투영 변환한다.
+	static bool ConvertCubemapFacesToEquirectangular(const std::array<const uint8*, 6>& faceRGBA16F,
+		uint32 faceSize, uint32 outWidth, uint32 outHeight, std::vector<float>& outRGB);
+
+	// DirectX LH 6면(+X,-X,+Y,-Y,+Z,-Z) RGB32F 선형 HDR 이미지를 Equirectangular RGB32F로 역투영 변환한다.
+	static bool ConvertCubemapFacesToEquirectangular(const std::array<const float*, 6>& faceRGB32F,
+		uint32 faceSize, uint32 outWidth, uint32 outHeight, std::vector<float>& outRGB);
+
+	// Equirectangular RGB32F 선형 HDR 데이터를 UTF-8/한글 경로에 안전하게 Radiance .hdr 파일로 저장한다.
+	static bool SaveEquirectangularHDR(const std::filesystem::path& outputPath, const float* rgb32f,
+		uint32 width, uint32 height);
 
 	// 리소스 해제
 	void Free();

@@ -134,3 +134,10 @@ Viewport,NavGridTitle,NavGrid,NavGrid
 Viewport,NavGridNoActiveScene,No active scene found to bake NavGrid.,NavGrid를 베이크할 활성 씬이 없습니다.
 Viewport,NavGridBakeTitle,NavGrid Bake,NavGrid 베이크
 Viewport,NavGridBakedMessage,"NavGrid baked: {}x{} cells ({} obstacles, cell {:.2f}m)","NavGrid 베이크 완료: {}x{} 셀 (장애물 {}개, 셀 {:.2f}m)"
+Viewport,CaptureHDRMenu,Capture HDR at Current Location...,현재 위치에서 HDR 캡처...
+Viewport,CaptureHDRTitle,HDR Capture,HDR 캡처
+Viewport,CaptureHDRNoCamera,No active scene or camera is available for HDR capture.,HDR 캡처에 사용할 활성 씬이나 카메라가 없습니다.
+Viewport,CaptureHDRInitFailed,Failed to initialize offscreen HDR capture pipeline.,오프스크린 HDR 캡처 파이프라인을 초기화하지 못했습니다.
+Viewport,CaptureHDRReadbackFailed,Failed to read back HDR face {} from GPU.,GPU에서 HDR 면 {}을(를) 읽어오지 못했습니다.
+Viewport,CaptureHDRSaveFailed,Failed to save captured HDR file: {},캡처한 HDR 파일을 저장하지 못했습니다: {}
+Viewport,CaptureHDRSucceeded,Saved HDR environment map: {},HDR 환경 맵을 저장했습니다: {}

@@ -9,6 +9,7 @@
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "ResourceHandleArchiveAdapter.h"
 #include "ResourcePreloader.h"
+#include "IBLManager.h"
 #include "NavigationSystem.h"
 
 namespace Engine
@@ -434,6 +435,12 @@ namespace
 
         for (const auto& reference : unresolved)
         {
+            if ((reference.AssetKey == L"Engine://Texture/DefaultBRDFLut" ||
+                 reference.AssetPath == L"Engine://Texture/DefaultBRDFLut") &&
+                Engine::IBLManager::Get().GetDefaultBRDFLUT())
+            {
+                continue;
+            }
             ENGINE_LOG_WARN("{} resource preload deferred: key=\"{}\", path=\"{}\"", kind,
                 Engine::WStrToStr(reference.AssetKey), Engine::WStrToStr(reference.AssetPath));
         }

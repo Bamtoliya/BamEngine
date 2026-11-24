@@ -51,6 +51,10 @@
 #include "RaytracedShadowModeUI.h"
 #include "AmbientOcclusionModeUI.h"
 #include "RHI.h"
+#include "FileDialogs.h"
+#include "IBLManager.h"
+#include "PlatformPath.h"
+#include <filesystem>
 
 #pragma region Helper
 struct LightingPassData
@@ -269,6 +273,7 @@ void SceneViewportPanel::PreparePipelines()
 
 void SceneViewportPanel::Free()
 {
+	CancelHDRCapture();
 	ResetSplinePointSelection();
 	if (s_ActiveSceneViewport == this)
 		s_ActiveSceneViewport = nullptr;
@@ -338,8 +343,8 @@ void SceneViewportPanel::Update(f32 dt)
 	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 렌더링 100% 차단 (0 FPS)
 	if (!m_Open || !m_IsVisibleOnScreen)
 		return;
-	// 2. 적응형 프레임 쓰로틀링 판정
-	const bool isHighPriority = m_Focused || m_Hovered || PIEManager::Get().IsPlaying();
+	// 2. 적응형 프레임 쓰로틀링 판정 (HDR 캡처 진행 중에는 6면 연속 수집을 위해 쓰로틀링 우회)
+	const bool isHighPriority = m_Focused || m_Hovered || PIEManager::Get().IsPlaying() || m_HDRCapture.Active;
 	const float targetInterval = isHighPriority ? 0.0f : (1.0f / 15.0f); // 비포커스 시 15 FPS
 	m_TimeSinceLastRender += dt;
 	if (m_TimeSinceLastRender < targetInterval)
@@ -350,6 +355,8 @@ void SceneViewportPanel::Update(f32 dt)
 	m_TimeSinceLastRender = 0.0f;
 	// Download the clicked frame before resizing/replacing its render targets.
 	ProcessPickingRequest();
+	if (m_HDRCapture.Active)
+		ProcessHDRCapture(SceneManager::Get().GetCurrentScene());
 	if (!CalculateRenderResolution(m_PanelWidth, m_PanelHeight))
 		return;
 
@@ -817,6 +824,13 @@ void SceneViewportPanel::DrawDebugMenu()
 		{
 			BakeSceneNavGrid();
 		}
+		ImGui::Separator();
+		ImGui::BeginDisabled(m_HDRCapture.Active);
+		if (ImGui::MenuItem((std::string(ICON_FA_CAMERA " ") + LOCAL("Viewport.CaptureHDRMenu")).c_str()))
+		{
+			RequestHDRCaptureFromCurrentLocation();
+		}
+		ImGui::EndDisabled();
 		ImGui::EndMenu();
 	}
 }
@@ -2970,5 +2984,191 @@ void SceneViewportPanel::BakeSceneNavGrid()
 
 	NotificationManager::Get().AddNotification(
 		LOCAL("Viewport.NavGridBakeTitle"), msg, ELogLevel::Info, 4.0f);
+}
+#pragma endregion
+
+#pragma region HDR Capture
+void SceneViewportPanel::RequestHDRCaptureFromCurrentLocation()
+{
+	if (m_HDRCapture.Active)
+		return;
+
+	Engine::Scene* activeScene = SceneManager::Get().GetCurrentScene();
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
+	if (!activeScene || !cameraBuffer.has_value())
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Viewport.CaptureHDRTitle"), LOCAL("Viewport.CaptureHDRNoCamera"), ELogLevel::Warn, 3.0f);
+		return;
+	}
+
+	// 선택된 엔티티가 유효한 월드 위치를 가지면 그 위치를, 아니면 현재 Scene View 카메라 위치를 캡처 원점으로 사용한다.
+	vec3 captureOrigin = cameraBuffer->cameraPosition;
+	if (Engine::Entity* selectedEntity = SelectionManager::Get().GetPrimarySelectedEntity())
+	{
+		if (selectedEntity->GetScene() == activeScene)
+		{
+			auto& registry = activeScene->GetRegistry();
+			const entt::entity handle = selectedEntity->GetEntityHandle();
+			glm::mat4 worldMatrix(1.0f);
+			if (registry.valid(handle) && Engine::TransformSystem::TryGetWorldMatrix(registry, handle, worldMatrix))
+			{
+				const vec3 entityPos(worldMatrix[3]);
+				if (std::isfinite(entityPos.x) && std::isfinite(entityPos.y) && std::isfinite(entityPos.z))
+					captureOrigin = entityPos;
+			}
+		}
+	}
+
+	std::filesystem::path initialDir = Engine::PlatformPath::GetProjectAssetRoot() / L"Texture" / L"IBL";
+	std::error_code ec;
+	if (!initialDir.empty())
+	{
+		if (!std::filesystem::exists(initialDir, ec))
+			std::filesystem::create_directories(initialDir, ec);
+		if (ec)
+			initialDir = Engine::PlatformPath::GetProjectAssetRoot();
+	}
+
+	std::wstring savePath;
+	const std::vector<FileDialogFilter> filters = { { L"Radiance HDR (*.hdr)", L"*.hdr" } };
+	if (!FileDialogs::SaveFileDialog(savePath, filters, L"IBLCapture.hdr", L"hdr", initialDir.wstring(), EFileDialogContext::General))
+		return;
+
+	CancelHDRCapture();
+
+	const std::wstring capturePrefix = m_Name + L"_IBLCapture";
+	if (!m_HDRCapture.Pipeline.Initialize(capturePrefix, HDRCaptureState::FaceSize, HDRCaptureState::FaceSize, true))
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Viewport.CaptureHDRTitle"), LOCAL("Viewport.CaptureHDRInitFailed"), ELogLevel::Error, 4.0f);
+		return;
+	}
+
+	// 단발 6면 캡처에서 시간 누적 지터·이력 잔상을 방지하기 위해 TAA 및 시간 누적 기반 패스를 끈다.
+	m_HDRCapture.Pipeline.SetTemporalAAMode(Engine::ERaytracedShadowMode::Off);
+	m_HDRCapture.Pipeline.SetRaytracedReflectionMode(Engine::ERaytracedShadowMode::Off);
+	m_HDRCapture.Pipeline.SetAmbientOcclusionMode(Engine::EAmbientOcclusionMode::Off);
+
+	f32 farPlane = 10000.0f;
+	if (m_CameraController)
+	{
+		if (const auto* camComp = m_CameraController->GetCameraComponent())
+			farPlane = (std::max)(farPlane, camComp->FarPlane);
+	}
+
+	m_HDRCapture.Active = true;
+	m_HDRCapture.Origin = captureOrigin;
+	m_HDRCapture.FarPlane = farPlane;
+	m_HDRCapture.OutputPath = savePath;
+	m_HDRCapture.TargetScene = activeScene;
+	m_HDRCapture.SubmittedFace = -1;
+	m_HDRCapture.NextFace = 0;
+	for (auto& pixels : m_HDRCapture.FacePixels)
+		pixels.clear();
+}
+
+void SceneViewportPanel::ProcessHDRCapture(Engine::Scene* activeScene)
+{
+	if (!m_HDRCapture.Active)
+		return;
+
+	if (!activeScene || activeScene != m_HDRCapture.TargetScene)
+	{
+		CancelHDRCapture();
+		return;
+	}
+
+	Engine::RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi)
+	{
+		CancelHDRCapture();
+		return;
+	}
+
+	// 1. 직전 프레임에 제출한 면의 선형 HDR LightingColor(R16G16B16A16_FLOAT) Readback
+	if (m_HDRCapture.SubmittedFace >= 0 && m_HDRCapture.SubmittedFace < 6)
+	{
+		const int32 faceIdx = m_HDRCapture.SubmittedFace;
+		auto* rt = RenderTargetManager::Get().GetRenderTarget(m_HDRCapture.Pipeline.GetFinalColorRTName());
+		auto* texture = rt ? rt->GetTexture() : nullptr;
+		const uint32 expectedBytes = HDRCaptureState::FaceSize * HDRCaptureState::FaceSize * 8;
+		auto& dstPixels = m_HDRCapture.FacePixels[faceIdx];
+		dstPixels.resize(expectedBytes);
+
+		if (!texture || rhi->ReadTexturePixels(texture, dstPixels.data(), expectedBytes) != EResult::Success)
+		{
+			CancelHDRCapture();
+			NotificationManager::Get().AddNotification(
+				LOCAL("Viewport.CaptureHDRTitle"), LOCAL_FMT("Viewport.CaptureHDRReadbackFailed", faceIdx), ELogLevel::Error, 4.0f);
+			return;
+		}
+		m_HDRCapture.SubmittedFace = -1;
+	}
+
+	// 2. 6면 수집 완료 시 Equirectangular 변환 및 .hdr 저장
+	if (m_HDRCapture.NextFace >= 6)
+	{
+		const std::array<const uint8*, 6> facePtrs = {
+			m_HDRCapture.FacePixels[0].data(), m_HDRCapture.FacePixels[1].data(),
+			m_HDRCapture.FacePixels[2].data(), m_HDRCapture.FacePixels[3].data(),
+			m_HDRCapture.FacePixels[4].data(), m_HDRCapture.FacePixels[5].data()
+		};
+
+		std::vector<float> equirectRGB;
+		const std::filesystem::path outPath(m_HDRCapture.OutputPath);
+		const std::string displayPath = WStrToStr(outPath.filename().wstring());
+		const bool saved = Engine::IBLManager::ConvertCubemapFacesToEquirectangular(
+			facePtrs, HDRCaptureState::FaceSize, HDRCaptureState::EquirectWidth, HDRCaptureState::EquirectHeight, equirectRGB) &&
+			Engine::IBLManager::SaveEquirectangularHDR(outPath, equirectRGB.data(), HDRCaptureState::EquirectWidth, HDRCaptureState::EquirectHeight);
+
+		CancelHDRCapture();
+
+		if (saved)
+		{
+			NotificationManager::Get().AddNotification(
+				LOCAL("Viewport.CaptureHDRTitle"), LOCAL_FMT("Viewport.CaptureHDRSucceeded", displayPath), ELogLevel::Info, 4.0f);
+		}
+		else
+		{
+			NotificationManager::Get().AddNotification(
+				LOCAL("Viewport.CaptureHDRTitle"), LOCAL_FMT("Viewport.CaptureHDRSaveFailed", displayPath), ELogLevel::Error, 4.0f);
+		}
+		return;
+	}
+
+	// 3. 다음 면 렌더링 제출 (DirectX LH 큐브맵 6면 규격: +X, -X, +Y, -Y, +Z, -Z)
+	static constexpr vec3 kCubeDirections[6] = {
+		vec3(1.0f,  0.0f,  0.0f), vec3(-1.0f,  0.0f,  0.0f),
+		vec3(0.0f,  1.0f,  0.0f), vec3( 0.0f, -1.0f,  0.0f),
+		vec3(0.0f,  0.0f,  1.0f), vec3( 0.0f,  0.0f, -1.0f)
+	};
+	static constexpr vec3 kCubeUps[6] = {
+		vec3(0.0f, 1.0f,  0.0f), vec3(0.0f, 1.0f, 0.0f),
+		vec3(0.0f, 0.0f, -1.0f), vec3(0.0f, 0.0f, 1.0f),
+		vec3(0.0f, 1.0f,  0.0f), vec3(0.0f, 1.0f, 0.0f)
+	};
+
+	const int32 faceIdx = m_HDRCapture.NextFace;
+	const mat4 view = glm::lookAtLH(m_HDRCapture.Origin, m_HDRCapture.Origin + kCubeDirections[faceIdx], kCubeUps[faceIdx]);
+	const mat4 proj = glm::perspectiveLH_ZO(glm::radians(90.0f), 1.0f, 0.05f, m_HDRCapture.FarPlane);
+	const CameraBuffer faceCamera = CameraBuffer::FromMatrices(
+		view, proj, m_HDRCapture.Origin, static_cast<f32>(TimeManager::Get().GetTotalTime()));
+
+	m_HDRCapture.Pipeline.Submit(faceCamera, activeScene);
+	m_HDRCapture.SubmittedFace = faceIdx;
+	++m_HDRCapture.NextFace;
+}
+
+void SceneViewportPanel::CancelHDRCapture()
+{
+	m_HDRCapture.Pipeline.Free();
+	m_HDRCapture.Active = false;
+	m_HDRCapture.TargetScene = nullptr;
+	m_HDRCapture.SubmittedFace = -1;
+	m_HDRCapture.NextFace = 0;
+	m_HDRCapture.OutputPath.clear();
+	for (auto& pixels : m_HDRCapture.FacePixels)
+		pixels.clear();
 }
 #pragma endregion
