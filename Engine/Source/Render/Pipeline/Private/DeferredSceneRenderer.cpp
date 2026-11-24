@@ -689,9 +689,13 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 		{
 			if (!IsComponentEnabled(world, entity, sky))
 				continue;
+			const auto isValidCube = [](const Texture* tex) -> bool
+			{
+				return tex && tex->GetRHITexture() && tex->GetRHITexture()->GetDimension() == ETextureDimension::TextureCube;
+			};
 			const auto* prefiltered = sky.PrefilteredMap.Get();
 			const auto* irradiance = sky.IrradianceMap.Get();
-			if (!prefiltered || !prefiltered->GetRHITexture() || (irradiance && !irradiance->GetRHITexture()))
+			if (!isValidCube(prefiltered) && !isValidCube(irradiance))
 				continue;
 
 			const auto* lut = sky.BRDFLutMap.Get();
@@ -911,15 +915,24 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 						lightingData.IBLIntensity = sky.IBLIntensity;
 						lightingData.ShadowAmbientFloor = sky.ShadowAmbientFloor;
 
+						const auto isValidCube = [](const Texture* tex) -> bool
+						{
+							return tex && tex->GetRHITexture() && tex->GetRHITexture()->GetDimension() == ETextureDimension::TextureCube;
+						};
 						Texture* irrTex = sky.IrradianceMap.IsValid() ? sky.IrradianceMap.Get() : nullptr;
 						Texture* prefTex = sky.PrefilteredMap.IsValid() ? sky.PrefilteredMap.Get() : nullptr;
+						if (!isValidCube(irrTex)) irrTex = nullptr;
+						if (!isValidCube(prefTex)) prefTex = nullptr;
+
 						Texture* lutTex = sky.BRDFLutMap.Get();
 						if (!lutTex || !lutTex->GetRHITexture())
 							lutTex = defaultBRDFLUT;
 
-						// Prefiltered 큐브맵만 있고 Irradiance가 없으면 Prefiltered로 대체
+						// 둘 중 하나만 지정된 경우 단일 HDR/DDS 큐브맵으로 양쪽을 채워 바로 IBL·Probe GI에 사용한다.
 						if (prefTex && !irrTex)
 							irrTex = prefTex;
+						else if (irrTex && !prefTex)
+							prefTex = irrTex;
 
 						if (irrTex && prefTex && lutTex && irrTex->GetRHITexture() && prefTex->GetRHITexture() && lutTex->GetRHITexture())
 						{

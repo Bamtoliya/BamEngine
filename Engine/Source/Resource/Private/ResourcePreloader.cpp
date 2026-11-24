@@ -54,7 +54,7 @@ namespace Engine
             const auto extension = GetPreloadExtension(path);
             if (extension == L".bammesh") return EPreloadKind::Mesh;
             if (extension == L".bammat" || extension == L".bammatinst") return EPreloadKind::Material;
-            for (const auto* texture : { L".png", L".jpg", L".jpeg", L".bmp", L".tga", L".dds", L".bamtex" })
+            for (const auto* texture : { L".png", L".jpg", L".jpeg", L".bmp", L".tga", L".dds", L".hdr", L".bamtex" })
                 if (extension == texture) return EPreloadKind::Texture;
             return EPreloadKind::Other;
         }

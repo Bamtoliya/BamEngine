@@ -50,6 +50,8 @@ namespace Engine
         constexpr uint32 DDPF_ALPHAPIXELS = 0x00000001;
         constexpr uint32 DDPF_FOURCC      = 0x00000004;
         constexpr uint32 DDPF_RGB         = 0x00000040;
+        constexpr uint32 DDSCAPS2_CUBEMAP = 0x00000200;
+        constexpr uint32 D3D10_RESOURCE_MISC_TEXTURECUBE = 0x00000004;
 
         constexpr uint32 MAKE_FOURCC(char a, char b, char c, char d)
         {
@@ -68,6 +70,7 @@ namespace Engine
             case 87: return ETextureFormat::B8G8R8A8_UNORM;       // DXGI_FORMAT_B8G8R8A8_UNORM
             case 91: return ETextureFormat::B8G8R8A8_UNORM_SRGB;  // DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
             case 10: return ETextureFormat::R16G16B16A16_FLOAT;   // DXGI_FORMAT_R16G16B16A16_FLOAT
+            case 26: return ETextureFormat::R11G11B10_UFLOAT;     // DXGI_FORMAT_R11G11B10_FLOAT
             case 2:  return ETextureFormat::R32G32B32A32_FLOAT;   // DXGI_FORMAT_R32G32B32A32_FLOAT
             case 71: return ETextureFormat::BC1_RGBA_UNORM;       // DXGI_FORMAT_BC1_UNORM
             case 72: return ETextureFormat::BC1_RGBA_UNORM_SRGB;  // DXGI_FORMAT_BC1_UNORM_SRGB
@@ -108,7 +111,16 @@ namespace Engine
         outInfo.depth = (header.dwDepth > 0) ? header.dwDepth : 1;
         outInfo.mipLevels = (header.dwMipMapCount > 0) ? header.dwMipMapCount : 1;
         outInfo.arraySize = 1;
-        outInfo.dimension = (header.dwDepth > 1) ? ETextureDimension::Texture3D : ETextureDimension::Texture2D;
+        if ((header.dwCaps2 & DDSCAPS2_CUBEMAP) != 0)
+        {
+            outInfo.dimension = ETextureDimension::TextureCube;
+            outInfo.arraySize = 6;
+            outInfo.depth = 1;
+        }
+        else
+        {
+            outInfo.dimension = (header.dwDepth > 1) ? ETextureDimension::Texture3D : ETextureDimension::Texture2D;
+        }
 
         if (header.ddspf.dwFlags & DDPF_FOURCC)
         {
@@ -122,8 +134,17 @@ namespace Engine
                 headerSize += sizeof(DDS_HEADER_DXT10);
 
                 outInfo.format = DxgiToTextureFormat(dxt10.dxgiFormat);
-                if (dxt10.arraySize > 0)
-                    outInfo.arraySize = dxt10.arraySize;
+                const uint32 dxt10Array = (dxt10.arraySize > 0) ? dxt10.arraySize : 1;
+                if ((dxt10.miscFlag & D3D10_RESOURCE_MISC_TEXTURECUBE) != 0)
+                {
+                    outInfo.dimension = (dxt10Array > 1) ? ETextureDimension::TextureCubeArray : ETextureDimension::TextureCube;
+                    outInfo.arraySize = dxt10Array * 6;
+                    outInfo.depth = 1;
+                }
+                else
+                {
+                    outInfo.arraySize = dxt10Array;
+                }
             }
             else if (header.ddspf.dwFourCC == MAKE_FOURCC('D', 'X', 'T', '1'))
             {
@@ -146,6 +167,30 @@ namespace Engine
                      header.ddspf.dwFourCC == MAKE_FOURCC('B', 'C', '5', 'U'))
             {
                 outInfo.format = ETextureFormat::BC5_RG_UNORM;
+            }
+            else if (header.ddspf.dwFourCC == 111) // D3DFMT_R16F
+            {
+                outInfo.format = ETextureFormat::R16_FLOAT;
+            }
+            else if (header.ddspf.dwFourCC == 112) // D3DFMT_G16R16F
+            {
+                outInfo.format = ETextureFormat::R16G16_FLOAT;
+            }
+            else if (header.ddspf.dwFourCC == 113) // D3DFMT_A16B16G16R16F
+            {
+                outInfo.format = ETextureFormat::R16G16B16A16_FLOAT;
+            }
+            else if (header.ddspf.dwFourCC == 114) // D3DFMT_R32F
+            {
+                outInfo.format = ETextureFormat::R32_FLOAT;
+            }
+            else if (header.ddspf.dwFourCC == 115) // D3DFMT_G32R32F
+            {
+                outInfo.format = ETextureFormat::R32G32_FLOAT;
+            }
+            else if (header.ddspf.dwFourCC == 116) // D3DFMT_A32B32G32R32F
+            {
+                outInfo.format = ETextureFormat::R32G32B32A32_FLOAT;
             }
             else
             {

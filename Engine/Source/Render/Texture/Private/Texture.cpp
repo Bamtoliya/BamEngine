@@ -13,6 +13,8 @@
 #include <stb_image_resize2.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include "DDSLoader.h"
+#include "IBLManager.h"
+#include <cctype>
 #pragma push_macro("new")
 #undef new
 #include <archive/BeveArchive.h>
@@ -29,16 +31,42 @@ ETextureFormat ToTextureFormat(uint32 channels, bool sRGB)
 	}
 }
 
+std::string ToLowerAsciiExtension(const std::filesystem::path& path)
+{
+	std::string ext = path.extension().string();
+	for (char& ch : ext)
+		ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+	return ext;
+}
+
+uint32 ComputeHDRCubemapFaceSize(uint32 srcWidth, uint32 srcHeight)
+{
+	const uint32 raw = (std::max)(srcWidth / 4, srcHeight / 2);
+	uint32 pow2 = 16;
+	while (pow2 < raw && pow2 < 512)
+		pow2 <<= 1;
+	return std::clamp(pow2, 16u, 512u);
+}
+
 constexpr uint32 TextureArchiveFormatVersion = 1;
 [[nodiscard]]
 archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, f32 ppu, uint32& byteCount)
 {
-	const bool isValid2D = (header.dimension == ETextureDimension::Texture2D && header.depth == 1);
-	const bool isValid3D = (header.dimension == ETextureDimension::Texture3D && header.depth >= 1);
-	if ((!isValid2D && !isValid3D) || header.mipLevels < 1 || header.arraySize != 1)
+	const bool isValid2D = (header.dimension == ETextureDimension::Texture2D && header.depth == 1 && header.arraySize == 1);
+	const bool isValid3D = (header.dimension == ETextureDimension::Texture3D && header.depth >= 1 && header.arraySize == 1);
+	const bool isValidCube = (header.dimension == ETextureDimension::TextureCube && header.depth == 1 && header.arraySize == 6);
+	if ((!isValid2D && !isValid3D && !isValidCube) || header.mipLevels < 1)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.Layout" };
 	const bool isBC = IsBlockCompressed(header.format);
-	if (header.format != ETextureFormat::R8G8B8A8_UNORM && header.format != ETextureFormat::R8G8B8A8_UNORM_SRGB && !isBC)
+	const bool isSupportedUncompressed = (header.format == ETextureFormat::R8G8B8A8_UNORM ||
+		header.format == ETextureFormat::R8G8B8A8_UNORM_SRGB ||
+		header.format == ETextureFormat::B8G8R8A8_UNORM ||
+		header.format == ETextureFormat::B8G8R8A8_UNORM_SRGB ||
+		header.format == ETextureFormat::R16G16_FLOAT ||
+		header.format == ETextureFormat::R16G16B16A16_FLOAT ||
+		header.format == ETextureFormat::R32_FLOAT ||
+		header.format == ETextureFormat::R32G32B32A32_FLOAT);
+	if (!isSupportedUncompressed && !isBC)
 		return { archive::ArchiveErrorCode::UnsupportedType, "Texture.TextureHeader.format" };
 	if (header.width == 0 || header.height == 0 || header.depth == 0)
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.TextureHeader.Size" };
@@ -46,8 +74,9 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 		return { archive::ArchiveErrorCode::InvalidValue, "Texture.PixelPerUnit" };
 
 	uint64 totalBytes = 0;
-	if (header.dimension == ETextureDimension::Texture2D)
+	if (header.dimension == ETextureDimension::Texture2D || header.dimension == ETextureDimension::TextureCube)
 	{
+		uint64 sliceBytes = 0;
 		uint32 curW = header.width;
 		uint32 curH = header.height;
 		if (isBC)
@@ -57,7 +86,7 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 			{
 				const uint32 blockW = (curW + 3) / 4;
 				const uint32 blockH = (curH + 3) / 4;
-				totalBytes += static_cast<uint64>(blockW) * blockH * blockSize;
+				sliceBytes += static_cast<uint64>(blockW) * blockH * blockSize;
 				curW = (std::max)(1u, curW >> 1);
 				curH = (std::max)(1u, curH >> 1);
 			}
@@ -67,15 +96,17 @@ archive::ArchiveResult ValidateTextureHeader(const TextureBinaryHeader& header, 
 			const uint32 bpp = GetUncompressedBytesPerPixel(header.format);
 			for (uint32 m = 0; m < header.mipLevels; ++m)
 			{
-				totalBytes += static_cast<uint64>(curW) * bpp * curH;
+				sliceBytes += static_cast<uint64>(curW) * bpp * curH;
 				curW = (std::max)(1u, curW >> 1);
 				curH = (std::max)(1u, curH >> 1);
 			}
 		}
+		totalBytes = sliceBytes * header.arraySize;
 	}
 	else
 	{
-		const uint64 sliceBytes = static_cast<uint64>(header.width) * 4 * header.height;
+		const uint32 bpp = GetUncompressedBytesPerPixel(header.format);
+		const uint64 sliceBytes = static_cast<uint64>(header.width) * bpp * header.height;
 		totalBytes = sliceBytes * header.depth;
 	}
 
@@ -138,7 +169,7 @@ EResult Texture::Initialize(void* arg)
 		if (m_Path.empty())
 			return EResult::InvalidArgument;
 
-	if (desc->dimension != ETextureDimension::Texture2D ||
+	if ((desc->dimension != ETextureDimension::Texture2D && desc->dimension != ETextureDimension::TextureCube) ||
 		desc->usage != ETextureUsage::Sampler || desc->sRGB)
 	{
 		return EResult::NotImplemented;
@@ -155,8 +186,12 @@ EResult Texture::Initialize(void* arg)
 	if (buffer.empty() || buffer.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
 		return EResult::InvalidArgument;
 
-	if (fullPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0))
+	const std::string ext = ToLowerAsciiExtension(fullPath);
+	if (ext == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0))
 		return InitializeFromDDSMemory(buffer);
+
+	if (ext == ".hdr" || stbi_is_hdr_from_memory(buffer.data(), static_cast<int>(buffer.size())) != 0)
+		return InitializeFromHDRMemory(buffer, desc->generateMips);
 
 	return InitializeFromEncodedMemory(buffer, desc->generateMips);
 }
@@ -165,6 +200,9 @@ EResult Texture::InitializeFromEncodedMemory(const vector<uint8>& encodedData, b
 {
 	if (encodedData.empty() || encodedData.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
 		return EResult::InvalidArgument;
+
+	if (stbi_is_hdr_from_memory(encodedData.data(), static_cast<int>(encodedData.size())) != 0)
+		return InitializeFromHDRMemory(encodedData, generateMips);
 
 	RHI* rhi = GetResourceUploadRHI();
 
@@ -326,6 +364,78 @@ Texture* Texture::CreateFromDDSMemory(const vector<uint8>& ddsData, const wstrin
 		instance->m_Path = NormalizePath(key);
 	}
 	return instance;
+}
+
+EResult Texture::InitializeFromHDRMemory(const vector<uint8>& hdrData, bool generateMips)
+{
+	if (hdrData.empty() || hdrData.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
+		return EResult::InvalidArgument;
+
+	const int encodedSize = static_cast<int>(hdrData.size());
+	int srcWidth = 0;
+	int srcHeight = 0;
+	int channels = 0;
+
+	std::unique_ptr<float, decltype(&stbi_image_free)> pixels(
+		stbi_loadf_from_memory(hdrData.data(), encodedSize, &srcWidth, &srcHeight, &channels, 3),
+		stbi_image_free);
+
+	if (!pixels || srcWidth <= 0 || srcHeight <= 0)
+		return EResult::Fail;
+
+	const uint32 faceSize = ComputeHDRCubemapFaceSize(static_cast<uint32>(srcWidth), static_cast<uint32>(srcHeight));
+	TextureBinaryHeader header{};
+	vector<uint8> cubePixels;
+	if (!IBLManager::ConvertEquirectangularToCubemap(pixels.get(), static_cast<uint32>(srcWidth), static_cast<uint32>(srcHeight),
+		faceSize, generateMips, header, cubePixels))
+		return EResult::Fail;
+
+	uint32 byteCount = 0;
+	if (!ValidateTextureHeader(header, m_PixelPerUnit, byteCount) || byteCount != cubePixels.size())
+		return EResult::InvalidArgument;
+
+	RHI* rhi = GetResourceUploadRHI();
+	RHITexture* texture = nullptr;
+	if (rhi)
+	{
+		RHITextureDesc textureDesc{};
+		textureDesc.width = header.width;
+		textureDesc.height = header.height;
+		textureDesc.depth = header.depth;
+		textureDesc.mipLevels = header.mipLevels;
+		textureDesc.arraySize = header.arraySize;
+		textureDesc.format = header.format;
+		textureDesc.dimension = header.dimension;
+		textureDesc.usage = ETextureUsage::Sampler;
+		textureDesc.data = cubePixels.data();
+		textureDesc.dataSize = byteCount;
+
+		texture = rhi->CreateTexture(textureDesc);
+		if (!texture) return EResult::Fail;
+	}
+
+	Safe_Release(m_RHITexture);
+	m_RHITexture = texture;
+	m_CachedHeader = header;
+	m_TempData = std::move(cubePixels);
+	MarkResident();
+	return EResult::Success;
+}
+
+Texture* Texture::CreateFromHDRMemory(const vector<uint8>& hdrData, const wstring& key, bool generateMips)
+{
+	std::unique_ptr<Texture> instance(new Texture());
+	if (!key.empty())
+	{
+		instance->m_Key = NormalizePath(key);
+		instance->m_Path = NormalizePath(key);
+	}
+	if (IsFailure(instance->InitializeFromHDRMemory(hdrData, generateMips)))
+	{
+		instance->Free();
+		return nullptr;
+	}
+	return instance.release();
 }
 
 Texture* Texture::Create(void* arg)
@@ -685,12 +795,20 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
 		return EResult::Fail;
 
-	const bool isDDS = (targetPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0));
-	const bool isBamtex = (targetPath.extension() == ".bamtex" || targetPath.extension() == ".beve");
+	const std::string ext = ToLowerAsciiExtension(targetPath);
+	const bool isDDS = (ext == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0));
+	const bool isBamtex = (ext == ".bamtex" || ext == ".beve");
+	const bool isHDR = (ext == ".hdr" || stbi_is_hdr_from_memory(buffer.data(), static_cast<int>(buffer.size())) != 0);
 	EResult result = EResult::Fail;
 	if (isDDS)
 	{
 		result = InitializeFromDDSMemory(buffer);
+		if (result == EResult::Success)
+			IncreaseVersion();
+	}
+	else if (isHDR)
+	{
+		result = InitializeFromHDRMemory(buffer);
 		if (result == EResult::Success)
 			IncreaseVersion();
 	}

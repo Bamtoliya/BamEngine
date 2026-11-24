@@ -13,6 +13,10 @@ namespace Editor::Detail
 
 	ImTextureID GetResourcePickerTextureID(Engine::RHITexture* texture)
 	{
+		if (texture == nullptr ||
+			texture->GetDimension() != Engine::ETextureDimension::Texture2D ||
+			texture->GetArraySize() != 1)
+			return ImTextureID{};
 		return ImGuiManager::Get().GetImGuiTextureID(texture);
 	}
 

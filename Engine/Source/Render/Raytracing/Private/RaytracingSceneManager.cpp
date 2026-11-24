@@ -1027,7 +1027,8 @@ void RaytracingSceneManager::PruneSkinned()
 #pragma region Caster Policy
 bool RaytracingSceneManager::IsSkinningSupported(const Mesh* mesh)
 {
-	if (!mesh || !mesh->IsSkinned() || mesh->IsDynamic() || mesh->GetTopology() != ETopology::TriangleList)
+	// ModelImporter는 스킨드 메시에 EMeshFlag::Dynamic을 부여하므로 스키닝 경로에서는 Dynamic 플래그로 제외하지 않는다.
+	if (!mesh || !mesh->IsSkinned() || mesh->GetTopology() != ETopology::TriangleList)
 		return false;
 	const uint32 vertexCount = mesh->GetVertexCount();
 	if (vertexCount == 0 || !mesh->GetPositionBuffer() || !mesh->GetMaterialBuffer())
@@ -1042,7 +1043,8 @@ bool RaytracingSceneManager::IsSkinningSupported(const Mesh* mesh)
 
 bool RaytracingSceneManager::IsReflectionSupported(const Mesh* mesh, const MaterialInterface* material)
 {
-	if (!mesh || !material || mesh->IsDynamic() || mesh->GetTopology() != ETopology::TriangleList)
+	// 비스킨드 동적 메시는 매 프레임 정점이 바뀔 수 있어 제외하고, 스킨드 메시는 ModelImporter의 Dynamic 플래그를 허용한다.
+	if (!mesh || !material || (!mesh->IsSkinned() && mesh->IsDynamic()) || mesh->GetTopology() != ETopology::TriangleList)
 		return false;
 	if (!mesh->GetPositionBuffer() || !mesh->GetMaterialBuffer() || mesh->GetVertexCount() == 0 ||
 		mesh->GetStreamStride(EMeshStream::Material) != sizeof(VertexMaterial))
@@ -1056,7 +1058,8 @@ bool RaytracingSceneManager::IsShadowCasterSupported(const Mesh* mesh, const Mat
 	if (!mesh || !material)
 		return false;
 	// 스킨드 메시는 Compute 스키닝 결과로 BLAS를 만들 때만 호출부가 지원으로 본다(IsSkinningSupported).
-	if (mesh->IsDynamic() || mesh->GetTopology() != ETopology::TriangleList)
+	// ModelImporter가 스킨드 메시에 EMeshFlag::Dynamic을 부여하므로 비스킨드 동적 메시만 여기서 제외한다.
+	if ((!mesh->IsSkinned() && mesh->IsDynamic()) || mesh->GetTopology() != ETopology::TriangleList)
 		return false;
 	if (!mesh->GetPositionBuffer() || mesh->GetVertexCount() == 0)
 		return false;

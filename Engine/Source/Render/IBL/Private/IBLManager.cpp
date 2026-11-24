@@ -7,6 +7,8 @@
 #include <glm/packing.hpp>
 #include <vector>
 #include <cmath>
+#include <cstring>
+#include <limits>
 #include <algorithm>
 #include <thread>
 
@@ -64,6 +66,80 @@ namespace Engine
 			float ggx1 = GeometrySchlickGGX(NdotL, roughness);
 			return ggx2 * ggx1;
 		}
+
+		// DirectX LH 큐브맵 면(+X, -X, +Y, -Y, +Z, -Z)의 UV([-1, 1])에 대응하는 정규화 방향 벡터
+		vec3 CubeFaceDirection(uint32 face, float u, float v)
+		{
+			vec3 dir(0.0f);
+			switch (face)
+			{
+			case 0: dir = vec3( 1.0f,   -v,   -u); break; // +X
+			case 1: dir = vec3(-1.0f,   -v,    u); break; // -X
+			case 2: dir = vec3(    u, 1.0f,    v); break; // +Y
+			case 3: dir = vec3(    u,-1.0f,   -v); break; // -Y
+			case 4: dir = vec3(    u,   -v, 1.0f); break; // +Z
+			case 5: dir = vec3(   -u,   -v,-1.0f); break; // -Z
+			default: break;
+			}
+			return glm::normalize(dir);
+		}
+
+		vec3 SampleEquirectangularRGB(const float* srcRGB, uint32 srcWidth, uint32 srcHeight, const vec3& dir)
+		{
+			constexpr float kInvTwoPi = 0.15915494309189533577f;
+			constexpr float kInvPi = 0.31830988618379067154f;
+
+			const float phi = std::atan2(dir.z, dir.x);
+			const float theta = std::asin(glm::clamp(dir.y, -1.0f, 1.0f));
+			const float u = phi * kInvTwoPi + 0.5f;
+			const float v = 0.5f - theta * kInvPi;
+
+			const float fx = u * static_cast<float>(srcWidth) - 0.5f;
+			const float fy = v * static_cast<float>(srcHeight) - 0.5f;
+
+			const int32 x0 = static_cast<int32>(std::floor(fx));
+			const int32 y0 = static_cast<int32>(std::floor(fy));
+			const float tx = fx - static_cast<float>(x0);
+			const float ty = fy - static_cast<float>(y0);
+
+			const int32 w = static_cast<int32>(srcWidth);
+			const int32 h = static_cast<int32>(srcHeight);
+			const auto wrapX = [w](int32 x) -> uint32 { int32 r = x % w; return static_cast<uint32>(r < 0 ? r + w : r); };
+			const auto clampY = [h](int32 y) -> uint32 { return static_cast<uint32>(std::clamp(y, 0, h - 1)); };
+
+			const uint32 ux0 = wrapX(x0);
+			const uint32 ux1 = wrapX(x0 + 1);
+			const uint32 uy0 = clampY(y0);
+			const uint32 uy1 = clampY(y0 + 1);
+
+			const auto load = [srcRGB, srcWidth](uint32 x, uint32 y) -> vec3
+			{
+				const size_t idx = (static_cast<size_t>(y) * srcWidth + x) * 3;
+				return vec3(srcRGB[idx], srcRGB[idx + 1], srcRGB[idx + 2]);
+			};
+
+			const vec3 c00 = load(ux0, uy0);
+			const vec3 c10 = load(ux1, uy0);
+			const vec3 c01 = load(ux0, uy1);
+			const vec3 c11 = load(ux1, uy1);
+
+			const vec3 c0 = glm::mix(c00, c10, tx);
+			const vec3 c1 = glm::mix(c01, c11, tx);
+			return glm::mix(c0, c1, ty);
+		}
+
+		void PackRGBA16F(const vec3& color, uint8* dst)
+		{
+			const auto sanitize = [](float v) -> float
+			{
+				if (!std::isfinite(v) || v <= 0.0f) return 0.0f;
+				return (std::min)(v, 65504.0f);
+			};
+			const uint32 rg = glm::packHalf2x16(vec2(sanitize(color.r), sanitize(color.g)));
+			const uint32 ba = glm::packHalf2x16(vec2(sanitize(color.b), 1.0f));
+			std::memcpy(dst, &rg, sizeof(uint32));
+			std::memcpy(dst + sizeof(uint32), &ba, sizeof(uint32));
+		}
 	}
 
 	IBLManager& IBLManager::Get()
@@ -109,6 +185,117 @@ namespace Engine
 		}
 
 		return vec2(A / static_cast<float>(numSamples), B / static_cast<float>(numSamples));
+	}
+
+	bool IBLManager::ConvertEquirectangularToCubemap(const float* srcRGB, uint32 srcWidth, uint32 srcHeight,
+		uint32 faceSize, bool generateMips, TextureBinaryHeader& outHeader, std::vector<uint8>& outPixels)
+	{
+		if (!srcRGB || srcWidth == 0 || srcHeight == 0 || faceSize == 0)
+			return false;
+
+		const uint32 mipLevels = (generateMips && faceSize > 1) ? Texture::CalculateMipLevels(faceSize, faceSize) : 1;
+		constexpr uint32 bytesPerPixel = 8; // R16G16B16A16_FLOAT
+
+		uint64 perFaceBytes = 0;
+		for (uint32 m = 0; m < mipLevels; ++m)
+		{
+			const uint32 curSize = (std::max)(1u, faceSize >> m);
+			perFaceBytes += static_cast<uint64>(curSize) * curSize * bytesPerPixel;
+		}
+
+		const uint64 totalBytes = perFaceBytes * 6;
+		if (totalBytes == 0 || totalBytes > std::numeric_limits<uint32>::max())
+			return false;
+
+		outHeader = {};
+		outHeader.width = faceSize;
+		outHeader.height = faceSize;
+		outHeader.depth = 1;
+		outHeader.mipLevels = mipLevels;
+		outHeader.arraySize = 6;
+		outHeader.format = ETextureFormat::R16G16B16A16_FLOAT;
+		outHeader.dimension = ETextureDimension::TextureCube;
+		outHeader.dataSize = static_cast<uint32>(totalBytes);
+
+		outPixels.resize(static_cast<size_t>(totalBytes));
+
+		auto buildFace = [&](uint32 face)
+		{
+			std::vector<vec3> curMip(static_cast<size_t>(faceSize) * faceSize);
+			const float invFaceSize = 1.0f / static_cast<float>(faceSize);
+			for (uint32 y = 0; y < faceSize; ++y)
+			{
+				const float v = 2.0f * (static_cast<float>(y) + 0.5f) * invFaceSize - 1.0f;
+				for (uint32 x = 0; x < faceSize; ++x)
+				{
+					const float u = 2.0f * (static_cast<float>(x) + 0.5f) * invFaceSize - 1.0f;
+					const vec3 dir = CubeFaceDirection(face, u, v);
+					curMip[static_cast<size_t>(y) * faceSize + x] = SampleEquirectangularRGB(srcRGB, srcWidth, srcHeight, dir);
+				}
+			}
+
+			uint8* faceDst = outPixels.data() + static_cast<size_t>(face) * static_cast<size_t>(perFaceBytes);
+			size_t mipOffset = 0;
+			uint32 curSize = faceSize;
+
+			for (uint32 m = 0; m < mipLevels; ++m)
+			{
+				uint8* mipDst = faceDst + mipOffset;
+				const size_t pixelCount = static_cast<size_t>(curSize) * curSize;
+				for (size_t i = 0; i < pixelCount; ++i)
+					PackRGBA16F(curMip[i], mipDst + i * bytesPerPixel);
+
+				mipOffset += pixelCount * bytesPerPixel;
+				if (m + 1 >= mipLevels)
+					break;
+
+				const uint32 nextSize = (std::max)(1u, curSize >> 1);
+				std::vector<vec3> nextMip(static_cast<size_t>(nextSize) * nextSize);
+				for (uint32 y = 0; y < nextSize; ++y)
+				{
+					const uint32 sy0 = (std::min)(y * 2, curSize - 1);
+					const uint32 sy1 = (std::min)(y * 2 + 1, curSize - 1);
+					for (uint32 x = 0; x < nextSize; ++x)
+					{
+						const uint32 sx0 = (std::min)(x * 2, curSize - 1);
+						const uint32 sx1 = (std::min)(x * 2 + 1, curSize - 1);
+						const vec3 sum = curMip[static_cast<size_t>(sy0) * curSize + sx0]
+							+ curMip[static_cast<size_t>(sy0) * curSize + sx1]
+							+ curMip[static_cast<size_t>(sy1) * curSize + sx0]
+							+ curMip[static_cast<size_t>(sy1) * curSize + sx1];
+						nextMip[static_cast<size_t>(y) * nextSize + x] = sum * 0.25f;
+					}
+				}
+				curMip = std::move(nextMip);
+				curSize = nextSize;
+			}
+		};
+
+		const uint32 numThreads = (std::min)(6u, (std::max)(1u, std::thread::hardware_concurrency()));
+		if (numThreads <= 1 || faceSize < 64)
+		{
+			for (uint32 face = 0; face < 6; ++face)
+				buildFace(face);
+		}
+		else
+		{
+			std::vector<std::thread> workers;
+			workers.reserve(numThreads);
+			for (uint32 t = 0; t < numThreads; ++t)
+			{
+				workers.emplace_back([&, t, numThreads]()
+				{
+					for (uint32 face = t; face < 6; face += numThreads)
+						buildFace(face);
+				});
+			}
+			for (auto& w : workers)
+			{
+				if (w.joinable()) w.join();
+			}
+		}
+
+		return true;
 	}
 
 	Texture* IBLManager::GenerateBRDFLUT(uint32 size, RHI* rhi)

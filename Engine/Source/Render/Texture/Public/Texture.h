@@ -26,6 +26,7 @@ private:
 	EResult Initialize(void* arg = nullptr) override;
 	EResult InitializeFromEncodedMemory(const vector<uint8>& encodedData, bool generateMips = true);
 	EResult InitializeFromDDSMemory(const vector<uint8>& ddsData);
+	EResult InitializeFromHDRMemory(const vector<uint8>& hdrData, bool generateMips = true);
 public:
 	virtual ~Texture() = default;
 public:
@@ -37,6 +38,7 @@ public:
 	static Texture* CreateFromRHITexture(RHITexture* rhiTexture, const wstring& key = L"");
 	static Texture* CreateFromEncodedMemory(const vector<uint8>& encodedData, const wstring& key = L"", bool generateMips = true);
 	static Texture* CreateFromDDSMemory(const vector<uint8>& ddsData, const wstring& key = L"");
+	static Texture* CreateFromHDRMemory(const vector<uint8>& hdrData, const wstring& key = L"", bool generateMips = true);
 	virtual void Free() override;
 #pragma endregion
 
