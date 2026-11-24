@@ -62,7 +62,13 @@ namespace Editor
 		m_AlbedoPreviewInfo.clear();
 
 		m_SourcePath = sourcePath;
-		m_DestDir = destDir;
+		m_DestDir = ModelImporter::ResolveWritableDestinationDirectory(sourcePath, destDir, &m_RedirectedFromReadOnly);
+		if (m_RedirectedFromReadOnly)
+		{
+			BAM_LOG(Info, "Editor", "Asset",
+				"Redirected read-only model import destination from '{}' to '{}'",
+				Engine::WStrToStr(destDir.wstring()), Engine::WStrToStr(m_DestDir.wstring()));
+		}
 		m_Desc = {};
 		m_Desc.Overwrite = true;
 
@@ -806,6 +812,12 @@ namespace Editor
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 						ImGui::TextWrapped("%s: %s", LOCAL_CSTR("ModelImport.DestinationPath"), previewPath.c_str());
 						ImGui::PopStyleColor();
+						if (m_RedirectedFromReadOnly)
+						{
+							ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.78f, 0.25f, 1.0f));
+							ImGui::TextWrapped(ICON_FA_TRIANGLE_EXCLAMATION " %s", LOCAL_CSTR("ContentBrowser.ReadOnlyProtected"));
+							ImGui::PopStyleColor();
+						}
 					}
 				}, previewFlags, /*reserveHalfForContent=*/false);
 

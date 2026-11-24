@@ -303,6 +303,11 @@ namespace
 		}
 		if (!saveToFile)
 			return EResult::Success;
+		if (Engine::PlatformPath::IsReadOnlyTarget(key))
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Import output target is read-only: {}", WStrToStr(key));
+			return EResult::AccessDenied;
+		}
 		std::error_code ec;
 		const auto targetPath = Engine::PlatformPath::ResolveProjectRelative(filesystem::path(key));
 		const bool exists = filesystem::exists(targetPath, ec);
@@ -1982,6 +1987,38 @@ Tools::ModelConversion::Options ModelImporter::MakeConversionOptions(const Model
 	return options;
 }
 
+std::filesystem::path ModelImporter::ResolveWritableDestinationDirectory(const std::filesystem::path& sourcePath,
+	const std::filesystem::path& destDir, bool* outRedirected)
+{
+	if (outRedirected) *outRedirected = false;
+
+	const std::filesystem::path candidate = destDir.empty() ? sourcePath.parent_path() : destDir;
+	if (candidate.empty() || !Engine::PlatformPath::IsReadOnlyTarget(candidate))
+		return destDir;
+
+	if (outRedirected) *outRedirected = true;
+
+	std::wstring subPath;
+	const std::wstring virtualUri = Engine::PlatformPath::ToVirtualUri(candidate);
+	if (Engine::PlatformPath::IsEngineUri(virtualUri))
+		subPath = virtualUri.substr(9); // strip "Engine://"
+	else if (Engine::PlatformPath::IsEditorUri(virtualUri))
+		subPath = virtualUri.substr(8); // strip "Editor://"
+
+	while (!subPath.empty() && (subPath.front() == L'/' || subPath.front() == L'\\'))
+		subPath.erase(subPath.begin());
+
+	if (subPath.empty() || subPath == L".")
+		subPath = L"Model";
+
+	const auto& projectRoot = Engine::PlatformPath::GetProjectAssetRoot();
+	std::filesystem::path redirected = Engine::PlatformPath::ToProjectRelative(projectRoot / subPath);
+	if (Engine::PlatformPath::IsReadOnlyTarget(redirected))
+		redirected = Engine::PlatformPath::ToProjectRelative(projectRoot / L"Model");
+
+	return redirected;
+}
+
 EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const filesystem::path& destDir, void* arg, std::unique_ptr<ImportJob>& outJob)
 {
 	if (outJob || sourcePath.empty())
@@ -2045,6 +2082,14 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 		}
 		if (ec)
 			return EResult::InvalidArgument;
+	}
+
+	if (settings.SaveToFile && Engine::PlatformPath::IsReadOnlyTarget(outputDirectory))
+	{
+		BAM_LOG(Error, "Editor", "Asset",
+			"Model import blocked: destination directory is read-only ({}). Import to Project Assets/ instead.",
+			Engine::WStrToStr(outputDirectory.wstring()));
+		return EResult::AccessDenied;
 	}
 
 	ModelImportRequest request;

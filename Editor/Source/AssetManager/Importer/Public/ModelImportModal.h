@@ -90,6 +90,7 @@ private:
 	bool m_PendingFocusCamera = true;
 	bool m_CloseRequested = false;
 	bool m_ImportRequested = false;
+	bool m_RedirectedFromReadOnly = false;
 	std::filesystem::path m_SourcePath;
 	std::filesystem::path m_DestDir;
 	ModelImportDesc m_Desc;

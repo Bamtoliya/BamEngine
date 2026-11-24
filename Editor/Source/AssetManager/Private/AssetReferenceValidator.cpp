@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <map>
 #include "Functions.h"
+#include <archive/ArchiveValue.h>
 #include <glaze/beve.hpp>
 #include <glaze/glaze.hpp>
 #include <set>
@@ -96,12 +97,13 @@ namespace Editor
                 return false;
             if (IsBeveReferenceDocumentPath(source))
             {
-                ReferenceJson candidate;
-                const auto error = glz::read_beve(candidate, text);
-                if (!error && error.count == text.size() && candidate.is_object())
+                archive::detail::ArchiveValue beveValue;
+                const auto error = glz::read_beve(beveValue, text);
+                if (!error && error.count == text.size() && beveValue.is_object())
                 {
-                    document = std::move(candidate);
-                    return true;
+                    std::string jsonText;
+                    if (!glz::write_json(beveValue, jsonText) && ParseReferenceDocument(jsonText, document))
+                        return true;
                 }
             }
             return ParseReferenceDocument(text, document);

@@ -737,8 +737,9 @@ namespace Editor
 						if (entry.Handle.IsValid())
 						{
 							const auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(entry.Handle));
-							if (texture && texture->GetRHITexture())
-								view.Texture = Detail::GetResourcePickerTextureID(texture->GetRHITexture());
+							auto* rhiTex = texture ? texture->GetRHITexture() : nullptr;
+							if (rhiTex && rhiTex->GetDimension() == Engine::ETextureDimension::Texture2D && rhiTex->GetArraySize() == 1)
+								view.Texture = Detail::GetResourcePickerTextureID(rhiTex);
 						}
 					}
 					if (!view.Texture && !entry.FullPath.empty())

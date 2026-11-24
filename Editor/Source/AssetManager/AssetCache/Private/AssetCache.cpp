@@ -54,6 +54,43 @@ namespace
         return ThumbnailCacheKey(path);
     }
 
+    Engine::Resource* FindInMemoryResource(const filesystem::path& assetPath)
+    {
+        if (assetPath.empty() || !Engine::ResourceManager::IsCreated())
+            return nullptr;
+
+        auto& rm = Engine::ResourceManager::Get();
+        auto findByKey = [&](const std::wstring& key) -> Engine::Resource*
+            {
+                if (key.empty()) return nullptr;
+                const auto handle = rm.FindHandleByKey(key);
+                return handle.IsValid() ? rm.GetResource(handle) : nullptr;
+            };
+
+        if (auto* res = findByKey(assetPath.wstring()))
+            return res;
+
+        const std::wstring virtualUri = Engine::PlatformPath::ToVirtualUri(assetPath);
+        if (auto* res = findByKey(virtualUri))
+            return res;
+
+        std::error_code ec;
+        if (!std::filesystem::exists(assetPath, ec))
+        {
+            if (auto* res = findByKey(assetPath.filename().wstring()))
+                return res;
+        }
+
+        return nullptr;
+    }
+
+    bool IsDisplayable2DTexture(const Engine::RHITexture* rhiTex)
+    {
+        return rhiTex != nullptr &&
+            rhiTex->GetDimension() == Engine::ETextureDimension::Texture2D &&
+            rhiTex->GetArraySize() == 1;
+    }
+
     void ExpandThumbnailInvalidations(std::unordered_set<std::string>& invalidations)
     {
         if (invalidations.empty() || !Engine::ResourceManager::IsCreated())
@@ -429,15 +466,18 @@ AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheK
         // [방향 B] 3D 모델·메시·프리팹은 독립 워커 프로세스로 100% 격리 베이킹 (크기 제한 없이 무간섭 처리)
         if ((isModel || isMesh || isPrefab) && AssetWorkerHost::IsCreated() && AssetWorkerHost::Get().IsAvailable())
         {
-            if (diskCachePath.empty())
+            if (!diskCachePath.empty())
+            {
+                const Engine::uint64 requestId = ++m_NextRequestId;
+                if (AssetWorkerHost::Get().EnqueueThumbnail(key, requestId, assetPath, diskCachePath, MAX_THUMBNAIL_DIM))
+                    m_LoadingPaths.emplace(key, requestId);
+                return {};
+            }
+            if (FindInMemoryResource(assetPath) == nullptr)
             {
                 InsertToCache(key, nullptr, 0);
                 return {};
             }
-            const Engine::uint64 requestId = ++m_NextRequestId;
-            if (AssetWorkerHost::Get().EnqueueThumbnail(key, requestId, assetPath, diskCachePath, MAX_THUMBNAIL_DIM))
-                m_LoadingPaths.emplace(key, requestId);
-            return {};
         }
 
         // 워커 미사용 시 인-프로세스 폴백: 대용량 모델/메시 Fast Reject로 메인 스레드 프리징 방어
@@ -477,6 +517,43 @@ AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheK
 
     if (!isImage)
     {
+        if (auto* inMemRes = FindInMemoryResource(assetPath))
+        {
+            if (auto* tex = dynamic_cast<Engine::Texture*>(inMemRes))
+            {
+                if (auto* rhiTex = tex->GetRHITexture(); IsDisplayable2DTexture(rhiTex))
+                {
+                    Engine::Safe_AddRef(rhiTex);
+                    InsertToCache(key, rhiTex, 0);
+                    return ThumbnailView{ rhiTex, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), {} };
+                }
+            }
+            else if (auto* sprite = dynamic_cast<Engine::Sprite*>(inMemRes))
+            {
+                if (auto* tex = sprite->GetTexture())
+                {
+                    if (auto* rhiTex = tex->GetRHITexture(); IsDisplayable2DTexture(rhiTex))
+                    {
+                        const auto spHandle = Engine::ResourceManager::Get().FindHandleByKey(inMemRes->GetKey());
+                        Engine::Safe_AddRef(rhiTex);
+                        InsertToCache(key, rhiTex, 0, spHandle);
+                        return ThumbnailView{ rhiTex, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), spHandle };
+                    }
+                }
+            }
+            else if (dynamic_cast<Engine::Mesh*>(inMemRes) != nullptr ||
+                dynamic_cast<Engine::Model*>(inMemRes) != nullptr ||
+                dynamic_cast<Engine::MaterialInterface*>(inMemRes) != nullptr)
+            {
+                if (m_Pending3DQueue.size() >= MAX_PENDING_3D_REQUESTS)
+                    return {};
+                const Engine::uint64 requestId = ++m_NextRequestId;
+                m_LoadingPaths.emplace(key, requestId);
+                m_Pending3DQueue.push(Thumbnail3DRequest{ key, requestId });
+                return {};
+            }
+        }
+
         InsertToCache(key, nullptr, 0);
         return {};
     }
@@ -1462,6 +1539,23 @@ void AssetCache::ProcessPending3DThumbnail()
                     if (loaded.IsValid()) handle = Engine::ResourceHandle<Engine::Mesh>(loaded);
                 }
                 if (handle.IsValid() && handle.Get()) submitSuccess = thumbRenderer->SubmitMesh(handle.Get());
+            }
+        }
+
+        if (!submitSuccess && thumbRenderer != nullptr)
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(path, ec))
+            {
+                if (auto* inMemRes = FindInMemoryResource(path))
+                {
+                    if (auto* mat = dynamic_cast<Engine::MaterialInterface*>(inMemRes))
+                        submitSuccess = thumbRenderer->SubmitMaterial(mat);
+                    else if (auto* model = dynamic_cast<Engine::Model*>(inMemRes))
+                        submitSuccess = thumbRenderer->SubmitModel(model);
+                    else if (auto* mesh = dynamic_cast<Engine::Mesh*>(inMemRes))
+                        submitSuccess = thumbRenderer->SubmitMesh(mesh);
+                }
             }
         }
 

@@ -123,6 +123,8 @@ public:
 	// nullopt: 진행 중, 값 있음: 전체 작업 종료
 	std::optional<EResult> FinalizeStep(ModelImportTask& task);
 	static Tools::ModelConversion::Options MakeConversionOptions(const ModelImportDesc& desc);
+	static std::filesystem::path ResolveWritableDestinationDirectory(const std::filesystem::path& sourcePath,
+		const std::filesystem::path& destDir, bool* outRedirected = nullptr);
 	static std::filesystem::path ResolveExternalTexturePath(const std::filesystem::path& sourcePath, const std::filesystem::path& destinationDirectory, std::string_view texturePathUtf8);
 	static bool SaveImportOptions(const std::filesystem::path& sidecarPath, const ModelImportDesc& desc);
 	static bool LoadImportOptions(const std::filesystem::path& sidecarPath, ModelImportDesc& outDesc);
