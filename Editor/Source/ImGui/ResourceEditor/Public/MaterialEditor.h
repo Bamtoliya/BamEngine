@@ -206,6 +206,8 @@ private:
 	// 저장 & 문서 관리
 	void ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate);
 	void SaveTarget();
+	bool CanCreateMaterialInstance() const;
+	void CreateMaterialInstance();
 	bool LoadShaderGraph(const std::filesystem::path& path);
 	bool SaveShaderGraph();
 	// 연결된 그래프를 읽기만 한다. 파일 생성·머티리얼 경로 기록·셰이더 교체는 하지 않는다.

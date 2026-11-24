@@ -329,47 +329,67 @@ void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
 {
 	if (!scene) return;
 
-	if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("Hierarchy.CreateEmpty")).c_str()))
+	auto safeCreate = [this, scene](auto&& func)
 	{
-		try { EntityFactory::CreateEmptyEntity(scene); }
-		catch (const std::exception& error) { EDITOR_LOG_ERROR("Entity creation failed: {}", error.what()); m_HierarchyMessage = "Hierarchy.EditFailed"; }
-	}
+		try
+		{
+			Entity* entity = func();
+			if (entity)
+			{
+				SelectionManager::Get().SetSelectedEntity(entity);
+				m_RevealEntity = entity->GetEntityHandle();
+			}
+		}
+		catch (const std::exception& error)
+		{
+			EDITOR_LOG_ERROR("Entity creation failed: {}", error.what());
+			m_HierarchyMessage = "Hierarchy.EditFailed";
+		}
+	};
+
+	if (ImGui::MenuItem((ICON_FA_FILE " " + LOCAL_LABEL("Hierarchy.CreateEmpty")).c_str()))
+		safeCreate([&] { return &EntityFactory::CreateEmptyEntity(scene); });
 	ImGui::Separator();
 
 	if (ImGui::BeginMenu((ICON_FA_CUBES " " + LOCAL_LABEL("Hierarchy.3DObjects")).c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cube").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Cube", L"CubeMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreateCubeEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Sphere").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Sphere", L"SphereMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreateSphereEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Cylinder").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Cylinder", L"CylinderMesh", L"Engine://Material/DefaultMaterial.bammat.json");
-		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Quad").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreateCylinderEntity(scene); });
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Capsule").c_str()))
+			safeCreate([&] { return &EntityFactory::CreateCapsuleEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Plane").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Plane", L"PlaneMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreatePlaneEntity(scene); });
+		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Quad").c_str()))
+			safeCreate([&] { return &EntityFactory::CreatePrimitiveEntity(scene, L"Quad", L"QuadMesh", L"Engine://Material/DefaultMaterial.bammat.json"); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.WaterSurface").c_str()))
-			EntityFactory::CreatePrimitiveEntity(scene, L"Water Surface", L"WaterGridMesh", L"Engine://Material/WaveMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreatePrimitiveEntity(scene, L"Water Surface", L"WaterGridMesh", L"Engine://Material/WaveMaterial.bammat.json"); });
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::BeginMenu((ICON_FA_LIGHTBULB " " + LOCAL_LABEL("Hierarchy.Lights")).c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddDirectionalLight").c_str()))
-			EntityFactory::CreateLightEntity(scene, L"Directional Light", L"Directional");
+			safeCreate([&] { return &EntityFactory::CreateDirectionalLightEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddPointLight").c_str()))
-			EntityFactory::CreateLightEntity(scene, L"Point Light", L"Point");
+			safeCreate([&] { return &EntityFactory::CreatePointLightEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSpotLight").c_str()))
-			EntityFactory::CreateLightEntity(scene, L"Spot Light", L"Spot");
+			safeCreate([&] { return &EntityFactory::CreateSpotLightEntity(scene); });
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddSkyLight").c_str()))
-			EntityFactory::CreateLightEntity(scene, L"Sky Light", L"Sky");
+			safeCreate([&] { return &EntityFactory::CreateSkyLightEntity(scene); });
 		ImGui::EndMenu();
 	}
+
+	if (ImGui::MenuItem((ICON_FA_CAMERA " " + LOCAL_LABEL("Hierarchy.Camera")).c_str()))
+		safeCreate([&] { return &EntityFactory::CreateCameraEntity(scene); });
 
 	if (ImGui::BeginMenu((ICON_FA_IMAGE " " + LOCAL_LABEL("Hierarchy.2DObjects")).c_str()))
 	{
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.Sprite").c_str()))
-			EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/SpriteMaterial.bammat.json");
+			safeCreate([&] { return &EntityFactory::CreateSpriteEntity(scene, L"Sprite", L"Resources/Material/SpriteMaterial.bammat.json"); });
 		ImGui::EndMenu();
 	}
 
@@ -378,14 +398,12 @@ void HierarchyPanel::DrawEntityCreationMenu(Scene* scene)
 		const auto& prefab = PrefabModeManager::Get();
 		const bool canCreateCanvas = !prefab.IsInPrefabMode() || prefab.GetPrefabScene() != scene;
 		if (ImGui::MenuItem(LOCAL_LABEL("Hierarchy.AddCanvas").c_str(), nullptr, false, canCreateCanvas))
-			EntityFactory::CreateCanvasEntity(scene);
+			safeCreate([&] { return &EntityFactory::CreateCanvasEntity(scene); });
 		ImGui::EndMenu();
 	}
 
 	if (ImGui::MenuItem((ICON_FA_MOUNTAIN " " + LOCAL_LABEL("Hierarchy.AddTerrain")).c_str()))
-	{
-		EntityFactory::CreateTerrainEntity(scene);
-	}
+		safeCreate([&] { return &EntityFactory::CreateTerrainEntity(scene); });
 }
 
 void HierarchyPanel::DrawSceneContextMenu(Scene* scene)

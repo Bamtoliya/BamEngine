@@ -128,3 +128,6 @@ MaterialEditor,InputPins,Input Pins,입력 핀
 MaterialEditor,PinConnected,Connected,연결됨
 MaterialEditor,CopyDiagnostics,Copy diagnostics,진단 내용 복사
 MaterialEditor,TerrainNeedsGeometry,Terrain materials must use the Geometry (G-Buffer) pass.,지형 머티리얼은 지오메트리(G-Buffer) 패스를 써야 합니다.
+MaterialEditor,Quad,Quad,사각형 (Quad)
+MaterialEditor,CreateInstance,Create Instance,인스턴스 생성
+MaterialEditor,CreateInstanceFailed,Failed to create material instance.,머티리얼 인스턴스 생성에 실패했습니다.

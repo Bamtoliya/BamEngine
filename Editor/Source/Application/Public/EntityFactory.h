@@ -22,8 +22,18 @@ public:
 	static Entity& CreateUIPreset(class Scene* scene, Entity& parent, UIElementPreset preset, const wstring& name);
 	static Entity& CreateEmptyEntity(class Scene* scene, const wstring& name = L"Entity");
 	static Entity& CreatePrimitiveEntity(class Scene* scene, const wstring& name = L"Primitive", const wstring& meshKey = L"", const wstring& materialKey = L"");
+	static Entity& CreateCubeEntity(class Scene* scene, const wstring& name = L"Cube");
+	static Entity& CreateSphereEntity(class Scene* scene, const wstring& name = L"Sphere");
+	static Entity& CreatePlaneEntity(class Scene* scene, const wstring& name = L"Plane");
+	static Entity& CreateCylinderEntity(class Scene* scene, const wstring& name = L"Cylinder");
+	static Entity& CreateCapsuleEntity(class Scene* scene, const wstring& name = L"Capsule");
 	static Entity& CreateSpriteEntity(class Scene* scene, const wstring& name = L"Sprite", const wstring& materialKey = L"");
 	static Entity& CreateLightEntity(class Scene* scene, const wstring& name = L"Light", const wstring& lightType = L"Point");
+	static Entity& CreateDirectionalLightEntity(class Scene* scene, const wstring& name = L"Directional Light");
+	static Entity& CreatePointLightEntity(class Scene* scene, const wstring& name = L"Point Light");
+	static Entity& CreateSpotLightEntity(class Scene* scene, const wstring& name = L"Spot Light");
+	static Entity& CreateSkyLightEntity(class Scene* scene, const wstring& name = L"Sky Light");
+	static Entity& CreateCameraEntity(class Scene* scene, const wstring& name = L"Camera", bool isMainCamera = false);
 	static Entity& CreateTerrainEntity(class Scene* scene, const wstring& name = L"Terrain");
 };
 END

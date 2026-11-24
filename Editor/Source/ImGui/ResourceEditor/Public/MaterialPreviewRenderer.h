@@ -12,6 +12,7 @@ enum class EPreviewMeshType : uint8
 {
 	Sphere,
 	Cube,
+	Quad,
 	Plane,
 	Count
 };
@@ -53,6 +54,7 @@ private:
 	entt::entity m_MeshEntity = entt::null;
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_CubeMesh;
+	Engine::ResourceHandle<Engine::Mesh> m_QuadMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_PlaneMesh;
 
 	// 프리뷰 상태

@@ -13,6 +13,7 @@
 #include "UITextInputComponent.h"
 #include "UIDropdownComponent.h"
 #include "PrefabModeManager.h"
+#include "CameraComponent.h"
 #include <stdexcept>
 
 Entity& EntityFactory::CreateCanvasEntity(Scene* scene, const wstring& name)
@@ -276,33 +277,60 @@ Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, 
 	ResourceManager& resourceManager = ResourceManager::Get();
 	ResourceHandle<Mesh> meshHandle = resourceManager.GetResourceHandle<Mesh>(meshKey);
 
+	const wstring effectiveMaterialKey = materialKey.empty() ? L"Engine://Material/DefaultMaterial.bammat.json" : materialKey;
+
 	// 1. 직접 키 조회
-	ResourceHandle<MaterialInterface> materialHandle = resourceManager.GetResourceHandle<MaterialInterface>(materialKey);
+	ResourceHandle<MaterialInterface> materialHandle = resourceManager.GetResourceHandle<MaterialInterface>(effectiveMaterialKey);
 
 	// 2. 가상 URI 변환 조회 Fallback (Resources/... -> Engine://... 등)
-	if (!materialHandle && !materialKey.empty())
+	if (!materialHandle && !effectiveMaterialKey.empty())
 	{
-		const wstring virtualUri = PlatformPath::ToVirtualUri(materialKey);
-		if (!virtualUri.empty() && virtualUri != materialKey)
+		const wstring virtualUri = PlatformPath::ToVirtualUri(effectiveMaterialKey);
+		if (!virtualUri.empty() && virtualUri != effectiveMaterialKey)
 			materialHandle = resourceManager.GetResourceHandle<MaterialInterface>(virtualUri);
 	}
 
 	// 3. 디스크 로드 시도 Fallback
-	if (!materialHandle && !materialKey.empty())
+	if (!materialHandle && !effectiveMaterialKey.empty())
 	{
-		materialHandle = ResourceHandle<MaterialInterface>(resourceManager.LoadFile(materialKey));
+		materialHandle = ResourceHandle<MaterialInterface>(resourceManager.LoadFile(effectiveMaterialKey));
 	}
 
 	if (!meshHandle || !materialHandle)
 	{
 		EDITOR_LOG_ERROR("Failed to create primitive entity: Missing resources. Mesh: {} ('{}'), Material: {} ('{}')",
 			meshHandle ? "OK" : "Missing", WStrToStr(meshKey),
-			materialHandle ? "OK" : "Missing", WStrToStr(materialKey));
+			materialHandle ? "OK" : "Missing", WStrToStr(effectiveMaterialKey));
 		return entity;
 	}
 
 	scene->AddComponent<StaticMeshRendererComponent>(entity, meshHandle, materialHandle);
 	return entity;
+}
+
+Entity& EntityFactory::CreateCubeEntity(Scene* scene, const wstring& name)
+{
+	return CreatePrimitiveEntity(scene, name, L"CubeMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+}
+
+Entity& EntityFactory::CreateSphereEntity(Scene* scene, const wstring& name)
+{
+	return CreatePrimitiveEntity(scene, name, L"SphereMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+}
+
+Entity& EntityFactory::CreatePlaneEntity(Scene* scene, const wstring& name)
+{
+	return CreatePrimitiveEntity(scene, name, L"PlaneMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+}
+
+Entity& EntityFactory::CreateCylinderEntity(Scene* scene, const wstring& name)
+{
+	return CreatePrimitiveEntity(scene, name, L"CylinderMesh", L"Engine://Material/DefaultMaterial.bammat.json");
+}
+
+Entity& EntityFactory::CreateCapsuleEntity(Scene* scene, const wstring& name)
+{
+	return CreatePrimitiveEntity(scene, name, L"CapsuleMesh", L"Engine://Material/DefaultMaterial.bammat.json");
 }
 
 Entity& EntityFactory::CreateSpriteEntity(Scene* scene, const wstring& name, const wstring& materialKey)
@@ -362,6 +390,56 @@ Entity& EntityFactory::CreateLightEntity(Scene* scene, const wstring& name, cons
 		EDITOR_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", WStrToStr(lightType));
 		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Point;
 	}
+	return entity;
+}
+
+Entity& EntityFactory::CreateDirectionalLightEntity(Scene* scene, const wstring& name)
+{
+	return CreateLightEntity(scene, name, L"Directional");
+}
+
+Entity& EntityFactory::CreatePointLightEntity(Scene* scene, const wstring& name)
+{
+	return CreateLightEntity(scene, name, L"Point");
+}
+
+Entity& EntityFactory::CreateSpotLightEntity(Scene* scene, const wstring& name)
+{
+	return CreateLightEntity(scene, name, L"Spot");
+}
+
+Entity& EntityFactory::CreateSkyLightEntity(Scene* scene, const wstring& name)
+{
+	return CreateLightEntity(scene, name, L"Sky");
+}
+
+Entity& EntityFactory::CreateCameraEntity(Scene* scene, const wstring& name, bool isMainCamera)
+{
+	Entity& entity = CreateEmptyEntity(scene, name);
+	auto& camera = scene->AddComponent<CameraComponent>(entity);
+	camera.CameraType = ECameraType::Perspective;
+	camera.FOV = 60.0f;
+	camera.NearPlane = 0.1f;
+	camera.FarPlane = 1000.0f;
+
+	if (isMainCamera)
+	{
+		camera.IsMainCamera = true;
+	}
+	else
+	{
+		bool hasMainCamera = false;
+		for (auto camEntity : scene->GetRegistry().view<CameraComponent>())
+		{
+			if (camEntity != entity.GetEntityHandle() && scene->GetRegistry().get<CameraComponent>(camEntity).IsMainCamera)
+			{
+				hasMainCamera = true;
+				break;
+			}
+		}
+		camera.IsMainCamera = !hasMainCamera;
+	}
+
 	return entity;
 }
 

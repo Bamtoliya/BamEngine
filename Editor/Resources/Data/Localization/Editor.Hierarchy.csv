@@ -5,6 +5,7 @@ Hierarchy,3DObjects,3D Object,3D 오브젝트
 Hierarchy,Cube,Cube,큐브
 Hierarchy,Sphere,Sphere,스피어
 Hierarchy,Cylinder,Cylinder,실린더
+Hierarchy,Capsule,Capsule,캡슐
 Hierarchy,Quad,Quad,평면 (Quad)
 Hierarchy,Plane,Plane,평면 (Plane)
 Hierarchy,WaterSurface,Water Surface (Wave),파도 수면 (Wave)
@@ -12,6 +13,7 @@ Hierarchy,Lights,Light,라이트
 Hierarchy,2DObjects,2D Object,2D 오브젝트
 Hierarchy,Sprite,Sprite,스프라이트
 Hierarchy,UI,UI,UI
+Hierarchy,AddCamera,Camera,카메라
 Hierarchy,AddCanvas,Add UI Canvas,UI 캔버스 추가
 Hierarchy,AddDirectionalLight,Directional Light,디렉셔널 라이트
 Hierarchy,AddEntity,Add Entity,엔티티 추가
@@ -23,6 +25,7 @@ Hierarchy,AddSkyLight,Sky Light,스카이 라이트
 Hierarchy,AddSpotLight,Spot Light,스포트 라이트
 Hierarchy,AddSprite,Add Sprite Entity,스프라이트 엔티티 추가
 Hierarchy,AddTerrain,Terrain,터레인
+Hierarchy,Camera,Camera,카메라
 Hierarchy,CreateChild,Create Child Empty,빈 자식 생성
 Hierarchy,CycleRejected,An entity cannot be parented to itself or its descendants.,자신이나 자손을 부모로 지정할 수 없습니다.
 Hierarchy,DeactivatedByParent,Deactivated by parent hierarchy.,부모 계층에 의해 비활성화됨

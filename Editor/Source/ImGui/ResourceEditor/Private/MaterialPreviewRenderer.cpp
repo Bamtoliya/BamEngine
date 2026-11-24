@@ -21,7 +21,8 @@ namespace Editor
 		auto& rm = Engine::ResourceManager::Get();
 		m_SphereMesh = rm.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
 		m_CubeMesh = rm.GetResourceHandle<Engine::Mesh>(L"CubeMesh");
-		m_PlaneMesh = rm.GetResourceHandle<Engine::Mesh>(L"QuadMesh");
+		m_QuadMesh = rm.GetResourceHandle<Engine::Mesh>(L"QuadMesh");
+		m_PlaneMesh = rm.GetResourceHandle<Engine::Mesh>(L"PlaneMesh");
 
 		// 3. 프리뷰 대상 메쉬 엔티티 생성 (컴포넌트만 부착하면 위젯이 자동 렌더링)
 		auto& entity = m_Widget.CreateEntity(L"MaterialPreviewMesh");
@@ -60,6 +61,7 @@ namespace Editor
 		{
 		case EPreviewMeshType::Sphere: meshComp->meshHandle = m_SphereMesh; break;
 		case EPreviewMeshType::Cube:   meshComp->meshHandle = m_CubeMesh;   break;
+		case EPreviewMeshType::Quad:   meshComp->meshHandle = m_QuadMesh;   break;
 		case EPreviewMeshType::Plane:  meshComp->meshHandle = m_PlaneMesh;  break;
 		default: break;
 		}
@@ -128,8 +130,12 @@ namespace Editor
 		if (toolbar.Icon("Cube", ICON_FA_CUBE, "MaterialPreview.Cube", meshOptions))
 			m_CurrentMeshType = EPreviewMeshType::Cube;
 
+		meshOptions.Active = m_CurrentMeshType == EPreviewMeshType::Quad;
+		if (toolbar.Icon("Quad", ICON_FA_SQUARE, "MaterialEditor.Quad", meshOptions))
+			m_CurrentMeshType = EPreviewMeshType::Quad;
+
 		meshOptions.Active = m_CurrentMeshType == EPreviewMeshType::Plane;
-		if (toolbar.Icon("Plane", ICON_FA_SQUARE, "MaterialPreview.Plane", meshOptions))
+		if (toolbar.Icon("Plane", ICON_FA_TABLE_CELLS_LARGE, "MaterialPreview.Plane", meshOptions))
 			m_CurrentMeshType = EPreviewMeshType::Plane;
 
 		if (toolbar.Icon("AutoRotate", m_AutoRotate ? ICON_FA_PAUSE : ICON_FA_PLAY,

@@ -338,6 +338,8 @@ void MaterialEditor::DrawCustomToolbar()
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
 		DrawSaveMenuItem();
+		if (ImGui::MenuItem((ICON_FA_CLONE " " + LOCAL_LABEL("MaterialEditor.CreateInstance")).c_str(), nullptr, false, CanCreateMaterialInstance()))
+			CreateMaterialInstance();
 		if (ImGui::MenuItem((ICON_FA_ROTATE_LEFT " " + LOCAL_LABEL("MaterialEditor.Revert")).c_str(), nullptr, false, CanSaveDocument() && HasUnsavedResourceChanges()))
 			RunWithDiscardConfirmation([this] { RestoreSavedChanges(); }, false);
 		DrawCloseMenuItem();
@@ -361,6 +363,8 @@ void MaterialEditor::DrawCustomToolbar()
 				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Sphere);
 			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Cube").c_str(), nullptr, currentType == EPreviewMeshType::Cube))
 				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Cube);
+			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Quad").c_str(), nullptr, currentType == EPreviewMeshType::Quad))
+				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Quad);
 			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Plane").c_str(), nullptr, currentType == EPreviewMeshType::Plane))
 				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Plane);
 			ImGui::EndMenu();
@@ -382,6 +386,8 @@ void MaterialEditor::DrawCustomQuickAccess()
 
 	EditorUI::ToolbarLayout toolbar;
 	DrawSaveButton(toolbar);
+	if (toolbar.Icon("CreateInstance", ICON_FA_CLONE, "MaterialEditor.CreateInstance", { .Enabled = CanCreateMaterialInstance() }))
+		CreateMaterialInstance();
 	DrawHistoryButtons(toolbar, "MaterialEditor");
 	if (toolbar.Icon("RevertMaterial", ICON_FA_ROTATE_LEFT, "MaterialEditor.Revert", { .Enabled = CanSaveDocument() && HasUnsavedResourceChanges() }))
 		RunWithDiscardConfirmation([this] { RestoreSavedChanges(); }, false);
@@ -2223,6 +2229,80 @@ void MaterialEditor::SaveTarget()
 	if (AssetCache::IsCreated())
 		AssetCache::Get().RequestInvalidate(m_TargetResourcePath);
 	EDITOR_LOG_INFO("Material saved: {}", path);
+}
+
+bool MaterialEditor::CanCreateMaterialInstance() const
+{
+	return m_Open && m_Material && !IsAsyncLoading() && !m_TargetResourcePath.empty() &&
+		dynamic_cast<const Engine::Material*>(m_Material) != nullptr;
+}
+
+void MaterialEditor::CreateMaterialInstance()
+{
+	if (!CanCreateMaterialInstance())
+		return;
+
+	std::wstring baseStem = m_TargetResourcePath.stem().wstring();
+	if (baseStem.ends_with(L".bammat"))
+		baseStem = baseStem.substr(0, baseStem.length() - 7);
+
+	std::filesystem::path targetDir = m_TargetResourcePath.parent_path();
+	if (Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath) &&
+		Engine::PlatformPath::GetEngineResourceRoot() != Engine::PlatformPath::GetProjectAssetRoot())
+	{
+		targetDir = Engine::PlatformPath::GetProjectAssetRoot() / "Material";
+		std::error_code dirEc;
+		std::filesystem::create_directories(targetDir, dirEc);
+	}
+
+	std::filesystem::path instPath = targetDir / (baseStem + L"_Inst.bammatinst.json");
+	int suffix = 1;
+	while (std::filesystem::exists(instPath))
+	{
+		instPath = targetDir / (baseStem + L"_Inst_" + std::to_wstring(suffix++) + L".bammatinst.json");
+	}
+
+	auto& rm = Engine::ResourceManager::Get();
+	const std::wstring relBasePath = Engine::PlatformPath::ToProjectRelative(m_TargetResourcePath).wstring();
+	auto baseHandle = rm.GetResourceHandle<Engine::Material>(relBasePath);
+	if (!baseHandle.IsValid())
+		baseHandle = static_cast<Engine::ResourceHandle<Engine::Material>>(rm.LoadFile(relBasePath));
+
+	if (!baseHandle.IsValid())
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("MaterialEditor.CreateInstanceFailed"), ELogLevel::Error);
+		return;
+	}
+
+	MaterialInstanceDesc desc{};
+	desc.BaseMaterialHandle = baseHandle;
+	desc.Key = Engine::PlatformPath::ToProjectRelative(instPath).wstring();
+	desc.Path = instPath.wstring();
+
+	auto* newInst = Engine::MaterialInstance::Create(&desc);
+	if (!newInst)
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("MaterialEditor.CreateInstanceFailed"), ELogLevel::Error);
+		return;
+	}
+
+	const EResult saveResult = rm.SaveToJsonFile(newInst, instPath.wstring());
+	rm.DestroyResource(newInst);
+	if (saveResult != EResult::Success)
+	{
+		NotificationManager::Get().AddNotification(GetDisplayName(),
+			LOCAL("MaterialEditor.CreateInstanceFailed"), ELogLevel::Error);
+		return;
+	}
+
+	if (AssetCache::IsCreated())
+		AssetCache::Get().RequestInvalidate(instPath);
+	EDITOR_LOG_INFO("Created Material Instance (JSON): {}", instPath.string());
+	NotificationManager::Get().AddNotification(LOCAL("Notification.InstanceCreated"),
+		instPath.filename().string(), ELogLevel::Info, 3.0f);
+	RunWithDiscardConfirmation([this, instPath] { BeginAsyncOpen(instPath); }, true);
 }
 
 std::optional<MaterialEditor::DocumentSnapshot> MaterialEditor::CaptureDocument() const
