@@ -1,5 +1,6 @@
 Group,Key,English,Korean
 MaterialPreview,Cube,Cube,큐브
+MaterialPreview,MaterialBall,Material Ball,머티리얼 볼
 MaterialPreview,Navigation,L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom,왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소
 MaterialPreview,Plane,Plane,평면
 MaterialPreview,Sphere,Sphere,구체

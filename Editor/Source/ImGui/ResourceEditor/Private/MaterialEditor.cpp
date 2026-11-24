@@ -359,6 +359,8 @@ void MaterialEditor::DrawCustomToolbar()
 		if (ImGui::BeginMenu(LOCAL_LABEL("MaterialEditor.PreviewMesh").c_str()))
 		{
 			const auto currentType = m_PreviewRenderer.GetPreviewMeshType();
+			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.MaterialBall").c_str(), nullptr, currentType == EPreviewMeshType::MaterialBall))
+				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::MaterialBall);
 			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Sphere").c_str(), nullptr, currentType == EPreviewMeshType::Sphere))
 				m_PreviewRenderer.SetPreviewMeshType(EPreviewMeshType::Sphere);
 			if (ImGui::MenuItem(LOCAL_LABEL("MaterialEditor.Cube").c_str(), nullptr, currentType == EPreviewMeshType::Cube))

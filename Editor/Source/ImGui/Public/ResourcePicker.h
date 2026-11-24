@@ -174,7 +174,19 @@ namespace Editor
 
 			if (auto* texture = dynamic_cast<Engine::Texture*>(resource))
 			{
-				result.Texture = texture->GetRHITexture();
+				auto* rhiTex = texture->GetRHITexture();
+				if (rhiTex != nullptr &&
+					rhiTex->GetDimension() == Engine::ETextureDimension::Texture2D &&
+					rhiTex->GetArraySize() == 1)
+				{
+					result.Texture = rhiTex;
+				}
+				else
+				{
+					const auto& path = resource->GetPath().empty() ? resource->GetKey() : resource->GetPath();
+					if (!path.empty())
+						result = GetResourcePickerThumbnail(Engine::PlatformPath::ResolveUri(path));
+				}
 			}
 			else if (auto* sprite = dynamic_cast<Engine::Sprite*>(resource))
 			{
@@ -736,10 +748,16 @@ namespace Editor
 					{
 						if (entry.Handle.IsValid())
 						{
-							const auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(entry.Handle));
-							auto* rhiTex = texture ? texture->GetRHITexture() : nullptr;
-							if (rhiTex && rhiTex->GetDimension() == Engine::ETextureDimension::Texture2D && rhiTex->GetArraySize() == 1)
-								view.Texture = Detail::GetResourcePickerTextureID(rhiTex);
+							if (auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(entry.Handle)))
+							{
+								const auto fieldThumb = Detail::GetResourceFieldThumbnail(texture);
+								if (fieldThumb.Texture != nullptr)
+								{
+									view.Texture = Detail::GetResourcePickerTextureID(fieldThumb.Texture);
+									view.UV0 = fieldThumb.UV0;
+									view.UV1 = fieldThumb.UV1;
+								}
+							}
 						}
 					}
 					if (!view.Texture && !entry.FullPath.empty())

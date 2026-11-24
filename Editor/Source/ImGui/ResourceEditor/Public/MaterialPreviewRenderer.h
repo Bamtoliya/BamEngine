@@ -10,6 +10,7 @@ BEGIN(Editor)
 
 enum class EPreviewMeshType : uint8
 {
+	MaterialBall,
 	Sphere,
 	Cube,
 	Quad,
@@ -52,13 +53,14 @@ private:
 
 	// 프리뷰 대상 메쉬 엔티티 및 리소스 핸들
 	entt::entity m_MeshEntity = entt::null;
+	Engine::ResourceHandle<Engine::Mesh> m_MaterialBallMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_CubeMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_QuadMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_PlaneMesh;
 
 	// 프리뷰 상태
-	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::Sphere;
+	EPreviewMeshType m_CurrentMeshType = EPreviewMeshType::MaterialBall;
 	bool m_AutoRotate = true;
 	f32 m_AutoRotateSpeed = 25.0f; // 초당 회전 각도 (도)
 };

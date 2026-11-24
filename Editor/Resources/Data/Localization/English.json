@@ -1174,6 +1174,7 @@
         "MaterialEditor.Value": "Value",
         "MaterialEditor.VertexShader": "Vertex Shader",
         "MaterialEditor.Cube": "Cube",
+        "MaterialEditor.MaterialBall": "Material Ball",
         "MaterialEditor.Plane": "Plane",
         "MaterialEditor.PreviewMesh": "Preview Mesh",
         "MaterialEditor.ResetCamera": "Reset Camera",
@@ -1260,6 +1261,7 @@
         "MaterialOption.Unknown": "Unknown",
         "MaterialOption.Wireframe": "Wireframe",
         "MaterialPreview.Cube": "Cube",
+        "MaterialPreview.MaterialBall": "Material Ball",
         "MaterialPreview.Navigation": "L-Drag: Orbit | R-Drag+WASD: Fly | M-Drag: Pan | Wheel: Zoom",
         "MaterialPreview.Plane": "Plane",
         "MaterialPreview.Sphere": "Sphere",
@@ -2637,6 +2639,13 @@
         "Viewport.NavGridTitle": "NavGrid",
         "Viewport.NavGridNoActiveScene": "No active scene found to bake NavGrid.",
         "Viewport.NavGridBakeTitle": "NavGrid Bake",
-        "Viewport.NavGridBakedMessage": "NavGrid baked: {}x{} cells ({} obstacles, cell {:.2f}m)"
+        "Viewport.NavGridBakedMessage": "NavGrid baked: {}x{} cells ({} obstacles, cell {:.2f}m)",
+        "Viewport.CaptureHDRMenu": "Capture HDR at Current Location...",
+        "Viewport.CaptureHDRTitle": "HDR Capture",
+        "Viewport.CaptureHDRNoCamera": "No active scene or camera is available for HDR capture.",
+        "Viewport.CaptureHDRInitFailed": "Failed to initialize offscreen HDR capture pipeline.",
+        "Viewport.CaptureHDRReadbackFailed": "Failed to read back HDR face {} from GPU.",
+        "Viewport.CaptureHDRSaveFailed": "Failed to save captured HDR file: {}",
+        "Viewport.CaptureHDRSucceeded": "Saved HDR environment map: {}"
     }
 }

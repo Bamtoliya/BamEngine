@@ -1174,6 +1174,7 @@
         "MaterialEditor.Value": "값",
         "MaterialEditor.VertexShader": "정점 셰이더",
         "MaterialEditor.Cube": "큐브 (Cube)",
+        "MaterialEditor.MaterialBall": "머티리얼 볼 (Material Ball)",
         "MaterialEditor.Plane": "평면 (Plane)",
         "MaterialEditor.PreviewMesh": "프리뷰 메시",
         "MaterialEditor.ResetCamera": "카메라 초기화",
@@ -1260,6 +1261,7 @@
         "MaterialOption.Unknown": "알 수 없음",
         "MaterialOption.Wireframe": "와이어프레임",
         "MaterialPreview.Cube": "큐브",
+        "MaterialPreview.MaterialBall": "머티리얼 볼",
         "MaterialPreview.Navigation": "왼쪽 드래그: 궤도 회전 | 오른쪽 드래그+WASD: 이동 | 가운데 드래그: 화면 이동 | 휠: 확대/축소",
         "MaterialPreview.Plane": "평면",
         "MaterialPreview.Sphere": "구체",
@@ -2637,6 +2639,13 @@
         "Viewport.NavGridTitle": "NavGrid",
         "Viewport.NavGridNoActiveScene": "NavGrid를 베이크할 활성 씬이 없습니다.",
         "Viewport.NavGridBakeTitle": "NavGrid 베이크",
-        "Viewport.NavGridBakedMessage": "NavGrid 베이크 완료: {}x{} 셀 (장애물 {}개, 셀 {:.2f}m)"
+        "Viewport.NavGridBakedMessage": "NavGrid 베이크 완료: {}x{} 셀 (장애물 {}개, 셀 {:.2f}m)",
+        "Viewport.CaptureHDRMenu": "현재 위치에서 HDR 캡처...",
+        "Viewport.CaptureHDRTitle": "HDR 캡처",
+        "Viewport.CaptureHDRNoCamera": "HDR 캡처에 사용할 활성 씬이나 카메라가 없습니다.",
+        "Viewport.CaptureHDRInitFailed": "오프스크린 HDR 캡처 파이프라인을 초기화하지 못했습니다.",
+        "Viewport.CaptureHDRReadbackFailed": "GPU에서 HDR 면 {}을(를) 읽어오지 못했습니다.",
+        "Viewport.CaptureHDRSaveFailed": "캡처한 HDR 파일을 저장하지 못했습니다: {}",
+        "Viewport.CaptureHDRSucceeded": "HDR 환경 맵을 저장했습니다: {}"
     }
 }

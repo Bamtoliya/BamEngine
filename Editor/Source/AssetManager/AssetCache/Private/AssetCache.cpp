@@ -22,6 +22,7 @@
 #include "Functions.h"
 #include "PlatformPath.h"
 #include <fstream>
+#include <cmath>
 #include <limits>
 #include "MaterialInstance.h"
 #include <unordered_map>
@@ -427,7 +428,7 @@ AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheK
     for (char& ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds";
+    const bool isImage = ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp" || ext == ".dds" || ext == ".hdr";
     const bool isMaterial = ext == ".bammat" || ext == ".bammatinst" || ext == ".mat" ||
         filename.ends_with(".bammat.json") || filename.ends_with(".bammatinst.json");
     const bool isRawModel = ext == ".fbx" || ext == ".obj" || ext == ".gltf" || ext == ".glb";
@@ -956,12 +957,42 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
         return std::nullopt;
     }
     int decodedWidth = 0, decodedHeight = 0;
-    std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(
-        stbi_load_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight,
-            &channels, STBI_rgb_alpha),
-        stbi_image_free);
-    if (!pixels || decodedWidth != width || decodedHeight != height)
-        return std::nullopt;
+    std::vector<uint8_t> hdrRgba;
+    std::unique_ptr<stbi_uc, decltype(&stbi_image_free)> pixels(nullptr, stbi_image_free);
+    const uint8_t* rgbaSource = nullptr;
+
+    if (ext == ".hdr")
+    {
+        std::unique_ptr<float, decltype(&stbi_image_free)> hdrFloats(
+            stbi_loadf_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight, &channels, 3),
+            stbi_image_free);
+        if (!hdrFloats || decodedWidth != width || decodedHeight != height)
+            return std::nullopt;
+        const size_t pixelCount = static_cast<size_t>(width) * static_cast<size_t>(height);
+        hdrRgba.resize(pixelCount * 4);
+        const float* src = hdrFloats.get();
+        for (size_t i = 0; i < pixelCount; ++i)
+        {
+            for (size_t c = 0; c < 3; ++c)
+            {
+                const float v = std::max(0.0f, src[i * 3 + c]);
+                const float tonemapped = v / (1.0f + v);
+                const float srgb = std::pow(tonemapped, 1.0f / 2.2f);
+                hdrRgba[i * 4 + c] = static_cast<uint8_t>(std::min(255.0f, std::max(0.0f, srgb * 255.0f + 0.5f)));
+            }
+            hdrRgba[i * 4 + 3] = 255;
+        }
+        rgbaSource = hdrRgba.data();
+    }
+    else
+    {
+        pixels.reset(stbi_load_from_memory(encodedData.data(), encodedSize, &decodedWidth, &decodedHeight,
+            &channels, STBI_rgb_alpha));
+        if (!pixels || decodedWidth != width || decodedHeight != height)
+            return std::nullopt;
+        rgbaSource = pixels.get();
+    }
+
     ThumbnailUploadTask task;
     task.AssetPath = key;
     if (width > MAX_THUMBNAIL_DIM || height > MAX_THUMBNAIL_DIM)
@@ -975,13 +1006,13 @@ std::optional<AssetCache::ThumbnailUploadTask> AssetCache::LoadImageThumbnail(co
             targetW = std::max(1, static_cast<int32>(MAX_THUMBNAIL_DIM * aspect));
         task.Width = targetW;
         task.Height = targetH;
-        task.Data = DownsampleRGBA(pixels.get(), width, height, targetW, targetH);
+        task.Data = DownsampleRGBA(rgbaSource, width, height, targetW, targetH);
     }
     else
     {
         task.Width = width;
         task.Height = height;
-        task.Data.assign(pixels.get(), pixels.get() + static_cast<size_t>(rgbaBytes));
+        task.Data.assign(rgbaSource, rgbaSource + static_cast<size_t>(rgbaBytes));
     }
     // 3. 축소 완료된 128x128 RGBA 데이터를 디스크 캐시 파일로 영속화
     if (!diskCachePath.empty() && !task.Data.empty())
