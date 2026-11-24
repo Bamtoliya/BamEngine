@@ -8,6 +8,33 @@ namespace
 		static Engine::MulticastDelegate<const Engine::ActionTimelineEvent&> listeners;
 		return listeners;
 	}
+
+	Engine::MulticastDelegate<const Engine::ActionTimelineEndEvent&>& GetActionTimelineEndListeners()
+	{
+		static Engine::MulticastDelegate<const Engine::ActionTimelineEndEvent&> listeners;
+		return listeners;
+	}
+}
+
+Engine::DelegateHandle Engine::ActionTimelineEvents::SubscribeEnd(EndHandler handler)
+{
+	if (!handler) return 0;
+	return GetActionTimelineEndListeners().Add(std::move(handler));
+}
+
+void Engine::ActionTimelineEvents::UnsubscribeEnd(DelegateHandle handle)
+{
+	if (handle != 0) GetActionTimelineEndListeners().Remove(handle);
+}
+
+void Engine::ActionTimelineEvents::PublishEnd(const ActionTimelineEndEvent& event)
+{
+	GetActionTimelineEndListeners().Broadcast(event);
+}
+
+std::size_t Engine::ActionTimelineEvents::GetEndSubscriberCount()
+{
+	return GetActionTimelineEndListeners().GetListenerCount();
 }
 
 Engine::DelegateHandle Engine::ActionTimelineEvents::Subscribe(Handler handler)

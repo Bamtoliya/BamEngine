@@ -29,6 +29,8 @@ public:
 		const reflection::Registry* sourceRegistry = nullptr);
 	[[nodiscard]] GraphDiagnostic Begin(GraphNodeId entry, float delta = 0.0f, std::size_t budget = 10000);
 	[[nodiscard]] GraphDiagnostic BeginTrigger(GraphNodeId entry, int64_t otherEntity, std::size_t budget = 10000);
+	// Event.OnActionTimelineEnded 전용. reason은 EActionTimelineEndReason의 정수값이며 0(Completed)이면 completed 출력이 true다.
+	[[nodiscard]] GraphDiagnostic BeginTimelineEnded(GraphNodeId entry, int64_t reason, std::size_t budget = 10000);
 	void Resume();
 	void Pause();
 	void Stop();

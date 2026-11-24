@@ -188,9 +188,50 @@ namespace
 		}
 	}
 
+	// 작성 클립의 길이(초). 클립이 없으면 0이다.
+	float GetClipLengthSeconds(const Animation* clip)
+	{
+		if (!clip || clip->GetDuration() <= 0.0) return 0.0f;
+		const double ticksPerSecond = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
+		return static_cast<float>(clip->GetDuration() / ticksPerSecond);
+	}
+
+	// 엔티티와 직계 자식의 히트박스를 함께 켜거나 끈다.
+	void SetTimelineHitboxesActive(entt::registry& world, entt::entity entity, bool active)
+	{
+		if (auto* hitbox = world.try_get<HitboxComponent>(entity)) hitbox->SetActive(active);
+		const auto* hier = world.try_get<HierarchyComponent>(entity);
+		if (!hier) return;
+		for (entt::entity child : hier->children)
+		{
+			if (!world.valid(child)) continue;
+			if (auto* childHitbox = world.try_get<HitboxComponent>(child)) childHitbox->SetActive(active);
+		}
+	}
+
+	// 추적하던 재생 세션을 끝낸다. 세션이 연 히트박스 창은 사유와 관계없이 닫고, 종료 이벤트는 씬 갱신 뒤에 보낸다.
+	void EndTrackedSession(Scene& scene, entt::registry& world, entt::entity entity, ActionTimelineComponent& timeline,
+		EActionTimelineEndReason reason, std::vector<ActionTimelineEndEvent>& pendingEndEvents)
+	{
+		if (timeline.hitboxWindowOpen)
+		{
+			SetTimelineHitboxesActive(world, entity, false);
+			timeline.hitboxWindowOpen = false;
+		}
+		timeline.interruptPending = false;
+		if (!timeline.trackedSessionActive) return;
+		timeline.trackedSessionActive = false;
+		static constexpr const char* reasonNames[] = { "Completed", "Stopped", "Interrupted" };
+		BAM_LOG(Info, "Engine", "ActionTimeline", "Session {} ended: {} at {:.3f}s (elapsed {:.3f}s): {}", timeline.trackedSessionSerial,
+			reasonNames[static_cast<int>(reason)], timeline.currentTime, timeline.playElapsed, timeline.timelinePath);
+		pendingEndEvents.push_back({ &scene, entity, reason, timeline.trackedSessionSerial });
+	}
+
 	void WarnOutOfRangeNotifies(const ActionTimelineAsset& asset)
 	{
-		const float duration = std::max(0.05f, asset.GetDuration());
+		// 마지막 트랙 끝에서 끝나는 타임라인은 길이가 항목을 따라가므로 범위를 벗어난 노티파이가 없다.
+		if (asset.GetEndPolicy() == ETimelineEndPolicy::LastTrackEnd) return;
+		const float duration = std::max(ActionTimelineAsset::MinPlaybackDuration, asset.GetDuration());
 		for (const auto& track : asset.GetNotifyTracks())
 		{
 			for (const auto& notify : track.Notifies)
@@ -786,10 +827,8 @@ namespace
 		EndAnimatorOverride(world, entity, timeline, blendOutTime);
 		EndCameraOverride(world, timeline);
 		ReleaseHeldVFXForOwner(world, entity);
-		if (auto* hitbox = world.try_get<HitboxComponent>(entity))
-		{
-			hitbox->SetActive(false);
-		}
+		if (timeline.hitboxWindowOpen) SetTimelineHitboxesActive(world, entity, false);
+		else if (auto* hitbox = world.try_get<HitboxComponent>(entity)) hitbox->SetActive(false);
 	}
 
 	void EnsureDestroyHook(entt::registry& world)
@@ -815,6 +854,7 @@ namespace
 					if (prevTimeline->animatorOverrideEntity == animatorEntity)
 					{
 						prevTimeline->animatorOverrideEntity = entt::null;
+						prevTimeline->interruptPending = true;
 						prevTimeline->isPlaying = false;
 						prevTimeline->notifyStartPending = true;
 						++prevTimeline->playSerial;
@@ -1027,6 +1067,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 
 		// 타임라인 순회 중에는 모으기만 하고, 씬의 갱신이 끝난 뒤 같은 프레임에 발행한다(핸들러가 엔티티를 바꿔도 순회가 깨지지 않게).
 		std::vector<ActionTimelineEvent> pendingEvents;
+		std::vector<ActionTimelineEndEvent> pendingEndEvents;
 
 		// ── 0. 소켓 부착(AttachToSocket) 엔티티 위치 및 회전 실시간 동기화 ──
 		{
@@ -1109,6 +1150,15 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				continue;
 			}
 
+			// 0. 추적하던 세션의 번호가 바뀌었으면 그 세션은 끝났다. 끝 시점 도달(Completed)은 3단계 뒤에서 보낸다.
+			// 재생 중이면 Play 재호출·에셋 교체로 끊긴 것이고, 멈춰 있으면 Stop이다. 다른 타임라인의 Animator 인계는 표시로 구분한다.
+			if (timeline.trackedSessionActive && timeline.trackedSessionSerial != timeline.playSerial)
+			{
+				const auto reason = timeline.interruptPending || timeline.isPlaying
+					? EActionTimelineEndReason::Interrupted : EActionTimelineEndReason::Stopped;
+				EndTrackedSession(*scene, world, entity, timeline, reason, pendingEndEvents);
+			}
+
 			// 1. 에셋 경로 변경 시 자동 로드 동기화
 			if (timeline.timelinePath != timeline.loadedTimelinePath)
 			{
@@ -1119,6 +1169,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				timeline.prevTime = 0.0f;
 				timeline.playElapsed = 0.0f;
 				timeline.notifyStartPending = true;
+				timeline.playbackCompleted = false;
 				if (!timeline.timelinePath.empty())
 				{
 					auto handle = LoadTimelineResource(timeline.timelinePath, TimelineResourceLoadStage::Playback);
@@ -1143,16 +1194,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			if (timeline.animatorOverrideEntity != entt::null)
 			{
 				const bool sessionChanged = timeline.animatorOverrideSerial != timeline.playSerial;
-				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
 				if (!asset || timeline.animatorOverrideEntity != animatorEntity ||
-					(!timeline.isPlaying && (sessionChanged || finished)))
+					(!timeline.isPlaying && (sessionChanged || timeline.playbackCompleted)))
 					EndAnimatorOverride(world, entity, timeline, asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime);
 			}
 			if (timeline.cameraOverrideActive)
 			{
 				const bool sessionChanged = timeline.cameraOverrideSerial != timeline.playSerial;
-				const bool finished = asset && timeline.currentTime >= std::max(0.05f, asset->GetDuration());
-				if (!asset || sessionChanged || (!timeline.isPlaying && finished))
+				if (!asset || sessionChanged || (!timeline.isPlaying && timeline.playbackCompleted))
 					EndCameraOverride(world, timeline);
 			}
 			if (!asset || !timeline.isPlaying) continue;
@@ -1165,14 +1214,21 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				timeline.boundClipAnimator = animatorEntity;
 			}
 
-			const float duration = std::max(0.05f, asset->GetDuration());
+			// 재생 길이는 에셋의 종료 정책으로 매 틱 정한다(편집으로 트랙이 바뀌어도 따라간다).
+			const float duration = asset->ResolvePlaybackDuration(GetClipLengthSeconds(timeline.boundClip.Get()));
+			timeline.trackedSessionSerial = timeline.playSerial;
+			timeline.trackedSessionActive = true;
 			timeline.prevTime = timeline.currentTime;
 			const auto playbackStep = AdvanceActionTimeline(timeline.currentTime, dt * timeline.playRate, duration,
 				timeline.isLooping, timeline.notifyStartPending);
 			timeline.currentTime = playbackStep.CurrentTime;
 			timeline.playElapsed += dt * timeline.playRate;
 			timeline.notifyStartPending = false;
-			if (playbackStep.Finished) timeline.isPlaying = false;
+			if (playbackStep.Finished)
+			{
+				timeline.isPlaying = false;
+				timeline.playbackCompleted = true;
+			}
 
 			// 2. Animator 구동: 작성 클립이 있을 때만 넘겨받는다. 클립이 없는 타임라인(사운드·카메라 전용)은 Animator를 건드리지 않는다.
 			// Animator는 자신 또는 자식 모델 루트에서 찾는다.
@@ -1217,41 +1273,10 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							notify.Name == "HitboxOn" || notify.Name == "Hitbox.Enable");
 						const bool isHitboxOff = (notify.EventTag == "HitboxOff" || notify.EventTag == "Hitbox.Disable" ||
 							notify.Name == "HitboxOff" || notify.Name == "Hitbox.Disable");
-						if (isHitboxOn)
+						if (isHitboxOn || isHitboxOff)
 						{
-							if (auto* hitbox = world.try_get<HitboxComponent>(entity))
-							{
-								hitbox->SetActive(true);
-							}
-							if (const auto* hier = world.try_get<HierarchyComponent>(entity))
-							{
-								for (entt::entity child : hier->children)
-								{
-									if (world.valid(child))
-									{
-										if (auto* childHitbox = world.try_get<HitboxComponent>(child))
-											childHitbox->SetActive(true);
-									}
-								}
-							}
-						}
-						else if (isHitboxOff)
-						{
-							if (auto* hitbox = world.try_get<HitboxComponent>(entity))
-							{
-								hitbox->SetActive(false);
-							}
-							if (const auto* hier = world.try_get<HierarchyComponent>(entity))
-							{
-								for (entt::entity child : hier->children)
-								{
-									if (world.valid(child))
-									{
-										if (auto* childHitbox = world.try_get<HitboxComponent>(child))
-											childHitbox->SetActive(false);
-									}
-								}
-							}
+							SetTimelineHitboxesActive(world, entity, isHitboxOn);
+							timeline.hitboxWindowOpen = isHitboxOn;
 						}
 
 						// (2) 소리 노티파이 (Audio FX)
@@ -1325,21 +1350,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							const std::size_t endCrossings = CountActionTimelineCrossings(playbackStep, notify.TriggerTime + notify.Duration);
 							if (endCrossings > 0)
 							{
-								if (auto* hitbox = world.try_get<HitboxComponent>(entity))
-								{
-									hitbox->SetActive(false);
-								}
-								if (const auto* hier = world.try_get<HierarchyComponent>(entity))
-								{
-									for (entt::entity child : hier->children)
-									{
-										if (world.valid(child))
-										{
-											if (auto* childHitbox = world.try_get<HitboxComponent>(child))
-												childHitbox->SetActive(false);
-										}
-									}
-								}
+								SetTimelineHitboxesActive(world, entity, false);
+								timeline.hitboxWindowOpen = false;
 							}
 						}
 					}
@@ -1350,6 +1362,8 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			if (playbackStep.Finished)
 			{
 				EndCameraOverride(world, timeline);
+				// 끝 시점의 노티파이까지 처리한 뒤 세션을 끝낸다.
+				EndTrackedSession(*scene, world, entity, timeline, EActionTimelineEndReason::Completed, pendingEndEvents);
 			}
 			else
 			{
@@ -1370,8 +1384,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				const auto* owner = world.valid(hold.ownerEntity) ? TryGetEnabledComponent<ActionTimelineComponent>(world, hold.ownerEntity) : nullptr;
 				const auto* ownerFlag = owner ? world.try_get<FlagComponent>(hold.ownerEntity) : nullptr;
 				const bool ownerGone = !owner || (ownerFlag && (!ownerFlag->IsActiveInHierarchy() || HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Dead)));
-				const auto* ownerAsset = owner ? owner->timelineAsset.Get() : nullptr;
-				const bool ownerEnded = owner && !owner->isPlaying && ownerAsset && owner->currentTime >= std::max(0.05f, ownerAsset->GetDuration());
+				const bool ownerEnded = owner && !owner->isPlaying && owner->playbackCompleted;
 				if (!IsComponentEnabled<ActionVFXHoldComponent>(world, vfxEntity))
 				{
 					holdView.get<CompositeVFXComponent>(vfxEntity).Release();
@@ -1401,6 +1414,14 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			const auto* timeline = TryGetEnabledComponent<ActionTimelineComponent>(world, event.entity);
 			if (timeline && timeline->playSerial == event.playSerial)
 				ActionTimelineEvents::Publish(event);
+		}
+
+		// ── 7. 재생 종료 발행 ──
+		// 끝난 세션의 알림이므로 세션 번호는 비교하지 않고, 엔티티와 컴포넌트가 남아 있을 때만 보낸다.
+		for (const auto& event : pendingEndEvents)
+		{
+			if (world.valid(event.entity) && world.all_of<ActionTimelineComponent>(event.entity))
+				ActionTimelineEvents::PublishEnd(event);
 		}
 	}
 }

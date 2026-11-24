@@ -34,6 +34,8 @@
 #include "TagComponent.h"
 #include "RuntimeSystemManifest.h"
 #include "SystemManager.h"
+// Delegate.h의 전역 using namespace std가 Windows.h보다 먼저 오면 byte가 모호해지므로 엔진 헤더 뒤에 둔다.
+#include "ActionTimelineEvents.h"
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -437,6 +439,139 @@ namespace
 			passed &= Check(!world.all_of<Engine::ActionVFXHoldComponent>(held2) && vfx2.isDraining && !vfx2.holdUntilRelease,
 				"Destroying owning ActionTimelineComponent must release any remaining held VFX.");
 		}
+		return passed;
+	}
+
+	bool CheckEndPolicyDuration()
+	{
+		using Engine::ActionTimelineAsset;
+		using Policy = Engine::ETimelineEndPolicy;
+		bool passed = true;
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::Fixed, 3.0f, 1.2f, 0.4f) == 3.0f,
+			"Fixed must end at the stored duration even when a clip and tracks end earlier.");
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::ClipLength, 3.0f, 1.2f, 0.4f) == 1.2f,
+			"ClipLength must end at the clip length.");
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::ClipLength, 3.0f, 0.0f, 0.4f) == 3.0f,
+			"ClipLength without a resolved clip must fall back to the stored duration.");
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::LastTrackEnd, 3.0f, 0.0f, 0.4f) == 0.4f,
+			"LastTrackEnd without a clip must end at the last track item, not at the stored duration.");
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::LastTrackEnd, 3.0f, 1.2f, 0.4f) == 1.2f,
+			"LastTrackEnd must wait for the clip when the clip ends after every track item.");
+		passed &= Check(ActionTimelineAsset::ResolvePlaybackDuration(Policy::LastTrackEnd, 3.0f, 0.0f, 0.0f) ==
+			ActionTimelineAsset::MinPlaybackDuration, "An empty LastTrackEnd timeline must still last the minimum duration.");
+
+		Engine::TimelineNotifyTrack notifyTrack;
+		Engine::AnimNotifyData instant;
+		instant.TriggerTime = 0.3f;
+		Engine::AnimNotifyData held;
+		held.TriggerTime = 0.2f;
+		held.Duration = 0.5f;
+		notifyTrack.Notifies = { instant, held };
+		Engine::TimelineCameraTrack shot;
+		shot.StartTime = 0.1f;
+		shot.Duration = 0.4f;
+		Engine::TimelineCameraCutSection cut;
+		cut.StartTime = 0.0f;
+		cut.EndTime = 0.6f;
+		Engine::TimelineCameraSplineSection spline;
+		spline.StartTime = 0.2f;
+		spline.EndTime = 0.65f;
+		const float lastEnd = ActionTimelineAsset::ComputeLastTrackEnd({ notifyTrack }, { shot }, { cut }, { spline });
+		passed &= Check(std::abs(lastEnd - 0.7f) < 1.0e-5f, "The last track end must include a held notify's duration.");
+		passed &= Check(ActionTimelineAsset::ComputeLastTrackEnd({}, {}, {}, {}) == 0.0f, "No track items must give a zero last track end.");
+		return passed;
+	}
+
+	bool CheckEndPolicyPlaybackAndEndEvents()
+	{
+		ResourceManagerScope resources;
+		if (!resources.Created) return Check(false, "Resource manager creation failed.");
+
+		bool passed = true;
+		ScenePtr scene(Engine::Scene::Create());
+		TimelineSystemPtr system(Engine::ActionTimelineSystem::Create());
+		if (!scene || !system) return Check(false, "Scene or ActionTimelineSystem creation failed.");
+		scene->SetActive(true);
+
+		// 새 타임라인 기본값과 같다: 편집 범위 3초, 클립 없음, 마지막 트랙 끝에서 종료.
+		// HitboxOn(0.1s)을 끄는 노티파이가 없어도 세션이 끝나면 창이 닫혀야 한다. 마지막 항목은 0.4s의 이벤트다.
+		Engine::ActionTimelineCreateDesc desc;
+		desc.Duration = 3.0f;
+		desc.EndPolicy = Engine::ETimelineEndPolicy::LastTrackEnd;
+		Engine::TimelineNotifyTrack track;
+		track.Kind = Engine::ETimelineNotifyTrackKind::Event;
+		Engine::AnimNotifyData hitboxOn;
+		hitboxOn.Name = "HitboxOn";
+		hitboxOn.EventTag = "HitboxOn";
+		hitboxOn.TriggerTime = 0.1f;
+		hitboxOn.Type = Engine::EAnimNotifyType::CustomEvent;
+		Engine::AnimNotifyData last;
+		last.Name = "Recover";
+		last.EventTag = "Recover";
+		last.TriggerTime = 0.4f;
+		last.Type = Engine::EAnimNotifyType::CustomEvent;
+		track.Notifies = { hitboxOn, last };
+		desc.NotifyTracks.push_back(track);
+		auto asset = Engine::ResourceManager::Get().AddResource(L"TimelineEndPolicyAsset", Engine::ActionTimelineAsset::Create(&desc));
+		if (!asset.IsValid()) return Check(false, "End policy timeline asset creation failed.");
+
+		auto& world = scene->GetRegistry();
+		const auto entity = scene->CreateEntity().GetEntityHandle();
+		world.emplace<Engine::WorldTransformComponent>(entity);
+		world.emplace<Engine::FlagComponent>(entity);
+		auto& timeline = world.emplace<Engine::ActionTimelineComponent>(entity);
+		timeline.timelineAsset = asset;
+		auto& hitbox = world.emplace<Engine::HitboxComponent>(entity);
+		hitbox.active = false;
+
+		std::vector<Engine::ActionTimelineEndEvent> ends;
+		std::vector<std::string> tags;
+		const auto endHandle = Engine::ActionTimelineEvents::SubscribeEnd([&ends](const Engine::ActionTimelineEndEvent& event) { ends.push_back(event); });
+		const auto tagHandle = Engine::ActionTimelineEvents::Subscribe([&tags](const Engine::ActionTimelineEvent& event) { tags.push_back(event.eventTag); });
+
+		// 1. 끝까지 재생: 3초가 아니라 0.4초에서 끝나고, 같은 틱에 마지막 노티파이 뒤 Completed가 온다.
+		timeline.Play();
+		const auto completedSerial = timeline.playSerial;
+		system->OnUpdate(world, { scene.get() }, 0.2f);
+		passed &= Check(hitbox.active && timeline.isPlaying, "HitboxOn must open the window during playback.");
+		system->OnUpdate(world, { scene.get() }, 0.3f);
+		passed &= Check(!timeline.isPlaying && timeline.playbackCompleted && std::abs(timeline.currentTime - 0.4f) < 1.0e-5f,
+			"A clip-less LastTrackEnd timeline must finish at its last track item instead of the 3 second editing range.");
+		passed &= Check(!tags.empty() && tags.back() == "Recover", "The last notify must fire before the timeline ends.");
+		passed &= Check(ends.size() == 1 && ends[0].reason == Engine::EActionTimelineEndReason::Completed && ends[0].playSerial == completedSerial,
+			"Finishing must publish one Completed end event for the finished session.");
+		passed &= Check(!hitbox.active, "Ending the session must close a hitbox window that no notify closed.");
+		system->OnUpdate(world, { scene.get() }, 0.1f);
+		passed &= Check(ends.size() == 1, "A finished session must not publish its end twice.");
+
+		// 2. Stop: 열린 히트박스 창을 닫고 Stopped를 보낸다.
+		timeline.Play();
+		const auto stoppedSerial = timeline.playSerial;
+		system->OnUpdate(world, { scene.get() }, 0.2f);
+		passed &= Check(hitbox.active, "HitboxOn must reopen the window in the next session.");
+		timeline.Stop();
+		system->OnUpdate(world, { scene.get() }, 0.1f);
+		passed &= Check(ends.size() == 2 && ends[1].reason == Engine::EActionTimelineEndReason::Stopped && ends[1].playSerial == stoppedSerial,
+			"Stop must publish Stopped for the stopped session.");
+		passed &= Check(!hitbox.active, "Stop must close the open hitbox window.");
+
+		// 3. 재생 중 다시 Play: 이전 세션은 Interrupted, 새 세션은 계속 재생된다.
+		timeline.Play();
+		const auto interruptedSerial = timeline.playSerial;
+		system->OnUpdate(world, { scene.get() }, 0.05f);
+		timeline.Play();
+		system->OnUpdate(world, { scene.get() }, 0.05f);
+		passed &= Check(ends.size() == 3 && ends[2].reason == Engine::EActionTimelineEndReason::Interrupted &&
+			ends[2].playSerial == interruptedSerial && timeline.isPlaying,
+			"Restarting during playback must publish Interrupted for the previous session and keep playing.");
+
+		// 4. 일시정지는 종료가 아니다.
+		timeline.Pause();
+		system->OnUpdate(world, { scene.get() }, 0.05f);
+		passed &= Check(ends.size() == 3, "Pause must not end the session.");
+
+		Engine::ActionTimelineEvents::UnsubscribeEnd(endHandle);
+		Engine::ActionTimelineEvents::Unsubscribe(tagHandle);
 		return passed;
 	}
 
@@ -996,6 +1131,7 @@ namespace
 		{
 			Engine::ActionTimelineCreateDesc desc;
 			desc.Duration = 2.0f;
+			desc.EndPolicy = Engine::ETimelineEndPolicy::LastTrackEnd;
 			Engine::TimelineCameraCutSection cut;
 			cut.TrackName = "IntroCut";
 			cut.StartTime = 0.1f;
@@ -1038,6 +1174,8 @@ namespace
 			passed &= Check(dstAsset->GetCameraSplineTracks().size() == 1 &&
 				dstAsset->GetCameraSplineTracks()[0] == spline,
 				"CameraSplineTracks must round-trip cleanly through JsonArchive.");
+			passed &= Check(dstAsset->GetEndPolicy() == Engine::ETimelineEndPolicy::LastTrackEnd,
+				"EndPolicy must round-trip cleanly through JsonArchive.");
 
 			// 구버전 JSON(m_CameraCutTracks, m_CameraSplineTracks 누락) 하위 호환 로드 검증
 			Engine::ActionTimelineCreateDesc legacyDesc;
@@ -1063,6 +1201,7 @@ namespace
 			};
 			replaceKey(legacyJson, "\"m_CameraCutTracks\"", "\"m_IgnoredLegacyCut\"");
 			replaceKey(legacyJson, "\"m_CameraSplineTracks\"", "\"m_IgnoredLegacySpline\"");
+			replaceKey(legacyJson, "\"m_EndPolicy\"", "\"m_IgnoredLegacyEndPolicy\"");
 
 			archive::JsonArchive legacyReadAr;
 			passed &= Check(static_cast<bool>(legacyReadAr.Parse(legacyJson)), "Legacy JSON parse must succeed.");
@@ -1072,6 +1211,9 @@ namespace
 				legacyAsset->GetCameraSplineTracks().empty() &&
 				std::abs(legacyAsset->GetDuration() - 1.5f) <= 1.0e-4f,
 				"Legacy asset must default missing camera sequencer tracks to empty.");
+			passed &= Check(legacyAsset->GetEndPolicy() == Engine::ETimelineEndPolicy::Fixed &&
+				legacyAsset->ResolvePlaybackDuration(0.0f) == 1.5f,
+				"A legacy asset without EndPolicy must keep ending at its stored duration.");
 		}
 		return passed;
 	}
@@ -1140,6 +1282,8 @@ int main()
 	passed &= CheckParticleNotifySpawnAndAutoDestroy();
 	passed &= CheckAnimatorOverrideLifecycle();
 	passed &= CheckHeldVFXReleaseLifecycle();
+	passed &= CheckEndPolicyDuration();
+	passed &= CheckEndPolicyPlaybackAndEndEvents();
 	passed &= CheckGameplayCombat();
 	passed &= CheckTimelineHitboxWindow();
 	passed &= CheckInteractableQueries();

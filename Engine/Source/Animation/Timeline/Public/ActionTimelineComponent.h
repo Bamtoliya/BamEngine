@@ -63,6 +63,17 @@ namespace Engine
 		f32 playElapsed = 0.0f;
 		bool notifyStartPending = true;
 
+		// 재생 세션 종료 추적 (런타임 전용)
+		// playbackCompleted: 이번 세션이 끝 시점까지 재생해 멈췄다. Play·Stop·에셋 교체 시 지운다.
+		// trackedSessionSerial/Active: 시스템이 재생 중으로 본 마지막 세션. 세션 번호가 바뀌면 이전 세션의 종료 이벤트를 보낸다.
+		// interruptPending: 다른 타임라인이 Animator를 넘겨받아 이 세션을 끊었다. 다음 종료 판정에서 Interrupted로 보낸다.
+		// hitboxWindowOpen: 이번 세션의 HitboxOn 노티파이가 연 창이 아직 닫히지 않았다. 세션이 어떻게 끝나든 닫는다.
+		bool playbackCompleted = false;
+		uint32 trackedSessionSerial = 0;
+		bool trackedSessionActive = false;
+		bool interruptPending = false;
+		bool hitboxWindowOpen = false;
+
 		// 런타임 캐시
 		std::string loadedTimelinePath;
 
@@ -102,13 +113,18 @@ namespace Engine
 			prevTime = 0.0f;
 			playElapsed = 0.0f;
 			notifyStartPending = true;
+			playbackCompleted = false;
 			++playSerial;
 			isPlaying = true;
 		}
 
 		void Pause() { isPlaying = false; }
 		void Resume() { isPlaying = true; }
-		void Stop() { isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; playElapsed = 0.0f; notifyStartPending = true; ++playSerial; }
+		void Stop()
+		{
+			isPlaying = false; currentTime = 0.0f; prevTime = 0.0f; playElapsed = 0.0f; notifyStartPending = true; playbackCompleted = false;
+			++playSerial;
+		}
 	};
 
 	STRUCT(COMPONENT, DISPLAY_NAME("STRUCT_SOCKET_ATTACHMENT"), CATEGORY("CATEGORY_CORE"))

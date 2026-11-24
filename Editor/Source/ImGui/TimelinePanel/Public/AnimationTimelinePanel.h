@@ -17,6 +17,8 @@ class Entity;
 class Skeleton;
 END
 
+namespace EditorUI { class ToolbarLayout; }
+
 BEGIN(Editor)
 
 // 트랙 요소 선택 구분
@@ -80,7 +82,7 @@ public:
 	void TogglePlayPause();
 	void StepFrame(int step);
 	void GoToFirstFrame() { m_CurrentTime = 0.0f; }
-	void GoToLastFrame() { m_CurrentTime = m_Duration; m_IsPlaying = false; }
+	void GoToLastFrame() { m_CurrentTime = GetPlaybackDuration(); m_IsPlaying = false; }
 	void ToggleLoop() { m_IsLooping = !m_IsLooping; }
 	void ResetZoom() { m_TimelineZoom = 1.0f; m_ViewStartTime = 0.0f; }
 	bool CanDeleteSelected() const;
@@ -104,6 +106,7 @@ private:
 		std::string ClipName;
 		float Duration = 0.0f;
 		float BlendOutTime = 0.0f;
+		Engine::ETimelineEndPolicy EndPolicy = Engine::ETimelineEndPolicy::Fixed;
 		bool operator==(const DocumentSnapshot& other) const = default;
 	};
 	DocumentSnapshot CaptureDocument() const;
@@ -117,6 +120,10 @@ private:
 
 	// 클립 선택: 문서 길이를 클립에 맞춘다. 범위 밖이면 클립 없음(길이 수동 입력)으로 둔다.
 	void SelectClip(int index);
+	// 런타임과 같은 종료 정책으로 계산한 재생 길이. m_Duration은 편집 범위(눈금자 길이)이며 Fixed 정책에서만 재생 길이와 같다.
+	float GetPlaybackDuration() const;
+	float GetSelectedClipLength() const;
+	void DrawEndPolicyControls(EditorUI::ToolbarLayout& toolbar);
 	int FindClipIndex(const std::string& clipName) const;
 
 	// 모델·소켓 검증
@@ -180,6 +187,7 @@ private:
 	f32 m_CurrentTime = 0.0f;
 	f32 m_Duration = 2.0f;
 	f32 m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime; // 저장되는 문서 값. 런타임 종료 시 원래 애니메이션으로 섞는 시간
+	Engine::ETimelineEndPolicy m_EndPolicy = Engine::ETimelineEndPolicy::Fixed; // 저장되는 문서 값. 재생이 끝나는 시점 규칙
 	f32 m_FPS = 30.0f;
 	f32 m_PlaybackSpeed = 1.0f;
 	bool m_NotifyStartPending = true;

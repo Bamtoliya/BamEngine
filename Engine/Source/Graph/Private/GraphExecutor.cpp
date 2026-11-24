@@ -4,7 +4,8 @@ namespace
 {
 	bool IsGameplayEventEntry(const std::string& type)
 	{
-		return type == "Event.OnActionPressed" || type == "Event.OnActionReleased" || type == "Event.OnActionTimelineEvent";
+		return type == "Event.OnActionPressed" || type == "Event.OnActionReleased" || type == "Event.OnActionTimelineEvent" ||
+			type == "Event.OnActionTimelineEnded";
 	}
 
 	bool SupportsBuiltin(const std::string& type)
@@ -143,6 +144,17 @@ GraphDiagnostic GraphExecutor::BeginTrigger(GraphNodeId entry, int64_t otherEnti
 
 	Store(entry, "other", otherEntity);
 	m_Pending.push_back({ TaskKind::Enter, entry });
+	return {};
+}
+
+GraphDiagnostic GraphExecutor::BeginTimelineEnded(GraphNodeId entry, int64_t reason, std::size_t budget)
+{
+	const auto* node = m_Graph.FindNode(entry);
+	if (!node || node->Type != "Event.OnActionTimelineEnded")
+		return { EGraphError::InvalidExecutionState, entry, {}, 0, "Select a valid timeline end event entry." };
+	if (const auto diagnostic = Begin(entry, 0.0f, budget); !diagnostic.Succeeded()) return diagnostic;
+	Store(entry, "reason", reason);
+	Store(entry, "completed", reason == 0);
 	return {};
 }
 

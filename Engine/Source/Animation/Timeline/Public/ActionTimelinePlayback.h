@@ -2,10 +2,19 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
 
 namespace Engine
 {
+	// 재생 세션이 끝난 사유. 그래프 핀에는 정수로 전달되므로 순서를 바꾸지 않는다.
+	enum class EActionTimelineEndReason : std::uint8_t
+	{
+		Completed,   // 끝 시점까지 재생했다.
+		Stopped,     // Stop으로 멈췄다.
+		Interrupted  // 재시작·에셋 교체·다른 타임라인의 Animator 인계로 끊겼다.
+	};
+
 	struct ActionTimelinePlaybackStep
 	{
 		float PreviousTime = 0.0f;

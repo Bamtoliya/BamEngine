@@ -13,6 +13,7 @@ namespace EditorUI
     inline constexpr float MinimumTimelineDuration = 0.05f;
     inline constexpr ImU32 TimelineRulerBackground = IM_COL32(28, 30, 36, 255);
     inline constexpr ImU32 TimelinePlayheadColor = IM_COL32(255, 65, 45, 255);
+    inline constexpr ImU32 TimelineEndMarkerColor = IM_COL32(110, 200, 255, 200); // 재생이 끝나는 시점(편집 범위와 다를 때)
 
     // ── 타임라인 트랙 공통 시각 규격 ──
     inline constexpr ImU32 TimelineHeaderBackground = IM_COL32(30, 33, 38, 255);    // 트랙 이름 칸

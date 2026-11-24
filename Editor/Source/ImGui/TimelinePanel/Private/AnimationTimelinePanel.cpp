@@ -158,7 +158,7 @@ void AnimationTimelinePanel::StepFrame(int step)
 {
 	const float frameStep = 1.0f / m_FPS;
 	ClearPreviewVFX();
-	m_CurrentTime = std::clamp(m_CurrentTime + static_cast<float>(step) * frameStep, 0.0f, m_Duration);
+	m_CurrentTime = std::clamp(m_CurrentTime + static_cast<float>(step) * frameStep, 0.0f, std::max(m_Duration, GetPlaybackDuration()));
 	m_NotifyStartPending = m_CurrentTime == 0.0f;
 }
 
@@ -169,7 +169,7 @@ void AnimationTimelinePanel::TogglePlayPause()
 		m_IsPlaying = false;
 		return;
 	}
-	if (!m_IsLooping && m_CurrentTime >= m_Duration)
+	if (!m_IsLooping && m_CurrentTime >= GetPlaybackDuration())
 	{
 		StartPreviewFromBeginning();
 		return;
@@ -227,7 +227,7 @@ void AnimationTimelinePanel::DeleteSelected()
 
 AnimationTimelinePanel::DocumentSnapshot AnimationTimelinePanel::CaptureDocument() const
 {
-	return { m_NotifyTracks, m_CameraTracks, m_CameraCutTracks, m_CameraSplineTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration, m_BlendOutTime };
+	return { m_NotifyTracks, m_CameraTracks, m_CameraCutTracks, m_CameraSplineTracks, m_ModelAssetPath, m_CurrentClipName, m_Duration, m_BlendOutTime, m_EndPolicy };
 }
 
 bool AnimationTimelinePanel::HasUncommittedEdit() const
@@ -237,7 +237,7 @@ bool AnimationTimelinePanel::HasUncommittedEdit() const
 	return m_NotifyTracks != committed.NotifyTracks || m_CameraTracks != committed.CameraTracks ||
 		m_CameraCutTracks != committed.CameraCutTracks || m_CameraSplineTracks != committed.CameraSplineTracks ||
 		m_ModelAssetPath != committed.ModelPath || m_CurrentClipName != committed.ClipName || m_Duration != committed.Duration ||
-		m_BlendOutTime != committed.BlendOutTime;
+		m_BlendOutTime != committed.BlendOutTime || m_EndPolicy != committed.EndPolicy;
 }
 
 bool AnimationTimelinePanel::IsEditInProgress() const
@@ -279,6 +279,7 @@ void AnimationTimelinePanel::ApplyDocumentSnapshot(const DocumentSnapshot& snaps
 	m_CurrentClipName = snapshot.ClipName;
 	m_Duration = snapshot.Duration;
 	m_BlendOutTime = snapshot.BlendOutTime;
+	m_EndPolicy = snapshot.EndPolicy;
 	m_CurrentTime = std::clamp(m_CurrentTime, 0.0f, m_Duration);
 
 	m_NotifyTracks = snapshot.NotifyTracks;
@@ -347,6 +348,7 @@ void AnimationTimelinePanel::ReleaseResourceDocument()
 	m_NotifyStartPending = true;
 	m_Duration = 2.0f;
 	m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime;
+	m_EndPolicy = Engine::ETimelineEndPolicy::Fixed;
 	ResetZoom();
 	ResetEditHistory();
 	MarkDocumentSaved();
@@ -462,6 +464,62 @@ void AnimationTimelinePanel::SelectClip(int index)
 	m_CurrentClipName = Engine::WStrToStr(clip->GetName());
 	const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
 	m_Duration = std::max(0.1f, clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 1.0f);
+}
+
+float AnimationTimelinePanel::GetSelectedClipLength() const
+{
+	auto* model = m_TargetModel.Get();
+	if (!model || m_SelectedClipIndex < 0) return 0.0f;
+	const auto anims = model->GetAnimations();
+	const auto* clip = m_SelectedClipIndex < static_cast<int>(anims.size()) ? anims[m_SelectedClipIndex].Get() : nullptr;
+	if (!clip || clip->GetDuration() <= 0.0) return 0.0f;
+	const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
+	return static_cast<float>(clip->GetDuration() / tps);
+}
+
+float AnimationTimelinePanel::GetPlaybackDuration() const
+{
+	const float lastTrackEnd = m_EndPolicy == Engine::ETimelineEndPolicy::LastTrackEnd
+		? Engine::ActionTimelineAsset::ComputeLastTrackEnd(m_NotifyTracks, m_CameraTracks, m_CameraCutTracks, m_CameraSplineTracks) : 0.0f;
+	return Engine::ActionTimelineAsset::ResolvePlaybackDuration(m_EndPolicy, m_Duration, GetSelectedClipLength(), lastTrackEnd);
+}
+
+void AnimationTimelinePanel::DrawEndPolicyControls(EditorUI::ToolbarLayout& toolbar)
+{
+	// 종료 정책은 저장되는 문서 값이다. 편집 이력·미저장 표시는 문서 스냅샷 비교로 처리된다.
+	struct PolicyOption { Engine::ETimelineEndPolicy Policy; const char* LabelKey; };
+	static constexpr PolicyOption options[] = {
+		{ Engine::ETimelineEndPolicy::Fixed, "Timeline.EndPolicyFixed" },
+		{ Engine::ETimelineEndPolicy::ClipLength, "Timeline.EndPolicyClipLength" },
+		{ Engine::ETimelineEndPolicy::LastTrackEnd, "Timeline.EndPolicyLastTrackEnd" } };
+
+	toolbar.Text(LOCAL_CSTR("Timeline.EndPolicy"), false);
+	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 7.0f);
+	const char* previewKey = options[0].LabelKey;
+	for (const auto& option : options)
+		if (option.Policy == m_EndPolicy) previewKey = option.LabelKey;
+	if (ImGui::BeginCombo("##EndPolicy", LOCAL_CSTR(previewKey)))
+	{
+		for (const auto& option : options)
+		{
+			const bool selected = option.Policy == m_EndPolicy;
+			if (ImGui::Selectable(LOCAL_CSTR(option.LabelKey), selected) && !selected)
+			{
+				m_EndPolicy = option.Policy;
+				m_IsDirty = true;
+			}
+			if (selected) ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.EndPolicyTooltip"));
+
+	// 재생 길이가 편집 범위와 다르면 실제로 끝나는 시점을 보여준다.
+	if (m_EndPolicy != Engine::ETimelineEndPolicy::Fixed)
+	{
+		const std::string endLabel = LOCAL_FMT("Timeline.PlaybackEnd", GetPlaybackDuration());
+		toolbar.Text(endLabel.c_str(), false);
+	}
 }
 
 int AnimationTimelinePanel::FindClipIndex(const std::string& clipName) const
@@ -650,6 +708,7 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	asset->SetClipName(m_CurrentClipName);
 	asset->SetDuration(m_Duration);
 	asset->SetBlendOutTime(m_BlendOutTime);
+	asset->SetEndPolicy(m_EndPolicy);
 	asset->GetNotifyTracks() = m_NotifyTracks;
 	asset->GetCameraTracks() = m_CameraTracks;
 	asset->GetCameraCutTracks() = m_CameraCutTracks;
@@ -696,6 +755,7 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	m_CurrentClipName = asset->GetClipName();
 	m_Duration = std::max(0.1f, asset->GetDuration());
 	m_BlendOutTime = asset->GetBlendOutTime();
+	m_EndPolicy = asset->GetEndPolicy();
 	m_NotifyTracks = asset->GetNotifyTracks();
 	m_CameraTracks = asset->GetCameraTracks();
 	m_CameraCutTracks = asset->GetCameraCutTracks();
@@ -896,9 +956,10 @@ void AnimationTimelinePanel::Update(f32 dt)
 	Engine::ActionTimelinePlaybackStep playbackStep;
 	bool advanced = false;
 
-	if (m_IsPlaying && !m_IsScrubbing && m_Duration > 0.0f)
+	const float playbackDuration = GetPlaybackDuration();
+	if (m_IsPlaying && !m_IsScrubbing)
 	{
-		playbackStep = Engine::AdvanceActionTimeline(m_CurrentTime, dt * m_PlaybackSpeed, m_Duration,
+		playbackStep = Engine::AdvanceActionTimeline(m_CurrentTime, dt * m_PlaybackSpeed, playbackDuration,
 			m_IsLooping, m_NotifyStartPending);
 		m_CurrentTime = playbackStep.CurrentTime;
 		m_NotifyStartPending = false;
@@ -961,7 +1022,7 @@ void AnimationTimelinePanel::Update(f32 dt)
 		{
 			auto* vfx = Engine::TryGetEnabledComponent<Engine::CompositeVFXComponent>(reg, preview.Entity);
 			if (!vfx) continue;
-			const bool timelineFinished = !m_IsLooping && m_CurrentTime >= m_Duration;
+			const bool timelineFinished = !m_IsLooping && m_CurrentTime >= playbackDuration;
 			vfx->timelineTimeScale = preview.IsTest || timelineFinished ? 1.0f : std::max(0.0f, m_PlaybackSpeed);
 			vfx->SetTimelinePaused(!preview.IsTest && !timelineFinished &&
 				(!m_IsPlaying || m_IsScrubbing || vfx->timelineTimeScale == 0.0f));
@@ -1403,6 +1464,8 @@ void AnimationTimelinePanel::DrawTransportBar()
 		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.DurationTooltip"));
 	}
 
+	DrawEndPolicyControls(toolbar);
+
 	// 런타임에서 타임라인이 끝난 뒤 원래 애니메이션으로 섞어 넘어가는 시간. 편집 이력·저장 기준점은 문서 스냅샷 비교로 처리된다.
 	toolbar.Text(LOCAL_CSTR("Timeline.BlendOut"), false);
 	toolbar.SetNextItemWidth(ImGui::GetFontSize() * 4.8f);
@@ -1615,7 +1678,7 @@ void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSec
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("End Time");
+		EditorUI::PropertyRow("Timeline.EndTime");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::DragFloat("##CutEndTime", &cutSection.EndTime, 0.01f, cutSection.StartTime, m_Duration, "%.2fs"))
 		{
@@ -1623,7 +1686,7 @@ void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSec
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Blend In");
+		EditorUI::PropertyRow("Timeline.BlendIn");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		const float maxBlend = std::max(0.0f, cutSection.EndTime - cutSection.StartTime);
 		if (ImGui::DragFloat("##CutBlendIn", &cutSection.BlendInDuration, 0.01f, 0.0f, maxBlend, "%.2fs"))
@@ -1632,17 +1695,17 @@ void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSec
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Target Camera");
+		EditorUI::PropertyRow("Timeline.TargetCamera");
 		char camBuf[128];
 		strncpy_s(camBuf, cutSection.TargetCameraName.c_str(), sizeof(camBuf) - 1);
 		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (ImGui::InputTextWithHint("##CutTargetCamera", "(Main Camera)", camBuf, sizeof(camBuf)))
+		if (ImGui::InputTextWithHint("##CutTargetCamera", LOCAL_CSTR("Timeline.MainCameraHint"), camBuf, sizeof(camBuf)))
 		{
 			cutSection.TargetCameraName = camBuf;
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Use Local Offset");
+		EditorUI::PropertyRow("Timeline.UseLocalOffset");
 		bool useOffset = (cutSection.LocalPositionOffset != vec3(0.0f) || cutSection.LocalEulerRotationOffset != vec3(0.0f));
 		if (ImGui::Checkbox("##CutUseOffset", &useOffset))
 		{
@@ -1656,14 +1719,14 @@ void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSec
 
 		if (useOffset)
 		{
-			EditorUI::PropertyRow("Position Offset");
+			EditorUI::PropertyRow("Timeline.PositionOffset");
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat3("##CutPosOffset", &cutSection.LocalPositionOffset.x, 0.05f, -100.0f, 100.0f, "%.2f"))
 			{
 				changed = true;
 			}
 
-			EditorUI::PropertyRow("Rotation Offset");
+			EditorUI::PropertyRow("Timeline.RotationOffset");
 			ImGui::SetNextItemWidth(-FLT_MIN);
 			if (ImGui::DragFloat3("##CutRotOffset", &cutSection.LocalEulerRotationOffset.x, 0.5f, -180.0f, 180.0f, "%.1f deg"))
 			{
@@ -1671,7 +1734,7 @@ void AnimationTimelinePanel::DrawCameraCutInspector(Engine::TimelineCameraCutSec
 			}
 		}
 
-		EditorUI::PropertyRow("Override FOV");
+		EditorUI::PropertyRow("Timeline.OverrideFOV");
 		bool overrideFOV = (cutSection.TargetFOV > 0.0f);
 		if (ImGui::Checkbox("##CutOverrideFOV", &overrideFOV))
 		{
@@ -1737,7 +1800,7 @@ void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSpl
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("End Time");
+		EditorUI::PropertyRow("Timeline.EndTime");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::DragFloat("##SplineEndTime", &splineSection.EndTime, 0.01f, splineSection.StartTime, m_Duration, "%.2fs"))
 		{
@@ -1745,7 +1808,7 @@ void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSpl
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Blend In");
+		EditorUI::PropertyRow("Timeline.BlendIn");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		const float maxBlend = std::max(0.0f, splineSection.EndTime - splineSection.StartTime);
 		if (ImGui::DragFloat("##SplineBlendIn", &splineSection.BlendInDuration, 0.01f, 0.0f, maxBlend, "%.2fs"))
@@ -1754,17 +1817,17 @@ void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSpl
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Spline Entity");
+		EditorUI::PropertyRow("Timeline.SplineEntity");
 		char splineBuf[128];
 		strncpy_s(splineBuf, splineSection.SplineEntityName.c_str(), sizeof(splineBuf) - 1);
 		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (ImGui::InputTextWithHint("##SplineEntityName", "SplineEntityName", splineBuf, sizeof(splineBuf)))
+		if (ImGui::InputTextWithHint("##SplineEntityName", LOCAL_CSTR("Timeline.SplineEntityHint"), splineBuf, sizeof(splineBuf)))
 		{
 			splineSection.SplineEntityName = splineBuf;
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Start T (0~1)");
+		EditorUI::PropertyRow("Timeline.StartT");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::SliderFloat("##SplineStartT", &splineSection.StartT, 0.0f, 1.0f, "%.2f"))
 		{
@@ -1772,7 +1835,7 @@ void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSpl
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("End T (0~1)");
+		EditorUI::PropertyRow("Timeline.EndT");
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		if (ImGui::SliderFloat("##SplineEndT", &splineSection.EndT, 0.0f, 1.0f, "%.2f"))
 		{
@@ -1780,24 +1843,24 @@ void AnimationTimelinePanel::DrawCameraSplineInspector(Engine::TimelineCameraSpl
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Closed Loop");
-		ImGui::TextDisabled("%s", "(In Spline Component)");
+		EditorUI::PropertyRow("Timeline.ClosedLoop");
+		ImGui::TextDisabled("%s", LOCAL_CSTR("Timeline.InSplineComponent"));
 
-		EditorUI::PropertyRow("Look-At Target");
+		EditorUI::PropertyRow("Timeline.LookAtTarget");
 		char lookAtBuf[128];
 		strncpy_s(lookAtBuf, splineSection.LookAtTargetName.c_str(), sizeof(lookAtBuf) - 1);
 		ImGui::SetNextItemWidth(-FLT_MIN);
-		if (ImGui::InputTextWithHint("##SplineLookAtTarget", "(None / Spline Tangent)", lookAtBuf, sizeof(lookAtBuf)))
+		if (ImGui::InputTextWithHint("##SplineLookAtTarget", LOCAL_CSTR("Timeline.LookAtTargetHint"), lookAtBuf, sizeof(lookAtBuf)))
 		{
 			splineSection.LookAtTargetName = lookAtBuf;
 			changed = true;
 		}
 
-		EditorUI::PropertyRow("Follow Tangent");
+		EditorUI::PropertyRow("Timeline.FollowTangent");
 		if (ImGui::Checkbox("##SplineFollowTangent", &splineSection.FollowTangent)) changed = true;
-		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", "Follow spline tangent when Look-At Target is empty");
+		if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", LOCAL_CSTR("Timeline.FollowTangentTooltip"));
 
-		EditorUI::PropertyRow("Override FOV");
+		EditorUI::PropertyRow("Timeline.OverrideFOV");
 		bool overrideFOV = (splineSection.TargetFOV > 0.0f);
 		if (ImGui::Checkbox("##SplineOverrideFOV", &overrideFOV))
 		{
@@ -1967,6 +2030,14 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 		// 행 영역의 이름 칸 경계선과 재생 헤드 선 (눈금자 높이 부분은 아래에서 고정 영역에 그린다)
 		const float viewBottom = rulerMax.y + rowsViewHeight;
 		Editor::DrawVerticalSplitterLine(*rowsDraw, headerSplitter, timelineMin.x, rulerMax.y, viewBottom);
+		// 종료 정책으로 정한 재생 끝이 편집 범위 안에서 다르면 표시한다.
+		const float playbackEnd = GetPlaybackDuration();
+		if (m_EndPolicy != Engine::ETimelineEndPolicy::Fixed && playbackEnd < m_Duration)
+		{
+			const float endX = TimeToScreenX(playbackEnd, timelineMin.x, timelineWidth);
+			if (endX >= timelineMin.x && endX <= timelineMax.x)
+				rowsDraw->AddLine(ImVec2(endX, rulerMax.y), ImVec2(endX, std::min(rowsEndY, viewBottom)), EditorUI::TimelineEndMarkerColor, 1.5f);
+		}
 		if (curX >= timelineMin.x && curX <= timelineMax.x)
 			rowsDraw->AddLine(ImVec2(curX, rulerMax.y), ImVec2(curX, std::min(rowsEndY, viewBottom)), EditorUI::TimelinePlayheadColor, 2.0f);
 	}
@@ -2022,7 +2093,7 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 			m_CameraTracks.push_back(newCam);
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem((ICON_FA_CLAPPERBOARD " Add Camera Cut Section")))
+		if (ImGui::MenuItem((ICON_FA_CLAPPERBOARD " " + LOCAL_LABEL("Timeline.AddCameraCutSection")).c_str()))
 		{
 			Engine::TimelineCameraCutSection newCut{};
 			newCut.TrackName = "Camera_Cut_" + std::to_string(m_CameraCutTracks.size() + 1);
@@ -2032,7 +2103,7 @@ void AnimationTimelinePanel::DrawTimelineTrackArea()
 			m_CameraCutTracks.push_back(newCut);
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem((ICON_FA_ROUTE " Add Camera Spline Section")))
+		if (ImGui::MenuItem((ICON_FA_ROUTE " " + LOCAL_LABEL("Timeline.AddCameraSplineSection")).c_str()))
 		{
 			Engine::TimelineCameraSplineSection newSpline{};
 			newSpline.TrackName = "Camera_Spline_" + std::to_string(m_CameraSplineTracks.size() + 1);
@@ -2149,7 +2220,7 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 			track.IsMuted = !track.IsMuted;
 			m_IsDirty = true;
 		}
-		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("Hierarchy.Duplicate")).c_str()))
+		if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("Timeline.DuplicateTrack")).c_str()))
 		{
 			Engine::TimelineNotifyTrack copyTrack = track;
 			copyTrack.TrackName += "_Copy";

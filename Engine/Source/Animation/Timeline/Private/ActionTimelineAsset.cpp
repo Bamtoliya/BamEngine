@@ -3,6 +3,8 @@
 #include "ReflectionRegistry.h"
 #include <archive/JsonArchive.h>
 #include <reflection_archive/ReflectionArchiveAdapter.h>
+#include <algorithm>
+#include <cmath>
 
 BEGIN(Engine)
 
@@ -24,6 +26,7 @@ EResult ActionTimelineAsset::Initialize(void* arg)
 			m_ModelPath = desc->ModelPath;
 			m_ClipName = desc->ClipName;
 			m_Duration = desc->Duration;
+			m_EndPolicy = desc->EndPolicy;
 			m_NotifyTracks = desc->NotifyTracks;
 			for (auto& track : m_NotifyTracks) track.Kind = ResolveTrackKind(track);
 			m_CameraTracks = desc->CameraTracks;
@@ -88,6 +91,38 @@ ETimelineNotifyTrackKind ActionTimelineAsset::ResolveTrackKind(const TimelineNot
 	if (name.find("Audio") != std::string::npos || name.find("Sound") != std::string::npos) return ETimelineNotifyTrackKind::Audio;
 	if (name.find("Event") != std::string::npos) return ETimelineNotifyTrackKind::Event;
 	return ETimelineNotifyTrackKind::Effect;
+}
+
+float ActionTimelineAsset::ComputeLastTrackEnd(const std::vector<TimelineNotifyTrack>& notifyTracks, const std::vector<TimelineCameraTrack>& cameraTracks,
+	const std::vector<TimelineCameraCutSection>& cutTracks, const std::vector<TimelineCameraSplineSection>& splineTracks)
+{
+	float lastEnd = 0.0f;
+	const auto extend = [&lastEnd](float end) { if (std::isfinite(end) && end > lastEnd) lastEnd = end; };
+	for (const auto& track : notifyTracks)
+		for (const auto& notify : track.Notifies)
+			extend(notify.TriggerTime + std::max(0.0f, notify.Duration));
+	for (const auto& shot : cameraTracks) extend(shot.StartTime + std::max(0.0f, shot.Duration));
+	for (const auto& section : cutTracks) extend(std::max(section.StartTime, section.EndTime));
+	for (const auto& section : splineTracks) extend(std::max(section.StartTime, section.EndTime));
+	return lastEnd;
+}
+
+float ActionTimelineAsset::ResolvePlaybackDuration(ETimelineEndPolicy policy, float fixedDuration, float clipLength, float lastTrackEnd)
+{
+	const auto positive = [](float value) { return std::isfinite(value) && value > 0.0f ? value : 0.0f; };
+	float duration = positive(fixedDuration);
+	if (policy == ETimelineEndPolicy::ClipLength && positive(clipLength) > 0.0f)
+		duration = positive(clipLength);
+	else if (policy == ETimelineEndPolicy::LastTrackEnd)
+		duration = std::max(positive(clipLength), positive(lastTrackEnd));
+	return std::max(MinPlaybackDuration, duration);
+}
+
+float ActionTimelineAsset::ResolvePlaybackDuration(float clipLength) const
+{
+	const float lastTrackEnd = m_EndPolicy == ETimelineEndPolicy::LastTrackEnd
+		? ComputeLastTrackEnd(m_NotifyTracks, m_CameraTracks, m_CameraCutTracks, m_CameraSplineTracks) : 0.0f;
+	return ResolvePlaybackDuration(m_EndPolicy, m_Duration, clipLength, lastTrackEnd);
 }
 
 bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const

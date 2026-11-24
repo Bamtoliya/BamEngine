@@ -42,6 +42,15 @@ enum class ETimelineNotifyTrackKind : uint8
 	Event
 };
 
+// 재생이 끝나는 시점을 정하는 규칙. 저장값은 정수이므로 순서를 바꾸지 않는다.
+ENUM()
+enum class ETimelineEndPolicy : uint8
+{
+	Fixed,        // 저장한 길이(Duration)에서 끝난다. 값이 없던 이전 파일의 기본값이다.
+	ClipLength,   // 작성 클립 길이에서 끝난다. 클립을 찾지 못하면 저장한 길이를 쓴다.
+	LastTrackEnd  // 작성 클립과 모든 트랙 항목 중 가장 늦게 끝나는 시점에서 끝난다.
+};
+
 // 개별 노티파이 마커 데이터
 STRUCT()
 struct ENGINE_API AnimNotifyData
@@ -240,6 +249,7 @@ struct ActionTimelineCreateDesc : public ResourceCreateDesc
 	std::string ModelPath;
 	std::string ClipName;
 	float Duration = 1.0f;
+	ETimelineEndPolicy EndPolicy = ETimelineEndPolicy::Fixed;
 	std::vector<TimelineNotifyTrack> NotifyTracks;
 	std::vector<TimelineCameraTrack> CameraTracks;
 	std::vector<TimelineCameraCutSection> CameraCutTracks;
@@ -289,6 +299,18 @@ public:
 	float GetBlendOutTime() const { return m_BlendOutTime; }
 	void SetBlendOutTime(float time) { m_BlendOutTime = std::max(0.0f, time); }
 
+	ETimelineEndPolicy GetEndPolicy() const { return m_EndPolicy; }
+	void SetEndPolicy(ETimelineEndPolicy policy) { m_EndPolicy = policy; }
+
+	// 재생 길이의 하한(초). 길이 0으로 바로 끝나 노티파이를 놓치지 않게 한다.
+	static constexpr float MinPlaybackDuration = 0.05f;
+	// 모든 트랙 항목 중 가장 늦게 끝나는 시점(초). 음소거·비활성 항목도 작성된 내용이므로 포함한다. 항목이 없으면 0이다.
+	static float ComputeLastTrackEnd(const std::vector<TimelineNotifyTrack>& notifyTracks, const std::vector<TimelineCameraTrack>& cameraTracks,
+		const std::vector<TimelineCameraCutSection>& cutTracks, const std::vector<TimelineCameraSplineSection>& splineTracks);
+	// 종료 정책으로 재생 길이를 정한다. clipLength가 0 이하이면 작성 클립을 찾지 못한 것으로 본다. 결과는 MinPlaybackDuration 이상이다.
+	static float ResolvePlaybackDuration(ETimelineEndPolicy policy, float fixedDuration, float clipLength, float lastTrackEnd);
+	float ResolvePlaybackDuration(float clipLength) const;
+
 	const std::vector<TimelineNotifyTrack>& GetNotifyTracks() const { return m_NotifyTracks; }
 	std::vector<TimelineNotifyTrack>& GetNotifyTracks() { return m_NotifyTracks; }
 
@@ -317,6 +339,9 @@ private:
 
 	PROPERTY(EDITABLE, ALLOW_MISSING)
 		float m_BlendOutTime = DefaultBlendOutTime;
+
+	PROPERTY(EDITABLE, ALLOW_MISSING)
+		ETimelineEndPolicy m_EndPolicy = ETimelineEndPolicy::Fixed;
 
 	PROPERTY(EDITABLE)
 		std::vector<TimelineNotifyTrack> m_NotifyTracks;
