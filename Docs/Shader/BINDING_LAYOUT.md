@@ -1,6 +1,6 @@
 ﻿# Shader Resource Binding Layout
 
-- 최종 갱신: 2026-11-24 (지형 모션 벡터 `motionVectorTerrainVS`, 반사 누적 `ReflectionDenoiseParams` 128바이트; 2026-11-23: 프로브 GI 아틀라스·상태 `t2`~`t4, space1`, `LightingPassData` 624바이트)
+- 최종 갱신: 2026-11-24 (지형 높이맵·스플랫을 `t8`~`t10, space3`로 이동해 머티리얼 범위 `t0`~`t7, space1`에서 분리; 지형 레이어 `terrainPS` `TerrainObjectData` 256바이트·`t8`~`t15, space1`; 지형 모션 벡터 `motionVectorTerrainVS`, 반사 누적 `ReflectionDenoiseParams` 128바이트; 2026-11-23: 프로브 GI 아틀라스·상태 `t2`~`t4, space1`, `LightingPassData` 624바이트)
 - 관련 문서: [BuiltInResourcesAndShaders.md](../BuiltInResourcesAndShaders.md) (기본 리소스 및 셰이더 전체 명세서)
 
 This document defines the shared resource-group order for HLSL/D3D12 and
@@ -206,13 +206,26 @@ When adding or moving a binding:
 | `t0, space2` | `motionVectorVS` | 이번·이전 월드 행렬 쌍(128바이트) |
 | `b0, space2` | `motionVectorSkinningVS` | 이번·이전 월드 행렬 |
 | `b0, space2` | `motionVectorTerrainVS` | 이번·이전 월드 행렬과 `HeightfieldData`(x 최대 높이, yz 칸 간격) 144바이트 (RHI CBV slot `1`) |
-| `t1, space1` | `motionVectorTerrainVS` | 지형 높이맵(`terrainVS`와 같은 슬롯, `BindTextureSampler` slot `1`) |
+| `t8, space3` | `motionVectorTerrainVS` | 지형 높이맵(`terrainVS`와 같은 슬롯, `BindTexture` slot `TerrainHeightmapSlot` = 24) |
 | `t0, space2` | `motionVectorSkinningVS` | 이번 프레임 뼈 256개 뒤에 이전 프레임 256개 |
 | `b1, space3` | `motionVector*` | `MotionConstants` 192바이트 |
 | `t4, space3` | `motionVectorPS` | G-Buffer 위치 |
 | `b1, space3` | `temporalAAPS` | `TemporalAAParams` 224바이트 |
 | `t0`~`t4`, `s0`, `space3` | `temporalAAPS` | 디퓨즈, 장면 색 복사본, 이전 결과, 모션 벡터, 위치 |
 | `b1, space3` | `infiniteGridPS` | `GridDepthParams` 16바이트. 깊이 타깃의 TAA 지터(NDC), 끄면 0 |
+
+### 지형 바인딩
+
+| 바인딩 | 셰이더 | 내용 |
+| --- | --- | --- |
+| `b0, space2` | `terrainVS`, `terrainShadowDepthVS`, `motionVectorTerrainVS` | `ObjectData`: 월드 행렬, `PickingData`, `HeightfieldData`(x 최대 높이, yz 칸 간격) 96바이트 (RHI CBV slot `1`) |
+| `b0, space2` | `terrainPS` | `TerrainObjectData` 256바이트: 위 96바이트 + `LayerTiling[2]`(레이어 0~7 반복 길이 m, `[i/4][i%4]`) + `LayerTint[8]`. `Renderer.cpp`의 같은 이름 구조와 일치해야 한다. 지형 드로우만 이 길이로 묶고, VS 쪽은 앞 96바이트만 읽는다 |
+| `t8, space3` | `terrainVS`, `terrainShadowDepthVS`, `motionVectorTerrainVS` | 높이맵 `R32_FLOAT`, `Load`로 읽음 (`BindTexture` slot `TerrainHeightmapSlot` = 24) |
+| `t9`, `t10, space3` | `terrainPS` | 스플랫 가중치: 레이어 0~3, 4~7 (`RGBA8`, `BindTexture` slot 25·26). 샘플러는 `s0, space1` |
+| `t8`~`t15, space1` | `terrainPS` | 레이어 0~7 알베도(`TerrainLayerAsset`). 없으면 흰 텍스처와 기본 색 배율 (slot `8`~`15`) |
+| `s0, space1` | `terrainPS` | 기본 샘플러. 레이어는 분기 안에서 읽으므로 `SampleGrad`(월드 XZ 기울기) |
+
+머티리얼 텍스처 범위 `t0`~`t7, space1`(셰이더 그래프 `TextureSample` 슬롯 0~7)에는 지형 데이터를 두지 않는다(2026-11-24 T3-a). `space3` 샘플러 표는 `s0`~`s7`뿐이라 슬롯 16 이상(`t8`~`t10, space3`)은 `BindTexture`로 텍스처만 묶는다. 지형을 그리는 G-Buffer·그림자·모션 벡터 패스는 `space3`의 `t8`~`t10`을 쓰지 않는다(포워드 패스의 `t10`~`t12` IBL은 불투명 지형과 겹치지 않음). `t0`·`t2`·`t3, space1`은 지형 머티리얼(`TerrainMaterial`) 자리로 `terrainPS`는 읽지 않는다.
 
 ### 디퍼드 데칼 바인딩 (D3D12 전용)
 

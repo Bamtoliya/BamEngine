@@ -733,13 +733,149 @@ P4는 삭제된 목표나 구현 불필요 판정이 아니다. 선행 조건·�
 | 순서 | 작업 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|
 | 1-A | 콘텐츠 브라우저 이동·이름 변경 차단 사유 표시 | 없음 | 차단 시 모달에 구체적 원인(미저장 씬·편집기·프리팹 모드 등)과 대상 이름이 표시된다 | 코드 반영 / 빌드·실행 미검증 ([구현 기록](ImplementationLog.md)) |
-| 1-B | 액션 타임라인 종료 정책(`EndPolicy`), 종료 이벤트, 새 타임라인 기본값 | 없음 | 클립 없는 타임라인이 마지막 트랙 종료 시점에 끝나고 그래프가 종료 사유를 받는다 | 계획 |
-| 1-C | `GraphBindingComponent::graphFile` 로직 그래프 경로 피커 | 없음 | 로직 도메인 그래프만 표시되고 이동·이름 변경 후 참조가 유지된다 | 계획 |
-| T1~T4 | 지형 저장·레이어·그래프 도메인·내비게이션 | [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 4절 | 같은 문서 4절 | 계획 |
-| V1 | 디스토션 1단계: `ForwardTransparent` 그래프에 `Shader.ScreenUV`·`Shader.SceneColor` 노드 | 없음 | 강도 0에서 왜곡이 없고 화면 밖 UV는 왜곡 전 배경을 쓴다 | 계획 |
+| 1-B | 액션 타임라인 종료 정책(`EndPolicy`), 종료 이벤트, 새 타임라인 기본값 | 없음 | 클립 없는 타임라인이 마지막 트랙 종료 시점에 끝나고 그래프가 종료 사유를 받는다 | 코드 반영 / 빌드·실행 미검증 ([AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md) 12절) |
+| 1-C | `GraphBindingComponent::graphFile` 로직 그래프 경로 피커 | 없음 | 로직 도메인 그래프만 표시되고 이동·이름 변경 후 참조가 유지된다 | 코드 반영 / 빌드·실행 미검증 ([구현 기록](ImplementationLog.md)) |
+| T1~T4 | 지형 저장·레이어·그래프 도메인·내비게이션 | [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 4절 | 같은 문서 4절 | T1(a~d)·T2(a~e)·T3(a~c)·T4 코드 반영 / 빌드·실행 미검증 |
+| V1 | 디스토션 1단계: `ForwardTransparent` 그래프에 `Shader.ScreenUV`·`Shader.SceneColor` 노드 | 없음 | 강도 0에서 왜곡이 없고 화면 밖 UV는 왜곡 전 배경을 쓴다 | 코드 반영 / 빌드·실행 미검증 |
 | 보류 | 씬 단위 시퀀서 | 컷신 요구 확인 | — | 보류(P4) |
 
 - **이름 변경 실패 원인(정적 분석)**: 참조 스캔과 이동 가능 판정이 분리되어 있다. 참조가 0건이어도 `ImGuiManager::PrepareAssetFileChanges`가 미저장 리소스 편집기·미저장 씬·프리팹 모드·PIE·씬 로딩에서 거부하며, 모달은 원인을 구분하지 않았다. 확인 후 `ResourceManager::RelocateFileResources`가 모델 임포트 원본·셰이더 바이너리 경로를 가진 로드 리소스 때문에 거부할 수도 있다.
 - **3초 지연 원인(정적 분석)**: `ContentBrowserPanel::CreateEmptyTimeline`이 새 타임라인을 3초로 만들고, 클립을 지정할 때만 길이가 바뀐다. 종료 조건은 에셋 길이뿐이며 `ActionTimeline.Play`는 재생 중 재실행을 거부한다. 1-B에서 `Fixed`/`ClipLength`/`LastTrackEnd` 정책과 지속형 노티파이의 해제 규칙(경과·타임라인 종료·Stop/중단 시 히트박스 Off와 VFX Hold 해제)을 명시한다.
 - **디스토션**: 불투명 패스 후 `SceneColorCopy`가 이미 있어(`glassPS`) 그래프 노드 추가로 첫 결과를 낸다. 반투명끼리는 서로의 왜곡을 보지 못하는 제약이 있으며, 다수 중첩·파티클 대응이 필요하면 별도 디스토션 버퍼 후처리를 검토한다.
 - **시퀀서**: `ActionTimeline`이 이미 엔티티 단위 카메라 컷·스플라인 트랙을 가진다. 여러 엔티티 바인딩 컷신 요구가 생기기 전에는 새 시스템을 만들지 않고, 필요 시 ActionTimeline에 엔티티 바인딩 트랙을 확장하는 방향을 먼저 검토한다.
+
+#### 11.7.1 검증 대기 목록 (2026-11-24)
+
+코드는 반영했지만 AI는 빌드·실행하지 않았다. 아래 항목을 사용자가 확인한 뒤 각 행을 지우고, 결과를 [ImplementationLog.md](ImplementationLog.md)의 해당 기록에 남긴다. 실패하면 출력과 로그를 붙여 해당 작업으로 돌아간다.
+
+**공통 빌드·검사**
+
+```powershell
+cmake --build --preset x64-ninja-debug --target GenerateLocalization Editor Client ActionTimelinePlaybackCheck AssetReferenceCheck TerrainDataCheck ShaderGraphCheck NavigationAICheck PakArchiveCheck SceneArchiveCheck RLSimulationCheck VFXBlendAndPassCheck VirtualPathCheck RaytracingSkinnedPolicyCheck
+ctest --test-dir out/build/x64-ninja-debug -R "^(ActionTimelinePlaybackCheck|AssetReferenceCheck|TerrainDataCheck|ShaderGraphCheck|NavigationAICheck|PakArchiveCheck|SceneArchiveCheck|VFXBlendAndPassCheck|VirtualPathCheck|RaytracingSkinnedPolicyCheck)$" --output-on-failure
+ctest --test-dir out/build/x64-ninja-debug -R "^RLSimulationCheck$" --output-on-failure -V
+```
+
+| 작업 | 확인 항목 | 통과 기준 | 상태 |
+|---|---|---|---|
+| 1-A | 씬을 수정해 저장하지 않은 채 참조 없는 에셋 이름 변경 | 모달에 미저장 문서 사유와 씬 파일명이 표시된다 | 대기 |
+| 1-A | 머티리얼 편집기를 미저장 상태로 두고 이름 변경 | 모달에 편집기 이름이 표시된다 | 대기 |
+| 1-A | 모두 저장한 뒤 이름 변경 | 모달 없이 바로 바뀐다 | 대기 |
+| 1-A | 한국어·영어 전환 | 차단 사유 문구가 두 언어로 표시된다 | 대기 |
+| 1-B | `ActionTimelinePlaybackCheck` | 통과(정책별 길이, `Completed`·`Stopped`·`Interrupted`, 히트박스 창 닫힘, 정책 직렬화) | 빌드 오류 수정 후 재실행 대기 |
+| 1-B | **사용자 보고: 어느 정책에서도 1초에 Completed** | `TestScene`에서 공격 시 콘솔 `ActionTimeline` 로그의 `Session N ended: Completed at`이 약 0.05초(현재 `Test.bamtimeline.json`), 경로가 `Test.bamtimeline.json`이다. 1초 근처면 로그 전체를 보고한다 | 원인 미확정 |
+| 1-B | 패널에서 종료 시점을 고정 길이로 바꿔 저장 | 타임라인 핫 리로드 알림이 뜨고, 다음 공격이 0.4초에 끝난다(에디터 재시작 없이) | 대기 |
+| 1-B | 종료 시점 콤보 변경·Ctrl+Z | 파란 종료선과 `x초에 종료` 표시가 따라 바뀌고 되돌아간다 | 대기 |
+| 1-B | 그래프 `On Action Timeline Ended` → `Print` | 끝까지 재생 시 `reason` 0, Stop 시 1 | 대기 |
+| 1-B | 기존 타임라인(`BaselineVerification_Hit` 등) | 이전과 같은 길이(약 1.07초)에서 끝난다 | 대기 |
+| 1-C | Graph Binding 피커 목록 | `Assets/Scripts`의 로직 그래프만 있고 `Assets/Shaders/Graphs/NewMaterial_2`는 없다 | 대기 |
+| 1-C | 셰이더 그래프를 피커에 끌어다 놓기 | 거부된다 | 대기 |
+| 1-C | 그래프 선택 후 PIE | 고른 그래프가 실행된다 | 대기 |
+| 1-C | 콘텐츠 브라우저에서 그래프 이름 변경 | 피커 표시와 PIE 실행이 유지된다. `AssetReferenceCheck` 통과 | 대기 |
+| 1-C | Ctrl+Z | 이전 그래프로 돌아간다 | 대기 |
+| T1-a | `TerrainDataCheck` | 통과(한글 경로 왕복, R16 오차, 손상·잘린 파일 거부, 기본 경로 이름) | 대기 |
+| T1-a | 지형을 스컬프트·페인트하고 씬 저장 | 씬 옆에 `<씬>_Terrain_<ID>.bamterrain`이 생기고 씬 JSON의 `DataPath`가 그 파일을 가리킨다 | 대기 |
+| T1-a | 에디터 재시작 후 씬 열기 | 높이와 스플랫이 저장 시점과 같다 | 대기 |
+| T1-a | 이전 씬(`DataPath` 없음) 열기 | 오류 없이 열리고 기존 기본 형태가 보인다 | 대기 |
+| T1-a | 독립 Client 실행 | 같은 지형이 보인다(패키징에 `.bamterrain` 포함 여부도 확인) | 대기 |
+| T1-a | 스컬프트 → Ctrl+Z → 저장 → 재시작 | 되돌린 상태가 저장되어 있다 | 대기 |
+| T1-b | `TerrainDataCheck`의 `CheckUnsavedTerrainPreservation` | 통과 | 대기 |
+| T1-b | 지형을 스컬프트하고 **저장하지 않은 채** PIE 시작 → 종료 | 스컬프트한 높이가 그대로 남는다(마지막 저장 상태나 기본 형태로 돌아가지 않는다) | 대기 |
+| T1-b | 저장한 적 없는 새 씬의 지형으로 위 항목 반복 | 같다 | 대기 |
+| T1-b | 스컬프트 후 자동 저장 주기를 기다린 뒤 에디터 강제 종료 → 재시작 → 복구 | 복구한 지형이 스컬프트한 상태다. `Temp/`(복구 폴더)에 `AutoSave_<씬>_Terrain_<ID>.bamterrain`이 있다 | 대기 |
+| T1-b | 복구 후 씬 저장 | 원래 `.bamterrain`(씬 옆)에 쓰이고, 씬 JSON의 `DataPath`가 복구 폴더를 가리키지 않는다. `RecoveryDataPath`는 빈 값이다 | 대기 |
+| T1-b | 원본 파일 보호 | 자동 저장만 일어나고 씬을 저장하지 않았을 때 씬 옆 `.bamterrain`의 수정 시각이 바뀌지 않는다 | 대기 |
+| T1-c | `TerrainDataCheck`의 `CheckHeightmapImportExport` | 통과 | 대기 |
+| T1-c | 지형 편집기 → 하이트맵 내보내기(PNG) | 16비트 그레이스케일 PNG가 생기고 외부 이미지 도구(예: GIMP)에서 16비트로 열린다. 완료 알림이 뜬다 | 대기 |
+| T1-c | 내보낸 PNG를 다시 가져오기 | 지형 모양이 같고 경사면에 8비트 계단이 보이지 않는다 | 대기 |
+| T1-c | RAW(`.r16`)로 내보내기·가져오기 | 위와 같다. 파일 크기 = (해상도+1)² × 2바이트 | 대기 |
+| T1-c | 한글 폴더·파일 이름으로 내보내기·가져오기 | 성공한다 | 대기 |
+| T1-c | 기존 8비트 PNG 하이트맵 가져오기 | 이전처럼 가져와진다 | 대기 |
+| T1-c | 가져오기·초기화 후 Ctrl+Z / Ctrl+Y | 이전 지형으로 돌아가고 다시 적용된다. 편집 메뉴에 "하이트맵 가져오기"·"지형 초기화"가 보인다 | 대기 |
+| T1-c | 이미지가 아닌 파일 가져오기 | 경고 알림이 뜨고 지형이 바뀌지 않으며 이력에 남지 않는다 | 대기 |
+| T1-d | 새 지형 엔티티 만들기(계층 → 지형) | 인스펙터의 머티리얼이 `TerrainMaterial`(엔진)이고 지형이 바로 보인다 | 대기 |
+| T1-d | `Assets/Material/TerrainMaterial.bammat.json`을 임시로 다른 폴더에 옮긴 뒤 기존 지형 씬 열기 | 지형이 엔진 기본 머티리얼로 보이고, 머티리얼 로드 오류가 매 프레임 반복되지 않는다. 확인 후 파일을 되돌린다 | 대기 |
+| T1-d | 기존 씬(Assets 머티리얼 참조) 열기 | 이전과 같은 모양이다 | 대기 |
+| T1-d | Client 일반 파일 패키지 만들기 | 패키지 `Assets` 아래에 씬의 `.bamterrain`과 `Engine/Resources/Material/TerrainMaterial.bammat.json`이 있고, 실행하면 지형이 저장한 모양이다 | 대기 |
+| T1-d | Client pak 패키지 | 지형 밖 기존 한계(pak 리소스 로더 없음). 확인만 하고 결과를 기록한다 | 참고 |
+| T2-a | `TerrainDataCheck`의 `CheckLayersAndAttributes` | 통과(해상도 상한, v2 왕복, v1 호환, 이동·회전 지형 페인트 위치·정규화, 속성 페인트, 해상도 변경) | 대기 |
+| T2-a | T1에서 저장한 지형 씬(`.bamterrain` v1) 열기 | 높이·스플랫이 그대로 보인다. 다시 저장하면 파일이 v2가 되고(크기 증가: 정점당 5바이트) 다시 열어도 같다 | 대기 |
+| T2-a | 인스펙터에서 지형 해상도 입력 | 1024보다 크게 넣을 수 없다. 1024로 바꾸면 지형이 다시 만들어지고 높이가 리샘플링된다 | 대기 |
+| T2-a | 해상도를 바꾼 뒤 저장·재시작 | 바뀐 해상도와 높이가 유지된다 | 대기 |
+| T2-b | 지형 편집기 열기 → 지형 선택 | `브러시: 꺼짐` 버튼과 `조형`·`레이어 페인트`·`속성 페인트` 도구 버튼이 보이고, 선택한 도구가 강조된다 | 대기 |
+| T2-b | 브러시 켜기 → 조형 도구로 드래그 | 이전과 같이 높이가 바뀐다(초록 링). Ctrl+Z 메뉴 이름이 "조각" | 대기 |
+| T2-b | 레이어 페인트 → 레이어 2 선택 → 드래그 | 칠한 곳이 레이어 2(암석) 색으로 바뀐다(파란 링). 놓을 때 이력 1건 "레이어 페인트", Ctrl+Z로 되돌아간다 | 대기 |
+| T2-b | 지형을 이동·회전한 뒤 페인트 | 링 중심(커서 아래)에 칠해진다 | 대기 |
+| T2-b | 레이어 5~8 선택 | (T2-e에서 대체) 경고 없이 칠한 색이 보인다 | T2-e 참고 |
+| T2-b | 속성 페인트(이동 불가) 드래그 | 화면 변화는 없고(주황 링) 이력 1건 "속성 페인트"가 남는다. 저장 후 `.bamterrain` 수정 시각이 바뀐다 | 대기 |
+| T2-b | 뷰포트에 포커스를 두고 숫자 1~8 | 페인트 도구에서만 팔레트 선택이 바뀐다. 조형 도구이거나 브러시가 꺼져 있으면 다른 동작에 쓰이거나 무시된다 | 대기 |
+| T2-b | `[`·`]` 누르고 있기 | 브러시가 켜져 있을 때 반경이 1~100 사이에서 연속으로 줄고 는다 | 대기 |
+| T2-b | 단축키 설정 창 | "지형 편집기" 분류에 10개 동작이 있고, 재바인딩하면 팔레트·반경 툴팁의 키 표시가 바뀐다. 기존 동작과 충돌 경고가 없다 | 대기 |
+| T2-b | 텍스트 입력 중(검색창 등) 숫자 입력 | 레이어 선택이 바뀌지 않는다 | 대기 |
+| T2-b | 한국어·영어 전환 | 새 문구가 두 언어로 보인다 | 대기 |
+| T2-c | 속성 페인트 도구로 이동 불가·물 칠하기 | 칠한 정점에 빨강·파랑 점이 보이고, 커서를 지형 밖으로 옮겨도 유지된다. 지우기로 칠하면 점이 사라진다. 다른 도구로 바꾸면 점이 숨는다 | 대기 |
+| T2-c | 지형을 이동·회전한 뒤 속성 점 | 점이 지형 표면 위치에 붙어 있다 | 대기 |
+| T2-c | 해상도 1024 지형에서 속성 페인트 | 프레임 시간 측정(점 표시 비용). 느리면 보고 | 측정 필요 |
+| T2-c | 이전 씬(`Layers` 없음) 열기 | 오류 없이 열리고 목록이 비어 있다 | 대기 |
+| T2-d | `TerrainDataCheck`의 `CheckTerrainLayerAsset` | 통과(한글 파일명 저장 왕복, 키 유지, 표시 이름, 확장자 판정) | 대기 |
+| T2-d | 콘텐츠 브라우저 우클릭 → 만들기 → 지형 레이어 | `NewTerrainLayer.bamterrainlayer.json`이 생기고 이름 바꾸기 상태가 된다. 초록 레이어 아이콘·"LAYER" 배지 | 대기 |
+| T2-d | 그 파일 더블클릭 | 지형 레이어 편집기가 열리고 알베도 텍스처·반복 길이·이동 가능·이동 비용·표면 종류를 편집할 수 있다 | 대기 |
+| T2-d | 값 변경 → Ctrl+Z / Ctrl+Y → Ctrl+S | 되돌리기·다시 실행이 되고, 저장하면 미저장 표시가 사라지며 파일에 반영된다 | 대기 |
+| T2-d | 미저장 상태로 편집기 닫기 | 저장·버리기 확인이 뜬다 | 대기 |
+| T2-d | 지형 컴포넌트 → 레이어 목록 `+` → 칸의 에셋 피커 | 지형 레이어 에셋만 목록에 보이고 고를 수 있다. 끌어다 놓기도 된다 | 대기 |
+| T2-d | 레이어 에셋 이름을 "잔디"로 바꾸고 칸에 지정 | 지형 편집기 팔레트 칸이 "잔디"로 보이고, 선택 시 에셋 설정 요약이 보인다. 에셋이 없는 칸은 "레이어 N"과 지정 안내 | 대기 |
+| T2-d | 두 지형이 같은 레이어 에셋을 참조한 상태에서 에셋의 이동 비용을 바꿔 저장 | 핫 리로드 알림이 뜨고 두 지형 팔레트 요약이 모두 바뀐다(에디터 재시작 없이) | 대기 |
+| T2-d | 씬 저장·재시작 | 지형 칸의 에셋 참조가 유지된다 | 대기 |
+| T2-d | 레이어 에셋을 콘텐츠 브라우저에서 이동·이름 변경 | 지형 칸의 참조가 끊기지 않는다(기존 리소스 핸들 경로). 끊기면 보고 | 대기 |
+| T2-d | 한국어·영어 전환 | 새 문구(만들기 메뉴, 편집기 제목·안내, 알림)가 두 언어로 보인다 | 대기 |
+| T2-e | 셰이더 빌드 | `terrainPS.hlsl` 컴파일 경고·오류가 없다(특히 분기 안 텍스처 읽기 경고) | 대기 |
+| T2-e | 레이어 에셋이 없는 기존 지형 씬 열기 | 이전과 같은 색(잔디·암석·흙)과 무늬 크기로 보인다. 절벽은 암석 색 | 대기 |
+| T2-e | 레이어 5~8을 칠하기 | 칠한 곳에 해당 칸 기본 색(파랑·노랑·보라·흰색 계열)이 바로 보인다. 저장·재시작 후에도 같다 | 대기 |
+| T2-e | 레이어 에셋에 알베도 텍스처 지정 후 저장 | 그 레이어를 칠한 곳에 텍스처가 보이고, 같은 에셋을 쓰는 다른 지형에도 바로 반영된다 | 대기 |
+| T2-e | 레이어 에셋의 반복 길이를 1m·20m로 바꿔 저장 | 무늬 크기가 바뀐다 | 대기 |
+| T2-e | 두 레이어 경계 | 경계에서 텍스처가 반짝이거나 줄무늬가 생기지 않는다(`SampleGrad`) | 대기 |
+| T2-e | 지형을 이동·회전 | 레이어 무늬는 월드 XZ 기준이라 지형을 옮기면 무늬가 미끄러진다(이전과 같은 동작, 결함 아님) | 참고 |
+| T2-e | 그림자·피킹·TAA 켠 상태 | 지형 그림자·선택·모션 벡터가 이전과 같다 | 대기 |
+| T2-e | Vulkan·SDL GPU 백엔드(있으면) | 지형이 그려지는지 확인. 지형 상수 256바이트를 받지 못하면 보고 | 미확인 |
+| T2-e | 프레임 시간 | 레이어 8개를 고르게 칠한 넓은 지형에서 G-Buffer 패스 시간을 칠하기 전과 비교 | 측정 필요 |
+| T3-a | 셰이더 빌드 | `terrainVS`·`terrainShadowDepthVS`·`motionVectorTerrainVS`·`terrainPS` 컴파일 오류·경고가 없다 | 대기 |
+| T3-a | 지형이 있는 씬 | 높이·레이어 색이 T2-e와 같다(바인딩 이동 전후 차이 없음) | 대기 |
+| T3-a | 지형 그림자 | 지형이 그림자를 드리우고 받는다(`terrainShadowDepthVS`가 새 슬롯의 높이맵을 읽음). 평평한 판 모양 그림자면 실패 | 대기 |
+| T3-a | TAA 켜고 지형 이동 | 잔상이 없다(`motionVectorTerrainVS`) | 대기 |
+| T3-a | 스컬프트·페인트 직후 | 높이·색이 바로 바뀐다(업로드한 텍스처가 새 슬롯에 묶임) | 대기 |
+| T3-a | 그래픽스 디버거(PIX 등, 가능하면) | 지형 드로우에서 `t0`~`t7, space1`에 지형 텍스처가 없고, `t8`~`t10, space3`에 높이맵·스플랫 두 장이 있다 | 선택 |
+| T3-a | Vulkan·SDL GPU 백엔드(있으면) | 지형이 그려지는지 확인 | 미확인 |
+| T3-b1 | `ShaderGraphCheck` | 통과(지형 도메인 사례 포함) | 대기 |
+| T3-b1 | 셰이더 빌드 | `terrainLayers.hlsli`를 포함한 `terrainPS.hlsl`이 경고·오류 없이 컴파일된다 | 대기 |
+| T3-b1 | 지형이 있는 씬 | T3-a와 같은 모양이다(`terrainPS`를 공용 헤더로 다시 썼지만 동작은 같아야 함). 레이어 0만 칠한 곳, 여러 레이어 경계, 절벽 | 대기 |
+| T3-b1 | 머티리얼 편집기의 그래프 노드 목록 | "지형 레이어 가중치/샘플/합성", "지형 경사", "지형 높이" 노드가 보인다. 일반(G-Buffer) 머티리얼에 연결하고 컴파일하면 "지형 노드는 지형 머티리얼에서만…" 오류가 뜬다 | 대기 |
+| T3-b2 | 엔진 `TerrainMaterial` 인스펙터 | "머티리얼 도메인"이 "지형"으로 보인다. 다른 머티리얼은 "표면" | 대기 |
+| T3-b2 | `TerrainMaterial`을 프로젝트로 복제 → 셰이더 그래프 연결 → 지형 노드(레이어 합성 → baseColor) 컴파일 | 컴파일 성공. 생성된 PS가 `terrainLayers.hlsli`를 포함해 DXC로 컴파일된다(오류 시 메시지 기록) | 대기 |
+| T3-b2 | 그 머티리얼을 지형 컴포넌트에 지정 | 지형 높이·레이어가 기존과 같게 보인다. 그림자도 그대로 | 대기 |
+| T3-b2 | 그래프에서 `Terrain.LayerSample(1)` → baseColor로 바꿔 실시간 반영 | 지형 전체가 레이어 1 색으로 바뀐다(에디터 재시작 없이) | 대기 |
+| T3-b2 | `Terrain.Slope`를 roughness나 baseColor 혼합에 연결 | 경사에 따라 결과가 바뀐다 | 대기 |
+| T3-b2 | 지형 머티리얼의 주 패스를 ForwardTransparent로 바꾸고 컴파일 | "지형 머티리얼은 지오메트리 패스를 써야 합니다" 오류 | 대기 |
+| T3-b2 | 일반 머티리얼에서 그래프 컴파일 | 이전과 같이 VS·PS를 만든다(회귀 없음) | 대기 |
+| T3-b2 | 지형 머티리얼 미리보기(구) | 지형 모양이 보이지 않는 것은 알려진 한계(실제 지형에서 확인) | 참고 |
+| T3-c | `ShaderGraphCheck` 기본 지형 그래프 사례 | 통과 | 대기 |
+| T3-c | 지형 도메인 머티리얼에서 "셰이더 그래프 만들기" | 새 그래프에 레이어 합성·레이어 샘플(1)·경사·smoothstep·빼기·lerp 두 개·상수 세 개가 연결된 상태로 열린다. 노드가 겹치지 않게 놓인다 | 대기 |
+| T3-c | 그 그래프를 컴파일해 지형에 지정 | 엔진 기본 지형 머티리얼과 나란히 비교해 색·절벽 전환·거칠기(반사 하이라이트)가 같다 | 대기 |
+| T3-c | 표면 머티리얼에서 "셰이더 그래프 만들기" | 이전처럼 출력 노드 하나만 있다 | 대기 |
+| CTest 수정 | `ShaderGraphCheck`·`NavigationAICheck` 재실행 | 둘 다 통과한다(위 표의 T3-b1·T3-c 사례와 디스토션·지형 내비게이션 사례 포함). `NavigationAICheck`는 경로 우회·`.bamnavgrid` 저장 왕복까지 이어서 확인한다. 또 실패하면 `LastTest.log`의 마지막 메시지를 기록한다 | 대기 |
+| T3-c | T3 완료 기준 | 그래프 노드 값(예: smoothstep 0.55→0.3)을 바꾸면 지형 절벽 범위가 바로 바뀌고, 그림자·클릭 선택이 이전과 같다 | 대기 |
+| T4 | `NavigationAICheck` | 통과(기존 테스트 + 지형 바운드·급경사·`Blocked` 우회 경로·한글 경로 `.bamnavgrid` 저장/로드 왕복) | 대기 |
+| T4 | 지형(급경사 + `Blocked` 페인트) 씬에서 뷰포트 NavGrid 베이크 버튼 클릭 | 한국어 툴팁·알림이 표시되고, 오버레이가 지형 높이를 따라 그려지며 경사/Blocked 영역이 적색(장애물)으로 표시된다 | 대기 |
+| T4 | 베이크 후 씬 저장 → 에디터 재시작/씬 재로드 | `<씬이름>_NavGrid.bamnavgrid`가 생성되고, 재베이크 없이 오버레이와 `NavAgent` 우회 경로가 유지된다 | 대기 |
+| V1 | `ShaderGraphCheck` (11절 7종) | 통과(강도 0 무왜곡, 왜곡 오프셋, 미연결 폴백, 화면 밖 배경 폴백, 채널 분리, GBuffer/VS 거부) | 대기 |
+| V1 | `ForwardTransparent` 머티리얼 그래프에서 `Shader.ScreenUV` + `Shader.SceneColor` 연결 | 강도 0에서 배경 왜곡이 없고, UV 오프셋 시 왜곡되며 화면 밖 UV에서 가장자리 늘어짐(Streak) 없이 원본 배경을 사용한다 | 대기 |
+| B-5 | `GenerateLocalization` 및 한/영 언어 전환 | `SettingsPanel`(오디오 믹서), `UnifiedSettingsPanel`(검색창), `BuildProfilePanel`(BamPak 요약·빈 빌드 로그 중앙 정렬), `AnimationTimelinePanel`(카메라 컷/스플라인 인스펙터·트랙 추가/복제) 문구가 두 언어로 깨짐 없이 표시된다 | 대기 |
+| Pak | `PakArchiveCheck` (`TestLoaderPakFallbackAndTerrain`) & `SceneArchiveCheck` | 통과(가상 URI·물리 경로 `ExistsOrOnDisk`, 팩 우선 + 디스크 폴백, JSON `LoadArchiveWithFallback`, 디스크 원본 삭제 후 `.bamterrain` v2 pak 로드, 변조 팩 디스크 폴백 차단) | 대기 |
+| Pak | Client pak 패키징본 실행 (`Assets/` 원본 제거 상태) | 씬·텍스처·머티리얼·셰이더·`.bamterrain`이 `.bampak`에서 정상 로드되어 렌더링된다 | 대기 |
+| A-1 | `BAMENGINE_WITH_EDITOR=ON`/`OFF` 빌드 | `ResourceManager::GetDebugSnapshot()` `#if BAM_EDITOR` 스텁 전환 후 양 구성에서 Engine·Editor·Client 빌드·링크 성공 | 대기 |
+| A-2 | IBL 큐브맵 할당 씬(`RenderingFeatureLab`) 첫 프레임 | 이미 `992de2bd`에 해소 반영됨. `DirectX12RHI` 패스 내 업로드 거부 로그 없이 IBL 반사/조명 정상 출력 확인 | 대기 |
+| A-3 | `.bampak` 마운트 상태에서 AnimatorController·Graph JSON·Localization JSON·AsyncResourceLoader 로드 | 디스크 원본 없이 pak에서 정상 로드되고, 미마운트 시 기존 디스크 폴백이 동작한다 | 대기 |
+| A-4 | `VFXBlendAndPassCheck` 및 `PureAdditive` 머티리얼 | 통과(`One/One` vs `SrcAlpha/One` 보존, `VFXPassHelper` 필터 일치) 및 머티리얼 에디터 드롭다운 한/영 표시 | 대기 |
+| B-1 | `VirtualPathCheck` 및 프로젝트 A↔B 전환·독립 모듈 핫리로드 | `ResolveModules`/`ResolvePrimaryRuntimeModule` 통과, 기존 루트 `GameModule.dll` 하위 호환, 외부 프로젝트 `Source/` 수정 시 자동 빌드·리로드 및 Client Export DLL 로드 확인 | 대기 |
+| B-2 | `raytracedShadowMaskRTCS.hlsl` 컴파일·`RaytracingSkinnedPolicyCheck` 및 `RenderingFeatureLab` | 셰이더 컴파일·`SortSkinnedByDistance` 통과, `Masked` 재질 DXR 그림자 알파 컷아웃 및 스킨드 32개 초과 시 근접 캐릭터 우선 유지 | 대기 |
+
+**커밋 전 주의:** 1-A는 커밋 `cda1467f`로 main에 있다. 1-B·1-C·T1(a~d)·T2(a~e)·T3(a~c)·T4·V1·B-5·Pak 로더 연결은 미커밋이다. 새 파일 `Engine/Source/Terrain/{Public,Private}/TerrainDataFile.*`·`TerrainLayerAsset.*`, `Editor/Source/ImGui/ResourceEditor/{Public,Private}/TerrainLayerEditor.*`, `Engine/Resources/Material/TerrainMaterial.bammat.json`, `Engine/Resources/Shader/hlsl/terrainLayers.hlsli`도 커밋 대상이다. 메인 워크트리에는 MultiProject/ProjectHub 변경과 `Engine.csv`의 타 작업 행이 혼재되어 있으므로 커밋 시 기능 단위로 선별 스테이징한다.

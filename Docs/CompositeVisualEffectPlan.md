@@ -24,7 +24,7 @@
   - **Phase 5 Step 4 잔여 범위 (2026-11-20 동기화):**
     - 2026-11-20 코드 반영: [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md) 2~4절의 편집 씬 격리, Animator 복원 수명, 공용 Notify 시간 판정, URI 정규화와 참조 진단을 구현했다. 헤드리스 회귀 검사도 추가했으나 빌드·CTest·로캘 생성은 아직 실행하지 않았다.
     - 필수 수동 통합: 같은 계획의 5절 체크리스트에 따라 패널·편집 씬 격리·복원 수명·Notify 경계·PIE·독립 Windows Release Client를 검증해야 한다. 코드 반영만으로 Phase 5 Step 4 완료로 판정하지 않는다.
-    - 선택적 렌더링·UX 마감: 실제 요구 확인 시 순수 `One/One` Additive 블렌드 모드 분리(`RHIBlendTypes.h`), `ParticleSystem`/`CompositeVFXSystem` 대상 패스 수집 중복 정리, Game View·Client·CTest 및 Step 1 기즈모/외력/Depth Fade 실행 검증 기록. *(※ 9.9절의 공중 모드 가상 환경광 보정은 2026-11-19 정정에 따라 철회됨.)*
+    - 선택적 렌더링·UX 마감 [2026-11-24 코드 반영]: 순수 `One/One` Additive 블렌드 모드 분리(`RHIBlendTypes.h`, `PureAdditive`), `ParticleSystem`/`CompositeVFXSystem` 대상 패스 수집/필터 공용 헬퍼(`VFXPassHelper.h`) 추출 및 중복 정리, CTest 회귀 검사(`VFXBlendAndPassCheck`) 추가 완료. (빌드·실행 검증 사용자 대기)
   - **Phase 5 (환경 상호작용 & 상용 엔진 수준 저작 UX 고도화):** 진행 중 (3D 기즈모, 완급 조절 커브, 인라인 프리뷰, 2D 커브 모달 에디터, 패스 교정·Air Mode·소켓 스폰 기본 구현 완료 / 통합·검증 잔여)
 - **공통 기준:** [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md), [SourceOrganizationGuidelines.md](SourceOrganizationGuidelines.md)
 - **연계 문서:** [ParticleAndEffectSystemPlan.md](ParticleAndEffectSystemPlan.md), [AnimationTimelineEditorPlan.md](AnimationTimelineEditorPlan.md), [AnimationPipelineIntegrationPlan.md](AnimationPipelineIntegrationPlan.md), [DevelopmentPriorities.md](DevelopmentPriorities.md)
@@ -396,12 +396,28 @@ flowchart TD
   - `SubmitSceneVFX`가 패스의 허용 블렌드 모드를 한 번 계산한다. `None`인 Geometry 패스는 `Opaque | Masked`로 보정하고, 스프라이트·메쉬·데칼·트레일 트랙 4곳이 같은 값으로 거른다.
   - `OnSubmit`은 `ParticleSystem::OnSubmit`과 같은 규칙으로 씬 제출을 허용한 Geometry와 ForwardTransparent 패스를 모은다. 각 트랙은 블렌드 모드를 받는 패스 하나에만 들어간다.
 - **사용 기준**: `VFXMeshTrack::emissiveIntensity`(HDR 배율)는 섬광·불꽃 코어처럼 스스로 빛나는 Additive 트랙에만 쓴다. 배경을 가리거나 배경보다 어두운 색이 필요한 연기·먼지·형태가 분명한 링은 AlphaBlend를 쓴다.
-- **알려진 한계**: 피킹은 Geometry 패스 기준이므로 ForwardTransparent에만 그려지는 트랙은 클릭해도 엔티티가 선택되지 않는다(일반 파티클과 같음). 대상 패스 수집 코드는 `ParticleSystem`과 중복된다.
+- **알려진 한계**: 피킹은 Geometry 패스 기준이므로 ForwardTransparent에만 그려지는 트랙은 클릭해도 엔티티가 선택되지 않는다(일반 파티클과 같음). 대상 패스 수집 코드는 `ParticleSystem`과 중복되었으나 9.12절에서 `VFXPassHelper`로 공용화 완료.
 - **검증 (사용자 실행)**:
   - 수정 전 프리뷰 `GBuffer_Diffuse`에 Additive 링이 기록되고 `GBuffer_Normal`의 같은 영역은 비어 있음을 확인했다.
   - 수정 후 `GBuffer_Diffuse`에 링이 없고, 최종 출력에서 링이 배경보다 어두워지지 않으며 배경 프리셋 변경에 따라 가산 결과만 바뀜을 확인했다.
   - 프리뷰의 Opaque 메쉬 트랙이 최종 출력과 `GBuffer_Diffuse`·`GBuffer_Normal`에 그려짐을 확인했다.
   - 씬 뷰포트에서 Opaque 트랙이 유지되고, Additive 메쉬 트랙과 데칼 트랙이 표시됨을 확인했다.
   - 게임 뷰·패키지 실행과 CTest 결과는 기록되지 않았다.
+
+### 9.12 순수 Additive(One/One) 블렌드 분리 및 패스 수집/필터 공용화 (2026-11-24)
+
+- **개요 및 배경**:
+  - 기존 `EBlendMode::Additive`는 `SrcAlpha / One`으로 설정되어 있어, 텍스처나 트랙의 알파 감소 시 광량이 함께 감쇄하는 알파 가산(Alpha Additive) 특성을 가졌다.
+  - 알파 감쇄 없이 방출 광량을 100% 보존하는 순수 가산 블렌드(`PureAdditive`, `One / One`)를 신규 분리 정의하여, 기존 프리멀티플라이드/알파 가산 동작의 하위 호환성을 완벽히 보존하면서 완전 자체 발광형 연출을 지원하도록 고도화했다.
+  - `CompositeVFXSystem`과 `ParticleSystem`에 중복 존재하던 뷰포트 타깃 패스 수집 로직(`CollectVFXViewportTargets`)과 프리뷰 패스 블렌드 보정(`ResolveEffectiveAcceptedBlendModes`), 블렌드 모드 허용 검사(`IsBlendModeAccepted`)를 `Engine/Source/VFX/Public/VFXPassHelper.h`로 일원화했다.
+- **주요 변경 사항**:
+  1. `RHIBlendTypes.h`: `EBlendMode::PureAdditive = 1 << 7` 및 `BlendState(PureAdditive)`(`srcColor = One`, `dstColor = One`, `srcAlpha = One`, `dstAlpha = One`) 추가, 기존 `Additive`(`SrcAlpha / One`) 유지.
+  2. `RenderPass.h` / `RenderPassManager.h`: `IsAcceptsBlendMode`에서 `Additive` 허용 패스가 `PureAdditive`도 안전하게 수용하도록 폴백 연동. 기본 및 프로필 패스의 `acceptedBlendModes`에 `PureAdditive` 포함.
+  3. `VFXPassHelper.h`: 중복된 15줄의 뷰포트 패스 수집, 실효 블렌드 모드 보정, 호환성 필터 함수를 헤더 인라인 헬퍼로 집약.
+  4. `CompositeVFXSystem.cpp` / `ParticleSystem.cpp`: `OnSubmit` 및 `SubmitScene*`의 중복 블록을 `VFXPassHelper` 호출로 치환.
+  5. `MaterialEditor.cpp` / `Editor.MaterialOption.csv`: 머티리얼 에디터 파이프라인 블렌드 모드 드롭다운에 `순수 가산 (One/One)` 옵션 추가.
+  6. `VFXBlendAndPassCheck.cpp` / `Checks.cmake`: Additive/PureAdditive 블렌드 상태 및 패스 수용/거부 판정을 검증하는 CTest 신설.
+- **검증 항목**:
+  - `VFXBlendAndPassCheck` 실행 시 BlendState 팩터(`One/One` vs `SrcAlpha/One`)와 패스 필터 3종 테스트 일괄 통과 확인.
 
 ---

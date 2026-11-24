@@ -2,6 +2,165 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-24] P2 차기 개발·트랙 1(스탠드얼론 Client/지형·머티리얼 실환경 수정)·트랙 2(에디터 UI/UX 공통화)·멀티 프로젝트 Phase 5·DXR M3 통합 반영
+
+- **요약**:
+  1. **지형 확장(T1~T4) 및 머티리얼/렌더(V1·DXR M3)**:
+     - 지형 데이터(`.bamterrain`)·레이어 에셋(`.bamterrainlayer.json`)·지형 셰이더 그래프 도메인(`terrainLayers.hlsli`) 및 **T4 지형 대응 `NavGrid`**(경사각·`Blocked`·레이어 비용 반영, `.bamnavgrid` 저장/복원, 150m 거리 스트라이드 오버레이) 구현.
+     - `ShaderCompiler`에 `Engine://Shader/hlsl` `-I` include 경로 전달, `TerrainComponent::TerrainMaterial`의 `MaterialInstance` 수용 및 자체 그래프 폴백, `PreviewViewportWidget` 더미 높이맵 프리뷰 렌더링 보완.
+     - **V1 디스토션 1단계**: `ForwardTransparent` 전용 `Shader.ScreenUV`·`Shader.SceneColor` 노드(강도 0 무왜곡, 화면 밖 UV 원본 배경 폴백) 추가.
+     - **Render M3 후속**: `Masked` 알파 테스트 재질 DXR 그림자 지원(`raytracedShadowMaskRTCS.hlsl`) 및 카메라 거리 기준 스킨드 메시 우선순위(`SortSkinnedByDistance`) 적용.
+  2. **`.bampak` 로더 연결 & 독립 Client 스탠드얼론 수정(P2-4, A-3, 트랙 1)**:
+     - `PakMountManager`에 `ToPakUri`, `ExistsOrOnDisk`, `ReadBytesWithFallback`(무결성 실패 시 디스크 폴백 차단), `LoadArchiveWithFallback`을 추가하고 `ResourceManager`, `Texture`, `DirectX12Shader`, `SceneManager`, `TerrainDataFile`, `StartupResourceLoader`, `RenderPipelineProfileFile`, `ResourcePreloader`, `AnimatorStateMachine`, `GraphFile`, `LocalizationManager`, `AsyncResourceLoader`에 연결.
+     - `Client/Main.cpp`·`ClientGameRuntime.cpp`·`PlatformPath.cpp`: 작업 디렉터리/루트 고정, `Editor://` 오분류 방지, 패키지 `Mounts/` 자동 등록, `LoadStartupScene` 가상 URI 폴백 수정.
+     - `AssetReferenceValidator.cpp`: 코드 생성 내장 리소스(`DefaultBRDFLut`, `PostProcess_*`, `ToneMappingMaterial` 등) 예외 보강, `.git`/`Temp`/`Logs`/`out` 스캔 제외 및 중복 `fs::canonical` 제거, `AssetReferenceCheck` check 51 빈 픽스처 수정.
+  3. **액션 타임라인·로직 그래프·`ResourceManager` `#if BAM_EDITOR`·멀티 프로젝트 Phase 5 (1-A~1-C, A-1, B-1)**:
+     - `ActionTimelineAsset`/`ActionTimelineSystem`: `EndPolicy`(`Fixed`/`ClipLength`/`LastTrackEnd`) 및 `On Action Timeline Ended` 이벤트 추가, `GraphBindingComponent::graphFile` 로직 그래프 피커 적용.
+     - `ImGuiManager`: 미저장 씬이 열려 있어도 메모리 상 참조 0건인 에셋의 이름 변경·이동 허용.
+     - `ResourceManager::GetDebugSnapshot()` `#if BAM_EDITOR` 및 `BAM_EDITOR == 0` 안전 스텁 전환.
+     - **멀티 프로젝트 Phase 5**: `ProjectDescriptor::ResolveModules`, `ModuleBuildManager` 동적 타깃·외부 프로젝트 자동 configure(`BamEngineConfig.cmake`), `HotReloadManager::RebindForProject`, `ProjectSessionManager::SwitchProject` 모듈 언로드/재로드 연동, `ClientPackage`/`Client/Main.cpp` 모듈 DLL 스테이징·로드.
+  4. **에디터 UI/UX 공통화 & 로캘 일관성 (B-5, 트랙 2)**:
+     - `EditorUI::TextButton`/`TextButtonRaw`(자동 너비, `IconButton` 높이 통일, `SameLine` 자동 개행, `Default`/`Primary`/`Danger` 스타일, 툴팁·단축키 힌트) 도입 및 `TerrainEditor`, `BuildProfilePanel`, `NetworkProfilerPanel`, `UnifiedSettingsPanel`, `SettingsPanel`, `SpriteEditor`, `TextureInspector`, `CameraViewportPanel`, `PreviewViewportWidget` 치환.
+     - `BuildProfilePanel`: 상단 요약 액션 바 + `Editor::DrawSidebarLayout` 확장형 좌측 사이드바(`General & Output`, `Scenes` 순서/인덱스 재배치, `Assets` 폴더 일괄 추가, `Packaging & BamPak`, `Build Log`) 개편.
+     - `ReflectionPropertyDrawer`: `Vector`/`Array`/`Set`/`Map` 컨테이너 및 `mat3`/`mat4` 행렬 `ImGui::BeginTable` 정렬, 읽기 전용 긴 경로(`DataPath`, `RecoveryDataPath`) 선택·복사 및 잘림 툴팁(`DrawClippedStringTooltip`) 추가.
+     - `EntityHierarchyView` UTF-8 `...` 말줄임+툴팁, `ContentBrowserGridItem` 자물쇠 배지 폰트 비례 중앙 정렬, `PostProcessPanel` 미세 가로 스크롤 제거.
+     - 로캘 CSV 보완 및 `LocalizationManager::TranslateLogMessage`·`ConsolePanel::OnLanguageChanged` 실시간 콘솔 로그 재번역 적용.
+- **검증 상태**:
+  - `x64-ninja-debug` 빌드 및 CTest(10종 + `RLSimulationCheck`) 통과 후 `AssetReferenceCheck` check 51 수정 반영.
+  - 이후 추가 반영된 트랙 1(로그 분석 조치, 이름변경 최적화, 빌드패널 사이드바, 프로퍼티 테이블) 및 트랙 2·`AssetReferenceCheck` 수정분은 재빌드 및 실환경 UI/스탠드얼론 Client 확인 대기([DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절).
+
+### [2026-11-24] 순수 Additive(One/One) 블렌드 분리 및 VFX 패스 수집/필터 공용화 (후보 A-4)
+
+- **배경과 목적**:
+  - 기존 `EBlendMode::Additive`는 `SrcAlpha / One` 블렌드 팩터로 동작하여, 텍스처나 트랙의 Alpha가 감소할 때 방출 광량이 비례하여 감쇄되는 알파 가산(Alpha Additive) 특성을 가졌다.
+  - 알파 감쇄 없이 방출 광량을 100% 보존하는 순수 가산 블렌드(`PureAdditive`, `One / One`)를 신규 분리 정의하여, 기존 프리멀티플라이드/알파 가산 동작의 하위 호환성을 안전하게 유지하면서 완전 자체 발광형 언릿 머티리얼을 지원하도록 고도화했다.
+  - `CompositeVFXSystem`과 `ParticleSystem`에 중복 분산되어 있던 뷰포트 패스 타깃 수집 로직(`CollectVFXViewportTargets`)과 프리뷰 패스 블렌드 보정(`ResolveEffectiveAcceptedBlendModes`), 블렌드 모드 허용 검사(`IsBlendModeAccepted`)를 `Engine/Source/VFX/Public/VFXPassHelper.h`로 일원화했다.
+- **핵심 구현 내용**:
+  1. **`Engine/Source/Render/RHI/Public/RHIBlendTypes.h`**:
+     - `EBlendMode::PureAdditive = 1 << 7` 및 `ALL = (1 << 8) - 1` 추가.
+     - `BlendState(EBlendMode::PureAdditive)` 블렌드 상태 매핑 추가: `srcColor = One`, `dstColor = One`, `colorBlendOp = Add`, `srcAlpha = One`, `dstAlpha = One`, `alphaBlendOp = Add`, `colorWriteMask = RGBA`, `enable = true`.
+     - 기존 `EBlendMode::Additive`(`SrcAlpha / One`)는 그대로 보존하여 기존 에셋 동작 무결성 보장.
+  2. **`Engine/Source/Render/RenderPass/Public/RenderPass.h` / `RenderPassManager.h`**:
+     - `RenderPass::IsAcceptsBlendMode(EBlendMode mode)`에서 `mode == PureAdditive`일 때 패스가 기존 `Additive`를 수용하면 자동으로 허용하는 하위 호환 폴백 지원.
+     - `RenderPassManager::RegisterRenderPass` 기본 허용 블렌드 모드 및 `DeferredProfilePasses.cpp` 포워드 투명 패스에 `PureAdditive` 명시 추가.
+  3. **`Engine/Source/VFX/Public/VFXPassHelper.h` 신설**:
+     - `CollectVFXViewportTargets()`: 활성 카메라 존재 여부, 씬 제출 허용 여부, Geometry/ForwardTransparent 패스 여부 및 중복 제거를 단일 헬퍼로 집약.
+     - `ResolveEffectiveAcceptedBlendModes(renderPass)`: 프리뷰 Geometry 패스의 `None` 블렌드 모드를 `Opaque | Masked`로 보정하는 전파 방어 로직 집약.
+     - `IsBlendModeAccepted(acceptedModes, materialMode)`: 패스의 허용 모드와 머티리얼 모드의 호환성 판정.
+  4. **`Engine/Source/VFX/Private/CompositeVFXSystem.cpp` / `ParticleSystem.cpp`**:
+     - `OnSubmit`의 15줄 중복 타깃 수집을 `VFXPassHelper::CollectVFXViewportTargets()` 한 줄로 치환.
+     - `SubmitScene*`의 실효 블렌드 모드 계산을 `VFXPassHelper::ResolveEffectiveAcceptedBlendModes(renderPass)`로 일원화.
+     - 스프라이트·메시·데칼·트레일 및 이미터 컴포넌트 순회 시의 블렌드 필터를 `VFXPassHelper::IsBlendModeAccepted`로 치환.
+  5. **`Editor/Source/ImGui/ResourceEditor/Private/MaterialEditor.cpp` & `Editor.MaterialOption.csv`**:
+     - 머티리얼 에디터 파이프라인 설정의 블렌드 모드 콤보 박스에 `PureAdditive` 매핑 추가.
+     - `Editor.MaterialOption.csv`에 `MaterialOption,PureAdditive,Pure Additive (One/One),순수 가산 (One/One)` 추가 (JSON 직접 수정 금지 준수).
+  6. **`Engine/examples/VFXBlendAndPassCheck.cpp` 신설 & `Engine/cmake/Checks.cmake` 등록**:
+     - Additive 기존 팩터 보존 및 PureAdditive `One/One` 팩터 검증.
+     - 프리뷰 Geometry 패스 실효 블렌드 모드 보정 검증.
+     - 패스 수용/거부 및 Additive 수용 패스의 PureAdditive 호환 폴백 검증.
+- **검증 상태**:
+  - 코드 정적 분석 및 diff 전수 검토 완료.
+  - 빌드(`cmake`, `msbuild`) 및 CTest 실행은 AI 직접 실행 금지 지침에 따라 사용자 검증 대기.
+
+### [2026-11-24] 멀티 프로젝트 물리 격리 및 외부 폴더 마운트 (Multi-Project & Content Mount Phase 1~4)
+
+- **배경과 목적.** 기존 BamEngine은 엔진 저장소 루트와 단일 프로젝트 루트가 결합되어 있어, 여러 프로젝트 간 에셋(`Assets/`), 설정(`Config/`), 캐시(`.bam/cache/`), 임시/복구 데이터가 단일 작업 공간에 혼재되었다. 또한 공용 에셋 라이브러리나 외부 폴더를 안전하게 참조할 수 있는 마운트 계층이 부재했다. 이를 해결하기 위해:
+  1) `PlatformPath`에서 엔진 루트와 프로젝트 루트를 명시적으로 분리하고, `.bamproject` 매니페스트 및 외부 콘텐츠 가상 마운트(`Mount://<Alias>/...`) 계층을 신설.
+  2) 에디터 프로세스 재시작 없이 활성 프로젝트를 교체할 수 있는 8단계 인-프로세스 핫 스위치 파이프라인(`ProjectSessionManager::SwitchProject`) 및 프로젝트 스코프 리소스 언로드(`ResourceManager::UnloadProjectScopedResources`) 구현.
+  3) 최근 프로젝트 목록(`%APPDATA%/BamEngine/RecentProjects.json`) 및 신규 프로젝트 생성/열기 모달(`ProjectHubModal`), 콘텐츠 브라우저 외부 마운트 탐색 및 관리 UI(`ContentBrowserPanel`) 연동.
+  4) 패키징 파이프라인(`PakFormat.h`, `AssetReferenceValidator`, `ClientPackage`)에서 `Mount://` 가상 URI를 정규 런타임 경로로 지원하여, 참조된 외부 마운트 에셋만 선택적으로 `.bampak`에 패킹되도록 통합.
+- **Phase 1: 경로 시스템 분리 및 `.bamproject` 매니페스트 (`PlatformPath`, `ProjectDescriptor`).**
+  - `PlatformPath`:
+    - `SetEngineRoot(path)` / `GetEngineRoot()` 분리 (미설정 시 `GetProjectRoot()`로 안전한 폴백 제공).
+    - `ContentMountDesc` 구조체 (`Name`, `RootPath`, `ReadOnly`, `ShowUnderAssets`) 정의.
+    - `Mount://<Alias>/...` 가상 마운트 API (`RegisterContentMount`, `UnregisterContentMount`, `ClearContentMounts`, `GetContentMounts`, `HasContentMount`, `IsMountUri`, `ResolveMountUri`, `IsMountReadOnly`) 추가.
+    - `IsVirtualUri`, `ResolveUri`, `ToVirtualUri` 정규화 우선순위(`Project://` -> `Engine://` -> `Editor://` -> `Plugin://` -> `Mount://<Name>/`) 정립 및 상향 경로 탈출 방어(`IsSubpathOf`).
+    - `IsReadOnlyTarget`: `ReadOnly` 마운트의 가상 URI 및 물리 경로 보호.
+  - `Engine::ProjectDescriptor`:
+    - `.bamproject` JSON 스키마 (`SchemaVersion`, `ProjectName`, `EngineVersion`, `AssetDirectory`, `ContentMounts`, `Modules`) 정의 및 Glaze 기반 `LoadFromFile` / `SaveToFile` 구현.
+    - `ResolveAssetRoot`, `ResolveContentMounts`, `FindProjectFile` 탐색/해석 도우미 제공.
+    - `ScaffoldNewProject`: 독립 프로젝트 디렉터리에 `.bamproject`, `Config/Project.json`, `Assets/Scenes/Main.bamscene.json`을 자동 생성하는 격리 스캐폴딩 지원.
+- **Phase 2: 인-프로세스 프로젝트 전환 및 리소스 정리 (`ResourceManager`, `EditorSettingsService`, `ProjectSessionManager`).**
+  - `ResourceManager`:
+    - `UnloadProjectScopedResources()` 추가: `Project://` 및 `Mount://` 스코프 리소스만 선별 해제하고, `Engine://`, `Editor://`, `Plugin://` 및 프로시저럴 빌트인 리소스(폰트, 기본 머티리얼, 더미 텍스처 등)는 메모리에 유지하여 전환 속도와 UI 안정성 확보.
+  - `EditorSettingsService`:
+    - `ReloadProjectSettings(projectRoot)`: 새 프로젝트 루트의 `Config/Project.json`, `Config/InputActions.json`, `Config/EditorWorkspace.json`을 리로드하고 `InputManager` 액션 갱신. 전역 `EditorPreferences`는 유지.
+    - `RecentProjectEntry` 및 최근 프로젝트 목록 영속화 (`%APPDATA%/BamEngine/RecentProjects.json`).
+  - `Editor::ProjectSessionManager` (싱글톤):
+    - 8단계 핫 스위치 파이프라인 (`SwitchProject`):
+      1) 사전 유효성 검증 및 미저장 편집/PIE 실행 확인 콜백.
+      2) 백그라운드 리스너(`efsw`), 비동기 로더/스트리머, 복구 타이머 드레인/중지.
+      3) UI 편집기 창 정리, Undo/Redo 이력 초기화, 클립보드/선택 상태/썸네일 캐시 초기화.
+      4) 씬 언로드, 백엔드 GPU 커맨드 큐 플러시 대기(`WaitForGPUIdle`), `UnloadProjectScopedResources()`.
+      5) `PlatformPath` 루트 및 마운트 재바인딩 (`EngineRoot` 불변 보장, 새 `.bamproject`의 `ContentMounts` 등록).
+      6) `EditorSettingsService` 및 프로젝트 로캘 카탈로그 리로드.
+      7) 파일 감시자/복구 세션 재시작, 콘텐츠 브라우저 새로고침, 시작 씬 로드 (실패 시 빈 씬 안전 폴백).
+      8) 윈도우 타이틀 갱신(`BamEngine Editor - <ProjectName>`) 및 최근 프로젝트 기록.
+    - `CreateProject`: 템플릿(Empty, 3D, 2D) 기반 스캐폴딩 후 즉시 전환 지원.
+    - 외부 마운트 영속 수정 API (`AddContentMount`, `RemoveContentMount`, `UpdateContentMount`, `SetContentMountFlags`)로 `.bamproject`와 실시간 동기화.
+- **Phase 3: 프로젝트 허브 및 콘텐츠 브라우저 외부 마운트 UI (`ProjectHubModal`, `ContentBrowserPanel`, 로캘 CSV).**
+  - `ProjectHubModal`:
+    - 최근 프로젝트 목록 더블클릭 열기, `.bamproject` 또는 폴더 브라우저 열기, 새 프로젝트 생성 탭(프로젝트명 유효성 검사, 위치 브라우징, 템플릿 선택).
+  - `ContentBrowserPanel`:
+    - 좌측 트리에 `External Mounts` 섹션 신설 및 `PlatformPath::GetContentMounts()` 렌더링. `ShowUnderAssets` 활성화 마운트는 `Assets/` 하위 가상 링크 노드로도 표시.
+    - `[외부 폴더 연결...]` 모달 및 우클릭 컨텍스트 메뉴(`읽기 전용 토글`, `Assets 하위 표시 토글`, `연결 해제`) 제공.
+    - 기존 읽기 전용 가드(`PlatformPath::IsReadOnlyTarget`)를 통해 읽기 전용 마운트 대상의 삭제/이름변경/이동 차단.
+  - 로캘 CSV:
+    - `Editor.ProjectHub.csv` 신설 (Group=ProjectHub, 21개 키).
+    - `Editor.ContentBrowser.csv` 확장 (Group=ContentBrowser, 13개 키 추가). JSON 직접 수정 금지 원칙 준수.
+- **Phase 4: 의존성 기반 패키징 연동 (`PakFormat.h`, `AssetReferenceValidator`, `ClientPackage`).**
+  - `PakFormat.h`:
+    - `NormalizePakUri`에 `mount://` -> `"Mount://"` 스키마 정규화 지원 (`Mount://<Alias>/<relPath>` 2세그먼트 검증).
+  - `AssetReferenceValidator`:
+    - `ValidateBuildScene`에서 `Mount://` URIs를 정규 런타임 에셋으로 인식하여 외부 절대 경로 오류 방지 및 재귀 의존성 추적.
+  - `ClientPackage`:
+    - `OnlyReferencedAssets = true` 모드에서 참조된 `Mount://` 파일 및 `AdditionalAssets`의 마운트 항목만 `staging/Mounts/<Name>/<rel>`에 선별 스테이징. 외부 마운트 폴더 전체 복사 차단.
+    - `staging/Mounts/`를 `Content/Project.bampak` 내부 가상 URI(`Mount://...`)로 매핑하여 패킹 및 무결성 검증.
+    - 패키지 내보내기 대상 폴더가 등록된 외부 마운트 폴더와 중첩되는 경우 감지하여 충돌 차단.
+- **검사 (`VirtualPathCheck.cpp`).**
+  - Section 14: `SetEngineRoot` / `GetEngineRoot` vs `GetProjectRoot` 독립 분리 및 폴백 검증.
+  - Section 15: `Mount://<Alias>/...` 등록, 대소문자 무관 판별, URI 해석, 디렉터리 탈출 방어, `ToVirtualUri` 역변환, `IsReadOnlyTarget` / `IsMountReadOnly` 보호, 마운트 해제 검증.
+  - Section 16: `ProjectDescriptor` `.bamproject` 직렬화/역직렬화 라운드트립, 상대 경로 해석, `FindProjectFile`, `ScaffoldNewProject` 격리 생성 및 필수 파일(`.bamproject`, `Project.json`, `Main.bamscene.json`) 무결성 검증.
+- **검증 및 확인 명령.**
+  - AI는 빌드 및 테스트를 직접 실행하지 않았다.
+  - 사용자 실행 확인 명령:
+    ```powershell
+    cmake --build --preset x64-ninja-debug --target VirtualPathCheck Editor PakArchiveCheck AssetReferenceCheck
+    ctest --test-dir out/build/x64-ninja-debug -R "^(VirtualPathCheck|PakArchiveCheck|AssetReferenceCheck)$" --output-on-failure
+    ```
+- **정적 한계 및 남은 위험.**
+  - Phase 5 (2단계: 프로젝트별 독립 C++ 모듈 DLL 빌드 및 핫리로드)는 추후 구현 예정으로, 현재는 단일 게임플레이 DLL/내장 컴포넌트 모델 유지.
+  - 실제 대규모 씬에서 외부 마운트 에셋을 참조한 후 인-프로세스 프로젝트를 반복 전환할 때의 DirectX12 GPU 메모리 및 OS 파일 핸들 릴리즈는 사용자 실행 환경 검증 필요.
+
+### [2026-11-24] 의존성 기반 선택적 Client 패키징 (P2-E 5.1절)
+
+- **배경과 목적.** 기존에는 `ClientPackage`가 `Assets/` 및 `Engine/Resources/` 전체 폴더의 모든 런타임 파일을 무조건 복사하여 미참조 대용량 에셋이나 미사용 리소스까지 패키지에 포함되었다. 시작 씬과 명시된 추가 씬/에셋의 실제 재귀 의존성만 추적하여 배포본을 경량화하고 선택적 스테이징을 지원한다.
+- **의존성 탐색 보강 (`AssetReferenceValidator`).**
+  - `Engine::TerrainComponent`의 `DataPath`(`.bamterrain`) 수집 연결.
+  - 머티리얼(`EResourceType::Material`/`MaterialInstance`)의 `m_ShaderGraphPath`(`.bamgraph`/`.bamgraph.json`) 재귀 탐색 연결.
+  - 셰이더 문서(`EResourceType::Shader`)의 `m_DxilPath`, `m_SpirvPath`, `m_WgslPath` 바이너리 수집 연결.
+  - `IsBuiltinResourceIdentifier`를 통한 빌트인 리소스(QuadMesh, CubeMesh, Standard 등)의 오탐 방지 및 `referencedFiles` 중복 제거.
+- **선택적 스테이징 (`ClientPackage`).**
+  - `ClientPackageRequest`에 `bool OnlyReferencedAssets = true;` 추가(기본 활성화).
+  - `ExportClientPackage`: `OnlyReferencedAssets` 활성화 시 시작 씬, `AdditionalScenes`, `AdditionalAssets`, `ValidateBuildScene` 재귀 참조, `StartupResourceLoader` 매니페스트 및 파이프라인 파일, `RenderPipelineProfile` 및 필수 렌더 셰이더/리소스, 프로젝트/엔진 로캘 카탈로그, 엔진 런타임 필수/폴백 리소스(`TerrainMaterial.bammat.json`, 런타임 DXIL `.cso` 등)만 선택 복사(`StageSelectedResources`). 비활성화 시 기존 전체 폴더 스캔 유지.
+  - `PackAssetsIntoBamPak` 활성화 시 `AdditionalAssets`도 `Content/Project.bampak`의 무결성 검증 목록에 포함.
+  - `[Package inventory]`에 수집 정책(`dependency-based selective packaging` vs `full runtime resource scan`) 및 스테이징/제외 통계(수·바이트) 출력.
+- **UI 연동 (`BuildProfilePanel`).**
+  - `BuildProfilePanel`에 `참조된 에셋만 패키징`(`BuildProfile.OnlyReferencedAssets*`) 체크박스를 추가하고 `m_OnlyReferencedAssets`를 `ClientPackageRequest`로 전달.
+  - `Editor.BuildProfile.csv`에 `BuildProfile.OnlyReferencedAssets`, `BuildProfile.OnlyReferencedAssetsTooltip`, `BuildProfile.OnlyReferencedAssetsCheckbox` 및 `BuildProfile.BamPakPackaging*` 로캘 키 6행 추가.
+- **검사 (`PakArchiveCheck`).**
+  - `TestDependencyBasedPackaging` 추가: 시작 씬 재귀 참조 에셋 포함, `AdditionalAssets`(JSON 및 직접 파일 예외 스트리밍 오디오) 포함, 미참조 씬/텍스처/머티리얼/오디오/엔진리소스 제외, 패키지 매니페스트 기반 마운트 및 데이터 페이로드 무결성 검증.
+- **검증 및 확인 명령.**
+  - AI는 빌드 및 테스트를 직접 실행하지 않았다.
+  - 사용자 실행 확인 명령:
+    ```powershell
+    cmake --build --preset x64-ninja-debug --target PakArchiveCheck Editor AssetReferenceCheck
+    ctest --test-dir out/build/x64-ninja-debug -R "^(PakArchiveCheck|AssetReferenceCheck)$" --output-on-failure
+    ```
+- **정적 한계 및 남은 위험.**
+  - C++ 코드나 로직 그래프의 문자열 핀에서 동적으로 파일 경로를 구성하여 로드하는 에셋(예: `SpawnCompositeVFX("Project://VFX/Fire.bamvfx.json")`)은 정적 JSON 파싱으로 추적되지 않으므로 `BuildProfilePanel`의 `AdditionalAssets`에 수동 등록 필요.
+  - 실제 프로젝트 씬(예: `RaytracingScene3`)의 저장소 밖 Windows Client 내보내기 및 렌더링 일치는 사용자 실행 검증 대기.
+
 ### [2026-11-24] 렌더링 기능 병렬 구현 병합과 후속 수정
 
 - **병합.** 세션별로 구현한 일곱 기능을 커밋해 main에 병합했다(구현 커밋 → 병합 커밋). RT 대상 확대 `5d186491`→`3def7781`, 부드러운 RT 그림자 `074d9e6b`→`6c0364c2`, AO(GTAO·RT) `3c2dac7b`→`8dee6eaa`, 프로브 GI 1단계 `624c2948`→`c9b0c098`(2~4단계는 그 세션이 따로 기록), 투영 데칼 `a29bec92`→`20b3e110`, 자동 노출 `e684db5b`→`7626792b`, 피사계 심도 `21cb9436`→`47fb9c98`. 기능별 설계와 한계는 `RenderingDevelopmentPlan.md`의 S8~S11, M3, M4에 있다.
@@ -12,6 +171,131 @@ This document tracks implementation details, architectural decisions, and techni
 - **확인된 결과.** 사용자가 CTest 전체 통과와 시험 씬의 렌더링을 확인했다(병합 후, 데칼 텍스처·선택 수정 전). 바닥 틈과 데칼 피킹 문제를 보고받아 고쳤다.
 - **확인하지 못한 것.** 데칼 텍스처·선택과 볼륨 표시 수정 후의 화면, 모션 벡터, 기능별 GPU 시간과 메모리, Release, Client.
 - **남은 위험.** 조명 패스의 IBL 큐브맵도 그리기 명령 안에서 `GetRHITexture()`를 불러, 자리만 등록된 상태로 처음 쓰이면 같은 업로드 실패가 날 수 있다(정적 분석).
+
+### [2026-11-24] 편집 모드에서 지형이 그려지지 않던 결함 (T1-a·T2-e 회귀)
+
+- **증상(사용자 보고).** 에디터에서 지형이 보이지 않아 T1~T3 항목을 확인할 수 없었다. 로그에는 지형 오류가 없었다.
+- **원인.** `TerrainSystem`은 실행 단계를 지정하지 않아 `ISystem` 기본값(Gameplay)을 쓰므로 `OnUpdate`는 PIE 중에만 돌고, 편집 모드에서는 `OnSubmit`만 돈다. T1-a의 `TerrainDataFile::LoadIfChanged`와 T2-a의 `TerrainUtility::EnsureLayerData`를 `OnUpdate`에만 넣어, 편집 모드에서 레이어 4~7 데이터가 비고 `SplatmapExtraTexture`가 만들어지지 않았다. T2-e에서 이 텍스처가 없으면 그리지 않게 했으므로 지형 전체가 빠졌다. 같은 이유로 편집 모드에서 `.bamterrain`도 읽히지 않았다(저장한 높이 대신 기본 형태).
+- **수정.** 두 호출을 `OnUpdate`·`OnSubmit`이 함께 부르는 `TerrainSystem::EnsureTerrainResources` 맨 앞으로 옮겼다.
+- **검증.** AI는 빌드·실행하지 않았다. 편집 모드에서 지형이 보이고 저장한 높이로 열리는지, PIE 전후가 같은지 11.7.1절 T1~T3 항목으로 확인한다.
+
+### [2026-11-24] CTest 실패 2건 수정 (`ShaderGraphCheck`, `NavigationAICheck`)
+
+- **결과(사용자 보고).** 전체 CTest에서 `NavigationAICheck`(48)·`ShaderGraphCheck`(56)만 실패했다. `LastTest.log`: ShaderGraphCheck는 `Data inputs accept one source.`, NavigationAICheck는 `Steep terrain slope cell was unexpectedly walkable.`
+- **ShaderGraphCheck 원인.** 디스토션 V1 검사(커밋 전 다른 작업)의 2번 사례가 1번에서 `ScreenUV → SceneColor.uv`로 연결한 입력 핀에 `AddFloat2` 결과를 끊지 않고 다시 연결했다(데이터 입력은 연결 하나, `Graph::CheckConnection`). 연결 번호를 보관해 `Disconnect`한 뒤 다시 연결하도록 검사를 고쳤다. 이 파일에서 앞쪽에 있는 지형 도메인·기본 지형 그래프 사례(T3-b1·T3-c)는 이 오류 전에 예외 없이 지나갔다(예외는 첫 실패에서 멈춤).
+- **ShaderGraphCheck 추가 수정(재실행 후).** 연결 오류를 고치자 같은 디스토션 검사의 다음 두 곳이 드러났다. (1) 기대 문자열 `5.00000000e-02f`: `0.05f`는 2진수로 정확히 표현되지 않아 생성기(`FormatFloat`, 9자리)가 `5.00000007e-02f`를 내므로 정확히 표현되는 `0.0625f`·`-0.125f`로 바꿨다. (2) 정점 단계 거부 검사: 정점 생성기는 `worldPositionOffset`·`customUV`에 연결된 노드만 읽는데 검사 그래프의 디스토션 노드는 `baseColor`에만 연결되어 거부가 일어나지 않았다. `SceneColor.rgb → worldPositionOffset` 연결을 추가했다. 생성기 코드는 바꾸지 않았다.
+- **NavigationAICheck 원인.** 커밋 전 지형 내비게이션(T4) 베이크가 경사를 가장 가까운 정점의 좌우 차분으로 구했다. 정점 한 줄짜리 능선에서 꼭대기 정점의 양옆 높이가 같아 기울기 0(평지)이 되어 약 84° 급경사 셀 (7,3)이 통행 가능으로 남았다. 셀 중심이 놓인 칸 네 정점의 쌍선형 기울기로 바꿨다(`NavGrid::BakeObstaclesFromScene`). 속성·레이어는 이전처럼 가장 가까운 정점에서 읽는다.
+- **영향.** 경사 판정이 정점 단위에서 셀 단위가 되어, 정점 하나만 솟은 뾰족한 지형 옆 셀도 막힌다(의도). 완만한 경사에서는 결과가 같다.
+- **검증.** AI는 빌드·실행하지 않았다. 손으로 따라 계산한 결과 급경사 셀 (7,3)·(8,3)은 막히고, 속성 Blocked 셀 (7,10)·평지 (3,3)·(12,3)·(7,15)는 기대와 같으며 남쪽 통로(z≥13)로 우회가 가능하다. 이후 단계(경로·저장 왕복)는 실행 확인이 필요하다.
+
+### [2026-11-24] 기본 지형 그래프 (T3-c)
+
+- **수정.** `ShaderGraphCompiler::BuildDefaultTerrainGraph`가 `terrainPS`와 같은 지형 표면 그래프를 만들고, 머티리얼 편집기가 지형 도메인 머티리얼의 새 그래프를 이것으로 시작한다. 엔진 `TerrainMaterial`은 고정 셰이더를 계속 쓴다(공유 리소스·Client 이유). 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.13절.
+- **검사.** `ShaderGraphCheck`에 기본 지형 그래프 사례.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 머티리얼 편집기의 Terrain 도메인 연결 (T3-b2)
+
+- **수정.** `EMaterialDomain`(`Surface`·`Terrain`)과 머티리얼 필드 `m_Domain`을 추가하고, 엔진 기본 지형 머티리얼을 Terrain으로 표시했다. 머티리얼 편집기는 지형 도메인에서 그래프로 픽셀 셰이더만 만들고 엔진 `terrainVS`와 짝지어 적용한다(주 패스는 지오메트리만). 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.12절.
+- **로캘.** `Engine.csv` 3행(도메인 열거값 2, 속성 1), `Editor.MaterialEditor.csv` 1행.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 셰이더 그래프 Terrain 도메인 컴파일러 (T3-b1)
+
+- **수정.** 지형 노드 5종(`Terrain.LayerWeight`·`LayerSample`·`LayerBlend`·`Slope`·`Height`)과 `ShaderGraphCompiler::GenerateTerrainMaterialHlsl`을 추가했다. 지형 픽셀 공용 선언을 `terrainLayers.hlsli`로 옮기고 `terrainPS.hlsl`을 그 위에 다시 썼다(동작 같음). 지형 노드는 지형 생성기·픽셀 단계에서만 컴파일된다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.11절.
+- **로캘.** `Engine.csv` 10행(노드 이름 5, 핀 1, 오류 4).
+- **검사.** `ShaderGraphCheck`에 지형 도메인 사례.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 바인딩을 머티리얼 텍스처 범위에서 분리 (T3-a)
+
+- **수정.** 지형 높이맵을 `t8, space3`, 스플랫을 `t9`·`t10, space3`로 옮겨 머티리얼 범위 `t0`~`t7, space1`(셰이더 그래프 슬롯)을 비웠다. 지형 셰이더 4개와 `Renderer.cpp` 지형·모션 벡터 드로우, `RenderCommands.h` 슬롯 상수, [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)를 고쳤다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.10절.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 8레이어 렌더링 (T2-e)
+
+- **수정.** `terrainPS.hlsl`이 레이어 에셋 알베도(`t8`~`t15`)·반복 길이·색 배율과 레이어 4~7 스플랫(`t5`)을 읽어 8개 레이어를 합성한다. 지형 드로우 상수 `TerrainObjectData`(256바이트), `HeightfieldDrawData` 레이어 필드, `SplatmapExtraTexture` 생성·업로드, 에셋 없는 칸의 기본 색·반복 길이를 추가했다. [Shader/BINDING_LAYOUT.md](Shader/BINDING_LAYOUT.md)에 지형 바인딩 절을 추가했다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.9절.
+- **로캘.** `Editor.TerrainEditor.csv`에서 `TerrainEditor.LayerNotRendered` 삭제.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+- **미확인.** D3D12 외 백엔드의 256바이트 상수, 밉맵 없는 레이어 텍스처의 반짝임.
+
+### [2026-11-24] 지형 레이어 독립 에셋 (T2-d)
+
+- **결정.** 사용자: 레이어 정의를 독립 에셋으로 한다(T2-c의 컴포넌트 내장 목록 대체).
+- **수정.** `TerrainLayerAsset`·`TerrainLayerSettings`, 리소스 종류·로더, 지형 칸의 에셋 참조, `TerrainLayerEditor`(저장·Ctrl+S·실행 취소), 콘텐츠 브라우저 만들기·아이콘, 피커·인스펙터 형식 목록, 에셋 핫 리로드, 팔레트 이름·요약. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.8절.
+- **로캘.** `Engine.csv` 1행, `Editor.ContentBrowser.csv`·`Editor.ResourceEditor.csv`·`Editor.Notification.csv` 각 1행, `Editor.TerrainEditor.csv` 3행 추가·1행 문구 변경.
+- **검사.** `TerrainDataCheck`에 `CheckTerrainLayerAsset`.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 레이어 정의와 속성 맵 표시 (T2-c)
+
+- **결정(계획 변경).** `TerrainLayer` 독립 에셋 대신 `TerrainComponent::Layers`(`TerrainLayerSlot`)로 구현했다. 인스펙터가 에셋을 편집하지 않아 전용 편집기가 필요했기 때문이다. 지형 사이 공유는 잃는다.
+- **수정.** 레이어 정의 필드, 팔레트의 레이어 이름·속성 요약, 속성 페인트 중 속성 맵 점 표시. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.7절.
+- **로캘.** `Engine.csv` 6행, `Editor.TerrainEditor.csv` 4행.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 편집기 브러시 도구·레이어 팔레트·단축키 (T2-b)
+
+- **수정.** 지형 편집기에 조형·레이어 페인트·속성 페인트 도구와 8칸 레이어 팔레트, 속성 선택을 추가하고 뷰포트 입력을 도구별 함수에 연결했다. 레이어 선택(1~8)과 브러시 반경(`[`·`]`)을 `ShortcutManager`에 등록했다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.6절.
+- **로캘.** `Editor.TerrainEditor.csv`·`Editor.Action.csv`·`Editor.Shortcuts.csv`.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 8레이어 데이터·속성 맵·페인트 위치 (T2-a)
+
+- **결정.** 사용자: 레이어 최대 8개, 최대 해상도 1025 정점.
+- **수정.** 레이어 4~7(`SplatDataExtra`)과 속성 맵(`AttributeData`, `ETerrainAttribute`)을 추가하고 `.bamterrain`을 v2로 올렸다(v1 읽기 유지). 해상도 상한 1024를 `RANGE`와 `TryGetGridLayout`에 넣었다. 페인트가 `worldMatrix`를 반영하고 8레이어를 정규화하며, 속성 페인트를 추가했다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.5절.
+- **검사.** `TerrainDataCheck`에 `CheckLayersAndAttributes`.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+- **남은 것.** 레이어 4~7 렌더링, `TerrainLayer` 에셋, 팔레트 UI·에디터 브러시 연결(T2-b 이후).
+
+### [2026-11-24] 지형 기본 머티리얼 정리와 패키징 확인 (T1-d)
+
+- **수정.** 지형 기본 머티리얼을 추적되는 `Engine/Resources/Material/TerrainMaterial.bammat.json`으로 옮기고, 새 지형은 파일에서 불러오며, 머티리얼이 없는 지형은 그릴 때 기본 머티리얼을 쓴다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.4절.
+- **확인.** 일반 파일 패키지는 `.bamterrain`을 포함한다(코드 변경 없음). pak 패키지에서 리소스를 읽는 로더가 없는 것은 지형 밖 기존 한계로 기록했다.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 하이트맵 16비트 입출력·UTF-8 경로·가져오기 Undo (T1-c)
+
+- **수정.** 하이트맵 가져오기·내보내기를 16비트 PNG와 RAW(`.raw`·`.r16`)로 바꾸고, 파일을 넓은 문자 경로로 읽고 써 한글 경로를 지원한다. 가져오기 실패 시 높이를 바꾸지 않는다. 지형 편집기의 가져오기·초기화를 편집 이력에 기록하고 결과를 알린다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.3절.
+- **로캘.** `Editor.TerrainEditor.csv` 8행.
+- **검사.** `TerrainDataCheck`에 `CheckHeightmapImportExport`.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 저장하지 않은 지형 편집의 PIE·복구 보존 (T1-b)
+
+- **결정.** "하이트맵 자동 저장" = 복구용 스냅샷(계획 기본안). 원본 `.bamterrain`은 씬 저장 때만 바뀐다.
+- **수정.** PIE 시작·종료에 지형 메모리 사본(`TerrainDataFile::CaptureMemory`·`RestoreMemory`), 복구 스냅샷에 임시 지형 파일과 `TerrainComponent::RecoveryDataPath`(`ScopedRecoveryCopies`)를 추가했다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.2절.
+- **검사.** `TerrainDataCheck`에 `CheckUnsavedTerrainPreservation`.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+
+### [2026-11-24] 지형 데이터 파일 저장·복원 (T1-a)
+
+- **원인.** `TerrainComponent`의 `HeightData`·`SplatData`가 `PROPERTY`가 아니어서 스컬프트·페인트 결과가 씬 저장·재시작·Client에서 사라졌다.
+- **수정.** `.bamterrain` v1 형식과 `TerrainDataFile`(쓰기·읽기·씬 저장·변경 시 읽기)을 추가했다. 컴포넌트는 `DataPath`만 직렬화하고, `SceneDocument::SaveTo`가 씬 JSON보다 먼저 모든 지형 데이터를 쓴다(실패 시 씬 저장 실패). `TerrainSystem`이 `DataPath` 변경 시 파일을 읽는다. 세부는 [TerrainSystemExpansionPlan.md](TerrainSystemExpansionPlan.md) 6.1절.
+- **로캘.** `Engine.csv`에 `PROP_TERRAIN_DATA_PATH` 1행.
+- **검사.** `TerrainDataCheck`에 `CheckTerrainDataFile` 추가.
+- **검증.** AI는 빌드·실행하지 않았다. 확인 항목은 [DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절.
+- **남은 한계.** PIE·복구 스냅샷의 미저장 지형 편집 보존, Import·Reset Undo, 16비트 입출력, 다른 이름으로 저장 시 데이터 파일 공유.
+
+### [2026-11-24] 그래프 바인딩 로직 그래프 경로 피커 (1-C)
+
+- **원인.** `GraphBindingComponent::graphFile`이 일반 문자열 필드로 그려져 경로를 손으로 입력해야 했다. 셰이더 그래프도 같은 `.bamgraph.json` 확장자를 써서 확장자만으로는 로직 그래프를 고를 수 없다.
+- **수정.** 인스펙터가 `graphFile`을 숨기고 `DrawInspectorAssetPathPicker`(Animator 컨트롤러·타임라인과 같은 피커)를 그린다. 필터 `IsLogicGraphFile`은 파일의 최상위 `"Domain"` 값이 0(Logic)인 것만 받으며, 피커가 매 프레임 물어도 다시 읽지 않도록 수정 시각 기준으로 결과를 보관한다. 고른 경로는 가상 URI로 저장된다. 표시 이름은 기존 `PROP_GRAPH_FILE`을 써서 로캘 행 추가는 없다.
+- **참조 유지.** 이동·이름 변경 시 `graphFile`과 실행 중 그래프 상태의 갱신은 기존 `AssetPathRelocation`이 처리하고 `AssetReferenceCheck`가 검사한다(이번에 바꾸지 않음).
+- **검증.** AI는 빌드·실행하지 않았다. 사용자 확인 대기: `cmake --build --preset x64-ninja-debug --target Editor AssetReferenceCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^AssetReferenceCheck$" --output-on-failure`. 에디터에서 (1) Graph Binding 피커 목록에 `Assets/Scripts`의 로직 그래프만 있고 `Assets/Shaders/Graphs/NewMaterial_2`가 없는지, (2) 셰이더 그래프를 끌어다 놓으면 거부되는지, (3) 고른 뒤 PIE에서 그래프가 실행되는지, (4) 콘텐츠 브라우저에서 그 그래프 이름을 바꾼 뒤 피커 표시와 PIE 실행이 유지되는지, (5) Ctrl+Z로 이전 그래프로 돌아가는지.
+- **남은 한계.** 도메인 판정은 JSON 전체 파싱이 아니라 첫 `"Domain"` 키의 값을 읽는다(현재 그래프 파일에서는 최상위 키만 이 이름을 쓴다). 필터 함수는 인스펙터 내부 함수라 자동 검사가 없다.
+
+### [2026-11-23] 액션 타임라인 종료 정책과 종료 이벤트 (1-B)
+
+- **원인.** `ContentBrowserPanel::CreateEmptyTimeline`이 새 타임라인을 길이 3초로 만들고, 클립이 없으면 끝나는 조건이 이 길이뿐이었다. `ActionTimeline.Play`가 재생 중 재실행을 거부하므로 마지막 노티파이 뒤 빈 시간만큼 다음 액션이 늦었다. 그래프는 타임라인이 언제·왜 끝났는지 받을 수단이 없었고, `Stop()`·중단 시 `HitboxOn` 창이 열린 채 남았다.
+- **수정.** 에셋에 `ETimelineEndPolicy`(`Fixed`·`ClipLength`·`LastTrackEnd`, 이전 파일은 `Fixed`)와 `ComputeLastTrackEnd`·`ResolvePlaybackDuration`을 추가했다. `ActionTimelineSystem`이 매 틱 정책으로 길이를 정하고, 세션 번호 추적으로 `Completed`·`Stopped`·`Interrupted`를 판정해 `ActionTimelineEvents::PublishEnd`로 보낸다. 끝 판정은 시간 비교 대신 `playbackCompleted` 표시를 쓴다(Animator·카메라 복원, 지속형 VFX 해제, 인스펙터 재개 버튼). 세션이 어떻게 끝나든 그 세션이 연 히트박스 창을 닫는다. 중복된 히트박스 켜기·끄기 코드는 `SetTimelineHitboxesActive`로 묶었다.
+- **그래프.** `Event.OnActionTimelineEnded`(출력 `reason` 정수, `completed` 불)와 `GraphExecutor::BeginTimelineEnded`를 추가하고, `GraphSystem`이 종료 이벤트를 구독해 같은 프레임의 노티파이 이벤트 뒤에 전달한다.
+- **편집기.** 타임라인 패널 트랜스포트 바에 종료 시점 콤보·재생 끝 표시, 트랙 영역에 재생 끝 표시선을 추가했다. 프리뷰 재생은 런타임과 같은 길이를 쓴다. 새 타임라인 기본 정책은 `LastTrackEnd`다.
+- **로캘.** `Editor.Timeline.csv`에 `Timeline.EndPolicy*`·`Timeline.PlaybackEnd` 6행 추가, `Timeline.DurationTooltip` 문구 수정. `Engine.csv`에 정책 열거값 3행, `OnActionTimelineEnded`, 핀 2행 추가. JSON은 `GenerateLocalization`이 생성한다.
+- **검사.** `ActionTimelinePlaybackCheck`에 `CheckEndPolicyDuration`, `CheckEndPolicyPlaybackAndEndEvents`, 정책 직렬화 왕복·이전 파일 기본값 검사를 추가했다.
+- **검증.** AI는 빌드·실행하지 않았다. 사용자 확인 대기: `cmake --build --preset x64-ninja-debug --target Editor ActionTimelinePlaybackCheck`, `ctest --test-dir out/build/x64-ninja-debug -R "^ActionTimelinePlaybackCheck$" --output-on-failure`. 에디터에서 (1) 새 타임라인에 0.4초 이벤트 노티파이만 두고 PIE에서 공격 입력을 연타 → 약 0.4초마다 재생, (2) 종료 시점 콤보 변경 → 표시선·`x초에 종료`·Ctrl+Z, (3) 로직 그래프에 `On Action Timeline Ended` → `Print` 연결 후 끝까지 재생·Stop 시 `reason` 0·1 확인, (4) 기존 타임라인 파일이 이전과 같은 길이로 끝나는지 확인.
+- **사용자 보고 후 수정(2026-11-24).** 빌드 후 "어느 정책에서도 1초에 Completed"가 보고됐다. 에셋 핫 리로드(`AssetHotReloadManager`)가 텍스처·머티리얼·메시·로캘만 다시 읽어, 패널에서 저장한 타임라인이 이미 불러온 씬 에셋에 반영되지 않았다(정적 분석으로 확인). `.bamtimeline(.json)`·`.actiontimeline(.json)` 변경 시 불러온 `ActionTimelineAsset`을 `Resource::Reload`로 제자리에서 다시 읽고 알림(`Notification.TimelineHotReloaded`)을 띄운다. 세션 종료 시 `Session N ended: 사유 at 시간` Info 로그를 남긴다(`Stop`·재시작은 시간을 먼저 0으로 되돌리므로 시간은 `Completed`에서만 의미가 있다). 1초라는 값의 출처는 아직 확인하지 못했다. 테스트 씬의 `Test.bamtimeline.json`(마지막 트랙 끝, 노티파이 모두 0초)은 0.05초에 끝나야 한다.
+- **남은 한계.** `ActionTimeline.Play`는 재생 중 재실행을 계속 거부한다. 엔티티 `Dead`·컴포넌트 제거는 종료 이벤트를 보내지 않는다. `Stopped`·`Interrupted`는 다음 타임라인 틱에 판정한다.
 
 ### [2026-11-23] 프로브 기반 동적 GI (M4 1~4단계)
 

@@ -1,7 +1,7 @@
 # 다음 목표: Client 실행 설정과 빌드·패키징
 
-- 작성일: 2026-10-24 (최종 갱신: 2026-11-18)
-- 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 Deferred 렌더 프로필 검증과 배포 경로 기록을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 남아 있다.
+- 작성일: 2026-10-24 (최종 갱신: 2026-11-24)
+- 상태: Editor의 Windows x64 Release 빌드 및 폴더 내보내기에 의존성 기반 선택적 패키징(기본 활성화)과 2-팩(.bampak) 패키징을 연결했다. 저장소 밖 실행과 Editor·Client 렌더링 일치 검증은 사용자 검증 대기 상태다.
 - 렌더링 공유 후속 설계: [Render Pipeline Profile](RenderPipelineProfilePlan.md)
 - WebGPU 진행 상태: `Client/Web`에는 저장된 씬을 읽는 독립 프리뷰가 있다. Client의 공유 실행 계층을 플랫폼 호스트에서 분리했지만, 실제 Wasm Client·WebGPU 렌더링과 Editor 내보내기는 후속 범위다.
 - 관련 지침: [EngineEditorClientGuidelines.md](EngineEditorClientGuidelines.md)의 3절, 12절, 13절
@@ -140,14 +140,14 @@ Editor에서 제작하고 저장한 프로젝트를 배포 폴더로 구성하�
 
 선택 수집 이후의 타입별 바이너리화, 데이터 팩 작성, Client 마운트와 검증은 [Client 리소스 쿠킹·바이너리화·팩 배포 계획](ClientAssetCookingAndPackingPlan.md)을 따른다.
 
-**상태:** Windows x64 Release 폴더 내보내기에 배포 목록 비교 로그를 추가했다. 선택적 수집과 증분 스테이징은 후속 작업이다. 현재 `ClientPackage.cpp`는 고정된 DLL 목록을 복사하고 `Assets/`와 `Engine/Resources/`에서 허용 확장자의 파일을 모두 순회한다. `AssetReferenceValidator`는 시작 씬에서 JSON과 Animator 컨트롤러 참조를 따라가지만, 바이너리 에셋 내부와 런타임 코드의 동적 로드까지 수집하지는 못한다. [패키저](../Editor/Source/Build/Private/ClientPackage.cpp) · [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
+**상태:** 2026-11-24 의존성 기반 선택적 패키징(`OnlyReferencedAssets = true` 기본 활성화)이 `ClientPackage`와 `BuildProfilePanel`에 반영되었다. `AssetReferenceValidator::ValidateBuildScene`의 재귀 탐색이 지형 `.bamterrain`, 머티리얼 셰이더 그래프(`.bamgraph`/`.bamgraph.json`), 셰이더 바이너리(DXIL/SPIR-V/WGSL)로 확장되었으며, `BuildProfilePanel`에서 체크박스로 제어된다. 전체 폴더 스캔 대비 미참조 에셋은 배포본에서 제외되며, 인벤토리 로그에 수집 정책 및 제외 통계가 기록된다. [패키저](../Editor/Source/Build/Private/ClientPackage.cpp) · [참조 검사](../Editor/Source/AssetManager/Private/AssetReferenceValidator.cpp)
 
 #### 5.1 배포에 필요한 항목 수집
 
-- **시작점:** 빌드 프로필에 선택된 시작 씬과 추가 씬, 런타임 시작 리소스, 렌더 파이프라인 프로필, 프로젝트에서 활성화한 런타임 모듈 및 명시적 추가 에셋을 목록의 시작점으로 삼는다. 씬 전환, 코드에서 이름으로 로드하는 에셋, 런타임 스폰용 프리팹은 추가 목록이나 모듈 선언으로 포함한다.
-- **프로젝트 애셋:** 씬 → 프리팹 → 컴포넌트 → 메시·머티리얼·텍스처, Animator → 스켈레톤·클립처럼 간접 참조도 순회한다. `Project://`와 `Engine://`를 런타임과 같은 규칙으로 해석하고, 동일 항목과 순환 참조는 한 번만 처리한다. JSON과 바이너리 포맷의 참조는 타입별 리더나 임포트·저장 시 생성한 의존성 목록으로 읽는다.
-- **엔진 리소스:** Client 시작에 필요한 최소 리소스에 선택한 렌더 파이프라인·셰이더 백엔드, 활성 시스템·모듈의 리소스, 씬에서 직접 참조하는 `Engine://` 파일을 합친다. 예를 들어 Windows D3D12의 Deferred 씬에서 쓰는 스키닝 그림자·파티클 셰이더와 기본 텍스처는 해당 기능의 의존성으로 포함한다. Editor 전용 데이터와 대상 백엔드에서 사용하지 않는 셰이더는 수집 목록에서 제외한다.
-- **누락과 진단:** 각 항목에 포함 이유와 참조 출처를 남긴다. 필수 의존성을 찾지 못하면 어느 씬·컴포넌트·모듈에서 요구했는지 보고하고 게시 전에 실패한다. 아직 의존성 분석을 지원하지 않는 포맷은 명시적 포함 목록으로 보완하고, 의존성이 검증되지 않은 프로젝트에는 기존 전체 수집 경로를 사용한다.
+- **시작점:** 시작 씬, `AdditionalScenes`, `AdditionalAssets`, `StartupResourceLoader` 매니페스트 및 파이프라인 의존성, `RenderPipelineProfile` 및 필수 렌더 리소스, 엔진/프로젝트 로캘 카탈로그, 엔진 런타임 필수/폴백 리소스(`TerrainMaterial.bammat.json`, 런타임 DXIL `.cso` 등)를 수집 목록의 시작점으로 삼는다.
+- **프로젝트 애셋:** `ValidateBuildScene`이 씬 → 프리팹 → 컴포넌트 → 메시·머티리얼·텍스처·스프라이트·타일맵·VFX·오디오·지형 데이터(`.bamterrain`), 머티리얼 → 셰이더 그래프(`.bamgraph`), 셰이더 → 바이너리, Animator → 컨트롤러·클립, ActionTimeline → 모델·사운드·VFX를 재귀 순회하여 중복 없이 수집한다.
+- **엔진 리소스:** Client 시작에 필요한 최소 리소스(Deferred/Forward 파이프라인 필수 셰이더, 기본 머티리얼·텍스처, 폰트, 로캘 JSON)를 선택 수집하며, 에디터 전용 리소스 및 미참조 파일은 제외한다.
+- **누락과 진단:** 인벤토리 로그에 `[Package inventory]`와 함께 수집 정책(`dependency-based selective packaging` vs `full runtime resource scan`) 및 스테이징/제외 통계(수·바이트)를 출력한다. 코드나 그래프 문자열 핀에서 런타임 동적 로드하는 에셋은 `AdditionalAssets`로 명시한다.
 
 #### 5.2 런타임 모듈과 시스템 선택
 
