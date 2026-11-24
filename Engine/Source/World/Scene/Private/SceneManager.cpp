@@ -13,6 +13,7 @@
 #include "PrefabInstanceComponent.h"
 #include "ScenePersistenceComponent.h"
 #include "WorldComponents.h"
+#include "PakArchive.h"
 #include "PlatformPath.h"
 #include <chrono>
 #include <functional>
@@ -147,7 +148,7 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 		return EResult::Fail;
 
 	const auto physical = PlatformPath::ResolveUri(filePath);
-	auto result = ar.LoadFromFile(physical);
+	auto result = PakMountManager::Get().LoadArchiveWithFallback(ar, filePath);
 	if (result)
 		result = m_CurrentScene->InstantiatePrefabArchive(ar, outRootEntity, parent);
 
@@ -241,11 +242,9 @@ EResult SceneManager::LoadSceneAdditive(const std::filesystem::path& scenePath, 
 		return EResult::Fail;
 	}
 
-	std::filesystem::path targetPath = scenePath;
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
+	std::filesystem::path targetPath = PlatformPath::ResolveUri(scenePath);
 
-	if (!std::filesystem::exists(targetPath))
+	if (!PakMountManager::Get().ExistsOrOnDisk(targetPath))
 	{
 		const std::string ext = targetPath.extension().string();
 		if (ext == ".json")
@@ -254,20 +253,20 @@ EResult SceneManager::LoadSceneAdditive(const std::filesystem::path& scenePath, 
 			if (!stem.ends_with(".bamscene"))
 			{
 				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
-				if (std::filesystem::exists(candidatePath))
+				if (PakMountManager::Get().ExistsOrOnDisk(candidatePath))
 					targetPath = candidatePath;
 			}
 		}
 	}
 
-	if (!std::filesystem::exists(targetPath))
+	if (!PakMountManager::Get().ExistsOrOnDisk(targetPath))
 	{
 		ENGINE_LOG_ERROR("Additive scene file not found: {}", targetPath.string());
 		return EResult::Fail;
 	}
 
 	archive::JsonArchive ar;
-	auto result = ar.LoadFromFile(targetPath);
+	auto result = PakMountManager::Get().LoadArchiveWithFallback(ar, targetPath);
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Additive scene archive load failed: {}", targetPath.string());
@@ -542,10 +541,8 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 {
 	if (filePath.empty())
 		return EResult::InvalidArgument;
-	std::filesystem::path targetPath(filePath);
-	if (targetPath.is_relative())
-		targetPath = PlatformPath::ResolveProjectRelative(targetPath);
-	if (!std::filesystem::exists(targetPath))
+	std::filesystem::path targetPath = PlatformPath::ResolveUri(filePath);
+	if (!PakMountManager::Get().ExistsOrOnDisk(targetPath))
 	{
 		const std::string ext = targetPath.extension().string();
 		if (ext == ".json")
@@ -554,7 +551,7 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 			if (!stem.ends_with(".bamscene"))
 			{
 				const auto candidatePath = targetPath.parent_path() / (stem + ".bamscene.json");
-				if (std::filesystem::exists(candidatePath))
+				if (PakMountManager::Get().ExistsOrOnDisk(candidatePath))
 					targetPath = candidatePath;
 			}
 		}
@@ -563,7 +560,7 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 	const auto elapsedMs = [](Clock::time_point begin, Clock::time_point end) { return std::chrono::duration<double, std::milli>(end - begin).count(); };
 	const auto readStart = Clock::now();
 	Scene* candidate = nullptr;
-	auto result = ar.LoadFromFile(targetPath);
+	auto result = PakMountManager::Get().LoadArchiveWithFallback(ar, targetPath);
 	const auto createStart = Clock::now();
 	if (result) result = Scene::CreateFromArchive(ar, candidate);
 	const auto openStart = Clock::now();

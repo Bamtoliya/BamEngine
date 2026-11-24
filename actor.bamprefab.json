@@ -17,11 +17,19 @@
                         "Data": {
                             "AspectRatio": 1.7777777910232544,
                             "CameraType": 0,
+                            "DepthOfFieldMode": 0,
                             "FOV": 73,
+                            "FStop": 2.799999952316284,
                             "FarPlane": 1000,
+                            "FocusDistance": 10,
+                            "FocusRange": 4,
+                            "FocusTransitionRange": 10,
                             "IsMainCamera": false,
+                            "MaxBlurRadius": 12,
                             "NearPlane": 0.10000000149011612,
-                            "OrthographicSize": 10
+                            "OrthographicSize": 10,
+                            "OverrideDepthOfField": false,
+                            "SensorHeight": 24
                         },
                         "Enabled": false,
                         "Type": "Engine::CameraComponent"
