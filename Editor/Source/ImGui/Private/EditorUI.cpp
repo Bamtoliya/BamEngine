@@ -126,6 +126,27 @@ namespace
         const auto& padding = ImGui::GetStyle().FramePadding;
         return ImVec2(std::max(padding.x, minimum), std::max(padding.y, minimum));
     }
+
+    std::string BuildTextButtonDisplay(const char* text, const char* icon)
+    {
+        std::string display;
+        if (icon && icon[0] != '\0')
+        {
+            display += icon;
+            if (text && text[0] != '\0')
+                display += ' ';
+        }
+        if (text)
+            display += text;
+        return display;
+    }
+
+    ImVec2 TextButtonPadding()
+    {
+        const float fontSize = ImGui::GetFontSize();
+        const auto& padding = ImGui::GetStyle().FramePadding;
+        return ImVec2(std::max(padding.x, fontSize * 0.45f), std::max(padding.y, fontSize * 0.2f));
+    }
 }
 
 ImVec2 EditorUI::GetIconButtonSize(const char* icon, bool compact)
@@ -204,6 +225,96 @@ bool EditorUI::IconButton(const char* id, const char* icon, const char* tooltipK
     return pressed;
 }
 
+ImVec2 EditorUI::GetTextButtonSize(const char* text, const TextButtonOptions& options)
+{
+    const std::string display = BuildTextButtonDisplay(text, options.Icon);
+    const ImVec2 textSize = ImGui::CalcTextSize(display.c_str());
+    const ImVec2 padding = TextButtonPadding();
+    const float naturalWidth = textSize.x + padding.x * 2.0f;
+    const float width = std::max(naturalWidth, options.MinWidth);
+    const float baseHeight = std::max(ImGui::GetFrameHeight(), textSize.y + padding.y * 2.0f);
+    const float height = options.Height > 0.0f ? std::max(baseHeight, options.Height) : baseHeight;
+    return ImVec2(width, height);
+}
+
+bool EditorUI::TextButtonRaw(const char* id, const char* text, const TextButtonOptions& options)
+{
+    const std::string display = BuildTextButtonDisplay(text, options.Icon);
+    const ImVec2 textSize = ImGui::CalcTextSize(display.c_str());
+    const ImVec2 padding = TextButtonPadding();
+    const float naturalWidth = textSize.x + padding.x * 2.0f;
+    const float baseHeight = std::max(ImGui::GetFrameHeight(), textSize.y + padding.y * 2.0f);
+    const float height = options.Height > 0.0f ? std::max(baseHeight, options.Height) : baseHeight;
+
+    float width = std::max(naturalWidth, options.MinWidth);
+    if (options.FullWidth)
+        width = std::max(std::max(1.0f, ImGui::GetContentRegionAvail().x), options.MinWidth);
+    else if (options.SameLine)
+        SameLineIfFits(width);
+
+    const std::string label = (id && id[0] != '\0') ? (display + "###" + id) : display;
+    ImGui::BeginDisabled(!options.Enabled);
+
+    int pushedColors = 0;
+    if (options.Style == EButtonStyle::Danger)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.9f, 0.3f, 0.3f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.65f, 0.15f, 0.15f, 1.0f));
+        pushedColors = 3;
+    }
+    else if (options.Style == EButtonStyle::Primary)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.18f, 0.48f, 0.82f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.06f, 0.53f, 0.98f, 1.0f));
+        pushedColors = 3;
+    }
+    else if (options.Active)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        pushedColors = 1;
+    }
+
+    const bool pressed = ImGui::Button(label.c_str(), ImVec2(width, height));
+
+    if (pushedColors > 0)
+        ImGui::PopStyleColor(pushedColors);
+
+    const bool textClipped = (width - ImGui::GetStyle().FramePadding.x * 2.0f) < textSize.x - 0.5f;
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+    {
+        std::string tooltip;
+        if (options.TooltipText && options.TooltipText[0] != '\0')
+            tooltip = options.TooltipText;
+        else if (options.TooltipKey && options.TooltipKey[0] != '\0')
+            tooltip = LOCAL(options.TooltipKey);
+        else if (textClipped && !display.empty())
+            tooltip = display;
+
+        if (!tooltip.empty())
+        {
+            if (options.ShortcutHint && options.ShortcutHint[0] != '\0')
+                ImGui::SetTooltip("%s (%s)", tooltip.c_str(), options.ShortcutHint);
+            else
+                ImGui::SetTooltip("%s", tooltip.c_str());
+        }
+        else if (options.ShortcutHint && options.ShortcutHint[0] != '\0')
+        {
+            ImGui::SetTooltip("%s", options.ShortcutHint);
+        }
+    }
+
+    ImGui::EndDisabled();
+    return pressed;
+}
+
+bool EditorUI::TextButton(const char* id, const char* labelKey, const TextButtonOptions& options)
+{
+    const std::string translated = (labelKey && labelKey[0] != '\0') ? LOCAL(labelKey) : std::string();
+    return TextButtonRaw(id, translated.c_str(), options);
+}
+
 bool EditorUI::ToolbarLayout::Icon(const char* id, const char* icon, const char* tooltipKey, const IconButtonOptions& options)
 {
     auto buttonOptions = options;
@@ -215,17 +326,16 @@ bool EditorUI::ToolbarLayout::Icon(const char* id, const char* icon, const char*
 
 bool EditorUI::ToolbarLayout::Button(const char* id, const char* icon, const char* labelKey)
 {
-    const std::string text = std::string(icon) + " " + LOCAL(labelKey);
-    const float width = ImGui::CalcTextSize(text.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    TextButtonOptions options;
+    options.Icon = icon;
+    options.TooltipKey = labelKey;
+    const std::string text = LOCAL(labelKey);
+    const float width = EditorUI::GetTextButtonSize(text.c_str(), options).x;
     if (width > ImGui::GetContentRegionAvail().x)
         return Icon(id, icon, labelKey);
-    if (m_HasItem)
-        EditorUI::SameLineIfFits(width);
+    options.SameLine = m_HasItem;
     m_HasItem = true;
-    const bool pressed = ImGui::Button((text + "###" + id).c_str());
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("%s", LOCAL_CSTR(labelKey));
-    return pressed;
+    return EditorUI::TextButtonRaw(id, text.c_str(), options);
 }
 
 void EditorUI::ToolbarLayout::SetNextItemWidth(float preferredWidth)

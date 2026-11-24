@@ -1,22 +1,49 @@
 Group,Key,English,Korean
+TerrainEditor,AttributeBlocked,Blocked,이동 불가
+TerrainEditor,AttributeErase,Erase,지우기
+TerrainEditor,AttributeHint,Invisible gameplay mask. Navigation reads it in a later step.,보이지 않는 게임플레이 마스크입니다. 내비게이션은 이후 단계에서 읽습니다.
+TerrainEditor,AttributePalette,Attribute,속성
+TerrainEditor,AttributeTool,Paint Attributes,속성 페인트
+TerrainEditor,AttributeWater,Water,물
 TerrainEditor,BrushMode,Brush Mode,브러시 모드
 TerrainEditor,DefaultName,Terrain,지형
+TerrainEditor,ExportDone,Exported {}.,{} 파일로 내보냈습니다.
+TerrainEditor,ExportFailed,Could not export {}.,{} 파일로 내보내지 못했습니다.
 TerrainEditor,ExportHeightmap,Export Heightmap,하이트맵 익스포트
 TerrainEditor,Falloff,Falloff,감쇠
 TerrainEditor,Flatten,Flatten,평탄화
 TerrainEditor,HeightmapFile,Heightmap File,하이트맵 파일
+TerrainEditor,HeightmapFiles,Heightmaps (16-bit PNG / RAW / image),하이트맵 (16비트 PNG / RAW / 이미지)
+TerrainLayerEditor,Hint,Changes apply to every terrain that uses this layer after saving.,저장하면 이 레이어를 쓰는 모든 지형에 반영됩니다.
+TerrainEditor,HistoryImport,Import Heightmap,하이트맵 가져오기
+TerrainEditor,HistoryReset,Reset Terrain,지형 초기화
+TerrainEditor,ImportFailed,Could not read {} as a heightmap.,{} 파일을 하이트맵으로 읽지 못했습니다.
 TerrainEditor,ImportHeightmap,Import Heightmap,하이트맵 임포트
+TerrainEditor,LayerPalette,Layer Palette,레이어 팔레트
+TerrainEditor,LayerSlot,Layer {},레이어 {}
+TerrainEditor,LayerSummary,{} · Nav cost {:.1f} · Surface {},{} · 이동 비용 {:.1f} · 표면 {}
+TerrainEditor,LayerTooltip,Paint layer {} ({}),레이어 {} 칠하기 ({})
+TerrainEditor,LayerUndefined,No layer asset in this slot. Assign one under Layers in the Terrain component.,이 칸에 레이어 에셋이 없습니다. 지형 컴포넌트의 레이어 목록에서 지정하세요.
+TerrainLayerEditor,LoadFailed,Could not open {} as a terrain layer.,{} 파일을 지형 레이어로 열지 못했습니다.
 TerrainEditor,Lower,Lower,내리기
 TerrainEditor,NoScene,No active scene.,활성 씬이 없습니다.
 TerrainEditor,NoSelection,No terrain selected. Select a Terrain entity in Hierarchy.,계층 패널에서 지형 엔티티를 선택하세요.
+TerrainEditor,NotWalkable,Not walkable,이동 불가
+TerrainEditor,PaintTool,Paint Layers,레이어 페인트
+TerrainEditor,Png16Files,16-bit PNG,16비트 PNG
 TerrainEditor,Radius,Radius,반경
+TerrainEditor,RadiusTooltip,Smaller: {} / Larger: {},작게: {} / 크게: {}
 TerrainEditor,Raise,Raise,올리기
+TerrainEditor,RawFiles,RAW (16-bit little-endian),RAW (16비트 리틀 엔디언)
 TerrainEditor,ResetTerrain,Reset Terrain,지형 초기화
+TerrainLayerEditor,SaveFailed,Could not save {}.,{} 파일을 저장하지 못했습니다.
 TerrainEditor,Sculpt,Sculpt,조각
-TerrainEditor,SculptOff,Sculpting: OFF (Click to Enable),지형 조형: 꺼짐 (클릭하여 켜기)
-TerrainEditor,SculptOn,Sculpting: ON (Click to Disable),지형 조형: 켜짐 (클릭하여 끄기)
+TerrainEditor,SculptOff,Brush: OFF (Click to Enable),브러시: 꺼짐 (클릭하여 켜기)
+TerrainEditor,SculptOn,Brush: ON (Click to Disable),브러시: 켜짐 (클릭하여 끄기)
 TerrainEditor,Smooth,Smooth,부드럽게
 TerrainEditor,Strength,Strength,강도
 TerrainEditor,Target,Target: {},대상: {}
 TerrainEditor,TargetHeight,Target Height,목표 높이
 TerrainEditor,Title,Terrain Editor,지형 편집기
+TerrainEditor,Tool,Tool,도구
+TerrainEditor,Walkable,Walkable,이동 가능

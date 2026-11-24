@@ -126,3 +126,11 @@ Viewport,PixelPerfectView,Pixel Perfect View (1:1),픽셀 퍼펙트 뷰 (1:1)
 Viewport,Pivot,Pivot,피벗
 Viewport,Center,Center,중심점
 Viewport,CameraSpeedValue,Move Speed: {:.1f},이동 속도: {:.1f}
+Viewport,NavGridOverlayTooltip,Show/Hide NavGrid Overlay,NavGrid 오버레이 표시/숨기기
+Viewport,BakeNavGridTooltip,Bake NavGrid from Scene Colliders & Terrain,씬 콜라이더·지형으로 NavGrid 베이크
+Viewport,ShowNavGridOverlay,Show NavGrid Overlay,NavGrid 오버레이 표시
+Viewport,BakeNavGridMenu,Bake NavGrid (Scene),NavGrid 베이크 (씬)
+Viewport,NavGridTitle,NavGrid,NavGrid
+Viewport,NavGridNoActiveScene,No active scene found to bake NavGrid.,NavGrid를 베이크할 활성 씬이 없습니다.
+Viewport,NavGridBakeTitle,NavGrid Bake,NavGrid 베이크
+Viewport,NavGridBakedMessage,"NavGrid baked: {}x{} cells ({} obstacles, cell {:.2f}m)","NavGrid 베이크 완료: {}x{} 셀 (장애물 {}개, 셀 {:.2f}m)"

@@ -209,21 +209,21 @@ void AnimatorGraphPanel::DrawCustomContent()
 		ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Layer Properties: %s", layer.name.c_str());
 		ImGui::Separator();
 		ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
-		ImGui::SliderFloat("Weight", &layer.weight, 0.0f, 1.0f, "%.2f");
+		ImGui::SliderFloat(LOCAL_LABEL("AnimatorGraph.Weight").c_str(), &layer.weight, 0.0f, 1.0f, "%.2f");
 
 		std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
-		if (ImGui::InputText("Mask Root Bone", &rootBoneStr))
+		if (ImGui::InputText(LOCAL_LABEL("AnimatorGraph.MaskRootBone").c_str(), &rootBoneStr))
 			layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
-		ImGui::Checkbox("Recursive Children", &layer.mask.includeChildren);
+		ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.RecursiveChildren").c_str(), &layer.mask.includeChildren);
 
 		auto clip = layer.clip;
 		if (DrawInspectorResourcePicker(clip, true))
 			layer.clip = clip;
 
-		ImGui::DragFloat("Play Rate", &layer.playRate, 0.05f, 0.1f, 5.0f);
-		ImGui::Checkbox("Looping", &layer.isLooping);
+		ImGui::DragFloat(LOCAL_LABEL("AnimatorGraph.PlayRate").c_str(), &layer.playRate, 0.05f, 0.1f, 5.0f);
+		ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.Looping").c_str(), &layer.isLooping);
 		ImGui::SameLine();
-		ImGui::Checkbox("Playing", &layer.isPlaying);
+		ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.Playing").c_str(), &layer.isPlaying);
 	}
 	ImGui::EndChild();
 	ImGui::SameLine();
@@ -818,7 +818,7 @@ void AnimatorGraphPanel::DrawLayersTab()
 	ImGui::PushID("AnimatorLayersTab");
 
 	// Base Layer
-	if (ImGui::CollapsingHeader("Base Layer", ImGuiTreeNodeFlags_DefaultOpen))
+	if (ImGui::CollapsingHeader(LOCAL_LABEL("AnimatorGraph.BaseLayer").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		ImGui::TextDisabled("Weight: 1.00 (Base)");
 		ImGui::TextDisabled("Mask: Full Body");
@@ -837,14 +837,14 @@ void AnimatorGraphPanel::DrawLayersTab()
 		if (ImGui::CollapsingHeader(headerTitle.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 		{
 			ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
-			ImGui::SliderFloat("Weight", &layer.weight, 0.0f, 1.0f, "%.2f");
+			ImGui::SliderFloat(LOCAL_LABEL("AnimatorGraph.Weight").c_str(), &layer.weight, 0.0f, 1.0f, "%.2f");
 
 			std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
-			if (ImGui::InputText("Mask Root Bone", &rootBoneStr))
+			if (ImGui::InputText(LOCAL_LABEL("AnimatorGraph.MaskRootBone").c_str(), &rootBoneStr))
 			{
 				layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
 			}
-			ImGui::Checkbox("Recursive Children", &layer.mask.includeChildren);
+			ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.RecursiveChildren").c_str(), &layer.mask.includeChildren);
 			if (!layer.mask.boneWeights.empty())
 			{
 				ImGui::TextDisabled("Evaluated Bones: %zu", layer.mask.boneWeights.size());
@@ -856,10 +856,10 @@ void AnimatorGraphPanel::DrawLayersTab()
 				layer.clip = clip;
 			}
 
-			ImGui::DragFloat("Play Rate", &layer.playRate, 0.05f, 0.1f, 5.0f);
-			ImGui::Checkbox("Looping", &layer.isLooping);
+			ImGui::DragFloat(LOCAL_LABEL("AnimatorGraph.PlayRate").c_str(), &layer.playRate, 0.05f, 0.1f, 5.0f);
+			ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.Looping").c_str(), &layer.isLooping);
 			ImGui::SameLine();
-			ImGui::Checkbox("Playing", &layer.isPlaying);
+			ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.Playing").c_str(), &layer.isPlaying);
 
 			if (ImGui::Button(LOCAL_CSTR("EditorCommon.Delete")))
 			{

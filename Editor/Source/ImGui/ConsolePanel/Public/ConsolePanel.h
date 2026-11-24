@@ -53,6 +53,7 @@ private:
 	void DrawLog();
 	void DrawLogItem(const ConsoleRow& row, float rowHeight);
 	void RebuildVisibleRows();
+	void OnLanguageChanged(ELocalizationLanguage newLang);
 
 private:
 	static std::string BuildDisplayText(const LogEntry& entry);
@@ -60,7 +61,6 @@ private:
 	static const char* LevelIcon(Engine::ELogLevel level);
 	static const char* CategoryIcon(std::string_view category);
 	static ImVec4 LevelColor(Engine::ELogLevel level);
-private:
 private:
 	deque<ConsoleItem> m_Items;
 	ImGuiTextFilter m_Filter;
@@ -70,6 +70,8 @@ private:
 	bool m_ScrollToBottom = false;
 	bool m_HasNewEntries = false;
 	bool m_IsRightMouseButtonDown = false;
+	bool m_LanguageInitialized = false;
+	ELocalizationLanguage m_CurrentLanguage = ELocalizationLanguage::English;
 
 	array<bool, 5> m_ShowLevels{ true, true, true, true, true };
 	uint64 m_DroppedCount = 0;

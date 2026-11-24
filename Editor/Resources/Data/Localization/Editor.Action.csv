@@ -60,3 +60,13 @@ Action,Viewport.CameraSpeedDecrease,Decrease Camera Speed,카메라 속도 감�
 Action,Viewport.TogglePivot,Toggle Pivot / Center,피벗 / 중심점 모드 전환
 Action,Timeline.StepPrev,Step Previous Frame,1프레임 이전
 Action,Timeline.StepNext,Step Next Frame,1프레임 다음
+Action,Terrain.Layer1,Terrain: Select Layer 1,지형: 레이어 1 선택
+Action,Terrain.Layer2,Terrain: Select Layer 2,지형: 레이어 2 선택
+Action,Terrain.Layer3,Terrain: Select Layer 3,지형: 레이어 3 선택
+Action,Terrain.Layer4,Terrain: Select Layer 4,지형: 레이어 4 선택
+Action,Terrain.Layer5,Terrain: Select Layer 5,지형: 레이어 5 선택
+Action,Terrain.Layer6,Terrain: Select Layer 6,지형: 레이어 6 선택
+Action,Terrain.Layer7,Terrain: Select Layer 7,지형: 레이어 7 선택
+Action,Terrain.Layer8,Terrain: Select Layer 8,지형: 레이어 8 선택
+Action,Terrain.BrushSmaller,Terrain: Smaller Brush,지형: 브러시 작게
+Action,Terrain.BrushLarger,Terrain: Larger Brush,지형: 브러시 크게

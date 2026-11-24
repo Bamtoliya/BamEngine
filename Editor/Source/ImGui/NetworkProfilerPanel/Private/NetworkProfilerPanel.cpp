@@ -1,4 +1,5 @@
 ﻿#include "NetworkProfilerPanel.h"
+#include "EditorUI.h"
 #include "System.h"
 #include "NetworkSystem.h"
 #include "SystemManager.h"
@@ -8,7 +9,6 @@
 #include <format>
 #include <numeric>
 
-BEGIN(Editor)
 struct NetworkProfilerPanel::PluginState
 {
     std::array<float, MaxPingHistory> PingHistory;
@@ -152,7 +152,7 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     if (mode == Engine::Network::ENetworkMode::Standalone)
     {
         ImGui::InputInt(LOCAL_LABEL("NetworkProfiler.Port").c_str(), &m_ServerPort);
-        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.HostServer").c_str(), ImVec2(120, 26)))
+        if (EditorUI::TextButton("HostServer", "NetworkProfiler.HostServer"))
         {
             driver.StartServer(static_cast<std::uint16_t>(m_ServerPort));
         }
@@ -161,8 +161,9 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
         ImGui::SetNextItemWidth(140);
         ImGui::InputText(LOCAL_LABEL("NetworkProfiler.IPAddress").c_str(), m_ServerAddressBuffer, sizeof(m_ServerAddressBuffer));
 
-        ImGui::SameLine();
-        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.Connect").c_str(), ImVec2(100, 26)))
+        EditorUI::TextButtonOptions connectOpt;
+        connectOpt.SameLine = true;
+        if (EditorUI::TextButton("Connect", "NetworkProfiler.Connect", connectOpt))
         {
             Engine::Network::NetworkAddress targetAddr(m_ServerAddressBuffer, static_cast<std::uint16_t>(m_ServerPort));
             driver.ConnectToServer(targetAddr);
@@ -170,7 +171,9 @@ void NetworkProfilerPanel::DrawSessionControl(Engine::NetworkSystem* netSystem)
     }
     else
     {
-        if (ImGui::Button(LOCAL_LABEL("NetworkProfiler.Disconnect").c_str(), ImVec2(150, 26)))
+        EditorUI::TextButtonOptions disconnectOpt;
+        disconnectOpt.Style = EditorUI::EButtonStyle::Danger;
+        if (EditorUI::TextButton("Disconnect", "NetworkProfiler.Disconnect", disconnectOpt))
         {
             driver.Stop(Engine::Network::EDisconnectReason::Requested);
         }
@@ -190,19 +193,20 @@ void NetworkProfilerPanel::DrawSimulationControls(Engine::NetworkSystem* netSyst
     auto& driver = netSystem->GetDriver();
     auto& sim = driver.GetSimSettings();
 
-    ImGui::TextUnformatted("Network Simulation (Lag & Packet Drop):");
+    ImGui::TextUnformatted(LOCAL_CSTR("NetworkProfiler.SimulationTitle"));
 
     ImGui::SetNextItemWidth(180.0f);
-    ImGui::SliderFloat("Simulated Latency (ms)##NetSim", &sim.simulatedLatencyMs, 0.0f, 500.0f, "%.1f ms");
+    ImGui::SliderFloat(LOCAL_LABEL("NetworkProfiler.SimulatedLatency").c_str(), &sim.simulatedLatencyMs, 0.0f, 500.0f, "%.1f ms");
 
     ImGui::SetNextItemWidth(180.0f);
-    ImGui::SliderFloat("Simulated Jitter (ms)##NetSim", &sim.simulatedJitterMs, 0.0f, 100.0f, "%.1f ms");
+    ImGui::SliderFloat(LOCAL_LABEL("NetworkProfiler.SimulatedJitter").c_str(), &sim.simulatedJitterMs, 0.0f, 100.0f, "%.1f ms");
 
     ImGui::SetNextItemWidth(180.0f);
-    ImGui::SliderFloat("Packet Loss (%)##NetSim", &sim.simulatedPacketLossPercent, 0.0f, 50.0f, "%.1f %%");
+    ImGui::SliderFloat(LOCAL_LABEL("NetworkProfiler.PacketLoss").c_str(), &sim.simulatedPacketLossPercent, 0.0f, 50.0f, "%.1f %%");
 
-    ImGui::SameLine();
-    if (ImGui::Button("Reset##NetSim", ImVec2(80, 24)))
+    EditorUI::TextButtonOptions resetOpt;
+    resetOpt.SameLine = true;
+    if (EditorUI::TextButton("NetSimReset", "EditorCommon.Reset", resetOpt))
     {
         sim.Reset();
     }
@@ -255,5 +259,3 @@ void NetworkProfilerPanel::DrawConnectedClientsTable(Engine::NetworkSystem* netS
         ImGui::EndTable();
     }
 }
-
-END

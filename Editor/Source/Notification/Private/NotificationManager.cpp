@@ -220,12 +220,15 @@ void NotificationManager::DrawHistoryPopup()
                     // 시각 및 레벨 아이콘
                     ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[%s]", item.TimeString.c_str());
                     ImGui::SameLine();
-                    ImGui::TextColored(color, "%s %s", icon, item.Title.c_str());
+                    const auto curLang = Engine::LocalizationManager::IsCreated() ? Engine::LocalizationManager::Get().GetCurrentLanguage() : ELocalizationLanguage::English;
+                    std::string displayTitle = Engine::LocalizationManager::IsCreated() ? Engine::LocalizationManager::Get().TranslateLogMessage(item.Title, curLang) : item.Title;
+                    ImGui::TextColored(color, "%s %s", icon, displayTitle.c_str());
 
                     if (!item.Message.empty())
                     {
                         ImGui::Indent(18.0f);
-                        ImGui::TextWrapped("%s", item.Message.c_str());
+                        std::string displayMsg = Engine::LocalizationManager::IsCreated() ? Engine::LocalizationManager::Get().TranslateLogMessage(item.Message, curLang) : item.Message;
+                        ImGui::TextWrapped("%s", displayMsg.c_str());
                         ImGui::Unindent(18.0f);
                     }
 

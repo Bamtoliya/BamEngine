@@ -156,6 +156,9 @@ ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVis
 			{ ".timeline.json",       ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
 			{ ".bamtimeline",         ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
 			{ ".actiontimeline",      ICON_FA_STOPWATCH,           ImVec4(0.92f, 0.72f, 0.15f, 0.38f), ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" },
+			// 지형 레이어 (TerrainLayerAsset)
+			{ ".bamterrainlayer.json", ICON_FA_LAYER_GROUP,        ImVec4(0.45f, 0.70f, 0.25f, 0.38f), ImVec4(0.55f, 0.80f, 0.35f, 1.0f), "LAYER" },
+			{ ".bamterrainlayer",      ICON_FA_LAYER_GROUP,        ImVec4(0.45f, 0.70f, 0.25f, 0.38f), ImVec4(0.55f, 0.80f, 0.35f, 1.0f), "LAYER" },
 			// [신규] Save Data (세이브 게임)
 			{ ".bamsave.json",       ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
 			{ ".save.json",          ICON_FA_FLOPPY_DISK,         ImVec4(0.20f, 0.80f, 0.65f, 0.38f), ImVec4(0.35f, 0.95f, 0.78f, 1.0f), "SAVE" },
@@ -563,11 +566,16 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 	// 엔진 빌트인 읽기 전용 리소스인 경우 좌상단에 자물쇠 배지 표시
 	if (ctx.IsReadOnly)
 	{
+		const ImVec2 lockIconSize = ImGui::CalcTextSize(ICON_FA_LOCK);
+		const float badgePadding = (std::max)(3.0f, ImGui::GetFontSize() * 0.2f);
+		const float badgeSide = (std::max)(lockIconSize.x, lockIconSize.y) + badgePadding * 2.0f;
 		const ImVec2 lockBadgeMin(cursorPos.x + 3.0f, cursorPos.y + 3.0f);
-		const ImVec2 lockBadgeMax(cursorPos.x + 21.0f, cursorPos.y + 21.0f);
+		const ImVec2 lockBadgeMax(lockBadgeMin.x + badgeSide, lockBadgeMin.y + badgeSide);
 		drawList->AddRectFilled(lockBadgeMin, lockBadgeMax, ImGui::GetColorU32(ImVec4(0.10f, 0.10f, 0.10f, 0.82f)), 4.0f);
-		drawList->AddText(ImVec2(lockBadgeMin.x + 3.0f, lockBadgeMin.y + 2.0f),
-			ImGui::GetColorU32(ImVec4(0.95f, 0.78f, 0.25f, 1.0f)), ICON_FA_LOCK);
+		const ImVec2 lockIconPos(
+			lockBadgeMin.x + (badgeSide - lockIconSize.x) * 0.5f,
+			lockBadgeMin.y + (badgeSide - lockIconSize.y) * 0.5f);
+		drawList->AddText(lockIconPos, ImGui::GetColorU32(ImVec4(0.95f, 0.78f, 0.25f, 1.0f)), ICON_FA_LOCK);
 	}
 
 	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);

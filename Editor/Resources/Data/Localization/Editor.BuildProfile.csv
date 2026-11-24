@@ -44,3 +44,45 @@ BuildProfile,InvalidStartupScene,Select a saved BamEngine scene inside the proje
 BuildProfile,SelectionSaveFailed,Could not save the build settings. Your selection is available for this session.,빌드 설정을 저장하지 못했습니다. 현재 세션에서는 선택한 값을 사용할 수 있습니다.
 BuildProfile,StartupScene,Startup Scene,시작 씬
 BuildProfile,OutputFolder,Export Folder,내보낼 폴더
+BuildProfile,OnlyReferencedAssets,Package Referenced Assets Only,참조된 에셋만 패키징
+BuildProfile,OnlyReferencedAssetsTooltip,"Collect and package only referenced scenes/assets and essential engine dependencies instead of scanning the full Assets folder.","전체 Assets 폴더를 스캔하는 대신 참조된 씬/에셋 및 필수 엔진 의존성만 수집하여 패키징합니다."
+BuildProfile,OnlyReferencedAssetsCheckbox,Only include referenced assets,참조된 에셋만 포함
+BuildProfile,BamPakPackaging,BamPak Packaging,BamPak 패키징
+BuildProfile,BamPakPackagingTooltip,"Pack Engine and Project assets into Content/Engine.bampak and Content/Project.bampak with Config/PackageManifest.json.","엔진 및 프로젝트 에셋을 Config/PackageManifest.json과 함께 Content/Engine.bampak 및 Content/Project.bampak으로 패키징합니다."
+BuildProfile,BamPakPackagingCheckbox,Pack assets into .bampak archives,에셋을 .bampak 아카이브로 패키징
+BuildProfile,BamPakSummary,BamPak Summary,BamPak 요약
+BuildProfile,BamPakSummaryValue,{0} archive(s) / {1} entries / {2} bytes,아카이브 {0}개 / 항목 {1}개 / {2}바이트
+BuildProfile,IntegrityCheck,Integrity Check,무결성 검사
+BuildProfile,IntegrityVerified,Verified,검증됨
+BuildProfile,IntegrityFailed,Failed,실패
+BuildProfile,DirectFileExceptions,Direct-File Exceptions,직접 파일 예외
+BuildProfile,DirectFileExceptionsValue,{0} file(s) preserved on disk,디스크에 유지된 파일 {0}개
+BuildProfile,ScenesInBuild,Scenes in Build,빌드에 포함할 씬
+BuildProfile,AddCurrentScene,Add Current Scene,현재 씬 추가
+BuildProfile,AddCurrentSceneTooltip,Add the currently active scene to the build list.,현재 열려 있는 씬을 빌드 목록에 추가합니다.
+BuildProfile,AddSceneFile,Add Scene...,씬 파일 추가…
+BuildProfile,NoScenesInBuild,No scenes in build. Add the current open scene or browse for scene files.,빌드에 포함된 씬이 없습니다. 현재 열린 씬을 추가하거나 씬 파일을 추가하세요.
+BuildProfile,StartupSceneBadge,Startup,시작 씬
+BuildProfile,StartupSceneTooltip,This scene will be loaded first when the client starts (Index 0).,클라이언트 시작 시 가장 먼저 로드되는 시작 씬입니다 (인덱스 0).
+BuildProfile,SceneIndex,Index,인덱스
+BuildProfile,AddAssetFile,Add Asset...,에셋 파일 추가…
+BuildProfile,AddAssetFolder,Add Folder...,에셋 폴더 추가…
+BuildProfile,ClearAllAssets,Clear All,모두 제거
+BuildProfile,NoAdditionalAssets,No additional assets configured. Add files or folders that must always be included in the package.,항상 포함할 추가 에셋이 없습니다. 패키징에 반드시 포함해야 할 파일이나 폴더를 추가하세요.
+BuildProfile,AdditionalAssetsFolderSuccess,Added {0} file(s) from folder.,폴더에서 {0}개의 파일을 추가했습니다.
+BuildProfile,InvalidAssetFolder,Select a folder inside the project Assets folder.,프로젝트 Assets 폴더 안의 폴더를 선택하세요.
+BuildProfile,NoAssetsFoundInFolder,No valid asset files found in the selected folder.,선택한 폴더에 유효한 에셋 파일이 없습니다.
+BuildProfile,PackagingSettings,Packaging Options,패키징 옵션
+BuildProfile,BuildAndExportTooltipMissing,Startup scene, output folder, package folder name, and program name are required.,시작 씬, 내보낼 위치, 패키지 폴더 이름, 프로그램 이름이 필요합니다.
+BuildProfile,AssetCount,Total {0} asset(s),총 {0}개 에셋
+BuildProfile,CategoryGeneral,General & Output,일반 및 출력
+BuildProfile,CategoryScenes,Scenes,씬
+BuildProfile,CategoryAssets,Assets,에셋
+BuildProfile,CategoryPackaging,Packaging & BamPak,패키징 및 BamPak
+BuildProfile,CategoryBuildLog,Build Log,빌드 로그
+BuildProfile,GroupConfiguration,Configuration,빌드 설정
+BuildProfile,GroupOutput,Output & Diagnostics,출력 및 진단
+BuildProfile,StatusIdle,Ready,준비 완료
+BuildProfile,MissingBuildSettings,Settings Incomplete,설정 미완료
+BuildProfile,ClearBuildLog,Clear Log,로그 지우기
+BuildProfile,GeneralSection,Build & Output Settings,빌드 및 출력 기본 설정

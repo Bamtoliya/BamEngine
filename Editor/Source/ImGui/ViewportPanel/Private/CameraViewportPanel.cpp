@@ -174,13 +174,14 @@ void CameraViewportPanel::DrawCameraMenu()
 		ImGui::Separator();
 
 		// 5. 빠른 이동 프리셋 버튼
-		if (ImGui::Button(LOCAL_LABEL("Viewport.CameraResetOrigin").c_str()))
+		if (EditorUI::TextButton("CameraResetOrigin", "Viewport.CameraResetOrigin"))
 		{
 			if (transform->SetLocalPosition(vec3(0.0f, 5.0f, -10.0f)))
 				m_CameraController->SetControlRotation(vec3(15.0f, 0.0f, 0.0f));
 		}
-		ImGui::SameLine();
-		if (ImGui::Button(LOCAL_LABEL("Viewport.CameraTopView").c_str()))
+		EditorUI::TextButtonOptions topViewOpt;
+		topViewOpt.SameLine = true;
+		if (EditorUI::TextButton("CameraTopView", "Viewport.CameraTopView", topViewOpt))
 		{
 			if (transform->SetLocalPosition(vec3(pos.x, 50.0f, pos.z)))
 				m_CameraController->SetControlRotation(vec3(90.0f, 0.0f, 0.0f));

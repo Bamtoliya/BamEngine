@@ -66,7 +66,7 @@ void AudioMixerSettingsWidget::Apply()
         {
             NotificationManager::Get().AddNotification(
                 LOCAL("AudioPreview.Title"),
-                "Audio mixer settings saved to Config/AudioMixer.json",
+                LOCAL_FMT("AudioPreview.SavedNotice", configPath.generic_string()),
                 ELogLevel::Info
             );
         }
@@ -78,13 +78,13 @@ void AudioMixerSettingsWidget::Draw()
 {
     ImGui::TextUnformatted(LOCAL_CSTR("AudioPreview.Title"));
     ImGui::SameLine();
-    ImGui::TextDisabled("— Audio Mixer Bus Controls");
+    ImGui::TextDisabled("— %s", LOCAL_CSTR("AudioPreview.MixerSubtitle"));
     ImGui::Separator();
     ImGui::Spacing();
 
     if (!Engine::AudioManager::IsCreated())
     {
-        ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.3f, 1.0f), "AudioManager is not initialized.");
+        ImGui::TextColored(ImVec4(0.9f, 0.4f, 0.3f, 1.0f), "%s", LOCAL_CSTR("AudioPreview.AudioManagerUninitialized"));
         return;
     }
 
@@ -96,15 +96,15 @@ void AudioMixerSettingsWidget::Draw()
     auto& audioMgr = Engine::AudioManager::Get();
     auto& mixer = audioMgr.GetMixer();
 
-    if (ImGui::CollapsingHeader("Bus Channels", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("AudioPreview.BusChannels").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         const ImGuiTableFlags tableFlags = ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp;
         if (ImGui::BeginTable("##AudioBusTable", 4, tableFlags))
         {
-            ImGui::TableSetupColumn("Bus", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Volume", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Mute", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-            ImGui::TableSetupColumn("Effective", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+            ImGui::TableSetupColumn(LOCAL_CSTR("AudioPreview.ColumnBus"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn(LOCAL_CSTR("AudioPreview.ColumnVolume"), ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn(LOCAL_CSTR("AudioPreview.ColumnMute"), ImGuiTableColumnFlags_WidthFixed, 60.0f);
+            ImGui::TableSetupColumn(LOCAL_CSTR("AudioPreview.ColumnEffective"), ImGuiTableColumnFlags_WidthFixed, 100.0f);
             ImGui::TableHeadersRow();
 
             constexpr Engine::EAudioBus buses[] = {
@@ -167,31 +167,30 @@ void AudioMixerSettingsWidget::Draw()
     }
 
     // Actions: Reset to Default, Save Settings, Load Settings
-    if (ImGui::CollapsingHeader("Mixer Profile Actions", ImGuiTreeNodeFlags_DefaultOpen))
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("AudioPreview.MixerProfileActions").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        const float buttonWidth = 140.0f;
-        const float buttonHeight = 28.0f;
+        const std::filesystem::path configPath = "Config/AudioMixer.json";
 
-        if (ImGui::Button("Reset to Default", ImVec2(buttonWidth, buttonHeight)))
+        if (EditorUI::TextButton("AudioResetToDefault", "AudioPreview.ResetToDefault"))
         {
             ResetToDefaults();
             NotificationManager::Get().AddNotification(
                 LOCAL("AudioPreview.Title"),
-                "Audio mixer reset to default levels.",
+                LOCAL("AudioPreview.ResetNotice"),
                 ELogLevel::Info
             );
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Save Settings", ImVec2(buttonWidth, buttonHeight)))
+        EditorUI::TextButtonOptions actionOpt;
+        actionOpt.SameLine = true;
+        if (EditorUI::TextButton("AudioSaveSettings", "AudioPreview.SaveSettings", actionOpt))
         {
-            const std::filesystem::path configPath = "Config/AudioMixer.json";
             if (mixer.SaveSettings(configPath))
             {
                 m_Dirty = false;
                 NotificationManager::Get().AddNotification(
                     LOCAL("AudioPreview.Title"),
-                    "Audio mixer settings saved to Config/AudioMixer.json",
+                    LOCAL_FMT("AudioPreview.SavedNotice", configPath.generic_string()),
                     ELogLevel::Info
                 );
             }
@@ -199,22 +198,20 @@ void AudioMixerSettingsWidget::Draw()
             {
                 NotificationManager::Get().AddNotification(
                     LOCAL("AudioPreview.Title"),
-                    "Failed to save Config/AudioMixer.json",
+                    LOCAL_FMT("AudioPreview.SaveFailedNotice", configPath.generic_string()),
                     ELogLevel::Error
                 );
             }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Load Settings", ImVec2(buttonWidth, buttonHeight)))
+        if (EditorUI::TextButton("AudioLoadSettings", "AudioPreview.LoadSettings", actionOpt))
         {
-            const std::filesystem::path configPath = "Config/AudioMixer.json";
             if (mixer.LoadSettings(configPath))
             {
                 ReloadDraft();
                 NotificationManager::Get().AddNotification(
                     LOCAL("AudioPreview.Title"),
-                    "Audio mixer settings loaded from Config/AudioMixer.json",
+                    LOCAL_FMT("AudioPreview.LoadedNotice", configPath.generic_string()),
                     ELogLevel::Info
                 );
             }
@@ -222,14 +219,14 @@ void AudioMixerSettingsWidget::Draw()
             {
                 NotificationManager::Get().AddNotification(
                     LOCAL("AudioPreview.Title"),
-                    "Config/AudioMixer.json not found or failed to load",
+                    LOCAL_FMT("AudioPreview.LoadFailedNotice", configPath.generic_string()),
                     ELogLevel::Warn
                 );
             }
         }
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Configuration file: Config/AudioMixer.json");
+        ImGui::TextDisabled("%s", LOCAL_FMT("AudioPreview.ConfigFileLabel", configPath.generic_string()).c_str());
     }
 }
 

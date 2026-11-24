@@ -24,3 +24,4 @@ ResourceEditor,CompositeVFXTitle,Composite VFX Editor,통합 비주얼 이펙트
 ResourceEditor,DiscardTitle,Unsaved Changes,저장하지 않은 변경
 ResourceEditor,DiscardMessage,{} has unsaved changes.,{}에 저장하지 않은 변경 내용이 있습니다.
 ResourceEditor,DiscardFailed,Could not restore the saved asset. The document remains open.,저장된 에셋을 복원하지 못했습니다. 문서를 열린 상태로 유지합니다.
+ResourceEditor,TerrainLayerTitle,Terrain Layer Editor,지형 레이어 편집기

@@ -1,0 +1,22 @@
+Group,Key,English,Korean
+ProjectHub,Title,Project Hub,프로젝트 허브
+ProjectHub,RecentProjects,Recent Projects,최근 프로젝트
+ProjectHub,NoRecentProjects,No recent projects found.,최근 프로젝트가 없습니다.
+ProjectHub,OpenProject,Open Project...,프로젝트 열기...
+ProjectHub,OpenFolder,Open Folder...,폴더 열기...
+ProjectHub,CreateNewProject,Create New Project,새 프로젝트 생성
+ProjectHub,ProjectName,Project Name,프로젝트 이름
+ProjectHub,TargetFolder,Target Location,대상 폴더
+ProjectHub,Browse,Browse...,찾아보기...
+ProjectHub,Template,Template,템플릿
+ProjectHub,TemplateEmpty,Empty Project,빈 프로젝트
+ProjectHub,Template3D,3D Starter Project,3D 시작 프로젝트
+ProjectHub,Template2D,2D Starter Project,2D 시작 프로젝트
+ProjectHub,CreateAndOpen,Create & Open,생성 및 열기
+ProjectHub,Cancel,Cancel,취소
+ProjectHub,Open,Open,열기
+ProjectHub,ActiveProject,Active Project,현재 프로젝트
+ProjectHub,InvalidProjectName,Please enter a valid project name.,유효한 프로젝트 이름을 입력하세요.
+ProjectHub,InvalidTargetFolder,Please select a valid directory.,유효한 대상 폴더를 선택하세요.
+ProjectHub,CreateFailed,Failed to create project.,프로젝트 생성에 실패했습니다.
+ProjectHub,SwitchFailed,Failed to switch project.,프로젝트 전환에 실패했습니다.

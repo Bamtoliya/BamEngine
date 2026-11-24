@@ -34,7 +34,11 @@
 #include "SceneViewportPanel.h"
 #include "SplineCurve.h"
 #include "AssetPathPicker.h"
+#include "GraphBindingComponent.h"
 #include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <unordered_map>
 #include <cfloat>
 
 namespace
@@ -51,9 +55,43 @@ namespace
 		return name.ends_with(".bamtimeline.json") || name.ends_with(".actiontimeline.json") || name.ends_with(".bamtimeline") || name.ends_with(".actiontimeline");
 	}
 
+	// 로직 그래프만 받는다. 셰이더 그래프도 같은 .bamgraph.json 확장자를 쓰므로 파일의 최상위 "Domain" 값을 읽는다.
+	// 피커가 목록의 파일마다 매 프레임 물어볼 수 있어 수정 시각 기준으로 결과를 보관한다. 읽지 못한 파일은 받지 않는다.
+	bool IsLogicGraphFile(const std::filesystem::path& path)
+	{
+		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		if (!name.ends_with(".bamgraph.json") && !name.ends_with(".bamgraph")) return false;
+
+		struct CachedDomain { std::filesystem::file_time_type WriteTime; bool IsLogic = false; };
+		static std::unordered_map<std::wstring, CachedDomain> cache;
+
+		const auto resolved = Engine::PlatformPath::ResolveUri(path);
+		std::error_code ec;
+		const auto writeTime = std::filesystem::last_write_time(resolved, ec);
+		if (ec) return false;
+		const auto key = resolved.generic_wstring();
+		if (const auto found = cache.find(key); found != cache.end() && found->second.WriteTime == writeTime)
+			return found->second.IsLogic;
+
+		bool isLogic = false;
+		if (std::ifstream file(resolved, std::ios::binary); file)
+		{
+			const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+			if (const auto keyPos = text.find("\"Domain\""); keyPos != std::string::npos)
+			{
+				const auto valuePos = text.find_first_not_of(" \t\r\n:", keyPos + 8);
+				isLogic = valuePos != std::string::npos && text[valuePos] == '0' &&
+					(valuePos + 1 >= text.size() || !std::isdigit(static_cast<unsigned char>(text[valuePos + 1])));
+			}
+		}
+		cache[key] = { writeTime, isLogic };
+		return isLogic;
+	}
+
 	// 아이콘과 색은 콘텐츠 브라우저의 Animator·Timeline 표시와 맞춘다.
 	const Editor::AssetPathPickerDesc AnimatorControllerPicker{ { ICON_FA_DIAGRAM_PROJECT, ImVec4(0.95f, 0.50f, 0.85f, 1.0f), "ANIMATOR" }, IsAnimatorControllerFile };
 	const Editor::AssetPathPickerDesc ActionTimelinePicker{ { ICON_FA_STOPWATCH, ImVec4(1.00f, 0.82f, 0.25f, 1.0f), "TIMELINE" }, IsActionTimelineFile };
+	const Editor::AssetPathPickerDesc LogicGraphPicker{ { ICON_FA_CIRCLE_NODES, ImVec4(0.60f, 0.55f, 1.00f, 1.0f), "GRAPH" }, IsLogicGraphFile };
 }
 
 InspectorPanel::InspectorPanel(uint32 panelId) : m_PanelId(panelId)
@@ -1533,9 +1571,8 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 					timeline.Pause();
 				}
 
-				const auto* timelineAsset = timeline.timelineAsset.Get();
-				const bool canResume = !timeline.isPlaying && (!timelineAsset || timeline.isLooping ||
-					timeline.currentTime < std::max(0.05f, timelineAsset->GetDuration()));
+				// 끝까지 재생한 세션은 이어서 재생할 구간이 없다. 길이는 종료 정책에 따라 달라지므로 시간 대신 완료 표시로 판정한다.
+				const bool canResume = !timeline.isPlaying && (timeline.isLooping || !timeline.playbackCompleted);
 				ImGui::BeginDisabled(!canResume);
 				if (playbackToolbar.Button("Timeline.Resume", ICON_FA_PLAY, "EditorCommon.Resume"))
 				{
@@ -1554,6 +1591,24 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 			}
 
 			// 타임라인 편집기는 경로 필드 더블클릭으로 연다(미저장 확인을 거치는 공용 리소스 편집기 경로).
+			}
+		}
+		else if (object.Is<Engine::GraphBindingComponent>())
+		{
+			// 경로 문자열 입력 대신 로직 그래프만 보여주는 피커를 쓴다. 고른 경로는 가상 URI로 저장되어 이동·이름 변경 시 참조 갱신 대상이 된다.
+			componentSettings.HiddenProperties.insert("graphFile");
+			bool isOpen = false;
+			changed = ReflectionPropertyDrawer::DrawObject(type, object, registry, &componentSettings, &headerActions, &isOpen);
+			if (isOpen)
+			{
+				auto& binding = world.get<Engine::GraphBindingComponent>(handle);
+				ImGui::Text("%s", LOCAL_CSTR("PROP_GRAPH_FILE"));
+				std::string pickedGraph;
+				if (Editor::DrawInspectorAssetPathPicker(Engine::WStrToStr(binding.graphFile), pickedGraph, LogicGraphPicker))
+				{
+					binding.graphFile = Engine::StrToWStr(pickedGraph);
+					changed = true;
+				}
 			}
 		}
 		else if (object.Is<Engine::SplineComponent>())

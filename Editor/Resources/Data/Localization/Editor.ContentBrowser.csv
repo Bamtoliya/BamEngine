@@ -101,3 +101,17 @@ ContentBrowser,RenameInvalidName,Enter a valid file name. Empty names and reserv
 ContentBrowser,RenameNameExists,This name is already in use. Enter another name.,이미 사용 중인 이름입니다. 다른 이름을 입력하세요.
 ContentBrowser,RenameInputHint,Enter: confirm name. Escape or click elsewhere: keep the original name. The extension is preserved.,Enter: 이름 확정. Escape 또는 다른 곳 클릭: 기존 이름 유지. 확장자는 유지됩니다.
 ContentBrowser,RenameImpactCount,Stored references to renamed assets: {},이름을 변경할 에셋을 가리키는 저장된 참조 {}건
+ContentBrowser,CreateTerrainLayer,Terrain Layer,지형 레이어
+ContentBrowser,ExternalMounts,External Mounts,외부 마운트
+ContentBrowser,MountExternalFolder,Mount External Folder...,외부 폴더 연결...
+ContentBrowser,MountName,Mount Name,마운트 이름
+ContentBrowser,MountFolder,Folder Path,폴더 경로
+ContentBrowser,MountReadOnly,Read-Only,읽기 전용
+ContentBrowser,MountShowUnderAssets,Show Under Assets,Assets 하위에 표시
+ContentBrowser,Unmount,Unmount,연결 해제
+ContentBrowser,MountSettings,Mount Settings...,마운트 설정...
+ContentBrowser,MountLinkBadge,External Mount,외부 마운트
+ContentBrowser,MountAddTitle,Mount External Folder,외부 폴더 연결
+ContentBrowser,MountAddConfirm,Mount,연결
+ContentBrowser,MountFailed,Failed to mount folder.,폴더 연결에 실패했습니다.
+ContentBrowser,MountInvalidInput,Invalid mount name or folder path.,마운트 이름 또는 폴더 경로가 올바르지 않습니다.

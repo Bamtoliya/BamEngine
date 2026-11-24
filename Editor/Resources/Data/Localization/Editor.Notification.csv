@@ -54,9 +54,11 @@ Notification,Saved,Saved: {},저장됨: {}
 Notification,ShaderCompileError,Shader Compile Error,셰이더 컴파일 오류
 Notification,ShaderHotReloaded,Shader Hot-Swapped,셰이더 핫 리로드 완료
 Notification,TextureHotReloaded,Texture Hot-Swapped,텍스처 핫 리로드 완료
+Notification,TimelineHotReloaded,Timeline Hot-Swapped,타임라인 핫 리로드 완료
 Notification,TextureNotLoaded,Texture Not Loaded,메모리에 로드된 텍스처가 없습니다
 Notification,TextureReloaded,Texture Reloaded,텍스처를 다시 불러왔습니다
 Notification,TotalCount,Total Notifications,전체 알림
 Notification,CompilingNamedModule,Building {0}...,{0} 빌드 중...
 Notification,NamedModuleBuildFailed,{0} build failed. See the console.,{0} 빌드 실패. 콘솔을 확인하세요.
 Notification,NamedModuleBuildSucceeded,{0} build succeeded.,{0} 빌드 성공.
+Notification,TerrainLayerHotReloaded,Terrain Layer Hot-Swapped,지형 레이어 핫 리로드 완료

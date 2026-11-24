@@ -241,26 +241,36 @@ void BaseViewportPanel::DrawCustomOptions()
 }
 void BaseViewportPanel::DrawRenderTargetMenu()
 {
-	
-	if (ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderTargetsMenu")))
+	if (!ImGui::BeginMenu(LOCAL_CSTR("Viewport.RenderTargetsMenu")))
+		return;
+
+	const float minMenuWidth = ImGui::GetFontSize() * 18.0f;
+	ImGui::SetNextWindowSizeConstraints(ImVec2(minMenuWidth, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
+	if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AllRenderTargets").c_str()))
 	{
-		if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.AllRenderTargets").c_str()))
+		EditorUI::DrawSearchBar("RenderTargetSearch", m_RenderTargetSearch,
+			sizeof(m_RenderTargetSearch));
+		ImGui::Separator();
+
+		const string filter = Engine::ToLowerStr(m_RenderTargetSearch);
+		const auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
+
+		for (const auto& name : allNames)
 		{
-			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
-			for (const auto& name : allNames)
-			{
-				string label = WStrToStr(name);
-				bool selected = (name == m_SelectedRTName);
-				if (ImGui::MenuItem(label.c_str(), nullptr, selected))
-				{
-					m_SelectedRTName = name;
-				}
-				DrawRTItemContextMenu(name);
-			}
-			ImGui::EndMenu();
+			const string label = WStrToStr(name);
+			if (!filter.empty() && Engine::ToLowerStr(label).find(filter) == string::npos)
+				continue;
+
+			if (ImGui::MenuItem(label.c_str(), nullptr, name == m_SelectedRTName))
+				m_SelectedRTName = name;
+
+			DrawRTItemContextMenu(name);
 		}
+
 		ImGui::EndMenu();
 	}
+
+	ImGui::EndMenu();
 }
 void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 {

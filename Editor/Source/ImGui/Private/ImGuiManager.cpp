@@ -959,7 +959,8 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new MaterialEditor()) ||
 		!initializeClosed(new PrefabEditorPanel()) ||
 		!initializeClosed(new ParticleEditorPanel()) ||
-		!initializeClosed(new VFXEditorPanel()))
+		!initializeClosed(new VFXEditorPanel()) ||
+		!initializeClosed(new TerrainLayerEditor()))
 		return EResult::Fail;
 
 	const auto catalog = Engine::PlatformPath::GetExecutableDirectory() / "EditorResourcePlugins.txt";
@@ -1956,6 +1957,38 @@ bool ImGuiManager::CanRepairAssetReferenceSource(const std::filesystem::path& so
 	return true;
 }
 
+namespace
+{
+	bool ContainsCaseInsensitive(std::string_view haystack, std::string_view needle)
+	{
+		if (needle.empty()) return false;
+		const auto it = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(),
+			[](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+		return it != haystack.end();
+	}
+
+	bool SceneReferencesAnyAsset(Engine::Scene* scene, const AssetPathRelocation& relocation)
+	{
+		if (!scene) return true;
+		if (relocation.Changes().empty()) return false;
+		archive::JsonArchive writer;
+		std::string json;
+		if (!scene->WriteArchive(writer) || !writer.ToJson(json))
+			return true;
+
+		for (const auto& change : relocation.Changes())
+		{
+			const std::string virtualUri = WStrToStr(Engine::PlatformPath::ToVirtualUri(change.Before));
+			if (ContainsCaseInsensitive(json, virtualUri))
+				return true;
+			const std::string genericPath = change.Before.lexically_normal().generic_string();
+			if (ContainsCaseInsensitive(json, genericPath))
+				return true;
+		}
+		return false;
+	}
+}
+
 bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation, AssetMoveBlock* outBlock) const
 {
 	if (outBlock) *outBlock = {};
@@ -1991,7 +2024,15 @@ bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation, Asse
 		auto* document = documents.Find(id);
 		if (!document) continue;
 		if (document->HasUnsavedChanges())
-			return block(EAssetMoveBlockReason::UnsavedDocument, documentName(*document));
+		{
+			auto* sceneDocument = dynamic_cast<SceneDocument*>(document);
+			if (!sceneDocument || relocation.Affects(document->GetPath()) || relocation.Rewrites(document->GetPath()) ||
+				SceneReferencesAnyAsset(sceneDocument->GetScene(), relocation))
+			{
+				return block(EAssetMoveBlockReason::UnsavedDocument, documentName(*document));
+			}
+			continue;
+		}
 		if (!document->PrepareAssetPathRelocation(relocation))
 			return block(EAssetMoveBlockReason::DocumentRejected, documentName(*document));
 		if (dynamic_cast<SceneDocument*>(document) && relocation.Affects(document->GetPath()))

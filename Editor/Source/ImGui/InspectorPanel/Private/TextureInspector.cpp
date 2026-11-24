@@ -139,18 +139,20 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
     ImGui::Spacing();
 
     // 5. 실행 버튼
+    EditorUI::TextButtonOptions importBtnOpt;
+    importBtnOpt.FullWidth = true;
     if (s_IsImporting)
     {
         // 작업 중일 때는 중복 클릭 방지를 위해 버튼 비활성화
-        ImGui::BeginDisabled();
-        ImGui::Button(LOCAL_LABEL("TextureInspector.Importing").c_str(), ImVec2(-1, 30));
-        ImGui::EndDisabled();
-
+        importBtnOpt.Enabled = false;
+        EditorUI::TextButton("TextureImporting", "TextureInspector.Importing", importBtnOpt);
     }
     else
     {
-        ImGui::BeginDisabled(ext == L".dds");
-        if (ImGui::Button(LOCAL_LABEL("TextureInspector.Import").c_str(), ImVec2(-1, 30)))
+        importBtnOpt.Enabled = (ext != L".dds");
+        if (ext == L".dds")
+            importBtnOpt.TooltipKey = "TextureInspector.DdsImportUnsupported";
+        if (EditorUI::TextButton("TextureImport", "TextureInspector.Import", importBtnOpt))
         {
             std::error_code error;
             const std::filesystem::path sourcePath = std::filesystem::absolute(assetPath, error);
@@ -159,7 +161,6 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
                 BAM_LOG(Error, "Editor", "Asset", "Failed to resolve texture import path: {}", error.message());
                 s_ImportSucceeded = false;
                 s_ShowSuccessPopup = true;
-                ImGui::EndDisabled();
                 return true;
             }
             const std::filesystem::path destDir = sourcePath.parent_path();
@@ -186,9 +187,6 @@ bool TextureInspector::OnInspectorGUI(const std::filesystem::path& assetPath)
                     s_ImportSucceeded = result == EResult::Success;
                 });
         }
-        ImGui::EndDisabled();
-        if (ext == L".dds" && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("%s", LOCAL_CSTR("TextureInspector.DdsImportUnsupported"));
     }
 
     // 팝업 오픈 트리거 (비동기 작업이 끝났을 때 1프레임 동안 호출)

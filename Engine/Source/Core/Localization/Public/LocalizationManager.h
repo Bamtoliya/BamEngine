@@ -82,11 +82,22 @@ public:
 	LocalizedText GetTextForDisplay(std::string_view key) const;
 	LocalizedText GetTextForDisplay(const wstring& key) const;
 	EResult AddText(ELocalizationLanguage lang, const string& key, const string& text);
+	std::string TranslateLogMessage(std::string_view message, ELocalizationLanguage targetLang) const;
 
 #pragma endregion
 
 #pragma region Variables
 private:
+	struct TemplatePattern
+	{
+		std::string SourcePrefix;
+		std::string SourceSuffix;
+		std::string TargetPrefix;
+		std::string TargetSuffix;
+	};
+
+	void RebuildReverseMaps() const;
+
 	ELocalizationLanguage m_CurrentLanguage = ELocalizationLanguage::English;
 	struct TextKeyHash
 	{
@@ -103,6 +114,12 @@ private:
 	std::vector<TextMap> m_ProjectLocalizationData;
 	std::vector<std::filesystem::path> m_ProjectCatalogFiles;
 	std::vector<wstring> m_RegisteredFiles;
+
+	mutable bool m_ReverseMapDirty = true;
+	mutable std::unordered_map<std::string, std::string> m_KoreanToEnglish;
+	mutable std::unordered_map<std::string, std::string> m_EnglishToKorean;
+	mutable std::vector<TemplatePattern> m_KorToEngTemplates;
+	mutable std::vector<TemplatePattern> m_EngToKorTemplates;
 #pragma endregion
 
 	

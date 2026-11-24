@@ -22,6 +22,7 @@ enum class EShortcutContext : uint8
     ModelEditor,
     MaterialEditor,
     SpriteEditor,
+    TerrainLayerEditor, // 지형 레이어 에셋 편집기 활성 시
     Count
 };
 

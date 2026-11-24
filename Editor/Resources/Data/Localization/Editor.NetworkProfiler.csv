@@ -25,3 +25,7 @@ NetworkProfiler,Standalone,[ Standalone ],[ 독립 실행 ]
 NetworkProfiler,State,State,상태
 NetworkProfiler,SystemUnavailable,NetworkSystem is not registered in SystemManager.,시스템 관리자에 네트워크 시스템이 등록되지 않았습니다.
 NetworkProfiler,Title,Network Profiler,네트워크 프로파일러
+NetworkProfiler,SimulationTitle,Network Simulation (Lag & Packet Drop):,네트워크 시뮬레이션 (지연 & 패킷 손실):
+NetworkProfiler,SimulatedLatency,Simulated Latency (ms),시뮬레이션 지연 (ms)
+NetworkProfiler,SimulatedJitter,Simulated Jitter (ms),시뮬레이션 지터 (ms)
+NetworkProfiler,PacketLoss,Packet Loss (%),패킷 손실률 (%)

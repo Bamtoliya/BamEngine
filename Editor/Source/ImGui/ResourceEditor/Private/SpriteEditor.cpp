@@ -743,10 +743,14 @@ void SpriteEditor::DrawCanvas(float availWidth, float availHeight)
 		const ImVec2 centerBoxMax(canvasPos.x + canvasSize.x - 40.0f, canvasPos.y + canvasSize.y - 40.0f);
 		drawList->AddRect(centerBoxMin, centerBoxMax, IM_COL32(120, 120, 120, 150), 8.0f, ImDrawFlags_None, 1.5f);
 
-		const float btnW = 180.0f;
-		const float btnH = 36.0f;
-		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - btnW) * 0.5f, canvasPos.y + canvasSize.y * 0.5f - btnH));
-		if (ImGui::Button((std::string(ICON_FA_FOLDER_OPEN) + " " + LOCAL("SpriteEditor.OpenTexture")).c_str(), ImVec2(btnW, btnH)))
+		EditorUI::TextButtonOptions openBtnOpt;
+		openBtnOpt.Icon = ICON_FA_FOLDER_OPEN;
+		openBtnOpt.MinWidth = ImGui::GetFontSize() * 10.0f;
+		openBtnOpt.Height = ImGui::GetFrameHeight() * 1.35f;
+		const std::string openText = LOCAL("SpriteEditor.OpenTexture");
+		const ImVec2 btnSize = EditorUI::GetTextButtonSize(openText.c_str(), openBtnOpt);
+		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - btnSize.x) * 0.5f, canvasPos.y + canvasSize.y * 0.5f - btnSize.y));
+		if (EditorUI::TextButtonRaw("OpenTextureEmpty", openText.c_str(), openBtnOpt))
 			RunWithDiscardConfirmation([this] { OpenTextureDialog(); });
 
 		ImGui::SetCursorScreenPos(ImVec2(canvasPos.x + (canvasSize.x - 320.0f) * 0.5f, canvasPos.y + canvasSize.y * 0.5f + 12.0f));

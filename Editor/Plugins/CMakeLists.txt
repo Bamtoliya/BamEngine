@@ -91,6 +91,7 @@
     bam_add_editor_panel_plugin(EditorNetworkProfilerPanel "${EDITOR_SOURCE_DIR}/ImGui/NetworkProfilerPanel"
         "${EDITOR_SOURCE_DIR}/ImGui/NetworkProfilerPanel/Private/NetworkProfilerPanel.cpp"
         "${EDITOR_SOURCE_DIR}/ImGui/NetworkProfilerPanel/Private/NetworkProfilerPanelPlugin.cpp"
+        "${EDITOR_SOURCE_DIR}/ImGui/Private/EditorUI.cpp"
     )
 
     set(plugin_catalog_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

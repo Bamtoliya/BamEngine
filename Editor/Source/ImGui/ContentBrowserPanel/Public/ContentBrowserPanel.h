@@ -207,6 +207,9 @@ private:
 #pragma region TreeView
 private:
 	void DrawDirectoryTree(const filesystem::path& path, const filesystem::path& rootPath);
+	void DrawExternalMountsTree();
+	void OpenMountAddModal();
+	void DrawMountAddModal();
 #pragma endregion
 
 #pragma region GridView
@@ -256,6 +259,7 @@ private:
 	void CreateEmptyPrefab(const filesystem::path& path);
 	void CreateEmptyGraph(const filesystem::path& path);
 	void CreateEmptyTimeline(const filesystem::path& path);
+	void CreateEmptyTerrainLayer(const filesystem::path& path);
 	void CreateEmptyParticleEffect(const filesystem::path& path);
 #pragma endregion
 
@@ -337,6 +341,13 @@ private:
 private:
 	// 폴더 트리 노드별 읽기 전용 여부 캐시 (경로 정규화 비용을 프레임마다 반복하지 않기 위함)
 	std::unordered_map<std::wstring, bool> m_ReadOnlyCache;
+private:
+	bool m_OpenMountAddModal = false;
+	char m_MountNameBuffer[128] = {};
+	char m_MountPathBuffer[512] = {};
+	bool m_MountReadOnly = true;
+	bool m_MountShowUnderAssets = false;
+	std::string m_MountError;
 #pragma endregion
 };
 END

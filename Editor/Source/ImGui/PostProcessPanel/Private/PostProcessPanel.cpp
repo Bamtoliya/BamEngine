@@ -365,7 +365,7 @@ void PostProcessPanel::DrawPipelineList(PostProcessChain* chain)
 	// ── 순서 조정 버튼 ──
 	const bool canMoveUp = (m_SelectedEffectIndex > 0 && m_SelectedEffectIndex < static_cast<int32>(effects.size()));
 	const bool canMoveDown = (m_SelectedEffectIndex >= 0 && m_SelectedEffectIndex < static_cast<int32>(effects.size()) - 1);
-	const ImVec2 btnSize(ImGui::GetContentRegionAvail().x * 0.5f - 4.f, 0.f);
+	const ImVec2 btnSize(ImGui::GetContentRegionAvail().x * 0.5f - ImGui::GetStyle().ItemSpacing.x * 0.5f, 0.f);
 
 	if (!canMoveUp) ImGui::BeginDisabled(true);
 	const string moveUpText = string(ICON_FA_ARROW_UP " ") + LOCAL_LABEL("PostProcess.MoveEffectUp");
@@ -560,7 +560,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	EditorUI::ToolbarLayout toolbar;
 	const float buttonWidth = EditorUI::GetIconButtonSize(ICON_FA_FLOPPY_DISK).x +
 		EditorUI::GetIconButtonSize(ICON_FA_TRASH_CAN).x + ImGui::GetStyle().ItemSpacing.x * 2.0f;
-	toolbar.SetNextItemWidth(std::max(ImGui::GetFontSize() * 8.0f, ImGui::GetContentRegionAvail().x - buttonWidth));
+	toolbar.SetNextItemWidth(std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonWidth));
 	const char* currentPresetName = m_SelectedPresetName.empty()
 		? LOCAL_CSTR("PostProcess.SelectPresetPrompt") : m_SelectedPresetName.c_str();
 

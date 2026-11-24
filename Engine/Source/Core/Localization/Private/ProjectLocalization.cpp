@@ -170,5 +170,6 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
 
     m_ProjectLocalizationData.swap(projectData);
     m_ProjectCatalogFiles.swap(files);
+    m_ReverseMapDirty = true;
     return EResult::Success;
 }

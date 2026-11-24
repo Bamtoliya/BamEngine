@@ -23,6 +23,7 @@
 #include "UnifiedSettingsPanel.h"
 #include "PrefabEditorPanel.h"
 #include "SpriteEditor.h"
+#include "TerrainLayerEditor.h"
 #include "PluginResourceEditor.h"
 #include "ContentBrowserPanel.h"
 #include "PreviewViewportWidget.h"
@@ -30,6 +31,7 @@
 #include "ModelEditor.h"
 #include "MaterialEditor.h"
 #include "TilePalettePanel.h"
+#include "TerrainEditor.h"
 #include "EditorCameraController.h"
 #include "NotificationManager.h"
 #include <fmt/core.h>
@@ -90,6 +92,9 @@ void EditorActionRegistry::RegisterAll()
     });
     RegisterDocumentHistory("SpriteEditor", "ResourceEditor.SpriteTitle", EShortcutContext::SpriteEditor, [] {
         return dynamic_cast<SpriteEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Sprite Editor"));
+    });
+    RegisterDocumentHistory("TerrainLayerEditor", "ResourceEditor.TerrainLayerTitle", EShortcutContext::TerrainLayerEditor, [] {
+        return dynamic_cast<TerrainLayerEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Terrain Layer Editor"));
     });
     RegisterDocumentHistory("Prefab", "ResourceEditor.PrefabTitle", EShortcutContext::PrefabEditor, [] {
         return dynamic_cast<PrefabEditorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Prefab Editor"));
@@ -314,6 +319,9 @@ void EditorActionRegistry::RegisterAll()
     registerResourceSave("MaterialEditor.Save", EShortcutContext::MaterialEditor, [] {
         return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
     });
+    registerResourceSave("TerrainLayerEditor.Save", EShortcutContext::TerrainLayerEditor, [] {
+        return dynamic_cast<TerrainLayerEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Terrain Layer Editor"));
+    });
 
     auto findMaterialEditor = []() -> MaterialEditor* {
         return dynamic_cast<MaterialEditor*>(ImGuiManager::Get().GetImGuiPanel(L"Material Editor"));
@@ -457,6 +465,49 @@ void EditorActionRegistry::RegisterAll()
             const auto* panel = AnimationTimelinePanel::GetActivePanel();
             return panel && panel->CanRedo();
         },
+        .AllowRepeat = true
+        });
+
+    // ── [Terrain Brush Actions] ──
+    // 레이어 선택(1~8)은 지형 브러시가 켜져 있고 페인트 도구일 때만, 반경 조절([ / ])은 브러시가 켜져 있을 때만 실행된다.
+    static constexpr Engine::EKeyCode layerKeys[] = { Engine::EKeyCode::Num1, Engine::EKeyCode::Num2, Engine::EKeyCode::Num3, Engine::EKeyCode::Num4,
+        Engine::EKeyCode::Num5, Engine::EKeyCode::Num6, Engine::EKeyCode::Num7, Engine::EKeyCode::Num8 };
+    static constexpr const char* layerActionIds[] = { "Terrain.Layer.1", "Terrain.Layer.2", "Terrain.Layer.3", "Terrain.Layer.4",
+        "Terrain.Layer.5", "Terrain.Layer.6", "Terrain.Layer.7", "Terrain.Layer.8" };
+    static constexpr const char* layerNameKeys[] = { "Action.Terrain.Layer1", "Action.Terrain.Layer2", "Action.Terrain.Layer3", "Action.Terrain.Layer4",
+        "Action.Terrain.Layer5", "Action.Terrain.Layer6", "Action.Terrain.Layer7", "Action.Terrain.Layer8" };
+    for (uint32 layer = 0; layer < 8; ++layer)
+    {
+        sm.RegisterAction({
+            .Id = layerActionIds[layer],
+            .DisplayNameKey = layerNameKeys[layer],
+            .CategoryKey = "Shortcuts.CategoryTerrain",
+            .Context = EShortcutContext::Viewport,
+            .DefaultChord = ShortcutChord(layerKeys[layer]),
+            .ExecuteHandler = [layer]() { if (auto* editor = TerrainEditor::Get()) editor->SelectPaintLayer(layer); },
+            .CanExecute = []() { const auto* editor = TerrainEditor::Get(); return editor && editor->CanUseLayerShortcuts(); }
+            });
+    }
+
+    sm.RegisterAction({
+        .Id = "Terrain.Brush.Smaller",
+        .DisplayNameKey = "Action.Terrain.BrushSmaller",
+        .CategoryKey = "Shortcuts.CategoryTerrain",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::LeftBracket),
+        .ExecuteHandler = []() { if (auto* editor = TerrainEditor::Get()) editor->AdjustBrushRadius(1.0f / 1.2f); },
+        .CanExecute = []() { const auto* editor = TerrainEditor::Get(); return editor && editor->IsSculptingActive(); },
+        .AllowRepeat = true
+        });
+
+    sm.RegisterAction({
+        .Id = "Terrain.Brush.Larger",
+        .DisplayNameKey = "Action.Terrain.BrushLarger",
+        .CategoryKey = "Shortcuts.CategoryTerrain",
+        .Context = EShortcutContext::Viewport,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::RightBracket),
+        .ExecuteHandler = []() { if (auto* editor = TerrainEditor::Get()) editor->AdjustBrushRadius(1.2f); },
+        .CanExecute = []() { const auto* editor = TerrainEditor::Get(); return editor && editor->IsSculptingActive(); },
         .AllowRepeat = true
         });
 

@@ -1,6 +1,7 @@
 ﻿#include "EditorEnvironmentSettingsWidget.h"
 #include "EditorSettingsService.h"
 #include "Editor_Includes.h"
+#include "EditorUI.h"
 #include "LocalizationManager.h"
 #include "SceneViewportPanel.h"
 #include "NotificationManager.h"
@@ -259,7 +260,10 @@ void EditorEnvironmentSettingsWidget::Draw()
             EditorUI::EndPropertyTable();
         }
         ImGui::Spacing();
-        if (ImGui::Button(LOCAL_CSTR("Settings.ClearAllDiskCaches"), ImVec2(-FLT_MIN, 28.0f)))
+        EditorUI::TextButtonOptions clearCacheOpt;
+        clearCacheOpt.FullWidth = true;
+        clearCacheOpt.Style = EditorUI::EButtonStyle::Danger;
+        if (EditorUI::TextButton("ClearAllDiskCaches", "Settings.ClearAllDiskCaches", clearCacheOpt))
         {
             const uintmax_t cleared = ClearCacheSubdirectory(rootCache);
             if (Editor::AssetCache::IsCreated())

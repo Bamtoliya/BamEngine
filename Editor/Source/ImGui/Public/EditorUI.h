@@ -41,6 +41,35 @@ namespace EditorUI
     void SameLineIfFits(float width);
     bool IconButton(const char* id, const char* icon, const char* tooltipKey, const IconButtonOptions& options = {});
 
+    enum class EButtonStyle
+    {
+        Default,
+        Primary,
+        Danger
+    };
+
+    struct TextButtonOptions
+    {
+        const char* Icon = nullptr;          // 선택적 선행 아이콘 (예: ICON_FA_PLUS)
+        const char* TooltipKey = nullptr;    // 호버 시 표시할 로캘 툴팁 키
+        const char* TooltipText = nullptr;   // 이미 번역/포맷된 툴팁 문자열 (TooltipKey보다 우선)
+        const char* ShortcutHint = nullptr;  // 툴팁에 함께 표시할 단축키 힌트
+        bool Enabled = true;
+        bool Active = false;                 // 활성 토글 상태 강조
+        bool SameLine = false;               // 직전 항목 뒤에 공간이 남으면 SameLineIfFits 적용
+        bool FullWidth = false;              // 가용 너비를 채움 (-FLT_MIN 대체)
+        float MinWidth = 0.0f;               // 최소 너비 (텍스트 + 패딩보다 작아지지 않음)
+        float Height = 0.0f;                 // 0 이하면 일반 IconButton/GetFrameHeight()와 통일
+        EButtonStyle Style = EButtonStyle::Default;
+    };
+
+    // 이미 번역된 표시 문자열 기준 크기 계산.
+    ImVec2 GetTextButtonSize(const char* text, const TextButtonOptions& options = {});
+    // 로캘 키(labelKey)를 번역해 표시하는 공통 텍스트 버튼.
+    bool TextButton(const char* id, const char* labelKey, const TextButtonOptions& options = {});
+    // 이미 번역되었거나 동적으로 조합된 문자열(text)을 표시하는 공통 텍스트 버튼.
+    bool TextButtonRaw(const char* id, const char* text, const TextButtonOptions& options = {});
+
     // Draw 호출마다 지역 객체로 만든다. 입력 상태나 실행 핸들러를 보관하지 않는다.
     class ToolbarLayout
     {

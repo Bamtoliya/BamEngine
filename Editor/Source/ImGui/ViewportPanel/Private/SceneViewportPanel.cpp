@@ -242,7 +242,7 @@ void SceneViewportPanel::PrepareRenderTargetsAndPasses(uint32 width, uint32 heig
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
-		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
+		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied);
 
 	m_PostProcessChain.PrepareResources(width, height);
 
@@ -496,14 +496,14 @@ void SceneViewportPanel::DrawCustomOptions()
 	EditorUI::IconButtonOptions navOverlayOpt;
 	navOverlayOpt.Compact = true;
 	navOverlayOpt.Active = m_DebugRenderer.GetShowNavGridOverlay();
-	if (EditorUI::IconButton("NavGridOverlay", ICON_FA_MAP, "Show/Hide NavGrid Overlay", navOverlayOpt))
+	if (EditorUI::IconButton("NavGridOverlay", ICON_FA_MAP, "Viewport.NavGridOverlayTooltip", navOverlayOpt))
 	{
 		m_DebugRenderer.ToggleShowNavGridOverlay();
 	}
 
 	EditorUI::IconButtonOptions bakeOpt;
 	bakeOpt.Compact = true;
-	if (EditorUI::IconButton("BakeNavGrid", ICON_FA_HAMMER, "Bake NavGrid from Scene Colliders", bakeOpt))
+	if (EditorUI::IconButton("BakeNavGrid", ICON_FA_HAMMER, "Viewport.BakeNavGridTooltip", bakeOpt))
 	{
 		BakeSceneNavGrid();
 	}
@@ -812,8 +812,8 @@ void SceneViewportPanel::DrawDebugMenu()
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
 		ImGui::MenuItem("Show Gameplay Gizmos", nullptr, m_DebugRenderer.GetDrawGameplayGizmosPtr());
 		ImGui::Separator();
-		ImGui::MenuItem("Show NavGrid Overlay", nullptr, m_DebugRenderer.GetShowNavGridOverlayPtr());
-		if (ImGui::MenuItem(ICON_FA_HAMMER " Bake NavGrid (Scene)"))
+		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowNavGridOverlay").c_str(), nullptr, m_DebugRenderer.GetShowNavGridOverlayPtr());
+		if (ImGui::MenuItem((std::string(ICON_FA_HAMMER " ") + LOCAL("Viewport.BakeNavGridMenu")).c_str()))
 		{
 			BakeSceneNavGrid();
 		}
@@ -1847,6 +1847,35 @@ std::optional<CameraBuffer> SceneViewportPanel::GetActiveCameraBuffer()
 	return m_CameraController ? m_CameraController->GetCameraBuffer() : std::nullopt;
 }
 
+void SceneViewportPanel::DrawTerrainAttributeOverlay(const Engine::TerrainComponent& terrain, const glm::mat4& worldMatrix)
+{
+	const std::optional<CameraBuffer> cameraBuffer = GetActiveCameraBuffer();
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!cameraBuffer || !Engine::TerrainUtility::TryGetGridLayout(terrain.Resolution, axisCount, sampleCount) ||
+		terrain.AttributeData.size() != sampleCount || terrain.HeightData.size() != sampleCount)
+		return;
+
+	ImDrawList* drawList = ImGui::GetWindowDrawList();
+	const float stepX = terrain.Width / static_cast<float>(terrain.Resolution);
+	const float stepZ = terrain.Length / static_cast<float>(terrain.Resolution);
+	const float halfW = terrain.Width * 0.5f;
+	const float halfL = terrain.Length * 0.5f;
+	for (std::size_t index = 0; index < sampleCount; ++index)
+	{
+		const uint8 attribute = terrain.AttributeData[index];
+		if (attribute == static_cast<uint8>(Engine::ETerrainAttribute::None)) continue;
+		const float x = static_cast<float>(index % axisCount) * stepX - halfW;
+		const float z = static_cast<float>(index / axisCount) * stepZ - halfL;
+		// 높이는 셰이더와 같이 0~1 값에 MaxHeight를 곱한다. 지면에 가려지지 않게 살짝 띄운다.
+		const glm::vec3 world = glm::vec3(worldMatrix * glm::vec4(x, terrain.HeightData[index] * terrain.MaxHeight + 0.05f, z, 1.0f));
+		ImVec2 screen{};
+		if (!WorldToViewportScreen(world, cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screen)) continue;
+		const ImU32 color = attribute == static_cast<uint8>(Engine::ETerrainAttribute::Water) ? IM_COL32(60, 140, 255, 220) : IM_COL32(255, 70, 60, 220);
+		drawList->AddCircleFilled(screen, 3.0f, color);
+	}
+}
+
 void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 {
 	auto* terrainEditor = TerrainEditor::Get();
@@ -1862,7 +1891,10 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 		{
 			const std::array targets{ targetEntity->GetEntityHandle() };
 			SceneEditSnapshot after = SceneEditSnapshot::Capture(*activeScene, targets);
-			Application::Get().GetEditHistory().Record(m_SculptBeforeSnapshot, after, LOCAL("TerrainEditor.Sculpt"));
+			const char* labelKey = "TerrainEditor.Sculpt";
+			if (terrainEditor && terrainEditor->GetTool() == ETerrainTool::Paint) labelKey = "TerrainEditor.PaintTool";
+			else if (terrainEditor && terrainEditor->GetTool() == ETerrainTool::Attribute) labelKey = "TerrainEditor.AttributeTool";
+			Application::Get().GetEditHistory().Record(m_SculptBeforeSnapshot, after, LOCAL(labelKey));
 		}
 		m_IsSculptStrokeActive = false;
 		m_SculptModified = false;
@@ -1878,6 +1910,10 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 	auto* terrain = TryGetEnabledComponent<Engine::TerrainComponent>(registry, targetEntity->GetEntityHandle());
 	auto* transform = registry.try_get<Engine::WorldTransformComponent>(targetEntity->GetEntityHandle());
 	if (!terrain || !transform) return;
+
+	// 속성 페인트 중에는 보이지 않는 속성 맵을 정점 점으로 보여준다(이동 불가 빨강, 물 파랑). 커서 위치와 무관하게 그린다.
+	if (terrainEditor->GetTool() == ETerrainTool::Attribute)
+		DrawTerrainAttributeOverlay(*terrain, transform->worldMatrix);
 
 	Engine::Ray ray;
 	float maxDist = 1000.0f;
@@ -1896,6 +1932,9 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 		ImDrawList* drawList = ImGui::GetWindowDrawList();
 		const float radius = terrainEditor->GetBrushParams().Radius;
 		const int segments = 32;
+		// 도구별 링 색: 조형 초록, 페인트 파랑, 속성 주황
+		const ImU32 ringColor = terrainEditor->GetTool() == ETerrainTool::Paint ? IM_COL32(80, 160, 255, 255)
+			: terrainEditor->GetTool() == ETerrainTool::Attribute ? IM_COL32(255, 160, 50, 255) : IM_COL32(50, 220, 100, 255);
 		ImVec2 prevScreenPos{};
 		bool hasPrev = false;
 
@@ -1906,7 +1945,7 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 			ImVec2 screenPos{};
 			if (WorldToViewportScreen(circleWorldPos, cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screenPos))
 			{
-				if (hasPrev) drawList->AddLine(prevScreenPos, screenPos, IM_COL32(50, 220, 100, 255), 2.0f);
+				if (hasPrev) drawList->AddLine(prevScreenPos, screenPos, ringColor, 2.0f);
 				prevScreenPos = screenPos;
 				hasPrev = true;
 			}
@@ -1927,10 +1966,22 @@ void SceneViewportPanel::HandleTerrainSculpting(bool imageHovered)
 	if (m_IsSculptStrokeActive && InputManager::Get().IsMouseButtonPressed(EMouseButton::Left) && !ImGuizmo::IsUsing())
 	{
 		const float dt = TimeManager::Get().GetDeltaTime();
-		if (Engine::TerrainUtility::ApplyBrush(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetBrushParams(), dt))
+		const auto& brush = terrainEditor->GetBrushParams();
+		bool modified = false;
+		switch (terrainEditor->GetTool())
 		{
-			m_SculptModified = true;
+		case ETerrainTool::Sculpt:
+			modified = Engine::TerrainUtility::ApplyBrush(*terrain, hitResult.point, transform->worldMatrix, brush, dt);
+			break;
+		case ETerrainTool::Paint:
+			modified = Engine::TerrainUtility::ApplyPaint(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetPaintLayer(),
+				brush.Radius, terrainEditor->GetPaintStrength() * dt, brush.Falloff);
+			break;
+		case ETerrainTool::Attribute:
+			modified = Engine::TerrainUtility::ApplyAttributePaint(*terrain, hitResult.point, transform->worldMatrix, terrainEditor->GetPaintAttribute(), brush.Radius);
+			break;
 		}
+		if (modified) m_SculptModified = true;
 	}
 }
 
@@ -2866,7 +2917,7 @@ void SceneViewportPanel::BakeSceneNavGrid()
 	if (!scene)
 	{
 		NotificationManager::Get().AddNotification(
-			"NavGrid", "No active scene found to bake NavGrid.", ELogLevel::Warn, 3.0f);
+			LOCAL("Viewport.NavGridTitle"), LOCAL("Viewport.NavGridNoActiveScene"), ELogLevel::Warn, 3.0f);
 		return;
 	}
 
@@ -2915,10 +2966,9 @@ void SceneViewportPanel::BakeSceneNavGrid()
 		}
 	}
 
-	const std::string msg = "NavGrid baked: " + std::to_string(width) + "x" + std::to_string(height) +
-		" cells (" + std::to_string(obstacleCount) + " obstacles, cell " + std::to_string(cellSize) + "m)";
+	const std::string msg = LOCAL_FMT("Viewport.NavGridBakedMessage", width, height, obstacleCount, cellSize);
 
 	NotificationManager::Get().AddNotification(
-		"NavGrid Bake", msg, ELogLevel::Info, 4.0f);
+		LOCAL("Viewport.NavGridBakeTitle"), msg, ELogLevel::Info, 4.0f);
 }
 #pragma endregion

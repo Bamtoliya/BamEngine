@@ -127,3 +127,4 @@ MaterialEditor,NodeTitle,Node #{}: {},노드 #{}: {}
 MaterialEditor,InputPins,Input Pins,입력 핀
 MaterialEditor,PinConnected,Connected,연결됨
 MaterialEditor,CopyDiagnostics,Copy diagnostics,진단 내용 복사
+MaterialEditor,TerrainNeedsGeometry,Terrain materials must use the Geometry (G-Buffer) pass.,지형 머티리얼은 지오메트리(G-Buffer) 패스를 써야 합니다.

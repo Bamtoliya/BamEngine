@@ -2,3 +2,20 @@ Group,Key,English,Korean
 AudioPreview,Playing,Playing...,재생 중...
 AudioPreview,Stopped,Stopped,정지됨
 AudioPreview,Title,Audio,오디오
+AudioPreview,MixerSubtitle,Audio Mixer Bus Controls,오디오 믹서 버스 제어
+AudioPreview,AudioManagerUninitialized,AudioManager is not initialized.,AudioManager가 초기화되지 않았습니다.
+AudioPreview,BusChannels,Bus Channels,버스 채널
+AudioPreview,ColumnBus,Bus,버스
+AudioPreview,ColumnVolume,Volume,볼륨
+AudioPreview,ColumnMute,Mute,음소거
+AudioPreview,ColumnEffective,Effective,유효 볼륨
+AudioPreview,MixerProfileActions,Mixer Profile Actions,믹서 프로필 작업
+AudioPreview,ResetToDefault,Reset to Default,기본값으로 초기화
+AudioPreview,SaveSettings,Save Settings,설정 저장
+AudioPreview,LoadSettings,Load Settings,설정 불러오기
+AudioPreview,SavedNotice,Audio mixer settings saved to {0},오디오 믹서 설정을 {0}에 저장했습니다.
+AudioPreview,SaveFailedNotice,Failed to save {0},{0} 저장에 실패했습니다.
+AudioPreview,LoadedNotice,Audio mixer settings loaded from {0},{0}에서 오디오 믹서 설정을 불러왔습니다.
+AudioPreview,LoadFailedNotice,{0} not found or failed to load,{0}을(를) 찾을 수 없거나 불러오기에 실패했습니다.
+AudioPreview,ResetNotice,Audio mixer reset to default levels.,오디오 믹서를 기본 레벨로 초기화했습니다.
+AudioPreview,ConfigFileLabel,Configuration file: {0},설정 파일: {0}

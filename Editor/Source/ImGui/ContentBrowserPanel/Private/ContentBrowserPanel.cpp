@@ -23,6 +23,8 @@
 #include "MaterialInstance.h"
 #include "ModelImportModal.h"
 #include "NotificationManager.h"
+#include "ProjectSessionManager.h"
+#include "FileDialogs.h"
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 #include <algorithm>
@@ -379,6 +381,7 @@ void ContentBrowserPanel::Draw()
 	FileConfilictPopup();
 	DrawFileDeletionConfirmation();
 	DrawFileMoveConfirmation();
+	DrawMountAddModal();
 
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
@@ -421,6 +424,12 @@ void ContentBrowserPanel::Draw()
 
 		// 3. Project Assets
 		DrawDirectoryTree(m_RootPath, m_RootPath);
+
+		// 4. External Mounts
+		ImGui::Spacing();
+		ImGui::Separator();
+		ImGui::Spacing();
+		DrawExternalMountsTree();
 		ImGui::EndChild();
 		ImGui::TableNextColumn();
 		DrawDirectoryGrid();
@@ -644,8 +653,224 @@ void ContentBrowserPanel::DrawDirectoryTree(const filesystem::path& path, const 
 	{
 		for (const auto& childPath : childDirectories)
 			DrawDirectoryTree(childPath, rootPath);
+
+		if (isRoot && rootPath.native() == m_RootPath.native())
+		{
+			const auto contentMounts = Engine::PlatformPath::GetContentMounts();
+			for (const auto& mount : contentMounts)
+			{
+				if (!mount.ShowUnderAssets || mount.RootPath.empty())
+					continue;
+				std::error_code mountEc;
+				if (!filesystem::is_directory(mount.RootPath, mountEc))
+					continue;
+
+				const bool mountSelected = Engine::PlatformPath::IsSamePath(m_CurrentDirectory, mount.RootPath);
+				ImGuiTreeNodeFlags linkFlags = ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+				if (mountSelected)
+					linkFlags |= ImGuiTreeNodeFlags_Selected;
+
+				const std::string linkLabel = std::string(ICON_FA_LINK " ") + mount.Name + " " + LOCAL("ContentBrowser.MountLinkBadge") + "##MountAssetLink_" + mount.Name;
+				ImGui::TreeNodeEx(linkLabel.c_str(), linkFlags);
+				if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+					NavigateTo(mount.RootPath);
+			}
+		}
+
 		ImGui::TreePop();
 	}
+}
+
+void ContentBrowserPanel::DrawExternalMountsTree()
+{
+	ImGui::TextDisabled("%s", LOCAL_CSTR("ContentBrowser.ExternalMounts"));
+	if (ImGui::SmallButton(LOCAL_LABEL("ContentBrowser.MountExternalFolder").c_str()))
+		OpenMountAddModal();
+
+	const auto contentMounts = Engine::PlatformPath::GetContentMounts();
+	for (const auto& mount : contentMounts)
+	{
+		ImGui::PushID(mount.Name.c_str());
+		std::error_code ec;
+		const bool exists = !mount.RootPath.empty() && filesystem::is_directory(mount.RootPath, ec);
+		const std::string headerLabel = std::string(ICON_FA_LINK " ") + mount.Name +
+			(mount.ReadOnly ? " [" + LOCAL("ContentBrowser.MountReadOnly") + "]" : "") + "##ExternalMountNode";
+
+		const bool selected = exists && Engine::PlatformPath::IsSamePath(m_CurrentDirectory, mount.RootPath);
+		ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+		if (!exists)
+			flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+		if (selected)
+			flags |= ImGuiTreeNodeFlags_Selected;
+
+		const bool opened = ImGui::TreeNodeEx(headerLabel.c_str(), flags);
+		if (exists && ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
+			NavigateTo(mount.RootPath);
+
+		if (ImGui::BeginPopupContextItem("ExternalMountContextMenu"))
+		{
+			if (!ProjectSessionManager::IsCreated())
+				ProjectSessionManager::Create();
+
+			bool readOnly = mount.ReadOnly;
+			if (ImGui::MenuItem(LOCAL_LABEL("ContentBrowser.MountReadOnly").c_str(), nullptr, &readOnly))
+			{
+				ProjectSessionManager::Get().SetContentMountFlags(mount.Name, readOnly, mount.ShowUnderAssets);
+				m_ReadOnlyCache.clear();
+				m_CachedSubdirectories.clear();
+				RequestRefresh();
+			}
+
+			bool showUnderAssets = mount.ShowUnderAssets;
+			if (ImGui::MenuItem(LOCAL_LABEL("ContentBrowser.MountShowUnderAssets").c_str(), nullptr, &showUnderAssets))
+			{
+				ProjectSessionManager::Get().SetContentMountFlags(mount.Name, mount.ReadOnly, showUnderAssets);
+				RequestRefresh();
+			}
+
+			ImGui::Separator();
+			if (ImGui::MenuItem(LOCAL_LABEL("ContentBrowser.Unmount").c_str()))
+			{
+				const bool insideMount = exists && !m_CurrentDirectory.empty() &&
+					!Engine::PlatformPath::Normalize(m_CurrentDirectory).lexically_relative(Engine::PlatformPath::Normalize(mount.RootPath)).native().starts_with(L"..");
+				ProjectSessionManager::Get().RemoveContentMount(mount.Name);
+				if (insideMount)
+					NavigateTo(m_RootPath);
+				m_ReadOnlyCache.clear();
+				m_CachedSubdirectories.clear();
+				RequestRefresh();
+			}
+			ImGui::EndPopup();
+		}
+
+		if (exists && opened)
+		{
+			std::error_code subEc;
+			for (const auto& entry : filesystem::directory_iterator(mount.RootPath, subEc))
+			{
+				if (!subEc && entry.is_directory(subEc))
+					DrawDirectoryTree(entry.path(), mount.RootPath);
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+}
+
+void ContentBrowserPanel::OpenMountAddModal()
+{
+	m_OpenMountAddModal = true;
+	memset(m_MountNameBuffer, 0, sizeof(m_MountNameBuffer));
+	memset(m_MountPathBuffer, 0, sizeof(m_MountPathBuffer));
+	m_MountReadOnly = true;
+	m_MountShowUnderAssets = false;
+	m_MountError.clear();
+}
+
+void ContentBrowserPanel::DrawMountAddModal()
+{
+	constexpr const char* kPopupId = "MountExternalFolderPopup";
+	if (m_OpenMountAddModal)
+	{
+		ImGui::OpenPopup(kPopupId);
+		m_OpenMountAddModal = false;
+	}
+
+	const std::string modalTitle = LOCAL("ContentBrowser.MountAddTitle") + "###" + kPopupId;
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+		return;
+
+	if (EditorUI::BeginPropertyTable("MountAddTable"))
+	{
+		EditorUI::PropertyRow("ContentBrowser.MountName");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::InputText("##MountNameInput", m_MountNameBuffer, sizeof(m_MountNameBuffer));
+
+		EditorUI::PropertyRow("ContentBrowser.MountFolder");
+		const float browseWidth = ImGui::CalcTextSize("...").x + ImGui::GetStyle().FramePadding.x * 2.0f + 12.0f;
+		ImGui::SetNextItemWidth(std::max(80.0f, ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x));
+		ImGui::InputText("##MountPathInput", m_MountPathBuffer, sizeof(m_MountPathBuffer));
+		ImGui::SameLine();
+		if (ImGui::Button("...##BrowseMountFolder", ImVec2(browseWidth, 0.0f)))
+		{
+			std::wstring selectedFolder;
+			if (FileDialogs::OpenFolderDialog(selectedFolder, Engine::StrToWStr(m_MountPathBuffer), "ContentBrowser.MountFolder") && !selectedFolder.empty())
+			{
+				const std::string utf8 = Engine::WStrToStr(selectedFolder);
+				const size_t copyLen = std::min(utf8.size(), sizeof(m_MountPathBuffer) - 1);
+				memcpy(m_MountPathBuffer, utf8.data(), copyLen);
+				m_MountPathBuffer[copyLen] = '\0';
+				if (m_MountNameBuffer[0] == '\0')
+				{
+					const std::string folderName = Engine::WStrToStr(filesystem::path(selectedFolder).filename().wstring());
+					const size_t nameLen = std::min(folderName.size(), sizeof(m_MountNameBuffer) - 1);
+					memcpy(m_MountNameBuffer, folderName.data(), nameLen);
+					m_MountNameBuffer[nameLen] = '\0';
+				}
+			}
+		}
+
+		EditorUI::PropertyRow("ContentBrowser.MountReadOnly");
+		ImGui::Checkbox("##MountReadOnlyCheckbox", &m_MountReadOnly);
+
+		EditorUI::PropertyRow("ContentBrowser.MountShowUnderAssets");
+		ImGui::Checkbox("##MountShowUnderAssetsCheckbox", &m_MountShowUnderAssets);
+
+		EditorUI::EndPropertyTable();
+	}
+
+	if (!m_MountError.empty())
+	{
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_MountError.c_str());
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	const EditorUI::DialogAction actions[] = {
+		{ "ContentBrowser.Cancel", true, false },
+		{ "ContentBrowser.MountAddConfirm", true, false }
+	};
+	const int clicked = EditorUI::DialogButtonBar("MountAddFooter", actions, 2);
+	if (clicked == 0)
+	{
+		m_MountError.clear();
+		ImGui::CloseCurrentPopup();
+	}
+	else if (clicked == 1)
+	{
+		const std::string mountName(m_MountNameBuffer);
+		const std::string mountPathUtf8(m_MountPathBuffer);
+		if (mountName.empty() || mountPathUtf8.empty())
+		{
+			m_MountError = LOCAL("ContentBrowser.MountInvalidInput");
+		}
+		else
+		{
+			if (!ProjectSessionManager::IsCreated())
+				ProjectSessionManager::Create();
+			std::string error;
+			if (ProjectSessionManager::Get().AddContentMount(mountName, filesystem::path(Engine::StrToWStr(mountPathUtf8)),
+				m_MountReadOnly, m_MountShowUnderAssets, &error))
+			{
+				m_MountError.clear();
+				m_ReadOnlyCache.clear();
+				m_CachedSubdirectories.clear();
+				RequestRefresh();
+				ImGui::CloseCurrentPopup();
+			}
+			else
+			{
+				m_MountError = !error.empty() ? error : LOCAL("ContentBrowser.MountFailed");
+			}
+		}
+	}
+
+	ImGui::EndPopup();
 }
 #pragma endregion
 
@@ -739,6 +964,11 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 			if (ImGui::MenuItem((ICON_FA_STOPWATCH " " + LOCAL_LABEL("ContentBrowser.CreateTimeline")).c_str()))
 			{
 				CreateEmptyTimeline(m_CurrentDirectory);
+			}
+
+			if (ImGui::MenuItem((ICON_FA_LAYER_GROUP " " + LOCAL_LABEL("ContentBrowser.CreateTerrainLayer")).c_str()))
+			{
+				CreateEmptyTerrainLayer(m_CurrentDirectory);
 			}
 
 			if (ImGui::MenuItem((ICON_FA_FIRE " " + LOCAL_LABEL("ContentBrowser.CreateEffect")).c_str()))
@@ -2992,12 +3222,35 @@ void ContentBrowserPanel::CreateEmptyTimeline(const filesystem::path& path)
 	auto* asset = Engine::ActionTimelineAsset::CreateEmpty();
 	if (!asset)
 		return;
+	// 길이 3초는 편집 범위다. 새 타임라인은 클립·트랙이 끝나는 시점에 끝나므로, 빈 공간 때문에 다음 재생이 늦어지지 않는다.
 	asset->SetDuration(3.0f);
+	asset->SetEndPolicy(Engine::ETimelineEndPolicy::LastTrackEnd);
 	const bool saved = asset->SaveToFile(Engine::WStrToStr(outputPath.wstring()));
 	Engine::ResourceManager::Get().DestroyResource(asset);
 	if (!saved)
 	{
 		EDITOR_LOG_WARN("Timeline creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		return;
+	}
+	RequestRefresh();
+	QueueCreatedAssetRename(outputPath);
+}
+
+void ContentBrowserPanel::CreateEmptyTerrainLayer(const filesystem::path& path)
+{
+	if (!CanTransferTo(path))
+		return;
+	const filesystem::path outputPath = GenerateUniqueAssetPath(path, L"NewTerrainLayer", Engine::TerrainLayerAsset::FileSuffix);
+
+	// 타임라인과 같이 빈 에셋을 리플렉션으로 저장해 현재 구조와 항상 일치시킨다. 값은 지형 레이어 편집기에서 바꾼다.
+	auto* asset = Engine::TerrainLayerAsset::CreateEmpty();
+	if (!asset)
+		return;
+	const bool saved = asset->SaveToFile(outputPath);
+	Engine::ResourceManager::Get().DestroyResource(asset);
+	if (!saved)
+	{
+		EDITOR_LOG_WARN("Terrain layer creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
 		return;
 	}
 	RequestRefresh();

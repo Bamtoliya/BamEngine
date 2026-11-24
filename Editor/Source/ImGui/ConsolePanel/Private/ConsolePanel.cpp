@@ -68,6 +68,20 @@ namespace
 void ConsolePanel::Draw(bool isRightMouseButtonDown)
 {
     m_IsRightMouseButtonDown = isRightMouseButtonDown;  
+    if (Engine::LocalizationManager::IsCreated())
+    {
+        const auto activeLang = Engine::LocalizationManager::Get().GetCurrentLanguage();
+        if (!m_LanguageInitialized)
+        {
+            m_CurrentLanguage = activeLang;
+            m_LanguageInitialized = true;
+        }
+        else if (m_CurrentLanguage != activeLang)
+        {
+            m_CurrentLanguage = activeLang;
+            OnLanguageChanged(activeLang);
+        }
+    }
     DrawOptions();
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.4f);
@@ -259,11 +273,11 @@ std::string ConsolePanel::FormatTime(const std::chrono::system_clock::time_point
 }
 void ConsolePanel::DrawLevelBadge(Engine::ELogLevel level)
 {
-    const char* name = LevelName(level);
+    const std::string name = LOCAL("LogLevel." + std::string(LevelName(level)));
     const char* icon = LevelIcon(level);
     const ImVec4 color = LevelColor(level);
     const float iconWidth = ImGui::CalcTextSize(icon).x;
-    const float textWidth = ImGui::CalcTextSize(name).x;
+    const float textWidth = ImGui::CalcTextSize(name.c_str()).x;
     const float padX = 6.0f;
     const float padY = 2.0f;
     const float spacing = 4.0f;
@@ -279,7 +293,7 @@ void ConsolePanel::DrawLevelBadge(Engine::ELogLevel level)
         ImGui::GetColorU32(ImVec4(color.x, color.y, color.z, 0.55f)), 4.0f, 0, 1.0f);
     drawList->AddText(ImVec2(badgeMin.x + padX, badgeMin.y + padY), ImGui::GetColorU32(color), icon);
     drawList->AddText(ImVec2(badgeMin.x + padX + iconWidth + spacing, badgeMin.y + padY),
-        ImGui::GetColorU32(color), name);
+        ImGui::GetColorU32(color), name.c_str());
     ImGui::Dummy(ImVec2(totalWidth, badgeHeight));
 }
 void ConsolePanel::DrawCategoryBadge(std::string_view category)
@@ -535,6 +549,30 @@ void ConsolePanel::DrawLogItem(const ConsoleRow& row, float rowHeight)
     }
 }
 
+void ConsolePanel::OnLanguageChanged(ELocalizationLanguage newLang)
+{
+    if (!Engine::LocalizationManager::IsCreated())
+        return;
+
+    auto& loc = Engine::LocalizationManager::Get();
+    for (auto& item : m_Items)
+    {
+        std::string translated = loc.TranslateLogMessage(item.Entry.Message, newLang);
+        if (translated != item.Entry.Message)
+        {
+            item.Entry.Message = std::move(translated);
+            item.SingleLineMessage = item.Entry.Message;
+            for (char& ch : item.SingleLineMessage)
+            {
+                if (ch == '\n' || ch == '\r' || ch == '\t')
+                    ch = ' ';
+            }
+        }
+        item.DisplayText = BuildDisplayText(item.Entry);
+    }
+    RebuildVisibleRows();
+}
+
 void ConsolePanel::RebuildVisibleRows()
 {
     m_VisibleRows.clear();
@@ -609,8 +647,9 @@ std::string ConsolePanel::BuildDisplayText(const Engine::LogEntry& entry)
             timeText, sizeof(timeText), "%H:%M:%S", &localTime);
     }
 
-    auto text = fmt::format("{} [{}.{:03}] [{}] [{}] [{} {}] {}",
-        LevelIcon(entry.Level), timeText, milliseconds, LevelName(entry.Level), entry.Source,
+    const std::string levelStr = LOCAL("LogLevel." + std::string(LevelName(entry.Level)));
+    auto text = fmt::format("{} [{}.{:03}] [{}] [{}] [{}] [{} {}] {}",
+        LevelIcon(entry.Level), timeText, milliseconds, LevelName(entry.Level), levelStr, entry.Source,
         CategoryIcon(entry.Category), entry.Category, entry.Message);
 
     // 리스트는 고정 높이 한 줄로 표시합니다.
@@ -814,6 +853,11 @@ bool ConsolePanel::RestorePluginState(const void* state, std::size_t stateSize)
     m_Filter.Build();
     m_ScrollToBottom = false;
     m_HasNewEntries = false;
+    if (Engine::LocalizationManager::IsCreated())
+    {
+        m_CurrentLanguage = Engine::LocalizationManager::Get().GetCurrentLanguage();
+        m_LanguageInitialized = true;
+    }
     RebuildVisibleRows();
     return true;
 }

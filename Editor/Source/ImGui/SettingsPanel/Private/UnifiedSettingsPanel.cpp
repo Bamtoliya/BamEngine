@@ -189,7 +189,7 @@ void UnifiedSettingsPanel::Draw()
     }
 
     if (EditorUI::SearchBar("UnifiedSettingsSearch", m_SearchFilter.InputBuf,
-        IM_ARRAYSIZE(m_SearchFilter.InputBuf), "Shortcuts.Search"))
+        IM_ARRAYSIZE(m_SearchFilter.InputBuf), "Settings.Search"))
     {
         m_SearchFilter.Build();
     }
@@ -324,13 +324,13 @@ void UnifiedSettingsPanel::DrawFooter()
     const std::string textReset = loc.GetText("Settings.Btn.ResetDefaults");
     const std::string textDiscard = loc.GetText("Settings.Btn.Discard");
     const std::string textApply = loc.GetText("Settings.Btn.Apply");
-    // 폰트 크기 및 언어에 따른 동적 버튼 너비 산출
-    const float paddingX = ImGui::GetStyle().FramePadding.x * 2.0f + 16.0f;
-    const float btnResetW = std::max(90.0f, ImGui::CalcTextSize(textReset.c_str()).x + paddingX);
-    const float btnDiscardW = std::max(90.0f, ImGui::CalcTextSize(textDiscard.c_str()).x + paddingX);
-    const float btnApplyW = std::max(90.0f, ImGui::CalcTextSize(textApply.c_str()).x + paddingX);
-    const float btnH = ImGui::GetFrameHeight();
-    if (ImGui::Button(textReset.c_str(), ImVec2(btnResetW, btnH)))
+
+    EditorUI::TextButtonOptions footerBtnOpt;
+    footerBtnOpt.MinWidth = ImGui::GetFontSize() * 5.5f;
+    const float btnDiscardW = EditorUI::GetTextButtonSize(textDiscard.c_str(), footerBtnOpt).x;
+    const float btnApplyW = EditorUI::GetTextButtonSize(textApply.c_str(), footerBtnOpt).x;
+
+    if (EditorUI::TextButtonRaw("SettingsResetDefaults", textReset.c_str(), footerBtnOpt))
     {
         ResetToDefaults();
     }
@@ -344,17 +344,21 @@ void UnifiedSettingsPanel::DrawFooter()
     {
         ImGui::SameLine();
     }
-    ImGui::BeginDisabled(!hasChanges);
-    if (ImGui::Button(textDiscard.c_str(), ImVec2(btnDiscardW, btnH)))
+
+    EditorUI::TextButtonOptions discardOpt = footerBtnOpt;
+    discardOpt.Enabled = hasChanges;
+    if (EditorUI::TextButtonRaw("SettingsDiscard", textDiscard.c_str(), discardOpt))
     {
         ResetDrafts(); // 저장된 기존 설정으로 초안 복원
     }
-    ImGui::SameLine();
-    if (ImGui::Button(textApply.c_str(), ImVec2(btnApplyW, btnH)))
+    EditorUI::TextButtonOptions applyOpt = footerBtnOpt;
+    applyOpt.Enabled = hasChanges;
+    applyOpt.SameLine = true;
+    applyOpt.Style = EditorUI::EButtonStyle::Primary;
+    if (EditorUI::TextButtonRaw("SettingsApply", textApply.c_str(), applyOpt))
     {
         ApplySettings(); // 모든 변경 사항 적용 및 저장
     }
-    ImGui::EndDisabled();
 }
 
 void UnifiedSettingsPanel::CaptureState(EditorWorkspace& workspace) const

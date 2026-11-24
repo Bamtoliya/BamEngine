@@ -59,7 +59,7 @@ EResult GameViewportPanel::OnInitialize(void* arg)
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		ERenderPassLoadOperation::RPLO_Load, ERenderPassStoreOperation::RPSO_Store,
 		vec4(0.f, 0.f, 0.f, -1.f), 200, ERenderSortType::FrontToBack, ERenderPassType::UI,
-		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied);
+		EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied);
 
 	m_SelectedRTName = m_DisplayRTName = m_Pipeline.GetFinalColorRTName();
 	return m_UIOverlayPassID != INVALID_PASS_ID ? EResult::Success : EResult::Fail;

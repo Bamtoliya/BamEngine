@@ -1,5 +1,6 @@
 ﻿Group,Key,English,Korean
 MaterialOption,Additive,Additive,가산 (Additive)
+MaterialOption,PureAdditive,Pure Additive (One/One),순수 가산 (One/One)
 MaterialOption,Always,Always,항상 통과
 MaterialOption,Back,Back (Back-face Culling),뒷면 (후면 컬링)
 MaterialOption,Custom,Custom,사용자 정의

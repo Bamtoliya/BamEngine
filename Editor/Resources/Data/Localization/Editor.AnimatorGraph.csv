@@ -93,3 +93,10 @@ AnimatorGraph,LiveActiveState,Active,실행 중
 AnimatorGraph,DefaultEntryHint,Default Entry,기본 진입
 AnimatorGraph,GlobalTransitions,Global Transitions,전역 전이
 AnimatorGraph,AnyShort,Any,전역
+AnimatorGraph,Weight,Weight,가중치
+AnimatorGraph,MaskRootBone,Mask Root Bone,마스크 루트 본
+AnimatorGraph,RecursiveChildren,Recursive Children,자식 본 포함
+AnimatorGraph,PlayRate,Play Rate,재생 속도
+AnimatorGraph,Looping,Looping,반복
+AnimatorGraph,Playing,Playing,재생 중
+AnimatorGraph,BaseLayer,Base Layer,기본 레이어

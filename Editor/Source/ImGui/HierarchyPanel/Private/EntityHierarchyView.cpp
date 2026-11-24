@@ -84,6 +84,30 @@ namespace
         return entry.Label;
     }
 
+    std::string TruncateLabelWithEllipsis(const std::string& label, float maxWidth, bool& outTruncated)
+    {
+        outTruncated = false;
+        if (ImGui::CalcTextSize(label.c_str()).x <= maxWidth)
+            return label;
+
+        outTruncated = true;
+        if (maxWidth <= 0.0f)
+            return "...";
+
+        std::string truncated = label;
+        while (!truncated.empty() && ImGui::CalcTextSize((truncated + "...").c_str()).x > maxWidth)
+        {
+            while (!truncated.empty())
+            {
+                const char c = truncated.back();
+                truncated.pop_back();
+                if ((c & 0xC0) != 0x80) break;
+            }
+        }
+        truncated += "...";
+        return truncated;
+    }
+
     bool ContainsIgnoreCase(std::string_view source, std::string_view target)
     {
         if (target.empty()) return true;
@@ -558,8 +582,21 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             // 레이블: [아이콘] [이름] (자식이 있으면 자식 개수 뱃지 추가)
             const auto& label = EntityLabel(scene, entity, visual.Icon, children.size());
 
+            // 우측 정렬 컨트롤(Visible / Active 토글) 영역을 먼저 확보해 이름 가용 너비를 제한한다.
+            const bool hasRightControls = (!locked && flagComp);
+            const float iconPadding = ImGui::GetFontSize() * 0.15f;
+            float widestIcon = 0.0f;
+            for (const char* icon : { ICON_FA_EYE, ICON_FA_EYE_SLASH, ICON_FA_CHECK })
+                widestIcon = std::max(widestIcon, ImGui::CalcTextSize(icon).x);
+            const ImVec2 slot(std::max(ImGui::GetFrameHeight(), widestIcon + iconPadding * 2.0f), ImGui::GetFrameHeight());
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float rightPadding = ImGui::GetStyle().WindowPadding.x;
+            const float controlsWidth = slot.x * 2.0f + spacing + rightPadding;
+            const float alignX = ImGui::GetWindowContentRegionMax().x - controlsWidth;
+
             ImGui::SetNextItemAllowOverlap();
             bool opened = false;
+            bool isNameTruncated = false;
             const bool renaming = m_RenamingEntity == entity;
             if (renaming)
             {
@@ -596,7 +633,11 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             {
                 if (selectableRows)
                     ImGui::SetNextItemSelectionUserData(selectionId(entity));
-                opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", label.c_str());
+                const float labelStartX = ImGui::GetCursorPosX() + ImGui::GetTreeNodeToLabelSpacing();
+                const float rightLimitX = hasRightControls ? (alignX - spacing) : ImGui::GetWindowContentRegionMax().x;
+                const float maxLabelWidth = std::max(0.0f, rightLimitX - labelStartX);
+                const std::string displayLabel = TruncateLabelWithEllipsis(label, maxLabelWidth, isNameTruncated);
+                opened = ImGui::TreeNodeEx("EntityNode", flags, "%s", displayLabel.c_str());
                 syncOpen(opened);
                 ImGui::PopStyleColor();
             }
@@ -610,8 +651,24 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 action.OpenUIEditor = entity;
             }
             if (entity == reveal) ImGui::SetScrollHereY();
-            if (tree.Invalid.contains(entity) && ImGui::IsItemHovered())
-                ImGui::SetTooltip("%s", Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
+            if (ImGui::IsItemHovered())
+            {
+                const bool invalidLinks = tree.Invalid.contains(entity);
+                if (isNameTruncated && invalidLinks)
+                {
+                    const auto& fullName = Editor::GetEntityHierarchyName(scene, entity);
+                    ImGui::SetTooltip("%s\n%s", fullName.c_str(),
+                        Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
+                }
+                else if (isNameTruncated)
+                {
+                    ImGui::SetTooltip("%s", Editor::GetEntityHierarchyName(scene, entity).c_str());
+                }
+                else if (invalidLinks)
+                {
+                    ImGui::SetTooltip("%s", Text("Hierarchy.InvalidLinks", "Invalid hierarchy links; shown without repair.").c_str());
+                }
+            }
 
             // --- 1. [핵심] TreeNodeEx에 Drag & Drop 및 우클릭 메뉴를 먼저 바인딩 ---
             const auto* id = world.try_get<Engine::IDComponent>(entity);
@@ -782,20 +839,8 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
             }
 
             // --- 2. 우측 정렬 컨트롤: Active & Visible 토글 아이콘 버튼 ---
-            if (!locked && flagComp)
+            if (hasRightControls)
             {
-                // 두 토글은 같은 슬롯을 쓴다. 높이는 FramePadding 트리 노드 행과 같고, 폭은 가장 넓은 아이콘이 잘리지 않게 잡는다.
-                // ImGui::Button은 FramePadding 안쪽에만 라벨을 그리므로 아이콘 슬롯에서는 가로 패딩을 줄인다.
-                const float iconPadding = ImGui::GetFontSize() * 0.15f;
-                float widestIcon = 0.0f;
-                for (const char* icon : { ICON_FA_EYE, ICON_FA_EYE_SLASH, ICON_FA_CHECK })
-                    widestIcon = std::max(widestIcon, ImGui::CalcTextSize(icon).x);
-                const ImVec2 slot(std::max(ImGui::GetFrameHeight(), widestIcon + iconPadding * 2.0f), ImGui::GetFrameHeight());
-                const float spacing = ImGui::GetStyle().ItemSpacing.x;
-                const float rightPadding = ImGui::GetStyle().WindowPadding.x;
-                const float controlsWidth = slot.x * 2.0f + spacing + rightPadding;
-                const float alignX = ImGui::GetWindowContentRegionMax().x - controlsWidth;
-
                 if (alignX > ImGui::GetCursorPosX())
                 {
                     ImGui::SameLine(alignX);

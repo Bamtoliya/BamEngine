@@ -10,6 +10,7 @@
 
 BEGIN(Engine)
 struct PostProcessComponent;
+struct TerrainComponent;
 END
 
 BEGIN(Editor)
@@ -135,6 +136,8 @@ protected:
 private:
 	std::optional<CameraBuffer> GetActiveCameraBuffer();
 	void HandleTerrainSculpting(bool imageHovered);
+	// 속성 페인트 중 지형 속성 맵(이동 불가·물)을 정점 점으로 그린다.
+	void DrawTerrainAttributeOverlay(const Engine::TerrainComponent& terrain, const glm::mat4& worldMatrix);
 	bool HandleTilemapPainting(bool imageHovered);
 
 private:

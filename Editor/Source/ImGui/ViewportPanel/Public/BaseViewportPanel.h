@@ -131,6 +131,7 @@ protected: //Viewport Display
 	string m_WindowID;
 	bool m_IsRenderTargetViewer = false;
 	wstring m_SelectedRTName;
+	char m_RenderTargetSearch[256] = {};
 	wstring m_DisplayRTName;
 	ImVec2 m_ImageScreenPos = { 0.f, 0.f }; //Screen Absolute Position
 	ImVec2 m_ImageSize = { 0.f, 0.f }; //Actual Image Size after Letterbox
