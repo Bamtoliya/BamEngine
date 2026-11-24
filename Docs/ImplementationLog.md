@@ -18,11 +18,17 @@ This document tracks implementation details, architectural decisions, and techni
      - `MaterialPreviewRenderer`에서 `EPreviewMeshType::Quad`(`QuadMesh`)와 `Plane`(`PlaneMesh`)을 분리하고, `MaterialEditor` 툴바·메뉴에 `Create Instance`(`<Name>_Inst.bammatinst.json` 즉시 생성·오픈) 추가.
      - `EntityFactory` 및 `HierarchyPanel`에 `Capsule`·`Camera`·기본 도형·라이트 프리셋 보완 및 `DefaultMaterial` 폴백 추가.
   5. **콘텐츠 브라우저 외부 마운트 팝업·UTF-8 주소창 (트랙 3-4)**:
-     - `ContentBrowserPanel::DrawMountAddModal`에서 `OpenPopup(modalTitle.c_str())`와 `BeginPopupModal(modalTitle.c_str(), ...)` 해시 ID 불일치를 수정해 외부 폴더 연결 모달 정상 오픈 확인(Label 배경과 세로 스플리터 불일치는 후속 UI 과제로 분리).
+     - `ContentBrowserPanel::DrawMountAddModal`에서 `OpenPopup(modalTitle.c_str())`와 `BeginPopupModal(modalTitle.c_str(), ...)` 해시 ID 불일치를 수정해 외부 폴더 연결 모달 정상 오픈 확인. 이어서 모달 가로 폭 540px 고정 및 `ImGuiCol_PopupBg` 알파 `1.0f` 적용(`UI-Mount`)으로 뒤쪽 스플리터 비침 해소.
      - 주소창 브레드크럼 UTF-8(`WStrToStr`) 통일, 클릭/연필 버튼 시 `InputText` 전환, 미등록 외부 폴더 읽기 전용 탐색 및 `외부 마운트로 연결...` 컨텍스트 메뉴/상단 배너 연동.
+  6. **인게임 HDR 환경맵 캡처(`IBL-Capture`)·`.hdr` 2D 썸네일/피커·`MaterialBall` 프리뷰·패키징 잠금 완화**:
+     - `DirectX12RHI::ReadTexturePixels` FP16/FP32 Readback, `IBLManager::ConvertCubemapFacesToEquirectangular`·`SaveEquirectangularHDR`, `SceneViewportPanel` `현재 위치에서 HDR 캡처...` 구현 및 실환경 실행·확인 완료.
+     - `AssetCache::LoadImageThumbnail`에 `.hdr` Reinhard 톤매핑 + sRGB 감마 2D 썸네일 생성 추가, `ResourcePicker.h`에서 `TextureCube` 2D 썸네일 폴백 연동.
+     - `MaterialPreviewRenderer` / `MaterialEditor`: `EPreviewMeshType::MaterialBall`(`Engine://Model/material_ball_in_3d-coat.glb`) 기본 프리뷰 추가 및 `SphereMesh` 폴백.
+     - `SceneArchive::PreloadDocumentResources`에서 `Engine://Texture/DefaultBRDFLut` 미등록 시 즉시 생성·등록하도록 보강, `ClientPackage::MovePackage` 10회 재시도(100ms) 및 잠금 안내 보강.
+     - `Assets/` 및 `Engine/Resources/` 구버전 바이너리·중복 `.zip`·미사용 JSON 전수 감사 완료(삭제 승인 대기).
 - **검증 상태**:
-  - 실환경에서 IBL `.hdr` 반사 및 외부 폴더 연결 모달 오픈 확인, AO/RT 그림자 깜빡임 재빌드 후 해소 확인, Probe GI 코너 빛샘은 `ShadowBias`로 미해소 확인([DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절에 후속 과제 기록).
-  - 최종 추가된 트랙 3(주소창·내장 썸네일)·엔진 리소스 임포트·`MaterialEditor` `Create Instance`·`EntityFactory` 프리셋의 전체 재빌드/회귀 확인은 후속 검증 대기.
+  - 실환경에서 IBL `.hdr` 반사, 외부 폴더 연결 모달 오픈, `IBL-Capture` 6면 HDR 캡처·저장 실행 확인, AO/RT 그림자 깜빡임 재빌드 후 해소 확인, Probe GI 코너 빛샘은 `ShadowBias`로 미해소 확인([DevelopmentPriorities.md](DevelopmentPriorities.md) 11.7.1절에 후속 과제 기록).
+  - 최근 추가 반영된 `UI-Mount`, `Thumb-HDR` + HDR 피커 썸네일, `MaterialBall` 프리뷰, `ClientPackage` 잠금 재시도는 에디터 빌드·확인 대기(`cmake --build --preset x64-ninja-debug --target GenerateLocalization Editor`).
 
 ### [2026-11-24] P2 차기 개발·트랙 1(스탠드얼론 Client/지형·머티리얼 실환경 수정)·트랙 2(에디터 UI/UX 공통화)·멀티 프로젝트 Phase 5·DXR M3 통합 반영
 

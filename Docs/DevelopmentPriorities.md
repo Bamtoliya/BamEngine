@@ -763,7 +763,7 @@ ctest --test-dir out/build/x64-ninja-debug -R "^RLSimulationCheck$" --output-on-
 | 1-A | 모두 저장한 뒤 이름 변경 | 모달 없이 바로 바뀐다 | 대기 |
 | 1-A | 한국어·영어 전환 | 차단 사유 문구가 두 언어로 표시된다 | 대기 |
 | 1-B | `ActionTimelinePlaybackCheck` | 통과(정책별 길이, `Completed`·`Stopped`·`Interrupted`, 히트박스 창 닫힘, 정책 직렬화) | 빌드 오류 수정 후 재실행 대기 |
-| 1-B | **사용자 보고: 어느 정책에서도 1초에 Completed** | `TestScene`에서 공격 시 콘솔 `ActionTimeline` 로그의 `Session N ended: Completed at`이 약 0.05초(현재 `Test.bamtimeline.json`), 경로가 `Test.bamtimeline.json`이다. 1초 근처면 로그 전체를 보고한다 | 원인 미확정 |
+| 1-B | **사용자 보고: 어느 정책에서도 1초에 Completed** | `TestScene`에서 공격 시 콘솔 `ActionTimeline` 로그의 `Session N ended: Completed at`이 약 0.05초(현재 `Test.bamtimeline.json`), 경로가 `Test.bamtimeline.json`이다. 1초 근처면 로그 전체를 보고한다 | 해결 확인 (2026-11-25) |
 | 1-B | 패널에서 종료 시점을 고정 길이로 바꿔 저장 | 타임라인 핫 리로드 알림이 뜨고, 다음 공격이 0.4초에 끝난다(에디터 재시작 없이) | 대기 |
 | 1-B | 종료 시점 콤보 변경·Ctrl+Z | 파란 종료선과 `x초에 종료` 표시가 따라 바뀌고 되돌아간다 | 대기 |
 | 1-B | 그래프 `On Action Timeline Ended` → `Print` | 끝까지 재생 시 `reason` 0, Stop 시 1 | 대기 |
@@ -870,16 +870,45 @@ ctest --test-dir out/build/x64-ninja-debug -R "^RLSimulationCheck$" --output-on-
 | V1 | `ForwardTransparent` 머티리얼 그래프에서 `Shader.ScreenUV` + `Shader.SceneColor` 연결 | 강도 0에서 배경 왜곡이 없고, UV 오프셋 시 왜곡되며 화면 밖 UV에서 가장자리 늘어짐(Streak) 없이 원본 배경을 사용한다 | 대기 |
 | B-5 | `GenerateLocalization` 및 한/영 언어 전환 | `SettingsPanel`(오디오 믹서), `UnifiedSettingsPanel`(검색창), `BuildProfilePanel`(BamPak 요약·빈 빌드 로그 중앙 정렬), `AnimationTimelinePanel`(카메라 컷/스플라인 인스펙터·트랙 추가/복제) 문구가 두 언어로 깨짐 없이 표시된다 | 대기 |
 | Pak | `PakArchiveCheck` (`TestLoaderPakFallbackAndTerrain`) & `SceneArchiveCheck` | 통과(가상 URI·물리 경로 `ExistsOrOnDisk`, 팩 우선 + 디스크 폴백, JSON `LoadArchiveWithFallback`, 디스크 원본 삭제 후 `.bamterrain` v2 pak 로드, 변조 팩 디스크 폴백 차단) | 대기 |
-| Pak | Client pak 패키징본 실행 (`Assets/` 원본 제거 상태) | 씬·텍스처·머티리얼·셰이더·`.bamterrain`이 `.bampak`에서 정상 로드되어 렌더링된다 | 대기 |
-| A-1 | `BAMENGINE_WITH_EDITOR=ON`/`OFF` 빌드 | `ResourceManager::GetDebugSnapshot()` `#if BAM_EDITOR` 스텁 전환 후 양 구성에서 Engine·Editor·Client 빌드·링크 성공 | 대기 |
+| Pak | Client pak 패키징본 실행 (`Assets/` 원본 제거 상태) | 씬·텍스처·머티리얼·셰이더·`.bamterrain`이 `.bampak`에서 정상 로드되어 렌더링된다 | 완료 확인 (2026-11-25, 스탠드얼론 빌드·내보내기 구동 확인) |
+| A-1 | `BAMENGINE_WITH_EDITOR=ON`/`OFF` 빌드 | `ResourceManager::GetDebugSnapshot()` `#if BAM_EDITOR` 스텁 전환 후 양 구성에서 Engine·Editor·Client 빌드·링크 성공 | 완료 확인 (2026-11-25, BAMENGINE_WITH_EDITOR=OFF / BAMENGINE_SHIPPING=ON Engine·Client 빌드 및 독립 Client 구동 확인) |
 | A-2 | IBL 큐브맵 할당 씬(`RenderingFeatureLab`) 첫 프레임 | 이미 `992de2bd`에 해소 반영됨. `DirectX12RHI` 패스 내 업로드 거부 로그 없이 IBL 반사/조명 정상 출력 확인 | 대기 |
-| A-3 | `.bampak` 마운트 상태에서 AnimatorController·Graph JSON·Localization JSON·AsyncResourceLoader 로드 | 디스크 원본 없이 pak에서 정상 로드되고, 미마운트 시 기존 디스크 폴백이 동작한다 | 대기 |
+| A-3 | `.bampak` 마운트 상태에서 AnimatorController·Graph JSON·Localization JSON·AsyncResourceLoader 로드 | 디스크 원본 없이 pak에서 정상 로드되고, 미마운트 시 기존 디스크 폴백이 동작한다 | 완료 확인 (2026-11-25, Assets 원본 없이 .bampak 로드 확인) |
 | A-4 | `VFXBlendAndPassCheck` 및 `PureAdditive` 머티리얼 | 통과(`One/One` vs `SrcAlpha/One` 보존, `VFXPassHelper` 필터 일치) 및 머티리얼 에디터 드롭다운 한/영 표시 | 대기 |
 | B-1 | `VirtualPathCheck` 및 프로젝트 A↔B 전환·독립 모듈 핫리로드 | `ResolveModules`/`ResolvePrimaryRuntimeModule` 통과, 기존 루트 `GameModule.dll` 하위 호환, 외부 프로젝트 `Source/` 수정 시 자동 빌드·리로드 및 Client Export DLL 로드 확인 | 대기 |
 | B-2 | `raytracedShadowMaskRTCS.hlsl` 컴파일·`RaytracingSkinnedPolicyCheck` 및 `RenderingFeatureLab` | 셰이더 컴파일·`SortSkinnedByDistance` 통과, `Masked` 재질 DXR 그림자 알파 컷아웃 및 스킨드 32개 초과 시 근접 캐릭터 우선 유지 | 대기 |
 | M4-GI | Probe GI 코너 빛샘(다크룸·GI 박스 빨간/초록 벽 모서리) 및 얇은 벽 반대편 파란빛 흔들림 | `Sun`의 `ShadowBias`로 미해소 확인. `ProbeGIVolumeComponent`에 `NormalBias`/`ViewBias`/히스테리시스 파라미터 노출 및 DDGI Chebyshev 가시성·얇은 벽 보간 개선 필요 | 후속 과제 |
-| UI-Mount | 외부 폴더 연결 모달 `PropertyTable` Label 배경 영역과 세로 스플리터 불일치 수정 | 모달 내 라벨 배경 폭/행 높이와 세로 구분선 위치 정렬 일치 | 후속 과제 |
-| Thumb-HDR | `.hdr` Equirectangular 파일의 콘텐츠 브라우저/피커 2D 톤매핑 썸네일 생성 지원 | `.hdr` 에셋이 빈 아이콘이 아닌 톤매핑된 미리보기 썸네일로 표시된다 | 후속 과제 |
-| IBL-Capture | 인게임 특정 지점(카메라/엔티티 위치)에서 6면 HDR 렌더 → Equirectangular `.hdr` 캡처·저장 기능 | 선택한 기준점에서 생성한 `.hdr` 파일을 `SkyAtmosphereComponent` IBL 슬롯에 바로 적용 가능 | 후속 과제 |
+| UI-Mount | 외부 폴더 연결 모달 `PropertyTable` Label 배경 영역과 세로 스플리터 불일치 수정 | 모달 내 라벨 배경 폭/행 높이와 세로 구분선 위치 정렬 일치 | 코드 반영 / 확인 대기 |
+| Thumb-HDR | `.hdr` Equirectangular 파일의 콘텐츠 브라우저/피커 2D 톤매핑 썸네일 생성 지원 | `.hdr` 에셋 및 피커 항목이 빈 아이콘이 아닌 톤매핑된 미리보기 썸네일로 표시된다 | 코드 반영 / 확인 대기 |
+| IBL-Capture | 인게임 특정 지점(카메라/엔티티 위치)에서 6면 HDR 렌더 → Equirectangular `.hdr` 캡처·저장 기능 | 선택한 기준점에서 생성한 `.hdr` 파일을 `SkyAtmosphereComponent` IBL 슬롯에 바로 적용 가능 | 실행·확인 완료 (2026-11-25) |
+| MatBall | 머티리얼 프리뷰 기본 모델 `material_ball_in_3d-coat.glb` 연동 및 피커 HDR 썸네일 폴백 | 머티리얼 에디터 기본 프리뷰가 `MaterialBall`로 표시되고 로드 실패 시 `SphereMesh`로 폴백 | 코드 반영 / 확인 대기 |
+| Scene-MissingRef | 씬 로딩 시 누락 리소스 관대 로드 및 로딩 직후 대체 리소스 지정/변수 초기화 복구 UI | 에디터에서 누락 `ResourceHandle`·경로 필드가 있어도 씬이 중단 없이 열리고, 로딩 직후 모달에서 타입별 대체 에셋 지정 또는 Null/기본값 치환 후 수정 표시(`*`)가 유지된다. 단, 패키징/무결성 CTest 엄격 모드는 기존 실패 정책 유지 | 후속 과제 |
+
+- **`Scene-MissingRef` 계획 요약**: (1) `Scene::CreateFromArchive`에 에디터용 누락 리소스 수집 컨텍스트(`MissingReferenceInfo`: 엔티티·컴포넌트·필드명·기대 타입·원본 URI)를 두고, 해석 실패한 핸들/경로는 일단 빈 핸들(또는 기본 폴백)로 역직렬화를 통과시켜 씬이 화면에 뜨게 한다. (2) 에디터(`ImGuiManager`/`SceneDocument`)는 씬 로드 직후 수집된 누락 목록이 있으면 **누락 리소스 복구 모달**을 띄워 항목별로 `ResourcePicker`로 대체 에셋을 고르거나 `Null/비우기`(일괄 기본값 대체 포함)를 선택·적용할 수 있게 한다. (3) 복구 적용 시 씬을 미저장(`Dirty`) 상태로 표시해 사용자가 새 참조로 저장하도록 유도하며, `Client` Shipping 패키징/자동 검증(`SceneArchiveCheck` 등)은 누락 참조를 그대로 오류로 보고하는 엄격 모드를 유지한다.
 
 **커밋 전 주의:** 1-A는 커밋 `cda1467f`로 main에 있다. 1-B·1-C·T1(a~d)·T2(a~e)·T3(a~c)·T4·V1·B-5·Pak 로더 연결은 미커밋이다. 새 파일 `Engine/Source/Terrain/{Public,Private}/TerrainDataFile.*`·`TerrainLayerAsset.*`, `Editor/Source/ImGui/ResourceEditor/{Public,Private}/TerrainLayerEditor.*`, `Engine/Resources/Material/TerrainMaterial.bammat.json`, `Engine/Resources/Shader/hlsl/terrainLayers.hlsli`도 커밋 대상이다. 메인 워크트리에는 MultiProject/ProjectHub 변경과 `Engine.csv`의 타 작업 행이 혼재되어 있으므로 커밋 시 기능 단위로 선별 스테이징한다.
+
+### 11.8 게임 제작 실전 보강·확인 항목 (공통 및 장르별)
+
+실제 게임 개발 단계에 진입할 때, 엔진 코어 기능과 별개로 게임플레이 완성도·조작감·출시 품질을 위해 사전 확인 또는 보강이 필요한 항목들을 전 장르 공통 기반과 장르별 특화 항목으로 나누어 정리한다.
+
+#### 전 장르 공통 (출시·완성도 기반)
+
+| 영역 | 현재 상태 및 확인 필요 사항 | 게임 제작 시 보강 방향 |
+|---|---|---|
+| **오브젝트 풀링 (Entity/VFX)** | ECS 기반 엔티티 생성·파괴는 존재하나 고속 재사용 풀은 게임 측 설계 영역. | 탄환·적·파티클 등이 빈번히 생성·소멸될 때 프레임 히치를 막기 위해 게임 모듈에 재사용 풀을 구축한다. |
+| **오디오 동시 발음 제어 & BGM 전환** | `Audio` 모듈과 믹서 설정은 존재. 동일 SFX 다중 중첩 시 볼륨 폭주 방지(쿨다운/보이스 제한)와 BGM 크로스페이드 지원 여부 확인 필요. | 피격음·폭발음 중첩 시 클리핑을 막는 최소 재발음 간격·동시 보이스 수 제한과 스테이지/보스전 BGM 크로스페이드 유틸리티를 확인·보강한다. |
+| **UI 트위닝 & 월드-스크린 투영** | UI Editor(위젯/레이아웃)는 존재. 콤보 스케일 펀치, 데미지 플로팅 텍스트·월드 마커용 3D→2D 화면 투영 헬퍼 확인 필요. | 타격감 및 HUD 피드백 강화를 위해 3D→2D 좌표 변환 헬퍼와 간단한 UI 스케일/알파 트위닝 유틸리티를 마련한다. |
+| **씬 전환 & 로딩 흐름** | 씬 로드·저장과 `SaveGame`은 존재. 스테이지 전환 시 페이드 인/아웃 및 비동기 로딩 연출은 게임 측 구현 필요. | 타이틀 ↔ 스테이지 ↔ 결과 화면 전환 시 페이드 오버레이와 씬 전환 상태 머신을 게임 모듈에 구성한다. |
+| **런타임 입력 리매핑 & 게임패드 지원** | 에디터용 `ShortcutManager`와 `Input` 모듈은 존재. 런타임 플레이어용 키 재바인딩 UI/저장 및 게임패드(아날로그 스틱·데드존·진동) 대응 확인 필요. | 옵션 메뉴에서 플레이어 조작 키를 변경·저장할 수 있는 입력 매핑 레이어와 컨트롤러 지원 범위를 점검·보강한다. |
+| **세이브 버전 관리** | `SaveGame` 직렬화는 존재. 업데이트로 세이브 구조체가 바뀔 때 기존 세이브 파일 손상/무시 방지 규칙 필요. | 세이브 데이터에 `SchemaVersion` 필드를 포함하고 버전 업그레이드(마이그레이션) 및 안전한 기본값 폴백 경로를 둔다. |
+
+#### 장르별 추가 보강·확인 항목
+
+| 대상 장르 | 보강·확인 항목 | 세부 내용 및 적용 방향 |
+|---|---|---|
+| **3D 쿼터뷰 / 아케이드 / 디펜스** | 동적 NavGrid 장애물 갱신 | 정적 베이크(`.bamnavgrid`) 외에 런타임 구조물(비콘·벽) 설치 시 셀 차단 및 경로 재계산 API 또는 Steering 기반 국소 회피 보완 여부를 확인한다. |
+| **3D 3인칭 액션 / 어드벤처** | 타깃 락온·카메라 오클루전·히트스톱 | 스프링암 카메라 벽 충돌/투명화 보정, 타깃 락온 전환, 타격 시 짧은 프레임 정지(Hitstop)·카메라 셰이크, 루트 모션/커브 이동 보정을 준비한다. |
+| **2D 플랫포머 / 2D 탑다운** | 2D 조작감·타일맵 충돌 확장 | 타일맵 원웨이(단방향) 플랫폼, 코요테 타임·점프 버퍼링, 2D 카메라 룸 경계 클램핑 및 픽셀 퍼펙트 스케일링 유지 규칙을 보강한다. |
+| **RPG / 전략 / 시뮬레이션** | 데이터 테이블·다중 선택·상태 관리 | 외부 밸런스 시트(CSV/JSON) 로더 및 검증기, RTS/전략용 드래그 박스 다중 피킹·미니맵, 인벤토리·퀘스트·대화 상태 머신을 게임 계층에 구성한다. |
+| **멀티플레이 / 코옵 (후순위)** | `Network` 리플리케이션 & 세션 | 싱글플레이 완성 이후 `Network` 모듈의 ECS 상태 리플리케이션, 클라이언트 예측·보정, 로비/세션 흐름을 단계적으로 연결한다. |
