@@ -859,11 +859,18 @@ void ContentBrowserPanel::DrawMountAddModal()
 
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(520.0f, 0.0f), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(540.0f, 0.0f), ImVec2(540.0f, FLT_MAX));
 
 	bool open = true;
+	ImVec4 modalBg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+	modalBg.w = 1.0f;
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, modalBg);
 	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::PopStyleColor();
 		return;
+	}
 
 	if (EditorUI::BeginPropertyTable("MountAddTable"))
 	{
@@ -952,6 +959,7 @@ void ContentBrowserPanel::DrawMountAddModal()
 	}
 
 	ImGui::EndPopup();
+	ImGui::PopStyleColor();
 }
 #pragma endregion
 

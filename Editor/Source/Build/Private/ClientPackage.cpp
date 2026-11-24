@@ -165,8 +165,21 @@ namespace
 
     void MovePackage(const fs::path& source, const fs::path& target, const char* message)
     {
-        if (!MoveFileW(source.c_str(), target.c_str()))
-            throw fs::filesystem_error(message, source, target, { static_cast<int>(GetLastError()), std::system_category() });
+        constexpr int kMaxAttempts = 10;
+        DWORD lastError = ERROR_SUCCESS;
+        for (int attempt = 0; attempt < kMaxAttempts; ++attempt)
+        {
+            if (MoveFileW(source.c_str(), target.c_str()))
+                return;
+            lastError = GetLastError();
+            if (lastError != ERROR_ACCESS_DENIED && lastError != ERROR_SHARING_VIOLATION)
+                break;
+            Sleep(100);
+        }
+        std::string fullMessage = message ? message : "Move failed";
+        if (lastError == ERROR_ACCESS_DENIED || lastError == ERROR_SHARING_VIOLATION)
+            fullMessage += " (folder or file is locked by Explorer, terminal, log viewer, or running Client.exe)";
+        throw fs::filesystem_error(fullMessage, source, target, { static_cast<int>(lastError), std::system_category() });
     }
 
     void PublishPackage(const Editor::ClientPackageDestination& destination, const fs::path& staging,
