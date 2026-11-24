@@ -45,7 +45,8 @@ public:
 	bool IsSupported() const;
 	// 이번 프레임에 TLAS가 필요한 씬과 뷰를 등록한다. 같은 조합은 한 번만 빌드한다.
 	// reflections면 반사에 필요한 메시와 인스턴스 표도 함께 준비한다.
-	void RequestScene(Scene* scene, uint32 viewID, bool reflections = false);
+	// cameraPosition이 있으면 스킨드 메시 한도를 초과할 때 카메라에 가까운 순서대로 우선 선택한다.
+	void RequestScene(Scene* scene, uint32 viewID, bool reflections = false, const vec3* cameraPosition = nullptr);
 	// 이번 프레임에 TLAS가 요청된 씬인지. 제출 단계에서 섀도맵 제외 후보를 표시할 때 확인한다.
 	bool IsSceneRequested(const Scene* scene, uint32 viewID) const;
 	// 빌드 전에 프레임이 중단되면 해제된 씬 포인터가 다음 프레임에 남지 않도록 프레임 큐와 함께 비운다.
@@ -64,7 +65,8 @@ public:
 #pragma region Caster Policy
 public:
 	// 레이트레이싱 그림자가 형상을 그대로 표현할 수 있는 캐스터인지. 섀도맵 제외 여부는 이 판정이 아니라 GetTopLevelCasters로 정한다.
-	static bool IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material);
+	// allowMasked가 true면 Masked 재질도 허용한다(바인드리스 인스턴스 표가 필요하다).
+	static bool IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material, bool allowMasked = false);
 	// 반사에 나타낼 수 있는 메시인지(스킨드 포함). Masked는 광선마다 알파를 확인한다.
 	static bool IsReflectionSupported(const Mesh* mesh, const MaterialInterface* material);
 	// Compute 스키닝으로 레이트레이싱할 수 있는 스킨드 메시인지(정점 형식과 스트림 개수).
@@ -137,6 +139,8 @@ private:
 		Scene* Source = nullptr;
 		uint32 ViewID = 0;
 		bool Reflections = false;
+		bool HasCameraPosition = false;
+		vec3 CameraPosition{ 0.0f };
 	};
 	struct TopLevelEntry
 	{

@@ -145,10 +145,15 @@ const vector<uint8>& MaterialInstance::GetOrBuildConstantBufferBlob(uint32 liveT
 
 EResult MaterialInstance::Bind(uint32 slot)
 {
-	if (!m_BaseMaterialHandle) return EResult::Fail;
-	RHI* rhi = Renderer::Get().GetRHI();
 	Material* baseMaterial = m_BaseMaterialHandle.Get();
-	if (!rhi || !baseMaterial) return EResult::Fail;
+	if (!baseMaterial)
+	{
+		if (HasShaderGraph())
+			return MaterialInterface::Bind(slot);
+		return EResult::Fail;
+	}
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return EResult::Fail;
 
 	auto* defaultSampler = SamplerManager::Get().GetDefaultSampler();
 	if (!defaultSampler) return EResult::Fail;
@@ -281,6 +286,12 @@ ERenderPassType MaterialInstance::GetPrimaryPassType() const
 	if (HasFlag(m_OverrideFlags, EPipelineOverrideFlag::PrimaryPassType)) return m_PrimaryPassType;
 	Material* baseMat = GetBaseMaterial();
 	return baseMat ? baseMat->GetPrimaryPassType() : ERenderPassType::Geometry;
+}
+EMaterialDomain MaterialInstance::GetDomain() const
+{
+	// 도메인은 셰이더 쌍을 정하므로 인스턴스가 바꾸지 않고 기본 머티리얼을 따른다.
+	Material* baseMat = GetBaseMaterial();
+	return baseMat ? baseMat->GetDomain() : EMaterialDomain::Surface;
 }
 EBlendMode MaterialInstance::GetBlendMode() const
 {

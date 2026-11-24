@@ -43,6 +43,7 @@ namespace Engine
 		{
 			mat4 World{ 1.0f };
 			std::vector<mat4> Bones; // 정적 메시는 비어 있다.
+			uint64 Stamp = 0; // 모양 표식(MakeMotionStamp). 다르면 정점이 바뀐 것이라 변환만으로 이동량을 구할 수 없다.
 		};
 
 		void Begin()
@@ -51,19 +52,20 @@ namespace Engine
 			m_RecordedCount = 0;
 		}
 
-		// 이번 프레임의 변환을 기록한다. 한 물체의 여러 서브메시는 같은 변환으로 여러 번 불러도 된다.
-		void Record(uint64 id, const mat4& world, const std::vector<mat4>* bones = nullptr)
+		// 이번 프레임의 변환을 기록한다. 한 물체의 여러 서브메시는 같은 변환·모양 표식으로 여러 번 불러도 된다.
+		void Record(uint64 id, const mat4& world, const std::vector<mat4>* bones = nullptr, uint64 stamp = 0)
 		{
 			Entry& entry = m_Entries[id];
 			if (entry.Frame == m_Frame)
 			{
 				// 한 번호가 서로 다른 변환으로 그려지면 어느 쪽의 이전 변환인지 알 수 없다.
-				if (entry.Source != bones || entry.Current.World != world) entry.Ambiguous = true;
+				if (entry.Source != bones || entry.Current.World != world || entry.Current.Stamp != stamp) entry.Ambiguous = true;
 				return;
 			}
 			std::swap(entry.Previous, entry.Current);
 			entry.HasPrevious = entry.Frame != 0u && entry.Frame + 1u == m_Frame && !entry.Ambiguous;
 			entry.Current.World = world;
+			entry.Current.Stamp = stamp;
 			if (bones) entry.Current.Bones.assign(bones->begin(), bones->end());
 			else entry.Current.Bones.clear();
 			entry.Source = bones;
@@ -79,7 +81,7 @@ namespace Engine
 			if (found == m_Entries.end()) return nullptr;
 			const Entry& entry = found->second;
 			if (entry.Frame != m_Frame || !entry.HasPrevious || entry.Ambiguous) return nullptr;
-			if (entry.Previous.Bones.size() != entry.Current.Bones.size()) return nullptr;
+			if (entry.Previous.Bones.size() != entry.Current.Bones.size() || entry.Previous.Stamp != entry.Current.Stamp) return nullptr;
 			const bool moved = entry.Previous.World != entry.Current.World || entry.Previous.Bones != entry.Current.Bones;
 			return moved ? &entry.Previous : nullptr;
 		}

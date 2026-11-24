@@ -33,12 +33,11 @@ public:
 		uint32 priority = 0,
 		ERenderSortType sortType = ERenderSortType::None,
 		ERenderPassType passType = ERenderPassType::Custom,
-		EBlendMode acceptedBlendModes = EBlendMode::Opaque | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Masked | EBlendMode::Forward | EBlendMode::Decal
+		EBlendMode acceptedBlendModes = EBlendMode::Opaque | EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied | EBlendMode::Masked | EBlendMode::Forward | EBlendMode::Decal
 		);
 	RenderPassID GetRenderPassIDByName(const wstring& name);
 	RenderPass* GetRenderPassByID(RenderPassID id);
 	const vector<RenderPass*>& GetAllRenderPasses() const { return m_RenderPasses; }
-private:
 	void SortRenderPasses();
 #pragma endregion
 

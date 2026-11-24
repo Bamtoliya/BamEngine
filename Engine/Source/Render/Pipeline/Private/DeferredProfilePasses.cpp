@@ -164,7 +164,7 @@ namespace Engine
                 desc.passType = transparent ? ERenderPassType::ForwardTransparent : ERenderPassType::Forward;
                 desc.sortType = transparent ? ERenderSortType::BackToFront : ERenderSortType::FrontToBack;
                 desc.acceptedBlendModes = transparent
-                    ? EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::NonPremultiplied | EBlendMode::Decal
+                    ? EBlendMode::AlphaBlend | EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied | EBlendMode::Decal
                     : EBlendMode::Forward;
                 desc.loadOperation = desc.stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;
                 desc.renderTargetNames = input("Color");

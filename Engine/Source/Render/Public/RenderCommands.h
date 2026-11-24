@@ -6,7 +6,9 @@
 #include "MaterialInterface.h"
 #include "UIEllipseMaskGeometry.h"
 #include "UIAlphaMaskGeometry.h"
+#include "RenderTargetTypes.h"
 #include <optional>
+#include <array>
 
 BEGIN(Engine)
 
@@ -26,13 +28,26 @@ struct RenderObjectId
 	}
 };
 
+// 지형 텍스처 슬롯(RHI 텍스처 슬롯). 16 이상은 space3(t = 슬롯 - 16)이다. BINDING_LAYOUT.md "지형 바인딩"과 같아야 한다.
+inline constexpr uint32 TerrainHeightmapSlot = MAX_MATERIAL_TEXTURE_SLOTS + 8;   // t8, space3
+inline constexpr uint32 TerrainSplatSlot = MAX_MATERIAL_TEXTURE_SLOTS + 9;       // t9, space3 (레이어 0~3)
+inline constexpr uint32 TerrainSplatExtraSlot = MAX_MATERIAL_TEXTURE_SLOTS + 10; // t10, space3 (레이어 4~7)
+
 struct HeightfieldDrawData
 {
+	static constexpr uint32 MaxLayers = 8;
+
 	std::shared_ptr<class RHITexture> heightmap;
-	std::shared_ptr<class RHITexture> splatmap;
+	std::shared_ptr<class RHITexture> splatmap;      // 레이어 0~3 가중치 (t9, space3)
+	std::shared_ptr<class RHITexture> splatmapExtra; // 레이어 4~7 가중치 (t10, space3)
 	std::shared_ptr<class Mesh> gridMesh;
 	f32 maxHeight = 0.f;
 	vec2 cellSpacing = vec2(1.f);
+
+	// 레이어 i의 알베도(t8+i, space1), 반복 길이(m), 색 배율. 텍스처는 이번 프레임 동안 리소스가 소유한다(없으면 흰 텍스처).
+	std::array<class RHITexture*, MaxLayers> layerTextures{};
+	std::array<f32, MaxLayers> layerTiling{};
+	std::array<vec4, MaxLayers> layerTints{};
 };
 
 struct StaticDrawCommand

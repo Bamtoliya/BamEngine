@@ -68,7 +68,7 @@ namespace
 	std::string BuildMaterialConstantsHlsl(const MaterialBufferLayout& layout)
 	{
 		std::ostringstream out;
-		out << "// ── 머티리얼 상수 버퍼 (Space 3, b0 / RHI Slot 2) ──\n";
+		out << "// -- Material Constant Buffer (Space 3, b0 / RHI Slot 2) --\n";
 		out << "struct MaterialConstants\n";
 		out << "{\n";
 		out << "uint   materialFlags;\n";
@@ -108,6 +108,33 @@ namespace
 	constexpr int GraphTextureSlotCount = 4;
 	constexpr std::string_view DiffuseTextureDeclaration =
 		"Texture2D diffuseMap : register(t0, space1);\nSamplerState materialSampler : register(s0, space1);\n";
+
+	// 지형 도메인 생성 중인지. Terrain.* 노드는 terrainPixel(TerrainBeginPixel 결과)을 읽으므로 그 생성기 밖에서는 컴파일하지 않는다.
+	thread_local bool t_TerrainDomain = false;
+
+	struct TerrainDomainScope
+	{
+		TerrainDomainScope() { t_TerrainDomain = true; }
+		~TerrainDomainScope() { t_TerrainDomain = false; }
+	};
+
+	// ForwardTransparent 패스 생성 중인지. Shader.ScreenUV / Shader.SceneColor 노드는 SceneColorCopy 버퍼를 읽으므로 그 생성기 밖에서는 컴파일하지 않는다.
+	thread_local bool t_ForwardTransparentDomain = false;
+
+	struct ForwardTransparentScope
+	{
+		ForwardTransparentScope() { t_ForwardTransparentDomain = true; }
+		~ForwardTransparentScope() { t_ForwardTransparentDomain = false; }
+	};
+
+	// Terrain.* 노드의 layer 상수(0~7). 범위 밖이면 -1.
+	int TerrainLayerIndex(const GraphNode& node)
+	{
+		const auto value = node.InputValues.find("layer");
+		if (value == node.InputValues.end()) return 0;
+		const auto* layer = std::get_if<std::int64_t>(&value->second);
+		return layer && *layer >= 0 && *layer < 8 ? static_cast<int>(*layer) : -1;
+	}
 
 	int GraphTextureSlot(const GraphNode& node)
 	{
@@ -183,6 +210,7 @@ namespace
 
 		static const std::unordered_set<std::string> supported{
 			"Shader.ColorOutput", "Shader.MaterialOutput", "Shader.TextureSample",
+			"Shader.ScreenUV", "Shader.SceneColor",
 			"Shader.TexCoord0", "Shader.TexCoord1",
 			"Shader.Time", "Shader.WorldPosition", "Shader.WorldNormal", "Shader.ViewDirection", "Shader.Fresnel",
 			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
@@ -198,7 +226,8 @@ namespace
 			"Math.AddFloat4", "Math.SubtractFloat4", "Math.MultiplyFloat4", "Math.ScaleFloat4",
 			"Math.DotFloat4", "Math.NormalizeFloat4", "Math.LerpFloat4",
 			"Math.MakeFloat3", "Math.BreakFloat3",
-			"Math.MakeFloat4", "Math.BreakFloat4"
+			"Math.MakeFloat4", "Math.BreakFloat4",
+			"Terrain.LayerWeight", "Terrain.LayerSample", "Terrain.LayerBlend", "Terrain.Slope", "Terrain.Height"
 		};
 		return supported.contains(type);
 	}
@@ -350,8 +379,40 @@ namespace
 			return resolvePin("In", expectedType, outExpression);
 		}
 
+		if (type.rfind("Terrain.", 0) == 0)
+		{
+			if (!t_TerrainDomain)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.TerrainDomainOnly" };
+			if (stage == EShaderStage::Vertex)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.TerrainPixelOnly" };
+
+			if (type == "Terrain.Slope") { outExpression = "terrainPixel.Slope"; return {}; }
+			if (type == "Terrain.Height") { outExpression = "terrainPixel.Height"; return {}; }
+
+			std::string color;
+			if (type == "Terrain.LayerBlend")
+				color = "TerrainBlendLayers(terrainPixel)";
+			else
+			{
+				const int layer = TerrainLayerIndex(*producer);
+				if (layer < 0)
+					return { EGraphError::InvalidDefault, producer->Id, "layer", 0, "ShaderGraph.TerrainLayerRange" };
+				if (type == "Terrain.LayerWeight")
+				{
+					outExpression = "TerrainLayerWeight(terrainPixel, " + std::to_string(layer) + "u)";
+					return {};
+				}
+				color = "TerrainSampleLayer(terrainPixel, " + std::to_string(layer) + "u)";
+			}
+			outExpression = outputPin.Pin == "rgb" ? "(" + color + ").rgb" : color;
+			return {};
+		}
+
 		if (type == "Shader.TexCoord0" || type == "Shader.TexCoord1")
 		{
+			// 지형 정점 셰이더는 두 번째 UV를 내지 않는다.
+			if (t_TerrainDomain && type == "Shader.TexCoord1")
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.TerrainNoUV1" };
 			if (outputPin.Pin != "uv" || expectedType != EGraphPinType::Float2)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 			outExpression = type == "Shader.TexCoord0" ? "input.TexCoord" : "input.TexCoord1";
@@ -438,6 +499,77 @@ namespace
 			}
 
 			const std::string sampleCall = "SampleGraphTexture" + std::to_string(slot) + "(" + uv + ")";
+			if (outputPin.Pin == "rgba")
+			{
+				if (expectedType != EGraphPinType::Float4)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = sampleCall;
+			}
+			else if (outputPin.Pin == "rgb")
+			{
+				if (expectedType != EGraphPinType::Float3)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").rgb";
+			}
+			else if (outputPin.Pin == "r")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").r";
+			}
+			else if (outputPin.Pin == "g")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").g";
+			}
+			else if (outputPin.Pin == "b")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").b";
+			}
+			else if (outputPin.Pin == "a")
+			{
+				if (expectedType != EGraphPinType::Float)
+					return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+				outExpression = "(" + sampleCall + ").a";
+			}
+			else
+			{
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			}
+			return {};
+		}
+
+		if (type == "Shader.ScreenUV")
+		{
+			if (stage == EShaderStage::Vertex)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.ScreenUVPixelOnly" };
+			if (!t_ForwardTransparentDomain)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.ForwardTransparentOnly" };
+			if (outputPin.Pin != "uv" || expectedType != EGraphPinType::Float2)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+
+			outExpression = "screenUV";
+			return {};
+		}
+
+		if (type == "Shader.SceneColor")
+		{
+			if (stage == EShaderStage::Vertex)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.SceneColorPixelOnly" };
+			if (!t_ForwardTransparentDomain)
+				return { EGraphError::UnsupportedCompilation, producer->Id, outputPin.Pin, 0, "ShaderGraph.ForwardTransparentOnly" };
+
+			std::string uv = "screenUV";
+			if (HasInputLink(graph, producer->Id, "uv"))
+			{
+				auto result = resolvePin("uv", EGraphPinType::Float2, uv);
+				if (!result.Succeeded()) return result;
+			}
+
+			const std::string sampleCall = "SampleSceneColor(" + uv + ", screenUV)";
 			if (outputPin.Pin == "rgba")
 			{
 				if (expectedType != EGraphPinType::Float4)
@@ -1194,6 +1326,7 @@ return output;
 GraphDiagnostic ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(
 	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
 {
+	const ForwardTransparentScope transparentScope;
 	const GraphNode* outputNode = nullptr;
 	std::string baseColor;
 	std::vector<GraphPinReference> callStack;
@@ -1285,9 +1418,25 @@ float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
 };
 
+// Pass Texture: SceneColorCopy (Space 3, t0 / RHI Slot 16)
+Texture2D g_SceneColor : register(t0, space3);
+SamplerState g_SceneColorSampler : register(s0, space3);
+
+float4 SampleSceneColor(float2 uv, float2 baseScreenUV)
+{
+	bool isOffScreen = any(uv < 0.0f) || any(uv > 1.0f);
+	float2 finalUV = isOffScreen ? baseScreenUV : uv;
+	finalUV = clamp(finalUV, float2(0.0001f, 0.0001f), float2(0.9999f, 0.9999f));
+	return g_SceneColor.Sample(g_SceneColorSampler, finalUV);
+}
+
 )" + materialConstantsBlock + BuildGraphTextureHlsl(graph, useMaterialTexture) + R"(
 float4 main(PS_INPUT input) : SV_TARGET0
 {
+float _sceneWidth, _sceneHeight;
+g_SceneColor.GetDimensions(_sceneWidth, _sceneHeight);
+float2 screenUV = input.Position.xy / float2(max(_sceneWidth, 1.0f), max(_sceneHeight, 1.0f));
+
 float4 diffuse = ()" + baseColor + R"() * input.Color;
 )" + materialDiffuseSample + opacityMaskClip + R"(
 float alpha = saturate(diffuse.a);
@@ -1304,5 +1453,173 @@ return float4(litColor, alpha);
 )";
 
 	outSource.swap(source);
+	return {};
+}
+GraphDiagnostic ShaderGraphCompiler::GenerateTerrainMaterialHlsl(
+	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	const TerrainDomainScope terrainDomain;
+	const GraphNode* outputNode = nullptr;
+	std::vector<GraphPinReference> callStack;
+
+	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	// 연결된 출력 핀만 그래프 식으로 바꾸고, 나머지는 기본값을 쓴다. 정점 입력 핀은 지형 정점 셰이더가 고정이라 읽지 않는다.
+	const bool isMaterialOutput = outputNode->Type == "Shader.MaterialOutput";
+	const auto resolveIfLinked = [&](const char* pin, EGraphPinType type, std::string& expression) -> GraphDiagnostic
+		{
+			if (!HasInputLink(graph, outputNode->Id, pin)) return {};
+			return ResolveInputExpression(graph, registry, { outputNode->Id, pin }, type, EShaderStage::Pixel, callStack, expression);
+		};
+
+	// baseColor가 없으면 칠한 레이어 합성(지형의 기본 표면)
+	std::string baseColor = "TerrainBlendLayers(terrainPixel)";
+	if (auto result = resolveIfLinked(isMaterialOutput ? "baseColor" : "color", EGraphPinType::Float4, baseColor); !result.Succeeded())
+		return result;
+
+	std::string roughness = "gMaterial.roughness";
+	std::string metallic = "gMaterial.metallic";
+	std::string cavity = "gMaterial.cavity";
+	std::string ao = "gMaterial.ao";
+	std::string emissive = "gMaterial.emissiveColor";
+	std::string normalExpr;
+	bool hasNormalLink = false;
+	if (isMaterialOutput)
+	{
+		const struct { const char* Pin; EGraphPinType Type; std::string* Expression; } pins[] = {
+			{ "roughness", EGraphPinType::Float, &roughness }, { "metallic", EGraphPinType::Float, &metallic },
+			{ "cavity", EGraphPinType::Float, &cavity }, { "ao", EGraphPinType::Float, &ao },
+			{ "emissive", EGraphPinType::Float3, &emissive }, { "normal", EGraphPinType::Float3, &normalExpr } };
+		for (const auto& pin : pins)
+			if (auto result = resolveIfLinked(pin.Pin, pin.Type, *pin.Expression); !result.Succeeded()) return result;
+		hasNormalLink = HasInputLink(graph, outputNode->Id, "normal");
+	}
+
+	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
+	const std::string textureBlock = BuildGraphTextureHlsl(graph, false);
+	// 그래프가 슬롯 0(materialSampler, s0 space1)을 쓰면 지형 공용 헤더가 같은 샘플러를 쓰게 한다(같은 레지스터 중복 선언 방지).
+	const std::string samplerAlias = textureBlock.find("materialSampler") != std::string::npos
+		? "#define TERRAIN_SAMPLER materialSampler\n" : "";
+
+	std::string source = R"(#include "common.hlsli"
+#include "shading_flags.hlsli"
+
+// 지형 정점 셰이더(terrainVS)의 출력과 같아야 한다.
+struct PS_INPUT
+{
+float4 Position : SV_POSITION;
+float3 WorldPos : WORLD_POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float4 Color : COLOR0;
+nointerpolation float PickingId : TEXCOORD5;
+};
+
+struct PS_OUTPUT
+{
+float4 Diffuse : SV_TARGET0;
+float4 Normal : SV_TARGET1;
+float4 PBR : SV_TARGET2;
+float4 Emission : SV_TARGET3;
+float4 Position : SV_TARGET4;
+};
+
+)" + BuildMaterialConstantsHlsl(layout) + textureBlock + samplerAlias + R"(#include "terrainLayers.hlsli"
+
+PS_OUTPUT main(PS_INPUT input)
+{
+PS_OUTPUT output;
+const TerrainPixel terrainPixel = TerrainBeginPixel(input.WorldPos, normalize(input.Normal), input.TexCoord);
+float4 diffuse = ()" + baseColor + R"() * input.Color;
+
+)" + BuildNormalCalculationHlsl(normalExpr, hasNormalLink) + R"(
+float roughness = clamp()" + roughness + R"(, 0.04f, 1.0f);
+float metallic = saturate()" + metallic + R"();
+float cavity = clamp()" + cavity + R"(, 0.0f, 1.0f);
+float ao = clamp()" + ao + R"(, 0.0f, 1.0f);
+float3 emission = )" + emissive + R"(;
+
+uint defaultMeshFlags = FLAG_RECEIVE_SHADOWS | FLAG_RECEIVE_DECALS | FLAG_APPLY_SSAO;
+
+output.Diffuse = diffuse;
+output.Normal = float4(N * 0.5f + 0.5f, PackShadingData(SHADING_MODEL_DEFAULT_LIT, defaultMeshFlags));
+output.PBR = float4(roughness, metallic, cavity, ao);
+output.Emission = float4(emission, 1.0f);
+output.Position = float4(input.WorldPos, input.PickingId);
+return output;
+}
+)";
+
+	outSource.swap(source);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::BuildDefaultTerrainGraph(const GraphRegistry& registry, Graph& outGraph)
+{
+	Graph graph(EGraphDomain::Shader);
+	GraphDiagnostic failure;
+	const auto add = [&](const char* type, float x, float y) -> GraphNodeId
+		{
+			if (!failure.Succeeded()) return 0;
+			const auto result = graph.AddNode(registry, type);
+			if (!result.Succeeded()) { failure = result; return 0; }
+			(void)graph.SetNodePosition(result.Node, x, y);
+			return result.Node;
+		};
+	const auto connect = [&](GraphNodeId from, const char* fromPin, GraphNodeId to, const char* toPin)
+		{
+			if (!failure.Succeeded()) return;
+			if (auto result = graph.Connect(registry, { from, fromPin }, { to, toPin }); !result.Succeeded()) failure = result;
+		};
+	const auto set = [&](GraphNodeId node, const char* pin, GraphValue value)
+		{
+			if (!failure.Succeeded()) return;
+			if (auto result = graph.SetInputValue(registry, { node, pin }, std::move(value)); !result.Succeeded()) failure = result;
+		};
+	const auto constant = [&](float value, float x, float y)
+		{
+			const auto node = add("Core.Float", x, y);
+			set(node, "value", value);
+			return node;
+		};
+
+	const auto output = add("Shader.MaterialOutput", 900.0f, 250.0f);
+
+	// 절벽 가중치 = 1 - smoothstep(0.55, 0.78, 경사)
+	const auto slope = add("Terrain.Slope", 0.0f, 420.0f);
+	const auto smooth = add("Math.SmoothStepFloat", 200.0f, 420.0f);
+	set(smooth, "edge0", 0.55f);
+	set(smooth, "edge1", 0.78f);
+	connect(slope, "slope", smooth, "value");
+	const auto cliff = add("Math.SubtractFloat", 420.0f, 420.0f);
+	set(cliff, "a", 1.0f);
+	connect(smooth, "result", cliff, "b");
+
+	// 색 = lerp(칠한 레이어 합성, 레이어 1, 절벽 가중치)
+	const auto blend = add("Terrain.LayerBlend", 200.0f, 100.0f);
+	const auto rock = add("Terrain.LayerSample", 200.0f, 230.0f);
+	set(rock, "layer", std::int64_t{ 1 });
+	const auto color = add("Math.LerpFloat4", 620.0f, 150.0f);
+	connect(blend, "rgba", color, "a");
+	connect(rock, "rgba", color, "b");
+	connect(cliff, "result", color, "t");
+	connect(color, "result", output, "baseColor");
+
+	// 거칠기 = lerp(0.85, 0.65, 절벽 가중치)
+	const auto roughness = add("Math.LerpFloat", 620.0f, 420.0f);
+	set(roughness, "a", 0.85f);
+	set(roughness, "b", 0.65f);
+	connect(cliff, "result", roughness, "t");
+	connect(roughness, "result", output, "roughness");
+
+	// 연결하지 않은 핀은 머티리얼 상수를 읽으므로 terrainPS와 같은 값을 상수로 넣는다.
+	connect(constant(0.0f, 620.0f, 560.0f), "result", output, "metallic");
+	connect(constant(0.5f, 620.0f, 620.0f), "result", output, "cavity");
+	connect(constant(1.0f, 620.0f, 680.0f), "result", output, "ao");
+
+	if (!failure.Succeeded()) return failure;
+	outGraph = std::move(graph);
 	return {};
 }

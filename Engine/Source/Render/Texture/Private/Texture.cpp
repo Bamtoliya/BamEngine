@@ -147,19 +147,13 @@ EResult Texture::Initialize(void* arg)
 
 	std::filesystem::path fullPath = PlatformPath::ResolveUri(m_Path);
 
-	std::ifstream file(fullPath, std::ios::binary | std::ios::ate);
-	if (!file.is_open())
-		return EResult::FileNotFound;
+	vector<uint8> buffer;
+	const EResult readResult = PakMountManager::Get().ReadBytesWithFallback(m_Path, buffer);
+	if (readResult != EResult::Success)
+		return readResult;
 
-	const std::streamsize size = file.tellg();
-	if (size <= 0 || size > static_cast<std::streamsize>((std::numeric_limits<int>::max)()))
+	if (buffer.empty() || buffer.size() > static_cast<size_t>((std::numeric_limits<int>::max)()))
 		return EResult::InvalidArgument;
-
-	file.seekg(0, std::ios::beg);
-
-	vector<uint8> buffer(static_cast<size_t>(size));
-	if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
-		return EResult::Fail;
 
 	if (fullPath.extension() == ".dds" || (buffer.size() >= 4 && std::memcmp(buffer.data(), "DDS ", 4) == 0))
 		return InitializeFromDDSMemory(buffer);

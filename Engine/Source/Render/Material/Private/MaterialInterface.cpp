@@ -146,6 +146,7 @@ EResult MaterialInterface::OnPostLoad()
             m_PrimaryPassType = ERenderPassType::Forward;
         }
         else if (m_BlendMode == EBlendMode::AlphaBlend || m_BlendMode == EBlendMode::Additive ||
+                 m_BlendMode == EBlendMode::PureAdditive ||
                  m_BlendMode == EBlendMode::NonPremultiplied || m_BlendMode == EBlendMode::Decal)
         {
             const bool isGBufferPs = (psKey.find("gbuffer") != string::npos);

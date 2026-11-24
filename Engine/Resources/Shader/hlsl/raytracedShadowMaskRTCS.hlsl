@@ -7,10 +7,11 @@
 // lightingPS가 min(마스크, 섀도맵)으로 합성한다.
 #include "common.hlsli"
 #include "light.hlsli"
+#include "raytracing.hlsli"
 #include "raytracedShadow.hlsli"
 #include "reflection.hlsli"
 
-// RaytracingInstanceData.h와 같다. 반사에만 쓰는 메시(Masked 등)는 그림자 광선에서 제외한다.
+// RaytracingInstanceData.h와 같다.
 static const uint RAYTRACING_MASK_SHADOW = 1u;
 // 점·스포트 섀도맵의 Near와 같다. 광원을 감싼 전구 메시에 막히지 않게 한다.
 static const float LOCAL_LIGHT_NEAR = 0.05f;
@@ -23,7 +24,8 @@ struct RaytracedShadowParams
 	uint  FrameIndex;          // 광원 원판의 표본 위치를 프레임마다 바꾼다
 	uint4 Lights;              // 채널별 광원 버퍼 인덱스
 	uint  WritePenumbra;       // 1이면 u3에 반그림자 반지름을 쓴다(누적·필터를 쓰는 프레임)
-	uint3 Pad;
+	uint  InstanceTable;       // Masked 알파 테스트용 RaytracedInstance 표 번호
+	uint2 Pad;
 };
 
 Texture2D gDiffuse : register(t0, space3);
@@ -59,6 +61,21 @@ float2 SampleDisk(uint2 pixel, uint channel)
 	const float angle = u.y * 6.2831853f;
 	return radius * float2(cos(angle), sin(angle));
 }
+
+bool AcceptShadowCandidate(uint instanceIndex, uint primitiveIndex, float2 barycentrics)
+{
+	if (gShadowParams.InstanceTable == INVALID_BINDLESS_INDEX)
+		return true;
+	return PassesAlphaTest(LoadRaytracedInstance(gShadowParams.InstanceTable, instanceIndex), primitiveIndex, barycentrics);
+}
+
+#define RESOLVE_SHADOW_CANDIDATES(query) \
+	while (query.Proceed()) \
+	{ \
+		if (query.CandidateType() == CANDIDATE_NON_OPAQUE_TRIANGLE && \
+			AcceptShadowCandidate(query.CandidateInstanceID(), query.CandidatePrimitiveIndex(), query.CandidateTriangleBarycentrics())) \
+			query.CommitNonOpaqueTriangleHit(); \
+	}
 
 // 조명 결과가 0인 픽셀(빛을 등진 면, 범위·원뿔 밖)은 광선을 쏘지 않는다.
 ShadowSample TraceVisibility(Light light, float3 origin, float3 normal, float2 disk)
@@ -138,9 +155,9 @@ ShadowSample TraceVisibility(Light light, float3 origin, float3 normal, float2 d
 	if (sourceSize > 0.0f)
 	{
 		// 반그림자 반지름을 구하려면 받는 면에서 가장 가까운 물체까지의 거리가 필요하다.
-		RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> query;
+		RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
 		query.TraceRayInline(gSceneTLAS, RAY_FLAG_NONE, RAYTRACING_MASK_SHADOW, ray);
-		query.Proceed();
+		RESOLVE_SHADOW_CANDIDATES(query)
 		if (query.CommittedStatus() == COMMITTED_TRIANGLE_HIT)
 		{
 			result.Visibility = 0.0f;
@@ -150,9 +167,9 @@ ShadowSample TraceVisibility(Light light, float3 origin, float3 normal, float2 d
 	}
 
 	// 차폐 여부만 필요하므로 첫 교차에서 탐색을 끝낸다.
-	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES | RAY_FLAG_FORCE_OPAQUE> query;
+	RayQuery<RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES> query;
 	query.TraceRayInline(gSceneTLAS, RAY_FLAG_NONE, RAYTRACING_MASK_SHADOW, ray);
-	query.Proceed();
+	RESOLVE_SHADOW_CANDIDATES(query)
 	result.Visibility = query.CommittedStatus() == COMMITTED_TRIANGLE_HIT ? 0.0f : 1.0f;
 	return result;
 }

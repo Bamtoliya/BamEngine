@@ -64,6 +64,21 @@ namespace Editor
 		return pass == Engine::ERenderPassType::Geometry || pass == Engine::ERenderPassType::ForwardTransparent;
 	}
 
+	bool MaterialEditor::IsTerrainDomain() const
+	{
+		return m_Material && m_Material->GetDomain() == Engine::EMaterialDomain::Terrain;
+	}
+
+	Engine::ResourceHandle<Engine::Shader> MaterialEditor::GetTerrainVertexShader()
+	{
+		// 엔진 지형 머티리얼(TerrainMaterial.bammat.json)과 같은 셰이더 파일. 이름이 VS로 끝나 정점 셰이더로 읽힌다.
+		// DirectX12 바이너리만 있으므로 다른 RHI에서는 지형 그래프 머티리얼을 쓸 수 없다.
+		auto& rm = Engine::ResourceManager::Get();
+		auto handle = rm.GetResourceHandle<Engine::Shader>(L"Resources/Shader/TerrainVS");
+		if (!handle.Get()) handle = Engine::ResourceHandle<Engine::Shader>(rm.LoadFile(L"Engine://Shader/bin/dxil/terrainVS.cso"));
+		return handle;
+	}
+
 	bool MaterialEditor::IsGraphShader(const Engine::ResourceHandle<Engine::Shader>& handle)
 	{
 		const auto* shader = handle.Get();
@@ -153,17 +168,31 @@ namespace Editor
 		}
 		std::string candidateVs;
 		std::string candidatePs;
-
-		m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVs);
-		if (!m_LastGraphDiagnostic.Succeeded())
+		// 지형 도메인: 정점 셰이더는 엔진 terrainVS를 쓰므로 그래프는 픽셀 표면만 만든다. G-Buffer 패스만 지원한다.
+		const bool terrainDomain = IsTerrainDomain();
+		if (terrainDomain && primaryPass != Engine::ERenderPassType::Geometry)
 		{
 			build.MaterialCurrent = false;
-			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = LocalizeGraphMessage(m_LastGraphDiagnostic.Message);
+			build.StatusKey = "MaterialEditor.TerrainNeedsGeometry";
+			build.Details = LOCAL("MaterialEditor.TerrainNeedsGeometry");
 			return;
 		}
 
-		m_LastGraphDiagnostic = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
+		if (!terrainDomain)
+		{
+			m_LastGraphDiagnostic = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVs);
+			if (!m_LastGraphDiagnostic.Succeeded())
+			{
+				build.MaterialCurrent = false;
+				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = LocalizeGraphMessage(m_LastGraphDiagnostic.Message);
+				return;
+			}
+		}
+
+		m_LastGraphDiagnostic = terrainDomain
+			? Engine::ShaderGraphCompiler::GenerateTerrainMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs)
+			: (primaryPass == Engine::ERenderPassType::ForwardTransparent)
 			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs)
 			: Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePs);
 		build.Details.clear();
@@ -182,6 +211,7 @@ namespace Editor
 			const auto vsPath = hlslDir / "MaterialVS.hlsl";
 			const auto psPath = hlslDir / "MaterialPS.hlsl";
 
+			if (!terrainDomain)
 			{
 				std::ofstream file(vsPath, std::ios::binary | std::ios::trunc);
 				file.write(candidateVs.data(), static_cast<std::streamsize>(candidateVs.size()));
@@ -191,13 +221,16 @@ namespace Editor
 				file.write(candidatePs.data(), static_cast<std::streamsize>(candidatePs.size()));
 			}
 
-			auto vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, Engine::ERHIType::DirectX12, "main");
-			if (!vsResult.Success || vsResult.Bytecode.empty())
+			if (!terrainDomain)
 			{
-				build.MaterialCurrent = false;
-				build.StatusKey = "MaterialEditor.CompileFailed";
-				build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
-				return;
+				auto vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, Engine::ERHIType::DirectX12, "main");
+				if (!vsResult.Success || vsResult.Bytecode.empty())
+				{
+					build.MaterialCurrent = false;
+					build.StatusKey = "MaterialEditor.CompileFailed";
+					build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
+					return;
+				}
 			}
 
 			auto psResult = ShaderCompiler::Compile(psPath, EShaderType::Fragment, Engine::ERHIType::DirectX12, "main");
@@ -239,18 +272,32 @@ namespace Editor
 			return;
 		}
 
-		// 1. VS 및 PS HLSL 소스 코드 동시 생성
-		std::string candidateVsHlsl;
-		auto diagVs = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVsHlsl);
-		if (!diagVs.Succeeded())
+		// 지형 도메인: 정점 셰이더는 엔진 terrainVS(높이 변위·그림자·모션 벡터와 같은 식)를 쓰고 픽셀 셰이더만 만든다.
+		const bool terrainDomain = IsTerrainDomain();
+		if (terrainDomain && primaryPass != Engine::ERenderPassType::Geometry)
 		{
-			build.StatusKey = "MaterialEditor.CompileFailed";
-			build.Details = LocalizeGraphMessage(diagVs.Message);
+			build.StatusKey = "MaterialEditor.TerrainNeedsGeometry";
+			build.Details = LOCAL("MaterialEditor.TerrainNeedsGeometry");
 			return;
 		}
 
+		// 1. VS 및 PS HLSL 소스 코드 동시 생성
+		std::string candidateVsHlsl;
+		if (!terrainDomain)
+		{
+			auto diagVs = Engine::ShaderGraphCompiler::GenerateGBufferMaterialVS(m_ShaderGraph.Data, m_GraphRegistry, candidateVsHlsl);
+			if (!diagVs.Succeeded())
+			{
+				build.StatusKey = "MaterialEditor.CompileFailed";
+				build.Details = LocalizeGraphMessage(diagVs.Message);
+				return;
+			}
+		}
+
 		std::string candidatePsHlsl;
-		auto diagPs = (primaryPass == Engine::ERenderPassType::ForwardTransparent)
+		auto diagPs = terrainDomain
+			? Engine::ShaderGraphCompiler::GenerateTerrainMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl)
+			: (primaryPass == Engine::ERenderPassType::ForwardTransparent)
 			? Engine::ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl)
 			: Engine::ShaderGraphCompiler::GenerateGBufferMaterialHlsl(m_ShaderGraph.Data, m_GraphRegistry, candidatePsHlsl);
 		if (!diagPs.Succeeded())
@@ -267,6 +314,7 @@ namespace Editor
 			const auto psPath = hlslDir / "MaterialPS.hlsl";
 
 			// 파일 쓰기
+			if (!terrainDomain)
 			{
 				std::ofstream file(vsPath, std::ios::binary | std::ios::trunc);
 				file.write(candidateVsHlsl.data(), static_cast<std::streamsize>(candidateVsHlsl.size()));
@@ -278,13 +326,17 @@ namespace Editor
 
 			const auto rhiType = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHIType() : Engine::ERHIType::DirectX12;
 
-			// 2. Vertex Shader 컴파일
-			auto vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, rhiType, "main");
-			if (!vsResult.Success || vsResult.Bytecode.empty())
+			// 2. Vertex Shader 컴파일 (지형 도메인은 엔진 셰이더를 그대로 쓴다)
+			ShaderCompileResult vsResult;
+			if (!terrainDomain)
 			{
-				build.StatusKey = "MaterialEditor.CompileFailed";
-				build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
-				return;
+				vsResult = ShaderCompiler::Compile(vsPath, EShaderType::Vertex, rhiType, "main");
+				if (!vsResult.Success || vsResult.Bytecode.empty())
+				{
+					build.StatusKey = "MaterialEditor.CompileFailed";
+					build.Details = "[VS Compile Error] " + vsResult.ErrorMessage;
+					return;
+				}
 			}
 
 			// 3. Pixel Shader 컴파일
@@ -333,11 +385,12 @@ namespace Editor
 						stalePasses.push_back(pass.passType);
 			}
 
-			auto vs = create(vsResult, EShaderType::Vertex, L"/VS");
+			auto vs = terrainDomain ? GetTerrainVertexShader() : create(vsResult, EShaderType::Vertex, L"/VS");
 			auto ps = vs.IsValid() ? create(psResult, EShaderType::Fragment, L"/PS") : Engine::ResourceHandle<Engine::Shader>{};
 			if (!vs.IsValid() || !ps.IsValid())
 			{
-				if (vs.IsValid()) (void)rm.DestroyResource(vs.GetRawHandle());
+				// 엔진 지형 정점 셰이더는 공유 리소스라 지우지 않는다.
+				if (vs.IsValid() && !terrainDomain) (void)rm.DestroyResource(vs.GetRawHandle());
 				build.StatusKey = "MaterialEditor.CompileFailed";
 				build.Details = LOCAL("MaterialEditor.GraphShaderPublishFailed");
 				return;

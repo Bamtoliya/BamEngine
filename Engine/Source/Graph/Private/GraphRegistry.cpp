@@ -192,6 +192,11 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 		{ "Event.OnActionTimelineEvent", logic, {
 			{ "eventTag", Direction::Input, Type::String, std::string{}, {}, "PIN_ACTION_TIMELINE_EVENT_TAG", true },
 			{ "exec", Direction::Output, Type::Execution, {} } } },
+		// reason: 0 끝까지 재생(Completed), 1 Stop, 2 재시작·교체·인계로 끊김(Interrupted). EActionTimelineEndReason 순서와 같다.
+		{ "Event.OnActionTimelineEnded", logic, {
+			{ "exec", Direction::Output, Type::Execution, {} },
+			{ "reason", Direction::Output, Type::Int, {}, {}, "PIN_ACTION_TIMELINE_END_REASON" },
+			{ "completed", Direction::Output, Type::Bool, {}, {}, "PIN_ACTION_TIMELINE_COMPLETED" } } },
 		{ "Flow.Branch", logic, {
 			{ "exec", Direction::Input, Type::Execution, {} }, { "condition", Direction::Input, Type::Bool, false },
 			{ "true", Direction::Output, Type::Execution, {} }, { "false", Direction::Output, Type::Execution, {} } } },
@@ -406,10 +411,35 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "viewDir", Direction::Input, Type::Float3, std::array<float, 3>{ 0.0f, 0.0f, 1.0f } },
 			{ "power", Direction::Input, Type::Float, 5.0f },
 			{ "result", Direction::Output, Type::Float, {} } } },
+		// 지형 도메인 노드(ShaderGraphCompiler::GenerateTerrainMaterialHlsl에서만 컴파일된다). layer는 0~7 상수로만 받는다.
+		{ "Terrain.LayerWeight", shader, {
+			{ "layer", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TerrainLayer", true },
+			{ "weight", Direction::Output, Type::Float, {} } } },
+		{ "Terrain.LayerSample", shader, {
+			{ "layer", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TerrainLayer", true },
+			{ "rgba", Direction::Output, Type::Float4, {}, {}, "Graph.PinName.RGBA" },
+			{ "rgb", Direction::Output, Type::Float3, {}, {}, "Graph.PinName.RGB" } } },
+		{ "Terrain.LayerBlend", shader, {
+			{ "rgba", Direction::Output, Type::Float4, {}, {}, "Graph.PinName.RGBA" },
+			{ "rgb", Direction::Output, Type::Float3, {}, {}, "Graph.PinName.RGB" } } },
+		{ "Terrain.Slope", shader, {
+			{ "slope", Direction::Output, Type::Float, {} } } },
+		{ "Terrain.Height", shader, {
+			{ "height", Direction::Output, Type::Float, {} } } },
 		{ "Shader.TextureSample", shader, {
 			{ "slot", Direction::Input, Type::Int, std::int64_t{ 0 }, {}, "Graph.PinName.TextureSlot" },
 			{ "uv", Direction::Input, Type::Float2, std::array<float, 2>{}, {}, "Graph.PinName.TextureUV" },
 			{ "name", Direction::Input, Type::String, std::string{}, {}, "Graph.PinName.TextureName" },
+			{ "rgba", Direction::Output, Type::Float4, {}, {}, "Graph.PinName.RGBA" },
+			{ "rgb", Direction::Output, Type::Float3, {}, {}, "Graph.PinName.RGB" },
+			{ "r", Direction::Output, Type::Float, {}, {}, "Graph.PinName.R" },
+			{ "g", Direction::Output, Type::Float, {}, {}, "Graph.PinName.G" },
+			{ "b", Direction::Output, Type::Float, {}, {}, "Graph.PinName.B" },
+			{ "a", Direction::Output, Type::Float, {}, {}, "Graph.PinName.A" } } },
+		{ "Shader.ScreenUV", shader, {
+			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.ScreenUV" } } },
+		{ "Shader.SceneColor", shader, {
+			{ "uv", Direction::Input, Type::Float2, std::array<float, 2>{}, {}, "Graph.PinName.ScreenUV" },
 			{ "rgba", Direction::Output, Type::Float4, {}, {}, "Graph.PinName.RGBA" },
 			{ "rgb", Direction::Output, Type::Float3, {}, {}, "Graph.PinName.RGB" },
 			{ "r", Direction::Output, Type::Float, {}, {}, "Graph.PinName.R" },
@@ -466,9 +496,21 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 				if (pin.Key == "slot" || pin.Key == "name") pin.LiteralOnly = true;
 			}
 		}
+		if (definition.Type == "Shader.ScreenUV")
+		{
+			definition.Category = "Coordinates";
+			definition.DisplayName = "Graph.Node.ScreenUV";
+		}
+		if (definition.Type == "Shader.SceneColor")
+		{
+			definition.Category = "Texture";
+			definition.DisplayName = "Graph.Node.SceneColor";
+		}
 	}
 	for (auto& definition : definitions)
 	{
+		if (definition.Type == "Shader.ScreenUV") definition.Tooltip = "Normalized screen-space coordinates [0, 1].";
+		if (definition.Type == "Shader.SceneColor") definition.Tooltip = "Sample the opaque scene background color buffer.";
 		if (definition.Type == "Flow.Branch") definition.Tooltip = "Run the true or false execution path.";
 		if (definition.Type == "Flow.Sequence") definition.Tooltip = "Finish then0 before running then1.";
 		if (definition.Type == "Flow.ForLoop") definition.Tooltip = "Run body for each index in [first, last).";

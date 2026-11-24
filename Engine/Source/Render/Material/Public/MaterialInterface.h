@@ -11,6 +11,14 @@
 
 BEGIN(Engine)
 
+// 셰이더 그래프가 만드는 표면 종류. 저장값은 정수이므로 순서를 바꾸지 않는다.
+ENUM()
+enum class EMaterialDomain : uint8
+{
+	Surface, // 일반 메시: 그래프가 정점·픽셀 셰이더를 모두 만든다
+	Terrain  // 지형: 정점 셰이더는 엔진 terrainVS(높이 변위), 그래프는 픽셀 표면만 만든다(Terrain.* 노드 사용 가능)
+};
+
 STRUCT()
 struct MaterialTextureBinding
 {
@@ -355,6 +363,8 @@ public:
 public:
 	virtual BlendState GetBlendState();
 	virtual ERenderPassType GetPrimaryPassType() const { return m_PrimaryPassType; }
+	virtual EMaterialDomain GetDomain() const { return m_Domain; }
+	void SetDomain(EMaterialDomain domain) { m_Domain = domain; }
 	virtual EBlendMode GetBlendMode() const { return m_BlendMode; }
 	virtual ECullMode GetCullMode() const { return m_CullMode; }
 	virtual EFrontFace GetFrontFace() const { return m_FrontFace; }
@@ -402,6 +412,9 @@ protected:
 protected:
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_PRIMARY_PASS_TYPE"))
 	ERenderPassType m_PrimaryPassType = { ERenderPassType::Geometry };
+	// 셰이더 그래프가 만드는 표면 종류. 값이 없던 이전 머티리얼은 Surface다.
+	PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_MATERIAL_DOMAIN"))
+	EMaterialDomain m_Domain = { EMaterialDomain::Surface };
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_BLEND_MODE"))
 	EBlendMode m_BlendMode = { EBlendMode::Opaque };
 	PROPERTY(EDITABLE, CATEGORY("CATEGORY_PIPELINE"), DISPLAY_NAME("PROP_CULL_MODE"))

@@ -108,7 +108,8 @@ namespace
 		uint32 FrameIndex = 0u;
 		std::array<uint32, MAX_RAYTRACED_SHADOW_LIGHTS> Lights{};
 		uint32 WritePenumbra = 0u;
-		uint32 Pad[3]{};
+		uint32 InstanceTable = Engine::RHI::INVALID_BINDLESS_INDEX;
+		uint32 Pad[2]{};
 	};
 	static_assert(sizeof(RaytracedShadowParams) == 48);
 
@@ -579,7 +580,7 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		// 레이트레이싱 그림자·반사·AO·프로브 GI를 쓰는 씬만 TLAS를 요청한다(빌드는 Renderer::Render 시작 시).
 		// 프로브 GI는 반사처럼 닿은 면의 재질을 읽으므로 인스턴스 표도 준비한다.
 		if (useRaytracedShadow || useRaytracedReflection || ambientOcclusion == EAmbientOcclusionMode::Raytraced || useProbeGI)
-			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection || useProbeGI);
+			RaytracingSceneManager::Get().RequestScene(sceneToQuery, passes.Geometry, useRaytracedReflection || useProbeGI, &cameraBuffer.cameraPosition);
 		SubmitLightingPass(cameraBuffer, sceneCamera, sceneToQuery, skyData, passes, useRaytracedShadow, useRaytracedReflection, ambientOcclusion,
 			previousJitterNDC, useProbeGI);
 	}
@@ -1926,6 +1927,8 @@ Engine::RHITexture* Engine::DeferredSceneRenderer::DispatchRaytracedShadowMask(E
 
 	RaytracedShadowParams params{};
 	params.Lights = lights.Lights;
+	if (rhi.GetCapabilities().SupportsBindlessResources)
+		params.InstanceTable = Engine::RaytracingSceneManager::Get().GetInstanceTableIndex(scene, viewID);
 	if (!denoise)
 	{
 		m_ShadowHistory.Reset();

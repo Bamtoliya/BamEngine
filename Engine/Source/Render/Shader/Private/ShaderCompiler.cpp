@@ -1,5 +1,6 @@
 ﻿#include "ShaderCompiler.h"
 #include "Logger.h"
+#include "PlatformPath.h"
 
 std::filesystem::path ShaderCompiler::FindDxcPath()
 {
@@ -192,6 +193,9 @@ ShaderCompileResult ShaderCompiler::Compile(
     else
         cmd += L"-spirv ";
     cmd += L"-I \"" + hlslPath.parent_path().wstring() + L"\" ";
+    const std::filesystem::path engineHlslDir = Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl");
+    if (!engineHlslDir.empty() && engineHlslDir != hlslPath.parent_path() && std::filesystem::exists(engineHlslDir, ec))
+        cmd += L"-I \"" + engineHlslDir.wstring() + L"\" ";
     cmd += L"-T " + std::wstring(profile.begin(), profile.end()) + L" ";
     cmd += L"-E " + std::wstring(entryPoint.begin(), entryPoint.end()) + L" ";
     cmd += L"-Fo \"" + outPath.wstring() + L"\" ";
@@ -246,17 +250,24 @@ bool ShaderCompiler::IsUpToDate(const std::filesystem::path& hlslPath, const std
     if (ec) return false;
     const auto hlslTime = std::filesystem::last_write_time(hlslPath, ec);
     if (ec || outTime < hlslTime) return false;
-    // 같은 폴더 내의 모든 .hlsli 인클루드 헤더 파일의 수정 시각 대조
-    const auto dir = hlslPath.parent_path();
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+    // 같은 폴더 및 엔진 공용 HLSL 폴더 내의 모든 .hlsli 인클루드 헤더 파일의 수정 시각 대조
+    auto hasNewerHeader = [&](const std::filesystem::path& headerDir) -> bool
     {
-        if (entry.is_regular_file(ec) && entry.path().extension() == ".hlsli")
+        if (headerDir.empty() || !std::filesystem::exists(headerDir, ec)) return false;
+        for (const auto& entry : std::filesystem::directory_iterator(headerDir, ec))
         {
-            const auto headerTime = entry.last_write_time(ec);
-            if (!ec && outTime < headerTime)
-                return false;
+            if (entry.is_regular_file(ec) && entry.path().extension() == ".hlsli")
+            {
+                const auto headerTime = entry.last_write_time(ec);
+                if (!ec && outTime < headerTime) return true;
+            }
         }
-    }
+        return false;
+    };
+    const std::filesystem::path dir = hlslPath.parent_path();
+    if (hasNewerHeader(dir)) return false;
+    const std::filesystem::path engineHlslDir = Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl");
+    if (!engineHlslDir.empty() && engineHlslDir != dir && hasNewerHeader(engineHlslDir)) return false;
     return true;
 }
 bool ShaderCompiler::ReadCompiledFile(const std::filesystem::path& path, std::vector<uint8>& outBytecode, std::string& outErrorMessage)

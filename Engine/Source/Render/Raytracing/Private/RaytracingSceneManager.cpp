@@ -24,6 +24,8 @@
 #include "ResourceManager.h"
 #include "PlatformPath.h"
 
+#include <limits>
+
 IMPLEMENT_SINGLETON(RaytracingSceneManager)
 
 namespace
@@ -94,7 +96,7 @@ bool RaytracingSceneManager::IsSupported() const
 	return m_RHI && m_RHI->GetCapabilities().SupportsInlineRaytracing;
 }
 
-void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID, bool reflections)
+void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID, bool reflections, const vec3* cameraPosition)
 {
 	if (!scene || !IsSupported())
 		return;
@@ -102,9 +104,20 @@ void RaytracingSceneManager::RequestScene(Scene* scene, uint32 viewID, bool refl
 	{
 		if (request.Source != scene || request.ViewID != viewID) continue;
 		request.Reflections |= reflections;
+		if (cameraPosition)
+		{
+			request.HasCameraPosition = true;
+			request.CameraPosition = *cameraPosition;
+		}
 		return;
 	}
-	m_RequestedScenes.push_back({ scene, viewID, reflections });
+	TopLevelRequest request{ scene, viewID, reflections };
+	if (cameraPosition)
+	{
+		request.HasCameraPosition = true;
+		request.CameraPosition = *cameraPosition;
+	}
+	m_RequestedScenes.push_back(request);
 }
 
 bool RaytracingSceneManager::IsSceneRequested(const Scene* scene, uint32 viewID) const
@@ -327,7 +340,8 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 	m_InstanceScratch.clear();
 	m_InstanceDataScratch.clear();
 	entry.InstanceTableIndex = RHI::INVALID_BINDLESS_INDEX;
-	reflections = reflections && m_RHI->GetCapabilities().SupportsBindlessResources;
+	const bool allowBindless = m_RHI->GetCapabilities().SupportsBindlessResources;
+	reflections = reflections && allowBindless;
 	entry.Casters.Begin();
 	entry.InstanceCount = 0;
 	entry.UnsupportedCasterCount = 0;
@@ -366,13 +380,16 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 
 		// 정적 렌더러에 붙은 스킨드 메시는 자세를 알 수 없어 섀도맵에 맡긴다(스키닝은 SkinnedMeshRendererComponent만).
 		const bool staticGeometry = !mesh->IsSkinned();
-		const bool shadowSupported = castsShadow && staticGeometry && IsShadowCasterSupported(mesh, material);
-		if (castsShadow && !shadowSupported)
-			++entry.UnsupportedCasterCount;
+		const bool isMasked = material->GetBlendMode() == EBlendMode::Masked;
+		bool shadowSupported = castsShadow && staticGeometry && IsShadowCasterSupported(mesh, material, allowBindless);
 
 		RaytracingInstanceData instanceData;
 		const bool reflectionSupported = reflections && staticGeometry && IsReflectionSupported(mesh, material) &&
 			BuildInstanceData(*mesh, *material, nullptr, instanceData);
+		if (!reflectionSupported && shadowSupported && isMasked && !BuildInstanceData(*mesh, *material, nullptr, instanceData))
+			shadowSupported = false;
+		if (castsShadow && !shadowSupported)
+			++entry.UnsupportedCasterCount;
 		if (!shadowSupported && !reflectionSupported)
 			continue;
 
@@ -396,7 +413,10 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 		{
 			instance.instanceMask |= RAYTRACING_MASK_REFLECTION;
 			if (castsShadow) instance.instanceMask |= RAYTRACING_MASK_REFLECTION_SHADOW;
-			instance.forceNonOpaque = material->GetBlendMode() == EBlendMode::Masked;
+		}
+		if (reflectionSupported || (shadowSupported && isMasked))
+		{
+			instance.forceNonOpaque = isMasked;
 			instance.instanceID = static_cast<uint32>(m_InstanceDataScratch.size());
 			m_InstanceDataScratch.push_back(instanceData);
 		}
@@ -423,7 +443,8 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 		if (!mesh || !material) continue;
 
 		const bool skinnable = IsSkinningSupported(mesh);
-		const bool shadowSupported = castsShadow && skinnable && IsShadowCasterSupported(mesh, material);
+		const bool isMasked = material->GetBlendMode() == EBlendMode::Masked;
+		bool shadowSupported = castsShadow && skinnable && IsShadowCasterSupported(mesh, material, allowBindless);
 		const bool reflectionWanted = reflections && skinnable && IsReflectionSupported(mesh, material);
 		if (castsShadow && !shadowSupported)
 			++entry.UnsupportedCasterCount;
@@ -446,15 +467,22 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 
 		// 정점·재질은 스키닝 결과를, 인덱스는 원본 메시를 읽는다.
 		RaytracingInstanceData instanceData;
-		bool reflectionSupported = reflectionWanted && BuildInstanceData(*mesh, *material, &constants, instanceData);
-		if (reflectionSupported)
+		const bool needInstanceData = reflectionWanted || (shadowSupported && isMasked);
+		bool hasInstanceData = needInstanceData && BuildInstanceData(*mesh, *material, &constants, instanceData);
+		if (hasInstanceData)
 		{
 			instanceData.PositionBuffer = m_RHI->GetBindlessIndex(skinned->Positions);
 			instanceData.PositionStride = SkinnedPositionStride;
 			instanceData.MaterialBuffer = m_RHI->GetBindlessIndex(skinned->Materials);
 			instanceData.MaterialStride = skinned->MaterialStride;
-			reflectionSupported = instanceData.PositionBuffer != RHI::INVALID_BINDLESS_INDEX &&
+			hasInstanceData = instanceData.PositionBuffer != RHI::INVALID_BINDLESS_INDEX &&
 				instanceData.MaterialBuffer != RHI::INVALID_BINDLESS_INDEX;
+		}
+		const bool reflectionSupported = reflectionWanted && hasInstanceData;
+		if (shadowSupported && isMasked && !hasInstanceData)
+		{
+			shadowSupported = false;
+			++entry.UnsupportedCasterCount;
 		}
 		if (!shadowSupported && !reflectionSupported)
 			continue;
@@ -469,7 +497,10 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 		{
 			instance.instanceMask |= RAYTRACING_MASK_REFLECTION;
 			if (castsShadow) instance.instanceMask |= RAYTRACING_MASK_REFLECTION_SHADOW;
-			instance.forceNonOpaque = material->GetBlendMode() == EBlendMode::Masked;
+		}
+		if (hasInstanceData)
+		{
+			instance.forceNonOpaque = isMasked;
 			instance.instanceID = static_cast<uint32>(m_InstanceDataScratch.size());
 			m_InstanceDataScratch.push_back(instanceData);
 		}
@@ -483,8 +514,8 @@ EResult RaytracingSceneManager::BuildScene(Scene& scene, uint32 viewID, bool ref
 	if (IsSuccess(result))
 	{
 		entry.InstanceCount = static_cast<uint32>(m_InstanceScratch.size());
-		// 표를 만들지 못하면 이번 프레임의 반사만 쓰지 않는다.
-		if (reflections && !UploadInstanceTable(entry))
+		// 표를 만들지 못하면 이번 프레임의 반사와 알파 테스트에 쓰지 못한다.
+		if (!m_InstanceDataScratch.empty() && !UploadInstanceTable(entry))
 			entry.InstanceTableIndex = RHI::INVALID_BINDLESS_INDEX;
 	}
 	return result;
@@ -672,19 +703,49 @@ void RaytracingSceneManager::PrepareSkinnedMeshes(Stats& stats)
 
 bool RaytracingSceneManager::CollectSkinnedJobs(Stats& stats)
 {
-	// 같은 씬을 여러 뷰가 요청해도 한 번만 스키닝한다. 반사 요청은 합친다.
-	std::vector<std::pair<Scene*, bool>> scenes;
+	// 같은 씬을 여러 뷰가 요청해도 한 번만 스키닝한다. 반사 요청과 카메라 위치는 합친다.
+	struct SceneRequestSummary
+	{
+		Scene* Source = nullptr;
+		bool Reflections = false;
+		std::vector<vec3> CameraPositions;
+	};
+	std::vector<SceneRequestSummary> scenes;
 	for (const TopLevelRequest& request : m_RequestedScenes)
 	{
-		const auto it = std::find_if(scenes.begin(), scenes.end(), [&](const auto& item) { return item.first == request.Source; });
+		const auto it = std::find_if(scenes.begin(), scenes.end(), [&](const SceneRequestSummary& item) { return item.Source == request.Source; });
 		if (it == scenes.end())
-			scenes.emplace_back(request.Source, request.Reflections);
+		{
+			SceneRequestSummary summary{ request.Source, request.Reflections, {} };
+			if (request.HasCameraPosition)
+				summary.CameraPositions.push_back(request.CameraPosition);
+			scenes.push_back(std::move(summary));
+		}
 		else
-			it->second |= request.Reflections;
+		{
+			it->Reflections |= request.Reflections;
+			if (request.HasCameraPosition)
+				it->CameraPositions.push_back(request.CameraPosition);
+		}
 	}
 
-	for (const auto& [scene, reflections] : scenes)
+	struct SkinnedCandidate
 	{
+		Scene* Source = nullptr;
+		uint32 EntityIndex = 0;
+		Mesh* SourceMesh = nullptr;
+		mat4 WorldMatrix{ 1.0f };
+		const std::vector<mat4>* Bones = nullptr;
+		float DistanceSquared = 0.0f;
+	};
+	std::vector<SkinnedCandidate> candidates;
+	std::vector<RaytracingSkinnedPriority> priorities;
+	bool sortByDistance = false;
+	const bool allowMaskedShadow = m_RHI->GetCapabilities().SupportsBindlessResources;
+
+	for (const SceneRequestSummary& summary : scenes)
+	{
+		Scene* scene = summary.Source;
 		auto& world = scene->GetRegistry();
 		auto view = world.view<SkinnedMeshRendererComponent, WorldTransformComponent, FlagComponent>();
 		for (auto [entity, skinnedRenderer, worldTransform, flag] : view.each())
@@ -700,41 +761,74 @@ bool RaytracingSceneManager::CollectSkinnedJobs(Stats& stats)
 			skinnedRenderer.ResolveRenderState(mesh, material, constants);
 			if (!mesh || !material || !IsSkinningSupported(mesh))
 				continue;
-			const bool needed = (skinnedRenderer.castShadow && IsShadowCasterSupported(mesh, material)) ||
-				(reflections && IsReflectionSupported(mesh, material));
+			const bool needed = (skinnedRenderer.castShadow && IsShadowCasterSupported(mesh, material, allowMaskedShadow)) ||
+				(summary.Reflections && IsReflectionSupported(mesh, material));
 			if (!needed)
 				continue;
 
-			SkinnedEntry& entry = m_Skinned[SkinnedKey{ scene, static_cast<uint32>(entt::to_entity(entity)) }];
-			entry.LastUsedFrame = m_FrameCounter;
-			entry.StateFrame = m_FrameCounter;
-			if (!m_SkinnedLimit.TryAcquire())
-			{
-				entry.State = ESkinnedState::OverLimit;
-				++stats.SkinnedOverLimitCount;
-				continue;
-			}
-			entry.State = ESkinnedState::Pending;
-
 			// 그리기 경로와 같이 애니메이터(루트)의 월드 행렬과 뼈 행렬을 쓴다. 애니메이터가 없으면 단위 뼈다.
-			entry.WorldMatrix = worldTransform.worldMatrix;
+			mat4 worldMatrix = worldTransform.worldMatrix;
 			const std::vector<mat4>* bones = nullptr;
 			const entt::entity animatorEntity = FindAnimatorEntityInAncestors(world, entity);
 			if (animatorEntity != entt::null)
 			{
 				if (const auto* animWorld = world.try_get<WorldTransformComponent>(animatorEntity))
-					entry.WorldMatrix = animWorld->worldMatrix;
+					worldMatrix = animWorld->worldMatrix;
 				if (const auto* animator = TryGetEnabledComponent<AnimatorComponent>(world, animatorEntity); animator && !animator->finalBoneMatrices.empty())
 					bones = &animator->finalBoneMatrices;
 			}
 
-			const auto boneOffset = static_cast<uint32>(m_BoneScratch.size());
-			const size_t copyCount = bones ? std::min<size_t>(bones->size(), SkinnedBoneCount) : 0;
-			if (copyCount > 0)
-				m_BoneScratch.insert(m_BoneScratch.end(), bones->begin(), bones->begin() + static_cast<std::ptrdiff_t>(copyCount));
-			m_BoneScratch.resize(static_cast<size_t>(boneOffset) + SkinnedBoneCount, mat4(1.0f));
-			m_SkinnedJobs.push_back({ &entry, mesh, boneOffset });
+			float minDistanceSq = std::numeric_limits<float>::max();
+			if (!summary.CameraPositions.empty())
+			{
+				sortByDistance = true;
+				const vec3 worldPos(worldMatrix[3]);
+				for (const vec3& camPos : summary.CameraPositions)
+				{
+					const vec3 delta = worldPos - camPos;
+					const float distSq = glm::dot(delta, delta);
+					if (distSq < minDistanceSq)
+						minDistanceSq = distSq;
+				}
+			}
+
+			const auto order = static_cast<uint32>(candidates.size());
+			candidates.push_back({ scene, static_cast<uint32>(entt::to_entity(entity)), mesh, worldMatrix, bones, minDistanceSq });
+			priorities.push_back({ minDistanceSq, order });
 		}
+	}
+
+	if (sortByDistance)
+		SortSkinnedByDistance(priorities);
+
+	for (const RaytracingSkinnedPriority& priority : priorities)
+	{
+		const SkinnedCandidate& candidate = candidates[priority.Order];
+		const SkinnedKey key{ candidate.Source, candidate.EntityIndex };
+		if (!m_SkinnedLimit.TryAcquire())
+		{
+			if (const auto it = m_Skinned.find(key); it != m_Skinned.end())
+			{
+				it->second.LastUsedFrame = m_FrameCounter;
+				it->second.StateFrame = m_FrameCounter;
+				it->second.State = ESkinnedState::OverLimit;
+			}
+			++stats.SkinnedOverLimitCount;
+			continue;
+		}
+
+		SkinnedEntry& entry = m_Skinned[key];
+		entry.LastUsedFrame = m_FrameCounter;
+		entry.StateFrame = m_FrameCounter;
+		entry.State = ESkinnedState::Pending;
+		entry.WorldMatrix = candidate.WorldMatrix;
+
+		const auto boneOffset = static_cast<uint32>(m_BoneScratch.size());
+		const size_t copyCount = candidate.Bones ? std::min<size_t>(candidate.Bones->size(), SkinnedBoneCount) : 0;
+		if (copyCount > 0)
+			m_BoneScratch.insert(m_BoneScratch.end(), candidate.Bones->begin(), candidate.Bones->begin() + static_cast<std::ptrdiff_t>(copyCount));
+		m_BoneScratch.resize(static_cast<size_t>(boneOffset) + SkinnedBoneCount, mat4(1.0f));
+		m_SkinnedJobs.push_back({ &entry, candidate.SourceMesh, boneOffset });
 	}
 	return !m_SkinnedJobs.empty();
 }
@@ -957,7 +1051,7 @@ bool RaytracingSceneManager::IsReflectionSupported(const Mesh* mesh, const Mater
 	return blendMode == EBlendMode::Opaque || blendMode == EBlendMode::Masked;
 }
 
-bool RaytracingSceneManager::IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material)
+bool RaytracingSceneManager::IsShadowCasterSupported(const Mesh* mesh, const MaterialInterface* material, bool allowMasked)
 {
 	if (!mesh || !material)
 		return false;
@@ -966,8 +1060,12 @@ bool RaytracingSceneManager::IsShadowCasterSupported(const Mesh* mesh, const Mat
 		return false;
 	if (!mesh->GetPositionBuffer() || mesh->GetVertexCount() == 0)
 		return false;
-	// 불투명 재질만 지원한다. Masked는 알파 테스트가 필요해 섀도맵이 담당한다.
-	if (material->GetBlendMode() != EBlendMode::Opaque)
+	const EBlendMode blendMode = material->GetBlendMode();
+	if (blendMode != EBlendMode::Opaque && (!allowMasked || blendMode != EBlendMode::Masked))
+		return false;
+	// Masked 알파 테스트는 정점 UV를 읽기 위해 VertexMaterial 스트림이 필요하다.
+	if (blendMode == EBlendMode::Masked &&
+		(!mesh->GetMaterialBuffer() || mesh->GetStreamStride(EMeshStream::Material) != sizeof(VertexMaterial)))
 		return false;
 	// 그림자 패스에 엔진 기본(ShadowDepthVS/PS)이 아닌 셰이더를 쓰는 재질은 형상을 바꾸거나(WPO 등)
 	// 픽셀을 버릴 수 있으므로 섀도맵이 담당한다. 기본 재질은 기본 그림자 셰이더를 명시적으로 바인딩한다.

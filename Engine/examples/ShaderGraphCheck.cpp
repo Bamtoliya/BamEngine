@@ -649,6 +649,159 @@ int main()
 				"Masked blend mode and alpha cutoff update must invalidate constant buffer cache.");
 		}
 
+		// ── 지형 도메인(T3-b): 지형 노드·기본 레이어 합성·정점 셰이더 입력 일치·다른 생성기에서의 거부 ──
+		{
+			// 출력만 있는 지형 그래프: baseColor 기본값이 레이어 합성이고 공용 헤더를 포함한다.
+			Graph terrainGraph{ EGraphDomain::Shader };
+			const auto terrainOutput = Add(terrainGraph, registry, "Shader.MaterialOutput");
+			std::string terrainSource;
+			Accept(ShaderGraphCompiler::GenerateTerrainMaterialHlsl(terrainGraph, registry, terrainSource));
+			Expect(terrainSource.find("#include \"terrainLayers.hlsli\"") != std::string::npos, "Terrain shader must include the shared terrain header.");
+			Expect(terrainSource.find("TerrainBlendLayers(terrainPixel)") != std::string::npos, "Unlinked terrain baseColor must blend painted layers.");
+			Expect(terrainSource.find("TexCoord1") == std::string::npos, "Terrain pixel input must match terrainVS (no second UV).");
+			Expect(terrainSource.find("#define TERRAIN_SAMPLER") == std::string::npos, "Terrain shader must not alias the sampler without a graph texture.");
+
+			// 레이어 3 샘플을 baseColor로, 경사로 거칠기를 정한다.
+			const auto layerSample = Add(terrainGraph, registry, "Terrain.LayerSample");
+			Accept(terrainGraph.SetInputValue(registry, { layerSample, "layer" }, std::int64_t{ 3 }));
+			Accept(terrainGraph.Connect(registry, { layerSample, "rgba" }, { terrainOutput, "baseColor" }));
+			const auto slope = Add(terrainGraph, registry, "Terrain.Slope");
+			Accept(terrainGraph.Connect(registry, { slope, "slope" }, { terrainOutput, "roughness" }));
+			Accept(ShaderGraphCompiler::GenerateTerrainMaterialHlsl(terrainGraph, registry, terrainSource));
+			Expect(terrainSource.find("TerrainSampleLayer(terrainPixel, 3u)") != std::string::npos, "LayerSample must sample the chosen layer.");
+			Expect(terrainSource.find("terrainPixel.Slope") != std::string::npos, "Slope node must read the terrain pixel slope.");
+
+			// 지형 노드는 일반 G-Buffer 생성기에서 컴파일하지 않는다(terrainPixel이 없다).
+			std::string gbufferWithTerrain = "previous";
+			const auto rejected = ShaderGraphCompiler::GenerateGBufferMaterialHlsl(terrainGraph, registry, gbufferWithTerrain);
+			Expect(!rejected.Succeeded() && rejected.Code == EGraphError::UnsupportedCompilation && gbufferWithTerrain == "previous",
+				"Terrain nodes must be rejected outside the terrain domain without replacing the source.");
+
+			// 범위 밖 레이어 번호는 거부한다.
+			Accept(terrainGraph.SetInputValue(registry, { layerSample, "layer" }, std::int64_t{ 9 }));
+			const auto badLayer = ShaderGraphCompiler::GenerateTerrainMaterialHlsl(terrainGraph, registry, terrainSource);
+			Expect(!badLayer.Succeeded() && badLayer.Code == EGraphError::InvalidDefault, "Terrain layer outside 0-7 must be rejected.");
+			Accept(terrainGraph.SetInputValue(registry, { layerSample, "layer" }, std::int64_t{ 7 }));
+
+			// 두 번째 UV는 지형 정점 셰이더가 내지 않으므로 거부한다.
+			Graph uv1Graph{ EGraphDomain::Shader };
+			const auto uv1Output = Add(uv1Graph, registry, "Shader.MaterialOutput");
+			const auto uv1 = Add(uv1Graph, registry, "Shader.TexCoord1");
+			const auto uv1Sample = Add(uv1Graph, registry, "Shader.TextureSample");
+			Accept(uv1Graph.Connect(registry, { uv1, "uv" }, { uv1Sample, "uv" }));
+			Accept(uv1Graph.Connect(registry, { uv1Sample, "rgba" }, { uv1Output, "baseColor" }));
+			std::string uv1Source;
+			const auto uv1Result = ShaderGraphCompiler::GenerateTerrainMaterialHlsl(uv1Graph, registry, uv1Source);
+			Expect(!uv1Result.Succeeded() && uv1Result.Code == EGraphError::UnsupportedCompilation, "Terrain domain must reject the second UV set.");
+
+			// 그래프가 텍스처 슬롯 0(materialSampler)을 쓰면 지형 헤더가 같은 샘플러를 쓴다.
+			Graph samplerGraph{ EGraphDomain::Shader };
+			const auto samplerOutput = Add(samplerGraph, registry, "Shader.MaterialOutput");
+			const auto slot0 = Add(samplerGraph, registry, "Shader.TextureSample");
+			Accept(samplerGraph.Connect(registry, { slot0, "rgba" }, { samplerOutput, "baseColor" }));
+			std::string samplerSource;
+			Accept(ShaderGraphCompiler::GenerateTerrainMaterialHlsl(samplerGraph, registry, samplerSource));
+			const auto aliasPos = samplerSource.find("#define TERRAIN_SAMPLER materialSampler");
+			const auto includePos = samplerSource.find("#include \"terrainLayers.hlsli\"");
+			Expect(aliasPos != std::string::npos && includePos != std::string::npos && aliasPos < includePos,
+				"Terrain header must reuse materialSampler when the graph declares slot 0.");
+		}
+
+		// ── 기본 지형 그래프(T3-c): terrainPS.hlsl과 같은 식을 만든다 ──
+		{
+			Graph defaultTerrain;
+			Accept(ShaderGraphCompiler::BuildDefaultTerrainGraph(registry, defaultTerrain));
+			Expect(defaultTerrain.GetDomain() == EGraphDomain::Shader, "Default terrain graph must be a shader graph.");
+			std::string defaultSource;
+			Accept(ShaderGraphCompiler::GenerateTerrainMaterialHlsl(defaultTerrain, registry, defaultSource));
+			const auto contains = [&](const char* text) { return defaultSource.find(text) != std::string::npos; };
+			Expect(contains("TerrainBlendLayers(terrainPixel)"), "Default terrain graph must blend painted layers.");
+			Expect(contains("TerrainSampleLayer(terrainPixel, 1u)"), "Default terrain graph must use layer 1 for cliffs.");
+			Expect(contains("terrainPixel.Slope"), "Default terrain graph must read the slope.");
+			Expect(contains("smoothstep("), "Default terrain graph must use smoothstep for the cliff transition.");
+			Expect(!contains("gMaterial.metallic") && !contains("gMaterial.cavity") && !contains("gMaterial.ao") && !contains("gMaterial.roughness"),
+				"Default terrain graph must fix PBR values like terrainPS instead of reading material constants.");
+
+			// 같은 그래프는 일반 G-Buffer 머티리얼로는 컴파일되지 않는다(지형 노드 사용).
+			std::string notTerrain;
+			const auto rejected = ShaderGraphCompiler::GenerateGBufferMaterialHlsl(defaultTerrain, registry, notTerrain);
+			Expect(!rejected.Succeeded() && rejected.Code == EGraphError::UnsupportedCompilation,
+				"Default terrain graph must not compile as a surface material.");
+		}
+
+		// ── 11. 디스토션 V1 (Shader.ScreenUV 및 Shader.SceneColor) 검증 ──
+		{
+			// (1) ScreenUV 및 SceneColor 기본 연결 (강도 0: 왜곡 없음)
+			Graph distortGraph{ EGraphDomain::Shader };
+			const auto matOut = Add(distortGraph, registry, "Shader.MaterialOutput");
+			const auto screenUv = Add(distortGraph, registry, "Shader.ScreenUV");
+			const auto sceneColor = Add(distortGraph, registry, "Shader.SceneColor");
+
+			const auto directUvLink = distortGraph.Connect(registry, { screenUv, "uv" }, { sceneColor, "uv" });
+			Accept(directUvLink);
+			Accept(distortGraph.Connect(registry, { sceneColor, "rgba" }, { matOut, "baseColor" }));
+
+			std::string ftSource;
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(distortGraph, registry, ftSource));
+
+			// SceneColorCopy 바인딩 선언 및 안전 샘플러 함수 검증
+			Expect(ftSource.find("Texture2D g_SceneColor : register(t0, space3);") != std::string::npos,
+				"ForwardTransparent PS must declare g_SceneColor on t0, space3.");
+			Expect(ftSource.find("SamplerState g_SceneColorSampler : register(s0, space3);") != std::string::npos,
+				"ForwardTransparent PS must declare g_SceneColorSampler on s0, space3.");
+			Expect(ftSource.find("float4 SampleSceneColor(float2 uv, float2 baseScreenUV)") != std::string::npos,
+				"ForwardTransparent PS must define SampleSceneColor helper.");
+			Expect(ftSource.find("bool isOffScreen = any(uv < 0.0f) || any(uv > 1.0f);") != std::string::npos &&
+				ftSource.find("float2 finalUV = isOffScreen ? baseScreenUV : uv;") != std::string::npos &&
+				ftSource.find("clamp(finalUV, float2(0.0001f, 0.0001f), float2(0.9999f, 0.9999f))") != std::string::npos,
+				"SampleSceneColor must fall back to baseScreenUV when off-screen and clamp finalUV.");
+			Expect(ftSource.find("float2 screenUV = input.Position.xy / float2(max(_sceneWidth, 1.0f), max(_sceneHeight, 1.0f));") != std::string::npos,
+				"ForwardTransparent PS must compute screenUV from SV_Position and g_SceneColor dimensions.");
+
+			// 강도 0 연결식: SampleSceneColor(screenUV, screenUV)
+			Expect(ftSource.find("SampleSceneColor(screenUV, screenUV)") != std::string::npos,
+				"Direct connection from ScreenUV to SceneColor must generate SampleSceneColor(screenUV, screenUV).");
+
+			// (2) 왜곡 오프셋 적용 검증 (uv = screenUV + offset)
+			const auto addNode = Add(distortGraph, registry, "Math.AddFloat2");
+			const auto offsetConst = Add(distortGraph, registry, "Core.Float2");
+			Accept(distortGraph.SetInputValue(registry, { offsetConst, "value" }, std::array<float, 2>{ 0.0625f, -0.125f })); // 2진수로 정확히 표현되는 값(0.05f는 출력이 5.00000007e-02f가 되어 문자열 비교가 깨진다)
+			Accept(distortGraph.Connect(registry, { screenUv, "uv" }, { addNode, "a" }));
+			Accept(distortGraph.Connect(registry, { offsetConst, "result" }, { addNode, "b" }));
+			// 데이터 입력은 연결을 하나만 받으므로 (1)의 직접 연결을 먼저 끊고 오프셋 결과로 바꾼다.
+			Accept(distortGraph.Disconnect(directUvLink.Link));
+			Accept(distortGraph.Connect(registry, { addNode, "result" }, { sceneColor, "uv" }));
+
+			std::string offsetFtSource;
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(distortGraph, registry, offsetFtSource));
+			Expect(offsetFtSource.find("SampleSceneColor((screenUV + float2(6.25000000e-02f, -1.25000000e-01f)), screenUV)") != std::string::npos,
+				"Distorted UV must pass perturbed UV as first arg and clean screenUV as second arg.");
+
+			// (3) 미연결 uv 입력 시 기본 screenUV 폴백 검증
+			Graph fallbackGraph{ EGraphDomain::Shader };
+			const auto fbMatOut = Add(fallbackGraph, registry, "Shader.MaterialOutput");
+			const auto fbSceneColor = Add(fallbackGraph, registry, "Shader.SceneColor");
+			Accept(fallbackGraph.Connect(registry, { fbSceneColor, "rgb" }, { fbMatOut, "emissive" }));
+
+			std::string fbFtSource;
+			Accept(ShaderGraphCompiler::GenerateForwardTransparentMaterialHlsl(fallbackGraph, registry, fbFtSource));
+			Expect(fbFtSource.find("(SampleSceneColor(screenUV, screenUV)).rgb") != std::string::npos,
+				"Unconnected uv input on SceneColor must fall back to screenUV and support rgb swizzle.");
+
+			// (4) GBuffer 셰이더 생성기 및 정점 단계에서의 사용 거부 검증
+			std::string rejectedGbSource;
+			const auto gbReject = ShaderGraphCompiler::GenerateGBufferMaterialHlsl(distortGraph, registry, rejectedGbSource);
+			Expect(!gbReject.Succeeded() && gbReject.Code == EGraphError::UnsupportedCompilation,
+				"Distortion nodes must be rejected when compiling GBuffer material PS.");
+
+			// 정점 생성기는 worldPositionOffset·customUV에 연결된 노드만 읽으므로, 거부되는지 보려면 거기에 연결해야 한다.
+			Accept(distortGraph.Connect(registry, { sceneColor, "rgb" }, { matOut, "worldPositionOffset" }));
+			std::string rejectedVsSource;
+			const auto vsReject = ShaderGraphCompiler::GenerateGBufferMaterialVS(distortGraph, registry, rejectedVsSource);
+			Expect(!vsReject.Succeeded() && vsReject.Code == EGraphError::UnsupportedCompilation,
+				"Distortion nodes must be rejected when compiling vertex shader stages.");
+		}
+
 		std::cout << "Shader graph checks passed.\n";
 		return 0;
 	}

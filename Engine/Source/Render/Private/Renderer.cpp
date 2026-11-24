@@ -772,9 +772,10 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			batchMaterial = nullptr;
 			batchMesh = nullptr;
 
+			const bool isTerrainGrid = (command.heightfield->gridMesh != nullptr);
 			if (material != lastMaterial || mesh != lastMesh || command.mirrored != lastMirrored)
 			{
-				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc, &lastPipeline, command.mirrored)))
+				if (IsFailure(BindMeshPipeline(mesh, material, passType, pipelineDesc, &lastPipeline, command.mirrored, isTerrainGrid)))
 					return EResult::Fail;
 				lastMirrored = command.mirrored;
 			}
@@ -791,15 +792,42 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			if (!heightfield.heightmap || !heightfield.splatmap || !sampler)
 				return EResult::Fail;
 
-			if (IsFailure(m_RHI->BindTextureSampler(heightfield.heightmap.get(), sampler, 1)) ||
-				IsFailure(m_RHI->BindTextureSampler(heightfield.splatmap.get(), sampler, 4)))
+			// 높이맵·스플랫은 머티리얼 텍스처 범위(t0~t7, space1, 셰이더 그래프가 씀) 밖의 space3에 둔다.
+			// space3 샘플러는 s0~s7뿐이라 슬롯 16 이상은 텍스처만 묶는다(셰이더는 Load 또는 space1 샘플러로 읽는다).
+			if (IsFailure(m_RHI->BindTexture(heightfield.heightmap.get(), TerrainHeightmapSlot)) ||
+				IsFailure(m_RHI->BindTexture(heightfield.splatmap.get(), TerrainSplatSlot)))
 				return EResult::Fail;
+			// 레이어 4~7 가중치와 레이어 알베도(t8~t15, space1). 비어 있는 슬롯은 묶지 않는다(지형 시스템이 흰 텍스처로 채운다).
+			if (heightfield.splatmapExtra && IsFailure(m_RHI->BindTexture(heightfield.splatmapExtra.get(), TerrainSplatExtraSlot)))
+				return EResult::Fail;
+			for (uint32 layer = 0; layer < HeightfieldDrawData::MaxLayers; ++layer)
+			{
+				if (heightfield.layerTextures[layer] &&
+					IsFailure(m_RHI->BindTextureSampler(heightfield.layerTextures[layer], sampler, 8 + layer)))
+					return EResult::Fail;
+			}
 
-			SceneUBO objectData{};
-			objectData.worldMatrix = command.worldMatrix;
-			objectData.pickingData.x = static_cast<float>(command.pickingId);
-			objectData.heightfieldData = vec4(
+			// 지형 드로우만 SceneUBO 뒤에 레이어 상수를 붙인다. VS·그림자·모션 벡터 셰이더는 앞 96바이트(ObjectData)만 읽는다.
+			// terrainPS.hlsl의 TerrainObjectData와 배치가 같아야 한다(BINDING_LAYOUT.md).
+			struct TerrainObjectData
+			{
+				SceneUBO object;
+				vec4 layerTiling[2];                       // 레이어 0~7 반복 길이(m)
+				vec4 layerTint[HeightfieldDrawData::MaxLayers]; // 레이어 색 배율
+			};
+			static_assert(offsetof(TerrainObjectData, layerTiling) == 96);
+			static_assert(sizeof(TerrainObjectData) == 256);
+
+			TerrainObjectData objectData{};
+			objectData.object.worldMatrix = command.worldMatrix;
+			objectData.object.pickingData.x = static_cast<float>(command.pickingId);
+			objectData.object.heightfieldData = vec4(
 				heightfield.maxHeight, heightfield.cellSpacing.x, heightfield.cellSpacing.y, 0.f);
+			for (uint32 layer = 0; layer < HeightfieldDrawData::MaxLayers; ++layer)
+			{
+				objectData.layerTiling[layer / 4][layer % 4] = heightfield.layerTiling[layer];
+				objectData.layerTint[layer] = heightfield.layerTints[layer];
+			}
 
 			lastMaterial = nullptr;
 
@@ -813,9 +841,24 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 				lastMesh = mesh;
 			}
 
-			const EResult result = mesh->GetIndexBuffer()
-				? m_RHI->DrawIndexed(mesh->GetIndexCount())
-				: m_RHI->Draw(mesh->GetVertexCount());
+			EResult result = EResult::Success;
+			if (isTerrainGrid)
+			{
+				result = mesh->GetIndexBuffer()
+					? m_RHI->DrawIndexed(mesh->GetIndexCount())
+					: m_RHI->Draw(mesh->GetVertexCount());
+			}
+			else
+			{
+				InstanceData inst{};
+				inst.worldMatrix = command.worldMatrix;
+				inst.pickingData = vec4(static_cast<float>(command.pickingId), command.receiveDecals ? 0.f : 1.f, 0.f, 0.f);
+				if (IsFailure(m_RHI->BindInstanceBuffer(&inst, 1)))
+					return EResult::Fail;
+				result = mesh->GetIndexBuffer()
+					? m_RHI->DrawIndexedInstanced(mesh->GetIndexCount(), 1)
+					: m_RHI->DrawInstanced(mesh->GetVertexCount(), 1);
+			}
 
 			if (IsFailure(result))
 				return result;
@@ -1453,8 +1496,8 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 
 			if (!bindPipeline(info.terrainVertexShader, *command.mesh, 1u)) continue;
 			const TerrainMotionObject object{ command.worldMatrix, previous->World, vec4(heightfield.maxHeight, heightfield.cellSpacing.x, heightfield.cellSpacing.y, 0.0f) };
-			// 높이맵은 지형 G-Buffer 셰이더와 같은 슬롯(t1, space1)에 묶는다.
-			if (IsFailure(m_RHI->BindTextureSampler(heightfield.heightmap.get(), sampler, 1)) ||
+			// 높이맵은 지형 G-Buffer 셰이더와 같은 슬롯(t8, space3)에 묶는다.
+			if (IsFailure(m_RHI->BindTexture(heightfield.heightmap.get(), TerrainHeightmapSlot)) ||
 				IsFailure(m_RHI->BindConstantBuffer(&object, sizeof(object), 1)) || IsFailure(command.mesh->Bind(0)) ||
 				IsFailure(command.mesh->GetIndexBuffer() ? m_RHI->DrawIndexed(command.mesh->GetIndexCount()) : m_RHI->Draw(command.mesh->GetVertexCount())))
 				return EResult::Fail;
@@ -1702,11 +1745,22 @@ EResult Renderer::PreparePassPipelineDesc(RenderPass* renderPass, RHIPipelineDes
 	return EResult::Success;
 }
 
-EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, bool mirrored)
+EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, bool mirrored, bool isTerrainGrid)
 {
 	if (!m_RHI || !material) return EResult::InvalidArgument;
 	Shader* vs = ResolveVertexShader(mesh, material, passType);
 	Shader* ps = material->GetPixelShader(passType);
+
+	// 지형 머티리얼을 프리뷰 구체/평면 등 일반 메시로 그릴 때는 지형 높이맵 변위 VS 대신 일반 GBuffer/Shadow VS를 쓴다.
+	if (!isTerrainGrid && material->GetDomain() == EMaterialDomain::Terrain)
+	{
+		EnsureDefaultShaders();
+		const bool isSkinned = mesh && mesh->IsSkinned();
+		if (passType == ERenderPassType::Shadow)
+			vs = isSkinned ? m_DefaultShadowDepthSkinningVS.Get() : m_DefaultShadowDepthVS.Get();
+		else
+			vs = isSkinned ? m_DefaultGBufferSkinningVS.Get() : m_DefaultGBufferVS.Get();
+	}
 
 	// 타 패스(Shadow 등)에 머티리얼 전용 오버라이드가 없어 nullptr를 반환한 경우, 렌더러 기본 섀도우 셰이더로 안전 폴백
 	if (passType == ERenderPassType::Shadow && (!vs || !ps))
@@ -1820,9 +1874,9 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	return EResult::Success;
 }
 
-EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, RHIPipeline** inOutLastPipeline, bool mirrored)
+EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERenderPassType passType, RHIPipelineDesc& desc, RHIPipeline** inOutLastPipeline, bool mirrored, bool isTerrainGrid)
 {
-	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc, mirrored);
+	const auto result = PrepareMeshPipelineDesc(mesh, material, passType, desc, mirrored, isTerrainGrid);
 	if (result != EResult::Success)
 	{
 		static std::unordered_set<std::string> s_LoggedInvalidMaterials;

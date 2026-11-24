@@ -15,7 +15,8 @@ enum class EBlendMode
 	Masked = 1 << 4,
 	Forward = 1 << 5,
 	Decal = 1 << 6,
-	ALL = (1 << 7) - 1
+	PureAdditive = 1 << 7,
+	ALL = (1 << 8) - 1
 };
 
 ENABLE_BITMASK_OPERATORS(EBlendMode)
@@ -112,6 +113,16 @@ struct BlendState
 			break;
 		case EBlendMode::Additive:
 			srcColor = EBlendFactor::SrcAlpha;
+			dstColor = EBlendFactor::One;
+			colorBlendOp = EBlendOp::Add;
+			srcAlpha = EBlendFactor::One;
+			dstAlpha = EBlendFactor::One;
+			alphaBlendOp = EBlendOp::Add;
+			colorWriteMask = EColorChannel::RGBA;
+			enable = true;
+			break;
+		case EBlendMode::PureAdditive:
+			srcColor = EBlendFactor::One;
 			dstColor = EBlendFactor::One;
 			colorBlendOp = EBlendOp::Add;
 			srcAlpha = EBlendFactor::One;

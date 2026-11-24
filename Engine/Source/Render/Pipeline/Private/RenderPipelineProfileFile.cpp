@@ -1,4 +1,5 @@
 #include "RenderPipelineProfile.h"
+#include "PakArchive.h"
 
 #include <archive/JsonArchive.h>
 #include <algorithm>
@@ -130,7 +131,7 @@ namespace Engine
     RenderPipelineProfileResult LoadRenderPipelineProfile(const std::filesystem::path& path, RenderPipelineProfile& profile)
     {
         archive::JsonArchive reader;
-        auto result = reader.LoadFromFile(path);
+        auto result = PakMountManager::Get().LoadArchiveWithFallback(reader, path);
         if (!result)
             return ProfileArchiveError(path, result, "Load render pipeline profile");
 

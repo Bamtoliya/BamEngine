@@ -1,4 +1,5 @@
 ﻿#include "DirectX12Shader.h"
+#include "PakArchive.h"
 #include "PlatformPath.h"
 
 EResult DirectX12Shader::Initialize(const DESC& desc)
@@ -11,19 +12,13 @@ EResult DirectX12Shader::Initialize(const DESC& desc)
 	}
 	else if (!desc.filePath.empty())
 	{
-		std::filesystem::path shaderPath = PlatformPath::ResolveUri(desc.filePath);
-		ifstream file(shaderPath, ios::binary | ios::ate);
-		if (!file.is_open())
+		const EResult readRes = PakMountManager::Get().ReadBytesWithFallback(desc.filePath, m_ShaderBytecode);
+		if (readRes != EResult::Success)
 		{
-			fmt::print(stderr, "Shader open failed: {}\n", WStrToStr(shaderPath.wstring()));
-			return EResult::FileNotFound;
+			fmt::print(stderr, "Shader open failed: {}\n", WStrToStr(desc.filePath));
+			return readRes;
 		}
-		size_t fileSize = static_cast<size_t>(file.tellg());
-		m_ShaderBytecode.resize(fileSize);
-		file.seekg(0, ios::beg);
-		file.read((char*)m_ShaderBytecode.data(), fileSize);
-		file.close();
-		fmt::print(stderr, "DX12 shader load: {}, size={}\n", WStrToStr(shaderPath.wstring()), fileSize);
+		fmt::print(stderr, "DX12 shader load: {}, size={}\n", WStrToStr(desc.filePath), m_ShaderBytecode.size());
 	}
 	else
 	{

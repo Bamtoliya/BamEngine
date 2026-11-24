@@ -2,6 +2,8 @@
 
 #include "Base.h"
 #include "RenderTypes.h"
+#include <vector>
+#include <unordered_map>
 
 BEGIN(Engine)
 class ENGINE_API RenderPass : public Base
@@ -35,7 +37,7 @@ public:
 	bool HasOverrideClearColor() const { return m_Desc.overrideClearColor.a >= 0.0f; }
 	const ERenderPassType GetPassType() const { return m_Desc.passType; }
 	EBlendMode GetAcceptedBlendModes() const { return m_Desc.acceptedBlendModes; }
-	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None; }
+	bool IsAcceptsBlendMode(EBlendMode mode) const { return (m_Desc.acceptedBlendModes & mode) != EBlendMode::None || (mode == EBlendMode::PureAdditive && (m_Desc.acceptedBlendModes & EBlendMode::Additive) != EBlendMode::None); }
 	bool IsEnabled() const { return m_Desc.isEnabled; }
 	bool UsesPointSpriteSampling() const { return m_PointSpriteSampling; }
 	// 레이트레이싱이 차폐를 맡는 캐스터를 제외하는지. 방향광 그림자 패스는 캐스케이드, 점광원 그림자 패스는 큐브맵에 적용한다.
@@ -86,7 +88,7 @@ public:
 	void ClearPassConstant(uint32 slot) { m_PassConstants.erase(slot); }
 	void ClearAllPassConstants() { m_PassConstants.clear(); }
 	bool HasPassConstant(uint32 slot) const { return m_PassConstants.find(slot) != m_PassConstants.end(); }
-	const unordered_map<uint32, vector<uint8>>& GetAllPassConstants() const { return m_PassConstants; }
+	const std::unordered_map<uint32, std::vector<uint8>>& GetAllPassConstants() const { return m_PassConstants; }
 #pragma endregion
 
 #pragma region Pass Textures
@@ -94,7 +96,7 @@ public:
 	void SetPassTexture(uint32 slot, const wstring& renderTargetName) { m_PassTextures[slot] = renderTargetName; }
 	void ClearPassTexture(uint32 slot) { m_PassTextures.erase(slot); }
 	void ClearAllPassTextures() { m_PassTextures.clear(); }
-	const unordered_map<uint32, wstring>& GetAllPassTextures() const { return m_PassTextures; }
+	const std::unordered_map<uint32, wstring>& GetAllPassTextures() const { return m_PassTextures; }
 #pragma endregion
 
 #pragma region PrePass Copy
@@ -118,8 +120,8 @@ public:
 #pragma region Variable
 private:
 	DESC m_Desc;
-	unordered_map<uint32, vector<uint8>> m_PassConstants;
-	unordered_map<uint32, wstring> m_PassTextures;
+	std::unordered_map<uint32, std::vector<uint8>> m_PassConstants;
+	std::unordered_map<uint32, wstring> m_PassTextures;
 	bool m_PointSpriteSampling = false;
 	bool m_SkipsRaytracedShadowCasters = false;
 	bool m_SkipsRaytracedSpotCasters = false;

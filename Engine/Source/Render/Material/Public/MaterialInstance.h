@@ -63,6 +63,7 @@ public:
 #pragma region Pipeline
 public:
 	virtual ERenderPassType GetPrimaryPassType() const override;
+	virtual EMaterialDomain GetDomain() const override;
 	virtual EBlendMode GetBlendMode() const override;
 	virtual ECullMode GetCullMode() const override;
 	virtual EFillMode GetFillMode() const override;

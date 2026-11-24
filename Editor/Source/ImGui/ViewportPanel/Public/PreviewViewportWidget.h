@@ -15,7 +15,9 @@
 BEGIN(Engine)
 class Scene;
 class Entity;
+class RHITexture;
 struct BoundingBox;
+struct HeightfieldDrawData;
 END
 
 BEGIN(Editor)
@@ -87,6 +89,7 @@ public:
 
 	[[nodiscard]] float GetStudioLightMultiplier() const { return m_StudioLightMultiplier; }
 private:
+	bool EnsureDummyTerrainData(Engine::HeightfieldDrawData& outData);
 	bool TryGetModelBounds(entt::entity root, Engine::BoundingBox& bounds) const;
 	bool FrameModelBounds(const Engine::BoundingBox& bounds);
 	void ApplyFocus(const Engine::vec3& targetPos, Engine::f32 distance);
@@ -142,6 +145,11 @@ private:
 	// 채널 필터링
 	std::wstring m_SelectedRTName;
 	ChannelFilter m_ChannelFilter;
+
+	// 지형 머티리얼 프리뷰용 더미 텍스처
+	std::shared_ptr<Engine::RHITexture> m_DummyTerrainHeightmap;
+	std::shared_ptr<Engine::RHITexture> m_DummyTerrainSplatmap;
+	std::shared_ptr<Engine::RHITexture> m_DummyTerrainSplatmapExtra;
 };
 
 END

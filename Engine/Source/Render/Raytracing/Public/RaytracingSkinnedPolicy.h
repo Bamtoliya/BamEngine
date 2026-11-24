@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <vector>
 
 namespace Engine
 {
@@ -46,4 +48,21 @@ namespace Engine
 		std::uint32_t m_MaxInstances = 0;
 		std::uint32_t m_Count = 0;
 	};
+
+	struct RaytracingSkinnedPriority
+	{
+		float DistanceSquared = 0.0f;
+		std::uint32_t Order = 0;
+	};
+
+	// 카메라에 가까운 스킨드 메시부터 한도 안에 넣도록 정렬한다. 거리가 같으면 원래 순서를 유지한다.
+	inline void SortSkinnedByDistance(std::vector<RaytracingSkinnedPriority>& items)
+	{
+		std::stable_sort(items.begin(), items.end(), [](const RaytracingSkinnedPriority& a, const RaytracingSkinnedPriority& b)
+			{
+				if (a.DistanceSquared != b.DistanceSquared)
+					return a.DistanceSquared < b.DistanceSquared;
+				return a.Order < b.Order;
+			});
+	}
 }

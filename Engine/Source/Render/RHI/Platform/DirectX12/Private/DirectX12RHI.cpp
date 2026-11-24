@@ -303,7 +303,7 @@ EResult DirectX12RHI::Initialize(void* arg)
         ComPtr<ID3DBlob> error;
         if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error)))
         {
-            if (error) fmt::print(stderr, "루트 시그니처 오류: {}\n", (char*)error->GetBufferPointer());
+            if (error) fmt::print(stderr, "Root signature error: {}\n", (char*)error->GetBufferPointer());
             return EResult::Fail;
         }
         if (FAILED(m_Device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_GlobalRootSignature))))

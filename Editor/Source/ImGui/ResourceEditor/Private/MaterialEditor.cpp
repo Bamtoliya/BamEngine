@@ -609,7 +609,7 @@ void MaterialEditor::DrawPipelineSettings()
 				m_Material->SetBlendMode(Engine::EBlendMode::AlphaBlend);
 			}
 			else if ((nextPass == Engine::ERenderPassType::Geometry || nextPass == Engine::ERenderPassType::Forward) &&
-				(curBlend == Engine::EBlendMode::AlphaBlend || curBlend == Engine::EBlendMode::Additive || curBlend == Engine::EBlendMode::NonPremultiplied))
+				(curBlend == Engine::EBlendMode::AlphaBlend || curBlend == Engine::EBlendMode::Additive || curBlend == Engine::EBlendMode::PureAdditive || curBlend == Engine::EBlendMode::NonPremultiplied))
 			{
 				m_Material->SetBlendMode(Engine::EBlendMode::Opaque);
 			}
@@ -640,6 +640,7 @@ void MaterialEditor::DrawPipelineSettings()
 			Engine::EBlendMode::Masked,
 			Engine::EBlendMode::AlphaBlend,
 			Engine::EBlendMode::Additive,
+			Engine::EBlendMode::PureAdditive,
 			Engine::EBlendMode::NonPremultiplied
 		};
 		constexpr const char* const blendKeys[] = {
@@ -647,6 +648,7 @@ void MaterialEditor::DrawPipelineSettings()
 			"MaterialOption.Masked",
 			"MaterialOption.Translucent",
 			"MaterialOption.Additive",
+			"MaterialOption.PureAdditive",
 			"MaterialOption.NonPremultiplied"
 		};
 		int blendIdx = -1;
@@ -2146,9 +2148,14 @@ std::filesystem::path MaterialEditor::GenerateDefaultShaderGraphPath() const
 	if (m_Material && !m_TargetResourcePath.empty())
 	{
 		baseName = m_TargetResourcePath.stem().string();
-		const std::string bammat = ".bammat";
-		if (baseName.size() > bammat.size() && baseName.ends_with(bammat))
-			baseName = baseName.substr(0, baseName.size() - bammat.size());
+		for (const std::string_view suffix : { ".bammatinst", ".bammat" })
+		{
+			if (baseName.size() > suffix.size() && baseName.ends_with(suffix))
+			{
+				baseName = baseName.substr(0, baseName.size() - suffix.size());
+				break;
+			}
+		}
 	}
 	const std::string filename = baseName + ".bamgraph.json";
 	return PlatformPath::ResolveProjectRelative(std::filesystem::path("Assets/Shaders/Graphs") / filename);
@@ -2164,8 +2171,13 @@ bool MaterialEditor::CreateDefaultMaterialShaderGraph(const std::filesystem::pat
 		Engine::GraphRegistry registry;
 		(void)registry.RegisterBuiltins();
 
-		(void)graph.AddNode(registry, "Shader.MaterialOutput");
-		(void)graph.SetNodePosition(1, 400.0f, 250.0f);
+		// 지형 도메인은 terrainPS와 같은 결과를 내는 기본 지형 그래프로 시작한다. 실패하면 빈 출력 노드로 둔다.
+		if (!IsTerrainDomain() || !Engine::ShaderGraphCompiler::BuildDefaultTerrainGraph(registry, graph).Succeeded())
+		{
+			graph = Engine::Graph(Engine::EGraphDomain::Shader);
+			(void)graph.AddNode(registry, "Shader.MaterialOutput");
+			(void)graph.SetNodePosition(1, 400.0f, 250.0f);
+		}
 
 		if (!ReflectionRegistry::IsCreated()) return false;
 		const auto& reflection = ReflectionRegistry::Get();

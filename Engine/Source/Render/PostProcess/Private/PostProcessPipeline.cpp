@@ -352,7 +352,6 @@ void PostProcessPipeline::SetHistoryScene(const void* scene)
 	m_HistoryScene = scene;
 	ResetHistory();
 }
-}
 
 wstring PostProcessPipeline::Execute(f32 dt, const wstring& inputRT)
 {

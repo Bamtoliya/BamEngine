@@ -213,6 +213,9 @@ private:
 	bool HasInheritedShaderGraph() const;
 	bool CanEditShaderGraph() const;
 	static bool SupportsGraphPass(Engine::ERenderPassType pass);
+	// 지형 도메인 머티리얼이면 그래프는 픽셀 셰이더만 만들고 정점 셰이더는 엔진 terrainVS를 쓴다.
+	bool IsTerrainDomain() const;
+	static Engine::ResourceHandle<Engine::Shader> GetTerrainVertexShader();
 	static bool IsGraphShader(const Engine::ResourceHandle<Engine::Shader>& handle);
 	void TryLoadLinkedShaderGraph();
 	// 사용자가 요청했을 때만 기본 그래프를 만들어 머티리얼에 연결한다.

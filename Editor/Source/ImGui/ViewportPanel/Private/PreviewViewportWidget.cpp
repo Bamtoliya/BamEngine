@@ -37,6 +37,8 @@
 #include "AnimatorPoseUpdate.h"
 #include "ParticleSystem.h"
 #include "CompositeVFXSystem.h"
+#include "ResourceManager.h"
+#include "Texture.h"
 #include <vector>
 #include "ViewportImage.h"
 #include "GizmoHelper.h"
@@ -150,6 +152,9 @@ void PreviewViewportWidget::Free()
 	m_ChannelFilter.Free();
 	m_SelectedRTName.clear();
 	m_PreviewLightDraft.reset();
+	m_DummyTerrainHeightmap.reset();
+	m_DummyTerrainSplatmap.reset();
+	m_DummyTerrainSplatmapExtra.reset();
 	m_Pipeline.Free();
 
 	Engine::Safe_Release(m_CameraController);
@@ -230,6 +235,81 @@ bool PreviewViewportWidget::SetModelFocusTarget(const Engine::Entity& model, boo
 
 	m_FocusModel = root;
 	m_ModelFocusPending = refocus;
+	return true;
+}
+
+bool PreviewViewportWidget::EnsureDummyTerrainData(Engine::HeightfieldDrawData& outData)
+{
+	auto* rhi = Engine::Renderer::IsCreated() ? Engine::Renderer::Get().GetRHI() : nullptr;
+	if (!rhi) return false;
+
+	auto create1x1 = [&](Engine::ETextureFormat format, void* data, uint32 dataSize) -> std::shared_ptr<Engine::RHITexture>
+	{
+		RHITextureDesc desc{};
+		desc.width = 1;
+		desc.height = 1;
+		desc.format = format;
+		desc.dimension = Engine::ETextureDimension::Texture2D;
+		desc.usage = Engine::ETextureUsage::Sampler;
+		desc.data = data;
+		desc.dataSize = dataSize;
+		return std::shared_ptr<Engine::RHITexture>(rhi->CreateTexture(desc),
+			[](Engine::RHITexture* value) { Engine::Safe_Release(value); });
+	};
+
+	if (!m_DummyTerrainHeightmap)
+	{
+		f32 zeroHeight = 0.0f;
+		m_DummyTerrainHeightmap = create1x1(Engine::ETextureFormat::R32_FLOAT, &zeroHeight, sizeof(zeroHeight));
+	}
+	if (!m_DummyTerrainSplatmap)
+	{
+		uint8 defaultSplat[4] = { 255, 0, 0, 0 };
+		m_DummyTerrainSplatmap = create1x1(Engine::ETextureFormat::R8G8B8A8_UNORM, defaultSplat, sizeof(defaultSplat));
+	}
+	if (!m_DummyTerrainSplatmapExtra)
+	{
+		uint8 zeroSplat[4] = { 0, 0, 0, 0 };
+		m_DummyTerrainSplatmapExtra = create1x1(Engine::ETextureFormat::R8G8B8A8_UNORM, zeroSplat, sizeof(zeroSplat));
+	}
+	if (!m_DummyTerrainHeightmap || !m_DummyTerrainSplatmap || !m_DummyTerrainSplatmapExtra)
+		return false;
+
+	static Engine::ResourceHandle<Engine::Texture> s_WhiteTex;
+	static bool s_WhiteRequested = false;
+	if (!s_WhiteRequested && Engine::ResourceManager::IsCreated())
+	{
+		s_WhiteRequested = true;
+		auto& rm = Engine::ResourceManager::Get();
+		s_WhiteTex = rm.GetResourceHandle<Engine::Texture>(L"Engine://Texture/white1x1.png");
+		if (!s_WhiteTex.Get())
+			s_WhiteTex = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(L"Engine://Texture/white1x1.png"));
+	}
+	Engine::RHITexture* fallbackTex = s_WhiteTex.Get() ? s_WhiteTex->GetRHITexture() : m_DummyTerrainSplatmap.get();
+
+	constexpr std::array<Engine::vec4, Engine::HeightfieldDrawData::MaxLayers> defaultTints{
+		Engine::vec4(0.32f, 0.52f, 0.24f, 1.f),
+		Engine::vec4(0.46f, 0.45f, 0.42f, 1.f),
+		Engine::vec4(0.44f, 0.34f, 0.24f, 1.f),
+		Engine::vec4(0.68f, 0.62f, 0.46f, 1.f),
+		Engine::vec4(0.50f, 0.50f, 0.50f, 1.f),
+		Engine::vec4(0.50f, 0.50f, 0.50f, 1.f),
+		Engine::vec4(0.50f, 0.50f, 0.50f, 1.f),
+		Engine::vec4(0.50f, 0.50f, 0.50f, 1.f),
+	};
+
+	outData.heightmap = m_DummyTerrainHeightmap;
+	outData.splatmap = m_DummyTerrainSplatmap;
+	outData.splatmapExtra = m_DummyTerrainSplatmapExtra;
+	outData.gridMesh = nullptr;
+	outData.maxHeight = 0.0f;
+	outData.cellSpacing = Engine::vec2(1.0f);
+	for (uint32 i = 0; i < Engine::HeightfieldDrawData::MaxLayers; ++i)
+	{
+		outData.layerTextures[i] = fallbackTex;
+		outData.layerTiling[i] = 2.0f;
+		outData.layerTints[i] = defaultTints[i];
+	}
 	return true;
 }
 
@@ -406,6 +486,12 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 			if (Engine::ResourceStreamer::IsCreated()) Engine::ResourceStreamer::Get().RequestMaterial(*mat, 0.0f, 1.0f);
 			cmd.worldMatrix = transComp.worldMatrix;
 			cmd.pickingId = 0;
+			if (mat->GetDomain() == Engine::EMaterialDomain::Terrain)
+			{
+				Engine::HeightfieldDrawData dummyTerrain{};
+				if (EnsureDummyTerrainData(dummyTerrain))
+					cmd.heightfield = std::move(dummyTerrain);
+			}
 			Engine::Renderer::Get().SubmitStatic(cmd, meshPass(*mat));
 		}
 	}
@@ -769,7 +855,7 @@ void PreviewViewportWidget::DrawPreviewLightingPopup()
 			0.0f, EditorPreferences::MaxPreviewLightIntensity, "%.2f");
 	}
 
-	if (ImGui::Button(LOCAL_LABEL("Settings.Btn.ResetDefaults").c_str()))
+	if (EditorUI::TextButton("ResetPreviewLighting", "Settings.Btn.ResetDefaults"))
 		draft = EditorPreferences{}.PreviewLightIntensity;
 
 	ImGui::Separator();

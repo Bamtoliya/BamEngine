@@ -47,5 +47,16 @@ int main()
     RaytracingSkinnedLimit none(0);
     Expect(!none.TryAcquire(), "a zero limit must admit nothing");
 
+    // 카메라에 가까운 스킨드 메시가 먼저 선택되고, 같은 거리는 원래 순서를 유지한다.
+    std::vector<RaytracingSkinnedPriority> priorities = {
+        { 100.0f, 0 },
+        { 4.0f, 1 },
+        { 25.0f, 2 },
+        { 4.0f, 3 },
+    };
+    SortSkinnedByDistance(priorities);
+    Expect(priorities[0].Order == 1 && priorities[1].Order == 3 && priorities[2].Order == 2 && priorities[3].Order == 0,
+        "nearest skinned candidates must sort first while preserving order on ties");
+
     return g_Failures == 0 ? 0 : 1;
 }
