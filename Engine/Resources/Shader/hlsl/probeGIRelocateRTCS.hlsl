@@ -8,7 +8,9 @@
 #include "probeGI.hlsli"
 
 static const float BACKFACE_RATIO_THRESHOLD = 0.25f;
+static const float BACKFACE_REACTIVATE_THRESHOLD = 0.15f;
 static const float MIN_FRONTFACE_DISTANCE_RATIO = 0.2f;
+static const float FRONTFACE_PUSH_DAMPING = 0.5f;
 static const float MAX_PROBE_OFFSET_RATIO = 0.45f;
 // 추적 패스는 뒷면 거리를 -0.2배로 줄여 기록한다.
 static const float BACKFACE_DISTANCE_SCALE = 5.0f;
@@ -60,12 +62,15 @@ void main(uint3 dispatchId : SV_DispatchThreadID)
 	}
 
 	const float minFrontface = min(gParams.GridSpacing.x, min(gParams.GridSpacing.y, gParams.GridSpacing.z)) * MIN_FRONTFACE_DISTANCE_RATIO;
-	const bool inside = (float)backfaceCount > BACKFACE_RATIO_THRESHOLD * (float)gParams.RaysPerProbe;
-	float3 offset = gProbeData[texel].xyz;
+	const float4 currentState = gProbeData[texel];
+	const bool prevActive = currentState.a > 0.0f;
+	const float backfaceRatio = (float)backfaceCount / max((float)gParams.RaysPerProbe, 1.0f);
+	const bool inside = backfaceRatio > (prevActive ? BACKFACE_RATIO_THRESHOLD : BACKFACE_REACTIVATE_THRESHOLD);
+	float3 offset = currentState.xyz;
 	if (inside)
 		offset += backfaceDirection * (closestBackface + minFrontface * 0.5f);
 	else if (closestFrontface < minFrontface)
-		offset -= frontfaceDirection * (minFrontface - closestFrontface);
+		offset -= frontfaceDirection * ((minFrontface - closestFrontface) * FRONTFACE_PUSH_DAMPING);
 	const float3 limit = gParams.GridSpacing * MAX_PROBE_OFFSET_RATIO;
 	gProbeData[texel] = float4(clamp(offset, -limit, limit), inside ? 0.0f : 1.0f);
 }

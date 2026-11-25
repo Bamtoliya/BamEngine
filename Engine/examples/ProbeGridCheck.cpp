@@ -304,10 +304,18 @@ namespace
         fewBackfaces.BackfaceCount = 25u;
         Expect(ProbeGrid::RelocateProbe({}, fewBackfaces, spacing).Active, "a quarter of back-face hits is not yet inside");
 
+        ProbeGrid::ProbeRayStats borderlineBackfaces = insideWall;
+        borderlineBackfaces.BackfaceCount = 20u;
+        Expect(!ProbeGrid::RelocateProbe({ vec3(0.0f), false }, borderlineBackfaces, spacing).Active,
+            "an inactive probe stays off until back-face hits drop below the reactivate threshold");
+        borderlineBackfaces.BackfaceCount = 15u;
+        Expect(ProbeGrid::RelocateProbe({ vec3(0.0f), false }, borderlineBackfaces, spacing).Active,
+            "an inactive probe turns back on once back-face hits are at or below the reactivate threshold");
+
         ProbeGrid::ProbeRayStats touching = open;
         touching.ClosestFrontfaceDistance = 0.05f;
         const auto pushed = ProbeGrid::RelocateProbe({ vec3(0.1f, 0.0f, 0.0f), true }, touching, spacing);
-        Expect(pushed.Active && Near(pushed.Offset, vec3(-0.05f, 0.0f, 0.0f)), "a probe too close to a surface moves away from it");
+        Expect(pushed.Active && Near(pushed.Offset, vec3(0.025f, 0.0f, 0.0f)), "a probe too close to a surface moves away with damping");
 
         ProbeGrid::ProbeRayStats deep = insideWall;
         deep.ClosestBackfaceDistance = 5.0f;

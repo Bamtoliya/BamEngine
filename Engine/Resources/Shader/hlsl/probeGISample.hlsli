@@ -58,6 +58,7 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 
 	float3 sum = float3(0.0f, 0.0f, 0.0f);
 	float totalWeight = 0.0f;
+	bool hasActiveProbe = false;
 	for (uint corner = 0u; corner < 8u; ++corner)
 	{
 		const uint3 offset = uint3(corner & 1u, (corner >> 1u) & 1u, (corner >> 2u) & 1u);
@@ -69,39 +70,43 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 			continue;
 		const float3 probePosition = gi.GridOrigin + gi.GridSpacing * (float3)coord + state.xyz;
 
-		// 면 뒤쪽 프로브를 줄인다. 완전히 없애면 얇은 물체에서 끊기므로 0.2를 남긴다.
-		const float3 toProbe = normalize(probePosition - position);
-		const float wrap = (dot(toProbe, normal) + 1.0f) * 0.5f;
-		float weight = wrap * wrap + 0.2f;
+		// 면 뒤쪽 프로브를 강하게 감쇠한다. 아주 작은 하한(0.02)만 남겨 얇은 물체에서 급격히 끊기지 않게 하되 뒤쪽 빛샘은 crush로 억제한다.
+		const float3 toProbeVec = probePosition - position;
+		const float3 toProbe = toProbeVec / max(length(toProbeVec), 1e-4f);
+		const float wrap = saturate((dot(toProbe, normal) + 1.0f) * 0.5f);
+		float weight = wrap * wrap + 0.02f;
 
-		// 체비쇼프 가시성
+		// 체비쇼프 가시성: FP16 오차로 분산이 부풀지 않게 0 하한을 두고, 가려진 프로브는 0까지 줄여 코너·다크룸 빛샘을 막는다.
 		const float3 probeToPoint = biasedPosition - probePosition;
 		const float pointDistance = length(probeToPoint);
 		const float2 moments = distanceAtlas.SampleLevel(atlasSampler,
 			ProbeAtlasUV(probeIndex, gi.GridCounts, PROBE_DISTANCE_TEXELS, probeToPoint / max(pointDistance, 1e-4f)), 0.0f).rg;
 		if (pointDistance > moments.x)
 		{
-			const float variance = abs(moments.y - moments.x * moments.x);
+			const float variance = max(moments.y - moments.x * moments.x, 0.0f);
 			const float difference = pointDistance - moments.x;
 			const float chebyshev = variance / max(variance + difference * difference, 1e-6f);
-			weight *= max(chebyshev * chebyshev * chebyshev, 0.05f);
+			weight *= max(chebyshev * chebyshev * chebyshev, 0.0f);
 		}
 
-		// 아주 작은 가중치는 더 눌러 가려진 프로브가 조금씩 새는 것을 줄인다.
-		weight = max(weight, 1e-6f);
+		// 아주 작은 가중치는 세제곱으로 더 눌러 가려진 프로브가 조금씩 새는 것을 줄인다.
 		const float crushThreshold = 0.2f;
 		if (weight < crushThreshold)
-			weight *= weight * weight / (crushThreshold * crushThreshold);
+			weight *= (weight * weight) / (crushThreshold * crushThreshold);
 
 		const float3 trilinear = lerp(1.0f - alpha, alpha, (float3)offset);
 		const float4 irradiance = irradianceAtlas.SampleLevel(atlasSampler, ProbeAtlasUV(probeIndex, gi.GridCounts, PROBE_IRRADIANCE_TEXELS, normal), 0.0f);
 		// a는 한 번 이상 갱신한 프로브만 1이다.
-		weight *= trilinear.x * trilinear.y * trilinear.z * saturate(irradiance.a);
+		const float initialized = saturate(irradiance.a);
+		if (initialized > 0.0f)
+			hasActiveProbe = true;
+		weight *= trilinear.x * trilinear.y * trilinear.z * initialized;
 		sum += irradiance.rgb * weight;
 		totalWeight += weight;
 	}
-	valid = totalWeight > 1e-6f;
-	return valid ? sum / totalWeight : float3(0.0f, 0.0f, 0.0f);
+	// 활성·초기화된 프로브가 셀에 하나라도 있는데 모두 가려졌다면(어두운 코너) 외부 하늘 IBL로 되돌리지 않고 0을 반환한다.
+	valid = hasActiveProbe;
+	return totalWeight > 1e-6f ? sum / totalWeight : float3(0.0f, 0.0f, 0.0f);
 }
 
 #endif

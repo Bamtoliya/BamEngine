@@ -44,11 +44,16 @@ float4 BlendTexel(uint row, uint2 local, float4 previous)
 	result.a = 1.0f;
 	float hysteresis = row < gParams.FreshCount ? 0.0f : gParams.Hysteresis;
 #if !PROBE_BLEND_DISTANCE
-	// 조명이 크게 바뀐 텍셀(이전 값 대비 ChangeThreshold배 이상)은 이력을 덜 남겨 빨리 따라간다. 노이즈 정도의 변화에는 그대로 둔다.
+	// 조명이 크게 바뀐 텍셀만 이력 비율을 완만하게 낮춘다. 어두운 영역(얇은 벽 뒤 등)의 소수 광선 노이즈에 과민 반응하지 않도록 하한(0.25)과 감쇠 폭(최대 0.35)을 제한한다.
 	const float3 change = abs(result.rgb - previous.rgb);
+	const float maxChange = max(change.r, max(change.g, change.b));
 	const float previousBrightness = max(previous.r, max(previous.g, previous.b));
-	if (max(change.r, max(change.g, change.b)) > gParams.ChangeThreshold * max(previousBrightness, 0.05f))
-		hysteresis = max(hysteresis - 0.75f, 0.0f);
+	const float relativeChange = maxChange / max(previousBrightness, 0.25f);
+	if (relativeChange > gParams.ChangeThreshold)
+	{
+		const float reduction = saturate((relativeChange - gParams.ChangeThreshold) / max(gParams.ChangeThreshold * 3.0f, 0.5f)) * 0.35f;
+		hysteresis = max(hysteresis - reduction, 0.0f);
+	}
 #endif
 	return lerp(result, previous, hysteresis);
 }

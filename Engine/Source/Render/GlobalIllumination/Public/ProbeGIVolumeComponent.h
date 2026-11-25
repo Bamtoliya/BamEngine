@@ -50,5 +50,13 @@ namespace Engine
 		// 상자 밖으로 이 거리(m)만큼 기존 환경광과 섞는다.
 		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0f, 10.0f), CATEGORY("CATEGORY_PROBE_GI_SHADING"), DISPLAY_NAME("PROP_PROBE_BLEND_DISTANCE"))
 		f32 BlendDistance = 1.0f;
+
+		// 표본 위치를 면 법선 방향으로 띄우는 거리(m). 코너·얇은 벽 빛샘을 줄인다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0f, 1.0f), CATEGORY("CATEGORY_PROBE_GI_SHADING"), DISPLAY_NAME("PROP_PROBE_NORMAL_BIAS"))
+		f32 NormalBias = 0.05f;
+
+		// 표본 위치를 카메라 방향으로 띄우는 거리(m). 얇은 벽 두께보다 크면 반대편으로 넘어갈 수 있다.
+		PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0f, 1.0f), CATEGORY("CATEGORY_PROBE_GI_SHADING"), DISPLAY_NAME("PROP_PROBE_VIEW_BIAS"))
+		f32 ViewBias = 0.15f;
 	};
 }

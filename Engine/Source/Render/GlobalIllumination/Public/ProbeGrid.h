@@ -153,8 +153,12 @@ namespace Engine::ProbeGrid
 	// 셰이더(probeGIRelocateRTCS)와 같은 규칙이다. 한쪽을 바꾸면 다른 쪽과 ProbeGridCheck도 맞춘다.
 	// 뒷면에 닿은 광선이 이 비율보다 많으면 벽 속으로 본다.
 	constexpr f32 BackfaceRatioThreshold = 0.25f;
+	// 이미 꺼진 프로브는 뒷면 비율이 이 값 이하로 내려와야 다시 켠다(얇은 벽 경계 0↔1 깜빡임 방지).
+	constexpr f32 BackfaceReactivateThreshold = 0.15f;
 	// 앞면까지 이 거리(가장 좁은 간격에 대한 비율)보다 가까우면 면에서 떼어 낸다.
 	constexpr f32 MinFrontfaceDistanceRatio = 0.2f;
+	// 앞면에서 떼어 낼 때 한 번에 이동하는 비율(얇은 벽·코너 진동 완화).
+	constexpr f32 FrontfacePushDamping = 0.5f;
 	// 격자 위치에서 축마다 간격의 이 비율까지만 옮긴다. 이웃 셀로 넘어가면 보간이 깨진다.
 	constexpr f32 MaxProbeOffsetRatio = 0.45f;
 
@@ -187,7 +191,9 @@ namespace Engine::ProbeGrid
 		if (stats.RayCount == 0u)
 			return next;
 		const f32 minFrontface = MinSpacing(spacing) * MinFrontfaceDistanceRatio;
-		const bool inside = static_cast<f32>(stats.BackfaceCount) > BackfaceRatioThreshold * static_cast<f32>(stats.RayCount);
+		const f32 backfaceRatio = static_cast<f32>(stats.BackfaceCount) / static_cast<f32>(stats.RayCount);
+		const f32 threshold = current.Active ? BackfaceRatioThreshold : BackfaceReactivateThreshold;
+		const bool inside = backfaceRatio > threshold;
 		if (inside)
 		{
 			// 가장 가까운 뒷면을 지나 벽 밖으로 나간다.
@@ -195,8 +201,8 @@ namespace Engine::ProbeGrid
 		}
 		else if (stats.ClosestFrontfaceDistance < minFrontface)
 		{
-			// 면에 너무 붙어 있으면 반대쪽으로 뗀다.
-			next.Offset -= stats.ClosestFrontfaceDirection * (minFrontface - stats.ClosestFrontfaceDistance);
+			// 면에 너무 붙어 있으면 반대쪽으로 감쇠 이동해 얇은 벽·코너 진동을 줄인다.
+			next.Offset -= stats.ClosestFrontfaceDirection * ((minFrontface - stats.ClosestFrontfaceDistance) * FrontfacePushDamping);
 		}
 		const vec3 limit = spacing * MaxProbeOffsetRatio;
 		next.Offset = glm::clamp(next.Offset, -limit, limit);
