@@ -21,6 +21,7 @@
 #include "PakArchive.h"
 #include "PixelPerfectCameraComponent.h"
 #include "PlatformPath.h"
+#include "RuntimeSettingsManager.h"
 #include "StartupResourceLoader.h"
 #include "Systems.h"
 
@@ -43,6 +44,13 @@ Engine::EResult Client::ClientGameRuntime::LoadProject(const std::filesystem::pa
         return result;
 
     m_ProjectLoaded = true;
+    const auto settingsPath = GetRuntimeSettingsPath();
+    const auto settingsLoad = Engine::RuntimeSettingsManager::Get().LoadFromFile(settingsPath);
+    if (settingsLoad.Status == Engine::EConfigLoadStatus::Failed)
+    {
+        BAM_LOG(Warn, "Client", "Config",
+            "Failed to load runtime settings from {}; using defaults.", settingsPath.string());
+    }
     return Engine::EResult::Success;
 }
 
@@ -145,6 +153,15 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
     m_RenderPipeline.SetTemporalAAMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.TemporalAAMode));
     m_RenderPipeline.SetAmbientOcclusionMode(Engine::ToAmbientOcclusionMode(m_ProjectSettings.AmbientOcclusionMode));
     m_RenderPipeline.SetProbeGIMode(Engine::ToRaytracedShadowMode(m_ProjectSettings.ProbeGIMode));
+    {
+        auto& settingsMgr = Engine::RuntimeSettingsManager::Get();
+        const auto applyRes = settingsMgr.ApplySettings(settingsMgr.GetAppliedSettings(), true);
+        if (applyRes.HasFailures())
+        {
+            BAM_LOG(Warn, "Client", "Config", "Some startup runtime settings failed to apply: {}",
+                applyRes.FailureReason);
+        }
+    }
     if (IsFailure(InitializeSystems()))
     {
         BAM_LOG(Error, "Client", "Startup", "InitializeSystems failed.");
@@ -271,6 +288,16 @@ void Client::ClientGameRuntime::Free()
     m_ProjectSettings = {};
     m_ProjectRoot.clear();
     m_ProjectLoaded = false;
+}
+
+std::filesystem::path Client::ClientGameRuntime::GetRuntimeSettingsPath() const
+{
+    return m_ProjectRoot / "Config" / "RuntimeSettings.json";
+}
+
+Engine::ConfigSaveResult Client::ClientGameRuntime::SaveRuntimeSettings() const
+{
+    return Engine::RuntimeSettingsManager::Get().SaveToFile(GetRuntimeSettingsPath());
 }
 
 Engine::EResult Client::ClientGameRuntime::LoadProjectSettings()

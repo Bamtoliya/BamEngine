@@ -2,6 +2,7 @@
 #include "Runtime.h"
 #include "IBLManager.h"
 #include "Logger.h"
+#include "RuntimeSettingsManager.h"
 #if BAM_EDITOR
 #include <chrono>
 #endif
@@ -76,11 +77,19 @@ EResult Runtime::Initialize(void* arg)
 
 	if (!create(m_PickingManager)) return fail("PickingManager");
 
+	if (!RuntimeSettingsManager::IsCreated())
+		RuntimeSettingsManager::Create();
+	if (RuntimeSettingsManager::IsCreated())
+		RuntimeSettingsManager::Get().BindRuntime(m_TimeManager, m_LocalizationManager, m_AudioManager, m_Renderer->GetRHI());
+
 	return EResult::Success;
 }
 
 void Runtime::Free()
 {
+	if (RuntimeSettingsManager::IsCreated())
+		RuntimeSettingsManager::Get().UnbindRuntime();
+
 	// ── 0. 씬(Scene)을 참조하는 프레임 큐 및 피킹 타겟 정리 ──
 	if (m_Renderer)
 	{

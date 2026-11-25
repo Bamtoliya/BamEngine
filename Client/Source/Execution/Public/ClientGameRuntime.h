@@ -3,6 +3,7 @@
 #include "ClientRenderPipeline.h"
 #include "ClientStartupStage.h"
 #include "Config.h"
+#include "ConfigManager.h"
 #include "Runtime.h"
 #include "RuntimeUIInput.h"
 
@@ -27,6 +28,8 @@ namespace Client
         void Free();
 
         const Engine::ProjectSettings& GetProjectSettings() const { return m_ProjectSettings; }
+        std::filesystem::path GetRuntimeSettingsPath() const;
+        Engine::ConfigSaveResult SaveRuntimeSettings() const;
 
     private:
         Engine::EResult LoadProjectSettings();

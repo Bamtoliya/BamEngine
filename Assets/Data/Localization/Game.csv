@@ -1,2 +1,15 @@
 Group,Key,English,Korean
 Game,BaselineChallenge.Restart,Restart,다시 시작
+Game,UI.Settings.Title,Settings,설정
+Game,UI.Settings.Resolution,Resolution,해상도
+Game,UI.Settings.Quality,Quality,품질
+Game,UI.Settings.Fullscreen,Fullscreen,전체 화면
+Game,UI.Settings.VSync,VSync,수직 동기화
+Game,UI.Settings.MasterVolume,Master Volume,마스터 볼륨
+Game,UI.Settings.BGMVolume,BGM Volume,배경음 볼륨
+Game,UI.Settings.SFXVolume,SFX Volume,효과음 볼륨
+Game,UI.Settings.UIVolume,UI Volume,UI 볼륨
+Game,UI.Settings.VoiceVolume,Voice Volume,음성 볼륨
+Game,UI.Settings.Defaults,Defaults,기본값
+Game,UI.Settings.Apply,Apply,적용
+Game,UI.Settings.Close,Close,닫기

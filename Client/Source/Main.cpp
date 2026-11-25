@@ -16,6 +16,7 @@
 #include "ClientStartupSplash.h"
 #include "DirectX12RHI.h"
 #include "Renderer.h"
+#include "RuntimeSettingsManager.h"
 #include "TimeManager.h"
 #include <chrono>
 #if defined(_WIN32)
@@ -33,6 +34,9 @@ public:
 
     ~Application()
     {
+        if (Engine::RuntimeSettingsManager::IsCreated())
+            Engine::RuntimeSettingsManager::Get().SetHostCallbacks({});
+
         m_ClientRuntime.Free();
 
         if (m_Window)
@@ -94,8 +98,12 @@ public:
 
         m_SDLInitialized = true;
         const auto& settings = m_ClientRuntime.GetProjectSettings();
+        const auto& runtimeSettings = Engine::RuntimeSettingsManager::Get().GetAppliedSettings();
         const char* title = settings.WindowTitle.empty() ? "BamEngine Client" : settings.WindowTitle.c_str();
-        m_Window = SDL_CreateWindow(title, 1280, 720, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN);
+        SDL_WindowFlags windowFlags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_HIDDEN;
+        if (runtimeSettings.Fullscreen)
+            windowFlags |= SDL_WINDOW_FULLSCREEN;
+        m_Window = SDL_CreateWindow(title, runtimeSettings.ResolutionWidth, runtimeSettings.ResolutionHeight, windowFlags);
 
         if (!m_Window)
         {
@@ -121,7 +129,7 @@ public:
         rhiDesc.windowHandle = hwnd;
         rhiDesc.width = static_cast<Engine::uint32>(width);
         rhiDesc.height = static_cast<Engine::uint32>(height);
-        rhiDesc.isVSync = true;
+        rhiDesc.isVSync = runtimeSettings.VSync;
 
         Engine::RendererDesc rendererDesc = {};
         rendererDesc.rhiType = Engine::ERHIType::DirectX12;
@@ -138,6 +146,22 @@ public:
         }
         if (initialized != Engine::EResult::Success)
             return initialized;
+
+        if (Engine::RuntimeSettingsManager::IsCreated())
+        {
+            Engine::RuntimeSettingsHostCallbacks callbacks;
+            callbacks.ApplyDisplay = [this](std::int32_t reqWidth, std::int32_t reqHeight, bool fullscreen) -> Engine::EResult
+            {
+                if (!m_Window)
+                    return Engine::EResult::Fail;
+                if (!SDL_SetWindowFullscreen(m_Window, fullscreen))
+                    return Engine::EResult::Fail;
+                if (!fullscreen && !SDL_SetWindowSize(m_Window, reqWidth, reqHeight))
+                    return Engine::EResult::Fail;
+                return Engine::EResult::Success;
+            };
+            Engine::RuntimeSettingsManager::Get().SetHostCallbacks(std::move(callbacks));
+        }
 
         splash.SetStage(ClientStartupStage::FirstFrame);
         if (!SDL_ShowWindow(m_Window))

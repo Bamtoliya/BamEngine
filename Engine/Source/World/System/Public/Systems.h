@@ -13,6 +13,7 @@
 #include "GraphSystem.h"
 
 #include "UIRenderSystem.h"
+#include "UISettingsMenuSystem.h"
 #include "MeshRenderSystem.h"
 #include "SpriteRenderSystem.h"
 #include "SpriteAnimationSystem.h"

@@ -16,3 +16,4 @@
 #include "CanvasScalerComponent.h"
 #include "UITextInputComponent.h"
 #include "UIDropdownComponent.h"
+#include "RuntimeSettingsMenuComponent.h"

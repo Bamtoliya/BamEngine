@@ -7,6 +7,7 @@
 #include "LocalizationManager.h"
 #include "ConfigManager.h"
 #include "Logger.h"
+#include "RuntimeSettingsManager.h"
 #include "BamEditorSettings.gen.h"
 #include "RHI.h"
 #include "BaseViewportPanel.h"
@@ -709,6 +710,8 @@ void EditorSettingsService::BindRuntime(ImGuiManager& gui, TimeManager& time, Lo
     m_TimeManager = &time;
     m_LocalizationManager = &localization;
     m_RHI = &rhi;
+    if (Engine::RuntimeSettingsManager::IsCreated())
+        Engine::RuntimeSettingsManager::Get().BindRuntime(m_TimeManager, m_LocalizationManager, nullptr, m_RHI);
 }
 
 void EditorSettingsService::UnbindRuntime()

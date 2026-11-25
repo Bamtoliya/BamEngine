@@ -31,7 +31,7 @@ inline EResult RegisterCommonRuntimeSystems(SystemManager& systemManager, bool r
 #endif
 
     if (!addSystems.operator()<
-            UIRenderSystem, AudioSystem, TerrainSystem, PhysicsSystem, GameplayCombatSystem, NavigationSystem, GraphSystem, SplineFollowSystem>())
+            UIRenderSystem, UISettingsMenuSystem, AudioSystem, TerrainSystem, PhysicsSystem, GameplayCombatSystem, NavigationSystem, GraphSystem, SplineFollowSystem>())
         return EResult::Fail;
 
     return EResult::Success;
