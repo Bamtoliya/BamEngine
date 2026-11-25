@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-25] 런타임 설정·누락 리소스 복구·프로젝트 허브 C++ 모듈·지형/NavMesh·디스토션 V2·Probe GI 바이어스
+
+- **요약** (기능별 커밋):
+  1. **RuntimeSettings** (`67a556b7`): `RuntimeSettingsManager`/`RuntimeSettings`(해상도·전체화면·VSync·FPS·렌더 스케일·품질·오디오·언어)와 `UISettingsMenuSystem`/`RuntimeSettingsMenuComponent`, `Client` 시작 시 `Config/RuntimeSettings.json` 로드·적용 및 SDL 창 콜백 연동, `RuntimeSettingsCheck` 추가.
+  2. **누락 리소스 복구** (`5cd82918`): `MissingResourceRecoveryContext`로 씬 로드 중 누락 `ResourceHandle`을 빈 핸들로 로드하며 기록하고, 에디터가 복구 모달(교체/Null 유지)을 표시. `SceneArchiveCheck` 확장.
+  3. **프로젝트 허브** (`29ec09a6`): 최근/새 프로젝트 탭별 하단 버튼, `Project.OpenHub`(Ctrl+Shift+O) 액션 등록, 최근 프로젝트 메뉴, 새 프로젝트 시 선택적 C++ 모듈 스캐폴딩(`ProjectDescriptor::Scaffold…`).
+  4. **지형·NavMesh** (`2e122943`): 지형 구멍(`Hole`) 마스크·레이어 노멀·청크 LOD·`TerrainSystem` 확장, `NavMesh` 베이크/저장(`Scene::NavMeshPath`)과 뷰포트 오버레이·베이크 메뉴.
+  5. **디스토션 V2** (`b7d2aa4a`): `EBlendMode::Distortion`/`ERenderPassType::Distortion`, `distortionWritePS`/`distortionCompositePS`, 드로우 0건 시 패스 생략(`requireNonEmptyPassID`), 머티리얼 에디터 옵션, `BINDING_LAYOUT.md` 갱신.
+  6. **Probe GI** (`0de48719`): `NormalBias`/`ViewBias` 파라미터와 셰이더 반영.
+  7. 리소스 정리: 내장 텍스처 폴더·`material_ball` 모델 추가, 미사용 `.bamshader.json`/`white1x1.bamtex.json` 삭제, 로캘 JSON 재생성 결과 반영.
+- **검증 상태**: 모두 **미검증**(빌드·CTest·에디터 실환경 실행 없음, 정적 분류만 수행). 확인 대상: `RuntimeSettingsCheck`, `SceneArchiveCheck`, `TerrainDataCheck`, `NavigationAICheck`, `ProbeGridCheck`, 디스토션 머티리얼 렌더, 누락 리소스 모달, 프로젝트 허브 C++ 모듈 생성.
+- **분류 한계**: `SceneDocument.cpp`의 NavMesh 저장과 `ImGuiManager`의 `OpenProjectHub`, `DeferredSceneRenderer`의 지형 바인딩은 파일 단위 커밋이라 해당 기능 커밋에 함께 포함되었을 수 있음. `BamEngine.bamproject`(로컬 마운트 경로 포함)는 커밋에서 제외.
+
 ### [2026-11-25] HDR 큐브맵 IBL · DXR 스킨드 반사 · BEVE 참조 검증 · 프리뷰/인스턴스/프리셋 · 콘텐츠 브라우저 주소창
 
 - **요약**:
