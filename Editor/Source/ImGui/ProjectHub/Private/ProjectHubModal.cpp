@@ -63,23 +63,27 @@ void ProjectHubModal::Close()
 
 void ProjectHubModal::Draw()
 {
+	const std::string modalTitle = LOCAL("ProjectHub.Title") + "###" + kProjectHubPopupId;
 	if (m_OpenRequested)
 	{
-		ImGui::OpenPopup(kProjectHubPopupId);
+		ImGui::OpenPopup(modalTitle.c_str());
 		m_OpenRequested = false;
 	}
 
-	if (!m_IsOpen && !ImGui::IsPopupOpen(kProjectHubPopupId))
+	if (!m_IsOpen && !ImGui::IsPopupOpen(modalTitle.c_str()))
 		return;
 
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 	ImGui::SetNextWindowSize(ImVec2(760.0f, 520.0f), ImGuiCond_Appearing);
 
-	const std::string modalTitle = LOCAL("ProjectHub.Title") + "###" + kProjectHubPopupId;
 	bool open = m_IsOpen;
+	ImVec4 modalBg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+	modalBg.w = 1.0f;
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, modalBg);
 	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_NoCollapse))
 	{
+		ImGui::PopStyleColor();
 		if (!open)
 			Close();
 		return;
@@ -89,6 +93,7 @@ void ProjectHubModal::Draw()
 	{
 		ImGui::CloseCurrentPopup();
 		ImGui::EndPopup();
+		ImGui::PopStyleColor();
 		Close();
 		return;
 	}
@@ -97,12 +102,14 @@ void ProjectHubModal::Draw()
 	{
 		if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.RecentProjects").c_str()))
 		{
+			m_ActiveTab = 0;
 			DrawRecentProjectsSection();
 			ImGui::EndTabItem();
 		}
 
 		if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.CreateNewProject").c_str()))
 		{
+			m_ActiveTab = 1;
 			DrawCreateProjectSection();
 			ImGui::EndTabItem();
 		}
@@ -118,20 +125,34 @@ void ProjectHubModal::Draw()
 
 	ImGui::Spacing();
 	ImGui::Separator();
-	const EditorUI::DialogAction actions[] = { { "ProjectHub.Cancel", true, false } };
-	if (EditorUI::DialogButtonBar("ProjectHubFooter", actions, 1) == 0)
+	const EditorUI::DialogAction recentActions[] = { { "ProjectHub.Cancel", true, false } };
+	const EditorUI::DialogAction createActions[] = {
+		{ "ProjectHub.Cancel", true, false },
+		{ "ProjectHub.CreateAndOpen", true, false }
+	};
+	const int actionCount = (m_ActiveTab == 1) ? 2 : 1;
+	const EditorUI::DialogAction* actions = (m_ActiveTab == 1) ? createActions : recentActions;
+	const int clicked = EditorUI::DialogButtonBar("ProjectHubFooter", actions, actionCount);
+	if (clicked == 0)
 	{
 		ImGui::CloseCurrentPopup();
 		Close();
 	}
+	else if (clicked == 1 && m_ActiveTab == 1)
+	{
+		TryCreateProject();
+	}
 
 	ImGui::EndPopup();
+	ImGui::PopStyleColor();
 }
 
 void ProjectHubModal::DrawRecentProjectsSection()
 {
-	const float footerReserve = ImGui::GetFrameHeightWithSpacing() * 2.4f;
-	const float listHeight = std::max(140.0f, ImGui::GetContentRegionAvail().y - footerReserve - ImGui::GetFrameHeightWithSpacing() * 1.6f);
+	const EditorUI::DialogAction footerActions[] = { { "ProjectHub.Cancel", true, false } };
+	const float errorReserve = m_ErrorMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+	const float footerReserve = EditorUI::GetDialogButtonBarHeight(footerActions, 1) + ImGui::GetStyle().ItemSpacing.y * 3.0f + errorReserve;
+	const float listHeight = std::max(140.0f, ImGui::GetContentRegionAvail().y - footerReserve);
 
 	if (ImGui::Button(LOCAL_LABEL("ProjectHub.OpenProject").c_str()))
 	{
@@ -226,12 +247,11 @@ void ProjectHubModal::DrawCreateProjectSection()
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		ImGui::Combo("##ProjectTemplateCombo", &m_SelectedTemplateIndex, templateLabels, 3);
 
+		EditorUI::PropertyRow("ProjectHub.CreateCppModule");
+		ImGui::Checkbox("##CreateCppModuleCheckbox", &m_CreateCppModule);
+
 		EditorUI::EndPropertyTable();
 	}
-
-	ImGui::Spacing();
-	if (ImGui::Button(LOCAL_LABEL("ProjectHub.CreateAndOpen").c_str()))
-		TryCreateProject();
 }
 
 void ProjectHubModal::TrySwitchProject(const std::filesystem::path& projectFileOrRoot)
@@ -282,7 +302,7 @@ void ProjectHubModal::TryCreateProject()
 	if (!ProjectSessionManager::IsCreated())
 		ProjectSessionManager::Create();
 
-	const auto result = ProjectSessionManager::Get().CreateProject(targetDir, projectName, projectTemplate, true);
+	const auto result = ProjectSessionManager::Get().CreateProject(targetDir, projectName, projectTemplate, true, {}, m_CreateCppModule);
 	if (result.Succeeded)
 	{
 		ImGui::CloseCurrentPopup();

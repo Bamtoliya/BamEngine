@@ -15,6 +15,7 @@ Action,File.LoadScene,Load Scene,씬 불러오기
 Action,File.NewScene,New Scene,새 씬
 Action,File.SaveScene,Save Scene,씬 저장하기
 Action,File.SaveSceneAs,Save Scene As...,다른 이름으로 씬 저장...
+Action,Project.OpenHub,Project Hub (Open / New)...,프로젝트 허브 (열기/새로 만들기)...
 Action,Graph.AddNode,Add Node,노드 추가
 Action,Graph.AlignBottom,Align Bottom,아래쪽 정렬
 Action,Graph.AlignLeft,Align Left,왼쪽 정렬

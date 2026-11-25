@@ -34,6 +34,7 @@
 #include "TerrainEditor.h"
 #include "EditorCameraController.h"
 #include "NotificationManager.h"
+#include "ProjectSessionManager.h"
 #include <fmt/core.h>
 
 BEGIN(Editor)
@@ -242,6 +243,19 @@ void EditorActionRegistry::RegisterAll()
     // =========================================================================================
     // [File / Scene Actions] (Global Context)
     // =========================================================================================
+    sm.RegisterAction({
+        .Id = "Project.OpenHub",
+        .DisplayNameKey = "Action.Project.OpenHub",
+        .CategoryKey = "EditorMenu.File",
+        .Context = EShortcutContext::Global,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::O, EModifierKey::Ctrl | EModifierKey::Shift),
+        .ExecuteHandler = []() { ImGuiManager::Get().OpenProjectHub(); },
+        .CanExecute = []() {
+            return PIEManager::Get().IsEditing() &&
+                (!ProjectSessionManager::IsCreated() || !ProjectSessionManager::Get().IsSwitching());
+        }
+    });
+
     sm.RegisterAction({
         .Id = "File.NewScene",
         .DisplayNameKey = "Action.File.NewScene",

@@ -48,7 +48,7 @@ public:
 public:
     ProjectSwitchResult CreateProject(const std::filesystem::path& targetDirectory, const std::string& projectName,
         Engine::EProjectTemplate projectTemplate = Engine::EProjectTemplate::Empty,
-        bool switchImmediately = true, const ProjectSwitchOptions& options = {});
+        bool switchImmediately = true, const ProjectSwitchOptions& options = {}, bool createCppModule = false);
 
     ProjectSwitchResult SwitchProject(const std::filesystem::path& bamProjectOrRoot,
         const ProjectSwitchOptions& options = {});

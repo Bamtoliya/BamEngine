@@ -71,9 +71,10 @@ namespace Engine
         // 디렉터리 또는 파일 경로에서 .bamproject 파일 경로 탐색
         ENGINE_API static std::filesystem::path FindProjectFile(const std::filesystem::path& directoryOrFile);
 
-        // 독립 프로젝트 디렉터리 스캐폴딩 (.bamproject, Config/Project.json, Assets/Scenes/Main.bamscene.json 생성)
+        // 독립 프로젝트 디렉터리 스캐폴딩 (.bamproject, Config/Project.json, Assets/Scenes/Main.bamscene.json, 선택적 C++ 모듈 생성)
         ENGINE_API static bool ScaffoldNewProject(const std::filesystem::path& projectDir,
             const std::string& projectName, std::filesystem::path* outProjectFile = nullptr,
-            std::string* outError = nullptr, EProjectTemplate projectTemplate = EProjectTemplate::Empty);
+            std::string* outError = nullptr, EProjectTemplate projectTemplate = EProjectTemplate::Empty,
+            bool createCppModule = false);
     };
 }

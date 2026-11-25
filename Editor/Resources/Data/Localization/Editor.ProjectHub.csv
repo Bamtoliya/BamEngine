@@ -20,3 +20,4 @@ ProjectHub,InvalidProjectName,Please enter a valid project name.,유효한 프�
 ProjectHub,InvalidTargetFolder,Please select a valid directory.,유효한 대상 폴더를 선택하세요.
 ProjectHub,CreateFailed,Failed to create project.,프로젝트 생성에 실패했습니다.
 ProjectHub,SwitchFailed,Failed to switch project.,프로젝트 전환에 실패했습니다.
+ProjectHub,CreateCppModule,Create C++ Game Module,C++ 게임 모듈 생성

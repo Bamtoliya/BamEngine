@@ -177,7 +177,7 @@ std::string ProjectSessionManager::GetActiveProjectName() const
 
 ProjectSwitchResult ProjectSessionManager::CreateProject(const std::filesystem::path& targetDirectory,
     const std::string& projectName, Engine::EProjectTemplate projectTemplate,
-    bool switchImmediately, const ProjectSwitchOptions& options)
+    bool switchImmediately, const ProjectSwitchOptions& options, bool createCppModule)
 {
     ProjectSwitchResult result;
     if (targetDirectory.empty() || projectName.empty())
@@ -189,7 +189,7 @@ ProjectSwitchResult ProjectSessionManager::CreateProject(const std::filesystem::
     std::filesystem::path createdProjectFile;
     std::string scaffoldError;
     if (!Engine::ProjectDescriptor::ScaffoldNewProject(
-            targetDirectory, projectName, &createdProjectFile, &scaffoldError, projectTemplate))
+            targetDirectory, projectName, &createdProjectFile, &scaffoldError, projectTemplate, createCppModule))
     {
         result.ErrorMessage = scaffoldError.empty() ? "Failed to scaffold new project." : scaffoldError;
         return result;

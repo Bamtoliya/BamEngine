@@ -81,6 +81,24 @@ namespace Engine
             return std::string(text.substr(first, last - first + 1));
         }
 
+        std::string BuildDefaultModuleName(std::string_view projectName)
+        {
+            std::string sanitized;
+            sanitized.reserve(projectName.size() + 8);
+            for (unsigned char ch : projectName)
+            {
+                if (std::isalnum(ch) || ch == '_')
+                    sanitized.push_back(static_cast<char>(ch));
+            }
+            if (sanitized.empty())
+                sanitized = "Game";
+            else if (std::isdigit(static_cast<unsigned char>(sanitized.front())))
+                sanitized.insert(0, "Game");
+            if (!sanitized.ends_with("Module"))
+                sanitized += "Module";
+            return sanitized;
+        }
+
         bool WriteUtf8File(const std::filesystem::path& filePath, std::string_view content, std::string* outError)
         {
             std::error_code ec;
@@ -355,7 +373,7 @@ namespace Engine
     }
 
     bool ProjectDescriptor::ScaffoldNewProject(const std::filesystem::path& projectDir, const std::string& projectName,
-        std::filesystem::path* outProjectFile, std::string* outError, EProjectTemplate projectTemplate)
+        std::filesystem::path* outProjectFile, std::string* outError, EProjectTemplate projectTemplate, bool createCppModule)
     {
         if (projectDir.empty())
         {
@@ -394,12 +412,16 @@ namespace Engine
             return false;
         }
 
+        const std::string moduleName = createCppModule ? ProjectDescriptorDetail::BuildDefaultModuleName(trimmedName) : std::string{};
+
         // 1. Write <ProjectName>.bamproject
         ProjectDescriptor desc;
         desc.SchemaVersion = CurrentSchemaVersion;
         desc.ProjectName = trimmedName;
         desc.EngineVersion = BAMEGINE_VERSION;
         desc.AssetDirectory = "Assets";
+        if (createCppModule)
+            desc.Modules.push_back({ moduleName, "Runtime" });
 
         const std::filesystem::path bamProjectPath = PlatformPath::Normalize(normDir / (Utf8ToPath(trimmedName).wstring() + L".bamproject"));
         if (!SaveToFile(bamProjectPath, desc, outError))
@@ -435,6 +457,56 @@ namespace Engine
         if (!ProjectDescriptorDetail::WriteUtf8File(scenesDir / "Main.bamscene.json", kEmptySceneJson, outError))
         {
             return false;
+        }
+
+        // 4. Optional Phase 5 C++ module scaffolding (Source/CMakeLists.txt + Source/<ModuleName>/...)
+        if (createCppModule)
+        {
+            const std::filesystem::path sourceDir = normDir / "Source";
+            const std::filesystem::path moduleDir = sourceDir / Utf8ToPath(moduleName);
+
+            const std::string rootCMake =
+                "cmake_minimum_required(VERSION 3.24)\n"
+                "project(" + moduleName + "Project LANGUAGES CXX)\n"
+                "set(CMAKE_CXX_STANDARD 20)\n"
+                "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n\n"
+                "if(NOT DEFINED BAMENGINE_ROOT AND DEFINED ENV{BAMENGINE_ROOT})\n"
+                "    set(BAMENGINE_ROOT \"$ENV{BAMENGINE_ROOT}\")\n"
+                "endif()\n\n"
+                "find_package(BamEngine REQUIRED PATHS \"${BAMENGINE_ROOT}/Engine/CMake\")\n"
+                "add_subdirectory(" + moduleName + ")\n";
+
+            if (!ProjectDescriptorDetail::WriteUtf8File(sourceDir / "CMakeLists.txt", rootCMake, outError))
+                return false;
+
+            const std::string moduleCMake =
+                "add_library(" + moduleName + " SHARED\n"
+                "    " + moduleName + ".cpp\n"
+                ")\n"
+                "bamengine_configure_game_module(" + moduleName + " \"${CMAKE_CURRENT_SOURCE_DIR}/../..\")\n";
+
+            if (!ProjectDescriptorDetail::WriteUtf8File(moduleDir / "CMakeLists.txt", moduleCMake, outError))
+                return false;
+
+            const std::string moduleCpp =
+                "#include \"ModuleInterface.h\"\n"
+                "#include \"Logger.h\"\n\n"
+                "class " + moduleName + " final : public Engine::IModule\n"
+                "{\n"
+                "public:\n"
+                "    void OnLoad() override\n"
+                "    {\n"
+                "        BAM_LOG(Info, \"" + moduleName + "\", \"Lifecycle\", \"[" + moduleName + "] Loaded.\");\n"
+                "    }\n\n"
+                "    void OnUnload() override\n"
+                "    {\n"
+                "        BAM_LOG(Info, \"" + moduleName + "\", \"Lifecycle\", \"[" + moduleName + "] Unloaded.\");\n"
+                "    }\n"
+                "};\n\n"
+                "IMPLEMENT_MODULE(" + moduleName + ")\n";
+
+            if (!ProjectDescriptorDetail::WriteUtf8File(moduleDir / (Utf8ToPath(moduleName).wstring() + L".cpp"), moduleCpp, outError))
+                return false;
         }
 
         if (outProjectFile) *outProjectFile = bamProjectPath;

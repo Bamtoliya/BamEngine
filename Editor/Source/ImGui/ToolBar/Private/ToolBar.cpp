@@ -27,6 +27,8 @@
 #include "NotificationManager.h"
 #include "SceneDocument.h"
 #include "EditorSettingsService.h"
+#include "ProjectSessionManager.h"
+#include "PlatformPath.h"
 #include "ModuleBuildManager.h"
 #include "CrashHandler.h"
 #include <cmath>
@@ -162,6 +164,61 @@ void ToolBar::DrawFileMenu()
 {
 	if (ImGui::BeginMenu(LOCAL_LABEL("EditorMenu.File").c_str()))
 	{
+		ACTION_MENU_ITEM(LOCAL_CSTR("Action.Project.OpenHub"), "Project.OpenHub");
+		if (ImGui::BeginMenu(LOCAL_LABEL("ProjectHub.RecentProjects").c_str()))
+		{
+			const std::vector<RecentProjectEntry> emptyEntries;
+			const auto& recentProjects = EditorSettingsService::IsCreated()
+				? EditorSettingsService::Get().GetRecentProjects() : emptyEntries;
+			const auto activeRoot = Engine::PlatformPath::Normalize(Engine::PlatformPath::GetProjectRoot());
+
+			if (recentProjects.empty())
+			{
+				ImGui::BeginDisabled();
+				ImGui::MenuItem(LOCAL_CSTR("ProjectHub.NoRecentProjects"));
+				ImGui::EndDisabled();
+			}
+			else
+			{
+				for (size_t i = 0; i < recentProjects.size(); ++i)
+				{
+					const auto& entry = recentProjects[i];
+					const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
+						? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
+						: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+					const auto entryRoot = Engine::PlatformPath::Normalize(!entry.ProjectRoot.empty()
+						? std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot))
+						: entryTarget.parent_path());
+					const bool isActive = !activeRoot.empty() && Engine::PlatformPath::IsSamePath(activeRoot, entryRoot);
+					const std::string displayName = entry.ProjectName.empty() ? entry.ProjectRoot : entry.ProjectName;
+
+					ImGui::PushID(static_cast<int>(i));
+					if (ImGui::MenuItem(displayName.c_str(), nullptr, isActive, !isActive))
+					{
+						if (!ProjectSessionManager::IsCreated())
+							ProjectSessionManager::Create();
+						const auto result = ProjectSessionManager::Get().SwitchProject(entryTarget);
+						if (!result.Succeeded && !result.Cancelled)
+						{
+							const std::string err = !result.ErrorMessage.empty()
+								? result.ErrorMessage : LOCAL("ProjectHub.SwitchFailed");
+							NotificationManager::Get().AddNotification(LOCAL("ProjectHub.Title"), err, ELogLevel::Error);
+						}
+					}
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+					{
+						const std::string& pathHint = !entry.ProjectFilePath.empty()
+							? entry.ProjectFilePath : entry.ProjectRoot;
+						if (!pathHint.empty())
+							ImGui::SetTooltip("%s", pathHint.c_str());
+					}
+					ImGui::PopID();
+				}
+			}
+			ImGui::EndMenu();
+		}
+		ImGui::Separator();
+
 		ACTION_MENU_ITEM(LOCAL_CSTR("Action.File.Exit"), "File.Exit");
 		if (false)
 		{
@@ -395,6 +452,14 @@ void ToolBar::DrawWindowMenu()
 
 		if (ImGui::MenuItem(LOCAL_LABEL("ToolBar.NewViewportPanel").c_str()))
 			AddNewViewportPanel();
+
+		const bool hasMissing = gui.HasMissingResources() && PIEManager::Get().IsEditing();
+		const std::size_t unresolvedCount = gui.GetUnresolvedMissingResourceCount();
+		const std::string missingLabel = unresolvedCount > 0
+			? LOCAL("EditorDocument.OpenMissingResources") + " (" + std::to_string(unresolvedCount) + ")###OpenMissingResources"
+			: LOCAL("EditorDocument.OpenMissingResources") + "###OpenMissingResources";
+		if (ImGui::MenuItem(missingLabel.c_str(), nullptr, false, hasMissing))
+			gui.OpenMissingResourceRecoveryModal();
 
 		ImGui::Separator();
 
