@@ -15,9 +15,8 @@
 
 ## 시연 영상
 
-[![BamEngine Demo](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/maxresdefault.jpg)](https://youtu.be/laocWytRGds)
-<!-- 업로드한 YouTube 영상의 ID로 YOUTUBE_VIDEO_ID 두 곳을 교체하고 아래 주석을 해제하세요.
--->
+https://github.com/user-attachments/assets/905b768b-487f-4b3b-8b1d-44f6cb54f924
+
 > 메인 시연 영상 추가 예정.
 
 ## 주요 기능
