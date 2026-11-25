@@ -30,3 +30,16 @@ EditorDocument,LoadingSceneTitle,Loading Scene,씬 불러오는 중
 EditorDocument,LoadingSceneReading,Reading scene file...,씬 파일을 읽는 중...
 EditorDocument,LoadingSceneResources,Loading scene resources ({}/{})...,씬 리소스를 불러오는 중 ({}/{})...
 EditorDocument,LoadingSceneFinalizing,Finalizing scene...,씬을 구성하는 중...
+EditorDocument,MissingResourcesTitle,Missing Resources Detected,누락된 리소스 감지
+EditorDocument,MissingResourcesToast,{} missing resource reference(s) were loaded as empty. Review and save the scene.,{}개의 누락된 리소스 참조가 비어 있는 상태로 로드되었습니다. 확인 후 씬을 저장하세요.
+EditorDocument,MissingResourcesSummary,"Scene '{}' loaded with {} missing resource reference(s). Replace each reference or keep it empty (Null), then save the scene.","씬 '{}'에서 {}개의 누락된 리소스 참조가 발견되었습니다. 각 항목의 대체 리소스를 선택하거나 Null(비우기) 상태를 유지한 뒤 씬을 저장하세요."
+EditorDocument,MissingResourcesProgress,{} of {} replaced ({} kept as Null),{} / {}건 대체됨 ({}건 Null 유지)
+EditorDocument,MissingResourcesColEntity,Entity,엔티티
+EditorDocument,MissingResourcesColComponent,Component,컴포넌트
+EditorDocument,MissingResourcesColField,Field,필드
+EditorDocument,MissingResourcesColPath,Missing Path,누락 경로
+EditorDocument,MissingResourcesColAction,Recovery,복구
+EditorDocument,MissingResourcesKeepNull,Keep Null,Null 유지
+EditorDocument,MissingResourcesKeptNull,Kept as Null,Null 유지됨
+EditorDocument,MissingResourcesSelectEntity,Select Entity,엔티티 선택
+EditorDocument,OpenMissingResources,Missing Resources...,누락된 리소스...

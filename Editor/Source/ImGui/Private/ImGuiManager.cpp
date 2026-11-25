@@ -37,6 +37,10 @@
 #include "ResourceEditors.h"
 #include "ResourceManager.h"
 #include "ResourceHandleArchiveAdapter.h"
+#include "ResourcePicker.h"
+#include "Resources.h"
+#include "ReflectionRegistry.h"
+#include "IconsFontAwesome7.h"
 #include "ResourcePreloader.h"
 #include "ResourceStreamer.h"
 #include "Scene.h"
@@ -291,7 +295,9 @@ EResult ImGuiManager::InitializeImGui()
 
 void ImGuiManager::Free()
 {
+	m_ProjectHubModal.Close();
 	AsyncResourceOpenService::Get().Shutdown();
+	ClearMissingResourceRecoveryState();
 	m_SceneLoadState.reset();
 	ReleaseFrameTextures();
 	if (m_ImGuiContext)
@@ -440,6 +446,7 @@ void ImGuiManager::Draw()
 	DrawResourceQuitConfirmation();
 	DrawDocumentConfirmation();
 	DrawNewSceneDialog();
+	m_ProjectHubModal.Draw();
 	if (Engine::ResourceStreamer::IsCreated() && EditorSettingsService::IsCreated())
 	{
 		const auto budget = EditorSettingsService::Get().GetProjectSettings().ResourceStreamingBudgetMB;
@@ -447,6 +454,10 @@ void ImGuiManager::Draw()
 	}
 	UpdateSceneLoad();
 	DrawSceneLoadingModal();
+	if (!IsSceneLoading())
+	{
+		DrawMissingResourceRecoveryModal();
+	}
 	// 시작 씬 로드가 끝나기 전에 복원하면 뒤늦은 로드가 복원 결과를 덮어쓴다.
 	if (RecoveryManager::IsCreated() && !IsSceneLoading())
 	{
@@ -1426,11 +1437,12 @@ bool ImGuiManager::ExecuteNewScene(ESceneTemplate templateType)
 		documents.push_back(application.GetSceneDocumentId());
 
 	return m_DocumentController->RequestAction(std::move(documents),
-		[templateType](const std::vector<EditorDocumentId>&) -> EResult
+		[this, templateType](const std::vector<EditorDocumentId>&) -> EResult
 		{
 			if (!PIEManager::Get().IsEditing())
 				return EResult::AccessDenied;
 
+			ClearMissingResourceRecoveryState();
 			auto& scenes = SceneManager::Get();
 			EResult result = scenes.NewScene();
 			if (result != EResult::Success)
@@ -1516,6 +1528,7 @@ bool ImGuiManager::RequestSceneAction(ESceneDocumentAction action, std::filesyst
 			if (action == ESceneDocumentAction::Open)
 				return BeginSceneLoad(path) ? EResult::Success : EResult::Fail;
 
+			ClearMissingResourceRecoveryState();
 			auto& scenes = SceneManager::Get();
 			EResult result = EResult::Fail;
 
@@ -1555,6 +1568,8 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 {
 	if (m_SceneLoadState)
 		return false;
+
+	ClearMissingResourceRecoveryState();
 
 	std::filesystem::path resolvedPath(path);
 	if (resolvedPath.is_relative())
@@ -1732,7 +1747,12 @@ void ImGuiManager::UpdateSceneLoad()
 
 		const auto createStart = std::chrono::steady_clock::now();
 		Scene* candidate = nullptr;
-		const auto result = Engine::Scene::CreateFromArchive(*state.Archive, candidate);
+		Engine::MissingResourceRecoveryContext recoveryContext;
+		archive::ArchiveResult result;
+		{
+			Engine::MissingResourceRecoveryScope recoveryScope(&recoveryContext);
+			result = Engine::Scene::CreateFromArchive(*state.Archive, candidate);
+		}
 		const auto openStart = std::chrono::steady_clock::now();
 		if (!result || !candidate)
 		{
@@ -1780,8 +1800,24 @@ void ImGuiManager::UpdateSceneLoad()
 
 		SelectionManager::Get().ClearSelection(true);
 		Application::Get().AdoptSceneDocument(state.RequestedPath);
-		NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
-			LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(state.RequestedPath.wstring())), ELogLevel::Info);
+		if (!recoveryContext.Entries.empty())
+		{
+			Application::Get().GetEditHistory().NotifyUntrackedChange();
+			m_MissingResourceItems.clear();
+			m_MissingResourceItems.reserve(recoveryContext.Entries.size());
+			for (auto& entry : recoveryContext.Entries)
+				m_MissingResourceItems.push_back({ std::move(entry), false });
+			m_MissingResourceSceneName = state.DisplayName;
+			m_OpenMissingResourceModal = true;
+			m_MissingResourceModalOpen = true;
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.MissingResourcesTitle"),
+				LOCAL_FMT("EditorDocument.MissingResourcesToast", m_MissingResourceItems.size()), ELogLevel::Warn);
+		}
+		else
+		{
+			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+				LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(state.RequestedPath.wstring())), ELogLevel::Info);
+		}
 		m_SceneLoadState.reset();
 	}
 }
@@ -1855,6 +1891,257 @@ void ImGuiManager::DrawSceneLoadingModal()
 	ImGui::TextDisabled("%s", stageText.c_str());
 	ImGui::Spacing();
 	ImGui::ProgressBar(progress, ImVec2(-1.0f, 0.0f));
+	ImGui::EndPopup();
+}
+
+void ImGuiManager::ClearMissingResourceRecoveryState()
+{
+	m_MissingResourceItems.clear();
+	m_MissingResourceSceneName.clear();
+	m_OpenMissingResourceModal = false;
+	m_MissingResourceModalOpen = false;
+}
+
+std::size_t ImGuiManager::GetUnresolvedMissingResourceCount() const
+{
+	std::size_t count = 0;
+	for (const auto& item : m_MissingResourceItems)
+		if (!item.Resolved) ++count;
+	return count;
+}
+
+bool ImGuiManager::OpenMissingResourceRecoveryModal()
+{
+	if (m_MissingResourceItems.empty() || !PIEManager::Get().IsEditing())
+		return false;
+	m_MissingResourceModalOpen = true;
+	m_OpenMissingResourceModal = true;
+	return true;
+}
+
+void ImGuiManager::DrawMissingResourceRecoveryModal()
+{
+	if (!m_MissingResourceModalOpen || m_MissingResourceItems.empty())
+		return;
+
+	const std::string modalTitle = LOCAL("EditorDocument.MissingResourcesTitle") + "###MissingResourceRecoveryModal";
+	if (m_OpenMissingResourceModal && !ImGui::IsPopupOpen(modalTitle.c_str()))
+	{
+		ImGui::OpenPopup(modalTitle.c_str());
+		m_OpenMissingResourceModal = false;
+	}
+
+	const ImVec2 viewportSize = ImGui::GetMainViewport()->WorkSize;
+	const ImVec2 defaultSize(std::clamp(viewportSize.x * 0.68f, 680.0f, 1100.0f),
+		std::clamp(viewportSize.y * 0.56f, 360.0f, 700.0f));
+	ImGui::SetNextWindowSize(defaultSize, ImGuiCond_Appearing);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(620.0f, 300.0f), ImVec2(1400.0f, 900.0f));
+
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), nullptr, ImGuiWindowFlags_NoSavedSettings))
+		return;
+
+	auto* scene = Engine::SceneManager::Get().GetCurrentScene();
+	if (!scene)
+	{
+		ClearMissingResourceRecoveryState();
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+	if (!PIEManager::Get().IsEditing() || !Engine::ReflectionRegistry::IsCreated())
+	{
+		m_MissingResourceModalOpen = false;
+		m_OpenMissingResourceModal = false;
+		ImGui::CloseCurrentPopup();
+		ImGui::EndPopup();
+		return;
+	}
+
+	ImGui::TextWrapped("%s", LOCAL_FMT("EditorDocument.MissingResourcesSummary",
+		m_MissingResourceSceneName, m_MissingResourceItems.size()).c_str());
+	ImGui::Spacing();
+
+	std::size_t resolvedCount = 0;
+	for (const auto& item : m_MissingResourceItems)
+		if (item.Resolved) ++resolvedCount;
+	const std::size_t nullCount = m_MissingResourceItems.size() - resolvedCount;
+	ImGui::TextDisabled("%s", LOCAL_FMT("EditorDocument.MissingResourcesProgress",
+		resolvedCount, m_MissingResourceItems.size(), nullCount).c_str());
+	ImGui::Spacing();
+
+	const EditorUI::DialogAction actions[] = { { "EditorCommon.OK" } };
+	const float footerHeight = EditorUI::GetDialogButtonBarHeight(actions, IM_ARRAYSIZE(actions)) +
+		ImGui::GetStyle().ItemSpacing.y * 2.0f;
+	const float tableHeight = std::max(140.0f, ImGui::GetContentRegionAvail().y - footerHeight);
+
+	auto drawRecoveryControl = [&](MissingResourceRecoveryItem& item) -> bool
+	{
+		auto* entity = scene->FindEntityById(item.Entry.EntityPersistentId);
+		if (!entity)
+			return false;
+
+		const auto* compEntry = Engine::ReflectionRegistry::Get().FindComponent(item.Entry.ComponentType);
+		if (!compEntry || !compEntry->ReflectionType || !compEntry->Edit)
+			return false;
+
+		const auto compObj = compEntry->Edit(scene->GetRegistry(), entity->GetEntityHandle());
+		if (!compObj.IsValid())
+			return false;
+
+		const auto* prop = compEntry->ReflectionType->FindProperty(item.Entry.PropertyName);
+		if (!prop || !prop->CanWrite())
+			return false;
+
+		const auto read = prop->TryReadValue(compObj);
+		if (!read)
+			return false;
+
+		auto drawTypedPicker = [&]<typename ResourceType>(const Engine::ResourceHandle<ResourceType>* current) -> bool
+		{
+			if (!current)
+				return false;
+
+			auto candidate = *current;
+			const float keepNullWidth = candidate.IsValid()
+				? ImGui::CalcTextSize(LOCAL_CSTR("EditorDocument.MissingResourcesKeepNull")).x +
+					ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetStyle().ItemSpacing.x
+				: 0.0f;
+			const float pickerWidth = std::max(120.0f, ImGui::GetContentRegionAvail().x - keepNullWidth);
+			ImGui::SetNextItemWidth(pickerWidth);
+
+			bool changed = false;
+			if (ImGui::BeginChild("##PickerWrap", ImVec2(pickerWidth, ImGui::GetFrameHeight()), ImGuiChildFlags_None,
+				ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+			{
+				changed = Editor::DrawInspectorResourcePicker(candidate, true, false);
+			}
+			ImGui::EndChild();
+
+			if (candidate.IsValid())
+			{
+				ImGui::SameLine();
+				if (ImGui::Button(LOCAL_CSTR("EditorDocument.MissingResourcesKeepNull")))
+				{
+					candidate.Reset();
+					changed = true;
+				}
+			}
+
+			if (changed)
+			{
+				if (prop->TryWriteValue(compObj, reflection::ValueView::From(candidate)) == reflection::PropertyAccessError::None)
+				{
+					item.Resolved = candidate.IsValid();
+					Application::Get().GetEditHistory().NotifyUntrackedChange();
+				}
+			}
+			else
+			{
+				item.Resolved = current->IsValid();
+			}
+			return true;
+		};
+
+#define MISSING_RECOVERY_RESOURCE(Type) \
+		if (drawTypedPicker(read.Value.Get<Engine::ResourceHandle<Engine::Type>>())) return true;
+		MISSING_RECOVERY_RESOURCE(Texture)
+		MISSING_RECOVERY_RESOURCE(Sprite)
+		MISSING_RECOVERY_RESOURCE(Mesh)
+		MISSING_RECOVERY_RESOURCE(Model)
+		MISSING_RECOVERY_RESOURCE(Material)
+		MISSING_RECOVERY_RESOURCE(MaterialInstance)
+		MISSING_RECOVERY_RESOURCE(MaterialInterface)
+		MISSING_RECOVERY_RESOURCE(Skeleton)
+		MISSING_RECOVERY_RESOURCE(Shader)
+		MISSING_RECOVERY_RESOURCE(Animation)
+		MISSING_RECOVERY_RESOURCE(AudioClip)
+		MISSING_RECOVERY_RESOURCE(SpriteAnimation)
+		MISSING_RECOVERY_RESOURCE(ParticleEffect)
+		MISSING_RECOVERY_RESOURCE(CompositeEffect)
+		MISSING_RECOVERY_RESOURCE(TerrainLayerAsset)
+#undef MISSING_RECOVERY_RESOURCE
+		return false;
+	};
+
+	constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+		ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingStretchProp;
+	if (ImGui::BeginTable("MissingResourcesTable", 5, tableFlags, ImVec2(0.0f, tableHeight)))
+	{
+		ImGui::TableSetupScrollFreeze(0, 1);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorDocument.MissingResourcesColEntity"), ImGuiTableColumnFlags_WidthStretch, 0.16f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorDocument.MissingResourcesColComponent"), ImGuiTableColumnFlags_WidthStretch, 0.16f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorDocument.MissingResourcesColField"), ImGuiTableColumnFlags_WidthStretch, 0.14f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorDocument.MissingResourcesColPath"), ImGuiTableColumnFlags_WidthStretch, 0.28f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorDocument.MissingResourcesColAction"), ImGuiTableColumnFlags_WidthStretch, 0.26f);
+		ImGui::TableHeadersRow();
+
+		for (std::size_t i = 0; i < m_MissingResourceItems.size(); ++i)
+		{
+			auto& item = m_MissingResourceItems[i];
+			const auto& entry = item.Entry;
+
+			ImGui::PushID(static_cast<int>(i));
+			ImGui::TableNextRow();
+
+			// 1. Entity
+			ImGui::TableNextColumn();
+			ImGui::AlignTextToFramePadding();
+			const std::string entityLabel = entry.EntityName.empty()
+				? fmt::format("#{}", entry.EntityPersistentId)
+				: fmt::format("{} (#{})", WStrToStr(entry.EntityName), entry.EntityPersistentId);
+			ImGui::TextUnformatted(entityLabel.c_str());
+
+			// 2. Component
+			ImGui::TableNextColumn();
+			const std::string& compLabel = entry.ComponentDisplayName.empty()
+				? entry.ComponentType : entry.ComponentDisplayName;
+			ImGui::TextUnformatted(compLabel.c_str());
+			if (!entry.ComponentType.empty() && ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", entry.ComponentType.c_str());
+
+			// 3. Field
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(entry.PropertyName.c_str());
+			if (!entry.ExpectedResourceType.empty() && ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", entry.ExpectedResourceType.c_str());
+
+			// 4. Missing Path
+			ImGui::TableNextColumn();
+			const std::string missingPath = WStrToStr(entry.AssetPath.empty() ? entry.AssetKey : entry.AssetPath);
+			ImGui::PushStyleColor(ImGuiCol_Text, item.Resolved
+				? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
+				: ImVec4(0.96f, 0.62f, 0.32f, 1.0f));
+			ImGui::TextUnformatted(missingPath.c_str());
+			ImGui::PopStyleColor();
+			if (!missingPath.empty() && ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", missingPath.c_str());
+
+			// 5. Recovery Action
+			ImGui::TableNextColumn();
+			if (!drawRecoveryControl(item))
+			{
+				ImGui::TextDisabled("%s", LOCAL_CSTR("EditorDocument.MissingResourcesKeptNull"));
+				if (auto* entity = scene->FindEntityById(entry.EntityPersistentId))
+				{
+					ImGui::SameLine();
+					if (ImGui::SmallButton(LOCAL_CSTR("EditorDocument.MissingResourcesSelectEntity")))
+						SelectionManager::Get().SetSelectedEntity(entity);
+				}
+			}
+
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+
+	ImGui::Spacing();
+	const int action = EditorUI::DialogButtonBar("MissingResourceRecoveryActions", actions, IM_ARRAYSIZE(actions));
+	if (action == 0)
+	{
+		m_MissingResourceModalOpen = false;
+		m_OpenMissingResourceModal = false;
+		ImGui::CloseCurrentPopup();
+	}
 	ImGui::EndPopup();
 }
 
@@ -2214,6 +2501,11 @@ void ImGuiManager::DrawDocumentConfirmation()
 
 	ImGui::EndPopup();
 }
+void ImGuiManager::OpenProjectHub()
+{
+	m_ProjectHubModal.Open();
+}
+
 void ImGuiManager::DrawNewSceneDialog()
 {
 	const std::string modalTitle = LOCAL("EditorDocument.NewSceneDialogTitle") + "###NewSceneTemplateModal";

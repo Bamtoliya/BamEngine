@@ -2,9 +2,11 @@
 
 #include "ImGuiInterface.h"
 #include "ToolBar.h"
+#include "ProjectHubModal.h"
 #include <SDL3/SDL.h>
 #include "EditorSettings.h"
 #include "EditorDocumentController.h"
+#include "ResourceReference.h"
 #include <unordered_set>
 #include <string_view>
 #include "PluginHost.h"
@@ -168,6 +170,10 @@ public:
 	// 에디터 시작 시 마지막 작업 씬을 로딩 창과 함께 연다. 이미 로드 중이면 false.
 	bool RestoreSceneOnStartup(const std::filesystem::path& path);
 	bool RequestQuit();
+	void OpenProjectHub();
+	bool HasMissingResources() const { return !m_MissingResourceItems.empty(); }
+	std::size_t GetUnresolvedMissingResourceCount() const;
+	bool OpenMissingResourceRecoveryModal();
 	bool IsSceneLoading() const { return m_SceneLoadState != nullptr; }
 	EditorDocumentController& GetDocumentController() { return *m_DocumentController; }
 	// outBlock receives the first refusal reason so the caller can explain it; it is reset on success.
@@ -186,6 +192,8 @@ private:
 	bool BeginSceneLoad(const std::filesystem::path& path);
 	void UpdateSceneLoad();
 	void DrawSceneLoadingModal();
+	void DrawMissingResourceRecoveryModal();
+	void ClearMissingResourceRecoveryState();
 	bool ContinueQuitRequest();
 	vector<ResourceEditorInterface*> CollectUnsavedResourceEditors() const;
 	void DrawResourceQuitConfirmation();
@@ -219,6 +227,7 @@ private:
 #pragma region ImGui
 private:
 	ToolBar m_ToolBar;
+	ProjectHubModal m_ProjectHubModal;
 	vector<IImGui*> m_ImGuiPanels;
 	vector<IImGui*> m_PendingAddPanels;
 	vector<IImGui*> m_PendingRemovePanels;
@@ -226,6 +235,15 @@ private:
 	bool m_ShowNewSceneDialog = false;
 	bool m_ResourceQuitConfirmPending = false;
 	ESceneTemplate m_SelectedSceneTemplate = ESceneTemplate::Basic;
+	struct MissingResourceRecoveryItem
+	{
+		Engine::MissingResourceEntry Entry;
+		bool Resolved = false;
+	};
+	std::vector<MissingResourceRecoveryItem> m_MissingResourceItems;
+	std::string m_MissingResourceSceneName;
+	bool m_OpenMissingResourceModal = false;
+	bool m_MissingResourceModalOpen = false;
 	ImGuiStyle m_BaseStyle{};
 	float m_UIScale = 1.0f;
 	vector<IImGui*> m_WorkspacePanels;

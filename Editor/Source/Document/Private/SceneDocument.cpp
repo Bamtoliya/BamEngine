@@ -6,6 +6,7 @@
 #include "NavigationSystem.h"
 #include "PlatformPath.h"
 #include "Functions.h"
+#include "ResourceReference.h"
 #include <archive/JsonArchive.h>
 
 namespace
@@ -104,6 +105,16 @@ namespace Editor
             m_Scene->SetNavGridPath(navUri);
         }
 
+        if (auto navMesh = Engine::NavigationSystem::GetSceneNavMesh(m_Scene))
+        {
+            std::string navMeshUri = m_Scene->GetNavMeshPath();
+            if (navMeshUri.empty())
+                navMeshUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(Engine::NavMesh::MakeDefaultPath(target)));
+            if (!navMesh->SaveToFile(Engine::NavMesh::ResolveDataPath(navMeshUri)))
+                return Engine::EResult::Fail;
+            m_Scene->SetNavMeshPath(navMeshUri);
+        }
+
         archive::JsonArchive writer;
         auto result = m_Scene->WriteArchive(writer);
         if (result)
@@ -128,6 +139,7 @@ namespace Editor
             return Engine::EResult::Success;
 
         DocumentScenePtr candidate;
+        Engine::MissingResourceRecoveryContext recoveryContext;
 
         if (m_Path.empty())
         {
@@ -142,7 +154,11 @@ namespace Editor
                 return Engine::EResult::Fail;
 
             Engine::Scene* restored = nullptr;
-            const auto result = Engine::Scene::CreateFromArchive(reader, restored);
+            archive::ArchiveResult result;
+            {
+                Engine::MissingResourceRecoveryScope recoveryScope(&recoveryContext);
+                result = Engine::Scene::CreateFromArchive(reader, restored);
+            }
             candidate.reset(restored);
 
             if (!result || !candidate)
@@ -156,6 +172,8 @@ namespace Editor
         DocumentScenePtr previous(m_Scene);
         m_Scene = candidate.release();
         m_History.ResetDocument(m_Scene, true);
+        if (!recoveryContext.Entries.empty())
+            m_History.NotifyUntrackedChange();
 
         return Engine::EResult::Success;
     }

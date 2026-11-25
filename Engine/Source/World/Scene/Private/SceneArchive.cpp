@@ -327,7 +327,18 @@ namespace
                 if (!entry->CanDisable())
                     return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
             }
+            auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext();
+            if (recovery != nullptr)
+            {
+                recovery->CurrentComponentType = type;
+                recovery->CurrentComponentDisplayName = entry->Name;
+            }
             result = registry.ReadComponent(component, "Data", world, handle, entry->Type);
+            if (recovery != nullptr)
+            {
+                recovery->CurrentComponentType.clear();
+                recovery->CurrentComponentDisplayName.clear();
+            }
             if (result && hasEnableState && !entry->SetEnabled(world, handle, componentEnabled))
                 return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
             if (result && entry->Type == std::type_index(typeid(Engine::SkyAtmosphereComponent)))
@@ -391,7 +402,30 @@ namespace
                     if (!data) return data;
                 }
 
+                auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext();
+                const std::size_t missingStart = recovery != nullptr ? recovery->Entries.size() : 0;
+                if (recovery != nullptr)
+                {
+                    recovery->CurrentEntityPersistentId = entity.Id;
+                    recovery->CurrentEntityName.clear();
+                }
+
                 data = ReadComponents(value, world, entity.Handle, legacyClouds);
+
+                if (recovery != nullptr)
+                {
+                    if (const auto* nameComp = world.try_get<Engine::NameComponent>(entity.Handle);
+                        nameComp != nullptr && !nameComp->name.empty())
+                    {
+                        for (std::size_t idx = missingStart; idx < recovery->Entries.size(); ++idx)
+                            recovery->Entries[idx].EntityName = nameComp->name;
+                    }
+                    recovery->CurrentEntityPersistentId = 0;
+                    recovery->CurrentEntityName.clear();
+                    recovery->CurrentComponentType.clear();
+                    recovery->CurrentComponentDisplayName.clear();
+                }
+
                 if (data) entities.push_back(std::move(entity));
                 return data;
             });
@@ -516,6 +550,7 @@ archive::ArchiveResult Scene::WriteArchive(archive::IArchive& ar) const
         if (written) written = object.Write("Name", m_Name);
         if (written) written = object.Write("Active", IsActive());
         if (written && !m_NavGridPath.empty()) written = object.Write("NavGridPath", m_NavGridPath);
+        if (written && !m_NavMeshPath.empty()) written = object.Write("NavMeshPath", m_NavMeshPath);
         if (!written) return written;
         return WriteEntityRecords(object, m_LocalRegistry, entities);
     });
@@ -547,6 +582,9 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         bool hasNavGridPath = false;
         if (field) field = object.HasField("NavGridPath", hasNavGridPath);
         if (field && hasNavGridPath) field = object.Read("NavGridPath", candidate->m_NavGridPath);
+        bool hasNavMeshPath = false;
+        if (field) field = object.HasField("NavMeshPath", hasNavMeshPath);
+        if (field && hasNavMeshPath) field = object.Read("NavMeshPath", candidate->m_NavMeshPath);
         if (!field) return field;
         candidate->SetActive(active);
         PreloadDocumentResources("Scene", resourceReferences);
@@ -573,6 +611,12 @@ archive::ArchiveResult Scene::CreateFromArchive(const archive::IArchive& ar, Sce
         auto navGrid = std::make_shared<NavGrid>();
         if (navGrid->LoadFromFile(NavGrid::ResolveDataPath(candidate->m_NavGridPath)))
             NavigationSystem::SetSceneNavGrid(candidate.get(), std::move(navGrid));
+    }
+    if (!candidate->m_NavMeshPath.empty())
+    {
+        auto navMesh = std::make_shared<NavMesh>();
+        if (navMesh->LoadFromFile(NavMesh::ResolveDataPath(candidate->m_NavMeshPath)))
+            NavigationSystem::SetSceneNavMesh(candidate.get(), std::move(navMesh));
     }
     scene = candidate.release();
     return {};

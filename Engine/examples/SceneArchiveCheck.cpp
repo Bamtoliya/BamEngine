@@ -2467,6 +2467,87 @@ namespace
 
         return true;
     }
+
+    bool CheckMissingResourceStrictAndLenientRecovery()
+    {
+        constexpr uint64 brokenEntityId = 7777ULL;
+        const std::wstring missingUri = L"Project://Assets/Missing/GhostMesh.bammesh.json";
+        const std::string brokenSceneJson = SceneJson(
+            EntityJson(brokenEntityId,
+                R"({"Type":"Engine::StaticMeshRendererComponent","Data":{)"
+                R"("meshHandle":{"Null":false,"AssetKey":"Project://Assets/Missing/GhostMesh.bammesh.json",)"
+                R"("AssetPath":"Project://Assets/Missing/GhostMesh.bammesh.json"},)"
+                R"("materialHandle":{"Null":true},"castShadow":true,"receiveDecals":true}},)"
+                R"({"Type":"Engine::NameComponent","Data":{"name":"BrokenMeshEntity"}})"));
+
+        // 1. Default strict mode must reject missing resource references with InvalidValue.
+        {
+            archive::JsonArchive strictReader;
+            if (!strictReader.Decode(brokenSceneJson))
+                return Fail("Missing-resource strict test JSON could not be decoded.");
+            Engine::Scene* strictOutput = nullptr;
+            const auto strictResult = Engine::Scene::CreateFromArchive(strictReader, strictOutput);
+            ScenePtr strictCleanup(strictOutput);
+            if (strictResult || strictResult.Code != archive::ArchiveErrorCode::InvalidValue || strictOutput != nullptr)
+                return Fail("Strict mode unexpectedly loaded a scene with a missing resource reference.");
+        }
+
+        // 2. Lenient recovery mode must tolerate the missing resource as an empty handle and collect entry metadata.
+        {
+            archive::JsonArchive lenientReader;
+            if (!lenientReader.Decode(brokenSceneJson))
+                return Fail("Missing-resource lenient test JSON could not be decoded.");
+
+            Engine::MissingResourceRecoveryContext recovery;
+            Engine::Scene* lenientOutput = nullptr;
+            archive::ArchiveResult lenientResult;
+            {
+                Engine::MissingResourceRecoveryScope scope(&recovery);
+                lenientResult = Engine::Scene::CreateFromArchive(lenientReader, lenientOutput);
+            }
+            ScenePtr restored(lenientOutput);
+            if (!lenientResult || restored == nullptr)
+                return Fail("Lenient recovery mode failed to load a scene with a missing resource reference.");
+
+            auto* restoredEntity = restored->FindEntityById(brokenEntityId);
+            if (restoredEntity == nullptr)
+                return Fail("Lenient recovery mode lost the entity with a missing resource.");
+
+            const auto* meshComp = restored->GetRegistry().try_get<Engine::StaticMeshRendererComponent>(
+                restoredEntity->GetEntityHandle());
+            if (meshComp == nullptr || meshComp->meshHandle.IsValid())
+                return Fail("Lenient recovery mode did not clear the missing mesh handle to empty.");
+
+            if (recovery.Entries.size() != 1)
+                return Fail("Lenient recovery mode did not collect the expected missing resource entry count.");
+
+            const auto& entry = recovery.Entries[0];
+            if (entry.EntityPersistentId != brokenEntityId ||
+                entry.EntityName != L"BrokenMeshEntity" ||
+                entry.ComponentType != "Engine::StaticMeshRendererComponent" ||
+                entry.PropertyName != "meshHandle" ||
+                entry.ExpectedResourceType != "Engine::Mesh" ||
+                entry.AssetKey != missingUri ||
+                entry.AssetPath != missingUri)
+                return Fail("Collected MissingResourceEntry metadata did not match expected values.");
+        }
+
+        // 3. After scope exit, strict mode must be active again.
+        if (Engine::MissingResourceRecoveryContext::GetActiveContext() != nullptr)
+            return Fail("MissingResourceRecoveryScope did not restore the previous context.");
+        {
+            archive::JsonArchive strictAgainReader;
+            if (!strictAgainReader.Decode(brokenSceneJson))
+                return Fail("Post-scope strict test JSON could not be decoded.");
+            Engine::Scene* strictAgainOutput = nullptr;
+            const auto strictAgainResult = Engine::Scene::CreateFromArchive(strictAgainReader, strictAgainOutput);
+            ScenePtr strictAgainCleanup(strictAgainOutput);
+            if (strictAgainResult || strictAgainResult.Code != archive::ArchiveErrorCode::InvalidValue || strictAgainOutput != nullptr)
+                return Fail("Strict mode was not restored after MissingResourceRecoveryScope exited.");
+        }
+
+        return true;
+    }
 }
 
 int main()
@@ -2489,7 +2570,8 @@ int main()
         !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
         !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip() ||
         !CheckEntityReferenceSerializationAndPrefabIndependence() ||
-        !CheckExternalEntityReferenceCount() || !CheckDisabledPickingSource())
+        !CheckExternalEntityReferenceCount() || !CheckDisabledPickingSource() ||
+        !CheckMissingResourceStrictAndLenientRecovery())
         return 1;
     std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
     return 0;

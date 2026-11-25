@@ -1,4 +1,5 @@
 ﻿#include "Resource.h"
+#include "ResourceReference.h"
 #include "ReflectionRegistry.h"
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <archive/JsonArchive.h>
@@ -201,3 +202,18 @@ EResult Resource::Fulfill(Resource* prepared)
 	return EResult::Success;
 }
 #pragma endregion
+
+namespace
+{
+	thread_local Engine::MissingResourceRecoveryContext* s_ActiveMissingResourceRecovery = nullptr;
+}
+
+void Engine::MissingResourceRecoveryContext::SetActiveContext(MissingResourceRecoveryContext* context) noexcept
+{
+	s_ActiveMissingResourceRecovery = context;
+}
+
+Engine::MissingResourceRecoveryContext* Engine::MissingResourceRecoveryContext::GetActiveContext() noexcept
+{
+	return s_ActiveMissingResourceRecovery;
+}

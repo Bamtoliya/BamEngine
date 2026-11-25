@@ -29,6 +29,15 @@ namespace archive_resource
             return path.extension().wstring().rfind(L".bam", 0) == 0;
         }
 
+        template<typename T>
+        inline std::string ExtractResourceTypeName()
+        {
+            std::string name = typeid(T).name();
+            if (name.rfind("class ", 0) == 0) name.erase(0, 6);
+            else if (name.rfind("struct ", 0) == 0) name.erase(0, 7);
+            return name;
+        }
+
         inline Engine::Handle TryFindLoadedByKeyOrPath(Engine::ResourceManager& manager,
             const std::wstring& candidate, bool allowFilePathLookup)
         {
@@ -348,7 +357,30 @@ namespace archive_resource
                 auto& manager = Engine::ResourceManager::Get();
                 const auto handle = ResolveResourceHandle(manager, assetKey, assetPath);
                 if (!manager.IsValid(handle) || !dynamic_cast<T*>(manager.GetResource(handle)))
+                {
+                    if (auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext())
+                    {
+                        Engine::MissingResourceEntry entry;
+                        entry.EntityPersistentId = recovery->CurrentEntityPersistentId;
+                        entry.EntityName = recovery->CurrentEntityName;
+                        entry.ComponentType = recovery->CurrentComponentType;
+                        entry.ComponentDisplayName = recovery->CurrentComponentDisplayName;
+                        entry.PropertyName = std::string(key);
+                        entry.ExpectedResourceType = detail::ExtractResourceTypeName<T>();
+                        entry.AssetKey = assetKey;
+                        entry.AssetPath = assetPath;
+                        recovery->Entries.push_back(std::move(entry));
+
+                        ENGINE_LOG_WARN("Missing resource loaded as empty handle: entity={} component={} property={} type={} key=\"{}\" path=\"{}\"",
+                            recovery->CurrentEntityPersistentId, recovery->CurrentComponentType, key,
+                            detail::ExtractResourceTypeName<T>(), Engine::WStrToStr(assetKey), Engine::WStrToStr(assetPath));
+
+                        candidate.Reset();
+                        isNull = true;
+                        return {};
+                    }
                     return { archive::ArchiveErrorCode::InvalidValue, "ResourceReference" };
+                }
 
                 candidate = Engine::ResourceHandle<T>(handle);
                 return {};
