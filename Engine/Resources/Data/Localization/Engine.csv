@@ -717,8 +717,10 @@
 ,PROP_PROBE_COUNT_Y,Probe Count Y,Y축 프로브 수
 ,PROP_PROBE_COUNT_Z,Probe Count Z,Z축 프로브 수
 ,PROP_PROBE_HYSTERESIS,History Weight,이전 결과 비율
+,PROP_PROBE_NORMAL_BIAS,Normal Bias,법선 바이어스
 ,PROP_PROBE_RADIUS,Probe Radius,프로브 반지름
 ,PROP_PROBE_RAYS,Rays per Probe,프로브당 광선 수
+,PROP_PROBE_VIEW_BIAS,View Bias,시선 바이어스
 ,PROP_RADIUS,Radius,반지름
 ,PROP_RANGE,Range,범위
 ,PROP_RATIO,Ratio,비율
@@ -825,14 +827,24 @@
 ,PROP_TARGET_POSITION,Target Position,타겟 위치
 ,PROP_TARGET_TAG,Target Tag,타겟 태그
 ,PROP_TELEPORT_THRESHOLD,Teleport Threshold,순간이동 임계값
+,PROP_TERRAIN_CHUNK_COUNT_PER_AXIS,Chunks Per Axis,축당 청크 수
 ,PROP_TERRAIN_DATA_PATH,Terrain Data File,지형 데이터 파일
+,PROP_TERRAIN_ENABLE_CHUNK_LOD,Enable Chunk LOD,청크 LOD 사용
 ,PROP_TERRAIN_LAYERS,Layers,레이어
 ,PROP_TERRAIN_LAYER_ALBEDO,Albedo Texture,알베도 텍스처
 ,PROP_TERRAIN_LAYER_ASSET,Layer Asset,레이어 에셋
+,PROP_TERRAIN_LAYER_METALLIC,Metallic,금속성
 ,PROP_TERRAIN_LAYER_NAV_COST,Navigation Cost,이동 비용
+,PROP_TERRAIN_LAYER_NORMAL,Normal Texture,노멀 텍스처
+,PROP_TERRAIN_LAYER_ROUGHNESS,Roughness,거칠기
 ,PROP_TERRAIN_LAYER_SURFACE,Surface Type,표면 종류
 ,PROP_TERRAIN_LAYER_TILING,Tiling (m),반복 길이 (m)
 ,PROP_TERRAIN_LAYER_WALKABLE,Walkable,이동 가능
+,PROP_TERRAIN_LOD0_DISTANCE,LOD 0 Distance,LOD 0 거리
+,PROP_TERRAIN_LOD1_DISTANCE,LOD 1 Distance,LOD 1 거리
+,PROP_TERRAIN_LOD2_DISTANCE,LOD 2 Distance,LOD 2 거리
+,PROP_TERRAIN_LOD_HYSTERESIS,LOD Hysteresis,LOD 히스테리시스
+,PROP_TERRAIN_STREAMING_LOAD_DISTANCE,Streaming Load Distance,스트리밍 로드 거리
 ,PROP_TEXTURE_BINDINGS,Texture Bindings,텍스처 바인딩
 ,PROP_TEXTURE_HANDLE,Texture Handle,텍스처 핸들
 ,PROP_TILING,Tiling,반복
@@ -866,6 +878,21 @@
 ,PROP_UI_RECT_SCALE,Scale,배율
 ,PROP_UI_SCROLL_SHOW_SCROLLBAR,Show Scrollbar,스크롤바 표시
 ,PROP_UI_SCROLL_WHEEL_STEP,Wheel step,휠 이동 간격
+,PROP_UI_SETTINGS_APPLY_BUTTON,Apply Button,적용 버튼
+,PROP_UI_SETTINGS_AUTO_SYNC,Auto Sync On Enable,활성화 시 자동 동기화
+,PROP_UI_SETTINGS_BGM_SLIDER,BGM Volume Slider,배경음 볼륨 슬라이더
+,PROP_UI_SETTINGS_CLOSE_BUTTON,Close Button,닫기 버튼
+,PROP_UI_SETTINGS_FILE_PATH,Settings File Path,설정 파일 경로
+,PROP_UI_SETTINGS_FULLSCREEN_TOGGLE,Fullscreen Toggle,전체 화면 토글
+,PROP_UI_SETTINGS_MASTER_SLIDER,Master Volume Slider,마스터 볼륨 슬라이더
+,PROP_UI_SETTINGS_QUALITY_DROPDOWN,Quality Dropdown,품질 드롭다운
+,PROP_UI_SETTINGS_RESET_BUTTON,Reset Button,초기화 버튼
+,PROP_UI_SETTINGS_RESOLUTION_DROPDOWN,Resolution Dropdown,해상도 드롭다운
+,PROP_UI_SETTINGS_SAVE_ON_APPLY,Save On Apply,적용 시 저장
+,PROP_UI_SETTINGS_SFX_SLIDER,SFX Volume Slider,효과음 볼륨 슬라이더
+,PROP_UI_SETTINGS_UI_SLIDER,UI Volume Slider,UI 볼륨 슬라이더
+,PROP_UI_SETTINGS_VOICE_SLIDER,Voice Volume Slider,음성 볼륨 슬라이더
+,PROP_UI_SETTINGS_VSYNC_TOGGLE,VSync Toggle,수직 동기화 토글
 ,PROP_UI_TEXT,Text,텍스트
 ,PROP_UI_TEXT_ALIGNMENT,Horizontal Alignment,가로 정렬
 ,PROP_UI_TEXT_LOCALE_KEY,Localization Key,로캘 키
@@ -1033,6 +1060,7 @@
 ,STRUCT_UI_PROGRESS_BAR,UI Progress Bar,UI 진행률 바
 ,STRUCT_UI_RENDER_ORDER,UI Render Order,UI 렌더 순서
 ,STRUCT_UI_SCROLL,UI Scroll,UI 스크롤
+,STRUCT_UI_SETTINGS_MENU,UI Settings Menu,UI 설정 메뉴
 ,STRUCT_UI_SLIDER,UI Slider,UI 슬라이더
 ,STRUCT_UI_TEXT,UI Text,UI 텍스트
 ,STRUCT_UI_TEXT_INPUT,UI Text Input,UI 텍스트 입력
