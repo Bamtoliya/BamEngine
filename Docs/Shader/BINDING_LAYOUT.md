@@ -219,9 +219,11 @@ When adding or moving a binding:
 | 바인딩 | 셰이더 | 내용 |
 | --- | --- | --- |
 | `b0, space2` | `terrainVS`, `terrainShadowDepthVS`, `motionVectorTerrainVS` | `ObjectData`: 월드 행렬, `PickingData`, `HeightfieldData`(x 최대 높이, yz 칸 간격) 96바이트 (RHI CBV slot `1`) |
-| `b0, space2` | `terrainPS` | `TerrainObjectData` 256바이트: 위 96바이트 + `LayerTiling[2]`(레이어 0~7 반복 길이 m, `[i/4][i%4]`) + `LayerTint[8]`. `Renderer.cpp`의 같은 이름 구조와 일치해야 한다. 지형 드로우만 이 길이로 묶고, VS 쪽은 앞 96바이트만 읽는다 |
+| `b0, space2` | `terrainPS` | `TerrainObjectData` 384바이트: 위 96바이트 + `LayerTiling[2]`(레이어 0~7 반복 길이 m, `[i/4][i%4]`) + `LayerTint[8]` + `LayerPbrParams[8]`(x 거칠기, y 금속성, z 노멀 유무). `Renderer.cpp`의 같은 이름 구조와 일치해야 한다. 지형 드로우만 이 길이로 묶고, VS 쪽은 앞 96바이트만 읽는다 |
+| `t0`~`t7, space3` | `terrainPS` | 레이어 0~7 접선 공간 노멀(`TerrainLayerAsset::NormalTexture`, `BindTexture` slot `TerrainLayerNormalBaseSlot` = 16~23). 없으면 폴백 텍스처, `LayerPbrParams[i].z`로 무시. 샘플러는 `s0, space1` |
 | `t8, space3` | `terrainVS`, `terrainShadowDepthVS`, `motionVectorTerrainVS` | 높이맵 `R32_FLOAT`, `Load`로 읽음 (`BindTexture` slot `TerrainHeightmapSlot` = 24) |
 | `t9`, `t10, space3` | `terrainPS` | 스플랫 가중치: 레이어 0~3, 4~7 (`RGBA8`, `BindTexture` slot 25·26). 샘플러는 `s0, space1` |
+| `t11, space3` | `terrainPS`, `terrainShadowDepthVS` | 구멍 마스크 `R8_UNORM`(255=`ETerrainAttribute::Hole`, 0=표면, `BindTexture` slot `TerrainHoleMaskSlot` = 27). `terrainPS`는 `Sample >= 0.5` 시 `clip(-1)`, `terrainShadowDepthVS`는 `Load >= 0.5` 시 NaN 반환 |
 | `t8`~`t15, space1` | `terrainPS` | 레이어 0~7 알베도(`TerrainLayerAsset`). 없으면 흰 텍스처와 기본 색 배율 (slot `8`~`15`) |
 | `s0, space1` | `terrainPS` | 기본 샘플러. 레이어는 분기 안에서 읽으므로 `SampleGrad`(월드 XZ 기울기) |
 
@@ -242,3 +244,10 @@ G-Buffer 정점 셰이더(`gbufferVS`, `gbufferSkinningVS`, 셰이더 그래프 
 `gbufferPS`와 셰이더 그래프 G-Buffer PS는 이 값이 1이면 `FLAG_RECEIVE_DECALS`를 빼고 기록한다. 맨 뒤 출력이라 읽지 않는 픽셀 셰이더와도 연결된다.
 
 `temporalAAPS`는 `SV_Target0`에 HDR 장면 색, `SV_Target1`에 다음 프레임의 이력을 쓴다. G-Buffer의 발광 타깃은 1보다 밝은 값을 담도록 `R11G11B10_UFLOAT`이다(알파 없음).
+
+### 디스토션 V2 바인딩
+
+| 바인딩 | 셰이더 | 내용 |
+| --- | --- | --- |
+| `t0`, `s0, space1` | `distortionWritePS` | 노멀맵 또는 마스크 텍스처. `R16G16_FLOAT` 오프셋 버퍼에 Additive(`One/One`), 깊이 테스트 `LessOrEqual`, 깊이 쓰기 `Off`로 누적 |
+| `t0`, `t1`, `s0, space3` | `distortionCompositePS` | `SceneColorCopy`(HDR), `DistortionOffset`(`R16G16_FLOAT`), Clamp 선형 샘플러. `DistortionWritePass` 제출이 1건 이상일 때만 실행 |

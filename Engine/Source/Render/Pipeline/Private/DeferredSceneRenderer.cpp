@@ -52,9 +52,6 @@ namespace
 	static_assert(sizeof(ProbeGILightingData) == 64);
 	static_assert(offsetof(ProbeGILightingData, GridCounts) == 32);
 
-	// 표본 위치를 띄우는 거리. 가장 좁은 프로브 간격에 대한 비율이며 측정 전 시작값이다.
-	constexpr f32 ProbeGINormalBiasRatio = 0.1f;
-	constexpr f32 ProbeGIViewBiasRatio = 0.3f;
 	// lightingPS의 gProbeIrradianceAtlas(t2, space1)·gProbeDistanceAtlas(t3, space1)
 	constexpr Engine::uint32 ProbeGIIrradianceSlot = 2;
 	constexpr Engine::uint32 ProbeGIDistanceSlot = 3;
@@ -367,6 +364,8 @@ namespace
 	constexpr const wchar_t* DecalVSFile = L"decalVS.cso";
 	constexpr const wchar_t* DecalPSKey = L"Resources/Shader/DecalPS";
 	constexpr const wchar_t* DecalPSFile = L"decalPS.cso";
+	constexpr const wchar_t* DistortionCompositePSKey = L"Resources/Shader/DistortionCompositePS";
+	constexpr const wchar_t* DistortionCompositePSFile = L"distortionCompositePS.cso";
 
 	vec3 NormalizedAxis(const vec3& axis)
 	{
@@ -385,7 +384,7 @@ void Engine::DeferredSceneRenderer::Free()
 	for (auto*& buffer : m_LocalLightBuffer)
 		Safe_Release(buffer);
 	m_LightingPipeline = nullptr;
-	for (RenderPassID* pass : { &m_TemporalPassID, &m_MotionPassID, &m_DecalPassID })
+	for (RenderPassID* pass : { &m_TemporalPassID, &m_MotionPassID, &m_DecalPassID, &m_DistortionWritePassID, &m_DistortionCompositePassID })
 	{
 		if (*pass != INVALID_PASS_ID && Engine::RenderPassManager::IsCreated())
 			Engine::RenderPassManager::Get().RemoveRenderPass(*pass);
@@ -403,6 +402,7 @@ void Engine::DeferredSceneRenderer::Free()
 	m_ShadowHistory.Reset();
 	removeTarget(m_DecalNormalCopyName);
 	m_Decals.clear();
+	removeTarget(m_DistortionOffsetTargetName);
 	for (auto& name : m_ReflectionTargetNames)
 		removeTarget(name);
 	m_ReflectionHistory.Reset();
@@ -524,6 +524,15 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 	if (pointShadowPass && pointShadowPass->IsEnabled())
 		renderer.RegisterShadowPassForView(pointShadowPass, cameraBuffer, passes.Geometry);
 
+	// 1-0. 디스토션 V2 패스를 TAA보다 먼저 등록해 ForwardTransparent → DistortionWrite → DistortionComposite → TAA 순서를 보장한다.
+	if (auto* transparentPass = rpm.GetRenderPassByID(passes.ForwardTransparent);
+		transparentPass && transparentPass->IsEnabled() && transparentPass->GetRenderTargetCount() > 0u && transparentPass->HasPrePassCopy())
+	{
+		const std::wstring colorName = transparentPass->GetRenderTargetName(0);
+		const std::wstring copyName = transparentPass->GetPrePassCopyDest();
+		(void)EnsureDistortionPasses(passes.ForwardTransparent, colorName, colorName, copyName);
+	}
+
 	// 1-1. TAA를 쓰면 장면을 그리는 패스와 조명만 지터 카메라를 쓴다. 그림자·반사·기즈모는 원래 카메라를 쓴다.
 	const CameraBuffer sceneCamera = PrepareTemporalAA(cameraBuffer, sceneToQuery, passes);
 
@@ -550,6 +559,9 @@ void Engine::DeferredSceneRenderer::Submit(const CameraBuffer& cameraBuffer, Sce
 		forwardTransPass->SetPassTexture(MAX_MATERIAL_TEXTURE_SLOTS + 4, passes.LightingInputs[4]);
 		renderer.RegisterViewportCamera(sceneCamera, forwardTransPass, passes.AcceptSceneMeshes, passes.Geometry);
 	}
+
+	// 3-0. 디스토션 V2: 오프셋 버퍼 기록 패스 카메라 등록 및 조건부 합성 패스 제출 (제출 0건 시 완전 스킵)
+	SubmitDistortionPasses(sceneCamera, passes);
 
 	// 3-1. 앰비언트 오클루전 방식. 쓰기 텍스처가 필요한 Compute라 DirectX12만 지원하고, 독립 프리뷰와 직교 카메라는 제외한다.
 	const EAmbientOcclusionMode requestedOcclusion = ResolveAmbientOcclusion(m_AmbientOcclusionOverrides);
@@ -1013,9 +1025,8 @@ void Engine::DeferredSceneRenderer::SubmitLightingPass(const CameraBuffer& camer
 					gi.GridCounts = { grid.Counts.X, grid.Counts.Y, grid.Counts.Z };
 					gi.Intensity = probeGIVolume.Intensity;
 					gi.BlendDistance = probeGIVolume.BlendDistance;
-					const f32 minSpacing = ProbeGrid::MinSpacing(grid.Spacing);
-					gi.NormalBias = minSpacing * ProbeGINormalBiasRatio;
-					gi.ViewBias = minSpacing * ProbeGIViewBiasRatio;
+					gi.NormalBias = probeGIVolume.NormalBias;
+					gi.ViewBias = probeGIVolume.ViewBias;
 					gi.DebugView = probeGIDebugView ? 1u : 0u;
 				}
 				else if (!m_ProbeGIFailureLogged)
@@ -1089,6 +1100,8 @@ bool Engine::DeferredSceneRenderer::FindProbeGIVolume(Engine::Scene* scene, cons
 		volume.Hysteresis = glm::clamp(component.Hysteresis, 0.0f, 0.99f);
 		volume.Intensity = glm::max(component.Intensity, 0.0f);
 		volume.BlendDistance = glm::max(component.BlendDistance, 0.0f);
+		volume.NormalBias = glm::clamp(component.NormalBias, 0.0f, 1.0f);
+		volume.ViewBias = glm::clamp(component.ViewBias, 0.0f, 1.0f);
 	}
 	return found;
 }
@@ -1166,9 +1179,8 @@ bool Engine::DeferredSceneRenderer::DispatchProbeGIUpdate(Engine::RHI& rhi, Engi
 	// DDGI처럼 대각선 간격의 1.5배까지만 거리를 기록한다. 그보다 먼 면은 가시성 검사에서 차이가 없다.
 	params.MaxProbeDistance = glm::length(volume.Grid.Spacing) * 1.5f;
 	params.BlendDistance = volume.BlendDistance;
-	const f32 minSpacing = ProbeGrid::MinSpacing(volume.Grid.Spacing);
-	params.SampleNormalBias = minSpacing * ProbeGINormalBiasRatio;
-	params.SampleViewBias = minSpacing * ProbeGIViewBiasRatio;
+	params.SampleNormalBias = volume.NormalBias;
+	params.SampleViewBias = volume.ViewBias;
 
 	const auto dispatch = [&](const wchar_t* name, Engine::RHIPipeline* pipeline, Engine::RHITexture* output, bool traces,
 		Engine::uint32 groupsX, Engine::uint32 groupsY)
@@ -1254,10 +1266,16 @@ Engine::Shader* Engine::DeferredSceneRenderer::GetOwnedShader(const wchar_t* sha
 	auto handle = resources.GetResourceHandle<Engine::Shader>(shaderKey);
 	if (!handle.Get())
 	{
+		const auto binRoot = PlatformPath::GetEngineResourceRoot() / "Shader" / "bin";
+		const std::wstring stem = std::filesystem::path(shaderFile).stem().wstring();
+		const ERHIType rhiType = Renderer::IsCreated() ? Renderer::Get().GetRHIType() : ERHIType::DirectX12;
 		ShaderDesc desc{};
 		desc.Key = shaderKey;
-		desc.dxilPath = (PlatformPath::GetEngineResourceRoot() / "Shader" / "bin" / "dxil" / shaderFile).wstring();
-		desc.Path = desc.dxilPath;
+		desc.dxilPath = (binRoot / "dxil" / shaderFile).wstring();
+		desc.spirvPath = (binRoot / "spirv" / (stem + L".spv")).wstring();
+		desc.wgslPath = (binRoot / "wgsl" / (stem + L".wgsl")).wstring();
+		desc.Path = (rhiType == ERHIType::DirectX12) ? desc.dxilPath :
+			(rhiType == ERHIType::WebGPU ? desc.wgslPath : desc.spirvPath);
 		desc.shaderType = type;
 		handle = resources.LoadResource<Engine::Shader>(&desc);
 	}
@@ -1519,6 +1537,124 @@ bool Engine::DeferredSceneRenderer::EnsureTemporalAAPasses(RenderPassID geometry
 		};
 	return ensure(m_MotionPassID, L"_MotionVectorPass", ERenderPassLoadOperation::RPLO_Clear, *geometry) &&
 		ensure(m_TemporalPassID, L"_TemporalAAPass", ERenderPassLoadOperation::RPLO_Load, *transparent);
+}
+
+bool Engine::DeferredSceneRenderer::EnsureDistortionPasses(RenderPassID transparentPass, const std::wstring& prefix,
+	const std::wstring& colorName, const std::wstring& copyName)
+{
+	auto& rpm = Engine::RenderPassManager::Get();
+	const auto* transparent = rpm.GetRenderPassByID(transparentPass);
+	if (!transparent)
+		return false;
+
+	if (m_DistortionWritePassID == INVALID_PASS_ID)
+	{
+		RenderPassDesc writeDesc{};
+		writeDesc.name = prefix + L"_DistortionWritePass";
+		writeDesc.priority = transparent->GetPriority();
+		writeDesc.loadOperation = ERenderPassLoadOperation::RPLO_Clear;
+		writeDesc.stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;
+		writeDesc.depthStencilName = transparent->GetDepthStencilName();
+		writeDesc.sortType = ERenderSortType::None;
+		writeDesc.passType = ERenderPassType::Distortion;
+		writeDesc.acceptedBlendModes = EBlendMode::Distortion;
+		m_DistortionWritePassID = rpm.RegisterRenderPass(std::move(writeDesc));
+	}
+
+	if (m_DistortionWritePassID != INVALID_PASS_ID && m_DistortionCompositePassID == INVALID_PASS_ID)
+	{
+		RenderPassDesc compositeDesc{};
+		compositeDesc.name = prefix + L"_DistortionCompositePass";
+		compositeDesc.priority = transparent->GetPriority();
+		compositeDesc.loadOperation = ERenderPassLoadOperation::RPLO_Load;
+		compositeDesc.stencilLoadOperation = ERenderPassLoadOperation::RPLO_Load;
+		compositeDesc.renderTargetNames = { colorName };
+		compositeDesc.prePassCopySrcRT = colorName;
+		compositeDesc.prePassCopyDstRT = copyName;
+		compositeDesc.requireNonEmptyPassID = m_DistortionWritePassID;
+		compositeDesc.passType = ERenderPassType::PostProcess;
+		compositeDesc.acceptedBlendModes = EBlendMode::None;
+		m_DistortionCompositePassID = rpm.RegisterRenderPass(std::move(compositeDesc));
+	}
+
+	return m_DistortionWritePassID != INVALID_PASS_ID && m_DistortionCompositePassID != INVALID_PASS_ID;
+}
+
+void Engine::DeferredSceneRenderer::SubmitDistortionPasses(const CameraBuffer& sceneCamera, const DeferredScenePassBindings& passes)
+{
+	auto& rpm = Engine::RenderPassManager::Get();
+	auto* writePass = m_DistortionWritePassID != INVALID_PASS_ID ? rpm.GetRenderPassByID(m_DistortionWritePassID) : nullptr;
+	auto* compositePass = m_DistortionCompositePassID != INVALID_PASS_ID ? rpm.GetRenderPassByID(m_DistortionCompositePassID) : nullptr;
+	const auto* transparent = rpm.GetRenderPassByID(passes.ForwardTransparent);
+	if (!writePass || !compositePass || !transparent || !transparent->IsEnabled() ||
+		transparent->GetRenderTargetCount() == 0u || !transparent->HasPrePassCopy())
+		return;
+
+	const std::wstring colorName = transparent->GetRenderTargetName(0);
+	const std::wstring copyName = transparent->GetPrePassCopyDest();
+	auto& targets = Engine::RenderTargetManager::Get();
+	const auto* color = targets.GetRenderTarget(colorName);
+	if (!color || !targets.GetRenderTarget(copyName))
+		return;
+
+	Engine::Shader* compositePS = GetOwnedShader(DistortionCompositePSKey, DistortionCompositePSFile, EShaderType::Fragment, m_DistortionShaderMissing);
+	const auto fullscreenVS = Engine::ResourceManager::Get().GetResourceHandle<Engine::Shader>(L"FullscreenQuadVS");
+	if (!compositePS || !fullscreenVS.Get() || !fullscreenVS->GetRHIShader())
+		return;
+
+	const auto* offsetTarget = EnsureOwnedTarget(colorName + L"_DistortionOffset", ETextureFormat::R16G16_FLOAT,
+		color->GetWidth(), color->GetHeight(), m_DistortionOffsetTargetName,
+		ETextureUsage::RenderTarget | ETextureUsage::Sampler, vec4(0.0f));
+	if (!offsetTarget)
+		return;
+
+	writePass->SetColorAttachments({ m_DistortionOffsetTargetName });
+	writePass->SetDepthStencilAttachment(transparent->GetDepthStencilName());
+	compositePass->SetColorAttachments({ colorName });
+	compositePass->SetPrePassCopy(colorName, copyName);
+	compositePass->SetRequireNonEmptyPassID(m_DistortionWritePassID);
+
+	RHIPipelineDesc pipelineDesc{};
+	pipelineDesc.pipelineType = EPipelineType::Graphics;
+	pipelineDesc.vertexShader = fullscreenVS->GetRHIShader();
+	pipelineDesc.pixelShader = compositePS->GetRHIShader();
+	pipelineDesc.colorAttachmentCount = 1;
+	pipelineDesc.colorAttachmentFormats[0] = color->GetFormat();
+	pipelineDesc.depthStencilAttachmentFormat = ETextureFormat::UNKNOWN;
+	pipelineDesc.depthStencilState.depthTestEnable = false;
+	pipelineDesc.depthStencilState.depthWriteEnable = false;
+	pipelineDesc.topology = ETopology::TriangleList;
+	pipelineDesc.cullMode = ECullMode::None;
+	RHIPipeline* pipeline = Engine::PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);
+	if (!pipeline)
+		return;
+
+	auto& renderer = Engine::Renderer::Get();
+	renderer.RegisterViewportCamera(sceneCamera, writePass, passes.AcceptSceneMeshes, passes.Geometry);
+
+	const std::wstring offsetName = m_DistortionOffsetTargetName;
+	renderer.SubmitCustomCommand([this, pipeline, copyName, offsetName](f32, RenderPass*) -> EResult
+		{
+			auto* rhi = Renderer::Get().GetRHI();
+			auto& rtm = RenderTargetManager::Get();
+			const auto* sceneCopy = rtm.GetRenderTarget(copyName);
+			const auto* offsetRT = rtm.GetRenderTarget(offsetName);
+			SamplerDesc samplerDesc{};
+			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = ESamplerAddressMode::Clamp;
+			auto* sampler = SamplerManager::Get().GetOrCreateSampler(samplerDesc);
+
+			const bool succeeded = rhi && sampler && sceneCopy && sceneCopy->GetTexture() && offsetRT && offsetRT->GetTexture() &&
+				IsSuccess(rhi->BindPipeline(pipeline)) &&
+				IsSuccess(rhi->BindTextureSampler(sceneCopy->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 0)) &&
+				IsSuccess(rhi->BindTextureSampler(offsetRT->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS + 1)) &&
+				IsSuccess(rhi->Draw(3));
+			if (!succeeded && !m_DistortionFailureLogged)
+			{
+				ENGINE_LOG_ERROR("Distortion composite pass failed.");
+				m_DistortionFailureLogged = true;
+			}
+			return EResult::Success;
+		}, m_DistortionCompositePassID);
 }
 
 CameraBuffer Engine::DeferredSceneRenderer::PrepareTemporalAA(const CameraBuffer& camera, Engine::Scene* scene, const DeferredScenePassBindings& passes)

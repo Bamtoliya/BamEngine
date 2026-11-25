@@ -39,6 +39,8 @@ struct ProbeGIVolumeData
 	f32 Hysteresis = 0.97f;
 	f32 Intensity = 1.0f;
 	f32 BlendDistance = 1.0f;
+	f32 NormalBias = 0.05f;
+	f32 ViewBias = 0.15f;
 };
 
 // 이번 프레임에 갱신한 프로브 GI 텍스처. 조명 패스가 읽는다.
@@ -97,6 +99,8 @@ public:
 	void SetAmbientOcclusionOverrides(const AmbientOcclusionOverrides& overrides) { m_AmbientOcclusionOverrides = overrides; }
 	// 마지막으로 실행한 방식(Off, ScreenSpace, Raytraced)
 	EAmbientOcclusionMode GetActiveAmbientOcclusion() const { return m_AmbientOcclusionActive; }
+	// 디스토션 V2 오프셋 기록 패스 ID (아직 생성되지 않았으면 INVALID_PASS_ID)
+	RenderPassID GetDistortionWritePassID() const { return m_DistortionWritePassID; }
 
 private:
 	SkyAtmosphereData BuildSkyAtmosphereData(Scene* scene);
@@ -130,6 +134,8 @@ private:
 	// sceneCamera는 G-Buffer를 그린 카메라다(TAA 지터 포함).
 	void SubmitDecalPass(const CameraBuffer& sceneCamera, Scene* scene, const DeferredScenePassBindings& passes);
 	bool EnsureTemporalAAPasses(RenderPassID geometryPass, RenderPassID transparentPass, const std::wstring& prefix);
+	bool EnsureDistortionPasses(RenderPassID transparentPass, const std::wstring& prefix, const std::wstring& colorName, const std::wstring& copyName);
+	void SubmitDistortionPasses(const CameraBuffer& sceneCamera, const DeferredScenePassBindings& passes);
 	class Shader* GetOwnedShader(const wchar_t* shaderKey, const wchar_t* shaderFile, EShaderType type, bool& shaderMissing);
 	RHIPipeline* GetRaytracingPipeline(const wchar_t* shaderKey, const wchar_t* shaderFile, bool& shaderMissing);
 	RHIPipeline* GetRaytracedShadowPipeline();
@@ -219,6 +225,13 @@ private:
 	bool m_DecalShaderMissing = false;
 	bool m_DecalFailureLogged = false;
 	bool m_DecalLimitLogged = false;
+
+	// 디스토션 V2: 오프셋 버퍼(R16G16_FLOAT) 기록 패스 및 HDR 씬 컬러 합성 패스
+	RenderPassID m_DistortionWritePassID = INVALID_PASS_ID;
+	RenderPassID m_DistortionCompositePassID = INVALID_PASS_ID;
+	std::wstring m_DistortionOffsetTargetName;
+	bool m_DistortionShaderMissing = false;
+	bool m_DistortionFailureLogged = false;
 };
 
 END

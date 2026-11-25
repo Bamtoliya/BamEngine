@@ -68,6 +68,7 @@ public:
 	[[nodiscard]] Engine::RenderPassID GetLightingPassID() const { return m_LightingPassID; }
 	[[nodiscard]] Engine::RenderPassID GetForwardPassID() const { return m_ForwardPassID; }
 	[[nodiscard]] Engine::RenderPassID GetForwardTransparentPassID() const { return m_ForwardTransparentPassID; }
+	[[nodiscard]] Engine::RenderPassID GetDistortionWritePassID() const { return m_SceneRenderer.GetDistortionWritePassID(); }
 
 	[[nodiscard]] uint32 GetWidth() const { return m_Width; }
 	[[nodiscard]] uint32 GetHeight() const { return m_Height; }

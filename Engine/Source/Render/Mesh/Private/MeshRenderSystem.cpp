@@ -160,7 +160,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
         if (!isShadowPass && !viewport.hasCamera) continue;
         if (passType != ERenderPassType::Geometry && passType != ERenderPassType::Forward &&
-            passType != ERenderPassType::ForwardTransparent && !isShadowPass)
+            passType != ERenderPassType::ForwardTransparent && passType != ERenderPassType::Distortion && !isShadowPass)
             continue;
 
         auto it = std::find_if(targets.begin(), targets.end(), [pass](const PassTarget& t) {

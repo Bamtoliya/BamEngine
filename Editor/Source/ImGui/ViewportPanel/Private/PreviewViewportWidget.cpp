@@ -463,8 +463,11 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	auto& reg = m_PreviewScene->GetRegistry();
 	const uint32 geomPassId = m_Pipeline.GetGeometryPassID();
 	const uint32 transparentPassId = m_Pipeline.GetForwardTransparentPassID();
+	const uint32 distortionPassId = m_Pipeline.GetDistortionWritePassID();
 	const auto meshPass = [&](const Engine::MaterialInterface& material)
 	{
+		if (material.GetPrimaryPassType() == Engine::ERenderPassType::Distortion && distortionPassId != Engine::INVALID_PASS_ID)
+			return distortionPassId;
 		return material.GetPrimaryPassType() == Engine::ERenderPassType::ForwardTransparent ? transparentPassId : geomPassId;
 	};
 
@@ -538,6 +541,11 @@ void PreviewViewportWidget::Submit(Engine::f32 dt)
 	Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, m_Pipeline.GetForwardTransparentPassID());
 	Engine::CompositeVFXSystem::SubmitSceneVFX(m_PreviewScene, cameraBuffer, m_Pipeline.GetGeometryPassID());
 	Engine::CompositeVFXSystem::SubmitSceneVFX(m_PreviewScene, cameraBuffer, m_Pipeline.GetForwardTransparentPassID());
+	if (distortionPassId != Engine::INVALID_PASS_ID)
+	{
+		Engine::ParticleSystem::SubmitSceneParticles(m_PreviewScene, cameraBuffer, distortionPassId);
+		Engine::CompositeVFXSystem::SubmitSceneVFX(m_PreviewScene, cameraBuffer, distortionPassId);
+	}
 
 	const bool showFinalOutput = m_SelectedRTName.empty();
 	m_DisplayRTName = showFinalOutput

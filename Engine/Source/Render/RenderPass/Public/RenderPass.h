@@ -114,6 +114,8 @@ public:
 	bool HasPrePassCopy() const { return !m_Desc.prePassCopySrcRT.empty() && !m_Desc.prePassCopyDstRT.empty(); }
 	const wstring& GetPrePassCopySource() const { return m_Desc.prePassCopySrcRT; }
 	const wstring& GetPrePassCopyDest() const { return m_Desc.prePassCopyDstRT; }
+	RenderPassID GetRequireNonEmptyPassID() const { return m_Desc.requireNonEmptyPassID; }
+	void SetRequireNonEmptyPassID(RenderPassID passID) { m_Desc.requireNonEmptyPassID = passID; }
 #pragma endregion
 
 

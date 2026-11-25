@@ -39,7 +39,7 @@ std::vector<Engine::ViewportCameraInfo> Engine::VFXPassHelper::CollectVFXViewpor
 		if (!viewport.hasCamera || !viewport.acceptsSceneSubmissions || !pass || !pass->IsEnabled()) continue;
 
 		const auto type = pass->GetPassType();
-		if (type != ERenderPassType::Geometry && type != ERenderPassType::ForwardTransparent) continue;
+		if (type != ERenderPassType::Geometry && type != ERenderPassType::ForwardTransparent && type != ERenderPassType::Distortion) continue;
 		if (pass->GetAcceptedBlendModes() == EBlendMode::None) continue;
 
 		if (std::ranges::find(targets, viewport.renderPass, &ViewportCameraInfo::renderPass) == targets.end())

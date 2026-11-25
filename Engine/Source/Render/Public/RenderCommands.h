@@ -29,9 +29,11 @@ struct RenderObjectId
 };
 
 // 지형 텍스처 슬롯(RHI 텍스처 슬롯). 16 이상은 space3(t = 슬롯 - 16)이다. BINDING_LAYOUT.md "지형 바인딩"과 같아야 한다.
-inline constexpr uint32 TerrainHeightmapSlot = MAX_MATERIAL_TEXTURE_SLOTS + 8;   // t8, space3
-inline constexpr uint32 TerrainSplatSlot = MAX_MATERIAL_TEXTURE_SLOTS + 9;       // t9, space3 (레이어 0~3)
-inline constexpr uint32 TerrainSplatExtraSlot = MAX_MATERIAL_TEXTURE_SLOTS + 10; // t10, space3 (레이어 4~7)
+inline constexpr uint32 TerrainLayerNormalBaseSlot = MAX_MATERIAL_TEXTURE_SLOTS + 0; // t0~t7, space3 (레이어 0~7 노멀)
+inline constexpr uint32 TerrainHeightmapSlot = MAX_MATERIAL_TEXTURE_SLOTS + 8;       // t8, space3
+inline constexpr uint32 TerrainSplatSlot = MAX_MATERIAL_TEXTURE_SLOTS + 9;           // t9, space3 (레이어 0~3)
+inline constexpr uint32 TerrainSplatExtraSlot = MAX_MATERIAL_TEXTURE_SLOTS + 10;     // t10, space3 (레이어 4~7)
+inline constexpr uint32 TerrainHoleMaskSlot = MAX_MATERIAL_TEXTURE_SLOTS + 11;       // t11, space3 (구멍 마스크 R8_UNORM)
 
 struct HeightfieldDrawData
 {
@@ -40,14 +42,17 @@ struct HeightfieldDrawData
 	std::shared_ptr<class RHITexture> heightmap;
 	std::shared_ptr<class RHITexture> splatmap;      // 레이어 0~3 가중치 (t9, space3)
 	std::shared_ptr<class RHITexture> splatmapExtra; // 레이어 4~7 가중치 (t10, space3)
+	std::shared_ptr<class RHITexture> holeMask;      // 구멍 마스크 (t11, space3, R8_UNORM)
 	std::shared_ptr<class Mesh> gridMesh;
 	f32 maxHeight = 0.f;
 	vec2 cellSpacing = vec2(1.f);
 
-	// 레이어 i의 알베도(t8+i, space1), 반복 길이(m), 색 배율. 텍스처는 이번 프레임 동안 리소스가 소유한다(없으면 흰 텍스처).
+	// 레이어 i의 알베도(t8+i, space1), 노멀(t0+i, space3), 반복 길이(m), 색 배율, PBR(x=Roughness, y=Metallic, z=HasNormalMap).
 	std::array<class RHITexture*, MaxLayers> layerTextures{};
+	std::array<class RHITexture*, MaxLayers> layerNormalTextures{};
 	std::array<f32, MaxLayers> layerTiling{};
 	std::array<vec4, MaxLayers> layerTints{};
+	std::array<vec4, MaxLayers> layerPbrParams{};
 };
 
 struct StaticDrawCommand

@@ -575,6 +575,7 @@ void MaterialEditor::DrawPipelineSettings()
 		constexpr Engine::ERenderPassType primaryPassValues[] = {
 			Engine::ERenderPassType::Geometry,
 			Engine::ERenderPassType::ForwardTransparent,
+			Engine::ERenderPassType::Distortion,
 			Engine::ERenderPassType::Forward,
 			Engine::ERenderPassType::UI,
 			Engine::ERenderPassType::PostProcess,
@@ -583,6 +584,7 @@ void MaterialEditor::DrawPipelineSettings()
 		constexpr const char* const primaryPassKeys[] = {
 			"MaterialOption.Geometry",
 			"MaterialOption.ForwardTransparent",
+			"MaterialOption.Distortion",
 			"MaterialOption.Forward",
 			"MaterialOption.UI",
 			"MaterialOption.PostProcess",
@@ -611,13 +613,17 @@ void MaterialEditor::DrawPipelineSettings()
 
 			// PrimaryPassType과 BlendMode의 모순을 방지하기 위한 권장 프리셋 자동 보정
 			const auto curBlend = m_Material->GetBlendMode();
-			if (nextPass == Engine::ERenderPassType::ForwardTransparent &&
-				(curBlend == Engine::EBlendMode::Opaque || curBlend == Engine::EBlendMode::Masked))
+			if (nextPass == Engine::ERenderPassType::Distortion)
+			{
+				m_Material->SetBlendMode(Engine::EBlendMode::Distortion);
+			}
+			else if (nextPass == Engine::ERenderPassType::ForwardTransparent &&
+				(curBlend == Engine::EBlendMode::Opaque || curBlend == Engine::EBlendMode::Masked || curBlend == Engine::EBlendMode::Distortion))
 			{
 				m_Material->SetBlendMode(Engine::EBlendMode::AlphaBlend);
 			}
 			else if ((nextPass == Engine::ERenderPassType::Geometry || nextPass == Engine::ERenderPassType::Forward) &&
-				(curBlend == Engine::EBlendMode::AlphaBlend || curBlend == Engine::EBlendMode::Additive || curBlend == Engine::EBlendMode::PureAdditive || curBlend == Engine::EBlendMode::NonPremultiplied))
+				(curBlend == Engine::EBlendMode::AlphaBlend || curBlend == Engine::EBlendMode::Additive || curBlend == Engine::EBlendMode::PureAdditive || curBlend == Engine::EBlendMode::NonPremultiplied || curBlend == Engine::EBlendMode::Distortion))
 			{
 				m_Material->SetBlendMode(Engine::EBlendMode::Opaque);
 			}
@@ -649,7 +655,8 @@ void MaterialEditor::DrawPipelineSettings()
 			Engine::EBlendMode::AlphaBlend,
 			Engine::EBlendMode::Additive,
 			Engine::EBlendMode::PureAdditive,
-			Engine::EBlendMode::NonPremultiplied
+			Engine::EBlendMode::NonPremultiplied,
+			Engine::EBlendMode::Distortion
 		};
 		constexpr const char* const blendKeys[] = {
 			"MaterialOption.Opaque",
@@ -657,7 +664,8 @@ void MaterialEditor::DrawPipelineSettings()
 			"MaterialOption.Translucent",
 			"MaterialOption.Additive",
 			"MaterialOption.PureAdditive",
-			"MaterialOption.NonPremultiplied"
+			"MaterialOption.NonPremultiplied",
+			"MaterialOption.Distortion"
 		};
 		int blendIdx = -1;
 		for (int i = 0; i < static_cast<int>(IM_ARRAYSIZE(blendValues)); ++i)
@@ -869,7 +877,7 @@ void MaterialEditor::DrawShaderSettings()
 	ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.PassSpecificShaders"));
 
 	// 상단 컨트롤: 패스 종류 선택 및 [+ 추가] 버튼
-	constexpr const char* const passNames[] = { "Custom", "Geometry", "Lighting", "Shadow", "Forward", "ForwardTransparent", "PostProcess", "UI" };
+	constexpr const char* const passNames[] = { "Custom", "Geometry", "Lighting", "Shadow", "Forward", "ForwardTransparent", "PostProcess", "UI", "Distortion" };
 	ImGui::SetNextItemWidth(ImGui::GetFontSize() * 8.0f);
 	ImGui::Combo("##NewPassTypeCombo", &m_NewPassTypeIndex, passNames, IM_ARRAYSIZE(passNames));
 	ImGui::SameLine();

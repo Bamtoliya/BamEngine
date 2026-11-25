@@ -106,6 +106,7 @@ public: //Entity Submit
 	void SubmitSprite(const SpriteDrawCommand& command, RenderPassID passID);
 	void SubmitDynamicGeometry(DynamicGeometryDrawCommand command, RenderPassID passID);
 	void SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID);
+	bool HasDrawCommands(RenderPassID passID) const;
 
 #pragma endregion
 

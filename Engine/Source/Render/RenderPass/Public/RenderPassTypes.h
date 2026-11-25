@@ -43,6 +43,7 @@ enum class ERenderPassType : uint8
 	ForwardTransparent,
 	PostProcess,
 	UI,
+	Distortion,
 };
 
 ENUM()
@@ -76,5 +77,7 @@ struct RenderPassDesc
 	bool isEnabled = true;
 	wstring prePassCopySrcRT = { L"" };
 	wstring prePassCopyDstRT = { L"" };
+	// INVALID_PASS_ID가 아니면 지정한 패스에 드로우 커맨드가 1건 이상 제출된 프레임에만 이 패스를 실행한다.
+	RenderPassID requireNonEmptyPassID = INVALID_PASS_ID;
 };
 END

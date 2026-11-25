@@ -16,7 +16,8 @@ enum class EBlendMode
 	Forward = 1 << 5,
 	Decal = 1 << 6,
 	PureAdditive = 1 << 7,
-	ALL = (1 << 8) - 1
+	Distortion = 1 << 8,
+	ALL = (1 << 9) - 1
 };
 
 ENABLE_BITMASK_OPERATORS(EBlendMode)
@@ -122,6 +123,7 @@ struct BlendState
 			enable = true;
 			break;
 		case EBlendMode::PureAdditive:
+		case EBlendMode::Distortion:
 			srcColor = EBlendFactor::One;
 			dstColor = EBlendFactor::One;
 			colorBlendOp = EBlendOp::Add;

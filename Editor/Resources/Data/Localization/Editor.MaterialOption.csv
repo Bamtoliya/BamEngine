@@ -5,6 +5,7 @@ MaterialOption,Always,Always,항상 통과
 MaterialOption,Back,Back (Back-face Culling),뒷면 (후면 컬링)
 MaterialOption,Custom,Custom,사용자 정의
 MaterialOption,Decal,Decal,데칼
+MaterialOption,Distortion,Distortion,왜곡 (Distortion)
 MaterialOption,Equal,Equal (==),같음 (==)
 MaterialOption,Forward,Forward,포워드
 MaterialOption,ForwardTransparent,ForwardTransparent,포워드 투명

@@ -184,16 +184,19 @@ EResult Renderer::Render(f32 dt)
 			continue;
 		// ── [핵심 최적화] 실제 수행할 작업이 전혀 없는 빈 패스(Empty Pass) 완전 스킵 ──
 		const RenderPassID pid = pass->GetID();
+		if (pass->GetRequireNonEmptyPassID() != INVALID_PASS_ID && !HasDrawCommands(pass->GetRequireNonEmptyPassID()))
+			continue;
+
 		auto delIt = m_RenderPassDelegates.find(pid);
 		const bool hasDelegate = (delIt != m_RenderPassDelegates.end() && delIt->second.IsBound());
 		const bool hasCommands =
-			(m_StaticDrawCommands.find(pid) != m_StaticDrawCommands.end() && !m_StaticDrawCommands.at(pid).empty()) ||
-			(m_SkinnedDrawCommands.find(pid) != m_SkinnedDrawCommands.end() && !m_SkinnedDrawCommands.at(pid).empty()) ||
-			(m_SpriteDrawCommands.find(pid) != m_SpriteDrawCommands.end() && !m_SpriteDrawCommands.at(pid).empty()) ||
-			(m_UIImageDrawCommands.find(pid) != m_UIImageDrawCommands.end() && !m_UIImageDrawCommands.at(pid).empty()) ||
-			(m_DynamicGeometryDrawCommands.find(pid) != m_DynamicGeometryDrawCommands.end() && !m_DynamicGeometryDrawCommands.at(pid).empty()) ||
+			HasDrawCommands(pid) ||
 			(m_CustomRenderQueues.find(pid) != m_CustomRenderQueues.end() && !m_CustomRenderQueues.at(pid).empty()) ||
 			hasDelegate;
+
+		// 디스토션 오프셋 기록 패스는 제출된 드로우가 0건이면 클리어조차 건너뛰어 비용 0을 유지한다.
+		if (passType == ERenderPassType::Distortion && !hasCommands)
+			continue;
 
 		auto jobsIt = jobsPerPass.find(pid);
 		const bool hasJobs = (jobsIt != jobsPerPass.end() && !jobsIt->second.empty());
@@ -792,18 +795,23 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			if (!heightfield.heightmap || !heightfield.splatmap || !sampler)
 				return EResult::Fail;
 
-			// 높이맵·스플랫은 머티리얼 텍스처 범위(t0~t7, space1, 셰이더 그래프가 씀) 밖의 space3에 둔다.
+			// 높이맵·스플랫·구멍 마스크·레이어 노멀은 머티리얼 텍스처 범위(t0~t7, space1, 셰이더 그래프가 씀) 밖의 space3에 둔다.
 			// space3 샘플러는 s0~s7뿐이라 슬롯 16 이상은 텍스처만 묶는다(셰이더는 Load 또는 space1 샘플러로 읽는다).
 			if (IsFailure(m_RHI->BindTexture(heightfield.heightmap.get(), TerrainHeightmapSlot)) ||
 				IsFailure(m_RHI->BindTexture(heightfield.splatmap.get(), TerrainSplatSlot)))
 				return EResult::Fail;
-			// 레이어 4~7 가중치와 레이어 알베도(t8~t15, space1). 비어 있는 슬롯은 묶지 않는다(지형 시스템이 흰 텍스처로 채운다).
+			// 레이어 4~7 가중치, 구멍 마스크, 레이어 알베도(t8~t15, space1), 레이어 노멀(t0~t7, space3).
 			if (heightfield.splatmapExtra && IsFailure(m_RHI->BindTexture(heightfield.splatmapExtra.get(), TerrainSplatExtraSlot)))
+				return EResult::Fail;
+			if (heightfield.holeMask && IsFailure(m_RHI->BindTexture(heightfield.holeMask.get(), TerrainHoleMaskSlot)))
 				return EResult::Fail;
 			for (uint32 layer = 0; layer < HeightfieldDrawData::MaxLayers; ++layer)
 			{
 				if (heightfield.layerTextures[layer] &&
 					IsFailure(m_RHI->BindTextureSampler(heightfield.layerTextures[layer], sampler, 8 + layer)))
+					return EResult::Fail;
+				if (heightfield.layerNormalTextures[layer] &&
+					IsFailure(m_RHI->BindTexture(heightfield.layerNormalTextures[layer], TerrainLayerNormalBaseSlot + layer)))
 					return EResult::Fail;
 			}
 
@@ -812,11 +820,13 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			struct TerrainObjectData
 			{
 				SceneUBO object;
-				vec4 layerTiling[2];                       // 레이어 0~7 반복 길이(m)
-				vec4 layerTint[HeightfieldDrawData::MaxLayers]; // 레이어 색 배율
+				vec4 layerTiling[2];                                // 레이어 0~7 반복 길이(m)
+				vec4 layerTint[HeightfieldDrawData::MaxLayers];     // 레이어 색 배율
+				vec4 layerPbrParams[HeightfieldDrawData::MaxLayers];// x: Roughness, y: Metallic, z: HasNormalMap(0/1)
 			};
 			static_assert(offsetof(TerrainObjectData, layerTiling) == 96);
-			static_assert(sizeof(TerrainObjectData) == 256);
+			static_assert(offsetof(TerrainObjectData, layerPbrParams) == 256);
+			static_assert(sizeof(TerrainObjectData) == 384);
 
 			TerrainObjectData objectData{};
 			objectData.object.worldMatrix = command.worldMatrix;
@@ -827,6 +837,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			{
 				objectData.layerTiling[layer / 4][layer % 4] = heightfield.layerTiling[layer];
 				objectData.layerTint[layer] = heightfield.layerTints[layer];
+				objectData.layerPbrParams[layer] = heightfield.layerPbrParams[layer];
 			}
 
 			lastMaterial = nullptr;
@@ -1526,7 +1537,7 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 		{
 			if (!command.mesh || !command.objectId.IsValid()) continue;
 			const auto* previous = history.FindMoved(command.objectId.GetKey() | skinnedKeyBit);
-			if (!previous || command.mesh->IsDynamic() || !command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
+			if (!previous || !command.mesh->IsSkinned() || command.mesh->GetTopology() != ETopology::TriangleList) continue;
 			if (drawCount >= maxSkinnedDraws) break;
 
 			if (!bindPipeline(info.skinnedVertexShader, *command.mesh, 3u)) continue;
@@ -1639,6 +1650,17 @@ void Renderer::SubmitDynamicGeometry(DynamicGeometryDrawCommand command, RenderP
 void Renderer::SubmitUIImage(const UIImageDrawCommand& command, RenderPassID passID)
 {
 	m_UIImageDrawCommands[passID].push_back(command);
+}
+bool Renderer::HasDrawCommands(RenderPassID passID) const
+{
+	const auto nonEmpty = [passID](const auto& table)
+		{
+			const auto it = table.find(passID);
+			return it != table.end() && !it->second.empty();
+		};
+	return nonEmpty(m_StaticDrawCommands) || nonEmpty(m_SkinnedDrawCommands) ||
+		nonEmpty(m_SpriteDrawCommands) || nonEmpty(m_UIImageDrawCommands) ||
+		nonEmpty(m_DynamicGeometryDrawCommands);
 }
 #pragma endregion
 
@@ -1868,9 +1890,20 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	desc.fillMode = material->GetFillMode();
 	desc.blendState = material->GetBlendState();
 	const bool hasDepthStencil = desc.depthStencilAttachmentFormat != ETextureFormat::UNKNOWN;
-	desc.depthStencilState.depthTestEnable = hasDepthStencil && material->GetDepthMode() != EDepthMode::None;
-	desc.depthStencilState.depthWriteEnable = hasDepthStencil && material->GetDepthMode() == EDepthMode::ReadWrite;
-	desc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
+	if (passType == ERenderPassType::Distortion)
+	{
+		// 디스토션 V2 오프셋 버퍼는 반투명 메시·파티클·트레일이 Additive(One/One)로 누적하며 깊이 테스트 LessEqual, 깊이 쓰기 Off를 보장한다.
+		desc.blendState = BlendState(EBlendMode::Distortion);
+		desc.depthStencilState.depthTestEnable = hasDepthStencil;
+		desc.depthStencilState.depthWriteEnable = false;
+		desc.depthStencilState.depthCompareOp = ECompareOp::LessOrEqual;
+	}
+	else
+	{
+		desc.depthStencilState.depthTestEnable = hasDepthStencil && material->GetDepthMode() != EDepthMode::None;
+		desc.depthStencilState.depthWriteEnable = hasDepthStencil && material->GetDepthMode() == EDepthMode::ReadWrite;
+		desc.depthStencilState.depthCompareOp = material->GetDepthCompareOp();
+	}
 	return EResult::Success;
 }
 

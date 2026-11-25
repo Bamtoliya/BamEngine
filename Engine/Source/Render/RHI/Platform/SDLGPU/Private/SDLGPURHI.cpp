@@ -736,8 +736,8 @@ EResult SDLGPURHI::BeginRenderPass(RenderPass* renderPass)
 				depthInfo.cycle = false;
 				depthInfo.clear_stencil = 0;
 				depthInfo.clear_depth = 1.f;
-				depthInfo.load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetLoadOperation())];
-				depthInfo.store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStoreOperation())];
+				depthInfo.load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetStencilLoadOperation())];
+				depthInfo.store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStencilStoreOperation())];
 				depthInfo.stencil_load_op = SDL_GPURenderPassLoadOperations[static_cast<uint8>(renderPass->GetStencilLoadOperation())];
 				depthInfo.stencil_store_op = SDL_GPURenderPassStoreOperations[static_cast<uint8>(renderPass->GetStencilStoreOperation())];
 			}
