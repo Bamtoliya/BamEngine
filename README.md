@@ -1,4 +1,4 @@
-# BamEngine
+﻿# BamEngine
 
 [한국어](README.md) | [English](README.en.md)
 
@@ -15,8 +15,8 @@
 
 ## 시연 영상
 
+[![BamEngine Demo](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/maxresdefault.jpg)](https://youtu.be/laocWytRGds)
 <!-- 업로드한 YouTube 영상의 ID로 YOUTUBE_VIDEO_ID 두 곳을 교체하고 아래 주석을 해제하세요.
-[![BamEngine Demo](https://img.youtube.com/vi/YOUTUBE_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUTUBE_VIDEO_ID)
 -->
 > 메인 시연 영상 추가 예정.
 
