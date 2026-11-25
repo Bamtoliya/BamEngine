@@ -356,6 +356,222 @@ Mesh* TerrainUtility::CreateGridMesh(float width, float length, uint32 segmentsX
 	return Mesh::Create(&desc);
 }
 
+Mesh* TerrainUtility::CreateChunkGridMesh(float width, float length, uint32 resolution, uint32 minVertexX, uint32 maxVertexX, uint32 minVertexZ, uint32 maxVertexZ, uint32 lodStep)
+{
+	if (!std::isfinite(width) || width <= 0.0f || !std::isfinite(length) || length <= 0.0f ||
+		resolution == 0 || resolution > TerrainComponent::MaxResolution ||
+		minVertexX >= maxVertexX || maxVertexX > resolution ||
+		minVertexZ >= maxVertexZ || maxVertexZ > resolution || lodStep == 0)
+		return nullptr;
+
+	std::vector<uint32> xs;
+	std::vector<uint32> zs;
+	for (uint32 x = minVertexX; x < maxVertexX; x += lodStep) xs.push_back(x);
+	xs.push_back(maxVertexX);
+	for (uint32 z = minVertexZ; z < maxVertexZ; z += lodStep) zs.push_back(z);
+	zs.push_back(maxVertexZ);
+
+	const uint32 segmentsX = static_cast<uint32>(xs.size() - 1);
+	const uint32 segmentsZ = static_cast<uint32>(zs.size() - 1);
+	TerrainGridMeshLayout layout;
+	if (!TryGetTerrainGridMeshLayout(segmentsX, segmentsZ, layout))
+		return nullptr;
+
+	const float startX = -width * 0.5f;
+	const float startZ = -length * 0.5f;
+	const float invResolution = 1.0f / static_cast<float>(resolution);
+
+	std::vector<VertexPosition> positions(layout.VertexCount);
+	std::vector<VertexMaterial> materials(layout.VertexCount);
+	std::vector<uint32> indices(layout.IndexCount);
+
+	uint32 vertexIndex = 0;
+	for (uint32 iz = 0; iz < layout.Rows; ++iz)
+	{
+		const float v = static_cast<float>(zs[iz]) * invResolution;
+		const float currentZ = startZ + v * length;
+
+		for (uint32 ix = 0; ix < layout.Columns; ++ix)
+		{
+			const float u = static_cast<float>(xs[ix]) * invResolution;
+			const float currentX = startX + u * width;
+
+			positions[vertexIndex].position = vec3(currentX, 0.0f, currentZ);
+
+			auto& material = materials[vertexIndex];
+			material.texCoord = vec2(u, v);
+			material.texCoord1 = material.texCoord;
+			material.normal = vec3(0.0f, 1.0f, 0.0f);
+			material.tangent = vec3(1.0f, 0.0f, 0.0f);
+			material.binormal = vec3(0.0f, 0.0f, 1.0f);
+			material.color = vec4(1.0f);
+			++vertexIndex;
+		}
+	}
+
+	uint32 index = 0;
+	for (uint32 z = 0; z < segmentsZ; ++z)
+	{
+		for (uint32 x = 0; x < segmentsX; ++x)
+		{
+			const uint32 i0 = z * layout.Columns + x;
+			const uint32 i1 = i0 + 1;
+			const uint32 i2 = i0 + layout.Columns;
+			const uint32 i3 = i2 + 1;
+
+			indices[index++] = i0;
+			indices[index++] = i2;
+			indices[index++] = i1;
+			indices[index++] = i1;
+			indices[index++] = i2;
+			indices[index++] = i3;
+		}
+	}
+
+	const float minLocalX = startX + (static_cast<float>(minVertexX) * invResolution) * width;
+	const float maxLocalX = startX + (static_cast<float>(maxVertexX) * invResolution) * width;
+	const float minLocalZ = startZ + (static_cast<float>(minVertexZ) * invResolution) * length;
+	const float maxLocalZ = startZ + (static_cast<float>(maxVertexZ) * invResolution) * length;
+
+	MeshCreateDesc desc{};
+	desc.Streams[static_cast<uint32>(EMeshStream::Position)] =
+	{ positions.data(), layout.VertexCount, sizeof(VertexPosition) };
+	desc.Streams[static_cast<uint32>(EMeshStream::Material)] =
+	{ materials.data(), layout.VertexCount, sizeof(VertexMaterial) };
+	desc.IndexData = indices.data();
+	desc.IndexCount = layout.IndexCount;
+	desc.IndexStride = sizeof(uint32);
+	desc.BoundingBoxMin = vec3(minLocalX, 0.0f, minLocalZ);
+	desc.BoundingBoxMax = vec3(maxLocalX, 0.0f, maxLocalZ);
+	desc.Flags = EMeshFlag::KeepRawData | EMeshFlag::HasPosition | EMeshFlag::HasNormal |
+		EMeshFlag::HasTexCoord | EMeshFlag::HasTangent;
+
+	return Mesh::Create(&desc);
+}
+
+bool TerrainUtility::ComputeChunkRange(uint32 resolution, uint32 chunkCountPerAxis, uint32 chunkX, uint32 chunkZ, uint32& outMinVertexX, uint32& outMaxVertexX, uint32& outMinVertexZ, uint32& outMaxVertexZ, vec2& outUVOffset, vec2& outUVScale)
+{
+	if (resolution == 0 || resolution > TerrainComponent::MaxResolution || chunkCountPerAxis == 0)
+		return false;
+
+	const uint32 effectiveChunks = std::clamp(chunkCountPerAxis, 1u, std::min(resolution, TerrainComponent::MaxChunkCountPerAxis));
+	if (chunkX >= effectiveChunks || chunkZ >= effectiveChunks)
+		return false;
+
+	outMinVertexX = static_cast<uint32>((static_cast<uint64>(chunkX) * resolution) / effectiveChunks);
+	outMaxVertexX = static_cast<uint32>((static_cast<uint64>(chunkX + 1u) * resolution) / effectiveChunks);
+	outMinVertexZ = static_cast<uint32>((static_cast<uint64>(chunkZ) * resolution) / effectiveChunks);
+	outMaxVertexZ = static_cast<uint32>((static_cast<uint64>(chunkZ + 1u) * resolution) / effectiveChunks);
+	if (outMinVertexX >= outMaxVertexX || outMinVertexZ >= outMaxVertexZ)
+		return false;
+
+	const f32 invResolution = 1.0f / static_cast<f32>(resolution);
+	outUVOffset = vec2(static_cast<f32>(outMinVertexX) * invResolution, static_cast<f32>(outMinVertexZ) * invResolution);
+	outUVScale = vec2(static_cast<f32>(outMaxVertexX - outMinVertexX) * invResolution, static_cast<f32>(outMaxVertexZ - outMinVertexZ) * invResolution);
+	return true;
+}
+
+bool TerrainUtility::ComputeChunkLocalBounds(const TerrainComponent& terrain, uint32 minVertexX, uint32 maxVertexX, uint32 minVertexZ, uint32 maxVertexZ, BoundingBox& outLocalBounds)
+{
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!std::isfinite(terrain.Width) || terrain.Width <= 0.0f ||
+		!std::isfinite(terrain.Length) || terrain.Length <= 0.0f ||
+		!std::isfinite(terrain.MaxHeight) || terrain.MaxHeight < 0.0f ||
+		!TryGetGridLayout(terrain.Resolution, axisCount, sampleCount) ||
+		minVertexX >= maxVertexX || maxVertexX > terrain.Resolution ||
+		minVertexZ >= maxVertexZ || maxVertexZ > terrain.Resolution)
+		return false;
+
+	const f32 invResolution = 1.0f / static_cast<f32>(terrain.Resolution);
+	const f32 minX = -terrain.Width * 0.5f + static_cast<f32>(minVertexX) * invResolution * terrain.Width;
+	const f32 maxX = -terrain.Width * 0.5f + static_cast<f32>(maxVertexX) * invResolution * terrain.Width;
+	const f32 minZ = -terrain.Length * 0.5f + static_cast<f32>(minVertexZ) * invResolution * terrain.Length;
+	const f32 maxZ = -terrain.Length * 0.5f + static_cast<f32>(maxVertexZ) * invResolution * terrain.Length;
+
+	f32 minY = 0.0f;
+	f32 maxY = terrain.MaxHeight;
+	if (terrain.HeightData.size() == sampleCount)
+	{
+		f32 minH = 1.0f;
+		f32 maxH = 0.0f;
+		for (uint32 z = minVertexZ; z <= maxVertexZ; ++z)
+		{
+			const std::size_t rowOffset = static_cast<std::size_t>(z) * axisCount;
+			for (uint32 x = minVertexX; x <= maxVertexX; ++x)
+			{
+				const f32 raw = terrain.HeightData[rowOffset + x];
+				const f32 h = std::isfinite(raw) ? std::clamp(raw, 0.0f, 1.0f) : 0.0f;
+				minH = (std::min)(minH, h);
+				maxH = (std::max)(maxH, h);
+			}
+		}
+		minY = minH * terrain.MaxHeight;
+		maxY = maxH * terrain.MaxHeight;
+	}
+
+	outLocalBounds = BoundingBox(vec3(minX, minY, minZ), vec3(maxX, maxY, maxZ));
+	return outLocalBounds.IsValid();
+}
+
+bool TerrainUtility::ComputeChunkWorldBounds(const BoundingBox& localBounds, const mat4& worldMatrix, BoundingBox& outWorldBounds)
+{
+	return localBounds.TryTransformToAABB(worldMatrix, outWorldBounds);
+}
+
+f32 TerrainUtility::ComputeDistanceToBoundingBox(const vec3& point, const BoundingBox& bounds)
+{
+	const vec3 clamped = glm::clamp(point, bounds.min, bounds.max);
+	return glm::length(point - clamped);
+}
+
+uint32 TerrainUtility::SelectChunkLOD(f32 distance, uint32 previousLOD, f32 lod0Distance, f32 lod1Distance, f32 lod2Distance, f32 hysteresis)
+{
+	const f32 d0 = std::isfinite(lod0Distance) ? (std::max)(0.0f, lod0Distance) : 80.0f;
+	const f32 d1 = std::isfinite(lod1Distance) ? (std::max)(d0, lod1Distance) : (std::max)(d0, 180.0f);
+	(void)lod2Distance;
+	const f32 dist = std::isfinite(distance) ? (std::max)(0.0f, distance) : 0.0f;
+	const f32 h = (previousLOD < TerrainComponent::MaxLODLevels && std::isfinite(hysteresis)) ? (std::max)(0.0f, hysteresis) : 0.0f;
+
+	if (previousLOD >= TerrainComponent::MaxLODLevels || h <= 0.0f)
+	{
+		if (dist <= d0) return 0u;
+		if (dist <= d1) return 1u;
+		return 2u;
+	}
+
+	if (previousLOD == 0u)
+	{
+		if (dist > d1 + h) return 2u;
+		if (dist > d0 + h) return 1u;
+		return 0u;
+	}
+	if (previousLOD == 1u)
+	{
+		if (dist < (std::max)(0.0f, d0 - h)) return 0u;
+		if (dist > d1 + h) return 2u;
+		return 1u;
+	}
+	if (dist < (std::max)(0.0f, d0 - h)) return 0u;
+	if (dist < (std::max)(0.0f, d1 - h)) return 1u;
+	return 2u;
+}
+
+bool TerrainUtility::ShouldChunkBeLoaded(f32 distance, bool currentlyLoaded, f32 loadDistance, f32 hysteresis)
+{
+	if (!std::isfinite(loadDistance) || loadDistance <= 0.0f)
+		return true;
+
+	const f32 dist = std::isfinite(distance) ? (std::max)(0.0f, distance) : 0.0f;
+	const f32 h = std::isfinite(hysteresis) ? (std::max)(0.0f, hysteresis) : 0.0f;
+	return currentlyLoaded ? (dist <= loadDistance + h) : (dist <= loadDistance);
+}
+
+bool TerrainUtility::IsChunkVisibleInFrustum(const Frustum& frustum, const BoundingBox& worldBounds)
+{
+	return FrustumCuller::TestBoundingBox(frustum, worldBounds);
+}
+
 bool TerrainUtility::ApplyBrush(TerrainComponent& terrain, const glm::vec3& hitWorldPos, const glm::mat4& worldMatrix, const TerrainBrushParams& params, float dt)
 {
 	uint32 vertexAxisCount = 0;
@@ -607,7 +823,8 @@ bool TerrainUtility::EnsureLayerData(TerrainComponent& terrain)
 	const bool splatChanged = FitLayerPlane(terrain.SplatData, TerrainComponent::LayersPerPlane, terrain.Resolution, sampleCount, 255);
 	const bool extraChanged = FitLayerPlane(terrain.SplatDataExtra, TerrainComponent::LayersPerPlane, terrain.Resolution, sampleCount, 0);
 	const bool attributeChanged = FitLayerPlane(terrain.AttributeData, 1, terrain.Resolution, sampleCount, 0);
-	if (splatChanged) terrain.IsSplatDirty = true;
+	if (splatChanged || extraChanged) terrain.IsSplatDirty = true;
+	if (attributeChanged) terrain.IsAttributeDirty = true;
 	return splatChanged || extraChanged || attributeChanged;
 }
 
@@ -656,7 +873,11 @@ bool TerrainUtility::ApplyAttributePaint(TerrainComponent& terrain, const vec3& 
 			terrain.AttributeData[index] = attribute;
 			return true;
 		});
-	if (modified) terrain.IsDataDirty = true;
+	if (modified)
+	{
+		terrain.IsAttributeDirty = true;
+		terrain.IsDataDirty = true;
+	}
 	return modified;
 }
 

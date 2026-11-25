@@ -2,6 +2,7 @@ Group,Key,English,Korean
 TerrainEditor,AttributeBlocked,Blocked,이동 불가
 TerrainEditor,AttributeErase,Erase,지우기
 TerrainEditor,AttributeHint,Invisible gameplay mask. Navigation reads it in a later step.,보이지 않는 게임플레이 마스크입니다. 내비게이션은 이후 단계에서 읽습니다.
+TerrainEditor,AttributeHole,Hole,구멍
 TerrainEditor,AttributePalette,Attribute,속성
 TerrainEditor,AttributeTool,Paint Attributes,속성 페인트
 TerrainEditor,AttributeWater,Water,물

@@ -1,4 +1,5 @@
 #include "NavGrid.h"
+#include "NavMesh.h"
 #include "NavAgentComponent.h"
 #include "AIPerceptionComponent.h"
 #include "NavigationSystem.h"
@@ -451,6 +452,145 @@ namespace
 		std::filesystem::remove_all(folder, ec);
 		return true;
 	}
+
+	bool TestMultiLayerNavMesh()
+	{
+		// 5-1. 다층(1층 바닥 + 램프 + 2층 오버패스 다리 + 급경사 필터링) 베이크 검증
+		NavMeshBuildInput input;
+		input.settings.maxSlopeDegrees = 45.0f;
+		input.settings.maxStepHeight = 0.5f;
+
+		// 1층 바닥 (y = 0, x: -6..6, z: -6..6)
+		input.AddQuad(vec3(-6.0f, 0.0f, -6.0f), vec3(-6.0f, 0.0f, 6.0f), vec3(6.0f, 0.0f, 6.0f), vec3(6.0f, 0.0f, -6.0f));
+
+		// 1층(x=2) -> 2층(x=6)으로 올라가는 램프 (z: -1..1, 경사각 atan(3/4) ≈ 36.87 deg <= 45 deg)
+		input.AddQuad(vec3(2.0f, 0.0f, -1.0f), vec3(2.0f, 0.0f, 1.0f), vec3(6.0f, 3.0f, 1.0f), vec3(6.0f, 3.0f, -1.0f));
+
+		// 2층 오버패스 다리 (y = 3, x: -4..6, z: -1..1) — 1층 바닥과 XZ가 겹치는 2층 레이어
+		input.AddQuad(vec3(-4.0f, 3.0f, -1.0f), vec3(-4.0f, 3.0f, 1.0f), vec3(6.0f, 3.0f, 1.0f), vec3(6.0f, 3.0f, -1.0f));
+
+		// 60도 초과 급경사 삼각형 (필터링되어야 함)
+		input.AddTriangle(vec3(-5.0f, 0.0f, -5.0f), vec3(-5.0f, 0.0f, -4.0f), vec3(-4.5f, 3.0f, -4.5f));
+
+		NavMesh navMesh;
+		if (!navMesh.Build(input))
+		{
+			std::cerr << "NavMesh::Build failed for multi-layer geometry.\n";
+			return false;
+		}
+
+		// 1층(2) + 램프(2) + 2층(2) = 6개 삼각형만 남아야 함 (급경사 1개 제외)
+		if (navMesh.GetPolygonCount() != 6)
+		{
+			std::cerr << "NavMesh slope filtering mismatch. Expected 6 polygons, got " << navMesh.GetPolygonCount() << ".\n";
+			return false;
+		}
+
+		// 2층 다리 위 좌표는 1층(y=0)이 아닌 2층(y=3) 폴리곤을 선택해야 함
+		vec3 snappedUpper(0.0f);
+		const int32 upperPoly = navMesh.FindClosestPolygon(vec3(0.0f, 3.1f, 0.0f), &snappedUpper);
+		if (upperPoly < 0 || std::abs(snappedUpper.y - 3.0f) > 0.1f)
+		{
+			std::cerr << "NavMesh::FindClosestPolygon did not select upper bridge layer.\n";
+			return false;
+		}
+
+		// 5-2. 1층(-3, 0, 0) -> 2층 다리(-2, 3, 0) 3D 경로 탐색 (램프 경유 필수)
+		const vec3 startPos(-3.0f, 0.0f, 0.0f);
+		const vec3 goalPos(-2.0f, 3.0f, 0.0f);
+		std::vector<vec3> path;
+		if (!navMesh.FindPath(startPos, goalPos, path) || path.size() < 3)
+		{
+			std::cerr << "NavMesh::FindPath failed on multi-layer ramp + bridge.\n";
+			return false;
+		}
+
+		bool visitedRampEntry = false;
+		for (const auto& wp : path)
+		{
+			if (wp.x >= 1.9f)
+			{
+				visitedRampEntry = true;
+			}
+		}
+		if (!visitedRampEntry || std::abs(path.back().y - 3.0f) > 0.1f)
+		{
+			std::cerr << "Multi-layer NavMesh path did not traverse ramp to reach upper bridge.\n";
+			return false;
+		}
+
+		// 5-3. .bamnavmesh UTF-8/한글 경로 저장 → 재로드 왕복 검증
+		const auto folder = std::filesystem::temp_directory_path() / L"BamNavMeshCheck";
+		std::error_code ec;
+		std::filesystem::remove_all(folder, ec);
+		std::filesystem::create_directories(folder, ec);
+		const auto filePath = folder / L"다층_네비.bamnavmesh";
+
+		if (!navMesh.SaveToFile(filePath))
+		{
+			std::cerr << "NavMesh::SaveToFile failed.\n";
+			return false;
+		}
+
+		auto loadedMesh = std::make_shared<NavMesh>();
+		if (!loadedMesh->LoadFromFile(filePath) ||
+			loadedMesh->GetPolygonCount() != navMesh.GetPolygonCount() ||
+			loadedMesh->GetVertexCount() != navMesh.GetVertexCount())
+		{
+			std::cerr << "NavMesh::LoadFromFile failed or mismatched counts.\n";
+			std::filesystem::remove_all(folder, ec);
+			return false;
+		}
+
+		std::vector<vec3> reloadedPath;
+		if (!loadedMesh->FindPath(startPos, goalPos, reloadedPath) || reloadedPath.size() != path.size())
+		{
+			std::cerr << "Reloaded NavMesh produced a different path.\n";
+			std::filesystem::remove_all(folder, ec);
+			return false;
+		}
+		std::filesystem::remove_all(folder, ec);
+
+		// 5-4. NavigationSystem NavMesh 우선 사용 및 3D 에이전트 이동 검증
+		std::unique_ptr<Scene, ReleaseObject> scene(Scene::Create());
+		if (!scene)
+		{
+			std::cerr << "Failed to create scene for NavMesh NavigationSystem test.\n";
+			return false;
+		}
+		NavigationSystem::SetSceneNavMesh(scene.get(), loadedMesh);
+
+		auto& world = scene->GetRegistry();
+		const auto agentEntity = scene->CreateEntity().GetEntityHandle();
+		auto& tr = world.get_or_emplace<TransformComponent>(agentEntity);
+		auto& wt = world.get_or_emplace<WorldTransformComponent>(agentEntity);
+		tr.SetLocalPosition(startPos);
+		TransformSystem::UpdateRootWorld(tr, wt);
+
+		auto& agent = world.emplace<NavAgentComponent>(agentEntity);
+		agent.moveSpeed = 8.0f;
+		agent.stoppingDistance = 0.25f;
+		agent.SetDestination(goalPos);
+
+		for (int step = 0; step < 120; ++step)
+		{
+			NavigationSystem::ProcessScene(*scene, 0.05f);
+			if (agent.reachedDestination)
+			{
+				break;
+			}
+		}
+
+		if (!agent.reachedDestination || std::abs(tr.position.y - 3.0f) > 0.35f)
+		{
+			std::cerr << "NavAgent failed to climb ramp onto 2nd floor bridge via NavigationSystem NavMesh.\n";
+			NavigationSystem::RemoveSceneNavMesh(scene.get());
+			return false;
+		}
+
+		NavigationSystem::RemoveSceneNavMesh(scene.get());
+		return true;
+	}
 }
 
 int main()
@@ -480,6 +620,13 @@ int main()
 	if (!TestTerrainNavGridBakeAndPersistence())
 	{
 		std::cerr << "[NavigationAICheck] FAILED: Terrain NavGrid bake & persistence\n";
+		return 1;
+	}
+
+	std::cout << "[NavigationAICheck] Running 3D Multi-Layer NavMesh tests...\n";
+	if (!TestMultiLayerNavMesh())
+	{
+		std::cerr << "[NavigationAICheck] FAILED: 3D Multi-Layer NavMesh\n";
 		return 1;
 	}
 

@@ -161,6 +161,8 @@ public:
 	[[nodiscard]] static archive::ArchiveResult CreateFromArchive(const archive::IArchive& ar, Scene*& scene);
 	const std::string& GetNavGridPath() const { return m_NavGridPath; }
 	void SetNavGridPath(std::string path) { m_NavGridPath = std::move(path); }
+	const std::string& GetNavMeshPath() const { return m_NavMeshPath; }
+	void SetNavMeshPath(std::string path) { m_NavMeshPath = std::move(path); }
 	[[nodiscard]] archive::ArchiveResult WritePrefabArchive(archive::IArchive& ar, const Entity& rootEntity) const;
 	[[nodiscard]] archive::ArchiveResult InstantiatePrefabArchive(const archive::IArchive& ar, Entity*& outRootEntity, Entity* parent = nullptr);
 #pragma endregion
@@ -180,6 +182,7 @@ protected:
 	wstring m_Name = { L"Scene" };
 
 	std::string m_NavGridPath;
+	std::string m_NavMeshPath;
 #pragma endregion
 };
 

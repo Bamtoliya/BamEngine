@@ -230,9 +230,10 @@ int CheckLayersAndAttributes()
 		TerrainUtility::TryGetGridLayout(TerrainComponent::MaxResolution + 1, axis, samples))
 		return Fail("Terrain resolution must allow 1024 divisions (1025 vertices) and reject more.");
 
-	// v2 왕복: 레이어 4~7과 속성 맵이 보존된다
+	// v2 왕복: 레이어 4~7과 속성 맵(Blocked·Hole 포함)이 보존된다
 	TerrainDataContent content{ 2, std::vector<f32>(9, 0.25f), std::vector<uint8>(36, 10), std::vector<uint8>(36, 20), std::vector<uint8>(9, 0) };
 	content.Attributes[4] = static_cast<uint8>(ETerrainAttribute::Blocked);
+	content.Attributes[5] = static_cast<uint8>(ETerrainAttribute::Hole);
 	content.SplatExtra[7] = 99;
 	TerrainDataContent read;
 	if (!TerrainDataFile::Write(folder / L"v2.bamterrain", content) || !TerrainDataFile::Read(folder / L"v2.bamterrain", read) ||
@@ -277,10 +278,20 @@ int CheckLayersAndAttributes()
 		return Fail("Painted layer weights across 8 layers must stay normalized to 255.");
 
 	if (!TerrainUtility::ApplyAttributePaint(terrain, hit, world, static_cast<uint8>(ETerrainAttribute::Water), 1.0f) ||
-		terrain.AttributeData.size() != 25 || terrain.AttributeData[underCursor] != static_cast<uint8>(ETerrainAttribute::Water) || terrain.AttributeData[origin] != 0)
+		terrain.AttributeData.size() != 25 || terrain.AttributeData[underCursor] != static_cast<uint8>(ETerrainAttribute::Water) || terrain.AttributeData[origin] != 0 ||
+		!terrain.IsAttributeDirty)
 		return Fail("Attribute paint must mark only the vertices under the cursor.");
 	if (TerrainUtility::ApplyAttributePaint(terrain, hit, world, static_cast<uint8>(ETerrainAttribute::Water), 1.0f))
 		return Fail("Repainting the same attribute must report no change.");
+
+	// ETerrainAttribute::Hole 페인트 및 재페인트 판정
+	terrain.IsAttributeDirty = false;
+	if (!TerrainUtility::ApplyAttributePaint(terrain, hit, world, static_cast<uint8>(ETerrainAttribute::Hole), 1.0f) ||
+		terrain.AttributeData[underCursor] != static_cast<uint8>(ETerrainAttribute::Hole) || terrain.AttributeData[origin] != 0 ||
+		!terrain.IsAttributeDirty || !terrain.IsDataDirty)
+		return Fail("Hole attribute paint must mark only the vertices under the cursor and set dirty flags.");
+	if (TerrainUtility::ApplyAttributePaint(terrain, hit, world, static_cast<uint8>(ETerrainAttribute::Hole), 1.0f))
+		return Fail("Repainting the Hole attribute must report no change.");
 
 	// 해상도가 바뀌면 레이어 4~7·속성 맵도 새 크기로 맞춘다
 	terrain.Resolution = 8;
@@ -315,6 +326,8 @@ int CheckTerrainLayerAsset()
 	const auto path = folder / L"암석.bamterrainlayer.json";
 
 	TerrainLayerSettings settings;
+	settings.Roughness = 0.42f;
+	settings.Metallic = 0.25f;
 	settings.Tiling = 3.5f;
 	settings.Walkable = false;
 	settings.NavCost = 7.0f;
@@ -339,6 +352,35 @@ int CheckTerrainLayerAsset()
 	if (!sameSettings) return Fail("Terrain layer settings must round-trip through the asset file.");
 	if (!keptIdentity) return Fail("Loading a terrain layer must keep the key assigned by the loader.");
 	if (displayName != WStrToStr(L"암석")) return Fail("Terrain layer display name must be the file name without its suffix.");
+
+	// 구형 .bamterrainlayer.json(PBR 필드 누락) 하위 호환: ALLOW_MISSING으로 기본값(Roughness=0.85, Metallic=0.0)을 유지한다.
+	const auto legacyPath = folder / L"legacy.bamterrainlayer.json";
+	{
+		std::ifstream savedFile(path);
+		std::string jsonText((std::istreambuf_iterator<char>(savedFile)), std::istreambuf_iterator<char>());
+		const std::size_t keyPos = jsonText.find("\"m_Settings\"");
+		const std::size_t openBrace = keyPos != std::string::npos ? jsonText.find('{', keyPos) : std::string::npos;
+		if (openBrace == std::string::npos) return Fail("Saved terrain layer JSON must contain m_Settings.");
+		int depth = 0;
+		std::size_t closeBrace = std::string::npos;
+		for (std::size_t i = openBrace; i < jsonText.size(); ++i)
+		{
+			if (jsonText[i] == '{') ++depth;
+			else if (jsonText[i] == '}' && --depth == 0) { closeBrace = i; break; }
+		}
+		if (closeBrace == std::string::npos) return Fail("Saved terrain layer JSON had malformed m_Settings.");
+		jsonText.replace(openBrace, closeBrace - openBrace + 1,
+			R"({"Tiling":6.0,"Walkable":true,"NavCost":1.5,"SurfaceType":"Grass"})");
+		std::ofstream legacyFile(legacyPath, std::ios::trunc);
+		legacyFile << jsonText;
+	}
+	auto* legacyLoaded = TerrainLayerAsset::CreateEmpty();
+	const bool legacyOk = legacyLoaded && legacyLoaded->LoadFromFile(legacyPath);
+	const TerrainLayerSettings legacySettings = legacyOk ? legacyLoaded->GetSettings() : TerrainLayerSettings{};
+	if (legacyLoaded) ResourceManager::Get().DestroyResource(legacyLoaded);
+	if (!legacyOk || !Near(legacySettings.Tiling, 6.0f) || !Near(legacySettings.Roughness, 0.85f) ||
+		!Near(legacySettings.Metallic, 0.0f) || legacySettings.SurfaceType != "Grass")
+		return Fail("Legacy terrain layer JSON without PBR fields must load with default Roughness=0.85 and Metallic=0.0.");
 
 	if (!TerrainLayerAsset::IsTerrainLayerFile(L"A.BAMTERRAINLAYER.JSON") || TerrainLayerAsset::IsTerrainLayerFile(L"A.bamtimeline.json"))
 		return Fail("Terrain layer file detection must ignore case and reject other assets.");
@@ -455,6 +497,116 @@ int CheckUnsavedTerrainPreservation()
 	return 0;
 }
 
+// 지형 확장 2단계: 청크 분할·UV 서브영역·AABB·LOD 메시·프러스텀 컬링·히스테리시스 LOD 선택·스트리밍 임계치
+int CheckChunkLodAndCulling()
+{
+	using namespace Engine;
+
+	// 1. 청크 분할 및 UV 서브영역 계산
+	uint32 minX = 0, maxX = 0, minZ = 0, maxZ = 0;
+	vec2 uvOffset(0.0f), uvScale(0.0f);
+	if (!TerrainUtility::ComputeChunkRange(16, 4, 0, 0, minX, maxX, minZ, maxZ, uvOffset, uvScale) ||
+		minX != 0 || maxX != 4 || minZ != 0 || maxZ != 4 ||
+		!Near(uvOffset.x, 0.0f) || !Near(uvOffset.y, 0.0f) || !Near(uvScale.x, 0.25f) || !Near(uvScale.y, 0.25f))
+		return Fail("Chunk (0,0) vertex range or UV sub-rect is incorrect.");
+
+	uint32 nextMinX = 0, nextMaxX = 0, nextMinZ = 0, nextMaxZ = 0;
+	if (!TerrainUtility::ComputeChunkRange(16, 4, 1, 2, nextMinX, nextMaxX, nextMinZ, nextMaxZ, uvOffset, uvScale) ||
+		nextMinX != maxX || nextMaxX != 8 || nextMinZ != 8 || nextMaxZ != 12 ||
+		!Near(uvOffset.x, 0.25f) || !Near(uvOffset.y, 0.5f) || !Near(uvScale.x, 0.25f) || !Near(uvScale.y, 0.25f))
+		return Fail("Chunk (1,2) must share boundary with previous chunk and compute exact UV.");
+
+	if (TerrainUtility::ComputeChunkRange(0, 4, 0, 0, minX, maxX, minZ, maxZ, uvOffset, uvScale) ||
+		TerrainUtility::ComputeChunkRange(16, 0, 0, 0, minX, maxX, minZ, maxZ, uvOffset, uvScale) ||
+		TerrainUtility::ComputeChunkRange(16, 4, 4, 0, minX, maxX, minZ, maxZ, uvOffset, uvScale))
+		return Fail("Invalid chunk range parameters must be rejected.");
+
+	// 2. 청크 로컬·월드 AABB 계산
+	TerrainComponent terrain;
+	terrain.Width = 16.0f;
+	terrain.Length = 16.0f;
+	terrain.MaxHeight = 20.0f;
+	terrain.Resolution = 16;
+	terrain.HeightData.assign(17 * 17, 0.1f);
+	terrain.HeightData[2 * 17 + 2] = 0.8f; // 청크 (0,0) 내부 봉우리: Y = 16.0
+
+	BoundingBox localBounds00;
+	if (!TerrainUtility::ComputeChunkLocalBounds(terrain, 0, 4, 0, 4, localBounds00) ||
+		!Near(localBounds00.min.x, -8.0f) || !Near(localBounds00.max.x, -4.0f) ||
+		!Near(localBounds00.min.y, 2.0f) || !Near(localBounds00.max.y, 16.0f) ||
+		!Near(localBounds00.min.z, -8.0f) || !Near(localBounds00.max.z, -4.0f))
+		return Fail("Chunk (0,0) local AABB did not reflect chunk height range.");
+
+	BoundingBox localBounds11;
+	if (!TerrainUtility::ComputeChunkLocalBounds(terrain, 4, 8, 4, 8, localBounds11) ||
+		!Near(localBounds11.min.y, 2.0f) || !Near(localBounds11.max.y, 2.0f))
+		return Fail("Flat chunk (1,1) local AABB height must match flat height.");
+
+	const glm::mat4 world = glm::translate(glm::mat4(1.0f), glm::vec3(100.0f, 10.0f, -50.0f));
+	BoundingBox worldBounds00;
+	if (!TerrainUtility::ComputeChunkWorldBounds(localBounds00, world, worldBounds00) ||
+		!Near(worldBounds00.min.x, 92.0f) || !Near(worldBounds00.max.x, 96.0f) ||
+		!Near(worldBounds00.min.y, 12.0f) || !Near(worldBounds00.max.y, 26.0f) ||
+		!Near(worldBounds00.min.z, -58.0f) || !Near(worldBounds00.max.z, -54.0f))
+		return Fail("Chunk world AABB transform is incorrect.");
+
+	// 3. 청크별 LOD 0/1/2 메시 생성
+	const auto releaseMesh = [](Mesh* mesh) { mesh->Free(); delete mesh; };
+	std::unique_ptr<Mesh, decltype(releaseMesh)> lod0(TerrainUtility::CreateChunkGridMesh(16.0f, 16.0f, 16, 0, 4, 0, 4, 1), releaseMesh);
+	std::unique_ptr<Mesh, decltype(releaseMesh)> lod1(TerrainUtility::CreateChunkGridMesh(16.0f, 16.0f, 16, 0, 4, 0, 4, 2), releaseMesh);
+	std::unique_ptr<Mesh, decltype(releaseMesh)> lod2(TerrainUtility::CreateChunkGridMesh(16.0f, 16.0f, 16, 0, 4, 0, 4, 4), releaseMesh);
+	if (!lod0 || lod0->GetVertexCount() != 25 || lod0->GetIndexCount() != 96 ||
+		!lod1 || lod1->GetVertexCount() != 9 || lod1->GetIndexCount() != 24 ||
+		!lod2 || lod2->GetVertexCount() != 4 || lod2->GetIndexCount() != 6)
+		return Fail("Chunk LOD 0/1/2 mesh vertex or index counts are incorrect.");
+	if (!Near(lod0->GetMin().x, -8.0f) || !Near(lod0->GetMax().x, -4.0f) ||
+		!Near(lod2->GetMin().z, -8.0f) || !Near(lod2->GetMax().z, -4.0f))
+		return Fail("Chunk LOD mesh bounds do not match chunk span.");
+
+	// 4. 프러스텀 컬링
+	const glm::mat4 view = glm::lookAtRH(glm::vec3(0.0f, 10.0f, 20.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f);
+	const Frustum frustum = FrustumCuller::ExtractFrustum(proj * view);
+	const BoundingBox frontBox(vec3(-4.0f, 0.0f, -4.0f), vec3(4.0f, 5.0f, 4.0f));
+	const BoundingBox behindBox(vec3(-4.0f, 0.0f, 40.0f), vec3(4.0f, 5.0f, 50.0f));
+	const BoundingBox sideBox(vec3(200.0f, 0.0f, -4.0f), vec3(210.0f, 5.0f, 4.0f));
+	if (!TerrainUtility::IsChunkVisibleInFrustum(frustum, frontBox) ||
+		TerrainUtility::IsChunkVisibleInFrustum(frustum, behindBox) ||
+		TerrainUtility::IsChunkVisibleInFrustum(frustum, sideBox))
+		return Fail("Chunk frustum culling misclassified front, behind, or side bounds.");
+
+	// 5. 거리 계산 및 히스테리시스 기반 LOD 선택
+	if (!Near(TerrainUtility::ComputeDistanceToBoundingBox(vec3(0.0f, 2.0f, 0.0f), frontBox), 0.0f) ||
+		!Near(TerrainUtility::ComputeDistanceToBoundingBox(vec3(7.0f, 2.0f, 0.0f), frontBox), 3.0f))
+		return Fail("Distance to chunk AABB is incorrect.");
+
+	if (TerrainUtility::SelectChunkLOD(50.0f, 3u, 80.0f, 180.0f, 350.0f, 8.0f) != 0u ||
+		TerrainUtility::SelectChunkLOD(120.0f, 3u, 80.0f, 180.0f, 350.0f, 8.0f) != 1u ||
+		TerrainUtility::SelectChunkLOD(250.0f, 3u, 80.0f, 180.0f, 350.0f, 8.0f) != 2u)
+		return Fail("Initial distance-based LOD selection is incorrect.");
+
+	// 히스테리시스 구간 [72, 88], [172, 188]에서는 기존 LOD를 유지해야 한다.
+	if (TerrainUtility::SelectChunkLOD(85.0f, 0u, 80.0f, 180.0f, 350.0f, 8.0f) != 0u ||
+		TerrainUtility::SelectChunkLOD(89.0f, 0u, 80.0f, 180.0f, 350.0f, 8.0f) != 1u ||
+		TerrainUtility::SelectChunkLOD(75.0f, 1u, 80.0f, 180.0f, 350.0f, 8.0f) != 1u ||
+		TerrainUtility::SelectChunkLOD(71.0f, 1u, 80.0f, 180.0f, 350.0f, 8.0f) != 0u ||
+		TerrainUtility::SelectChunkLOD(185.0f, 1u, 80.0f, 180.0f, 350.0f, 8.0f) != 1u ||
+		TerrainUtility::SelectChunkLOD(189.0f, 1u, 80.0f, 180.0f, 350.0f, 8.0f) != 2u ||
+		TerrainUtility::SelectChunkLOD(175.0f, 2u, 80.0f, 180.0f, 350.0f, 8.0f) != 2u ||
+		TerrainUtility::SelectChunkLOD(171.0f, 2u, 80.0f, 180.0f, 350.0f, 8.0f) != 1u)
+		return Fail("LOD hysteresis failed to prevent boundary popping.");
+
+	// 6. 스트리밍 로드/언로드 임계치 판정
+	if (!TerrainUtility::ShouldChunkBeLoaded(9999.0f, false, 0.0f, 10.0f) ||
+		!TerrainUtility::ShouldChunkBeLoaded(199.0f, false, 200.0f, 10.0f) ||
+		TerrainUtility::ShouldChunkBeLoaded(201.0f, false, 200.0f, 10.0f) ||
+		!TerrainUtility::ShouldChunkBeLoaded(205.0f, true, 200.0f, 10.0f) ||
+		TerrainUtility::ShouldChunkBeLoaded(211.0f, true, 200.0f, 10.0f))
+		return Fail("Chunk streaming load/unload threshold with hysteresis is incorrect.");
+
+	return 0;
+}
+
 int main()
 {
 	using namespace Engine;
@@ -520,6 +672,9 @@ int main()
 		return checkResult;
 
 	if (const int checkResult = CheckTerrainLayerAsset(); checkResult != 0)
+		return checkResult;
+
+	if (const int checkResult = CheckChunkLodAndCulling(); checkResult != 0)
 		return checkResult;
 
 	std::cout << "Terrain data checks passed.\n";

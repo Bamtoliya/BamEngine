@@ -10,6 +10,7 @@
 #include "PickingManager.h"
 #include "Texture.h"
 #include "MotionHistory.h"
+#include "FrustumCuller.h"
 
 namespace
 {
@@ -66,6 +67,16 @@ namespace
 		{ 0.35f, 0.65f, 0.25f, 1.0f }, { 0.48f, 0.45f, 0.42f, 1.0f }, { 0.55f, 0.42f, 0.28f, 1.0f }, { 0.70f, 0.68f, 0.60f, 1.0f },
 		{ 0.30f, 0.45f, 0.70f, 1.0f }, { 0.80f, 0.75f, 0.45f, 1.0f }, { 0.60f, 0.35f, 0.55f, 1.0f }, { 0.85f, 0.85f, 0.90f, 1.0f } };
 	constexpr f32 DefaultLayerTiling = 5.0f;
+	constexpr f32 DefaultLayerRoughness = 0.85f;
+	constexpr f32 DefaultLayerMetallic = 0.0f;
+
+	void BuildHoleMaskBytes(const std::vector<uint8>& attributes, std::size_t sampleCount, std::vector<uint8>& outMask)
+	{
+		outMask.resize(sampleCount);
+		const uint8 holeAttr = static_cast<uint8>(ETerrainAttribute::Hole);
+		for (std::size_t i = 0; i < sampleCount; ++i)
+			outMask[i] = (i < attributes.size() && attributes[i] == holeAttr) ? 255u : 0u;
+	}
 
 	RHITexture* GetFallbackLayerTexture()
 	{
@@ -94,6 +105,15 @@ namespace
 			draw.layerTints[layer] = texture ? vec4(1.0f) : DefaultLayerTints[layer];
 			const f32 tiling = asset ? asset->GetSettings().Tiling : DefaultLayerTiling;
 			draw.layerTiling[layer] = std::isfinite(tiling) && tiling > 0.01f ? tiling : DefaultLayerTiling;
+
+			const Texture* normalMap = asset ? asset->GetSettings().NormalTexture.Get() : nullptr;
+			RHITexture* normalTexture = normalMap ? normalMap->GetRHITexture() : nullptr;
+			draw.layerNormalTextures[layer] = normalTexture ? normalTexture : fallback;
+			const f32 rawRoughness = asset ? asset->GetSettings().Roughness : DefaultLayerRoughness;
+			const f32 rawMetallic = asset ? asset->GetSettings().Metallic : DefaultLayerMetallic;
+			const f32 roughness = std::isfinite(rawRoughness) ? std::clamp(rawRoughness, 0.04f, 1.0f) : DefaultLayerRoughness;
+			const f32 metallic = std::isfinite(rawMetallic) ? std::clamp(rawMetallic, 0.0f, 1.0f) : DefaultLayerMetallic;
+			draw.layerPbrParams[layer] = vec4(roughness, metallic, normalTexture ? 1.0f : 0.0f, 0.0f);
 		}
 	}
 }
@@ -140,15 +160,16 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 	if (!std::isfinite(stepX) || stepX <= 0.f || !std::isfinite(stepZ) || stepZ <= 0.f)
 		return false;
 
+	const bool useChunks = terrain.EnableChunkLOD && terrain.ChunkCountPerAxis > 1 && terrain.Resolution > 1;
 	const bool heightLayoutMatches = terrain.HeightData.size() == sampleCount;
 	const bool splatLayoutMatches = terrain.SplatData.size() == sampleCount * 4;
 
-	const bool meshMatches = terrain.GridMesh &&
+	const bool meshMatches = useChunks || (terrain.GridMesh &&
 		terrain.GridMesh->GetVertexCount() == sampleCount &&
 		terrain.GridMesh->GetMin().x == -terrain.Width * 0.5f &&
 		terrain.GridMesh->GetMax().x == terrain.Width * 0.5f &&
 		terrain.GridMesh->GetMin().z == -terrain.Length * 0.5f &&
-		terrain.GridMesh->GetMax().z == terrain.Length * 0.5f;
+		terrain.GridMesh->GetMax().z == terrain.Length * 0.5f);
 
 	const auto textureMatches = [&](const std::shared_ptr<RHITexture>& texture, ETextureFormat format)
 		{
@@ -158,13 +179,19 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 
 	const bool heightTextureMatches = textureMatches(terrain.HeightmapTexture, ETextureFormat::R32_FLOAT);
 	const bool splatTextureMatches = textureMatches(terrain.SplatmapTexture, ETextureFormat::R8G8B8A8_UNORM);
-	// 레이어 4~7 평면은 EnsureLayerData가 크기를 맞춘다. 크기가 맞을 때만 텍스처를 만든다.
+	// 레이어 4~7 평면과 속성 맵은 EnsureLayerData가 크기를 맞춘다. 크기가 맞을 때만 텍스처를 만든다.
 	const bool extraLayoutMatches = terrain.SplatDataExtra.size() == sampleCount * 4;
 	const bool extraTextureMatches = textureMatches(terrain.SplatmapExtraTexture, ETextureFormat::R8G8B8A8_UNORM);
+	const bool holeMaskLayoutMatches = terrain.AttributeData.size() == sampleCount;
+	const bool holeMaskTextureMatches = textureMatches(terrain.HoleMaskTexture, ETextureFormat::R8_UNORM);
 
 	if (heightLayoutMatches && splatLayoutMatches && meshMatches &&
-		heightTextureMatches && splatTextureMatches && (!extraLayoutMatches || extraTextureMatches))
+		heightTextureMatches && splatTextureMatches && (!extraLayoutMatches || extraTextureMatches) &&
+		(!holeMaskLayoutMatches || holeMaskTextureMatches))
+	{
+		if (useChunks) EnsureTerrainChunks(terrain);
 		return true;
+	}
 
 	RHI* rhi = Renderer::Get().GetRHI();
 	if (!rhi)
@@ -180,6 +207,7 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 
 	if (!heightLayoutMatches)
 	{
+		candidate.ChunkBoundsDirty = true;
 		if (candidate.HeightData.empty())
 		{
 			candidate.HeightData.resize(sampleCount);
@@ -280,8 +308,95 @@ bool TerrainSystem::EnsureTerrainResources(TerrainComponent& terrain)
 			return false;
 	}
 
+	if (holeMaskLayoutMatches && !holeMaskTextureMatches)
+	{
+		std::vector<uint8> holeMask;
+		BuildHoleMaskBytes(candidate.AttributeData, sampleCount, holeMask);
+		candidate.HoleMaskTexture = createTexture(ETextureFormat::R8_UNORM,
+			holeMask.data(), static_cast<uint32>(holeMask.size()));
+		if (!candidate.HoleMaskTexture)
+			return false;
+		candidate.IsAttributeDirty = false;
+	}
+
 	terrain = std::move(candidate);
+	if (useChunks) EnsureTerrainChunks(terrain);
 	return true;
+}
+
+void TerrainSystem::EnsureTerrainChunks(TerrainComponent& terrain)
+{
+	const uint32 effectiveChunks = std::clamp(terrain.ChunkCountPerAxis, 1u,
+		(std::min)(terrain.Resolution, TerrainComponent::MaxChunkCountPerAxis));
+	const std::size_t expectedCount = static_cast<std::size_t>(effectiveChunks) * effectiveChunks;
+
+	const bool layoutChanged = terrain.BuiltChunkCountPerAxis != effectiveChunks ||
+		terrain.BuiltChunkResolution != terrain.Resolution ||
+		terrain.BuiltChunkWidth != terrain.Width ||
+		terrain.BuiltChunkLength != terrain.Length ||
+		terrain.Chunks.size() != expectedCount;
+
+	if (layoutChanged)
+	{
+		terrain.Chunks.clear();
+		terrain.Chunks.reserve(expectedCount);
+		for (uint32 cz = 0; cz < effectiveChunks; ++cz)
+		{
+			for (uint32 cx = 0; cx < effectiveChunks; ++cx)
+			{
+				TerrainChunkRuntime chunk{};
+				chunk.ChunkX = cx;
+				chunk.ChunkZ = cz;
+				chunk.CurrentLOD = TerrainComponent::MaxLODLevels;
+				if (!TerrainUtility::ComputeChunkRange(terrain.Resolution, effectiveChunks, cx, cz,
+					chunk.MinVertexX, chunk.MaxVertexX, chunk.MinVertexZ, chunk.MaxVertexZ,
+					chunk.UVOffset, chunk.UVScale))
+					continue;
+				terrain.Chunks.push_back(std::move(chunk));
+			}
+		}
+
+		terrain.BuiltChunkCountPerAxis = effectiveChunks;
+		terrain.BuiltChunkResolution = terrain.Resolution;
+		terrain.BuiltChunkWidth = terrain.Width;
+		terrain.BuiltChunkLength = terrain.Length;
+		terrain.ChunkBoundsDirty = true;
+	}
+
+	if (terrain.BuiltChunkMaxHeight != terrain.MaxHeight)
+		terrain.ChunkBoundsDirty = true;
+
+	if (terrain.ChunkBoundsDirty)
+		UpdateTerrainChunkBounds(terrain);
+}
+
+void TerrainSystem::UpdateTerrainChunkBounds(TerrainComponent& terrain)
+{
+	for (auto& chunk : terrain.Chunks)
+	{
+		TerrainUtility::ComputeChunkLocalBounds(terrain,
+			chunk.MinVertexX, chunk.MaxVertexX, chunk.MinVertexZ, chunk.MaxVertexZ, chunk.LocalBounds);
+	}
+	terrain.BuiltChunkMaxHeight = terrain.MaxHeight;
+	terrain.ChunkBoundsDirty = false;
+}
+
+std::shared_ptr<Mesh> TerrainSystem::EnsureChunkLodMesh(const TerrainComponent& terrain, TerrainChunkRuntime& chunk, uint32 lodLevel)
+{
+	const uint32 lod = (std::min)(lodLevel, TerrainComponent::MaxLODLevels - 1u);
+	if (chunk.LodMeshes[lod]) return chunk.LodMeshes[lod];
+
+	const uint32 lodStep = 1u << lod;
+	Mesh* mesh = TerrainUtility::CreateChunkGridMesh(terrain.Width, terrain.Length, terrain.Resolution,
+		chunk.MinVertexX, chunk.MaxVertexX, chunk.MinVertexZ, chunk.MaxVertexZ, lodStep);
+	if (!mesh) return nullptr;
+
+	chunk.LodMeshes[lod] = std::shared_ptr<Mesh>(mesh, [](Mesh* value)
+		{
+			value->Free();
+			delete value;
+		});
+	return chunk.LodMeshes[lod];
 }
 
 void TerrainSystem::UpdateTerrainHeightmap(TerrainComponent& terrain)
@@ -363,8 +478,19 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 	(void)registry;
 	(void)dt;
 
+	m_LastFrameStats = {};
+
 	auto& renderer = Renderer::Get();
-	vector<RenderPass*> targetPasses;
+	struct TargetPassEntry
+	{
+		RenderPass* pass = nullptr;
+		CameraBuffer camera{};
+		bool hasCamera = false;
+		CameraBuffer lodCamera{};
+		bool hasLODCamera = false;
+		bool isShadow = false;
+	};
+	vector<TargetPassEntry> targetPasses;
 
 	for (const auto& viewport : renderer.GetActiveViewportCameras())
 	{
@@ -378,8 +504,13 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 		if (passType != ERenderPassType::Geometry && passType != ERenderPassType::Forward && !isShadowPass)
 			continue;
 
-		if (std::find(targetPasses.begin(), targetPasses.end(), pass) == targetPasses.end())
-			targetPasses.push_back(pass);
+		const auto exists = std::find_if(targetPasses.begin(), targetPasses.end(),
+			[pass](const TargetPassEntry& entry) { return entry.pass == pass; });
+		if (exists == targetPasses.end())
+		{
+			targetPasses.push_back({ pass, viewport.cameraBuffer, viewport.hasCamera,
+				viewport.lodCamera, viewport.hasLODCamera, isShadowPass });
+		}
 	}
 
 	if (targetPasses.empty()) return;
@@ -397,10 +528,10 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 
 			UpdateTerrainHeightmap(terrain);
 			UpdateTerrainSplatmap(terrain);
+			UpdateTerrainHoleMask(terrain);
 
 			if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 
-			Mesh* mesh = terrain.GridMesh.get();
 			// 이전 씬의 구형 키(Resources/Material/TerrainMaterial)나 빈 핸들은 찾지 못하므로 엔진 기본 머티리얼로 그린다(컴포넌트 값은 바꾸지 않는다).
 			MaterialInterface* material = terrain.TerrainMaterial.Get();
 			if (!material)
@@ -415,9 +546,9 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 				material = defaultMaterial.Get();
 			}
 
-			// 레이어 4~7 텍스처가 없으면 셰이더가 다른 드로우의 t5를 읽으므로 그리지 않는다(EnsureLayerData 후 바로 만들어진다).
-			if (!mesh || !material || !terrain.HeightmapTexture || !terrain.SplatmapTexture || !terrain.SplatmapExtraTexture ||
-				terrain.IsDirty || terrain.IsSplatDirty)
+			// 레이어 4~7·구멍 마스크 텍스처가 없으면 셰이더가 다른 드로우의 슬롯을 읽으므로 그리지 않는다(EnsureLayerData 후 바로 만들어진다).
+			if (!material || !terrain.HeightmapTexture || !terrain.SplatmapTexture || !terrain.SplatmapExtraTexture ||
+				!terrain.HoleMaskTexture || terrain.IsDirty || terrain.IsSplatDirty || terrain.IsAttributeDirty)
 				continue;
 
 			if (terrain.Resolution == 0 ||
@@ -428,12 +559,7 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 
 			const uint64 axisCount = static_cast<uint64>(terrain.Resolution) + 1;
 			if (terrain.HeightmapTexture->GetWidth() != axisCount ||
-				terrain.HeightmapTexture->GetHeight() != axisCount ||
-				static_cast<uint64>(mesh->GetVertexCount()) != axisCount * axisCount)
-				continue;
-
-			if (mesh->GetMin().x != -terrain.Width * 0.5f || mesh->GetMax().x != terrain.Width * 0.5f ||
-				mesh->GetMin().z != -terrain.Length * 0.5f || mesh->GetMax().z != terrain.Length * 0.5f)
+				terrain.HeightmapTexture->GetHeight() != axisCount)
 				continue;
 
 			const vec2 cellSpacing(terrain.Width / static_cast<f32>(terrain.Resolution),
@@ -443,27 +569,161 @@ void TerrainSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& act
 				cellSpacing.x <= 0.f || cellSpacing.y <= 0.f)
 				continue;
 
+			const uint32 sceneHash = static_cast<uint32>(std::hash<const Scene*>{}(scene)) | 1u;
+			const uint32 entityId = static_cast<uint32>(entt::to_integral(entity));
+			const uint64 baseMotionStamp = MakeHeightfieldMotionStamp(terrain.HeightmapTexture.get(), terrain.MaxHeight, cellSpacing.x, cellSpacing.y);
+			const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<TerrainComponent>(scene, entity);
+
+			HeightfieldDrawData baseHeightfield{};
+			baseHeightfield.heightmap = terrain.HeightmapTexture;
+			baseHeightfield.splatmap = terrain.SplatmapTexture;
+			baseHeightfield.splatmapExtra = terrain.SplatmapExtraTexture;
+			baseHeightfield.holeMask = terrain.HoleMaskTexture;
+			FillTerrainLayerDrawData(terrain, baseHeightfield);
+			baseHeightfield.maxHeight = terrain.MaxHeight;
+			baseHeightfield.cellSpacing = cellSpacing;
+
+			const bool useChunks = terrain.EnableChunkLOD && terrain.ChunkCountPerAxis > 1 && terrain.Resolution > 1 && !terrain.Chunks.empty();
+			if (useChunks)
+			{
+				if (terrain.ChunkBoundsDirty || terrain.BuiltChunkMaxHeight != terrain.MaxHeight)
+					UpdateTerrainChunkBounds(terrain);
+
+				bool recordedPrimaryStats = false;
+				terrain.ChunkStats = {};
+				terrain.ChunkStats.TotalChunks = static_cast<uint32>(terrain.Chunks.size());
+
+				for (const TargetPassEntry& target : targetPasses)
+				{
+					if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+
+					const bool applyFrustumCull = !target.isShadow && target.hasCamera;
+					const Frustum frustum = applyFrustumCull ? FrustumCuller::ExtractFrustum(target.camera.viewProjMatrix) : Frustum{};
+					const bool hasRefCamera = target.hasLODCamera || target.hasCamera;
+					const vec3 refCameraPos = target.hasLODCamera ? target.lodCamera.cameraPosition : target.camera.cameraPosition;
+
+					TerrainChunkStats passStats{};
+					passStats.TotalChunks = static_cast<uint32>(terrain.Chunks.size());
+
+					for (std::size_t chunkIndex = 0; chunkIndex < terrain.Chunks.size(); ++chunkIndex)
+					{
+						auto& chunk = terrain.Chunks[chunkIndex];
+						BoundingBox worldBounds{};
+						if (!TerrainUtility::ComputeChunkWorldBounds(chunk.LocalBounds, worldTransform.worldMatrix, worldBounds))
+							continue;
+
+						const f32 distance = hasRefCamera
+							? TerrainUtility::ComputeDistanceToBoundingBox(refCameraPos, worldBounds)
+							: 0.0f;
+
+						// 스트리밍 로드 거리 임계치 평가(언로드 시 청크 메시 풀 해제)
+						if (hasRefCamera)
+						{
+							chunk.IsLoaded = TerrainUtility::ShouldChunkBeLoaded(distance, chunk.IsLoaded,
+								terrain.StreamingLoadDistance, terrain.LODHysteresis);
+						}
+						else if (terrain.StreamingLoadDistance <= 0.0f)
+						{
+							chunk.IsLoaded = true;
+						}
+
+						if (!chunk.IsLoaded)
+						{
+							chunk.LodMeshes = {};
+							chunk.CurrentLOD = TerrainComponent::MaxLODLevels;
+							++passStats.UnloadedChunks;
+							continue;
+						}
+						++passStats.LoadedChunks;
+
+						// 그림자 패스는 카메라 시야 밖 지형도 그림자를 드리워야 하므로 카메라 프러스텀 컬링을 건너뛴다.
+						if (applyFrustumCull && !TerrainUtility::IsChunkVisibleInFrustum(frustum, worldBounds))
+						{
+							++passStats.CulledChunks;
+							continue;
+						}
+
+						uint32 lod = chunk.CurrentLOD < TerrainComponent::MaxLODLevels ? chunk.CurrentLOD : 0u;
+						if (hasRefCamera)
+						{
+							lod = TerrainUtility::SelectChunkLOD(distance, chunk.CurrentLOD,
+								terrain.LOD0Distance, terrain.LOD1Distance, terrain.LOD2Distance, terrain.LODHysteresis);
+							chunk.CurrentLOD = lod;
+						}
+
+						const std::shared_ptr<Mesh> chunkMesh = EnsureChunkLodMesh(terrain, chunk, lod);
+						if (!chunkMesh) continue;
+
+						StaticDrawCommand command;
+						command.mesh = chunkMesh.get();
+						command.material = material;
+						command.worldMatrix = worldTransform.worldMatrix;
+						command.objectId = { sceneHash, entityId, static_cast<uint32>(chunkIndex + 1u) };
+						command.motionStamp = CombineMotionStamp(baseMotionStamp, lod);
+						command.pickingId = pickingId;
+						command.worldBounds = worldBounds;
+						command.heightfield = baseHeightfield;
+						command.heightfield->gridMesh = chunkMesh;
+
+						renderer.SubmitStatic(command, target.pass->GetID());
+						++passStats.VisibleChunks;
+						++passStats.LodChunkCounts[lod];
+					}
+
+					if (!target.isShadow && !recordedPrimaryStats)
+					{
+						terrain.ChunkStats = passStats;
+						recordedPrimaryStats = true;
+					}
+				}
+
+				m_LastFrameStats.TotalChunks += terrain.ChunkStats.TotalChunks;
+				m_LastFrameStats.LoadedChunks += terrain.ChunkStats.LoadedChunks;
+				m_LastFrameStats.VisibleChunks += terrain.ChunkStats.VisibleChunks;
+				m_LastFrameStats.CulledChunks += terrain.ChunkStats.CulledChunks;
+				m_LastFrameStats.UnloadedChunks += terrain.ChunkStats.UnloadedChunks;
+				for (uint32 i = 0; i < TerrainComponent::MaxLODLevels; ++i)
+					m_LastFrameStats.LodChunkCounts[i] += terrain.ChunkStats.LodChunkCounts[i];
+				continue;
+			}
+
+			// ── 단일 GridMesh 폴백 경로 (EnableChunkLOD == false 또는 ChunkCountPerAxis <= 1) ──
+			Mesh* mesh = terrain.GridMesh.get();
+			if (!mesh || static_cast<uint64>(mesh->GetVertexCount()) != axisCount * axisCount)
+				continue;
+
+			if (mesh->GetMin().x != -terrain.Width * 0.5f || mesh->GetMax().x != terrain.Width * 0.5f ||
+				mesh->GetMin().z != -terrain.Length * 0.5f || mesh->GetMax().z != terrain.Length * 0.5f)
+				continue;
+
 			StaticDrawCommand command;
 			command.mesh = mesh;
 			command.material = material;
 			command.worldMatrix = worldTransform.worldMatrix;
 			// 월드 행렬만 움직이는 지형의 모션 벡터를 위한 번호. 씬마다 엔티티 번호가 겹치므로 씬 주소로 구분한다(MeshRenderSystem과 같다).
-			command.objectId = { static_cast<uint32>(std::hash<const Scene*>{}(scene)) | 1u, static_cast<uint32>(entt::to_integral(entity)) };
-			command.motionStamp = MakeHeightfieldMotionStamp(terrain.HeightmapTexture.get(), terrain.MaxHeight, cellSpacing.x, cellSpacing.y);
-			command.pickingId = PickingManager::Get().RegisterPickingEntity<TerrainComponent>(scene, entity);
-			command.heightfield.emplace();
-			command.heightfield->gridMesh = terrain.GridMesh;
-			command.heightfield->heightmap = terrain.HeightmapTexture;
-			command.heightfield->splatmap = terrain.SplatmapTexture;
-			command.heightfield->splatmapExtra = terrain.SplatmapExtraTexture;
-			FillTerrainLayerDrawData(terrain, *command.heightfield);
-			command.heightfield->maxHeight = terrain.MaxHeight;
-			command.heightfield->cellSpacing = cellSpacing;
-
-			for (RenderPass* pass : targetPasses)
+			command.objectId = { sceneHash, entityId };
+			command.motionStamp = baseMotionStamp;
+			command.pickingId = pickingId;
+			BoundingBox localBounds{};
+			BoundingBox worldBounds{};
+			if (TerrainUtility::ComputeChunkLocalBounds(terrain, 0, terrain.Resolution, 0, terrain.Resolution, localBounds) &&
+				TerrainUtility::ComputeChunkWorldBounds(localBounds, worldTransform.worldMatrix, worldBounds))
 			{
-				if (!pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
-				renderer.SubmitStatic(command, pass->GetID());
+				command.worldBounds = worldBounds;
+			}
+			command.heightfield = baseHeightfield;
+			command.heightfield->gridMesh = terrain.GridMesh;
+
+			terrain.ChunkStats = { 1u, 1u, 1u, 0u, 0u, { 1u, 0u, 0u } };
+			m_LastFrameStats.TotalChunks += 1u;
+			m_LastFrameStats.LoadedChunks += 1u;
+			m_LastFrameStats.VisibleChunks += 1u;
+			m_LastFrameStats.LodChunkCounts[0] += 1u;
+
+			for (const TargetPassEntry& target : targetPasses)
+			{
+				if (!target.pass->IsAcceptsBlendMode(material->GetBlendMode())) continue;
+				renderer.SubmitStatic(command, target.pass->GetID());
 			}
 		}
 	}
@@ -493,4 +753,30 @@ void TerrainSystem::UpdateTerrainSplatmap(TerrainComponent& terrain)
 	}
 	if (uploaded)
 		terrain.IsSplatDirty = false;
+}
+
+void TerrainSystem::UpdateTerrainHoleMask(TerrainComponent& terrain)
+{
+	if (!terrain.IsAttributeDirty || !terrain.HoleMaskTexture) return;
+	RHI* rhi = Renderer::Get().GetRHI();
+	if (!rhi) return;
+	uint32 axisCount = 0;
+	std::size_t sampleCount = 0;
+	if (!TerrainUtility::TryGetGridLayout(terrain.Resolution, axisCount, sampleCount) ||
+		terrain.AttributeData.size() != sampleCount)
+		return;
+
+	std::vector<uint8> holeMask;
+	BuildHoleMaskBytes(terrain.AttributeData, sampleCount, holeMask);
+
+	RHITextureDesc desc{};
+	desc.width = axisCount;
+	desc.height = axisCount;
+	desc.format = ETextureFormat::R8_UNORM;
+	desc.dimension = ETextureDimension::Texture2D;
+	desc.usage = ETextureUsage::Sampler;
+	desc.data = holeMask.data();
+	desc.dataSize = static_cast<uint32>(holeMask.size());
+	if (IsSuccess(rhi->UploadTextureData(terrain.HoleMaskTexture.get(), desc)))
+		terrain.IsAttributeDirty = false;
 }

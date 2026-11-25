@@ -33,6 +33,7 @@ Scene* Scene::Create(void* arg)
 void Scene::Free()
 {
 	NavigationSystem::RemoveSceneNavGrid(this);
+	NavigationSystem::RemoveSceneNavMesh(this);
 	ClearEntities();
 }
 #pragma endregion

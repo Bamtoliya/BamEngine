@@ -38,14 +38,16 @@ VS_OUTPUT main(VS_INPUT input, uint vertexId : SV_VertexID)
     uint width, height;
     heightMap.GetDimensions(width, height);
 
-    const int2 index = int2(vertexId % width, vertexId / width);
     const int2 lastIndex = int2(width, height) - 1;
     const float maxHeight = ubo.HeightfieldData.x;
-    const float2 cellSpacing = ubo.HeightfieldData.yz;
+    const float2 cellSpacing = max(ubo.HeightfieldData.yz, float2(1e-6f, 1e-6f));
 
-	// 그리드의 정점 번호는 CPU 높이 배열의 인덱스와 같습니다.
+    // 로컬 XZ 위치에서 전체 높이맵 격자 인덱스를 복원하므로 단일 그리드와 청크/LOD 메시가 같은 경로로 동작한다.
+    const float2 gridCoord = input.Position.xz / cellSpacing + 0.5f * float2(lastIndex);
+    const int2 index = clamp(int2(round(gridCoord)), int2(0, 0), lastIndex);
+
     float3 displacedPosition = input.Position;
-    displacedPosition.y = heightMap.Load(int3(index, 0)) * maxHeight;
+    displacedPosition.y = heightMap.Load(int3(index, 0)) * maxHeight + input.Position.y;
 
     const float4 worldPosition = mul(ubo.WorldMatrix, float4(displacedPosition, 1.0f));
     output.Position = mul(commonData.ViewProjection, worldPosition);

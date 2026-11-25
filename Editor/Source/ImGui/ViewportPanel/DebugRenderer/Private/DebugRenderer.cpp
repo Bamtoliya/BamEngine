@@ -15,6 +15,7 @@
 #include "NavAgentComponent.h"
 #include "AIPerceptionComponent.h"
 #include "NavGrid.h"
+#include "NavMesh.h"
 #include "NavigationSystem.h"
 #include "SelectionManager.h"
 #include "TransformSystem.h"
@@ -73,6 +74,8 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 		RegisterGameplayDebug(cameraBuffer);
 	if (m_ShowNavGridOverlay)
 		RegisterNavGridDebug(cameraBuffer);
+	if (m_ShowNavMeshOverlay)
+		RegisterNavMeshDebug(cameraBuffer);
 
 	if (m_Vertices.empty() || colorRTName.empty()) return;
 
@@ -827,6 +830,87 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 					DrawLine(p10, p01, obstacleColor);
 				}
 			}
+		}
+	}
+}
+
+void DebugRenderer::RegisterNavMeshDebug(const CameraBuffer& cameraBuffer)
+{
+	Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene) return;
+
+	std::shared_ptr<Engine::NavMesh> navMesh = Engine::NavigationSystem::GetSceneNavMesh(scene);
+	if (!navMesh)
+	{
+		if (const auto* ctxNavMesh = scene->GetRegistry().ctx().find<std::shared_ptr<Engine::NavMesh>>())
+		{
+			navMesh = *ctxNavMesh;
+		}
+	}
+	if (!navMesh || !navMesh->IsValid()) return;
+
+	const auto& data = navMesh->GetData();
+	const auto& vertices = data.vertices;
+	const auto& polygons = data.polygons;
+
+	const Frustum frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
+	const mat4 invView = glm::inverse(cameraBuffer.viewMatrix);
+	const vec3 camPos = vec3(invView[3]);
+
+	constexpr f32 c_OverlayRadius = 150.0f;
+	constexpr f32 c_OverlayRadiusSq = c_OverlayRadius * c_OverlayRadius;
+	constexpr f32 c_GroundOffset = 0.06f;
+
+	const vec4 polyEdgeColor(0.15f, 0.95f, 0.75f, 0.85f);
+	const vec4 sameLayerLinkColor(1.0f, 0.9f, 0.2f, 0.65f);
+	const vec4 multiLayerLinkColor(1.0f, 0.5f, 0.1f, 0.95f);
+
+	for (size_t polyIdx = 0; polyIdx < polygons.size(); ++polyIdx)
+	{
+		const auto& poly = polygons[polyIdx];
+		if (poly.vertexIndices.size() < 3) continue;
+
+		const vec3 diff = poly.center - camPos;
+		if (glm::dot(diff, diff) > c_OverlayRadiusSq) continue;
+
+		vec3 minPt(std::numeric_limits<f32>::max());
+		vec3 maxPt(std::numeric_limits<f32>::lowest());
+		for (uint32 vIdx : poly.vertexIndices)
+		{
+			if (vIdx >= vertices.size()) continue;
+			minPt = glm::min(minPt, vertices[vIdx]);
+			maxPt = glm::max(maxPt, vertices[vIdx]);
+		}
+		const BoundingBox polyBox(minPt - vec3(0.0f, 0.1f, 0.0f), maxPt + vec3(0.0f, 0.2f, 0.0f));
+		if (!FrustumCuller::TestBoundingBox(frustum, polyBox)) continue;
+
+		if (m_Vertices.size() + poly.vertexIndices.size() * 4 >= 2 * static_cast<sizet>(m_MaxLines))
+		{
+			return;
+		}
+
+		for (size_t i = 0; i < poly.vertexIndices.size(); ++i)
+		{
+			const uint32 idxA = poly.vertexIndices[i];
+			const uint32 idxB = poly.vertexIndices[(i + 1) % poly.vertexIndices.size()];
+			if (idxA >= vertices.size() || idxB >= vertices.size()) continue;
+
+			const vec3 a = vertices[idxA] + vec3(0.0f, c_GroundOffset, 0.0f);
+			const vec3 b = vertices[idxB] + vec3(0.0f, c_GroundOffset, 0.0f);
+			DrawLine(a, b, polyEdgeColor);
+		}
+
+		for (int32 neighborIdx : poly.neighbors)
+		{
+			if (neighborIdx < 0 || neighborIdx <= static_cast<int32>(polyIdx)) continue;
+			if (static_cast<size_t>(neighborIdx) >= polygons.size()) continue;
+
+			const auto& neighbor = polygons[static_cast<size_t>(neighborIdx)];
+			const bool isMultiLayer = std::abs(poly.center.y - neighbor.center.y) > 0.25f;
+			const vec4& linkColor = isMultiLayer ? multiLayerLinkColor : sameLayerLinkColor;
+			const vec3 pA = poly.center + vec3(0.0f, c_GroundOffset + 0.02f, 0.0f);
+			const vec3 pB = neighbor.center + vec3(0.0f, c_GroundOffset + 0.02f, 0.0f);
+			DrawLine(pA, pB, linkColor);
 		}
 	}
 }

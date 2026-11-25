@@ -50,6 +50,9 @@ public:
 	void ToggleNavGridOverlay() { m_DebugRenderer.ToggleShowNavGridOverlay(); }
 	void BakeSceneNavGrid();
 	bool HasActiveNavGrid() const;
+	void ToggleNavMeshOverlay() { m_DebugRenderer.ToggleShowNavMeshOverlay(); }
+	void BakeSceneNavMesh();
+	bool HasActiveNavMesh() const;
 	void FocusSelectedEntity();
 	void RequestHDRCaptureFromCurrentLocation();
 

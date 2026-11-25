@@ -56,6 +56,7 @@ NavigationSystem* NavigationSystem::Create(void* arg)
 void NavigationSystem::Free()
 {
 	ClearNavGrids();
+	ClearNavMeshes();
 	ISystem::Free();
 }
 
@@ -118,6 +119,41 @@ void NavigationSystem::ClearNavGrids()
 	s_SceneNavGrids.clear();
 }
 
+void NavigationSystem::SetSceneNavMesh(const Scene* scene, std::shared_ptr<NavMesh> navMesh)
+{
+	if (scene)
+	{
+		s_SceneNavMeshes[scene] = std::move(navMesh);
+	}
+}
+
+std::shared_ptr<NavMesh> NavigationSystem::GetSceneNavMesh(const Scene* scene)
+{
+	if (!scene)
+	{
+		return nullptr;
+	}
+	const auto it = s_SceneNavMeshes.find(scene);
+	if (it != s_SceneNavMeshes.end())
+	{
+		return it->second;
+	}
+	return nullptr;
+}
+
+void NavigationSystem::RemoveSceneNavMesh(const Scene* scene)
+{
+	if (scene)
+	{
+		s_SceneNavMeshes.erase(scene);
+	}
+}
+
+void NavigationSystem::ClearNavMeshes()
+{
+	s_SceneNavMeshes.clear();
+}
+
 void NavigationSystem::ProcessScene(Scene& scene, f32 dt)
 {
 	ProcessRegistry(scene.GetRegistry(), dt, &scene);
@@ -128,6 +164,20 @@ void NavigationSystem::ProcessRegistry(entt::registry& world, f32 dt, const Scen
 	// ─────────────────────────────────────────────────────────────
 	// 1. 에이전트 경로 탐색 및 이동 추종 (NavAgentComponent)
 	// ─────────────────────────────────────────────────────────────
+	std::shared_ptr<NavMesh> defaultNavMesh;
+	if (scene)
+	{
+		defaultNavMesh = GetSceneNavMesh(scene);
+	}
+	if (!defaultNavMesh)
+	{
+		if (const auto* ctxMesh = world.ctx().find<std::shared_ptr<NavMesh>>())
+		{
+			defaultNavMesh = *ctxMesh;
+		}
+	}
+	const bool useNavMesh = (defaultNavMesh && defaultNavMesh->IsValid());
+
 	std::shared_ptr<NavGrid> defaultNavGrid;
 	if (scene)
 	{
@@ -162,13 +212,16 @@ void NavigationSystem::ProcessRegistry(entt::registry& world, f32 dt, const Scen
 		auto& agent = agentView.get<NavAgentComponent>(entity);
 		auto& transform = agentView.get<TransformComponent>(entity);
 
-		// 경로 재계산 요청 처리
+		// 경로 재계산 요청 처리 (NavMesh 우선, 미등록 시 NavGrid 폴백)
 		if (agent.hasDestination && (agent.pathPending || (agent.autoRepath && agent.path.empty())))
 		{
-			if (defaultNavGrid)
+			if (useNavMesh || defaultNavGrid)
 			{
 				const vec3 currentPos = GetEntityWorldPosition(world, entity);
-				if (defaultNavGrid->FindPath(currentPos, agent.targetPosition, agent.path))
+				const bool pathFound = useNavMesh
+					? defaultNavMesh->FindPath(currentPos, agent.targetPosition, agent.path)
+					: defaultNavGrid->FindPath(currentPos, agent.targetPosition, agent.path);
+				if (pathFound)
 				{
 					agent.pathPending = false;
 					agent.currentWaypointIndex = 0;
@@ -220,9 +273,12 @@ void NavigationSystem::ProcessRegistry(entt::registry& world, f32 dt, const Scen
 				}
 
 				const vec2 newXZ = currentXZ + moveDir * moveStep;
-				agent.velocity = vec3(moveDir.x * agent.moveSpeed, 0.0f, moveDir.y * agent.moveSpeed);
+				const f32 t = dist > 1e-4f ? (moveStep / dist) : 1.0f;
+				const f32 newY = useNavMesh ? glm::mix(currentPos.y, targetWaypoint.y, t) : transform.position.y;
+				const f32 velY = (useNavMesh && dt > 1e-5f) ? ((newY - currentPos.y) / dt) : 0.0f;
+				agent.velocity = vec3(moveDir.x * agent.moveSpeed, velY, moveDir.y * agent.moveSpeed);
 
-				(void)transform.SetLocalPosition(vec3(newXZ.x, transform.position.y, newXZ.y));
+				(void)transform.SetLocalPosition(vec3(newXZ.x, newY, newXZ.y));
 
 				// 진행 방향을 향하도록 Yaw 회전 갱신 (+Z 전방 기준)
 				if (glm::length2(moveDir) > 1e-4f)

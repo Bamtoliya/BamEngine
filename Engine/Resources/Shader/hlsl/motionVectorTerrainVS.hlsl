@@ -21,10 +21,12 @@ MotionVertex main(VS_INPUT input, uint vertexId : SV_VertexID)
 	uint width, height;
 	gHeightMap.GetDimensions(width, height);
 
-	// 그리드의 정점 번호는 CPU 높이 배열의 인덱스와 같다.
-	const int2 index = int2(vertexId % width, vertexId / width);
+	const int2 lastIndex = int2(width, height) - 1;
+	const float2 cellSpacing = max(gObject.HeightfieldData.yz, float2(1e-6f, 1e-6f));
+	const float2 gridCoord = input.Position.xz / cellSpacing + 0.5f * float2(lastIndex);
+	const int2 index = clamp(int2(round(gridCoord)), int2(0, 0), lastIndex);
 	float3 displacedPosition = input.Position;
-	displacedPosition.y = gHeightMap.Load(int3(index, 0)) * gObject.HeightfieldData.x;
+	displacedPosition.y = gHeightMap.Load(int3(index, 0)) * gObject.HeightfieldData.x + input.Position.y;
 
 	const float4 position = float4(displacedPosition, 1.0f);
 	return MakeMotionVertex(mul(gObject.World, position), mul(gObject.PreviousWorld, position));

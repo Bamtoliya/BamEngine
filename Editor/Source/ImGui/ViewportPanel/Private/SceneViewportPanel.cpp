@@ -39,6 +39,7 @@
 #include "PostProcessComponent.h"
 #include "NotificationManager.h"
 #include "NavGrid.h"
+#include "NavMesh.h"
 #include "NavigationSystem.h"
 #include <archive/JsonArchive.h>
 #include "PrefabModeManager.h"
@@ -823,6 +824,12 @@ void SceneViewportPanel::DrawDebugMenu()
 		if (ImGui::MenuItem((std::string(ICON_FA_HAMMER " ") + LOCAL("Viewport.BakeNavGridMenu")).c_str()))
 		{
 			BakeSceneNavGrid();
+		}
+		ImGui::Separator();
+		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowNavMeshOverlay").c_str(), nullptr, m_DebugRenderer.GetShowNavMeshOverlayPtr());
+		if (ImGui::MenuItem((std::string(ICON_FA_HAMMER " ") + LOCAL("Viewport.BakeNavMeshMenu")).c_str()))
+		{
+			BakeSceneNavMesh();
 		}
 		ImGui::Separator();
 		ImGui::BeginDisabled(m_HDRCapture.Active);
@@ -1885,7 +1892,9 @@ void SceneViewportPanel::DrawTerrainAttributeOverlay(const Engine::TerrainCompon
 		const glm::vec3 world = glm::vec3(worldMatrix * glm::vec4(x, terrain.HeightData[index] * terrain.MaxHeight + 0.05f, z, 1.0f));
 		ImVec2 screen{};
 		if (!WorldToViewportScreen(world, cameraBuffer->viewProjMatrix, m_ImageScreenPos, m_ImageSize, screen)) continue;
-		const ImU32 color = attribute == static_cast<uint8>(Engine::ETerrainAttribute::Water) ? IM_COL32(60, 140, 255, 220) : IM_COL32(255, 70, 60, 220);
+		ImU32 color = IM_COL32(255, 70, 60, 220);
+		if (attribute == static_cast<uint8>(Engine::ETerrainAttribute::Water)) color = IM_COL32(60, 140, 255, 220);
+		else if (attribute == static_cast<uint8>(Engine::ETerrainAttribute::Hole)) color = IM_COL32(180, 70, 255, 220);
 		drawList->AddCircleFilled(screen, 3.0f, color);
 	}
 }
@@ -2984,6 +2993,46 @@ void SceneViewportPanel::BakeSceneNavGrid()
 
 	NotificationManager::Get().AddNotification(
 		LOCAL("Viewport.NavGridBakeTitle"), msg, ELogLevel::Info, 4.0f);
+}
+
+bool SceneViewportPanel::HasActiveNavMesh() const
+{
+	Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene) return false;
+
+	if (Engine::NavigationSystem::GetSceneNavMesh(scene))
+		return true;
+
+	if (const auto* ctxNavMesh = scene->GetRegistry().ctx().find<std::shared_ptr<Engine::NavMesh>>())
+		return ctxNavMesh->operator bool();
+
+	return false;
+}
+
+void SceneViewportPanel::BakeSceneNavMesh()
+{
+	Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
+	if (!scene)
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Viewport.NavMeshTitle"), LOCAL("Viewport.NavMeshNoActiveScene"), ELogLevel::Warn, 3.0f);
+		return;
+	}
+
+	auto navMesh = std::make_shared<Engine::NavMesh>();
+	if (!navMesh->BuildFromScene(*scene))
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Viewport.NavMeshBakeTitle"), LOCAL("Viewport.NavMeshBakeFailedMessage"), ELogLevel::Warn, 4.0f);
+		return;
+	}
+
+	Engine::NavigationSystem::SetSceneNavMesh(scene, navMesh);
+	m_DebugRenderer.SetShowNavMeshOverlay(true);
+
+	const std::string msg = LOCAL_FMT("Viewport.NavMeshBakedMessage", navMesh->GetPolygonCount(), navMesh->GetVertexCount());
+	NotificationManager::Get().AddNotification(
+		LOCAL("Viewport.NavMeshBakeTitle"), msg, ELogLevel::Info, 4.0f);
 }
 #pragma endregion
 

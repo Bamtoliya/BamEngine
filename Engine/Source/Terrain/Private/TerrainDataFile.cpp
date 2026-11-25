@@ -67,6 +67,7 @@ namespace
 		terrain.AttributeData = std::move(content.Attributes);
 		terrain.MarkHeightDirty();
 		terrain.IsSplatDirty = true;
+		terrain.IsAttributeDirty = true;
 	}
 }
 

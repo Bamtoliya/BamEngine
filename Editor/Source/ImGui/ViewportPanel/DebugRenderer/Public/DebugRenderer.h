@@ -21,6 +21,7 @@ private:
 	void RegisterColliderDebug(const CameraBuffer& cameraBuffer);
 	void RegisterGameplayDebug(const CameraBuffer& cameraBuffer);
 	void RegisterNavGridDebug(const CameraBuffer& cameraBuffer);
+	void RegisterNavMeshDebug(const CameraBuffer& cameraBuffer);
 public:
 	void DrawLine(const vec3& start, const vec3& end, const vec4& color);
 	void DrawRect(const Engine::Rect& rect, const vec4& color);
@@ -44,6 +45,11 @@ public:
 	bool IsShowNavGridOverlay() const { return m_ShowNavGridOverlay; }
 	void SetShowNavGridOverlay(bool show) { m_ShowNavGridOverlay = show; }
 	void ToggleShowNavGridOverlay() { m_ShowNavGridOverlay = !m_ShowNavGridOverlay; }
+	bool* GetShowNavMeshOverlayPtr() { return &m_ShowNavMeshOverlay; }
+	bool GetShowNavMeshOverlay() const { return m_ShowNavMeshOverlay; }
+	bool IsShowNavMeshOverlay() const { return m_ShowNavMeshOverlay; }
+	void SetShowNavMeshOverlay(bool show) { m_ShowNavMeshOverlay = show; }
+	void ToggleShowNavMeshOverlay() { m_ShowNavMeshOverlay = !m_ShowNavMeshOverlay; }
 
 private:
 	vector<Engine::DebugVertex> m_Vertices;
@@ -51,6 +57,7 @@ private:
 	bool m_DrawColliders = { false };
 	bool m_DrawGameplayGizmos = { true };
 	bool m_ShowNavGridOverlay = { false };
+	bool m_ShowNavMeshOverlay = { false };
 	uint32 m_MaxLines = 65536;
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
 };

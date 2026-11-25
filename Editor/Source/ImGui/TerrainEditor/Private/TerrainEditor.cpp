@@ -90,12 +90,13 @@ void TerrainEditor::DrawPalette(const Engine::TerrainComponent& terrain)
 		return;
 	}
 
-	// 속성 페인트: 게임 의미(이동 차단·물)를 보이지 않는 맵에 칠한다. 지우기는 None을 칠한다.
+	// 속성 페인트: 게임 의미(이동 차단·물·구멍)를 맵에 칠한다. 지우기는 None을 칠한다.
 	ImGui::TextUnformatted(LOCAL_CSTR("TerrainEditor.AttributePalette"));
 	int attribute = m_PaintAttribute;
 	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeErase").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::None)); ImGui::SameLine();
 	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeBlocked").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Blocked)); ImGui::SameLine();
-	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeWater").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Water));
+	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeWater").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Water)); ImGui::SameLine();
+	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeHole").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Hole));
 	m_PaintAttribute = static_cast<uint8>(attribute);
 	ImGui::TextDisabled("%s", LOCAL_CSTR("TerrainEditor.AttributeHint"));
 }
