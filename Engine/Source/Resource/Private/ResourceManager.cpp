@@ -79,9 +79,9 @@ namespace
 		const std::wstring& key = resource.GetKey();
 		const std::wstring& path = resource.GetPath();
 
-		if (Engine::PlatformPath::IsEngineUri(key) || Engine::PlatformPath::IsEditorUri(key) || Engine::PlatformPath::IsPluginUri(key))
+		if (Engine::PlatformPath::IsEngineUri(key) || Engine::PlatformPath::IsVirtualSchemeUri(key, L"Editor") || Engine::PlatformPath::IsPluginUri(key))
 			return false;
-		if (Engine::PlatformPath::IsEngineUri(path) || Engine::PlatformPath::IsEditorUri(path) || Engine::PlatformPath::IsPluginUri(path))
+		if (Engine::PlatformPath::IsEngineUri(path) || Engine::PlatformPath::IsVirtualSchemeUri(path, L"Editor") || Engine::PlatformPath::IsPluginUri(path))
 			return false;
 
 		if (Engine::PlatformPath::IsProjectUri(key) || Engine::PlatformPath::IsMountUri(key))
@@ -92,7 +92,7 @@ namespace
 		if (!path.empty())
 		{
 			const std::wstring virtualPath = Engine::PlatformPath::ToVirtualUri(Engine::PlatformPath::ResolveUri(path));
-			if (Engine::PlatformPath::IsEngineUri(virtualPath) || Engine::PlatformPath::IsEditorUri(virtualPath) ||
+			if (Engine::PlatformPath::IsEngineUri(virtualPath) || Engine::PlatformPath::IsVirtualSchemeUri(virtualPath, L"Editor") ||
 				Engine::PlatformPath::IsPluginUri(virtualPath))
 				return false;
 			if (Engine::PlatformPath::IsProjectUri(virtualPath) || Engine::PlatformPath::IsMountUri(virtualPath))

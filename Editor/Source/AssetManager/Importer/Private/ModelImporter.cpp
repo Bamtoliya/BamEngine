@@ -2003,8 +2003,8 @@ std::filesystem::path ModelImporter::ResolveWritableDestinationDirectory(const s
 	const std::wstring virtualUri = Engine::PlatformPath::ToVirtualUri(candidate);
 	if (Engine::PlatformPath::IsEngineUri(virtualUri))
 		subPath = virtualUri.substr(9); // strip "Engine://"
-	else if (Engine::PlatformPath::IsEditorUri(virtualUri))
-		subPath = virtualUri.substr(8); // strip "Editor://"
+	else if (Engine::PlatformPath::IsVirtualSchemeUri(virtualUri, L"Editor"))
+		subPath = virtualUri.substr(9); // strip "Editor://"
 
 	while (!subPath.empty() && (subPath.front() == L'/' || subPath.front() == L'\\'))
 		subPath.erase(subPath.begin());

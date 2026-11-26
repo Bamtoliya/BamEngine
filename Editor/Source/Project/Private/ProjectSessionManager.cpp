@@ -564,8 +564,8 @@ void ProjectSessionManager::WaitForGPUIdle()
 void ProjectSessionManager::RebindPathsAndMounts(const std::filesystem::path& newProjectRoot,
     const std::filesystem::path& newAssetRoot, const Engine::ProjectDescriptor& descriptor)
 {
-    // Lock EngineRoot / EngineResourceRoot / EditorResourceRoot before rebinding ProjectRoot
-    // so Engine:// and Editor:// remain anchored to the engine installation.
+    // Lock EngineRoot / EngineResourceRoot before rebinding ProjectRoot
+    // so Engine:// and registered virtual schemes remain anchored to the engine installation.
     const std::filesystem::path engineRoot = Engine::PlatformPath::GetEngineRoot();
     if (!engineRoot.empty())
         Engine::PlatformPath::SetEngineRoot(engineRoot);
@@ -573,10 +573,6 @@ void ProjectSessionManager::RebindPathsAndMounts(const std::filesystem::path& ne
     const std::filesystem::path engineResRoot = Engine::PlatformPath::GetEngineResourceRoot();
     if (!engineResRoot.empty())
         Engine::PlatformPath::SetEngineResourceRoot(engineResRoot);
-
-    const std::filesystem::path editorResRoot = Engine::PlatformPath::GetEditorResourceRoot();
-    if (!editorResRoot.empty())
-        Engine::PlatformPath::SetEditorResourceRoot(editorResRoot);
 
     Engine::PlatformPath::SetProjectRoot(newProjectRoot);
     Engine::PlatformPath::SetProjectAssetRoot(newAssetRoot);

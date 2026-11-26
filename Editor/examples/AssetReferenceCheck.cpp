@@ -469,7 +469,7 @@ int RunAssetReferenceChecks()
     Engine::PlatformPath::SetProjectRoot(root);
     Engine::PlatformPath::SetProjectAssetRoot(assets);
     Engine::PlatformPath::SetEngineResourceRoot(engine);
-    Engine::PlatformPath::SetEditorResourceRoot(root / "EditorResources");
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", root / "EditorResources", true, true });
 
     const auto scene = assets / "Sample.bamscene.json";
     const auto material = materials / "Brick.bammat.json";

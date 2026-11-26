@@ -15,11 +15,12 @@ namespace Engine
     static std::filesystem::path s_EngineRoot;
     static std::filesystem::path s_ProjectRoot;
     static std::filesystem::path s_EngineResourceRoot;
-    static std::filesystem::path s_EditorResourceRoot;
     static std::filesystem::path s_ProjectAssetRoot;
     static bool s_EngineResourceRootExplicit = false;
-    static bool s_EditorResourceRootExplicit = false;
     static bool s_ProjectAssetRootExplicit = false;
+
+    static std::mutex s_VirtualSchemeMutex;
+    static std::vector<VirtualSchemeDesc> s_VirtualSchemes;
 
     struct PluginMountEntry
     {
@@ -59,6 +60,43 @@ namespace Engine
         bool EqualsIgnoreCase(std::string_view lhs, std::string_view rhs)
         {
             return lhs.size() == rhs.size() && StartsWithIgnoreCase(lhs, rhs);
+        }
+
+        bool EqualsIgnoreCase(std::wstring_view lhs, std::wstring_view rhs)
+        {
+            return lhs.size() == rhs.size() && StartsWithIgnoreCase(lhs, rhs);
+        }
+
+        std::wstring_view TrimSchemeSuffix(std::wstring_view scheme)
+        {
+            if (scheme.size() >= 3 && scheme.substr(scheme.size() - 3) == L"://")
+                return scheme.substr(0, scheme.size() - 3);
+            return scheme;
+        }
+
+        std::string_view TrimSchemeSuffix(std::string_view scheme)
+        {
+            if (scheme.size() >= 3 && scheme.substr(scheme.size() - 3) == "://")
+                return scheme.substr(0, scheme.size() - 3);
+            return scheme;
+        }
+
+        bool MatchesSchemePrefix(std::wstring_view uri, std::wstring_view scheme)
+        {
+            scheme = TrimSchemeSuffix(scheme);
+            if (scheme.empty()) return false;
+            return uri.size() >= scheme.size() + 3 &&
+                StartsWithIgnoreCase(uri, scheme) &&
+                uri.substr(scheme.size(), 3) == L"://";
+        }
+
+        bool MatchesSchemePrefix(std::string_view uri, std::string_view scheme)
+        {
+            scheme = TrimSchemeSuffix(scheme);
+            if (scheme.empty()) return false;
+            return uri.size() >= scheme.size() + 3 &&
+                StartsWithIgnoreCase(uri, scheme) &&
+                uri.substr(scheme.size(), 3) == "://";
         }
 
         bool IsValidContentMountName(std::string_view name)
@@ -120,7 +158,6 @@ namespace Engine
     {
         s_EngineRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
         if (!s_EngineResourceRootExplicit) s_EngineResourceRoot.clear();
-        if (!s_EditorResourceRootExplicit) s_EditorResourceRoot.clear();
     }
 
     const std::filesystem::path& PlatformPath::GetEngineRoot()
@@ -136,7 +173,6 @@ namespace Engine
         if (s_EngineRoot.empty())
         {
             if (!s_EngineResourceRootExplicit) s_EngineResourceRoot.clear();
-            if (!s_EditorResourceRootExplicit) s_EditorResourceRoot.clear();
         }
     }
 
@@ -305,34 +341,66 @@ namespace Engine
         return s_EngineResourceRoot;
     }
 
-    void PlatformPath::SetEditorResourceRoot(const std::filesystem::path& root)
+    void PlatformPath::RegisterVirtualScheme(const VirtualSchemeDesc& desc)
     {
-        s_EditorResourceRoot = root.empty() ? std::filesystem::path{} : Normalize(root);
-        s_EditorResourceRootExplicit = !root.empty();
-    }
+        const std::wstring_view trimmed = TrimSchemeSuffix(desc.Scheme);
+        if (trimmed.empty()) return;
 
-    const std::filesystem::path& PlatformPath::GetEditorResourceRoot()
-    {
-        if (s_EditorResourceRoot.empty())
+        VirtualSchemeDesc normalized = desc;
+        normalized.Scheme = std::wstring(trimmed);
+        normalized.RootPath = desc.RootPath.empty() ? std::filesystem::path{} : Normalize(desc.RootPath);
+
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        for (auto& existing : s_VirtualSchemes)
         {
-            const auto& engineRoot = GetEngineRoot();
-            auto candidate = Normalize(engineRoot / "Editor/Resources");
-            std::error_code ec;
-            if (std::filesystem::is_directory(candidate, ec))
+            if (EqualsIgnoreCase(existing.Scheme, normalized.Scheme))
             {
-                s_EditorResourceRoot = candidate;
-            }
-            else if (!s_EngineResourceRootExplicit && !s_ProjectAssetRootExplicit &&
-                     std::filesystem::is_directory(engineRoot / "Resources", ec))
-            {
-                s_EditorResourceRoot = Normalize(engineRoot / "Resources");
-            }
-            else
-            {
-                s_EditorResourceRoot = candidate;
+                existing.RootPath = std::move(normalized.RootPath);
+                existing.ReadOnly = normalized.ReadOnly;
+                existing.IncludeInFallbackResolve = normalized.IncludeInFallbackResolve;
+                return;
             }
         }
-        return s_EditorResourceRoot;
+        s_VirtualSchemes.push_back(std::move(normalized));
+    }
+
+    void PlatformPath::UnregisterVirtualScheme(std::wstring_view scheme)
+    {
+        const std::wstring_view trimmed = TrimSchemeSuffix(scheme);
+        if (trimmed.empty()) return;
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        std::erase_if(s_VirtualSchemes, [trimmed](const VirtualSchemeDesc& s) {
+            return EqualsIgnoreCase(s.Scheme, trimmed);
+        });
+    }
+
+    void PlatformPath::ClearVirtualSchemes()
+    {
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        s_VirtualSchemes.clear();
+    }
+
+    std::filesystem::path PlatformPath::GetVirtualSchemeRoot(std::wstring_view scheme)
+    {
+        const std::wstring_view trimmed = TrimSchemeSuffix(scheme);
+        if (trimmed.empty()) return {};
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        for (const auto& s : s_VirtualSchemes)
+        {
+            if (EqualsIgnoreCase(s.Scheme, trimmed))
+                return s.RootPath;
+        }
+        return {};
+    }
+
+    bool PlatformPath::IsVirtualSchemeUri(const std::wstring& uri, std::wstring_view scheme)
+    {
+        return MatchesSchemePrefix(uri, scheme);
+    }
+
+    bool PlatformPath::IsVirtualSchemeUri(const std::string& uri, std::string_view scheme)
+    {
+        return MatchesSchemePrefix(uri, scheme);
     }
 
     void PlatformPath::SetProjectAssetRoot(const std::filesystem::path& root)
@@ -369,16 +437,6 @@ namespace Engine
         return StartsWithIgnoreCase(uri, "engine://");
     }
 
-    bool PlatformPath::IsEditorUri(const std::wstring& uri)
-    {
-        return StartsWithIgnoreCase(uri, L"editor://");
-    }
-
-    bool PlatformPath::IsEditorUri(const std::string& uri)
-    {
-        return StartsWithIgnoreCase(uri, "editor://");
-    }
-
     bool PlatformPath::IsProjectUri(const std::wstring& uri)
     {
         return StartsWithIgnoreCase(uri, L"project://") || StartsWithIgnoreCase(uri, L"asset://");
@@ -411,14 +469,29 @@ namespace Engine
 
     bool PlatformPath::IsVirtualUri(std::wstring_view uri)
     {
-        return IsEngineUri(std::wstring(uri)) || IsEditorUri(std::wstring(uri)) ||
-            IsProjectUri(std::wstring(uri)) || IsPluginUri(uri) || IsMountUri(uri);
+        if (IsEngineUri(std::wstring(uri)) || IsProjectUri(std::wstring(uri)) || IsPluginUri(uri) || IsMountUri(uri))
+            return true;
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        for (const auto& s : s_VirtualSchemes)
+        {
+            if (MatchesSchemePrefix(uri, s.Scheme))
+                return true;
+        }
+        return false;
     }
 
     bool PlatformPath::IsVirtualUri(std::string_view uri)
     {
-        return IsEngineUri(std::string(uri)) || IsEditorUri(std::string(uri)) ||
-            IsProjectUri(std::string(uri)) || IsPluginUri(uri) || IsMountUri(uri);
+        if (IsEngineUri(std::string(uri)) || IsProjectUri(std::string(uri)) || IsPluginUri(uri) || IsMountUri(uri))
+            return true;
+        const std::wstring wuri = Utf8ToPath(uri).wstring();
+        const std::lock_guard lock(s_VirtualSchemeMutex);
+        for (const auto& s : s_VirtualSchemes)
+        {
+            if (MatchesSchemePrefix(wuri, s.Scheme))
+                return true;
+        }
+        return false;
     }
 
     void PlatformPath::RegisterPluginMount(std::string_view pluginId, const std::filesystem::path& contentRoot)
@@ -688,17 +761,6 @@ namespace Engine
             return resolved;
         }
 
-        if (IsEditorUri(pathOrUri))
-        {
-            const std::wstring sub = pathOrUri.substr(9);
-            const auto resolved = Normalize(GetEditorResourceRoot() / sub);
-            if (!IsSubpathOf(resolved, GetEditorResourceRoot()) && resolved != GetEditorResourceRoot())
-            {
-                return GetEditorResourceRoot();
-            }
-            return resolved;
-        }
-
         if (IsProjectUri(pathOrUri))
         {
             const size_t prefixLen = StartsWithIgnoreCase(pathOrUri, L"project://") ? 10 : 8;
@@ -721,6 +783,34 @@ namespace Engine
             return ResolveMountUri(pathOrUri);
         }
 
+        {
+            std::filesystem::path schemeRoot;
+            size_t prefixLen = 0;
+            {
+                const std::lock_guard lock(s_VirtualSchemeMutex);
+                for (const auto& s : s_VirtualSchemes)
+                {
+                    if (MatchesSchemePrefix(pathOrUri, s.Scheme))
+                    {
+                        schemeRoot = s.RootPath;
+                        prefixLen = s.Scheme.size() + 3;
+                        break;
+                    }
+                }
+            }
+            if (prefixLen > 0)
+            {
+                if (schemeRoot.empty()) return {};
+                const std::wstring sub = pathOrUri.substr(prefixLen);
+                const auto resolved = Normalize(schemeRoot / sub);
+                if (!IsSubpathOf(resolved, schemeRoot) && !IsSamePath(resolved, schemeRoot))
+                {
+                    return schemeRoot;
+                }
+                return resolved;
+            }
+        }
+
         const std::filesystem::path fsPath(pathOrUri);
         if (fsPath.is_absolute())
         {
@@ -736,9 +826,22 @@ namespace Engine
         if (std::filesystem::exists(inEngine, ec))
             return inEngine;
 
-        const auto inEditor = Normalize(GetEditorResourceRoot() / fsPath);
-        if (std::filesystem::exists(inEditor, ec))
-            return inEditor;
+        std::vector<std::filesystem::path> fallbackRoots;
+        {
+            const std::lock_guard lock(s_VirtualSchemeMutex);
+            for (const auto& s : s_VirtualSchemes)
+            {
+                if (s.IncludeInFallbackResolve && !s.RootPath.empty())
+                    fallbackRoots.push_back(s.RootPath);
+            }
+        }
+
+        for (const auto& fallbackRoot : fallbackRoots)
+        {
+            const auto inScheme = Normalize(fallbackRoot / fsPath);
+            if (std::filesystem::exists(inScheme, ec))
+                return inScheme;
+        }
 
         auto normRel = Normalize(fsPath);
         const std::wstring relStr = normRel.generic_wstring();
@@ -753,9 +856,12 @@ namespace Engine
             if (std::filesystem::exists(strippedEngine, ec))
                 return strippedEngine;
 
-            const auto strippedEditor = Normalize(GetEditorResourceRoot() / stripped);
-            if (std::filesystem::exists(strippedEditor, ec))
-                return strippedEditor;
+            for (const auto& fallbackRoot : fallbackRoots)
+            {
+                const auto strippedScheme = Normalize(fallbackRoot / stripped);
+                if (std::filesystem::exists(strippedScheme, ec))
+                    return strippedScheme;
+            }
         }
 
         const auto inCwd = Normalize(std::filesystem::current_path(ec) / fsPath);
@@ -785,10 +891,9 @@ namespace Engine
         const auto norm = physicalPath.is_absolute() ? Normalize(physicalPath) : ResolveUri(physicalPath);
 
         const auto engineRoot = GetEngineResourceRoot();
-        const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
 
-        // Priority order: Project:// -> Engine:// -> Editor:// -> Plugin:// -> Mount://<Name>/
+        // Priority order: Project:// -> Engine:// -> registered virtual schemes -> Plugin:// -> Mount://<Name>/
         if (projectRoot != engineRoot && (IsSubpathOf(norm, projectRoot) || IsSamePath(norm, projectRoot)))
         {
             auto rel = norm.lexically_relative(projectRoot);
@@ -807,13 +912,20 @@ namespace Engine
             return L"Engine://" + relW;
         }
 
-        if (editorRoot != projectRoot && (IsSubpathOf(norm, editorRoot) || IsSamePath(norm, editorRoot)))
         {
-            auto rel = norm.lexically_relative(editorRoot);
-            const auto relW = rel.generic_wstring();
-            if (relW.empty() || relW == L".")
-                return L"Editor://";
-            return L"Editor://" + relW;
+            const std::lock_guard lock(s_VirtualSchemeMutex);
+            for (const auto& s : s_VirtualSchemes)
+            {
+                if (s.RootPath.empty() || s.RootPath == projectRoot) continue;
+                if (IsSubpathOf(norm, s.RootPath) || IsSamePath(norm, s.RootPath))
+                {
+                    auto rel = norm.lexically_relative(s.RootPath);
+                    const auto relW = rel.generic_wstring();
+                    if (relW.empty() || relW == L".")
+                        return s.Scheme + L"://";
+                    return s.Scheme + L"://" + relW;
+                }
+            }
         }
 
         // Check registered plugin content mounts
@@ -878,7 +990,7 @@ namespace Engine
 
     bool PlatformPath::IsReadOnlyTarget(const std::wstring& pathOrUri)
     {
-        if (IsEngineUri(pathOrUri) || IsEditorUri(pathOrUri))
+        if (IsEngineUri(pathOrUri))
             return true;
         if (IsProjectUri(pathOrUri))
             return false;
@@ -892,10 +1004,17 @@ namespace Engine
                 return true;
             return false;
         }
+        {
+            const std::lock_guard lock(s_VirtualSchemeMutex);
+            for (const auto& s : s_VirtualSchemes)
+            {
+                if (MatchesSchemePrefix(pathOrUri, s.Scheme))
+                    return s.ReadOnly;
+            }
+        }
 
         const auto resolved = ResolveUri(pathOrUri);
         const auto engineRoot = GetEngineResourceRoot();
-        const auto editorRoot = GetEditorResourceRoot();
         const auto projectRoot = GetProjectAssetRoot();
 
         if (IsSubpathOf(resolved, engineRoot) || IsSamePath(resolved, engineRoot))
@@ -906,9 +1025,14 @@ namespace Engine
             return IsBuiltInRelativeResourcePath(rel.generic_wstring());
         }
 
-        if (IsSubpathOf(resolved, editorRoot) || IsSamePath(resolved, editorRoot))
         {
-            return true;
+            const std::lock_guard lock(s_VirtualSchemeMutex);
+            for (const auto& s : s_VirtualSchemes)
+            {
+                if (s.RootPath.empty()) continue;
+                if (IsSubpathOf(resolved, s.RootPath) || IsSamePath(resolved, s.RootPath))
+                    return s.ReadOnly;
+            }
         }
 
         if (projectRoot != engineRoot && (IsSubpathOf(resolved, projectRoot) || IsSamePath(resolved, projectRoot)))

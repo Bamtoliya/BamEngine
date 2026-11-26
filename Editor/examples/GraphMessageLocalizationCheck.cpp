@@ -1,4 +1,5 @@
 ﻿#include "GraphMessageLocalization.h"
+#include "PlatformPath.h"
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -6,6 +7,7 @@
 int main()
 {
     using Engine::LocalizationManager;
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / L"Editor/Resources", true, true });
     if (!LocalizationManager::Create()) return 1;
     struct Scope { ~Scope() { LocalizationManager::Destroy(); } } scope;
     auto& localization = LocalizationManager::Get();

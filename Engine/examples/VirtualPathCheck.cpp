@@ -161,7 +161,7 @@ int main()
         // 커스텀 목 루트 초기화 -> 실제 디스크 환경 자동 감지
         PlatformPath::SetProjectRoot({});
         PlatformPath::SetEngineResourceRoot({});
-        PlatformPath::SetEditorResourceRoot({});
+        PlatformPath::ClearVirtualSchemes();
         PlatformPath::SetProjectAssetRoot({});
 
         const fs::path engineRoot = PlatformPath::GetEngineResourceRoot();
@@ -205,11 +205,25 @@ int main()
         const auto resolvedProjectScene = PlatformPath::ResolveUri(L"Project://Scenes/RaytracingScene.bamscene.json");
         EXPECT_EQ(resolvedProjectScene, PlatformPath::Normalize(projectRoot / "Scenes/RaytracingScene.bamscene.json"));
 
-        // 12. Editor:// 가상 마운트 URI 및 에디터 로캘 해석 검증
+        // 12. 범용 가상 스키마 등록(Editor://) 및 해제, 역변환, 읽기 전용 가드 검증
+        const fs::path editorResRoot = PlatformPath::Normalize(PlatformPath::GetEngineRoot() / "Editor/Resources");
+        PlatformPath::RegisterVirtualScheme({ L"Editor", editorResRoot, true, true });
+        EXPECT_EQ(PlatformPath::GetVirtualSchemeRoot(L"Editor"), editorResRoot);
+        EXPECT_TRUE(PlatformPath::IsVirtualSchemeUri(L"Editor://Data/Localization/English.json", L"Editor"));
+        EXPECT_TRUE(PlatformPath::IsVirtualSchemeUri("editor://data/localization/english.json", "editor"));
+        EXPECT_TRUE(PlatformPath::IsVirtualUri(L"Editor://Data/Localization/English.json"));
+        EXPECT_TRUE(PlatformPath::IsVirtualUri("editor://data/localization/english.json"));
+
         const auto resolvedEditorLoc = PlatformPath::ResolveUri(L"Editor://Data/Localization/English.json");
         EXPECT_TRUE(fs::exists(resolvedEditorLoc));
+        EXPECT_EQ(PlatformPath::ToVirtualUri(resolvedEditorLoc), L"Editor://Data/Localization/English.json");
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Editor://Data/Localization/English.json"));
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(resolvedEditorLoc));
+
+        PlatformPath::UnregisterVirtualScheme(L"Editor");
+        EXPECT_TRUE(PlatformPath::GetVirtualSchemeRoot(L"Editor").empty());
+        EXPECT_FALSE(PlatformPath::IsVirtualUri(L"Editor://Data/Localization/English.json"));
+        EXPECT_FALSE(PlatformPath::IsReadOnlyTarget(L"Editor://Data/Localization/English.json"));
 
         // 읽기 전용 판별 검증
         EXPECT_TRUE(PlatformPath::IsReadOnlyTarget(L"Engine://Shader/hlsl/defaultVS.hlsl"));

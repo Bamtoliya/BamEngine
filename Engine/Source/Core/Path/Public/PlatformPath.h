@@ -27,6 +27,14 @@ namespace Engine
         bool ShowUnderAssets = false;
     };
 
+    struct VirtualSchemeDesc
+    {
+        std::wstring Scheme;
+        std::filesystem::path RootPath;
+        bool ReadOnly = true;
+        bool IncludeInFallbackResolve = false;
+    };
+
     class ENGINE_API PlatformPath
     {
     public:
@@ -56,19 +64,21 @@ namespace Engine
         static void SetEngineResourceRoot(const std::filesystem::path& root);
         static const std::filesystem::path& GetEngineResourceRoot();
 
-        // 에디터 시스템 리소스 루트 ("Editor://")
-        static void SetEditorResourceRoot(const std::filesystem::path& root);
-        static const std::filesystem::path& GetEditorResourceRoot();
-
         // 사용자 프로젝트 애셋 루트 ("Project://", "Asset://")
         static void SetProjectAssetRoot(const std::filesystem::path& root);
         static const std::filesystem::path& GetProjectAssetRoot();
 
+        // 범용 가상 스키마 등록/조회 ("<Scheme>://...")
+        static void RegisterVirtualScheme(const VirtualSchemeDesc& desc);
+        static void UnregisterVirtualScheme(std::wstring_view scheme);
+        static void ClearVirtualSchemes();
+        static std::filesystem::path GetVirtualSchemeRoot(std::wstring_view scheme);
+        static bool IsVirtualSchemeUri(const std::wstring& uri, std::wstring_view scheme);
+        static bool IsVirtualSchemeUri(const std::string& uri, std::string_view scheme);
+
         // 가상 URI 스키마 판별
         static bool IsEngineUri(const std::wstring& uri);
         static bool IsEngineUri(const std::string& uri);
-        static bool IsEditorUri(const std::wstring& uri);
-        static bool IsEditorUri(const std::string& uri);
         static bool IsProjectUri(const std::wstring& uri);
         static bool IsProjectUri(const std::string& uri);
         static bool IsPluginUri(std::wstring_view uri);
@@ -108,7 +118,7 @@ namespace Engine
         // 물리 디스크 경로를 가상 URI("Project://...", "Engine://...", "Plugin://...", "Mount://...")로 안전하게 정규화
         static std::wstring ToVirtualUri(const std::filesystem::path& physicalPath);
 
-        // 읽기 전용 가드: Engine://, Editor://, ReadOnly Mount:// 또는 해당 루트 하위인지 여부
+        // 읽기 전용 가드: Engine://, ReadOnly 가상 스키마, ReadOnly Mount:// 또는 해당 루트 하위인지 여부
         static bool IsReadOnlyTarget(const std::filesystem::path& pathOrUri);
         static bool IsReadOnlyTarget(const std::wstring& pathOrUri);
         static bool IsReadOnlyTarget(const std::string& pathOrUri);

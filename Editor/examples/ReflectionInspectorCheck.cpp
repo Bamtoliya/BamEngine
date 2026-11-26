@@ -868,6 +868,7 @@ namespace
 int main()
 {
     Scope scope;
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / L"Editor/Resources", true, true });
     if (!Engine::LocalizationManager::Create() || !Engine::ResourceManager::Create() ||
         !Engine::ReflectionRegistry::Create() || !Engine::InputManager::Create()) return 1;
     if (!CheckPayloads() || !CheckResourceTypes() || !CheckColliderValidation() ||

@@ -58,6 +58,7 @@ EResult Application::Initialize(void* arg)
     EditorSplashScreen::UpdateProgress(0.05f, "로그 시스템 초기화 중...");
 
     const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / "Editor/Resources", true, true });
     if (!InitializeLogger())
     {
         EditorSplashScreen::Hide();

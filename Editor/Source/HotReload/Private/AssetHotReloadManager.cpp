@@ -271,7 +271,7 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 	// 1. 현재 프로젝트 루트 기준 기본 디렉터리 등록
 	registerDirectory(Engine::PlatformPath::GetProjectAssetRoot(), "project assets");
 	registerDirectory(Engine::PlatformPath::GetEngineResourceRoot(), "engine resources");
-	registerDirectory(Engine::PlatformPath::GetEditorResourceRoot(), "editor resources");
+	registerDirectory(Engine::PlatformPath::GetVirtualSchemeRoot(L"Editor"), "editor resources");
 
 	// 2. 모든 연결된 Git 워크트리의 에셋 및 리소스 디렉터리 자동 감시 등록
 	for (const auto& root : Engine::PlatformPath::GetWorktreeRoots())
@@ -511,7 +511,8 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 {
 	const auto parent = AssetFileKey(locPath.parent_path());
 	const auto engine = AssetFileKey(Engine::PlatformPath::GetEngineResourceRoot() / "Data/Localization");
-	const auto editor = AssetFileKey(Engine::PlatformPath::GetEditorResourceRoot() / "Data/Localization");
+	const auto editorRoot = Engine::PlatformPath::GetVirtualSchemeRoot(L"Editor");
+	const auto editor = editorRoot.empty() ? std::wstring{} : AssetFileKey(editorRoot / "Data/Localization");
 	if (parent.empty() || (parent != engine && parent != editor) || !IsLocalizationFile(locPath)) return;
 	// .csv 파일이 수정된 경우 파이썬 변환 스크립트 실행
 	if (LowerAscii(locPath.extension().wstring()) == L".csv")

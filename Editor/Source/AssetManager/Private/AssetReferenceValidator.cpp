@@ -732,7 +732,7 @@ namespace Editor
             index->Root = root;
             index->ProjectRoot = Path::GetProjectRoot();
             index->EngineRoot = Path::GetEngineResourceRoot();
-            index->EditorRoot = Path::GetEditorResourceRoot();
+            index->EditorRoot = Path::GetVirtualSchemeRoot(L"Editor");
         }
         // Keep scanning other directories if one subtree cannot be listed.
         std::set<fs::path> visited{ root };
@@ -801,7 +801,7 @@ namespace Editor
         if (timing) *timing = {};
 
         if (paths.empty() || index.Root.empty() || index.ProjectRoot != Path::GetProjectRoot() ||
-            index.EngineRoot != Path::GetEngineResourceRoot() || index.EditorRoot != Path::GetEditorResourceRoot())
+            index.EngineRoot != Path::GetEngineResourceRoot() || index.EditorRoot != Path::GetVirtualSchemeRoot(L"Editor"))
             return false;
 
         std::error_code error;

@@ -192,7 +192,7 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_EngineRootPath = Engine::PlatformPath::GetEngineResourceRoot();
 	if (m_EngineRootPath.empty())
 		m_EngineRootPath = m_RootPath;
-	m_EditorRootPath = Engine::PlatformPath::GetEditorResourceRoot();
+	m_EditorRootPath = Engine::PlatformPath::GetVirtualSchemeRoot(L"Editor");
 	m_ShowEngineContent = true;
 	m_CurrentDirectory = m_RootPath;
 	m_LastDirectory = m_CurrentDirectory;
@@ -339,7 +339,7 @@ static void PrimeAssetReferencePathRoots()
 	static_cast<void>(Engine::PlatformPath::GetProjectRoot());
 	static_cast<void>(Engine::PlatformPath::GetProjectAssetRoot());
 	static_cast<void>(Engine::PlatformPath::GetEngineResourceRoot());
-	static_cast<void>(Engine::PlatformPath::GetEditorResourceRoot());
+	static_cast<void>(Engine::PlatformPath::GetVirtualSchemeRoot(L"Editor"));
 }
 
 void ContentBrowserPanel::Update(f32 dt)
