@@ -89,6 +89,8 @@ void Runtime::Free()
 {
 	if (RuntimeSettingsManager::IsCreated())
 		RuntimeSettingsManager::Get().UnbindRuntime();
+	// Runtime::Initialize에서 생성한 싱글톤이므로 여기서 해제하지 않으면 종료 시 누수로 보고된다.
+	RuntimeSettingsManager::Destroy();
 
 	// ── 0. 씬(Scene)을 참조하는 프레임 큐 및 피킹 타겟 정리 ──
 	if (m_Renderer)
