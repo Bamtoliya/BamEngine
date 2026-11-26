@@ -10,6 +10,7 @@
 #include "Logger.h"
 #include "PlatformPath.h"
 #include "ModelSubfolderHelper.h"
+#include "AssetCache.h"
 
 #pragma push_macro("new")
 #undef new
