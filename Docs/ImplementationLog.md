@@ -2,6 +2,21 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] `SpriteSheetBaker` 에디터 UI 연동 및 인게임 설정 메뉴(`UISettingsMenuSystem`) 런타임 키 리매핑 UI 추가
+
+- **요약**:
+  1. **`SpriteSheetBaker` 에디터 UI 연동 (`sprite-baker-ui`)**:
+     - `ContentBrowserGridItem.h/.cpp`, `ContentBrowserPanel.h/.cpp`, `Editor/Resources/Data/Localization/Editor.ContentBrowser.csv`: `.bammodel` 우클릭 컨텍스트 메뉴에 `2D 스프라이트 시트로 굽기...` 추가 및 `DrawSpriteSheetBakeModal`(프레임 크기·방향 수·프레임 수·컬럼·패딩·피벗·출력 PNG 경로·리샘플링·`NotificationManager` 알림) 구현.
+  2. **인게임 설정 메뉴 런타임 키 리매핑 UI (`ingame-key-rebind-ui`)**:
+     - `RuntimeSettingsMenuComponent.h`, `UISettingsMenuSystem.h/.cpp`, `Engine/Resources/Data/Localization/Engine.csv`: 기존 `RuntimeSettingsCheck` 좌표/위젯을 유지하면서 `ControlsButton` 및 `ControlsPanel`(동적 액션/바인딩 행, 키보드/게임패드 입력 대기·`Escape` 취소·`RebindAction` + `SaveBindingsToFile`·`ResetAllBindingsToDefault`) 추가.
+- **검증 상태**:
+  - 사용자 실환경에서 `GenerateLocalization`, `Engine`, `Editor`, `Client`, `RuntimeSettingsCheck` 빌드 완료 및 전체 CTest 통과 확인 완료.
+  - **실환경 수동 검증 대기 항목**:
+    1. **아웃라인 후처리 (`OutlineEffect`)**: 에디터 `PostProcessPanel`에서 `Outline` 활성화 시 Scene/Game View 및 Client에서 깊이·노멀 엣지 아웃라인이 정상 표시되고 `Thickness`/`DepthThreshold`/`NormalThreshold`/`OutlineColor`/`Intensity` 조절이 즉시 반영되는지 확인.
+    2. **스프라이트 시트 베이킹 UI (`SpriteSheetBaker`)**: 콘텐츠 브라우저 `.bammodel` 우클릭 → `2D 스프라이트 시트로 굽기...` 모달에서 PNG 및 `.bamsprite.json` 생성, `NotificationManager` 알림 및 콘텐츠 브라우저 자동 새로고침 동작 확인. (참고: 실제 턴테이블 각도 회전 캡처는 후속 `ThumbnailRenderer` 각도 오버라이드 확장 필요)
+    3. **인게임 런타임 키 리매핑 (`UISettingsMenuSystem`)**: PIE/Client 인게임 설정 메뉴에서 `조작 키` 버튼 → 액션 클릭 후 키보드/게임패드 입력 재바인딩, `Escape` 취소, `초기화` 버튼 및 `Config/InputBindings.json` 저장·재시작 복원 확인.
+    4. **NavMesh 터레인 `Hole` & Probe GI (`M4-GI`)**: 터레인 구멍 경계 NavMesh 베이크 일치 여부 및 `RenderingFeatureLab` 다크룸/GI 박스 코너 빛샘·얇은 벽 흔들림 개선 확인.
+
 ### [2026-11-27] 아웃라인 에디터/파이프라인 연결 · 신규 API CTest 마무리 · 3D→2D 스프라이트 시트 베이커 구현
 
 - **요약**:

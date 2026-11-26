@@ -728,7 +728,7 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json") ||
 				peekedType == Engine::EResourceType::Mesh || peekedType == Engine::EResourceType::Model)
 			{
-				ContextMenu_Model(path);
+				ContextMenu_Model(browser, path);
 			}
 			else if (filename.ends_with(".png") || filename.ends_with(".jpg") ||
 				filename.ends_with(".tga") || filename.ends_with(".jpeg") || filename.ends_with(".bmp") ||
@@ -1101,7 +1101,7 @@ void ContentBrowserGridItem::ContextMenu_Material(ContentBrowserPanel& browser, 
 	}
 }
 
-void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path)
+void ContentBrowserGridItem::ContextMenu_Model(ContentBrowserPanel& browser, const std::filesystem::path& path)
 {
 	std::string filename = ToLowerAscii(path.filename().string());
 	std::string ext = ToLowerAscii(path.extension().string());
@@ -1163,6 +1163,10 @@ void ContentBrowserGridItem::ContextMenu_Model(const std::filesystem::path& path
 	}
 	else if (filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json"))
 	{
+		if (ImGui::MenuItem((ICON_FA_IMAGES " " + LOCAL_LABEL("ContentBrowser.BakeSpriteSheet")).c_str()))
+		{
+			browser.OpenSpriteSheetBakeModal(path);
+		}
 		if (!ImGui::MenuItem((ICON_FA_SLIDERS " " + LOCAL_LABEL("ContentBrowser.ReimportWithOptions")).c_str()))
 			return;
 

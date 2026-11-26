@@ -119,3 +119,17 @@ ContentBrowser,MountAsExternal,Mount as External Folder...,외부 마운트로 �
 ContentBrowser,MountAsExternalHint,Mount this folder as an external content mount,이 폴더를 외부 콘텐츠 마운트로 등록합니다.
 ContentBrowser,ExternalReadOnlyNotice,Browsing external folder in read-only mode.,외부 폴더를 읽기 전용으로 탐색 중입니다.
 ContentBrowser,AddressBarEditHint,Click to edit path (Enter: Navigate, Esc: Cancel),클릭하여 경로 입력 (Enter: 이동, Esc: 취소)
+ContentBrowser,BakeSpriteSheet,Bake to 2D Sprite Sheet...,2D 스프라이트 시트로 굽기...
+ContentBrowser,BakeSpriteSheetTitle,Bake 2D Sprite Sheet,2D 스프라이트 시트 굽기
+ContentBrowser,BakeSpriteSheetFrameSize,Frame Size,프레임 크기
+ContentBrowser,BakeSpriteSheetDirections,Directions,방향 수
+ContentBrowser,BakeSpriteSheetFramesPerDir,Frames / Direction,방향당 프레임
+ContentBrowser,BakeSpriteSheetColumns,Columns,컬럼 수
+ContentBrowser,BakeSpriteSheetPadding,Padding,패딩
+ContentBrowser,BakeSpriteSheetPivot,Pivot,피벗
+ContentBrowser,BakeSpriteSheetOutputPng,Output PNG Path,출력 PNG 경로
+ContentBrowser,BakeSpriteSheetConfirm,Bake,굽기
+ContentBrowser,BakeSpriteSheetModelLoadFailed,Failed to load model asset for sprite sheet baking.,스프라이트 시트 굽기용 모델 에셋을 불러오지 못했습니다.
+ContentBrowser,BakeSpriteSheetInvalidPath,Enter a valid output PNG path.,올바른 출력 PNG 경로를 입력하세요.
+ContentBrowser,BakeSpriteSheetSuccess,"Baked sprite sheet: {} ({}x{}, {} frames)","스프라이트 시트 굽기 완료: {} ({}x{}, {}프레임)"
+ContentBrowser,BakeSpriteSheetFailed,Failed to bake sprite sheet: {},스프라이트 시트 굽기 실패: {}

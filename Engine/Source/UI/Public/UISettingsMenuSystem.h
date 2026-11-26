@@ -18,6 +18,7 @@ namespace Engine
         bool startVisible = true;
         bool saveOnApply = true;
         std::string settingsFilePath = "Config/RuntimeSettings.json";
+        std::string bindingsFilePath = "Config/InputBindings.json";
     };
 
     // RuntimeSettingsMenuComponent가 붙은 루트 Canvas 엔티티와 설정 UI 위젯 계층을 생성한다.
@@ -38,11 +39,22 @@ namespace Engine
 
         static void OpenMenu(Scene& scene, entt::entity menuEntity);
         static void CloseMenu(Scene& scene, entt::entity menuEntity);
+        static void OpenControlsPanel(Scene& scene, entt::entity menuEntity);
+        static void CloseControlsPanel(Scene& scene, entt::entity menuEntity);
+        static void RefreshKeyBindings(Scene& scene, entt::entity menuEntity);
 
         static std::span<const std::pair<std::int32_t, std::int32_t>> GetSupportedResolutions() noexcept;
 
     private:
+        bool HandleInstancePointerEvent(Scene& scene, const UIPointerEvent& event);
+        void BeginRebind(Scene& scene, entt::entity menuEntity, std::string_view mapId, std::string_view actionId);
+        void CancelRebind(Scene* scene = nullptr);
+        void PollRebindInput(Scene& scene);
+
         DelegateHandle m_SettingsListenerHandle{};
         bool m_ExternalSettingsDirty = false;
+        std::string m_AwaitingRebindMapId;
+        std::string m_AwaitingRebindActionId;
+        entt::entity m_AwaitingRebindMenuEntity = entt::null;
     };
 }

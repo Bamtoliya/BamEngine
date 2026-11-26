@@ -403,6 +403,7 @@
 ,PROP_ALBEDO,Albedo,알베도 (반사색)
 ,PROP_ALIGN_TO_SURFACE_DISK,Align To Surface Disk,표면 밀착 디스크 렌더링
 ,PROP_ALIGN_TO_SURFACE_NORMAL,Align To Surface Normal,표면 법선 방향 정렬
+,PROP_ALIGN_TO_VELOCITY,,
 ,PROP_ALPHA_CURVE,Alpha Curve,알파 커브
 ,PROP_AMPLITUDE,Amplitude,진폭
 ,PROP_ANCHOR_MAX,Anchor Max,앵커 최대
@@ -444,6 +445,7 @@
 ,PROP_CAMERA_TYPE,Camera Type,카메라 타입
 ,PROP_CASCADE_SPLIT_LAMBDA,Cascade Split Lambda,캐스케이드 분할 가중치
 ,PROP_CAST_SHADOW,Cast Shadow,그림자
+,PROP_CCD_MOTION_THRESHOLD,,
 ,PROP_CELL_SIZE,Cell Size,셀 크기
 ,PROP_CENTER,Center,중심
 ,PROP_CHALLENGE_HIT_HEIGHT,Vertical Hit Distance,수직 판정 거리
@@ -507,6 +509,7 @@
 ,PROP_EMISSION_START_TIME,Emission Start Time,방출 시작 시간
 ,PROP_EMISSIVE_INTENSITY,Emissive Intensity,발광 세기
 ,PROP_EMITTERS,Emitters,이미터 목록
+,PROP_EMITTING,,
 ,PROP_EMIT_DIRECTION,Direction,방출 방향
 ,PROP_ENABLED,Enabled,활성화
 ,PROP_ENABLE_CAMERA_LAG,Enable Camera Lag,카메라 지연 활성화
@@ -770,6 +773,7 @@
 ,PROP_SKELETON_HANDLE,Skeleton Handle,스켈레톤 핸들
 ,PROP_SKY_INTENSITY,Sky Intensity,하늘 강도
 ,PROP_SNAP_SUBPIXEL,Snap Subpixel,서브픽셀 스냅
+,PROP_SNAP_TO_CAMERA_AXES,,
 ,PROP_SOCKET_BONE,Socket Bone,소켓 본
 ,PROP_SOCKET_OFFSET,Socket Offset,소켓 오프셋
 ,PROP_SOCKET_ROTATION,Socket Rotation,소켓 회전
@@ -881,7 +885,13 @@
 ,PROP_UI_SETTINGS_APPLY_BUTTON,Apply Button,적용 버튼
 ,PROP_UI_SETTINGS_AUTO_SYNC,Auto Sync On Enable,활성화 시 자동 동기화
 ,PROP_UI_SETTINGS_BGM_SLIDER,BGM Volume Slider,배경음 볼륨 슬라이더
+,PROP_UI_SETTINGS_BINDINGS_FILE_PATH,,
 ,PROP_UI_SETTINGS_CLOSE_BUTTON,Close Button,닫기 버튼
+,PROP_UI_SETTINGS_CONTROLS_BACK_BUTTON,,
+,PROP_UI_SETTINGS_CONTROLS_BUTTON,,
+,PROP_UI_SETTINGS_CONTROLS_LIST,,
+,PROP_UI_SETTINGS_CONTROLS_PANEL,,
+,PROP_UI_SETTINGS_CONTROLS_RESET_BUTTON,,
 ,PROP_UI_SETTINGS_FILE_PATH,Settings File Path,설정 파일 경로
 ,PROP_UI_SETTINGS_FULLSCREEN_TOGGLE,Fullscreen Toggle,전체 화면 토글
 ,PROP_UI_SETTINGS_MASTER_SLIDER,Master Volume Slider,마스터 볼륨 슬라이더
@@ -907,15 +917,19 @@
 ,PROP_UNBOUND,Unbound,전역 적용
 ,PROP_UPSCALE_RT,Upscale RT,업스케일 RT
 ,PROP_USE_ALPHA_CURVE,Use Alpha Curve,알파 커브 사용
+,PROP_USE_CCD,,
 ,PROP_USE_DEAD_RECKONING,Use Dead Reckoning,추측 항법(Dead Reckoning) 사용
 ,PROP_USE_FIXED_SEED,Use Fixed Seed,고정 시드 사용
 ,PROP_USE_GRAPH_ATTACK_INPUT,Use Graph Attack Input,그래프 공격 입력 사용
 ,PROP_USE_GRAPH_MOVE_INPUT,Use Graph Movement Input,그래프 이동 입력 사용
 ,PROP_USE_INTENSITY_CURVE,Use Intensity Curve,조도 커브 사용
 ,PROP_USE_SCALE_CURVE,Use Scale Curve,스케일 커브 사용
+,PROP_UV_OFFSET,,
+,PROP_UV_SCALE,,
 ,PROP_UV_SCROLL_SPEED,UV Scroll Speed,UV 스크롤 속도
 ,PROP_VALUE,Value,값
 ,PROP_VELOCITY_ITERATIONS,Velocity Iterations,속도 반복 횟수
+,PROP_VELOCITY_STRETCH_FACTOR,,
 ,PROP_VERTEX_SHADER,Vertex Shader,버텍스 셰이더
 ,PROP_VERTEX_SHADER_HANDLE,Vertex Shader Handle,버텍스 셰이더 핸들
 ,PROP_VFX_PATH,VFX Asset,VFX 에셋
@@ -997,6 +1011,7 @@
 ,STRUCT_COLLIDER,Collider,충돌체
 ,STRUCT_COLLIDER_2D,Collider 2D,2D 충돌체
 ,STRUCT_COLLIDER_SETTINGS,Collider Settings,충돌체 설정
+,STRUCT_COLLISION_CALLBACK,,
 ,STRUCT_COMPOSITE_VFX,Composite VFX,복합 비주얼 이펙트
 ,STRUCT_CURVE_KEY,Curve Key,커브 키
 ,STRUCT_DECAL,Decal,데칼
@@ -1048,6 +1063,7 @@
 ,STRUCT_TERRAIN,Terrain,지형
 ,STRUCT_THIRD_PERSON_CONTROLLER,Third Person Controller,3인칭 컨트롤러
 ,STRUCT_TILEMAP,Tilemap,타일맵
+,STRUCT_TRAIL,,
 ,STRUCT_TRANSFORM,Transform,트랜스폼
 ,STRUCT_TRIGGER_CALLBACK,Trigger Callback,트리거 콜백
 ,STRUCT_UI_ALPHA_MASK,UI Image Mask,UI 이미지 마스크
@@ -1150,6 +1166,12 @@
 ,Tolerance must be non-negative.,Tolerance must be non-negative.,허용 오차는 0 이상이어야 합니다.
 ,Transformation,Transformation,변환
 ,UI,UI,UI
+,UI.Settings.Back,Back,뒤로
+,UI.Settings.Controls,Controls,조작 키
+,UI.Settings.ControlsTitle,Key Bindings,조작 키 설정
+,UI.Settings.PressAnyKey,Press any key...,키를 누르세요...
+,UI.Settings.ResetControls,Reset Controls,기본값으로 초기화
+,UI.Settings.Unbound,Unbound,지정 안 됨
 ,Unknown execution error.,Unknown execution error.,알 수 없는 실행 오류입니다.
 ,Unknown graph metadata or parameter:,Unknown graph metadata or parameter:,알 수 없는 그래프 메타데이터 또는 매개변수:
 ,Unknown node type:,Unknown node type:,알 수 없는 노드 유형:

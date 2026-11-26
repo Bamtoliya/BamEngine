@@ -83,6 +83,7 @@ public:
 	const filesystem::path& GetActiveRootForPath(const filesystem::path& path) const;
 	bool IsExternalUnregisteredDirectory(const filesystem::path& path) const;
 	void OpenMountAddModal(const filesystem::path& initialPath = {});
+	void OpenSpriteSheetBakeModal(const filesystem::path& modelPath);
 	EPanelMenuCategory GetPanelMenuCategory() const override { return EPanelMenuCategory::Assets; }
 #pragma endregion
 
@@ -356,6 +357,19 @@ private:
 	bool m_MountReadOnly = true;
 	bool m_MountShowUnderAssets = false;
 	std::string m_MountError;
+private:
+	void DrawSpriteSheetBakeModal();
+	bool m_OpenSpriteSheetBakeModal = false;
+	filesystem::path m_SpriteBakeModelPath;
+	int32 m_SpriteBakeFrameWidth = 64;
+	int32 m_SpriteBakeFrameHeight = 64;
+	int32 m_SpriteBakeDirections = 8;
+	int32 m_SpriteBakeFramesPerDirection = 1;
+	int32 m_SpriteBakeColumns = 8;
+	int32 m_SpriteBakePadding = 2;
+	vec2 m_SpriteBakePivot = { 0.5f, 0.5f };
+	char m_SpriteBakeOutputPngBuffer[512] = {};
+	std::string m_SpriteBakeError;
 #pragma endregion
 };
 END

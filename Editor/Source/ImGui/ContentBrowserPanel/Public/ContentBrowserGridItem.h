@@ -56,7 +56,7 @@ private:
 
 private:
 	static void ContextMenu_Material(ContentBrowserPanel& browser, const std::filesystem::path& path);
-	static void ContextMenu_Model(const std::filesystem::path& path);
+	static void ContextMenu_Model(ContentBrowserPanel& browser, const std::filesystem::path& path);
 	static void ContextMenu_Texture(ContentBrowserPanel& browser, const std::filesystem::path& path);
 	static void ContextMenu_Sprite(const std::filesystem::path& path);
 	static void ContextMenu_Shader(const std::filesystem::path& path);

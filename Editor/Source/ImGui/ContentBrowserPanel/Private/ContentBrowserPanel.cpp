@@ -25,6 +25,8 @@
 #include "NotificationManager.h"
 #include "ProjectSessionManager.h"
 #include "FileDialogs.h"
+#include "SpriteSheetBaker.h"
+#include "Model.h"
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 #include <algorithm>
@@ -466,6 +468,7 @@ void ContentBrowserPanel::Draw()
 	DrawFileDeletionConfirmation();
 	DrawFileMoveConfirmation();
 	DrawMountAddModal();
+	DrawSpriteSheetBakeModal();
 
 	if (m_CurrentDirectory != m_LastDirectory)
 	{
@@ -981,6 +984,264 @@ void ContentBrowserPanel::DrawMountAddModal()
 	ImGui::PopStyleColor();
 }
 #pragma endregion
+
+namespace
+{
+	bool ResizeRGBA8Bilinear(const std::vector<uint8>& src, int32 srcW, int32 srcH, int32 dstW, int32 dstH, std::vector<uint8>& outDst)
+	{
+		if (srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0)
+			return false;
+		if (src.size() < static_cast<size_t>(srcW) * static_cast<size_t>(srcH) * 4)
+			return false;
+
+		outDst.resize(static_cast<size_t>(dstW) * static_cast<size_t>(dstH) * 4);
+		const float scaleX = static_cast<float>(srcW) / static_cast<float>(dstW);
+		const float scaleY = static_cast<float>(srcH) / static_cast<float>(dstH);
+
+		for (int32 y = 0; y < dstH; ++y)
+		{
+			const float fy = std::clamp((static_cast<float>(y) + 0.5f) * scaleY - 0.5f, 0.0f, static_cast<float>(srcH - 1));
+			const int32 y0 = static_cast<int32>(fy);
+			const int32 y1 = std::min(y0 + 1, srcH - 1);
+			const float wy = fy - static_cast<float>(y0);
+
+			for (int32 x = 0; x < dstW; ++x)
+			{
+				const float fx = std::clamp((static_cast<float>(x) + 0.5f) * scaleX - 0.5f, 0.0f, static_cast<float>(srcW - 1));
+				const int32 x0 = static_cast<int32>(fx);
+				const int32 x1 = std::min(x0 + 1, srcW - 1);
+				const float wx = fx - static_cast<float>(x0);
+
+				const size_t i00 = (static_cast<size_t>(y0) * srcW + x0) * 4;
+				const size_t i10 = (static_cast<size_t>(y0) * srcW + x1) * 4;
+				const size_t i01 = (static_cast<size_t>(y1) * srcW + x0) * 4;
+				const size_t i11 = (static_cast<size_t>(y1) * srcW + x1) * 4;
+				const size_t dstIdx = (static_cast<size_t>(y) * dstW + x) * 4;
+
+				for (int c = 0; c < 4; ++c)
+				{
+					const float top = static_cast<float>(src[i00 + c]) * (1.0f - wx) + static_cast<float>(src[i10 + c]) * wx;
+					const float bot = static_cast<float>(src[i01 + c]) * (1.0f - wx) + static_cast<float>(src[i11 + c]) * wx;
+					outDst[dstIdx + c] = static_cast<uint8>(std::clamp(top * (1.0f - wy) + bot * wy + 0.5f, 0.0f, 255.0f));
+				}
+			}
+		}
+		return true;
+	}
+}
+
+void ContentBrowserPanel::OpenSpriteSheetBakeModal(const filesystem::path& modelPath)
+{
+	m_SpriteBakeModelPath = modelPath;
+	m_SpriteBakeFrameWidth = 64;
+	m_SpriteBakeFrameHeight = 64;
+	m_SpriteBakeDirections = 8;
+	m_SpriteBakeFramesPerDirection = 1;
+	m_SpriteBakeColumns = 8;
+	m_SpriteBakePadding = 2;
+	m_SpriteBakePivot = { 0.5f, 0.5f };
+	m_SpriteBakeError.clear();
+	m_OpenSpriteSheetBakeModal = true;
+
+	filesystem::path modelStem = modelPath.stem();
+	const std::string lowerName = Engine::WStrToStr(modelPath.filename().wstring());
+	if (lowerName.size() >= 14 && _stricmp(lowerName.c_str() + lowerName.size() - 14, ".bammodel.json") == 0)
+		modelStem.replace_extension();
+
+	const filesystem::path defaultPngPath = modelPath.parent_path() / (modelStem.wstring() + L"_Sheet.png");
+	const std::string defaultPngUtf8 = Engine::WStrToStr(defaultPngPath.wstring());
+	const size_t copyLen = std::min(defaultPngUtf8.size(), sizeof(m_SpriteBakeOutputPngBuffer) - 1);
+	memcpy(m_SpriteBakeOutputPngBuffer, defaultPngUtf8.data(), copyLen);
+	m_SpriteBakeOutputPngBuffer[copyLen] = '\0';
+}
+
+void ContentBrowserPanel::DrawSpriteSheetBakeModal()
+{
+	constexpr const char* kPopupId = "BakeSpriteSheetPopup";
+	const std::string modalTitle = LOCAL("ContentBrowser.BakeSpriteSheetTitle") + "###" + kPopupId;
+	if (m_OpenSpriteSheetBakeModal)
+	{
+		ImGui::OpenPopup(modalTitle.c_str());
+		m_OpenSpriteSheetBakeModal = false;
+	}
+
+	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+	ImGui::SetNextWindowSize(ImVec2(540.0f, 0.0f), ImGuiCond_Appearing);
+	ImGui::SetNextWindowSizeConstraints(ImVec2(540.0f, 0.0f), ImVec2(540.0f, FLT_MAX));
+
+	bool open = true;
+	ImVec4 modalBg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+	modalBg.w = 1.0f;
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, modalBg);
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_AlwaysAutoResize))
+	{
+		ImGui::PopStyleColor();
+		return;
+	}
+
+	if (EditorUI::BeginPropertyTable("SpriteSheetBakeTable"))
+	{
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetFrameSize");
+		int frameSize[2] = { m_SpriteBakeFrameWidth, m_SpriteBakeFrameHeight };
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputInt2("##SpriteBakeFrameSize", frameSize))
+		{
+			m_SpriteBakeFrameWidth = std::clamp(frameSize[0], 1, 4096);
+			m_SpriteBakeFrameHeight = std::clamp(frameSize[1], 1, 4096);
+		}
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetDirections");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputInt("##SpriteBakeDirections", &m_SpriteBakeDirections))
+			m_SpriteBakeDirections = std::clamp(m_SpriteBakeDirections, 1, 64);
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetFramesPerDir");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputInt("##SpriteBakeFramesPerDir", &m_SpriteBakeFramesPerDirection))
+			m_SpriteBakeFramesPerDirection = std::clamp(m_SpriteBakeFramesPerDirection, 1, 256);
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetColumns");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputInt("##SpriteBakeColumns", &m_SpriteBakeColumns))
+			m_SpriteBakeColumns = std::clamp(m_SpriteBakeColumns, 0, 256);
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetPadding");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		if (ImGui::InputInt("##SpriteBakePadding", &m_SpriteBakePadding))
+			m_SpriteBakePadding = std::clamp(m_SpriteBakePadding, 0, 128);
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetPivot");
+		ImGui::SetNextItemWidth(-FLT_MIN);
+		ImGui::DragFloat2("##SpriteBakePivot", &m_SpriteBakePivot.x, 0.01f, 0.0f, 1.0f, "%.2f");
+
+		EditorUI::PropertyRow("ContentBrowser.BakeSpriteSheetOutputPng");
+		const float browseWidth = ImGui::CalcTextSize("...").x + ImGui::GetStyle().FramePadding.x * 2.0f + 12.0f;
+		ImGui::SetNextItemWidth(std::max(80.0f, ImGui::GetContentRegionAvail().x - browseWidth - ImGui::GetStyle().ItemSpacing.x));
+		ImGui::InputText("##SpriteBakeOutputPng", m_SpriteBakeOutputPngBuffer, sizeof(m_SpriteBakeOutputPngBuffer));
+		ImGui::SameLine();
+		if (ImGui::Button("...##BrowseSpriteBakeOutput", ImVec2(browseWidth, 0.0f)))
+		{
+			const filesystem::path currentOut = Engine::StrToWStr(m_SpriteBakeOutputPngBuffer);
+			std::wstring selectedPath;
+			const std::vector<FileDialogFilter> filters = { { L"PNG Image (*.png)", L"*.png" } };
+			if (FileDialogs::SaveFileDialog(selectedPath, filters,
+				currentOut.filename().wstring(), L"png",
+				currentOut.parent_path().wstring(), EFileDialogContext::General) && !selectedPath.empty())
+			{
+				const std::string utf8 = Engine::WStrToStr(selectedPath);
+				const size_t copyLen = std::min(utf8.size(), sizeof(m_SpriteBakeOutputPngBuffer) - 1);
+				memcpy(m_SpriteBakeOutputPngBuffer, utf8.data(), copyLen);
+				m_SpriteBakeOutputPngBuffer[copyLen] = '\0';
+			}
+		}
+
+		EditorUI::EndPropertyTable();
+	}
+
+	if (!m_SpriteBakeError.empty())
+	{
+		ImGui::Spacing();
+		ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_SpriteBakeError.c_str());
+	}
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	const EditorUI::DialogAction actions[] = {
+		{ "ContentBrowser.Cancel", true, false },
+		{ "ContentBrowser.BakeSpriteSheetConfirm", true, false }
+	};
+	const int clicked = EditorUI::DialogButtonBar("SpriteSheetBakeFooter", actions, 2);
+	if (clicked == 0)
+	{
+		m_SpriteBakeError.clear();
+		ImGui::CloseCurrentPopup();
+	}
+	else if (clicked == 1)
+	{
+		const std::string outputPngUtf8(m_SpriteBakeOutputPngBuffer);
+		if (outputPngUtf8.empty())
+		{
+			m_SpriteBakeError = LOCAL("ContentBrowser.BakeSpriteSheetInvalidPath");
+		}
+		else
+		{
+			auto& rm = Engine::ResourceManager::Get();
+			Engine::Handle modelHandle = rm.FindHandleByFilePath(m_SpriteBakeModelPath);
+			if (!modelHandle.IsValid())
+				modelHandle = rm.LoadFile(m_SpriteBakeModelPath.wstring());
+			auto* model = modelHandle.IsValid() ? dynamic_cast<Engine::Model*>(rm.GetResource(modelHandle)) : nullptr;
+
+			if (!model)
+			{
+				m_SpriteBakeError = LOCAL("ContentBrowser.BakeSpriteSheetModelLoadFailed");
+				NotificationManager::Get().AddNotification(LOCAL("ContentBrowser.Title"),
+					m_SpriteBakeError, ELogLevel::Error, 4.0f);
+			}
+			else
+			{
+				SpriteSheetBakeConfig config;
+				config.frameWidth = m_SpriteBakeFrameWidth;
+				config.frameHeight = m_SpriteBakeFrameHeight;
+				config.directions = m_SpriteBakeDirections;
+				config.framesPerDirection = m_SpriteBakeFramesPerDirection;
+				config.columns = m_SpriteBakeColumns;
+				config.padding = m_SpriteBakePadding;
+				config.pivot = m_SpriteBakePivot;
+				config.outputPngPath = filesystem::path(Engine::StrToWStr(outputPngUtf8));
+				config.outputSpriteMetaPath = config.outputPngPath;
+				config.outputSpriteMetaPath.replace_extension(L".bamsprite.json");
+
+				std::string captureError;
+				const SpriteSheetBakeResult result = SpriteSheetBaker::BakeTurntableFromCapture(
+					config,
+					[model, &config, &captureError](int32, float, int32, int32, std::vector<uint8>& outRgbaFrame) -> bool
+					{
+						std::vector<uint8> captured;
+						int32 srcW = 0;
+						int32 srcH = 0;
+						if (!SpriteSheetBaker::CaptureThumbnailFrameRGBA(model, captured, srcW, srcH, &captureError))
+							return false;
+						if (srcW == config.frameWidth && srcH == config.frameHeight)
+						{
+							outRgbaFrame = std::move(captured);
+							return true;
+						}
+						if (!ResizeRGBA8Bilinear(captured, srcW, srcH, config.frameWidth, config.frameHeight, outRgbaFrame))
+						{
+							captureError = "Failed to resize captured thumbnail frame.";
+							return false;
+						}
+						return true;
+					});
+
+				if (result.succeeded)
+				{
+					m_SpriteBakeError.clear();
+					NotificationManager::Get().AddNotification(
+						LOCAL("ContentBrowser.Title"),
+						LOCAL_FMT("ContentBrowser.BakeSpriteSheetSuccess",
+							Engine::WStrToStr(result.outputPngPath.filename().wstring()),
+							result.atlasWidth, result.atlasHeight, result.totalFrames),
+						ELogLevel::Info, 4.0f);
+					RequestRefresh();
+					ImGui::CloseCurrentPopup();
+				}
+				else
+				{
+					const std::string errDetail = !result.errorMessage.empty() ? result.errorMessage : captureError;
+					m_SpriteBakeError = LOCAL_FMT("ContentBrowser.BakeSpriteSheetFailed", errDetail);
+					NotificationManager::Get().AddNotification(
+						LOCAL("ContentBrowser.Title"),
+						m_SpriteBakeError, ELogLevel::Error, 4.0f);
+				}
+			}
+		}
+	}
+
+	ImGui::EndPopup();
+	ImGui::PopStyleColor();
+}
 
 #pragma region GridView
 void ContentBrowserPanel::DrawDirectoryGrid()

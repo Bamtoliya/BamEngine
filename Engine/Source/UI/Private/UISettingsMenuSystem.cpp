@@ -2,6 +2,7 @@
 #include "UISettingsMenuSystem.h"
 
 #include "ComponentEnable.h"
+#include "InputManager.h"
 #include "RuntimeSettingsManager.h"
 #include "RuntimeUIInput.h"
 #include "UIComponents.h"
@@ -43,6 +44,14 @@ namespace Engine
         constexpr std::string_view kApplyButtonName = "ApplyButton";
         constexpr std::string_view kResetButtonName = "ResetButton";
         constexpr std::string_view kCloseButtonName = "CloseButton";
+        constexpr std::string_view kControlsButtonName = "ControlsButton";
+        constexpr std::string_view kControlsPanelName = "ControlsPanel";
+        constexpr std::string_view kControlsListContainerName = "ControlsListContainer";
+        constexpr std::string_view kControlsResetButtonName = "ControlsResetButton";
+        constexpr std::string_view kControlsBackButtonName = "ControlsBackButton";
+
+        constexpr glm::vec4 kKeyBindNormalColor{ 0.24f, 0.27f, 0.33f, 1.0f };
+        constexpr glm::vec4 kKeyBindAwaitingColor{ 0.72f, 0.45f, 0.16f, 1.0f };
 
         int FindResolutionIndex(std::int32_t width, std::int32_t height) noexcept
         {
@@ -295,6 +304,169 @@ namespace Engine
 
             return SceneEntityReference{ world.get<IDComponent>(handle).id };
         }
+
+        void DestroyEntityAndDetach(Scene& scene, entt::entity parent, entt::entity child)
+        {
+            auto& world = scene.GetRegistry();
+            if (child == entt::null || !world.valid(child))
+                return;
+
+            if (parent != entt::null && world.valid(parent))
+            {
+                if (auto* hierarchy = world.try_get<HierarchyComponent>(parent))
+                {
+                    std::erase(hierarchy->children, child);
+                }
+            }
+
+            if (Entity* entity = scene.FindEntity(child))
+                (void)scene.DestroyEntity(*entity);
+        }
+
+        std::string FormatBindingsLabel(const std::vector<std::string>& bindings)
+        {
+            std::string joined;
+            for (std::size_t i = 0; i < bindings.size(); ++i)
+            {
+                if (i > 0)
+                    joined += ", ";
+                joined += bindings[i];
+            }
+            return joined;
+        }
+
+        void UpdateKeyBindingRowVisual(entt::registry& world, entt::entity buttonEntity,
+            const std::vector<std::string>& bindings, bool awaiting)
+        {
+            if (buttonEntity == entt::null || !world.valid(buttonEntity))
+                return;
+
+            if (auto* button = world.try_get<UIButtonComponent>(buttonEntity))
+            {
+                const glm::vec4 baseColor = awaiting ? kKeyBindAwaitingColor : kKeyBindNormalColor;
+                button->normalColor = baseColor;
+                button->hoveredColor = glm::min(baseColor + glm::vec4(0.12f, 0.12f, 0.12f, 0.0f), glm::vec4(1.0f));
+                button->pressedColor = glm::max(baseColor - glm::vec4(0.12f, 0.12f, 0.12f, 0.0f), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+            }
+
+            if (auto* textComp = world.try_get<UITextComponent>(buttonEntity))
+            {
+                if (awaiting)
+                {
+                    textComp->text = "Press any key...";
+                    textComp->useLocalization = true;
+                    textComp->localizationKey = "UI.Settings.PressAnyKey";
+                }
+                else if (bindings.empty())
+                {
+                    textComp->text = "Unbound";
+                    textComp->useLocalization = true;
+                    textComp->localizationKey = "UI.Settings.Unbound";
+                }
+                else
+                {
+                    textComp->text = FormatBindingsLabel(bindings);
+                    textComp->useLocalization = false;
+                    textComp->localizationKey.clear();
+                }
+            }
+        }
+
+        void RefreshKeyBindingsImpl(Scene& scene, entt::entity menuEntity,
+            std::string_view awaitingMapId, std::string_view awaitingActionId)
+        {
+            if (!InputManager::IsCreated())
+                return;
+
+            auto& world = scene.GetRegistry();
+            if (!world.valid(menuEntity))
+                return;
+
+            auto* menu = world.try_get<RuntimeSettingsMenuComponent>(menuEntity);
+            if (!menu)
+                return;
+
+            const entt::entity listContainer = ResolveWidget(
+                scene, menuEntity, menu->controlsListContainer, kControlsListContainerName);
+            if (listContainer == entt::null || !world.valid(listContainer))
+                return;
+
+            const auto& input = InputManager::Get();
+            const InputActionSettings& actionSettings = input.GetCurrentInputActionSettings();
+
+            std::vector<std::pair<std::string, std::string>> desiredRows;
+            for (const auto& map : actionSettings.Maps)
+            {
+                for (const auto& action : map.Actions)
+                    desiredRows.emplace_back(map.Id, action.Id);
+            }
+
+            bool needsRebuild = (menu->keyBindingRows.size() != desiredRows.size());
+            if (!needsRebuild)
+            {
+                for (std::size_t i = 0; i < desiredRows.size(); ++i)
+                {
+                    const auto& row = menu->keyBindingRows[i];
+                    if (row.mapId != desiredRows[i].first || row.actionId != desiredRows[i].second ||
+                        !world.valid(row.buttonEntity))
+                    {
+                        needsRebuild = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needsRebuild)
+            {
+                for (const auto& row : menu->keyBindingRows)
+                {
+                    DestroyEntityAndDetach(scene, listContainer, row.labelEntity);
+                    DestroyEntityAndDetach(scene, listContainer, row.buttonEntity);
+                }
+                menu->keyBindingRows.clear();
+
+                const bool multiMap = actionSettings.Maps.size() > 1;
+                constexpr float rowHeight = 38.0f;
+                constexpr float rowStep = 48.0f;
+                for (std::size_t i = 0; i < desiredRows.size(); ++i)
+                {
+                    const auto& [mapId, actionId] = desiredRows[i];
+                    const float rowY = 8.0f + static_cast<float>(i) * rowStep;
+                    const std::string displayLabel = multiMap ? (mapId + " - " + actionId) : actionId;
+
+                    Entity& labelEnt = CreateUIEntity(scene, listContainer,
+                        "KeyBindLabel_" + mapId + "_" + actionId,
+                        { 16.0f, rowY }, { 320.0f, rowHeight }, 1);
+                    auto& labelText = world.emplace<UITextComponent>(labelEnt.GetEntityHandle());
+                    labelText.text = displayLabel;
+                    labelText.useLocalization = false;
+                    labelText.fontPixels = 20;
+                    labelText.alignment = EUITextAlignment::Left;
+                    labelText.verticalAlignment = EUITextVerticalAlignment::Middle;
+                    labelText.color = glm::vec4(0.92f, 0.94f, 0.98f, 1.0f);
+
+                    const SceneEntityReference btnRef = CreateButton(scene, listContainer,
+                        "KeyBindButton_" + mapId + "_" + actionId,
+                        "", "", { 356.0f, rowY }, { 288.0f, rowHeight }, kKeyBindNormalColor);
+                    Entity* btnEnt = scene.FindEntityById(btnRef.PersistentId);
+
+                    menu->keyBindingRows.push_back({
+                        mapId,
+                        actionId,
+                        labelEnt.GetEntityHandle(),
+                        btnEnt ? btnEnt->GetEntityHandle() : entt::null
+                    });
+                }
+            }
+
+            for (const auto& row : menu->keyBindingRows)
+            {
+                const bool awaiting = (!awaitingMapId.empty() && !awaitingActionId.empty() &&
+                    row.mapId == awaitingMapId && row.actionId == awaitingActionId);
+                const std::vector<std::string> bindings = input.GetActionBindings(row.mapId, row.actionId);
+                UpdateKeyBindingRowVisual(world, row.buttonEntity, bindings, awaiting);
+            }
+        }
     }
 
     Entity* CreateInGameSettingsMenu(Scene& scene, const InGameSettingsMenuDesc& desc)
@@ -317,6 +489,7 @@ namespace Engine
         auto& menu = world.emplace<RuntimeSettingsMenuComponent>(canvasHandle);
         menu.saveOnApply = desc.saveOnApply;
         menu.settingsFilePath = desc.settingsFilePath;
+        menu.bindingsFilePath = desc.bindingsFilePath;
 
         // 화면 전체 반투명 배경 (뒤쪽 입력 차단)
         Entity& backdrop = CreateUIEntity(scene, canvasHandle, "Backdrop", { 0.0f, 0.0f }, desc.referenceResolution, 0);
@@ -407,16 +580,51 @@ namespace Engine
             y += rowStep;
         }
 
-        // Bottom Buttons: [Reset]  [Apply] [Close]
+        // Bottom Buttons: [Reset] [Controls]  [Apply] [Close]
         constexpr float btnY = 588.0f;
         constexpr float btnW = 140.0f;
         constexpr float btnH = 44.0f;
         menu.resetButton = CreateButton(scene, panelHandle, kResetButtonName,
             "Defaults", "UI.Settings.Defaults", { 40.0f, btnY }, { btnW, btnH }, { 0.30f, 0.32f, 0.38f, 1.0f });
+        menu.controlsButton = CreateButton(scene, panelHandle, kControlsButtonName,
+            "Controls", "UI.Settings.Controls", { 200.0f, btnY }, { btnW, btnH }, { 0.28f, 0.34f, 0.42f, 1.0f });
         menu.applyButton = CreateButton(scene, panelHandle, kApplyButtonName,
             "Apply", "UI.Settings.Apply", { 424.0f, btnY }, { btnW, btnH }, { 0.22f, 0.52f, 0.88f, 1.0f });
         menu.closeButton = CreateButton(scene, panelHandle, kCloseButtonName,
             "Close", "UI.Settings.Close", { 580.0f, btnY }, { btnW, btnH }, { 0.38f, 0.26f, 0.26f, 1.0f });
+
+        // 조작 키 리매핑 서브 패널 (초기 숨김, 기존 위젯 좌표/동작 비간섭)
+        Entity& controlsPanel = CreateUIEntity(scene, canvasHandle, kControlsPanelName, panelPos, panelSize, 20);
+        const entt::entity controlsPanelHandle = controlsPanel.GetEntityHandle();
+        world.get<FlagComponent>(controlsPanelHandle).flags = EEntityFlag::None;
+        menu.controlsPanel = SceneEntityReference{ world.get<IDComponent>(controlsPanelHandle).id };
+        {
+            auto& cpImage = world.emplace<UIImageComponent>(controlsPanelHandle);
+            cpImage.color = glm::vec4(0.11f, 0.12f, 0.15f, 0.98f);
+            cpImage.raycastTarget = true;
+        }
+
+        CreateLabel(scene, controlsPanelHandle, "ControlsTitleLabel", "Key Bindings", "UI.Settings.ControlsTitle",
+            { 32.0f, 20.0f }, { 696.0f, 44.0f }, 30, EUITextAlignment::Center);
+
+        Entity& controlsList = CreateUIEntity(scene, controlsPanelHandle, kControlsListContainerName,
+            { 40.0f, 84.0f }, { 680.0f, 480.0f }, 1);
+        const entt::entity controlsListHandle = controlsList.GetEntityHandle();
+        menu.controlsListContainer = SceneEntityReference{ world.get<IDComponent>(controlsListHandle).id };
+        {
+            auto& listBg = world.emplace<UIImageComponent>(controlsListHandle);
+            listBg.color = glm::vec4(0.08f, 0.09f, 0.12f, 0.65f);
+            listBg.raycastTarget = true;
+            world.emplace<UIClipComponent>(controlsListHandle);
+            auto& scroll = world.emplace<UIScrollComponent>(controlsListHandle);
+            scroll.wheelStep = 40.0f;
+            scroll.showScrollbar = true;
+        }
+
+        menu.controlsResetButton = CreateButton(scene, controlsPanelHandle, kControlsResetButtonName,
+            "Reset Controls", "UI.Settings.ResetControls", { 40.0f, btnY }, { 180.0f, btnH }, { 0.30f, 0.32f, 0.38f, 1.0f });
+        menu.controlsBackButton = CreateButton(scene, controlsPanelHandle, kControlsBackButtonName,
+            "Back", "UI.Settings.Back", { 580.0f, btnY }, { btnW, btnH }, { 0.38f, 0.26f, 0.26f, 1.0f });
 
         UISettingsMenuSystem::SyncFromManager(scene, canvasHandle);
         return &canvasEntity;
@@ -445,6 +653,7 @@ namespace Engine
             RuntimeSettingsManager::Get().RemoveChangeListener(m_SettingsListenerHandle);
         m_SettingsListenerHandle = {};
         m_ExternalSettingsDirty = false;
+        CancelRebind(nullptr);
     }
 
     void UISettingsMenuSystem::OnUpdate(entt::registry&, const vector<Scene*>& activeScenes, f32)
@@ -477,8 +686,14 @@ namespace Engine
                 }
             }
 
+            if (m_AwaitingRebindMenuEntity != entt::null &&
+                !m_AwaitingRebindMapId.empty() && !m_AwaitingRebindActionId.empty())
+            {
+                PollRebindInput(*scene);
+            }
+
             for (const UIPointerEvent& event : GetRuntimeUIPointerEvents(*scene))
-                HandlePointerEvent(*scene, event);
+                HandleInstancePointerEvent(*scene, event);
         }
     }
 
@@ -497,6 +712,7 @@ namespace Engine
             : RuntimeSettingsManager::GetDefaultSettings();
 
         UISettingsMenuDetail::ApplyWidgetsFromSettings(scene, menuEntity, *menu, applied);
+        RefreshKeyBindings(scene, menuEntity);
     }
 
     void UISettingsMenuSystem::SyncAllFromManager(Scene& scene)
@@ -632,9 +848,96 @@ namespace Engine
                     CloseMenu(scene, menuEntity);
                     return true;
                 }
+
+                if (event.target == ResolveWidget(scene, menuEntity, menu.controlsButton, kControlsButtonName))
+                {
+                    OpenControlsPanel(scene, menuEntity);
+                    return true;
+                }
+
+                if (event.target == ResolveWidget(scene, menuEntity, menu.controlsBackButton, kControlsBackButtonName))
+                {
+                    CloseControlsPanel(scene, menuEntity);
+                    return true;
+                }
+
+                if (event.target == ResolveWidget(scene, menuEntity, menu.controlsResetButton, kControlsResetButtonName))
+                {
+                    if (InputManager::IsCreated())
+                    {
+                        auto& input = InputManager::Get();
+                        input.ResetAllBindingsToDefault();
+                        if (!menu.bindingsFilePath.empty())
+                            (void)input.SaveBindingsToFile(std::filesystem::u8path(menu.bindingsFilePath));
+                    }
+                    RefreshKeyBindings(scene, menuEntity);
+                    return true;
+                }
             }
         }
         return false;
+    }
+
+    bool UISettingsMenuSystem::HandleInstancePointerEvent(Scene& scene, const UIPointerEvent& event)
+    {
+        if (event.type == EUIPointerEventType::Click)
+        {
+            auto& world = scene.GetRegistry();
+            if (world.valid(event.target))
+            {
+                for (const entt::entity menuEntity : world.view<RuntimeSettingsMenuComponent>())
+                {
+                    if (!IsComponentEnabled<RuntimeSettingsMenuComponent>(world, menuEntity))
+                        continue;
+
+                    auto& menu = world.get<RuntimeSettingsMenuComponent>(menuEntity);
+                    if (event.target == UISettingsMenuDetail::ResolveWidget(
+                            scene, menuEntity, menu.controlsBackButton, UISettingsMenuDetail::kControlsBackButtonName))
+                    {
+                        CancelRebind(&scene);
+                        CloseControlsPanel(scene, menuEntity);
+                        return true;
+                    }
+
+                    if (event.target == UISettingsMenuDetail::ResolveWidget(
+                            scene, menuEntity, menu.controlsResetButton, UISettingsMenuDetail::kControlsResetButtonName))
+                    {
+                        CancelRebind(&scene);
+                        if (InputManager::IsCreated())
+                        {
+                            auto& input = InputManager::Get();
+                            input.ResetAllBindingsToDefault();
+                            if (!menu.bindingsFilePath.empty())
+                                (void)input.SaveBindingsToFile(std::filesystem::u8path(menu.bindingsFilePath));
+                        }
+                        RefreshKeyBindings(scene, menuEntity);
+                        return true;
+                    }
+
+                    if (event.target == UISettingsMenuDetail::ResolveWidget(
+                            scene, menuEntity, menu.closeButton, UISettingsMenuDetail::kCloseButtonName))
+                    {
+                        CancelRebind(&scene);
+                        CloseMenu(scene, menuEntity);
+                        return true;
+                    }
+
+                    if (menu.controlsVisible)
+                    {
+                        for (const auto& row : menu.keyBindingRows)
+                        {
+                            if (event.target == row.buttonEntity)
+                            {
+                                BeginRebind(scene, menuEntity, row.mapId, row.actionId);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return HandlePointerEvent(scene, event);
     }
 
     void UISettingsMenuSystem::OpenMenu(Scene& scene, entt::entity menuEntity)
@@ -649,6 +952,7 @@ namespace Engine
         if (auto* menu = world.try_get<RuntimeSettingsMenuComponent>(menuEntity))
             menu->wasVisible = true;
 
+        CloseControlsPanel(scene, menuEntity);
         SyncFromManager(scene, menuEntity);
     }
 
@@ -658,6 +962,7 @@ namespace Engine
         if (!world.valid(menuEntity))
             return;
 
+        CloseControlsPanel(scene, menuEntity);
         SyncFromManager(scene, menuEntity);
 
         if (auto* flag = world.try_get<FlagComponent>(menuEntity))
@@ -665,6 +970,154 @@ namespace Engine
 
         if (auto* menu = world.try_get<RuntimeSettingsMenuComponent>(menuEntity))
             menu->wasVisible = false;
+    }
+
+    void UISettingsMenuSystem::OpenControlsPanel(Scene& scene, entt::entity menuEntity)
+    {
+        auto& world = scene.GetRegistry();
+        if (!world.valid(menuEntity))
+            return;
+
+        auto* menu = world.try_get<RuntimeSettingsMenuComponent>(menuEntity);
+        if (!menu)
+            return;
+
+        const entt::entity controlsPanel = UISettingsMenuDetail::ResolveWidget(
+            scene, menuEntity, menu->controlsPanel, UISettingsMenuDetail::kControlsPanelName);
+        if (controlsPanel != entt::null && world.valid(controlsPanel))
+        {
+            if (auto* flag = world.try_get<FlagComponent>(controlsPanel))
+                flag->flags = EEntityFlag::Default;
+        }
+        menu->controlsVisible = true;
+        RefreshKeyBindings(scene, menuEntity);
+    }
+
+    void UISettingsMenuSystem::CloseControlsPanel(Scene& scene, entt::entity menuEntity)
+    {
+        auto& world = scene.GetRegistry();
+        if (!world.valid(menuEntity))
+            return;
+
+        auto* menu = world.try_get<RuntimeSettingsMenuComponent>(menuEntity);
+        if (!menu)
+            return;
+
+        const entt::entity controlsPanel = UISettingsMenuDetail::ResolveWidget(
+            scene, menuEntity, menu->controlsPanel, UISettingsMenuDetail::kControlsPanelName);
+        if (controlsPanel != entt::null && world.valid(controlsPanel))
+        {
+            if (auto* flag = world.try_get<FlagComponent>(controlsPanel))
+                flag->flags = EEntityFlag::None;
+        }
+        menu->controlsVisible = false;
+    }
+
+    void UISettingsMenuSystem::RefreshKeyBindings(Scene& scene, entt::entity menuEntity)
+    {
+        UISettingsMenuDetail::RefreshKeyBindingsImpl(scene, menuEntity, {}, {});
+    }
+
+    void UISettingsMenuSystem::BeginRebind(Scene& scene, entt::entity menuEntity,
+        std::string_view mapId, std::string_view actionId)
+    {
+        m_AwaitingRebindMenuEntity = menuEntity;
+        m_AwaitingRebindMapId = std::string(mapId);
+        m_AwaitingRebindActionId = std::string(actionId);
+        UISettingsMenuDetail::RefreshKeyBindingsImpl(scene, menuEntity, m_AwaitingRebindMapId, m_AwaitingRebindActionId);
+    }
+
+    void UISettingsMenuSystem::CancelRebind(Scene* scene)
+    {
+        const entt::entity prevMenu = m_AwaitingRebindMenuEntity;
+        m_AwaitingRebindMenuEntity = entt::null;
+        m_AwaitingRebindMapId.clear();
+        m_AwaitingRebindActionId.clear();
+
+        if (scene && prevMenu != entt::null && scene->GetRegistry().valid(prevMenu))
+            UISettingsMenuDetail::RefreshKeyBindingsImpl(*scene, prevMenu, {}, {});
+    }
+
+    void UISettingsMenuSystem::PollRebindInput(Scene& scene)
+    {
+        auto& world = scene.GetRegistry();
+        if (!InputManager::IsCreated() ||
+            m_AwaitingRebindMenuEntity == entt::null || !world.valid(m_AwaitingRebindMenuEntity))
+        {
+            CancelRebind(&scene);
+            return;
+        }
+
+        auto* menu = world.try_get<RuntimeSettingsMenuComponent>(m_AwaitingRebindMenuEntity);
+        if (!menu || !menu->controlsVisible)
+        {
+            CancelRebind(&scene);
+            return;
+        }
+
+        auto& input = InputManager::Get();
+
+        // Escape 키로 리매핑 대기 취소
+        if (input.IsKeyButtonDown(EKeyCode::Escape))
+        {
+            CancelRebind(&scene);
+            return;
+        }
+
+        std::string capturedBinding;
+
+        // 키보드 키 감지
+        for (uint32 code = static_cast<uint32>(EKeyCode::A); code < static_cast<uint32>(EKeyCode::Count); ++code)
+        {
+            const auto key = static_cast<EKeyCode>(code);
+            if (key == EKeyCode::Escape)
+                continue;
+
+            if (input.IsKeyButtonDown(key))
+            {
+                if (const char* keyName = EngineKeyCodeToString(key); keyName && keyName[0] != '\0')
+                {
+                    capturedBinding = keyName;
+                    break;
+                }
+            }
+        }
+
+        // 게임패드 버튼 감지
+        if (capturedBinding.empty())
+        {
+            for (uint32 pad = 0; pad < InputManager::MaxGamepads; ++pad)
+            {
+                if (!input.IsGamepadConnected(pad))
+                    continue;
+
+                for (uint32 b = 0; b < static_cast<uint32>(EGamepadButton::Count); ++b)
+                {
+                    const auto button = static_cast<EGamepadButton>(b);
+                    if (input.IsGamepadButtonDown(button, pad))
+                    {
+                        if (const char* btnName = EngineGamepadButtonToString(button); btnName && btnName[0] != '\0')
+                        {
+                            capturedBinding = std::string("Gamepad:") + btnName;
+                            break;
+                        }
+                    }
+                }
+                if (!capturedBinding.empty())
+                    break;
+            }
+        }
+
+        if (capturedBinding.empty())
+            return;
+
+        if (input.RebindAction(m_AwaitingRebindMapId, m_AwaitingRebindActionId, capturedBinding))
+        {
+            if (!menu->bindingsFilePath.empty())
+                (void)input.SaveBindingsToFile(std::filesystem::u8path(menu->bindingsFilePath));
+        }
+
+        CancelRebind(&scene);
     }
 
     std::span<const std::pair<std::int32_t, std::int32_t>> UISettingsMenuSystem::GetSupportedResolutions() noexcept
