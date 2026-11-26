@@ -3,6 +3,9 @@
 #include "Model.h"
 #include "Logger.h"
 #include "ResourceManager.h"
+#if BAM_EDITOR
+#include "ResourceReference.h"
+#endif
 
 #pragma region Constructor&Destructor
 
@@ -111,9 +114,16 @@ EResult Model::OnPostLoad()
 			}
 		}
 
+#if BAM_EDITOR
+		const bool allowMissingMesh = (MissingResourceRecoveryContext::GetActiveContext() != nullptr);
+#endif
 		for (const uint32 meshIndex : node.MeshIndices)
 		{
+#if BAM_EDITOR
+			if (meshIndex >= m_Meshes.size() || (!allowMissingMesh && !m_Meshes[meshIndex].IsValid()))
+#else
 			if (meshIndex >= m_Meshes.size() || !m_Meshes[meshIndex].IsValid())
+#endif
 			{
 				ENGINE_LOG_ERROR("Invalid model node mesh: node={}, mesh={}", nodeIndex, meshIndex);
 				return EResult::InvalidArgument;

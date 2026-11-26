@@ -76,12 +76,14 @@ public:
 public:
 	const wstring& GetPath() const { return m_Path; }
 	void SetPath(const wstring& path) { m_Path = path; }
+#if BAM_EDITOR
 	// Called under the manager lock: do not load resources or mutate state here.
 	// Append changes to stable path fields, or return false to reject the transaction before any writes.
 	virtual bool PrepareFilePathRelocation(const std::vector<FilePathChange>&, std::vector<Utf8FilePathUpdate>&)
 	{
 		return true;
 	}
+#endif
 #pragma endregion
 
 #pragma region GPU Upload

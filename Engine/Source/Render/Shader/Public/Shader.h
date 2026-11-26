@@ -83,12 +83,14 @@ public:
 	const wstring& GetDxilPath() const { return m_DxilPath; }
 	const wstring& GetSpirvPath() const { return m_SpirvPath; }
 	const wstring& GetWgslPath() const { return m_WgslPath; }
+#if BAM_EDITOR
 	bool PrepareFilePathRelocation(const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>&) override
 	{
 		return !PlatformPath::IsFilePathAffected(m_DxilPath, changes) &&
 			!PlatformPath::IsFilePathAffected(m_SpirvPath, changes) &&
 			!PlatformPath::IsFilePathAffected(m_WgslPath, changes);
 	}
+#endif
 
 	uint32 GetNumSamplers() const { return m_NumSamplers; }
 	uint32 GetNumStorageTextures() const { return m_NumStorageTextures; }

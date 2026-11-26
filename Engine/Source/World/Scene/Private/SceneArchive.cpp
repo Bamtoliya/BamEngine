@@ -327,18 +327,22 @@ namespace
                 if (!entry->CanDisable())
                     return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
             }
+#if BAM_EDITOR
             auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext();
             if (recovery != nullptr)
             {
                 recovery->CurrentComponentType = type;
                 recovery->CurrentComponentDisplayName = entry->Name;
             }
+#endif
             result = registry.ReadComponent(component, "Data", world, handle, entry->Type);
+#if BAM_EDITOR
             if (recovery != nullptr)
             {
                 recovery->CurrentComponentType.clear();
                 recovery->CurrentComponentDisplayName.clear();
             }
+#endif
             if (result && hasEnableState && !entry->SetEnabled(world, handle, componentEnabled))
                 return { archive::ArchiveErrorCode::InvalidValue, "Enabled" };
             if (result && entry->Type == std::type_index(typeid(Engine::SkyAtmosphereComponent)))
@@ -402,6 +406,7 @@ namespace
                     if (!data) return data;
                 }
 
+#if BAM_EDITOR
                 auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext();
                 const std::size_t missingStart = recovery != nullptr ? recovery->Entries.size() : 0;
                 if (recovery != nullptr)
@@ -409,9 +414,11 @@ namespace
                     recovery->CurrentEntityPersistentId = entity.Id;
                     recovery->CurrentEntityName.clear();
                 }
+#endif
 
                 data = ReadComponents(value, world, entity.Handle, legacyClouds);
 
+#if BAM_EDITOR
                 if (recovery != nullptr)
                 {
                     if (const auto* nameComp = world.try_get<Engine::NameComponent>(entity.Handle);
@@ -425,6 +432,7 @@ namespace
                     recovery->CurrentComponentType.clear();
                     recovery->CurrentComponentDisplayName.clear();
                 }
+#endif
 
                 if (data) entities.push_back(std::move(entity));
                 return data;

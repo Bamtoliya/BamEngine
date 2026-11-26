@@ -30,6 +30,7 @@ namespace Engine
         bool WritingPrefab = false;
     };
 
+#if BAM_EDITOR
     struct MissingResourceEntry
     {
         uint64_t EntityPersistentId = 0;
@@ -74,4 +75,5 @@ namespace Engine
     private:
         MissingResourceRecoveryContext* m_Previous = nullptr;
     };
+#endif
 }

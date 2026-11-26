@@ -45,6 +45,7 @@ void ActionTimelineAsset::Free()
 	m_CameraSplineTracks.clear();
 }
 
+#if BAM_EDITOR
 void ActionTimelineAsset::PrepareNotifyPathRelocation(std::vector<TimelineNotifyTrack>& tracks,
 	const vector<FilePathChange>& changes, vector<Utf8FilePathUpdate>& updates)
 {
@@ -72,6 +73,7 @@ bool ActionTimelineAsset::IsProjectJsonDocument(const std::filesystem::path& pat
 	return PlatformPath::IsProjectUri(PlatformPath::ToVirtualUri(path)) &&
 		(extension == ".json" || extension == ".actiontimeline");
 }
+#endif
 
 ActionTimelineAsset* ActionTimelineAsset::Create(void* arg)
 {

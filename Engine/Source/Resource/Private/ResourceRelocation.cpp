@@ -1,5 +1,6 @@
 #include "ResourceManager.h"
 
+#if BAM_EDITOR
 bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>& changes,
     const std::function<bool()>& commitFiles)
 {
@@ -90,3 +91,4 @@ bool Engine::ResourceManager::RelocateFileResources(const vector<FilePathChange>
     m_HashToHandle.swap(nextIndex);
     return true;
 }
+#endif

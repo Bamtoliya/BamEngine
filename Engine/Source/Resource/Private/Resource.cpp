@@ -203,6 +203,7 @@ EResult Resource::Fulfill(Resource* prepared)
 }
 #pragma endregion
 
+#if BAM_EDITOR
 namespace
 {
 	thread_local Engine::MissingResourceRecoveryContext* s_ActiveMissingResourceRecovery = nullptr;
@@ -217,3 +218,4 @@ Engine::MissingResourceRecoveryContext* Engine::MissingResourceRecoveryContext::
 {
 	return s_ActiveMissingResourceRecovery;
 }
+#endif

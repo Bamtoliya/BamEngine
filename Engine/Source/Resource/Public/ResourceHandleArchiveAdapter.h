@@ -29,6 +29,7 @@ namespace archive_resource
             return path.extension().wstring().rfind(L".bam", 0) == 0;
         }
 
+#if BAM_EDITOR
         template<typename T>
         inline std::string ExtractResourceTypeName()
         {
@@ -37,6 +38,7 @@ namespace archive_resource
             else if (name.rfind("struct ", 0) == 0) name.erase(0, 7);
             return name;
         }
+#endif
 
         inline Engine::Handle TryFindLoadedByKeyOrPath(Engine::ResourceManager& manager,
             const std::wstring& candidate, bool allowFilePathLookup)
@@ -358,6 +360,7 @@ namespace archive_resource
                 const auto handle = ResolveResourceHandle(manager, assetKey, assetPath);
                 if (!manager.IsValid(handle) || !dynamic_cast<T*>(manager.GetResource(handle)))
                 {
+#if BAM_EDITOR
                     if (auto* recovery = Engine::MissingResourceRecoveryContext::GetActiveContext())
                     {
                         Engine::MissingResourceEntry entry;
@@ -379,6 +382,7 @@ namespace archive_resource
                         isNull = true;
                         return {};
                     }
+#endif
                     return { archive::ArchiveErrorCode::InvalidValue, "ResourceReference" };
                 }
 
