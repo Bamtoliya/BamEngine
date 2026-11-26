@@ -3,6 +3,7 @@
 #include "ComponentEnable.h"
 #include "Logger.h"
 #include <chrono>
+#include <map>
 #include "PhysicsComponent.h"
 #include "Scene.h"
 #include "TransformComponent.h"
@@ -339,7 +340,7 @@ static void ResolvePhysicsContact(entt::registry& world, entt::entity entityA, e
     }
 }
 
-static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity)
+static bool ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA, entt::entity entityB, const HitResult& hit, bool resolveVelocity, CollisionEvent* outCollision = nullptr)
 {
     auto* bodyA = TryGetEnabledComponent<RigidBodyComponent>(world, entityA);
     auto* bodyB = TryGetEnabledComponent<RigidBodyComponent>(world, entityB);
@@ -363,15 +364,15 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
 
     double inverseMassA = 0.0, inverseMassB = 0.0;
     if (!tryGetInverseMass3D(bodyA, inverseMassA) || !tryGetInverseMass3D(bodyB, inverseMassB))
-        return;
+        return false;
 
     const double inverseMassSum = inverseMassA + inverseMassB;
     if (inverseMassSum <= 0.0)
-        return;
+        return false;
 
     if (!hit.hasHit || !std::isfinite(hit.denetrationDepth) || hit.denetrationDepth < 0.f ||
         !std::isfinite(hit.normal.x) || !std::isfinite(hit.normal.y) || !std::isfinite(hit.normal.z))
-        return;
+        return false;
 
     const glm::dvec3 normal(hit.normal.x, hit.normal.y, hit.normal.z);
     const double weightA = inverseMassA / inverseMassSum;
@@ -387,6 +388,17 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
     glm::dvec3 velocityA = getContactVelocity3D(bodyA);
     glm::dvec3 velocityB = getContactVelocity3D(bodyB);
     const double normalSpeed = glm::dot(velocityA - velocityB, normal);
+
+    if (outCollision)
+    {
+        outCollision->entityA = entityA;
+        outCollision->entityB = entityB;
+        outCollision->contactPoint = hit.point;
+        outCollision->contactNormal = hit.normal;
+        outCollision->penetrationDepth = hit.denetrationDepth;
+        outCollision->relativeVelocity = vec3(velocityA - velocityB);
+        outCollision->type = ECollisionEventType::Enter;
+    }
 
     const auto* colA = TryGetEnabledComponent<ColliderComponent>(world, entityA);
     const auto* colB = TryGetEnabledComponent<ColliderComponent>(world, entityB);
@@ -423,7 +435,7 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
     const vec3 nextVelocityA(velocityA);
     const vec3 nextVelocityB(velocityB);
     if (!IsFinite(nextVelocityA) || !IsFinite(nextVelocityB))
-        return;
+        return false;
 
     constexpr double penetrationSlop = 0.001;
     constexpr double correctionRatio = 0.8;
@@ -435,7 +447,7 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
             if (inverseMassA > 0.0 && bodyA) bodyA->LinearVelocity = nextVelocityA;
             if (inverseMassB > 0.0 && bodyB) bodyB->LinearVelocity = nextVelocityB;
         }
-        return;
+        return true;
     }
 
     auto& transformA = world.get<TransformComponent>(entityA);
@@ -449,14 +461,14 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
 
     if ((inverseMassA > 0.0 && !candidateA.SetLocalPosition(positionA)) ||
         (inverseMassB > 0.0 && !candidateB.SetLocalPosition(positionB)))
-        return;
+        return false;
 
     auto candidateWorldA = world.get<WorldTransformComponent>(entityA);
     auto candidateWorldB = world.get<WorldTransformComponent>(entityB);
 
     if ((inverseMassA > 0.0 && !TransformSystem::UpdateRootWorld(candidateA, candidateWorldA)) ||
         (inverseMassB > 0.0 && !TransformSystem::UpdateRootWorld(candidateB, candidateWorldB)))
-        return;
+        return false;
 
     if (inverseMassA > 0.0)
     {
@@ -470,6 +482,7 @@ static void ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
         world.get<WorldTransformComponent>(entityB) = candidateWorldB;
         if (bodyB) bodyB->LinearVelocity = nextVelocityB;
     }
+    return true;
 }
 
 static void ResolveJoints2D(entt::registry& world, f32 dt)
@@ -622,7 +635,48 @@ static void CollectPhysicsTriggerEvents3D(Scene& scene);
 namespace
 {
     std::vector<PhysicsSystem::GlobalTriggerCallback> s_GlobalTriggerCallbacks;
+    std::vector<PhysicsSystem::GlobalCollisionCallback> s_GlobalCollisionCallbacks;
     Engine::PhysicsSettings s_PhysicsSettings;
+
+    using PhysicsCollisionPair = std::pair<entt::entity, entt::entity>;
+    struct PhysicsCollisionState3D
+    {
+        std::set<PhysicsCollisionPair> Previous;
+        std::vector<CollisionEvent> Events;
+    };
+
+    void FinalizePhysicsCollisionEvents3D(Scene& scene, const std::map<PhysicsCollisionPair, CollisionEvent>& currentContacts)
+    {
+        auto& world = scene.GetRegistry();
+        auto& state = world.ctx().emplace<PhysicsCollisionState3D>();
+        state.Events.clear();
+
+        std::set<PhysicsCollisionPair> currentPairs;
+        for (const auto& [pair, contact] : currentContacts)
+        {
+            currentPairs.insert(pair);
+            CollisionEvent event = contact;
+            event.type = state.Previous.contains(pair) ? ECollisionEventType::Stay : ECollisionEventType::Enter;
+            state.Events.push_back(event);
+        }
+
+        for (const auto& pair : state.Previous)
+        {
+            if (currentPairs.contains(pair))
+                continue;
+
+            if (scene.FindEntity(pair.first) || scene.FindEntity(pair.second))
+            {
+                CollisionEvent exitEvent{};
+                exitEvent.entityA = pair.first;
+                exitEvent.entityB = pair.second;
+                exitEvent.type = ECollisionEventType::Exit;
+                state.Events.push_back(exitEvent);
+            }
+        }
+
+        state.Previous = std::move(currentPairs);
+    }
 }
 
 const Engine::PhysicsSettings& Engine::PhysicsSystem::GetSettings()
@@ -1084,6 +1138,65 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
 
             vec3 position = transform.position + velocity * dt;
 
+            if (body.UseCCD && std::isfinite(body.CCDMotionThreshold) && body.CCDMotionThreshold >= 0.f)
+            {
+                const vec3 delta = velocity * dt;
+                const f32 moveDist = glm::length(delta);
+                if (std::isfinite(moveDist) && moveDist >= body.CCDMotionThreshold && moveDist > 1.0e-6f)
+                {
+                    if (const auto* col = TryGetEnabledComponent<ColliderComponent>(world, entity);
+                        col && col->GetSettings().Enabled && !col->GetSettings().IsTrigger)
+                    {
+                        const mat4 colliderWorld = world.get<WorldTransformComponent>(entity).worldMatrix * glm::translate(mat4(1.0f), col->GetOffset());
+                        const vec3 dir = delta / moveDist;
+                        SweepQuery query{};
+                        query.maxDistance = moveDist;
+                        query.layerMask = col->GetSettings().CollisionMask;
+                        query.includeTrigger = false;
+                        query.ignoreEntity = entity;
+
+                        SceneSweepHit sweepHit{};
+                        bool hasSweepHit = false;
+                        if (const auto* sph = std::get_if<SphereShape>(&col->GetShape()))
+                        {
+                            const f32 scale = glm::max(glm::length(vec3(colliderWorld[0])), glm::max(glm::length(vec3(colliderWorld[1])), glm::length(vec3(colliderWorld[2]))));
+                            const f32 radius = sph->Radius * scale;
+                            if (sph->HasValidParameters() && radius > 0.f)
+                                hasSweepHit = PhysicsSystem::SweepSphere(*scene, vec3(colliderWorld[3]), radius, dir, sweepHit, query);
+                        }
+                        else if (const auto* box = std::get_if<BoxShape>(&col->GetShape()))
+                        {
+                            if (box->HasValidParameters())
+                            {
+                                const vec3 halfSize = box->Size * 0.5f;
+                                const vec3 extent = glm::abs(vec3(colliderWorld[0])) * halfSize.x +
+                                                    glm::abs(vec3(colliderWorld[1])) * halfSize.y +
+                                                    glm::abs(vec3(colliderWorld[2])) * halfSize.z;
+                                hasSweepHit = PhysicsSystem::SweepBox(*scene, vec3(colliderWorld[3]), extent, dir, sweepHit, query);
+                            }
+                        }
+                        else if (const auto* cap = std::get_if<CapsuleShape>(&col->GetShape()))
+                        {
+                            const f32 halfSegment = std::max(0.0f, (cap->Height * 0.5f) - cap->Radius);
+                            const f32 scaleXZ = glm::max(glm::length(vec3(colliderWorld[0])), glm::length(vec3(colliderWorld[2])));
+                            const f32 radius = cap->Radius * scaleXZ;
+                            if (cap->HasValidParameters() && radius > 0.f)
+                            {
+                                const vec3 pA = vec3(colliderWorld * vec4(0.0f, -halfSegment, 0.0f, 1.0f));
+                                const vec3 pB = vec3(colliderWorld * vec4(0.0f, halfSegment, 0.0f, 1.0f));
+                                hasSweepHit = PhysicsSystem::SweepCapsule(*scene, pA, pB, radius, dir, sweepHit, query);
+                            }
+                        }
+
+                        if (hasSweepHit && sweepHit.Hit.hasHit && sweepHit.Hit.distance > 0.f && sweepHit.Hit.distance < moveDist)
+                        {
+                            const f32 clampedDist = std::min(moveDist, sweepHit.Hit.distance + 0.0005f);
+                            position = transform.position + dir * clampedDist;
+                        }
+                    }
+                }
+            }
+
 
             auto candidate = transform;
             auto candidateWorld = world.get<WorldTransformComponent>(entity);
@@ -1149,6 +1262,7 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
         }
 
         const int positionIterations = glm::clamp(s_PhysicsSettings.PositionIterations, 1, 4);
+        std::map<PhysicsCollisionPair, CollisionEvent> frameCollisions3D;
 
         for (int iteration = 0; iteration < positionIterations; ++iteration)
         {
@@ -1237,7 +1351,19 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                 const vec3 oldPosA = a.transform->position;
                 const vec3 oldPosB = b.transform->position;
 
-                ResolvePhysicsContact3D(world, a.entity, b.entity, hit, resolveVelocity);
+                CollisionEvent contactEvent{};
+                if (ResolvePhysicsContact3D(world, a.entity, b.entity, hit, resolveVelocity, &contactEvent))
+                {
+                    PhysicsCollisionPair pair{ contactEvent.entityA, contactEvent.entityB };
+                    if (pair.second < pair.first)
+                    {
+                        std::swap(pair.first, pair.second);
+                        std::swap(contactEvent.entityA, contactEvent.entityB);
+                        contactEvent.contactNormal = -contactEvent.contactNormal;
+                        contactEvent.relativeVelocity = -contactEvent.relativeVelocity;
+                    }
+                    frameCollisions3D.try_emplace(pair, contactEvent);
+                }
 
                 if (a.isDynamic)
                 {
@@ -1261,6 +1387,8 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
         {
             if (auto* state = world.ctx().find<PhysicsTriggerState>())
                 state->Events.clear();
+            if (auto* colState = world.ctx().find<PhysicsCollisionState3D>())
+                colState->Events.clear();
 
             continue;
         }
@@ -1271,6 +1399,10 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
             DispatchTriggerEvents(*scene, state2D->Events);
         if (const auto* state3D = world.ctx().find<PhysicsTriggerState3D>())
             DispatchTriggerEvents(*scene, state3D->Events);
+
+        FinalizePhysicsCollisionEvents3D(*scene, frameCollisions3D);
+        if (const auto* colState3D = world.ctx().find<PhysicsCollisionState3D>())
+            DispatchCollisionEvents(*scene, colState3D->Events);
     }
 }
 #pragma endregion
@@ -1708,6 +1840,58 @@ void PhysicsSystem::RegisterGlobalTriggerCallback(GlobalTriggerCallback callback
 void PhysicsSystem::ClearGlobalTriggerCallbacks()
 {
     s_GlobalTriggerCallbacks.clear();
+}
+
+void PhysicsSystem::DispatchCollisionEvents(Scene& scene, const std::vector<CollisionEvent>& events)
+{
+    auto& world = scene.GetRegistry();
+    for (const auto& event : events)
+    {
+        const auto invoke = [&](entt::entity self, entt::entity other)
+        {
+            if (!world.valid(self)) return;
+
+            if (auto* cb = TryGetEnabledComponent<CollisionCallbackComponent>(world, self))
+            {
+                if (event.type == ECollisionEventType::Enter && cb->OnCollisionEnter)
+                    cb->OnCollisionEnter(self, other, event);
+                else if (event.type == ECollisionEventType::Stay && cb->OnCollisionStay)
+                    cb->OnCollisionStay(self, other, event);
+                else if (event.type == ECollisionEventType::Exit && cb->OnCollisionExit)
+                    cb->OnCollisionExit(self, other, event);
+            }
+        };
+
+        invoke(event.entityA, event.entityB);
+        invoke(event.entityB, event.entityA);
+
+        for (const auto& callback : s_GlobalCollisionCallbacks)
+        {
+            if (callback) callback(event);
+        }
+    }
+}
+
+std::span<const CollisionEvent> PhysicsSystem::GetCollisionEvents3D(const Scene& scene)
+{
+    const auto* state = scene.GetRegistry().ctx().find<PhysicsCollisionState3D>();
+    if (!state) return {};
+    return { state->Events.data(), state->Events.size() };
+}
+
+void PhysicsSystem::ResetCollisionState3D(Scene& scene)
+{
+    scene.GetRegistry().ctx().erase<PhysicsCollisionState3D>();
+}
+
+void PhysicsSystem::RegisterGlobalCollisionCallback(GlobalCollisionCallback callback)
+{
+    s_GlobalCollisionCallbacks.push_back(std::move(callback));
+}
+
+void PhysicsSystem::ClearGlobalCollisionCallbacks()
+{
+    s_GlobalCollisionCallbacks.clear();
 }
 
 #pragma region Sweep & Overlap

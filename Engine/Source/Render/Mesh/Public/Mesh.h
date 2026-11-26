@@ -147,6 +147,7 @@ public:
 #pragma region Setter
 public:
 	EResult SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint32 stride);
+	EResult UpdateStreamBufferInPlace(EMeshStream stream, const void* data, uint32 count, uint32 stride);
 	EResult SetIndexBuffer(void* data, uint32 indexCount, uint32 stride);
 public:
 	void SetTopology(ETopology topology)

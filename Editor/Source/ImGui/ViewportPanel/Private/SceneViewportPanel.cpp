@@ -27,6 +27,7 @@
 #include "TransformPropertyEditor.h"
 #include "PickingManager.h"
 #include "PIEManager.h"
+#include "DebugDraw.h"
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -450,6 +451,46 @@ void SceneViewportPanel::Update(f32 dt)
 		DrawSelectedSpline(activeScene);
 		DrawSelectedDecal(activeScene);
 		DrawSelectedProbeVolume(activeScene);
+
+		std::vector<Engine::DebugDrawCommand> debugCommands;
+		Engine::DebugDraw::ConsumeCommands(dt, debugCommands);
+		for (const auto& cmd : debugCommands)
+		{
+			switch (cmd.Shape)
+			{
+			case Engine::EDebugDrawShape::Line:
+				m_DebugRenderer.DrawLine(cmd.Start, cmd.End, cmd.Color);
+				break;
+			case Engine::EDebugDrawShape::Box:
+				m_DebugRenderer.DrawBox(cmd.Start, cmd.End, cmd.Color, cmd.Transform);
+				break;
+			case Engine::EDebugDrawShape::Sphere:
+				m_DebugRenderer.DrawSphere(cmd.Start, cmd.Radius, cmd.Color);
+				break;
+			case Engine::EDebugDrawShape::Arrow:
+			{
+				m_DebugRenderer.DrawLine(cmd.Start, cmd.End, cmd.Color);
+				const vec3 delta = cmd.End - cmd.Start;
+				const f32 len = glm::length(delta);
+				if (len > 1e-5f)
+				{
+					const vec3 dir = delta / len;
+					const vec3 refUp = std::abs(dir.y) < 0.99f ? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f);
+					const vec3 right = glm::normalize(glm::cross(refUp, dir));
+					const vec3 up = glm::cross(dir, right);
+					const f32 headLen = std::min(cmd.Radius > 0.0f ? cmd.Radius : 0.25f, len * 0.5f);
+					const f32 headWidth = headLen * 0.4f;
+					const vec3 base = cmd.End - dir * headLen;
+					m_DebugRenderer.DrawLine(cmd.End, base + right * headWidth, cmd.Color);
+					m_DebugRenderer.DrawLine(cmd.End, base - right * headWidth, cmd.Color);
+					m_DebugRenderer.DrawLine(cmd.End, base + up * headWidth, cmd.Color);
+					m_DebugRenderer.DrawLine(cmd.End, base - up * headWidth, cmd.Color);
+				}
+				break;
+			}
+			}
+		}
+
 		m_DebugRenderer.SubmitDebugDraw(*cameraBuffer, m_DisplayRTName);
 	}
 

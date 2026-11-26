@@ -3,6 +3,7 @@
 #include "Engine_Includes.h"
 #include "System.h"
 #include "TriggerEvent.h"
+#include "CollisionCallbackComponent.h"
 #include "HitResult.h"
 #include "Ray.h"
 #include "BoundingSphere.h"
@@ -88,6 +89,17 @@ public:
 
 	// 2D & 3D 통합 이벤트 디스패처
 	static void DispatchTriggerEvents(Scene& scene, const std::vector<TriggerEvent>& events);
+
+	static std::span<const CollisionEvent> GetCollisionEvents3D(const Scene& scene);
+	static void ResetCollisionState3D(Scene& scene);
+
+	// 전역 3D 충돌 리스너 등록
+	using GlobalCollisionCallback = std::function<void(const CollisionEvent&)>;
+	static void RegisterGlobalCollisionCallback(GlobalCollisionCallback callback);
+	static void ClearGlobalCollisionCallbacks();
+
+	// 3D 충돌 이벤트 디스패처
+	static void DispatchCollisionEvents(Scene& scene, const std::vector<CollisionEvent>& events);
 public:
 	static bool Raycast(const Scene& scene, const Ray& ray, SceneRaycastHit& outHit, const RaycastQuery& query);
 	static std::vector<SceneRaycastHit> RaycastAll(const Scene& scene, const Ray& ray, const RaycastQuery& query);

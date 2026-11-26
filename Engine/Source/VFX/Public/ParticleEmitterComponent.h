@@ -51,8 +51,11 @@ namespace Engine
 		vec3 velocity = vec3(0.0f);
 		vec4 color = vec4(1.0f);
 		vec2 size = vec2(1.0f);
+		vec3 scale3D = vec3(1.0f);
 		f32 rotation = 0.0f;
 		f32 angularVelocity = 0.0f;
+		vec3 rotation3D = vec3(0.0f);
+		vec3 angularVelocity3D = vec3(0.0f);
 		f32 age = 0.0f;
 		f32 lifetime = 1.0f;
 		uint8 bounceCount = 0;
@@ -205,6 +208,12 @@ namespace Engine
 
 		PROPERTY(EDITABLE, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_ROTATION_SPEED_MAX"))
 		f32 rotationSpeedMax = 1.0f;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_ALIGN_TO_VELOCITY"))
+		bool alignToVelocity = false;
+
+		PROPERTY(EDITABLE, ALLOW_MISSING, CATEGORY("CATEGORY_PARTICLE_SIZE"), DISPLAY_NAME("PROP_VELOCITY_STRETCH_FACTOR"), EDITCONDITION(alignToVelocity))
+		f32 velocityStretchFactor = 0.0f;
 
 		// ── 색상 및 알파 (Color & Alpha) ──
 		PROPERTY(EDITABLE, COLOR_PROPERTY, CATEGORY("CATEGORY_PARTICLE_COLOR"), DISPLAY_NAME("PROP_COLOR_START"))

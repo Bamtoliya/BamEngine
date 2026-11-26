@@ -168,6 +168,23 @@ void DirectX12Buffer::SetData(const void* data, uint32 size)
 	}
 }
 
+EResult DirectX12Buffer::UpdateData(const void* data, uint32 size)
+{
+	if (!data || size == 0 || !m_Buffer || size > m_Size)
+		return EResult::InvalidArgument;
+
+	if (m_MappedData)
+	{
+		std::memcpy(m_MappedData, data, size);
+		return EResult::Success;
+	}
+
+	if (!m_RHI)
+		return EResult::Fail;
+
+	return static_cast<DirectX12RHI*>(m_RHI)->UploadBufferData(this, data, size, 0);
+}
+
 EResult DirectX12Buffer::UploadRangeInternal(const void* data, uint32 size, uint32 offset)
 {
 	if (!m_Buffer)

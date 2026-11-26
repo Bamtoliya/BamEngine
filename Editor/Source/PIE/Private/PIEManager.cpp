@@ -50,6 +50,7 @@ void PIEManager::StartPlay()
     Engine::AudioManager::Get().StopAllSounds();
     SelectionManager::Get().ClearSelection(true);
     m_State = EPlayState::Play;
+    m_SingleStepRequested = false;
     if (auto* gameView = ImGuiManager::Get().GetImGuiPanel(L"Game View"))
     {
         gameView->Open();
@@ -71,7 +72,20 @@ void PIEManager::Resume()
 {
     if (m_State != EPlayState::Pause) return;
     m_State = EPlayState::Play;
+    m_SingleStepRequested = false;
     EDITOR_LOG_INFO("[PIE] Resumed");
+}
+void PIEManager::RequestSingleStep()
+{
+    if (m_State != EPlayState::Pause) return;
+    m_SingleStepRequested = true;
+}
+bool PIEManager::ConsumeSingleStepRequest()
+{
+    if (m_State != EPlayState::Pause || !m_SingleStepRequested)
+        return false;
+    m_SingleStepRequested = false;
+    return true;
 }
 void PIEManager::Stop()
 {
@@ -89,6 +103,7 @@ void PIEManager::Stop()
     }
 
     m_State = EPlayState::Edit;
+    m_SingleStepRequested = false;
     Application::Get().RebindSceneDocumentAfterPlay();
 
     // 에디터 복귀 시 씬 뷰포트(Scene View)로 포커스 복원

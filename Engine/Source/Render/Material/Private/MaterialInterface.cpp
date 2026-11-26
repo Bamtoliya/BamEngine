@@ -750,7 +750,8 @@ Shader* MaterialInterface::GetVertexShader(ERenderPassType passType) const
 {
     for (const auto& binding : m_PassShaders)
     {
-        if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
+        if (binding.passType == passType && binding.vertexShader.IsValid() &&
+            (binding.pixelShader.IsValid() || passType == ERenderPassType::Shadow))
             return binding.vertexShader.Get();
     }
     if (passType == m_PrimaryPassType || m_PrimaryPassType == ERenderPassType::Custom)
@@ -762,7 +763,8 @@ Shader* MaterialInterface::GetPixelShader(ERenderPassType passType) const
 {
     for (const auto& binding : m_PassShaders)
     {
-        if (binding.passType == passType && binding.vertexShader.IsValid() && binding.pixelShader.IsValid())
+        if (binding.passType == passType && binding.pixelShader.IsValid() &&
+            (binding.vertexShader.IsValid() || passType == ERenderPassType::Shadow))
             return binding.pixelShader.Get();
     }
     if (passType == m_PrimaryPassType || m_PrimaryPassType == ERenderPassType::Custom)

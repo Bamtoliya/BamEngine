@@ -18,6 +18,10 @@ public:
 	void OnLateUpdate(entt::registry& globalRegistry, const vector<Scene*>& activeScenes, f32 dt) override;
 	static void UpdateCameras(entt::registry& registry, uint32 viewportWidth = 0, uint32 viewportHeight = 0);
 	static bool UpdateCamera(entt::registry& registry, entt::entity entity, uint32 viewportWidth = 0, uint32 viewportHeight = 0);
+
+private:
+	inline static uint32 m_LastViewportWidth = 0;
+	inline static uint32 m_LastViewportHeight = 0;
 };
 
 END

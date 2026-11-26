@@ -134,7 +134,7 @@ void Runtime::Free()
 void Runtime::FixedUpdate(f32 dt)
 {
 	SystemManager::Get().FixedUpdate(m_GlobalRegistry, SceneManager::Get().GetActiveScenes(), dt);
-	
+	if (m_InputManager) m_InputManager->ConsumeFixedStepActions();
 }
 void Runtime::Update(f32 dt, bool updateInput, uint8 phaseMask)
 {

@@ -37,6 +37,7 @@ public:
 
 public:
 	virtual void SetData(const void* data, uint32 size) override;
+	virtual EResult UpdateData(const void* data, uint32 size) override;
 	virtual void* GetMappedPointer() const override { return m_MappedData; }
 public:
 	EResult QueryUploadComplete(bool& complete) override;

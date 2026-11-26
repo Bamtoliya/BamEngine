@@ -348,12 +348,14 @@ namespace
 		f32 Metallic = 0.0f;
 		uint32 TextureFlags = 0u;
 		vec2 Padding{ 0.0f };
+		vec4 UVScaleOffset{ 1.0f, 1.0f, 0.0f, 0.0f };
 	};
-	static_assert(sizeof(DecalParams) == 224);
+	static_assert(sizeof(DecalParams) == 240);
 	static_assert(offsetof(DecalParams, BaseColor) == 128);
 	static_assert(offsetof(DecalParams, AxisZ) == 176);
 	static_assert(offsetof(DecalParams, AngleFadeRange) == 192);
 	static_assert(offsetof(DecalParams, TextureFlags) == 212);
+	static_assert(offsetof(DecalParams, UVScaleOffset) == 224);
 
 	// decal.hlsli의 DECAL_HAS_*_TEXTURE
 	constexpr Engine::uint32 DecalHasBaseColorTexture = 1u << 0u;
@@ -1488,6 +1490,7 @@ void Engine::DeferredSceneRenderer::SubmitDecalPass(const CameraBuffer& sceneCam
 				params.DepthFade = decal.DepthFade;
 				params.Roughness = decal.Roughness;
 				params.Metallic = decal.Metallic;
+				params.UVScaleOffset = decal.UVScaleOffset;
 
 				const Texture* textures[3] = { decal.BaseColorTexture, decal.NormalTexture, decal.PBRTexture };
 				const uint32 textureFlags[3] = { DecalHasBaseColorTexture, DecalHasNormalTexture, DecalHasPBRTexture };

@@ -133,6 +133,9 @@ public:
 	f32 GetActionMapMouseScrollDeltaY(std::string_view mapId) const;
 	bool WasActionPressed(std::string_view mapId, std::string_view actionId) const;
 	bool WasActionReleased(std::string_view mapId, std::string_view actionId) const;
+	bool WasActionPressedInFixedUpdate(std::string_view mapId, std::string_view actionId) const;
+	bool WasActionReleasedInFixedUpdate(std::string_view mapId, std::string_view actionId) const;
+	void ConsumeFixedStepActions();
 	bool IsActionHeld(std::string_view mapId, std::string_view actionId) const;
 	bool HasKeyboardFocus() const;
 	static bool ValidateInputActionSettings(const InputActionSettings& settings);
@@ -186,6 +189,8 @@ private:// Input Action Maps
 		bool Held = false;
 		bool Pressed = false;
 		bool Released = false;
+		bool FixedPressed = false;
+		bool FixedReleased = false;
 	};
 
 	struct ActionMapState

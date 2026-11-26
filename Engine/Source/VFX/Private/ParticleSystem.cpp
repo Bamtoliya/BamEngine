@@ -98,6 +98,42 @@ namespace
 
 		return vec3(curlX, curlY, curlZ) * strength;
 	}
+
+	mat4 BuildVelocityAlignedRotationMatrix(const vec3& velocityDir)
+	{
+		const vec3 up = glm::normalize(velocityDir);
+		const vec3 ref = std::abs(up.y) < 0.999f ? vec3(0.0f, 1.0f, 0.0f) : vec3(1.0f, 0.0f, 0.0f);
+		const vec3 right = glm::normalize(glm::cross(ref, up));
+		const vec3 forward = glm::cross(right, up);
+
+		mat4 rot(1.0f);
+		rot[0] = vec4(right, 0.0f);
+		rot[1] = vec4(up, 0.0f);
+		rot[2] = vec4(forward, 0.0f);
+		return rot;
+	}
+
+	vec3 ComputeVelocityAlignedEuler(const vec3& velocityDir)
+	{
+		const mat4 rotMat = BuildVelocityAlignedRotationMatrix(velocityDir);
+		return glm::eulerAngles(glm::quat_cast(rotMat));
+	}
+
+	mat4 BuildParticleMeshWorldMatrix(const Engine::Particle& p, bool alignToVelocity, bool isWorldSpace, const mat4& parentWorldMat)
+	{
+		mat4 rotMat(1.0f);
+		if (alignToVelocity && glm::length2(p.velocity) > 0.0001f)
+		{
+			rotMat = BuildVelocityAlignedRotationMatrix(p.velocity);
+		}
+		else
+		{
+			rotMat = glm::mat4_cast(glm::quat(p.rotation3D));
+		}
+
+		const mat4 localMat = glm::translate(mat4(1.0f), p.position) * rotMat * glm::scale(mat4(1.0f), p.scale3D);
+		return isWorldSpace ? localMat : (parentWorldMat * localMat);
+	}
 }
 
 EResult Engine::ParticleSystem::Initialize(void* arg)
@@ -362,11 +398,27 @@ void Engine::ParticleSystem::UpdateEmitter(Scene* scene, ParticleEmitterComponen
 
 		p.position = isWorld ? nextPosWorld : vec3(invWorldMat * vec4(nextPosWorld, 1.0f));
 		p.rotation += p.angularVelocity * dt;
+		p.rotation3D += p.angularVelocity3D * dt;
 
 		// 수명 진행에 따른 색상 및 크기 보간
 		const f32 t = p.GetNormalizedAge();
 		p.color = glm::mix(emitter.colorStart, emitter.colorEnd, t);
 		p.size = glm::mix(emitter.sizeStart, emitter.sizeEnd, t);
+		p.scale3D = vec3(p.size.x, p.size.y, (p.size.x + p.size.y) * 0.5f);
+
+		if (emitter.alignToVelocity)
+		{
+			const f32 speedSq = glm::length2(p.velocity);
+			if (speedSq > 0.0001f)
+			{
+				const f32 speed = std::sqrt(speedSq);
+				p.rotation3D = ComputeVelocityAlignedEuler(p.velocity / speed);
+				if (emitter.velocityStretchFactor > 0.0f)
+				{
+					p.scale3D.y *= (1.0f + speed * emitter.velocityStretchFactor);
+				}
+			}
+		}
 
 		++i;
 	}
@@ -387,9 +439,12 @@ void Engine::ParticleSystem::SpawnParticle(ParticleEmitterComponent& emitter, co
 	p.age = 0.0f;
 	p.lifetime = std::max(RandomFloat(emitter.lifetimeMin, emitter.lifetimeMax), 0.001f);
 	p.size = emitter.sizeStart;
+	p.scale3D = vec3(p.size.x, p.size.y, (p.size.x + p.size.y) * 0.5f);
 	p.color = emitter.colorStart;
 	p.rotation = RandomFloat(0.0f, glm::two_pi<f32>());
 	p.angularVelocity = RandomFloat(emitter.rotationSpeedMin, emitter.rotationSpeedMax);
+	p.rotation3D = vec3(RandomFloat(0.0f, glm::two_pi<f32>()), RandomFloat(0.0f, glm::two_pi<f32>()), p.rotation);
+	p.angularVelocity3D = vec3(RandomFloat(emitter.rotationSpeedMin, emitter.rotationSpeedMax), RandomFloat(emitter.rotationSpeedMin, emitter.rotationSpeedMax), p.angularVelocity);
 	p.bounceCount = 0;
 
 	// 원뿔(Cone) 방향 계산
@@ -641,10 +696,26 @@ void Engine::ParticleSystem::UpdateEffectComponent(Scene* scene, ParticleEffectC
 
 			p.position = isWorld ? nextPosWorld : vec3(invWorldMat * vec4(nextPosWorld, 1.0f));
 			p.rotation += p.angularVelocity * effectiveDt;
+			p.rotation3D += p.angularVelocity3D * effectiveDt;
 
 			const f32 t = p.GetNormalizedAge();
 			p.color = glm::mix(emitterData.colorStart, emitterData.colorEnd, t);
 			p.size = glm::mix(emitterData.sizeStart, emitterData.sizeEnd, t);
+			p.scale3D = vec3(p.size.x, p.size.y, (p.size.x + p.size.y) * 0.5f);
+
+			if (emitterData.alignToVelocity)
+			{
+				const f32 speedSq = glm::length2(p.velocity);
+				if (speedSq > 0.0001f)
+				{
+					const f32 speed = std::sqrt(speedSq);
+					p.rotation3D = ComputeVelocityAlignedEuler(p.velocity / speed);
+					if (emitterData.velocityStretchFactor > 0.0f)
+					{
+						p.scale3D.y *= (1.0f + speed * emitterData.velocityStretchFactor);
+					}
+				}
+			}
 
 			++i;
 		}
@@ -696,9 +767,12 @@ void Engine::ParticleSystem::SpawnEffectParticle(const ParticleEmitterData& emit
 	p.age = 0.0f;
 	p.lifetime = std::max(RandomFloat(emitterData.lifetimeMin, emitterData.lifetimeMax), 0.001f);
 	p.size = emitterData.sizeStart;
+	p.scale3D = vec3(p.size.x, p.size.y, (p.size.x + p.size.y) * 0.5f);
 	p.color = emitterData.colorStart;
 	p.rotation = RandomFloat(0.0f, glm::two_pi<f32>());
 	p.angularVelocity = RandomFloat(emitterData.rotationSpeedMin, emitterData.rotationSpeedMax);
+	p.rotation3D = vec3(RandomFloat(0.0f, glm::two_pi<f32>()), RandomFloat(0.0f, glm::two_pi<f32>()), p.rotation);
+	p.angularVelocity3D = vec3(RandomFloat(emitterData.rotationSpeedMin, emitterData.rotationSpeedMax), RandomFloat(emitterData.rotationSpeedMin, emitterData.rotationSpeedMax), p.angularVelocity);
 	p.bounceCount = 0;
 
 	// 원뿔 방향 계산
@@ -782,16 +856,41 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
 		if (emitter.particles.empty()) continue;
 
-		Mesh* mesh = emitter.meshHandle.Get() ? emitter.meshHandle.Get() : defaultQuadMesh;
+		Mesh* customMesh = emitter.meshHandle.Get();
 		MaterialInterface* material = emitter.materialHandle.Get() ? emitter.materialHandle.Get() : defaultMaterial;
-		Texture* texture = emitter.textureHandle.Get() ? emitter.textureHandle.Get() : defaultTexture;
-
-		if (!mesh || !material || !texture) continue;
-		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
+		if (!material) continue;
 		if (!VFXPassHelper::IsBlendModeAccepted(acceptedBlendModes, material->GetBlendMode())) continue;
 
 		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<ParticleEmitterComponent>(scene, entity);
 		const bool isWorldSpace = (emitter.simulationSpace == EParticleSimulationSpace::World);
+
+		if (customMesh)
+		{
+			if (!customMesh->GetIndexBuffer()) continue;
+			const BoundingBox localBounds(customMesh->GetMin(), customMesh->GetMax());
+
+			for (const auto& p : emitter.particles)
+			{
+				const mat4 worldMatrix = BuildParticleMeshWorldMatrix(p, emitter.alignToVelocity, isWorldSpace, transform.worldMatrix);
+				StaticDrawCommand command;
+				command.mesh = customMesh;
+				command.material = material;
+				command.worldMatrix = worldMatrix;
+				BoundingBox worldBounds;
+				if (localBounds.TryTransformToAABB(worldMatrix, worldBounds))
+					command.worldBounds = worldBounds;
+				command.pickingId = pickingId;
+
+				renderer.SubmitStatic(command, targetPassId);
+			}
+			continue;
+		}
+
+		Mesh* mesh = defaultQuadMesh;
+		Texture* texture = emitter.textureHandle.Get() ? emitter.textureHandle.Get() : defaultTexture;
+
+		if (!mesh || !texture) continue;
+		if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
 
 		for (const auto& p : emitter.particles)
 		{
@@ -867,15 +966,40 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 			const auto& inst = effectComp.instances[eIdx];
 			if (!emitterData.enabled || inst.particles.empty()) continue;
 
-			Mesh* mesh = emitterData.meshHandle.Get() ? emitterData.meshHandle.Get() : defaultQuadMesh;
+			Mesh* customMesh = emitterData.meshHandle.Get();
 			MaterialInterface* material = emitterData.materialHandle.Get() ? emitterData.materialHandle.Get() : defaultMaterial;
-			Texture* texture = emitterData.textureHandle.Get() ? emitterData.textureHandle.Get() : defaultTexture;
-
-			if (!mesh || !material || !texture) continue;
-			if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
+			if (!material) continue;
 			if (!VFXPassHelper::IsBlendModeAccepted(acceptedBlendModes, material->GetBlendMode())) continue;
 
 			const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
+
+			if (customMesh)
+			{
+				if (!customMesh->GetIndexBuffer()) continue;
+				const BoundingBox localBounds(customMesh->GetMin(), customMesh->GetMax());
+
+				for (const auto& p : inst.particles)
+				{
+					const mat4 worldMatrix = BuildParticleMeshWorldMatrix(p, emitterData.alignToVelocity, isWorldSpace, transform.worldMatrix);
+					StaticDrawCommand command;
+					command.mesh = customMesh;
+					command.material = material;
+					command.worldMatrix = worldMatrix;
+					BoundingBox worldBounds;
+					if (localBounds.TryTransformToAABB(worldMatrix, worldBounds))
+						command.worldBounds = worldBounds;
+					command.pickingId = pickingId;
+
+					renderer.SubmitStatic(command, targetPassId);
+				}
+				continue;
+			}
+
+			Mesh* mesh = defaultQuadMesh;
+			Texture* texture = emitterData.textureHandle.Get() ? emitterData.textureHandle.Get() : defaultTexture;
+
+			if (!mesh || !texture) continue;
+			if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
 
 			for (const auto& p : inst.particles)
 			{
@@ -979,15 +1103,40 @@ void Engine::ParticleSystem::SubmitSceneParticles(Scene* scene, const CameraBuff
 				const auto& inst = rt.emitterInstances[eIdx];
 				if (!emitterData.enabled || inst.particles.empty()) continue;
 
-				Mesh* mesh = emitterData.meshHandle.Get() ? emitterData.meshHandle.Get() : defaultQuadMesh;
+				Mesh* customMesh = emitterData.meshHandle.Get();
 				MaterialInterface* material = emitterData.materialHandle.Get() ? emitterData.materialHandle.Get() : defaultMaterial;
-				Texture* texture = emitterData.textureHandle.Get() ? emitterData.textureHandle.Get() : defaultTexture;
-
-				if (!mesh || !material || !texture) continue;
-				if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
+				if (!material) continue;
 				if (!VFXPassHelper::IsBlendModeAccepted(acceptedBlendModes, material->GetBlendMode())) continue;
 
 				const bool isWorldSpace = (emitterData.simulationSpace == EParticleSimulationSpace::World);
+
+				if (customMesh)
+				{
+					if (!customMesh->GetIndexBuffer()) continue;
+					const BoundingBox localBounds(customMesh->GetMin(), customMesh->GetMax());
+
+					for (const auto& p : inst.particles)
+					{
+						const mat4 worldMatrix = BuildParticleMeshWorldMatrix(p, emitterData.alignToVelocity, isWorldSpace, trackWorldMat);
+						StaticDrawCommand command;
+						command.mesh = customMesh;
+						command.material = material;
+						command.worldMatrix = worldMatrix;
+						BoundingBox worldBounds;
+						if (localBounds.TryTransformToAABB(worldMatrix, worldBounds))
+							command.worldBounds = worldBounds;
+						command.pickingId = pickingId;
+
+						renderer.SubmitStatic(command, targetPassId);
+					}
+					continue;
+				}
+
+				Mesh* mesh = defaultQuadMesh;
+				Texture* texture = emitterData.textureHandle.Get() ? emitterData.textureHandle.Get() : defaultTexture;
+
+				if (!mesh || !texture) continue;
+				if (!texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
 
 				for (const auto& p : inst.particles)
 				{

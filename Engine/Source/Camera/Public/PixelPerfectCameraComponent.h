@@ -22,6 +22,9 @@ namespace Engine
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_SNAP_SUBPIXEL"))
 		bool snapSubpixel = true; // 서브픽셀 위치 스냅으로 카메라 이동 시 떨림(Jittering) 방지
 
+		PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_SNAP_TO_CAMERA_AXES"), EDITCONDITION(snapSubpixel))
+		bool snapToCameraAxes = true; // 회전 직교 카메라에서 카메라 로컬 Right/Up 축 기준 Texel 스냅
+
 		PROPERTY(EDITABLE, DISPLAY_NAME("PROP_UPSCALE_RT"), VISIBLE(false))
 		bool upscaleRT = true; // 가상 저해상도 렌더타깃에 렌더 후 정수배 업스케일
 

@@ -25,6 +25,10 @@ namespace Engine
         static constexpr std::uint32_t CurrentVersion = 1;
 
         std::uint32_t Version = CurrentVersion;
+        std::uint32_t InternalWidth = 0;
+        std::uint32_t InternalHeight = 0;
+        bool IntegerUpscale = false;
+        bool PointUpscale = false;
         std::vector<RenderPipelinePassProfile> Passes;
         std::string Output;
 

@@ -3,6 +3,7 @@
 #include <fmod.hpp>
 #include <fmod_errors.h>
 #include <algorithm>
+#include <cmath>
 
 IMPLEMENT_SINGLETON(AudioManager)
 
@@ -57,6 +58,8 @@ EResult AudioManager::Initialize(void* arg)
 
 void AudioManager::Free()
 {
+	m_SoundStates.clear();
+
 	if (m_VoiceGroup) { m_VoiceGroup->release(); m_VoiceGroup = nullptr; }
 	if (m_UIGroup) { m_UIGroup->release(); m_UIGroup = nullptr; }
 	if (m_SFXGroup) { m_SFXGroup->release(); m_SFXGroup = nullptr; }
@@ -72,10 +75,31 @@ void AudioManager::Free()
 	}
 }
 
+static void PruneInactiveChannels(std::vector<FMOD::Channel*>& channels)
+{
+	std::erase_if(channels, [](FMOD::Channel* ch)
+	{
+		if (!ch) return true;
+		bool isPlaying = false;
+		return ch->isPlaying(&isPlaying) != FMOD_OK || !isPlaying;
+	});
+}
+
 void AudioManager::Update(f32 dt)
 {
+	if (std::isfinite(dt) && dt > 0.f)
+	{
+		m_ElapsedTime += dt;
+	}
+
 	m_Mixer.Update(dt);
 	SyncBusGroups();
+
+	for (auto& [sound, state] : m_SoundStates)
+	{
+		(void)sound;
+		PruneInactiveChannels(state.ActiveChannels);
+	}
 
 	if (m_System)
 	{
@@ -125,17 +149,100 @@ void AudioManager::SyncBusGroups()
 	}
 }
 
-EResult AudioManager::PlayOneShot(FMOD::Sound* sound, f32 volume, EAudioBus bus)
+EResult AudioManager::PlayOneShotInternal(FMOD::Sound* sound, f32 volume, f32 pitch, EAudioBus bus, bool is3D, const vec3& position, f32 minDistance, f32 maxDistance)
 {
 	if (!m_System || !sound) return EResult::InvalidArgument;
 
+	auto stateIt = m_SoundStates.find(sound);
+	if (stateIt != m_SoundStates.end())
+	{
+		auto& state = stateIt->second;
+		PruneInactiveChannels(state.ActiveChannels);
+
+		if (state.Config.MinRetriggerInterval > 0.f && (m_ElapsedTime - state.LastPlayTime) < state.Config.MinRetriggerInterval)
+		{
+			return EResult::Success;
+		}
+		if (state.Config.MaxConcurrentVoices > 0 && state.ActiveChannels.size() >= state.Config.MaxConcurrentVoices)
+		{
+			return EResult::Success;
+		}
+	}
+
 	FMOD::ChannelGroup* group = GetBusGroup(bus);
 	FMOD::Channel* channel = nullptr;
-	FMOD_RESULT res = m_System->playSound(sound, group, false, &channel);
+	FMOD_RESULT res = m_System->playSound(sound, group, true, &channel);
 	if (res != FMOD_OK) return EResult::Fail;
 
-	if (channel) channel->setVolume(std::clamp(volume, 0.f, 1.f));
+	if (channel)
+	{
+		const f32 clampedVol = std::isfinite(volume) ? std::clamp(volume, 0.f, 1.f) : 1.f;
+		const f32 clampedPitch = (std::isfinite(pitch) && pitch > 0.f) ? std::clamp(pitch, 0.01f, 100.f) : 1.f;
+		channel->setVolume(clampedVol);
+		channel->setPitch(clampedPitch);
+		channel->setMode(FMOD_LOOP_OFF);
+
+		if (is3D)
+		{
+			const f32 safeMinDist = (std::isfinite(minDistance) && minDistance >= 0.f) ? minDistance : 1.f;
+			const f32 safeMaxDist = (std::isfinite(maxDistance) && maxDistance > safeMinDist) ? maxDistance : (safeMinDist + 19.f);
+			const FMOD_VECTOR fPos{ position.x, position.y, position.z };
+			const FMOD_VECTOR fVel{ 0.f, 0.f, 0.f };
+			channel->setMode(FMOD_3D | FMOD_3D_LINEARROLLOFF);
+			channel->set3DAttributes(&fPos, &fVel);
+			channel->set3DMinMaxDistance(safeMinDist, safeMaxDist);
+			channel->set3DSpread(0.f);
+		}
+		else
+		{
+			channel->setMode(FMOD_2D);
+		}
+
+		channel->setPaused(false);
+	}
+
+	if (stateIt != m_SoundStates.end())
+	{
+		stateIt->second.LastPlayTime = m_ElapsedTime;
+		if (channel) stateIt->second.ActiveChannels.push_back(channel);
+	}
+
 	return EResult::Success;
+}
+
+EResult AudioManager::PlayOneShot(FMOD::Sound* sound, f32 volume, EAudioBus bus, f32 pitch)
+{
+	return PlayOneShotInternal(sound, volume, pitch, bus, false, vec3(0.f), 1.f, 20.f);
+}
+
+EResult AudioManager::PlayOneShot3D(FMOD::Sound* sound, const vec3& position, f32 volume, f32 pitch, EAudioBus bus, f32 minDistance, f32 maxDistance)
+{
+	return PlayOneShotInternal(sound, volume, pitch, bus, true, position, minDistance, maxDistance);
+}
+
+void AudioManager::SetSoundConcurrency(FMOD::Sound* sound, const SoundConcurrencyConfig& config)
+{
+	if (!sound) return;
+	auto& state = m_SoundStates[sound];
+	state.Config = config;
+}
+
+void AudioManager::SetSoundConcurrency(FMOD::Sound* sound, uint32 maxConcurrentVoices, f32 minRetriggerInterval)
+{
+	SetSoundConcurrency(sound, SoundConcurrencyConfig{ maxConcurrentVoices, minRetriggerInterval });
+}
+
+void AudioManager::ClearSoundConcurrency(FMOD::Sound* sound)
+{
+	if (!sound) return;
+	m_SoundStates.erase(sound);
+}
+
+SoundConcurrencyConfig AudioManager::GetSoundConcurrency(FMOD::Sound* sound) const
+{
+	if (!sound) return {};
+	auto it = m_SoundStates.find(sound);
+	return it != m_SoundStates.end() ? it->second.Config : SoundConcurrencyConfig{};
 }
 
 void AudioManager::SetMasterVolume(f32 volume)
@@ -192,5 +299,10 @@ void AudioManager::StopAllSounds()
 	if (m_MasterGroup)
 	{
 		m_MasterGroup->stop();
+	}
+	for (auto& [sound, state] : m_SoundStates)
+	{
+		(void)sound;
+		state.ActiveChannels.clear();
 	}
 }

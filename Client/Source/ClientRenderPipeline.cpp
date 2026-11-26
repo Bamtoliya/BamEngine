@@ -61,6 +61,17 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
             return fail(WStrToStr(desc.Key), "Could not register the required shader: " + WStrToStr(desc.Path));
     }
 
+    m_UseInternalResolution = profile.InternalWidth > 0 && profile.InternalHeight > 0;
+    m_IntegerUpscale = profile.IntegerUpscale;
+    m_PointUpscale = profile.PointUpscale;
+    m_InternalWidth = profile.InternalWidth;
+    m_InternalHeight = profile.InternalHeight;
+    m_OutputWidth = width;
+    m_OutputHeight = height;
+
+    const uint32 sceneWidth = m_UseInternalResolution ? m_InternalWidth : width;
+    const uint32 sceneHeight = m_UseInternalResolution ? m_InternalHeight : height;
+
     result = m_Passes.Initialize(profile, L"Client", width, height);
     if (!result)
         return fail(result.Field, result.Message);
@@ -70,8 +81,8 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
     if (m_Passes.UsesScenePostProcess())
     {
         m_PostProcess.Initialize(L"Client");
-        m_PostProcess.PrepareResources(width, height);
-        if (IsFailure(m_PostProcess.Resize(width, height)) || !m_SceneSettings.CaptureDefaults(m_PostProcess))
+        m_PostProcess.PrepareResources(sceneWidth, sceneHeight);
+        if (IsFailure(m_PostProcess.Resize(sceneWidth, sceneHeight)) || !m_SceneSettings.CaptureDefaults(m_PostProcess))
             return fail("ScenePostProcess", "Could not prepare scene post-processing.");
     }
 
@@ -97,9 +108,17 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
 
     RenderPassDesc ui{};
     ui.name = L"Client UI";
-    ui.priority = 200;
+    ui.priority = m_UseInternalResolution ? 300u : 200u;
     ui.passType = ERenderPassType::UI;
-    ui.renderTargetNames = { m_Passes.GetColorTarget() };
+    if (m_UseInternalResolution)
+    {
+        ui.loadOperation = ERenderPassLoadOperation::RPLO_Load;
+        ui.storeOperation = ERenderPassStoreOperation::RPSO_Store;
+    }
+    else
+    {
+        ui.renderTargetNames = { m_Passes.GetColorTarget() };
+    }
     ui.sortType = ERenderSortType::FrontToBack;
     ui.acceptedBlendModes = EBlendMode::Opaque | EBlendMode::Masked | EBlendMode::AlphaBlend |
         EBlendMode::Additive | EBlendMode::PureAdditive | EBlendMode::NonPremultiplied;
@@ -107,8 +126,10 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
 
     RenderPassDesc output{};
     output.name = L"Client Present";
-    output.priority = 300;
+    output.priority = m_UseInternalResolution ? 200u : 300u;
     output.loadOperation = ERenderPassLoadOperation::RPLO_Clear;
+    if (m_UseInternalResolution)
+        output.overrideClearColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
     output.acceptedBlendModes = EBlendMode::None;
     m_PresentPass = passes.RegisterRenderPass(std::move(output));
     if (m_UIPass == INVALID_PASS_ID || m_PresentPass == INVALID_PASS_ID)
@@ -122,10 +143,14 @@ EResult Client::ClientRenderPipeline::Resize(uint32 width, uint32 height)
 {
     if (!UsesDeferredProfile())
         return EResult::Success;
+    m_OutputWidth = width;
+    m_OutputHeight = height;
     const auto result = m_Passes.Resize(width, height);
     if (IsFailure(result) || !m_Passes.UsesScenePostProcess())
         return result;
-    return m_PostProcess.Resize(width, height);
+    const uint32 sceneWidth = m_UseInternalResolution ? m_InternalWidth : width;
+    const uint32 sceneHeight = m_UseInternalResolution ? m_InternalHeight : height;
+    return m_PostProcess.Resize(sceneWidth, sceneHeight);
 }
 
 void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Scene& scene, f32 dt, bool pixelPerfect,
@@ -157,17 +182,50 @@ void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Sc
     }
 
     auto* ui = passes.GetRenderPassByID(m_UIPass);
-    ui->SetColorAttachments({ color });
+    if (!m_UseInternalResolution)
+        ui->SetColorAttachments({ color });
     renderer.RegisterViewportCamera(ui);
-    renderer.SubmitCustomCommand([pipeline = m_PresentPipeline, color = std::move(color)](f32, RenderPass*) -> EResult
+    renderer.SubmitCustomCommand([pipeline = m_PresentPipeline, color = std::move(color),
+        useInternal = m_UseInternalResolution, integerUpscale = m_IntegerUpscale, pointUpscale = m_PointUpscale,
+        internalW = m_InternalWidth, internalH = m_InternalHeight,
+        outputW = m_OutputWidth, outputH = m_OutputHeight](f32, RenderPass*) -> EResult
     {
         auto* target = RenderTargetManager::Get().GetRenderTarget(color);
         auto* rhi = Renderer::Get().GetRHI();
         SamplerDesc samplerDesc{};
+        if (pointUpscale)
+            samplerDesc.MinFilter = samplerDesc.MagFilter = samplerDesc.MipFilter = ESamplerFilter::Point;
         samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = ESamplerAddressMode::Clamp;
         auto* sampler = SamplerManager::Get().GetOrCreateSampler(samplerDesc);
         if (!target || !target->GetTexture() || !sampler)
             return EResult::Fail;
+        if (useInternal && internalW > 0 && internalH > 0)
+        {
+            const uint32 outW = rhi->GetSwapChainWidth() > 0 ? rhi->GetSwapChainWidth() : outputW;
+            const uint32 outH = rhi->GetSwapChainHeight() > 0 ? rhi->GetSwapChainHeight() : outputH;
+            if (outW > 0 && outH > 0)
+            {
+                uint32 dstW = outW;
+                uint32 dstH = outH;
+                const uint32 intScale = integerUpscale ? std::min(outW / internalW, outH / internalH) : 0u;
+                if (intScale >= 1)
+                {
+                    dstW = internalW * intScale;
+                    dstH = internalH * intScale;
+                }
+                else
+                {
+                    const float fitScale = std::min(static_cast<float>(outW) / static_cast<float>(internalW),
+                        static_cast<float>(outH) / static_cast<float>(internalH));
+                    dstW = std::max<uint32>(1, static_cast<uint32>(static_cast<float>(internalW) * fitScale));
+                    dstH = std::max<uint32>(1, static_cast<uint32>(static_cast<float>(internalH) * fitScale));
+                }
+                const int32 vpX = static_cast<int32>((outW - dstW) / 2);
+                const int32 vpY = static_cast<int32>((outH - dstH) / 2);
+                if (IsFailure(rhi->SetViewport(vpX, vpY, dstW, dstH)))
+                    return EResult::Fail;
+            }
+        }
         if (IsFailure(rhi->BindPipeline(pipeline)) ||
             IsFailure(rhi->BindTextureSampler(target->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
             return EResult::Fail;
@@ -189,4 +247,11 @@ void Client::ClientRenderPipeline::Free()
     m_Passes.Free();
     m_SceneRenderer.Free();
     m_PresentPipeline = nullptr;
+    m_UseInternalResolution = false;
+    m_IntegerUpscale = false;
+    m_PointUpscale = false;
+    m_InternalWidth = 0;
+    m_InternalHeight = 0;
+    m_OutputWidth = 0;
+    m_OutputHeight = 0;
 }

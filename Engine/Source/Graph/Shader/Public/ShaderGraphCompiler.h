@@ -6,10 +6,17 @@
 
 namespace Engine
 {
+	struct ShaderGraphCompiledVS
+	{
+		std::string VertexShaderSource;
+		std::string ShadowVertexShaderSource;
+	};
+
 	class ENGINE_API ShaderGraphCompiler final
 	{
 	public:
 		[[nodiscard]] static bool SupportsNode(const std::string& type);
+		[[nodiscard]] static bool HasWorldPositionOffset(const Graph& graph);
 
 		[[nodiscard]] static MaterialBufferLayout BuildMaterialBufferLayout(const Graph& graph);
 		[[nodiscard]] static std::vector<MaterialTextureDescriptor> CollectTextureDescriptors(const Graph& graph);
@@ -17,6 +24,12 @@ namespace Engine
 
 		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialVS(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);
+
+		[[nodiscard]] static GraphDiagnostic GenerateGBufferMaterialVS(
+			const Graph& graph, const GraphRegistry& registry, ShaderGraphCompiledVS& outCompiled);
+
+		[[nodiscard]] static GraphDiagnostic GenerateShadowDepthMaterialVS(
+			const Graph& graph, const GraphRegistry& registry, std::string& outShadowVertexShaderSource);
 
 		[[nodiscard]] static GraphDiagnostic GenerateColorHlsl(
 			const Graph& graph, const GraphRegistry& registry, std::string& outSource);

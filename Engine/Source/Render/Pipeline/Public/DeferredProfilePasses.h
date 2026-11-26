@@ -31,6 +31,9 @@ namespace Engine
         [[nodiscard]] const std::array<std::wstring, 6>& GetLightingInputs() const { return m_LightingInputs; }
         [[nodiscard]] const std::wstring& GetPointShadowInput() const { return m_PointShadowInput; }
         [[nodiscard]] bool UsesScenePostProcess() const { return m_UsesScenePostProcess; }
+        [[nodiscard]] uint32 GetInternalWidth() const { return m_InternalWidth; }
+        [[nodiscard]] uint32 GetInternalHeight() const { return m_InternalHeight; }
+        [[nodiscard]] bool HasInternalResolution() const { return m_InternalWidth > 0 && m_InternalHeight > 0; }
 
     private:
         std::vector<std::wstring> m_Targets;
@@ -39,6 +42,8 @@ namespace Engine
         std::wstring m_PointShadowInput;
         std::wstring m_ColorTarget;
         std::wstring m_SceneColorCopyTarget;
+        uint32 m_InternalWidth = 0;
+        uint32 m_InternalHeight = 0;
         bool m_UsesScenePostProcess = false;
     };
 }

@@ -48,6 +48,11 @@ namespace Engine
             !RenderPassManager::IsCreated() || width == 0 || height == 0)
             return { {}, {}, "An active RHI, render managers and a valid viewport size are required." };
 
+        m_InternalWidth = profile.InternalWidth;
+        m_InternalHeight = profile.InternalHeight;
+        const uint32 sceneWidth = HasInternalResolution() ? m_InternalWidth : width;
+        const uint32 sceneHeight = HasInternalResolution() ? m_InternalHeight : height;
+
         auto& targets = RenderTargetManager::Get();
         auto& passes = RenderPassManager::Get();
         std::map<std::string, std::vector<std::wstring>, std::less<>> outputs;
@@ -60,8 +65,8 @@ namespace Engine
             RenderTargetDesc desc{};
             desc.name = name;
             desc.fixedSize = resolution != 0;
-            desc.textureDesc.width = resolution ? resolution : width;
-            desc.textureDesc.height = resolution ? resolution : height;
+            desc.textureDesc.width = resolution ? resolution : sceneWidth;
+            desc.textureDesc.height = resolution ? resolution : sceneHeight;
             desc.textureDesc.format = format;
             desc.textureDesc.dimension = cube ? ETextureDimension::TextureCube : ETextureDimension::Texture2D;
             desc.textureDesc.arraySize = cube ? 6 : 1;
@@ -221,6 +226,8 @@ namespace Engine
         m_LightingInputs = {};
         m_PointShadowInput.clear();
         m_ColorTarget.clear();
+        m_InternalWidth = 0;
+        m_InternalHeight = 0;
         m_UsesScenePostProcess = false;
     }
 
@@ -229,6 +236,9 @@ namespace Engine
         if (width == 0 || height == 0 || m_Targets.empty())
             return EResult::InvalidArgument;
 
+        const uint32 targetWidth = HasInternalResolution() ? m_InternalWidth : width;
+        const uint32 targetHeight = HasInternalResolution() ? m_InternalHeight : height;
+
         auto& targets = RenderTargetManager::Get();
         bool succeeded = true;
         for (const auto& name : m_Targets)
@@ -236,7 +246,7 @@ namespace Engine
             if (name == m_LightingInputs.back() || name == m_PointShadowInput)
                 continue;
             auto* target = targets.GetRenderTarget(name);
-            if (!target || target->Resize(width, height) != EResult::Success)
+            if (!target || target->Resize(targetWidth, targetHeight) != EResult::Success)
                 succeeded = false;
         }
         return succeeded ? EResult::Success : EResult::Fail;

@@ -853,6 +853,55 @@ namespace
 		return ResolveInputExpression(graph, registry, { outputNode->Id, colorPin },
 			EGraphPinType::Float4, EShaderStage::Pixel, callStack, outColor);
 	}
+
+	std::string BuildShadowDepthMaterialVSHlsl(const std::string& materialConstantsBlock, const std::string& wpoExpression)
+	{
+		return R"(#include "common.hlsli"
+
+)" + materialConstantsBlock + R"(
+struct VS_INPUT
+{
+float3 Position : POSITION;
+float3 Normal : NORMAL;
+float2 TexCoord : TEXCOORD0;
+float3 Tangent : TANGENT;
+float3 Binormal : BINORMAL;
+float4 Color : COLOR;
+float2 TexCoord1 : TEXCOORD1;
+};
+
+struct InstanceData
+{
+float4x4 WorldMatrix;
+float4 PickingData;
+};
+
+StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
+
+float4 main(VS_INPUT input, uint instanceId : SV_InstanceID) : SV_POSITION
+{
+float4x4 world = g_Instances[instanceId].WorldMatrix;
+float4 worldPosition = mul(world, float4(input.Position, 1.0f));
+
+float3 axisX = float3(world[0][0], world[1][0], world[2][0]);
+float3 axisY = float3(world[0][1], world[1][1], world[2][1]);
+float3 axisZ = float3(world[0][2], world[1][2], world[2][2]);
+
+float3 normalWorld = input.Normal.x * cross(axisY, axisZ) +
+                    input.Normal.y * cross(axisZ, axisX) +
+                    input.Normal.z * cross(axisX, axisY);
+
+float determinantSign = dot(axisX, cross(axisY, axisZ)) < 0.0f ? -1.0f : 1.0f;
+float3 worldNormal = normalize(normalWorld * determinantSign);
+
+// [World Position Offset (WPO) 그래프 표현식 주입]
+float3 worldPosOffset = )" + wpoExpression + R"(;
+worldPosition.xyz += worldPosOffset;
+
+return mul(commonData.ViewProjection, worldPosition);
+}
+)";
+	}
 }
 
 MaterialBufferLayout ShaderGraphCompiler::BuildMaterialBufferLayout(const Graph& graph)
@@ -956,8 +1005,29 @@ std::vector<MaterialTextureDescriptor> ShaderGraphCompiler::CollectTextureParame
 	return CollectTextureDescriptors(graph);
 }
 
+bool ShaderGraphCompiler::HasWorldPositionOffset(const Graph& graph)
+{
+	for (const auto& node : graph.GetNodes())
+	{
+		if (node.Type == "Shader.MaterialOutput")
+			return HasInputLink(graph, node.Id, "worldPositionOffset");
+	}
+	return false;
+}
+
 GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 	const Graph& graph, const GraphRegistry& registry, std::string& outSource)
+{
+	ShaderGraphCompiledVS compiled;
+	const auto diagnostic = GenerateGBufferMaterialVS(graph, registry, compiled);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	outSource.swap(compiled.VertexShaderSource);
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
+	const Graph& graph, const GraphRegistry& registry, ShaderGraphCompiledVS& outCompiled)
 {
 	const GraphNode* outputNode = nullptr;
 	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
@@ -970,6 +1040,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 	std::string wpoExpression = "float3(0.0f, 0.0f, 0.0f)";
 	std::string uv0Expression = "input.TexCoord";
 	std::string uv1Expression = "input.TexCoord1";
+	bool hasWpoLink = false;
 	const auto links = graph.GetLinks();
 	const auto hasInputLink = [&](const char* pinName) {
 		return std::any_of(links.begin(), links.end(), [&](const GraphLink& link) {
@@ -984,6 +1055,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateGBufferMaterialVS(
 			auto result = ResolveInputExpression(
 				graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, EShaderStage::Vertex, callStack, wpoExpression);
 			if (!result.Succeeded()) return result;
+			hasWpoLink = true;
 		}
 
 		if (hasInputLink("customUV0"))
@@ -1070,7 +1142,36 @@ return output;
 }
 )";
 
-	outSource.swap(source);
+	outCompiled.VertexShaderSource.swap(source);
+	if (hasWpoLink)
+		outCompiled.ShadowVertexShaderSource = BuildShadowDepthMaterialVSHlsl(materialConstantsBlock, wpoExpression);
+	else
+		outCompiled.ShadowVertexShaderSource.clear();
+	return {};
+}
+
+GraphDiagnostic ShaderGraphCompiler::GenerateShadowDepthMaterialVS(
+	const Graph& graph, const GraphRegistry& registry, std::string& outShadowVertexShaderSource)
+{
+	const GraphNode* outputNode = nullptr;
+	const auto diagnostic = ValidateShaderGraph(graph, registry, outputNode);
+	if (!diagnostic.Succeeded()) return diagnostic;
+
+	if (outputNode->Type != "Shader.MaterialOutput" || !HasInputLink(graph, outputNode->Id, "worldPositionOffset"))
+	{
+		outShadowVertexShaderSource.clear();
+		return {};
+	}
+
+	std::vector<GraphPinReference> callStack;
+	std::string wpoExpression;
+	const auto result = ResolveInputExpression(
+		graph, registry, { outputNode->Id, "worldPositionOffset" }, EGraphPinType::Float3, EShaderStage::Vertex, callStack, wpoExpression);
+	if (!result.Succeeded()) return result;
+
+	const MaterialBufferLayout layout = BuildMaterialBufferLayout(graph);
+	const std::string materialConstantsBlock = BuildMaterialConstantsHlsl(layout);
+	outShadowVertexShaderSource = BuildShadowDepthMaterialVSHlsl(materialConstantsBlock, wpoExpression);
 	return {};
 }
 

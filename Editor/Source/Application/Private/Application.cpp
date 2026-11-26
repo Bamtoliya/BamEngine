@@ -813,6 +813,16 @@ void Application::Run(int argc, char* argv[])
             m_Runtime->LateUpdate(dt);
             if (measurePIE) firstPIESubSteps = subStepsRan;
         }
+        else if (PIEManager::Get().IsPaused() && PIEManager::Get().ConsumeSingleStepRequest())
+        {
+            while (timeManager.IsFixedUpdateReady())
+            {
+            }
+            const f32 fixedStep = timeManager.GetFixedStep();
+            m_Runtime->FixedUpdate(fixedStep);
+            m_Runtime->Update(fixedStep, false);
+            m_Runtime->LateUpdate(fixedStep);
+        }
         else
         {
             while (timeManager.IsFixedUpdateReady())

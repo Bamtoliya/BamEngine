@@ -2,6 +2,27 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] Slime Game 엔진 기능 격차 분석 및 P0/P1 범용 인프라(SE-01~SE-11) 구현
+
+- **요약**:
+  1. **엔진 기능 격차 분석 및 개발 계획서 작성**: `Docs/GamePlan/SlimeGame/Slime_Engine_Gap_And_Plan_v0.1.md`에 `Slime_Game_Design_Draft_v0.1.md` 및 `Slime_Movement_Design_v0.1.md` 대비 BamEngine 현황, 엔진 범용 vs `GameModule` 책임 경계, P0~P2 우선순위 로드맵(`SE-01`~`SE-12`) 정리.
+  2. **P0 범용 인프라 (`SE-01` ~ `SE-06`)**:
+     - `SE-01`: `InputManager`에 `FixedPressed`/`FixedReleased` 래치(`WasActionPressedInFixedUpdate`, `WasActionReleasedInFixedUpdate`, `ConsumeFixedStepActions`)를 추가하고 `Runtime::FixedUpdate` 끝에서 소비하도록 연결.
+     - `SE-02`: `CollisionCallbackComponent.h` 신규 추가 및 `PhysicsSystem`에 비트리거 3D 충돌 이벤트(`OnCollisionEnter/Stay/Exit`, 접촉점·법선·관통 깊이·상대속도) 발행·디스패치 구현.
+     - `SE-03`: `RHIBuffer::UpdateData` / `DirectX12Buffer::UpdateData` 및 `Mesh::UpdateStreamBufferInPlace` 구현(동일 크기/스트라이드 시 GPU 버퍼 재할당 회피, `SetStreamBuffer` 폴백), `MeshRenderSystem::OnSubmit` 동적 메시 `worldBounds` 프러스텀 컬링 정합.
+     - `SE-04`: `Engine::DebugDraw` 스레드 안전 정적 큐(`#if BAM_SHIPPING` no-op)와 `SceneViewportPanel` 렌더링 연동, `PIEManager::RequestSingleStep`/`ConsumeSingleStepRequest` 및 `ToolBar` Step 버튼(`Editor.ToolBar.csv` 로캘 포함)·`Application.cpp` 1고정틱 실행 연결.
+     - `SE-05`: `lightingPS.hlsl`에 `SHADING_MODEL_TOON(2u)`(3단계 셀 밴드/림/하이라이트) 및 `SHADING_MODEL_SUBSURFACE(3u)`(Fake SSS: Wrap Diffuse/Backlight Transmission/Fresnel/Gloss) 분기 구현.
+     - `SE-06`: `Particle` 3D 스케일(`scale3D`)·회전(`rotation3D`, `angularVelocity3D`) 및 `alignToVelocity`/`velocityStretchFactor` 확장, `ParticleSystem::OnSubmit`에서 `meshHandle` 유효 시 `StaticDrawCommand` + `SubmitStatic` 3D 제출.
+  3. **P1 범용 인프라 (`SE-07` ~ `SE-11`)**:
+     - `SE-07`: `RigidBodyComponent`(`UseCCD`, `CCDMotionThreshold`) 및 `PhysicsSystem` 3D Swept CCD TOI 클램핑, `AudioManager::PlayOneShot3D` 및 사운드별 Concurrency/Cooldown 제한, `AudioSystem::UpdateSources` 로그 레벨 `Trace` 하향.
+     - `SE-08`: 독립 `TrailComponent.h` 및 `CompositeVFXSystem` 연동, `DecalComponent` UV 스크롤/타일링·수명/페이드아웃(`DecalParams` 240B 16바이트 배수 정렬 동기화).
+     - `SE-09`: `RenderPipelineProfile` 내부 저해상도(`InternalWidth`, `InternalHeight`, `IntegerUpscale`, `PointUpscale`) 및 `DeferredProfilePasses`·`ClientRenderPipeline`의 Point 정수배 업스케일 + 풀 해상도 백버퍼 UI 분리 합성.
+     - `SE-10`: `PixelPerfectCameraComponent`(`snapToCameraAxes`) 및 `CameraSystem` 회전 직교 카메라 로컬 Right/Up 축 텍셀 스냅, 뷰포트 해상도 캐싱.
+     - `SE-11`: `ShaderGraphCompiler` `worldPositionOffset` 연결 시 Shadow 전용 VS 생성 및 `MaterialInterface` Shadow 패스 VS 단독 오버라이드, 범용 `PresetStorage.h`(`SavePresetToFile`/`LoadPresetFromFile`) 추가.
+- **검증 상태**:
+  - 스웜 독립 정적 검증(`verifier`, `verifier-code`, `verifier-p1`) 통과.
+  - **미검증**: 빌드(`Engine`, `Editor`, `Client`), `CTest`, 실제 에디터/클라이언트 GPU 실행 및 성능 계측은 아직 수행하지 않음.
+
 ### [2026-11-26] 마지막 작업 씬(LastScenePath) 즉시 저장 및 부팅 시 덮어쓰기 방지
 
 - **요약**:

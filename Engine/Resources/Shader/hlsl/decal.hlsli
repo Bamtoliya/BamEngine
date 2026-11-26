@@ -19,6 +19,7 @@ struct DecalParams
 	float Metallic;
 	uint TextureFlags;
 	float2 Padding;
+	float4 UVScaleOffset;    // xy: UV 스케일, zw: UV 오프셋(스크롤 포함)
 };
 ConstantBuffer<DecalParams> gDecal : register(b1, space3);
 

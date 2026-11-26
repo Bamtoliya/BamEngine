@@ -439,13 +439,10 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                 command.material = material;
                 command.worldMatrix = worldTransform.worldMatrix;
 
-                if (!activeMesh->IsDynamic())
-                {
-                    const BoundingBox localBounds(activeMesh->GetMin(), activeMesh->GetMax());
-                    BoundingBox worldBounds;
-                    if (localBounds.TryTransformToAABB(command.worldMatrix, worldBounds))
-                        command.worldBounds = worldBounds;
-                }
+                const BoundingBox localBounds(activeMesh->GetMin(), activeMesh->GetMax());
+                BoundingBox worldBounds;
+                if (localBounds.IsValid() && localBounds.TryTransformToAABB(command.worldMatrix, worldBounds))
+                    command.worldBounds = worldBounds;
 
                 command.pickingId = pickingId;
                 command.receiveDecals = meshRenderer.receiveDecals;

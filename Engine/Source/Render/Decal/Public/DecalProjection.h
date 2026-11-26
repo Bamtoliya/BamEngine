@@ -50,6 +50,8 @@ namespace Engine
 		f32 MaxAngle = 70.0f;
 		f32 DepthFade = 0.1f;
 		int32 SortOrder = 0;
+		// xy: UV 타일링 스케일, zw: UV 오프셋(스크롤 포함). 기본값 (1, 1, 0, 0).
+		vec4 UVScaleOffset{ 1.0f, 1.0f, 0.0f, 0.0f };
 	};
 
 	inline mat4 MakeDecalBoxMatrix(const mat4& worldMatrix, const vec3& size)

@@ -47,5 +47,12 @@ namespace Client
         Engine::RenderPassID m_ForwardPass = Engine::INVALID_PASS_ID;
         Engine::RenderPassID m_UIPass = Engine::INVALID_PASS_ID;
         Engine::RenderPassID m_PresentPass = Engine::INVALID_PASS_ID;
+        bool m_UseInternalResolution = false;
+        bool m_IntegerUpscale = false;
+        bool m_PointUpscale = false;
+        uint32 m_InternalWidth = 0;
+        uint32 m_InternalHeight = 0;
+        uint32 m_OutputWidth = 0;
+        uint32 m_OutputHeight = 0;
     };
 }

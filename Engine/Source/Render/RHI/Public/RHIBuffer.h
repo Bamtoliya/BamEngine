@@ -52,6 +52,7 @@ public:
 #pragma region Setter
 public:
 	virtual void SetData(const void* data, uint32 size) BAM_PURE;
+	virtual EResult UpdateData(const void* data, uint32 size) { return EResult::NotImplemented; }
 public:
 	// 새 정점·인덱스 버퍼의 초기 업로드용입니다.
 	// data는 이번 청크의 시작 주소이며, offset은 목적지의 바이트 오프셋입니다.

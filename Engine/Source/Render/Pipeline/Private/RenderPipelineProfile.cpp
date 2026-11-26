@@ -88,6 +88,9 @@ namespace Engine
     {
         if (profile.Version != RenderPipelineProfile::CurrentVersion)
             return InvalidProfileField("Version", "Unsupported render pipeline profile version.");
+        if ((profile.InternalWidth == 0) != (profile.InternalHeight == 0))
+            return InvalidProfileField(profile.InternalWidth == 0 ? "InternalWidth" : "InternalHeight",
+                "InternalWidth and InternalHeight must both be positive or both be zero.");
         if (profile.Passes.empty())
             return InvalidProfileField("Passes", "At least one pass is required.");
 

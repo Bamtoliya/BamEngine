@@ -609,7 +609,7 @@ void ToolBar::DrawHelpMenu()
 float ToolBar::GetPlayBarHeight() const
 {
 	const auto size = EditorUI::GetIconButtonSize(ICON_FA_PLAY);
-	const auto grid = EditorUI::MeasureIconGrid(size, 3, ImGui::GetMainViewport()->WorkSize.x - 16.0f);
+	const auto grid = EditorUI::MeasureIconGrid(size, 4, ImGui::GetMainViewport()->WorkSize.x - 16.0f);
 	return std::ceil(grid.y + 8.0f);
 }
 void ToolBar::DrawPlayControls()
@@ -628,7 +628,7 @@ void ToolBar::DrawPlayControls()
 		drawList->AddRectFilled(windowPos, ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y), pauseColor);
 	}
 
-	const auto grid = EditorUI::MeasureIconGrid(buttonSize, 3, ImGui::GetContentRegionAvail().x);
+	const auto grid = EditorUI::MeasureIconGrid(buttonSize, 4, ImGui::GetContentRegionAvail().x);
 	ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, (ImGui::GetContentRegionAvail().x - grid.x) * 0.5f));
 	EditorUI::ToolbarLayout toolbar;
 	EditorUI::IconButtonOptions options;
@@ -644,6 +644,10 @@ void ToolBar::DrawPlayControls()
 		if (state == EPlayState::Pause) pie.Resume();
 		else pie.Pause();
 	}
+	options.Enabled = state == EPlayState::Pause;
+	options.ShortcutHint = nullptr;
+	if (toolbar.Icon("StepBtn", ICON_FA_FORWARD_STEP, "ToolBar.StepTooltip", options)) pie.RequestSingleStep();
+	options.Enabled = state != EPlayState::Edit;
 	options.ShortcutHint = ShortcutManager::Get().GetShortcutHint("PIE.Stop");
 	if (toolbar.Icon("StopBtn", ICON_FA_STOP, "ToolBar.StopTooltip", options)) pie.Stop();
 }

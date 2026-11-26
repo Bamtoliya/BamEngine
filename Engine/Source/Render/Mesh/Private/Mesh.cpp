@@ -16,6 +16,26 @@ namespace
 		glm::vec4 color;
 	};
 	static_assert(sizeof(VertexMaterial) > sizeof(LegacyVertexMaterial));
+
+	bool ComputePositionBounds(const void* data, Engine::uint32 count, Engine::uint32 stride, Engine::vec3& outMin, Engine::vec3& outMax)
+	{
+		Engine::vec3 minBound(FLT_MAX);
+		Engine::vec3 maxBound(-FLT_MAX);
+		const Engine::uint8* rawPos = static_cast<const Engine::uint8*>(data);
+		for (Engine::uint32 i = 0; i < count; ++i)
+		{
+			Engine::vec3 position{};
+			std::memcpy(&position, rawPos + static_cast<Engine::sizet>(i) * stride, sizeof(Engine::vec3));
+			if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
+				return false;
+
+			minBound = glm::min(minBound, position);
+			maxBound = glm::max(maxBound, position);
+		}
+		outMin = minBound;
+		outMax = maxBound;
+		return true;
+	}
 }
 
 #pragma region Constructor&Destructor
@@ -383,21 +403,8 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 
 	vec3 minBound = m_BoundingBoxMin;
 	vec3 maxBound = m_BoundingBoxMax;
-	if (positionStream)
-	{
-		minBound = vec3(FLT_MAX);
-		maxBound = vec3(-FLT_MAX);
-		for (uint32 i = 0; i < count; ++i)
-		{
-			vec3 position{};
-			std::memcpy(&position, raw.data() + static_cast<sizet>(i) * stride, sizeof(vec3));
-			if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z))
-				return EResult::InvalidArgument;
-
-			minBound = glm::min(minBound, position);
-			maxBound = glm::max(maxBound, position);
-		}
-	}
+	if (positionStream && !ComputePositionBounds(raw.data(), count, stride, minBound, maxBound))
+		return EResult::InvalidArgument;
 
 	RHIBuffer* buffer = nullptr;
 	RHI* rhi = GetResourceUploadRHI();
@@ -424,6 +431,53 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 	}
 
 	RebuildCachedBuffers();
+	return EResult::Success;
+}
+
+EResult Mesh::UpdateStreamBufferInPlace(EMeshStream stream, const void* data, uint32 count, uint32 stride)
+{
+	RequireResident();
+	const uint32 idx = static_cast<uint32>(stream);
+	if (idx >= static_cast<uint32>(EMeshStream::Max) || !data || count == 0 || stride == 0)
+		return EResult::InvalidArgument;
+	if (count > std::numeric_limits<uint32>::max() / stride)
+		return EResult::InvalidArgument;
+
+	const bool positionStream = stream == EMeshStream::Position;
+	if (positionStream && stride < sizeof(vec3))
+		return EResult::InvalidArgument;
+
+	const uint32 totalSize = stride * count;
+	RHIBuffer* buffer = m_VertexBuffers[idx];
+	const bool canUpdateInPlace = buffer != nullptr &&
+		m_StreamCounts[idx] == count &&
+		m_StreamStrides[idx] == stride &&
+		buffer->GetSize() == totalSize &&
+		buffer->GetStride() == stride;
+	if (!canUpdateInPlace)
+		return SetStreamBuffer(stream, const_cast<void*>(data), count, stride);
+
+	vec3 minBound = m_BoundingBoxMin;
+	vec3 maxBound = m_BoundingBoxMax;
+	if (positionStream && !ComputePositionBounds(data, count, stride, minBound, maxBound))
+		return EResult::InvalidArgument;
+
+	if (IsFailure(buffer->UpdateData(data, totalSize)))
+		return SetStreamBuffer(stream, const_cast<void*>(data), count, stride);
+
+	m_RawData[idx].resize(totalSize);
+	std::memcpy(m_RawData[idx].data(), data, totalSize);
+	m_UVDensity = -1.0f;
+	if (stream == EMeshStream::SkinData)
+		m_SkinBindingSignature = 0;
+
+	if (positionStream)
+	{
+		m_BoundingBoxMin = minBound;
+		m_BoundingBoxMax = maxBound;
+		++m_GeometryVersion;
+	}
+
 	return EResult::Success;
 }
 

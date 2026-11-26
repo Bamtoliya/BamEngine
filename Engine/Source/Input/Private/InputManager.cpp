@@ -469,6 +469,16 @@ void InputManager::EvaluateActionMap(std::string_view mapId, bool enabled, const
 								return isMouseAllowed(button) && IsMouseButtonPressed(button);
 							}));
 						action.Released = enabled && wasEnabled && !action.Held && (wasHeld || action.Pressed);
+		if (enabled)
+		{
+			if (action.Pressed) action.FixedPressed = true;
+			if (action.Released) action.FixedReleased = true;
+		}
+		else
+		{
+			action.FixedPressed = false;
+			action.FixedReleased = false;
+		}
 	}
 }
 
@@ -501,6 +511,38 @@ bool InputManager::WasActionReleased(std::string_view mapId, std::string_view ac
 
 	const auto action = map->second.Actions.find(actionId);
 	return action != map->second.Actions.end() && action->second.Released;
+}
+
+bool InputManager::WasActionPressedInFixedUpdate(std::string_view mapId, std::string_view actionId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end() || !map->second.Enabled)
+		return false;
+
+	const auto action = map->second.Actions.find(actionId);
+	return action != map->second.Actions.end() && action->second.FixedPressed;
+}
+
+bool InputManager::WasActionReleasedInFixedUpdate(std::string_view mapId, std::string_view actionId) const
+{
+	const auto map = m_ActionMaps.find(mapId);
+	if (map == m_ActionMaps.end() || !map->second.Enabled)
+		return false;
+
+	const auto action = map->second.Actions.find(actionId);
+	return action != map->second.Actions.end() && action->second.FixedReleased;
+}
+
+void InputManager::ConsumeFixedStepActions()
+{
+	for (auto& [mapId, mapState] : m_ActionMaps)
+	{
+		for (auto& [actionId, action] : mapState.Actions)
+		{
+			action.FixedPressed = false;
+			action.FixedReleased = false;
+		}
+	}
 }
 
 bool InputManager::IsActionHeld(std::string_view mapId, std::string_view actionId) const

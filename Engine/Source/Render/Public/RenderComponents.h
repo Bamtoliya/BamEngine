@@ -19,4 +19,5 @@
 #include "ParticleEmitterComponent.h"
 #include "ParticleEffectComponent.h"
 #include "CompositeVFXComponent.h"
+#include "TrailComponent.h"
 #include "TilemapComponent.h"

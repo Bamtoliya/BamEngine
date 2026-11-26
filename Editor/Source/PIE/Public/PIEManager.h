@@ -25,6 +25,8 @@ public:
     void Pause();
     void Resume();
     void Stop();
+    void RequestSingleStep();
+    [[nodiscard]] bool ConsumeSingleStepRequest();
 
     [[nodiscard]] EPlayState GetState() const { return m_State; }
     [[nodiscard]] bool IsPlaying() const { return m_State == EPlayState::Play; }
@@ -38,6 +40,7 @@ private:
 
 private:
     EPlayState m_State = EPlayState::Edit;
+    bool m_SingleStepRequested = false;
     std::unique_ptr<archive::JsonArchive> m_Snapshot;
     // 씬 아카이브에 들어가지 않는 지형 높이·스플랫(저장하지 않은 편집 포함). 복원한 씬에 엔티티 ID로 되돌린다.
     Engine::TerrainDataFile::MemorySnapshot m_TerrainSnapshot;

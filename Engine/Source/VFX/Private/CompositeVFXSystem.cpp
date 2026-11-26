@@ -2,6 +2,8 @@
 #include "VFXPassHelper.h"
 #include "ComponentEnable.h"
 #include "CompositeVFXComponent.h"
+#include "TrailComponent.h"
+#include "DecalComponent.h"
 #include "LightTypes.h"
 #include "SpriteRendererComponent.h"
 #include "CompositeEffect.h"
@@ -114,6 +116,58 @@ void CompositeVFXSystem::SimulateSceneVFX(Scene* scene, f32 dt)
 			continue;
 		}
 		UpdateVFXEntity(scene, entity, vfxComp, transform, dt);
+	}
+
+	const f32 safeDt = std::max(0.0f, dt);
+
+	// 독립 TrailComponent 포인트 버퍼 갱신
+	auto trailView = scene->GetRegistry().view<TrailComponent, WorldTransformComponent, FlagComponent>();
+	for (auto [entity, trail, transform, flag] : trailView.each())
+	{
+		if (!IsComponentEnabled<TrailComponent>(scene->GetRegistry(), entity) ||
+			!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
+		{
+			trail.runtime.Reset();
+			continue;
+		}
+
+		auto& rt = trail.runtime;
+		for (auto& pt : rt.points)
+			pt.age += safeDt;
+		std::erase_if(rt.points, [&trail](const VFXTrailSamplePoint& pt) { return pt.age >= trail.lifetime; });
+
+		if (trail.emitting && trail.lifetime > 0.0f)
+		{
+			const vec3 currentPosA = vec3(transform.worldMatrix * vec4(trail.localOffsetA, 1.0f));
+			const vec3 currentPosB = vec3(transform.worldMatrix * vec4(trail.localOffsetB, 1.0f));
+			rt.headA = currentPosA;
+			rt.headB = currentPosB;
+			rt.hasHead = true;
+
+			if (!rt.hasLastSpawn || glm::distance(currentPosA, rt.lastSpawnPosA) >= trail.minVertexDistance)
+			{
+				rt.points.push_back({ currentPosA, currentPosB, 0.0f });
+				rt.lastSpawnPosA = currentPosA;
+				rt.lastSpawnPosB = currentPosB;
+				rt.hasLastSpawn = true;
+			}
+		}
+		else
+		{
+			rt.hasLastSpawn = false;
+			rt.hasHead = false;
+		}
+	}
+
+	// 수명이 지정된 DecalComponent 경과 시간 갱신
+	auto decalView = scene->GetRegistry().view<DecalComponent, FlagComponent>();
+	for (auto [entity, decal, flag] : decalView.each())
+	{
+		if (!IsComponentEnabled<DecalComponent>(scene->GetRegistry(), entity) ||
+			!flag.IsActiveInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead))
+			continue;
+		if (decal.lifetime > 0.0f)
+			decal.elapsedTime += safeDt;
 	}
 }
 
@@ -627,55 +681,186 @@ void CompositeVFXSystem::OnSubmit(entt::registry& registry, const vector<Scene*>
 	}
 }
 
-static bool BuildTrailStrip(const std::vector<VFXTrailSamplePoint>& samples, const VFXTrailTrack& track, const vec3& cameraPosition, DynamicGeometryDrawCommand& out)
+namespace
 {
-	const size_t count = samples.size();
-	if (count < 2) return false;
-
-	std::vector<vec3> centers(count);
-	for (size_t i = 0; i < count; ++i) centers[i] = (samples[i].posA + samples[i].posB) * 0.5f;
-
-	out.topology = ETopology::TriangleStrip;
-	out.positions.reserve(count * 2);
-	out.attributes.reserve(count * 2);
-
-	vec3 prevSide(0.0f);
-	for (size_t i = 0; i < count; ++i)
+	struct TrailRenderParams
 	{
-		// 중앙 차분 접선: 앞뒤 세그먼트 방향의 평균이라 이음새에서 양쪽 사각형의 모서리가 일치한다.
-		const vec3 tangentRaw = centers[std::min(i + 1, count - 1)] - centers[i == 0 ? 0 : i - 1];
-		const f32 tangentLen = glm::length(tangentRaw);
-		// 폭 방향 = 기준 축 × 접선. OffsetAxis는 A-B 축, ViewFacing은 점→카메라 방향을 기준 축으로 삼아 띠 면이 카메라를 향한다.
-		const vec3 axis = track.alignment == EVFXTrailAlignment::ViewFacing ? cameraPosition - centers[i] : samples[i].posA - samples[i].posB;
-		vec3 side = glm::cross(axis, tangentRaw);
-		const f32 sideLen = glm::length(side);
-		if (tangentLen < 1e-6f || sideLen < 1e-6f)
-		{
-			if (glm::dot(prevSide, prevSide) == 0.0f) continue; // 방향을 정할 수 없는 첫 점은 건너뛴다.
-			side = prevSide;
-		}
-		else
-		{
-			side /= sideLen;
-			// 진행 방향이 갑자기 뒤집혀도 띠가 꼬이지(나비 모양) 않도록 이전 점과 같은 쪽을 유지한다.
-			if (glm::dot(side, prevSide) < 0.0f) side = -side;
-		}
-		prevSide = side;
+		Engine::f32 lifetime = 0.35f;
+		Engine::f32 width = 0.5f;
+		Engine::f32 taperRatio = 0.0f;
+		Engine::EVFXTrailAlignment alignment = Engine::EVFXTrailAlignment::OffsetAxis;
+		Engine::vec4 colorStart = Engine::vec4(1.0f);
+		Engine::vec4 colorEnd = Engine::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+	};
 
-		const vec3 tangentDir = tangentLen < 1e-6f ? glm::normalize(glm::cross(prevSide, vec3(0.0f, 1.0f, 0.0f)) + vec3(1e-6f)) : tangentRaw / tangentLen;
-		const vec3 normal = glm::normalize(glm::cross(side, tangentDir)); // 기존 쿼드와 같은 -up 방향
-		const f32 normAge = std::clamp(samples[i].age / std::max(track.lifetime, 0.001f), 0.0f, 1.0f);
-		const f32 halfWidth = track.trailWidth * glm::mix(1.0f, track.taperRatio, normAge) * 0.5f;
-		const vec4 color = glm::mix(track.colorStart, track.colorEnd, normAge);
-		const f32 u = static_cast<f32>(i) / static_cast<f32>(count - 1);
+	bool BuildTrailStrip(const std::vector<Engine::VFXTrailSamplePoint>& samples, const TrailRenderParams& params, const Engine::vec3& cameraPosition, Engine::DynamicGeometryDrawCommand& out)
+	{
+		const size_t count = samples.size();
+		if (count < 2) return false;
 
-		// QuadMesh와 같은 UV 규칙: +폭 쪽 v=0, -폭 쪽 v=1, 진행 방향이 u
-		out.positions.emplace_back(centers[i] + side * halfWidth);
-		out.attributes.emplace_back(normal, vec2(u, 0.0f), tangentDir, side, color);
-		out.positions.emplace_back(centers[i] - side * halfWidth);
-		out.attributes.emplace_back(normal, vec2(u, 1.0f), tangentDir, side, color);
+		std::vector<Engine::vec3> centers(count);
+		for (size_t i = 0; i < count; ++i) centers[i] = (samples[i].posA + samples[i].posB) * 0.5f;
+
+		out.topology = Engine::ETopology::TriangleStrip;
+		out.positions.reserve(count * 2);
+		out.attributes.reserve(count * 2);
+
+		Engine::vec3 prevSide(0.0f);
+		for (size_t i = 0; i < count; ++i)
+		{
+			// 중앙 차분 접선: 앞뒤 세그먼트 방향의 평균이라 이음새에서 양쪽 사각형의 모서리가 일치한다.
+			const Engine::vec3 tangentRaw = centers[std::min(i + 1, count - 1)] - centers[i == 0 ? 0 : i - 1];
+			const Engine::f32 tangentLen = glm::length(tangentRaw);
+			// 폭 방향 = 기준 축 × 접선. OffsetAxis는 A-B 축, ViewFacing은 점→카메라 방향을 기준 축으로 삼아 띠 면이 카메라를 향한다.
+			const Engine::vec3 axis = params.alignment == Engine::EVFXTrailAlignment::ViewFacing ? cameraPosition - centers[i] : samples[i].posA - samples[i].posB;
+			Engine::vec3 side = glm::cross(axis, tangentRaw);
+			const Engine::f32 sideLen = glm::length(side);
+			if (tangentLen < 1e-6f || sideLen < 1e-6f)
+			{
+				if (glm::dot(prevSide, prevSide) == 0.0f) continue; // 방향을 정할 수 없는 첫 점은 건너뛴다.
+				side = prevSide;
+			}
+			else
+			{
+				side /= sideLen;
+				// 진행 방향이 갑자기 뒤집혀도 띠가 꼬이지(나비 모양) 않도록 이전 점과 같은 쪽을 유지한다.
+				if (glm::dot(side, prevSide) < 0.0f) side = -side;
+			}
+			prevSide = side;
+
+			const Engine::vec3 tangentDir = tangentLen < 1e-6f ? glm::normalize(glm::cross(prevSide, Engine::vec3(0.0f, 1.0f, 0.0f)) + Engine::vec3(1e-6f)) : tangentRaw / tangentLen;
+			const Engine::vec3 normal = glm::normalize(glm::cross(side, tangentDir)); // 기존 쿼드와 같은 -up 방향
+			const Engine::f32 normAge = std::clamp(samples[i].age / std::max(params.lifetime, 0.001f), 0.0f, 1.0f);
+			const Engine::f32 halfWidth = params.width * glm::mix(1.0f, params.taperRatio, normAge) * 0.5f;
+			const Engine::vec4 color = glm::mix(params.colorStart, params.colorEnd, normAge);
+			const Engine::f32 u = static_cast<Engine::f32>(i) / static_cast<Engine::f32>(count - 1);
+
+			// QuadMesh와 같은 UV 규칙: +폭 쪽 v=0, -폭 쪽 v=1, 진행 방향이 u
+			out.positions.emplace_back(centers[i] + side * halfWidth);
+			out.attributes.emplace_back(normal, Engine::vec2(u, 0.0f), tangentDir, side, color);
+			out.positions.emplace_back(centers[i] - side * halfWidth);
+			out.attributes.emplace_back(normal, Engine::vec2(u, 1.0f), tangentDir, side, color);
+		}
+		return out.positions.size() >= 4;
 	}
-	return out.positions.size() >= 4;
+
+	void SubmitTrailRuntime(const Engine::VFXTrailTrackRuntime& rt, const TrailRenderParams& params,
+		Engine::ResourceHandle<Engine::Texture> textureHandle, Engine::ResourceHandle<Engine::MaterialInterface> materialHandle,
+		Engine::Mesh* defaultQuadMesh, Engine::MaterialInterface* defaultAlphaBlendMaterial,
+		Engine::EBlendMode acceptedBlendModes, const Engine::vec3& cameraPosition,
+		Engine::uint32 pickingId, Engine::uint32 targetPassId, bool useTrailStrip,
+		Engine::Renderer& renderer, Engine::ResourceManager& resourceManager)
+	{
+		if (rt.points.empty()) return;
+
+		Engine::Mesh* mesh = defaultQuadMesh;
+		Engine::MaterialInterface* material = materialHandle.Get() ? materialHandle.Get() : defaultAlphaBlendMaterial;
+		if (!mesh || !material) return;
+
+		if (!Engine::VFXPassHelper::IsBlendModeAccepted(acceptedBlendModes, material->GetBlendMode()))
+			return;
+
+		Engine::Texture* texture = textureHandle.Get();
+		if (!texture)
+		{
+			const auto& texBindings = material->GetTextureBindings();
+			if (!texBindings.empty() && texBindings[0].texture.Get())
+				texture = texBindings[0].texture.Get();
+		}
+		if (!texture)
+		{
+			texture = resourceManager.GetResourceHandle<Engine::Texture>(L"Engine://Texture/white1x1.png").Get();
+			if (!texture)
+				texture = resourceManager.GetResourceHandle<Engine::Texture>(L"Resources/Texture/white1x1.png").Get();
+		}
+		if (!texture || !texture->GetRHITexture() || !mesh->GetIndexBuffer()) return;
+
+		// 저장된 점 + 현재 머리 위치를 제어점으로 사용한다.
+		std::vector<Engine::VFXTrailSamplePoint> controls(rt.points.begin(), rt.points.end());
+		if (rt.hasHead && glm::distance(rt.headA, controls.back().posA) > 1e-4f)
+			controls.push_back({ rt.headA, rt.headB, 0.0f });
+		if (controls.size() < 2) return;
+
+		// Catmull-Rom으로 제어점 사이를 보간해 꺾인 직선 대신 곡선을 만들고, 세그먼트 사이 각도를 줄여 이음새 틈을 줄인다.
+		constexpr int kSubdivisions = 4;
+		auto catmullRom = [](const Engine::vec3& p0, const Engine::vec3& p1, const Engine::vec3& p2, const Engine::vec3& p3, Engine::f32 t)
+			{
+				const Engine::f32 t2 = t * t;
+				const Engine::f32 t3 = t2 * t;
+				return 0.5f * (2.0f * p1 + (p2 - p0) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 + (3.0f * p1 - p0 - 3.0f * p2 + p3) * t3);
+			};
+
+		std::vector<Engine::VFXTrailSamplePoint> samples;
+		samples.reserve((controls.size() - 1) * kSubdivisions + 1);
+		for (size_t c = 0; c + 1 < controls.size(); ++c)
+		{
+			const auto& c0 = controls[c == 0 ? 0 : c - 1];
+			const auto& c1 = controls[c];
+			const auto& c2 = controls[c + 1];
+			const auto& c3 = controls[std::min(c + 2, controls.size() - 1)];
+			for (int s = 0; s < kSubdivisions; ++s)
+			{
+				const Engine::f32 t = static_cast<Engine::f32>(s) / static_cast<Engine::f32>(kSubdivisions);
+				samples.push_back({ catmullRom(c0.posA, c1.posA, c2.posA, c3.posA, t), catmullRom(c0.posB, c1.posB, c2.posB, c3.posB, t), glm::mix(c1.age, c2.age, t) });
+			}
+		}
+		samples.push_back(controls.back());
+
+		if (useTrailStrip)
+		{
+			Engine::DynamicGeometryDrawCommand strip;
+			strip.texture = texture;
+			strip.material = material;
+			strip.pickingId = pickingId;
+			if (BuildTrailStrip(samples, params, cameraPosition, strip))
+				renderer.SubmitDynamicGeometry(std::move(strip), targetPassId);
+			return;
+		}
+
+		// 동적 정점 버퍼를 지원하지 않는 백엔드(SDL GPU): 세그먼트별 쿼드로 대체한다.
+		const size_t ptCount = samples.size();
+		for (size_t p = 1; p < ptCount; ++p)
+		{
+			const auto& p0 = samples[p - 1];
+			const auto& p1 = samples[p];
+
+			const Engine::vec3 mid0 = (p0.posA + p0.posB) * 0.5f;
+			const Engine::vec3 mid1 = (p1.posA + p1.posB) * 0.5f;
+			const Engine::vec3 segDir = mid1 - mid0;
+			const Engine::f32 segLen = glm::length(segDir);
+			if (segLen < 0.0001f) continue;
+
+			const Engine::vec3 center = (mid0 + mid1) * 0.5f;
+			const Engine::vec3 dirNorm = segDir / segLen;
+			const Engine::vec3 upNorm = glm::normalize((p0.posA - p0.posB) + (p1.posA - p1.posB));
+			const Engine::vec3 rightNorm = glm::cross(upNorm, dirNorm);
+
+			const Engine::f32 avgAge = (p0.age + p1.age) * 0.5f;
+			const Engine::f32 normAge = std::clamp(avgAge / std::max(params.lifetime, 0.001f), 0.0f, 1.0f);
+			const Engine::f32 widthFactor = glm::mix(1.0f, params.taperRatio, normAge);
+			const Engine::f32 width = params.width * widthFactor;
+
+			Engine::mat4 orientMat(1.0f);
+			orientMat[0] = Engine::vec4(dirNorm * (segLen * 0.5f), 0.0f);
+			orientMat[1] = Engine::vec4(rightNorm * (width * 0.5f), 0.0f);
+			orientMat[2] = Engine::vec4(upNorm, 0.0f);
+			orientMat[3] = Engine::vec4(center, 1.0f);
+
+			const Engine::vec4 segColor = glm::mix(params.colorStart, params.colorEnd, normAge);
+			const Engine::f32 u0 = static_cast<Engine::f32>(p - 1) / static_cast<Engine::f32>(ptCount - 1);
+			const Engine::f32 uSpan = 1.0f / static_cast<Engine::f32>(ptCount - 1);
+
+			Engine::SpriteDrawCommand cmd;
+			cmd.mesh = mesh;
+			cmd.texture = texture;
+			cmd.material = material;
+			cmd.color = segColor;
+			cmd.uvTransform = Engine::vec4(u0, 0.0f, uSpan, 1.0f);
+			cmd.pickingId = pickingId;
+			cmd.worldMatrix = orientMat;
+			renderer.SubmitSprite(cmd, targetPassId);
+		}
+	}
 }
 
 void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& cameraBuffer, uint32 targetPassId)
@@ -882,122 +1067,36 @@ void CompositeVFXSystem::SubmitSceneVFX(Scene* scene, const CameraBuffer& camera
 			if (!track.enabled || track.isMuted) continue;
 			if (trackIdx >= vfxComp.trailRuntimes.size()) continue;
 
-			const auto& rt = vfxComp.trailRuntimes[trackIdx];
-			if (rt.points.empty()) continue;
-
-			Mesh* mesh = defaultQuadMesh;
-			MaterialInterface* material = track.materialHandle.Get() ? track.materialHandle.Get() : defaultAlphaBlendMaterial;
-			if (!mesh || !material) continue;
-
-			if (!VFXPassHelper::IsBlendModeAccepted(acceptedBlendModes, material->GetBlendMode()))
-				continue;
-
-			Texture* texture = track.textureHandle.Get();
-			if (!texture)
-			{
-				const auto& texBindings = material->GetTextureBindings();
-				if (!texBindings.empty() && texBindings[0].texture.Get())
-					texture = texBindings[0].texture.Get();
-			}
-			if (!texture)
-			{
-				texture = resourceManager.GetResourceHandle<Texture>(L"Engine://Texture/white1x1.png").Get();
-				if (!texture)
-					texture = resourceManager.GetResourceHandle<Texture>(L"Resources/Texture/white1x1.png").Get();
-			}
-
-			if (!texture || !texture->GetRHITexture() || !mesh->GetIndexBuffer()) continue;
-
-			// 저장된 점 + 현재 머리 위치를 제어점으로 사용한다.
-			std::vector<VFXTrailSamplePoint> controls(rt.points.begin(), rt.points.end());
-			if (rt.hasHead && glm::distance(rt.headA, controls.back().posA) > 1e-4f)
-				controls.push_back({ rt.headA, rt.headB, 0.0f });
-			if (controls.size() < 2) continue;
-
-			// Catmull-Rom으로 제어점 사이를 보간해 꺾인 직선 대신 곡선을 만들고, 세그먼트 사이 각도를 줄여 이음새 틈을 줄인다.
-			constexpr int kSubdivisions = 4;
-			auto catmullRom = [](const vec3& p0, const vec3& p1, const vec3& p2, const vec3& p3, f32 t)
-				{
-					const f32 t2 = t * t;
-					const f32 t3 = t2 * t;
-					return 0.5f * (2.0f * p1 + (p2 - p0) * t + (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t2 + (3.0f * p1 - p0 - 3.0f * p2 + p3) * t3);
-				};
-
-			std::vector<VFXTrailSamplePoint> samples;
-			samples.reserve((controls.size() - 1) * kSubdivisions + 1);
-			for (size_t c = 0; c + 1 < controls.size(); ++c)
-			{
-				const auto& c0 = controls[c == 0 ? 0 : c - 1];
-				const auto& c1 = controls[c];
-				const auto& c2 = controls[c + 1];
-				const auto& c3 = controls[std::min(c + 2, controls.size() - 1)];
-				for (int s = 0; s < kSubdivisions; ++s)
-				{
-					const f32 t = static_cast<f32>(s) / static_cast<f32>(kSubdivisions);
-					samples.push_back({ catmullRom(c0.posA, c1.posA, c2.posA, c3.posA, t), catmullRom(c0.posB, c1.posB, c2.posB, c3.posB, t), glm::mix(c1.age, c2.age, t) });
-				}
-			}
-			samples.push_back(controls.back());
-
-			if (useTrailStrip)
-			{
-				DynamicGeometryDrawCommand strip;
-				strip.texture = texture;
-				strip.material = material;
-				strip.pickingId = pickingId;
-				if (BuildTrailStrip(samples, track, cameraBuffer.cameraPosition, strip))
-					renderer.SubmitDynamicGeometry(std::move(strip), targetPassId);
-				continue;
-			}
-
-			// 동적 정점 버퍼를 지원하지 않는 백엔드(SDL GPU): 세그먼트별 쿼드로 대체한다. 곡선 구간 이음새가 남는다.
-
-			// 연속된 보간 점 쌍을 순회하며 쿼드 세그먼트 빌드 및 제출
-			const size_t ptCount = samples.size();
-			for (size_t p = 1; p < ptCount; ++p)
-			{
-				const auto& p0 = samples[p - 1];
-				const auto& p1 = samples[p];
-
-				const vec3 mid0 = (p0.posA + p0.posB) * 0.5f;
-				const vec3 mid1 = (p1.posA + p1.posB) * 0.5f;
-				const vec3 segDir = mid1 - mid0;
-				const f32 segLen = glm::length(segDir);
-				if (segLen < 0.0001f) continue;
-
-				const vec3 center = (mid0 + mid1) * 0.5f;
-				const vec3 dirNorm = segDir / segLen;
-				const vec3 upNorm = glm::normalize((p0.posA - p0.posB) + (p1.posA - p1.posB));
-				const vec3 rightNorm = glm::cross(upNorm, dirNorm);
-
-				const f32 avgAge = (p0.age + p1.age) * 0.5f;
-				const f32 normAge = std::clamp(avgAge / std::max(track.lifetime, 0.001f), 0.0f, 1.0f);
-				const f32 widthFactor = glm::mix(1.0f, track.taperRatio, normAge);
-				const f32 width = track.trailWidth * widthFactor;
-
-				// 세그먼트 방향으로 정렬된 변환 행렬
-				mat4 orientMat(1.0f);
-				orientMat[0] = vec4(dirNorm * (segLen * 0.5f), 0.0f);
-				orientMat[1] = vec4(rightNorm * (width * 0.5f), 0.0f);
-				orientMat[2] = vec4(upNorm, 0.0f);
-				orientMat[3] = vec4(center, 1.0f);
-
-				const vec4 segColor = glm::mix(track.colorStart, track.colorEnd, normAge);
-
-				// UV: 진행 방향을 따라 비율 매핑
-				const f32 u0 = static_cast<f32>(p - 1) / static_cast<f32>(ptCount - 1);
-				const f32 uSpan = 1.0f / static_cast<f32>(ptCount - 1);
-
-				SpriteDrawCommand cmd;
-				cmd.mesh = mesh;
-				cmd.texture = texture;
-				cmd.material = material;
-				cmd.color = segColor;
-				cmd.uvTransform = vec4(u0, 0.0f, uSpan, 1.0f);
-				cmd.pickingId = pickingId;
-				cmd.worldMatrix = orientMat;
-				renderer.SubmitSprite(cmd, targetPassId);
-			}
+			const TrailRenderParams params{
+				track.lifetime, track.trailWidth, track.taperRatio,
+				track.alignment, track.colorStart, track.colorEnd
+			};
+			SubmitTrailRuntime(vfxComp.trailRuntimes[trackIdx], params,
+				track.textureHandle, track.materialHandle,
+				defaultQuadMesh, defaultAlphaBlendMaterial, acceptedBlendModes,
+				cameraBuffer.cameraPosition, pickingId, targetPassId, useTrailStrip,
+				renderer, resourceManager);
 		}
+	}
+
+	// ── 독립 TrailComponent 렌더링 제출 ──
+	const bool useTrailStrip = renderer.GetRHI() && renderer.GetRHI()->SupportsDynamicVertexBuffers();
+	auto trailView = scene->GetRegistry().view<const TrailComponent, const WorldTransformComponent, const FlagComponent>();
+	for (auto [entity, trail, transform, flag] : trailView.each())
+	{
+		if (!IsComponentEnabled<TrailComponent>(scene->GetRegistry(), entity)) continue;
+		if (!flag.IsActiveInHierarchy() || !flag.IsVisibleInHierarchy() || HasFlag(flag.effectiveFlags, EEntityFlag::Dead)) continue;
+		if (trail.runtime.points.empty()) continue;
+
+		const uint32 pickingId = PickingManager::Get().RegisterPickingEntity<TrailComponent>(scene, entity);
+		const TrailRenderParams params{
+			trail.lifetime, trail.width, trail.taperRatio,
+			trail.alignment, trail.colorStart, trail.colorEnd
+		};
+		SubmitTrailRuntime(trail.runtime, params,
+			trail.textureHandle, trail.materialHandle,
+			defaultQuadMesh, defaultAlphaBlendMaterial, acceptedBlendModes,
+			cameraBuffer.cameraPosition, pickingId, targetPassId, useTrailStrip,
+			renderer, resourceManager);
 	}
 }

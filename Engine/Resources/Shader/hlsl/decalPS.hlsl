@@ -41,7 +41,8 @@ PS_OUTPUT main(PS_INPUT input)
 	const float3 local = mul(gDecal.WorldToBox, float4(worldPosition, 1.0f)).xyz;
 
 	// 기울기는 버리기 전에 모든 픽셀에서 구한다.
-	const float2 uv = float2(local.x + 0.5f, 0.5f - local.y);
+	const float2 baseUV = float2(local.x + 0.5f, 0.5f - local.y);
+	const float2 uv = baseUV * gDecal.UVScaleOffset.xy + gDecal.UVScaleOffset.zw;
 	const float2 uvDx = ClampGradient(ddx(uv));
 	const float2 uvDy = ClampGradient(ddy(uv));
 

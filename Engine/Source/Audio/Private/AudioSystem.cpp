@@ -196,7 +196,7 @@ void AudioSystem::UpdateSources(entt::registry& registry)
 						source.m_IsPlaying = true;
 
 						f32 dist = glm::distance(pos, m_LastListenerPosition);
-						BAM_LOG(Info, "Engine","AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
+						BAM_LOG(Trace, "Engine","AudioSystem", "Playing 3D Audio! Listener: ({:.1f}, {:.1f}, {:.1f}), Source: ({:.1f}, {:.1f}, {:.1f}), Distance: {:.1f} (Max: {:.1f})",
 							m_LastListenerPosition.x, m_LastListenerPosition.y, m_LastListenerPosition.z, pos.x, pos.y, pos.z, dist, source.maxDistance);
 					}
 					else

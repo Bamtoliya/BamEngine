@@ -673,6 +673,148 @@ float3 CalcLight(Light light, float3 worldPosition, float3 normal, float3 viewDi
 	return result;
 }
 
+float3 CalcToonLight(Light light, float3 worldPosition, float3 normal, float3 viewDirection, float3 albedo, float roughness, float metallic, float shadowFactor)
+{
+	uint lightType = GetLightType(light.PackedFlags);
+	bool affectsDiffuse = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE);
+	bool affectsSpecular = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_SPECULAR);
+	float3 lightDirection;
+	float attenuation;
+
+	if (lightType == LIGHT_TYPE_DIRECTIONAL)
+	{
+		lightDirection = normalize(-light.Direction);
+		attenuation = 1.0f;
+	}
+	else
+	{
+		float3 toLight = light.Position - worldPosition;
+		float distanceToLight = length(toLight);
+		if (distanceToLight < 0.0001f) return float3(0.0f, 0.0f, 0.0f);
+
+		lightDirection = toLight / distanceToLight;
+		attenuation = CalcAttenuation(light, distanceToLight);
+		if (lightType == LIGHT_TYPE_SPOT)
+		{
+			attenuation *= CalcSpotFade(light, lightDirection);
+		}
+	}
+
+	if (attenuation <= 0.0f) return float3(0.0f, 0.0f, 0.0f);
+
+	float rawNdotL = dot(normal, lightDirection);
+	float ndotl = saturate(rawNdotL);
+	float litFactor = ndotl * shadowFactor;
+
+	// 3단계 셀 밴드 + 부드러운 전환 (그림자 -> 중간 음영 -> 밝은 면)
+	float midBand = smoothstep(0.16f, 0.22f, litFactor);
+	float highBand = smoothstep(0.52f, 0.60f, litFactor);
+	float celDiffuse = midBand * 0.45f + highBand * 0.55f;
+
+	float3 lightRadiance = light.Color * light.Intensity * attenuation;
+	float3 result = float3(0.0f, 0.0f, 0.0f);
+
+	if (affectsDiffuse)
+	{
+		result += (albedo / PI) * (1.0f - metallic * 0.5f) * celDiffuse * lightRadiance;
+	}
+
+	if (affectsSpecular && litFactor > 0.001f)
+	{
+		// 스타일라이즈드 스페큘러 하이라이트
+		float3 halfVector = normalize(viewDirection + lightDirection);
+		float ndoth = max(dot(normal, halfVector), 0.0f);
+		float shininess = lerp(128.0f, 8.0f, roughness);
+		float specRaw = pow(ndoth, shininess);
+		float specBand = smoothstep(0.45f, 0.55f, specRaw) * (1.0f - roughness * 0.7f);
+		float3 specTint = lerp(float3(1.0f, 1.0f, 1.0f), albedo, metallic);
+
+		// 림 라이트 (실루엣 가장자리 하이라이트)
+		float ndotv = saturate(dot(normal, viewDirection));
+		float rimRaw = pow(1.0f - ndotv, 3.5f) * saturate(rawNdotL * 0.5f + 0.5f) * shadowFactor;
+		float rimBand = smoothstep(0.35f, 0.55f, rimRaw) * 0.35f * (1.0f - roughness * 0.5f);
+
+		result += (specTint * specBand + lerp(float3(1.0f, 1.0f, 1.0f), albedo, 0.35f) * rimBand) * lightRadiance;
+	}
+
+	return result;
+}
+
+float3 CalcSubsurfaceLight(Light light, float3 worldPosition, float3 normal, float3 viewDirection, float3 albedo, float roughness, float metallic, float3 f0, float shadowFactor)
+{
+	uint lightType = GetLightType(light.PackedFlags);
+	bool affectsDiffuse = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_DIFFUSE);
+	bool affectsSpecular = HasLightFlag(light.PackedFlags, LIGHT_FLAG_AFFECT_SPECULAR);
+	float3 lightDirection;
+	float attenuation;
+
+	if (lightType == LIGHT_TYPE_DIRECTIONAL)
+	{
+		lightDirection = normalize(-light.Direction);
+		attenuation = 1.0f;
+	}
+	else
+	{
+		float3 toLight = light.Position - worldPosition;
+		float distanceToLight = length(toLight);
+		if (distanceToLight < 0.0001f) return float3(0.0f, 0.0f, 0.0f);
+
+		lightDirection = toLight / distanceToLight;
+		attenuation = CalcAttenuation(light, distanceToLight);
+		if (lightType == LIGHT_TYPE_SPOT)
+		{
+			attenuation *= CalcSpotFade(light, lightDirection);
+		}
+	}
+
+	if (attenuation <= 0.0f) return float3(0.0f, 0.0f, 0.0f);
+
+	float rawNdotL = dot(normal, lightDirection);
+	float ndotl = saturate(rawNdotL);
+	float ndotv = saturate(dot(normal, viewDirection));
+	float3 lightRadiance = light.Color * light.Intensity * attenuation;
+	float3 result = float3(0.0f, 0.0f, 0.0f);
+
+	if (affectsDiffuse)
+	{
+		// 1. Wrap Diffuse (표면 아래로 감싸지는 부드러운 확산광)
+		const float wrap = 0.5f;
+		float wrapDiffuse = saturate((rawNdotL + wrap) / ((1.0f + wrap) * (1.0f + wrap)));
+
+		// 터미네이터 부근 피하 산란 채도 보정
+		float scatterBand = smoothstep(-wrap, 0.0f, rawNdotL) * (1.0f - smoothstep(0.0f, wrap, rawNdotL));
+		float3 sssTint = albedo * float3(1.0f, 0.55f, 0.40f);
+		float3 diffuseTerm = ((albedo / PI) * wrapDiffuse + (sssTint / PI) * scatterBand * 0.45f) * (1.0f - metallic);
+
+		// 2. View-dependent Backlight Transmission (역광 투과)
+		float3 backLightDir = normalize(lightDirection + normal * 0.35f);
+		float backDotView = saturate(dot(viewDirection, -backLightDir));
+		float transmission = pow(backDotView, 4.0f) * 0.65f * (1.0f - metallic);
+		float3 transmissionTerm = (sssTint / PI) * transmission;
+
+		// 3. Fresnel (표면 가장자리 산란 광택)
+		float fresnelScatter = pow(1.0f - ndotv, 4.0f) * 0.25f * saturate(rawNdotL * 0.5f + 0.5f);
+		float3 fresnelTerm = (albedo / PI) * fresnelScatter * (1.0f - metallic);
+
+		result += (diffuseTerm + transmissionTerm + fresnelTerm) * lightRadiance * shadowFactor;
+	}
+
+	if (affectsSpecular && ndotl > 0.0f)
+	{
+		// 4. Stylized Gloss Highlight
+		float3 halfVector = normalize(viewDirection + lightDirection);
+		float ndoth = max(dot(normal, halfVector), 0.0f);
+		float glossPower = lerp(96.0f, 12.0f, roughness);
+		float glossRaw = pow(ndoth, glossPower);
+		float stylizedGloss = lerp(glossRaw, smoothstep(0.25f, 0.55f, glossRaw), 0.5f) * (1.0f - roughness * 0.6f);
+		float3 fresnel = FresnelSchlick(max(dot(halfVector, viewDirection), 0.0f), f0);
+
+		result += fresnel * stylizedGloss * ndotl * lightRadiance * shadowFactor;
+	}
+
+	return result;
+}
+
 float CalcCloudShadowFactor(float3 worldPosition)
 {
 	VolumetricCloudData cloud = gLightingData.Cloud;
@@ -858,7 +1000,18 @@ float4 main(PS_INPUT input) : SV_TARGET
             }
         }
 
-        directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
+        if (shadingModel == SHADING_MODEL_TOON)
+        {
+            directLighting += CalcToonLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, shadowFactor);
+        }
+        else if (shadingModel == SHADING_MODEL_SUBSURFACE)
+        {
+            directLighting += CalcSubsurfaceLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0, shadowFactor);
+        }
+        else
+        {
+            directLighting += CalcLight(light, worldPosition, normal, viewDirection, albedo, roughness, metallic, f0) * shadowFactor;
+        }
     }
 
     float normalDotView = max(dot(normal, viewDirection), 0.0f);

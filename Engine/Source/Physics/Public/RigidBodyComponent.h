@@ -24,6 +24,12 @@ namespace Engine
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FREEZE_ROTATION"), EDITCONDITION(BodyType == Dynamic))
         bool FreezeRotation = false;
 
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_USE_CCD"), EDITCONDITION(BodyType == Dynamic))
+        bool UseCCD = false;
+
+        PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 1.0e12), DISPLAY_NAME("PROP_CCD_MOTION_THRESHOLD"), EDITCONDITION(BodyType == Dynamic && UseCCD))
+        f32 CCDMotionThreshold = 0.25f;
+
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_LINEAR_VELOCITY"), EDITCONDITION(BodyType != Static))
         vec3 LinearVelocity = vec3(0.f);
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_ANGULAR_VELOCITY"), EDITCONDITION(BodyType == Dynamic && !FreezeRotation))

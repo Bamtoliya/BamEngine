@@ -4,6 +4,8 @@
 #include "Macro.h"
 #include "Result.h"
 #include "AudioMixer.h"
+#include <unordered_map>
+#include <vector>
 
 BEGIN(FMOD)
 class System;
@@ -13,6 +15,12 @@ class ChannelGroup;
 END
 
 BEGIN(Engine)
+
+struct ENGINE_API SoundConcurrencyConfig
+{
+	uint32 MaxConcurrentVoices = 0; // 0이면 무제한
+	f32 MinRetriggerInterval = 0.f; // 초 단위, 0 이하이면 쿨다운 없음
+};
 
 class ENGINE_API AudioManager final : public Base
 {
@@ -28,8 +36,15 @@ public:
 	void Update(f32 dt);
 
 public:
-	// 사운드 재생 편의 인터페이스 (2D 원샷 사운드)
-	EResult PlayOneShot(FMOD::Sound* sound, f32 volume = 1.f, EAudioBus bus = EAudioBus::SFX);
+	// 사운드 재생 편의 인터페이스 (2D / 3D 원샷 사운드)
+	EResult PlayOneShot(FMOD::Sound* sound, f32 volume = 1.f, EAudioBus bus = EAudioBus::SFX, f32 pitch = 1.f);
+	EResult PlayOneShot3D(FMOD::Sound* sound, const vec3& position, f32 volume = 1.f, f32 pitch = 1.f, EAudioBus bus = EAudioBus::SFX, f32 minDistance = 1.f, f32 maxDistance = 20.f);
+
+	// 사운드별 동시 보이스 수 및 최소 재트리거 간격 설정 (기본: 무제한)
+	void SetSoundConcurrency(FMOD::Sound* sound, const SoundConcurrencyConfig& config);
+	void SetSoundConcurrency(FMOD::Sound* sound, uint32 maxConcurrentVoices, f32 minRetriggerInterval = 0.f);
+	void ClearSoundConcurrency(FMOD::Sound* sound);
+	SoundConcurrencyConfig GetSoundConcurrency(FMOD::Sound* sound) const;
 
 	// 믹서 접근
 	AudioMixer& GetMixer() { return m_Mixer; }
@@ -69,8 +84,16 @@ public:
 
 private:
 	void SyncBusGroups();
+	EResult PlayOneShotInternal(FMOD::Sound* sound, f32 volume, f32 pitch, EAudioBus bus, bool is3D, const vec3& position, f32 minDistance, f32 maxDistance);
 
 private:
+	struct SoundVoiceState
+	{
+		SoundConcurrencyConfig Config{};
+		f32 LastPlayTime = -1.0e9f;
+		std::vector<FMOD::Channel*> ActiveChannels;
+	};
+
 	FMOD::System* m_System = { nullptr };
 	FMOD::ChannelGroup* m_MasterGroup = { nullptr };
 	FMOD::ChannelGroup* m_BGMGroup = { nullptr };
@@ -79,6 +102,8 @@ private:
 	FMOD::ChannelGroup* m_VoiceGroup = { nullptr };
 
 	AudioMixer m_Mixer;
+	f32 m_ElapsedTime = 0.f;
+	std::unordered_map<FMOD::Sound*, SoundVoiceState> m_SoundStates;
 };
 
 END
