@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] RPG/전략/시뮬레이션 장르 보강(`DataTable`, `StrategyRpgHelpers`) 및 `GameplayCommonCheck` CTest 확장
+
+- **요약**:
+  1. **외부 데이터 테이블 로더·검증기 (`DataTable`)**:
+     - `Engine/Source/Gameplay/Public/DataTable.h`, `Private/DataTable.cpp`: RFC 4180 CSV 파서(UTF-8 BOM, 따옴표/이스케이프, CRLF/LF), 필수 컬럼 검증(`ValidateRequiredColumns`), 키 컬럼 O(1) 해시 조회(`FindRowIndex`/`FindRowIndexByKey`), 타입별 안전 조회(`GetString`/`GetInt`/`GetFloat`/`GetBool`) 구현.
+  2. **RPG / 전략 / 시뮬레이션 헬퍼 (`StrategyRpgHelpers`)**:
+     - `Engine/Source/Gameplay/Public/StrategyRpgHelpers.h`, `Private/StrategyRpgHelpers.cpp`: `DragBoxSelector`(화면 사각형 다중 선별), `MinimapProjection`(월드 XZ ↔ 미니맵 UV/픽셀 양방향 변환), `InventoryContainer`(고정/가변 슬롯 스택 관리), `QuestTracker`(퀘스트 시작·진행·완료·실패 상태 추적) 구현.
+  3. **`GameplayCommonCheck` CTest 확장**:
+     - `Engine/examples/GameplayCommonCheck.cpp`: `CheckActionCombatHelpers`, `CheckPlatformer2DHelpers`, `CheckNavGridDynamicObstacles` 3개 테스트 케이스 추가 및 `main()` 연결.
+- **검증 상태**:
+  - 사용자 실환경에서 `Engine`, `GameplayCommonCheck` 빌드 완료 및 CTest 전체 통과 확인 완료.
+
 ### [2026-11-27] 장르별 게임 제작 보강(11.8절) 3대 영역 구현 및 `GameplayCommonCheck` CTest 추가
 
 - **요약**:

@@ -8,7 +8,11 @@
 #include "InputActionSettings.h"
 #include "InputMap.h"
 #include "SceneTransitionManager.h"
+#include "ActionCombatHelpers.h"
+#include "Platformer2DHelpers.h"
+#include "NavGrid.h"
 
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <iostream>
@@ -269,6 +273,153 @@ namespace
 			SceneTransitionManager::Destroy();
 		return ok;
 	}
+
+	bool CheckActionCombatHelpers()
+	{
+		// 1. HitstopState: 중첩 시 최장 시간, 최소 배율, 만료 복귀
+		HitstopState hitstop;
+		hitstop.Trigger(0.2f, 0.2f);
+		if (!Expect(hitstop.IsActive() && ApproxEqual(hitstop.GetEffectiveTimeScale(), 0.2f), "Hitstop initial trigger mismatch"))
+			return false;
+
+		hitstop.Trigger(0.5f, 0.0f);
+		if (!Expect(hitstop.IsActive() && ApproxEqual(hitstop.GetEffectiveTimeScale(), 0.0f), "Hitstop overlap min timeScale mismatch"))
+			return false;
+
+		hitstop.Update(0.25f);
+		if (!Expect(hitstop.IsActive(), "Hitstop should remain active for longest duration"))
+			return false;
+
+		hitstop.Update(0.30f);
+		if (!Expect(!hitstop.IsActive() && ApproxEqual(hitstop.GetEffectiveTimeScale(), 1.0f), "Hitstop should expire and restore scale 1.0"))
+			return false;
+
+		// 2. CameraShakeState: 발동, 감쇠, 종료
+		CameraShakeState shake;
+		shake.Trigger(1.0f, 0.4f, 25.0f);
+		if (!Expect(shake.IsActive(), "CameraShake should be active after Trigger"))
+			return false;
+
+		shake.Update(0.05f);
+		if (!Expect(glm::length(shake.GetPositionOffset()) > 0.0f || glm::length(shake.GetRotationOffsetDeg()) > 0.0f,
+			"CameraShake should produce non-zero offset while active"))
+			return false;
+
+		shake.Update(0.5f);
+		if (!Expect(!shake.IsActive() &&
+			ApproxEqual(glm::length(shake.GetPositionOffset()), 0.0f) &&
+			ApproxEqual(glm::length(shake.GetRotationOffsetDeg()), 0.0f),
+			"CameraShake should stop and zero offsets after duration"))
+			return false;
+
+		// 3. TargetLockOnSelector: FindBestTarget, SwitchTarget 좌/우, IsTargetValid
+		const std::array<TargetCandidate, 3> candidates{ {
+			{ 1, vec3(0.0f, 0.0f, 5.0f) },
+			{ 2, vec3(3.0f, 0.0f, 5.0f) },
+			{ 3, vec3(-3.0f, 0.0f, 5.0f) }
+		} };
+		const vec3 cameraPos(0.0f, 0.0f, 0.0f);
+		const vec3 cameraForward(0.0f, 0.0f, 1.0f);
+		const vec3 cameraRight(1.0f, 0.0f, 0.0f);
+
+		const auto best = TargetLockOnSelector::FindBestTarget(candidates, cameraPos, cameraForward, 20.0f, 90.0f);
+		if (!Expect(best.has_value() && *best == 1, "FindBestTarget should select center target 1"))
+			return false;
+
+		const auto rightTarget = TargetLockOnSelector::SwitchTarget(candidates, cameraPos, cameraForward, cameraRight, 20.0f, 90.0f, 1, true);
+		if (!Expect(rightTarget.has_value() && *rightTarget == 2, "SwitchTarget(right) should select target 2"))
+			return false;
+
+		const auto leftTarget = TargetLockOnSelector::SwitchTarget(candidates, cameraPos, cameraForward, cameraRight, 20.0f, 90.0f, 1, false);
+		if (!Expect(leftTarget.has_value() && *leftTarget == 3, "SwitchTarget(left) should select target 3"))
+			return false;
+
+		if (!Expect(TargetLockOnSelector::IsTargetValid(vec3(0.0f, 0.0f, 5.0f), cameraPos, 20.0f), "Target within maxDistance should be valid"))
+			return false;
+		if (!Expect(!TargetLockOnSelector::IsTargetValid(vec3(0.0f, 0.0f, 25.0f), cameraPos, 20.0f), "Target beyond maxDistance should be invalid"))
+			return false;
+
+		return true;
+	}
+
+	bool CheckPlatformer2DHelpers()
+	{
+		// 1. PlatformerJumpController: 코요테 타임 내 점프 소비 & 점프 버퍼링 후 착지 소비
+		PlatformerJumpController jump(0.12f, 0.12f);
+		jump.Update(true, 0.016f);
+		jump.Update(false, 0.05f);
+		jump.RequestJump();
+		if (!Expect(jump.CanJump() && jump.ConsumeJump() && !jump.ConsumeJump(), "Coyote time jump consume failed"))
+			return false;
+
+		jump.Update(false, 0.20f);
+		jump.RequestJump();
+		if (!Expect(jump.HasBufferedJump(), "Jump should be buffered in mid-air"))
+			return false;
+
+		jump.Update(true, 0.05f);
+		if (!Expect(jump.ConsumeJump(), "Buffered jump should be consumable upon landing"))
+			return false;
+
+		// 2. OneWayPlatform2D::ShouldCollide: 하강 착지 true, 상승/하향 드롭 false
+		if (!Expect(OneWayPlatform2D::ShouldCollide(1.1f, 0.95f, -2.0f, 1.0f, false), "Falling onto one-way platform should collide"))
+			return false;
+		if (!Expect(!OneWayPlatform2D::ShouldCollide(0.9f, 1.1f, 2.0f, 1.0f, false), "Rising through one-way platform must not collide"))
+			return false;
+		if (!Expect(!OneWayPlatform2D::ShouldCollide(1.1f, 0.95f, -2.0f, 1.0f, true), "Drop-through request must not collide"))
+			return false;
+
+		// 3. Camera2DRoomBounds::ClampPosition: 대형 룸 클램프, 소형 룸 중앙 정렬
+		const vec2 largeClamped = Camera2DRoomBounds::ClampPosition(vec2(2.0f, 58.0f), vec2(10.0f, 5.0f), vec2(0.0f, 0.0f), vec2(100.0f, 60.0f));
+		if (!Expect(ApproxEqual(largeClamped.x, 10.0f) && ApproxEqual(largeClamped.y, 55.0f), "Large room camera clamp mismatch"))
+			return false;
+
+		const vec2 smallCentered = Camera2DRoomBounds::ClampPosition(vec2(0.0f, 0.0f), vec2(10.0f, 5.0f), vec2(0.0f, 0.0f), vec2(12.0f, 8.0f));
+		if (!Expect(ApproxEqual(smallCentered.x, 6.0f) && ApproxEqual(smallCentered.y, 4.0f), "Small room camera centering mismatch"))
+			return false;
+
+		return true;
+	}
+
+	bool CheckNavGridDynamicObstacles()
+	{
+		NavGrid grid;
+		if (!Expect(grid.Initialize(10, 10, 1.0f, vec3(0.0f)), "NavGrid::Initialize failed"))
+			return false;
+
+		const int32 box1Added = grid.SetDynamicObstacleBox(vec3(1.0f, 0.0f, 1.0f), vec3(3.0f, 1.0f, 3.0f), true);
+		const int32 box2Added = grid.SetDynamicObstacleBox(vec3(2.0f, 0.0f, 2.0f), vec3(4.0f, 1.0f, 4.0f), true);
+		if (!Expect(box1Added > 0 && box2Added > 0, "SetDynamicObstacleBox should affect cells"))
+			return false;
+
+		if (!Expect(grid.IsDynamicBlocked(1, 1) && !grid.IsWalkable(1, 1) &&
+			grid.IsDynamicBlocked(2, 2) && !grid.IsWalkable(2, 2),
+			"Overlapped and non-overlapped cells should be blocked"))
+			return false;
+
+		grid.SetDynamicObstacleBox(vec3(1.0f, 0.0f, 1.0f), vec3(3.0f, 1.0f, 3.0f), false);
+		if (!Expect(!grid.IsDynamicBlocked(1, 1) && grid.IsWalkable(1, 1) &&
+			grid.IsDynamicBlocked(2, 2) && !grid.IsWalkable(2, 2),
+			"Removing first box should restore (1,1) while keeping overlapped (2,2) blocked"))
+			return false;
+
+		grid.SetDynamicObstacleBox(vec3(2.0f, 0.0f, 2.0f), vec3(4.0f, 1.0f, 4.0f), false);
+		if (!Expect(!grid.IsDynamicBlocked(2, 2) && grid.IsWalkable(2, 2),
+			"Removing second box should restore (2,2) walkability"))
+			return false;
+
+		const int32 circleAdded = grid.SetDynamicObstacleCircle(vec3(5.5f, 0.0f, 5.5f), 1.5f, true);
+		if (!Expect(circleAdded > 0 && grid.IsDynamicBlocked(5, 5) && !grid.IsWalkable(5, 5),
+			"SetDynamicObstacleCircle should block center cell (5,5)"))
+			return false;
+
+		grid.ClearDynamicObstacles();
+		if (!Expect(!grid.IsDynamicBlocked(5, 5) && grid.IsWalkable(5, 5),
+			"ClearDynamicObstacles should restore all cells"))
+			return false;
+
+		return true;
+	}
 }
 
 int main()
@@ -278,7 +429,10 @@ int main()
 	if (!CheckUIProjectionAndTween()) return 3;
 	if (!CheckInputRebindAndDeadzone()) return 4;
 	if (!CheckSceneTransitionStateMachine()) return 5;
+	if (!CheckActionCombatHelpers()) return 6;
+	if (!CheckPlatformer2DHelpers()) return 7;
+	if (!CheckNavGridDynamicObstacles()) return 8;
 
-	std::cout << "[PASS] GameplayCommonCheck (SaveMigration, EntityPool, UIProjection/Tween, InputRebind/Deadzone, SceneTransition)\n";
+	std::cout << "[PASS] GameplayCommonCheck (SaveMigration, EntityPool, UIProjection/Tween, InputRebind/Deadzone, SceneTransition, ActionCombat, Platformer2D, NavGridDynamic)\n";
 	return 0;
 }
