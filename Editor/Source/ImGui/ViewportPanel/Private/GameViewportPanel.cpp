@@ -119,8 +119,8 @@ void GameViewportPanel::Update(f32 dt)
 
 	if (m_UseScenePostProcess && m_ScenePostProcess.Apply(m_PostProcessChain.GetPipeline(), activeScene))
 	{
-		// 피사계 심도가 읽는 장면 입력. 메인 카메라가 덮어쓰기를 켰으면 그 초점 값을 쓴다.
-		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, m_CameraDepthOfField });
+		// 피사계 심도·아웃라인 등이 읽는 장면 입력. 메인 카메라가 덮어쓰기를 켰으면 그 초점 값을 쓴다.
+		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, m_CameraDepthOfField, m_Pipeline.GetNormalRTName() });
 		currentRT = m_PostProcessChain.ExecuteChain(dt, currentRT);
 	}
 	RenderPassManager::Get().GetRenderPassByID(m_UIOverlayPassID)->SetColorAttachments({ currentRT });

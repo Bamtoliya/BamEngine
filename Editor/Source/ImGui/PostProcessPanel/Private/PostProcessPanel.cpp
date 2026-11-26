@@ -466,7 +466,9 @@ void PostProcessPanel::DrawEffectInspector(PostProcessChain& chain, Engine::IPos
 			case Engine::EMaterialParameterType::Float:
 			{
 				float val = param.data.size() >= sizeof(float) ? *reinterpret_cast<const float*>(param.data.data()) : 0.0f;
-				applyParameter(ImGui::SliderFloat("##val", &val, param.minValue, param.maxValue, "%.2f"),
+				const char* fmt = ((param.maxValue - param.minValue) <= 0.1f || (param.minValue > 0.0f && param.minValue < 0.01f))
+					? "%.3f" : "%.2f";
+				applyParameter(ImGui::SliderFloat("##val", &val, param.minValue, param.maxValue, fmt),
 					[&] { effect->SetFloat(name, val); });
 				break;
 			}

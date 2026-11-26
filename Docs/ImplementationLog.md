@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 아웃라인 에디터/파이프라인 연결 · 신규 API CTest 마무리 · 3D→2D 스프라이트 시트 베이커 구현
+
+- **요약**:
+  1. **아웃라인 후처리(`OutlineEffect`) 에디터 UI 및 `NormalRT` 파이프라인 연결 (`outline-editor-wire`)**:
+     - `ViewportDeferredPipeline.h`(`GetNormalRTName`), `GameViewportPanel.cpp`, `SceneViewportPanel.cpp`, `ClientRenderPipeline.cpp`: G-Buffer `NormalRT`를 `PostProcessSceneInputs::NormalRT`로 전달.
+     - `PostProcessPanel.cpp`, `Editor/Resources/Data/Localization/Editor.PostProcess.csv`: `OutlineEffect` 미세 범위 Float 파라미터 `"%.3f"` 포맷 지원 및 6개 로캘 키(`POST_PROCESS_OUTLINE`, `OUTLINE_*`) 추가.
+  2. **신규 API 헤드리스 CTest 마무리 (`ctest-final-batch`)**:
+     - `Engine/examples/GameplayCommonCheck.cpp`: `CheckDataTable`, `CheckStrategyRpgHelpers` 추가 (총 10개 케이스).
+     - `Engine/examples/NetworkProtocolCheck.cpp`: `NetworkPredictionBuffer` 및 `NetworkInterpolationBuffer` 단위 테스트 추가.
+  3. **3D → 2D 스프라이트 시트 베이킹 도구 (`SpriteSheetBaker`, `sprite-baker-tool`)**:
+     - `Editor/Source/AssetManager/Baking/Public/SpriteSheetBaker.h`, `Private/SpriteSheetBaker.cpp`: `AssembleAtlasRGBA`(엣지 패딩 복제), `WriteSpriteSheetOutputs`(원자적 PNG + `.bamsprite.json` 저장), `BakeTurntableFromFrames`, `BakeTurntableFromCapture`, `CaptureThumbnailFrameRGBA` 구현.
+- **검증 상태**:
+  - 사용자 실환경에서 전체 빌드 완료 및 78개 전체 CTest 통과 확인 완료.
+
 ### [2026-11-27] 스타일라이즈드 아웃라인 후처리(`OutlineEffect`) 및 멀티플레이 예측·보간 기반(`NetworkPrediction`, `NetworkInterpolation`) 구현
 
 - **요약**:

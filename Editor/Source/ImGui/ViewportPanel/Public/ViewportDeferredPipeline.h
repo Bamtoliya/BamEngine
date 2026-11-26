@@ -57,6 +57,7 @@ public:
 	[[nodiscard]] const std::wstring& GetSceneColorCopyRTName() const { return m_SceneColorCopyName; }
 	[[nodiscard]] const std::wstring& GetDepthRTName() const { return m_DepthName; }
 	[[nodiscard]] const std::wstring& GetDiffuseRTName() const { return m_LightingInputs[0]; }
+	[[nodiscard]] const std::wstring& GetNormalRTName() const { return m_LightingInputs[1]; }
 	[[nodiscard]] const std::wstring& GetPositionRTName() const { return m_LightingInputs[4]; }
 	[[nodiscard]] const std::wstring& GetShadowDepthRTName() const { return m_ShadowDepthName; }
 	[[nodiscard]] const std::wstring& GetPointShadowDepthRTName() const { return m_PointShadowDepthName; }

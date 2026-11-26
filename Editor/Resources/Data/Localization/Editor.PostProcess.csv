@@ -53,3 +53,9 @@ PostProcess,Unsupported,Unsupported,미지원
 PostProcess,Value,Value,값
 PostProcess,Viewport,Viewport,뷰포트
 PostProcess,Vignette,Vignette,비네팅
+,POST_PROCESS_OUTLINE,Outline,아웃라인
+,OUTLINE_THICKNESS,Thickness,두께
+,OUTLINE_DEPTH_THRESHOLD,Depth Threshold,깊이 임계값
+,OUTLINE_NORMAL_THRESHOLD,Normal Threshold,법선 임계값
+,OUTLINE_COLOR,Outline Color,외곽선 색상
+,OUTLINE_INTENSITY,Intensity,강도

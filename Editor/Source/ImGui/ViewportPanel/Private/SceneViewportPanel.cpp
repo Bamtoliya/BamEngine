@@ -423,9 +423,9 @@ void SceneViewportPanel::Update(f32 dt)
 	// Lighting이 꺼진 경우 디버깅 화면으로 GBuffer_Diffuse(0번 인덱스)를 우회 표시
 	if (!isPassEnabled(m_LightingPassID) && !m_OwnedRTNames.empty())
 		currentRT = m_OwnedRTNames[0];
-	// 피사계 심도가 읽는 장면 입력. 씬 뷰는 카메라 덮어쓰기를 쓰지 않고 후처리 값만 쓴다.
+	// 피사계 심도·아웃라인 등이 읽는 장면 입력. 씬 뷰는 카메라 덮어쓰기를 쓰지 않고 후처리 값만 쓴다.
 	if (cameraBuffer.has_value())
-		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, std::nullopt });
+		m_PostProcessChain.GetPipeline().SetSceneInputs({ m_Pipeline.GetPositionRTName(), m_Pipeline.GetDiffuseRTName(), *cameraBuffer, std::nullopt, m_Pipeline.GetNormalRTName() });
 	SubmitPostProcessPass(dt, ppSlot, currentRT);
 	if (isPassEnabled(m_UIOverlayPassID))
 		SubmitUIOverlayPass(currentRT);

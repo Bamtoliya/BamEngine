@@ -11,6 +11,8 @@
 #include "ActionCombatHelpers.h"
 #include "Platformer2DHelpers.h"
 #include "NavGrid.h"
+#include "DataTable.h"
+#include "StrategyRpgHelpers.h"
 
 #include <array>
 #include <cmath>
@@ -420,6 +422,104 @@ namespace
 
 		return true;
 	}
+
+	bool CheckDataTable()
+	{
+		DataTable table;
+		const std::string csv =
+			"\xEF\xBB\xBFid,name,hp,speed,boss,bad_num\r\n"
+			"101,\"Goblin, \"\"Elite\"\"\",250,3.5,YES,abc\r\n"
+			"102,Slime,50,1.25,off,\r\n";
+
+		std::string err;
+		if (!Expect(table.LoadFromCsvString(csv, &err, "id"), "DataTable::LoadFromCsvString failed"))
+			return false;
+
+		std::vector<std::string> missing;
+		if (!Expect(table.ValidateRequiredColumns({ "id", "name", "hp" }, &missing) && missing.empty(),
+			"ValidateRequiredColumns should pass for existing columns"))
+			return false;
+		if (!Expect(!table.ValidateRequiredColumns({ "id", "missing_col" }, &missing) && missing.size() == 1 && missing[0] == "missing_col",
+			"ValidateRequiredColumns should report missing column"))
+			return false;
+
+		const auto rowByKey = table.FindRowIndexByKey("101");
+		const auto rowByCol = table.FindRowIndex("name", "Slime");
+		if (!Expect(rowByKey.has_value() && *rowByKey == 0 && rowByCol.has_value() && *rowByCol == 1,
+			"FindRowIndexByKey / FindRowIndex mismatch"))
+			return false;
+
+		if (!Expect(table.GetString(0, "name") == "Goblin, \"Elite\"" &&
+			table.GetInt(0, "hp") == 250 &&
+			ApproxEqual(table.GetFloat(0, "speed"), 3.5f) &&
+			table.GetBool(0, "boss", false) == true &&
+			table.GetBool(1, "boss", true) == false,
+			"DataTable typed getters mismatch"))
+			return false;
+
+		if (!Expect(table.GetInt(0, "bad_num", -1) == -1 &&
+			ApproxEqual(table.GetFloat(1, "bad_num", 9.5f), 9.5f) &&
+			table.GetString(99, "name", "fallback") == "fallback",
+			"DataTable invalid format / out-of-range fallback mismatch"))
+			return false;
+
+		return true;
+	}
+
+	bool CheckStrategyRpgHelpers()
+	{
+		// 1. DragBoxSelector: 역전 사각형 정규화 및 카메라 앞쪽 필터
+		const mat4 viewProj = glm::perspective(glm::radians(60.0f), 1.0f, 0.1f, 100.0f) *
+			glm::lookAt(vec3(0.0f, 0.0f, 5.0f), vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, 1.0f, 0.0f));
+		const vec2 viewport(800.0f, 600.0f);
+		const std::array<DragBoxCandidate, 3> candidates = {
+			DragBoxCandidate{ 1, vec3(0.0f, 0.0f, 0.0f) },   // 화면 중앙 (선택 대상)
+			DragBoxCandidate{ 2, vec3(0.0f, 0.0f, 10.0f) },  // 카메라 뒤쪽 (제외)
+			DragBoxCandidate{ 3, vec3(50.0f, 0.0f, 0.0f) }   // 사각형 밖 (제외)
+		};
+		const auto selected = DragBoxSelector::SelectInScreenRect(
+			candidates, viewProj, viewport, vec2(500.0f, 400.0f), vec2(300.0f, 200.0f));
+		if (!Expect(selected.size() == 1 && selected[0] == 1,
+			"DragBoxSelector should normalize reversed rect and filter front-only"))
+			return false;
+
+		// 2. MinimapProjection: UV/픽셀 양방향 왕복 및 클램프
+		const vec2 worldMin(-100.0f, -100.0f);
+		const vec2 worldMax(100.0f, 100.0f);
+		const vec2 minimapSize(200.0f, 200.0f);
+		const vec2 clampedUV = MinimapProjection::WorldToMinimapUV(vec2(150.0f, -150.0f), worldMin, worldMax, true);
+		const vec2 pixel = MinimapProjection::WorldToMinimapPixel(vec2(50.0f, -50.0f), worldMin, worldMax, minimapSize, true);
+		const vec2 roundTrip = MinimapProjection::MinimapPixelToWorldXZ(pixel, worldMin, worldMax, minimapSize, true);
+		if (!Expect(ApproxEqual(clampedUV.x, 1.0f) && ApproxEqual(clampedUV.y, 0.0f) &&
+			ApproxEqual(roundTrip.x, 50.0f) && ApproxEqual(roundTrip.y, -50.0f),
+			"MinimapProjection round-trip or clamp mismatch"))
+			return false;
+
+		// 3. InventoryContainer: 고정 슬롯 상한 및 스택 추가/제거
+		InventoryContainer inv(2);
+		const uint32 added1 = inv.AddItem(10, 15, 10); // 슬롯 1(10) + 슬롯 2(5)
+		const uint32 added2 = inv.AddItem(20, 5, 10);  // 빈 슬롯 없음 -> 0
+		const uint32 removed = inv.RemoveItem(10, 7);  // 15 - 7 = 8
+		if (!Expect(inv.IsFixedSize() && inv.GetCapacity() == 2 &&
+			added1 == 15 && added2 == 0 && removed == 7 && inv.GetItemCount(10) == 8,
+			"InventoryContainer fixed slot stack/remove mismatch"))
+			return false;
+
+		// 4. QuestTracker: 시작 -> 진행 -> 완료 / 실패 상태 전이
+		QuestTracker quests;
+		if (!Expect(quests.StartQuest(1, 2) && quests.GetQuestState(1) == QuestState::Active,
+			"QuestTracker::StartQuest failed"))
+			return false;
+		if (!Expect(quests.AdvanceQuest(1, 1) && quests.GetQuestState(1) == QuestState::Active &&
+			quests.AdvanceQuest(1, 1) && quests.GetQuestState(1) == QuestState::Completed,
+			"QuestTracker::AdvanceQuest completion transition failed"))
+			return false;
+		if (!Expect(quests.StartQuest(2, 3) && quests.FailQuest(2) && quests.GetQuestState(2) == QuestState::Failed,
+			"QuestTracker::FailQuest transition failed"))
+			return false;
+
+		return true;
+	}
 }
 
 int main()
@@ -432,7 +532,9 @@ int main()
 	if (!CheckActionCombatHelpers()) return 6;
 	if (!CheckPlatformer2DHelpers()) return 7;
 	if (!CheckNavGridDynamicObstacles()) return 8;
+	if (!CheckDataTable()) return 9;
+	if (!CheckStrategyRpgHelpers()) return 10;
 
-	std::cout << "[PASS] GameplayCommonCheck (SaveMigration, EntityPool, UIProjection/Tween, InputRebind/Deadzone, SceneTransition, ActionCombat, Platformer2D, NavGridDynamic)\n";
+	std::cout << "[PASS] GameplayCommonCheck (SaveMigration, EntityPool, UIProjection/Tween, InputRebind/Deadzone, SceneTransition, ActionCombat, Platformer2D, NavGridDynamic, DataTable, StrategyRpgHelpers)\n";
 	return 0;
 }
