@@ -40,6 +40,14 @@ public:
 	EResult PlayOneShot(FMOD::Sound* sound, f32 volume = 1.f, EAudioBus bus = EAudioBus::SFX, f32 pitch = 1.f);
 	EResult PlayOneShot3D(FMOD::Sound* sound, const vec3& position, f32 volume = 1.f, f32 pitch = 1.f, EAudioBus bus = EAudioBus::SFX, f32 minDistance = 1.f, f32 maxDistance = 20.f);
 
+	// BGM 재생 및 크로스페이드 제어
+	EResult PlayBGM(FMOD::Sound* sound, f32 volume = 1.f, bool loop = true);
+	EResult CrossfadeBGM(FMOD::Sound* sound, f32 fadeDuration, f32 targetVolume = 1.f, bool loop = true);
+	void StopBGM();
+	void UpdateCrossfade(f32 deltaTime);
+	bool IsBGMPlaying() const;
+	bool IsCrossfading() const { return m_IsCrossfading; }
+
 	// 사운드별 동시 보이스 수 및 최소 재트리거 간격 설정 (기본: 무제한)
 	void SetSoundConcurrency(FMOD::Sound* sound, const SoundConcurrencyConfig& config);
 	void SetSoundConcurrency(FMOD::Sound* sound, uint32 maxConcurrentVoices, f32 minRetriggerInterval = 0.f);
@@ -104,6 +112,19 @@ private:
 	AudioMixer m_Mixer;
 	f32 m_ElapsedTime = 0.f;
 	std::unordered_map<FMOD::Sound*, SoundVoiceState> m_SoundStates;
+
+	// BGM 및 크로스페이드 상태
+	FMOD::Channel* m_CurrentBGMChannel = { nullptr };
+	FMOD::Sound* m_CurrentBGMSound = { nullptr };
+	f32 m_CurrentBGMVolume = 1.f;
+
+	FMOD::Channel* m_NextBGMChannel = { nullptr };
+	FMOD::Sound* m_NextBGMSound = { nullptr };
+	bool m_IsCrossfading = false;
+	f32 m_CrossfadeDuration = 0.f;
+	f32 m_CrossfadeElapsed = 0.f;
+	f32 m_CrossfadeStartVolume = 1.f;
+	f32 m_CrossfadeTargetVolume = 1.f;
 };
 
 END

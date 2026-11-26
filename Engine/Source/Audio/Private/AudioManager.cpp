@@ -58,6 +58,7 @@ EResult AudioManager::Initialize(void* arg)
 
 void AudioManager::Free()
 {
+	StopBGM();
 	m_SoundStates.clear();
 
 	if (m_VoiceGroup) { m_VoiceGroup->release(); m_VoiceGroup = nullptr; }
@@ -93,6 +94,7 @@ void AudioManager::Update(f32 dt)
 	}
 
 	m_Mixer.Update(dt);
+	UpdateCrossfade(dt);
 	SyncBusGroups();
 
 	for (auto& [sound, state] : m_SoundStates)
@@ -296,6 +298,7 @@ void AudioManager::FadeBusVolume(EAudioBus bus, f32 targetVolume, f32 durationSe
 
 void AudioManager::StopAllSounds()
 {
+	StopBGM();
 	if (m_MasterGroup)
 	{
 		m_MasterGroup->stop();
@@ -305,4 +308,151 @@ void AudioManager::StopAllSounds()
 		(void)sound;
 		state.ActiveChannels.clear();
 	}
+}
+
+static bool IsChannelPlaying(FMOD::Channel* channel)
+{
+	if (!channel) return false;
+	bool isPlaying = false;
+	return channel->isPlaying(&isPlaying) == FMOD_OK && isPlaying;
+}
+
+EResult AudioManager::PlayBGM(FMOD::Sound* sound, f32 volume, bool loop)
+{
+	if (!m_System || !sound) return EResult::InvalidArgument;
+
+	StopBGM();
+
+	const f32 clampedVol = std::isfinite(volume) ? std::clamp(volume, 0.f, 1.f) : 1.f;
+	FMOD::Channel* channel = nullptr;
+	FMOD_RESULT res = m_System->playSound(sound, m_BGMGroup, true, &channel);
+	if (res != FMOD_OK || !channel) return EResult::Fail;
+
+	channel->setMode(FMOD_2D | (loop ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF));
+	channel->setVolume(clampedVol);
+	channel->setPaused(false);
+
+	m_CurrentBGMChannel = channel;
+	m_CurrentBGMSound = sound;
+	m_CurrentBGMVolume = clampedVol;
+	return EResult::Success;
+}
+
+EResult AudioManager::CrossfadeBGM(FMOD::Sound* sound, f32 fadeDuration, f32 targetVolume, bool loop)
+{
+	if (!m_System || !sound) return EResult::InvalidArgument;
+
+	if (!std::isfinite(fadeDuration) || fadeDuration <= 0.f)
+	{
+		return PlayBGM(sound, targetVolume, loop);
+	}
+
+	const f32 clampedTargetVol = std::isfinite(targetVolume) ? std::clamp(targetVolume, 0.f, 1.f) : 1.f;
+
+	// 동일 트랙 중복 크로스페이드 방지
+	if (m_IsCrossfading)
+	{
+		if (m_NextBGMSound == sound && IsChannelPlaying(m_NextBGMChannel))
+		{
+			m_CrossfadeTargetVolume = clampedTargetVol;
+			return EResult::Success;
+		}
+		// 기존 크로스페이드 중이었다면 이전 outgoing 트랙을 정리하고 현재 incoming 트랙을 outgoing으로 승격
+		if (m_CurrentBGMChannel)
+		{
+			m_CurrentBGMChannel->stop();
+		}
+		const f32 prevProgress = std::clamp(m_CrossfadeElapsed / m_CrossfadeDuration, 0.f, 1.f);
+		m_CurrentBGMChannel = m_NextBGMChannel;
+		m_CurrentBGMSound = m_NextBGMSound;
+		m_CurrentBGMVolume = m_CrossfadeTargetVolume * prevProgress;
+		m_NextBGMChannel = nullptr;
+		m_NextBGMSound = nullptr;
+		m_IsCrossfading = false;
+	}
+	else if (m_CurrentBGMSound == sound && IsChannelPlaying(m_CurrentBGMChannel))
+	{
+		m_CurrentBGMVolume = clampedTargetVol;
+		m_CurrentBGMChannel->setVolume(clampedTargetVol);
+		return EResult::Success;
+	}
+
+	FMOD::Channel* nextChannel = nullptr;
+	FMOD_RESULT res = m_System->playSound(sound, m_BGMGroup, true, &nextChannel);
+	if (res != FMOD_OK || !nextChannel) return EResult::Fail;
+
+	nextChannel->setMode(FMOD_2D | (loop ? FMOD_LOOP_NORMAL : FMOD_LOOP_OFF));
+	nextChannel->setVolume(0.f);
+	nextChannel->setPaused(false);
+
+	m_NextBGMChannel = nextChannel;
+	m_NextBGMSound = sound;
+	m_IsCrossfading = true;
+	m_CrossfadeDuration = fadeDuration;
+	m_CrossfadeElapsed = 0.f;
+	m_CrossfadeStartVolume = IsChannelPlaying(m_CurrentBGMChannel) ? m_CurrentBGMVolume : 0.f;
+	m_CrossfadeTargetVolume = clampedTargetVol;
+
+	return EResult::Success;
+}
+
+void AudioManager::StopBGM()
+{
+	if (m_CurrentBGMChannel)
+	{
+		m_CurrentBGMChannel->stop();
+		m_CurrentBGMChannel = nullptr;
+	}
+	if (m_NextBGMChannel)
+	{
+		m_NextBGMChannel->stop();
+		m_NextBGMChannel = nullptr;
+	}
+	m_CurrentBGMSound = nullptr;
+	m_NextBGMSound = nullptr;
+	m_CurrentBGMVolume = 1.f;
+	m_IsCrossfading = false;
+	m_CrossfadeDuration = 0.f;
+	m_CrossfadeElapsed = 0.f;
+	m_CrossfadeStartVolume = 1.f;
+	m_CrossfadeTargetVolume = 1.f;
+}
+
+void AudioManager::UpdateCrossfade(f32 deltaTime)
+{
+	if (!m_IsCrossfading) return;
+	if (!std::isfinite(deltaTime) || deltaTime <= 0.f) return;
+
+	m_CrossfadeElapsed += deltaTime;
+	const f32 t = (m_CrossfadeDuration > 0.f) ? std::clamp(m_CrossfadeElapsed / m_CrossfadeDuration, 0.f, 1.f) : 1.f;
+
+	if (IsChannelPlaying(m_CurrentBGMChannel))
+	{
+		m_CurrentBGMChannel->setVolume(m_CrossfadeStartVolume * (1.f - t));
+	}
+	if (IsChannelPlaying(m_NextBGMChannel))
+	{
+		m_NextBGMChannel->setVolume(m_CrossfadeTargetVolume * t);
+	}
+
+	if (t >= 1.f)
+	{
+		if (m_CurrentBGMChannel)
+		{
+			m_CurrentBGMChannel->stop();
+		}
+		m_CurrentBGMChannel = m_NextBGMChannel;
+		m_CurrentBGMSound = m_NextBGMSound;
+		m_CurrentBGMVolume = m_CrossfadeTargetVolume;
+		m_NextBGMChannel = nullptr;
+		m_NextBGMSound = nullptr;
+		m_IsCrossfading = false;
+		m_CrossfadeDuration = 0.f;
+		m_CrossfadeElapsed = 0.f;
+	}
+}
+
+bool AudioManager::IsBGMPlaying() const
+{
+	return IsChannelPlaying(m_CurrentBGMChannel) || (m_IsCrossfading && IsChannelPlaying(m_NextBGMChannel));
 }

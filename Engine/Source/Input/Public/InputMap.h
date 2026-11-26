@@ -79,9 +79,32 @@ enum class EMouseButton : uint32
 
     Count
 };
+enum class EGamepadButton : uint32
+{
+    South = 0,       // Xbox A / PS Cross
+    East,            // Xbox B / PS Circle
+    West,            // Xbox X / PS Square
+    North,           // Xbox Y / PS Triangle
+    Back,
+    Guide,
+    Start,
+    LeftStick,
+    RightStick,
+    LeftShoulder,
+    RightShoulder,
+    DPadUp,
+    DPadDown,
+    DPadLeft,
+    DPadRight,
+
+    Count
+};
 ENGINE_API EKeyCode SDLKeyToEngineKeyCode(SDL_Scancode sdlScancode);
 ENGINE_API EKeyCode StringToEngineKeyCode(const string& keyString);
 ENGINE_API const char* EngineKeyCodeToString(EKeyCode key);
 ENGINE_API EMouseButton SDLButtonToEngineMouseButton(uint8 sdlButton);
 ENGINE_API EMouseButton StringToEngineMouseButton(const string& buttonString);
+ENGINE_API EGamepadButton SDLButtonToEngineGamepadButton(uint8 sdlButton);
+ENGINE_API EGamepadButton StringToEngineGamepadButton(const string& buttonString);
+ENGINE_API const char* EngineGamepadButtonToString(EGamepadButton button);
 END

@@ -19,6 +19,7 @@ namespace Engine
         std::string timestampIso8601{};
         double playTimeSeconds = 0.0;
         uint32 formatVersion = 1;
+        uint32 schemaVersion = 1;
 
         [[nodiscard]] bool operator==(const SaveSlotMetadata& other) const noexcept = default;
     };
@@ -26,6 +27,7 @@ namespace Engine
     struct SaveGameData
     {
         static constexpr uint32 CurrentFormatVersion = 1;
+        static constexpr uint32 CurrentSchemaVersion = 1;
 
         SaveSlotMetadata metadata{};
         vec3 playerPosition{ 0.0f };

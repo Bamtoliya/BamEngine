@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "Base.h"
+#include "InputActionSettings.h"
 #include "InputMap.h"
 #include "KeyChord.h"
 
@@ -126,6 +127,15 @@ public:
 #pragma region Input Actions
 public:
 	bool SetInputActionSettings(const InputActionSettings& settings);
+	bool RebindAction(std::string_view mapId, std::string_view actionId, std::string_view newBindingKey);
+	bool RebindAction(std::string_view mapId, std::string_view actionId, std::size_t bindingIndex, std::string_view newBindingKey);
+	bool ResetActionBindingsToDefault(std::string_view mapId, std::string_view actionId);
+	void ResetAllBindingsToDefault();
+	bool SaveBindingsToFile(const std::filesystem::path& filePath) const;
+	bool LoadBindingsFromFile(const std::filesystem::path& filePath);
+	std::vector<std::string> GetActionBindings(std::string_view mapId, std::string_view actionId) const;
+	const InputActionSettings& GetCurrentInputActionSettings() const { return m_CurrentActionSettings; }
+	const InputActionSettings& GetDefaultInputActionSettings() const { return m_DefaultActionSettings; }
 	std::optional<vec2> GetMouseButtonDownScreenPosition(EMouseButton button) const;
 	std::optional<vec2> GetMouseButtonDownPosition(EMouseButton button) const;
 	void EvaluateActionMap(std::string_view mapId, bool enabled, const InputActionMapMouseInput& mouse = {});
@@ -139,6 +149,29 @@ public:
 	bool IsActionHeld(std::string_view mapId, std::string_view actionId) const;
 	bool HasKeyboardFocus() const;
 	static bool ValidateInputActionSettings(const InputActionSettings& settings);
+#pragma endregion
+
+#pragma region Gamepad
+public:
+	static constexpr uint32 MaxGamepads = 4;
+
+	bool IsGamepadConnected(uint32 gamepadIndex = 0) const;
+	uint32 GetConnectedGamepadCount() const;
+
+	bool IsGamepadButtonDown(EGamepadButton button, uint32 gamepadIndex = 0) const;
+	bool IsGamepadButtonUp(EGamepadButton button, uint32 gamepadIndex = 0) const;
+	bool IsGamepadButtonPressed(EGamepadButton button, uint32 gamepadIndex = 0) const;
+
+	vec2 GetGamepadLeftStick(uint32 gamepadIndex = 0) const;
+	vec2 GetGamepadRightStick(uint32 gamepadIndex = 0) const;
+	f32 GetGamepadLeftTrigger(uint32 gamepadIndex = 0) const;
+	f32 GetGamepadRightTrigger(uint32 gamepadIndex = 0) const;
+
+	void SetGamepadDeadzone(f32 stickDeadzone, f32 triggerDeadzone = 0.05f);
+	f32 GetGamepadStickDeadzone() const { return m_GamepadStickDeadzone; }
+	f32 GetGamepadTriggerDeadzone() const { return m_GamepadTriggerDeadzone; }
+
+	bool SetGamepadRumble(f32 lowFreq, f32 highFreq, uint32 durationMs, uint32 gamepadIndex = 0);
 #pragma endregion
 
 #pragma region KeyChord
@@ -186,6 +219,7 @@ private:// Input Action Maps
 	{
 		std::vector<KeyChord> Chords;
 		std::vector<EMouseButton> MouseButtons;
+		std::vector<EGamepadButton> GamepadButtons;
 		bool Held = false;
 		bool Pressed = false;
 		bool Released = false;
@@ -203,7 +237,42 @@ private:// Input Action Maps
 
 	using ActionMaps = std::map<std::string, ActionMapState, std::less<>>;
 	static std::optional<ActionMaps> BuildActionMaps(const InputActionSettings& settings);
+	bool ApplyActionSettingsPreservingRuntimeState(InputActionSettings settings);
 	ActionMaps m_ActionMaps;
+	InputActionSettings m_DefaultActionSettings;
+	InputActionSettings m_CurrentActionSettings;
+
+private:// Gamepad
+	struct GamepadState
+	{
+		SDL_Gamepad* Handle = nullptr;
+		SDL_JoystickID InstanceId = 0;
+		bool Connected = false;
+		std::array<uint8, static_cast<std::size_t>(EGamepadButton::Count)> CurrentButtons{};
+		std::array<uint8, static_cast<std::size_t>(EGamepadButton::Count)> PreviousButtons{};
+		std::array<bool, static_cast<std::size_t>(EGamepadButton::Count)> DownEvents{};
+		std::array<bool, static_cast<std::size_t>(EGamepadButton::Count)> UpEvents{};
+		std::array<bool, static_cast<std::size_t>(EGamepadButton::Count)> PendingDown{};
+		std::array<bool, static_cast<std::size_t>(EGamepadButton::Count)> PendingUp{};
+		vec2 RawLeftStick = vec2(0.0f);
+		vec2 RawRightStick = vec2(0.0f);
+		vec2 LeftStick = vec2(0.0f);
+		vec2 RightStick = vec2(0.0f);
+		f32 RawLeftTrigger = 0.0f;
+		f32 RawRightTrigger = 0.0f;
+		f32 LeftTrigger = 0.0f;
+		f32 RightTrigger = 0.0f;
+	};
+
+	int32 FindGamepadSlot(SDL_JoystickID instanceId) const;
+	void OpenGamepadById(SDL_JoystickID instanceId);
+	void CloseGamepadSlot(uint32 slotIndex);
+	void UpdateGamepads();
+
+	std::array<GamepadState, MaxGamepads> m_Gamepads{};
+	f32 m_GamepadStickDeadzone = 0.15f;
+	f32 m_GamepadTriggerDeadzone = 0.05f;
+	bool m_GamepadSubsystemInitialized = false;
 #pragma endregion
 };
 END

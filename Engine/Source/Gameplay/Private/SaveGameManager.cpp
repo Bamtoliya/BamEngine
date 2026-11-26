@@ -1,4 +1,4 @@
-#include "SaveGameManager.h"
+﻿#include "SaveGameManager.h"
 #include "PlatformPath.h"
 #include "Scene.h"
 #include "TransformComponent.h"
@@ -12,6 +12,8 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <queue>
+#include <unordered_set>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -36,6 +38,7 @@ namespace Engine
             std::string timestampIso8601{};
             double playTimeSeconds = 0.0;
             uint32 formatVersion = 1;
+            uint32 schemaVersion = 1;
         };
 
         struct SaveGameDataDto
@@ -89,6 +92,8 @@ namespace Engine
         dto.metadata.playTimeSeconds = data.metadata.playTimeSeconds;
         dto.metadata.formatVersion = (data.metadata.formatVersion == 0) ?
             SaveGameData::CurrentFormatVersion : data.metadata.formatVersion;
+        dto.metadata.schemaVersion = (data.metadata.schemaVersion == 0) ?
+            SaveGameData::CurrentSchemaVersion : data.metadata.schemaVersion;
 
         dto.playerPosition = { data.playerPosition.x, data.playerPosition.y, data.playerPosition.z };
         dto.playerEulerRotation = { data.playerEulerRotation.x, data.playerEulerRotation.y, data.playerEulerRotation.z };
@@ -103,45 +108,61 @@ namespace Engine
         return !ec;
     }
 
+    namespace SaveGameDetail
+    {
+        bool DeserializeFromJsonInternal(std::string_view json, SaveGameData& outData, bool fallbackZeroSchemaToOne)
+        {
+            if (json.empty() || glz::validate_json(json))
+            {
+                return false;
+            }
+
+            SaveGameDataDto dto;
+            dto.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
+            dto.metadata.schemaVersion = 0; // 누락 시 구버전(0)으로 인식해 폴백/마이그레이션 처리
+            dto.playerHealth = 100.0f;
+            dto.playerMaxHealth = 100.0f;
+
+            const auto ec = glz::read<glz::opts{ .error_on_unknown_keys = false }>(dto, json);
+            if (ec)
+            {
+                return false;
+            }
+
+            if (dto.metadata.formatVersion == 0 || dto.metadata.formatVersion > SaveGameData::CurrentFormatVersion)
+            {
+                return false;
+            }
+
+            if (dto.metadata.schemaVersion > SaveGameData::CurrentSchemaVersion)
+            {
+                return false;
+            }
+
+            outData.metadata.slotName = std::move(dto.metadata.slotName);
+            outData.metadata.sceneUri = std::move(dto.metadata.sceneUri);
+            outData.metadata.checkpointId = std::move(dto.metadata.checkpointId);
+            outData.metadata.timestampIso8601 = std::move(dto.metadata.timestampIso8601);
+            outData.metadata.playTimeSeconds = dto.metadata.playTimeSeconds;
+            outData.metadata.formatVersion = dto.metadata.formatVersion;
+            outData.metadata.schemaVersion = (fallbackZeroSchemaToOne && dto.metadata.schemaVersion == 0) ?
+                1u : dto.metadata.schemaVersion;
+
+            outData.playerPosition = vec3(dto.playerPosition[0], dto.playerPosition[1], dto.playerPosition[2]);
+            outData.playerEulerRotation = vec3(dto.playerEulerRotation[0], dto.playerEulerRotation[1], dto.playerEulerRotation[2]);
+            outData.playerHealth = dto.playerHealth;
+            outData.playerMaxHealth = dto.playerMaxHealth;
+            outData.intFlags = std::move(dto.intFlags);
+            outData.floatFlags = std::move(dto.floatFlags);
+            outData.boolFlags = std::move(dto.boolFlags);
+            outData.stringFlags = std::move(dto.stringFlags);
+            return true;
+        }
+    }
+
     bool DeserializeFromJson(std::string_view json, SaveGameData& outData)
     {
-        if (json.empty() || glz::validate_json(json))
-        {
-            return false;
-        }
-
-        SaveGameDataDto dto;
-        dto.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
-        dto.playerHealth = 100.0f;
-        dto.playerMaxHealth = 100.0f;
-
-        const auto ec = glz::read_json(dto, json);
-        if (ec)
-        {
-            return false;
-        }
-
-        if (dto.metadata.formatVersion == 0 || dto.metadata.formatVersion > SaveGameData::CurrentFormatVersion)
-        {
-            return false;
-        }
-
-        outData.metadata.slotName = std::move(dto.metadata.slotName);
-        outData.metadata.sceneUri = std::move(dto.metadata.sceneUri);
-        outData.metadata.checkpointId = std::move(dto.metadata.checkpointId);
-        outData.metadata.timestampIso8601 = std::move(dto.metadata.timestampIso8601);
-        outData.metadata.playTimeSeconds = dto.metadata.playTimeSeconds;
-        outData.metadata.formatVersion = dto.metadata.formatVersion;
-
-        outData.playerPosition = vec3(dto.playerPosition[0], dto.playerPosition[1], dto.playerPosition[2]);
-        outData.playerEulerRotation = vec3(dto.playerEulerRotation[0], dto.playerEulerRotation[1], dto.playerEulerRotation[2]);
-        outData.playerHealth = dto.playerHealth;
-        outData.playerMaxHealth = dto.playerMaxHealth;
-        outData.intFlags = std::move(dto.intFlags);
-        outData.floatFlags = std::move(dto.floatFlags);
-        outData.boolFlags = std::move(dto.boolFlags);
-        outData.stringFlags = std::move(dto.stringFlags);
-        return true;
+        return SaveGameDetail::DeserializeFromJsonInternal(json, outData, true);
     }
 
     bool DeserializeMetadataFromJson(std::string_view json, SaveSlotMetadata& outMetadata)
@@ -153,9 +174,11 @@ namespace Engine
 
         MetadataWrapperDto wrapper;
         wrapper.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
+        wrapper.metadata.schemaVersion = 0;
 
         const auto ec = glz::read<glz::opts{ .error_on_unknown_keys = false }>(wrapper, json);
-        if (ec || wrapper.metadata.formatVersion == 0 || wrapper.metadata.formatVersion > SaveGameData::CurrentFormatVersion)
+        if (ec || wrapper.metadata.formatVersion == 0 || wrapper.metadata.formatVersion > SaveGameData::CurrentFormatVersion ||
+            wrapper.metadata.schemaVersion > SaveGameData::CurrentSchemaVersion)
         {
             return false;
         }
@@ -166,6 +189,7 @@ namespace Engine
         outMetadata.timestampIso8601 = std::move(wrapper.metadata.timestampIso8601);
         outMetadata.playTimeSeconds = wrapper.metadata.playTimeSeconds;
         outMetadata.formatVersion = wrapper.metadata.formatVersion;
+        outMetadata.schemaVersion = (wrapper.metadata.schemaVersion == 0) ? 1u : wrapper.metadata.schemaVersion;
         return true;
     }
 
@@ -178,7 +202,9 @@ namespace Engine
                 if (auto r = metaAr.Write("checkpointId", meta.checkpointId); !r) return r;
                 if (auto r = metaAr.Write("timestampIso8601", meta.timestampIso8601); !r) return r;
                 if (auto r = metaAr.Write("playTimeSeconds", meta.playTimeSeconds); !r) return r;
-                return metaAr.Write("formatVersion", meta.formatVersion);
+                if (auto r = metaAr.Write("formatVersion", meta.formatVersion); !r) return r;
+                const uint32 schemaVer = (meta.schemaVersion == 0) ? SaveGameData::CurrentSchemaVersion : meta.schemaVersion;
+                return metaAr.Write("schemaVersion", schemaVer);
             });
         if (!metaResult) return metaResult;
 
@@ -197,6 +223,7 @@ namespace Engine
 
     archive::ArchiveResult ReadSaveGameArchive(const archive::IArchive& ar, SaveGameData& outData)
     {
+        outData.metadata.schemaVersion = 0;
         bool hasMeta = false;
         if (auto r = ar.HasField("metadata", hasMeta); !r) return r;
         if (hasMeta)
@@ -210,6 +237,7 @@ namespace Engine
                     if ((void)metaAr.HasField("timestampIso8601", hasField); hasField) (void)metaAr.Read("timestampIso8601", meta.timestampIso8601);
                     if ((void)metaAr.HasField("playTimeSeconds", hasField); hasField) (void)metaAr.Read("playTimeSeconds", meta.playTimeSeconds);
                     if ((void)metaAr.HasField("formatVersion", hasField); hasField) (void)metaAr.Read("formatVersion", meta.formatVersion);
+                    if ((void)metaAr.HasField("schemaVersion", hasField); hasField) (void)metaAr.Read("schemaVersion", meta.schemaVersion);
                     return {};
                 });
             if (!metaResult) return metaResult;
@@ -218,6 +246,14 @@ namespace Engine
         if (outData.metadata.formatVersion == 0 || outData.metadata.formatVersion > SaveGameData::CurrentFormatVersion)
         {
             return { archive::ArchiveErrorCode::InvalidDocument, "formatVersion" };
+        }
+        if (outData.metadata.schemaVersion > SaveGameData::CurrentSchemaVersion)
+        {
+            return { archive::ArchiveErrorCode::InvalidDocument, "schemaVersion" };
+        }
+        if (outData.metadata.schemaVersion == 0)
+        {
+            outData.metadata.schemaVersion = 1;
         }
 
         bool hasField = false;
@@ -329,6 +365,10 @@ namespace Engine
         {
             saveCopy.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
         }
+        if (saveCopy.metadata.schemaVersion == 0)
+        {
+            saveCopy.metadata.schemaVersion = SaveGameData::CurrentSchemaVersion;
+        }
 
         std::string jsonStr;
         if (!SerializeToJson(saveCopy, jsonStr))
@@ -412,7 +452,12 @@ namespace Engine
         std::string jsonStr((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
         file.close();
 
-        return DeserializeFromJson(jsonStr, outData);
+        if (!SaveGameDetail::DeserializeFromJsonInternal(jsonStr, outData, false))
+        {
+            return false;
+        }
+
+        return MigrateSaveData(outData, SaveGameData::CurrentSchemaVersion);
     }
 
     bool SaveGameManager::ReadSlotMetadata(std::string_view slotName, SaveSlotMetadata& outMetadata) const
@@ -506,6 +551,166 @@ namespace Engine
         return result;
     }
 
+    void SaveGameManager::RegisterMigration(uint32 fromVersion, uint32 toVersion, SaveMigrationFn fn)
+    {
+        if (fromVersion >= toVersion || !fn)
+        {
+            BAM_LOG(Warn, "Gameplay", "SaveGame",
+                "Invalid save migration registration ({} -> {})", fromVersion, toVersion);
+            return;
+        }
+
+        for (auto& entry : m_Migrations)
+        {
+            if (entry.fromVersion == fromVersion && entry.toVersion == toVersion)
+            {
+                entry.migrate = std::move(fn);
+                return;
+            }
+        }
+
+        m_Migrations.push_back({ fromVersion, toVersion, std::move(fn) });
+    }
+
+    void SaveGameManager::ClearMigrations()
+    {
+        m_Migrations.clear();
+    }
+
+    bool SaveGameManager::HasMigration(uint32 fromVersion, uint32 toVersion) const
+    {
+        for (const auto& entry : m_Migrations)
+        {
+            if (entry.fromVersion == fromVersion && entry.toVersion == toVersion)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool SaveGameManager::MigrateSaveData(SaveGameData& data, uint32 targetVersion) const
+    {
+        const uint32 startVersion = data.metadata.schemaVersion;
+        if (startVersion == targetVersion)
+        {
+            return true;
+        }
+
+        if (startVersion > targetVersion)
+        {
+            BAM_LOG(Error, "Gameplay", "SaveGame",
+                "Cannot downgrade save schema from {} to {}", startVersion, targetVersion);
+            return false;
+        }
+
+        // BFS로 startVersion -> targetVersion까지의 단계적 마이그레이션 경로를 탐색합니다.
+        struct StepEdge
+        {
+            uint32 toVersion = 0;
+            const SaveMigrationEntry* entry = nullptr; // nullptr이면 레거시 0 -> 1 기본 폴백
+        };
+
+        std::unordered_map<uint32, std::pair<uint32, const SaveMigrationEntry*>> parentMap;
+        std::unordered_set<uint32> visited;
+        std::queue<uint32> frontier;
+
+        visited.insert(startVersion);
+        frontier.push(startVersion);
+
+        bool foundPath = false;
+        while (!frontier.empty() && !foundPath)
+        {
+            const uint32 current = frontier.front();
+            frontier.pop();
+
+            bool hasExplicitFromCurrent = false;
+            std::vector<StepEdge> candidates;
+            for (const auto& entry : m_Migrations)
+            {
+                if (entry.fromVersion == current && entry.toVersion <= targetVersion)
+                {
+                    hasExplicitFromCurrent = true;
+                    candidates.push_back({ entry.toVersion, &entry });
+                }
+            }
+
+            // 낮은 버전부터 우선 탐색해 단계적 마이그레이션(예: 1->2->3)을 자연스럽게 선호합니다.
+            std::sort(candidates.begin(), candidates.end(), [](const StepEdge& a, const StepEdge& b) {
+                return a.toVersion < b.toVersion;
+            });
+
+            // 구버전(0)에 대한 명시적 마이그레이션이 없으면 0 -> 1 기본 폴백을 허용합니다.
+            if (current == 0 && !hasExplicitFromCurrent && targetVersion >= 1)
+            {
+                candidates.push_back({ 1u, nullptr });
+            }
+
+            for (const auto& edge : candidates)
+            {
+                if (visited.contains(edge.toVersion))
+                {
+                    continue;
+                }
+                visited.insert(edge.toVersion);
+                parentMap[edge.toVersion] = { current, edge.entry };
+                if (edge.toVersion == targetVersion)
+                {
+                    foundPath = true;
+                    break;
+                }
+                frontier.push(edge.toVersion);
+            }
+        }
+
+        if (!foundPath)
+        {
+            BAM_LOG(Error, "Gameplay", "SaveGame",
+                "No migration path from schema version {} to {}", startVersion, targetVersion);
+            return false;
+        }
+
+        std::vector<StepEdge> path;
+        for (uint32 v = targetVersion; v != startVersion;)
+        {
+            const auto& [prev, entry] = parentMap.at(v);
+            path.push_back({ v, entry });
+            v = prev;
+        }
+        std::reverse(path.begin(), path.end());
+
+        // 실패 시 원본 상태를 보존하기 위해 복사본 위에서 순차 마이그레이션을 수행합니다.
+        SaveGameData working = data;
+        for (const auto& step : path)
+        {
+            if (step.entry != nullptr)
+            {
+                bool ok = false;
+                try
+                {
+                    ok = step.entry->migrate && step.entry->migrate(working);
+                }
+                catch (...)
+                {
+                    ok = false;
+                }
+
+                if (!ok)
+                {
+                    BAM_LOG(Error, "Gameplay", "SaveGame",
+                        "Save migration failed at step {} -> {}; rolling back safely",
+                        step.entry->fromVersion, step.entry->toVersion);
+                    return false;
+                }
+            }
+
+            working.metadata.schemaVersion = step.toVersion;
+        }
+
+        data = std::move(working);
+        return true;
+    }
+
     bool SaveGameManager::CaptureCheckpointFromEntity(const Scene& scene, entt::entity playerEntity,
         std::string_view sceneUri, std::string_view checkpointId, SaveGameData& outData)
     {
@@ -519,6 +724,7 @@ namespace Engine
         outData.metadata.checkpointId = std::string(checkpointId);
         outData.metadata.timestampIso8601 = GetCurrentTimestampIso8601();
         outData.metadata.formatVersion = SaveGameData::CurrentFormatVersion;
+        outData.metadata.schemaVersion = SaveGameData::CurrentSchemaVersion;
 
         if (const auto* transform = registry.try_get<TransformComponent>(playerEntity))
         {

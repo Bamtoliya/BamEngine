@@ -4,6 +4,7 @@
 #include "SaveGameTypes.h"
 #include <entt/entity/entity.hpp>
 #include <filesystem>
+#include <functional>
 #include <string_view>
 #include <vector>
 
@@ -46,6 +47,15 @@ namespace Engine
         // 전체 저장 슬롯 메타데이터 목록 조회
         [[nodiscard]] std::vector<SaveSlotMetadata> ListSlots() const;
 
+        // 스키마 버전 마이그레이션 콜백 등록 및 실행
+        using SaveMigrationFn = std::function<bool(SaveGameData&)>;
+
+        void RegisterMigration(uint32 fromVersion, uint32 toVersion, SaveMigrationFn fn);
+        void ClearMigrations();
+        [[nodiscard]] bool HasMigration(uint32 fromVersion, uint32 toVersion) const;
+        [[nodiscard]] bool MigrateSaveData(SaveGameData& data,
+            uint32 targetVersion = SaveGameData::CurrentSchemaVersion) const;
+
         // 씬 체크포인트 헬퍼: 엔티티의 TransformComponent::position / HealthComponent 자동 캡처
         [[nodiscard]] static bool CaptureCheckpointFromEntity(const Scene& scene, entt::entity playerEntity,
             std::string_view sceneUri, std::string_view checkpointId, SaveGameData& outData);
@@ -55,8 +65,16 @@ namespace Engine
             const SaveGameData& data);
 
     private:
+        struct SaveMigrationEntry
+        {
+            uint32 fromVersion = 0;
+            uint32 toVersion = 0;
+            SaveMigrationFn migrate;
+        };
+
         [[nodiscard]] std::filesystem::path GetSlotFilePath(std::string_view slotName) const;
 
         std::filesystem::path m_SaveDirectory;
+        std::vector<SaveMigrationEntry> m_Migrations;
     };
 }

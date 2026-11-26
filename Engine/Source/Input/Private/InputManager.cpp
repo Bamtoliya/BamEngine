@@ -8,8 +8,33 @@
 IMPLEMENT_SINGLETON(InputManager)
 
 #pragma region Helper
+namespace InputBindingDetail
+{
+	struct UserBindingEntryDto
+	{
+		std::string ActionId;
+		std::vector<std::string> Keys;
+	};
+
+	struct UserActionMapBindingsDto
+	{
+		std::string MapId;
+		std::vector<UserBindingEntryDto> Actions;
+	};
+
+	struct UserInputBindingsFileDto
+	{
+		uint32 Version = 1;
+		std::vector<UserActionMapBindingsDto> Maps;
+	};
+}
+
 namespace
 {
+	using InputBindingDetail::UserBindingEntryDto;
+	using InputBindingDetail::UserActionMapBindingsDto;
+	using InputBindingDetail::UserInputBindingsFileDto;
+
 	uint8 MakeModifierMask(bool ctrl, bool shift, bool alt)
 	{
 		return static_cast<uint8>(
@@ -28,16 +53,90 @@ namespace
 
 		return vec2(static_cast<f32>(windowX) + x, static_cast<f32>(windowY) + y);
 	}
+
+	SDL_GamepadButton EngineGamepadButtonToSDL(Engine::EGamepadButton button)
+	{
+		switch (button)
+		{
+		case Engine::EGamepadButton::South: return SDL_GAMEPAD_BUTTON_SOUTH;
+		case Engine::EGamepadButton::East: return SDL_GAMEPAD_BUTTON_EAST;
+		case Engine::EGamepadButton::West: return SDL_GAMEPAD_BUTTON_WEST;
+		case Engine::EGamepadButton::North: return SDL_GAMEPAD_BUTTON_NORTH;
+		case Engine::EGamepadButton::Back: return SDL_GAMEPAD_BUTTON_BACK;
+		case Engine::EGamepadButton::Guide: return SDL_GAMEPAD_BUTTON_GUIDE;
+		case Engine::EGamepadButton::Start: return SDL_GAMEPAD_BUTTON_START;
+		case Engine::EGamepadButton::LeftStick: return SDL_GAMEPAD_BUTTON_LEFT_STICK;
+		case Engine::EGamepadButton::RightStick: return SDL_GAMEPAD_BUTTON_RIGHT_STICK;
+		case Engine::EGamepadButton::LeftShoulder: return SDL_GAMEPAD_BUTTON_LEFT_SHOULDER;
+		case Engine::EGamepadButton::RightShoulder: return SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER;
+		case Engine::EGamepadButton::DPadUp: return SDL_GAMEPAD_BUTTON_DPAD_UP;
+		case Engine::EGamepadButton::DPadDown: return SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+		case Engine::EGamepadButton::DPadLeft: return SDL_GAMEPAD_BUTTON_DPAD_LEFT;
+		case Engine::EGamepadButton::DPadRight: return SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+		default: return SDL_GAMEPAD_BUTTON_INVALID;
+		}
+	}
+
+	f32 NormalizeGamepadStickAxis(Sint16 value)
+	{
+		return value < 0 ? static_cast<f32>(value) / 32768.0f : static_cast<f32>(value) / 32767.0f;
+	}
+
+	f32 NormalizeGamepadTriggerAxis(Sint16 value)
+	{
+		return std::clamp(static_cast<f32>(value) / 32767.0f, 0.0f, 1.0f);
+	}
+
+	vec2 ApplyRadialDeadzone(const vec2& raw, f32 deadzone)
+	{
+		const f32 magnitude = glm::length(raw);
+		if (magnitude <= deadzone || magnitude <= 0.00001f)
+			return vec2(0.0f);
+
+		const f32 clampedMag = std::min(magnitude, 1.0f);
+		const f32 rescaled = (clampedMag - deadzone) / (1.0f - deadzone);
+		return (raw / magnitude) * std::clamp(rescaled, 0.0f, 1.0f);
+	}
+
+	f32 ApplyTriggerDeadzone(f32 raw, f32 deadzone)
+	{
+		if (raw <= deadzone)
+			return 0.0f;
+		return std::clamp((raw - deadzone) / (1.0f - deadzone), 0.0f, 1.0f);
+	}
 }
 #pragma endregion
 
 #pragma region Constructor&Destructor
 EResult InputManager::Initialize(void* arg)
 {
+	if (SDL_InitSubSystem(SDL_INIT_GAMEPAD))
+	{
+		m_GamepadSubsystemInitialized = true;
+		int gamepadCount = 0;
+		if (SDL_JoystickID* ids = SDL_GetGamepads(&gamepadCount))
+		{
+			for (int i = 0; i < gamepadCount; ++i)
+				OpenGamepadById(ids[i]);
+			SDL_free(ids);
+		}
+	}
+	else
+	{
+		ENGINE_LOG_WARN("SDL_InitSubSystem(SDL_INIT_GAMEPAD) failed: {}", SDL_GetError());
+	}
 	return EResult::Success;
 }
 void InputManager::Free()
 {
+	for (uint32 i = 0; i < MaxGamepads; ++i)
+		CloseGamepadSlot(i);
+
+	if (m_GamepadSubsystemInitialized)
+	{
+		SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+		m_GamepadSubsystemInitialized = false;
+	}
 	__super::Free();
 }
 #pragma endregion
@@ -153,6 +252,8 @@ void InputManager::Update(f32 dt)
 	m_AccmulatedMouseScrollDelta = vec2(0.f);
 	m_MouseWheelSamples.swap(m_PendingMouseWheelSamples);
 	m_PendingMouseWheelSamples.clear();
+
+	UpdateGamepads();
 }
 #pragma endregion
 
@@ -345,6 +446,59 @@ void InputManager::ProcessEvent(const SDL_Event& event)
 		if (position)
 			m_PendingMouseWheelSamples.push_back({ *position, event.wheel.y });
 	}
+	else if (event.type == SDL_EVENT_GAMEPAD_ADDED)
+	{
+		OpenGamepadById(event.gdevice.which);
+	}
+	else if (event.type == SDL_EVENT_GAMEPAD_REMOVED)
+	{
+		const int32 slot = FindGamepadSlot(event.gdevice.which);
+		if (slot >= 0)
+			CloseGamepadSlot(static_cast<uint32>(slot));
+	}
+	else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN || event.type == SDL_EVENT_GAMEPAD_BUTTON_UP)
+	{
+		const int32 slotIndex = FindGamepadSlot(event.gbutton.which);
+		if (slotIndex >= 0)
+		{
+			const auto button = SDLButtonToEngineGamepadButton(event.gbutton.button);
+			if (button != EGamepadButton::Count)
+			{
+				auto& slot = m_Gamepads[static_cast<std::size_t>(slotIndex)];
+				const auto idx = static_cast<std::size_t>(button);
+				if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN)
+				{
+					slot.PendingDown[idx] = true;
+					if (!slot.Handle)
+						slot.CurrentButtons[idx] = 1;
+				}
+				else
+				{
+					slot.PendingUp[idx] = true;
+					if (!slot.Handle)
+						slot.CurrentButtons[idx] = 0;
+				}
+			}
+		}
+	}
+	else if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION)
+	{
+		const int32 slotIndex = FindGamepadSlot(event.gaxis.which);
+		if (slotIndex >= 0)
+		{
+			auto& slot = m_Gamepads[static_cast<std::size_t>(slotIndex)];
+			switch (event.gaxis.axis)
+			{
+			case SDL_GAMEPAD_AXIS_LEFTX: slot.RawLeftStick.x = NormalizeGamepadStickAxis(event.gaxis.value); break;
+			case SDL_GAMEPAD_AXIS_LEFTY: slot.RawLeftStick.y = NormalizeGamepadStickAxis(event.gaxis.value); break;
+			case SDL_GAMEPAD_AXIS_RIGHTX: slot.RawRightStick.x = NormalizeGamepadStickAxis(event.gaxis.value); break;
+			case SDL_GAMEPAD_AXIS_RIGHTY: slot.RawRightStick.y = NormalizeGamepadStickAxis(event.gaxis.value); break;
+			case SDL_GAMEPAD_AXIS_LEFT_TRIGGER: slot.RawLeftTrigger = NormalizeGamepadTriggerAxis(event.gaxis.value); break;
+			case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER: slot.RawRightTrigger = NormalizeGamepadTriggerAxis(event.gaxis.value); break;
+			default: break;
+			}
+		}
+	}
 }
 #pragma endregion
 
@@ -360,7 +514,293 @@ bool InputManager::SetInputActionSettings(const InputActionSettings& settings)
 	if (!maps) return false;
 
 	m_ActionMaps = std::move(*maps);
+	m_DefaultActionSettings = settings;
+	m_CurrentActionSettings = settings;
 	return true;
+}
+
+bool InputManager::ApplyActionSettingsPreservingRuntimeState(InputActionSettings settings)
+{
+	auto maps = BuildActionMaps(settings);
+	if (!maps) return false;
+
+	for (auto& [mapId, newMap] : *maps)
+	{
+		const auto oldMapIt = m_ActionMaps.find(mapId);
+		if (oldMapIt == m_ActionMaps.end()) continue;
+
+		newMap.Enabled = oldMapIt->second.Enabled;
+		newMap.MouseInput = oldMapIt->second.MouseInput;
+
+		for (auto& [actionId, newAction] : newMap.Actions)
+		{
+			const auto oldActionIt = oldMapIt->second.Actions.find(actionId);
+			if (oldActionIt == oldMapIt->second.Actions.end()) continue;
+
+			newAction.Held = oldActionIt->second.Held;
+			newAction.Pressed = oldActionIt->second.Pressed;
+			newAction.Released = oldActionIt->second.Released;
+			newAction.FixedPressed = oldActionIt->second.FixedPressed;
+			newAction.FixedReleased = oldActionIt->second.FixedReleased;
+		}
+	}
+
+	m_ActionMaps = std::move(*maps);
+	m_CurrentActionSettings = std::move(settings);
+	return true;
+}
+
+bool InputManager::RebindAction(std::string_view mapId, std::string_view actionId, std::string_view newBindingKey)
+{
+	if (newBindingKey.empty())
+	{
+		ENGINE_LOG_ERROR("RebindAction failed for '{}.{}': empty binding key", mapId, actionId);
+		return false;
+	}
+
+	InputActionSettings candidate = m_CurrentActionSettings;
+	auto mapIt = std::ranges::find_if(candidate.Maps, [mapId](const InputActionMap& m) { return m.Id == mapId; });
+	if (mapIt == candidate.Maps.end())
+	{
+		ENGINE_LOG_ERROR("RebindAction failed: unknown map '{}'", mapId);
+		return false;
+	}
+
+	const bool actionExists = std::ranges::any_of(mapIt->Actions, [actionId](const InputAction& a) { return a.Id == actionId; });
+	if (!actionExists)
+	{
+		ENGINE_LOG_ERROR("RebindAction failed: unknown action '{}.{}'", mapId, actionId);
+		return false;
+	}
+
+	std::erase_if(mapIt->Bindings, [actionId](const InputBinding& b) { return b.ActionId == actionId; });
+	mapIt->Bindings.push_back(InputBinding{ std::string(actionId), std::string(newBindingKey) });
+
+	return ApplyActionSettingsPreservingRuntimeState(std::move(candidate));
+}
+
+bool InputManager::RebindAction(std::string_view mapId, std::string_view actionId, std::size_t bindingIndex, std::string_view newBindingKey)
+{
+	if (newBindingKey.empty())
+	{
+		ENGINE_LOG_ERROR("RebindAction failed for '{}.{}': empty binding key", mapId, actionId);
+		return false;
+	}
+
+	InputActionSettings candidate = m_CurrentActionSettings;
+	auto mapIt = std::ranges::find_if(candidate.Maps, [mapId](const InputActionMap& m) { return m.Id == mapId; });
+	if (mapIt == candidate.Maps.end())
+	{
+		ENGINE_LOG_ERROR("RebindAction failed: unknown map '{}'", mapId);
+		return false;
+	}
+
+	const bool actionExists = std::ranges::any_of(mapIt->Actions, [actionId](const InputAction& a) { return a.Id == actionId; });
+	if (!actionExists)
+	{
+		ENGINE_LOG_ERROR("RebindAction failed: unknown action '{}.{}'", mapId, actionId);
+		return false;
+	}
+
+	std::size_t currentIndex = 0;
+	bool replaced = false;
+	for (auto& binding : mapIt->Bindings)
+	{
+		if (binding.ActionId != actionId) continue;
+		if (currentIndex == bindingIndex)
+		{
+			binding.Key = std::string(newBindingKey);
+			replaced = true;
+			break;
+		}
+		++currentIndex;
+	}
+
+	if (!replaced)
+	{
+		if (bindingIndex != currentIndex)
+		{
+			ENGINE_LOG_ERROR("RebindAction failed for '{}.{}': binding index {} out of range", mapId, actionId, bindingIndex);
+			return false;
+		}
+		mapIt->Bindings.push_back(InputBinding{ std::string(actionId), std::string(newBindingKey) });
+	}
+
+	return ApplyActionSettingsPreservingRuntimeState(std::move(candidate));
+}
+
+bool InputManager::ResetActionBindingsToDefault(std::string_view mapId, std::string_view actionId)
+{
+	const auto defaultMapIt = std::ranges::find_if(m_DefaultActionSettings.Maps, [mapId](const InputActionMap& m) { return m.Id == mapId; });
+	if (defaultMapIt == m_DefaultActionSettings.Maps.end()) return false;
+
+	const bool defaultActionExists = std::ranges::any_of(defaultMapIt->Actions, [actionId](const InputAction& a) { return a.Id == actionId; });
+	if (!defaultActionExists) return false;
+
+	InputActionSettings candidate = m_CurrentActionSettings;
+	auto mapIt = std::ranges::find_if(candidate.Maps, [mapId](const InputActionMap& m) { return m.Id == mapId; });
+	if (mapIt == candidate.Maps.end()) return false;
+
+	std::erase_if(mapIt->Bindings, [actionId](const InputBinding& b) { return b.ActionId == actionId; });
+	for (const auto& defaultBinding : defaultMapIt->Bindings)
+	{
+		if (defaultBinding.ActionId == actionId)
+			mapIt->Bindings.push_back(defaultBinding);
+	}
+
+	return ApplyActionSettingsPreservingRuntimeState(std::move(candidate));
+}
+
+void InputManager::ResetAllBindingsToDefault()
+{
+	ApplyActionSettingsPreservingRuntimeState(m_DefaultActionSettings);
+}
+
+bool InputManager::SaveBindingsToFile(const std::filesystem::path& filePath) const
+{
+	if (filePath.empty())
+	{
+		ENGINE_LOG_ERROR("SaveBindingsToFile failed: empty file path");
+		return false;
+	}
+
+	UserInputBindingsFileDto dto;
+	for (const auto& map : m_CurrentActionSettings.Maps)
+	{
+		UserActionMapBindingsDto mapDto;
+		mapDto.MapId = map.Id;
+
+		for (const auto& action : map.Actions)
+		{
+			UserBindingEntryDto entryDto;
+			entryDto.ActionId = action.Id;
+			for (const auto& binding : map.Bindings)
+			{
+				if (binding.ActionId == action.Id)
+					entryDto.Keys.push_back(binding.Key);
+			}
+			mapDto.Actions.push_back(std::move(entryDto));
+		}
+
+		dto.Maps.push_back(std::move(mapDto));
+	}
+
+	std::string outJson;
+	const auto writeEc = glz::write<glz::opts{ .prettify = true, .indentation_width = 4 }>(dto, outJson);
+	if (writeEc)
+	{
+		ENGINE_LOG_ERROR("SaveBindingsToFile failed: JSON serialization error for '{}'", filePath.string());
+		return false;
+	}
+
+	std::error_code ec;
+	const auto parent = filePath.parent_path();
+	if (!parent.empty())
+	{
+		std::filesystem::create_directories(parent, ec);
+		if (ec)
+		{
+			ENGINE_LOG_ERROR("SaveBindingsToFile failed to create directory '{}': {}", parent.string(), ec.message());
+			return false;
+		}
+	}
+
+	std::ofstream file(filePath, std::ios::binary | std::ios::trunc);
+	if (!file.is_open())
+	{
+		ENGINE_LOG_ERROR("SaveBindingsToFile failed to open '{}' for writing", filePath.string());
+		return false;
+	}
+
+	file.write(outJson.data(), static_cast<std::streamsize>(outJson.size()));
+	if (!file.good())
+	{
+		ENGINE_LOG_ERROR("SaveBindingsToFile failed while writing '{}'", filePath.string());
+		return false;
+	}
+
+	return true;
+}
+
+bool InputManager::LoadBindingsFromFile(const std::filesystem::path& filePath)
+{
+	if (filePath.empty())
+	{
+		ENGINE_LOG_ERROR("LoadBindingsFromFile failed: empty file path");
+		return false;
+	}
+
+	std::error_code ec;
+	if (!std::filesystem::exists(filePath, ec) || ec)
+	{
+		ENGINE_LOG_WARN("LoadBindingsFromFile: file not found '{}'", filePath.string());
+		return false;
+	}
+
+	std::ifstream file(filePath, std::ios::binary);
+	if (!file.is_open())
+	{
+		ENGINE_LOG_ERROR("LoadBindingsFromFile failed to open '{}'", filePath.string());
+		return false;
+	}
+
+	std::ostringstream ss;
+	ss << file.rdbuf();
+	const std::string json = ss.str();
+	if (json.empty())
+	{
+		ENGINE_LOG_ERROR("LoadBindingsFromFile: empty JSON file '{}'", filePath.string());
+		return false;
+	}
+
+	UserInputBindingsFileDto dto;
+	const auto parseEc = glz::read<glz::opts{ .error_on_unknown_keys = false }>(dto, json);
+	if (parseEc)
+	{
+		ENGINE_LOG_ERROR("LoadBindingsFromFile parse error in '{}': {}", filePath.string(), glz::format_error(parseEc, json));
+		return false;
+	}
+
+	InputActionSettings candidate = m_DefaultActionSettings;
+	for (const auto& savedMap : dto.Maps)
+	{
+		auto mapIt = std::ranges::find_if(candidate.Maps, [&](const InputActionMap& m) { return m.Id == savedMap.MapId; });
+		if (mapIt == candidate.Maps.end())
+		{
+			ENGINE_LOG_WARN("LoadBindingsFromFile: skipping unknown map '{}'", savedMap.MapId);
+			continue;
+		}
+
+		for (const auto& savedAction : savedMap.Actions)
+		{
+			const bool actionExists = std::ranges::any_of(mapIt->Actions, [&](const InputAction& a) { return a.Id == savedAction.ActionId; });
+			if (!actionExists)
+			{
+				ENGINE_LOG_WARN("LoadBindingsFromFile: skipping unknown action '{}.{}'", savedMap.MapId, savedAction.ActionId);
+				continue;
+			}
+
+			std::erase_if(mapIt->Bindings, [&](const InputBinding& b) { return b.ActionId == savedAction.ActionId; });
+			for (const auto& key : savedAction.Keys)
+				mapIt->Bindings.push_back(InputBinding{ savedAction.ActionId, key });
+		}
+	}
+
+	return ApplyActionSettingsPreservingRuntimeState(std::move(candidate));
+}
+
+std::vector<std::string> InputManager::GetActionBindings(std::string_view mapId, std::string_view actionId) const
+{
+	std::vector<std::string> result;
+	const auto mapIt = std::ranges::find_if(m_CurrentActionSettings.Maps, [mapId](const InputActionMap& m) { return m.Id == mapId; });
+	if (mapIt == m_CurrentActionSettings.Maps.end()) return result;
+
+	for (const auto& binding : mapIt->Bindings)
+	{
+		if (binding.ActionId == actionId)
+			result.push_back(binding.Key);
+	}
+	return result;
 }
 
 std::optional<InputManager::ActionMaps> InputManager::BuildActionMaps(const InputActionSettings& settings)
@@ -406,6 +846,20 @@ std::optional<InputManager::ActionMaps> InputManager::BuildActionMaps(const Inpu
 				buttons.push_back(button);
 				continue;
 			}
+			constexpr std::string_view gamepadPrefix = "Gamepad:";
+			if (binding.Key.starts_with(gamepadPrefix))
+			{
+				const auto button = StringToEngineGamepadButton(binding.Key.substr(gamepadPrefix.size()));
+				if (button == EGamepadButton::Count)
+					return reject(source.Id, binding.ActionId, "invalid gamepad button: " + binding.Key);
+
+				auto& buttons = action->second.GamepadButtons;
+				if (std::ranges::find(buttons, button) != buttons.end())
+					return reject(source.Id, binding.ActionId, "duplicate gamepad button: " + binding.Key);
+
+				buttons.push_back(button);
+				continue;
+			}
 			const KeyChord chord = KeyChord::FromString(binding.Key);
 			if (!chord.IsValid())
 				return reject(source.Id, binding.ActionId, "invalid chord: " + binding.Key);
@@ -447,6 +901,24 @@ void InputManager::EvaluateActionMap(std::string_view mapId, bool enabled, const
 			return (allowedMouseButtons & bit) != 0;
 		};
 
+	const auto isAnyGamepadButtonDown = [this](EGamepadButton button)
+		{
+			for (uint32 i = 0; i < MaxGamepads; ++i)
+			{
+				if (IsGamepadButtonDown(button, i)) return true;
+			}
+			return false;
+		};
+
+	const auto isAnyGamepadButtonPressed = [this](EGamepadButton button)
+		{
+			for (uint32 i = 0; i < MaxGamepads; ++i)
+			{
+				if (IsGamepadButtonPressed(button, i)) return true;
+			}
+			return false;
+		};
+
 	const uint8 heldModifiers = GetKeyboardModifiers();
 	for (auto& [id, action] : state.Actions)
 	{
@@ -458,7 +930,7 @@ void InputManager::EvaluateActionMap(std::string_view mapId, bool enabled, const
 				}) || std::ranges::any_of(action.MouseButtons, [&](EMouseButton button)
 					{
 						return isMouseAllowed(button) && IsMouseButtonDown(button);
-					}));
+					}) || std::ranges::any_of(action.GamepadButtons, isAnyGamepadButtonDown));
 
 				action.Held = enabled &&
 					(std::ranges::any_of(action.Chords, [&](const KeyChord& chord)
@@ -467,7 +939,7 @@ void InputManager::EvaluateActionMap(std::string_view mapId, bool enabled, const
 						}) || std::ranges::any_of(action.MouseButtons, [&](EMouseButton button)
 							{
 								return isMouseAllowed(button) && IsMouseButtonPressed(button);
-							}));
+							}) || std::ranges::any_of(action.GamepadButtons, isAnyGamepadButtonPressed));
 						action.Released = enabled && wasEnabled && !action.Held && (wasHeld || action.Pressed);
 		if (enabled)
 		{
@@ -574,5 +1046,193 @@ uint8 InputManager::GetKeyDownModifiers(EKeyCode key)
 		return m_KeyDownModifiers[index];
 
 	return GetKeyboardModifiers();
+}
+#pragma endregion
+
+#pragma region Gamepad
+int32 InputManager::FindGamepadSlot(SDL_JoystickID instanceId) const
+{
+	for (uint32 i = 0; i < MaxGamepads; ++i)
+	{
+		if (m_Gamepads[i].Connected && m_Gamepads[i].InstanceId == instanceId)
+			return static_cast<int32>(i);
+	}
+	return -1;
+}
+
+void InputManager::OpenGamepadById(SDL_JoystickID instanceId)
+{
+	if (instanceId == 0 || FindGamepadSlot(instanceId) >= 0)
+		return;
+
+	SDL_Gamepad* handle = SDL_OpenGamepad(instanceId);
+	if (!handle)
+	{
+		ENGINE_LOG_WARN("SDL_OpenGamepad({}) failed: {}", static_cast<uint32>(instanceId), SDL_GetError());
+		return;
+	}
+
+	for (uint32 i = 0; i < MaxGamepads; ++i)
+	{
+		if (!m_Gamepads[i].Connected)
+		{
+			m_Gamepads[i] = GamepadState{};
+			m_Gamepads[i].Handle = handle;
+			m_Gamepads[i].InstanceId = instanceId;
+			m_Gamepads[i].Connected = true;
+			return;
+		}
+	}
+
+	ENGINE_LOG_WARN("MaxGamepads ({}) reached; ignoring gamepad {}", MaxGamepads, static_cast<uint32>(instanceId));
+	SDL_CloseGamepad(handle);
+}
+
+void InputManager::CloseGamepadSlot(uint32 slotIndex)
+{
+	if (slotIndex >= MaxGamepads) return;
+	auto& slot = m_Gamepads[slotIndex];
+	if (slot.Handle)
+	{
+		SDL_CloseGamepad(slot.Handle);
+		slot.Handle = nullptr;
+	}
+	slot = GamepadState{};
+}
+
+void InputManager::UpdateGamepads()
+{
+	for (auto& slot : m_Gamepads)
+	{
+		slot.PreviousButtons = slot.CurrentButtons;
+		slot.DownEvents = slot.PendingDown;
+		slot.UpEvents = slot.PendingUp;
+		slot.PendingDown.fill(false);
+		slot.PendingUp.fill(false);
+
+		if (!slot.Connected) continue;
+
+		if (slot.Handle)
+		{
+			for (uint32 b = 0; b < static_cast<uint32>(EGamepadButton::Count); ++b)
+			{
+				const SDL_GamepadButton sdlBtn = EngineGamepadButtonToSDL(static_cast<EGamepadButton>(b));
+				slot.CurrentButtons[b] = (sdlBtn != SDL_GAMEPAD_BUTTON_INVALID && SDL_GetGamepadButton(slot.Handle, sdlBtn)) ? 1 : 0;
+			}
+
+			slot.RawLeftStick.x = NormalizeGamepadStickAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_LEFTX));
+			slot.RawLeftStick.y = NormalizeGamepadStickAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_LEFTY));
+			slot.RawRightStick.x = NormalizeGamepadStickAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_RIGHTX));
+			slot.RawRightStick.y = NormalizeGamepadStickAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_RIGHTY));
+			slot.RawLeftTrigger = NormalizeGamepadTriggerAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_LEFT_TRIGGER));
+			slot.RawRightTrigger = NormalizeGamepadTriggerAxis(SDL_GetGamepadAxis(slot.Handle, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER));
+		}
+
+		slot.LeftStick = ApplyRadialDeadzone(slot.RawLeftStick, m_GamepadStickDeadzone);
+		slot.RightStick = ApplyRadialDeadzone(slot.RawRightStick, m_GamepadStickDeadzone);
+		slot.LeftTrigger = ApplyTriggerDeadzone(slot.RawLeftTrigger, m_GamepadTriggerDeadzone);
+		slot.RightTrigger = ApplyTriggerDeadzone(slot.RawRightTrigger, m_GamepadTriggerDeadzone);
+	}
+}
+
+bool InputManager::IsGamepadConnected(uint32 gamepadIndex) const
+{
+	return gamepadIndex < MaxGamepads && m_Gamepads[gamepadIndex].Connected;
+}
+
+uint32 InputManager::GetConnectedGamepadCount() const
+{
+	uint32 count = 0;
+	for (const auto& slot : m_Gamepads)
+	{
+		if (slot.Connected) ++count;
+	}
+	return count;
+}
+
+bool InputManager::IsGamepadButtonDown(EGamepadButton button, uint32 gamepadIndex) const
+{
+	const auto idx = static_cast<std::size_t>(button);
+	if (gamepadIndex >= MaxGamepads || idx >= static_cast<std::size_t>(EGamepadButton::Count))
+		return false;
+
+	const auto& slot = m_Gamepads[gamepadIndex];
+	if (!slot.Connected) return false;
+	return slot.DownEvents[idx] || (slot.CurrentButtons[idx] && !slot.PreviousButtons[idx]);
+}
+
+bool InputManager::IsGamepadButtonUp(EGamepadButton button, uint32 gamepadIndex) const
+{
+	const auto idx = static_cast<std::size_t>(button);
+	if (gamepadIndex >= MaxGamepads || idx >= static_cast<std::size_t>(EGamepadButton::Count))
+		return false;
+
+	const auto& slot = m_Gamepads[gamepadIndex];
+	if (!slot.Connected) return false;
+	return slot.UpEvents[idx] || (!slot.CurrentButtons[idx] && slot.PreviousButtons[idx]);
+}
+
+bool InputManager::IsGamepadButtonPressed(EGamepadButton button, uint32 gamepadIndex) const
+{
+	const auto idx = static_cast<std::size_t>(button);
+	if (gamepadIndex >= MaxGamepads || idx >= static_cast<std::size_t>(EGamepadButton::Count))
+		return false;
+
+	const auto& slot = m_Gamepads[gamepadIndex];
+	return slot.Connected && slot.CurrentButtons[idx] != 0;
+}
+
+vec2 InputManager::GetGamepadLeftStick(uint32 gamepadIndex) const
+{
+	if (gamepadIndex >= MaxGamepads || !m_Gamepads[gamepadIndex].Connected)
+		return vec2(0.0f);
+	return m_Gamepads[gamepadIndex].LeftStick;
+}
+
+vec2 InputManager::GetGamepadRightStick(uint32 gamepadIndex) const
+{
+	if (gamepadIndex >= MaxGamepads || !m_Gamepads[gamepadIndex].Connected)
+		return vec2(0.0f);
+	return m_Gamepads[gamepadIndex].RightStick;
+}
+
+f32 InputManager::GetGamepadLeftTrigger(uint32 gamepadIndex) const
+{
+	if (gamepadIndex >= MaxGamepads || !m_Gamepads[gamepadIndex].Connected)
+		return 0.0f;
+	return m_Gamepads[gamepadIndex].LeftTrigger;
+}
+
+f32 InputManager::GetGamepadRightTrigger(uint32 gamepadIndex) const
+{
+	if (gamepadIndex >= MaxGamepads || !m_Gamepads[gamepadIndex].Connected)
+		return 0.0f;
+	return m_Gamepads[gamepadIndex].RightTrigger;
+}
+
+void InputManager::SetGamepadDeadzone(f32 stickDeadzone, f32 triggerDeadzone)
+{
+	m_GamepadStickDeadzone = std::clamp(stickDeadzone, 0.0f, 0.99f);
+	m_GamepadTriggerDeadzone = std::clamp(triggerDeadzone, 0.0f, 0.99f);
+
+	for (auto& slot : m_Gamepads)
+	{
+		if (!slot.Connected) continue;
+		slot.LeftStick = ApplyRadialDeadzone(slot.RawLeftStick, m_GamepadStickDeadzone);
+		slot.RightStick = ApplyRadialDeadzone(slot.RawRightStick, m_GamepadStickDeadzone);
+		slot.LeftTrigger = ApplyTriggerDeadzone(slot.RawLeftTrigger, m_GamepadTriggerDeadzone);
+		slot.RightTrigger = ApplyTriggerDeadzone(slot.RawRightTrigger, m_GamepadTriggerDeadzone);
+	}
+}
+
+bool InputManager::SetGamepadRumble(f32 lowFreq, f32 highFreq, uint32 durationMs, uint32 gamepadIndex)
+{
+	if (gamepadIndex >= MaxGamepads) return false;
+	const auto& slot = m_Gamepads[gamepadIndex];
+	if (!slot.Connected || !slot.Handle) return false;
+
+	const Uint16 low = static_cast<Uint16>(std::lround(std::clamp(lowFreq, 0.0f, 1.0f) * 65535.0f));
+	const Uint16 high = static_cast<Uint16>(std::lround(std::clamp(highFreq, 0.0f, 1.0f) * 65535.0f));
+	return SDL_RumbleGamepad(slot.Handle, low, high, durationMs);
 }
 #pragma endregion

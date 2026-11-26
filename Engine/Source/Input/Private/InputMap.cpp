@@ -307,4 +307,81 @@ EMouseButton StringToEngineMouseButton(const string& buttonString)
 
     return EMouseButton::Count;
 }
+EGamepadButton SDLButtonToEngineGamepadButton(uint8 sdlButton)
+{
+    switch (sdlButton)
+    {
+    case SDL_GAMEPAD_BUTTON_SOUTH: return EGamepadButton::South;
+    case SDL_GAMEPAD_BUTTON_EAST: return EGamepadButton::East;
+    case SDL_GAMEPAD_BUTTON_WEST: return EGamepadButton::West;
+    case SDL_GAMEPAD_BUTTON_NORTH: return EGamepadButton::North;
+    case SDL_GAMEPAD_BUTTON_BACK: return EGamepadButton::Back;
+    case SDL_GAMEPAD_BUTTON_GUIDE: return EGamepadButton::Guide;
+    case SDL_GAMEPAD_BUTTON_START: return EGamepadButton::Start;
+    case SDL_GAMEPAD_BUTTON_LEFT_STICK: return EGamepadButton::LeftStick;
+    case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return EGamepadButton::RightStick;
+    case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return EGamepadButton::LeftShoulder;
+    case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: return EGamepadButton::RightShoulder;
+    case SDL_GAMEPAD_BUTTON_DPAD_UP: return EGamepadButton::DPadUp;
+    case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return EGamepadButton::DPadDown;
+    case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return EGamepadButton::DPadLeft;
+    case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return EGamepadButton::DPadRight;
+    default: return EGamepadButton::Count;
+    }
+}
+EGamepadButton StringToEngineGamepadButton(const string& buttonString)
+{
+    static const std::unordered_map<std::string, EGamepadButton> StringToGamepadMap =
+    {
+        {"south", EGamepadButton::South}, {"a", EGamepadButton::South}, {"cross", EGamepadButton::South},
+        {"east", EGamepadButton::East}, {"b", EGamepadButton::East}, {"circle", EGamepadButton::East},
+        {"west", EGamepadButton::West}, {"x", EGamepadButton::West}, {"square", EGamepadButton::West},
+        {"north", EGamepadButton::North}, {"y", EGamepadButton::North}, {"triangle", EGamepadButton::North},
+        {"back", EGamepadButton::Back}, {"select", EGamepadButton::Back},
+        {"guide", EGamepadButton::Guide}, {"home", EGamepadButton::Guide},
+        {"start", EGamepadButton::Start}, {"menu", EGamepadButton::Start},
+        {"leftstick", EGamepadButton::LeftStick}, {"l3", EGamepadButton::LeftStick},
+        {"rightstick", EGamepadButton::RightStick}, {"r3", EGamepadButton::RightStick},
+        {"leftshoulder", EGamepadButton::LeftShoulder}, {"lb", EGamepadButton::LeftShoulder}, {"l1", EGamepadButton::LeftShoulder},
+        {"rightshoulder", EGamepadButton::RightShoulder}, {"rb", EGamepadButton::RightShoulder}, {"r1", EGamepadButton::RightShoulder},
+        {"dpadup", EGamepadButton::DPadUp}, {"up", EGamepadButton::DPadUp},
+        {"dpaddown", EGamepadButton::DPadDown}, {"down", EGamepadButton::DPadDown},
+        {"dpadleft", EGamepadButton::DPadLeft}, {"left", EGamepadButton::DPadLeft},
+        {"dpadright", EGamepadButton::DPadRight}, {"right", EGamepadButton::DPadRight}
+    };
+
+    std::string lowerStr = buttonString;
+    std::transform(lowerStr.begin(), lowerStr.end(), lowerStr.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    auto it = StringToGamepadMap.find(lowerStr);
+    if (it != StringToGamepadMap.end())
+    {
+        return it->second;
+    }
+
+    return EGamepadButton::Count;
+}
+const char* EngineGamepadButtonToString(EGamepadButton button)
+{
+    switch (button)
+    {
+    case EGamepadButton::South: return "South";
+    case EGamepadButton::East: return "East";
+    case EGamepadButton::West: return "West";
+    case EGamepadButton::North: return "North";
+    case EGamepadButton::Back: return "Back";
+    case EGamepadButton::Guide: return "Guide";
+    case EGamepadButton::Start: return "Start";
+    case EGamepadButton::LeftStick: return "LeftStick";
+    case EGamepadButton::RightStick: return "RightStick";
+    case EGamepadButton::LeftShoulder: return "LeftShoulder";
+    case EGamepadButton::RightShoulder: return "RightShoulder";
+    case EGamepadButton::DPadUp: return "DPadUp";
+    case EGamepadButton::DPadDown: return "DPadDown";
+    case EGamepadButton::DPadLeft: return "DPadLeft";
+    case EGamepadButton::DPadRight: return "DPadRight";
+    default: return "Unknown";
+    }
+}
 END
