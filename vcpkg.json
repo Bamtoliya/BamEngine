@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "bam-engine",
   "version-string": "0.1.0",
   "dependencies": [
@@ -63,12 +63,12 @@
         "sdlgpu3-binding"
       ],
       "platform": "!emscripten"
-    },
-    {
-      "name": "qtbase",
-      "default-features": false,
-      "features": [ "widgets" ],
-      "platform": "windows"
     }
-  ]
+  ],
+  "features": {
+    "qt-editor": {
+      "description": "Build with Qt support",
+      "dependencies": [ "qtbase" ]
+    }
+  }
 }

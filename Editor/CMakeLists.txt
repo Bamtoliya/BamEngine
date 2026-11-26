@@ -123,4 +123,7 @@ if(BAMENGINE_BUILD_REFLECTION_CHECK)
     include(Checks)
 endif()
 
-include(QtBuild)
+
+if(BAM_ENABLE_QT_EDITOR)
+    include(QtBuild)
+endif()

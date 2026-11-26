@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+﻿cmake_minimum_required(VERSION 3.21)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,6 +26,7 @@ endif()
 include(CTest)
 option(BAMENGINE_BUILD_REFLECTION_CHECK "Build engine and editor reflection integration checks" OFF)
 option(BAMENGINE_SHIPPING "Build shipping configuration with editor/debug checks stripped" OFF)
+option(BAM_ENABLE_QT_EDITOR "Enable experimental Qt6 editor" OFF)
 if(EMSCRIPTEN OR BAMENGINE_SHIPPING)
     set(_bamengine_with_editor_default OFF)
 else()

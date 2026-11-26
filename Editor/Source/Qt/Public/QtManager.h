@@ -1,9 +1,12 @@
-﻿#pragma once
+﻿
+#pragma once
 
 #include <memory>
 #include "Base.h"
 
 class QMainWindow;
+
+#ifdef BAM_ENABLE_QT_EDITOR
 
 BEGIN(Editor)
 
@@ -35,3 +38,5 @@ private:
 };
 
 END
+
+#endif

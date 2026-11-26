@@ -1,4 +1,6 @@
-﻿#include <QApplication>
+﻿#ifdef BAM_ENABLE_QT_EDITOR
+
+#include <QApplication>
 #include <QDockWidget>
 #include <QLabel>
 #include <QMainWindow>
@@ -75,3 +77,5 @@ void QtManager::Free()
 {
 	m_MainWindow.reset();
 }
+
+#endif // BAM_ENABLE_QT_EDITOR
