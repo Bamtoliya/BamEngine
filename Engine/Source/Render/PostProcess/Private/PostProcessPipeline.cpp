@@ -8,6 +8,7 @@
 #include "BloomEffect.h"
 #include "AutoExposureEffect.h"
 #include "DepthOfFieldEffect.h"
+#include "OutlineEffect.h"
 #include "PostProcessOrder.h"
 #include <archive/JsonArchive.h>
 
@@ -71,7 +72,13 @@ void PostProcessPipeline::Initialize(const wstring& prefix)
 		AddEffect(toneEffect);
 	}
 
-	// 3. 머티리얼 기반 색상 조정 등록
+	// 3. 화면 공간 깊이·노멀 아웃라인 등록 (톤매핑 이후, 스타일/색보정 이전)
+	OutlineEffect* outlineEffect = new OutlineEffect();
+	outlineEffect->Initialize(prefix);
+	outlineEffect->SetEnabled(false);
+	AddEffect(outlineEffect);
+
+	// 4. 머티리얼 기반 색상 조정 등록
 	auto colorMatHandle = rm.GetResourceHandle<Material>(L"Resources/Material/ColorAdjustmentsMaterial");
 	if (!colorMatHandle)
 	{

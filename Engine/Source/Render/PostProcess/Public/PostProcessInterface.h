@@ -17,6 +17,7 @@ struct PostProcessSceneInputs
 	CameraBuffer Camera{};
 	// 메인 카메라가 피사계 심도를 덮어쓸 때만 값이 있다.
 	std::optional<DepthOfFieldSettings> CameraDepthOfField;
+	wstring NormalRT;    // G-Buffer 월드 법선(선택). 비어 있으면 위치 버퍼에서 법선을 근사한다.
 
 	bool IsValid() const { return !PositionRT.empty() && !DiffuseRT.empty(); }
 };

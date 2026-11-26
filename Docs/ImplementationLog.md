@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 스타일라이즈드 아웃라인 후처리(`OutlineEffect`) 및 멀티플레이 예측·보간 기반(`NetworkPrediction`, `NetworkInterpolation`) 구현
+
+- **요약**:
+  1. **화면 공간 깊이·노멀 기반 아웃라인 후처리 (`stylized-outline`)**:
+     - `Engine/Resources/Shader/hlsl/outlinePS.hlsl`, `Engine/Source/Render/PostProcess/Public/OutlineEffect.h`, `Private/OutlineEffect.cpp`: Roberts Cross 기반 뷰 공간 상대 깊이·법선 불연속성 검출, `NormalRT` 미전달 시 `PositionRT` 차분 폴백, 하늘 실루엣 처리(`OUTLINE_SKY_DEPTH`).
+     - `Engine/Source/Render/PostProcess/Public/PostProcessInterface.h`, `Private/PostProcessPipeline.cpp`: `PostProcessSceneInputs::NormalRT` 선택 필드 추가 및 `OutlineEffect` 등록(기본값 `Enabled = false`, `Thickness`/`DepthThreshold`/`NormalThreshold`/`OutlineColor`/`Intensity` 지원, 80B 16바이트 정렬 `static_assert` 검증).
+  2. **멀티플레이 클라이언트 예측·보정 & 스냅샷 보간 (`network-prediction`)**:
+     - `Engine/Source/Network/Public/NetworkPrediction.h`, `Private/NetworkPrediction.cpp`: 랩어라운드 안전 시퀀스 비교(`IsSequenceGreater`/`IsSequenceGreaterOrEqual`), `NetworkPredictionBuffer<TInput, TState>`(`RecordInput`, `Acknowledge`, `Reconcile`), 트랜스폼 오차 헬퍼 구현.
+     - `Engine/Source/Network/Public/NetworkInterpolation.h`: `NetworkInterpolationBuffer<TState>`(`PushSnapshot`, `Sample`, `PruneBefore`, `interpolationDelay`/`maxExtrapolationTime` 방어) 및 `NetworkTransformSnapshot` 보간/외삽 헬퍼 구현.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `Editor`, `NetworkProtocolCheck`, `NetworkRpcCheck`) 및 실환경 아웃라인 후처리 확인 대기.
+
 ### [2026-11-27] RPG/전략/시뮬레이션 장르 보강(`DataTable`, `StrategyRpgHelpers`) 및 `GameplayCommonCheck` CTest 확장
 
 - **요약**:
