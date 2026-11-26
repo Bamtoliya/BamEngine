@@ -2,6 +2,20 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 장르별 게임 제작 보강(11.8절) 3대 영역 구현 및 `GameplayCommonCheck` CTest 추가
+
+- **요약**:
+  1. **3D 3인칭 액션 보강 (`ActionCombatHelpers`)**:
+     - `Engine/Source/Gameplay/Public/ActionCombatHelpers.h`, `Private/ActionCombatHelpers.cpp`: `HitstopState`(중첩 시 최장 시간·최소 타임스케일), `CameraShakeState`(감쇠 진동, 강도 우선 덮어쓰기), `TargetLockOnSelector`(`FindBestTarget`, `SwitchTarget`, `IsTargetValid`, `std::optional<uint64>` 반환) 구현.
+  2. **2D 플랫포머 / 탑다운 보강 (`Platformer2DHelpers`)**:
+     - `Engine/Source/Gameplay/Public/Platformer2DHelpers.h`, `Private/Platformer2DHelpers.cpp`: `PlatformerJumpController`(코요테 타임·점프 버퍼링), `OneWayPlatform2D::ShouldCollide`(상승/하향 드롭 통과, 하강 착지 충돌), `Camera2DRoomBounds::ClampPosition`(소형 룸 중앙 정렬 및 경계 클램프) 구현.
+  3. **3D 쿼터뷰 / 디펜스 동적 NavGrid 장애물 갱신 (`NavGrid`)**:
+     - `Engine/Source/Navigation/Public/NavGrid.h`, `Private/NavGrid.cpp`: 정적 베이크(`m_Walkable`)와 분리된 참조 카운트(`m_DynamicObstacleCounts`) 기반 `SetDynamicObstacleBox`, `SetDynamicObstacleCircle`, `ClearDynamicObstacles`, `IsDynamicBlocked` 추가 및 `IsWalkable`/`FindPath`/`IsLineWalkable` 자동 연동.
+  4. **공통 기반 헤드리스 CTest (`GameplayCommonCheck`)**:
+     - `Engine/examples/GameplayCommonCheck.cpp`, `Engine/CMake/Checks.cmake`: `SaveGameManager` 마이그레이션, `EntityPool`, `UIProjection`/`UITween`, `InputManager` 리매핑/데드존, `SceneTransitionManager` 5개 케이스 등록.
+- **검증 상태**:
+  - 사용자 실환경에서 `Engine`, `GameplayCommonCheck`, `NavigationAICheck` 빌드 완료 및 CTest 전체 통과 확인 완료.
+
 ### [2026-11-27] 엔진·렌더링 미해결 과제 3건 해결 (NavMesh 터레인 Hole · Probe GI 빛샘 · 모델 임포트 프리뷰)
 
 - **요약**:

@@ -39,6 +39,7 @@ bool NavGrid::Initialize(int32 width, int32 height, f32 cellSize, const vec3& or
 	m_Origin = origin;
 	const size_t total = static_cast<size_t>(m_Width) * static_cast<size_t>(m_Height);
 	m_Walkable.assign(total, true);
+	m_DynamicObstacleCounts.assign(total, 0);
 	m_CellHeights.assign(total, m_Origin.y);
 	m_CellCosts.assign(total, 1.0f);
 	return true;
@@ -58,7 +59,130 @@ bool NavGrid::IsWalkable(int32 x, int32 z) const
 	{
 		return false;
 	}
-	return m_Walkable[static_cast<size_t>(z * m_Width + x)];
+	const size_t idx = static_cast<size_t>(z * m_Width + x);
+	if (!m_Walkable[idx])
+	{
+		return false;
+	}
+	return idx >= m_DynamicObstacleCounts.size() || m_DynamicObstacleCounts[idx] == 0;
+}
+
+bool NavGrid::IsDynamicBlocked(int32 gx, int32 gz) const
+{
+	if (!IsValidCell(gx, gz))
+	{
+		return false;
+	}
+	const size_t idx = static_cast<size_t>(gz * m_Width + gx);
+	return idx < m_DynamicObstacleCounts.size() && m_DynamicObstacleCounts[idx] > 0;
+}
+
+int32 NavGrid::SetDynamicObstacleBox(const vec3& minBounds, const vec3& maxBounds, bool addObstacle)
+{
+	if (m_Width <= 0 || m_Height <= 0 || m_CellSize <= 0.0f)
+	{
+		return 0;
+	}
+
+	const size_t total = static_cast<size_t>(m_Width) * static_cast<size_t>(m_Height);
+	if (m_DynamicObstacleCounts.size() != total)
+	{
+		m_DynamicObstacleCounts.assign(total, 0);
+	}
+
+	const vec3 minPt = glm::min(minBounds, maxBounds);
+	const vec3 maxPt = glm::max(minBounds, maxBounds);
+
+	const int32 minX = std::max(0, static_cast<int32>(std::floor((minPt.x - m_Origin.x) / m_CellSize)));
+	const int32 maxX = std::min(m_Width - 1, static_cast<int32>(std::floor((maxPt.x - m_Origin.x) / m_CellSize)));
+	const int32 minZ = std::max(0, static_cast<int32>(std::floor((minPt.z - m_Origin.z) / m_CellSize)));
+	const int32 maxZ = std::min(m_Height - 1, static_cast<int32>(std::floor((maxPt.z - m_Origin.z) / m_CellSize)));
+
+	int32 affected = 0;
+	for (int32 z = minZ; z <= maxZ; ++z)
+	{
+		for (int32 x = minX; x <= maxX; ++x)
+		{
+			const size_t idx = static_cast<size_t>(z * m_Width + x);
+			if (addObstacle)
+			{
+				if (m_DynamicObstacleCounts[idx] < std::numeric_limits<uint16_t>::max())
+				{
+					++m_DynamicObstacleCounts[idx];
+					++affected;
+				}
+			}
+			else
+			{
+				if (m_DynamicObstacleCounts[idx] > 0)
+				{
+					--m_DynamicObstacleCounts[idx];
+					++affected;
+				}
+			}
+		}
+	}
+	return affected;
+}
+
+int32 NavGrid::SetDynamicObstacleCircle(const vec3& center, f32 radius, bool addObstacle)
+{
+	if (m_Width <= 0 || m_Height <= 0 || m_CellSize <= 0.0f || radius < 0.0f)
+	{
+		return 0;
+	}
+
+	const size_t total = static_cast<size_t>(m_Width) * static_cast<size_t>(m_Height);
+	if (m_DynamicObstacleCounts.size() != total)
+	{
+		m_DynamicObstacleCounts.assign(total, 0);
+	}
+
+	const int32 minX = std::max(0, static_cast<int32>(std::floor((center.x - radius - m_Origin.x) / m_CellSize)));
+	const int32 maxX = std::min(m_Width - 1, static_cast<int32>(std::floor((center.x + radius - m_Origin.x) / m_CellSize)));
+	const int32 minZ = std::max(0, static_cast<int32>(std::floor((center.z - radius - m_Origin.z) / m_CellSize)));
+	const int32 maxZ = std::min(m_Height - 1, static_cast<int32>(std::floor((center.z + radius - m_Origin.z) / m_CellSize)));
+	const f32 radiusSq = radius * radius;
+
+	int32 affected = 0;
+	for (int32 z = minZ; z <= maxZ; ++z)
+	{
+		const f32 cz = m_Origin.z + (static_cast<f32>(z) + 0.5f) * m_CellSize;
+		const f32 dz = cz - center.z;
+		for (int32 x = minX; x <= maxX; ++x)
+		{
+			const f32 cx = m_Origin.x + (static_cast<f32>(x) + 0.5f) * m_CellSize;
+			const f32 dx = cx - center.x;
+			if (dx * dx + dz * dz > radiusSq)
+			{
+				continue;
+			}
+
+			const size_t idx = static_cast<size_t>(z * m_Width + x);
+			if (addObstacle)
+			{
+				if (m_DynamicObstacleCounts[idx] < std::numeric_limits<uint16_t>::max())
+				{
+					++m_DynamicObstacleCounts[idx];
+					++affected;
+				}
+			}
+			else
+			{
+				if (m_DynamicObstacleCounts[idx] > 0)
+				{
+					--m_DynamicObstacleCounts[idx];
+					++affected;
+				}
+			}
+		}
+	}
+	return affected;
+}
+
+void NavGrid::ClearDynamicObstacles()
+{
+	std::fill(m_DynamicObstacleCounts.begin(), m_DynamicObstacleCounts.end(), static_cast<uint16_t>(0));
 }
 
 void NavGrid::SetCellHeight(int32 x, int32 z, f32 height)
@@ -897,6 +1021,7 @@ bool NavGrid::LoadFromFile(const std::filesystem::path& path)
 	{
 		m_Walkable[i] = walkableBytes[i] != 0;
 	}
+	m_DynamicObstacleCounts.assign(count, 0);
 	m_CellHeights = std::move(heights);
 	m_CellCosts = std::move(costs);
 	return true;

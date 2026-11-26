@@ -4,6 +4,7 @@
 #include "Types.h"
 #include "BoundingBox.h"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -25,6 +26,10 @@ public:
 
 	void SetWalkable(int32 x, int32 z, bool walkable);
 	[[nodiscard]] bool IsWalkable(int32 x, int32 z) const;
+	[[nodiscard]] bool IsDynamicBlocked(int32 gx, int32 gz) const;
+	int32 SetDynamicObstacleBox(const vec3& minBounds, const vec3& maxBounds, bool addObstacle);
+	int32 SetDynamicObstacleCircle(const vec3& center, f32 radius, bool addObstacle);
+	void ClearDynamicObstacles();
 	void SetCellHeight(int32 x, int32 z, f32 height);
 	[[nodiscard]] f32 GetCellHeight(int32 x, int32 z) const;
 	void SetCellCost(int32 x, int32 z, f32 cost);
@@ -69,6 +74,7 @@ private:
 	vec3 m_Origin = vec3(0.0f);
 	f32 m_MaxStepHeight = 0.5f;
 	std::vector<bool> m_Walkable;
+	std::vector<uint16_t> m_DynamicObstacleCounts;
 	std::vector<f32> m_CellHeights;
 	std::vector<f32> m_CellCosts;
 };
