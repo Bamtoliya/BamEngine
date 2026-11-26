@@ -160,7 +160,7 @@ EResult Application::Initialize(void* arg)
     if (m_ImGuiManager)
         m_ImGuiManager->OpenProjectHubOnStartup();
     if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
-        AdoptSceneDocument({});
+        AdoptSceneDocument({}, false);
 
     RecoveryManagerDesc recoveryDesc{ EditorSettingsService::Get().GetProjectRoot() };
     RecoveryManager::Create(&recoveryDesc);
@@ -1028,7 +1028,7 @@ SceneDocument* Application::GetSceneDocument()
     return dynamic_cast<SceneDocument*>(m_Documents.Find(m_SceneDocumentId));
 }
 
-void Application::AdoptSceneDocument(const std::filesystem::path& path)
+void Application::AdoptSceneDocument(const std::filesystem::path& path, bool rememberScene)
 {
     if (!PIEManager::Get().IsEditing())
         return;
@@ -1053,7 +1053,8 @@ void Application::AdoptSceneDocument(const std::filesystem::path& path)
     if (nextId != InvalidEditorDocumentId)
         m_Documents.SetActive(nextId);
 
-    RememberEditedScene(path);
+    if (rememberScene)
+        RememberEditedScene(path);
 }
 
 void Application::RebindSceneDocumentAfterPlay()

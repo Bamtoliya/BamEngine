@@ -677,9 +677,12 @@ EEditorSettingsSaveStatus EditorSettingsService::SetBuildProfileWorkspace(const 
 
 void EditorSettingsService::RememberEditedScene(const std::filesystem::path& path)
 {
+    const std::string previousLastScene = m_EditorWorkspace.LastScenePath;
     if (path.empty())
     {
         m_EditorWorkspace.LastScenePath.clear();
+        if (!previousLastScene.empty())
+            SaveWorkspace();
         return;
     }
 
@@ -702,6 +705,9 @@ void EditorSettingsService::RememberEditedScene(const std::filesystem::path& pat
     const auto stored = insideProject ? relative : absolute;
     const auto utf8 = stored.generic_u8string();
     m_EditorWorkspace.LastScenePath.assign(utf8.begin(), utf8.end());
+
+    if (m_EditorWorkspace.LastScenePath != previousLastScene)
+        SaveWorkspace();
 }
 
 void EditorSettingsService::BindRuntime(ImGuiManager& gui, TimeManager& time, LocalizationManager& localization, RHI& rhi)

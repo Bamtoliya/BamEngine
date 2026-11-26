@@ -310,6 +310,9 @@ ProjectSwitchResult ProjectSessionManager::SwitchProject(const std::filesystem::
         }
     }
 
+    if (Application::IsCreated() && EditorSettingsService::IsCreated())
+        Application::Get().CaptureAndSaveEditorWorkspace();
+
     m_IsSwitching = true;
     struct SwitchGuard { bool& Flag; ~SwitchGuard() { Flag = false; } } guard{ m_IsSwitching };
 

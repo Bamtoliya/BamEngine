@@ -59,11 +59,11 @@ public:
 	void RememberEditedScene(const std::filesystem::path& path);
 	// 프로젝트 허브를 취소했을 때 기본 프로젝트의 마지막 씬을 불러온다.
 	void RestoreLastEditedScene();
+	void CaptureAndSaveEditorWorkspace();
 
 private:
 	EResult SubmitWindowRequest(const EditorWindowRequest& request);
 	void CaptureEditorWindowState();
-	void CaptureAndSaveEditorWorkspace();
 #pragma endregion
 
 #pragma region Command History
@@ -79,7 +79,7 @@ public:
 	EditorDocumentId GetSceneDocumentId() const { return m_SceneDocumentId; }
 	SceneDocument* GetSceneDocument();
 
-	void AdoptSceneDocument(const std::filesystem::path& path);
+	void AdoptSceneDocument(const std::filesystem::path& path, bool rememberScene = true);
 	void RebindSceneDocumentAfterPlay();
 	void CompleteQuitRequest() { m_QuitApproved = true; }
 #pragma endregion
