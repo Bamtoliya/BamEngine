@@ -110,6 +110,7 @@ private:
 	bool m_LoggerInitialized = false;
 private:
 	bool m_InitializationCompleted = false;
+	bool m_ExitBeforeLaunch = false;
 #pragma endregion
 };
 

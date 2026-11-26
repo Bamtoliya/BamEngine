@@ -188,28 +188,55 @@ void ProjectHubModal::DrawRecentProjectsSection()
 			TrySwitchProject(std::filesystem::path(selectedFolder));
 	}
 
-	ImGui::Spacing();
-	ImGui::BeginChild("RecentProjectsList", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
-
 	const std::vector<RecentProjectEntry> emptyEntries;
 	const auto& recentProjects = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetRecentProjects() : emptyEntries;
 	const auto activeRoot = Engine::PlatformPath::Normalize(Engine::PlatformPath::GetProjectRoot());
 
-	if (recentProjects.empty())
+	std::vector<std::filesystem::path> missingTargets;
+	missingTargets.reserve(recentProjects.size());
+	for (const auto& entry : recentProjects)
+	{
+		const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
+			? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
+			: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+		std::error_code ec;
+		if (!std::filesystem::exists(entryTarget, ec))
+			missingTargets.push_back(entryTarget);
+	}
+
+	if (!missingTargets.empty() && EditorSettingsService::IsCreated())
+	{
+		ImGui::SameLine();
+		if (ImGui::Button(LOCAL_LABEL("ProjectHub.CleanMissing").c_str()))
+		{
+			for (const auto& target : missingTargets)
+				EditorSettingsService::Get().RemoveRecentProject(target);
+		}
+	}
+
+	ImGui::Spacing();
+	ImGui::BeginChild("RecentProjectsList", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
+
+	const auto& currentRecentProjects = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetRecentProjects() : emptyEntries;
+	std::filesystem::path pendingRemoveTarget;
+
+	if (currentRecentProjects.empty())
 	{
 		EditorUI::EmptyState("ProjectHub.NoRecentProjects");
 	}
 	else
 	{
-		for (size_t i = 0; i < recentProjects.size(); ++i)
+		for (size_t i = 0; i < currentRecentProjects.size(); ++i)
 		{
-			const auto& entry = recentProjects[i];
+			const auto& entry = currentRecentProjects[i];
 			const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
 				? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
 				: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
 			const auto entryRoot = Engine::PlatformPath::Normalize(
 				!entry.ProjectRoot.empty() ? std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot)) : entryTarget.parent_path());
 			const bool isActive = !activeRoot.empty() && Engine::PlatformPath::IsSamePath(activeRoot, entryRoot);
+			std::error_code existsEc;
+			const bool exists = std::filesystem::exists(entryTarget, existsEc);
 
 			ImGui::PushID(static_cast<int>(i));
 			ImGui::BeginGroup();
@@ -219,13 +246,35 @@ void ProjectHubModal::DrawRecentProjectsSection()
 				ImGui::SameLine();
 				ImGui::TextColored(ImVec4(0.35f, 0.85f, 0.45f, 1.0f), "[%s]", LOCAL_CSTR("ProjectHub.ActiveProject"));
 			}
+			if (!exists)
+			{
+				ImGui::SameLine();
+				ImGui::TextColored(ImVec4(0.95f, 0.40f, 0.35f, 1.0f), "[%s]", LOCAL_CSTR("ProjectHub.MissingProject"));
+			}
 			ImGui::TextDisabled("%s", !entry.ProjectFilePath.empty() ? entry.ProjectFilePath.c_str() : entry.ProjectRoot.c_str());
 			ImGui::EndGroup();
 
-			const float buttonWidth = ImGui::CalcTextSize(LOCAL_CSTR("ProjectHub.Open")).x + ImGui::GetStyle().FramePadding.x * 2.0f + 12.0f;
-			ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - buttonWidth));
-			ImGui::BeginDisabled(isActive);
-			if (ImGui::Button(LOCAL_LABEL("ProjectHub.Open").c_str(), ImVec2(buttonWidth, 0.0f)))
+			const ImGuiStyle& style = ImGui::GetStyle();
+			const float openButtonWidth = ImGui::CalcTextSize(LOCAL_CSTR("ProjectHub.Open")).x + style.FramePadding.x * 2.0f + 12.0f;
+			const float removeButtonWidth = !exists
+				? (ImGui::CalcTextSize(LOCAL_CSTR("ProjectHub.RemoveFromList")).x + style.FramePadding.x * 2.0f + 12.0f)
+				: 0.0f;
+			const float totalButtonsWidth = openButtonWidth + (!exists ? (removeButtonWidth + style.ItemSpacing.x) : 0.0f);
+
+			ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetContentRegionMax().x - totalButtonsWidth));
+			if (!exists)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.22f, 0.22f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.78f, 0.28f, 0.28f, 1.0f));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.55f, 0.18f, 0.18f, 1.0f));
+				if (ImGui::Button(LOCAL_LABEL("ProjectHub.RemoveFromList").c_str(), ImVec2(removeButtonWidth, 0.0f)))
+					pendingRemoveTarget = entryTarget;
+				ImGui::PopStyleColor(3);
+				ImGui::SameLine();
+			}
+
+			ImGui::BeginDisabled(isActive || !exists);
+			if (ImGui::Button(LOCAL_LABEL("ProjectHub.Open").c_str(), ImVec2(openButtonWidth, 0.0f)))
 				TrySwitchProject(entryTarget);
 			ImGui::EndDisabled();
 
@@ -233,6 +282,9 @@ void ProjectHubModal::DrawRecentProjectsSection()
 			ImGui::PopID();
 		}
 	}
+
+	if (!pendingRemoveTarget.empty() && EditorSettingsService::IsCreated())
+		EditorSettingsService::Get().RemoveRecentProject(pendingRemoveTarget);
 
 	ImGui::EndChild();
 }

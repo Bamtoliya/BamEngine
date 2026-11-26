@@ -93,7 +93,52 @@ namespace Engine::StartupResourceLoaderDetail
 
 	std::filesystem::path ResolveStartupUri(const std::string& uri)
 	{
-		return PlatformPath::ResolveUri(Engine::Utf8ToPath(uri).wstring());
+		const auto resolved = PlatformPath::ResolveUri(Engine::Utf8ToPath(uri).wstring());
+		if (PakMountManager::Get().ExistsOrOnDisk(resolved))
+			return resolved;
+
+		std::string fallbackRel = uri;
+		constexpr std::string_view kProjectScheme = "Project://";
+		if (fallbackRel.size() >= kProjectScheme.size() &&
+			std::string_view(fallbackRel).substr(0, kProjectScheme.size()) == kProjectScheme)
+		{
+			fallbackRel.erase(0, kProjectScheme.size());
+		}
+
+		const auto rawPath = Engine::Utf8ToPath(fallbackRel);
+		if (rawPath.is_relative() && !PlatformPath::IsVirtualUri(fallbackRel))
+		{
+			auto tryResolveRelative = [](const std::filesystem::path& rel) -> std::filesystem::path
+			{
+				const auto engineResFallback = PlatformPath::GetEngineResourceRoot() / rel;
+				if (PakMountManager::Get().ExistsOrOnDisk(engineResFallback))
+					return engineResFallback;
+
+				const auto engineFallback = PlatformPath::GetEngineRoot() / rel;
+				if (PakMountManager::Get().ExistsOrOnDisk(engineFallback))
+					return engineFallback;
+
+				const auto engineAssetsFallback = PlatformPath::GetEngineRoot() / L"Assets" / rel;
+				if (PakMountManager::Get().ExistsOrOnDisk(engineAssetsFallback))
+					return engineAssetsFallback;
+
+				return {};
+			};
+
+			if (auto found = tryResolveRelative(rawPath); !found.empty())
+				return found;
+
+			// 레거시 "Resources/..." 접두사 제거 후 Engine/Resources 및 EngineRoot/Assets 재탐색
+			constexpr std::string_view kLegacyResourcesPrefix = "Resources/";
+			if (fallbackRel.size() > kLegacyResourcesPrefix.size() &&
+				std::string_view(fallbackRel).substr(0, kLegacyResourcesPrefix.size()) == kLegacyResourcesPrefix)
+			{
+				const auto strippedPath = Engine::Utf8ToPath(fallbackRel.substr(kLegacyResourcesPrefix.size()));
+				if (auto found = tryResolveRelative(strippedPath); !found.empty())
+					return found;
+			}
+		}
+		return resolved;
 	}
 
 	bool AppendStartupFile(const std::filesystem::path& path, std::string_view category,

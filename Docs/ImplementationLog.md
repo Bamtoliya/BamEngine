@@ -2,6 +2,41 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] Pre-Boot 경량 프로젝트 허브(`StartupProjectHub`) · 누락 프로젝트 제거 · 외부 프로젝트 직부팅 폴백 수정
+
+- **요약**:
+  1. **스플래쉬 전 경량 프로젝트 허브 도입 (`StartupProjectHub`)**:
+     - `Editor/Source/Application/Public/StartupProjectHub.h`, `Private/StartupProjectHub.cpp` 신규 구현(`SDL3 + ImGui SDL_Renderer` 독립 창, `맑은 고딕` 한글 폰트, 최근 프로젝트/새 프로젝트 생성 탭, 종료 시 에디터 본체 미초기화 즉시 종료).
+     - `Editor/Source/Application/Public/Application.h`, `Private/Application.cpp`: `EditorSplashScreen::Show()` 호출 전에 `PlatformPath::SetEngineRoot()`로 엔진 루트를 고정하고 `StartupProjectHub::Run()`으로 대상 프로젝트를 먼저 확정한 뒤, 선택된 프로젝트의 마지막 씬(`RestoreLastEditedScene()`)으로 바로 부팅하도록 전환.
+  2. **프로젝트 허브 누락 항목 제거 기능**:
+     - `Editor/Source/ImGui/ProjectHub/Private/ProjectHubModal.cpp`, `StartupProjectHub.cpp`, `Editor/Resources/Data/Localization/Editor.ProjectHub.csv`: 디스크에 존재하지 않는 최근 프로젝트에 `[경로 없음]` 경고 태그·`열기` 비활성화·개별 `제거` 버튼 및 상단 `없는 항목 정리` 버튼 추가.
+  3. **외부 프로젝트 직부팅 시 경로 폴백 수정**:
+     - `Editor/Source/Settings/Private/EditorSettingsService.cpp`: `LoadForStartup()`이 `PlatformPath::GetProjectRoot()`에 사전 지정된 프로젝트 루트를 최우선으로 사용하도록 수정.
+     - `Editor/Source/Application/Private/Application.cpp`, `Engine/Source/Resource/Private/StartupResourceLoader.cpp`: 외부 프로젝트에 없는 `EngineResourceDirectory`, `StartupManifest.json` 및 레거시 `"Resources/..."`/`"Project://..."` 스타트업 리소스를 `GetEngineResourceRoot()` / `GetEngineRoot()` / `GetEngineRoot()/Assets`로 폴백하도록 보강.
+- **검증 상태**:
+  - 사용자 실환경에서 `Editor` 빌드 후 스플래쉬 전 프로젝트 허브 실행, 누락 프로젝트 제거 및 첫 허브에서 외부 프로젝트(`ProjectSlime`) 직부팅 정상 동작 확인 완료.
+
+### [2026-11-27] 게임 제작 공통 기반(DevelopmentPriorities 11.8절) 6대 영역 구현
+
+- **요약**:
+  1. **오디오 BGM 크로스페이드 (`AudioManager`)**:
+     - `Engine/Source/Audio/Public/AudioManager.h`, `Private/AudioManager.cpp`에 `PlayBGM`, `CrossfadeBGM`, `StopBGM`, `UpdateCrossfade(dt)`(`AudioManager::Update` 자동 연동), `IsBGMPlaying`, `IsCrossfading` 추가.
+     - 동일 트랙 중복 크로스페이드, `fadeDuration <= 0`/비유한값 즉시 전환, 크로스페이드 중 재전환 승격 및 `StopAllSounds`/`Free` 일괄 정리 반영.
+  2. **UI 3D→2D 투영 & 경량 트위닝 (`UIProjection`, `UITween`)**:
+     - `Engine/Source/UI/Public/UIProjection.h`, `Private/UIProjection.cpp`: `GLM_FORCE_LEFT_HANDED` + `[0, 1]` 깊이 규약 기반 `WorldToScreen`, `ScreenToCanvas`, `WorldToCanvas` 추가.
+     - `Engine/Source/UI/Public/UITween.h`, `Private/UITween.cpp`: 이징 함수(`Linear`, `Quad`, `Cubic`, `Back`, `Bounce`, `EvaluatePunch`), `UITweenComponent`, `UITweenPlayer`, `UITweenSystem` 및 스케일/펀치/오프셋/알파/컬러/회전 트윈 헬퍼 추가.
+  3. **세이브 버전 관리 & 경량 엔티티 풀 (`SaveGameManager`, `EntityPool`)**:
+     - `Engine/Source/Gameplay/Public/SaveGameTypes.h`, `SaveGameManager.h/.cpp`: `SaveSlotMetadata::schemaVersion`(기본 1), `SaveGameData::CurrentSchemaVersion`, `RegisterMigration`, `ClearMigrations`, `HasMigration`, `MigrateSaveData`(BFS 단계적 업그레이드, 구버전 `0 -> 1` 폴백, 미래 버전 거부, 실패 시 롤백) 구현.
+     - `Engine/Source/World/Scene/Public/EntityPool.h`, `Private/EntityPool.cpp`: `BindScene`, `Prewarm`, `Acquire`, `Release`, `Clear`, `PruneInvalid` 구현 (`PoolSceneLifetime` 및 `Entity::WeakRef` 기반 씬 파괴·중복 반납 방어).
+  4. **런타임 입력 리매핑 & SDL3 게임패드 지원 (`InputMap`, `InputManager`)**:
+     - `Engine/Source/Input/Public/InputMap.h`, `Private/InputMap.cpp`, `Public/InputManager.h`, `Private/InputManager.cpp`: `RebindAction`, `ResetActionBindingsToDefault`, `ResetAllBindingsToDefault`, `SaveBindingsToFile`, `LoadBindingsFromFile`(`glaze` JSON) 및 `"Gamepad:<Button>"` 액션 바인딩 추가.
+     - 최대 4대 SDL3 게임패드 연결/해제, 버튼 상태, 좌/우 아날로그 스틱·트리거 방사형 데드존(`SetGamepadDeadzone`), 진동(`SetGamepadRumble`) 추가. 리매핑 시 `SE-01` `FixedPressed`/`FixedReleased` 래치 보존.
+  5. **씬 전환 페이드 상태 머신 (`SceneTransitionManager`)**:
+     - `Engine/Source/World/Scene/Public/SceneTransitionManager.h`, `Private/SceneTransitionManager.cpp`: `Idle -> FadingOut -> Loading -> FadingIn -> Idle` 상태 머신(`TransitionToScene`, `Update`, `SetFadeColor`, `GetFadeAlpha`, `GetFadeColor`, `IsTransitioning`, `GetState`) 구현.
+- **검증 상태**:
+  - 스웜 독립 정적 검증(`verifier`) 통과: 17개 파일 컴파일/링크/PCH/`UNITY_BUILD ON` 충돌 및 심각·높음·보통 결함 없음. (낮음 참고 2건: `UITween.cpp` 무한 루프 극소 `duration` 시 `fmod` 개선 여지, `PunchScale` `duration <= 0` 시 `normalizedT=1` 완료)
+  - **미검증**: 빌드(`Engine`, `Editor`, `Client`), `CTest`, 실제 런타임/게임패드 실행 검증은 아직 수행하지 않음.
+
 ### [2026-11-27] Slime Game 엔진 기능 격차 분석 및 P0/P1 범용 인프라(SE-01~SE-11) 구현
 
 - **요약**:

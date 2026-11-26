@@ -43,6 +43,7 @@
 #include "GameViewportPanel.h"
 #include "PlatformPath.h"
 #include "EditorSplashScreen.h"
+#include "StartupProjectHub.h"
 #include <chrono>
 
 IMPLEMENT_SINGLETON(Application)
@@ -53,12 +54,43 @@ EResult Application::Initialize(void* arg)
     if (!arg) return EResult::InvalidArgument;
     CAST_DESC;
 
+    // 0. 스플래시 화면 전에 엔진 루트를 고정하고 경량 프로젝트 허브를 먼저 실행해 대상 프로젝트를 확정한다.
+    const auto initialEngineRoot = Engine::PlatformPath::GetEngineRoot();
+    if (!initialEngineRoot.empty())
+        Engine::PlatformPath::SetEngineRoot(initialEngineRoot);
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / "Editor/Resources", true, true });
+    {
+        const StartupProjectHubResult hubResult = StartupProjectHub::Run();
+        if (hubResult.Cancelled)
+        {
+            m_ExitBeforeLaunch = true;
+            return EResult::Success;
+        }
+
+        if (!hubResult.SelectedProjectFileOrRoot.empty())
+        {
+            std::error_code ec;
+            std::filesystem::path selectedRoot = hubResult.SelectedProjectFileOrRoot;
+            if (std::filesystem::is_regular_file(selectedRoot, ec))
+                selectedRoot = selectedRoot.parent_path();
+
+            if (!selectedRoot.empty())
+            {
+                Engine::PlatformPath::SetProjectRoot(selectedRoot);
+                if (EditorSettingsService::IsCreated())
+                {
+                    const std::string projName = Engine::WStrToStr(selectedRoot.filename().wstring());
+                    EditorSettingsService::Get().RecordRecentProject(projName, hubResult.SelectedProjectFileOrRoot);
+                }
+            }
+        }
+    }
+
     // 1. 최우선으로 가벼운 스플래시 창을 즉시 노출 (0.05초)
     EditorSplashScreen::Show("BamEngine Editor", 520, 280);
     EditorSplashScreen::UpdateProgress(0.05f, "로그 시스템 초기화 중...");
 
     const auto projectRoot = Engine::PlatformPath::GetProjectRoot();
-    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / "Editor/Resources", true, true });
     if (!InitializeLogger())
     {
         EditorSplashScreen::Hide();
@@ -152,13 +184,11 @@ EResult Application::Initialize(void* arg)
         ProjectSessionManager::Get().GetActiveDescriptor());
     ShortcutManager::Get().LoadFromFile();
 
-    // 7. 마지막 작업 씬 복원
+    // 7. 마지막 작업 씬 복원 (프로젝트는 스플래시 전 StartupProjectHub에서 이미 확정됨)
     EditorSplashScreen::UpdateProgress(0.88f, "마지막 작업 씬 복원 중...");
-    // 시작 씬은 프로젝트 허브에서 프로젝트를 정한 뒤 로드한다(취소 시 기본 프로젝트의 마지막 씬).
+    RestoreLastEditedScene();
     if (!SceneManager::Get().GetCurrentScene())
         SceneManager::Get().NewScene();
-    if (m_ImGuiManager)
-        m_ImGuiManager->OpenProjectHubOnStartup();
     if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
         AdoptSceneDocument({}, false);
 
@@ -609,16 +639,40 @@ bool Application::InitializeResources()
     }
     if (!projectSettings.EngineResourceDirectory.empty())
     {
-        Engine::PlatformPath::SetEngineResourceRoot(
-            std::filesystem::path(projectSettings.EngineResourceDirectory).is_absolute()
-                ? projectSettings.EngineResourceDirectory
-                : projectRoot / projectSettings.EngineResourceDirectory);
+        const std::filesystem::path configuredEngineRes = projectSettings.EngineResourceDirectory;
+        std::error_code ec;
+        std::filesystem::path resolvedEngineRes = configuredEngineRes.is_absolute()
+            ? configuredEngineRes
+            : (projectRoot / configuredEngineRes);
+        if (!configuredEngineRes.is_absolute() && !std::filesystem::exists(resolvedEngineRes, ec))
+        {
+            const std::filesystem::path engineFallback = Engine::PlatformPath::GetEngineRoot() / configuredEngineRes;
+            if (std::filesystem::exists(engineFallback, ec))
+                resolvedEngineRes = engineFallback;
+        }
+        Engine::PlatformPath::SetEngineResourceRoot(resolvedEngineRes);
     }
 
     InitializeMeshes();
 
-    const auto manifestPath =
-        Engine::PlatformPath::ResolveUri(EditorSettingsService::Get().GetProjectSettings().StartupManifestPath);
+    const std::string& manifestSetting = EditorSettingsService::Get().GetProjectSettings().StartupManifestPath;
+    std::filesystem::path manifestPath = Engine::PlatformPath::ResolveUri(manifestSetting);
+    {
+        std::error_code ec;
+        if (!std::filesystem::exists(manifestPath, ec))
+        {
+            const std::filesystem::path relManifest = Engine::Utf8ToPath(manifestSetting);
+            if (relManifest.is_relative())
+            {
+                const std::filesystem::path engineFallback = Engine::PlatformPath::GetEngineRoot() / relManifest;
+                const std::filesystem::path engineAssetsFallback = Engine::PlatformPath::GetEngineRoot() / L"Assets" / relManifest;
+                if (std::filesystem::exists(engineFallback, ec))
+                    manifestPath = engineFallback;
+                else if (std::filesystem::exists(engineAssetsFallback, ec))
+                    manifestPath = engineAssetsFallback;
+            }
+        }
+    }
 
     return Engine::StartupResourceLoader::LoadPipeline(manifestPath);
 }
@@ -640,6 +694,9 @@ void Application::InitializeMeshes()
 #pragma region Loop
 void Application::Run(int argc, char* argv[])
 {
+    if (m_ExitBeforeLaunch)
+        return;
+
     bool bIsRunning = true;
     m_QuitApproved = false;
     SDL_Event event;

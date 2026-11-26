@@ -194,27 +194,33 @@ bool EditorSettingsService::LoadForStartup(std::uint32_t defaultWidth, std::uint
     m_EditorWorkspace.WindowHeight = static_cast<std::int32_t>(defaultHeight);
     m_ProjectRoot.clear();
 
-    // 실행 파일 위치부터 부모로 거슬러 올라가며 프로젝트 루트 마커 탐색
-    std::filesystem::path cur = Engine::PlatformPath::GetExecutableDirectory();
+    // 스플래시 전 StartupProjectHub 등에서 이미 프로젝트 루트가 지정된 경우 이를 최우선으로 사용한다.
     std::error_code ec;
-    for (int i = 0; i < 7; ++i)
+    const auto preselectedRoot = Engine::PlatformPath::GetProjectRoot();
+    if (!preselectedRoot.empty() && std::filesystem::exists(preselectedRoot, ec))
     {
-        if (std::filesystem::exists(cur / "Config" / "Project.json", ec))
+        m_ProjectRoot = Engine::PlatformPath::Normalize(preselectedRoot);
+    }
+
+    // 미지정 시 실행 파일 위치부터 부모로 거슬러 올라가며 프로젝트 루트 마커 탐색
+    if (m_ProjectRoot.empty())
+    {
+        std::filesystem::path cur = Engine::PlatformPath::GetExecutableDirectory();
+        for (int i = 0; i < 7; ++i)
         {
-            m_ProjectRoot = cur;
-            break;
+            if (std::filesystem::exists(cur / "Config" / "Project.json", ec))
+            {
+                m_ProjectRoot = cur;
+                break;
+            }
+            if (!cur.has_parent_path()) break;
+            cur = cur.parent_path();
         }
-        if (!cur.has_parent_path()) break;
-        cur = cur.parent_path();
     }
     if (m_ProjectRoot.empty())
     {
-        m_ProjectRoot = Engine::PlatformPath::GetProjectRoot();
-        if (m_ProjectRoot.empty())
-        {
-            m_ProjectRoot = std::filesystem::current_path(ec);
-            BAM_LOG(Warn, "Editor", "Config", "Project marker not found; falling back to current_path: {}", m_ProjectRoot.string());
-        }
+        m_ProjectRoot = std::filesystem::current_path(ec);
+        BAM_LOG(Warn, "Editor", "Config", "Project marker not found; falling back to current_path: {}", m_ProjectRoot.string());
     }
 
     reflection::RegistrationResult registration;
