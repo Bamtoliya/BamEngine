@@ -64,11 +64,7 @@ void DebugRenderer::Free()
 		Safe_Release(buffer);
 
 	m_Vertices.clear();
-	m_CachedNavMeshPtr = nullptr;
-	m_CachedNavMeshPolyCount = 0;
-	m_CachedNavMeshVertCount = 0;
-	m_CachedNavMeshCamPos = vec3(1e9f);
-	m_CachedNavMeshVertices.clear();
+	ReleaseNavMeshBuffers();
 }
 
 void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName)
@@ -80,9 +76,10 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 	if (m_ShowNavGridOverlay)
 		RegisterNavGridDebug(cameraBuffer);
 	if (m_ShowNavMeshOverlay)
-		RegisterNavMeshDebug(cameraBuffer);
+		UpdateNavMeshBuffers();
 
-	if (m_Vertices.empty() || colorRTName.empty()) return;
+	const bool hasNavMeshDraw = m_ShowNavMeshOverlay && (m_NavMeshFillVertexCount > 0 || m_NavMeshLineVertexCount > 0);
+	if ((m_Vertices.empty() && !hasNavMeshDraw) || colorRTName.empty()) return;
 
 	RenderPass* pass = Engine::RenderPassManager::Get().GetRenderPassByID(m_RenderPassID);
 	pass->SetColorAttachments({ colorRTName });
@@ -91,7 +88,9 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 	Engine::Renderer::Get().SubmitCustomCommand(
 		[this](f32 dt, Engine::RenderPass* pass)->EResult
 		{
-			if (m_Vertices.empty()) return EResult::Success;
+			const bool hasLines = !m_Vertices.empty();
+			const bool hasNavMesh = m_ShowNavMeshOverlay && (m_NavMeshFillVertexCount > 0 || m_NavMeshLineVertexCount > 0);
+			if (!hasLines && !hasNavMesh) return EResult::Success;
 
 			Engine::RHI* rhi = Engine::Renderer::Get().GetRHI();
 			if (!rhi)
@@ -100,36 +99,7 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 				return EResult::Fail;
 			}
 
-			const uint32 frameCount = rhi->GetFrameResourceCount();
-			const uint32 frameIndex = rhi->GetFrameResourceIndex();
-			if (frameCount > MAX_SWAPCHAIN_BUFFERS || frameIndex >= frameCount)
-			{
-				m_Vertices.clear();
-				return EResult::Fail;
-			}
-
-			auto& vertexBuffer = m_VertexBuffers[frameIndex];
-			if (!vertexBuffer)
-			{
-				const uint32 bufferSize = 2 * m_MaxLines * static_cast<uint32>(sizeof(DebugVertex));
-				vertexBuffer = rhi->CreateBuffer(nullptr, bufferSize, sizeof(DebugVertex), ERHIBufferType::Vertex);
-				if (!vertexBuffer)
-				{
-					m_Vertices.clear();
-					return EResult::Fail;
-				}
-			}
-
 			ResourceManager& rm = ResourceManager::Get();
-
-			// 파이프라인 디스크립터 (Grid와 동일한 방식으로 RenderPass에서 포맷 동적 매칭)
-			RHIPipelineDesc desc = {};
-			desc.pipelineType = EPipelineType::Graphics;
-			desc.blendState = Engine::BlendState{};
-			desc.fillMode = EFillMode::Solid;
-			desc.cullMode = ECullMode::None;
-			desc.topology = ETopology::LineList;
-
 			auto debugVSHandle = rm.GetResourceHandle<Shader>(L"DebugLineVS");
 			auto debugPSHandle = rm.GetResourceHandle<Shader>(L"DebugLinePS");
 			if (!debugVSHandle || !debugPSHandle)
@@ -137,54 +107,134 @@ void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstr
 				m_Vertices.clear();
 				return EResult::Fail;
 			}
-			desc.vertexShader = debugVSHandle->GetRHIShader();
-			desc.pixelShader = debugPSHandle->GetRHIShader();
-			desc.inputLayouts.push_back(Engine::DebugVertex::Layout);
 
-			desc.depthStencilState.depthTestEnable = false;
-			desc.depthStencilState.depthWriteEnable = false;
-			desc.depthStencilState.stencilTestEnable = false;
-			desc.depthStencilState.depthCompareOp = ECompareOp::Always;
+			RHIPipelineDesc baseDesc = {};
+			baseDesc.pipelineType = EPipelineType::Graphics;
+			baseDesc.fillMode = EFillMode::Solid;
+			baseDesc.cullMode = ECullMode::None;
+			baseDesc.vertexShader = debugVSHandle->GetRHIShader();
+			baseDesc.pixelShader = debugPSHandle->GetRHIShader();
+			baseDesc.inputLayouts.push_back(Engine::DebugVertex::Layout);
 
-			desc.colorAttachmentCount = pass->GetRenderTargetCount();
-			for (uint32 i = 0; i < desc.colorAttachmentCount; ++i)
+			baseDesc.colorAttachmentCount = pass->GetRenderTargetCount();
+			for (uint32 i = 0; i < baseDesc.colorAttachmentCount; ++i)
 			{
-				desc.colorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
+				baseDesc.colorAttachmentFormats[i] = Engine::RenderTargetManager::Get()
 					.GetRenderTarget(pass->GetRenderTargetName(i))->GetFormat();
 			}
 
-			// [핵심] RenderPass에서 Depth Stencil 포맷 동적 매칭
 			wstring depthStencilName = pass->GetDepthStencilName();
 			if (!depthStencilName.empty())
 			{
-				desc.depthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
+				baseDesc.depthStencilAttachmentFormat = Engine::RenderTargetManager::Get()
 					.GetRenderTarget(depthStencilName)->GetFormat();
 			}
 			else
 			{
-				desc.depthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
+				baseDesc.depthStencilAttachmentFormat = Engine::ETextureFormat::UNKNOWN;
 			}
 
-			RHIPipeline* pipeline = PipelineManager::Get().GetOrCreatePipeline(desc);
-			if (!pipeline || IsFailure(rhi->BindPipeline(pipeline)))
+			EResult res = EResult::Success;
+
+			if (hasLines)
 			{
+				const uint32 frameCount = rhi->GetFrameResourceCount();
+				const uint32 frameIndex = rhi->GetFrameResourceIndex();
+				if (frameCount > MAX_SWAPCHAIN_BUFFERS || frameIndex >= frameCount)
+				{
+					m_Vertices.clear();
+					return EResult::Fail;
+				}
+
+				auto& vertexBuffer = m_VertexBuffers[frameIndex];
+				if (!vertexBuffer)
+				{
+					const uint32 bufferSize = 2 * m_MaxLines * static_cast<uint32>(sizeof(DebugVertex));
+					vertexBuffer = rhi->CreateBuffer(nullptr, bufferSize, sizeof(DebugVertex), ERHIBufferType::Vertex);
+					if (!vertexBuffer)
+					{
+						m_Vertices.clear();
+						return EResult::Fail;
+					}
+				}
+
+				RHIPipelineDesc lineDesc = baseDesc;
+				lineDesc.blendState = Engine::BlendState{};
+				lineDesc.topology = ETopology::LineList;
+				lineDesc.depthStencilState.depthTestEnable = false;
+				lineDesc.depthStencilState.depthWriteEnable = false;
+				lineDesc.depthStencilState.stencilTestEnable = false;
+				lineDesc.depthStencilState.depthCompareOp = ECompareOp::Always;
+
+				RHIPipeline* linePipeline = PipelineManager::Get().GetOrCreatePipeline(lineDesc);
+				if (!linePipeline || IsFailure(rhi->BindPipeline(linePipeline)))
+				{
+					m_Vertices.clear();
+					return EResult::Fail;
+				}
+
+				const uint32 vertexCount = static_cast<uint32>(m_Vertices.size());
+				const uint32 dataSize = vertexCount * static_cast<uint32>(sizeof(DebugVertex));
+				vertexBuffer->SetData(m_Vertices.data(), dataSize);
+
+				RHIBuffer* buffers[1] = { vertexBuffer };
+				if (IsFailure(rhi->BindVertexBuffers(0, buffers, 1)))
+				{
+					m_Vertices.clear();
+					return EResult::Fail;
+				}
+
+				res = rhi->Draw(vertexCount);
 				m_Vertices.clear();
-				return EResult::Fail;
+				if (IsFailure(res)) return res;
 			}
 
-			const uint32 vertexCount = static_cast<uint32>(m_Vertices.size());
-			const uint32 dataSize = vertexCount * static_cast<uint32>(sizeof(DebugVertex));
-			vertexBuffer->SetData(m_Vertices.data(), dataSize);
-
-			RHIBuffer* buffers[1] = { vertexBuffer };
-			if (IsFailure(rhi->BindVertexBuffers(0, buffers, 1)))
+			if (hasNavMesh)
 			{
-				m_Vertices.clear();
-				return EResult::Fail;
+				const bool hasDepth = !depthStencilName.empty();
+				if (m_NavMeshFillVB && m_NavMeshFillVertexCount > 0)
+				{
+					RHIPipelineDesc fillDesc = baseDesc;
+					fillDesc.blendState = Engine::BlendState(EBlendMode::AlphaBlend);
+					fillDesc.topology = ETopology::TriangleList;
+					fillDesc.depthStencilState.depthTestEnable = hasDepth;
+					fillDesc.depthStencilState.depthWriteEnable = false;
+					fillDesc.depthStencilState.stencilTestEnable = false;
+					fillDesc.depthStencilState.depthCompareOp = hasDepth ? ECompareOp::LessOrEqual : ECompareOp::Always;
+
+					RHIPipeline* fillPipeline = PipelineManager::Get().GetOrCreatePipeline(fillDesc);
+					if (fillPipeline && !IsFailure(rhi->BindPipeline(fillPipeline)))
+					{
+						RHIBuffer* buffers[1] = { m_NavMeshFillVB };
+						if (!IsFailure(rhi->BindVertexBuffers(0, buffers, 1)))
+						{
+							res = rhi->Draw(m_NavMeshFillVertexCount);
+						}
+					}
+				}
+
+				if (m_NavMeshLineVB && m_NavMeshLineVertexCount > 0)
+				{
+					RHIPipelineDesc navLineDesc = baseDesc;
+					navLineDesc.blendState = Engine::BlendState(EBlendMode::AlphaBlend);
+					navLineDesc.topology = ETopology::LineList;
+					navLineDesc.depthStencilState.depthTestEnable = hasDepth;
+					navLineDesc.depthStencilState.depthWriteEnable = false;
+					navLineDesc.depthStencilState.stencilTestEnable = false;
+					navLineDesc.depthStencilState.depthCompareOp = hasDepth ? ECompareOp::LessOrEqual : ECompareOp::Always;
+
+					RHIPipeline* navLinePipeline = PipelineManager::Get().GetOrCreatePipeline(navLineDesc);
+					if (navLinePipeline && !IsFailure(rhi->BindPipeline(navLinePipeline)))
+					{
+						RHIBuffer* buffers[1] = { m_NavMeshLineVB };
+						if (!IsFailure(rhi->BindVertexBuffers(0, buffers, 1)))
+						{
+							res = rhi->Draw(m_NavMeshLineVertexCount);
+						}
+					}
+				}
 			}
 
-			const EResult res = rhi->Draw(vertexCount);
-			m_Vertices.clear();
 			return res;
 		}, m_RenderPassID);
 }
@@ -839,10 +889,25 @@ void DebugRenderer::RegisterNavGridDebug(const CameraBuffer& cameraBuffer)
 	}
 }
 
-void DebugRenderer::RegisterNavMeshDebug(const CameraBuffer& cameraBuffer)
+void DebugRenderer::ReleaseNavMeshBuffers()
+{
+	Safe_Release(m_NavMeshFillVB);
+	Safe_Release(m_NavMeshLineVB);
+	m_NavMeshFillVertexCount = 0;
+	m_NavMeshLineVertexCount = 0;
+	m_CachedNavMeshPtr = nullptr;
+	m_CachedNavMeshPolyCount = 0;
+	m_CachedNavMeshVertCount = 0;
+}
+
+void DebugRenderer::UpdateNavMeshBuffers()
 {
 	Scene* scene = SceneManager::Get().GetCurrentScene();
-	if (!scene) return;
+	if (!scene)
+	{
+		ReleaseNavMeshBuffers();
+		return;
+	}
 
 	std::shared_ptr<Engine::NavMesh> navMesh = Engine::NavigationSystem::GetSceneNavMesh(scene);
 	if (!navMesh)
@@ -854,11 +919,7 @@ void DebugRenderer::RegisterNavMeshDebug(const CameraBuffer& cameraBuffer)
 	}
 	if (!navMesh || !navMesh->IsValid())
 	{
-		m_CachedNavMeshPtr = nullptr;
-		m_CachedNavMeshPolyCount = 0;
-		m_CachedNavMeshVertCount = 0;
-		m_CachedNavMeshCamPos = vec3(1e9f);
-		m_CachedNavMeshVertices.clear();
+		ReleaseNavMeshBuffers();
 		return;
 	}
 
@@ -866,81 +927,99 @@ void DebugRenderer::RegisterNavMeshDebug(const CameraBuffer& cameraBuffer)
 	const auto& vertices = data.vertices;
 	const auto& polygons = data.polygons;
 
-	const mat4 invView = glm::inverse(cameraBuffer.viewMatrix);
-	const vec3 camPos = vec3(invView[3]);
-	const vec3 camDelta = camPos - m_CachedNavMeshCamPos;
-	constexpr f32 c_RebuildMoveThresholdSq = 15.0f * 15.0f;
-
-	if (m_CachedNavMeshPtr != navMesh.get() ||
-		m_CachedNavMeshPolyCount != polygons.size() ||
-		m_CachedNavMeshVertCount != vertices.size() ||
-		glm::dot(camDelta, camDelta) > c_RebuildMoveThresholdSq)
+	if (m_CachedNavMeshPtr == navMesh.get() &&
+		m_CachedNavMeshPolyCount == polygons.size() &&
+		m_CachedNavMeshVertCount == vertices.size())
 	{
-		m_CachedNavMeshPtr = navMesh.get();
-		m_CachedNavMeshPolyCount = polygons.size();
-		m_CachedNavMeshVertCount = vertices.size();
-		m_CachedNavMeshCamPos = camPos;
-		m_CachedNavMeshVertices.clear();
+		return;
+	}
 
-		constexpr f32 c_OverlayRadius = 80.0f;
-		constexpr f32 c_OverlayRadiusSq = c_OverlayRadius * c_OverlayRadius;
-		constexpr f32 c_GroundOffset = 0.06f;
-		constexpr size_t c_MaxNavMeshLines = 8192;
-		const size_t maxVerts = 2 * c_MaxNavMeshLines;
-		m_CachedNavMeshVertices.reserve(std::min(polygons.size() * 4, maxVerts));
+	ReleaseNavMeshBuffers();
 
-		const vec4 polyEdgeColor(0.15f, 0.95f, 0.75f, 0.85f);
-		const vec4 multiLayerLinkColor(1.0f, 0.5f, 0.1f, 0.95f);
+	Engine::RHI* rhi = Engine::Renderer::Get().GetRHI();
+	if (!rhi) return;
 
-		for (size_t polyIdx = 0; polyIdx < polygons.size(); ++polyIdx)
+	m_CachedNavMeshPtr = navMesh.get();
+	m_CachedNavMeshPolyCount = polygons.size();
+	m_CachedNavMeshVertCount = vertices.size();
+
+	constexpr f32 c_FillOffsetY = 0.03f;
+	constexpr f32 c_LineOffsetY = 0.04f;
+	const vec4 polyFillColor(0.15f, 0.75f, 0.95f, 0.28f);
+	const vec4 polyEdgeColor(0.15f, 0.95f, 0.75f, 0.85f);
+	const vec4 multiLayerLinkColor(1.0f, 0.5f, 0.1f, 0.95f);
+
+	vector<Engine::DebugVertex> fillVerts;
+	vector<Engine::DebugVertex> lineVerts;
+	fillVerts.reserve(polygons.size() * 6);
+	lineVerts.reserve(polygons.size() * 6);
+
+	for (size_t polyIdx = 0; polyIdx < polygons.size(); ++polyIdx)
+	{
+		const auto& poly = polygons[polyIdx];
+		if (poly.vertexIndices.size() < 3) continue;
+
+		const uint32 idx0 = poly.vertexIndices[0];
+		if (idx0 < vertices.size())
 		{
-			const auto& poly = polygons[polyIdx];
-			if (poly.vertexIndices.size() < 3) continue;
-
-			const vec3 diff = poly.center - camPos;
-			if (glm::dot(diff, diff) > c_OverlayRadiusSq) continue;
-
-			for (size_t i = 0; i < poly.vertexIndices.size(); ++i)
+			const vec3 v0 = vertices[idx0] + vec3(0.0f, c_FillOffsetY, 0.0f);
+			for (size_t i = 1; i + 1 < poly.vertexIndices.size(); ++i)
 			{
-				if (i < poly.neighbors.size())
-				{
-					const int32 neighborIdx = poly.neighbors[i];
-					if (neighborIdx >= 0 && static_cast<size_t>(neighborIdx) < polyIdx) continue;
-				}
-				if (m_CachedNavMeshVertices.size() + 2 > maxVerts) break;
+				const uint32 idx1 = poly.vertexIndices[i];
+				const uint32 idx2 = poly.vertexIndices[i + 1];
+				if (idx1 >= vertices.size() || idx2 >= vertices.size()) continue;
+				fillVerts.push_back({ v0, polyFillColor });
+				fillVerts.push_back({ vertices[idx1] + vec3(0.0f, c_FillOffsetY, 0.0f), polyFillColor });
+				fillVerts.push_back({ vertices[idx2] + vec3(0.0f, c_FillOffsetY, 0.0f), polyFillColor });
+			}
+		}
 
-				const uint32 idxA = poly.vertexIndices[i];
-				const uint32 idxB = poly.vertexIndices[(i + 1) % poly.vertexIndices.size()];
-				if (idxA >= vertices.size() || idxB >= vertices.size()) continue;
-
-				const vec3 a = vertices[idxA] + vec3(0.0f, c_GroundOffset, 0.0f);
-				const vec3 b = vertices[idxB] + vec3(0.0f, c_GroundOffset, 0.0f);
-				m_CachedNavMeshVertices.push_back({ a, polyEdgeColor });
-				m_CachedNavMeshVertices.push_back({ b, polyEdgeColor });
+		for (size_t i = 0; i < poly.vertexIndices.size(); ++i)
+		{
+			if (i < poly.neighbors.size())
+			{
+				const int32 neighborIdx = poly.neighbors[i];
+				if (neighborIdx >= 0 && static_cast<size_t>(neighborIdx) < polyIdx) continue;
 			}
 
-			for (const auto& link : poly.extraLinks)
-			{
-				if (link.targetPoly < 0 || link.targetPoly <= static_cast<int32>(polyIdx)) continue;
-				if (static_cast<size_t>(link.targetPoly) >= polygons.size()) continue;
-				if (m_CachedNavMeshVertices.size() + 2 > maxVerts) break;
+			const uint32 idxA = poly.vertexIndices[i];
+			const uint32 idxB = poly.vertexIndices[(i + 1) % poly.vertexIndices.size()];
+			if (idxA >= vertices.size() || idxB >= vertices.size()) continue;
 
-				const auto& neighbor = polygons[static_cast<size_t>(link.targetPoly)];
-				const vec3 pA = poly.center + vec3(0.0f, c_GroundOffset + 0.03f, 0.0f);
-				const vec3 pB = neighbor.center + vec3(0.0f, c_GroundOffset + 0.03f, 0.0f);
-				m_CachedNavMeshVertices.push_back({ pA, multiLayerLinkColor });
-				m_CachedNavMeshVertices.push_back({ pB, multiLayerLinkColor });
-			}
+			const vec3 a = vertices[idxA] + vec3(0.0f, c_LineOffsetY, 0.0f);
+			const vec3 b = vertices[idxB] + vec3(0.0f, c_LineOffsetY, 0.0f);
+			lineVerts.push_back({ a, polyEdgeColor });
+			lineVerts.push_back({ b, polyEdgeColor });
+		}
 
-			if (m_CachedNavMeshVertices.size() >= maxVerts) break;
+		for (const auto& link : poly.extraLinks)
+		{
+			if (link.targetPoly < 0 || link.targetPoly <= static_cast<int32>(polyIdx)) continue;
+			if (static_cast<size_t>(link.targetPoly) >= polygons.size()) continue;
+
+			const auto& neighbor = polygons[static_cast<size_t>(link.targetPoly)];
+			const vec3 pA = poly.center + vec3(0.0f, c_LineOffsetY + 0.03f, 0.0f);
+			const vec3 pB = neighbor.center + vec3(0.0f, c_LineOffsetY + 0.03f, 0.0f);
+			lineVerts.push_back({ pA, multiLayerLinkColor });
+			lineVerts.push_back({ pB, multiLayerLinkColor });
 		}
 	}
 
-	if (m_CachedNavMeshVertices.empty()) return;
-	const sizet maxTotalVerts = 2 * static_cast<sizet>(m_MaxLines);
-	if (m_Vertices.size() >= maxTotalVerts) return;
-	const sizet copyCount = std::min(m_CachedNavMeshVertices.size(), maxTotalVerts - m_Vertices.size());
-	m_Vertices.insert(m_Vertices.end(), m_CachedNavMeshVertices.begin(), m_CachedNavMeshVertices.begin() + copyCount);
+	if (!fillVerts.empty())
+	{
+		const uint32 fillSize = static_cast<uint32>(fillVerts.size() * sizeof(Engine::DebugVertex));
+		m_NavMeshFillVB = rhi->CreateBuffer(fillVerts.data(), fillSize, sizeof(Engine::DebugVertex), ERHIBufferType::Vertex);
+		if (m_NavMeshFillVB)
+			m_NavMeshFillVertexCount = static_cast<uint32>(fillVerts.size());
+	}
+
+	if (!lineVerts.empty())
+	{
+		const uint32 lineSize = static_cast<uint32>(lineVerts.size() * sizeof(Engine::DebugVertex));
+		m_NavMeshLineVB = rhi->CreateBuffer(lineVerts.data(), lineSize, sizeof(Engine::DebugVertex), ERHIBufferType::Vertex);
+		if (m_NavMeshLineVB)
+			m_NavMeshLineVertexCount = static_cast<uint32>(lineVerts.size());
+	}
 }
 
 #pragma region Draw Functions

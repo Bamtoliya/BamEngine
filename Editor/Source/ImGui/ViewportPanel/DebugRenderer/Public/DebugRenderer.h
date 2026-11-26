@@ -21,7 +21,8 @@ private:
 	void RegisterColliderDebug(const CameraBuffer& cameraBuffer);
 	void RegisterGameplayDebug(const CameraBuffer& cameraBuffer);
 	void RegisterNavGridDebug(const CameraBuffer& cameraBuffer);
-	void RegisterNavMeshDebug(const CameraBuffer& cameraBuffer);
+	void UpdateNavMeshBuffers();
+	void ReleaseNavMeshBuffers();
 public:
 	void DrawLine(const vec3& start, const vec3& end, const vec4& color);
 	void DrawRect(const Engine::Rect& rect, const vec4& color);
@@ -61,10 +62,12 @@ private:
 	uint32 m_MaxLines = 65536;
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
 
+	Engine::RHIBuffer* m_NavMeshFillVB = nullptr;
+	Engine::uint32 m_NavMeshFillVertexCount = 0;
+	Engine::RHIBuffer* m_NavMeshLineVB = nullptr;
+	Engine::uint32 m_NavMeshLineVertexCount = 0;
 	const void* m_CachedNavMeshPtr = nullptr;
 	size_t m_CachedNavMeshPolyCount = 0;
 	size_t m_CachedNavMeshVertCount = 0;
-	vec3 m_CachedNavMeshCamPos = vec3(1e9f);
-	vector<Engine::DebugVertex> m_CachedNavMeshVertices;
 };
 END

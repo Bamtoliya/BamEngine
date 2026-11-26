@@ -343,7 +343,9 @@ bool NavMeshBuildInput::CollectFromScene(const Scene& scene)
 				if (hasAttr)
 				{
 					const size_t a00 = static_cast<size_t>(z) * axisCount + x;
-					if (terrain.AttributeData[a00] == static_cast<uint8>(ETerrainAttribute::Blocked))
+					const uint8 attr = terrain.AttributeData[a00];
+					if (attr == static_cast<uint8>(ETerrainAttribute::Blocked) ||
+						attr == static_cast<uint8>(ETerrainAttribute::Hole))
 					{
 						continue;
 					}
