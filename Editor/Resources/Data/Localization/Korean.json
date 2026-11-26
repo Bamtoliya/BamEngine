@@ -2407,7 +2407,6 @@
         "ToolBar.WindowMaximize": "창 최대화",
         "ToolBar.WindowRestore": "창 크기 복원",
         "Transform.EulerRotation": "회전(각도)",
-        "Transform.Hirarchy_AddGameObject": "게임 오브젝트 추가+",
         "Transform.Position": "위치",
         "Transform.Rotation": "회전",
         "Transform.Scale": "크기",

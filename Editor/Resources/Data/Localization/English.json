@@ -2407,7 +2407,6 @@
         "ToolBar.WindowMaximize": "Maximize Window",
         "ToolBar.WindowRestore": "Restore Window",
         "Transform.EulerRotation": "Euler Rotation",
-        "Transform.Hirarchy_AddGameObject": "Add GameObject",
         "Transform.Position": "Position",
         "Transform.Rotation": "Rotation",
         "Transform.Scale": "Scale",
