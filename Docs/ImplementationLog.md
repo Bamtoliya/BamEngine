@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-26] 마지막 작업 씬(LastScenePath) 즉시 저장 및 부팅 시 덮어쓰기 방지
+
+- **요약**:
+  1. `EditorSettingsService::RememberEditedScene()`: `LastScenePath`가 변경될 때 즉시 `SaveWorkspace()`를 호출해 비정상 종료·프로젝트 전환 시에도 유실되지 않도록 보강.
+  2. `ProjectSessionManager::SwitchProject()`: 프로젝트 전환 직전 `Application::Get().CaptureAndSaveEditorWorkspace()`를 호출해 기존 프로젝트의 워크스페이스(`LastScenePath`·창·패널 상태)를 먼저 저장(`Application::CaptureAndSaveEditorWorkspace`를 `public`으로 공개).
+  3. `Application::AdoptSceneDocument(path, rememberScene = true)`: `Application::Initialize()`의 부팅용 임시 빈 씬 등록(`AdoptSceneDocument({}, false)`)이 기존 `LastScenePath`를 빈 문자열로 지우고 저장하던 결함 수정.
+- **검증 상태**: 사용자 실환경에서 프로젝트 허브 열기/닫기 및 에디터 완전 종료 후 재실행 시 마지막 씬 복원 정상 동작 확인 완료.
+
 ### [2026-11-26] VFX 체커보드·트레일 실시간 프리뷰 · Editor:// 3D 썸네일 · 3D NavMesh 정적 GPU 버퍼 전환
 
 - **요약**:
