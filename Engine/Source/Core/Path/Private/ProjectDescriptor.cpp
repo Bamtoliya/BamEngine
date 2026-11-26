@@ -453,7 +453,7 @@ namespace Engine
         }
 
         // 3. Write Assets/Scenes/Main.bamscene.json
-        constexpr std::string_view kEmptySceneJson = "{\n    \"Scene\": {\n        \"Entities\": []\n    }\n}\n";
+        constexpr std::string_view kEmptySceneJson = "{\n    \"Scene\": {\n        \"Active\": true,\n        \"Entities\": [],\n        \"Name\": \"Main\",\n        \"ResourceReferences\": [],\n        \"Version\": 1\n    }\n}\n";
         if (!ProjectDescriptorDetail::WriteUtf8File(scenesDir / "Main.bamscene.json", kEmptySceneJson, outError))
         {
             return false;
