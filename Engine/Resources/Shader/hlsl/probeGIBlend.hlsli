@@ -37,25 +37,29 @@ float4 BlendTexel(uint row, uint2 local, float4 previous)
 #endif
 	}
 	// 쓸 수 있는 광선이 없으면(모두 뒷면) 이전 값을 그대로 둔다.
-	if (totalWeight <= 1e-5f)
+	if (totalWeight <= 1e-7f)
 		return previous;
 
 	float4 result = sum / totalWeight;
 	result.a = 1.0f;
-	float hysteresis = row < gParams.FreshCount ? 0.0f : gParams.Hysteresis;
+	float hysteresis = (row < gParams.FreshCount || previous.a <= 0.0f) ? 0.0f : gParams.Hysteresis;
 #if !PROBE_BLEND_DISTANCE
-	// 조명이 크게 바뀐 텍셀만 이력 비율을 완만하게 낮춘다. 어두운 영역(얇은 벽 뒤 등)의 소수 광선 노이즈에 과민 반응하지 않도록 하한(0.25)과 감쇠 폭(최대 0.35)을 제한한다.
+	// 조명이 크게 바뀐 텍셀만 이력 비율을 완만하게 낮춘다. 어두운 영역(얇은 벽 뒤 등)의 소수 광선 노이즈에 과민 반응하지 않도록 하한(0.5)과 감쇠 폭(최대 0.20)을 제한한다.
 	const float3 change = abs(result.rgb - previous.rgb);
 	const float maxChange = max(change.r, max(change.g, change.b));
 	const float previousBrightness = max(previous.r, max(previous.g, previous.b));
-	const float relativeChange = maxChange / max(previousBrightness, 0.25f);
+	const float relativeChange = maxChange / max(previousBrightness, 0.5f);
 	if (relativeChange > gParams.ChangeThreshold)
 	{
-		const float reduction = saturate((relativeChange - gParams.ChangeThreshold) / max(gParams.ChangeThreshold * 3.0f, 0.5f)) * 0.35f;
+		const float reduction = saturate((relativeChange - gParams.ChangeThreshold) / max(gParams.ChangeThreshold * 3.0f, 0.5f)) * 0.20f;
 		hysteresis = max(hysteresis - reduction, 0.0f);
 	}
-#endif
+	// 제곱근(감마) 공간에서 보간해 단일 프레임의 밝은 광선 스파이크가 어두운 프로브에 튀는 현상을 억제한다.
+	const float3 blendedSqrt = lerp(sqrt(max(result.rgb, 0.0f)), sqrt(max(previous.rgb, 0.0f)), hysteresis);
+	return float4(blendedSqrt * blendedSqrt, 1.0f);
+#else
 	return lerp(result, previous, hysteresis);
+#endif
 }
 
 [numthreads(PROBE_TEXELS, PROBE_TEXELS, 1)]

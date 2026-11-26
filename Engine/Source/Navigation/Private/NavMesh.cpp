@@ -340,25 +340,45 @@ bool NavMeshBuildInput::CollectFromScene(const Scene& scene)
 				const uint32 i01 = i00 + axisCount;
 				const uint32 i11 = i01 + 1;
 
+				auto isBlockedOrHole = [&](size_t attrIdx) -> bool
+				{
+					const uint8 attr = terrain.AttributeData[attrIdx];
+					return attr == static_cast<uint8>(ETerrainAttribute::Blocked) ||
+						attr == static_cast<uint8>(ETerrainAttribute::Hole);
+				};
+
+				bool skipTri1 = false;
+				bool skipTri2 = false;
 				if (hasAttr)
 				{
 					const size_t a00 = static_cast<size_t>(z) * axisCount + x;
-					const uint8 attr = terrain.AttributeData[a00];
-					if (attr == static_cast<uint8>(ETerrainAttribute::Blocked) ||
-						attr == static_cast<uint8>(ETerrainAttribute::Hole))
-					{
-						continue;
-					}
+					const size_t a10 = a00 + 1;
+					const size_t a01 = a00 + axisCount;
+					const size_t a11 = a01 + 1;
+
+					const bool b00 = isBlockedOrHole(a00);
+					const bool b10 = isBlockedOrHole(a10);
+					const bool b01 = isBlockedOrHole(a01);
+					const bool b11 = isBlockedOrHole(a11);
+
+					skipTri1 = b00 || b01 || b11;
+					skipTri2 = b00 || b11 || b10;
 				}
 
-				indices.push_back(i00);
-				indices.push_back(i01);
-				indices.push_back(i11);
-				indices.push_back(i00);
-				indices.push_back(i11);
-				indices.push_back(i10);
-				triangleCosts.push_back(1.0f);
-				triangleCosts.push_back(1.0f);
+				if (!skipTri1)
+				{
+					indices.push_back(i00);
+					indices.push_back(i01);
+					indices.push_back(i11);
+					triangleCosts.push_back(1.0f);
+				}
+				if (!skipTri2)
+				{
+					indices.push_back(i00);
+					indices.push_back(i11);
+					indices.push_back(i10);
+					triangleCosts.push_back(1.0f);
+				}
 			}
 		}
 	}

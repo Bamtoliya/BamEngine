@@ -50,7 +50,14 @@ float2 ProbeAtlasUV(uint probeIndex, uint3 counts, uint texels, float3 direction
 float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 normal, float3 viewDirection,
 	Texture2D<float4> irradianceAtlas, Texture2D<float4> distanceAtlas, Texture2D<float4> probeData, SamplerState atlasSampler, out bool valid)
 {
-	const float3 biasedPosition = position + normal * gi.NormalBias + viewDirection * gi.ViewBias;
+	// 프로브 간격의 45%를 넘지 않게 바이어스를 제한해 얇은 벽 반대편·이웃 셀로 표본이 넘어가지 않게 한다.
+	const float minSpacing = min(gi.GridSpacing.x, min(gi.GridSpacing.y, gi.GridSpacing.z));
+	float3 surfaceBias = normal * gi.NormalBias + viewDirection * gi.ViewBias;
+	const float biasLength = length(surfaceBias);
+	const float maxBias = minSpacing * 0.45f;
+	if (biasLength > maxBias && biasLength > 1e-5f)
+		surfaceBias *= (maxBias / biasLength);
+	const float3 biasedPosition = position + surfaceBias;
 	const float3 local = (biasedPosition - gi.GridOrigin) / gi.GridSpacing;
 	const float3 baseCell = clamp(floor(local), 0.0f, (float3)(gi.GridCounts - 2u));
 	const float3 alpha = saturate(local - baseCell);
@@ -70,11 +77,11 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 			continue;
 		const float3 probePosition = gi.GridOrigin + gi.GridSpacing * (float3)coord + state.xyz;
 
-		// 면 뒤쪽 프로브를 강하게 감쇠한다. 아주 작은 하한(0.02)만 남겨 얇은 물체에서 급격히 끊기지 않게 하되 뒤쪽 빛샘은 crush로 억제한다.
+		// 면 뒤쪽 프로브를 0까지 감쇠한다. 하한(+0.02)을 두면 얇은 벽 반대편 프로브가 정규화로 새어 나온다.
 		const float3 toProbeVec = probePosition - position;
 		const float3 toProbe = toProbeVec / max(length(toProbeVec), 1e-4f);
 		const float wrap = saturate((dot(toProbe, normal) + 1.0f) * 0.5f);
-		float weight = wrap * wrap + 0.02f;
+		float weight = wrap * wrap;
 
 		// 체비쇼프 가시성: FP16 오차로 분산이 부풀지 않게 0 하한을 두고, 가려진 프로브는 0까지 줄여 코너·다크룸 빛샘을 막는다.
 		const float3 probeToPoint = biasedPosition - probePosition;
@@ -105,8 +112,9 @@ float3 SampleProbeIrradiance(ProbeGILightingData gi, float3 position, float3 nor
 		totalWeight += weight;
 	}
 	// 활성·초기화된 프로브가 셀에 하나라도 있는데 모두 가려졌다면(어두운 코너) 외부 하늘 IBL로 되돌리지 않고 0을 반환한다.
+	// totalWeight가 극히 작을 때 가려진 뒤쪽 프로브만 남아 정규화로 100% 증폭되는 현상을 막기 위해 하한(1e-3f)을 둔다.
 	valid = hasActiveProbe;
-	return totalWeight > 1e-6f ? sum / totalWeight : float3(0.0f, 0.0f, 0.0f);
+	return totalWeight > 1e-6f ? sum / max(totalWeight, 1e-3f) : float3(0.0f, 0.0f, 0.0f);
 }
 
 #endif

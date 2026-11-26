@@ -2,6 +2,19 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 엔진·렌더링 미해결 과제 3건 해결 (NavMesh 터레인 Hole · Probe GI 빛샘 · 모델 임포트 프리뷰)
+
+- **요약**:
+  1. **3D NavMesh 터레인 `Hole` 경계 정밀화 (`navmesh-hole`)**:
+     - `Engine/Source/Navigation/Private/NavMesh.cpp`(`CollectNavMeshGeometry`): 기존 셀 좌상단 단일 꼭짓점(`a00`) 속성 판정으로 인해 발생하던 구멍 경계 비대칭 오차(반 셀~1셀)를 수정해, 4개 꼭짓점(`a00`, `a10`, `a01`, `a11`)을 모두 조회하고 각 삼각형의 3꼭짓점 중 하나라도 `Hole`/`Blocked`이면 제외하도록 개선.
+  2. **Probe GI(DDGI) 코너 빛샘 및 얇은 벽 빛 흔들림 개선 (`M4-GI`, `probe-gi-leak`)**:
+     - `Engine/Resources/Shader/hlsl/probeGISample.hlsli`(`SampleProbeIrradiance`): `surfaceBias` 길이를 `minSpacing * 0.45f`로 클램프하고, 백페이스 가중치의 `+ 0.02f` 하한 제거(`wrap * wrap`) 및 `sum / max(totalWeight, 1e-3f)`로 코너·얇은 벽 뒤쪽 프로브의 정규화 증폭 빛샘 차단.
+     - `Engine/Resources/Shader/hlsl/probeGIBlend.hlsli`(`BlendTexel`): 조도 히스테리시스 블렌딩을 `sqrt` 공간으로 전환하고 급격한 스파이크 감쇠 폭을 완화(`0.35f -> 0.20f`)하며 거리 아틀라스 `totalWeight` 하한을 `1e-7f`로 보강. (C++/HLSL 상수 버퍼 16B 정렬 유지)
+  3. **대화형 3D 모델 임포트 프리뷰 보완 (`P1-F`, `model-import-preview`)**:
+     - `Editor/Source/AssetManager/Importer/Private/ModelImportModal.cpp`, `Editor/Resources/Data/Localization/Editor.ModelImportModal.csv`: 하드코딩된 DCC 프리셋 문구 로캘화, 중복 체크박스 제거 및 `Pitch +90°` 빠른 보정 버튼 추가, 스케일/리셋 버튼 클릭 시 `UpdatePreviewTransform()` 이후 카메라 포커스가 재계산되도록 순서 버그 수정.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `Editor`, `GenerateLocalization`), `NavigationAICheck`, 실환경 `RenderingFeatureLab` 다크룸/GI 박스·터레인 구멍·모델 임포트 모달 확인 대기.
+
 ### [2026-11-27] Pre-Boot 경량 프로젝트 허브(`StartupProjectHub`) · 누락 프로젝트 제거 · 외부 프로젝트 직부팅 폴백 수정
 
 - **요약**:

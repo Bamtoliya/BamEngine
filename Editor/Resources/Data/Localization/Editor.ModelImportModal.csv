@@ -1,2 +1,11 @@
 Group,Key,English,Korean
 ModelImportModal,TextureDimensions,%u x %u,%u × %u
+ModelImportModal,DccPreset,DCC Preset,DCC 프리셋
+ModelImportModal,PresetCustom,Custom,사용자 지정
+ModelImportModal,PresetBlender,Blender (glTF/FBX),Blender (glTF/FBX)
+ModelImportModal,PresetUnreal,Unreal FBX (cm -> m / Z-Up),Unreal FBX (cm -> m / Z-Up)
+ModelImportModal,PresetUnity,Unity / Mixamo FBX,Unity / Mixamo FBX
+ModelImportModal,QuickPresetBlender,Blender,Blender
+ModelImportModal,QuickPresetUnreal,Unreal (cm->m),Unreal (cm->m)
+ModelImportModal,QuickPresetUnity,Unity / Mixamo,Unity / Mixamo
+ModelImportModal,PitchPlus90,Pitch +90°,상하 +90° (Pitch +90°)

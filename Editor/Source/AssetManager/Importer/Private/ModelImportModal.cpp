@@ -847,12 +847,18 @@ namespace Editor
 
 	void ModelImportModal::DrawTransformOptions()
 	{
-		ImGui::TextWrapped("DCC Preset");
+		ImGui::TextWrapped("%s", LOCAL_CSTR("ModelImportModal.DccPreset"));
+		const std::string presetLabelStrings[] = {
+			LOCAL("ModelImportModal.PresetCustom"),
+			LOCAL("ModelImportModal.PresetBlender"),
+			LOCAL("ModelImportModal.PresetUnreal"),
+			LOCAL("ModelImportModal.PresetUnity")
+		};
 		const char* presetLabels[] = {
-			"Custom",
-			"Blender (glTF/FBX)",
-			"Unreal FBX (cm -> m, Z-Up)",
-			"Unity / Mixamo FBX"
+			presetLabelStrings[0].c_str(),
+			presetLabelStrings[1].c_str(),
+			presetLabelStrings[2].c_str(),
+			presetLabelStrings[3].c_str()
 		};
 		int currentPreset = static_cast<int>(m_Desc.DccPreset);
 		ImGui::SetNextItemWidth(-FLT_MIN);
@@ -868,18 +874,23 @@ namespace Editor
 		}
 
 		// One-click quick DCC preset buttons
-		const struct { const char* Name; EModelImportDccPreset Preset; } quickPresets[] = {
-			{ "Blender", EModelImportDccPreset::Blender },
-			{ "Unreal (cm->m)", EModelImportDccPreset::Unreal },
-			{ "Unity / Mixamo", EModelImportDccPreset::Unity }
+		const struct { const char* LabelKey; EModelImportDccPreset Preset; } quickPresets[] = {
+			{ "ModelImportModal.QuickPresetBlender", EModelImportDccPreset::Blender },
+			{ "ModelImportModal.QuickPresetUnreal", EModelImportDccPreset::Unreal },
+			{ "ModelImportModal.QuickPresetUnity", EModelImportDccPreset::Unity }
 		};
+		const auto& style = ImGui::GetStyle();
+		const float presetRightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
 		for (size_t i = 0; i < IM_ARRAYSIZE(quickPresets); ++i)
 		{
-			if (i > 0) ImGui::SameLine();
+			const auto label = LOCAL_LABEL(quickPresets[i].LabelKey);
+			const float buttonWidth = ImGui::CalcTextSize(label.c_str(), nullptr, true).x + style.FramePadding.x * 2.0f;
+			if (i > 0 && ImGui::GetItemRectMax().x + style.ItemSpacing.x + buttonWidth <= presetRightEdge)
+				ImGui::SameLine();
 			const bool isSelected = (m_Desc.DccPreset == quickPresets[i].Preset);
 			if (isSelected)
 				ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-			if (ImGui::SmallButton(quickPresets[i].Name))
+			if (ImGui::SmallButton(label.c_str()))
 			{
 				const auto prevFlags = m_Desc.PostProcessFlags;
 				ApplyDccPreset(quickPresets[i].Preset);
@@ -901,6 +912,7 @@ namespace Editor
 		ImGui::SetNextItemWidth(-FLT_MIN);
 		bool transformChanged = ImGui::DragFloat("###ModelImport.Scale", &m_Desc.UniformScale, 0.01f, 0.0001f, 1000.0f,
 			"%.4f", ImGuiSliderFlags_AlwaysClamp);
+		bool focusTargetRequested = false;
 		if (transformChanged)
 			m_Desc.DccPreset = EModelImportDccPreset::Custom;
 
@@ -912,7 +924,6 @@ namespace Editor
 		constexpr ScalePreset presets[] = {
 			{ "ModelImport.ScalePoint01", 0.01f }, { "ModelImport.Scale1", 1.0f }, { "ModelImport.Scale100", 100.0f }
 		};
-		const auto& style = ImGui::GetStyle();
 		const float rightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
 		for (const auto& preset : presets)
 		{
@@ -926,8 +937,7 @@ namespace Editor
 				m_Desc.UniformScale = preset.Scale;
 				m_Desc.DccPreset = EModelImportDccPreset::Custom;
 				transformChanged = true;
-				if (m_PreviewEntity)
-					m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
+				focusTargetRequested = true;
 			}
 		}
 
@@ -950,12 +960,34 @@ namespace Editor
 			}
 		}
 
-		// Quick-rotate buttons
-		const float btnHalfWidth = (ImGui::GetContentRegionAvail().x - style.ItemSpacing.x) * 0.5f;
+		// Quick-rotate buttons (Pitch +90, Pitch 180, Yaw 180, Reset)
+		const float quickRotRightEdge = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		const auto pitch90Label = LOCAL("ModelImportModal.PitchPlus90") + "###PitchPlus90Btn";
+		const auto pitch180Label = LOCAL("ModelImport.Pitch180") + "###Pitch180Btn";
+		const auto yaw180Label = LOCAL("ModelImport.Yaw180") + "###Yaw180Btn";
+		const auto resetLabel = LOCAL("ModelImport.Reset") + "###TransformResetBtn";
+
+		if (ImGui::SmallButton(pitch90Label.c_str()))
+		{
+			float nextPitch = m_Desc.RotationOffset[0] + 90.0f;
+			if (nextPitch > 180.0f) nextPitch -= 360.0f;
+			m_Desc.RotationOffset[0] = nextPitch;
+			m_Desc.DccPreset = EModelImportDccPreset::Custom;
+			transformChanged = true;
+		}
+
+		const auto sameLineIfFits = [&style, quickRotRightEdge](const std::string& label)
+			{
+				const float width = ImGui::CalcTextSize(label.c_str(), nullptr, true).x + style.FramePadding.x * 2.0f;
+				if (ImGui::GetItemRectMax().x + style.ItemSpacing.x + width <= quickRotRightEdge)
+					ImGui::SameLine();
+			};
+
+		sameLineIfFits(pitch180Label);
 		const bool pitchActive = m_Desc.FlipPitch;
 		if (pitchActive)
 			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-		if (ImGui::Button((LOCAL("ModelImport.Pitch180") + "###Pitch180Btn").c_str(), ImVec2(btnHalfWidth, 0.0f)))
+		if (ImGui::SmallButton(pitch180Label.c_str()))
 		{
 			m_Desc.FlipPitch = !m_Desc.FlipPitch;
 			m_Desc.DccPreset = EModelImportDccPreset::Custom;
@@ -964,12 +996,11 @@ namespace Editor
 		if (pitchActive)
 			ImGui::PopStyleColor();
 
-		ImGui::SameLine();
-
+		sameLineIfFits(yaw180Label);
 		const bool yawActive = m_Desc.FlipHeading;
 		if (yawActive)
 			ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-		if (ImGui::Button((LOCAL("ModelImport.Yaw180") + "###Yaw180Btn").c_str(), ImVec2(btnHalfWidth, 0.0f)))
+		if (ImGui::SmallButton(yaw180Label.c_str()))
 		{
 			m_Desc.FlipHeading = !m_Desc.FlipHeading;
 			m_Desc.DccPreset = EModelImportDccPreset::Custom;
@@ -978,16 +1009,8 @@ namespace Editor
 		if (yawActive)
 			ImGui::PopStyleColor();
 
-		const bool pitchChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Pitch180").c_str(), &m_Desc.FlipPitch);
-		ImGui::SameLine();
-		const bool yawChanged = ImGui::Checkbox(LOCAL_LABEL("ModelImport.Yaw180").c_str(), &m_Desc.FlipHeading);
-		if (pitchChanged || yawChanged)
-		{
-			m_Desc.DccPreset = EModelImportDccPreset::Custom;
-			transformChanged = true;
-		}
-
-		if (ImGui::SmallButton(LOCAL_LABEL("ModelImport.Reset").c_str()))
+		sameLineIfFits(resetLabel);
+		if (ImGui::SmallButton(resetLabel.c_str()))
 		{
 			m_Desc.UniformScale = 1.0f;
 			m_Desc.RotationOffset = {};
@@ -995,11 +1018,13 @@ namespace Editor
 			m_Desc.FlipHeading = false;
 			m_Desc.DccPreset = EModelImportDccPreset::Custom;
 			transformChanged = true;
-			if (m_PreviewEntity)
-				m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
+			focusTargetRequested = true;
 		}
+
 		if (transformChanged)
 			UpdatePreviewTransform();
+		if (focusTargetRequested && m_PreviewEntity)
+			m_PreviewWidget.SetModelFocusTarget(*m_PreviewEntity, true);
 
 		ImGui::Spacing();
 		ImGui::Separator();
