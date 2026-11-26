@@ -61,6 +61,7 @@ private:
 	Engine::ResourceHandle<Engine::Model> m_ModelHandle;
 	Engine::ResourceHandle<Engine::Mesh> m_MeshHandle;
 	string m_StatusKey;
+	std::vector<Engine::MissingResourceEntry> m_MissingResources;
 	using MaterialSlots = std::vector<Engine::ResourceHandle<Engine::MaterialInterface>>;
 	ResourceDocumentHistory<MaterialSlots> m_History;
 	bool CommitDocumentEdit();

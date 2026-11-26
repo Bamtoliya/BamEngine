@@ -43,6 +43,7 @@ public:
 	void SetAutoRotating(bool rotate) { m_AutoRotate = rotate; }
 	void ResetView();
 	void DrawViewportOnly(const ImVec2& size = ImVec2(0.0f, 0.0f));
+	static Engine::ResourceHandle<Engine::Mesh> GetOrLoadMaterialBallPreviewMesh();
 
 private:
 	void UpdatePreviewMesh(Engine::MaterialInterface* material);

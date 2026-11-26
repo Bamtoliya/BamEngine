@@ -8,7 +8,11 @@
 #include "SplineComponent.h"
 #include "GizmoHelper.h"
 
+#include <atomic>
+#include <future>
+
 BEGIN(Engine)
+class NavMesh;
 struct PostProcessComponent;
 struct TerrainComponent;
 END
@@ -32,7 +36,7 @@ class SceneViewportPanel : public CameraViewportPanel, public IGizmoHost
 #pragma region Constructor&Destructor
 public:
 	SceneViewportPanel() { m_Name = L"Scene Viewport"; }
-	virtual ~SceneViewportPanel() = default;
+	virtual ~SceneViewportPanel();
 protected:
 	EResult OnInitialize(void* arg) override;
 public:
@@ -53,6 +57,7 @@ public:
 	void ToggleNavMeshOverlay() { m_DebugRenderer.ToggleShowNavMeshOverlay(); }
 	void BakeSceneNavMesh();
 	bool HasActiveNavMesh() const;
+	static bool IsNavMeshBakeInProgress() { return s_NavMeshBakeInProgress.load(std::memory_order_relaxed); }
 	void FocusSelectedEntity();
 	void RequestHDRCaptureFromCurrentLocation();
 
@@ -282,6 +287,27 @@ private:
 		std::array<std::vector<uint8>, 6> FacePixels;
 	};
 	HDRCaptureState m_HDRCapture;
+#pragma endregion
+
+#pragma region NavMesh Bake
+private:
+	void PollNavMeshBake();
+	void CancelNavMeshBake();
+
+	struct NavMeshBakeResult
+	{
+		bool Success = false;
+		std::shared_ptr<Engine::NavMesh> NavMesh;
+	};
+
+	struct NavMeshBakeState
+	{
+		bool Active = false;
+		Engine::Scene* TargetScene = nullptr;
+		std::future<NavMeshBakeResult> Future;
+	};
+	NavMeshBakeState m_NavMeshBake;
+	inline static std::atomic<bool> s_NavMeshBakeInProgress{ false };
 #pragma endregion
 
 };

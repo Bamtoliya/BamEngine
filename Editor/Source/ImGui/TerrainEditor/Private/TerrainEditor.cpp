@@ -77,6 +77,7 @@ void TerrainEditor::DrawPalette(const Engine::TerrainComponent& terrain)
 		}
 		// 선택한 레이어의 게임 속성 요약. 칸에 넣을 에셋은 인스펙터의 지형 컴포넌트 "레이어" 목록에서, 값은 지형 레이어 편집기에서 고친다.
 		const auto* selectedAsset = m_PaintLayer < terrain.Layers.size() ? terrain.Layers[m_PaintLayer].Layer.Get() : nullptr;
+		ImGui::PushTextWrapPos(0.0f);
 		if (selectedAsset)
 		{
 			const auto& settings = selectedAsset->GetSettings();
@@ -87,6 +88,7 @@ void TerrainEditor::DrawPalette(const Engine::TerrainComponent& terrain)
 		{
 			ImGui::TextDisabled("%s", LOCAL_CSTR("TerrainEditor.LayerUndefined"));
 		}
+		ImGui::PopTextWrapPos();
 		return;
 	}
 
@@ -94,11 +96,13 @@ void TerrainEditor::DrawPalette(const Engine::TerrainComponent& terrain)
 	ImGui::TextUnformatted(LOCAL_CSTR("TerrainEditor.AttributePalette"));
 	int attribute = m_PaintAttribute;
 	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeErase").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::None)); ImGui::SameLine();
-	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeBlocked").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Blocked)); ImGui::SameLine();
+	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeBlocked").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Blocked));
 	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeWater").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Water)); ImGui::SameLine();
 	ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.AttributeHole").c_str(), &attribute, static_cast<int>(Engine::ETerrainAttribute::Hole));
 	m_PaintAttribute = static_cast<uint8>(attribute);
+	ImGui::PushTextWrapPos(0.0f);
 	ImGui::TextDisabled("%s", LOCAL_CSTR("TerrainEditor.AttributeHint"));
+	ImGui::PopTextWrapPos();
 }
 
 void TerrainEditor::Draw()
@@ -110,7 +114,9 @@ void TerrainEditor::Draw()
 		Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
 		if (!scene)
 		{
+			ImGui::PushTextWrapPos(0.0f);
 			ImGui::TextDisabled("%s", LOCAL_CSTR("TerrainEditor.NoScene"));
+			ImGui::PopTextWrapPos();
 			ImGui::End();
 			return;
 		}
@@ -134,7 +140,9 @@ void TerrainEditor::Draw()
 		{
 			const auto* nameComp = registry.try_get<Engine::NameComponent>(m_TargetEntity->GetEntityHandle());
 			std::string nameStr = nameComp ? WStrToStr(nameComp->name) : LOCAL("TerrainEditor.DefaultName");
+			ImGui::PushTextWrapPos(0.0f);
 			ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_FMT("TerrainEditor.Target", nameStr).c_str());
+			ImGui::PopTextWrapPos();
 		}
 		else
 		{
@@ -181,7 +189,7 @@ void TerrainEditor::Draw()
 			ImGui::TextUnformatted(LOCAL_CSTR("TerrainEditor.BrushMode"));
 			int modeInt = static_cast<int>(m_BrushParams.Mode);
 			ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.Raise").c_str(), &modeInt, 0); ImGui::SameLine();
-			ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.Lower").c_str(), &modeInt, 1); ImGui::SameLine();
+			ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.Lower").c_str(), &modeInt, 1);
 			ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.Smooth").c_str(), &modeInt, 2); ImGui::SameLine();
 			ImGui::RadioButton(LOCAL_LABEL("TerrainEditor.Flatten").c_str(), &modeInt, 3);
 			m_BrushParams.Mode = static_cast<Engine::ETerrainBrushMode>(modeInt);

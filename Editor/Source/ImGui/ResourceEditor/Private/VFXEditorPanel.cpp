@@ -23,6 +23,7 @@
 #include "Sprite.h"
 #include "ParticleEffect.h"
 #include "Mesh.h"
+#include "Texture.h"
 #include "MaterialInterface.h"
 #include "AudioClip.h"
 #include "ReflectionPropertyDrawer.h"
@@ -423,6 +424,126 @@ void VFXEditorPanel::ApplyBackgroundPreset()
 	}
 }
 
+namespace
+{
+	Engine::ResourceHandle<Engine::Texture> GetOrCreateVFXCheckerTexture(Engine::ResourceManager& rm)
+	{
+		constexpr const wchar_t* key = L"VFXPreviewCheckerTex";
+		if (auto existing = rm.GetResourceHandle<Engine::Texture>(key); existing.IsValid())
+			return existing;
+
+		constexpr uint32 size = 64;
+		constexpr uint32 half = size / 2;
+		std::vector<Engine::uint8> pixels(static_cast<size_t>(size) * size * 4);
+		for (uint32 y = 0; y < size; ++y)
+		{
+			for (uint32 x = 0; x < size; ++x)
+			{
+				const bool light = ((x < half) == (y < half));
+				const Engine::uint8 r = light ? 235 : 95;
+				const Engine::uint8 g = light ? 235 : 95;
+				const Engine::uint8 b = light ? 242 : 105;
+				const size_t idx = (static_cast<size_t>(y) * size + x) * 4;
+				pixels[idx + 0] = r;
+				pixels[idx + 1] = g;
+				pixels[idx + 2] = b;
+				pixels[idx + 3] = 255;
+			}
+		}
+
+		Engine::TextureBinaryHeader header{};
+		header.width = size;
+		header.height = size;
+		header.depth = 1;
+		header.mipLevels = 1;
+		header.arraySize = 1;
+		header.format = Engine::ETextureFormat::R8G8B8A8_UNORM;
+		header.dimension = Engine::ETextureDimension::Texture2D;
+		header.dataSize = static_cast<uint32>(pixels.size());
+
+		auto* tex = Engine::Texture::Create(header, pixels, key);
+		return tex ? rm.AddResource<Engine::Texture>(key, tex) : Engine::ResourceHandle<Engine::Texture>{};
+	}
+
+	Engine::ResourceHandle<Engine::Mesh> GetOrCreateVFXTiledPlaneMesh(Engine::ResourceManager& rm)
+	{
+		constexpr const wchar_t* key = L"VFXPreviewTiledPlaneMesh";
+		if (auto existing = rm.GetResourceHandle<Engine::Mesh>(key); existing.IsValid())
+			return existing;
+
+		constexpr float uvRepeat = 24.0f; // 48m 바닥에서 2m당 1타일(1m 체커 칸)
+		std::vector<Engine::VertexPosition> positions = {
+			{ { -0.5f, 0.0f,  0.5f } },
+			{ {  0.5f, 0.0f,  0.5f } },
+			{ {  0.5f, 0.0f, -0.5f } },
+			{ { -0.5f, 0.0f, -0.5f } }
+		};
+		std::vector<Engine::VertexMaterial> materials = {
+			{ { 0, 1, 0 }, { 0.0f,     0.0f     }, { 1, 0, 0 }, { 0, 0, 1 }, Engine::vec4(1.0f) },
+			{ { 0, 1, 0 }, { uvRepeat, 0.0f     }, { 1, 0, 0 }, { 0, 0, 1 }, Engine::vec4(1.0f) },
+			{ { 0, 1, 0 }, { uvRepeat, uvRepeat }, { 1, 0, 0 }, { 0, 0, 1 }, Engine::vec4(1.0f) },
+			{ { 0, 1, 0 }, { 0.0f,     uvRepeat }, { 1, 0, 0 }, { 0, 0, 1 }, Engine::vec4(1.0f) }
+		};
+		std::vector<uint32> indices = { 0, 1, 2, 0, 2, 3 };
+
+		Engine::MeshCreateDesc planeDesc{};
+		planeDesc.Streams[static_cast<uint32>(Engine::EMeshStream::Position)] = { positions.data(), static_cast<uint32>(positions.size()), sizeof(Engine::VertexPosition) };
+		planeDesc.Streams[static_cast<uint32>(Engine::EMeshStream::Material)] = { materials.data(), static_cast<uint32>(materials.size()), sizeof(Engine::VertexMaterial) };
+		planeDesc.IndexData = indices.data();
+		planeDesc.IndexCount = static_cast<uint32>(indices.size());
+		planeDesc.IndexStride = sizeof(uint32);
+		planeDesc.BoundingBoxMin = Engine::vec3(-0.5f, 0.0f, -0.5f);
+		planeDesc.BoundingBoxMax = Engine::vec3(0.5f, 0.0f, 0.5f);
+
+		auto* mesh = Engine::Mesh::Create(&planeDesc);
+		return mesh ? rm.AddResource<Engine::Mesh>(key, mesh) : Engine::ResourceHandle<Engine::Mesh>{};
+	}
+}
+
+void VFXEditorPanel::ApplyGroundBackdrop()
+{
+	auto& rm = Engine::ResourceManager::Get();
+	if (auto groundMatHandle = rm.GetResourceHandle<Engine::MaterialInterface>(L"VFXPreviewGroundMatInst");
+		auto* groundMat = groundMatHandle.Get())
+	{
+		if (m_ShowCheckerBackdrop)
+		{
+			if (auto checkerTex = GetOrCreateVFXCheckerTexture(rm); checkerTex.IsValid())
+			{
+				groundMat->SetTextureBinding("Diffuse", 0, checkerTex);
+				groundMat->AddColor4("BaseColor", Engine::vec4(0.55f, 0.55f, 0.58f, 1.0f));
+				groundMat->IncreaseVersion();
+			}
+		}
+		else
+		{
+			auto whiteTex = rm.GetResourceHandle<Engine::Texture>(L"Engine://Texture/white1x1.png");
+			if (!whiteTex.IsValid())
+				if (auto loaded = rm.LoadFile(L"Engine://Texture/white1x1.png"); loaded.IsValid())
+					whiteTex = Engine::ResourceHandle<Engine::Texture>(loaded);
+			if (whiteTex.IsValid())
+			{
+				groundMat->SetTextureBinding("Diffuse", 0, whiteTex);
+				groundMat->AddColor4("BaseColor", Engine::vec4(0.24f, 0.24f, 0.27f, 1.0f));
+				groundMat->IncreaseVersion();
+			}
+		}
+	}
+
+	if (m_PreviewGroundEntity)
+	{
+		if (auto* scene = m_PreviewWidget.GetScene())
+		{
+			if (auto* renderer = scene->GetRegistry().try_get<Engine::StaticMeshRendererComponent>(m_PreviewGroundEntity->GetEntityHandle()))
+			{
+				auto mesh = m_ShowCheckerBackdrop ? GetOrCreateVFXTiledPlaneMesh(rm) : rm.GetResourceHandle<Engine::Mesh>(L"PlaneMesh");
+				if (mesh.IsValid())
+					renderer->meshHandle = mesh;
+			}
+		}
+	}
+}
+
 void VFXEditorPanel::SetupPreview()
 {
 	auto* scene = m_PreviewWidget.GetScene();
@@ -475,6 +596,7 @@ void VFXEditorPanel::SetupPreview()
 	auto& groundRenderer = scene->AddComponent<Engine::StaticMeshRendererComponent>(*m_PreviewGroundEntity);
 	groundRenderer.meshHandle = rm.GetResourceHandle<Engine::Mesh>(L"PlaneMesh");
 	groundRenderer.materialHandle = groundMatHandle.IsValid() ? groundMatHandle : Engine::ResourceHandle<Engine::MaterialInterface>(baseMat);
+	m_BackdropDirty = true;
 	// 2. 환경 장애물 프리셋 엔티티 생성
 	auto createObstacle = [&](const std::wstring& name, const std::wstring& meshName,
 		const Engine::vec3& pos, const Engine::vec3& rot, const Engine::vec3& scale) -> Engine::Entity*
@@ -668,6 +790,11 @@ void VFXEditorPanel::Update(f32 dt)
 			Engine::CompositeVFXSystem::RefreshFlashLight(comp);
 		}
 	}
+	if (m_BackdropDirty)
+	{
+		ApplyGroundBackdrop();
+		m_BackdropDirty = false;
+	}
 	m_PreviewWidget.BeginFrame(dt);
 	m_PreviewWidget.Submit(dt);
 }
@@ -828,6 +955,13 @@ void VFXEditorPanel::DrawCustomQuickAccess()
 				}
 			}
 		}
+	}
+
+	// [체커보드 바닥 패턴 토글] (디스토션 굴절 가시성 확인용)
+	if (toolbar.Icon("CheckerBackdrop", ICON_FA_BORDER_ALL, "VFXEditor.CheckerBackdrop", { .Active = m_ShowCheckerBackdrop }))
+	{
+		m_ShowCheckerBackdrop = !m_ShowCheckerBackdrop;
+		m_BackdropDirty = true;
 	}
 
 	// [공중(Air) 프리뷰 모드 토글] (비행기 아이콘: 지면/그리드 일괄 숨김 및 수평선 단차 제거)

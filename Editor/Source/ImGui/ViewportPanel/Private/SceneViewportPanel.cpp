@@ -55,6 +55,7 @@
 #include "FileDialogs.h"
 #include "IBLManager.h"
 #include "PlatformPath.h"
+#include <chrono>
 #include <filesystem>
 
 #pragma region Helper
@@ -272,8 +273,14 @@ void SceneViewportPanel::PreparePipelines()
 	// 조명 합성 파이프라인은 m_Pipeline 내부에서 생성·관리됨
 }
 
+SceneViewportPanel::~SceneViewportPanel()
+{
+	CancelNavMeshBake();
+}
+
 void SceneViewportPanel::Free()
 {
+	CancelNavMeshBake();
 	CancelHDRCapture();
 	ResetSplinePointSelection();
 	if (s_ActiveSceneViewport == this)
@@ -341,6 +348,8 @@ ViewportWorkspace SceneViewportPanel::CaptureViewportState() const
 #pragma region Loop
 void SceneViewportPanel::Update(f32 dt)
 {
+	PollNavMeshBake();
+
 	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 렌더링 100% 차단 (0 FPS)
 	if (!m_Open || !m_IsVisibleOnScreen)
 		return;
@@ -827,10 +836,12 @@ void SceneViewportPanel::DrawDebugMenu()
 		}
 		ImGui::Separator();
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowNavMeshOverlay").c_str(), nullptr, m_DebugRenderer.GetShowNavMeshOverlayPtr());
+		ImGui::BeginDisabled(IsNavMeshBakeInProgress());
 		if (ImGui::MenuItem((std::string(ICON_FA_HAMMER " ") + LOCAL("Viewport.BakeNavMeshMenu")).c_str()))
 		{
 			BakeSceneNavMesh();
 		}
+		ImGui::EndDisabled();
 		ImGui::Separator();
 		ImGui::BeginDisabled(m_HDRCapture.Active);
 		if (ImGui::MenuItem((std::string(ICON_FA_CAMERA " ") + LOCAL("Viewport.CaptureHDRMenu")).c_str()))
@@ -3011,6 +3022,9 @@ bool SceneViewportPanel::HasActiveNavMesh() const
 
 void SceneViewportPanel::BakeSceneNavMesh()
 {
+	if (m_NavMeshBake.Active || s_NavMeshBakeInProgress.load(std::memory_order_relaxed))
+		return;
+
 	Engine::Scene* scene = SceneManager::Get().GetCurrentScene();
 	if (!scene)
 	{
@@ -3019,20 +3033,82 @@ void SceneViewportPanel::BakeSceneNavMesh()
 		return;
 	}
 
-	auto navMesh = std::make_shared<Engine::NavMesh>();
-	if (!navMesh->BuildFromScene(*scene))
+	Engine::NavMeshBuildInput input;
+	if (!input.CollectFromScene(*scene))
 	{
 		NotificationManager::Get().AddNotification(
 			LOCAL("Viewport.NavMeshBakeTitle"), LOCAL("Viewport.NavMeshBakeFailedMessage"), ELogLevel::Warn, 4.0f);
 		return;
 	}
 
-	Engine::NavigationSystem::SetSceneNavMesh(scene, navMesh);
+	m_NavMeshBake.Active = true;
+	m_NavMeshBake.TargetScene = scene;
+	s_NavMeshBakeInProgress.store(true, std::memory_order_relaxed);
+
+	m_NavMeshBake.Future = std::async(std::launch::async, [buildInput = std::move(input)]() -> NavMeshBakeResult
+	{
+		NavMeshBakeResult result;
+		auto navMesh = std::make_shared<Engine::NavMesh>();
+		if (navMesh->Build(buildInput))
+		{
+			result.Success = true;
+			result.NavMesh = std::move(navMesh);
+		}
+		return result;
+	});
+}
+
+void SceneViewportPanel::PollNavMeshBake()
+{
+	if (!m_NavMeshBake.Active)
+		return;
+
+	if (!m_NavMeshBake.Future.valid())
+	{
+		m_NavMeshBake.Active = false;
+		m_NavMeshBake.TargetScene = nullptr;
+		s_NavMeshBakeInProgress.store(false, std::memory_order_relaxed);
+		return;
+	}
+
+	if (m_NavMeshBake.Future.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+		return;
+
+	NavMeshBakeResult result = m_NavMeshBake.Future.get();
+	Engine::Scene* targetScene = m_NavMeshBake.TargetScene;
+	m_NavMeshBake.Active = false;
+	m_NavMeshBake.TargetScene = nullptr;
+	s_NavMeshBakeInProgress.store(false, std::memory_order_relaxed);
+
+	Engine::Scene* currentScene = SceneManager::Get().GetCurrentScene();
+	if (!currentScene || currentScene != targetScene)
+		return;
+
+	if (!result.Success || !result.NavMesh)
+	{
+		NotificationManager::Get().AddNotification(
+			LOCAL("Viewport.NavMeshBakeTitle"), LOCAL("Viewport.NavMeshBakeFailedMessage"), ELogLevel::Warn, 4.0f);
+		return;
+	}
+
+	Engine::NavigationSystem::SetSceneNavMesh(currentScene, result.NavMesh);
 	m_DebugRenderer.SetShowNavMeshOverlay(true);
 
-	const std::string msg = LOCAL_FMT("Viewport.NavMeshBakedMessage", navMesh->GetPolygonCount(), navMesh->GetVertexCount());
+	const std::string msg = LOCAL_FMT(
+		"Viewport.NavMeshBakedMessage", result.NavMesh->GetPolygonCount(), result.NavMesh->GetVertexCount());
 	NotificationManager::Get().AddNotification(
 		LOCAL("Viewport.NavMeshBakeTitle"), msg, ELogLevel::Info, 4.0f);
+}
+
+void SceneViewportPanel::CancelNavMeshBake()
+{
+	if (m_NavMeshBake.Future.valid())
+		m_NavMeshBake.Future.wait();
+	if (m_NavMeshBake.Active)
+		s_NavMeshBakeInProgress.store(false, std::memory_order_relaxed);
+	m_NavMeshBake.Active = false;
+	m_NavMeshBake.TargetScene = nullptr;
+	m_NavMeshBake.Future = {};
 }
 #pragma endregion
 

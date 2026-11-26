@@ -64,6 +64,11 @@ void DebugRenderer::Free()
 		Safe_Release(buffer);
 
 	m_Vertices.clear();
+	m_CachedNavMeshPtr = nullptr;
+	m_CachedNavMeshPolyCount = 0;
+	m_CachedNavMeshVertCount = 0;
+	m_CachedNavMeshCamPos = vec3(1e9f);
+	m_CachedNavMeshVertices.clear();
 }
 
 void DebugRenderer::SubmitDebugDraw(const CameraBuffer& cameraBuffer, const wstring& colorRTName)
@@ -847,72 +852,95 @@ void DebugRenderer::RegisterNavMeshDebug(const CameraBuffer& cameraBuffer)
 			navMesh = *ctxNavMesh;
 		}
 	}
-	if (!navMesh || !navMesh->IsValid()) return;
+	if (!navMesh || !navMesh->IsValid())
+	{
+		m_CachedNavMeshPtr = nullptr;
+		m_CachedNavMeshPolyCount = 0;
+		m_CachedNavMeshVertCount = 0;
+		m_CachedNavMeshCamPos = vec3(1e9f);
+		m_CachedNavMeshVertices.clear();
+		return;
+	}
 
 	const auto& data = navMesh->GetData();
 	const auto& vertices = data.vertices;
 	const auto& polygons = data.polygons;
 
-	const Frustum frustum = FrustumCuller::ExtractFrustum(cameraBuffer.viewProjMatrix);
 	const mat4 invView = glm::inverse(cameraBuffer.viewMatrix);
 	const vec3 camPos = vec3(invView[3]);
+	const vec3 camDelta = camPos - m_CachedNavMeshCamPos;
+	constexpr f32 c_RebuildMoveThresholdSq = 15.0f * 15.0f;
 
-	constexpr f32 c_OverlayRadius = 150.0f;
-	constexpr f32 c_OverlayRadiusSq = c_OverlayRadius * c_OverlayRadius;
-	constexpr f32 c_GroundOffset = 0.06f;
-
-	const vec4 polyEdgeColor(0.15f, 0.95f, 0.75f, 0.85f);
-	const vec4 sameLayerLinkColor(1.0f, 0.9f, 0.2f, 0.65f);
-	const vec4 multiLayerLinkColor(1.0f, 0.5f, 0.1f, 0.95f);
-
-	for (size_t polyIdx = 0; polyIdx < polygons.size(); ++polyIdx)
+	if (m_CachedNavMeshPtr != navMesh.get() ||
+		m_CachedNavMeshPolyCount != polygons.size() ||
+		m_CachedNavMeshVertCount != vertices.size() ||
+		glm::dot(camDelta, camDelta) > c_RebuildMoveThresholdSq)
 	{
-		const auto& poly = polygons[polyIdx];
-		if (poly.vertexIndices.size() < 3) continue;
+		m_CachedNavMeshPtr = navMesh.get();
+		m_CachedNavMeshPolyCount = polygons.size();
+		m_CachedNavMeshVertCount = vertices.size();
+		m_CachedNavMeshCamPos = camPos;
+		m_CachedNavMeshVertices.clear();
 
-		const vec3 diff = poly.center - camPos;
-		if (glm::dot(diff, diff) > c_OverlayRadiusSq) continue;
+		constexpr f32 c_OverlayRadius = 80.0f;
+		constexpr f32 c_OverlayRadiusSq = c_OverlayRadius * c_OverlayRadius;
+		constexpr f32 c_GroundOffset = 0.06f;
+		constexpr size_t c_MaxNavMeshLines = 8192;
+		const size_t maxVerts = 2 * c_MaxNavMeshLines;
+		m_CachedNavMeshVertices.reserve(std::min(polygons.size() * 4, maxVerts));
 
-		vec3 minPt(std::numeric_limits<f32>::max());
-		vec3 maxPt(std::numeric_limits<f32>::lowest());
-		for (uint32 vIdx : poly.vertexIndices)
+		const vec4 polyEdgeColor(0.15f, 0.95f, 0.75f, 0.85f);
+		const vec4 multiLayerLinkColor(1.0f, 0.5f, 0.1f, 0.95f);
+
+		for (size_t polyIdx = 0; polyIdx < polygons.size(); ++polyIdx)
 		{
-			if (vIdx >= vertices.size()) continue;
-			minPt = glm::min(minPt, vertices[vIdx]);
-			maxPt = glm::max(maxPt, vertices[vIdx]);
-		}
-		const BoundingBox polyBox(minPt - vec3(0.0f, 0.1f, 0.0f), maxPt + vec3(0.0f, 0.2f, 0.0f));
-		if (!FrustumCuller::TestBoundingBox(frustum, polyBox)) continue;
+			const auto& poly = polygons[polyIdx];
+			if (poly.vertexIndices.size() < 3) continue;
 
-		if (m_Vertices.size() + poly.vertexIndices.size() * 4 >= 2 * static_cast<sizet>(m_MaxLines))
-		{
-			return;
-		}
+			const vec3 diff = poly.center - camPos;
+			if (glm::dot(diff, diff) > c_OverlayRadiusSq) continue;
 
-		for (size_t i = 0; i < poly.vertexIndices.size(); ++i)
-		{
-			const uint32 idxA = poly.vertexIndices[i];
-			const uint32 idxB = poly.vertexIndices[(i + 1) % poly.vertexIndices.size()];
-			if (idxA >= vertices.size() || idxB >= vertices.size()) continue;
+			for (size_t i = 0; i < poly.vertexIndices.size(); ++i)
+			{
+				if (i < poly.neighbors.size())
+				{
+					const int32 neighborIdx = poly.neighbors[i];
+					if (neighborIdx >= 0 && static_cast<size_t>(neighborIdx) < polyIdx) continue;
+				}
+				if (m_CachedNavMeshVertices.size() + 2 > maxVerts) break;
 
-			const vec3 a = vertices[idxA] + vec3(0.0f, c_GroundOffset, 0.0f);
-			const vec3 b = vertices[idxB] + vec3(0.0f, c_GroundOffset, 0.0f);
-			DrawLine(a, b, polyEdgeColor);
-		}
+				const uint32 idxA = poly.vertexIndices[i];
+				const uint32 idxB = poly.vertexIndices[(i + 1) % poly.vertexIndices.size()];
+				if (idxA >= vertices.size() || idxB >= vertices.size()) continue;
 
-		for (int32 neighborIdx : poly.neighbors)
-		{
-			if (neighborIdx < 0 || neighborIdx <= static_cast<int32>(polyIdx)) continue;
-			if (static_cast<size_t>(neighborIdx) >= polygons.size()) continue;
+				const vec3 a = vertices[idxA] + vec3(0.0f, c_GroundOffset, 0.0f);
+				const vec3 b = vertices[idxB] + vec3(0.0f, c_GroundOffset, 0.0f);
+				m_CachedNavMeshVertices.push_back({ a, polyEdgeColor });
+				m_CachedNavMeshVertices.push_back({ b, polyEdgeColor });
+			}
 
-			const auto& neighbor = polygons[static_cast<size_t>(neighborIdx)];
-			const bool isMultiLayer = std::abs(poly.center.y - neighbor.center.y) > 0.25f;
-			const vec4& linkColor = isMultiLayer ? multiLayerLinkColor : sameLayerLinkColor;
-			const vec3 pA = poly.center + vec3(0.0f, c_GroundOffset + 0.02f, 0.0f);
-			const vec3 pB = neighbor.center + vec3(0.0f, c_GroundOffset + 0.02f, 0.0f);
-			DrawLine(pA, pB, linkColor);
+			for (const auto& link : poly.extraLinks)
+			{
+				if (link.targetPoly < 0 || link.targetPoly <= static_cast<int32>(polyIdx)) continue;
+				if (static_cast<size_t>(link.targetPoly) >= polygons.size()) continue;
+				if (m_CachedNavMeshVertices.size() + 2 > maxVerts) break;
+
+				const auto& neighbor = polygons[static_cast<size_t>(link.targetPoly)];
+				const vec3 pA = poly.center + vec3(0.0f, c_GroundOffset + 0.03f, 0.0f);
+				const vec3 pB = neighbor.center + vec3(0.0f, c_GroundOffset + 0.03f, 0.0f);
+				m_CachedNavMeshVertices.push_back({ pA, multiLayerLinkColor });
+				m_CachedNavMeshVertices.push_back({ pB, multiLayerLinkColor });
+			}
+
+			if (m_CachedNavMeshVertices.size() >= maxVerts) break;
 		}
 	}
+
+	if (m_CachedNavMeshVertices.empty()) return;
+	const sizet maxTotalVerts = 2 * static_cast<sizet>(m_MaxLines);
+	if (m_Vertices.size() >= maxTotalVerts) return;
+	const sizet copyCount = std::min(m_CachedNavMeshVertices.size(), maxTotalVerts - m_Vertices.size());
+	m_Vertices.insert(m_Vertices.end(), m_CachedNavMeshVertices.begin(), m_CachedNavMeshVertices.begin() + copyCount);
 }
 
 #pragma region Draw Functions

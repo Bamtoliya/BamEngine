@@ -1,4 +1,5 @@
 ﻿#include "ThumbnailRenderer.h"
+#include "MaterialPreviewRenderer.h"
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "TransformComponent.h"
@@ -22,8 +23,13 @@
 #include "PreviewCameraDefaults.h"
 #include "AnimationEvaluator.h"
 #include "MaterialInstance.h"
+#include "PlatformPath.h"
 #include <archive/BeveArchive.h>
 #include <archive/JsonArchive.h>
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <limits>
 
 namespace
 {
@@ -49,6 +55,8 @@ EResult ThumbnailRenderer::Initialize(void* arg)
 	m_SphereMesh = manager.GetResourceHandle<Engine::Mesh>(L"SphereMesh");
 	if (!m_SphereMesh.Get())
 		return EResult::FileNotFound;
+
+	m_MaterialBallMesh = Editor::MaterialPreviewRenderer::GetOrLoadMaterialBallPreviewMesh();
 
 	auto baseMaterial = manager.GetResourceHandle<Engine::Material>(DefaultMaterialKey);
 	if (!baseMaterial.IsValid())
@@ -103,6 +111,7 @@ void ThumbnailRenderer::Free()
 	m_Scene = nullptr;
 
 	m_MeshEntity = entt::null;
+	m_MaterialBallMesh = {};
 	m_SphereMesh = {};
 	m_PreviewMaterial = {};
 }
@@ -143,7 +152,7 @@ void ThumbnailRenderer::SetupStudioScene()
 	auto& meshFlag = registry.emplace<Engine::FlagComponent>(m_MeshEntity);
 	meshFlag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
 	auto& meshComp = registry.emplace<Engine::StaticMeshRendererComponent>(m_MeshEntity);
-	meshComp.meshHandle = m_SphereMesh;
+	meshComp.meshHandle = m_MaterialBallMesh.IsValid() ? m_MaterialBallMesh : m_SphereMesh;
 	meshComp.castShadow = true;
 	// 계층 구조 및 라이트 GPU 버퍼 캐시 갱신
 	RefreshStudioLights();

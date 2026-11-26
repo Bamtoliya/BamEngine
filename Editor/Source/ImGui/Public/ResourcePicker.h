@@ -333,10 +333,16 @@ namespace Editor
 			const float nameY = item.SubPath.empty() ? (textCenterY - lineHeight * 0.5f) : (textCenterY - lineHeight - spacingY * 0.5f);
 			const float pathY = textCenterY + spacingY * 0.5f;
 			const ImU32 nameColor = ImGui::GetColorU32(isSelected ? ImVec4(1.0f, 0.82f, 0.35f, 1.0f) : ImGui::GetStyleColorVec4(ImGuiCol_Text));
+			const float textMaxX = (thumbSize >= 48.0f ? badgeStartX : (cursorPos.x + availWidth - rightReserved)) - 8.0f;
 
-			drawList->AddText(ImVec2(textStartX, nameY), nameColor, item.Filename.data(), item.Filename.data() + item.Filename.size());
-			if (!item.SubPath.empty())
-				drawList->AddText(ImVec2(textStartX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), item.SubPath.data(), item.SubPath.data() + item.SubPath.size());
+			if (textMaxX > textStartX)
+			{
+				drawList->PushClipRect(ImVec2(textStartX, cursorPos.y), ImVec2(textMaxX, cursorPos.y + itemHeight), true);
+				drawList->AddText(ImVec2(textStartX, nameY), nameColor, item.Filename.data(), item.Filename.data() + item.Filename.size());
+				if (!item.SubPath.empty())
+					drawList->AddText(ImVec2(textStartX, pathY), ImGui::GetColorU32(ImGuiCol_TextDisabled), item.SubPath.data(), item.SubPath.data() + item.SubPath.size());
+				drawList->PopClipRect();
+			}
 
 			if (isSelected)
 			{

@@ -787,6 +787,48 @@ void ModelEditor::DrawCustomContent()
 			{
 				const bool canEdit = PIEManager::Get().IsEditing();
 
+				DrawMissingResourcesBanner(m_MissingResources, [this, model, canEdit]()
+				{
+					if (!model || !canEdit) return;
+					auto& rm = Engine::ResourceManager::Get();
+					bool anyFixed = false;
+					std::vector<Engine::MissingResourceEntry> remaining;
+					for (const auto& entry : m_MissingResources)
+					{
+						bool fixed = false;
+						if (entry.ExpectedResourceType.find("Material") != std::string::npos)
+						{
+							const auto found = FindNearbyReplacementAsset(m_TargetResourcePath, entry);
+							if (!found.empty())
+							{
+								auto loaded = rm.GetResourceHandle<Engine::MaterialInterface>(found.wstring());
+								if (!loaded.IsValid())
+									loaded = Engine::ResourceHandle<Engine::MaterialInterface>(rm.LoadFile(found.wstring()));
+								if (loaded.IsValid())
+								{
+									const auto materials = model->GetMaterials();
+									for (std::size_t i = 0; i < materials.size(); ++i)
+									{
+										if (!materials[i].IsValid() &&
+											model->SetMaterial(static_cast<uint32>(i), loaded) == EResult::Success)
+										{
+											fixed = true;
+											anyFixed = true;
+											break;
+										}
+									}
+								}
+							}
+						}
+						if (!fixed) remaining.push_back(entry);
+					}
+					m_MissingResources = std::move(remaining);
+					if (anyFixed)
+					{
+						m_History.MarkEdited();
+						SetupPreview();
+					}
+				});
 				DrawModelInfo(*model);
 				ImGui::Spacing();
 
@@ -880,6 +922,7 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 		m_ModelHandle.Reset();
 		m_MeshHandle = Engine::ResourceHandle<Engine::Mesh>(handle);
 		m_StatusKey.clear();
+		m_MissingResources.clear();
 		m_History.Clear();
 		SetupPreview();
 		return;
@@ -889,7 +932,12 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	using Milliseconds = std::chrono::duration<double, std::milli>;
 	const auto loadStart = Clock::now();
 	auto& manager = ResourceManager::Get();
-	const auto handle = manager.LoadFile(assetPath.wstring());
+	Engine::MissingResourceRecoveryContext recovery;
+	Engine::Handle handle;
+	{
+		Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
+		handle = manager.LoadFile(assetPath.wstring());
+	}
 	const auto loadEnd = Clock::now();
 	if (!dynamic_cast<Model*>(manager.GetResource(handle)) || !RestoreSavedChanges()) return;
 
@@ -897,6 +945,8 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	m_MeshHandle.Reset();
 	m_ModelHandle = ResourceHandle<Model>(handle);
 	m_StatusKey.clear();
+	m_MissingResources = std::move(recovery.Entries);
+	NotifyMissingResources(assetPath, m_MissingResources);
 	m_History.Reset(m_ModelHandle.Get()->GetMaterials());
 	const auto previewStart = Clock::now();
 	SetupPreview();
@@ -921,6 +971,7 @@ bool ModelEditor::BeginAsyncOpen(const std::filesystem::path& assetPath)
 	m_ModelHandle.Reset();
 	m_MeshHandle.Reset();
 	m_StatusKey.clear();
+	m_MissingResources.clear();
 	m_History.Clear();
 	if (m_PreviewEntity && m_PreviewWidget.GetScene())
 	{
@@ -969,7 +1020,12 @@ bool ModelEditor::StepAsyncOpen(float maxTimeSeconds)
 		}
 		else if (IsImportedModelFile(m_AsyncTargetPath))
 		{
-			const auto handle = manager.LoadFile(m_AsyncTargetPath.wstring());
+			Engine::MissingResourceRecoveryContext recovery;
+			Engine::Handle handle;
+			{
+				Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
+				handle = manager.LoadFile(m_AsyncTargetPath.wstring());
+			}
 			auto* model = dynamic_cast<Model*>(manager.GetResource(handle));
 			if (!model)
 			{
@@ -978,6 +1034,8 @@ bool ModelEditor::StepAsyncOpen(float maxTimeSeconds)
 				return true;
 			}
 			m_ModelHandle = ResourceHandle<Model>(handle);
+			m_MissingResources = std::move(recovery.Entries);
+			NotifyMissingResources(m_AsyncTargetPath, m_MissingResources);
 			m_History.Reset(m_ModelHandle.Get()->GetMaterials());
 		}
 		else
@@ -1068,8 +1126,17 @@ bool ModelEditor::CanSaveDocument() const
 bool ModelEditor::RestoreSavedResource()
 {
 	auto* model = m_ModelHandle.Get();
-	if (!model || model->Reload(m_TargetResourcePath) != EResult::Success) return false;
+	if (!model) return false;
+	Engine::MissingResourceRecoveryContext recovery;
+	EResult reloadResult = EResult::Fail;
+	{
+		Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
+		reloadResult = model->Reload(m_TargetResourcePath);
+	}
+	if (reloadResult != EResult::Success) return false;
 	m_StatusKey.clear();
+	m_MissingResources = std::move(recovery.Entries);
+	NotifyMissingResources(m_TargetResourcePath, m_MissingResources);
 	m_History.Reset(model->GetMaterials());
 	return true;
 }
@@ -1081,6 +1148,7 @@ void ModelEditor::ReleaseResourceDocument()
 	m_MeshHandle.Reset();
 	SetupPreview();
 	m_StatusKey.clear();
+	m_MissingResources.clear();
 	m_History.Clear();
 }
 
@@ -1157,6 +1225,7 @@ void ModelEditor::SaveModel()
 	}
 
 	m_StatusKey = "ModelEditor.Saved";
+	m_MissingResources.clear();
 	m_History.MarkSaved();
 }
 

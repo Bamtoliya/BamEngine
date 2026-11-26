@@ -141,6 +141,7 @@ Viewport,NavMeshNoActiveScene,No active scene found to bake 3D NavMesh.,3D NavMe
 Viewport,NavMeshBakeTitle,3D NavMesh Bake,3D NavMesh 베이크
 Viewport,NavMeshBakeFailedMessage,Failed to bake 3D NavMesh from the current scene.,현재 씬에서 3D NavMesh를 베이크하지 못했습니다.
 Viewport,NavMeshBakedMessage,"3D NavMesh baked: {} polygons, {} vertices","3D NavMesh 베이크 완료: 폴리곤 {}개, 정점 {}개"
+Viewport,NavMeshBakingStatus,Baking 3D NavMesh...,3D NavMesh 베이크 중...
 Viewport,CaptureHDRMenu,Capture HDR at Current Location...,현재 위치에서 HDR 캡처...
 Viewport,CaptureHDRTitle,HDR Capture,HDR 캡처
 Viewport,CaptureHDRNoCamera,No active scene or camera is available for HDR capture.,HDR 캡처에 사용할 활성 씬이나 카메라가 없습니다.

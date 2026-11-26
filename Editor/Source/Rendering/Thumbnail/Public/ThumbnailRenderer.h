@@ -66,7 +66,8 @@ private:
 	Engine::Scene* m_Scene = nullptr;
 	entt::entity m_MeshEntity = entt::null;
 
-	// 기본 프리뷰 메쉬 (Sphere)
+	// 기본 프리뷰 메쉬 (MaterialBall 우선, 실패 시 Sphere 폴백)
+	Engine::ResourceHandle<Engine::Mesh> m_MaterialBallMesh;
 	Engine::ResourceHandle<Engine::Mesh> m_SphereMesh;
 
 	// 빛

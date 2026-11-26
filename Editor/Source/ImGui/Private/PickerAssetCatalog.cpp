@@ -2,20 +2,20 @@
 #include "PlatformPath.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <cctype>
 #include <chrono>
 #include <exception>
 #include <future>
 #include <utility>
+#include <vector>
 
 namespace Editor::Detail
 {
 	namespace
 	{
 		using Clock = std::chrono::steady_clock;
-		using Roots = std::array<std::filesystem::path, 2>;
+		using Roots = std::vector<std::filesystem::path>;
 		std::atomic_bool pickerFilesChanged = false;
 
 		struct PickerAssetCatalogState
@@ -40,7 +40,7 @@ namespace Editor::Detail
 			for (std::size_t index = 0; index < roots.size(); ++index)
 			{
 				const auto& root = roots[index];
-				if (root.empty() || (index != 0 && root == roots.front()))
+				if (root.empty() || std::find(roots.begin(), roots.begin() + index, root) != roots.begin() + index)
 					continue;
 
 				std::error_code error;
@@ -78,11 +78,20 @@ namespace Editor::Detail
 	{
 		auto& state = GetPickerAssetCatalogState();
 		const auto now = Clock::now();
-		const auto& projectRoot = Engine::PlatformPath::GetProjectAssetRoot();
-		const auto& engineRoot = Engine::PlatformPath::GetEngineResourceRoot();
-		if (projectRoot != state.CurrentRoots[0] || engineRoot != state.CurrentRoots[1])
+		Roots nextRoots;
+		const auto appendRoot = [&nextRoots](const std::filesystem::path& p)
 		{
-			state.CurrentRoots = { projectRoot, engineRoot };
+			if (!p.empty() && std::find(nextRoots.begin(), nextRoots.end(), p) == nextRoots.end())
+				nextRoots.push_back(p);
+		};
+		appendRoot(Engine::PlatformPath::GetProjectAssetRoot());
+		appendRoot(Engine::PlatformPath::GetEngineResourceRoot());
+		for (const auto& mount : Engine::PlatformPath::GetContentMounts())
+			appendRoot(mount.RootPath);
+
+		if (nextRoots != state.CurrentRoots)
+		{
+			state.CurrentRoots = std::move(nextRoots);
 			state.Catalog.Files.clear();
 			state.Catalog.IsReady = false;
 			++state.Catalog.Revision;

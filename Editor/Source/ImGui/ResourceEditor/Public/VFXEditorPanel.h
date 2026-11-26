@@ -122,6 +122,7 @@ private:
 	void ScrubTime(f32 targetTime);
 
 	void ApplyBackgroundPreset();
+	void ApplyGroundBackdrop();
 
 	void DrawGizmo();
 	void DrawVisualHelpers(const Engine::mat4& viewProj, const ImVec2& imageScreenPos, const ImVec2& imageSize);
@@ -161,6 +162,8 @@ private:
 	EVFXBackgroundMode m_BackgroundMode = EVFXBackgroundMode::StudioGray;
 	bool m_PreviewMotion = false;
 	bool m_ShowGroundPlane = true;
+	bool m_ShowCheckerBackdrop = true;
+	bool m_BackdropDirty = true;
 	bool m_AirMode = false;
 	bool m_SavedGroundPlane = true;
 	bool m_SavedGrid = true;

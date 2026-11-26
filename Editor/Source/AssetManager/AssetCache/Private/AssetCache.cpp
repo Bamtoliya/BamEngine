@@ -405,20 +405,34 @@ std::string AssetCache::BuildCacheKey(const filesystem::path& assetPath)
     return ThumbnailCacheKey(assetPath);
 }
 
-AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath)
+bool AssetCache::FindCachedOrLoading(const std::string& key, ThumbnailView& outView)
 {
-    const std::string key = cacheKey.empty() ? ThumbnailCacheKey(assetPath) : cacheKey;
+    outView = {};
     if (key.empty())
-        return {};
+        return true;
 
     if (auto cached = m_ThumbnailCache.find(key); cached != m_ThumbnailCache.end())
     {
         m_LruList.splice(m_LruList.begin(), m_LruList, cached->second.LruIt);
-        return ThumbnailView{ cached->second.Texture, cached->second.UV0, cached->second.UV1, cached->second.SpriteHandle };
+        outView = ThumbnailView{ cached->second.Texture, cached->second.UV0, cached->second.UV1, cached->second.SpriteHandle };
+        return true;
     }
 
-    if (m_LoadingPaths.contains(key))
-        return {};
+    return m_LoadingPaths.contains(key);
+}
+
+bool AssetCache::TryGetCachedThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath, ThumbnailView& outView)
+{
+    const std::string key = cacheKey.empty() ? ThumbnailCacheKey(assetPath) : cacheKey;
+    return FindCachedOrLoading(key, outView);
+}
+
+AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath)
+{
+    const std::string key = cacheKey.empty() ? ThumbnailCacheKey(assetPath) : cacheKey;
+    ThumbnailView cachedView;
+    if (FindCachedOrLoading(key, cachedView))
+        return cachedView;
 
     std::string filename = Engine::WStrToStr(assetPath.filename().wstring());
     for (char& ch : filename)

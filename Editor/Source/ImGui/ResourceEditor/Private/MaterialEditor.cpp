@@ -119,13 +119,16 @@ bool MaterialEditor::CanSaveDocument() const
 	return m_Open && m_Material && !m_IsReadOnly && !IsAsyncLoading();
 }
 
-void MaterialEditor::ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate)
+void MaterialEditor::ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate,
+	std::vector<Engine::MissingResourceEntry> missingResources)
 {
 	m_TargetResourcePath = assetPath;
 	m_IsReadOnly = Engine::PlatformPath::IsReadOnlyTarget(assetPath);
 	m_PreviewRenderer.ReleaseMaterial();
 	m_MaterialHandle = std::move(candidate);
 	m_Material = m_MaterialHandle.Get();
+	m_MissingResources = std::move(missingResources);
+	NotifyMissingResources(assetPath, m_MissingResources);
 
 	// 이전 문서의 그래프 상태를 비우고, 연결된 그래프가 있을 때만 읽는다.
 	// 여는 것만으로 그래프 파일을 만들거나 머티리얼의 셰이더를 바꾸지 않는다.
@@ -152,12 +155,16 @@ void MaterialEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	CancelAsyncOpen();
 	const auto path = Engine::PlatformPath::ToProjectRelative(assetPath).wstring();
 	auto& manager = Engine::ResourceManager::Get();
+	Engine::MissingResourceRecoveryContext recovery;
 	auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
 	if (!candidate.IsValid())
+	{
+		Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
 		candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
+	}
 	if (!candidate.Get() || !RestoreSavedChanges()) return;
 
-	ApplyLoadedMaterial(assetPath, std::move(candidate));
+	ApplyLoadedMaterial(assetPath, std::move(candidate), std::move(recovery.Entries));
 }
 
 bool MaterialEditor::BeginAsyncOpen(const std::filesystem::path& assetPath)
@@ -200,14 +207,19 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 	{
 		const auto path = Engine::PlatformPath::ToProjectRelative(m_AsyncTargetPath).wstring();
 		auto& manager = Engine::ResourceManager::Get();
+		Engine::MissingResourceRecoveryContext recovery;
 		auto candidate = manager.GetResourceHandle<Engine::MaterialInterface>(path);
 		if (!candidate.IsValid())
+		{
+			Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
 			candidate = Engine::ResourceHandle<Engine::MaterialInterface>(manager.LoadFile(path));
+		}
 		if (!candidate.Get())
 		{
 			NotificationManager::Get().AddNotification(GetDisplayName(),
 				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
 			m_AsyncPendingMaterial.Reset();
+			m_AsyncPendingMissingResources.clear();
 			m_AsyncTargetPath.clear();
 			m_AsyncProgress = 0.0f;
 			m_AsyncStage = m_Material ? EAsyncStage::None : EAsyncStage::Failed;
@@ -215,6 +227,7 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 		}
 
 		m_AsyncPendingMaterial = std::move(candidate);
+		m_AsyncPendingMissingResources = std::move(recovery.Entries);
 		m_AsyncLoadDurationMs = Milliseconds(Clock::now() - m_AsyncLoadStart).count();
 		m_AsyncStage = EAsyncStage::LoadingGraph;
 		m_AsyncProgress = 0.70f;
@@ -228,6 +241,7 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 		if (!RestoreSavedChanges())
 		{
 			m_AsyncPendingMaterial.Reset();
+			m_AsyncPendingMissingResources.clear();
 			m_AsyncTargetPath.clear();
 			m_AsyncProgress = 0.0f;
 			m_AsyncStage = EAsyncStage::None;
@@ -237,7 +251,8 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 		const auto graphStart = Clock::now();
 		auto targetPath = std::move(m_AsyncTargetPath);
 		auto candidate = std::move(m_AsyncPendingMaterial);
-		ApplyLoadedMaterial(targetPath, std::move(candidate));
+		auto missingResources = std::move(m_AsyncPendingMissingResources);
+		ApplyLoadedMaterial(targetPath, std::move(candidate), std::move(missingResources));
 		const auto graphEnd = Clock::now();
 		const double graphMs = Milliseconds(graphEnd - graphStart).count();
 		const double totalMs = Milliseconds(graphEnd - m_AsyncStartTime).count();
@@ -260,6 +275,7 @@ void MaterialEditor::CancelAsyncOpen()
 	m_AsyncProgress = 0.0f;
 	m_AsyncTargetPath.clear();
 	m_AsyncPendingMaterial.Reset();
+	m_AsyncPendingMissingResources.clear();
 }
 
 void MaterialEditor::DrawAsyncLoadingOverlay()
@@ -299,6 +315,7 @@ void MaterialEditor::ReleaseResourceDocument()
 	m_PreviewRenderer.ReleaseMaterial();
 	m_Material = nullptr;
 	m_MaterialHandle.Reset();
+	m_MissingResources.clear();
 	m_LiveVertexShader.Reset();
 	m_LivePixelShader.Reset();
 	m_History.Clear();
@@ -316,12 +333,20 @@ bool MaterialEditor::RestoreSavedResource()
 	if (!m_Material) return false;
 	archive::JsonArchive draft;
 	if (!m_Material->WriteArchive(draft)) return false;
-	if (m_Material->Reload(m_TargetResourcePath) != EResult::Success)
+	Engine::MissingResourceRecoveryContext recovery;
+	EResult reloadResult = EResult::Fail;
+	{
+		Engine::MissingResourceRecoveryScope recoveryScope(&recovery);
+		reloadResult = m_Material->Reload(m_TargetResourcePath);
+	}
+	if (reloadResult != EResult::Success)
 	{
 		if (const auto restored = m_Material->ReadArchive(draft); !restored)
 			EDITOR_LOG_ERROR("Could not restore the material draft: {}", restored.Field);
 		return false;
 	}
+	m_MissingResources = std::move(recovery.Entries);
+	NotifyMissingResources(m_TargetResourcePath, m_MissingResources);
 	// 저장된 상태로 되돌렸으므로 그래프도 저장된 연결 기준으로 다시 읽은 뒤 통합 기준 스냅샷을 재설정한다.
 	m_ShaderGraph = {};
 	m_GraphReady = false;
@@ -519,31 +544,81 @@ void MaterialEditor::DrawLeftPane(float width, float height)
 		if (ImGui::BeginChild("##MaterialDetailsScroll", ImVec2(0.0f, curSettingsH), true))
 		{
 			ImGui::SetScrollX(0.0f); // 수평 1칸 밀림 방지: 가로 스크롤 위치 강제 0 고정
-			if (const auto* instance = dynamic_cast<const Engine::MaterialInstance*>(m_Material))
+			auto autoFixCallback = m_IsReadOnly ? std::function<void()>{} : [this]()
 			{
-				if (const auto* base = instance->GetBaseMaterial())
+				if (!m_Material || m_IsReadOnly) return;
+				auto& rm = Engine::ResourceManager::Get();
+				bool anyFixed = false;
+				std::vector<Engine::MissingResourceEntry> remaining;
+				for (const auto& entry : m_MissingResources)
 				{
-					const std::filesystem::path path = base->GetPath();
-					const std::filesystem::path key = base->GetKey();
-					const auto& reference = path.empty() ? key : path;
-					const auto name = Engine::WStrToStr(reference.filename().wstring());
-					ImGui::TextWrapped("%s", LOCAL_FMT("MaterialEditor.BaseMaterial", name).c_str());
-					if (ImGui::Button((ICON_FA_LINK " " + LOCAL_LABEL("MaterialEditor.OpenBaseMaterial")).c_str(),
-						ImVec2(-FLT_MIN, 0.0f)))
+					bool fixed = false;
+					if (entry.ExpectedResourceType.find("Texture") != std::string::npos)
 					{
-						auto& manager = ImGuiManager::Get();
-						if (!manager.RequestOpenResourceEditor(reference) &&
-							(key.empty() || key == reference || !manager.RequestOpenResourceEditor(key)))
+						const auto found = FindNearbyReplacementAsset(m_TargetResourcePath, entry);
+						if (!found.empty())
 						{
-							NotificationManager::Get().AddNotification(LOCAL("Notification.BaseMaterialNotFound"),
-								Engine::WStrToStr(reference.wstring()), ELogLevel::Warn);
+							auto loaded = rm.GetResourceHandle<Engine::Texture>(found.wstring());
+							if (!loaded.IsValid())
+								loaded = Engine::ResourceHandle<Engine::Texture>(rm.LoadFile(found.wstring()));
+							if (loaded.IsValid())
+							{
+								for (const auto& binding : m_Material->GetTextureBindings())
+								{
+									if (!binding.texture.IsValid())
+									{
+										m_Material->SetTextureBySlot(binding.slot, loaded);
+										fixed = true;
+										anyFixed = true;
+										break;
+									}
+								}
+							}
 						}
 					}
+					if (!fixed) remaining.push_back(entry);
 				}
-				else
+				m_MissingResources = std::move(remaining);
+				if (anyFixed)
 				{
-					ImGui::TextWrapped("%s", LOCAL_CSTR("Notification.BaseMaterialNotFound"));
+					m_Material->IncreaseVersion();
+					m_History.MarkEdited();
 				}
+			};
+			DrawMissingResourcesBanner(m_MissingResources, std::move(autoFixCallback));
+			if (auto* instance = dynamic_cast<Engine::MaterialInstance*>(m_Material))
+			{
+				const bool canEdit = !m_IsReadOnly;
+				auto baseHandle = instance->GetBaseMaterialHandle();
+				auto tableStyle = EditorUI::InspectorPropertyTableStyle();
+				const float availWidth = ImGui::GetContentRegionAvail().x;
+				tableStyle.LabelWidth = std::clamp(availWidth * 0.42f, 110.0f, 145.0f);
+
+				if (EditorUI::BeginPropertyTable("##BaseMaterialTable", tableStyle))
+				{
+					EditorUI::PropertyRow("MaterialEditor.BaseMaterialSlot");
+					if (Editor::DrawInspectorResourcePicker(baseHandle, canEdit, true) && canEdit)
+					{
+						if (baseHandle != instance->GetBaseMaterialHandle())
+						{
+							instance->SetBaseMaterial(baseHandle);
+							instance->IncreaseVersion();
+							if (!instance->HasShaderGraph())
+							{
+								m_ShaderGraph = {};
+								m_GraphReady = false;
+								m_LiveCompileCooldown = 0.0f;
+								TryLoadLinkedShaderGraph();
+							}
+							m_History.MarkEdited();
+							m_PreviewDirtyTimer = 0.2f;
+						}
+					}
+					EditorUI::EndPropertyTable();
+				}
+
+				if (!instance->GetBaseMaterial())
+					ImGui::TextDisabled("%s", LOCAL_CSTR("MaterialEditor.BaseMaterialMissing"));
 			}
 			DrawPipelineSettings();
 			DrawShaderSettings();
@@ -2235,6 +2310,7 @@ void MaterialEditor::SaveTarget()
 		return;
 	}
 
+	m_MissingResources.clear();
 	m_History.MarkSaved();
 	if (AssetCache::IsCreated())
 		AssetCache::Get().RequestInvalidate(m_TargetResourcePath);

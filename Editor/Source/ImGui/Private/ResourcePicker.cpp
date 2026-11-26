@@ -7,7 +7,30 @@ namespace Editor::Detail
 {
 	ResourceFieldThumbnail GetResourcePickerThumbnail(const std::filesystem::path& assetPath)
 	{
-		const auto thumbnail = AssetCache::Get().GetThumbnailView({}, assetPath);
+		if (assetPath.empty())
+			return {};
+
+		auto& assetCache = AssetCache::Get();
+		AssetCache::ThumbnailView thumbnail;
+		if (assetCache.TryGetCachedThumbnailView({}, assetPath, thumbnail))
+			return { thumbnail.Texture, thumbnail.UV0, thumbnail.UV1 };
+
+		static int s_LastFrameCount = -1;
+		static int s_ThumbnailRequestsThisFrame = 0;
+		constexpr int kMaxThumbnailRequestsPerFrame = 4;
+
+		const int currentFrame = ImGui::GetFrameCount();
+		if (currentFrame != s_LastFrameCount)
+		{
+			s_LastFrameCount = currentFrame;
+			s_ThumbnailRequestsThisFrame = 0;
+		}
+
+		if (s_ThumbnailRequestsThisFrame >= kMaxThumbnailRequestsPerFrame)
+			return {};
+
+		++s_ThumbnailRequestsThisFrame;
+		thumbnail = assetCache.GetThumbnailView({}, assetPath);
 		return { thumbnail.Texture, thumbnail.UV0, thumbnail.UV1 };
 	}
 

@@ -60,5 +60,11 @@ private:
 	bool m_ShowNavMeshOverlay = { false };
 	uint32 m_MaxLines = 65536;
 	RenderPassID m_RenderPassID = { INVALID_PASS_ID };
+
+	const void* m_CachedNavMeshPtr = nullptr;
+	size_t m_CachedNavMeshPolyCount = 0;
+	size_t m_CachedNavMeshVertCount = 0;
+	vec3 m_CachedNavMeshCamPos = vec3(1e9f);
+	vector<Engine::DebugVertex> m_CachedNavMeshVertices;
 };
 END

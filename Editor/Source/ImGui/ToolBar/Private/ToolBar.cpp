@@ -33,6 +33,7 @@
 #include "CrashHandler.h"
 #include <cmath>
 #include "AssetWorkerHost.h"
+#include "SceneViewportPanel.h"
 
 
 namespace
@@ -673,8 +674,9 @@ void ToolBar::DrawFooterControls()
 	const bool hasWorkerImport = AssetWorkerHost::IsCreated() &&
 		AssetWorkerHost::Get().GetActiveImportStatus(workerStatus);
 	const size_t activeTasks = AssetManager::IsCreated() ? AssetManager::Get().GetActiveTaskCount() : 0;
+	const bool isBakingNavMesh = SceneViewportPanel::IsNavMeshBakeInProgress();
 
-	if (hasWorkerImport || activeTasks > 0)
+	if (hasWorkerImport || activeTasks > 0 || isBakingNavMesh)
 	{
 		ImGui::SetCursorPos(ImVec2(padX, padY));
 		const float maxTextWidth = std::max(10.0f, startX - padX - 8.0f);
@@ -714,7 +716,7 @@ void ToolBar::DrawFooterControls()
 				}
 			}
 		}
-		else
+		else if (activeTasks > 0)
 		{
 			const std::string text = ICON_FA_ARROW_ROTATE_RIGHT " " + LOCAL_FMT("ContentBrowser.Importing", (int)activeTasks);
 			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", text.c_str());
@@ -722,6 +724,16 @@ void ToolBar::DrawFooterControls()
 			{
 				ImGui::SetTooltip("%s", text.c_str());
 			}
+		}
+
+		if (isBakingNavMesh)
+		{
+			if (hasWorkerImport || activeTasks > 0)
+				ImGui::SameLine(0.0f, 10.0f);
+			const std::string navMeshText = std::string(ICON_FA_SPINNER " ") + LOCAL("Viewport.NavMeshBakingStatus");
+			ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", navMeshText.c_str());
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", navMeshText.c_str());
 		}
 
 		ImGui::PopClipRect();

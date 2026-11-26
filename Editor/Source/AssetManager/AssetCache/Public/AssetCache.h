@@ -35,6 +35,7 @@ public:
 	};
 
 	static std::string BuildCacheKey(const filesystem::path& assetPath);
+	bool TryGetCachedThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath, ThumbnailView& outView);
 	ThumbnailView GetThumbnailView(const std::string& cacheKey, const filesystem::path& assetPath);
 	RHITexture* GetThumbnail(const filesystem::path& assetPath, Engine::Handle* spriteHandle = nullptr);
 
@@ -105,6 +106,7 @@ private:
 	std::optional<ThumbnailUploadTask> LoadModelThumbnail(const filesystem::path& assetPath);
 
 private:
+	bool FindCachedOrLoading(const std::string& key, ThumbnailView& outView);
 	void FlushPendingUploads();
 	void ProcessPending3DThumbnail();
 	void InsertToCache(const std::string& key, RHITexture* texture, size_t byteSize = 0, Engine::Handle spriteHandle = {});

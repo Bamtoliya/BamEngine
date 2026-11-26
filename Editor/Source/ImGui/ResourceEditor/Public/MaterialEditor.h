@@ -204,7 +204,8 @@ private:
 	void DrawGeneratedHlsl();
 
 	// 저장 & 문서 관리
-	void ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate);
+	void ApplyLoadedMaterial(const std::filesystem::path& assetPath, Engine::ResourceHandle<Engine::MaterialInterface> candidate,
+		std::vector<Engine::MissingResourceEntry> missingResources = {});
 	void SaveTarget();
 	bool CanCreateMaterialInstance() const;
 	void CreateMaterialInstance();
@@ -260,6 +261,7 @@ private:
 	Engine::MaterialInterface* m_Material = nullptr;
 	ResourceDocumentHistory<DocumentSnapshot> m_History;
 	bool m_IsReadOnly = false;
+	std::vector<Engine::MissingResourceEntry> m_MissingResources;
 
 	// 새 파라미터 / 텍스처 / 패스 입력 버퍼
 	char m_NewParamName[128] = "";
@@ -336,6 +338,7 @@ private:
 	float m_AsyncProgress = 0.0f;
 	std::filesystem::path m_AsyncTargetPath;
 	Engine::ResourceHandle<Engine::MaterialInterface> m_AsyncPendingMaterial;
+	std::vector<Engine::MissingResourceEntry> m_AsyncPendingMissingResources;
 	std::chrono::steady_clock::time_point m_AsyncStartTime{};
 	std::chrono::steady_clock::time_point m_AsyncLoadStart{};
 	double m_AsyncLoadDurationMs = 0.0;

@@ -25,3 +25,8 @@ ResourceEditor,DiscardTitle,Unsaved Changes,저장하지 않은 변경
 ResourceEditor,DiscardMessage,{} has unsaved changes.,{}에 저장하지 않은 변경 내용이 있습니다.
 ResourceEditor,DiscardFailed,Could not restore the saved asset. The document remains open.,저장된 에셋을 복원하지 못했습니다. 문서를 열린 상태로 유지합니다.
 ResourceEditor,TerrainLayerTitle,Terrain Layer Editor,지형 레이어 편집기
+ResourceEditor,MissingResourcesTitle,Missing References ({}),누락된 참조 ({})
+ResourceEditor,MissingResourcesHint,Some referenced assets could not be found and were loaded as empty. Reassign them below and save.,일부 참조 에셋을 찾지 못해 빈 값으로 열었습니다. 아래에서 다시 지정한 뒤 저장하세요.
+ResourceEditor,MissingResourcesNotification,{} opened with {} missing reference(s). Reassign them and save.,{} 에셋에 누락된 참조 {}건이 있어 빈 값으로 열었습니다. 다시 지정한 뒤 저장하세요.
+ResourceEditor,AutoFixMissing,Auto-Locate Nearby,근처에서 자동 찾기
+ResourceEditor,Dismiss,Dismiss,닫기

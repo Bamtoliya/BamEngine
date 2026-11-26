@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "ImGuiInterface.h"
+#include "ResourceReference.h"
 
 BEGIN(Editor)
 class AssetPathRelocation;
@@ -64,6 +65,9 @@ protected:
     virtual void DrawResourceFrame();
     void DrawStandardAsyncLoadingOverlay(const std::filesystem::path& targetPath, float progress, bool indeterminate, bool failed);
     void DrawCopyResourcePath();
+    void NotifyMissingResources(const std::filesystem::path& assetPath, const std::vector<Engine::MissingResourceEntry>& entries) const;
+    void DrawMissingResourcesBanner(std::vector<Engine::MissingResourceEntry>& entries, std::function<void()> onAutoFix = {});
+    static std::filesystem::path FindNearbyReplacementAsset(const std::filesystem::path& ownerAssetPath, const Engine::MissingResourceEntry& entry);
 private:
     friend class ImGuiManager;
     void DrawDiscardConfirmation();
