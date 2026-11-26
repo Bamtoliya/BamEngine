@@ -2,6 +2,17 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-26] VFX 체커보드·트레일 실시간 프리뷰 · Editor:// 3D 썸네일 · 3D NavMesh 정적 GPU 버퍼 전환
+
+- **요약**:
+  1. **`VFXEditorPanel` 체커보드 바닥판 미표시 수정**: `GetOrCreateVFXCheckerTexture()`에서 `Engine::Texture::Create(...)` 후 누락된 `UploadToGPU()` 호출을 추가(실패 시 `Free()`/`delete` 정리)하여 `MaterialInstance::Bind()`에서 Diffuse 슬롯 언바인드가 발생하던 문제 해결.
+  2. **`Editor://` 모델 3D 썸네일 미표시 수정**: `Tools/AssetWorker/main.cpp`에 `Editor://` 가상 스킴 등록을 추가하고, `AssetCache`(`ThumbnailCacheKey`, `CalculateDiskCachePath`) 및 `AssetWorkerHost::EnqueueThumbnail`에서 가상 URI(`IsVirtualUri`)를 `ResolveUri`로 해석하도록 보강.
+  3. **`VFXEditorPanel` 트레일 오프셋 실시간 프리뷰 갱신**: `OffsetTrailRuntimePoints()`를 추가해 `DrawInspector()`와 `DrawGizmo()`에서 `localOffsetA/B` 변경 시 재생/일시정지 여부와 무관하게 재재생 없이 즉시 프리뷰 트레일 정점을 이동하도록 개선.
+  4. **3D NavMesh 오버레이 전용 정적 GPU 버퍼 전환 & 터레인 `Hole` 제외**: `DebugRenderer`의 CPU 캐시/복사 로직을 제거하고 NavMesh 변경 시 1회 정적 `RHIBuffer`(`m_NavMeshFillVB`, `m_NavMeshLineVB`)를 생성해 최대 2 드로우콜(`DebugLineVS`/`DebugLinePS`, `ECompareOp::LessOrEqual`, `AlphaBlend`)로 전체 NavMesh를 그리도록 전환. `NavMesh.cpp` 지형 수집 시 `ETerrainAttribute::Hole` 셀 제외 추가.
+- **검증 상태**: 사용자 실환경에서 4건 모두 정상 동작 확인 완료.
+- **후속 추적 항목**:
+  - **3D NavMesh 터레인 `Hole` 경계 미세 오프셋**: `NavMesh.cpp`에서 터레인 셀을 단일 꼭짓점(`a00`) 속성으로만 제외하고 복셀화 해상도와 맞물리면서 구멍 경계가 실제 터레인 구멍과 반 셀~1셀 정도 미세하게 어긋나는 현상(추후 4꼭짓점/셀 중심 기준 판정 및 경계 정렬 개선 필요).
+
 ### [2026-11-26] CTest 통과 · 지형/디스토션/리소스피커/머티리얼볼 수정 · 누락 참조 복구 · 엔진/에디터 경계 격리
 
 - **요약**:
