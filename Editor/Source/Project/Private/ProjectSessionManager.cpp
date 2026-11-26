@@ -1,4 +1,4 @@
-#include "ProjectSessionManager.h"
+﻿#include "ProjectSessionManager.h"
 #include "PlatformPath.h"
 #include "EditorSettingsService.h"
 #include "Application.h"
@@ -615,6 +615,10 @@ bool ProjectSessionManager::LoadStartupSceneOrFallback(const std::filesystem::pa
 
     if (!sceneToLoad.empty())
     {
+        // 에디터의 씬 열기 경로(누락 리소스 복구 모달, 로딩 창, 문서 등록 포함)를 우선 사용한다.
+        if (ImGuiManager::IsCreated() && ImGuiManager::Get().RestoreSceneOnStartup(sceneToLoad))
+            return true;
+
         archive::JsonArchive reader;
         if (reader.LoadFromFile(sceneToLoad) &&
             Engine::SceneManager::Get().LoadScene(reader, sceneToLoad.wstring()) == EResult::Success)
@@ -816,7 +820,7 @@ void ProjectSessionManager::RefreshContentBrowser(const std::filesystem::path& n
         if (auto* cbPanel = dynamic_cast<ContentBrowserPanel*>(panel))
         {
             if (navigateToRoot && !newAssetRoot.empty())
-                cbPanel->NavigateTo(newAssetRoot);
+                cbPanel->RebindProjectRoot(newAssetRoot);
             cbPanel->RequestRefresh();
         }
     }

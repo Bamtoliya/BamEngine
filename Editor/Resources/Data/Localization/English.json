@@ -1861,6 +1861,7 @@
         "ProjectHub.CreateFailed": "Failed to create project.",
         "ProjectHub.SwitchFailed": "Failed to switch project.",
         "ProjectHub.CreateCppModule": "Create C++ Game Module",
+        "ProjectHub.SwitchBusy": "Another operation is in progress. Try again shortly.",
         "QtEditor.ScenePending": "Scene binding pending",
         "QtEditor.SelectionPending": "Selection binding pending",
         "QtEditor.ViewportPending": "Engine viewport integration pending",

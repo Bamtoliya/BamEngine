@@ -7,10 +7,10 @@
 #include "NotificationManager.h"
 #include "PlatformPath.h"
 #include "ProjectDescriptor.h"
+#include "Application.h"
+#include "ImGuiManager.h"
 #include <algorithm>
 #include <cstring>
-
-BEGIN(Editor)
 
 namespace
 {
@@ -54,6 +54,23 @@ void ProjectHubModal::Open()
 	}
 }
 
+void ProjectHubModal::OpenAsStartup()
+{
+	m_StartupPending = true;
+	Open();
+}
+
+void ProjectHubModal::Dismiss()
+{
+	const bool startup = m_StartupPending;
+	Close();
+	if (startup)
+	{
+		m_StartupPending = false;
+		Application::Get().RestoreLastEditedScene();
+	}
+}
+
 void ProjectHubModal::Close()
 {
 	m_OpenRequested = false;
@@ -75,17 +92,18 @@ void ProjectHubModal::Draw()
 
 	const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 	ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-	ImGui::SetNextWindowSize(ImVec2(760.0f, 520.0f), ImGuiCond_Appearing);
+	const ImVec2 workSize = ImGui::GetMainViewport()->WorkSize;
+	ImGui::SetNextWindowSize(ImVec2(std::clamp(workSize.x * 0.62f, 900.0f, 1280.0f), std::clamp(workSize.y * 0.72f, 560.0f, 820.0f)), ImGuiCond_Appearing);
 
 	bool open = m_IsOpen;
 	ImVec4 modalBg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
 	modalBg.w = 1.0f;
 	ImGui::PushStyleColor(ImGuiCol_PopupBg, modalBg);
-	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_NoCollapse))
+	if (!ImGui::BeginPopupModal(modalTitle.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
 	{
 		ImGui::PopStyleColor();
 		if (!open)
-			Close();
+			Dismiss();
 		return;
 	}
 
@@ -94,37 +112,10 @@ void ProjectHubModal::Draw()
 		ImGui::CloseCurrentPopup();
 		ImGui::EndPopup();
 		ImGui::PopStyleColor();
-		Close();
+		Dismiss();
 		return;
 	}
 
-	if (ImGui::BeginTabBar("ProjectHubTabs"))
-	{
-		if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.RecentProjects").c_str()))
-		{
-			m_ActiveTab = 0;
-			DrawRecentProjectsSection();
-			ImGui::EndTabItem();
-		}
-
-		if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.CreateNewProject").c_str()))
-		{
-			m_ActiveTab = 1;
-			DrawCreateProjectSection();
-			ImGui::EndTabItem();
-		}
-
-		ImGui::EndTabBar();
-	}
-
-	if (!m_ErrorMessage.empty())
-	{
-		ImGui::Spacing();
-		ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_ErrorMessage.c_str());
-	}
-
-	ImGui::Spacing();
-	ImGui::Separator();
 	const EditorUI::DialogAction recentActions[] = { { "ProjectHub.Cancel", true, false } };
 	const EditorUI::DialogAction createActions[] = {
 		{ "ProjectHub.Cancel", true, false },
@@ -132,11 +123,44 @@ void ProjectHubModal::Draw()
 	};
 	const int actionCount = (m_ActiveTab == 1) ? 2 : 1;
 	const EditorUI::DialogAction* actions = (m_ActiveTab == 1) ? createActions : recentActions;
+
+	// 본문은 고정 높이 자식 영역에 두어 모달 자체는 스크롤되지 않고, 푸터(오류·취소/확인)는 항상 같은 패널 안에 남는다.
+	const ImGuiStyle& style = ImGui::GetStyle();
+	const float errorReserve = m_ErrorMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing();
+	const float footerReserve = EditorUI::GetDialogButtonBarHeight(actions, actionCount) + style.ItemSpacing.y * 3.0f + errorReserve;
+	if (ImGui::BeginChild("ProjectHubBody", ImVec2(0.0f, -footerReserve), ImGuiChildFlags_None,
+		ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+	{
+		if (ImGui::BeginTabBar("ProjectHubTabs"))
+		{
+			if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.RecentProjects").c_str()))
+			{
+				m_ActiveTab = 0;
+				DrawRecentProjectsSection();
+				ImGui::EndTabItem();
+			}
+
+			if (ImGui::BeginTabItem(LOCAL_LABEL("ProjectHub.CreateNewProject").c_str()))
+			{
+				m_ActiveTab = 1;
+				DrawCreateProjectSection();
+				ImGui::EndTabItem();
+			}
+
+			ImGui::EndTabBar();
+		}
+	}
+	ImGui::EndChild();
+
+	if (!m_ErrorMessage.empty())
+		ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "%s", m_ErrorMessage.c_str());
+
+	ImGui::Separator();
 	const int clicked = EditorUI::DialogButtonBar("ProjectHubFooter", actions, actionCount);
 	if (clicked == 0)
 	{
 		ImGui::CloseCurrentPopup();
-		Close();
+		Dismiss();
 	}
 	else if (clicked == 1 && m_ActiveTab == 1)
 	{
@@ -149,11 +173,6 @@ void ProjectHubModal::Draw()
 
 void ProjectHubModal::DrawRecentProjectsSection()
 {
-	const EditorUI::DialogAction footerActions[] = { { "ProjectHub.Cancel", true, false } };
-	const float errorReserve = m_ErrorMessage.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
-	const float footerReserve = EditorUI::GetDialogButtonBarHeight(footerActions, 1) + ImGui::GetStyle().ItemSpacing.y * 3.0f + errorReserve;
-	const float listHeight = std::max(140.0f, ImGui::GetContentRegionAvail().y - footerReserve);
-
 	if (ImGui::Button(LOCAL_LABEL("ProjectHub.OpenProject").c_str()))
 	{
 		std::wstring selectedFile;
@@ -170,7 +189,7 @@ void ProjectHubModal::DrawRecentProjectsSection()
 	}
 
 	ImGui::Spacing();
-	ImGui::BeginChild("RecentProjectsList", ImVec2(0.0f, listHeight), ImGuiChildFlags_Borders);
+	ImGui::BeginChild("RecentProjectsList", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
 
 	const std::vector<RecentProjectEntry> emptyEntries;
 	const auto& recentProjects = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetRecentProjects() : emptyEntries;
@@ -254,25 +273,38 @@ void ProjectHubModal::DrawCreateProjectSection()
 	}
 }
 
-void ProjectHubModal::TrySwitchProject(const std::filesystem::path& projectFileOrRoot)
+bool ProjectHubModal::TrySwitchProject(const std::filesystem::path& projectFileOrRoot)
 {
 	m_ErrorMessage.clear();
+
+	// 종료와 같은 미저장 확인 흐름(리소스 편집기 목록 -> 씬 문서 저장/버리기/취소)을 거친 뒤에만 전환한다.
+	const bool accepted = ImGuiManager::Get().RequestGuardedAction([this, projectFileOrRoot]() { ExecuteSwitch(projectFileOrRoot); });
+	if (!accepted)
+		m_ErrorMessage = LOCAL("ProjectHub.SwitchBusy");
+	return accepted;
+}
+
+void ProjectHubModal::ExecuteSwitch(const std::filesystem::path& projectFileOrRoot)
+{
 	if (!ProjectSessionManager::IsCreated())
 		ProjectSessionManager::Create();
 
-	const auto result = ProjectSessionManager::Get().SwitchProject(projectFileOrRoot);
+	ProjectSwitchOptions options{};
+	options.StopPIEAutomatically = true;
+	options.AllowUnsavedDiscardWithoutPrompt = true; // 확인은 이미 끝났다.
+
+	const auto result = ProjectSessionManager::Get().SwitchProject(projectFileOrRoot, options);
 	if (result.Succeeded)
 	{
-		ImGui::CloseCurrentPopup();
+		m_StartupPending = false;
 		Close();
 		return;
 	}
 
-	if (!result.Cancelled)
-	{
-		m_ErrorMessage = !result.ErrorMessage.empty() ? result.ErrorMessage : LOCAL("ProjectHub.SwitchFailed");
-		NotificationManager::Get().AddNotification(LOCAL("ProjectHub.Title"), m_ErrorMessage, ELogLevel::Error);
-	}
+	m_ErrorMessage = LOCAL("ProjectHub.SwitchFailed");
+	if (!result.ErrorMessage.empty())
+		m_ErrorMessage += ": " + result.ErrorMessage;
+	NotificationManager::Get().AddNotification(LOCAL("ProjectHub.Title"), m_ErrorMessage, ELogLevel::Error);
 }
 
 void ProjectHubModal::TryCreateProject()
@@ -302,19 +334,32 @@ void ProjectHubModal::TryCreateProject()
 	if (!ProjectSessionManager::IsCreated())
 		ProjectSessionManager::Create();
 
-	const auto result = ProjectSessionManager::Get().CreateProject(targetDir, projectName, projectTemplate, true, {}, m_CreateCppModule);
-	if (result.Succeeded)
+	const auto result =
+		ProjectSessionManager::Get().CreateProject(
+			targetDir,
+			projectName,
+			projectTemplate,
+			false, // 생성만 수행
+			{},
+			m_CreateCppModule
+		);
+
+	if (!result.Succeeded)
 	{
-		ImGui::CloseCurrentPopup();
-		Close();
+		m_ErrorMessage = !result.ErrorMessage.empty()
+			? result.ErrorMessage
+			: LOCAL("ProjectHub.CreateFailed");
+
+		NotificationManager::Get().AddNotification(
+			LOCAL("ProjectHub.Title"),
+			m_ErrorMessage,
+			ELogLevel::Error
+		);
+
 		return;
 	}
 
-	if (!result.Cancelled)
-	{
-		m_ErrorMessage = !result.ErrorMessage.empty() ? result.ErrorMessage : LOCAL("ProjectHub.CreateFailed");
-		NotificationManager::Get().AddNotification(LOCAL("ProjectHub.Title"), m_ErrorMessage, ELogLevel::Error);
-	}
+	// 이미 생성된 프로젝트를 전환 대상으로 사용한다.
+	// 생성은 끝났지만 전환이 취소/실패하면 팝업을 닫지 않고 사유(미저장 확인 등)를 표시한다.
+	TrySwitchProject(result.ProjectFilePath);
 }
-
-END

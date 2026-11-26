@@ -57,12 +57,13 @@ public:
 	bool IsFullscreen() const { return (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0; }
 
 	void RememberEditedScene(const std::filesystem::path& path);
+	// 프로젝트 허브를 취소했을 때 기본 프로젝트의 마지막 씬을 불러온다.
+	void RestoreLastEditedScene();
 
 private:
 	EResult SubmitWindowRequest(const EditorWindowRequest& request);
 	void CaptureEditorWindowState();
 	void CaptureAndSaveEditorWorkspace();
-	void RestoreLastEditedScene();
 #pragma endregion
 
 #pragma region Command History

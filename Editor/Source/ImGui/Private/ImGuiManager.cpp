@@ -2145,8 +2145,29 @@ void ImGuiManager::DrawMissingResourceRecoveryModal()
 	ImGui::EndPopup();
 }
 
+bool ImGuiManager::RequestGuardedAction(std::function<void()> action)
+{
+	if (m_DocumentController->IsBusy() || IsSceneLoading() || m_ResourceQuitConfirmPending)
+		return false;
+	for (auto* panel : m_ImGuiPanels)
+	{
+		if (const auto* editor = dynamic_cast<const ResourceEditorInterface*>(panel);
+			editor && editor->m_PendingDiscardAction)
+			return false;
+	}
+
+	m_GuardedAction = std::move(action);
+	if (!CollectUnsavedResourceEditors().empty())
+	{
+		m_ResourceQuitConfirmPending = true;
+		return true;
+	}
+	return ContinueQuitRequest();
+}
+
 bool ImGuiManager::RequestQuit()
 {
+	m_GuardedAction = nullptr;
 	if (m_DocumentController->IsBusy() || IsSceneLoading() || m_ResourceQuitConfirmPending)
 		return false;
 	for (auto* panel : m_ImGuiPanels)
@@ -2190,9 +2211,12 @@ bool ImGuiManager::ContinueQuitRequest()
 	auto& application = Application::Get();
 
 	return m_DocumentController->RequestAction(application.GetDocuments().GetDocumentIds(),
-		[](const std::vector<EditorDocumentId>&) -> EResult
+		[guarded = std::exchange(m_GuardedAction, nullptr)](const std::vector<EditorDocumentId>&) -> EResult
 		{
-			Application::Get().CompleteQuitRequest();
+			if (guarded)
+				guarded();
+			else
+				Application::Get().CompleteQuitRequest();
 			return EResult::Success;
 		});
 }
@@ -2501,6 +2525,11 @@ void ImGuiManager::DrawDocumentConfirmation()
 
 	ImGui::EndPopup();
 }
+void ImGuiManager::OpenProjectHubOnStartup()
+{
+	m_ProjectHubModal.OpenAsStartup();
+}
+
 void ImGuiManager::OpenProjectHub()
 {
 	m_ProjectHubModal.Open();

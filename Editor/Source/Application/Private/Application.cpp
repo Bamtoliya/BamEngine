@@ -153,7 +153,11 @@ EResult Application::Initialize(void* arg)
 
     // 7. 마지막 작업 씬 복원
     EditorSplashScreen::UpdateProgress(0.88f, "마지막 작업 씬 복원 중...");
-    RestoreLastEditedScene();
+    // 시작 씬은 프로젝트 허브에서 프로젝트를 정한 뒤 로드한다(취소 시 기본 프로젝트의 마지막 씬).
+    if (!SceneManager::Get().GetCurrentScene())
+        SceneManager::Get().NewScene();
+    if (m_ImGuiManager)
+        m_ImGuiManager->OpenProjectHubOnStartup();
     if (m_SceneDocumentId == InvalidEditorDocumentId && SceneManager::Get().GetCurrentScene())
         AdoptSceneDocument({});
 

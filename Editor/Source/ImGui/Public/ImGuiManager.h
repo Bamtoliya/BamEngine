@@ -170,7 +170,10 @@ public:
 	// 에디터 시작 시 마지막 작업 씬을 로딩 창과 함께 연다. 이미 로드 중이면 false.
 	bool RestoreSceneOnStartup(const std::filesystem::path& path);
 	bool RequestQuit();
+	// 종료와 같은 미저장 확인(리소스 편집기·씬 문서)을 거쳐 승인되면 action을 실행한다. 거부되면 false.
+	bool RequestGuardedAction(std::function<void()> action);
 	void OpenProjectHub();
+	void OpenProjectHubOnStartup();
 	bool HasMissingResources() const { return !m_MissingResourceItems.empty(); }
 	std::size_t GetUnresolvedMissingResourceCount() const;
 	bool OpenMissingResourceRecoveryModal();
@@ -195,6 +198,7 @@ private:
 	void DrawMissingResourceRecoveryModal();
 	void ClearMissingResourceRecoveryState();
 	bool ContinueQuitRequest();
+	std::function<void()> m_GuardedAction;
 	vector<ResourceEditorInterface*> CollectUnsavedResourceEditors() const;
 	void DrawResourceQuitConfirmation();
 	void DrawDocumentConfirmation();

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include <filesystem>
@@ -13,6 +13,8 @@ public:
 	~ProjectHubModal() = default;
 
 	void Open();
+	// 에디터 시작 시: 프로젝트를 고르기 전에는 씬을 로드하지 않고, 취소하면 기본 프로젝트의 마지막 씬을 로드한다.
+	void OpenAsStartup();
 	void Close();
 	bool IsOpen() const { return m_IsOpen; }
 	void Draw();
@@ -20,12 +22,15 @@ public:
 private:
 	void DrawRecentProjectsSection();
 	void DrawCreateProjectSection();
-	void TrySwitchProject(const std::filesystem::path& projectFileOrRoot);
+	bool TrySwitchProject(const std::filesystem::path& projectFileOrRoot);
+	void ExecuteSwitch(const std::filesystem::path& projectFileOrRoot);
+	void Dismiss();
 	void TryCreateProject();
 
 private:
 	bool m_OpenRequested = false;
 	bool m_IsOpen = false;
+	bool m_StartupPending = false;
 	int m_ActiveTab = 0;
 	char m_ProjectNameBuffer[128] = {};
 	char m_TargetFolderBuffer[512] = {};
