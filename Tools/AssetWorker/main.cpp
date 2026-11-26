@@ -248,6 +248,7 @@ int main()
     }
 
     if (!projectRoot.empty()) Engine::PlatformPath::SetProjectRoot(projectRoot);
+    Engine::PlatformPath::RegisterVirtualScheme({ L"Editor", Engine::PlatformPath::GetEngineRoot() / "Editor/Resources", true, true });
     if (daemonMode) Engine::Logger::SetMinLevel(Engine::ELogLevel::Error);
 
     struct EngineScope

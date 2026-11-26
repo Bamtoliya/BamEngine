@@ -43,7 +43,9 @@ namespace
     {
         if (path.empty()) return {};
 
-        const auto absolutePath = Engine::PlatformPath::ResolveProjectRelative(path);
+        const auto absolutePath = Engine::PlatformPath::IsVirtualUri(path.wstring())
+            ? Engine::PlatformPath::ResolveUri(path)
+            : Engine::PlatformPath::ResolveProjectRelative(path);
         return Engine::WStrToStr(absolutePath.generic_wstring());
     }
 
@@ -687,7 +689,9 @@ std::filesystem::path AssetCache::GetDiskCacheDirectory()
 
 std::filesystem::path AssetCache::CalculateDiskCachePath(const std::filesystem::path& assetPath)
 {
-    const auto fullPath = Engine::PlatformPath::ResolveProjectRelative(assetPath);
+    const auto fullPath = Engine::PlatformPath::IsVirtualUri(assetPath.wstring())
+        ? Engine::PlatformPath::ResolveUri(assetPath)
+        : Engine::PlatformPath::ResolveProjectRelative(assetPath);
     std::error_code ec;
     const auto lastWrite = std::filesystem::last_write_time(fullPath, ec);
     if (ec) return {};

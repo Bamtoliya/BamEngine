@@ -549,7 +549,9 @@ bool AssetWorkerHost::EnqueueThumbnail(const std::string& assetKey, Engine::uint
     PendingThumbnailTask task;
     task.AssetKey = assetKey;
     task.RequestId = requestId;
-    task.SourcePath = Engine::PlatformPath::ResolveProjectRelative(sourcePath);
+    task.SourcePath = Engine::PlatformPath::IsVirtualUri(sourcePath.wstring())
+        ? Engine::PlatformPath::ResolveUri(sourcePath)
+        : Engine::PlatformPath::ResolveProjectRelative(sourcePath);
     task.OutputPngPath = outputPngPath;
     task.Resolution = resolution;
     m_PendingQueue.push_back(std::move(task));
