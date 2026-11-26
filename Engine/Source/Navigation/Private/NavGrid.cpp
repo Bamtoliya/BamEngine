@@ -375,7 +375,8 @@ void NavGrid::BakeObstaclesFromScene(const Scene& scene, f32 agentRadius, f32 ma
 				}
 
 				const std::size_t vIdx = static_cast<std::size_t>(nz) * axisCount + nx;
-				if (hasAttr && terrain.AttributeData[vIdx] == static_cast<uint8>(ETerrainAttribute::Blocked))
+				if (hasAttr && (terrain.AttributeData[vIdx] == static_cast<uint8>(ETerrainAttribute::Blocked) ||
+					terrain.AttributeData[vIdx] == static_cast<uint8>(ETerrainAttribute::Hole)))
 				{
 					SetWalkable(cx, cz, false);
 				}

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Engine_API.h"
 #include "Types.h"
@@ -37,10 +37,18 @@ struct ENGINE_API NavMeshBuildInput
 	bool CollectFromScene(const Scene& scene);
 };
 
+struct ENGINE_API NavMeshPortalLink
+{
+	int32 targetPoly = -1;
+	vec3 left = vec3(0.0f);
+	vec3 right = vec3(0.0f);
+};
+
 struct ENGINE_API NavMeshPoly
 {
 	std::vector<uint32> vertexIndices;
 	std::vector<int32> neighbors;
+	std::vector<NavMeshPortalLink> extraLinks;
 	vec3 center = vec3(0.0f);
 	vec3 normal = vec3(0.0f, 1.0f, 0.0f);
 	f32 cost = 1.0f;

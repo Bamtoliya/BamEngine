@@ -1,4 +1,4 @@
-#include "NavMesh.h"
+﻿#include "NavMesh.h"
 #include "Scene.h"
 #include "ColliderComponent.h"
 #include "TerrainComponent.h"
@@ -18,8 +18,6 @@
 #include <queue>
 #include <system_error>
 #include <unordered_map>
-
-BEGIN(Engine)
 
 namespace
 {
@@ -190,7 +188,7 @@ namespace
 	}
 
 	constexpr std::array<char, 8> NavMeshMagic{ 'B', 'A', 'M', 'N', 'A', 'V', 'M', '\0' };
-	constexpr uint32 NavMeshFileVersion = 1;
+	constexpr uint32 NavMeshFileVersion = 2;
 
 	struct NavMeshFileHeader
 	{
@@ -580,6 +578,62 @@ bool DefaultNavMeshBuilder::Build(const NavMeshBuildInput& input, NavMeshData& o
 		}
 	}
 
+	// 3차 인접성 연결: 미연결 경계 에지가 다른 폴리곤 면 내부에 maxStepHeight 이내로 착지하는 경우 포털 링크 연결
+	{
+		const int32 polyCount = static_cast<int32>(outData.polygons.size());
+		const f32 maxStep = input.settings.maxStepHeight;
+
+		auto isPointInsideTriXZ = [](const vec3& p, const vec3& a, const vec3& b, const vec3& c) -> bool
+			{
+				const f32 c0 = TriArea2DXZ(a, b, p);
+				const f32 c1 = TriArea2DXZ(b, c, p);
+				const f32 c2 = TriArea2DXZ(c, a, p);
+				const bool hasNeg = (c0 < -1e-4f) || (c1 < -1e-4f) || (c2 < -1e-4f);
+				const bool hasPos = (c0 > 1e-4f) || (c1 > 1e-4f) || (c2 > 1e-4f);
+				return !(hasNeg && hasPos);
+			};
+
+		auto hasConnection = [](const NavMeshPoly& poly, int32 target) -> bool
+			{
+				if (std::find(poly.neighbors.begin(), poly.neighbors.end(), target) != poly.neighbors.end())
+					return true;
+				return std::any_of(poly.extraLinks.begin(), poly.extraLinks.end(),
+					[target](const NavMeshPortalLink& link) { return link.targetPoly == target; });
+			};
+
+		for (int32 pA = 0; pA < polyCount; ++pA)
+		{
+			auto& polyA = outData.polygons[static_cast<size_t>(pA)];
+			const size_t nA = polyA.vertexIndices.size();
+			for (size_t eA = 0; eA < nA; ++eA)
+			{
+				if (polyA.neighbors[eA] != -1) continue;
+				const vec3& a0 = outData.vertices[polyA.vertexIndices[eA]];
+				const vec3& a1 = outData.vertices[polyA.vertexIndices[(eA + 1) % nA]];
+				const vec3 mid = 0.5f * (a0 + a1);
+
+				for (int32 pB = 0; pB < polyCount; ++pB)
+				{
+					if (pA == pB || hasConnection(polyA, pB)) continue;
+					auto& polyB = outData.polygons[static_cast<size_t>(pB)];
+					if (polyB.vertexIndices.size() < 3) continue;
+
+					const vec3& b0 = outData.vertices[polyB.vertexIndices[0]];
+					const vec3& b1 = outData.vertices[polyB.vertexIndices[1]];
+					const vec3& b2 = outData.vertices[polyB.vertexIndices[2]];
+					if (!isPointInsideTriXZ(mid, b0, b1, b2)) continue;
+
+					const vec3 closestOnB = ClosestPointOnTriangle3D(mid, b0, b1, b2);
+					if (std::abs(mid.y - closestOnB.y) > maxStep) continue;
+
+					polyA.extraLinks.push_back({ pB, a0, a1 });
+					polyB.extraLinks.push_back({ pA, a0, a1 });
+					break;
+				}
+			}
+		}
+	}
+
 	// 전체 바운딩 박스 계산
 	vec3 bMin(std::numeric_limits<f32>::max());
 	vec3 bMax(std::numeric_limits<f32>::lowest());
@@ -713,6 +767,25 @@ bool NavMesh::GetPortalEdge(int32 polyA, int32 polyB, vec3& outLeft, vec3& outRi
 			return true;
 		}
 	}
+
+	for (const auto& link : pA.extraLinks)
+	{
+		if (link.targetPoly == polyB)
+		{
+			if (TriArea2DXZ(pA.center, link.left, link.right) < 0.0f)
+			{
+				outLeft = link.left;
+				outRight = link.right;
+			}
+			else
+			{
+				outLeft = link.right;
+				outRight = link.left;
+			}
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -780,11 +853,11 @@ bool NavMesh::FindPath(const vec3& startWorld, const vec3& goalWorld, std::vecto
 		closed[static_cast<size_t>(curr)] = 1;
 
 		const auto& currPoly = m_Data.polygons[static_cast<size_t>(curr)];
-		for (int32 nb : currPoly.neighbors)
+		auto tryRelaxNeighbor = [&](int32 nb)
 		{
 			if (nb < 0 || static_cast<size_t>(nb) >= polyCount || closed[static_cast<size_t>(nb)])
 			{
-				continue;
+				return;
 			}
 			const auto& nbPoly = m_Data.polygons[static_cast<size_t>(nb)];
 			const f32 stepCost = glm::distance(currPoly.center, nbPoly.center) * std::max(1.0f, nbPoly.cost);
@@ -796,6 +869,14 @@ bool NavMesh::FindPath(const vec3& startWorld, const vec3& goalWorld, std::vecto
 				const f32 h = glm::distance(nbPoly.center, goalSnapped);
 				openSet.push({ nb, tentativeG + h });
 			}
+		};
+		for (int32 nb : currPoly.neighbors)
+		{
+			tryRelaxNeighbor(nb);
+		}
+		for (const auto& link : currPoly.extraLinks)
+		{
+			tryRelaxNeighbor(link.targetPoly);
 		}
 	}
 
@@ -964,6 +1045,14 @@ bool NavMesh::SaveToFile(const std::filesystem::path& path) const
 			file.write(reinterpret_cast<const char*>(&poly.normal), sizeof(vec3));
 			file.write(reinterpret_cast<const char*>(&poly.cost), sizeof(f32));
 			file.write(reinterpret_cast<const char*>(&poly.area), sizeof(uint8));
+			const uint32 extraCount = static_cast<uint32>(poly.extraLinks.size());
+			file.write(reinterpret_cast<const char*>(&extraCount), sizeof(extraCount));
+			for (const auto& link : poly.extraLinks)
+			{
+				file.write(reinterpret_cast<const char*>(&link.targetPoly), sizeof(int32));
+				file.write(reinterpret_cast<const char*>(&link.left), sizeof(vec3));
+				file.write(reinterpret_cast<const char*>(&link.right), sizeof(vec3));
+			}
 		}
 
 		if (!file.flush())
@@ -1014,7 +1103,7 @@ bool NavMesh::LoadFromFile(const std::filesystem::path& path)
 		return false;
 	}
 
-	if (header.Magic != NavMeshMagic || header.Version != NavMeshFileVersion ||
+	if (header.Magic != NavMeshMagic || (header.Version != 1 && header.Version != NavMeshFileVersion) ||
 		header.VertexCount == 0 || header.PolygonCount == 0 ||
 		header.VertexCount > 5000000 || header.PolygonCount > 5000000)
 	{
@@ -1070,6 +1159,26 @@ bool NavMesh::LoadFromFile(const std::filesystem::path& path)
 				return false;
 			}
 		}
+		if (header.Version >= 2)
+		{
+			uint32 extraCount = 0;
+			if (!file.read(reinterpret_cast<char*>(&extraCount), sizeof(extraCount)) || extraCount > 64)
+			{
+				return false;
+			}
+			poly.extraLinks.resize(extraCount);
+			for (uint32 l = 0; l < extraCount; ++l)
+			{
+				auto& link = poly.extraLinks[l];
+				if (!file.read(reinterpret_cast<char*>(&link.targetPoly), sizeof(int32)) ||
+					!file.read(reinterpret_cast<char*>(&link.left), sizeof(vec3)) ||
+					!file.read(reinterpret_cast<char*>(&link.right), sizeof(vec3)) ||
+					link.targetPoly < 0 || link.targetPoly >= static_cast<int32>(header.PolygonCount))
+				{
+					return false;
+				}
+			}
+		}
 	}
 
 	m_Data = std::move(loaded);
@@ -1096,5 +1205,3 @@ std::filesystem::path NavMesh::ResolveDataPath(const std::string& navMeshUri)
 	const auto path = Utf8ToPath(navMeshUri);
 	return PlatformPath::IsVirtualUri(navMeshUri) ? PlatformPath::ResolveUri(path) : PlatformPath::ResolveProjectRelative(path);
 }
-
-END
