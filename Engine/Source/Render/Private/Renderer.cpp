@@ -1172,7 +1172,7 @@ EResult Renderer::RenderDynamicGeometry(const vector<DynamicGeometryDrawCommand>
 		RHITexture* rhiTexture = command.texture->GetRHITexture();
 		if (!rhiTexture) continue;
 
-		if (IsFailure(PrepareMeshPipelineDesc(nullptr, command.material, passType, pipelineDesc))) continue;
+		if (PrepareMeshPipelineDesc(nullptr, command.material, passType, pipelineDesc) != EResult::Success) continue;
 		pipelineDesc.inputLayouts = s_DynamicLayouts;
 		pipelineDesc.topology = command.topology;
 		auto* pipeline = PipelineManager::Get().GetOrCreatePipeline(pipelineDesc);

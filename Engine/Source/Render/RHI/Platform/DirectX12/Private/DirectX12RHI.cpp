@@ -1301,7 +1301,8 @@ EResult DirectX12RHI::UploadTextureData(RHITexture* texture, const RHITextureDes
     const uint32 arraySlices = is3D ? 1 : desc.arraySize;
 
     const bool isBlockCompressed = IsBlockCompressed(desc.format);
-    const bool isSupportedFormat = (desc.format == ETextureFormat::R8G8B8A8_UNORM ||
+    const bool isSupportedFormat = (desc.format == ETextureFormat::R8_UNORM ||
+                                    desc.format == ETextureFormat::R8G8B8A8_UNORM ||
                                     desc.format == ETextureFormat::R8G8B8A8_UNORM_SRGB ||
                                     desc.format == ETextureFormat::B8G8R8A8_UNORM ||
                                     desc.format == ETextureFormat::B8G8R8A8_UNORM_SRGB ||

@@ -48,7 +48,7 @@ namespace Engine
         PROPERTY(EDITABLE)
         ESamplerAddressMode AddressW = ESamplerAddressMode::Wrap;
     
-        PROPERTY(EDITABLE)
+        PROPERTY(EDITABLE, ALLOW_MISSING)
         uint32 MaxAnisotropy = 1;
     
         PROPERTY(EDITABLE, COLOR)

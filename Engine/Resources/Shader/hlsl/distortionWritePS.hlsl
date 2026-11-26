@@ -27,7 +27,7 @@ float2 main(PS_INPUT input) : SV_TARGET0
 
 	// 노멀맵 텍스처(RG 편차 + B>0.5)는 그대로 방향 벡터로 쓰고, 흑백 노이즈/마스크 텍스처는 시간 기반 파동 방향을 생성한다.
 	const bool isNormalMap = (texSample.b > 0.5f) &&
-		((abs(texSample.r - texSample.b) + abs(texSample.g - texSample.b)) > 0.01f);
+		((abs(texSample.r - texSample.b) + abs(texSample.g - texSample.b)) > 0.08f);
 
 	float2 dir;
 	float mask;
@@ -38,13 +38,14 @@ float2 main(PS_INPUT input) : SV_TARGET0
 	}
 	else
 	{
-		const float waveA = sin(uv.x * 18.0f - commonData.Time * 8.0f + uv.y * 6.0f);
-		const float waveB = cos(uv.y * 12.0f - commonData.Time * 6.0f + uv.x * 10.0f);
+		const float noisePhase = texSample.r * 6.2831853f;
+		const float waveA = sin(uv.x * 16.0f - commonData.Time * 7.0f + uv.y * 6.0f + noisePhase);
+		const float waveB = cos(uv.y * 12.0f - commonData.Time * 5.0f + uv.x * 10.0f + noisePhase);
 		dir = float2(waveA, waveB);
 		mask = texSample.a * texSample.r;
 	}
 
-	const float baseStrength = 0.035f;
+	const float baseStrength = 0.05f;
 	const float weight = saturate(input.Color.a) * edgeFade * mask;
 	return dir * (baseStrength * weight);
 }
