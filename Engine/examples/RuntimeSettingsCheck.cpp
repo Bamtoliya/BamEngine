@@ -1,4 +1,4 @@
-#include "Engine_Includes.h"
+﻿#include "Engine_Includes.h"
 #include "ConfigManager.h"
 #include "LocalizationManager.h"
 #include "ReflectionRegistry.h"
@@ -352,6 +352,9 @@ int main()
             menuSystem->OnUpdate(uiWorld, activeScenes, 0.016f);
         };
 
+        // UIEventSystem 초기 m_SuppressUntilRelease=true 상태를 정상 해제하기 위한 idle 프레임 1회
+        uiInput.Update(activeScenes, UIPointerInput{ { 0.5f, 0.5f }, true, true, false, false, false });
+
         // 해상도 드롭다운 -> 1280x720 (index 0)
         clickAt(1090.0f, 313.0f);
         clickAt(1090.0f, 348.0f);
@@ -380,7 +383,13 @@ int main()
             std::abs(afterApply.MasterVolume - 0.25f) > 1e-4f ||
             !std::filesystem::exists(menuDesc.settingsFilePath))
         {
-            std::cerr << "[RuntimeSettingsCheck] Apply button did not commit or save settings.\n";
+            std::cerr << "[RuntimeSettingsCheck] Apply button did not commit or save settings."
+                << " res=" << afterApply.ResolutionWidth << "x" << afterApply.ResolutionHeight
+                << " quality=" << afterApply.QualityPreset
+                << " fs=" << afterApply.Fullscreen
+                << " vsync=" << afterApply.VSync
+                << " master=" << afterApply.MasterVolume
+                << " fileExists=" << std::filesystem::exists(menuDesc.settingsFilePath) << "\n";
             menuSystem->OnFree();
             return 24;
         }
