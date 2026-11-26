@@ -34,8 +34,8 @@ public:
 
 	// 단일 메쉬 1회 렌더링 제출 (AABB 자동 프레이밍, 머티리얼 미지정 시 기본 PBR 적용)
 	bool SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface* material = nullptr);
-	// 복합 모델 1회 렌더링 제출 (다중 서브메쉬, 노드 계층, 통합 AABB 자동 프레이밍)
-	bool SubmitModel(Engine::Model* model);
+	// 복합 모델 1회 렌더링 제출 (다중 서브메쉬, 노드 계층, 통합 AABB 자동 프레이밍, 선택적 Y축 턴테이블 회전)
+	bool SubmitModel(Engine::Model* model, f32 yawDegrees = 0.0f);
 
 	// 프리팹 1회 렌더링 제출 (인-프로세스 폴백용)
 	bool SubmitPrefab(const std::filesystem::path& prefabPath);

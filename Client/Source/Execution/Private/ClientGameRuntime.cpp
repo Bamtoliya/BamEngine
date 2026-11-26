@@ -22,6 +22,7 @@
 #include "PixelPerfectCameraComponent.h"
 #include "PlatformPath.h"
 #include "RuntimeSettingsManager.h"
+#include "SceneTransitionManager.h"
 #include "StartupResourceLoader.h"
 #include "Systems.h"
 
@@ -257,7 +258,9 @@ Engine::EResult Client::ClientGameRuntime::RunFrame(Engine::uint32 width, Engine
 
     m_Runtime->Update(dt, false);
     m_Runtime->LateUpdate(dt);
-        SubmitRenderPipeline(dt, width, height);
+    if (Engine::SceneTransitionManager::IsCreated())
+        Engine::SceneTransitionManager::Get().Update(dt);
+    SubmitRenderPipeline(dt, width, height);
 
     return m_Runtime->Render(dt);
 }

@@ -1195,12 +1195,12 @@ void ContentBrowserPanel::DrawSpriteSheetBakeModal()
 				std::string captureError;
 				const SpriteSheetBakeResult result = SpriteSheetBaker::BakeTurntableFromCapture(
 					config,
-					[model, &config, &captureError](int32, float, int32, int32, std::vector<uint8>& outRgbaFrame) -> bool
+					[model, &config, &captureError](int32, float yawDegrees, int32, int32, std::vector<uint8>& outRgbaFrame) -> bool
 					{
 						std::vector<uint8> captured;
 						int32 srcW = 0;
 						int32 srcH = 0;
-						if (!SpriteSheetBaker::CaptureThumbnailFrameRGBA(model, captured, srcW, srcH, &captureError))
+						if (!SpriteSheetBaker::CaptureThumbnailFrameRGBA(model, captured, srcW, srcH, &captureError, yawDegrees))
 							return false;
 						if (srcW == config.frameWidth && srcH == config.frameHeight)
 						{

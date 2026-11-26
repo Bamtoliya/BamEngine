@@ -83,7 +83,8 @@ public:
 		std::vector<uint8>& outRgbaPixels,
 		int32& outWidth,
 		int32& outHeight,
-		std::string* outError = nullptr);
+		std::string* outError = nullptr,
+		f32 yawDegrees = 0.0f);
 };
 
 END

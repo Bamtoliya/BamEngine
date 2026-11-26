@@ -16,6 +16,8 @@
 #include "PixelPerfectCameraComponent.h"
 #include "EditorSettingsService.h"
 #include "PlatformPath.h"
+#include "SceneTransitionManager.h"
+#include <algorithm>
 
 EResult GameViewportPanel::OnInitialize(void* arg)
 {
@@ -90,6 +92,9 @@ EResult GameViewportPanel::ResizeRenderTargets(uint32 width, uint32 height)
 
 void GameViewportPanel::Update(f32 dt)
 {
+	if (PIEManager::Get().IsPlaying() && Engine::SceneTransitionManager::IsCreated())
+		Engine::SceneTransitionManager::Get().Update(dt);
+
 	// 1. 창이 닫혔거나 다른 탭 뒤에 숨겨진 경우 렌더링 100% 차단 (0 FPS)
 	if (!m_Open || !m_IsVisibleOnScreen)
 		return;
@@ -224,6 +229,20 @@ void GameViewportPanel::DrawCustomViewport()
 	{
 		DrawRenderTargetImage(m_DisplayRTName, m_UsePixelPerfectView);
 		m_GameplayImageWindowId = ImGui::GetCurrentWindowRead()->ID;
+		if (Engine::SceneTransitionManager::IsCreated())
+		{
+			const auto& transition = Engine::SceneTransitionManager::Get();
+			const f32 fadeAlpha = transition.GetFadeAlpha();
+			if (fadeAlpha > 0.001f && m_ImageSize.x > 0.0f && m_ImageSize.y > 0.0f)
+			{
+				const vec4& fadeColor = transition.GetFadeColor();
+				const ImVec2 imageMin = m_ImageScreenPos;
+				const ImVec2 imageMax(m_ImageScreenPos.x + m_ImageSize.x, m_ImageScreenPos.y + m_ImageSize.y);
+				const ImU32 colorU32 = ImGui::ColorConvertFloat4ToU32(
+					ImVec4(fadeColor.r, fadeColor.g, fadeColor.b, std::clamp(fadeAlpha, 0.0f, 1.0f)));
+				ImGui::GetWindowDrawList()->AddRectFilled(imageMin, imageMax, colorU32);
+			}
+		}
 		return;
 	}
 

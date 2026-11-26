@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] `SpriteSheetBaker` 턴테이블 각도 회전 캡처 및 `SceneTransitionManager` 페이드 오버레이 렌더링 연결
+
+- **요약**:
+  1. **`SpriteSheetBaker` 실제 턴테이블 각도 회전 캡처 (`turntable-capture`)**:
+     - `ThumbnailRenderer.h/.cpp`: `SubmitModel(Engine::Model* model, f32 yawDegrees = 0.0f)`에 선택적 월드 Y축 회전(`yawMatrix * rootTransform`) 추가(스태틱/스킨드 메쉬 및 AABB 오토프레이밍 통합 반영, 기존 호출부 하위 호환).
+     - `SpriteSheetBaker.h/.cpp`, `ContentBrowserPanel.cpp`: `CaptureThumbnailFrameRGBA`에 `yawDegrees` 전달 경로 연결 및 모달 캡처 콜백 연동 완료.
+  2. **`SceneTransitionManager` 페이드 오버레이 렌더링 연결 (`scene-fade-overlay`)**:
+     - `GameViewportPanel.cpp`: PIE 실행 중 `SceneTransitionManager::Update(dt)` 호출 및 `GetFadeAlpha() > 0.001f` 시 Game View 이미지 영역 위 `AddRectFilled` 페이드 오버레이 렌더링.
+     - `ClientGameRuntime.cpp`, `ClientRenderPipeline.cpp`, `Engine/Resources/Shader/hlsl/clientPresentPS.hlsl`: `Update(dt)` 호출 및 32B `ClientPresentParams`(`b0, space3`, `static_assert(sizeof == 32)`) 기반 백버퍼 페이드 합성 추가.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `Editor`, `Client`) 및 실환경 턴테이블 4/8방향 베이킹·씬 전환 페이드 오버레이 확인 대기.
+
 ### [2026-11-27] `SpriteSheetBaker` 에디터 UI 연동 및 인게임 설정 메뉴(`UISettingsMenuSystem`) 런타임 키 리매핑 UI 추가
 
 - **요약**:

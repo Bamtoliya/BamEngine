@@ -518,7 +518,8 @@ bool SpriteSheetBaker::CaptureThumbnailFrameRGBA(
 	std::vector<uint8>& outRgbaPixels,
 	int32& outWidth,
 	int32& outHeight,
-	std::string* outError)
+	std::string* outError,
+	f32 yawDegrees)
 {
 	outRgbaPixels.clear();
 	outWidth = 0;
@@ -544,7 +545,7 @@ bool SpriteSheetBaker::CaptureThumbnailFrameRGBA(
 	}
 
 	auto& thumbRenderer = ThumbnailRenderer::Get();
-	if (!thumbRenderer.SubmitModel(model))
+	if (!thumbRenderer.SubmitModel(model, yawDegrees))
 	{
 		SpriteSheetBakerDetail::SetError(outError, "ThumbnailRenderer::SubmitModel failed.");
 		return false;

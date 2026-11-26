@@ -10,7 +10,19 @@
 #include "ResourceManager.h"
 #include "RHIPipeline.h"
 #include "SamplerManager.h"
+#include "SceneTransitionManager.h"
 #include "Shader.h"
+
+namespace
+{
+    struct ClientPresentParams
+    {
+        vec4 FadeColor = vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        f32 FadeAlpha = 0.0f;
+        f32 Pad[3] = {};
+    };
+    static_assert(sizeof(ClientPresentParams) == 32);
+}
 
 EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, uint32 width, uint32 height)
 {
@@ -185,10 +197,22 @@ void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Sc
     if (!m_UseInternalResolution)
         ui->SetColorAttachments({ color });
     renderer.RegisterViewportCamera(ui);
+    ClientPresentParams presentParams{};
+    if (Engine::SceneTransitionManager::IsCreated())
+    {
+        const auto& transition = Engine::SceneTransitionManager::Get();
+        const f32 fadeAlpha = transition.GetFadeAlpha();
+        if (fadeAlpha > 0.001f)
+        {
+            presentParams.FadeColor = transition.GetFadeColor();
+            presentParams.FadeAlpha = fadeAlpha;
+        }
+    }
+
     renderer.SubmitCustomCommand([pipeline = m_PresentPipeline, color = std::move(color),
         useInternal = m_UseInternalResolution, integerUpscale = m_IntegerUpscale, pointUpscale = m_PointUpscale,
         internalW = m_InternalWidth, internalH = m_InternalHeight,
-        outputW = m_OutputWidth, outputH = m_OutputHeight](f32, RenderPass*) -> EResult
+        outputW = m_OutputWidth, outputH = m_OutputHeight, presentParams](f32, RenderPass*) -> EResult
     {
         auto* target = RenderTargetManager::Get().GetRenderTarget(color);
         auto* rhi = Renderer::Get().GetRHI();
@@ -227,6 +251,7 @@ void Client::ClientRenderPipeline::Submit(const CameraBuffer& camera, Engine::Sc
             }
         }
         if (IsFailure(rhi->BindPipeline(pipeline)) ||
+            IsFailure(rhi->BindConstantBuffer(&presentParams, sizeof(presentParams), 2)) ||
             IsFailure(rhi->BindTextureSampler(target->GetTexture(), sampler, MAX_MATERIAL_TEXTURE_SLOTS)))
             return EResult::Fail;
         return rhi->Draw(3);

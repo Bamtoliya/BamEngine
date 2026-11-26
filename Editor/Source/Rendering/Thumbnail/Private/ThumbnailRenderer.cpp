@@ -331,7 +331,7 @@ bool ThumbnailRenderer::SubmitMesh(Engine::Mesh* mesh, Engine::MaterialInterface
 	}
 	return true;
 }
-bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
+bool ThumbnailRenderer::SubmitModel(Engine::Model* model, f32 yawDegrees)
 {
 	if (model == nullptr) return false;
 	RefreshStudioLights();
@@ -342,7 +342,10 @@ bool ThumbnailRenderer::SubmitModel(Engine::Model* model)
 	if (!rootTransform.SetEulerRotation(model->GetPlacementEulerDegrees()))
 		return false;
 
-	const mat4 placementMatrix = rootTransform.GetLocalMatrix();
+	const mat4 yawMatrix = (yawDegrees != 0.0f)
+		? glm::rotate(mat4(1.0f), glm::radians(yawDegrees), vec3(0.0f, 1.0f, 0.0f))
+		: mat4(1.0f);
+	const mat4 placementMatrix = yawMatrix * rootTransform.GetLocalMatrix();
 	std::vector<mat4> worldTransforms(nodes.size(), mat4(1.0f));
 	for (size_t i = 0; i < nodes.size(); ++i)
 	{
