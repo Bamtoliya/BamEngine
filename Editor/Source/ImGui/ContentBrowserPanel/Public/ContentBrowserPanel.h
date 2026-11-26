@@ -104,6 +104,8 @@ public:
 	void PasteFiles(const filesystem::path& directory);
 	const filesystem::path& GetCurrentDirectory() const { return m_CurrentDirectory; }
 	void NavigateTo(const filesystem::path& directory);
+	// 프로젝트 전환 시 프로젝트 애셋 루트·파일 감시를 새 루트로 다시 묶는다.
+	void RebindProjectRoot(const filesystem::path& newAssetRoot);
 	bool CanDeleteSelectedFiles() const;
 	void DeleteSelectedFiles();
 	bool CanUndoFileEdit() const;
@@ -205,7 +207,6 @@ private:
 	filesystem::path m_PendingFileDropDirectory;
 #pragma endregion
 
-
 #pragma region TreeView
 private:
 	void DrawDirectoryTree(const filesystem::path& path, const filesystem::path& rootPath);
@@ -272,7 +273,6 @@ public:
 	void CaptureState(EditorWorkspace& workspace) const override;
 	void RestoreState(const EditorWorkspace& workspace) override;
 #pragma endregion
-
 
 #pragma region Member Variable
 private:

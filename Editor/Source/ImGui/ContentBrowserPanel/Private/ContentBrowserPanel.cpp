@@ -216,6 +216,25 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	return EResult::Success;
 }
 
+void ContentBrowserPanel::RebindProjectRoot(const filesystem::path& newAssetRoot)
+{
+	if (newAssetRoot.empty())
+		return;
+	m_RootPath = newAssetRoot;
+	if (m_FileWatcher && m_FileListener)
+	{
+		m_FileWatcher->removeWatch(m_WatchID);
+		m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
+		m_FileListener->SetProjectWatchId(m_WatchID);
+	}
+	m_CachedSubdirectories.clear();
+	m_ReadOnlyCache.clear();
+	m_CurrentDirectory = m_RootPath;
+	m_LastDirectory = m_CurrentDirectory;
+	m_NeedToExpandTree = true;
+	RequestRefresh();
+}
+
 void ContentBrowserPanel::SetShowEngineContent(bool show)
 {
 	if (m_ShowEngineContent == show)
