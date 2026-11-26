@@ -102,6 +102,19 @@ namespace Engine
 		// PakArchive Mount
 		static bool IsPakMounted();
 		static bool HasPakEntry(const std::string& uri);
+
+		// SceneTransition
+		static bool TransitionToScene(const std::string& scenePath, f32 fadeOutDuration = 0.5f, f32 fadeInDuration = 0.5f);
+		static bool IsSceneTransitioning();
+
+		// Audio BGM
+		static bool CrossfadeBGMByPath(const std::string& audioPath, f32 fadeDuration = 1.0f, f32 volume = 1.0f);
+		static void StopBGM();
+		static bool IsBGMPlaying();
+		static bool IsBGMCrossfading();
+
+		// Gamepad
+		static bool SetGamepadRumble(f32 lowFreq, f32 highFreq, int32 durationMs, int32 gamepadIndex = 0);
 	};
 }
 
@@ -1014,5 +1027,60 @@ namespace Engine::GraphGameplay
 	inline bool HasPakEntry(std::string uri)
 	{
 		return GraphGameplayLibrary::HasPakEntry(uri);
+	}
+
+	// ── 씬 전환 페이드 노드 (Scene) ──
+	FUNCTION(GRAPH_CALLABLE("Scene.TransitionToScene"), DISPLAY_NAME("Transition To Scene"), CATEGORY("Scene"),
+		GRAPH_PIN_DEFAULT("scenePath", ""), GRAPH_PIN_DEFAULT("fadeOutDuration", 0.5f), GRAPH_PIN_DEFAULT("fadeInDuration", 0.5f))
+	inline bool TransitionToScene(std::string scenePath, float fadeOutDuration, float fadeInDuration)
+	{
+		return GraphGameplayLibrary::TransitionToScene(scenePath, fadeOutDuration, fadeInDuration);
+	}
+
+	FUNCTION(GRAPH_PURE("Scene.IsTransitioning"), DISPLAY_NAME("Is Scene Transitioning"), CATEGORY("Scene"))
+	inline bool IsSceneTransitioning()
+	{
+		return GraphGameplayLibrary::IsSceneTransitioning();
+	}
+
+	// ── BGM 크로스페이드 / 정지 노드 (Audio) ──
+	FUNCTION(GRAPH_CALLABLE("Audio.CrossfadeBGM"), DISPLAY_NAME("Crossfade BGM"), CATEGORY("Audio"),
+		GRAPH_PIN_DEFAULT("audioPath", ""), GRAPH_PIN_DEFAULT("fadeDuration", 1.0f), GRAPH_PIN_DEFAULT("volume", 1.0f))
+	inline bool CrossfadeBGMByPath(std::string audioPath, float fadeDuration, float volume)
+	{
+		return GraphGameplayLibrary::CrossfadeBGMByPath(audioPath, fadeDuration, volume);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Audio.StopBGM"), DISPLAY_NAME("Stop BGM"), CATEGORY("Audio"))
+	inline void StopBGM()
+	{
+		GraphGameplayLibrary::StopBGM();
+	}
+
+	FUNCTION(GRAPH_PURE("Audio.IsBGMPlaying"), DISPLAY_NAME("Is BGM Playing"), CATEGORY("Audio"))
+	inline bool IsBGMPlaying()
+	{
+		return GraphGameplayLibrary::IsBGMPlaying();
+	}
+
+	FUNCTION(GRAPH_PURE("Audio.IsBGMCrossfading"), DISPLAY_NAME("Is BGM Crossfading"), CATEGORY("Audio"))
+	inline bool IsBGMCrossfading()
+	{
+		return GraphGameplayLibrary::IsBGMCrossfading();
+	}
+
+	// ── 게임패드 진동 노드 (Input) ──
+	FUNCTION(GRAPH_CALLABLE("Input.SetGamepadRumble"), DISPLAY_NAME("Set Gamepad Rumble"), CATEGORY("Input"),
+		GRAPH_PIN_DEFAULT("lowFreq", 0.5f), GRAPH_PIN_DEFAULT("highFreq", 0.5f),
+		GRAPH_PIN_DEFAULT("durationMs", 200), GRAPH_PIN_DEFAULT("gamepadIndex", 0))
+	inline bool SetGamepadRumble(float lowFreq, float highFreq, std::int64_t durationMs, std::int64_t gamepadIndex)
+	{
+		if (durationMs < 0 || durationMs > std::numeric_limits<int32>::max() ||
+			gamepadIndex < 0 || gamepadIndex > std::numeric_limits<int32>::max())
+		{
+			return false;
+		}
+		return GraphGameplayLibrary::SetGamepadRumble(
+			lowFreq, highFreq, static_cast<int32>(durationMs), static_cast<int32>(gamepadIndex));
 	}
 }

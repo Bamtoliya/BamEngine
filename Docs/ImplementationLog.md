@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 비주얼 스크립팅(`GraphGameplayLibrary`) 신규 게임플레이 노드 7종 노출
+
+- **요약**:
+  - `Engine/Source/Graph/Libraries/Public/GraphGameplayLibrary.h`, `Private/GraphGameplayLibrary.cpp`:
+    1. 씬 전환: `Scene.TransitionToScene` (`GRAPH_CALLABLE`, 미생성 시 자동 생성), `Scene.IsTransitioning` (`GRAPH_PURE`)
+    2. BGM 크로스페이드: `Audio.CrossfadeBGM` (`GRAPH_CALLABLE`, `ResourceManager`로 `AudioClip` 로드 후 `CrossfadeBGM`), `Audio.StopBGM`, `Audio.IsBGMPlaying`, `Audio.IsBGMCrossfading`
+    3. 게임패드 진동: `Input.SetGamepadRumble` (`GRAPH_CALLABLE`, `InputManager::IsCreated()` 및 범위 가드)
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `GraphReflectionCheck`, `GraphExecutionCheck`) 및 CTest 실행 대기.
+
 ### [2026-11-27] `SpriteSheetBaker` 턴테이블 각도 회전 캡처 및 `SceneTransitionManager` 페이드 오버레이 렌더링 연결
 
 - **요약**:

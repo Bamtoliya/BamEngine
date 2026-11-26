@@ -7,12 +7,17 @@
 #include "NavAgentComponent.h"
 #include "AIPerceptionComponent.h"
 #include "AudioManager.h"
+#include "AudioClip.h"
 #include "AudioMixer.h"
+#include "ResourceManager.h"
+#include "InputManager.h"
 #include "SceneManager.h"
+#include "SceneTransitionManager.h"
 #include "SystemManager.h"
 #if !defined(__EMSCRIPTEN__)
 #include "NetworkSystem.h"
 #endif
+#include <cmath>
 #include <limits>
 
 namespace Engine
@@ -462,5 +467,68 @@ namespace Engine
 	{
 		if (uri.empty()) return false;
 		return PakMountManager::Get().HasEntry(uri);
+	}
+
+	// ── SceneTransition ──
+	bool GraphGameplayLibrary::TransitionToScene(const std::string& scenePath, f32 fadeOutDuration, f32 fadeInDuration)
+	{
+		if (scenePath.empty()) return false;
+		if (!SceneTransitionManager::IsCreated())
+		{
+			if (!SceneTransitionManager::Create()) return false;
+		}
+		return SceneTransitionManager::Get().TransitionToScene(
+			std::filesystem::path(scenePath), fadeOutDuration, fadeInDuration) == EResult::Success;
+	}
+
+	bool GraphGameplayLibrary::IsSceneTransitioning()
+	{
+		if (!SceneTransitionManager::IsCreated()) return false;
+		return SceneTransitionManager::Get().IsTransitioning();
+	}
+
+	// ── Audio BGM ──
+	bool GraphGameplayLibrary::CrossfadeBGMByPath(const std::string& audioPath, f32 fadeDuration, f32 volume)
+	{
+		if (audioPath.empty() || !AudioManager::IsCreated() || !ResourceManager::IsCreated()) return false;
+
+		const auto handle = ResourceManager::Get().LoadFile(audioPath);
+		if (!handle.IsValid()) return false;
+
+		auto* clip = dynamic_cast<AudioClip*>(ResourceManager::Get().GetResource(handle));
+		if (!clip) return false;
+
+		auto* sound = clip->GetFMODSound();
+		if (!sound) return false;
+
+		const f32 clampedVol = std::isfinite(volume) ? std::clamp(volume, 0.0f, 1.0f) : 1.0f;
+		const f32 safeFade = (std::isfinite(fadeDuration) && fadeDuration > 0.0f) ? fadeDuration : 0.0f;
+		return AudioManager::Get().CrossfadeBGM(sound, safeFade, clampedVol, true) == EResult::Success;
+	}
+
+	void GraphGameplayLibrary::StopBGM()
+	{
+		if (!AudioManager::IsCreated()) return;
+		AudioManager::Get().StopBGM();
+	}
+
+	bool GraphGameplayLibrary::IsBGMPlaying()
+	{
+		if (!AudioManager::IsCreated()) return false;
+		return AudioManager::Get().IsBGMPlaying();
+	}
+
+	bool GraphGameplayLibrary::IsBGMCrossfading()
+	{
+		if (!AudioManager::IsCreated()) return false;
+		return AudioManager::Get().IsCrossfading();
+	}
+
+	// ── Gamepad ──
+	bool GraphGameplayLibrary::SetGamepadRumble(f32 lowFreq, f32 highFreq, int32 durationMs, int32 gamepadIndex)
+	{
+		if (!InputManager::IsCreated() || durationMs < 0 || gamepadIndex < 0) return false;
+		return InputManager::Get().SetGamepadRumble(
+			lowFreq, highFreq, static_cast<uint32>(durationMs), static_cast<uint32>(gamepadIndex));
 	}
 }
