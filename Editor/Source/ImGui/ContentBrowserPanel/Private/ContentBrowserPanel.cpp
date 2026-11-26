@@ -3400,9 +3400,7 @@ void ContentBrowserPanel::CreateEmptyScene(const filesystem::path& path)
         "m_Layers": [
             {
                 "__Type__": "Layer",
-                "m_DeadGameObjects": [],
                 "m_Flags": 3,
-                "m_GameObjects": [],
                 "m_Index": 0,
                 "m_Name": "Default"
             }
