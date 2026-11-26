@@ -462,7 +462,14 @@ namespace
 		header.dataSize = static_cast<uint32>(pixels.size());
 
 		auto* tex = Engine::Texture::Create(header, pixels, key);
-		return tex ? rm.AddResource<Engine::Texture>(key, tex) : Engine::ResourceHandle<Engine::Texture>{};
+		if (!tex) return {};
+		if (FAILED(tex->UploadToGPU()))
+		{
+			tex->Free();
+			delete tex;
+			return {};
+		}
+		return rm.AddResource<Engine::Texture>(key, tex);
 	}
 
 	Engine::ResourceHandle<Engine::Mesh> GetOrCreateVFXTiledPlaneMesh(Engine::ResourceManager& rm)
@@ -708,6 +715,46 @@ void VFXEditorPanel::RestartSimulation()
 	m_CurrentTime = 0.0f;
 	m_TimelineSeek.reset();
 	m_FixedPreview = true;
+}
+
+void VFXEditorPanel::OffsetTrailRuntimePoints(size_t trackIndex, const Engine::vec3& localDeltaA, const Engine::vec3& localDeltaB)
+{
+	if (localDeltaA == Engine::vec3(0.0f) && localDeltaB == Engine::vec3(0.0f)) return;
+
+	auto* scene = m_PreviewWidget.GetScene();
+	if (!scene || !m_PreviewEntity) return;
+
+	auto& registry = scene->GetRegistry();
+	const auto handle = m_PreviewEntity->GetEntityHandle();
+	auto* comp = registry.try_get<Engine::CompositeVFXComponent>(handle);
+	if (!comp || trackIndex >= comp->trailRuntimes.size()) return;
+
+	Engine::mat4 worldMat(1.0f);
+	if (const auto* worldTrans = registry.try_get<Engine::WorldTransformComponent>(handle))
+		worldMat = worldTrans->worldMatrix;
+	else if (const auto* localTrans = registry.try_get<Engine::TransformComponent>(handle))
+		worldMat = localTrans->GetLocalMatrix();
+
+	const Engine::mat3 linear(worldMat);
+	const Engine::vec3 worldDeltaA = linear * localDeltaA;
+	const Engine::vec3 worldDeltaB = linear * localDeltaB;
+
+	auto& rt = comp->trailRuntimes[trackIndex];
+	for (auto& pt : rt.points)
+	{
+		pt.posA += worldDeltaA;
+		pt.posB += worldDeltaB;
+	}
+	if (rt.hasHead)
+	{
+		rt.headA += worldDeltaA;
+		rt.headB += worldDeltaB;
+	}
+	if (rt.hasLastSpawn)
+	{
+		rt.lastSpawnPosA += worldDeltaA;
+		rt.lastSpawnPosB += worldDeltaB;
+	}
 }
 
 void VFXEditorPanel::ScrubTime(f32 targetTime)
@@ -1457,8 +1504,12 @@ void VFXEditorPanel::DrawGizmo()
 					const Engine::vec3 delta = res.Position - currentPos;
 					track.localOffsetA += delta;
 					track.localOffsetB += delta;
+					OffsetTrailRuntimePoints(index, delta, delta);
 				}
-				InvalidateTimelinePreview();
+				else
+				{
+					InvalidateTimelinePreview();
+				}
 			}
 
 			if (res.DragEnded && m_GizmoSnapshot.valid &&
@@ -2017,6 +2068,20 @@ void VFXEditorPanel::DrawInspector()
 
 	// 삭제 버튼 등으로 선택이 바뀐 프레임에는 세션을 열지 않는다.
 	const bool sameTrack = m_SelectedTrack.type == selection.type && m_SelectedTrack.index == selection.index;
+	if (sameTrack && selection.type == ESelectedVFXTrackType::Trail && before.has_value())
+	{
+		const auto& trails = effect->GetTrailTracks();
+		if (selection.index >= 0 && selection.index < static_cast<int>(trails.size()))
+		{
+			if (const auto* prevTrack = std::any_cast<Engine::VFXTrailTrack>(&before))
+			{
+				const auto& currTrack = trails[selection.index];
+				OffsetTrailRuntimePoints(static_cast<size_t>(selection.index),
+					currTrack.localOffsetA - prevTrack->localOffsetA,
+					currTrack.localOffsetB - prevTrack->localOffsetB);
+			}
+		}
+	}
 	if (sameTrack && !m_InspectorEdit && before.has_value())
 		m_InspectorEdit = VFXInspectorEdit{ effect, selection, std::move(before) };
 }

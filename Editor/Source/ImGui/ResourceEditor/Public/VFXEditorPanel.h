@@ -118,6 +118,7 @@ private:
 	void SaveEffectTo(const std::filesystem::path& path);
 	void RestartSimulation();
 	void InvalidateTimelinePreview();
+	void OffsetTrailRuntimePoints(size_t trackIndex, const Engine::vec3& localDeltaA, const Engine::vec3& localDeltaB);
 	void MarkSaved(); // 현재 문서 상태를 저장 기준점으로 기록한다 (저장 성공·로드 시)
 	void ScrubTime(f32 targetTime);
 
