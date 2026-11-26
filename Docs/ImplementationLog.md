@@ -2,6 +2,32 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-26] CTest 통과 · 지형/디스토션/리소스피커/머티리얼볼 수정 · 누락 참조 복구 · 엔진/에디터 경계 격리
+
+- **요약**:
+  1. **CTest 실패 2건 해소 (`NavigationAICheck`, `RuntimeSettingsCheck`)**:
+     - `NavMesh.h/.cpp`: 다층 램프 하단이 큰 바닥 폴리곤 내부에 착지할 때 연결이 끊기던 문제를 `NavMeshPortalLink`(`extraLinks`, 3차 내부 착지 포털 연결, `GetPortalEdge`/`FindPath` 및 `.bamnavmesh` v2 직렬화)로 해결.
+     - `RuntimeSettingsCheck.cpp`: `UIEventSystem` 초기 `m_SuppressUntilRelease=true` 해제를 위한 idle 포인터 프레임 1회를 추가해 드롭다운 클릭 테스트 정상화.
+     - 사용자 실행으로 전체 CTest 통과 확인.
+  2. **실환경 버그 수정 및 에디터 UX 개선**:
+     - **리소스 피커**: `ResourcePicker.h` 경로 텍스트 클리핑(`PushClipRect`/`PopClipRect`)으로 우측 배지 겹침 해소, `PickerAssetCatalog.cpp`에 `PlatformPath::GetContentMounts()` 스캔 추가.
+     - **지형 & 내비게이션**: `DirectX12RHI::UploadTextureData`에 `ETextureFormat::R8_UNORM` 지원 추가(지형 `HoleMaskTexture` 오류 해소), `NavGrid::BakeObstaclesFromScene`에 `ETerrainAttribute::Hole` 비통행 처리 추가, `TerrainEditor.cpp` 텍스트 줄바꿈 및 Sculpt/Attribute 라디오 버튼 2×2 배치로 좌우 스크롤 해소(사용자 확인 완료).
+     - **디스토션 V2 & VFX 프리뷰**: `Renderer::RenderDynamicGeometry` 비호환 머티리얼 매 프레임 에러 로그 억제, `Assets/Material/DistortionV2_Test.bammat.json` 생성, `VFXEditorPanel` 체커보드 바닥 토글(`CheckerBackdrop`) 추가, `distortionWritePS.hlsl` 노이즈/강도(`0.05f`) 보강.
+     - **머티리얼 볼 & 에디터**: `SamplerDesc::MaxAnisotropy`에 `ALLOW_MISSING` 추가(`code=1` 오류 해소), `MaterialPreviewRenderer::GetOrLoadMaterialBallPreviewMesh()`에서 `.bammodel` 노드 계층 변환을 반영해 정방향 정규화·`ThumbnailRenderer` 공용화, `MaterialEditor` 부모 머티리얼 영역을 `DrawInspectorResourcePicker<Engine::Material>`로 교체.
+     - **리소스 편집기 누락 참조 복구**: `MaterialEditor`·`ModelEditor`에 `MissingResourceRecoveryScope` 적용, `ResourceEditorInterface::DrawMissingResourcesBanner` UTF-8 말줄임+툴팁 및 `FindNearbyReplacementAsset`(`AutoFixMissing` 버튼, `m_IsReadOnly` 시 숨김) 구현.
+  3. **엔진/에디터 경계 격리 및 일반화**:
+     - `MissingResourceRecoveryContext` 사용처(`Model.cpp`, `Resource.cpp`, `ResourceReference.h`, `ResourceHandleArchiveAdapter.h`, `SceneArchive.cpp`) 및 파일 리로케이션 API(`PrepareFilePathRelocation`, `RelocateFileResources`) 전체를 `#if BAM_EDITOR`로 격리.
+     - `PlatformPath`의 `Editor://` 하드코딩을 제거하고 범용 가상 스킴 등록 API(`RegisterVirtualScheme` 등)로 일반화(`Editor/Source/Application`에서 `"Editor"` 스킴 동적 등록, `VirtualPathCheck` 갱신).
+- **미해결 / 후속 추적 항목**:
+  - **`Editor://` 모델 3D 썸네일 미표시**: `Editor://Model/material_ball_in_3d-coat/material_ball_in_3d-coat.bammodel`이 모델 편집기에서는 누락/참조 실패 없이 정상 열리고 텍스처·머티리얼 썸네일도 정상 생성되지만, `.bam/cache/thumbnails` 삭제 후에도 콘텐츠 브라우저에서 해당 `Editor://` 모델의 3D 썸네일이 표시되지 않는 현상(후속 디버깅 필요).
+  - **`VFXEditorPanel` 체커보드 토글 시 바닥판 미표시**: `CheckerBackdrop` 토글을 켜고 `VFXPreviewTiledPlaneMesh` + `VFXPreviewCheckerTex`로 전환할 때 바닥판이 보이지 않는 현상(렌더 패스 밖 지연 갱신 및 와인딩·BaseColor 보정 후에도 재현 — `VFXPreviewGroundMatInst` 셰이더/UV/메시 생성 경로 후속 추적 필요).
+  - **`VFXEditorPanel` 트레일 오프셋 실시간 프리뷰 갱신 필요**: 통합 이펙트 패널에서 트레일 트랙의 오프셋 등 속성을 조절할 때 현재는 이펙트를 다시 재생해야 변경된 트레일 모양이 반영됨 — 속성 변경 시 즉시 트레일/프리뷰를 재구성해 실시간으로 변화를 확인할 수 있도록 개선 필요.
+  - **3D NavMesh 오버레이 최적화 시도 및 평가 (부적합 판정)**:
+    - 기존 `DebugRenderer::RegisterNavMeshDebug`는 매 프레임 절두체/거리 컬링으로 100fps → 30fps 드랍이 발생함.
+    - 개선 시도로 (1) 전체 폴리곤 `8192`라인 CPU 정점 캐싱 → 카메라 이동 시 끊김, (2) 카메라 반경 `80m` + `15m` 이동마다 재구축을 시도했으나, CPU `DebugRenderer` 라인 상한/반경 잘림과 재구축 스파이크 한계가 있어 **사용자 평가상 부적합한 방식**으로 기록.
+    - **근본 해결 방향(후속)**: CPU 라인 `m_Vertices` 매 프레임 복사 대신, NavMesh 베이크/로드 시점에 **전용 정적 GPU 버퍼(`RHIBuffer`) 1회 업로드 + 1 드로우콜**로 전체 NavMesh를 그리는 구조로 전환 필요.
+  - **2단계 성능/비동기 과제**: 리소스 피커 썸네일 오픈 지연 최적화(`AssetCache`+`ResourcePicker`), 3D NavMesh 비동기 베이크+푸터바(`SceneViewportPanel`+`ToolBar`) 코드 반영 완료.
+
 ### [2026-11-25] 런타임 설정·누락 리소스 복구·프로젝트 허브 C++ 모듈·지형/NavMesh·디스토션 V2·Probe GI 바이어스
 
 - **요약** (기능별 커밋):
