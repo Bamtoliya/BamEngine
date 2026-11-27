@@ -57,7 +57,28 @@ bool PhysicsMaterial::LoadFromFile(const std::filesystem::path& path)
 	if (!ar.LoadFromFile(ResolvePhysicsMaterialPath(path))) return false;
 	const std::wstring identityKey = m_Key;
 	const std::wstring identityPath = m_Path;
-	const bool read = static_cast<bool>(ReadArchive(ar));
+	bool read = static_cast<bool>(ReadArchive(ar));
+	if (!read)
+	{
+		// Resource 메타 필드(m_Key/m_Path 등)가 생략된 간편 평면 JSON 포맷도 관대하게 지원한다.
+		bool anyField = false;
+		if (ar.Read("StaticFriction", StaticFriction)) anyField = true;
+		if (ar.Read("DynamicFriction", DynamicFriction)) anyField = true;
+		if (ar.Read("Restitution", Restitution)) anyField = true;
+		uint32 frictionCombineVal = static_cast<uint32>(FrictionCombine);
+		if (ar.Read("FrictionCombine", frictionCombineVal) && frictionCombineVal <= static_cast<uint32>(EPhysicsCombineMode::Maximum))
+		{
+			FrictionCombine = static_cast<EPhysicsCombineMode>(frictionCombineVal);
+			anyField = true;
+		}
+		uint32 restitutionCombineVal = static_cast<uint32>(RestitutionCombine);
+		if (ar.Read("RestitutionCombine", restitutionCombineVal) && restitutionCombineVal <= static_cast<uint32>(EPhysicsCombineMode::Maximum))
+		{
+			RestitutionCombine = static_cast<EPhysicsCombineMode>(restitutionCombineVal);
+			anyField = true;
+		}
+		read = anyField;
+	}
 	m_Key = identityKey;
 	m_Path = identityPath;
 	return read;

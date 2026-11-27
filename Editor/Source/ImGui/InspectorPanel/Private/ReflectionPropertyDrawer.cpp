@@ -17,6 +17,7 @@
 #include "ReflectionInspectorSupport.h"
 #include "EditCondition.h"
 #include "PhysicsComponent.h"
+#include "PhysicsMaterial.h"
 #include <imgui_stdlib.h>
 #include <archive/Unicode.h>
 #include "ResourcePicker.h"
@@ -1702,6 +1703,7 @@ namespace Editor
 			INLINE_RESOURCE(ParticleEffect)
 			INLINE_RESOURCE(CompositeEffect)
 			INLINE_RESOURCE(TerrainLayerAsset)
+			INLINE_RESOURCE(PhysicsMaterial)
 #undef INLINE_RESOURCE
 			if (const auto* current = value.Get<entt::entity>())
 			{
@@ -2030,6 +2032,7 @@ namespace Editor
 		INSPECTOR_RESOURCE(ParticleEffect)
 		INSPECTOR_RESOURCE(CompositeEffect)
 		INSPECTOR_RESOURCE(TerrainLayerAsset)
+		INSPECTOR_RESOURCE(PhysicsMaterial)
 #undef INSPECTOR_RESOURCE
 		else if (const auto* current = read.Value.Get<entt::entity>())
 		{

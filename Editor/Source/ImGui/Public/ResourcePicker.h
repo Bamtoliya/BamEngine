@@ -33,6 +33,7 @@ namespace Engine
 	class ParticleEffect;
 	class CompositeEffect;
 	class TerrainLayerAsset;
+	class PhysicsMaterial;
 }
 
 namespace Editor
@@ -116,6 +117,10 @@ namespace Editor
 			{
 				return endsWith(".bamterrainlayer") || endsWith(".bamterrainlayer.json");
 			}
+			else if constexpr (std::is_same_v<T, Engine::PhysicsMaterial>)
+			{
+				return endsWith(".bamphysmat") || endsWith(".bamphysmat.json");
+			}
 			else
 			{
 				return true;
@@ -163,6 +168,8 @@ namespace Editor
 				return { ICON_FA_WAND_MAGIC_SPARKLES, ImVec4(0.95f, 0.40f, 0.90f, 1.0f), "COMPOSITE VFX" };
 			else if constexpr (std::is_same_v<T, Engine::TerrainLayerAsset>)
 				return { ICON_FA_LAYER_GROUP, ImVec4(0.55f, 0.80f, 0.35f, 1.0f), "TERRAIN LAYER" };
+			else if constexpr (std::is_same_v<T, Engine::PhysicsMaterial>)
+				return { ICON_FA_CUBE, ImVec4(0.35f, 0.78f, 0.95f, 1.0f), "PHYSICS MAT" };
 			else
 				return { ICON_FA_FILE, ImVec4(0.65f, 0.65f, 0.65f, 1.0f), "ASSET" };
 		}

@@ -1,6 +1,7 @@
 #pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
+#include "PhysicsMaterial.h"
 #include "Runtime.h"
 
 namespace
@@ -270,6 +271,15 @@ void ResourceManager::RegisterExplicitLoader()
 	registerSimpleLoader.operator() < ActionTimelineAsset, ActionTimelineCreateDesc > ({ L".bamtimeline", L".actiontimeline" });
 	registerSimpleLoader.operator() < CompositeEffect, CompositeEffectCreateDesc > ({ L".bamvfx", L".vfx" });
 	registerSimpleLoader.operator() < TerrainLayerAsset, TerrainLayerCreateDesc > ({ L".bamterrainlayer" });
+	m_LoaderRegistry[L".bamphysmat"] = [this](wstring key, wstring path) -> Handle
+		{
+			PhysicsMaterialCreateDesc desc;
+			desc.Key = key;
+			desc.Path = path.empty() ? key : path;
+			if (auto* mat = PhysicsMaterial::Create(&desc))
+				return this->AddResource<PhysicsMaterial>(key, mat).GetRawHandle();
+			return Handle{};
+		};
 
 	const auto shaderLoader = [this](wstring key, wstring path) -> Handle
 		{
