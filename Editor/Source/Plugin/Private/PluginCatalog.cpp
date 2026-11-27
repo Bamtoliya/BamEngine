@@ -84,6 +84,18 @@ namespace Editor
             }
         }
 
+        fs::path FindPackageManifestPath(const fs::path& directory)
+        {
+            std::error_code error;
+            for (const char* name : { "plugin.json", ".bamplugin.json" })
+            {
+                const auto candidate = directory / name;
+                if (fs::exists(candidate, error))
+                    return candidate;
+            }
+            return {};
+        }
+
         PluginCatalogEntry InspectPackage(const PluginPackageLocation& location,
             std::string_view sdkCompatibility)
         {
@@ -93,7 +105,9 @@ namespace Editor
 
             PluginManifest manifest;
             std::filesystem::path manifestPath;
-            if (ResolvePluginFile(location.Directory, "plugin.json", manifestPath) == CatalogStatus::Ready)
+            const auto foundManifest = FindPackageManifestPath(location.Directory);
+            if (!foundManifest.empty() &&
+                ResolvePluginFile(location.Directory, foundManifest.filename(), manifestPath) == CatalogStatus::Ready)
                 entry.ManifestResult = ReadPluginManifest(manifestPath, manifest);
             else
                 entry.ManifestResult = EPluginManifestResult::ReadFailed;
@@ -188,8 +202,7 @@ namespace Editor
                 for (; !error && it != end; it.increment(error))
                 {
                     const auto directory = ResolvePluginSourceDirectory(root, it->path().filename());
-                    std::error_code manifestError;
-                    if (directory.empty() || !std::filesystem::exists(directory / "plugin.json", manifestError))
+                    if (directory.empty() || FindPackageManifestPath(directory).empty())
                         continue;
 
                     const bool alreadyDiscovered = std::any_of(packages.begin(), packages.end(),

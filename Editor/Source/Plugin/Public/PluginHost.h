@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
+#include <unordered_map>
 
 namespace Editor
 {
@@ -64,6 +65,8 @@ namespace Editor
         bool BuildAndReloadPluginSource(const std::string& pluginId);
         bool IsPluginSourceBuilding() const;
         std::string GetPluginBuildLogs() const;
+        std::string GetPluginBuildLogs(const std::string& pluginId) const;
+        std::string GetPluginBuildError(const std::string& pluginId) const;
         const std::string& GetBuildingPluginId() const { return m_PendingBuildPluginId; }
         bool IsPluginContentMounted(std::size_t index) const;
 
@@ -91,5 +94,7 @@ namespace Editor
         bool m_ApprovalConfirmed = false;
         PluginSourceBuilder m_SourceBuilder;
         std::string m_PendingBuildPluginId;
+        std::unordered_map<std::string, std::string> m_PluginBuildLogs;
+        std::unordered_map<std::string, std::string> m_PluginBuildErrors;
     };
 }

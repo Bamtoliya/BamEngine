@@ -678,15 +678,33 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			if (hasSource)
 			{
 				ImGui::BeginDisabled(isAnySourceBuilding);
-				const char* buildLabel = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
-				if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, buildLabel))
-					host.BuildAndReloadPluginSource(entry.Id);
+				if (status.LastActionFailed)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.20f, 0.20f, 0.9f));
+					if (toolbar.Icon("RetrySourceBuild", ICON_FA_HAMMER, "PluginManager.RetryBuild"))
+						host.BuildAndReloadPluginSource(entry.Id);
+					ImGui::PopStyleColor();
+				}
+				else
+				{
+					const char* buildLabel = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.BuildAndLoad";
+					if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, buildLabel))
+						host.BuildAndReloadPluginSource(entry.Id);
+				}
 				ImGui::EndDisabled();
 
 				if (isBuildingThis)
 					ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.StatusCompiling"));
 				else if (status.LastActionFailed)
-					ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+				{
+					const auto buildErr = host.GetPluginBuildError(entry.Id);
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+					if (!buildErr.empty())
+						ImGui::TextWrapped("%s", LOCAL_FMT("PluginManager.BuildErrorDetail", buildErr).c_str());
+					else
+						ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+					ImGui::PopStyleColor();
+				}
 				else
 					ImGui::TextWrapped("%s", LOCAL_CSTR("PluginManager.PackageMissingBinary"));
 				return;
@@ -757,9 +775,19 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 		}
 		else if (hasSource)
 		{
-			const char* label = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.Build";
-			if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, label))
-				host.BuildAndReloadPluginSource(entry.Id);
+			if (status.LastActionFailed)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.20f, 0.20f, 0.9f));
+				if (toolbar.Icon("RetrySourceBuild", ICON_FA_HAMMER, "PluginManager.RetryBuild"))
+					host.BuildAndReloadPluginSource(entry.Id);
+				ImGui::PopStyleColor();
+			}
+			else
+			{
+				const char* label = status.IsLoaded ? "PluginManager.RebuildAndReload" : "PluginManager.BuildAndLoad";
+				if (toolbar.Icon("SourceBuild", ICON_FA_HAMMER, label))
+					host.BuildAndReloadPluginSource(entry.Id);
+			}
 		}
 		ImGui::EndDisabled();
 
@@ -785,7 +813,15 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			if (isBuildingThis)
 				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.StatusCompiling"));
 			else if (status.LastActionFailed)
-				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+			{
+				const auto buildErr = host.GetPluginBuildError(entry.Id);
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+				if (!buildErr.empty())
+					ImGui::TextWrapped("%s", LOCAL_FMT("PluginManager.BuildErrorDetail", buildErr).c_str());
+				else
+					ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.BuildFailed"));
+				ImGui::PopStyleColor();
+			}
 		}
 
 		if (status.LastActionFailed && !builder && !hasSource)
@@ -1056,7 +1092,8 @@ void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 	const bool hasSource = isHostPlugin &&
 		!host.GetEntry(*item.HostIndex).PackageDirectory.empty() &&
 		std::filesystem::exists(host.GetEntry(*item.HostIndex).PackageDirectory / "CMakeLists.txt");
-	const bool hasHostLogs = isHostPlugin && !host.GetPluginBuildLogs().empty();
+	const std::string hostLogs = isHostPlugin ? host.GetPluginBuildLogs(host.GetEntry(*item.HostIndex).Id) : std::string{};
+	const bool hasHostLogs = !hostLogs.empty();
 
 	if (!builder && !hasSource && !hasHostLogs)
 		return;
@@ -1077,12 +1114,12 @@ void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 	}
 	else if (isHostPlugin)
 	{
-		outputText = host.GetPluginBuildLogs();
+		outputText = hostLogs;
 		isCompiling = host.IsPluginSourceBuilding() && (host.GetBuildingPluginId() == host.GetEntry(*item.HostIndex).Id);
 		isFailed = host.GetStatus(*item.HostIndex).LastActionFailed;
 	}
 
-	// 상단 제어 바: [Copy Log], [Retry Compile] (실패 시), [Auto-scroll]
+	// 상단 제어 바: [Copy Log], [Retry Compile / Retry Build] (실패 시), [Auto-scroll]
 	if (toolbar.Icon("EditorCommon.Copy", ICON_FA_COPY, "EditorCommon.Copy"))
 	{
 		ImGui::SetClipboardText(outputText.c_str());
@@ -1090,8 +1127,9 @@ void PluginManagerPanel::DrawBuildConsole(const PluginModuleItem& item)
 
 	if (isFailed && !isCompiling)
 	{
+		const char* retryKey = builder ? "PluginManager.RetryCompile" : "PluginManager.RetryBuild";
 		ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.20f, 0.20f, 0.9f));
-		if (toolbar.Icon("PluginManager.RetryCompile", ICON_FA_HAMMER, "PluginManager.RetryCompile"))
+		if (toolbar.Icon(retryKey, ICON_FA_HAMMER, retryKey))
 		{
 			if (builder)
 				builder->RequestBuild();

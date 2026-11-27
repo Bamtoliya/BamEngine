@@ -43,15 +43,19 @@ namespace Editor
                 return {};
 
             std::error_code ec;
-            const auto manifestPath = catalog.PackageDirectory / "plugin.json";
-            if (std::filesystem::exists(manifestPath, ec))
+            for (const char* manifestName : { "plugin.json", ".bamplugin.json" })
             {
-                PluginManifest manifest;
-                if (ReadPluginManifest(manifestPath, manifest) == EPluginManifestResult::Success && !manifest.contentRoot.empty())
+                const auto manifestPath = catalog.PackageDirectory / manifestName;
+                if (std::filesystem::exists(manifestPath, ec))
                 {
-                    const auto candidate = catalog.PackageDirectory / manifest.contentRoot;
-                    if (std::filesystem::is_directory(candidate, ec))
-                        return candidate;
+                    PluginManifest manifest;
+                    if (ReadPluginManifest(manifestPath, manifest) == EPluginManifestResult::Success && !manifest.contentRoot.empty())
+                    {
+                        const auto candidate = catalog.PackageDirectory / manifest.contentRoot;
+                        if (std::filesystem::is_directory(candidate, ec))
+                            return candidate;
+                    }
+                    break;
                 }
             }
 
@@ -104,6 +108,8 @@ namespace Editor
     {
         m_SourceBuilder.Free();
         m_PendingBuildPluginId.clear();
+        m_PluginBuildLogs.clear();
+        m_PluginBuildErrors.clear();
         for (auto& entry : m_Entries)
         {
             if (entry.IsContentMounted)
@@ -230,8 +236,10 @@ namespace Editor
         {
             m_SourceBuilder.ClearNewResult();
             const auto result = m_SourceBuilder.GetLastResult();
+            m_PluginBuildLogs[result.PluginId] = result.Logs;
             if (result.Success)
             {
+                m_PluginBuildErrors.erase(result.PluginId);
                 EDITOR_LOG_INFO("[PluginHost] Plugin '{}' source build succeeded. Refreshing and loading/reloading...", result.PluginId);
                 RefreshInstalledPackages();
                 const auto it = std::find_if(m_Entries.begin(), m_Entries.end(), [&result](const Entry& e) {
@@ -248,6 +256,7 @@ namespace Editor
             }
             else
             {
+                m_PluginBuildErrors[result.PluginId] = result.ErrorMessage;
                 EDITOR_LOG_ERROR("[PluginHost] Plugin '{}' source build failed: {}", result.PluginId, result.ErrorMessage);
                 const auto it = std::find_if(m_Entries.begin(), m_Entries.end(), [&result](const Entry& e) {
                     return e.Catalog.Id == result.PluginId;
@@ -522,14 +531,45 @@ namespace Editor
             return false;
 
         std::filesystem::path outputBinDir;
+        std::filesystem::path expectedDllName;
         if (!entry.Catalog.BinaryPath.empty())
+        {
             outputBinDir = entry.Catalog.BinaryPath.parent_path();
+            expectedDllName = entry.Catalog.BinaryPath.filename();
+        }
         else
-            outputBinDir = sourceDir / "Binaries" / "Win64";
+        {
+            for (const char* manifestName : { "plugin.json", ".bamplugin.json" })
+            {
+                const auto manifestPath = sourceDir / manifestName;
+                if (!std::filesystem::exists(manifestPath, ec))
+                    continue;
+                PluginManifest manifest;
+                if (ReadPluginManifest(manifestPath, manifest) == EPluginManifestResult::Success)
+                {
+                    for (const auto& mod : manifest.modules)
+                    {
+                        if (mod.environment == "Editor" && !mod.binary.empty())
+                        {
+                            const auto rel = Engine::Utf8ToPath(mod.binary);
+                            if (!rel.parent_path().empty())
+                                outputBinDir = sourceDir / rel.parent_path();
+                            expectedDllName = rel.filename();
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+            if (outputBinDir.empty())
+                outputBinDir = sourceDir / "Binaries" / "Win64";
+        }
 
+        m_PluginBuildErrors.erase(pluginId);
+        m_PluginBuildLogs.erase(pluginId);
         m_PendingBuildPluginId = pluginId;
         EDITOR_LOG_INFO("[PluginHost] Starting source build for plugin '{}' in '{}'", pluginId, sourceDir.string());
-        return m_SourceBuilder.StartBuild(pluginId, sourceDir, outputBinDir);
+        return m_SourceBuilder.StartBuild(pluginId, sourceDir, outputBinDir, m_ExecutableDirectory, expectedDllName);
     }
 
     bool PluginHost::IsPluginSourceBuilding() const
@@ -540,5 +580,19 @@ namespace Editor
     std::string PluginHost::GetPluginBuildLogs() const
     {
         return m_SourceBuilder.GetLogs();
+    }
+
+    std::string PluginHost::GetPluginBuildLogs(const std::string& pluginId) const
+    {
+        if (m_SourceBuilder.IsBuilding() && m_PendingBuildPluginId == pluginId)
+            return m_SourceBuilder.GetLogs();
+        const auto it = m_PluginBuildLogs.find(pluginId);
+        return it != m_PluginBuildLogs.end() ? it->second : std::string{};
+    }
+
+    std::string PluginHost::GetPluginBuildError(const std::string& pluginId) const
+    {
+        const auto it = m_PluginBuildErrors.find(pluginId);
+        return it != m_PluginBuildErrors.end() ? it->second : std::string{};
     }
 }

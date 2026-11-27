@@ -70,6 +70,9 @@ PluginManager,RetryCompile,Retry Compile,컴파일 다시 시도
 PluginManager,AutoScroll,Auto-scroll,자동 스크롤
 PluginManager,NoBuildOutput,No build output recorded yet.,기록된 빌드 출력이 없습니다.
 PluginManager,Build,Build,빌드
+PluginManager,BuildAndLoad,Build & Load Plugin,플러그인 빌드 및 로드
+PluginManager,RetryBuild,Retry Build,빌드 다시 시도
+PluginManager,BuildErrorDetail,Build Error: {},빌드 오류: {}
 PluginManager,BuildFailed,Build failed,빌드 실패
 PluginManager,BuildSucceeded,Build succeeded,빌드 성공
 PluginManager,LastPluginOperationFailed,The last plugin operation failed.,마지막 플러그인 작업이 실패했습니다.

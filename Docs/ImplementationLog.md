@@ -2,6 +2,15 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 에디터 사용자 C++ 플러그인 원클릭 빌드·게시·로드 파이프라인 구현
+
+- **요약**:
+  - `Editor/Source/Plugin/Public/PluginSourceBuilder.h`: 에디터 `CMakeCache.txt` 기반 제너레이터/`vcpkg_installed` 연동, Ninja 등 비-VS 제너레이터용 `VsDevCmd.bat` 래핑, 스테이징 캐시 제너레이터 불일치 자동 초기화, 기대 DLL 우선 탐색 및 원자적 DLL/`.pdb` 게시 구현.
+  - `Editor/Source/Plugin/Private/PluginCatalog.cpp`, `Public/PluginHost.h`, `Private/PluginHost.cpp`: `plugin.json` 및 `.bamplugin.json` 매니페스트 동시 지원, 플러그인 ID별 빌드 로그·오류 분리(`GetPluginBuildLogs`, `GetPluginBuildError`), 빌드 성공 시 `RefreshInstalledPackages()` 후 자동 `Load`/`Reload`.
+  - `Editor/Source/ImGui/PluginManager/Private/PluginManagerPanel.cpp`, `Editor/Resources/Data/Localization/Editor.PluginManager.csv`: 소스 전용 패키지 `[Build & Load Plugin]` 버튼, 실패 시 오류 상세 및 `[Retry Build]` 복구 버튼과 로캘 키 3종(`BuildAndLoad`, `RetryBuild`, `BuildErrorDetail`) 추가.
+- **검증 상태**:
+  - 사용자 실환경에서 `GenerateLocalization`, `Editor` 빌드 완료 및 전체 CTest 통과 확인 완료 (실환경 사용자 소스 플러그인 원클릭 빌드·로드 수동 확인 대기).
+
 ### [2026-11-27] 슬라임 프로토타입 연계 엔진·에디터 안정화 (Physics Sleep, SpringArm, 동적 리플렉션, PIE 종료, EditorUI)
 
 - **요약**:
