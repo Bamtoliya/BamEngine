@@ -493,25 +493,98 @@ void EditorUI::EndPropertyTable()
     EditorUI::EndSettingsTable();
 }
 
+namespace
+{
+    std::string TruncateTextWithEllipsis(const char* text, float maxWidth, bool& outClipped)
+    {
+        outClipped = false;
+        if (!text || text[0] == '\0')
+            return {};
+        if (maxWidth <= 0.0f || ImGui::CalcTextSize(text).x <= maxWidth)
+            return text;
+
+        outClipped = true;
+        constexpr const char* kEllipsis = "...";
+        const float ellipsisWidth = ImGui::CalcTextSize(kEllipsis).x;
+        if (maxWidth <= ellipsisWidth)
+            return kEllipsis;
+
+        const float targetWidth = maxWidth - ellipsisWidth;
+        const size_t len = std::strlen(text);
+        size_t bestEnd = 0;
+        size_t pos = 0;
+        while (pos < len)
+        {
+            const unsigned char c = static_cast<unsigned char>(text[pos]);
+            size_t charLen = 1;
+            if ((c & 0x80u) == 0u) charLen = 1;
+            else if ((c & 0xE0u) == 0xC0u) charLen = 2;
+            else if ((c & 0xF0u) == 0xE0u) charLen = 3;
+            else if ((c & 0xF8u) == 0xF0u) charLen = 4;
+
+            const size_t nextPos = std::min(pos + charLen, len);
+            if (ImGui::CalcTextSize(text, text + nextPos).x > targetWidth)
+                break;
+            bestEnd = nextPos;
+            pos = nextPos;
+        }
+
+        std::string result(text, bestEnd);
+        result += kEllipsis;
+        return result;
+    }
+}
+
+void EditorUI::TextEllipsis(const char* text, float maxWidth, const char* tooltipDetail)
+{
+    if (!text) text = "";
+    const float availWidth = (maxWidth > 0.0f) ? maxWidth : ImGui::GetContentRegionAvail().x;
+    bool isClipped = false;
+    const std::string display = TruncateTextWithEllipsis(text, availWidth, isClipped);
+    const bool hasDetail = tooltipDetail != nullptr && tooltipDetail[0] != '\0';
+
+    ImGui::TextUnformatted(display.c_str());
+    if ((isClipped || hasDetail) && ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        if (isClipped) ImGui::TextUnformatted(text);
+        if (isClipped && hasDetail) ImGui::Separator();
+        if (hasDetail) ImGui::TextDisabled("%s", tooltipDetail);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+void EditorUI::ReadOnlyTextField(const char* id, const char* text, float width)
+{
+    if (!text) text = "";
+    const float availWidth = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    const float framePaddingX = ImGui::GetStyle().FramePadding.x * 2.0f;
+    const bool isClipped = ImGui::CalcTextSize(text).x > std::max(1.0f, availWidth - framePaddingX);
+
+    std::string buffer(text);
+    ImGui::SetNextItemWidth(width);
+    ImGui::InputText(id, buffer.data(), buffer.size() + 1, ImGuiInputTextFlags_ReadOnly);
+
+    if (isClipped && ImGui::IsItemHovered() && !ImGui::IsItemActive())
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
 void EditorUI::PropertyLabel(const char* text, const char* detail, float reservedRightWidth)
 {
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
 
-    const float availWidth = ImGui::GetContentRegionAvail().x - reservedRightWidth;
-    const bool isClipped = ImGui::CalcTextSize(text).x > availWidth;
-    const bool hasDetail = detail != nullptr && detail[0] != '\0';
-
+    const float availWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - reservedRightWidth);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(text);
-    if ((isClipped || hasDetail) && ImGui::IsItemHovered())
-    {
-        ImGui::BeginTooltip();
-        if (isClipped) ImGui::TextUnformatted(text);
-        if (isClipped && hasDetail) ImGui::Separator();
-        if (hasDetail) ImGui::TextDisabled("%s", detail);
-        ImGui::EndTooltip();
-    }
+    EditorUI::TextEllipsis(text, availWidth, detail);
 }
 
 void EditorUI::PropertyValue()

@@ -2,6 +2,24 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 슬라임 프로토타입 연계 엔진·에디터 안정화 (Physics Sleep, SpringArm, 동적 리플렉션, PIE 종료, EditorUI)
+
+- **요약**:
+  1. **물리 정지 접촉 안정화 (`PhysicsSystem`, `RigidBodyComponent`)**:
+     - `RigidBodyComponent.h`, `PhysicsSystem.cpp`: 런타임 `IsSleeping`/`SleepTimer`/`WakeUp()` 휴면 메커니즘 추가 및 `ResolvePhysicsContact3D`의 과도한 단일 프레임 관통 해소 완화(`correctionRatio = 0.35`, `maxCorrectionPerIteration = 0.15`).
+  2. **스프링암 카메라 지터 및 벽면 충돌 개선 (`SpringArmSystem`)**:
+     - `SpringArmSystem.cpp`: `CameraLag`/`ZoomLag` 보간을 프레임률 독립 지수 감쇠(`1 - exp(-speed * dt)`)로 변경하고, 시작점 관통(`distance <= 0.05`) 및 벽 뒷면/스침 레이 히트를 무시하도록 필터 추가.
+  3. **외부 게임 모듈 리플렉션·역직렬화 지원 (`BamEngineConfig`, `ReflectionRegistry`)**:
+     - `Engine/CMake/BamEngineConfig.cmake`: 경로 정규화(`TO_CMAKE_PATH`), `x64-ninja-debug` 우선 탐색, `FMT_HEADER_ONLY`, `Reflection::Runtime`(`ReflectionRuntime.lib`, `ArchiveJson.lib`) 및 `BAMENGINE_CLANG_RESOURCE_DIR` 자동 탐색 추가.
+     - `ReflectionRegistry.cpp`: 동적 모듈 컴포넌트(`entry->Read == nullptr`)에 대해 `ar.ReadObject` + `ReadProperties` 범용 역직렬화 폴백 추가(PIE 복원 크래시 해결).
+  4. **에디터 UX 및 종료 안전장치 (`PIEManager`, `ImGuiManager`, `EditorUI`)**:
+     - `PIEManager.h/.cpp`, `ImGuiManager.cpp`: 앱 종료 요청 시 PIE 씬 복원 실패로 종료가 영구 차단되지 않도록 `ForceStopForShutdown()` 추가.
+     - `EditorUI.h/.cpp`: `PropertyLabel` UTF-8 안전 `...` 축약 + 툴팁 적용, 공통 `TextEllipsis` 및 드래그·복사 가능 `ReadOnlyTextField` 헬퍼 추가.
+  5. **문서 갱신**:
+     - `Docs/GamePlan/SlimeGame/Slime_Engine_Gap_And_Plan_v0.1.md`: M5 실측 기반 코너 접힘·절벽 Drape CPU 메시 한계 및 P2(`SE-12`) GPU-Driven/SDF 고도화 과제 기록.
+- **검증 상태**:
+  - 사용자 실환경에서 `Engine`, `Editor`, `ProjectSlimeModule` 빌드 및 `SlimeMovementPlayground` PIE 실행·정지·컴포넌트 인스펙터 연동 확인 완료.
+
 ### [2026-11-27] 액션 타임라인-VFX Step 4 마감 · 2D 블렌드 트리 Freeform 보간 & `AnimatorGraphPanel` 캔버스 UX 개선
 
 - **요약**:

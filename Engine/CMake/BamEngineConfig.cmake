@@ -6,16 +6,29 @@
 #   target_link_libraries(MyGameModule PRIVATE BamEngine::Engine)
 
 if(TARGET BamEngine::Engine)
-    set(BamEngine_FOUND TRUE)
+    set(BAMENGINE_CLANG_RESOURCE_DIR "")
+file(GLOB _clang_res_candidates LIST_DIRECTORIES true
+    "${BAMENGINE_ROOT}/Projects/Reflection/dependencies/llvm-*/lib/clang/*")
+foreach(_res_cand ${_clang_res_candidates})
+    if(IS_DIRECTORY "${_res_cand}/include")
+        set(BAMENGINE_CLANG_RESOURCE_DIR "${_res_cand}")
+        break()
+    endif()
+endforeach()
+
+set(BamEngine_FOUND TRUE)
     return()
 endif()
 
 if(NOT DEFINED BAMENGINE_ROOT OR BAMENGINE_ROOT STREQUAL "")
     get_filename_component(BAMENGINE_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 endif()
+file(TO_CMAKE_PATH "${BAMENGINE_ROOT}" BAMENGINE_ROOT)
 
 if(NOT DEFINED BAMENGINE_BUILD_DIR OR BAMENGINE_BUILD_DIR STREQUAL "")
     foreach(_candidate
+        "${BAMENGINE_ROOT}/out/build/x64-ninja-debug"
+        "${BAMENGINE_ROOT}/out/build/x64-ninja-release"
         "${BAMENGINE_ROOT}/out/build/x64-debug"
         "${BAMENGINE_ROOT}/out/build/x64-release"
         "${BAMENGINE_ROOT}/build")
@@ -24,6 +37,9 @@ if(NOT DEFINED BAMENGINE_BUILD_DIR OR BAMENGINE_BUILD_DIR STREQUAL "")
             break()
         endif()
     endforeach()
+endif()
+if(DEFINED BAMENGINE_BUILD_DIR AND NOT BAMENGINE_BUILD_DIR STREQUAL "")
+    file(TO_CMAKE_PATH "${BAMENGINE_BUILD_DIR}" BAMENGINE_BUILD_DIR)
 endif()
 
 if(NOT EXISTS "${BAMENGINE_ROOT}/Engine/Source")
@@ -87,7 +103,7 @@ endif()
 add_library(BamEngine::Engine SHARED IMPORTED GLOBAL)
 set_target_properties(BamEngine::Engine PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${_bam_engine_public_includes}"
-    INTERFACE_COMPILE_DEFINITIONS "GLM_FORCE_DEPTH_ZERO_TO_ONE;GLM_FORCE_LEFT_HANDED;GLM_ENABLE_EXPERIMENTAL"
+    INTERFACE_COMPILE_DEFINITIONS "GLM_FORCE_DEPTH_ZERO_TO_ONE;GLM_FORCE_LEFT_HANDED;GLM_ENABLE_EXPERIMENTAL;FMT_HEADER_ONLY"
 )
 
 if(MSVC)
@@ -115,5 +131,59 @@ function(bamengine_configure_game_module TARGET_NAME PROJECT_ROOT)
     )
     target_link_libraries(${TARGET_NAME} PRIVATE BamEngine::Engine)
 endfunction()
+
+# Reflection codegen support for external game modules
+if(NOT TARGET Reflection::Runtime)
+    set(_bam_reflection_libs "")
+    if(DEFINED BAMENGINE_BUILD_DIR AND NOT BAMENGINE_BUILD_DIR STREQUAL "")
+        foreach(_lib_name ReflectionRuntime.lib ArchiveJson.lib)
+            foreach(_refl_cand
+                "${BAMENGINE_BUILD_DIR}/lib/${_lib_name}"
+                "${BAMENGINE_BUILD_DIR}/lib/Debug/${_lib_name}"
+                "${BAMENGINE_BUILD_DIR}/lib/Release/${_lib_name}")
+                if(EXISTS "${_refl_cand}")
+                    list(APPEND _bam_reflection_libs "${_refl_cand}")
+                    break()
+                endif()
+            endforeach()
+        endforeach()
+    endif()
+    add_library(Reflection::Runtime INTERFACE IMPORTED GLOBAL)
+    set_target_properties(Reflection::Runtime PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${BAMENGINE_ROOT}/Projects/Reflection/Include"
+    )
+    if(NOT _bam_reflection_libs STREQUAL "")
+        set_target_properties(Reflection::Runtime PROPERTIES
+            INTERFACE_LINK_LIBRARIES "${_bam_reflection_libs}"
+        )
+    endif()
+endif()
+if(EXISTS "${BAMENGINE_ROOT}/Projects/Reflection/cmake/ReflectionGenerate.cmake")
+    include("${BAMENGINE_ROOT}/Projects/Reflection/cmake/ReflectionGenerate.cmake")
+endif()
+
+set(BAMENGINE_REFLECTION_GENERATOR "")
+if(DEFINED BAMENGINE_BUILD_DIR AND NOT BAMENGINE_BUILD_DIR STREQUAL "")
+    foreach(_gen_cand
+        "${BAMENGINE_BUILD_DIR}/bin/ReflectionGenerator.exe"
+        "${BAMENGINE_BUILD_DIR}/bin/Debug/ReflectionGenerator.exe"
+        "${BAMENGINE_BUILD_DIR}/bin/Release/ReflectionGenerator.exe"
+        "${BAMENGINE_BUILD_DIR}/Projects/Reflection/ReflectionGenerator.exe")
+        if(EXISTS "${_gen_cand}")
+            set(BAMENGINE_REFLECTION_GENERATOR "${_gen_cand}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+set(BAMENGINE_CLANG_RESOURCE_DIR "")
+file(GLOB _clang_res_candidates LIST_DIRECTORIES true
+    "${BAMENGINE_ROOT}/Projects/Reflection/dependencies/llvm-*/lib/clang/*")
+foreach(_res_cand ${_clang_res_candidates})
+    if(IS_DIRECTORY "${_res_cand}/include")
+        set(BAMENGINE_CLANG_RESOURCE_DIR "${_res_cand}")
+        break()
+    endif()
+endforeach()
 
 set(BamEngine_FOUND TRUE)

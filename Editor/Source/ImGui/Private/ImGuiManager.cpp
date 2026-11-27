@@ -2202,9 +2202,17 @@ bool ImGuiManager::ContinueQuitRequest()
 		PIEManager::Get().Stop();
 		if (!PIEManager::Get().IsEditing())
 		{
-			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
-				LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
-			return false;
+			if (!m_GuardedAction)
+			{
+				// 앱 종료 요청 중에는 PIE 씬 복원 실패로 종료가 영구 차단되지 않도록 강제 정지 후 종료 진행
+				PIEManager::Get().ForceStopForShutdown();
+			}
+			else
+			{
+				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
+					LOCAL("EditorDocument.OperationFailed"), ELogLevel::Error);
+				return false;
+			}
 		}
 	}
 

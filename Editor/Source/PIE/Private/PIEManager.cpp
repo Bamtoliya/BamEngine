@@ -118,6 +118,18 @@ void PIEManager::Stop()
     EDITOR_LOG_INFO("[PIE] Stopped — scene restored");
 }
 
+void PIEManager::ForceStopForShutdown()
+{
+    if (m_State == EPlayState::Edit) return;
+
+    Engine::AudioManager::Get().StopAllSounds();
+    SelectionManager::Get().ClearSelection(true);
+    m_Snapshot.reset();
+    m_State = EPlayState::Edit;
+    m_SingleStepRequested = false;
+    EDITOR_LOG_WARN("[PIE] Force-stopped during application shutdown (scene restore skipped).");
+}
+
 EResult PIEManager::SnapshotScene()
 {
     const auto* scene = SceneManager::Get().GetCurrentScene();

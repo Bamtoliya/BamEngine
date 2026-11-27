@@ -143,6 +143,9 @@ namespace Engine
                     SceneRaycastHit hit{};
                     if (PhysicsSystem::Raycast(scene, probeRay, hit, query) && hit.Hit.hasHit)
                     {
+                        // 시작점이 벽에 닿아 발생한 0거리 히트나 벽 뒷면/스침 히트는 무시
+                        if (hit.Hit.distance <= 0.05f || glm::dot(hit.Hit.normal, armDir) >= -0.05f)
+                            continue;
                         const f32 hitDist = glm::max(arm.MinArmLength, hit.Hit.distance - arm.ProbeRadius);
                         if (hitDist < closestHitDistance)
                         {
@@ -160,7 +163,7 @@ namespace Engine
             }
             else
             {
-                const f32 zoomBlend = glm::clamp(arm.ZoomLagSpeed * dt, 0.0f, 1.0f);
+                const f32 zoomBlend = 1.0f - std::exp(-std::max(arm.ZoomLagSpeed, 0.0f) * dt);
                 arm.CurrentArmLength = glm::mix(arm.CurrentArmLength, targetDistance, zoomBlend);
             }
 
@@ -168,11 +171,12 @@ namespace Engine
             const vec3 socketOffsetWorld = armRot * arm.SocketOffset;
             const vec3 desiredPos = targetWorldPos + armDir * arm.CurrentArmLength + socketOffsetWorld;
 
-            // 5. 카메라 지연 (Camera Lag) 보간
+            // 5. 카메라 지연 (Camera Lag) 보간 (프레임률 독립 지수 감쇠)
             vec3 finalCameraPos = desiredPos;
             if (arm.EnableCameraLag && arm.IsInitialized)
             {
-                arm.PreviousDesiredPosition = glm::mix(arm.PreviousDesiredPosition, desiredPos, glm::clamp(arm.CameraLagSpeed * dt, 0.0f, 1.0f));
+                const f32 lagBlend = 1.0f - std::exp(-std::max(arm.CameraLagSpeed, 0.0f) * dt);
+                arm.PreviousDesiredPosition = glm::mix(arm.PreviousDesiredPosition, desiredPos, lagBlend);
                 finalCameraPos = arm.PreviousDesiredPosition;
             }
             else

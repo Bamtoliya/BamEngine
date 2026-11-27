@@ -669,7 +669,21 @@ archive::ArchiveResult ReflectionRegistry::ReadComponent(const archive::IArchive
     const auto result = archive_reflection::IsSerializationEnabled(entry->ReflectionType->Metadata, key, enabled);
     if (!result || !enabled)
         return result;
-    return entry->Read(ar, key, world, entity, *entry, m_Registry, codecs != nullptr ? codecs : &m_Codecs);
+    const auto* activeCodecs = codecs != nullptr ? codecs : &m_Codecs;
+    if (entry->Read != nullptr)
+        return entry->Read(ar, key, world, entity, *entry, m_Registry, activeCodecs);
+
+    // 동적 게임 모듈 컴포넌트(RegisterComponent/BuildComponentEntry)용 범용 역직렬화 폴백
+    if (!entry->Has(world, entity) && !entry->TryAdd(world, entity))
+        return { archive::ArchiveErrorCode::InvalidOperation, std::string(key) };
+    auto object = entry->Edit(world, entity);
+    if (!object.IsValid())
+        return { archive::ArchiveErrorCode::UnsupportedType, std::string(key) };
+    return ar.ReadObject(key, object,
+        [entry, this, activeCodecs](archive::IArchive& temporary, reflection::ObjectView& target)
+        {
+            return archive_reflection::detail::ReadProperties(temporary, *entry->ReflectionType, target, &m_Registry, activeCodecs);
+        });
 }
 
 archive::ArchiveResult ReflectionRegistry::WriteComponents(archive::IArchive& ar, std::string_view key,

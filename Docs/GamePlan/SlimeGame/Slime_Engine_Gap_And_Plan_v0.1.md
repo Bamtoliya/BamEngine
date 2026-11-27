@@ -206,6 +206,7 @@
 | **분열·합체 표면 기술** | SDF Raymarching은 `RenderPipelineProfile` 확장 및 깊이·그림자 통합 비용이 큼 | P0에서는 **Procedural Bridge Mesh / CPU Marching Cubes + `SE-03`(in-place 정점 갱신)**으로 먼저 검증하고, 품질 한계 확인 시 `SE-12`로 SDF 전환. |
 | **저해상도에서 미세 효과 소실** | 480×270에서 얇은 점액질 가닥, 눈, 작은 액적이 1픽셀 미만으로 사라질 수 있음 | Native 해상도와 480×270/640×360을 동일 카메라 구도로 비교하고 최소 가시 두께/액적 크기 보정 정책 수립. |
 | **비-DX12 RHI 백엔드 호환** | `DirectX12RHI` 외 `SDLGPURHI` 등에서 동적 정점 버퍼/인스턴싱/커스텀 패스 동작이 다를 수 있음 | 1차 검증은 Windows DX12 기준으로 수행하고 미지원 백엔드에는 capability 폴백 명시. |
+| **코너 접힘(Crease) & 절벽 Drape 메시 밀도 한계 (M5 실측)** | CPU 16×24 UV Sphere + 8방향 방사형 레이캐스트 프로브 방식은 저폴리 각짐(LowPoly) 및 UV 극점 Seam이 드러나며, 벽↔벽 내부 코너의 날카로운 접힘(Crease)과 절벽의 매끄러운 옷가지형 Drape 표현에 한계가 있음 | 프로토타입(M5)은 현재 CPU 경로로 유지하고, P2(`SE-12`)에서 **Icosphere/고밀도 메시 + GPU Compute / 지형 SDF 기반 정점 밀착(GPU-Driven Vertex Conforming) 또는 SDF Raymarching**으로 고도화한다. |
 
 ### 6.2 계층별 검증 계획
 

@@ -25,6 +25,7 @@ public:
     void Pause();
     void Resume();
     void Stop();
+    void ForceStopForShutdown();
     void RequestSingleStep();
     [[nodiscard]] bool ConsumeSingleStepRequest();
 

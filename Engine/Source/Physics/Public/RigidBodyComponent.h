@@ -43,5 +43,18 @@ namespace Engine
         // PhysicsSystem이 질량과 충돌 형상으로 계산하는 로컬 역관성 텐서.
         PROPERTY(READONLY, NOSERIALIZE, DISPLAY_NAME("PROP_INVERSE_INERTIA_LOCAL"), VISIBLE(false))
         mat3 InverseInertiaLocal = mat3(0.f);
+
+        // 정지 접촉 시 미세 침하/떨림을 막기 위한 런타임 휴면(Sleep) 상태.
+        PROPERTY(READONLY, NOSERIALIZE, VISIBLE(false))
+        bool IsSleeping = false;
+
+        PROPERTY(READONLY, NOSERIALIZE, VISIBLE(false))
+        f32 SleepTimer = 0.f;
+
+        void WakeUp()
+        {
+            IsSleeping = false;
+            SleepTimer = 0.f;
+        }
     };
 }

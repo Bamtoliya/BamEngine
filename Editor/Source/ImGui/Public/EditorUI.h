@@ -128,8 +128,14 @@ namespace EditorUI
     // 새 행의 첫 번째 열에 라벨을 그리고 두 번째 열로 이동한다.
     void PropertyRow(const char* labelKey);
 
-    // 새 행을 시작하고 라벨 열에 번역된 텍스트를 그린다. 잘리면 호버 시 전체 이름과 detail을 툴팁으로 보여준다.
+    // 새 행을 시작하고 라벨 열에 번역된 텍스트를 그린다. 잘리면 '...'으로 축약하고 호버 시 전체 이름과 detail을 툴팁으로 보여준다.
     void PropertyLabel(const char* text, const char* detail = nullptr, float reservedRightWidth = 0.0f);
+
+    // 가용 폭을 넘는 텍스트를 UTF-8 안전하게 '...'으로 축약해 표시하고, 잘린 경우 호버 시 전체 텍스트를 툴팁으로 보여준다.
+    void TextEllipsis(const char* text, float maxWidth = 0.0f, const char* tooltipDetail = nullptr);
+
+    // 드래그 선택 및 Ctrl+C 복사가 가능한 읽기 전용 텍스트 필드. 내용이 잘리면 호버 시 전체 텍스트를 툴팁으로 보여준다.
+    void ReadOnlyTextField(const char* id, const char* text, float width = -FLT_MIN);
 
     // 같은 행의 값 열로 이동한다.
     void PropertyValue();

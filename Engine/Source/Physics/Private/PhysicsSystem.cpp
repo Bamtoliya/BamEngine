@@ -438,7 +438,8 @@ static bool ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
         return false;
 
     constexpr double penetrationSlop = 0.001;
-    constexpr double correctionRatio = 0.8;
+    constexpr double correctionRatio = 0.35;
+    constexpr double maxCorrectionPerIteration = 0.15;
     const double correctionDepth = glm::max(static_cast<double>(hit.denetrationDepth) - penetrationSlop, 0.0);
     if (correctionDepth <= 0.0)
     {
@@ -455,7 +456,8 @@ static bool ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
     auto candidateA = transformA;
     auto candidateB = transformB;
 
-    const glm::dvec3 correction = normal * correctionDepth * correctionRatio;
+    const double clampedCorrection = std::min(correctionDepth * correctionRatio, maxCorrectionPerIteration);
+    const glm::dvec3 correction = normal * clampedCorrection;
     const vec3 positionA(glm::dvec3(transformA.position) + correction * weightA);
     const vec3 positionB(glm::dvec3(transformB.position) - correction * weightB);
 
@@ -1126,6 +1128,34 @@ void PhysicsSystem::OnFixedUpdate(entt::registry& registry, const vector<Scene*>
                 !std::isfinite(body.GravityScale) ||
                 !IsFinite(body.LinearVelocity) || !IsFinite(force))
                 continue;
+
+            constexpr f32 kSleepLinearThreshold = 0.08f;
+            constexpr f32 kSleepAngularThreshold = 0.08f;
+            constexpr f32 kSleepDelay = 0.25f;
+
+            const bool hasExternalInput = (glm::length(force) > 1.0e-4f) || (glm::length(torque) > 1.0e-4f);
+            const bool isMoving = (glm::length(body.LinearVelocity) > kSleepLinearThreshold) ||
+                                  (glm::length(body.AngularVelocity) > kSleepAngularThreshold);
+
+            if (hasExternalInput || isMoving)
+            {
+                body.WakeUp();
+            }
+            else if (body.IsSleeping)
+            {
+                continue;
+            }
+            else
+            {
+                body.SleepTimer += dt;
+                if (body.SleepTimer >= kSleepDelay)
+                {
+                    body.IsSleeping = true;
+                    body.LinearVelocity = vec3(0.f);
+                    body.AngularVelocity = vec3(0.f);
+                    continue;
+                }
+            }
 
             const vec3 acceleration = gravity3D * body.GravityScale + force / body.Mass;
             if (!IsFinite(acceleration))
