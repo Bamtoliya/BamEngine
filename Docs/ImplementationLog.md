@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] `Camera2DRoomComponent` 기즈모 · `Inventory`/`NavGrid` 그래프 노드 7종 · `RenderPipelineProfile` SE-09 직렬화 보강
+
+- **요약**:
+  1. **`Camera2DRoomComponent` 씬 뷰포트 경계 기즈모 (`camera-room-gizmo`)**:
+     - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`: 선택된 엔티티에 활성 `Camera2DRoomComponent`가 있을 때 `roomMin`~`roomMax` 2D 사각형 경계를 `DebugRenderer::DrawLine` 4개 선분(시안색)으로 시각화.
+  2. **`Inventory` · `NavGrid` 동적 장애물 비주얼 스크립팅 노드 7종 (`inv-navgrid-nodes`)**:
+     - `Engine/Source/Graph/Libraries/Public/GraphGameplayLibrary.h`, `Private/GraphGameplayLibrary.cpp`: `Inventory.AddItem`, `Inventory.RemoveItem`, `Inventory.GetItemCount`, `Inventory.Clear` 4종 및 `NavGrid.SetObstacleBox`, `NavGrid.SetObstacleCircle`, `NavGrid.ClearObstacles` 3종 추가(`HashFnv1a64` 통합, `GraphReflection` 호환 타입 준수).
+  3. **`RenderPipelineProfile` 저해상도 내부 RT + 정수배 업스케일 (`SE-09`) JSON 직렬화 보강 (`render-profile-se09`)**:
+     - `Engine/Source/Render/Pipeline/Private/RenderPipelineProfileFile.cpp`: `LoadRenderPipelineProfile`/`SaveRenderPipelineProfile`에 선택적 필드 `InternalWidth`, `InternalHeight`, `IntegerUpscale`, `PointUpscale` 읽기/쓰기 추가(`SlimePixel3D_640x360.bamrenderpipeline.json` 로드 오류 해소, 기존 프로필 하위 호환 유지).
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `Editor`, `GraphReflectionCheck`, `GraphExecutionCheck`, `RenderPipelineProfileCheck`) 및 CTest 실행 대기.
+
 ### [2026-11-27] 신규 기능 4건 구현 (`DataTableEditor`, `UITween`/`UIProjection` 노드, `Camera2DRoomComponent`, BGM 크로스페이드 테스트 UI)
 
 - **요약**:

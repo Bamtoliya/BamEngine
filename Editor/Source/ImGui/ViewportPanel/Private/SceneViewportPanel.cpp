@@ -17,6 +17,7 @@
 #include "Scene.h"
 #include "WorldComponents.h"
 #include "RenderComponents.h"
+#include "Camera2DRoomComponent.h"
 #include "DecalProjection.h"
 #include "ProbeGrid.h"
 #include "Light.h"
@@ -451,6 +452,7 @@ void SceneViewportPanel::Update(f32 dt)
 		DrawSelectedSpline(activeScene);
 		DrawSelectedDecal(activeScene);
 		DrawSelectedProbeVolume(activeScene);
+		DrawSelectedCamera2DRoom(activeScene, m_DebugRenderer);
 
 		std::vector<Engine::DebugDrawCommand> debugCommands;
 		Engine::DebugDraw::ConsumeCommands(dt, debugCommands);
@@ -2388,6 +2390,37 @@ void SceneViewportPanel::FocusSelectedEntity()
 }
 
 #pragma region Spline
+static void DrawSelectedCamera2DRoom(Engine::Scene* scene, DebugRenderer& debugRenderer)
+{
+	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
+	if (!scene || !selected || selected->GetScene() != scene)
+		return;
+
+	auto& world = scene->GetRegistry();
+	const auto entity = selected->GetEntityHandle();
+	if (!world.valid(entity))
+		return;
+
+	const auto* room = world.try_get<Engine::Camera2DRoomComponent>(entity);
+	if (!room || !IsComponentEnabled<Engine::Camera2DRoomComponent>(world, entity))
+		return;
+
+	f32 z = 0.0f;
+	if (const auto* worldTransform = world.try_get<Engine::WorldTransformComponent>(entity))
+		z = worldTransform->Position.z;
+
+	const vec3 minP(room->roomMin.x, room->roomMin.y, z);
+	const vec3 maxP(room->roomMax.x, room->roomMax.y, z);
+	const vec3 topLeft(room->roomMin.x, room->roomMax.y, z);
+	const vec3 bottomRight(room->roomMax.x, room->roomMin.y, z);
+	const vec4 roomColor(0.2f, 0.9f, 1.0f, 1.0f);
+
+	debugRenderer.DrawLine(minP, bottomRight, roomColor);
+	debugRenderer.DrawLine(bottomRight, maxP, roomColor);
+	debugRenderer.DrawLine(maxP, topLeft, roomColor);
+	debugRenderer.DrawLine(topLeft, minP, roomColor);
+}
+
 void SceneViewportPanel::DrawSelectedDecal(Engine::Scene* scene)
 {
 	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();

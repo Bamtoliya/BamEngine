@@ -576,15 +576,27 @@ namespace Engine
 			return s_questTracker;
 		}
 
-		uint64 HashQuestId(std::string_view questId) noexcept
+		InventoryContainer& GetInventoryContainer()
+		{
+			static InventoryContainer s_inventory;
+			return s_inventory;
+		}
+
+		uint64 HashFnv1a64(std::string_view key) noexcept
 		{
 			uint64 hash = 14695981039346656037ULL;
-			for (const unsigned char ch : questId)
+			for (const unsigned char ch : key)
 			{
 				hash ^= static_cast<uint64>(ch);
 				hash *= 1099511628211ULL;
 			}
 			return hash;
+		}
+
+		uint32 ClampPositiveToUint32(int64 value) noexcept
+		{
+			constexpr int64 kMaxUint32 = static_cast<int64>(std::numeric_limits<uint32>::max());
+			return (value > kMaxUint32) ? std::numeric_limits<uint32>::max() : static_cast<uint32>(value);
 		}
 	}
 
@@ -718,7 +730,7 @@ namespace Engine
 			return false;
 		}
 		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetQuestTracker().StartQuest(HashQuestId(questId), static_cast<uint32>(targetCount));
+		return GetQuestTracker().StartQuest(HashFnv1a64(questId), static_cast<uint32>(targetCount));
 	}
 
 	bool GraphGameplayLibrary::AdvanceQuest(const std::string& questId, int64 delta)
@@ -728,21 +740,21 @@ namespace Engine
 			return false;
 		}
 		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetQuestTracker().AdvanceQuest(HashQuestId(questId), static_cast<uint32>(delta));
+		return GetQuestTracker().AdvanceQuest(HashFnv1a64(questId), static_cast<uint32>(delta));
 	}
 
 	bool GraphGameplayLibrary::FailQuest(const std::string& questId)
 	{
 		if (questId.empty()) return false;
 		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetQuestTracker().FailQuest(HashQuestId(questId));
+		return GetQuestTracker().FailQuest(HashFnv1a64(questId));
 	}
 
 	bool GraphGameplayLibrary::IsQuestCompleted(const std::string& questId)
 	{
 		if (questId.empty()) return false;
 		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetQuestTracker().GetQuestState(HashQuestId(questId)) == QuestState::Completed;
+		return GetQuestTracker().GetQuestState(HashFnv1a64(questId)) == QuestState::Completed;
 	}
 
 	// ── UI Tween & Projection ──
@@ -864,5 +876,89 @@ namespace Engine
 
 		const UIWorldToScreenResult res = UIProjection::WorldToScreen(worldPos, *cam, viewportSize);
 		return res.isInFront;
+	}
+
+	// ── Inventory ──
+	int64 GraphGameplayLibrary::AddInventoryItem(const std::string& itemId, int64 count, int64 maxStack)
+	{
+		if (itemId.empty() || count <= 0 || maxStack <= 0)
+			return 0;
+
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return static_cast<int64>(GetInventoryContainer().AddItem(
+			HashFnv1a64(itemId), ClampPositiveToUint32(count), ClampPositiveToUint32(maxStack)));
+	}
+
+	int64 GraphGameplayLibrary::RemoveInventoryItem(const std::string& itemId, int64 count)
+	{
+		if (itemId.empty() || count <= 0)
+			return 0;
+
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return static_cast<int64>(GetInventoryContainer().RemoveItem(
+			HashFnv1a64(itemId), ClampPositiveToUint32(count)));
+	}
+
+	int64 GraphGameplayLibrary::GetInventoryItemCount(const std::string& itemId)
+	{
+		if (itemId.empty())
+			return 0;
+
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return static_cast<int64>(GetInventoryContainer().GetItemCount(HashFnv1a64(itemId)));
+	}
+
+	void GraphGameplayLibrary::ClearInventory()
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		GetInventoryContainer().Clear();
+	}
+
+	// ── NavGrid Dynamic Obstacles ──
+	int64 GraphGameplayLibrary::SetNavGridObstacleBox(const vec3& minBounds, const vec3& maxBounds, bool addObstacle)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene ||
+			!std::isfinite(minBounds.x) || !std::isfinite(minBounds.y) || !std::isfinite(minBounds.z) ||
+			!std::isfinite(maxBounds.x) || !std::isfinite(maxBounds.y) || !std::isfinite(maxBounds.z))
+		{
+			return 0;
+		}
+
+		const std::shared_ptr<NavGrid> grid = NavigationSystem::GetSceneNavGrid(scene);
+		if (!grid)
+			return 0;
+
+		return static_cast<int64>(grid->SetDynamicObstacleBox(minBounds, maxBounds, addObstacle));
+	}
+
+	int64 GraphGameplayLibrary::SetNavGridObstacleCircle(const vec3& center, float radius, bool addObstacle)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene ||
+			!std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z) ||
+			!std::isfinite(radius) || radius < 0.0f)
+		{
+			return 0;
+		}
+
+		const std::shared_ptr<NavGrid> grid = NavigationSystem::GetSceneNavGrid(scene);
+		if (!grid)
+			return 0;
+
+		return static_cast<int64>(grid->SetDynamicObstacleCircle(center, radius, addObstacle));
+	}
+
+	void GraphGameplayLibrary::ClearNavGridObstacles()
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene)
+			return;
+
+		const std::shared_ptr<NavGrid> grid = NavigationSystem::GetSceneNavGrid(scene);
+		if (!grid)
+			return;
+
+		grid->ClearDynamicObstacles();
 	}
 }

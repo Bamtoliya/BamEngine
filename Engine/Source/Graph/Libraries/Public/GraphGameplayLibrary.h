@@ -145,6 +145,17 @@ namespace Engine
 		static void UIStopTweens(int64 entityId);
 		static vec2 UIWorldToScreen(vec3 worldPos, vec2 viewportSize);
 		static bool UIIsWorldPointInFront(vec3 worldPos, vec2 viewportSize);
+
+		// Inventory
+		static int64 AddInventoryItem(const std::string& itemId, int64 count = 1, int64 maxStack = 99);
+		static int64 RemoveInventoryItem(const std::string& itemId, int64 count = 1);
+		static int64 GetInventoryItemCount(const std::string& itemId);
+		static void ClearInventory();
+
+		// NavGrid Dynamic Obstacles
+		static int64 SetNavGridObstacleBox(const vec3& minBounds, const vec3& maxBounds, bool addObstacle = true);
+		static int64 SetNavGridObstacleCircle(const vec3& center, float radius = 1.0f, bool addObstacle = true);
+		static void ClearNavGridObstacles();
 	};
 }
 
@@ -1251,5 +1262,60 @@ namespace Engine::GraphGameplay
 		return GraphGameplayLibrary::UIIsWorldPointInFront(
 			vec3(worldPos[0], worldPos[1], worldPos[2]),
 			vec2(viewportSize[0], viewportSize[1]));
+	}
+
+	// ── 인벤토리 노드 (Inventory) ──
+	FUNCTION(GRAPH_CALLABLE("Inventory.AddItem"), DISPLAY_NAME("Add Inventory Item"), CATEGORY("Inventory"),
+		GRAPH_PIN_DEFAULT("itemId", ""), GRAPH_PIN_DEFAULT("count", 1), GRAPH_PIN_DEFAULT("maxStack", 99))
+	inline std::int64_t AddInventoryItem(std::string itemId, std::int64_t count, std::int64_t maxStack)
+	{
+		return GraphGameplayLibrary::AddInventoryItem(itemId, count, maxStack);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Inventory.RemoveItem"), DISPLAY_NAME("Remove Inventory Item"), CATEGORY("Inventory"),
+		GRAPH_PIN_DEFAULT("itemId", ""), GRAPH_PIN_DEFAULT("count", 1))
+	inline std::int64_t RemoveInventoryItem(std::string itemId, std::int64_t count)
+	{
+		return GraphGameplayLibrary::RemoveInventoryItem(itemId, count);
+	}
+
+	FUNCTION(GRAPH_PURE("Inventory.GetItemCount"), DISPLAY_NAME("Get Inventory Item Count"), CATEGORY("Inventory"),
+		GRAPH_PIN_DEFAULT("itemId", ""))
+	inline std::int64_t GetInventoryItemCount(std::string itemId)
+	{
+		return GraphGameplayLibrary::GetInventoryItemCount(itemId);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Inventory.Clear"), DISPLAY_NAME("Clear Inventory"), CATEGORY("Inventory"))
+	inline void ClearInventory()
+	{
+		GraphGameplayLibrary::ClearInventory();
+	}
+
+	// ── 내비게이션 그리드 동적 장애물 노드 (NavGrid) ──
+	FUNCTION(GRAPH_CALLABLE("NavGrid.SetObstacleBox"), DISPLAY_NAME("Set NavGrid Obstacle Box"), CATEGORY("Navigation"),
+		GRAPH_PIN_DEFAULT("addObstacle", true))
+	inline std::int64_t SetNavGridObstacleBox(std::array<float, 3> minBounds, std::array<float, 3> maxBounds, bool addObstacle)
+	{
+		return GraphGameplayLibrary::SetNavGridObstacleBox(
+			vec3(minBounds[0], minBounds[1], minBounds[2]),
+			vec3(maxBounds[0], maxBounds[1], maxBounds[2]),
+			addObstacle);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("NavGrid.SetObstacleCircle"), DISPLAY_NAME("Set NavGrid Obstacle Circle"), CATEGORY("Navigation"),
+		GRAPH_PIN_DEFAULT("radius", 1.0f), GRAPH_PIN_DEFAULT("addObstacle", true))
+	inline std::int64_t SetNavGridObstacleCircle(std::array<float, 3> center, float radius, bool addObstacle)
+	{
+		return GraphGameplayLibrary::SetNavGridObstacleCircle(
+			vec3(center[0], center[1], center[2]),
+			radius,
+			addObstacle);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("NavGrid.ClearObstacles"), DISPLAY_NAME("Clear NavGrid Obstacles"), CATEGORY("Navigation"))
+	inline void ClearNavGridObstacles()
+	{
+		GraphGameplayLibrary::ClearNavGridObstacles();
 	}
 }

@@ -109,6 +109,16 @@ namespace Engine
             return result;
         }
 
+        template <typename T>
+        ArchiveResult ReadOptionalField(IArchive& object, const std::string& name, T& value)
+        {
+            bool hasField = false;
+            auto result = object.HasField(name, hasField);
+            if (!result || !hasField)
+                return result;
+            return object.Read(name, value);
+        }
+
         RenderPipelineProfileResult ProfileArchiveError(
             const std::filesystem::path& path, const ArchiveResult& result, std::string_view operation)
         {
@@ -142,7 +152,12 @@ namespace Engine
         if (candidate.Version != RenderPipelineProfile::CurrentVersion)
             return { path, "Version", "Unsupported render pipeline profile version." };
 
-        result = CheckProfileFields(reader, { "Version", "Passes", "Output" });
+        result = CheckProfileFields(reader,
+            { "Version", "InternalWidth", "InternalHeight", "IntegerUpscale", "PointUpscale", "Passes", "Output" });
+        if (result) result = ReadOptionalField(reader, "InternalWidth", candidate.InternalWidth);
+        if (result) result = ReadOptionalField(reader, "InternalHeight", candidate.InternalHeight);
+        if (result) result = ReadOptionalField(reader, "IntegerUpscale", candidate.IntegerUpscale);
+        if (result) result = ReadOptionalField(reader, "PointUpscale", candidate.PointUpscale);
         if (result) result = reader.ReadObjectArray("Passes", candidate.Passes, ReadProfilePass);
         if (result) result = reader.Read("Output", candidate.Output);
         if (!result)
@@ -170,6 +185,10 @@ namespace Engine
 
         archive::JsonArchive writer;
         auto result = writer.Write("Version", profile.Version);
+        if (result && profile.InternalWidth > 0) result = writer.Write("InternalWidth", profile.InternalWidth);
+        if (result && profile.InternalHeight > 0) result = writer.Write("InternalHeight", profile.InternalHeight);
+        if (result && profile.IntegerUpscale) result = writer.Write("IntegerUpscale", profile.IntegerUpscale);
+        if (result && profile.PointUpscale) result = writer.Write("PointUpscale", profile.PointUpscale);
         if (result) result = writer.WriteObjectArray("Passes", profile.Passes, WriteProfilePass);
         if (result) result = writer.Write("Output", profile.Output);
         if (result) result = writer.SaveToFile(path);
