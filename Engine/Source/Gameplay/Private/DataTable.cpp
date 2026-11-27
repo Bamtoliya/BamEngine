@@ -225,6 +225,42 @@ namespace Engine
 
 			return true;
 		}
+		void AppendEscapedCsvField(std::string& out, std::string_view field)
+		{
+			const bool needsQuotes = field.find_first_of(",\"\r\n") != std::string_view::npos;
+			if (!needsQuotes)
+			{
+				out.append(field);
+				return;
+			}
+
+			out.push_back('"');
+			for (const char ch : field)
+			{
+				if (ch == '"')
+				{
+					out.append("\"\"");
+				}
+				else
+				{
+					out.push_back(ch);
+				}
+			}
+			out.push_back('"');
+		}
+
+		void AppendCsvRecord(std::string& out, const std::vector<std::string>& fields)
+		{
+			for (std::size_t i = 0; i < fields.size(); ++i)
+			{
+				if (i > 0)
+				{
+					out.push_back(',');
+				}
+				AppendEscapedCsvField(out, fields[i]);
+			}
+			out.append("\r\n");
+		}
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════════
@@ -549,6 +585,127 @@ namespace Engine
 		m_rows.clear();
 		m_keyColumn.clear();
 		m_keyToRow.clear();
+	}
+
+	const std::string& DataTable::GetCell(std::size_t row, std::size_t col) const
+	{
+		static const std::string empty;
+		if (row >= m_rows.size() || col >= m_rows[row].size())
+			return empty;
+
+		return m_rows[row][col];
+	}
+
+	bool DataTable::SetCell(std::size_t row, std::size_t col, std::string value)
+	{
+		if (row >= m_rows.size() || col >= m_headers.size() || col >= m_rows[row].size())
+			return false;
+
+		if (m_rows[row][col] == value)
+			return true;
+
+		m_rows[row][col] = std::move(value);
+
+		if (!m_keyColumn.empty())
+		{
+			if (const auto colOpt = FindColumnIndex(m_keyColumn); colOpt.has_value() && *colOpt == col)
+			{
+				m_keyToRow.clear();
+				m_keyToRow.reserve(m_rows.size());
+				for (std::size_t rowIdx = 0; rowIdx < m_rows.size(); ++rowIdx)
+				{
+					m_keyToRow.try_emplace(m_rows[rowIdx][*colOpt], rowIdx);
+				}
+			}
+		}
+
+		return true;
+	}
+
+	bool DataTable::AddEmptyRow()
+	{
+		if (m_headers.empty())
+			return false;
+
+		m_rows.emplace_back(m_headers.size());
+
+		if (!m_keyColumn.empty())
+		{
+			if (const auto colOpt = FindColumnIndex(m_keyColumn); colOpt.has_value())
+			{
+				m_keyToRow.try_emplace(m_rows.back()[*colOpt], m_rows.size() - 1);
+			}
+		}
+
+		return true;
+	}
+
+	bool DataTable::RemoveRow(std::size_t row)
+	{
+		if (row >= m_rows.size())
+			return false;
+
+		m_rows.erase(m_rows.begin() + static_cast<std::ptrdiff_t>(row));
+
+		if (!m_keyColumn.empty())
+		{
+			if (const auto colOpt = FindColumnIndex(m_keyColumn); colOpt.has_value())
+			{
+				m_keyToRow.clear();
+				m_keyToRow.reserve(m_rows.size());
+				for (std::size_t rowIdx = 0; rowIdx < m_rows.size(); ++rowIdx)
+				{
+					m_keyToRow.try_emplace(m_rows[rowIdx][*colOpt], rowIdx);
+				}
+			}
+		}
+
+		return true;
+	}
+
+	bool DataTable::SaveToCsvFile(const std::filesystem::path& path, std::string* outError) const
+	{
+		if (m_headers.empty())
+		{
+			DataTableDetail::SetError(outError, "Cannot save empty DataTable (no headers)");
+			return false;
+		}
+
+		if (!path.parent_path().empty())
+		{
+			std::error_code ec;
+			std::filesystem::create_directories(path.parent_path(), ec);
+			if (ec)
+			{
+				DataTableDetail::SetError(
+					outError,
+					"Failed to create directory for CSV file: " + path.parent_path().string());
+				return false;
+			}
+		}
+
+		std::ofstream file(path, std::ios::binary | std::ios::trunc);
+		if (!file.is_open())
+		{
+			DataTableDetail::SetError(outError, "Failed to open CSV file for writing: " + path.string());
+			return false;
+		}
+
+		std::string buffer;
+		DataTableDetail::AppendCsvRecord(buffer, m_headers);
+		for (const auto& row : m_rows)
+		{
+			DataTableDetail::AppendCsvRecord(buffer, row);
+		}
+
+		file.write(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+		if (!file.good())
+		{
+			DataTableDetail::SetError(outError, "Failed to write CSV file: " + path.string());
+			return false;
+		}
+
+		return true;
 	}
 
 	std::optional<std::size_t> DataTable::FindColumnIndex(std::string_view col) const

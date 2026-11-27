@@ -18,6 +18,10 @@
 #include "ActionCombatHelpers.h"
 #include "StrategyRpgHelpers.h"
 #include "PlatformPath.h"
+#include "UITween.h"
+#include "UIProjection.h"
+#include "RectTransformComponent.h"
+#include "CameraComponent.h"
 #if !defined(__EMSCRIPTEN__)
 #include "NetworkSystem.h"
 #endif
@@ -686,6 +690,27 @@ namespace Engine
 		return GetCameraShakeState().IsActive();
 	}
 
+	float GraphGameplayLibrary::UpdateCombatEffects(float unscaledDt)
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		auto& hitstop = GetHitstopState();
+		hitstop.Update(unscaledDt);
+		GetCameraShakeState().Update(unscaledDt);
+		return hitstop.GetEffectiveTimeScale();
+	}
+
+	vec3 GraphGameplayLibrary::GetCameraShakePositionOffset()
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetCameraShakeState().GetPositionOffset();
+	}
+
+	vec3 GraphGameplayLibrary::GetCameraShakeRotationOffsetDeg()
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetCameraShakeState().GetRotationOffsetDeg();
+	}
+
 	bool GraphGameplayLibrary::StartQuest(const std::string& questId, int64 targetCount)
 	{
 		if (questId.empty() || targetCount < 0 || targetCount > std::numeric_limits<uint32>::max())
@@ -718,5 +743,126 @@ namespace Engine
 		if (questId.empty()) return false;
 		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
 		return GetQuestTracker().GetQuestState(HashQuestId(questId)) == QuestState::Completed;
+	}
+
+	// ── UI Tween & Projection ──
+	namespace
+	{
+		const CameraComponent* FindActiveMainCamera(const entt::registry& reg)
+		{
+			const CameraComponent* fallback = nullptr;
+			for (const entt::entity camEntity : reg.view<const CameraComponent>())
+			{
+				if (!IsComponentEnabled<CameraComponent>(reg, camEntity))
+					continue;
+				if (const auto* flag = reg.try_get<FlagComponent>(camEntity);
+					flag && (!flag->IsActiveInHierarchy() || HasFlag(flag->effectiveFlags, EEntityFlag::Dead)))
+					continue;
+
+				const auto& cam = reg.get<const CameraComponent>(camEntity);
+				if (!cam.GetCameraBuffer().has_value())
+					continue;
+
+				if (cam.IsMainCamera)
+					return &cam;
+				if (!fallback)
+					fallback = &cam;
+			}
+			return fallback;
+		}
+	}
+
+	bool GraphGameplayLibrary::UIPunchScale(int64 entityId, float peakScale, float duration)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || !std::isfinite(peakScale) || !std::isfinite(duration) || duration < 0.0f)
+			return false;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null)
+			return false;
+
+		vec2 baseScale(1.0f);
+		if (const auto* rect = reg.try_get<RectTransformComponent>(target))
+			baseScale = rect->scale;
+
+		return UITweenSystem::PunchScale(reg, target, baseScale, baseScale * peakScale, duration) != 0;
+	}
+
+	bool GraphGameplayLibrary::UIFadeAlpha(int64 entityId, float fromAlpha, float toAlpha, float duration)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || !std::isfinite(fromAlpha) || !std::isfinite(toAlpha) || !std::isfinite(duration) || duration < 0.0f)
+			return false;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null)
+			return false;
+
+		const float clampedFrom = std::clamp(fromAlpha, 0.0f, 1.0f);
+		const float clampedTo = std::clamp(toAlpha, 0.0f, 1.0f);
+		return UITweenSystem::PlayAlpha(reg, target, clampedFrom, clampedTo, duration) != 0;
+	}
+
+	bool GraphGameplayLibrary::UIMoveOffset(int64 entityId, vec2 fromOffset, vec2 toOffset, float duration)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene || !std::isfinite(fromOffset.x) || !std::isfinite(fromOffset.y) ||
+			!std::isfinite(toOffset.x) || !std::isfinite(toOffset.y) ||
+			!std::isfinite(duration) || duration < 0.0f)
+		{
+			return false;
+		}
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null)
+			return false;
+
+		return UITweenSystem::PlayOffset(reg, target, fromOffset, toOffset, duration) != 0;
+	}
+
+	void GraphGameplayLibrary::UIStopTweens(int64 entityId)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene)
+			return;
+
+		auto& reg = scene->GetRegistry();
+		const entt::entity target = GraphGameplay::Detail::ResolveGameplayTargetEntity(reg, entityId);
+		if (target == entt::null)
+			return;
+
+		UITweenSystem::StopAll(reg, target);
+	}
+
+	vec2 GraphGameplayLibrary::UIWorldToScreen(vec3 worldPos, vec2 viewportSize)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene)
+			return vec2(0.0f);
+
+		const CameraComponent* cam = FindActiveMainCamera(scene->GetRegistry());
+		if (!cam)
+			return vec2(0.0f);
+
+		const UIWorldToScreenResult res = UIProjection::WorldToScreen(worldPos, *cam, viewportSize);
+		return res.isInFront ? res.screenPosition : vec2(0.0f);
+	}
+
+	bool GraphGameplayLibrary::UIIsWorldPointInFront(vec3 worldPos, vec2 viewportSize)
+	{
+		Scene* scene = GraphSystem::GetCurrentScene();
+		if (!scene)
+			return false;
+
+		const CameraComponent* cam = FindActiveMainCamera(scene->GetRegistry());
+		if (!cam)
+			return false;
+
+		const UIWorldToScreenResult res = UIProjection::WorldToScreen(worldPos, *cam, viewportSize);
+		return res.isInFront;
 	}
 }

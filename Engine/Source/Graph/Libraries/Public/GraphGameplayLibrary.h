@@ -128,12 +128,23 @@ namespace Engine
 		static bool IsHitstopActive();
 		static void TriggerCameraShake(float intensity = 0.5f, float duration = 0.25f, float frequency = 25.0f);
 		static bool IsCameraShakeActive();
+		static float UpdateCombatEffects(float unscaledDt);
+		static vec3 GetCameraShakePositionOffset();
+		static vec3 GetCameraShakeRotationOffsetDeg();
 
 		// Quest
 		static bool StartQuest(const std::string& questId, int64 targetCount = 1);
 		static bool AdvanceQuest(const std::string& questId, int64 delta = 1);
 		static bool FailQuest(const std::string& questId);
 		static bool IsQuestCompleted(const std::string& questId);
+
+		// UI Tween & Projection
+		static bool UIPunchScale(int64 entityId, float peakScale = 1.25f, float duration = 0.25f);
+		static bool UIFadeAlpha(int64 entityId, float fromAlpha = 0.0f, float toAlpha = 1.0f, float duration = 0.25f);
+		static bool UIMoveOffset(int64 entityId, vec2 fromOffset, vec2 toOffset, float duration = 0.25f);
+		static void UIStopTweens(int64 entityId);
+		static vec2 UIWorldToScreen(vec3 worldPos, vec2 viewportSize);
+		static bool UIIsWorldPointInFront(vec3 worldPos, vec2 viewportSize);
 	};
 }
 
@@ -1193,5 +1204,52 @@ namespace Engine::GraphGameplay
 	inline bool IsQuestCompleted(std::string questId)
 	{
 		return GraphGameplayLibrary::IsQuestCompleted(questId);
+	}
+
+	// ── UI 트윈 & 투영 노드 (UI) ──
+	FUNCTION(GRAPH_CALLABLE("UI.PunchScale"), DISPLAY_NAME("UI Punch Scale"), CATEGORY("UI"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("peakScale", 1.25f), GRAPH_PIN_DEFAULT("duration", 0.25f))
+	inline bool UIPunchScale(std::int64_t entityId, float peakScale, float duration)
+	{
+		return GraphGameplayLibrary::UIPunchScale(entityId, peakScale, duration);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("UI.FadeAlpha"), DISPLAY_NAME("UI Fade Alpha"), CATEGORY("UI"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("fromAlpha", 0.0f), GRAPH_PIN_DEFAULT("toAlpha", 1.0f), GRAPH_PIN_DEFAULT("duration", 0.25f))
+	inline bool UIFadeAlpha(std::int64_t entityId, float fromAlpha, float toAlpha, float duration)
+	{
+		return GraphGameplayLibrary::UIFadeAlpha(entityId, fromAlpha, toAlpha, duration);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("UI.MoveOffset"), DISPLAY_NAME("UI Move Offset"), CATEGORY("UI"),
+		GRAPH_PIN_DEFAULT("entityId", -1), GRAPH_PIN_DEFAULT("duration", 0.25f))
+	inline bool UIMoveOffset(std::int64_t entityId, std::array<float, 2> fromOffset, std::array<float, 2> toOffset, float duration)
+	{
+		return GraphGameplayLibrary::UIMoveOffset(
+			entityId, vec2(fromOffset[0], fromOffset[1]), vec2(toOffset[0], toOffset[1]), duration);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("UI.StopTweens"), DISPLAY_NAME("UI Stop Tweens"), CATEGORY("UI"),
+		GRAPH_PIN_DEFAULT("entityId", -1))
+	inline void UIStopTweens(std::int64_t entityId)
+	{
+		GraphGameplayLibrary::UIStopTweens(entityId);
+	}
+
+	FUNCTION(GRAPH_PURE("UI.WorldToScreen"), DISPLAY_NAME("UI World To Screen"), CATEGORY("UI"))
+	inline std::array<float, 2> UIWorldToScreen(std::array<float, 3> worldPos, std::array<float, 2> viewportSize)
+	{
+		const vec2 screenPos = GraphGameplayLibrary::UIWorldToScreen(
+			vec3(worldPos[0], worldPos[1], worldPos[2]),
+			vec2(viewportSize[0], viewportSize[1]));
+		return { screenPos.x, screenPos.y };
+	}
+
+	FUNCTION(GRAPH_PURE("UI.IsWorldPointInFront"), DISPLAY_NAME("UI Is World Point In Front"), CATEGORY("UI"))
+	inline bool UIIsWorldPointInFront(std::array<float, 3> worldPos, std::array<float, 2> viewportSize)
+	{
+		return GraphGameplayLibrary::UIIsWorldPointInFront(
+			vec3(worldPos[0], worldPos[1], worldPos[2]),
+			vec2(viewportSize[0], viewportSize[1]));
 	}
 }

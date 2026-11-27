@@ -1,7 +1,10 @@
 #include "CameraSystem.h"
+#include "GraphGameplayLibrary.h"
 #include "ComponentEnable.h"
 #include "CameraComponent.h"
+#include "Camera2DRoomComponent.h"
 #include "PixelPerfectCameraComponent.h"
+#include "Platformer2DHelpers.h"
 #include "WorldTransformComponent.h"
 
 #include <glm/ext/matrix_clip_space.hpp>
@@ -165,6 +168,21 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 	mat4 finalWorld = worldMatrix;
 	vec3 camPos = vec3(worldMatrix[3]);
 
+	// Combat CameraShake 런타임 오프셋 적용
+	if (GraphGameplayLibrary::IsCameraShakeActive())
+	{
+		const vec3 posOffset = GraphGameplayLibrary::GetCameraShakePositionOffset();
+		const vec3 rotOffsetDeg = GraphGameplayLibrary::GetCameraShakeRotationOffsetDeg();
+		const vec3 rightAxis = glm::normalize(vec3(finalWorld[0]));
+		const vec3 upAxis = glm::normalize(vec3(finalWorld[1]));
+		const vec3 forwardAxis = glm::normalize(vec3(finalWorld[2]));
+		camPos += rightAxis * posOffset.x + upAxis * posOffset.y + forwardAxis * posOffset.z;
+		finalWorld[3] = vec4(camPos, finalWorld[3].w);
+
+		const mat4 shakeRot = glm::mat4_cast(glm::quat(glm::radians(rotOffsetDeg)));
+		finalWorld = finalWorld * shakeRot;
+	}
+
 	// ── 픽셀 퍼펙트 카메라 연동 2단계: 서브픽셀 카메라 스냅 (Sub-pixel Position Snapping) ──
 	if (pixelPerfect && camera.CameraType == ECameraType::Orthographic && pixelPerfect->assetsPPU > 0.0f)
 	{
@@ -211,6 +229,20 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 					finalWorld[3][1] = camPos.y;
 				}
 			}
+		}
+	}
+
+	if (camera.CameraType == ECameraType::Orthographic)
+	{
+		if (const auto* room = TryGetEnabledComponent<Camera2DRoomComponent>(registry, entity))
+		{
+			const vec2 halfViewSize(orthographicSize * camera.AspectRatio * 0.5f, orthographicSize * 0.5f);
+			const vec2 clampedPos = Camera2DRoomBounds::ClampPosition(
+				vec2(camPos.x, camPos.y), halfViewSize, room->roomMin, room->roomMax);
+			camPos.x = clampedPos.x;
+			camPos.y = clampedPos.y;
+			finalWorld[3][0] = camPos.x;
+			finalWorld[3][1] = camPos.y;
 		}
 	}
 

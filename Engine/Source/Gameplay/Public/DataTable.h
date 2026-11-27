@@ -88,6 +88,25 @@ namespace Engine
 		// 모든 헤더, 행 데이터 및 키 인덱스를 초기화한다.
 		void Clear();
 
+		// ── 테이블 편집 및 저장 API ──
+		// 지정한 행/열의 셀 값을 반환한다. 범위 밖이면 빈 문자열을 반환한다.
+		[[nodiscard]] const std::string& GetCell(std::size_t row, std::size_t col) const;
+
+		// 지정한 행/열의 셀 값을 수정한다. 범위 밖이면 false를 반환한다.
+		// 기본 키 컬럼을 수정한 경우 키 인덱스를 함께 갱신한다.
+		bool SetCell(std::size_t row, std::size_t col, std::string value);
+
+		// 현재 컬럼 수에 맞는 빈 행을 끝에 추가한다. 헤더가 비어 있으면 false를 반환한다.
+		bool AddEmptyRow();
+
+		// 지정한 행을 삭제한다. 범위 밖이면 false를 반환한다.
+		bool RemoveRow(std::size_t row);
+
+		// 현재 테이블 내용을 RFC 4180 CSV 형식으로 파일에 저장한다.
+		[[nodiscard]] bool SaveToCsvFile(
+			const std::filesystem::path& path,
+			std::string* outError = nullptr) const;
+
 	private:
 		struct TransparentStringHash
 		{
