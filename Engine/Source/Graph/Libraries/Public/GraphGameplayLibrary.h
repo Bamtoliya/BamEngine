@@ -115,6 +115,25 @@ namespace Engine
 
 		// Gamepad
 		static bool SetGamepadRumble(f32 lowFreq, f32 highFreq, int32 durationMs, int32 gamepadIndex = 0);
+
+		// DataTable
+		static bool LoadDataTableCsv(const std::string& tableId, const std::string& filePath, const std::string& keyColumn = "Id");
+		static std::string GetDataTableString(const std::string& tableId, const std::string& key, const std::string& column, const std::string& defaultValue = "");
+		static int64 GetDataTableInt(const std::string& tableId, const std::string& key, const std::string& column, int64 defaultValue = 0);
+		static float GetDataTableFloat(const std::string& tableId, const std::string& key, const std::string& column, float defaultValue = 0.0f);
+		static bool GetDataTableBool(const std::string& tableId, const std::string& key, const std::string& column, bool defaultValue = false);
+
+		// Combat (Hitstop / CameraShake)
+		static void TriggerHitstop(float duration = 0.08f, float timeScale = 0.0f);
+		static bool IsHitstopActive();
+		static void TriggerCameraShake(float intensity = 0.5f, float duration = 0.25f, float frequency = 25.0f);
+		static bool IsCameraShakeActive();
+
+		// Quest
+		static bool StartQuest(const std::string& questId, int64 targetCount = 1);
+		static bool AdvanceQuest(const std::string& questId, int64 delta = 1);
+		static bool FailQuest(const std::string& questId);
+		static bool IsQuestCompleted(const std::string& questId);
 	};
 }
 
@@ -1082,5 +1101,97 @@ namespace Engine::GraphGameplay
 		}
 		return GraphGameplayLibrary::SetGamepadRumble(
 			lowFreq, highFreq, static_cast<int32>(durationMs), static_cast<int32>(gamepadIndex));
+	}
+
+	// ── 데이터 테이블 노드 (DataTable) ──
+	FUNCTION(GRAPH_CALLABLE("DataTable.LoadCsv"), DISPLAY_NAME("Load DataTable CSV"), CATEGORY("DataTable"),
+		GRAPH_PIN_DEFAULT("tableId", ""), GRAPH_PIN_DEFAULT("filePath", ""), GRAPH_PIN_DEFAULT("keyColumn", "Id"))
+	inline bool LoadDataTableCsv(std::string tableId, std::string filePath, std::string keyColumn)
+	{
+		return GraphGameplayLibrary::LoadDataTableCsv(tableId, filePath, keyColumn);
+	}
+
+	FUNCTION(GRAPH_PURE("DataTable.EqualsString"), DISPLAY_NAME("DataTable String Equals"), CATEGORY("DataTable"),
+		GRAPH_PIN_DEFAULT("tableId", ""), GRAPH_PIN_DEFAULT("key", ""), GRAPH_PIN_DEFAULT("column", ""), GRAPH_PIN_DEFAULT("expectedValue", ""))
+	inline bool DataTableStringEquals(std::string tableId, std::string key, std::string column, std::string expectedValue)
+	{
+		return GraphGameplayLibrary::GetDataTableString(tableId, key, column, "") == expectedValue;
+	}
+
+	FUNCTION(GRAPH_PURE("DataTable.GetInt"), DISPLAY_NAME("Get DataTable Int"), CATEGORY("DataTable"),
+		GRAPH_PIN_DEFAULT("tableId", ""), GRAPH_PIN_DEFAULT("key", ""), GRAPH_PIN_DEFAULT("column", ""), GRAPH_PIN_DEFAULT("defaultValue", 0))
+	inline std::int64_t GetDataTableInt(std::string tableId, std::string key, std::string column, std::int64_t defaultValue)
+	{
+		return GraphGameplayLibrary::GetDataTableInt(tableId, key, column, defaultValue);
+	}
+
+	FUNCTION(GRAPH_PURE("DataTable.GetFloat"), DISPLAY_NAME("Get DataTable Float"), CATEGORY("DataTable"),
+		GRAPH_PIN_DEFAULT("tableId", ""), GRAPH_PIN_DEFAULT("key", ""), GRAPH_PIN_DEFAULT("column", ""), GRAPH_PIN_DEFAULT("defaultValue", 0.0f))
+	inline float GetDataTableFloat(std::string tableId, std::string key, std::string column, float defaultValue)
+	{
+		return GraphGameplayLibrary::GetDataTableFloat(tableId, key, column, defaultValue);
+	}
+
+	FUNCTION(GRAPH_PURE("DataTable.GetBool"), DISPLAY_NAME("Get DataTable Bool"), CATEGORY("DataTable"),
+		GRAPH_PIN_DEFAULT("tableId", ""), GRAPH_PIN_DEFAULT("key", ""), GRAPH_PIN_DEFAULT("column", ""), GRAPH_PIN_DEFAULT("defaultValue", false))
+	inline bool GetDataTableBool(std::string tableId, std::string key, std::string column, bool defaultValue)
+	{
+		return GraphGameplayLibrary::GetDataTableBool(tableId, key, column, defaultValue);
+	}
+
+	// ── 전투 피드백 노드 (Combat) ──
+	FUNCTION(GRAPH_CALLABLE("Combat.TriggerHitstop"), DISPLAY_NAME("Trigger Hitstop"), CATEGORY("Combat"),
+		GRAPH_PIN_DEFAULT("duration", 0.08f), GRAPH_PIN_DEFAULT("timeScale", 0.0f))
+	inline void TriggerHitstop(float duration, float timeScale)
+	{
+		GraphGameplayLibrary::TriggerHitstop(duration, timeScale);
+	}
+
+	FUNCTION(GRAPH_PURE("Combat.IsHitstopActive"), DISPLAY_NAME("Is Hitstop Active"), CATEGORY("Combat"))
+	inline bool IsHitstopActive()
+	{
+		return GraphGameplayLibrary::IsHitstopActive();
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Combat.TriggerCameraShake"), DISPLAY_NAME("Trigger Camera Shake"), CATEGORY("Combat"),
+		GRAPH_PIN_DEFAULT("intensity", 0.5f), GRAPH_PIN_DEFAULT("duration", 0.25f), GRAPH_PIN_DEFAULT("frequency", 25.0f))
+	inline void TriggerCameraShake(float intensity, float duration, float frequency)
+	{
+		GraphGameplayLibrary::TriggerCameraShake(intensity, duration, frequency);
+	}
+
+	FUNCTION(GRAPH_PURE("Combat.IsCameraShakeActive"), DISPLAY_NAME("Is Camera Shake Active"), CATEGORY("Combat"))
+	inline bool IsCameraShakeActive()
+	{
+		return GraphGameplayLibrary::IsCameraShakeActive();
+	}
+
+	// ── 퀘스트 노드 (Quest) ──
+	FUNCTION(GRAPH_CALLABLE("Quest.Start"), DISPLAY_NAME("Start Quest"), CATEGORY("Quest"),
+		GRAPH_PIN_DEFAULT("questId", ""), GRAPH_PIN_DEFAULT("targetCount", 1))
+	inline bool StartQuest(std::string questId, std::int64_t targetCount)
+	{
+		return GraphGameplayLibrary::StartQuest(questId, targetCount);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Quest.Advance"), DISPLAY_NAME("Advance Quest"), CATEGORY("Quest"),
+		GRAPH_PIN_DEFAULT("questId", ""), GRAPH_PIN_DEFAULT("delta", 1))
+	inline bool AdvanceQuest(std::string questId, std::int64_t delta)
+	{
+		return GraphGameplayLibrary::AdvanceQuest(questId, delta);
+	}
+
+	FUNCTION(GRAPH_CALLABLE("Quest.Fail"), DISPLAY_NAME("Fail Quest"), CATEGORY("Quest"),
+		GRAPH_PIN_DEFAULT("questId", ""))
+	inline bool FailQuest(std::string questId)
+	{
+		return GraphGameplayLibrary::FailQuest(questId);
+	}
+
+	FUNCTION(GRAPH_PURE("Quest.IsCompleted"), DISPLAY_NAME("Is Quest Completed"), CATEGORY("Quest"),
+		GRAPH_PIN_DEFAULT("questId", ""))
+	inline bool IsQuestCompleted(std::string questId)
+	{
+		return GraphGameplayLibrary::IsQuestCompleted(questId);
 	}
 }

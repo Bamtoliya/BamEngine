@@ -28,6 +28,7 @@
 #include <utility>
 #include "InputManager.h"
 #include <cmath>
+#include <cstdio>
 
 namespace ed = ax::NodeEditor;
 
@@ -2290,7 +2291,11 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 		if (state.IsBlendTree2D())
 		{
 			auto& tree = state.blendTree2D;
-			DrawBlend2DPreview(state);
+			const bool isFreeform = !tree.samples.empty();
+			if (!isFreeform)
+				DrawBlend2DPreview(state);
+			else
+				DrawBlend2DFreeformEditor(state);
 
 			ImGui::Spacing();
 			if (EditorUI::BeginPropertyTable("Blend2DParamsTable", EditorUI::InspectorPropertyTableStyle()))
@@ -2309,69 +2314,79 @@ void AnimatorGraphPanel::DrawStateInspector(Engine::AnimState& state)
 					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DAxesRequired"));
 				}
 
-				const auto drawRangeRow = [&](const char* labelKey, float& minimum, float& maximum)
+				if (!isFreeform)
 				{
-					EditorUI::PropertyRow(labelKey);
-					float range[2] = { minimum, maximum };
-					ImGui::SetNextItemWidth(-1.0f);
-					if (ImGui::DragFloat2(("##" + std::string(labelKey)).c_str(), range, 0.05f))
+					const auto drawRangeRow = [&](const char* labelKey, float& minimum, float& maximum)
 					{
-						minimum = range[0];
-						maximum = range[1];
-						m_History.MarkEdited();
+						EditorUI::PropertyRow(labelKey);
+						float range[2] = { minimum, maximum };
+						ImGui::SetNextItemWidth(-1.0f);
+						if (ImGui::DragFloat2(("##" + std::string(labelKey)).c_str(), range, 0.05f))
+						{
+							minimum = range[0];
+							maximum = range[1];
+							m_History.MarkEdited();
+						}
+					};
+
+					drawRangeRow("AnimatorGraph.Blend2DRangeX", tree.minX, tree.maxX);
+					drawRangeRow("AnimatorGraph.Blend2DRangeY", tree.minY, tree.maxY);
+
+					if (!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
+						!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
+					{
+						ImGui::TableNextRow();
+						ImGui::TableSetColumnIndex(0);
+						ImGui::TableSetColumnIndex(1);
+						ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DRangeInvalid"));
 					}
-				};
-
-				drawRangeRow("AnimatorGraph.Blend2DRangeX", tree.minX, tree.maxX);
-				drawRangeRow("AnimatorGraph.Blend2DRangeY", tree.minY, tree.maxY);
-
-				if (!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
-					!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
-				{
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					ImGui::TableSetColumnIndex(1);
-					ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DRangeInvalid"));
 				}
 
 				EditorUI::EndPropertyTable();
 			}
 
-			// 2x2 Corner Clips Grid Layout
-			ImGui::Spacing();
-			ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DWeights"));
-			if (ImGui::BeginTable("##Blend2DCornersGrid", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp))
+			if (!isFreeform)
 			{
-				const auto drawCornerCell = [&](int id, float x, float y, Engine::ResourceHandle<Engine::Animation>& clip)
+				// 2x2 Corner Clips Grid Layout
+				ImGui::Spacing();
+				ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DWeights"));
+				if (ImGui::BeginTable("##Blend2DCornersGrid", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp))
 				{
-					ImGui::PushID(id);
-					const auto label = LOCAL_FMT("AnimatorGraph.Blend2DCorner", x, y);
-					ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", label.c_str());
-					if (Editor::DrawInspectorResourcePicker(clip, true)) m_History.MarkEdited();
-					ImGui::PopID();
-				};
+					const auto drawCornerCell = [&](int id, float x, float y, Engine::ResourceHandle<Engine::Animation>& clip)
+					{
+						ImGui::PushID(id);
+						const auto label = LOCAL_FMT("AnimatorGraph.Blend2DCorner", x, y);
+						ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.85f, 1.0f), "%s", label.c_str());
+						if (Editor::DrawInspectorResourcePicker(clip, true)) m_History.MarkEdited();
+						ImGui::PopID();
+					};
 
-				// Top Row: (-X, +Y) and (+X, +Y)
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				drawCornerCell(2, tree.minX, tree.maxY, tree.clip01);
-				ImGui::TableSetColumnIndex(1);
-				drawCornerCell(3, tree.maxX, tree.maxY, tree.clip11);
+					// Top Row: (-X, +Y) and (+X, +Y)
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					drawCornerCell(2, tree.minX, tree.maxY, tree.clip01);
+					ImGui::TableSetColumnIndex(1);
+					drawCornerCell(3, tree.maxX, tree.maxY, tree.clip11);
 
-				// Bottom Row: (-X, -Y) and (+X, -Y)
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				drawCornerCell(0, tree.minX, tree.minY, tree.clip00);
-				ImGui::TableSetColumnIndex(1);
-				drawCornerCell(1, tree.maxX, tree.minY, tree.clip10);
+					// Bottom Row: (-X, -Y) and (+X, -Y)
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					drawCornerCell(0, tree.minX, tree.minY, tree.clip00);
+					ImGui::TableSetColumnIndex(1);
+					drawCornerCell(1, tree.maxX, tree.minY, tree.clip10);
 
-				ImGui::EndTable();
+					ImGui::EndTable();
+				}
+
+				if (!tree.clip00.IsValid() || !tree.clip10.IsValid() || !tree.clip01.IsValid() || !tree.clip11.IsValid())
+				{
+					ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DCornersIncomplete"));
+				}
+
+				ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DFreeformEmptyHint"));
 			}
 
-			if (!tree.clip00.IsValid() || !tree.clip10.IsValid() || !tree.clip01.IsValid() || !tree.clip11.IsValid())
-			{
-				ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "%s", LOCAL_CSTR("AnimatorGraph.Blend2DCornersIncomplete"));
-			}
+			DrawBlend2DSamplesSection(state);
 		}
 		else
 		{
@@ -2700,6 +2715,370 @@ void AnimatorGraphPanel::DrawBlend2DPreview(const Engine::AnimState& state)
 	ImGui::TextWrapped("%s", LOCAL_FMT("AnimatorGraph.Blend2DWeights",
 		weights[0].Weight * 100.0f, weights[1].Weight * 100.0f,
 		weights[2].Weight * 100.0f, weights[3].Weight * 100.0f).c_str());
+}
+
+void AnimatorGraphPanel::DrawBlend2DFreeformEditor(Engine::AnimState& state)
+{
+	auto& tree = state.blendTree2D;
+	const int sampleCount = static_cast<int>(tree.samples.size());
+	if (m_Blend2DSelectedSampleIndex >= sampleCount) m_Blend2DSelectedSampleIndex = -1;
+	if (m_Blend2DDraggingSampleIndex >= sampleCount)
+	{
+		m_Blend2DDraggingSampleIndex = -1;
+		m_Blend2DDragModified = false;
+	}
+
+	ImGui::TextUnformatted(LOCAL_CSTR("AnimatorGraph.Blend2DFreeformTitle"));
+
+	// 드래그 중에는 좌표계가 흔들리지 않도록 잠근 범위 유지
+	Blend2DBounds bounds;
+	if (m_Blend2DDraggingSampleIndex >= 0)
+	{
+		bounds = m_Blend2DLockedBounds;
+	}
+	else
+	{
+		float sMinX = -1.0f, sMaxX = 1.0f;
+		float sMinY = -1.0f, sMaxY = 1.0f;
+		for (const auto& sample : tree.samples)
+		{
+			if (std::isfinite(sample.x))
+			{
+				sMinX = (std::min)(sMinX, sample.x);
+				sMaxX = (std::max)(sMaxX, sample.x);
+			}
+			if (std::isfinite(sample.y))
+			{
+				sMinY = (std::min)(sMinY, sample.y);
+				sMaxY = (std::max)(sMaxY, sample.y);
+			}
+		}
+		if (std::isfinite(m_Blend2DTestPos.x))
+		{
+			sMinX = (std::min)(sMinX, m_Blend2DTestPos.x);
+			sMaxX = (std::max)(sMaxX, m_Blend2DTestPos.x);
+		}
+		if (std::isfinite(m_Blend2DTestPos.y))
+		{
+			sMinY = (std::min)(sMinY, m_Blend2DTestPos.y);
+			sMaxY = (std::max)(sMaxY, m_Blend2DTestPos.y);
+		}
+
+		const float padX = (std::max)(0.2f, (sMaxX - sMinX) * 0.1f);
+		const float padY = (std::max)(0.2f, (sMaxY - sMinY) * 0.1f);
+		bounds.minX = (sMinX < -1.0f) ? (sMinX - padX) : -1.0f;
+		bounds.maxX = (sMaxX > 1.0f) ? (sMaxX + padX) : 1.0f;
+		bounds.minY = (sMinY < -1.0f) ? (sMinY - padY) : -1.0f;
+		bounds.maxY = (sMaxY > 1.0f) ? (sMaxY + padY) : 1.0f;
+	}
+
+	const float spanX = (std::max)(0.001f, bounds.maxX - bounds.minX);
+	const float spanY = (std::max)(0.001f, bounds.maxY - bounds.minY);
+	const float side = (std::min)(ImGui::GetContentRegionAvail().x, 240.0f);
+
+	if (side > 32.0f)
+	{
+		ImGui::PushID(state.name.c_str());
+		ImGui::InvisibleButton("##Blend2DFreeformCanvas", ImVec2(side, side),
+			ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+		const bool hovered = ImGui::IsItemHovered();
+		const ImVec2 rectMin = ImGui::GetItemRectMin();
+		const ImVec2 rectMax = ImGui::GetItemRectMax();
+		ImGui::PopID();
+
+		const float pad = 12.0f;
+		const ImVec2 plotMin(rectMin.x + pad, rectMin.y + pad);
+		const ImVec2 plotMax(rectMax.x - pad, rectMax.y - pad);
+		const float plotW = (std::max)(1.0f, plotMax.x - plotMin.x);
+		const float plotH = (std::max)(1.0f, plotMax.y - plotMin.y);
+
+		const auto worldToScreen = [&](float wx, float wy) -> ImVec2
+		{
+			const float u = (wx - bounds.minX) / spanX;
+			const float v = (wy - bounds.minY) / spanY;
+			return ImVec2(plotMin.x + u * plotW, plotMax.y - v * plotH);
+		};
+
+		const auto screenToWorld = [&](const ImVec2& sp) -> Engine::vec2
+		{
+			const float u = std::clamp((sp.x - plotMin.x) / plotW, 0.0f, 1.0f);
+			const float v = std::clamp((plotMax.y - sp.y) / plotH, 0.0f, 1.0f);
+			return Engine::vec2(bounds.minX + u * spanX, bounds.minY + v * spanY);
+		};
+
+		const ImGuiIO& io = ImGui::GetIO();
+		const ImVec2 mousePos = io.MousePos;
+
+		// 테스트 커서 이동: 우클릭 또는 Shift+좌클릭 드래그
+		if (hovered && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+			(io.KeyShift && ImGui::IsMouseClicked(ImGuiMouseButton_Left))))
+		{
+			m_Blend2DDraggingTestCursor = true;
+		}
+		if (m_Blend2DDraggingTestCursor)
+		{
+			if (ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+				(io.KeyShift && ImGui::IsMouseDown(ImGuiMouseButton_Left)) ||
+				ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			{
+				m_Blend2DTestPos = screenToWorld(mousePos);
+			}
+			else
+			{
+				m_Blend2DDraggingTestCursor = false;
+			}
+		}
+
+		// 샘플 포인트 선택 및 드래그 (일반 좌클릭)
+		if (hovered && !io.KeyShift && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+		{
+			int hitIndex = -1;
+			constexpr float hitRadiusSq = 10.0f * 10.0f;
+			for (int i = sampleCount - 1; i >= 0; --i)
+			{
+				const auto& sample = tree.samples[i];
+				if (!std::isfinite(sample.x) || !std::isfinite(sample.y)) continue;
+				const ImVec2 sp = worldToScreen(sample.x, sample.y);
+				const float dx = mousePos.x - sp.x;
+				const float dy = mousePos.y - sp.y;
+				if (dx * dx + dy * dy <= hitRadiusSq)
+				{
+					hitIndex = i;
+					break;
+				}
+			}
+
+			m_Blend2DSelectedSampleIndex = hitIndex;
+			if (hitIndex >= 0)
+			{
+				m_Blend2DDraggingSampleIndex = hitIndex;
+				m_Blend2DDragModified = false;
+				m_Blend2DLockedBounds = bounds;
+			}
+		}
+
+		if (m_Blend2DDraggingSampleIndex >= 0 && m_Blend2DDraggingSampleIndex < sampleCount)
+		{
+			if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+			{
+				const Engine::vec2 newPos = screenToWorld(mousePos);
+				auto& dragged = tree.samples[m_Blend2DDraggingSampleIndex];
+				if (std::abs(dragged.x - newPos.x) > 1e-4f || std::abs(dragged.y - newPos.y) > 1e-4f)
+				{
+					dragged.x = std::round(newPos.x * 100.0f) * 0.01f;
+					dragged.y = std::round(newPos.y * 100.0f) * 0.01f;
+					m_Blend2DDragModified = true;
+				}
+			}
+			else
+			{
+				if (m_Blend2DDragModified) m_History.MarkEdited();
+				m_Blend2DDraggingSampleIndex = -1;
+				m_Blend2DDragModified = false;
+			}
+		}
+
+		// 실시간 가중치 평가
+		std::vector<Engine::BlendClipWeight2D> weights;
+		tree.Evaluate(m_Blend2DTestPos.x, m_Blend2DTestPos.y, weights);
+
+		auto* drawList = ImGui::GetWindowDrawList();
+		drawList->PushClipRect(rectMin, rectMax, true);
+
+		// 배경 및 테두리
+		drawList->AddRectFilled(rectMin, rectMax, IM_COL32(26, 30, 38, 255), 4.0f);
+		drawList->AddRect(plotMin, plotMax, IM_COL32(75, 85, 100, 255));
+
+		// 그리드 라인 (범위에 따라 0.5 또는 1.0 간격 선택)
+		const auto calcStep = [](float span) -> float
+		{
+			if (span <= 2.5f) return 0.5f;
+			if (span <= 6.0f) return 1.0f;
+			if (span <= 15.0f) return 2.0f;
+			return 5.0f;
+		};
+		const float stepX = calcStep(spanX);
+		const float stepY = calcStep(spanY);
+		const ImU32 gridColor = IM_COL32(50, 56, 68, 255);
+		const ImU32 axisColor = IM_COL32(105, 115, 135, 255);
+
+		for (float gx = std::ceil(bounds.minX / stepX) * stepX; gx <= bounds.maxX + 1e-4f; gx += stepX)
+		{
+			const float sx = worldToScreen(gx, bounds.minY).x;
+			const bool isOrigin = std::abs(gx) < 1e-3f;
+			drawList->AddLine(ImVec2(sx, plotMin.y), ImVec2(sx, plotMax.y), isOrigin ? axisColor : gridColor, isOrigin ? 1.5f : 1.0f);
+		}
+		for (float gy = std::ceil(bounds.minY / stepY) * stepY; gy <= bounds.maxY + 1e-4f; gy += stepY)
+		{
+			const float sy = worldToScreen(bounds.minX, gy).y;
+			const bool isOrigin = std::abs(gy) < 1e-3f;
+			drawList->AddLine(ImVec2(plotMin.x, sy), ImVec2(plotMax.x, sy), isOrigin ? axisColor : gridColor, isOrigin ? 1.5f : 1.0f);
+		}
+
+		// 각 샘플 포인트 및 가중치 원 시각화
+		int hoveredSampleIndex = -1;
+		for (int i = 0; i < sampleCount; ++i)
+		{
+			const auto& sample = tree.samples[i];
+			if (!std::isfinite(sample.x) || !std::isfinite(sample.y)) continue;
+
+			const ImVec2 sp = worldToScreen(sample.x, sample.y);
+			const auto* clipPtr = sample.clip.Get();
+
+			float sampleWeight = 0.0f;
+			if (clipPtr)
+			{
+				for (const auto& w : weights)
+				{
+					if (w.Clip == clipPtr) sampleWeight += w.Weight;
+				}
+			}
+			sampleWeight = std::clamp(sampleWeight, 0.0f, 1.0f);
+
+			const bool isSelected = (i == m_Blend2DSelectedSampleIndex);
+			const float dx = mousePos.x - sp.x;
+			const float dy = mousePos.y - sp.y;
+			if (hovered && dx * dx + dy * dy <= 10.0f * 10.0f) hoveredSampleIndex = i;
+
+			// 가중치 반경 원
+			if (sampleWeight > 0.005f)
+			{
+				const float weightRadius = 6.0f + sampleWeight * 18.0f;
+				const int fillAlpha = static_cast<int>(35.0f + sampleWeight * 95.0f);
+				drawList->AddCircleFilled(sp, weightRadius, IM_COL32(70, 180, 255, fillAlpha));
+				drawList->AddCircle(sp, weightRadius, IM_COL32(100, 210, 255, 220), 0, 1.5f);
+			}
+
+			// 샘플 중심 포인트
+			const ImU32 pointColor = isSelected ? IM_COL32(255, 200, 60, 255)
+				: (clipPtr ? IM_COL32(220, 230, 245, 255) : IM_COL32(160, 100, 100, 255));
+			drawList->AddCircleFilled(sp, isSelected ? 6.0f : 4.5f, pointColor);
+			if (isSelected)
+				drawList->AddCircle(sp, 7.5f, IM_COL32(255, 255, 255, 230), 0, 1.5f);
+
+			// 퍼센트 텍스트
+			if (sampleWeight > 0.005f)
+			{
+				char pctBuf[16];
+				std::snprintf(pctBuf, sizeof(pctBuf), "%.0f%%", sampleWeight * 100.0f);
+				drawList->AddText(ImVec2(sp.x + 7.0f, sp.y - 14.0f), IM_COL32(235, 245, 255, 255), pctBuf);
+			}
+		}
+
+		// 테스트 커서 시각화
+		const ImVec2 cursorSp = worldToScreen(m_Blend2DTestPos.x, m_Blend2DTestPos.y);
+		const ImU32 cursorColor = IM_COL32(0, 235, 200, 255);
+		drawList->AddLine(ImVec2(cursorSp.x - 7.0f, cursorSp.y), ImVec2(cursorSp.x + 7.0f, cursorSp.y), cursorColor, 1.5f);
+		drawList->AddLine(ImVec2(cursorSp.x, cursorSp.y - 7.0f), ImVec2(cursorSp.x, cursorSp.y + 7.0f), cursorColor, 1.5f);
+		drawList->AddCircle(cursorSp, 5.0f, cursorColor, 0, 1.5f);
+
+		drawList->PopClipRect();
+
+		if (hoveredSampleIndex >= 0 && m_Blend2DDraggingSampleIndex < 0)
+		{
+			const auto& hs = tree.samples[hoveredSampleIndex];
+			const std::string clipName = (hs.clip.IsValid() && hs.clip.Get())
+				? Engine::WStrToStr(std::filesystem::path(hs.clip->GetPath()).filename().wstring())
+				: LOCAL("AnimatorGraph.NoMotion");
+			ImGui::SetTooltip("#%d %s (%.2f, %.2f)", hoveredSampleIndex, clipName.c_str(), hs.x, hs.y);
+		}
+	}
+
+	ImGui::TextWrapped("%s", LOCAL_FMT("AnimatorGraph.Blend2DTestCursor", m_Blend2DTestPos.x, m_Blend2DTestPos.y).c_str());
+	ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.Blend2DFreeformHint"));
+}
+
+void AnimatorGraphPanel::DrawBlend2DSamplesSection(Engine::AnimState& state)
+{
+	auto& tree = state.blendTree2D;
+
+	ImGui::Spacing();
+	ImGui::Text("%s (%d)", LOCAL_CSTR("AnimatorGraph.Samples"), static_cast<int>(tree.samples.size()));
+
+	const std::string addLabel = std::string(ICON_FA_PLUS " ") + LOCAL("AnimatorGraph.Blend2DAddSample");
+	EditorUI::SameLineIfFits(ImGui::CalcTextSize(addLabel.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f);
+	if (ImGui::SmallButton(addLabel.c_str()))
+	{
+		tree.samples.push_back(Engine::BlendSample2D{});
+		m_Blend2DSelectedSampleIndex = static_cast<int>(tree.samples.size()) - 1;
+		m_History.MarkEdited();
+	}
+
+	if (tree.samples.empty()) return;
+
+	int sampleToRemove = -1;
+	if (ImGui::BeginTable("##Blend2DSamplesTable", 4, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+	{
+		ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Blend2DPosX"), ImGuiTableColumnFlags_WidthFixed, 54.0f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Blend2DPosY"), ImGuiTableColumnFlags_WidthFixed, 54.0f);
+		ImGui::TableSetupColumn(LOCAL_CSTR("AnimatorGraph.Clip"), ImGuiTableColumnFlags_WidthStretch);
+		ImGui::TableSetupColumn(LOCAL_CSTR("EditorCommon.Delete"), ImGuiTableColumnFlags_WidthFixed,
+			(std::max)(EditorUI::GetIconButtonSize(ICON_FA_TRASH, true).x, ImGui::CalcTextSize(LOCAL_CSTR("EditorCommon.Delete")).x));
+		ImGui::TableHeadersRow();
+
+		for (size_t i = 0; i < tree.samples.size(); ++i)
+		{
+			auto& sample = tree.samples[i];
+			ImGui::PushID(static_cast<int>(i));
+
+			ImGui::TableNextRow();
+			if (static_cast<int>(i) == m_Blend2DSelectedSampleIndex)
+				ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(60, 90, 130, 70));
+
+			ImGui::TableSetColumnIndex(0);
+			ImGui::SetNextItemWidth(-1.0f);
+			if (ImGui::DragFloat("##SampleX", &sample.x, 0.02f, -100.0f, 100.0f, "%.2f"))
+			{
+				m_Blend2DSelectedSampleIndex = static_cast<int>(i);
+				m_History.MarkEdited();
+			}
+			if (ImGui::IsItemActivated()) m_Blend2DSelectedSampleIndex = static_cast<int>(i);
+
+			ImGui::TableSetColumnIndex(1);
+			ImGui::SetNextItemWidth(-1.0f);
+			if (ImGui::DragFloat("##SampleY", &sample.y, 0.02f, -100.0f, 100.0f, "%.2f"))
+			{
+				m_Blend2DSelectedSampleIndex = static_cast<int>(i);
+				m_History.MarkEdited();
+			}
+			if (ImGui::IsItemActivated()) m_Blend2DSelectedSampleIndex = static_cast<int>(i);
+
+			ImGui::TableSetColumnIndex(2);
+			if (Editor::DrawInspectorResourcePicker(sample.clip, true))
+			{
+				m_Blend2DSelectedSampleIndex = static_cast<int>(i);
+				m_History.MarkEdited();
+			}
+
+			ImGui::TableSetColumnIndex(3);
+			if (EditorUI::SmallIconButton("DelBlend2DSample", ICON_FA_TRASH, "EditorCommon.Delete"))
+				sampleToRemove = static_cast<int>(i);
+
+			ImGui::PopID();
+		}
+		ImGui::EndTable();
+	}
+
+	if (sampleToRemove >= 0 && sampleToRemove < static_cast<int>(tree.samples.size()))
+	{
+		tree.samples.erase(tree.samples.begin() + sampleToRemove);
+		if (m_Blend2DSelectedSampleIndex == sampleToRemove)
+			m_Blend2DSelectedSampleIndex = -1;
+		else if (m_Blend2DSelectedSampleIndex > sampleToRemove)
+			--m_Blend2DSelectedSampleIndex;
+
+		if (m_Blend2DDraggingSampleIndex == sampleToRemove)
+		{
+			m_Blend2DDraggingSampleIndex = -1;
+			m_Blend2DDragModified = false;
+		}
+		else if (m_Blend2DDraggingSampleIndex > sampleToRemove)
+		{
+			--m_Blend2DDraggingSampleIndex;
+		}
+
+		m_History.MarkEdited();
+	}
 }
 
 void AnimatorGraphPanel::DrawTransitionInspector(Engine::AnimTransition& tr)

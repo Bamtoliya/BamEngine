@@ -100,3 +100,10 @@ AnimatorGraph,PlayRate,Play Rate,재생 속도
 AnimatorGraph,Looping,Looping,반복
 AnimatorGraph,Playing,Playing,재생 중
 AnimatorGraph,BaseLayer,Base Layer,기본 레이어
+AnimatorGraph,Blend2DFreeformTitle,2D Freeform Blend Tree,2D 자유형 블렌드 트리
+AnimatorGraph,Blend2DFreeformHint,Left-drag points to move. Right-drag or Shift+Left-drag to test weights.,좌클릭 드래그로 포인트 이동, 우클릭 또는 Shift+좌클릭 드래그로 가중치를 테스트하세요.
+AnimatorGraph,Blend2DTestCursor,Test Cursor X {:.2f} / Y {:.2f},테스트 커서 X {:.2f} / Y {:.2f}
+AnimatorGraph,Blend2DAddSample,Add Sample,샘플 추가
+AnimatorGraph,Blend2DPosX,Pos X,위치 X
+AnimatorGraph,Blend2DPosY,Pos Y,위치 Y
+AnimatorGraph,Blend2DFreeformEmptyHint,Add samples below to switch from 2x2 grid to 2D Freeform blending.,아래에서 샘플을 추가하면 2x2 격자에서 2D 자유형 블렌딩으로 전환됩니다.

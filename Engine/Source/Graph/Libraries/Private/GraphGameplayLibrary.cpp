@@ -14,11 +14,18 @@
 #include "SceneManager.h"
 #include "SceneTransitionManager.h"
 #include "SystemManager.h"
+#include "DataTable.h"
+#include "ActionCombatHelpers.h"
+#include "StrategyRpgHelpers.h"
+#include "PlatformPath.h"
 #if !defined(__EMSCRIPTEN__)
 #include "NetworkSystem.h"
 #endif
 #include <cmath>
 #include <limits>
+#include <mutex>
+#include <string_view>
+#include <unordered_map>
 
 namespace Engine
 {
@@ -530,5 +537,186 @@ namespace Engine
 		if (!InputManager::IsCreated() || durationMs < 0 || gamepadIndex < 0) return false;
 		return InputManager::Get().SetGamepadRumble(
 			lowFreq, highFreq, static_cast<uint32>(durationMs), static_cast<uint32>(gamepadIndex));
+	}
+
+	// ── DataTable / Combat / Quest ──
+	namespace
+	{
+		std::mutex& GetGameplayCacheMutex()
+		{
+			static std::mutex s_mutex;
+			return s_mutex;
+		}
+
+		std::unordered_map<std::string, DataTable>& GetDataTableCache()
+		{
+			static std::unordered_map<std::string, DataTable> s_tables;
+			return s_tables;
+		}
+
+		HitstopState& GetHitstopState()
+		{
+			static HitstopState s_hitstop;
+			return s_hitstop;
+		}
+
+		CameraShakeState& GetCameraShakeState()
+		{
+			static CameraShakeState s_cameraShake;
+			return s_cameraShake;
+		}
+
+		QuestTracker& GetQuestTracker()
+		{
+			static QuestTracker s_questTracker;
+			return s_questTracker;
+		}
+
+		uint64 HashQuestId(std::string_view questId) noexcept
+		{
+			uint64 hash = 14695981039346656037ULL;
+			for (const unsigned char ch : questId)
+			{
+				hash ^= static_cast<uint64>(ch);
+				hash *= 1099511628211ULL;
+			}
+			return hash;
+		}
+	}
+
+	bool GraphGameplayLibrary::LoadDataTableCsv(const std::string& tableId, const std::string& filePath, const std::string& keyColumn)
+	{
+		if (tableId.empty() || filePath.empty()) return false;
+		const std::filesystem::path resolvedPath = PlatformPath::ResolveUri(filePath);
+		if (resolvedPath.empty()) return false;
+
+		DataTable table;
+		std::string error;
+		if (!table.LoadFromCsvFile(resolvedPath, &error, keyColumn))
+		{
+			return false;
+		}
+
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		GetDataTableCache()[tableId] = std::move(table);
+		return true;
+	}
+
+	std::string GraphGameplayLibrary::GetDataTableString(const std::string& tableId, const std::string& key, const std::string& column, const std::string& defaultValue)
+	{
+		if (tableId.empty() || key.empty() || column.empty()) return defaultValue;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		const auto& cache = GetDataTableCache();
+		const auto it = cache.find(tableId);
+		if (it == cache.end()) return defaultValue;
+
+		const auto rowOpt = it->second.FindRowIndexByKey(key);
+		if (!rowOpt.has_value()) return defaultValue;
+		return it->second.GetString(*rowOpt, column, defaultValue);
+	}
+
+	int64 GraphGameplayLibrary::GetDataTableInt(const std::string& tableId, const std::string& key, const std::string& column, int64 defaultValue)
+	{
+		if (tableId.empty() || key.empty() || column.empty()) return defaultValue;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		const auto& cache = GetDataTableCache();
+		const auto it = cache.find(tableId);
+		if (it == cache.end()) return defaultValue;
+
+		const auto rowOpt = it->second.FindRowIndexByKey(key);
+		if (!rowOpt.has_value()) return defaultValue;
+
+		if (defaultValue >= std::numeric_limits<int32>::min() && defaultValue <= std::numeric_limits<int32>::max())
+		{
+			return static_cast<int64>(it->second.GetInt(*rowOpt, column, static_cast<int32>(defaultValue)));
+		}
+
+		const int32 probeZero = it->second.GetInt(*rowOpt, column, 0);
+		const int32 probeOne = it->second.GetInt(*rowOpt, column, 1);
+		return (probeZero == probeOne) ? static_cast<int64>(probeZero) : defaultValue;
+	}
+
+	float GraphGameplayLibrary::GetDataTableFloat(const std::string& tableId, const std::string& key, const std::string& column, float defaultValue)
+	{
+		if (tableId.empty() || key.empty() || column.empty()) return defaultValue;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		const auto& cache = GetDataTableCache();
+		const auto it = cache.find(tableId);
+		if (it == cache.end()) return defaultValue;
+
+		const auto rowOpt = it->second.FindRowIndexByKey(key);
+		if (!rowOpt.has_value()) return defaultValue;
+		return it->second.GetFloat(*rowOpt, column, defaultValue);
+	}
+
+	bool GraphGameplayLibrary::GetDataTableBool(const std::string& tableId, const std::string& key, const std::string& column, bool defaultValue)
+	{
+		if (tableId.empty() || key.empty() || column.empty()) return defaultValue;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		const auto& cache = GetDataTableCache();
+		const auto it = cache.find(tableId);
+		if (it == cache.end()) return defaultValue;
+
+		const auto rowOpt = it->second.FindRowIndexByKey(key);
+		if (!rowOpt.has_value()) return defaultValue;
+		return it->second.GetBool(*rowOpt, column, defaultValue);
+	}
+
+	void GraphGameplayLibrary::TriggerHitstop(float duration, float timeScale)
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		GetHitstopState().Trigger(duration, timeScale);
+	}
+
+	bool GraphGameplayLibrary::IsHitstopActive()
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetHitstopState().IsActive();
+	}
+
+	void GraphGameplayLibrary::TriggerCameraShake(float intensity, float duration, float frequency)
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		GetCameraShakeState().Trigger(intensity, duration, frequency);
+	}
+
+	bool GraphGameplayLibrary::IsCameraShakeActive()
+	{
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetCameraShakeState().IsActive();
+	}
+
+	bool GraphGameplayLibrary::StartQuest(const std::string& questId, int64 targetCount)
+	{
+		if (questId.empty() || targetCount < 0 || targetCount > std::numeric_limits<uint32>::max())
+		{
+			return false;
+		}
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetQuestTracker().StartQuest(HashQuestId(questId), static_cast<uint32>(targetCount));
+	}
+
+	bool GraphGameplayLibrary::AdvanceQuest(const std::string& questId, int64 delta)
+	{
+		if (questId.empty() || delta <= 0 || delta > std::numeric_limits<uint32>::max())
+		{
+			return false;
+		}
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetQuestTracker().AdvanceQuest(HashQuestId(questId), static_cast<uint32>(delta));
+	}
+
+	bool GraphGameplayLibrary::FailQuest(const std::string& questId)
+	{
+		if (questId.empty()) return false;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetQuestTracker().FailQuest(HashQuestId(questId));
+	}
+
+	bool GraphGameplayLibrary::IsQuestCompleted(const std::string& questId)
+	{
+		if (questId.empty()) return false;
+		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+		return GetQuestTracker().GetQuestState(HashQuestId(questId)) == QuestState::Completed;
 	}
 }

@@ -72,6 +72,8 @@ private:
 	void DrawSelectionInspector();
 	void DrawStateInspector(Engine::AnimState& state);
 	void DrawBlend2DPreview(const Engine::AnimState& state);
+	void DrawBlend2DFreeformEditor(Engine::AnimState& state);
+	void DrawBlend2DSamplesSection(Engine::AnimState& state);
 	void DrawTransitionInspector(Engine::AnimTransition& transition);
 	void RenameParameter(const std::string& oldName, const std::string& newName);
 public:
@@ -140,6 +142,21 @@ private:
 	inline static AnimatorGraphPanel* s_ActivePanel = nullptr;
 	std::string m_ParameterRenameDraft;
 	std::string m_StateRenameDraft;
+
+	// 2D Freeform 블렌드 트리 시각 편집기 상태
+	struct Blend2DBounds
+	{
+		float minX = -1.0f;
+		float maxX = 1.0f;
+		float minY = -1.0f;
+		float maxY = 1.0f;
+	};
+	int m_Blend2DSelectedSampleIndex = -1;
+	int m_Blend2DDraggingSampleIndex = -1;
+	bool m_Blend2DDragModified = false;
+	bool m_Blend2DDraggingTestCursor = false;
+	Engine::vec2 m_Blend2DTestPos{ 0.0f, 0.0f };
+	Blend2DBounds m_Blend2DLockedBounds{};
 };
 
 END

@@ -2,6 +2,16 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] `AnimatorGraphPanel` 2D Freeform 블렌드 트리 시각 편집기 및 `GraphGameplayLibrary` 노드 13종 확장
+
+- **요약**:
+  1. **`AnimatorGraphPanel` 2D Freeform 블렌드 트리 시각 편집기 (`blend2d-visual-editor`)**:
+     - `AnimatorGraphPanel.h/.cpp`, `Editor/Resources/Data/Localization/Editor.AnimatorGraph.csv`: `ImDrawList` 기반 2D 좌표 평면(자동 범위 확장, 드래그 중 범위 잠금, Undo 히스토리 연동), 우클릭/`Shift+드래그` 테스트 커서 실시간 가중치 원/퍼센트 시각화, 샘플 목록 CRUD(`Add Sample`, `Pos X/Y`, 리소스 피커, 삭제) 및 기존 2x2 격자 하위 호환 구현. 로캘 키 7종 추가.
+  2. **`GraphGameplayLibrary` 비주얼 스크립팅 노드 13종 확장 (`graph-nodes-extended`)**:
+     - `GraphGameplayLibrary.h/.cpp`: `DataTable` 5종(`LoadCsv`, `EqualsString`, `GetInt`, `GetFloat`, `GetBool`), `Combat` 4종(`TriggerHitstop`, `IsHitstopActive`, `TriggerCameraShake`, `IsCameraShakeActive`), `Quest` 4종(`Start`, `Advance`, `Fail`, `IsCompleted`) 노출.
+- **검증 상태**:
+  - 사용자 실환경에서 `GenerateLocalization`, `Engine`, `Editor`, `GraphReflectionCheck`, `GraphExecutionCheck` 빌드 완료 및 전체 CTest 통과 확인 완료.
+
 ### [2026-11-27] 에디터 사용자 C++ 플러그인 원클릭 빌드·게시·로드 파이프라인 구현
 
 - **요약**:
