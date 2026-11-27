@@ -9,3 +9,4 @@
 #include "ParticleEditorPanel.h"
 #include "VFXEditorPanel.h"
 #include "TerrainLayerEditor.h"
+#include "DataTableEditor.h"

@@ -1384,6 +1384,11 @@ void ContentBrowserPanel::GridViewContextMenu(const filesystem::path& path)
 				CreateEmptyParticleEffect(m_CurrentDirectory);
 			}
 
+			if (ImGui::MenuItem((ICON_FA_TABLE " " + LOCAL_LABEL("ContentBrowser.CreateDataTable")).c_str()))
+			{
+				CreateEmptyDataTable(m_CurrentDirectory);
+			}
+
 			ImGui::EndMenu();
 		}
 		ImGui::EndDisabled();
@@ -3836,6 +3841,28 @@ void ContentBrowserPanel::CreateEmptyTerrainLayer(const filesystem::path& path)
 	if (!saved)
 	{
 		EDITOR_LOG_WARN("Terrain layer creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		return;
+	}
+	RequestRefresh();
+	QueueCreatedAssetRename(outputPath);
+}
+
+void ContentBrowserPanel::CreateEmptyDataTable(const filesystem::path& path)
+{
+	if (!CanTransferTo(path))
+		return;
+	const filesystem::path outputPath = GenerateUniqueAssetPath(path, L"NewDataTable", L".csv");
+	std::ofstream file(outputPath, std::ios::out | std::ios::binary | std::ios::trunc);
+	if (!file.is_open())
+	{
+		EDITOR_LOG_WARN("Data table creation failed: could not open file {}", Engine::WStrToStr(outputPath.wstring()));
+		return;
+	}
+	file << "Id,Name,Value\r\n";
+	file.close();
+	if (!file)
+	{
+		EDITOR_LOG_WARN("Data table creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
 		return;
 	}
 	RequestRefresh();

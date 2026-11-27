@@ -102,6 +102,7 @@ ContentBrowser,RenameNameExists,This name is already in use. Enter another name.
 ContentBrowser,RenameInputHint,Enter: confirm name. Escape or click elsewhere: keep the original name. The extension is preserved.,Enter: 이름 확정. Escape 또는 다른 곳 클릭: 기존 이름 유지. 확장자는 유지됩니다.
 ContentBrowser,RenameImpactCount,Stored references to renamed assets: {},이름을 변경할 에셋을 가리키는 저장된 참조 {}건
 ContentBrowser,CreateTerrainLayer,Terrain Layer,지형 레이어
+ContentBrowser,CreateDataTable,Data Table (.csv),데이터 테이블 (.csv)
 ContentBrowser,ExternalMounts,External Mounts,외부 마운트
 ContentBrowser,MountExternalFolder,Mount External Folder...,외부 폴더 연결...
 ContentBrowser,MountName,Mount Name,마운트 이름

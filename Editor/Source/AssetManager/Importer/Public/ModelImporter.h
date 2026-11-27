@@ -96,6 +96,7 @@ struct ModelImportDesc
 
 	// Phase 6: Hybrid model asset subfolder organization
 	bool CreateModelSubfolder = true;
+	bool CopySourceToSubfolder = true;
 	bool UseMeshSubfolder = true;
 	bool UseMaterialSubfolder = true;
 	bool UseTextureSubfolder = true;

@@ -795,6 +795,9 @@ namespace Editor
 						if (m_Desc.CreateModelSubfolder)
 						{
 							ImGui::Indent();
+							ImGui::Checkbox(LOCAL_LABEL("ModelImportModal.CopySourceToSubfolder").c_str(), &m_Desc.CopySourceToSubfolder);
+							if (ImGui::IsItemHovered())
+								ImGui::SetTooltip("%s", LOCAL_CSTR("ModelImportModal.CopySourceToSubfolderTooltip"));
 							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderMeshes").c_str(), &m_Desc.UseMeshSubfolder);
 							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderMaterials").c_str(), &m_Desc.UseMaterialSubfolder);
 							ImGui::Checkbox(LOCAL_LABEL("ModelImport.SubfolderTextures").c_str(), &m_Desc.UseTextureSubfolder);

@@ -971,7 +971,8 @@ EResult ImGuiManager::CreateResourceEditors()
 		!initializeClosed(new PrefabEditorPanel()) ||
 		!initializeClosed(new ParticleEditorPanel()) ||
 		!initializeClosed(new VFXEditorPanel()) ||
-		!initializeClosed(new TerrainLayerEditor()))
+		!initializeClosed(new TerrainLayerEditor()) ||
+		!initializeClosed(new DataTableEditor()))
 		return EResult::Fail;
 
 	const auto catalog = Engine::PlatformPath::GetExecutableDirectory() / "EditorResourcePlugins.txt";

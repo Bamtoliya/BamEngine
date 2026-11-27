@@ -162,6 +162,7 @@ namespace Editor
 		ModelCreateDesc ModelDesc;
 		Engine::ModelSubfolderLayout Layout;
 		filesystem::path MeshDirectory;
+		filesystem::path SourceCopyDestination;
 		ResourceHandle<Material> BaseMaterial;
 		std::vector<PendingMesh> Meshes;
 		unordered_map<wstring, uint32> NameCounts;
@@ -777,6 +778,52 @@ namespace
 		return EResult::Success;
 	}
 
+	EResult CopySourceModelToSubfolder(const filesystem::path& sourcePath, const filesystem::path& destPath)
+	{
+		if (sourcePath.empty() || destPath.empty())
+			return EResult::InvalidArgument;
+
+		std::error_code ec;
+		const filesystem::path resolvedSource = Engine::PlatformPath::ResolveProjectRelative(sourcePath);
+		if (!filesystem::is_regular_file(resolvedSource, ec) || ec)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Source model file not found for copy: {}",
+				WStrToStr(resolvedSource.wstring()));
+			return EResult::Fail;
+		}
+
+		if (filesystem::exists(destPath, ec) && !ec)
+		{
+			std::error_code eqEc;
+			if (filesystem::equivalent(resolvedSource, destPath, eqEc) && !eqEc)
+				return EResult::Success;
+		}
+		else if (ec)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Failed to inspect source copy destination: path={}, error={}",
+				WStrToStr(destPath.wstring()), ec.message());
+			return EResult::Fail;
+		}
+
+		filesystem::create_directories(destPath.parent_path(), ec);
+		if (ec)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Failed to create Source directory: path={}, error={}",
+				WStrToStr(destPath.parent_path().wstring()), ec.message());
+			return EResult::Fail;
+		}
+
+		filesystem::copy_file(resolvedSource, destPath, filesystem::copy_options::overwrite_existing, ec);
+		if (ec)
+		{
+			BAM_LOG(Error, "Editor", "Asset", "Failed to copy source model to Source/: src={}, dst={}, error={}",
+				WStrToStr(resolvedSource.wstring()), WStrToStr(destPath.wstring()), ec.message());
+			return EResult::Fail;
+		}
+
+		return EResult::Success;
+	}
+
 	EResult CommitPreparedModel(ModelFinalizeState& state, const PreparedModelData& data, const filesystem::path& outputDir)
 	{
 		auto& manager = ResourceManager::Get();
@@ -1309,6 +1356,15 @@ namespace
 			}
 		}
 
+		if (settings.SaveToFile && !state.SourceCopyDestination.empty())
+		{
+			if (const EResult copyResult = CopySourceModelToSubfolder(data.SourcePath, state.SourceCopyDestination);
+				copyResult != EResult::Success)
+			{
+				return copyResult;
+			}
+		}
+
 		ModelOwner model(Model::Create(&modelDesc));
 		if (!model)
 		{
@@ -1348,7 +1404,8 @@ namespace
 		if (settings.SaveToFile)
 		{
 			const wstring sidecarStem = SanitizeFileName(data.SourcePath.stem().wstring());
-			const auto sidecarPath = outputDir / (sidecarStem + L".bamimport.json");
+			const auto sidecarPath = Engine::PlatformPath::ResolveProjectRelative(
+				outputDir / (sidecarStem + L".bamimport.json"));
 			ModelImporter::SaveImportOptions(sidecarPath, settings);
 
 			const auto bamImportDir = Engine::PlatformPath::ResolveProjectRelative(L".bam/import");
@@ -1573,9 +1630,23 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			desc.Path = desc.Key;
 			const auto& rotation = state.Settings.RotationOffset;
 			desc.PlacementEulerDegrees = vec3(rotation[0], rotation[1], rotation[2]);
-			const auto sourceUri = Engine::PlatformPath::ToVirtualUri(data.SourcePath);
-			if (Engine::PlatformPath::IsProjectUri(sourceUri))
-				desc.ImportSourceUri = sourceUri;
+			const bool copySourceToSubfolder = state.Settings.SaveToFile &&
+				state.Settings.CopySourceToSubfolder && state.Layout.UsesDedicatedModelFolder;
+			if (copySourceToSubfolder)
+			{
+				state.SourceCopyDestination = Engine::PlatformPath::ResolveProjectRelative(
+					state.Layout.RootDirectory / L"Source" / data.SourcePath.filename());
+				const auto copiedSourceUri = Engine::PlatformPath::ToVirtualUri(state.SourceCopyDestination);
+				if (Engine::PlatformPath::IsProjectUri(copiedSourceUri))
+					desc.ImportSourceUri = copiedSourceUri;
+			}
+
+			if (desc.ImportSourceUri.empty())
+			{
+				const auto sourceUri = Engine::PlatformPath::ToVirtualUri(data.SourcePath);
+				if (Engine::PlatformPath::IsProjectUri(sourceUri))
+					desc.ImportSourceUri = sourceUri;
+			}
 
 			if (const EResult result = ValidateImportOutput(manager, desc.Key, state.Settings.SaveToFile, state.Settings.Overwrite);
 				result != EResult::Success)
@@ -2173,6 +2244,7 @@ bool ModelImporter::SaveImportOptions(const std::filesystem::path& sidecarPath, 
 		ar.Write("LOD2Reduction", desc.LOD2Reduction);
 		ar.Write("TargetError", desc.TargetError);
 		ar.Write("CreateModelSubfolder", desc.CreateModelSubfolder);
+		ar.Write("CopySourceToSubfolder", desc.CopySourceToSubfolder);
 		ar.Write("UseMeshSubfolder", desc.UseMeshSubfolder);
 		ar.Write("UseMaterialSubfolder", desc.UseMaterialSubfolder);
 		ar.Write("UseTextureSubfolder", desc.UseTextureSubfolder);
@@ -2261,6 +2333,7 @@ bool ModelImporter::LoadImportOptions(const std::filesystem::path& sidecarPath, 
 		if (ar.Read("TargetError", error)) outDesc.TargetError = error;
 
 		if (ar.Read("CreateModelSubfolder", bVal)) outDesc.CreateModelSubfolder = bVal;
+		if (ar.Read("CopySourceToSubfolder", bVal)) outDesc.CopySourceToSubfolder = bVal;
 		if (ar.Read("UseMeshSubfolder", bVal)) outDesc.UseMeshSubfolder = bVal;
 		if (ar.Read("UseMaterialSubfolder", bVal)) outDesc.UseMaterialSubfolder = bVal;
 		if (ar.Read("UseTextureSubfolder", bVal)) outDesc.UseTextureSubfolder = bVal;
@@ -2288,6 +2361,8 @@ std::filesystem::path ModelImporter::ResolveSidecarPath(const std::filesystem::p
 		candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(destDir / stem / (stem + L".bamimport.json")));
 	}
 	candidates.push_back(modelOrSourcePath.parent_path() / (stem + L".bamimport.json"));
+	if (_wcsicmp(modelOrSourcePath.parent_path().filename().c_str(), L"Source") == 0)
+		candidates.push_back(modelOrSourcePath.parent_path().parent_path() / (stem + L".bamimport.json"));
 	candidates.push_back(Engine::PlatformPath::ResolveProjectRelative(std::filesystem::path(".bam/import") / (stem + L".bamimport.json")));
 
 	for (const auto& cand : candidates)

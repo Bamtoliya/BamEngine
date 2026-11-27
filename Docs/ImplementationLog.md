@@ -2,6 +2,39 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 신규 기능 4건 구현 (`DataTableEditor`, `UITween`/`UIProjection` 노드, `Camera2DRoomComponent`, BGM 크로스페이드 테스트 UI)
+
+- **요약**:
+  1. **에디터 `DataTable` CSV 뷰어·편집기 및 에디터 통합 (`datatable-editor`, `datatable-editor-wire`)**:
+     - `Engine/Source/Gameplay/Public/DataTable.h`, `Private/DataTable.cpp`: `GetCell`, `SetCell`, `AddEmptyRow`, `RemoveRow`, `SaveToCsvFile`(RFC 4180 이스케이프 저장) 추가.
+     - `Editor/Source/ImGui/ResourceEditor/Public/DataTableEditor.h`, `Private/DataTableEditor.cpp`, `ResourceEditors.h`, `ImGuiManager.cpp`: `ResourceEditorInterface` 파생 CSV 표 편집기 구현 및 `ImGuiManager` 정식 등록(미저장 확인·`.csv` 더블클릭 열기 연동).
+     - `ContentBrowserPanel.h/.cpp`, `Editor/Resources/Data/Localization/Editor.ContentBrowser.csv`: 우클릭 `만들기` → `데이터 테이블 (.csv)` (`NewDataTable.csv` 생성·리네임 큐) 추가.
+  2. **`UITween` · `UIProjection` 비주얼 스크립팅 노드 6종 (`ui-graph-nodes`)**:
+     - `Engine/Source/Graph/Libraries/Public/GraphGameplayLibrary.h`, `Private/GraphGameplayLibrary.cpp`: `UI.PunchScale`, `UI.FadeAlpha`, `UI.MoveOffset`, `UI.StopTweens`, `UI.WorldToScreen`, `UI.IsWorldPointInFront` 추가(`std::array<float, 2/3>` 핀 규약 준수).
+  3. **`Camera2DRoomComponent` & `CameraSystem` 자동 클램핑 (`camera2d-room-bounds`)**:
+     - `Engine/Source/Camera/Public/Camera2DRoomComponent.h`, `Private/CameraSystem.cpp`: 직교 카메라 `Camera2DRoomComponent`(`Enable`, `roomMin`, `roomMax`) 추가 및 `CameraSystem::UpdateCamera` 자동 클램핑 연동.
+  4. **오디오 믹서 BGM 크로스페이드 테스트 UI (`audio-mixer-crossfade`)**:
+     - `Editor/Source/ImGui/SettingsPanel/Public/SettingsPanel.h`, `Private/SettingsPanel.cpp`, `Editor/Resources/Data/Localization/Editor.Settings.csv`: `AudioMixerSettingsWidget` 하단에 `AudioClip` 피커·페이드 시간/볼륨 슬라이더·`[Crossfade BGM]`/`[Stop BGM]`·상태 표시 UI 및 로캘 키 10종 추가.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`GenerateLocalization`, `Engine`, `Editor`, `GraphReflectionCheck`, `GraphExecutionCheck`, `GameplayCommonCheck`) 및 CTest 실행 대기.
+
+### [2026-11-27] 하이브리드 모델 에셋 정리 파이프라인 (Phase 6) `Source/` 원본 보관 자동화 구현
+
+- **요약**:
+  - `Editor/Source/AssetManager/Importer/Public/ModelImporter.h`, `Private/ModelImporter.cpp`: `ModelImportDesc::CopySourceToSubfolder`(기본 `true`, `.bamimport.json` 하위 호환) 추가. `CreateModelSubfolder` 활성 시 `<ModelName>/Source/`로 원본 모델 자동 복사(`filesystem::equivalent` 동일 경로 스킵), `ImportSourceUri`에 `Source/` 기준 가상 URI 기록, `ResolveSidecarPath`에서 `Source/` 상위 모델 폴더 사이드카 탐색 보강.
+  - `Editor/Source/AssetManager/Importer/Private/ModelImportModal.cpp`, `Editor/Resources/Data/Localization/Editor.ModelImportModal.csv`: `FolderOrganization` 섹션에 `CopySourceToSubfolder` 체크박스·툴팁 및 로캘 키 2종 추가.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`GenerateLocalization`, `Editor`) 및 실환경 모델 임포트/재임포트 확인 대기.
+
+### [2026-11-27] `GraphGameplayLibrary` `Hitstop` / `CameraShake` 런타임 자동 틱 연동
+
+- **요약**:
+  - `GraphGameplayLibrary.h/.cpp`: `UpdateCombatEffects(float unscaledDt)`, `GetCameraShakePositionOffset()`, `GetCameraShakeRotationOffsetDeg()` 추가.
+  - `Runtime.cpp`: `Runtime::Update`에서 매 프레임 `UpdateCombatEffects(dt)`를 호출해 반환된 `hitstopScale`을 `systems.Update(..., dt * hitstopScale, ...)`에 적용(비활성 시 `1.0f` 유지).
+  - `CameraSystem.cpp`: `UpdateCamera`에서 `IsCameraShakeActive()`일 때 카메라 로컬 Right/Up/Forward 축 위치 오프셋 및 `glm::yawPitchRoll` 회전 오프셋을 자동 합성.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `GraphExecutionCheck`, `GameplayCommonCheck`) 및 CTest 실행 대기.
+
 ### [2026-11-27] `AnimatorGraphPanel` 2D Freeform 블렌드 트리 시각 편집기 및 `GraphGameplayLibrary` 노드 13종 확장
 
 - **요약**:

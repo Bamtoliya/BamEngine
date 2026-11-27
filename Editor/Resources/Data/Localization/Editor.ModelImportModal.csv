@@ -9,3 +9,5 @@ ModelImportModal,QuickPresetBlender,Blender,Blender
 ModelImportModal,QuickPresetUnreal,Unreal (cm->m),Unreal (cm->m)
 ModelImportModal,QuickPresetUnity,Unity / Mixamo,Unity / Mixamo
 ModelImportModal,PitchPlus90,Pitch +90°,상하 +90° (Pitch +90°)
+ModelImportModal,CopySourceToSubfolder,Keep Source Copy in Source/ Subfolder,원본 파일을 Source/ 하위 폴더에 보관
+ModelImportModal,CopySourceToSubfolderTooltip,Copy the external source model file into <ModelName>/Source/ and track it for reimport,외부 원본 모델 파일을 <ModelName>/Source/로 복사하고 재임포트용 원본 경로로 추적합니다

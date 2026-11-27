@@ -267,6 +267,7 @@ private:
 	void CreateEmptyTimeline(const filesystem::path& path);
 	void CreateEmptyTerrainLayer(const filesystem::path& path);
 	void CreateEmptyParticleEffect(const filesystem::path& path);
+	void CreateEmptyDataTable(const filesystem::path& path);
 #pragma endregion
 
 #pragma region Workspace Settings

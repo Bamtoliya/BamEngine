@@ -1,6 +1,8 @@
 #include "SettingsPanel.h"
 #include "AudioManager.h"
+#include "AudioClip.h"
 #include "EditorUI.h"
+#include "ResourcePicker.h"
 #include "NotificationManager.h"
 #include "LocalizationManager.h"
 #include <filesystem>
@@ -227,6 +229,52 @@ void AudioMixerSettingsWidget::Draw()
 
         ImGui::Spacing();
         ImGui::TextDisabled("%s", LOCAL_FMT("AudioPreview.ConfigFileLabel", configPath.generic_string()).c_str());
+    }
+
+    // BGM Crossfade Test
+    if (ImGui::CollapsingHeader(LOCAL_LABEL("Settings.AudioCrossfadeTitle").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(LOCAL_CSTR("Settings.AudioCrossfadeTargetClip"));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        Editor::DrawInspectorResourcePicker(m_TestBGMClip, true, true);
+
+        ImGui::SliderFloat(LOCAL_LABEL("Settings.AudioCrossfadeFadeDuration").c_str(), &m_TestCrossfadeDuration, 0.0f, 5.0f, "%.2fs");
+        ImGui::SliderFloat(LOCAL_LABEL("Settings.AudioCrossfadeVolume").c_str(), &m_TestBGMVolume, 0.0f, 1.0f, "%.2f");
+
+        const bool canCrossfade = (m_TestBGMClip.IsValid() && m_TestBGMClip.Get() != nullptr && m_TestBGMClip->GetFMODSound() != nullptr);
+        ImGui::BeginDisabled(!canCrossfade);
+        if (EditorUI::TextButton("AudioCrossfadeStart", "Settings.AudioCrossfadeStart"))
+        {
+            audioMgr.CrossfadeBGM(m_TestBGMClip->GetFMODSound(), m_TestCrossfadeDuration, m_TestBGMVolume, true);
+        }
+        ImGui::EndDisabled();
+
+        EditorUI::TextButtonOptions stopOpt;
+        stopOpt.SameLine = true;
+        if (EditorUI::TextButton("AudioCrossfadeStop", "Settings.AudioCrossfadeStop", stopOpt))
+        {
+            audioMgr.StopBGM();
+        }
+
+        ImGui::SameLine();
+        const char* statusKey = "Settings.AudioCrossfadeStatusStopped";
+        ImVec4 statusColor(0.6f, 0.6f, 0.6f, 1.0f);
+        if (audioMgr.IsCrossfading())
+        {
+            statusKey = "Settings.AudioCrossfadeStatusCrossfading";
+            statusColor = ImVec4(0.95f, 0.75f, 0.25f, 1.0f);
+        }
+        else if (audioMgr.IsBGMPlaying())
+        {
+            statusKey = "Settings.AudioCrossfadeStatusPlaying";
+            statusColor = ImVec4(0.35f, 0.85f, 0.45f, 1.0f);
+        }
+        ImGui::AlignTextToFramePadding();
+        ImGui::Text("%s:", LOCAL_CSTR("Settings.AudioCrossfadeStatus"));
+        ImGui::SameLine();
+        ImGui::TextColored(statusColor, "%s", LOCAL_CSTR(statusKey));
     }
 }
 
