@@ -2,6 +2,23 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 비균일 스케일 Box-Sphere 충돌 수정 · SpringArm 데드존 · 에디터 PIE/종료 안정화 · Glass 알파 반영
+
+- **요약**:
+  1. **비균일 스케일 Box vs Sphere 3D 충돌 버그 수정 (`PhysicsSystem.cpp`)**:
+     - `PhysicsSystem::Overlap3D`의 `boxA && sphereB` 경로가 구 반지름을 박스의 X축 스케일(`length(worldA[0])`)로만 나누던 문제를 수정.
+     - 박스의 3축 스케일(`sx, sy, sz`)과 정규직교 기저(`axisX, axisY, axisZ`)를 분리해 월드 반크기(`halfExtents`)와 원래 구 반지름(`worldRadius`)으로 충돌 지점·법선·침투 깊이를 정확히 계산.
+  2. **카메라 지연 데드존 및 상대 지터 제거 (`SpringArmComponent.h`, `SpringArmSystem.cpp`, `TimeManager.h`)**:
+     - `SpringArmComponent::CameraLagDeadZone`(기본 `0.04f`) 추가 및 단독 카메라 속도 외삽 제거로 60Hz 물리 이동 시 미세 떨림 완화.
+     - `TimeManager::GetFixedAccumulator()` 접근자 추가.
+  3. **에디터 종료 및 PIE 중 핫리로드 안정화 (`Application.cpp`)**:
+     - `Application::Free()`에서 `SceneManager::Destroy()`를 `HotReloadManager::Destroy()`보다 먼저 호출해 DLL 언로드 전 `entt::registry` 스토리지 풀 안전 해제.
+     - PIE 실행 중(`!PIEManager::Get().IsEditing()`)에는 `HotReloadManager::Update()` 지연 처리.
+  4. **반투명 Glass 셰이더 알파 반영 (`glassPS.hlsl`)**:
+     - 출력 알파를 `1.0f` 고정에서 `gMaterial.baseColor.a` 기반으로 변경해 내부 오브젝트(눈·기포 등) 투과 표현 지원.
+- **검증 상태**:
+  - `PhysicsSystem.cpp` 비균일 스케일 Box-Sphere 수정 및 `ProjectSlime` 북쪽 벽(`scale=[24,8,1]`) 충돌 정상화 확인 대기(엔진 리빌드 후 검증).
+
 ### [2026-11-27] 프로젝트 감사 보통 항목 일괄 수정 (핫패스 스크래치 버퍼 · 콘텐츠 브라우저 I/O·입력 · 로캘 정리)
 
 - **요약**:

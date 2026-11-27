@@ -32,6 +32,7 @@ public:
 	f32		GetDeltaTime()		const { return m_DeltaTime; }
 	f64		GetTotalTime()		const { return m_TotalTime; }
 	f32 	GetFixedStep()		const { return m_FixedStep; }
+	f32 	GetFixedAccumulator() const { return static_cast<f32>(m_AccTime); }
 	uint32	GetTargetFPS()		const { return m_TargetFPS; }
 	uint32	GetFPS()			const { return m_FPS; }
 #pragma endregion

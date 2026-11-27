@@ -2,6 +2,8 @@
 #include "ComponentEnable.h"
 #include "Scene.h"
 #include "PhysicsSystem.h"
+#include "RigidBodyComponent.h"
+#include "TimeManager.h"
 #include "TransformSystem.h"
 #include "SpringArmComponent.h"
 #include "CameraComponent.h"
@@ -171,12 +173,20 @@ namespace Engine
             const vec3 socketOffsetWorld = armRot * arm.SocketOffset;
             const vec3 desiredPos = targetWorldPos + armDir * arm.CurrentArmLength + socketOffsetWorld;
 
-            // 5. 카메라 지연 (Camera Lag) 보간 (프레임률 독립 지수 감쇠)
+            // 5. 카메라 지연 (Camera Lag) 보간 (프레임률 독립 지수 감쇠 + 데드존)
             vec3 finalCameraPos = desiredPos;
             if (arm.EnableCameraLag && arm.IsInitialized)
             {
-                const f32 lagBlend = 1.0f - std::exp(-std::max(arm.CameraLagSpeed, 0.0f) * dt);
-                arm.PreviousDesiredPosition = glm::mix(arm.PreviousDesiredPosition, desiredPos, lagBlend);
+                const vec3 delta = desiredPos - arm.PreviousDesiredPosition;
+                const f32 dist = glm::length(delta);
+                const f32 deadZone = std::max(arm.CameraLagDeadZone, 0.0f);
+                if (dist > deadZone && dist > 1.0e-5f)
+                {
+                    // 데드존 경계까지만 부드럽게 추적해 미세 떨림 구간에서는 완전히 정지
+                    const vec3 targetWithinZone = desiredPos - (delta / dist) * deadZone;
+                    const f32 lagBlend = 1.0f - std::exp(-std::max(arm.CameraLagSpeed, 0.0f) * dt);
+                    arm.PreviousDesiredPosition = glm::mix(arm.PreviousDesiredPosition, targetWithinZone, lagBlend);
+                }
                 finalCameraPos = arm.PreviousDesiredPosition;
             }
             else

@@ -44,6 +44,10 @@ namespace Engine
         PROPERTY(EDITABLE, RANGE(0.1, 50.0), DISPLAY_NAME("PROP_CAMERA_LAG_SPEED"), EDITCONDITION(EnableCameraLag))
             f32 CameraLagSpeed = 12.0f;
 
+        // 목표 위치와의 거리가 이 반경(m) 이내면 카메라를 움직이지 않아 미세 떨림 억제
+        PROPERTY(EDITABLE, ALLOW_MISSING, RANGE(0.0, 2.0), DISPLAY_NAME("PROP_CAMERA_LAG_DEADZONE"), EDITCONDITION(EnableCameraLag))
+            f32 CameraLagDeadZone = 0.04f;
+
         // 장애물 해제 시 카메라 암 길이 복귀 보간 속도
         PROPERTY(EDITABLE, RANGE(1.0, 50.0), DISPLAY_NAME("PROP_ZOOM_LAG_SPEED"), ALLOW_MISSING)
             f32 ZoomLagSpeed = 12.0f;

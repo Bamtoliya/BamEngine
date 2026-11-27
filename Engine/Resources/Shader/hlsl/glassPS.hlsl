@@ -89,5 +89,6 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 rimHighlight = float3(1.0f, 1.0f, 1.0f) * 0.35f;
     float3 finalColor = glassColor + rimHighlight * fresnel;
 
-    return float4(finalColor, 1.0f);
+    float outAlpha = (gMaterial.baseColor.a > 0.001f) ? saturate(gMaterial.baseColor.a) : 1.0f;
+    return float4(finalColor, outAlpha);
 }

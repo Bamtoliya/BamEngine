@@ -267,14 +267,10 @@ void Application::Free()
     if (ProjectSessionManager::IsCreated())
         ProjectSessionManager::Destroy();
 
-    // 게임 모듈 DLL 언로드(HotReloadManager::Destroy) 전에 모든 씬의 엔티티/동적 컴포넌트 스토리지를 먼저 정리한다.
+    // 게임 모듈 DLL 언로드(HotReloadManager::Destroy) 전에 SceneManager 자체를 파괴해
+    // entt::registry 내부의 동적 컴포넌트 스토리지(storage<T>) 소멸자가 DLL이 살아있을 때 실행되도록 보장한다.
     if (SceneManager::IsCreated())
-    {
-        for (auto* scene : SceneManager::Get().GetActiveScenes())
-        {
-            if (scene) scene->ClearEntities();
-        }
-    }
+        SceneManager::Destroy();
 
     HotReloadManager::Destroy();
 
@@ -811,7 +807,9 @@ void Application::Run(int argc, char* argv[])
         InputManager::Get().Update(dt);
         ImGuiManager::Get().Update(dt);
         AssetManager::Get().Update(dt);
-        HotReloadManager::Get().Update();
+        // PIE 실행 중에는 DLL 언로드로 인한 Scene/PickingManager 크래시를 막기 위해 자동 핫리로드를 보류한다.
+        if (!PIEManager::IsCreated() || PIEManager::Get().IsEditing())
+            HotReloadManager::Get().Update();
         NotificationManager::Get().Update(dt);
         if (RecoveryManager::IsCreated())
             RecoveryManager::Get().Update(dt);

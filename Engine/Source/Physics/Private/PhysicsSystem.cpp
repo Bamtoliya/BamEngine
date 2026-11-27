@@ -1777,16 +1777,29 @@ bool PhysicsSystem::Overlap3D(const Scene& scene, entt::entity entityA, entt::en
         if (boxA && sphereB)
         {
             const f32 scaleB = glm::max(glm::max(glm::length(vec3(worldB[0])), glm::length(vec3(worldB[1]))), glm::length(vec3(worldB[2])));
-            const mat4 invA = glm::inverse(worldA);
-            const vec3 localSphereCenter = vec3(invA * vec4(vec3(worldB[3]), 1.0f));
-            const f32 scaleA = glm::length(vec3(worldA[0]));
-            const f32 localRadius = scaleA > 1.0e-6f ? (sphereB->Radius * scaleB) / scaleA : sphereB->Radius * scaleB;
-            HitResult localHit{};
-            if (!Collision::Intersects(BoundingBox(-boxA->Size * 0.5f, boxA->Size * 0.5f), BoundingSphere(localSphereCenter, localRadius), localHit))
+            const f32 sx = glm::length(vec3(worldA[0]));
+            const f32 sy = glm::length(vec3(worldA[1]));
+            const f32 sz = glm::length(vec3(worldA[2]));
+            if (sx <= 1.0e-6f || sy <= 1.0e-6f || sz <= 1.0e-6f)
                 return false;
-            outHitResult.point = vec3(worldA * vec4(localHit.point, 1.0f));
-            outHitResult.normal = glm::normalize(mat3(worldA) * localHit.normal);
-            outHitResult.denetrationDepth = localHit.denetrationDepth * scaleA;
+
+            const vec3 axisX = vec3(worldA[0]) / sx;
+            const vec3 axisY = vec3(worldA[1]) / sy;
+            const vec3 axisZ = vec3(worldA[2]) / sz;
+            const vec3 boxCenter = vec3(worldA[3]);
+            const vec3 halfExtents = (boxA->Size * 0.5f) * vec3(sx, sy, sz);
+
+            const vec3 rel = vec3(worldB[3]) - boxCenter;
+            const vec3 localSphereCenter(glm::dot(rel, axisX), glm::dot(rel, axisY), glm::dot(rel, axisZ));
+            const f32 worldRadius = sphereB->Radius * scaleB;
+
+            HitResult localHit{};
+            if (!Collision::Intersects(BoundingBox(-halfExtents, halfExtents), BoundingSphere(localSphereCenter, worldRadius), localHit))
+                return false;
+
+            outHitResult.point = boxCenter + axisX * localHit.point.x + axisY * localHit.point.y + axisZ * localHit.point.z;
+            outHitResult.normal = glm::normalize(axisX * localHit.normal.x + axisY * localHit.normal.y + axisZ * localHit.normal.z);
+            outHitResult.denetrationDepth = localHit.denetrationDepth;
             outHitResult.hasHit = true;
             return true;
         }
