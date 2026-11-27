@@ -2,6 +2,16 @@
 #include "PIEManager.h"
 #include "Functions.h"
 #include "ResourcePreloader.h"
+#include "PrefabModeManager.h"
+
+namespace
+{
+    // 프리팹 모드는 메인 씬을 따로 보관하므로 언로드 전에 정리할 수 없다. 모드를 나간 뒤 리로드한다.
+    bool IsPrefabModeOpen()
+    {
+        return PrefabModeManager::IsCreated() && PrefabModeManager::Get().IsInPrefabMode();
+    }
+}
 
 // efsw 파일 이벤트 리스너
 class ModuleHotReloadFileListener final : public efsw::FileWatchListener
@@ -73,7 +83,7 @@ void ModuleHotReloadManager::Update()
     if (m_State == EHotReloadState::Reloading)
         return;
     // 작업 스레드가 리플렉션 등록 정보를 읽는 동안에는 모듈을 바꾸지 않고 다음 프레임에 다시 확인한다.
-    if (Engine::ResourcePreloader::IsAnyActive())
+    if (Engine::ResourcePreloader::IsAnyActive() || IsPrefabModeOpen())
         return;
 
     const auto readyFiles = CollectReadyFiles(std::chrono::milliseconds(250));
@@ -311,6 +321,11 @@ EResult ModuleHotReloadManager::ReloadModule()
     if (Engine::ResourcePreloader::IsAnyActive())
     {
         EDITOR_LOG_WARN("[HotReload] Module reload is blocked while scene resources are loading.");
+        return EResult::Fail;
+    }
+    if (IsPrefabModeOpen())
+    {
+        EDITOR_LOG_WARN("[HotReload] Module reload is blocked while Prefab Mode is open. Exit Prefab Mode to reload.");
         return EResult::Fail;
     }
 

@@ -7,6 +7,10 @@
 #include <reflection/Registry.h>
 #include "EditorEditContext.h"
 #include "EditorDocumentManager.h"
+#include "TerrainDataFile.h"
+#include <memory>
+
+namespace archive { class JsonArchive; }
 
 BEGIN(Editor)
 class SceneDocument;
@@ -25,7 +29,7 @@ class Application final : public Base
 #pragma region Constructor&Destructor
 private:
 	Application() {}
-	virtual ~Application() = default;
+	virtual ~Application();
 	EResult Initialize(void* arg);
 public:
 	void Free() override;
@@ -84,6 +88,12 @@ public:
 	void CompleteQuitRequest() { m_QuitApproved = true; }
 #pragma endregion
 
+#pragma region Module Hot Reload
+private:
+	void ReleaseSceneForModuleUnload();
+	void RestoreSceneAfterModuleReload();
+#pragma endregion
+
 #pragma region Loop
 public:
 	void Run(int argc, char* argv[]);
@@ -105,6 +115,13 @@ private:
 	EditorDocumentManager m_Documents;
 	EditorDocumentId m_SceneDocumentId = InvalidEditorDocumentId;
 	bool m_QuitApproved = false;
+private:
+	// 게임 모듈 핫 리로드 동안 보관하는 편집 씬(저장하지 않은 편집 포함). 새 모듈 로드 후 복원하고 비운다.
+	std::unique_ptr<archive::JsonArchive> m_ModuleReloadScene;
+	Engine::TerrainDataFile::MemorySnapshot m_ModuleReloadTerrain;
+	std::filesystem::path m_ModuleReloadScenePath;
+	std::filesystem::path m_ModuleReloadProjectRoot;
+	bool m_ModuleReloadSceneModified = false;
 private:
 	bool m_SDLInitialized = false;
 	bool m_LoggerInitialized = false;

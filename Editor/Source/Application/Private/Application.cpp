@@ -27,6 +27,7 @@
 #include "HotReloadManager.h"
 #include "InspectorPanel.h"
 #include "ModuleHotReloadManager.h"
+#include "PickingManager.h"
 #include "ProjectSessionManager.h"
 #include "TerrainComponent.h"
 #include "NotificationManager.h"
@@ -167,20 +168,15 @@ EResult Application::Initialize(void* arg)
 
     if (HotReloadManager::IsCreated())
     {
-        HotReloadManager::Get().GetModuleReloader().RegisterPreUnloadCallback([]()
+        HotReloadManager::Get().GetModuleReloader().RegisterPreUnloadCallback([this]()
             {
-                if (ImGuiManager::IsCreated())
-                {
-                    if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"Inspector"))
-                    {
-                        if (auto* inspector = dynamic_cast<InspectorPanel*>(panel))
-                            inspector->ClearCachedSnapshot();
-                    }
-                }
+                ReleaseSceneForModuleUnload();
             });
 
-        HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback([]()
+        // 시작·프로젝트 전환의 모듈 로드도 이 콜백을 부른다. 씬은 실제 핫 리로드에서 보관한 스냅샷이 있을 때만 복원한다.
+        HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback([this]()
             {
+                RestoreSceneAfterModuleReload();
                 if (auto* graphSystem = SystemManager::Get().GetSystem<GraphSystem>())
                 {
                     graphSystem->ReloadReflectedNodes(SceneManager::Get().GetActiveScenes());
@@ -267,8 +263,10 @@ void Application::Free()
     if (ProjectSessionManager::IsCreated())
         ProjectSessionManager::Destroy();
 
-    // 게임 모듈 DLL 언로드(HotReloadManager::Destroy) 전에 SceneManager 자체를 파괴해
+    // 게임 모듈 DLL 언로드(HotReloadManager::Destroy) 전에 PickingManager/SceneManager를 먼저 정리해
     // entt::registry 내부의 동적 컴포넌트 스토리지(storage<T>) 소멸자가 DLL이 살아있을 때 실행되도록 보장한다.
+    if (PickingManager::IsCreated())
+        PickingManager::Get().ClearState();
     if (SceneManager::IsCreated())
         SceneManager::Destroy();
 
@@ -1143,6 +1141,108 @@ void Application::AdoptSceneDocument(const std::filesystem::path& path, bool rem
     if (rememberScene)
         RememberEditedScene(path);
 }
+
+Application::~Application() = default;
+
+#pragma region Module Hot Reload
+// DLL 언로드 전에 게임 모듈 컴포넌트 storage<T>를 가진 씬을 완전히 파괴한다. SceneDocument·편집 이력 등
+// 참조가 하나라도 남으면 언로드 후 registry 정리에서 해제된 DLL의 vtable을 호출해 크래시가 난다.
+void Application::ReleaseSceneForModuleUnload()
+{
+    if (!SceneManager::IsCreated())
+        return; // 종료 경로: Free()가 문서와 SceneManager를 이미 정리했다.
+
+    if (PIEManager::IsCreated() && !PIEManager::Get().IsEditing())
+    {
+        BAM_LOG(Warn, "Editor", "HotReload", "Stopping Play-In-Editor before the game module is unloaded.");
+        PIEManager::Get().Stop();
+        if (!PIEManager::Get().IsEditing())
+            PIEManager::Get().ForceStopForShutdown();
+    }
+
+    // 프로젝트 전환·종료의 언로드는 씬을 이어 쓰지 않으므로 실제 핫 리로드일 때만 보관한다.
+    const auto* scene = SceneManager::Get().GetCurrentScene();
+    const bool reloading = HotReloadManager::Get().GetModuleReloader().GetState() == EHotReloadState::Reloading;
+    if (reloading && scene && !m_ModuleReloadScene)
+    {
+        auto snapshot = std::make_unique<archive::JsonArchive>();
+        const auto written = scene->WriteArchive(*snapshot);
+        if (written)
+        {
+            const auto* document = GetSceneDocument();
+            m_ModuleReloadScene = std::move(snapshot);
+            m_ModuleReloadTerrain = Engine::TerrainDataFile::CaptureMemory(scene->GetRegistry());
+            m_ModuleReloadScenePath = document ? document->GetPath() : std::filesystem::path{};
+            m_ModuleReloadProjectRoot = EditorSettingsService::Get().GetProjectRoot();
+            m_ModuleReloadSceneModified = GetEditHistory().HasUnsavedChanges();
+        }
+        else
+        {
+            BAM_LOG(Error, "Editor", "HotReload", "Scene snapshot failed before module unload; unsaved edits are lost: code={}, field={}",
+                static_cast<int32>(written.Code), written.Field);
+        }
+    }
+
+    if (SelectionManager::IsCreated())
+        SelectionManager::Get().ClearSelection(true);
+    if (PickingManager::IsCreated())
+        PickingManager::Get().ClearState();
+    if (ImGuiManager::IsCreated())
+    {
+        if (auto* inspector = dynamic_cast<InspectorPanel*>(ImGuiManager::Get().GetImGuiPanel(L"Inspector")))
+            inspector->ClearCachedSnapshot();
+    }
+
+    // NewScene만으로는 SceneDocument와 편집 이력 스냅샷이 쥔 참조가 남는다. 문서 교체가 둘 다 놓아 이전 씬을 파괴한다.
+    SceneManager::Get().UnloadAllAdditiveScenes();
+    SceneManager::Get().NewScene();
+    AdoptSceneDocument({}, false);
+
+    // 이번 프레임 뷰포트 Update가 이미 제출한 렌더 명령·레이트레이싱 요청은 파괴된 Scene*를 캡처하고 있다.
+    // Render에서 실행되기 전에 비운다(프로젝트 전환의 UnloadSceneAndProjectResources와 같은 처리).
+    if (Renderer::IsCreated())
+        Renderer::Get().ClearAllRenderQueues();
+}
+
+void Application::RestoreSceneAfterModuleReload()
+{
+    if (!m_ModuleReloadScene || !HotReloadManager::Get().GetModuleReloader().IsLoaded())
+        return;
+
+    // 다른 프로젝트의 모듈이 로드되었다면 이전 프로젝트 씬을 되살리지 않는다.
+    if (m_ModuleReloadProjectRoot != EditorSettingsService::Get().GetProjectRoot())
+    {
+        m_ModuleReloadScene.reset();
+        m_ModuleReloadTerrain = {};
+        return;
+    }
+
+    Engine::Scene* restored = nullptr;
+    const auto created = Engine::Scene::CreateFromArchive(*m_ModuleReloadScene, restored);
+    if (!created || !restored)
+    {
+        Safe_Release(restored);
+        BAM_LOG(Error, "Editor", "HotReload", "Scene restore failed after module reload: code={}, field={}",
+            static_cast<int32>(created.Code), created.Field);
+        return;
+    }
+
+    Engine::TerrainDataFile::RestoreMemory(restored->GetRegistry(), std::move(m_ModuleReloadTerrain));
+    m_ModuleReloadTerrain = {};
+    const auto opened = SceneManager::Get().OpenScene(restored);
+    Safe_Release(restored);
+    if (opened != EResult::Success)
+    {
+        BAM_LOG(Error, "Editor", "HotReload", "Cannot open the restored scene after module reload: {}", ResultToString(opened));
+        return;
+    }
+
+    m_ModuleReloadScene.reset();
+    AdoptSceneDocument(m_ModuleReloadScenePath, false);
+    if (m_ModuleReloadSceneModified)
+        GetEditHistory().NotifyUntrackedChange();
+}
+#pragma endregion
 
 void Application::RebindSceneDocumentAfterPlay()
 {
