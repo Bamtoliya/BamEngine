@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "instanceData.hlsli"
 
 struct VS_INPUT
 {
@@ -20,14 +21,6 @@ struct VS_OUTPUT
     float4 Color : COLOR0;
     nointerpolation float PickingId : TEXCOORD5;
 };
-
-struct InstanceData
-{
-    float4x4 WorldMatrix;
-    float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
 
 // 거스트너 파도 단일 파동 평가 함수 (Trochoidal Gerstner Wave)
 void EvaluateGerstnerWave(

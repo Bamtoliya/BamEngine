@@ -1,17 +1,10 @@
 #include "common.hlsli"
+#include "instanceData.hlsli"
 
 struct VS_INPUT
 {
     float3 Position : POSITION;
 };
-
-struct InstanceData
-{
-    float4x4 WorldMatrix;
-    float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
 
 float4 main(VS_INPUT input, uint instanceId : SV_InstanceID) : SV_POSITION
 {

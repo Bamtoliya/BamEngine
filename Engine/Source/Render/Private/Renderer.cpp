@@ -743,7 +743,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 			}
 
 			const uint32 instanceCount = static_cast<uint32>(instanceBatch.size());
-			if (IsFailure(m_RHI->BindInstanceBuffer(instanceBatch.data(), instanceCount)))
+			if (IsFailure(m_RHI->BindInstanceBuffer(instanceBatch.data(), instanceCount, sizeof(InstanceData))))
 				return EResult::Fail;
 
 			const EResult result = batchMesh->GetIndexBuffer()
@@ -864,7 +864,8 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 				InstanceData inst{};
 				inst.worldMatrix = command.worldMatrix;
 				inst.pickingData = vec4(static_cast<float>(command.pickingId), command.receiveDecals ? 0.f : 1.f, 0.f, 0.f);
-				if (IsFailure(m_RHI->BindInstanceBuffer(&inst, 1)))
+				inst.customData = command.customData;
+				if (IsFailure(m_RHI->BindInstanceBuffer(&inst, 1, sizeof(InstanceData))))
 					return EResult::Fail;
 				result = mesh->GetIndexBuffer()
 					? m_RHI->DrawIndexedInstanced(mesh->GetIndexCount(), 1)
@@ -941,6 +942,7 @@ EResult Renderer::RenderMeshes(const vector<StaticDrawCommand>& commands, Render
 		inst.worldMatrix = command.worldMatrix;
 		inst.pickingData.x = static_cast<float>(command.pickingId);
 		inst.pickingData.y = command.receiveDecals ? 0.0f : 1.0f;
+		inst.customData = command.customData;
 		instanceBatch.push_back(inst);
 	}
 

@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "shading_flags.hlsli"
 
 struct PS_INPUT
 {
@@ -28,6 +29,9 @@ ConstantBuffer<MaterialConstants> gMaterial : register(b0, space3);
 // Pass Texture: SceneColorCopy (Space 3, t0 / RHI Slot 16)
 Texture2D g_SceneColor : register(t0, space3);
 SamplerState g_SceneColorSampler : register(s0, space3);
+
+// Material Texture: Diffuse (Space 1, t0) - 알파 마스크로만 사용 (점액 흔적 등 블롭 모양 반투명 표현)
+Texture2D g_DiffuseMap : register(t0, space1);
 
 // Material Texture: Normal Map (Space 1, t1)
 Texture2D g_NormalMap : register(t1, space1);
@@ -90,5 +94,7 @@ float4 main(PS_INPUT input) : SV_TARGET
     float3 finalColor = glassColor + rimHighlight * fresnel;
 
     float outAlpha = (gMaterial.baseColor.a > 0.001f) ? saturate(gMaterial.baseColor.a) : 1.0f;
+    if (gMaterial.materialFlags & FLAG_HAS_DIFFUSE_MAP)
+        outAlpha *= g_DiffuseMap.Sample(g_MaterialSampler, input.TexCoord).a;
     return float4(finalColor, outAlpha);
 }

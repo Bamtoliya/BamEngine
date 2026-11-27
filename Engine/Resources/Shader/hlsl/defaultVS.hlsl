@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "instanceData.hlsli"
 
 struct VS_INPUT
 {
@@ -19,14 +20,6 @@ struct VS_OUTPUT
     float3 Binormal    : BINORMAL;
     float4 Color        : COLOR;
 };
-
-struct InstanceData
-{
-    float4x4 WorldMatrix;
-    float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
 
 VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
 {

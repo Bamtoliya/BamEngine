@@ -400,6 +400,9 @@ GraphDiagnostic GraphRegistry::RegisterBuiltins()
 			{ "uv", Direction::Output, Type::Float2, {}, {}, "Graph.PinName.UV1" } } },
 		{ "Shader.Time", shader, {
 			{ "time", Direction::Output, Type::Float, {} } } },
+		// StaticMeshRendererComponent::customData (InstanceData.CustomData). 같은 머티리얼에서 인스턴스마다 다른 값을 준다.
+		{ "Shader.InstanceCustomData", shader, {
+			{ "data", Direction::Output, Type::Float4, {} } } },
 		{ "Shader.WorldPosition", shader, {
 			{ "position", Direction::Output, Type::Float3, {} } } },
 		{ "Shader.WorldNormal", shader, {

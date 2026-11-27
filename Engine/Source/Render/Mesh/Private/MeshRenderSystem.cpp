@@ -326,6 +326,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
                     for (StaticDrawCommand command : commands)
                     {
                         command.receiveDecals = meshRenderer.receiveDecals;
+                        command.customData = meshRenderer.customData;
                         command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)), instanceIndex++ };
                         renderer.SubmitStatic(command, target.pass->GetID());
                     }
@@ -442,6 +443,7 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
 
                 command.pickingId = pickingId;
                 command.receiveDecals = meshRenderer.receiveDecals;
+                command.customData = meshRenderer.customData;
                 command.objectId = { motionSceneId, static_cast<uint32>(entt::to_integral(entity)) };
                 if (target.pass->GetPassType() == ERenderPassType::Shadow && isRaytraced(target.viewID))
                 {

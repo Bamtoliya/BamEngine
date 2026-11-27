@@ -22,9 +22,10 @@ void CheckMemoryLayoutAndAlignment()
 	std::cout << "[Test 1] Memory Layout & Struct Alignment Verification" << std::endl;
 
 	// StructuredBuffer<InstanceData> 및 정적 메시 인스턴스 데이터 크기 단언
-	assert(sizeof(InstanceData) == 80);
+	assert(sizeof(InstanceData) == 96);
 	assert(offsetof(InstanceData, worldMatrix) == 0);
 	assert(offsetof(InstanceData, pickingData) == 64);
+	assert(offsetof(InstanceData, customData) == 80);
 
 	// SpriteInstanceData 크기 단언
 	assert(sizeof(SpriteInstanceData) == 112);
@@ -37,7 +38,7 @@ void CheckMemoryLayoutAndAlignment()
 	assert(sizeof(InstanceData) % 16 == 0);
 	assert(sizeof(SpriteInstanceData) % 16 == 0);
 
-	std::cout << "  -> InstanceData (80B) and SpriteInstanceData (112B) layout assertions passed." << std::endl;
+	std::cout << "  -> InstanceData (96B) and SpriteInstanceData (112B) layout assertions passed." << std::endl;
 }
 
 // ==============================================================================

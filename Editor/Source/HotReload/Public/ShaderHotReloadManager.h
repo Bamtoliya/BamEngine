@@ -35,6 +35,7 @@ protected:
 private:
 	void ProcessModifiedFile(const std::filesystem::path& hlslPath);
 	void RegisterDefaultCandidates();
+	void CompileStaleProjectShaders();
 
 private:
 	efsw::FileWatcher* m_FileWatcher = nullptr;

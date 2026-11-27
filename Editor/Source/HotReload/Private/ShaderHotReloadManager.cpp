@@ -137,9 +137,42 @@ EResult ShaderHotReloadManager::Initialize(void* arg)
 	m_FileListener = new ShaderFileListener(this);
 
 	RegisterDefaultCandidates();
+	CompileStaleProjectShaders();
 
 	m_FileWatcher->watch();
 	return EResult::Success;
+}
+
+void ShaderHotReloadManager::CompileStaleProjectShaders()
+{
+	// 엔진 셰이더는 CMake(CompileShaders)가 빌드하지만 프로젝트 셰이더는 빌드 단계가 없다. 핫 리로드는 파일이 바뀔 때만
+	// 컴파일하므로, 에디터를 닫은 동안 추가·변경된 Project://Shader/hlsl/*.hlsl을 여기서 Project://Shader/bin에 만든다.
+	// 머티리얼은 그 바이너리(예: Project://Shader/bin/dxil/fooVS.cso)를 경로로 참조하고, 패키징은 .cso를 함께 복사한다.
+	std::error_code ec;
+	const std::filesystem::path projectShaderDir = Engine::PlatformPath::ResolveUri(L"Project://Shader");
+	if (projectShaderDir.empty() || !std::filesystem::is_directory(projectShaderDir, ec))
+		return;
+
+	const Engine::ERHIType rhiType = Engine::Renderer::IsCreated()
+		? Engine::Renderer::Get().GetRHIType()
+		: Engine::ERHIType::DirectX12;
+
+	for (const auto& entry : std::filesystem::recursive_directory_iterator(projectShaderDir, ec))
+	{
+		if (!entry.is_regular_file(ec) || ToLowerCopy(entry.path().extension().string()) != ".hlsl")
+			continue;
+
+		const EShaderType shaderType = Engine::ShaderCompiler::DeduceShaderTypeFromPath(entry.path());
+		if (shaderType == EShaderType::Unknown)
+			continue;
+		if (rhiType != Engine::ERHIType::DirectX12 && Engine::ShaderCompiler::IsDirectX12OnlyShader(entry.path()))
+			continue;
+
+		// forceRecompile=false: 바이너리가 소스와 .hlsli보다 새로우면 dxc를 실행하지 않는다(ShaderCompiler::IsUpToDate).
+		const Engine::ShaderCompileResult result = Engine::ShaderCompiler::Compile(entry.path(), shaderType, rhiType, "main", false);
+		if (!result.Success)
+			EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to compile project shader '{}':\n{}", entry.path().filename().string(), result.ErrorMessage);
+	}
 }
 
 void ShaderHotReloadManager::OnWatchPathAdded(const std::filesystem::path& resolvedPath)

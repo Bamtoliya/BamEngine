@@ -1,4 +1,5 @@
 #include "common.hlsli"
+#include "instanceData.hlsli"
 
 struct VS_INPUT
 {
@@ -22,14 +23,6 @@ struct VS_OUTPUT
     // 1이면 데칼을 받지 않는다(PickingData.y). 맨 뒤에 두어 읽지 않는 픽셀 셰이더와도 연결된다.
     nointerpolation float NoDecals : TEXCOORD6;
 };
-
-struct InstanceData
-{
-    float4x4 WorldMatrix;
-    float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
 
 VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
 {

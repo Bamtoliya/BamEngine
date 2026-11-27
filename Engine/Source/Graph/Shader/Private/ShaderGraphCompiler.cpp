@@ -212,7 +212,7 @@ namespace
 			"Shader.ColorOutput", "Shader.MaterialOutput", "Shader.TextureSample",
 			"Shader.ScreenUV", "Shader.SceneColor",
 			"Shader.TexCoord0", "Shader.TexCoord1",
-			"Shader.Time", "Shader.WorldPosition", "Shader.WorldNormal", "Shader.ViewDirection", "Shader.Fresnel",
+			"Shader.Time", "Shader.InstanceCustomData", "Shader.WorldPosition", "Shader.WorldNormal", "Shader.ViewDirection", "Shader.Fresnel",
 			"Core.Float", "Core.Float2", "Core.Float3", "Core.Float4",
 			"Core.Reroute.Float", "Core.Reroute.Float2", "Core.Reroute.Float3", "Core.Reroute.Float4", "Core.Comment",
 			"Math.AddFloat", "Math.SubtractFloat", "Math.MultiplyFloat", "Math.DivideFloat",
@@ -424,6 +424,15 @@ namespace
 			if (outputPin.Pin != "time" || expectedType != EGraphPinType::Float)
 				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
 			outExpression = "commonData.Time";
+			return {};
+		}
+
+		if (type == "Shader.InstanceCustomData")
+		{
+			// 지형 정점 셰이더(terrainVS)는 인스턴스 버퍼를 쓰지 않으므로 값을 넘기지 않는다.
+			if (t_TerrainDomain || outputPin.Pin != "data" || expectedType != EGraphPinType::Float4)
+				return { EGraphError::UnsupportedCompilation, outputPin.Node, outputPin.Pin, 0, "ShaderGraph.UnsupportedNode" };
+			outExpression = stage == EShaderStage::Vertex ? "g_Instances[instanceId].CustomData" : "input.CustomData";
 			return {};
 		}
 
@@ -870,13 +879,7 @@ float4 Color : COLOR;
 float2 TexCoord1 : TEXCOORD1;
 };
 
-struct InstanceData
-{
-float4x4 WorldMatrix;
-float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
+#include "instanceData.hlsli"
 
 float4 main(VS_INPUT input, uint instanceId : SV_InstanceID) : SV_POSITION
 {
@@ -1097,15 +1100,10 @@ float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
 nointerpolation float NoDecals : TEXCOORD6;
+nointerpolation float4 CustomData : TEXCOORD7;
 };
 
-struct InstanceData
-{
-float4x4 WorldMatrix;
-float4 PickingData;
-};
-
-StructuredBuffer<InstanceData> g_Instances : register(t0, space2);
+#include "instanceData.hlsli"
 
 VS_OUTPUT main(VS_INPUT input, uint instanceId : SV_InstanceID)
 {
@@ -1137,6 +1135,7 @@ output.Tangent = normalize(mul(world, float4(input.Tangent, 0.0f)).xyz);
 output.Color = input.Color;
 output.PickingId = g_Instances[instanceId].PickingData.x;
 output.NoDecals = g_Instances[instanceId].PickingData.y;
+output.CustomData = g_Instances[instanceId].CustomData;
 
 return output;
 }
@@ -1205,7 +1204,7 @@ GraphDiagnostic ShaderGraphCompiler::GenerateColorHlsl(
 	if (needsInput)
 	{
 		source += "struct PS_INPUT { float3 WorldPos : WORLD_POSITION; float3 Normal : NORMAL; "
-			"float2 TexCoord : TEXCOORD0; float2 TexCoord1 : TEXCOORD1; };\n";
+			"float2 TexCoord : TEXCOORD0; float2 TexCoord1 : TEXCOORD1; nointerpolation float4 CustomData : TEXCOORD7; };\n";
 	}
 	source += needsInput ? "float4 main(PS_INPUT input)" : "float4 main()";
 	source += " : SV_Target0\n{\n\treturn " + colorLiteral + ";\n}\n";
@@ -1236,6 +1235,8 @@ float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
+nointerpolation float NoDecals : TEXCOORD6;
+nointerpolation float4 CustomData : TEXCOORD7;
 };
 
 struct PS_OUTPUT
@@ -1383,6 +1384,7 @@ float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
 nointerpolation float NoDecals : TEXCOORD6;
+nointerpolation float4 CustomData : TEXCOORD7;
 };
 
 struct PS_OUTPUT
@@ -1517,6 +1519,8 @@ float2 TexCoord1 : TEXCOORD1;
 float3 Tangent : TANGENT;
 float4 Color : COLOR0;
 nointerpolation float PickingId : TEXCOORD5;
+nointerpolation float NoDecals : TEXCOORD6;
+nointerpolation float4 CustomData : TEXCOORD7;
 };
 
 // Pass Texture: SceneColorCopy (Space 3, t0 / RHI Slot 16)

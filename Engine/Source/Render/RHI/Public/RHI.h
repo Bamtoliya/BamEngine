@@ -114,7 +114,8 @@ public:
     virtual EResult BindConstantRangeBuffer(void* arg, uint32 slot, uint32 offset, uint32 size);
 	virtual EResult BindStorageBuffer(RHIBuffer* buffer, uint32 slot);
     virtual EResult BindInstanceBuffer(RHIBuffer* buffer, uint32 offset);
-    virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride = 80);
+    // stride는 셰이더의 StructuredBuffer 원소 크기와 같아야 한다 (예: sizeof(InstanceData)). 기본값을 두지 않는다.
+    virtual EResult BindInstanceBuffer(const void* data, uint32 instanceCount, uint32 stride);
     virtual EResult BindComputeStorageBuffer(RHIBuffer* buffer, uint32 slot = 0) { return EResult::NotImplemented; }
     // Compute 셰이더의 쓰기용 2D 텍스처(RWTexture2D, u2~u5 space3)를 slot 0~3에 묶는다.
     // 텍스처는 ETextureUsage::ComputeReadWrite로 생성해야 하며, 바인딩은 다음 Dispatch 한 번에만 적용된다.
