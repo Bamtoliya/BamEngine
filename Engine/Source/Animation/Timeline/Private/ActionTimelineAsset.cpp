@@ -5,8 +5,25 @@
 #include <reflection_archive/ReflectionArchiveAdapter.h>
 #include <algorithm>
 #include <cmath>
+#include <system_error>
 
 BEGIN(Engine)
+
+namespace
+{
+	std::string NormalizeModelPath(const std::string& path)
+	{
+		if (path.empty()) return {};
+		if (PlatformPath::IsVirtualUri(path)) return path;
+
+		const auto inputPath = Utf8ToPath(path);
+		const auto physicalPath = PlatformPath::ResolveUri(inputPath);
+		std::error_code error;
+		const bool exists = std::filesystem::exists(physicalPath, error) && !error;
+		const auto virtualUri = PlatformPath::ToVirtualUri(exists ? physicalPath : inputPath);
+		return PlatformPath::IsVirtualUri(virtualUri) ? WStrToStr(virtualUri) : path;
+	}
+}
 
 EResult ActionTimelineAsset::Initialize(void* arg)
 {
@@ -23,7 +40,7 @@ EResult ActionTimelineAsset::Initialize(void* arg)
 		}
 		else
 		{
-			m_ModelPath = desc->ModelPath;
+			m_ModelPath = NormalizeModelPath(desc->ModelPath);
 			m_ClipName = desc->ClipName;
 			m_Duration = desc->Duration;
 			m_EndPolicy = desc->EndPolicy;
@@ -127,6 +144,11 @@ float ActionTimelineAsset::ResolvePlaybackDuration(float clipLength) const
 	return ResolvePlaybackDuration(m_EndPolicy, m_Duration, clipLength, lastTrackEnd);
 }
 
+void ActionTimelineAsset::SetModelPath(const std::string& path)
+{
+	m_ModelPath = NormalizeModelPath(path);
+}
+
 bool ActionTimelineAsset::SaveToFile(const std::string& filePath) const
 {
 	const auto path = Utf8ToPath(filePath);
@@ -158,6 +180,7 @@ bool ActionTimelineAsset::LoadFromFile(const std::string& filePath)
 
 	// Resource 베이스 클래스의 리플렉션 역직렬화 자동 수행 (this 객체에 직접 복원). 트랙 종류 판정은 OnPostLoad에서 수행된다.
 	const auto readRes = ReadArchive(ar);
+	if (readRes) m_ModelPath = NormalizeModelPath(m_ModelPath);
 	return static_cast<bool>(readRes);
 }
 
@@ -165,6 +188,7 @@ EResult ActionTimelineAsset::OnPostLoad()
 {
 	// 이전 파일의 트랙 종류를 한 번 판정한다. 이후 저장하면 판정값이 기록되어 이름을 바꿔도 종류가 유지된다.
 	for (auto& track : m_NotifyTracks) track.Kind = ResolveTrackKind(track);
+	m_ModelPath = NormalizeModelPath(m_ModelPath);
 	return EResult::Success;
 }
 

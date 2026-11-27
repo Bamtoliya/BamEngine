@@ -226,7 +226,7 @@ namespace
 		const Animation* Secondary = nullptr;
 		f32 SecondaryWeight = 0.0f;
 		f64 Duration = 0.0;
-		std::array<BlendClipWeight2D, 4> Corners{};
+		std::vector<BlendClipWeight2D> Samples;
 	};
 
 	f64 AnimatorClipDuration(const Animation& clip)
@@ -253,25 +253,29 @@ namespace
 
 			const f32 rawX = x->second.floatValue;
 			const f32 rawY = y->second.floatValue;
+			const bool hasArbitrarySamples = !tree.samples.empty();
 
-			if (!std::isfinite(rawX) || !std::isfinite(rawY) ||
-				!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
-				!std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY)
+			if (!std::isfinite(rawX) || !std::isfinite(rawY))
+				return {};
+
+			if (!hasArbitrarySamples &&
+				(!std::isfinite(tree.minX) || !std::isfinite(tree.maxX) || tree.minX >= tree.maxX ||
+				 !std::isfinite(tree.minY) || !std::isfinite(tree.maxY) || tree.minY >= tree.maxY))
 			{
 				return {};
 			}
 
-			const vec2 desired(
-				std::clamp(rawX, tree.minX, tree.maxX),
-				std::clamp(rawY, tree.minY, tree.maxY));
+			const vec2 desired = hasArbitrarySamples
+				? vec2(rawX, rawY)
+				: vec2(std::clamp(rawX, tree.minX, tree.maxX), std::clamp(rawY, tree.minY, tree.maxY));
 
 			if (blendInput)
 			{
 				constexpr f32 halfLife = 0.08f;
 				const f32 alpha = std::isfinite(dt) && dt > 0.0f ? 1.0f - std::exp2(-dt / halfLife) : 0.0f;
-				const vec2 previous(
-					std::clamp(blendInput->x, tree.minX, tree.maxX),
-					std::clamp(blendInput->y, tree.minY, tree.maxY));
+				const vec2 previous = hasArbitrarySamples
+					? *blendInput
+					: vec2(std::clamp(blendInput->x, tree.minX, tree.maxX), std::clamp(blendInput->y, tree.minY, tree.maxY));
 
 				blendInput = glm::mix(previous, desired, alpha);
 			}
@@ -280,29 +284,36 @@ namespace
 				blendInput = desired;
 			}
 
-			if (!tree.Evaluate(blendInput->x, blendInput->y, motion.Corners))
+			if (!tree.Evaluate(blendInput->x, blendInput->y, motion.Samples))
 				return {};
 
-			for (const auto& sample : motion.Corners)
+			for (const auto& sample : motion.Samples)
 			{
 				if (!sample.Clip) continue;
-				motion.Primary = sample.Clip;
-				break;
+				if (!motion.Primary) motion.Primary = sample.Clip;
+				if (motion.Duration <= 0.0)
+				{
+					const f64 duration = AnimatorClipDuration(*sample.Clip);
+					if (duration > 0.0) motion.Duration = duration;
+				}
 			}
 
-			const std::array<const ResourceHandle<Animation>*, 4> corners{
-				&tree.clip00, &tree.clip10, &tree.clip01, &tree.clip11
-			};
-			for (const auto* corner : corners)
+			if (motion.Duration <= 0.0)
 			{
-				const auto* clip = corner->Get();
-				if (!clip) continue;
-
-				const f64 duration = AnimatorClipDuration(*clip);
-				if (duration > 0.0)
+				const std::array<const ResourceHandle<Animation>*, 4> corners{
+					&tree.clip00, &tree.clip10, &tree.clip01, &tree.clip11
+				};
+				for (const auto* corner : corners)
 				{
-					motion.Duration = duration;
-					break;
+					const auto* clip = corner->Get();
+					if (!clip) continue;
+
+					const f64 duration = AnimatorClipDuration(*clip);
+					if (duration > 0.0)
+					{
+						motion.Duration = duration;
+						break;
+					}
 				}
 			}
 			return motion;
@@ -339,7 +350,7 @@ namespace
 		if (state.IsBlendTree2D())
 		{
 			f32 totalWeight = 0.0f;
-			for (const auto& sample : motion.Corners)
+			for (const auto& sample : motion.Samples)
 			{
 				if (!sample.Clip) continue;
 

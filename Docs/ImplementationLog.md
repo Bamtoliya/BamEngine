@@ -2,6 +2,18 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 액션 타임라인-VFX Step 4 마감 · 2D 블렌드 트리 Freeform 보간 & `AnimatorGraphPanel` 캔버스 UX 개선
+
+- **요약**:
+  1. **액션 타임라인 ↔ VFX 통합 마감 (트랙 F Step 4, `timeline-vfx-step4`)**:
+     - `ActionTimelineSystem.cpp`: 컴포넌트 제거/비활성/사망 시 `EndTrackedSession` 및 `ReleaseHeldVFXForOwner(..., detachSockets = true)`로 잔여 `ActionVFXHoldComponent`/`SocketAttachmentComponent` 정리, 본 소켓 동기화를 본 포즈 갱신·Notify 스폰 이후로 단일화.
+     - `ActionTimelineAsset.h/.cpp`, `AnimationTimelinePanel.h/.cpp`: `m_ModelPath`의 `PlatformPath::ToVirtualUri` 정규화, 패널 닫기/숨김 시 `OnResourceWindowVisibility`에서 재생 정지 및 `ClearPreviewVFX()` 격리 정리.
+  2. **2D 블렌드 트리 임의 샘플 보간 & `AnimatorGraphPanel` 캔버스 UX 개선 (`animator-blend2d-canvas`)**:
+     - `BlendTree2D.h/.cpp`, `AnimatorStateMachine.cpp`, `BlendTree2DCheck.cpp`: `BlendSample2D` + `BlendTree2D::samples`(`ALLOW_MISSING`) 추가 및 Johansen(2009) Freeform Cartesian Gradient Band Interpolation 구현(기존 2x2 격자 100% 하위 호환), 삼각형/5점 비대칭 산포·런타임 블렌딩 테스트 추가.
+     - `AnimatorGraphPanel.h/.cpp`, `EditorActionRegistry.cpp`: 다중 노드 정렬(`AlignTop/Bottom/Left/Right`, `DistributeHoriz/Vert`) + `Undo` 반영 및 `EShortcutContext::AnimatorGraph` 단축키(`F`, `Shift+W/S/A/D/H/V`) 등록.
+- **검증 상태**:
+  - 사용자 실환경에서 전체 빌드 완료 및 `ActionTimelinePlaybackCheck`·`BlendTree2DCheck` 포함 전체 CTest 통과 확인 완료.
+
 ### [2026-11-27] 비주얼 스크립팅(`GraphGameplayLibrary`) 신규 게임플레이 노드 7종 노출
 
 - **요약**:

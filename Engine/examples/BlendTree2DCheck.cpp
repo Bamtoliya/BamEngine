@@ -618,6 +618,126 @@ int main()
 			return fail("GraphGameplayLibrary::SetAnimationIKEnabled failed to disable IK.");
 	}
 
+	// 8. Arbitrary / triangular 2D sample placement (Gradient Band Interpolation)
+	{
+		BlendTree2D freeform;
+		freeform.parameterX = "X";
+		freeform.parameterY = "Y";
+		freeform.samples = {
+			{ 0.0f, 0.0f, clips[0] },
+			{ 2.0f, 0.0f, clips[1] },
+			{ 1.0f, 2.0f, clips[2] }
+		};
+
+		std::vector<BlendClipWeight2D> weights;
+		const auto checkWeights = [&](float x, float y, const Animation* exactClip) -> bool
+			{
+				if (!freeform.Evaluate(x, y, weights) || weights.empty()) return false;
+				float sum = 0.0f;
+				float exactWeight = 0.0f;
+				for (const auto& entry : weights)
+				{
+					if (!entry.Clip || !std::isfinite(entry.Weight) || entry.Weight < 0.0f) return false;
+					sum += entry.Weight;
+					if (entry.Clip == exactClip) exactWeight += entry.Weight;
+				}
+				if (std::abs(sum - 1.0f) > 1e-5f) return false;
+				if (exactClip && std::abs(exactWeight - 1.0f) > 1e-5f) return false;
+				return true;
+			};
+
+		// Exact sample positions must produce weight 1.0 on that sample
+		if (!checkWeights(0.0f, 0.0f, clips[0].Get()) ||
+			!checkWeights(2.0f, 0.0f, clips[1].Get()) ||
+			!checkWeights(1.0f, 2.0f, clips[2].Get()))
+		{
+			return fail("Triangular 2D blend tree did not return weight 1.0 at exact sample positions.");
+		}
+
+		// Edge midpoint (1, 0) between (0, 0) and (2, 0): Gradient Band is symmetric (w0 == w1 > w2, sum == 1)
+		if (!checkWeights(1.0f, 0.0f, nullptr) || weights.size() < 2)
+		{
+			return fail("Triangular 2D blend tree edge midpoint weights are incorrect.");
+		}
+		float w0 = 0.0f;
+		float w1 = 0.0f;
+		float w2 = 0.0f;
+		for (const auto& entry : weights)
+		{
+			if (entry.Clip == clips[0].Get()) w0 = entry.Weight;
+			else if (entry.Clip == clips[1].Get()) w1 = entry.Weight;
+			else if (entry.Clip == clips[2].Get()) w2 = entry.Weight;
+		}
+		if (std::abs(w0 - w1) > 1e-5f || w0 <= w2)
+		{
+			return fail("Triangular 2D blend tree edge midpoint weights are incorrect.");
+		}
+
+		// Interior centroid (1, 2/3) should blend all 3 samples with normalized sum = 1.0
+		if (!checkWeights(1.0f, 2.0f / 3.0f, nullptr) || weights.size() != 3)
+			return fail("Triangular 2D blend tree centroid weights are incorrect.");
+
+		// 5-sample asymmetric scatter: verify exact samples + interior/exterior normalization
+		BlendTree2D scatter;
+		scatter.parameterX = "X";
+		scatter.parameterY = "Y";
+		scatter.samples = {
+			{  0.0f,  0.0f, clips[0] },
+			{  1.5f,  0.2f, clips[1] },
+			{ -1.2f,  0.8f, clips[2] },
+			{ -0.5f, -1.6f, clips[3] },
+			{  0.9f, -1.1f, clips[1] }
+		};
+
+		for (const auto& s : scatter.samples)
+		{
+			if (!scatter.Evaluate(s.x, s.y, weights) || weights.size() != 1 ||
+				weights[0].Clip != s.clip.Get() || std::abs(weights[0].Weight - 1.0f) > 1e-5f)
+			{
+				return fail("Scattered 2D blend tree failed exact sample weight check.");
+			}
+		}
+
+		const std::array<vec2, 4> probes{
+			vec2(0.4f, 0.1f), vec2(-0.6f, 0.2f), vec2(0.3f, -0.7f), vec2(3.0f, 2.5f)
+		};
+		for (const auto& p : probes)
+		{
+			if (!scatter.Evaluate(p.x, p.y, weights) || weights.empty())
+				return fail("Scattered 2D blend tree failed to evaluate probe point.");
+			float sum = 0.0f;
+			for (const auto& w : weights)
+			{
+				if (!w.Clip || !std::isfinite(w.Weight) || w.Weight < 0.0f)
+					return fail("Scattered 2D blend tree produced invalid weight.");
+				sum += w.Weight;
+			}
+			if (std::abs(sum - 1.0f) > 1e-5f)
+				return fail("Scattered 2D blend tree weights did not sum to 1.0.");
+		}
+
+		// Runtime integration check with AnimatorRuntimeState
+		auto freeformController = std::make_shared<AnimatorStateMachine>();
+		freeformController->defaultState = "Freeform2D";
+		AnimState freeformState{};
+		freeformState.name = "Freeform2D";
+		freeformState.isBlendTree = true;
+		freeformState.useBlendTree2D = true;
+		freeformState.blendTree2D = freeform;
+		freeformController->states.push_back(freeformState);
+
+		AnimatorRuntimeState freeformRuntime;
+		freeformRuntime.BindStateMachine(freeformController);
+		freeformRuntime.SetFloat("X", 1.0f);
+		freeformRuntime.SetFloat("Y", 0.0f);
+		freeformRuntime.UpdateLocalPose(0.0f, *skeleton.Get(), pose);
+		const float expectedMidX = w0 * 0.0f + w1 * 10.0f + w2 * 20.0f;
+		if (pose.size() != 1 || std::abs(pose[0].Position.x - expectedMidX) > 1e-4f)
+		{
+			return fail("AnimatorRuntimeState did not blend arbitrary 2D samples at midpoint.");
+		}
+	}
+
 	std::cout << "BlendTree2D, 2-Bone IK, Look-At IK, Root Motion, and Foot Ground IK checks passed.\n";
 	return 0;
 }

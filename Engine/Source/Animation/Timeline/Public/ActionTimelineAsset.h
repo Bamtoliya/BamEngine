@@ -289,7 +289,7 @@ public:
 
 	// Getters & Setters
 	const std::string& GetModelPath() const { return m_ModelPath; }
-	void SetModelPath(const std::string& path) { m_ModelPath = path; }
+	void SetModelPath(const std::string& path);
 
 	const std::string& GetClipName() const { return m_ClipName; }
 	void SetClipName(const std::string& clipName) { m_ClipName = clipName; }

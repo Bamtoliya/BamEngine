@@ -1448,6 +1448,45 @@ void EditorActionRegistry::RegisterAll()
                 panel->SaveDocument(true);
         }
         });
+    sm.RegisterAction({
+        .Id = "Animator.ResetView",
+        .DisplayNameKey = "AnimatorGraph.ResetView",
+        .CategoryKey = "Shortcuts.CategoryGraph",
+        .Context = EShortcutContext::AnimatorGraph,
+        .DefaultChord = ShortcutChord(Engine::EKeyCode::F),
+        .ExecuteHandler = []() {
+            if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+                panel->ResetCanvasView();
+        },
+        .CanExecute = []() {
+            const auto* panel = AnimatorGraphPanel::GetActivePanel();
+            return panel && panel->CanUseCanvas();
+        }
+        });
+    const auto registerAnimatorAlign = [&](const char* id, const char* key, ShortcutChord chord, char dir)
+        {
+            sm.RegisterAction({
+                .Id = id,
+                .DisplayNameKey = key,
+                .CategoryKey = "Shortcuts.CategoryGraph",
+                .Context = EShortcutContext::AnimatorGraph,
+                .DefaultChord = chord,
+                .ExecuteHandler = [dir]() {
+                    if (auto* panel = AnimatorGraphPanel::GetActivePanel())
+                        panel->AlignNodes(dir);
+                },
+                .CanExecute = []() {
+                    const auto* panel = AnimatorGraphPanel::GetActivePanel();
+                    return panel && panel->CanUseCanvas();
+                }
+                });
+        };
+    registerAnimatorAlign("Animator.AlignTop", "Action.Graph.AlignTop", ShortcutChord(Engine::EKeyCode::W, EModifierKey::Shift), 'W');
+    registerAnimatorAlign("Animator.AlignBottom", "Action.Graph.AlignBottom", ShortcutChord(Engine::EKeyCode::S, EModifierKey::Shift), 'S');
+    registerAnimatorAlign("Animator.AlignLeft", "Action.Graph.AlignLeft", ShortcutChord(Engine::EKeyCode::A, EModifierKey::Shift), 'A');
+    registerAnimatorAlign("Animator.AlignRight", "Action.Graph.AlignRight", ShortcutChord(Engine::EKeyCode::D, EModifierKey::Shift), 'D');
+    registerAnimatorAlign("Animator.DistributeHoriz", "Action.Graph.DistributeHoriz", ShortcutChord(Engine::EKeyCode::H, EModifierKey::Shift), 'H');
+    registerAnimatorAlign("Animator.DistributeVert", "Action.Graph.DistributeVert", ShortcutChord(Engine::EKeyCode::V, EModifierKey::Shift), 'V');
     // ── [Visual Script Graph Actions] ──
     sm.RegisterAction({
         .Id = "Graph.Open",

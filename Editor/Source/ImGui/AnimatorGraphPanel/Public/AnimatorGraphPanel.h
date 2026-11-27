@@ -38,9 +38,12 @@ public:
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::AnimatorGraph; }
 	static AnimatorGraphPanel* GetActivePanel() { return s_ActivePanel; }
 	bool CanDeleteSelection() const;
+	bool CanUseCanvas() const { return m_Open && m_StateMachine != nullptr && m_SelectedLayerIndex == 0; }
 	void DeleteSelection();
 	void ResetCanvasView();
+	void AlignNodes(char direction);
 private:
+	void AlignSelectedNodes(char direction);
 	// GraphPanel 스타일 2단 메뉴/툴바
 	void DrawCustomToolbar() override;
 	void DrawCustomQuickAccess() override;

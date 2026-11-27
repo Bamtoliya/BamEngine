@@ -66,6 +66,137 @@ void AnimatorGraphPanel::ResetCanvasView()
 	ed::SetCurrentEditor(previous);
 }
 
+void AnimatorGraphPanel::AlignNodes(char direction)
+{
+	if (!CanUseCanvas() || !m_EditorContext) return;
+	auto* previous = ed::GetCurrentEditor();
+	ed::SetCurrentEditor(m_EditorContext);
+	AlignSelectedNodes(direction);
+	ed::SetCurrentEditor(previous);
+}
+
+void AnimatorGraphPanel::AlignSelectedNodes(char direction)
+{
+	if (!m_StateMachine) return;
+
+	const int totalSelected = ed::GetSelectedObjectCount();
+	if (totalSelected <= 0) return;
+
+	std::vector<ed::NodeId> selectedNodes(totalSelected);
+	const int nodeCount = ed::GetSelectedNodes(selectedNodes.data(), totalSelected);
+	selectedNodes.resize(nodeCount);
+
+	struct NodeLayout
+	{
+		ed::NodeId EdId;
+		std::string Name;
+		ImVec2 Pos;
+		ImVec2 Size;
+	};
+	std::vector<NodeLayout> selected;
+	selected.reserve(selectedNodes.size());
+
+	for (const auto& edId : selectedNodes)
+	{
+		const uintptr_t rawId = edId.Get();
+		std::string name;
+		if (rawId == 1) name = "__Entry__";
+		else if (rawId == 2) name = "__AnyState__";
+		else if (rawId >= 100)
+		{
+			const size_t idx = static_cast<size_t>(rawId - 100);
+			if (idx < m_StateMachine->states.size())
+				name = m_StateMachine->states[idx].name;
+		}
+		if (name.empty()) continue;
+
+		const ImVec2 pos = ed::GetNodePosition(edId);
+		const ImVec2 size = ed::GetNodeSize(edId);
+		if (pos.x == FLT_MAX || size.x <= 0.0f) continue;
+		selected.push_back({ edId, std::move(name), pos, size });
+	}
+
+	if (direction == 'H' || direction == 'V')
+	{
+		if (selected.size() < 3) return;
+	}
+	else if (selected.size() < 2)
+	{
+		return;
+	}
+
+	const auto moveNode = [&](const NodeLayout& item, const ImVec2& newPos)
+		{
+			ed::SetNodePosition(item.EdId, newPos);
+			m_NodePositions[item.Name] = newPos;
+		};
+
+	switch (direction)
+	{
+	case 'W': // Align Top
+	{
+		float minY = FLT_MAX;
+		for (const auto& item : selected) minY = std::min(minY, item.Pos.y);
+		for (const auto& item : selected) moveNode(item, ImVec2(item.Pos.x, minY));
+		break;
+	}
+	case 'S': // Align Bottom
+	{
+		float maxBottom = -FLT_MAX;
+		for (const auto& item : selected) maxBottom = std::max(maxBottom, item.Pos.y + item.Size.y);
+		for (const auto& item : selected) moveNode(item, ImVec2(item.Pos.x, maxBottom - item.Size.y));
+		break;
+	}
+	case 'A': // Align Left
+	{
+		float minX = FLT_MAX;
+		for (const auto& item : selected) minX = std::min(minX, item.Pos.x);
+		for (const auto& item : selected) moveNode(item, ImVec2(minX, item.Pos.y));
+		break;
+	}
+	case 'D': // Align Right
+	{
+		float maxRight = -FLT_MAX;
+		for (const auto& item : selected) maxRight = std::max(maxRight, item.Pos.x + item.Size.x);
+		for (const auto& item : selected) moveNode(item, ImVec2(maxRight - item.Size.x, item.Pos.y));
+		break;
+	}
+	case 'H': // Distribute Horizontally
+	{
+		std::sort(selected.begin(), selected.end(), [](const NodeLayout& a, const NodeLayout& b) { return a.Pos.x < b.Pos.x; });
+		float totalWidth = 0.0f;
+		for (const auto& item : selected) totalWidth += item.Size.x;
+		const float span = (selected.back().Pos.x + selected.back().Size.x) - selected.front().Pos.x;
+		const float gap = (span - totalWidth) / static_cast<float>(selected.size() - 1);
+		float currentX = selected.front().Pos.x;
+		for (size_t i = 1; i + 1 < selected.size(); ++i)
+		{
+			currentX += selected[i - 1].Size.x + gap;
+			moveNode(selected[i], ImVec2(currentX, selected[i].Pos.y));
+		}
+		break;
+	}
+	case 'V': // Distribute Vertically
+	{
+		std::sort(selected.begin(), selected.end(), [](const NodeLayout& a, const NodeLayout& b) { return a.Pos.y < b.Pos.y; });
+		float totalHeight = 0.0f;
+		for (const auto& item : selected) totalHeight += item.Size.y;
+		const float span = (selected.back().Pos.y + selected.back().Size.y) - selected.front().Pos.y;
+		const float gap = (span - totalHeight) / static_cast<float>(selected.size() - 1);
+		float currentY = selected.front().Pos.y;
+		for (size_t i = 1; i + 1 < selected.size(); ++i)
+		{
+			currentY += selected[i - 1].Size.y + gap;
+			moveNode(selected[i], ImVec2(selected[i].Pos.x, currentY));
+		}
+		break;
+	}
+	default: return;
+	}
+
+	m_History.MarkEdited();
+}
+
 void AnimatorGraphPanel::SetStateMachine(const std::shared_ptr<Engine::AnimatorStateMachine>& sm)
 {
 	m_StateMachine = sm ? std::make_shared<Engine::AnimatorStateMachine>(*sm) : nullptr;
@@ -448,8 +579,7 @@ void AnimatorGraphPanel::DrawCustomToolbar()
 
 	if (ImGui::BeginMenu(LOCAL_CSTR("EditorMenu.View")))
 	{
-		if (ImGui::MenuItem(LOCAL_LABEL("AnimatorGraph.ResetView").c_str()))
-			ResetCanvasView();
+		ACTION_MENU_ITEM((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("AnimatorGraph.ResetView")).c_str(), "Animator.ResetView");
 		ImGui::EndMenu();
 	}
 }
@@ -474,6 +604,8 @@ void AnimatorGraphPanel::DrawCustomQuickAccess()
 		m_ShowPreviewViewport = !m_ShowPreviewViewport;
 	if (toolbar.Button("CreateState", ICON_FA_PLUS, "AnimatorGraph.CreateState"))
 		AddState(ImVec2(250.0f, 150.0f));
+	if (toolbar.Icon("ResetView", ICON_FA_MAXIMIZE, "AnimatorGraph.ResetView"))
+		ResetCanvasView();
 
 	if (m_ConnectingSourceIndex >= 0)
 	{
@@ -1682,10 +1814,28 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 		}
 		else if (hoveredNode)
 		{
+			const int totalSelected = ed::GetSelectedObjectCount();
+			bool alreadySelected = false;
+			if (totalSelected > 0)
+			{
+				std::vector<ed::NodeId> selNodes(totalSelected);
+				const int nodeCount = ed::GetSelectedNodes(selNodes.data(), totalSelected);
+				selNodes.resize(nodeCount);
+				alreadySelected = std::find(selNodes.begin(), selNodes.end(), hoveredNode) != selNodes.end();
+			}
+			if (!alreadySelected)
+				ed::SelectNode(hoveredNode, false);
+
 			const uintptr_t rawId = hoveredNode.Get();
 			if (rawId >= 100)
 			{
 				m_SelectedStateIndex = static_cast<int>(rawId - 100);
+				m_SelectedTransitionIndex = -1;
+				ImGui::OpenPopup("##AnimNodeMenu");
+			}
+			else if (ed::GetSelectedObjectCount() >= 2)
+			{
+				m_SelectedStateIndex = -1;
 				m_SelectedTransitionIndex = -1;
 				ImGui::OpenPopup("##AnimNodeMenu");
 			}
@@ -1711,7 +1861,9 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 	// 1. 노드 우클릭 팝업
 	if (ImGui::BeginPopup("##AnimNodeMenu"))
 	{
-		if (m_SelectedStateIndex >= 0 && m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size()))
+		const bool validState = m_SelectedStateIndex >= 0 &&
+			m_SelectedStateIndex < static_cast<int>(m_StateMachine->states.size());
+		if (validState)
 		{
 			const auto& state = m_StateMachine->states[m_SelectedStateIndex];
 
@@ -1737,6 +1889,36 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 				m_StateMachine->defaultState = state.name;
 				m_History.MarkEdited();
 			}
+		}
+
+		int selectedNodeCount = 0;
+		const int totalSelected = ed::GetSelectedObjectCount();
+		if (totalSelected > 0)
+		{
+			std::vector<ed::NodeId> selNodes(totalSelected);
+			selectedNodeCount = ed::GetSelectedNodes(selNodes.data(), totalSelected);
+		}
+		if (selectedNodeCount >= 2)
+		{
+			if (validState) ImGui::Separator();
+			if (ImGui::BeginMenu(LOCAL_LABEL("GraphPanel.Alignment").c_str()))
+			{
+				auto& sm = ShortcutManager::Get();
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignTop").c_str(), sm.GetShortcutHint("Animator.AlignTop"))) AlignSelectedNodes('W');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignBottom").c_str(), sm.GetShortcutHint("Animator.AlignBottom"))) AlignSelectedNodes('S');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignLeft").c_str(), sm.GetShortcutHint("Animator.AlignLeft"))) AlignSelectedNodes('A');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.AlignRight").c_str(), sm.GetShortcutHint("Animator.AlignRight"))) AlignSelectedNodes('D');
+				const bool canDistribute = selectedNodeCount >= 3;
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.DistributeHoriz").c_str(), sm.GetShortcutHint("Animator.DistributeHoriz"), false, canDistribute))
+					AlignSelectedNodes('H');
+				if (ImGui::MenuItem(LOCAL_LABEL("Action.Graph.DistributeVert").c_str(), sm.GetShortcutHint("Animator.DistributeVert"), false, canDistribute))
+					AlignSelectedNodes('V');
+				ImGui::EndMenu();
+			}
+		}
+
+		if (validState)
+		{
 			ImGui::Separator();
 			ACTION_MENU_ITEM((ICON_FA_TRASH " " + LOCAL_LABEL("EditorCommon.Delete")).c_str(), "Animator.DeleteSelection");
 		}
@@ -1763,10 +1945,7 @@ void AnimatorGraphPanel::DrawCanvasContextMenu()
 		{
 			AddState(m_ContextMenuPosition);
 		}
-		if (ImGui::MenuItem((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("AnimatorGraph.ResetView")).c_str()))
-		{
-			ed::NavigateToContent(0.5f);
-		}
+		ACTION_MENU_ITEM((ICON_FA_MAXIMIZE " " + LOCAL_LABEL("AnimatorGraph.ResetView")).c_str(), "Animator.ResetView");
 		ImGui::EndPopup();
 	}
 }

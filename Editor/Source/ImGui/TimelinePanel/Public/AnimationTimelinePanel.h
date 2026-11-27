@@ -133,6 +133,7 @@ private:
 
 private:
 	void DrawCustomQuickAccess() override;
+	void OnResourceWindowVisibility(bool visible) override;
 	void ReleaseResourceDocument() override;
 	const char* GetSaveActionId() const override { return "AnimationTimeline.Save"; }
 	void DrawCustomContent() override;

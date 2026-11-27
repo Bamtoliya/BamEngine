@@ -66,10 +66,13 @@ namespace
 	std::string NormalizeModelAssetPath(const std::string& path)
 	{
 		if (path.empty()) return {};
-		const auto physicalPath = Engine::PlatformPath::ResolveUri(Engine::Utf8ToPath(path));
+		if (Engine::PlatformPath::IsVirtualUri(path)) return path;
+
+		const auto inputPath = Engine::Utf8ToPath(path);
+		const auto physicalPath = Engine::PlatformPath::ResolveUri(inputPath);
 		std::error_code error;
-		if (!std::filesystem::exists(physicalPath, error) || error) return path;
-		const auto virtualUri = Engine::PlatformPath::ToVirtualUri(physicalPath);
+		const bool exists = std::filesystem::exists(physicalPath, error) && !error;
+		const auto virtualUri = Engine::PlatformPath::ToVirtualUri(exists ? physicalPath : inputPath);
 		return Engine::PlatformPath::IsVirtualUri(virtualUri) ? Engine::WStrToStr(virtualUri) : path;
 	}
 
@@ -332,6 +335,15 @@ void AnimationTimelinePanel::Redo()
 	(void)m_History.Redo();
 }
 
+void AnimationTimelinePanel::OnResourceWindowVisibility(bool visible)
+{
+	if (visible) return;
+	m_IsPlaying = false;
+	m_IsScrubbing = false;
+	m_IsDraggingItem = false;
+	ClearPreviewVFX();
+}
+
 void AnimationTimelinePanel::ReleaseResourceDocument()
 {
 	SetTargetModel({});
@@ -343,12 +355,14 @@ void AnimationTimelinePanel::ReleaseResourceDocument()
 	m_CurrentAssetPath.clear();
 	m_Selection = {};
 	m_IsDraggingItem = false;
+	m_IsScrubbing = false;
 	m_IsPlaying = false;
 	m_CurrentTime = 0.0f;
 	m_NotifyStartPending = true;
 	m_Duration = 2.0f;
 	m_BlendOutTime = Engine::ActionTimelineAsset::DefaultBlendOutTime;
 	m_EndPolicy = Engine::ETimelineEndPolicy::Fixed;
+	ClearPreviewVFX();
 	ResetZoom();
 	ResetEditHistory();
 	MarkDocumentSaved();
@@ -367,6 +381,24 @@ void AnimationTimelinePanel::ClearPreviewVFX()
 	for (const auto& preview : m_PreviewVFXEntities)
 	{
 		if (reg.valid(preview.Entity)) reg.destroy(preview.Entity);
+	}
+	for (const auto& held : m_PreviewHeldVFX)
+	{
+		if (reg.valid(held.Entity)) reg.destroy(held.Entity);
+	}
+	const entt::entity modelEntity = m_PreviewModelEntity ? m_PreviewModelEntity->GetEntityHandle() : entt::null;
+	std::vector<entt::entity> strayVFX;
+	for (auto e : reg.view<Engine::CompositeVFXComponent>())
+	{
+		if (e != modelEntity) strayVFX.push_back(e);
+	}
+	for (auto e : reg.view<Engine::SocketAttachmentComponent>())
+	{
+		if (e != modelEntity) strayVFX.push_back(e);
+	}
+	for (auto e : strayVFX)
+	{
+		if (reg.valid(e)) reg.destroy(e);
 	}
 	m_PreviewVFXEntities.clear();
 	m_PreviewHeldVFX.clear();
@@ -915,7 +947,8 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify,
 				(void)trans.SetEulerRotation(glm::degrees(glm::eulerAngles(xform.rotation)));
 				(void)trans.SetLocalScale(notify.VFXScale);
 
-				reg.emplace<Engine::WorldTransformComponent>(e);
+				auto& worldTrans = reg.emplace<Engine::WorldTransformComponent>(e);
+				Engine::TransformSystem::UpdateRootWorld(trans, worldTrans);
 				auto& flag = reg.emplace<Engine::FlagComponent>(e);
 				flag.flags = Engine::EEntityFlag::Active | Engine::EEntityFlag::Visible;
 
@@ -1033,16 +1066,18 @@ void AnimationTimelinePanel::Update(f32 dt)
 		while (it != m_PreviewVFXEntities.end())
 		{
 			entt::entity e = it->Entity;
-			if (reg.valid(e))
+			if (!reg.valid(e))
 			{
-				if (const auto* vfx = Engine::TryGetEnabledComponent<Engine::CompositeVFXComponent>(reg, e))
+				it = m_PreviewVFXEntities.erase(it);
+				continue;
+			}
+			if (const auto* vfx = Engine::TryGetEnabledComponent<Engine::CompositeVFXComponent>(reg, e))
+			{
+				if (vfx->isFinished && !vfx->isLooping)
 				{
-					if (vfx->isFinished && !vfx->isLooping)
-					{
-						reg.destroy(e);
-						it = m_PreviewVFXEntities.erase(it);
-						continue;
-					}
+					reg.destroy(e);
+					it = m_PreviewVFXEntities.erase(it);
+					continue;
 				}
 			}
 			++it;

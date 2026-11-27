@@ -250,10 +250,11 @@ namespace
 	struct ActionTimelineDestroyHookTag {};
 
 	// 소유 타임라인이 유지 중이던 지속형 VFX를 즉시 해제한다.
-	void ReleaseHeldVFXForOwner(entt::registry& world, entt::entity ownerEntity)
+	// detachSockets가 true이면(컴포넌트 제거·비활성화 등) 소유 엔티티에 붙어 있던 SocketAttachmentComponent도 함께 정리한다.
+	void ReleaseHeldVFXForOwner(entt::registry& world, entt::entity ownerEntity, bool detachSockets = false)
 	{
 		std::vector<entt::entity> released;
-		auto holdView = world.view<ActionVFXHoldComponent, CompositeVFXComponent>();
+		auto holdView = world.view<ActionVFXHoldComponent>();
 		for (auto vfxEntity : holdView)
 		{
 			if (holdView.get<ActionVFXHoldComponent>(vfxEntity).ownerEntity == ownerEntity)
@@ -261,10 +262,14 @@ namespace
 		}
 		for (auto vfxEntity : released)
 		{
-			if (!world.valid(vfxEntity) || !world.all_of<ActionVFXHoldComponent, CompositeVFXComponent>(vfxEntity))
-				continue;
-			world.get<CompositeVFXComponent>(vfxEntity).Release();
-			world.remove<ActionVFXHoldComponent>(vfxEntity);
+			if (!world.valid(vfxEntity)) continue;
+			if (auto* vfx = world.try_get<CompositeVFXComponent>(vfxEntity)) vfx->Release();
+			if (world.all_of<ActionVFXHoldComponent>(vfxEntity)) world.remove<ActionVFXHoldComponent>(vfxEntity);
+			if (detachSockets)
+			{
+				if (const auto* attach = world.try_get<SocketAttachmentComponent>(vfxEntity); attach && attach->targetEntity == ownerEntity)
+					world.remove<SocketAttachmentComponent>(vfxEntity);
+			}
 		}
 	}
 
@@ -826,7 +831,7 @@ namespace
 		const float blendOutTime = asset ? asset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
 		EndAnimatorOverride(world, entity, timeline, blendOutTime);
 		EndCameraOverride(world, timeline);
-		ReleaseHeldVFXForOwner(world, entity);
+		ReleaseHeldVFXForOwner(world, entity, true);
 		if (timeline.hitboxWindowOpen) SetTimelineHitboxesActive(world, entity, false);
 		else if (auto* hitbox = world.try_get<HitboxComponent>(entity)) hitbox->SetActive(false);
 	}
@@ -1069,43 +1074,6 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 		std::vector<ActionTimelineEvent> pendingEvents;
 		std::vector<ActionTimelineEndEvent> pendingEndEvents;
 
-		// ── 0. 소켓 부착(AttachToSocket) 엔티티 위치 및 회전 실시간 동기화 ──
-		{
-			auto attachView = world.view<SocketAttachmentComponent, TransformComponent>();
-			std::vector<entt::entity> deadAttachments;
-
-			for (auto attachEntity : attachView)
-			{
-				if (!IsComponentEnabled<SocketAttachmentComponent>(world, attachEntity)) continue;
-				auto& attach = attachView.get<SocketAttachmentComponent>(attachEntity);
-				auto& trans = attachView.get<TransformComponent>(attachEntity);
-
-				if (!world.valid(attach.targetEntity))
-				{
-					if (attach.autoDestroyOnTargetDead) deadAttachments.push_back(attachEntity);
-					continue;
-				}
-
-				const auto* targetFlag = world.try_get<FlagComponent>(attach.targetEntity);
-				if (targetFlag && HasFlag(targetFlag->effectiveFlags, EEntityFlag::Dead))
-				{
-					if (attach.autoDestroyOnTargetDead) deadAttachments.push_back(attachEntity);
-					continue;
-				}
-
-				const auto xform = ComputeSocketWorldTransform(world, attach.targetEntity, attach.boneName, attach.offsetPosition, attach.offsetRotation);
-				trans.SetLocalPosition(xform.position);
-				trans.rotation = xform.rotation;
-				trans.SetEulerRotation(glm::degrees(glm::eulerAngles(xform.rotation)));
-				trans.SetLocalScale(attach.scale);
-			}
-
-			for (auto deadE : deadAttachments)
-			{
-				if (auto* ent = scene->FindEntity(deadE)) scene->DestroyEntity(*ent);
-			}
-		}
-
 		// ── 0-1. 재생 완료된 1회성 액션 VFX 엔티티 자동 소멸 (AutoDestroy) ──
 		{
 			auto vfxView = world.view<CompositeVFXComponent, ActionVFXLifecycleComponent>();
@@ -1142,7 +1110,10 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 				const float blendOutTime = existingAsset ? existingAsset->GetBlendOutTime() : ActionTimelineAsset::DefaultBlendOutTime;
 				EndAnimatorOverride(world, entity, timeline, blendOutTime);
 				EndCameraOverride(world, timeline);
-				ReleaseHeldVFXForOwner(world, entity);
+				ReleaseHeldVFXForOwner(world, entity, true);
+				EndTrackedSession(*scene, world, entity, timeline,
+					timeline.interruptPending ? EActionTimelineEndReason::Interrupted : EActionTimelineEndReason::Stopped,
+					pendingEndEvents);
 				continue;
 			}
 			if (flag && HasFlag(flag->effectiveFlags, EEntityFlag::Paused))
@@ -1371,39 +1342,88 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 			}
 		}
 
+		// ── 4-5. 소켓 부착(AttachToSocket) 엔티티 위치 및 회전 실시간 동기화 ──
+		// 프리뷰(AnimationTimelinePanel::Update)와 동일하게 타임라인 진행·포즈 평가·노티파이 스폰 뒤에 평가해 1프레임 지연을 없앤다.
+		{
+			auto attachView = world.view<SocketAttachmentComponent, TransformComponent>();
+			std::vector<entt::entity> deadAttachments;
+			std::vector<entt::entity> staleAttachments;
+
+			for (auto attachEntity : attachView)
+			{
+				if (!IsComponentEnabled<SocketAttachmentComponent>(world, attachEntity)) continue;
+				auto& attach = attachView.get<SocketAttachmentComponent>(attachEntity);
+				auto& trans = attachView.get<TransformComponent>(attachEntity);
+
+				const auto* targetFlag = world.valid(attach.targetEntity) ? world.try_get<FlagComponent>(attach.targetEntity) : nullptr;
+				const bool targetGone = !world.valid(attach.targetEntity) ||
+					(targetFlag && HasFlag(targetFlag->effectiveFlags, EEntityFlag::Dead));
+				if (targetGone)
+				{
+					if (attach.autoDestroyOnTargetDead) deadAttachments.push_back(attachEntity);
+					else staleAttachments.push_back(attachEntity);
+					continue;
+				}
+
+				if (const auto* vfxComp = world.try_get<CompositeVFXComponent>(attachEntity);
+					vfxComp && vfxComp->isFinished && !vfxComp->isLooping)
+				{
+					staleAttachments.push_back(attachEntity);
+					continue;
+				}
+
+				const auto xform = ComputeSocketWorldTransform(world, attach.targetEntity, attach.boneName, attach.offsetPosition, attach.offsetRotation);
+				trans.SetLocalPosition(xform.position);
+				trans.rotation = xform.rotation;
+				trans.SetEulerRotation(glm::degrees(glm::eulerAngles(xform.rotation)));
+				trans.SetLocalScale(attach.scale);
+			}
+
+			for (auto deadE : deadAttachments)
+			{
+				if (auto* ent = scene->FindEntity(deadE)) scene->DestroyEntity(*ent);
+			}
+			for (auto staleE : staleAttachments)
+			{
+				if (world.valid(staleE) && world.all_of<SocketAttachmentComponent>(staleE))
+					world.remove<SocketAttachmentComponent>(staleE);
+			}
+		}
+
 		// ── 5. 지속형 VFX 노티파이 해제 ──
 		// 소유자가 사라지거나 비활성화될 때, 타임라인을 다시 재생·정지·교체할 때, 끝 시점을 지나거나 재생이 끝났을 때 해제한다.
 		// 일시정지(Pause·Paused 플래그) 중에는 유지한다.
 		{
-			auto holdView = world.view<ActionVFXHoldComponent, CompositeVFXComponent>();
+			auto holdView = world.view<ActionVFXHoldComponent>();
 			std::vector<entt::entity> released;
 			for (auto vfxEntity : holdView)
 			{
-				if (!IsComponentEnabled<CompositeVFXComponent>(world, vfxEntity)) continue;
 				const auto& hold = holdView.get<ActionVFXHoldComponent>(vfxEntity);
+				auto* vfx = world.try_get<CompositeVFXComponent>(vfxEntity);
+				if (!vfx || !IsComponentEnabled<CompositeVFXComponent>(world, vfxEntity) ||
+					!IsComponentEnabled<ActionVFXHoldComponent>(world, vfxEntity))
+				{
+					released.push_back(vfxEntity);
+					continue;
+				}
 				const auto* owner = world.valid(hold.ownerEntity) ? TryGetEnabledComponent<ActionTimelineComponent>(world, hold.ownerEntity) : nullptr;
 				const auto* ownerFlag = owner ? world.try_get<FlagComponent>(hold.ownerEntity) : nullptr;
 				const bool ownerGone = !owner || (ownerFlag && (!ownerFlag->IsActiveInHierarchy() || HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Dead)));
 				const bool ownerEnded = owner && !owner->isPlaying && owner->playbackCompleted;
-				if (!IsComponentEnabled<ActionVFXHoldComponent>(world, vfxEntity))
-				{
-					holdView.get<CompositeVFXComponent>(vfxEntity).Release();
-					continue;
-				}
 				if (ownerGone || ownerEnded || owner->playSerial != hold.playSerial || owner->playElapsed >= hold.releaseElapsed)
 					released.push_back(vfxEntity);
 				else
 				{
-					auto& vfx = holdView.get<CompositeVFXComponent>(vfxEntity);
-					vfx.timelineTimeScale = std::max(0.0f, owner->playRate);
-					vfx.SetTimelinePaused(!owner->isPlaying || vfx.timelineTimeScale == 0.0f ||
+					vfx->timelineTimeScale = std::max(0.0f, owner->playRate);
+					vfx->SetTimelinePaused(!owner->isPlaying || vfx->timelineTimeScale == 0.0f ||
 						(ownerFlag && HasFlag(ownerFlag->effectiveFlags, EEntityFlag::Paused)));
 				}
 			}
 			for (auto vfxEntity : released)
 			{
-				world.get<CompositeVFXComponent>(vfxEntity).Release();
-				world.remove<ActionVFXHoldComponent>(vfxEntity);
+				if (!world.valid(vfxEntity)) continue;
+				if (auto* vfx = world.try_get<CompositeVFXComponent>(vfxEntity)) vfx->Release();
+				if (world.all_of<ActionVFXHoldComponent>(vfxEntity)) world.remove<ActionVFXHoldComponent>(vfxEntity);
 			}
 		}
 
