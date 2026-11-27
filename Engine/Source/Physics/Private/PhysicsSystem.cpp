@@ -14,6 +14,7 @@
 #include "TransformSystem.h"
 #include "WorldTransformComponent.h"
 #include "ColliderComponent.h"
+#include "PhysicsMaterial.h"
 #include "TerrainComponent.h"
 #include "Mesh.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -402,13 +403,37 @@ static bool ResolvePhysicsContact3D(entt::registry& world, entt::entity entityA,
 
     const auto* colA = TryGetEnabledComponent<ColliderComponent>(world, entityA);
     const auto* colB = TryGetEnabledComponent<ColliderComponent>(world, entityB);
-    const f32 restA = colA ? colA->GetSettings().Restitution : 0.0f;
-    const f32 restB = colB ? colB->GetSettings().Restitution : 0.0f;
-    const f32 fricA = colA ? colA->GetSettings().Friction : 0.5f;
-    const f32 fricB = colB ? colB->GetSettings().Friction : 0.5f;
+    const PhysicsMaterial* matA = (colA && colA->Material.IsValid()) ? colA->Material.Get() : nullptr;
+    const PhysicsMaterial* matB = (colB && colB->Material.IsValid()) ? colB->Material.Get() : nullptr;
 
-    const double friction = std::sqrt(static_cast<double>(fricA) * fricB);
-    double restitution = glm::max(restA, restB);
+    const f32 restA = matA ? matA->Restitution : (colA ? colA->GetSettings().Restitution : 0.0f);
+    const f32 restB = matB ? matB->Restitution : (colB ? colB->GetSettings().Restitution : 0.0f);
+    const f32 fricA = matA ? matA->DynamicFriction : (colA ? colA->GetSettings().Friction : 0.5f);
+    const f32 fricB = matB ? matB->DynamicFriction : (colB ? colB->GetSettings().Friction : 0.5f);
+
+    if (!std::isfinite(fricA) || fricA < 0.f || !std::isfinite(fricB) || fricB < 0.f ||
+        !std::isfinite(restA) || !std::isfinite(restB))
+        return false;
+
+    double friction = 0.0;
+    double restitution = 0.0;
+    if (matA || matB)
+    {
+        const EPhysicsCombineMode frictionCombine = (matA && matB)
+            ? static_cast<EPhysicsCombineMode>(std::max(static_cast<uint8>(matA->FrictionCombine), static_cast<uint8>(matB->FrictionCombine)))
+            : (matA ? matA->FrictionCombine : matB->FrictionCombine);
+        const EPhysicsCombineMode restitutionCombine = (matA && matB)
+            ? static_cast<EPhysicsCombineMode>(std::max(static_cast<uint8>(matA->RestitutionCombine), static_cast<uint8>(matB->RestitutionCombine)))
+            : (matA ? matA->RestitutionCombine : matB->RestitutionCombine);
+
+        friction = std::max(0.0, static_cast<double>(PhysicsMaterial::CombineValues(fricA, fricB, frictionCombine)));
+        restitution = std::clamp(static_cast<double>(PhysicsMaterial::CombineValues(restA, restB, restitutionCombine)), 0.0, 1.0);
+    }
+    else
+    {
+        friction = std::sqrt(static_cast<double>(fricA) * fricB);
+        restitution = glm::max(restA, restB);
+    }
     constexpr double restitutionThreshold = 0.5;
     if (-normalSpeed < restitutionThreshold)
         restitution = 0.0;

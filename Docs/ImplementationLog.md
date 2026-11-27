@@ -2,6 +2,17 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] `PhysicsMaterial` 독립 에셋(`.bamphysmat.json`) 도입 및 `SceneViewportPanel` 기즈모 빌드 수정
+
+- **요약**:
+  1. **`PhysicsMaterial` 독립 에셋 (`.bamphysmat.json`, `physics-material-asset`)**:
+     - `Engine/Source/Physics/Public/PhysicsMaterial.h`, `Private/PhysicsMaterial.cpp`: `EPhysicsCombineMode` (`Average`/`Minimum`/`Multiply`/`Maximum`), `StaticFriction`/`DynamicFriction`/`Restitution`/결합 모드 프로퍼티, `CombineValues`, `SaveToFile`/`LoadFromFile`(`JsonArchive`) 구현.
+     - `Engine/Source/Physics/Public/ColliderComponent.h`, `Private/PhysicsSystem.cpp`: 선택적 `ResourceHandle<PhysicsMaterial> Material`(`ALLOW_MISSING`) 추가 및 3D 충돌 응답에서 재질 지정 시 우선 적용(미지정 시 기존 `ColliderSettings` 인라인 폴백).
+  2. **`SceneViewportPanel` 기즈모 빌드 수정**:
+     - `Editor/Source/ImGui/ViewportPanel/Private/SceneViewportPanel.cpp`: `DrawSelectedCamera2DRoom` 전방 선언 보강 및 `worldTransform->worldMatrix[3].z` (폴백 `TransformComponent::GetPosition().z`) 교정.
+- **검증 상태**:
+  - 정적 검토 완료. 빌드(`Engine`, `Editor`, `CollisionGeometryCheck`, `KinematicCharacterCheck`) 및 CTest 실행 대기.
+
 ### [2026-11-27] `Camera2DRoomComponent` 기즈모 · `Inventory`/`NavGrid` 그래프 노드 7종 · `RenderPipelineProfile` SE-09 직렬화 보강
 
 - **요약**:

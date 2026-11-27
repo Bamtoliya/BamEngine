@@ -15,6 +15,7 @@
 namespace Engine
 {
     class Mesh;
+    class PhysicsMaterial;
 
     ENUM()
     enum class EColliderShapeType : uint8
@@ -101,6 +102,7 @@ namespace Engine
         const vec3& GetOffset() const { return m_Offset; }
         const ColliderSettings& GetSettings() const { return m_Settings; }
         const ColliderShape& GetShape() const { return m_Shape; }
+        const ResourceHandle<PhysicsMaterial>& GetMaterial() const { return Material; }
 
         EColliderShapeType GetShapeType() const
         {
@@ -148,11 +150,20 @@ namespace Engine
             return true;
         }
 
+        void SetMaterial(const ResourceHandle<PhysicsMaterial>& material)
+        {
+            Material = material;
+            m_Dirty = true;
+        }
+
         bool IsDirty() const { return m_Dirty; }
         void MarkDirty() { m_Dirty = true; }
 
         // PhysicsSystem이 관련 데이터 갱신을 완료한 뒤 호출합니다.
         void ClearDirty() { m_Dirty = false; }
+
+        PROPERTY(EDITABLE, ALLOW_MISSING, DISPLAY_NAME("PROP_PHYSICS_MATERIAL"))
+        ResourceHandle<PhysicsMaterial> Material;
 
     private:
         PROPERTY(EDITABLE, DISPLAY_NAME("PROP_OFFSET"))

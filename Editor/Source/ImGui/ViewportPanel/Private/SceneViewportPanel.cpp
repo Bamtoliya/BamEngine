@@ -452,6 +452,7 @@ void SceneViewportPanel::Update(f32 dt)
 		DrawSelectedSpline(activeScene);
 		DrawSelectedDecal(activeScene);
 		DrawSelectedProbeVolume(activeScene);
+		extern void DrawSelectedCamera2DRoom(Engine::Scene* scene, DebugRenderer& debugRenderer);
 		DrawSelectedCamera2DRoom(activeScene, m_DebugRenderer);
 
 		std::vector<Engine::DebugDrawCommand> debugCommands;
@@ -2390,7 +2391,7 @@ void SceneViewportPanel::FocusSelectedEntity()
 }
 
 #pragma region Spline
-static void DrawSelectedCamera2DRoom(Engine::Scene* scene, DebugRenderer& debugRenderer)
+void DrawSelectedCamera2DRoom(Engine::Scene* scene, DebugRenderer& debugRenderer)
 {
 	auto* selected = SelectionManager::Get().GetPrimarySelectedEntity();
 	if (!scene || !selected || selected->GetScene() != scene)
@@ -2407,7 +2408,9 @@ static void DrawSelectedCamera2DRoom(Engine::Scene* scene, DebugRenderer& debugR
 
 	f32 z = 0.0f;
 	if (const auto* worldTransform = world.try_get<Engine::WorldTransformComponent>(entity))
-		z = worldTransform->Position.z;
+		z = worldTransform->worldMatrix[3].z;
+	else if (const auto* transform = world.try_get<Engine::TransformComponent>(entity))
+		z = transform->position.z;
 
 	const vec3 minP(room->roomMin.x, room->roomMin.y, z);
 	const vec3 maxP(room->roomMax.x, room->roomMax.y, z);
