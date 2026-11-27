@@ -3,7 +3,7 @@
 #include "IBLManager.h"
 #include "Logger.h"
 #include "RuntimeSettingsManager.h"
-#include "GraphGameplayLibrary.h"
+#include "ActionCombatHelpers.h"
 #if BAM_EDITOR
 #include <chrono>
 #endif
@@ -159,7 +159,7 @@ void Runtime::Update(f32 dt, bool updateInput, uint8 phaseMask)
 			Milliseconds(scenesStart - audioStart).count(), Milliseconds(Clock::now() - scenesStart).count());
 	}
 #endif
-	const f32 hitstopScale = GraphGameplayLibrary::UpdateCombatEffects(dt);
+	const f32 hitstopScale = CombatEffectService::Update(dt);
 	const f32 scaledDt = dt * hitstopScale;
 	systems.Update(m_GlobalRegistry, activeScenes, scaledDt, phaseMask);
 }

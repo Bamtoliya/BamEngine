@@ -107,3 +107,6 @@ AnimatorGraph,Blend2DAddSample,Add Sample,샘플 추가
 AnimatorGraph,Blend2DPosX,Pos X,위치 X
 AnimatorGraph,Blend2DPosY,Pos Y,위치 Y
 AnimatorGraph,Blend2DFreeformEmptyHint,Add samples below to switch from 2x2 grid to 2D Freeform blending.,아래에서 샘플을 추가하면 2x2 격자에서 2D 자유형 블렌딩으로 전환됩니다.
+AnimatorGraph,BaseLayerWeight,Weight: 1.00 (Base),가중치: 1.00 (기본)
+AnimatorGraph,BaseLayerMask,Mask: Full Body,마스크: 전신
+AnimatorGraph,EvaluatedBones,Evaluated Bones: {},평가된 본: {}개

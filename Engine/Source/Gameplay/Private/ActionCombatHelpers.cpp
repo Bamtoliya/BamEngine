@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <mutex>
 
 namespace Engine
 {
@@ -145,6 +146,83 @@ namespace Engine
 
 		const f32 t = std::clamp(remainingDuration / totalDuration, 0.0f, 1.0f);
 		return intensity * (t * t);
+	}
+
+	// ═══════════════════════════════════════════════════════════════════════════
+	// CombatEffectService
+	// ═══════════════════════════════════════════════════════════════════════════
+
+	namespace
+	{
+		std::mutex& GetCombatEffectMutex()
+		{
+			static std::mutex s_mutex;
+			return s_mutex;
+		}
+
+		HitstopState& GetCombatHitstopState()
+		{
+			static HitstopState s_hitstop;
+			return s_hitstop;
+		}
+
+		CameraShakeState& GetCombatCameraShakeState()
+		{
+			static CameraShakeState s_cameraShake;
+			return s_cameraShake;
+		}
+	}
+
+	void CombatEffectService::TriggerHitstop(f32 duration, f32 timeScale)
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		GetCombatHitstopState().Trigger(duration, timeScale);
+	}
+
+	bool CombatEffectService::IsHitstopActive()
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		return GetCombatHitstopState().IsActive();
+	}
+
+	void CombatEffectService::TriggerCameraShake(f32 intensity, f32 duration, f32 frequency)
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		GetCombatCameraShakeState().Trigger(intensity, duration, frequency);
+	}
+
+	bool CombatEffectService::IsCameraShakeActive()
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		return GetCombatCameraShakeState().IsActive();
+	}
+
+	f32 CombatEffectService::Update(f32 unscaledDt)
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		auto& hitstop = GetCombatHitstopState();
+		hitstop.Update(unscaledDt);
+		GetCombatCameraShakeState().Update(unscaledDt);
+		return hitstop.GetEffectiveTimeScale();
+	}
+
+	vec3 CombatEffectService::GetCameraShakePositionOffset()
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		return GetCombatCameraShakeState().GetPositionOffset();
+	}
+
+	vec3 CombatEffectService::GetCameraShakeRotationOffsetDeg()
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		return GetCombatCameraShakeState().GetRotationOffsetDeg();
+	}
+
+	void CombatEffectService::Reset()
+	{
+		std::lock_guard<std::mutex> lock(GetCombatEffectMutex());
+		GetCombatHitstopState().Reset();
+		GetCombatCameraShakeState().Reset();
 	}
 
 	// ═══════════════════════════════════════════════════════════════════════════

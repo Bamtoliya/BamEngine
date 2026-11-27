@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
@@ -205,9 +205,11 @@ EResult ContentBrowserPanel::OnInitialize(void*)
 	m_WatchID = m_FileWatcher->addWatch(m_RootPath.string(), m_FileListener, true);
 	m_FileListener->SetProjectWatchId(m_WatchID);
 	std::error_code ec;
-	if (m_EngineRootPath != m_RootPath && std::filesystem::is_directory(m_EngineRootPath, ec))
+	m_HasEngineRootDir = !m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath && std::filesystem::is_directory(m_EngineRootPath, ec);
+	m_HasEditorRootDir = !m_EditorRootPath.empty() && m_EditorRootPath != m_RootPath && m_EditorRootPath != m_EngineRootPath && std::filesystem::is_directory(m_EditorRootPath, ec);
+	if (m_HasEngineRootDir)
 		m_EngineWatchID = m_FileWatcher->addWatch(m_EngineRootPath.string(), m_FileListener, true);
-	if (!m_EditorRootPath.empty() && m_EditorRootPath != m_RootPath && m_EditorRootPath != m_EngineRootPath && std::filesystem::is_directory(m_EditorRootPath, ec))
+	if (m_HasEditorRootDir)
 		m_EditorWatchID = m_FileWatcher->addWatch(m_EditorRootPath.string(), m_FileListener, true);
 	m_FileWatcher->watch();
 	m_AsyncCompletionHandle = AssetManager::Get().OnAsyncCompleted().AddLambda([this]()
@@ -487,11 +489,9 @@ void ContentBrowserPanel::Draw()
 		ImGui::TableNextRow();
 		ImGui::TableNextColumn();
 		ImGui::BeginChild("TreeArea", ImVec2(0, 0), false);
-		std::error_code treeEc;
 
 		// 1. Engine Resources (상위 배치)
-		if (!m_EngineRootPath.empty() && m_EngineRootPath != m_RootPath &&
-			std::filesystem::is_directory(m_EngineRootPath, treeEc))
+		if (m_HasEngineRootDir)
 		{
 			DrawDirectoryTree(m_EngineRootPath, m_EngineRootPath);
 			ImGui::Spacing();
@@ -500,8 +500,7 @@ void ContentBrowserPanel::Draw()
 		}
 
 		// 2. Editor Resources (상위 배치)
-		if (!m_EditorRootPath.empty() && m_EditorRootPath != m_RootPath && m_EditorRootPath != m_EngineRootPath &&
-			std::filesystem::is_directory(m_EditorRootPath, treeEc))
+		if (m_HasEditorRootDir)
 		{
 			DrawDirectoryTree(m_EditorRootPath, m_EditorRootPath);
 			ImGui::Spacing();
@@ -1582,7 +1581,7 @@ void ContentBrowserPanel::AddressBar(float width)
 			NavigateToAddress(m_AddressBarInputBuffer);
 			m_AddressBarEditing = false;
 		}
-		else if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+		else if (InputManager::Get().IsKeyButtonDown(EKeyCode::Escape))
 		{
 			m_AddressBarEditing = false;
 		}

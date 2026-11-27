@@ -953,8 +953,8 @@ void AnimatorGraphPanel::DrawLayersTab()
 	// Base Layer
 	if (ImGui::CollapsingHeader(LOCAL_LABEL("AnimatorGraph.BaseLayer").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 	{
-		ImGui::TextDisabled("Weight: 1.00 (Base)");
-		ImGui::TextDisabled("Mask: Full Body");
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.BaseLayerWeight"));
+		ImGui::TextDisabled("%s", LOCAL_CSTR("AnimatorGraph.BaseLayerMask"));
 	}
 
 	// Additional Layers
@@ -980,7 +980,7 @@ void AnimatorGraphPanel::DrawLayersTab()
 			ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.RecursiveChildren").c_str(), &layer.mask.includeChildren);
 			if (!layer.mask.boneWeights.empty())
 			{
-				ImGui::TextDisabled("Evaluated Bones: %zu", layer.mask.boneWeights.size());
+				ImGui::TextDisabled("%s", LOCAL_FMT("AnimatorGraph.EvaluatedBones", layer.mask.boneWeights.size()).c_str());
 			}
 
 			auto clip = layer.clip;
@@ -1192,7 +1192,7 @@ void AnimatorGraphPanel::DrawCanvas()
 	ed::EnableShortcuts(false);
 
 	auto& input = Engine::InputManager::Get();
-	if (input.IsKeyButtonPressed(Engine::EKeyCode::Escape))
+	if (input.IsKeyButtonDown(Engine::EKeyCode::Escape))
 		m_ConnectingSourceIndex = -1;
 
 	// ── 0. 현재 씬 또는 프리뷰에서 선택된 엔티티의 런타임 애니메이터 상태 조회 ──

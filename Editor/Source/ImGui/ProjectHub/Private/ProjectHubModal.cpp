@@ -46,6 +46,8 @@ void ProjectHubModal::Open()
 	if (EditorSettingsService::IsCreated())
 		EditorSettingsService::Get().LoadRecentProjects();
 
+	RefreshRecentProjectStatus();
+
 	if (m_TargetFolderBuffer[0] == '\0')
 	{
 		const auto defaultRoot = Engine::PlatformPath::GetProjectRoot().parent_path();
@@ -171,6 +173,29 @@ void ProjectHubModal::Draw()
 	ImGui::PopStyleColor();
 }
 
+void ProjectHubModal::RefreshRecentProjectStatus()
+{
+	m_RecentProjectExists.clear();
+	m_MissingProjectCount = 0;
+
+	if (!EditorSettingsService::IsCreated())
+		return;
+
+	const auto& recentProjects = EditorSettingsService::Get().GetRecentProjects();
+	m_RecentProjectExists.reserve(recentProjects.size());
+	for (const auto& entry : recentProjects)
+	{
+		const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
+			? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
+			: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+		std::error_code ec;
+		const bool exists = std::filesystem::exists(entryTarget, ec);
+		m_RecentProjectExists.push_back(exists);
+		if (!exists)
+			++m_MissingProjectCount;
+	}
+}
+
 void ProjectHubModal::DrawRecentProjectsSection()
 {
 	if (ImGui::Button(LOCAL_LABEL("ProjectHub.OpenProject").c_str()))
@@ -190,27 +215,31 @@ void ProjectHubModal::DrawRecentProjectsSection()
 
 	const std::vector<RecentProjectEntry> emptyEntries;
 	const auto& recentProjects = EditorSettingsService::IsCreated() ? EditorSettingsService::Get().GetRecentProjects() : emptyEntries;
+	if (m_RecentProjectExists.size() != recentProjects.size())
+		RefreshRecentProjectStatus();
+
 	const auto activeRoot = Engine::PlatformPath::Normalize(Engine::PlatformPath::GetProjectRoot());
 
-	std::vector<std::filesystem::path> missingTargets;
-	missingTargets.reserve(recentProjects.size());
-	for (const auto& entry : recentProjects)
-	{
-		const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-			? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-			: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
-		std::error_code ec;
-		if (!std::filesystem::exists(entryTarget, ec))
-			missingTargets.push_back(entryTarget);
-	}
-
-	if (!missingTargets.empty() && EditorSettingsService::IsCreated())
+	if (m_MissingProjectCount > 0 && EditorSettingsService::IsCreated())
 	{
 		ImGui::SameLine();
 		if (ImGui::Button(LOCAL_LABEL("ProjectHub.CleanMissing").c_str()))
 		{
+			std::vector<std::filesystem::path> missingTargets;
+			missingTargets.reserve(m_MissingProjectCount);
+			for (size_t i = 0; i < recentProjects.size() && i < m_RecentProjectExists.size(); ++i)
+			{
+				if (!m_RecentProjectExists[i])
+				{
+					const auto& entry = recentProjects[i];
+					missingTargets.push_back(!entry.ProjectFilePath.empty()
+						? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
+						: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot)));
+				}
+			}
 			for (const auto& target : missingTargets)
 				EditorSettingsService::Get().RemoveRecentProject(target);
+			RefreshRecentProjectStatus();
 		}
 	}
 
@@ -235,8 +264,7 @@ void ProjectHubModal::DrawRecentProjectsSection()
 			const auto entryRoot = Engine::PlatformPath::Normalize(
 				!entry.ProjectRoot.empty() ? std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot)) : entryTarget.parent_path());
 			const bool isActive = !activeRoot.empty() && Engine::PlatformPath::IsSamePath(activeRoot, entryRoot);
-			std::error_code existsEc;
-			const bool exists = std::filesystem::exists(entryTarget, existsEc);
+			const bool exists = (i < m_RecentProjectExists.size()) ? m_RecentProjectExists[i] : false;
 
 			ImGui::PushID(static_cast<int>(i));
 			ImGui::BeginGroup();
@@ -284,7 +312,10 @@ void ProjectHubModal::DrawRecentProjectsSection()
 	}
 
 	if (!pendingRemoveTarget.empty() && EditorSettingsService::IsCreated())
+	{
 		EditorSettingsService::Get().RemoveRecentProject(pendingRemoveTarget);
+		RefreshRecentProjectStatus();
+	}
 
 	ImGui::EndChild();
 }

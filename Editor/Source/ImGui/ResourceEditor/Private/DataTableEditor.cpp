@@ -166,7 +166,7 @@ void DataTableEditor::DrawCustomQuickAccess()
 
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!m_Loaded || m_Table.GetColumnCount() == 0 || readOnly);
-	if (ImGui::Button("+ Add Row"))
+	if (ImGui::Button(LOCAL_LABEL("ResourceEditor.DataTableAddRow").c_str()))
 	{
 		if (m_Table.AddEmptyRow())
 		{

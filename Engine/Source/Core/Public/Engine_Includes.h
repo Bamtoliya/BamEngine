@@ -84,10 +84,6 @@
 
 #pragma region ThirdParty Library
 // 2. Third Party Library (변경 빈도가 가장 낮음)
-#if !defined(__EMSCRIPTEN__)
-#include "imgui.h"
-#endif
-
 // fmt
 #include <fmt/core.h>
 #include <fmt/color.h>
@@ -148,6 +144,10 @@ using Microsoft::WRL::ComPtr;
 #include "PlatformPath.h"
 #pragma endregion
 using namespace Engine;
+
+#if BAM_EDITOR && !defined(__EMSCRIPTEN__)
+#include "imgui.h"
+#endif
 
 
 #if defined(_DEBUG)

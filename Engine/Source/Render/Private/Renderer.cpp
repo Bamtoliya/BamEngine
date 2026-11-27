@@ -1524,7 +1524,8 @@ EResult Renderer::RenderMotionVectors(const MotionVectorInfo& info, MotionHistor
 			mat4 world;
 			mat4 previousWorld;
 		};
-		vector<mat4> bones(boneCount * 2u, mat4(1.0f));
+		m_MotionPassScratchBones.resize(boneCount * 2u, mat4(1.0f));
+		auto& bones = m_MotionPassScratchBones;
 		const auto copyBones = [&](const vector<mat4>* source, size_t offset)
 			{
 				const size_t count = source ? std::min(source->size(), boneCount) : 0u;
@@ -1814,15 +1815,8 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	}
 
 	// ── VS와 PS의 시그니처 링키지(호환성) 검증 및 자동 보정 ──
-	const std::string vsKeyStr = ToLowerStr(WStrToStr(vs->GetKey()));
-	const std::string psKeyStr = ToLowerStr(WStrToStr(ps->GetKey()));
-
-	const bool isGBufferPS = (psKeyStr.find("gbuffer") != std::string::npos ||
-	                          psKeyStr.find("graphmaterial") != std::string::npos ||
-	                          psKeyStr.find("livepixelshader") != std::string::npos ||
-	                          psKeyStr.find("materialoutput") != std::string::npos);
-	const bool isGBufferVS = (vsKeyStr.find("gbuffer") != std::string::npos ||
-	                          vsKeyStr.find("skinning") != std::string::npos);
+	const bool isGBufferPS = ps->IsGBufferPS();
+	const bool isGBufferVS = vs->IsGBufferVS();
 
 	// GBuffer 픽셀 셰이더인데 정점 셰이더가 GBuffer용(WorldPos, PickingId 출력)이 아닌 경우 (예: DefaultVS)
 	if (isGBufferPS && !isGBufferVS)
@@ -1833,6 +1827,8 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 		if (fallbackVS && fallbackVS->GetRHIShader())
 		{
 			static std::unordered_set<std::string> s_LoggedFixes;
+			const std::string vsKeyStr = ToLowerStr(WStrToStr(vs->GetKey()));
+			const std::string psKeyStr = ToLowerStr(WStrToStr(ps->GetKey()));
 			if (s_LoggedFixes.insert(vsKeyStr + "->" + psKeyStr).second)
 			{
 				BAM_LOG(Warn, "Renderer", "PrepareMeshPipelineDesc",
@@ -1847,7 +1843,7 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 		}
 	}
 	// 포워드/레거시 픽셀 셰이더(DefaultPS)인데 정점 셰이더가 GBufferVS인 경우 (BINORMAL 부재 등)
-	else if (!isGBufferPS && isGBufferVS && (psKeyStr.find("defaultps") != std::string::npos))
+	else if (!isGBufferPS && isGBufferVS && ps->IsDefaultPS())
 	{
 		EnsureDefaultShaders();
 		Shader* fallbackVS = m_DefaultVS.Get();
@@ -1865,8 +1861,7 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	if (mesh)
 	{
 		const auto& inputLayouts = mesh->GetInputLayoutDescs();
-		const std::wstring& vsKey = vs->GetKey();
-		const bool isSkinningVS = (vsKey.find(L"Skinning") != std::wstring::npos || vsKey.find(L"skinning") != std::wstring::npos);
+		const bool isSkinningVS = vs->IsSkinningShader();
 		const bool hasSkinLayout = (inputLayouts.size() > 2);
 		if (isSkinningVS && !hasSkinLayout) return EResult::InvalidArgument;
 		// 정적 VS인데 스킨드 레이아웃이 온 경우, 셰이더가 요구하지 않는 슬롯 2(SkinData)를 제외하고 안전하게 정적 레이아웃만 전달

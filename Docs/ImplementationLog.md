@@ -2,6 +2,36 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 프로젝트 감사 보통 항목 일괄 수정 (핫패스 스크래치 버퍼 · 콘텐츠 브라우저 I/O·입력 · 로캘 정리)
+
+- **요약**:
+  1. **렌더 핫패스 매 프레임 로컬 컨테이너 할당 제거 (`fix-hotpath-allocs`)**:
+     - `MeshRenderSystem.h/.cpp`: `m_ScratchTargets`, `m_ScratchViews`, `m_ScratchStreamingViews`, `m_ScratchViewLODs`, `m_ScratchPlainUVShaders` 멤버 스크래치 버퍼 재사용 전환.
+     - `Renderer.h/.cpp`: `RenderMotionVectors`의 로컬 `bones` 벡터를 `m_MotionPassScratchBones` 멤버 버퍼 재사용으로 전환.
+  2. **콘텐츠 브라우저 매 프레임 OS Stat 제거 & `Escape` 입력 통일 (`fix-cb-io-input`)**:
+     - `ContentBrowserPanel.h/.cpp`, `ContentBrowserGridItem.cpp`: `m_HasEngineRootDir`/`m_HasEditorRootDir` 초기화 1회 캐싱, 툴팁 `file_size` 호버 경로 기준 1회 캐싱, `ImGui::IsKeyPressed(ImGuiKey_Escape)` → `InputManager::Get().IsKeyButtonDown(EKeyCode::Escape)` 통일.
+  3. **하드코딩 UI 문구 로캘화 및 중복 `Escape` 정리 (`fix-locale-cleanup`)**:
+     - `SceneViewportPanel.cpp`/`Editor.Viewport.csv`(`Viewport.ShowGameplayGizmos`), `AnimatorGraphPanel.cpp`/`Editor.AnimatorGraph.csv`(`BaseLayerWeight`, `BaseLayerMask`, `EvaluatedBones`, `IsKeyButtonDown(Escape)` 정리), `DataTableEditor.cpp`/`Editor.ResourceEditor.csv`(`ResourceEditor.DataTableAddRow`).
+- **검증 상태**:
+  - 사용자 실환경에서 `GenerateLocalization`, `Engine`, `Editor`, `Client` 빌드 완료 및 전체 CTest 통과 확인 완료.
+
+### [2026-11-27] 프로젝트 감사 심각·높음 항목 5건 일괄 수정 (PIE 누수·역방향 의존·헤더 경계·렌더 핫패스·허브 I/O)
+
+- **요약**:
+  1. **PIE 전역 상태 수명 누수 및 역방향 의존 제거 (`fix-gameplay-state-dep`)**:
+     - `ActionCombatHelpers.h/.cpp`: `CombatEffectService` 추가(`HitstopState`/`CameraShakeState` 스레드 안전 관리).
+     - `Runtime.cpp`, `CameraSystem.cpp`: `GraphGameplayLibrary.h` 역방향 의존 제거 및 `CombatEffectService` 호출로 전환.
+     - `GraphGameplayLibrary.h/.cpp`, `PIEManager.cpp`: `ResetSessionState()` 추가 및 `PIEManager::Stop()`/`ForceStopForShutdown()`에서 자동 호출해 PIE 종료 시 전역 상태 잔류 차단.
+  2. **`Engine_Includes.h` ImGui 헤더 경계 정리 (`fix-engine-includes`)**:
+     - `Engine/Source/Core/Public/Engine_Includes.h`: `imgui.h` 포함을 `Macro.h` 이후로 이동하고 `#if BAM_EDITOR && !defined(__EMSCRIPTEN__)`로 가드.
+  3. **`Renderer::PrepareMeshPipelineDesc` 핫패스 문자열 변환·할당 제거 (`fix-shader-flags`)**:
+     - `Shader.h/.cpp`: `UpdateKeyFlags()`로 `IsGBufferVS`/`IsGBufferPS`/`IsDefaultPS`/`IsSkinningShader` 사전 캐싱.
+     - `Renderer.cpp`: 매 호출 `ToLowerStr(WStrToStr(...))` 제거 및 O(1) 무할당 게터로 교체.
+  4. **`ProjectHubModal` 매 프레임 디스크 I/O 제거 (`fix-hub-io-cache`)**:
+     - `ProjectHubModal.h/.cpp`: `RefreshRecentProjectStatus()`로 `std::filesystem::exists` 결과를 모달 오픈/항목 제거 시에만 1회 캐싱(`DrawRecentProjectsSection` 내 디스크 Stat 0회).
+- **검증 상태**:
+  - 사용자 실환경에서 `Engine`, `Editor`, `Client`, `GraphExecutionCheck`, `GameplayCommonCheck` 빌드 완료 및 전체 CTest 통과 확인 완료.
+
 ### [2026-11-27] `PhysicsMaterial` 독립 에셋(`.bamphysmat.json`) 도입 및 `SceneViewportPanel` 기즈모 빌드 수정
 
 - **요약**:

@@ -812,17 +812,26 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 		else
 		{
 			ImGui::TextColored(visual.AccentColor, "%s %s", visual.Icon, visual.BadgeText.c_str());
-			try
+			static std::filesystem::path s_CachedTooltipPath;
+			static uintmax_t s_CachedTooltipFileSize = 0;
+			static bool s_HasCachedTooltipSize = false;
+			if (s_CachedTooltipPath != path)
 			{
-				uintmax_t fileSize = std::filesystem::file_size(path);
-				if (fileSize < 1024)
-					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeBytes", fileSize).c_str());
-				else if (fileSize < 1024 * 1024)
-					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeKB", fileSize / 1024).c_str());
-				else
-					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeMB", (float)fileSize / (1024.0f * 1024.0f)).c_str());
+				s_CachedTooltipPath = path;
+				std::error_code ec;
+				const uintmax_t size = std::filesystem::file_size(path, ec);
+				s_HasCachedTooltipSize = !ec;
+				s_CachedTooltipFileSize = ec ? 0 : size;
 			}
-			catch (...) {}
+			if (s_HasCachedTooltipSize)
+			{
+				if (s_CachedTooltipFileSize < 1024)
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeBytes", s_CachedTooltipFileSize).c_str());
+				else if (s_CachedTooltipFileSize < 1024 * 1024)
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeKB", s_CachedTooltipFileSize / 1024).c_str());
+				else
+					ImGui::Text("%s", LOCAL_FMT("ContentBrowser.SizeMB", (float)s_CachedTooltipFileSize / (1024.0f * 1024.0f)).c_str());
+			}
 		}
 		ImGui::EndTooltip();
 	}

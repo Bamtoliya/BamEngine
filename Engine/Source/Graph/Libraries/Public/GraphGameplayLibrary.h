@@ -156,6 +156,9 @@ namespace Engine
 		static int64 SetNavGridObstacleBox(const vec3& minBounds, const vec3& maxBounds, bool addObstacle = true);
 		static int64 SetNavGridObstacleCircle(const vec3& center, float radius = 1.0f, bool addObstacle = true);
 		static void ClearNavGridObstacles();
+
+		// Session State Lifecycle
+		static void ResetSessionState();
 	};
 }
 

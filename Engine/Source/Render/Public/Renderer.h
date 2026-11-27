@@ -187,6 +187,7 @@ private:
 
 	vector<ViewportCameraInfo> m_ViewportCameras;
 	unordered_map<RenderPassID, vector<ViewportJob>> m_ViewportJobsPerPass;
+	vector<mat4> m_MotionPassScratchBones;
 private:
 	ResourceHandle<Shader> m_DefaultGBufferVS;
 	ResourceHandle<Shader> m_DefaultGBufferSkinningVS;

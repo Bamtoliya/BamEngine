@@ -3,6 +3,7 @@
 #include "Editor_Includes.h"
 #include <filesystem>
 #include <string>
+#include <vector>
 
 BEGIN(Editor)
 
@@ -20,6 +21,7 @@ public:
 	void Draw();
 
 private:
+	void RefreshRecentProjectStatus();
 	void DrawRecentProjectsSection();
 	void DrawCreateProjectSection();
 	bool TrySwitchProject(const std::filesystem::path& projectFileOrRoot);
@@ -37,6 +39,8 @@ private:
 	int m_SelectedTemplateIndex = 0;
 	bool m_CreateCppModule = false;
 	std::string m_ErrorMessage;
+	std::vector<bool> m_RecentProjectExists;
+	size_t m_MissingProjectCount = 0;
 };
 
 END

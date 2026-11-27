@@ -8,6 +8,7 @@
 #include "EditorSettingsService.h"
 #include "InputActionSettings.h"
 #include "InputManager.h"
+#include "GraphGameplayLibrary.h"
 #include <chrono>
 
 IMPLEMENT_SINGLETON(PIEManager)
@@ -93,6 +94,7 @@ void PIEManager::Stop()
 
     Engine::AudioManager::Get().StopAllSounds();
     SelectionManager::Get().ClearSelection(true);
+    Engine::GraphGameplayLibrary::ResetSessionState();
 
     const EResult restoreResult = RestoreScene();
     if (restoreResult != EResult::Success)
@@ -124,6 +126,7 @@ void PIEManager::ForceStopForShutdown()
 
     Engine::AudioManager::Get().StopAllSounds();
     SelectionManager::Get().ClearSelection(true);
+    Engine::GraphGameplayLibrary::ResetSessionState();
     m_Snapshot.reset();
     m_State = EPlayState::Edit;
     m_SingleStepRequested = false;

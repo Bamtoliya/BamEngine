@@ -558,18 +558,6 @@ namespace Engine
 			return s_tables;
 		}
 
-		HitstopState& GetHitstopState()
-		{
-			static HitstopState s_hitstop;
-			return s_hitstop;
-		}
-
-		CameraShakeState& GetCameraShakeState()
-		{
-			static CameraShakeState s_cameraShake;
-			return s_cameraShake;
-		}
-
 		QuestTracker& GetQuestTracker()
 		{
 			static QuestTracker s_questTracker;
@@ -680,47 +668,37 @@ namespace Engine
 
 	void GraphGameplayLibrary::TriggerHitstop(float duration, float timeScale)
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		GetHitstopState().Trigger(duration, timeScale);
+		CombatEffectService::TriggerHitstop(duration, timeScale);
 	}
 
 	bool GraphGameplayLibrary::IsHitstopActive()
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetHitstopState().IsActive();
+		return CombatEffectService::IsHitstopActive();
 	}
 
 	void GraphGameplayLibrary::TriggerCameraShake(float intensity, float duration, float frequency)
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		GetCameraShakeState().Trigger(intensity, duration, frequency);
+		CombatEffectService::TriggerCameraShake(intensity, duration, frequency);
 	}
 
 	bool GraphGameplayLibrary::IsCameraShakeActive()
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetCameraShakeState().IsActive();
+		return CombatEffectService::IsCameraShakeActive();
 	}
 
 	float GraphGameplayLibrary::UpdateCombatEffects(float unscaledDt)
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		auto& hitstop = GetHitstopState();
-		hitstop.Update(unscaledDt);
-		GetCameraShakeState().Update(unscaledDt);
-		return hitstop.GetEffectiveTimeScale();
+		return CombatEffectService::Update(unscaledDt);
 	}
 
 	vec3 GraphGameplayLibrary::GetCameraShakePositionOffset()
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetCameraShakeState().GetPositionOffset();
+		return CombatEffectService::GetCameraShakePositionOffset();
 	}
 
 	vec3 GraphGameplayLibrary::GetCameraShakeRotationOffsetDeg()
 	{
-		std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
-		return GetCameraShakeState().GetRotationOffsetDeg();
+		return CombatEffectService::GetCameraShakeRotationOffsetDeg();
 	}
 
 	bool GraphGameplayLibrary::StartQuest(const std::string& questId, int64 targetCount)
@@ -960,5 +938,16 @@ namespace Engine
 			return;
 
 		grid->ClearDynamicObstacles();
+	}
+
+	void GraphGameplayLibrary::ResetSessionState()
+	{
+		{
+			std::lock_guard<std::mutex> lock(GetGameplayCacheMutex());
+			GetDataTableCache().clear();
+			GetQuestTracker().Clear();
+			GetInventoryContainer().Clear();
+		}
+		CombatEffectService::Reset();
 	}
 }

@@ -30,3 +30,4 @@ ResourceEditor,MissingResourcesHint,Some referenced assets could not be found an
 ResourceEditor,MissingResourcesNotification,{} opened with {} missing reference(s). Reassign them and save.,{} 에셋에 누락된 참조 {}건이 있어 빈 값으로 열었습니다. 다시 지정한 뒤 저장하세요.
 ResourceEditor,AutoFixMissing,Auto-Locate Nearby,근처에서 자동 찾기
 ResourceEditor,Dismiss,Dismiss,닫기
+ResourceEditor,DataTableAddRow,+ Add Row,+ 행 추가

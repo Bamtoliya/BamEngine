@@ -149,3 +149,4 @@ Viewport,CaptureHDRInitFailed,Failed to initialize offscreen HDR capture pipelin
 Viewport,CaptureHDRReadbackFailed,Failed to read back HDR face {} from GPU.,GPU에서 HDR 면 {}을(를) 읽어오지 못했습니다.
 Viewport,CaptureHDRSaveFailed,Failed to save captured HDR file: {},캡처한 HDR 파일을 저장하지 못했습니다: {}
 Viewport,CaptureHDRSucceeded,Saved HDR environment map: {},HDR 환경 맵을 저장했습니다: {}
+Viewport,ShowGameplayGizmos,Show Gameplay Gizmos,게임플레이 기즈모 표시

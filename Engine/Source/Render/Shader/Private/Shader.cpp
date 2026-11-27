@@ -18,6 +18,7 @@ EResult Shader::Initialize(void* arg)
 	m_SpirvPath = desc->spirvPath;
 	m_WgslPath = desc->wgslPath;
 	ResolveLegacyBinaryPaths();
+	UpdateKeyFlags();
 	m_NumSamplers = desc->numSamplers;
 	m_NumStorageTextures = desc->numStorageTextures;
 	m_NumStorageBuffers = desc->numStorageBuffers;
@@ -96,6 +97,7 @@ EResult Shader::OnPostLoad()
 {
 	Safe_Release(m_RHIShader);
 	ResolveLegacyBinaryPaths();
+	UpdateKeyFlags();
 
 	RHI* rhi = Renderer::IsCreated() ? Renderer::Get().GetRHI() : nullptr;
 	if (!rhi)
@@ -136,5 +138,17 @@ void Shader::ResolveLegacyBinaryPaths()
 			m_WgslPath = wgslPath.wstring();
 		}
 	}
+}
+
+void Shader::UpdateKeyFlags()
+{
+	const wstring lowerKey = ToLowerWStr(m_Key);
+	m_IsSkinningShader = (lowerKey.find(L"skinning") != wstring::npos);
+	m_IsGBufferVS = m_IsSkinningShader || (lowerKey.find(L"gbuffer") != wstring::npos);
+	m_IsGBufferPS = (lowerKey.find(L"gbuffer") != wstring::npos ||
+	                 lowerKey.find(L"graphmaterial") != wstring::npos ||
+	                 lowerKey.find(L"livepixelshader") != wstring::npos ||
+	                 lowerKey.find(L"materialoutput") != wstring::npos);
+	m_IsDefaultPS = (lowerKey.find(L"defaultps") != wstring::npos);
 }
 #pragma endregion

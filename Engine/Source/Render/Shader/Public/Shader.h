@@ -78,6 +78,16 @@ public:
 
 #pragma region Getter
 public:
+	void SetKey(const wstring& key)
+	{
+		Resource::SetKey(key);
+		UpdateKeyFlags();
+	}
+	bool IsGBufferVS() const { return m_IsGBufferVS; }
+	bool IsGBufferPS() const { return m_IsGBufferPS; }
+	bool IsDefaultPS() const { return m_IsDefaultPS; }
+	bool IsSkinningShader() const { return m_IsSkinningShader; }
+
 	EShaderType GetShaderType() const { return m_ShaderType; }
 	const string& GetEntryPoint() const { return m_EntryPoint; }
 	const wstring& GetDxilPath() const { return m_DxilPath; }
@@ -127,6 +137,7 @@ protected:
 #pragma region MyRegion
 private:
 	void ResolveLegacyBinaryPaths();
+	void UpdateKeyFlags();
 #pragma endregion
 
 
@@ -161,6 +172,11 @@ private:
 	vector<ShaderResourceBindingInfo> m_StorageTextures = {};
 	vector<ShaderInterfaceVariableInfo> m_StageInputs = {};
 	vector<ShaderInterfaceVariableInfo> m_StageOutputs = {};
+
+	bool m_IsGBufferVS = false;
+	bool m_IsGBufferPS = false;
+	bool m_IsDefaultPS = false;
+	bool m_IsSkinningShader = false;
 
 #pragma endregion
 

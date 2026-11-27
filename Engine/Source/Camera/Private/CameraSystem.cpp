@@ -1,5 +1,5 @@
 #include "CameraSystem.h"
-#include "GraphGameplayLibrary.h"
+#include "ActionCombatHelpers.h"
 #include "ComponentEnable.h"
 #include "CameraComponent.h"
 #include "Camera2DRoomComponent.h"
@@ -169,10 +169,10 @@ bool CameraSystem::UpdateCamera(entt::registry& registry, entt::entity entity, u
 	vec3 camPos = vec3(worldMatrix[3]);
 
 	// Combat CameraShake 런타임 오프셋 적용
-	if (GraphGameplayLibrary::IsCameraShakeActive())
+	if (CombatEffectService::IsCameraShakeActive())
 	{
-		const vec3 posOffset = GraphGameplayLibrary::GetCameraShakePositionOffset();
-		const vec3 rotOffsetDeg = GraphGameplayLibrary::GetCameraShakeRotationOffsetDeg();
+		const vec3 posOffset = CombatEffectService::GetCameraShakePositionOffset();
+		const vec3 rotOffsetDeg = CombatEffectService::GetCameraShakeRotationOffsetDeg();
 		const vec3 rightAxis = glm::normalize(vec3(finalWorld[0]));
 		const vec3 upAxis = glm::normalize(vec3(finalWorld[1]));
 		const vec3 forwardAxis = glm::normalize(vec3(finalWorld[2]));

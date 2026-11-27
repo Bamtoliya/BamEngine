@@ -871,7 +871,7 @@ void SceneViewportPanel::DrawDebugMenu()
 	{
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGrid").c_str(), nullptr, m_Grid.GetVisible());
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowCollider").c_str(), nullptr, m_DebugRenderer.GetDrawCollidersPtr());
-		ImGui::MenuItem("Show Gameplay Gizmos", nullptr, m_DebugRenderer.GetDrawGameplayGizmosPtr());
+		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowGameplayGizmos").c_str(), nullptr, m_DebugRenderer.GetDrawGameplayGizmosPtr());
 		ImGui::Separator();
 		ImGui::MenuItem(LOCAL_LABEL("Viewport.ShowNavGridOverlay").c_str(), nullptr, m_DebugRenderer.GetShowNavGridOverlayPtr());
 		if (ImGui::MenuItem((std::string(ICON_FA_HAMMER " ") + LOCAL("Viewport.BakeNavGridMenu")).c_str()))

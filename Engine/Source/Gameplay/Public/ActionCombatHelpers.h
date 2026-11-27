@@ -50,6 +50,23 @@ namespace Engine
 		vec3 rotationOffsetDeg{ 0.0f };
 	};
 
+	// ── 전투 이펙트 서비스 (Combat Effect Service) ──
+	// 히트스톱과 카메라 셰이크 전역 런타임 상태를 스레드 안전하게 관리한다.
+	class ENGINE_API CombatEffectService
+	{
+	public:
+		static void TriggerHitstop(f32 duration, f32 timeScale = 0.0f);
+		[[nodiscard]] static bool IsHitstopActive();
+
+		static void TriggerCameraShake(f32 intensity, f32 duration, f32 frequency = 25.0f);
+		[[nodiscard]] static bool IsCameraShakeActive();
+
+		static f32 Update(f32 unscaledDt);
+		[[nodiscard]] static vec3 GetCameraShakePositionOffset();
+		[[nodiscard]] static vec3 GetCameraShakeRotationOffsetDeg();
+		static void Reset();
+	};
+
 	// ── 타깃 락온 후보 ──
 	struct ENGINE_API TargetCandidate
 	{

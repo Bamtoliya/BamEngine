@@ -135,18 +135,12 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
     auto& renderer = Renderer::Get();
 
     // 1. 활성 뷰포트/패스별 고유 카메라 정보(위치, ProjY) 추출 및 묶음 구성
-    struct PassTarget
-    {
-        RenderPass* pass = nullptr;
-        RenderPassID viewID = INVALID_PASS_ID;
-        vec3 cameraPos = vec3(0.0f);
-        float projY = 1.0f;
-        bool hasLODCamera = false;
-        size_t viewIndex = SIZE_MAX; // views의 인덱스. 뷰에 속하지 않는 패스는 SIZE_MAX
-    };
-    vector<PassTarget> targets;
-    vector<RenderPassID> views;
-    vector<StreamingView> streamingViews; // views와 같은 순서
+    m_ScratchTargets.clear();
+    m_ScratchViews.clear();
+    m_ScratchStreamingViews.clear();
+    auto& targets = m_ScratchTargets;
+    auto& views = m_ScratchViews;
+    auto& streamingViews = m_ScratchStreamingViews; // views와 같은 순서
     const auto* backBuffer = renderer.GetRHI() ? renderer.GetRHI()->GetBackBuffer() : nullptr;
 
     for (const auto& viewport : renderer.GetActiveViewportCameras())
@@ -201,11 +195,13 @@ void MeshRenderSystem::OnSubmit(entt::registry& registry, const vector<Scene*>& 
     }
 
     if (targets.empty()) return;
-    vector<int32> viewLODs(views.size(), -1);
+    m_ScratchViewLODs.assign(views.size(), -1);
+    auto& viewLODs = m_ScratchViewLODs;
 
     auto* streamer = ResourceStreamer::IsCreated() && ResourceStreamer::Get().HasEntries() ? &ResourceStreamer::Get() : nullptr;
     // UV를 그대로 쓰는 엔진 기본 셰이더인지. 다른 셰이더는 UV를 바꿀 수 있어 가장 자세한 밉을 요청한다.
-    unordered_map<const Shader*, bool> plainUVShaders;
+    m_ScratchPlainUVShaders.clear();
+    auto& plainUVShaders = m_ScratchPlainUVShaders;
     const auto usesPlainUV = [&plainUVShaders](const MaterialInterface& material)
         {
             const Shader* shader = material.GetPixelShader(ERenderPassType::Geometry);

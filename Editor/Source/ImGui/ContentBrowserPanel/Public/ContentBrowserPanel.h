@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Editor_Includes.h"
 #include "ImGuiInterface.h"
@@ -281,6 +281,8 @@ private:
 	filesystem::path m_RootPath;
 	filesystem::path m_EngineRootPath;
 	filesystem::path m_EditorRootPath;
+	bool m_HasEngineRootDir = false;
+	bool m_HasEditorRootDir = false;
 	filesystem::path m_CurrentDirectory;
 	filesystem::path m_LastDirectory;
 	bool m_NeedToExpandTree = false;
