@@ -912,3 +912,14 @@ ctest --test-dir out/build/x64-ninja-debug -R "^RLSimulationCheck$" --output-on-
 | **2D 플랫포머 / 2D 탑다운** | 2D 조작감·타일맵 충돌 확장 | 타일맵 원웨이(단방향) 플랫폼, 코요테 타임·점프 버퍼링, 2D 카메라 룸 경계 클램핑 및 픽셀 퍼펙트 스케일링 유지 규칙을 보강한다. |
 | **RPG / 전략 / 시뮬레이션** | 데이터 테이블·다중 선택·상태 관리 | 외부 밸런스 시트(CSV/JSON) 로더 및 검증기, RTS/전략용 드래그 박스 다중 피킹·미니맵, 인벤토리·퀘스트·대화 상태 머신을 게임 계층에 구성한다. |
 | **멀티플레이 / 코옵 (후순위)** | `Network` 리플리케이션 & 세션 | 싱글플레이 완성 이후 `Network` 모듈의 ECS 상태 리플리케이션, 클라이언트 예측·보정, 로비/세션 흐름을 단계적으로 연결한다. |
+
+### 11.9 후속 신규 기능 후보 (2026-11-27 보류 기록)
+
+2026-11-27 게임 제작 공통 기반·장르별 보강·에디터 도구 확장 이후, 다음 스프린트에서 이어서 진행할 수 있는 미구현 후속 후보를 기록한다.
+
+| 항목 | 대상 영역 | 세부 내용 |
+|---|---|---|
+| **`DataTableEditor` 컬럼 편집 & 중복 키 하이라이트** | `Editor/Source/ImGui/ResourceEditor/DataTableEditor.*`, `Engine/Source/Gameplay/DataTable.*` | `[+ Add Column]` / 컬럼 삭제 API 및 기본 키(`Id`) 중복 행 경고 하이라이트 추가 |
+| **2D 타일맵 원웨이(단방향) 플랫폼 충돌 연동** | `Engine/Source/Tilemap/`, `Engine/Source/Physics/` | `Platformer2DHelpers::OneWayPlatform2D`를 실제 타일맵/2D 물리 충돌 경로에 연결(상승/하향 드롭 통과, 하강 착지 충돌) |
+| **`SceneTransitionManager` 로딩 진행률·문구 훅 확장** | `Engine/Source/World/Scene/SceneTransitionManager.*`, `GameViewportPanel`, `ClientRenderPipeline` | `SetLoadingMessage` / `GetLoadingMessage` / `GetProgress` API 추가 및 페이드 화면 위 로딩 안내 문구·진행 상태 표시 |
+| **`PhysicsMaterial` 에디터·`ResourceManager` 확장자 로더 통합** | `Engine/Source/Resource/`, `Editor/Source/ImGui/` | `.bamphysmat.json` 자동 로더 등록(`EResourceType::PhysicsMaterial`), 콘텐츠 브라우저 생성 메뉴 및 전용 인스펙터 편집 연결 |
