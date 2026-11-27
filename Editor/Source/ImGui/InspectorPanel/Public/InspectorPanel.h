@@ -50,6 +50,16 @@ private:
     entt::entity m_CachedEntity = entt::null;
     Engine::Scene* m_CachedScene = nullptr;
     uint64 m_CachedRevision = 0;
+
+public:
+    void ClearCachedSnapshot()
+    {
+        m_CachedSnapshot = {};
+        m_CachedEntity = entt::null;
+        m_CachedScene = nullptr;
+    }
+
+private:
     SceneEditSnapshot m_CachedSnapshot;
 
     // Revert All 요청: 포인터 대신 씬과 루트 ID를 보관하고 실행 직전에 다시 찾는다.

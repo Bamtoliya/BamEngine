@@ -226,6 +226,12 @@ EResult ModuleHotReloadManager::UnloadModule()
     if (!m_CurrentModule && !m_ModuleHandle)
         return EResult::Success;
 
+    // DLL이 FreeLibrary로 언로드되기 전에 에디터가 들고 있는 동적 컴포넌트 스냅샷 등을 먼저 해제한다.
+    for (const auto& cb : m_PreUnloadCallbacks)
+    {
+        if (cb) cb();
+    }
+
     if (m_CurrentModule)
     {
         m_CurrentModule->OnUnload();

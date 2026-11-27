@@ -25,6 +25,7 @@
 
 #include "StartupResourceLoader.h"
 #include "HotReloadManager.h"
+#include "InspectorPanel.h"
 #include "ModuleHotReloadManager.h"
 #include "ProjectSessionManager.h"
 #include "TerrainComponent.h"
@@ -166,6 +167,18 @@ EResult Application::Initialize(void* arg)
 
     if (HotReloadManager::IsCreated())
     {
+        HotReloadManager::Get().GetModuleReloader().RegisterPreUnloadCallback([]()
+            {
+                if (ImGuiManager::IsCreated())
+                {
+                    if (auto* panel = ImGuiManager::Get().GetImGuiPanel(L"Inspector"))
+                    {
+                        if (auto* inspector = dynamic_cast<InspectorPanel*>(panel))
+                            inspector->ClearCachedSnapshot();
+                    }
+                }
+            });
+
         HotReloadManager::Get().GetModuleReloader().RegisterPostReloadCallback([]()
             {
                 if (auto* graphSystem = SystemManager::Get().GetSystem<GraphSystem>())
@@ -253,6 +266,15 @@ void Application::Free()
 
     if (ProjectSessionManager::IsCreated())
         ProjectSessionManager::Destroy();
+
+    // 게임 모듈 DLL 언로드(HotReloadManager::Destroy) 전에 모든 씬의 엔티티/동적 컴포넌트 스토리지를 먼저 정리한다.
+    if (SceneManager::IsCreated())
+    {
+        for (auto* scene : SceneManager::Get().GetActiveScenes())
+        {
+            if (scene) scene->ClearEntities();
+        }
+    }
 
     HotReloadManager::Destroy();
 

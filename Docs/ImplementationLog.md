@@ -21,6 +21,18 @@ This document tracks implementation details, architectural decisions, and techni
 - **검증 상태**:
   - 사용자 실환경에서 `GenerateLocalization`, `Editor` 빌드 완료 및 전체 CTest 통과 확인 완료 (실환경 사용자 소스 플러그인 원클릭 빌드·로드 수동 확인 대기).
 
+### [2026-11-27] 동적 메시 Upload 힙 전환(GPU 스톨 제거) 및 게임 모듈 핫리로드·종료 시 컴포넌트 소멸 순서 수정
+
+- **요약**:
+  1. **동적 메시 GPU 스톨 제거 (`Mesh.cpp`)**:
+     - `EMeshFlag::Dynamic` 플래그가 설정된 메시의 버텍스 버퍼를 `ERHIBufferType::Upload`(영구 매핑 힙)로 생성하도록 변경하여, `UpdateStreamBufferInPlace()` 호출 시 매 프레임 `UploadBufferData()` + `FlushCommandQueue()`가 발생하던 프레임 드랍 병목 제거.
+  2. **게임 모듈 핫리로드/종료 시 동적 컴포넌트 크래시 근본 수정 (`ModuleHotReloadManager`, `InspectorPanel`, `Application`)**:
+     - `ModuleHotReloadManager.h/.cpp`: `RegisterPreUnloadCallback()` 추가 및 `UnloadModule()`의 `FreeLibrary()` 직전에 콜백 실행.
+     - `InspectorPanel.h`, `Application.cpp`: `ClearCachedSnapshot()` 추가 및 Pre-Unload 콜백에 연결하여 언로드될 DLL의 `entt::storage`가 스냅샷에 남지 않도록 보장.
+     - `Application.cpp`: `Application::Free()`에서 `HotReloadManager::Destroy()` 호출 직전에 활성 씬의 `ClearEntities()`를 먼저 실행해 DLL 언로드 전 동적 컴포넌트 스토리지가 안전하게 소멸되도록 순서 수정.
+- **검증 상태**:
+  - 사용자 실환경에서 `Engine`, `Editor` 빌드 및 핫리로드·에디터 종료 정상 동작 확인 완료.
+
 ### [2026-11-27] 슬라임 프로토타입 연계 엔진·에디터 안정화 (Physics Sleep, SpringArm, 동적 리플렉션, PIE 종료, EditorUI)
 
 - **요약**:

@@ -78,7 +78,8 @@ EResult Mesh::Initialize(void* arg)
 		if (stream.Data && stream.Count > 0 && stream.Stride > 0 && rhi)
 		{
 			uint32 totalSize = stream.Stride * stream.Count;
-			m_VertexBuffers[i] = rhi->CreateBuffer(stream.Data, totalSize, stream.Stride, ERHIBufferType::Vertex);
+			const ERHIBufferType vbType = HasFlag(desc->Flags, EMeshFlag::Dynamic) ? ERHIBufferType::Upload : ERHIBufferType::Vertex;
+			m_VertexBuffers[i] = rhi->CreateBuffer(stream.Data, totalSize, stream.Stride, vbType);
 			if (!m_VertexBuffers[i]) return EResult::Fail;
 		}
 	}
@@ -410,7 +411,8 @@ EResult Mesh::SetStreamBuffer(EMeshStream stream, void* data, uint32 count, uint
 	RHI* rhi = GetResourceUploadRHI();
 	if (rhi)
 	{
-		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, ERHIBufferType::Vertex);
+		const ERHIBufferType vbType = HasFlag(m_Flags, EMeshFlag::Dynamic) ? ERHIBufferType::Upload : ERHIBufferType::Vertex;
+		buffer = rhi->CreateBuffer(raw.data(), totalSize, stride, vbType);
 		if (!buffer) return EResult::Fail;
 	}
 
@@ -664,8 +666,9 @@ EResult Mesh::UploadToGPU()
 	{
 		if (rhi && !m_VertexBuffers[i] && !m_RawData[i].empty() && m_StreamStrides[i] > 0)
 		{
+			const ERHIBufferType vbType = HasFlag(m_Flags, EMeshFlag::Dynamic) ? ERHIBufferType::Upload : ERHIBufferType::Vertex;
 			m_VertexBuffers[i] = rhi->CreateBuffer(
-				m_RawData[i].data(), static_cast<uint32>(m_RawData[i].size()), m_StreamStrides[i], ERHIBufferType::Vertex);
+				m_RawData[i].data(), static_cast<uint32>(m_RawData[i].size()), m_StreamStrides[i], vbType);
 			if (!m_VertexBuffers[i])
 				return EResult::Fail;
 		}

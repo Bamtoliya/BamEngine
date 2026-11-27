@@ -40,6 +40,12 @@ public:
     [[nodiscard]] const std::filesystem::path& GetCurrentShadowDllPath() const { return m_CurrentShadowDllPath; }
 
 public:
+    using PreUnloadCallback = std::function<void()>;
+    void RegisterPreUnloadCallback(PreUnloadCallback callback)
+    {
+        if (callback) m_PreUnloadCallbacks.push_back(std::move(callback));
+    }
+
     using PostReloadCallback = std::function<void()>;
     void RegisterPostReloadCallback(PostReloadCallback callback)
     {
@@ -60,6 +66,7 @@ private:
     Engine::IModule* m_CurrentModule = nullptr;
     DestroyModuleFunc m_DestroyFunc = nullptr;
     uint32 m_ReloadIndex = 0;
+    std::vector<PreUnloadCallback> m_PreUnloadCallbacks;
     std::vector<PostReloadCallback> m_PostReloadCallbacks;
     // efsw 자동 감지 관련
     efsw::FileWatcher* m_FileWatcher = nullptr;
