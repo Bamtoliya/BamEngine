@@ -771,3 +771,31 @@ BamEngine은 렌더링 파이프라인, 절차적 기하 생성(Procedural Mesh)
 3. **불투명/디퍼드 머티리얼의 `CullMode = None (0)` 남용 금지**:
    - 와인딩 불일치로 면이 잘리는 문제를 해결하기 위해 `CullMode`를 임의로 `None(0)`으로 변경하는 행위를 금지한다.
    - 반투명(AlphaBlend), 잎사귀 등 명시적 양면 렌더링이 필요한 특수 재질을 제외한 모든 표준 머티리얼은 반드시 `CullMode = Back (2)`를 유지한다.
+
+---
+
+## 22. 게임 콘텐츠 개발 시 엔진 내장 기능 우선 재활용 원칙 (Engine-First Content Development)
+
+독립 게임 프로젝트(`GameModule`)에서 콘텐츠·기믹·연출을 구현할 때는 C++ 시스템이나 게임 모듈에 모든 로직과 데이터를 직접 하드코딩하지 않고, **엔진이 이미 제공하는 내장 컴포넌트·에셋·이벤트 시스템을 우선 재활용**한다.
+
+### 22.1 기본 원칙
+
+1. **엔진 기능 우선 탐색**: 새 기능을 게임 모듈 C++로 작성하기 전에, 엔진에 동일한 역할을 하는 컴포넌트·에셋·그래프 노드가 있는지 먼저 확인한다.
+2. **게임 모듈의 책임 한정**: 게임 모듈 C++는 해당 게임 고유의 핵심 메커니즘(예: 특수 이동 솔버, 절차적 변형, 고유 규칙)에 집중하며, 범용 기믹·배치·재질·직렬화는 엔진 기능에 위임한다.
+3. **씬·에셋 기반 데이터 주도 구성**: 오브젝트 좌표, 자식 계층 구조, 물리 재질, 트리거 범위 등을 C++ 상수로 하드코딩하지 않고 씬(`.bamscene.json`), 프리팹(`.bamprefab.json`), 독립 에셋으로 관리해 에디터에서 직접 편집·검증할 수 있게 한다.
+
+### 22.2 영역별 엔진 내장 기능 재활용 기준
+
+| 영역 | 지양할 구현 (하드코딩) | 권장 구현 (엔진 내장 기능 활용) |
+| :--- | :--- | :--- |
+| **구역 진입·기믹 판정** | 시스템 내부에서 좌표 범위(`abs(x - cx) <= r`) 수동 비교 | `ColliderComponent` (`IsTrigger = true`) + `PhysicsSystem::GetTriggerEvents3D/2D` 또는 `GraphComponent` (`OnTriggerEnter`/`Exit`) |
+| **표면 마찰·탄성** | `Update()`마다 `ColliderSettings`의 `Friction`/`Restitution` 수동 덮어쓰기 | 독립 `PhysicsMaterial` (`.bamphysmat.json`) 에셋 및 `FrictionCombine`/`RestitutionCombine` 활용 |
+| **오브젝트·자식 배치** | 런타임 시작 시 `CreateEntity` + `ReparentEntity`로 고정 오브젝트/장식 스폰 | 씬(`.bamscene.json`) 또는 프리팹(`.bamprefab.json`) 계층에 사전 배치 후 이름으로 바인딩 |
+| **상호작용·경로 이동** | 커스텀 거리 체크·왕복 보간 루프 중복 작성 | `InteractableComponent`, `SplineComponent`, `GraphComponent` 활용 |
+| **프리셋·상태 저장** | 게임 모듈별 커스텀 JSON 파서/라이터 작성 | `ReflectionArchive`(`JsonArchive`), `PresetStorage`(`SavePresetToFile`/`LoadPresetFromFile`), `SaveGameManager` 활용 |
+| **시각·오디오 연출** | 매 프레임 수동 파티클 배열 조작·별도 사운드 래퍼 | `ParticleEmitterComponent`, `AudioSourceComponent`, `PostProcessVolume` 등 내장 컴포넌트 우선 사용 |
+
+### 22.3 예외 기준
+
+- 엔진 내장 기능만으로 표현할 수 없는 게임 고유 동작(예: 커스텀 절차적 메시 변형, 특수 물리 솔버)이거나, 프로토타입 검증 단계에서 엔진 기능이 아직 부재한 경우에 한해 게임 모듈에 최소 구현을 허용한다.
+- 엔진에 공통으로 필요한 기능이 누락된 경우, 게임 모듈에 임시 우회를 누적하기보다 엔진 확장 계획으로 분리해 승격한다.

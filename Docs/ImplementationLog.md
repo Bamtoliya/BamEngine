@@ -2,6 +2,38 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-27] 정적 메시 `InstanceData::customData` 확장(96B) · 공용 `instanceData.hlsli` · 프로젝트 셰이더 자동 컴파일
+
+- **요약**:
+  1. **인스턴스별 사용자 데이터(`customData`) 파이프라인 확장**:
+     - `Engine/Source/Render/Public/InstanceData.h`, `RenderCommands.h`, `StaticMeshRendererComponent.h`, `MeshRenderSystem.cpp`, `Renderer.cpp`, `RHI.h`: `InstanceData`에 `vec4 customData`(16B) 추가(`sizeof(InstanceData) == 96`), `RHI::BindInstanceBuffer`의 `stride` 기본값 제거로 셰이더 구조체 크기 불일치 방지, `MeshInstancingCheck.cpp` 96B 레이아웃 단언 갱신.
+     - `Engine/Resources/Shader/hlsl/instanceData.hlsli`(신규) 및 `defaultVS.hlsl`, `gbufferVS.hlsl`, `shadowDepthVS.hlsl`, `shadowDepthMaskedVS.hlsl`, `waveVS.hlsl`, `glassPS.hlsl`: 공용 `InstanceData` 선언 일원화 및 `ShaderGraphCompiler.cpp`/`GraphRegistry.cpp` 연동.
+  2. **프로젝트 셰이더 기동 시 자동 컴파일 (`ShaderHotReloadManager.h/.cpp`)**:
+     - `CompileStaleProjectShaders()` 추가: 에디터 초기화 시 `Project://Shader` 하위 `.hlsl` 중 바이너리가 오래되었거나 누락된 셰이더를 `Project://Shader/bin`으로 자동 컴파일.
+- **검증 상태**: 코드 반영 / 빌드·실행 미검증.
+
+### [2026-11-27] `PhysicsMaterial` 로더·에디터 피커 통합 및 `Engine` 로캘 동기화
+
+- **요약**:
+  1. **`PhysicsMaterial` `.bamphysmat` 확장자 로더 및 에디터 통합**:
+     - `Engine/Source/Resource/Private/ResourceManager.cpp`, `Engine/Source/Physics/Private/PhysicsMaterial.cpp`: `.bamphysmat` 명시적 로더 등록 및 직렬화 보강.
+     - `Editor/Source/ImGui/Public/ResourcePicker.h`, `ReflectionPropertyDrawer.cpp`: `PhysicsMaterial` 호환 확장자(`.bamphysmat`/`.bamphysmat.json`), 배지(`PHYSICS MAT`), 인스펙터 인라인/프로퍼티 리소스 피커 연동.
+  2. **엔진 로캘 키 동기화**:
+     - `Engine/Resources/Data/Localization/Engine.csv`, `English.json`, `Korean.json`: `PROP_CUSTOM_DATA`, `PhysicsMaterial`, 신규 그래프 노드 등 누락 키 반영.
+- **검증 상태**: 코드 반영 / 빌드·실행 미검증.
+
+### [2026-11-27] 게임 모듈 핫 리로드 크래시 수정 · 미저장 씬 보존 · 시작/프로젝트 전환 씬 중복 로드 제거
+
+- **증상**: 핫 리로드 때마다 `SceneDocument::~SceneDocument → Scene::Free → registry.clear → sparse_set::clear`에서 액세스 위반(`0xC0000005`, 해제된 DLL 주소). 호출 경로: 리로드 후 `RestoreLastEditedScene → ImGuiManager::UpdateSceneLoad → AdoptSceneDocument → EditorDocumentManager::Remove`.
+- **원인**: 언로드 전 콜백이 `SceneManager::NewScene()`만 호출했지만 `SceneDocument`(AddRef)와 `SceneEditHistory` 스냅샷(`Data::Owner`)이 이전 씬을 계속 참조했다. 게임 모듈 컴포넌트 `storage<T>`를 가진 registry가 `FreeLibrary` 이후까지 살아남아, 문서 교체 시 마지막 Release에서 언로드된 vtable을 호출했다. 같은 콜백이 리로드 후 디스크의 `LastScenePath`를 다시 읽어 미저장 편집이 사라졌고, 시작(`RebindForProject` → 콜백 + `Initialize` 7단계)과 프로젝트 전환(콜백 + `LoadStartupSceneOrFallback`)에서는 씬이 중복 로드되었다.
+- **변경**:
+  1. `Application::ReleaseSceneForModuleUnload()` (언로드 전): PIE 중이면 중지한다. 실제 핫 리로드(`EHotReloadState::Reloading`)일 때만 현재 씬을 `JsonArchive`와 `TerrainDataFile::CaptureMemory`로 메모리에 보관한다(경로·Dirty·프로젝트 루트 포함). 이어서 선택·피킹·인스펙터 캐시를 비우고, `NewScene()` 뒤 `AdoptSceneDocument({}, false)`로 문서와 편집 이력의 참조까지 놓아 이전 registry를 DLL이 살아 있을 때 파괴한다.
+  2. `Application::RestoreSceneAfterModuleReload()` (리로드 후): 보관한 스냅샷이 있고 모듈이 로드되어 있으며 프로젝트 루트가 같을 때만 씬을 복원하고 문서를 다시 연결한다. 미저장 상태였으면 `NotifyUntrackedChange()`로 Dirty를 유지한다. 시작·프로젝트 전환에서는 스냅샷이 없으므로 아무것도 하지 않는다(중복 로드 제거).
+  3. 렌더 큐 정리: `SceneViewportPanel::Update`(`ImGuiManager::Update`)가 `HotReloadManager::Update`보다 먼저 `Scene*`를 캡처한 조명 패스 등을 제출한다. 그래서 같은 프레임에 씬을 파괴하면 `DeferredSceneRenderer::SubmitLightingPass` 람다가 해제된 registry를 조회해 크래시가 났다(`view<FogComponent>` → `dense_map` → `fast_mod`). 씬 파괴 직후 `Renderer::ClearAllRenderQueues()`로 커스텀 큐와 레이트레이싱 요청을 비운다.
+  4. `ModuleHotReloadManager`: 프리팹 모드가 열려 있으면 자동·수동 리로드를 보류한다. 메인 씬을 `PrefabModeManager::m_SavedMainScene`이 따로 보관하기 때문이다. 자동 리로드의 변경 파일은 대기열에 남아 모드를 나간 뒤 적용된다.
+- **제약**: 리로드 후 Undo/Redo 이력은 초기화된다. 씬 직렬화에 실패하면 미저장 편집을 잃는다(오류 로그 출력). 추가(additive) 씬은 복원하지 않는다.
+- **검증 상태**: 코드 반영 / 빌드·실행 미검증.
+
 ### [2026-11-27] 비균일 스케일 Box-Sphere 충돌 수정 · SpringArm 데드존 · 에디터 PIE/종료 안정화 · Glass 알파 반영
 
 - **요약**:
