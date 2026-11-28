@@ -2,6 +2,14 @@
 
 This document tracks implementation details, architectural decisions, and technical debt.
 
+### [2026-11-28] 리소스 수명 관리, 이벤트 구독, 프로젝트 모듈 빌드 및 개발 문서
+
+- 리소스 핸들의 타입과 슬롯을 참조 획득 시 확인한다. 리소스 매니저는 등록·해제, 유휴 캐시 수거와 지연 삭제를 관리하며, 의존성 스냅샷으로 등록된 리소스 간 참조를 조회한다. 비동기 로더와 씬 스트리밍 경로도 함께 갱신했다. [리소스 API](APIReference/Resource/ResourceManagement.md)
+- EventBus는 발행 중 이벤트 저장소의 수명을 유지하고, 구독 핸들을 버스에서 발급한다. Delegate의 구독 변경 처리와 함께 확인할 수 있다. [이벤트 API](APIReference/Core/Event.md)
+- Windows 게임 모듈 산출물을 Editor, Client, Shipping 역할과 빌드 구성별로 분리하고, 외부 CMake 소비자와 Editor 모듈 빌드·Client 패키징 경로를 갱신했다. 파일 경계에서는 공용 Unicode 변환을 사용한다. [프로젝트 모듈 API](APIReference/Core/ProjectModule.md)
+- 사용자 가이드와 API 레퍼런스에 목차와 소스 근거를 추가했다. 각 문서에 표시한 기준 커밋은 최초 조사 시점을 가리킨다. [사용자 가이드](UserGuide/README.md) · [API 레퍼런스](APIReference/README.md)
+- 검증 상태는 변경분 정적 확인이다. 빌드와 CTest, Editor 핫 리로드, Client 패키징과 독립 실행 검증이 남아 있다.
+
 ### [2026-11-27] 정적 메시 `InstanceData::customData` 확장(96B) · 공용 `instanceData.hlsli` · 프로젝트 셰이더 자동 컴파일
 
 - **요약**:

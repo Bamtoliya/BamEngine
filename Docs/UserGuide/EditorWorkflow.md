@@ -1,40 +1,72 @@
 # 에디터 기본 작업
 
-이 문서는 현재 코드에서 연결된 기본 작업 경로를 안내합니다. 기능 구현 여부와 각 화면의 최신 실환경 검증 여부는 다르므로, 최근 검증이 명시되지 않은 UI 단계까지 모두 통과했다고 해석하지 마세요.
+[사용자 가이드 목차](README.md)
 
-## 씬 열기와 저장
+> 기준: [main / 770e3adb](https://github.com/Bamtoliya/BamEngine/commit/770e3adb81e3a4e9ea692996df09942e74587f28), 2026-11-28 KST. 정적 조사 기반이며 빌드·실행 검증은 별도다. [상태 표기](README.md#상태-표기)
 
-상단 `Scene` 메뉴에서 새 씬을 만들거나 저장, 다른 이름으로 저장, 씬 불러오기를 요청할 수 있습니다. 씬 파일 선택 대화상자는 `.bamscene.json`과 `.json`을 지원합니다. Editor의 `SceneDocument`는 씬을 JSON Archive로 저장합니다.
+`Window → Panels`를 이용해 필요한 패널을 다시 열 수 있다. 아래 목록은 주요 소스/헤더 및 문서에 근거한다.
 
-저장할 수 없는 실행 상태이거나 문서 작업이 진행 중이면 저장·불러오기가 거부됩니다. 미저장 변경이 있을 때 씬을 바꾸는 흐름은 확인 대화상자의 안내를 따르세요.
+| 패널 | 사용 목적 |
+|---|---|
+| Hierarchy | 씬 엔티티와 부모/자식 계층, 생성 및 프리팹 작업 |
+| Inspector | 선택 엔티티의 컴포넌트와 속성 변경 |
+| Scene View | 월드 배치, 기즈모, 편집 카메라 |
+| Game View / Camera Viewport | 게임 화면 및 카메라 결과 확인 |
+| UI View | Canvas 및 화면 UI 배치, 상호작용 미리보기 |
+| Content Browser | 프로젝트/엔진/마운트 에셋 탐색, 리소스 생성 및 열기 |
+| Graph | 로직 및 셰이더 그래프 편집 |
+| Tile Palette | 스프라이트 타일과 오토타일 규칙 편집 |
+| Animator Graph / Timeline | 애니메이션 상태 및 시간 기반 편집 기능(파일 확인) |
+| Post Process | 후처리 편집 기능(파일 확인) |
+| Console / Metrics / History | 로그, 성능, 편집 이력 |
+| Asset Reference / Build Profile | 참조 확인, 빌드 대상 및 패키징 설정 |
 
-## 엔티티 추가와 편집
+## Scene 카메라
 
-1. `Hierarchy` 패널의 빈 영역에서 마우스 오른쪽 버튼을 눌러 생성 메뉴를 엽니다.
-2. 빈 엔티티, 기본 3D 도형, 조명, Sprite, Canvas 또는 Terrain 중 필요한 항목을 선택합니다.
-3. Hierarchy에서 엔티티를 선택하면 `Inspector`에서 등록된 컴포넌트와 속성을 편집합니다. Scene View의 Transform 기즈모는 위치·회전·크기 편집에 사용합니다.
-4. 변경 후 `Scene` 메뉴에서 저장합니다.
+`EditorCameraController`에서 확인한 Perspective 조작:
 
-지원되는 엔티티와 작업 범위는 코드 및 기존 설계 문서에서 확인할 수 있습니다. 프리팹은 엔진 API와 에디터 워크플로 상태가 다를 수 있으므로 [프리팹 씬 워크플로 계획](../PrefabSceneWorkflowPlan.md)을 확인하세요.
+| 조작 | 기능 |
+|---|---|
+| Alt + 왼쪽 버튼 드래그 | 피벗 중심 Orbit |
+| 가운데 버튼 드래그 | Pan |
+| Alt + 오른쪽 버튼 드래그 | 줌 드래그 |
+| 휠 | 거리 또는 FOV 줌(설정에 따라), Orthographic에서는 크기 조절 |
+| 오른쪽 버튼을 누른 상태에서 휠 | 카메라 이동 속도 조절 |
+| 오른쪽 버튼과 WASD/QE | 자유 이동 계열 조작 |
 
-## 씬 Undo/Redo
+뷰포트에 포커스/호버가 필요할 수 있다. Scene View의 편집 카메라를 움직이는 것과 실제 Camera 엔티티를 움직이는 것은 다르다.
 
-`Edit` 메뉴의 실행 취소·다시 실행을 사용하거나, 씬 편집 문맥에서 `Ctrl+Z`로 Undo, `Ctrl+Y` 또는 `Ctrl+Shift+Z`로 Redo할 수 있습니다. 텍스트 입력 중에는 텍스트 편집 이력이 우선합니다.
+## 저장 및 단축키
 
-지원되는 변경과 제약은 [씬 Undo/Redo 사용 범위](../EditorUndoRedo.md)에 정리되어 있습니다. 선택, 카메라 이동, 도킹 배치 등 씬 데이터를 바꾸지 않는 동작은 씬 이력에 포함되지 않습니다.
+- `Scene` 메뉴: New, Save, Save As, Load에 대응하는 작업.
+- Undo: Ctrl+Z / Redo: Ctrl+Y 또는 Ctrl+Shift+Z (씬 편집 문맥 기준).
+- 텍스트 입력 중에는 텍스트 이력이 우선한다. 단축키는 Settings의 Shortcuts에서 현재 매핑을 확인한다.
+- 창 배치, 선택, 편집 카메라 이동 등은 씬 데이터 Undo 대상이 아니다.
+- 렌더 타겟을 보고 있다면 Game View의 정상 최종 출력과 디버그 타겟을 구분한다.
 
-## 에셋 탐색
+## 씬과 엔티티
 
-`Content Browser`에서 프로젝트 에셋과 엔진 리소스를 탐색할 수 있습니다. 리소스 열기와 임포트는 파일 형식과 현재 편집기 경로에 따라 지원 범위가 다릅니다. 특정 파일의 편집·변환이 확인되지 않은 경우에는 이를 보장하는 범용 임포트 기능으로 간주하지 마세요.
+## 씬 생성
 
-파일 이동·이름 변경·삭제에는 참조 영향 검사와 파일 이력이 연결되어 있습니다. 실제로 변경하기 전에 영향 확인 대화상자를 검토하고, 안전한 복구 경로와 제약은 Undo/Redo 문서를 확인하세요.
+`Scene` 메뉴에서 새 씬을 만든 뒤 `Assets/Scenes/` 하위에 `.bamscene.json`으로 저장한다. 콘텐츠 브라우저의 Create Scene 진입점도 존재한다. 시작 씬은 프로젝트 설정과 `Config/Project.json`의 `StartupScenePath`를 확인한다. 기본 생성 경로는 `Project://Scenes/Main.bamscene.json`이다.
 
-## 검증 범위
+## 엔티티 및 컴포넌트
 
-- Scene Archive와 에디터 이력에는 자동 검사 경로가 있습니다.
-- 2026-11-20에는 사용자가 `x64-ninja-debug` 전체 빌드와 CTest 44/44 통과를 확인했습니다.
-- 이 결과만으로 모든 패널의 조작, DPI·언어별 레이아웃, GPU 피킹, PIE 또는 최신 미커밋 UI의 실환경 검증을 의미하지 않습니다. 실환경 판정 기준은 [에디터 UX 검증 지침](../EditorUXTestGuidelines.md)을 따릅니다.
+1. Hierarchy 빈 영역의 우클릭 생성 메뉴에서 Empty, Cube, Sphere, Plane, Cylinder, Capsule, 조명, Sprite, Canvas, Terrain, Camera 등 필요한 항목을 만든다.
+2. 엔티티를 선택하고 Inspector 또는 Scene 기즈모에서 위치, 회전, 크기를 조절한다.
+3. Inspector에서 필요한 컴포넌트를 추가하고 리소스 핸들·대상 엔티티를 연결한다.
+4. 컴포넌트의 Enable 및 엔티티 활성 상태를 확인한다.
+5. 씬 저장 후 다시 열어 데이터와 참조가 유지되는지 확인한다.
 
-## English
+ECS에서 엔티티의 외형, 물리, 게임 동작은 별도 컴포넌트다. 메시가 존재한다고 충돌이 자동으로 생기는 것은 아니다. 부모/자식 계층의 Transform과 로컬/월드 좌표도 구분한다.
 
-[Basic Editor Workflow in English](EditorWorkflow.en.md)
+## 관련 문서 및 소스
+
+- [EditorWorkflow.md](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Docs/UserGuide/EditorWorkflow.md)
+- [`ToolBar.cpp`](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp) — `Editor/Source/ImGui/ToolBar/Private/ToolBar.cpp`
+- [`EntityFactory.cpp`](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Editor/Source/Application/Private/EntityFactory.cpp) — `Editor/Source/Application/Private/EntityFactory.cpp`
+- [`EditorCameraController.cpp`](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Editor/Source/Application/Camera/Private/EditorCameraController.cpp) — `Editor/Source/Application/Camera/Private/EditorCameraController.cpp`
+- [`HierarchyPanel.cpp`](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Editor/Source/ImGui/HierarchyPanel/Private/HierarchyPanel.cpp) — `Editor/Source/ImGui/HierarchyPanel/Private/HierarchyPanel.cpp`
+- [`Scene.h`](https://github.com/Bamtoliya/BamEngine/blob/770e3adb81e3a4e9ea692996df09942e74587f28/Engine/Source/World/Scene/Public/Scene.h) — `Engine/Source/World/Scene/Public/Scene.h`
+- [전체 근거 및 검토 범위](Sources.md)
+

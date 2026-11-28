@@ -1,4 +1,4 @@
-# Architecture Overview
+﻿# Architecture Overview
 
 This document summarizes the current CMake configuration and major execution paths. Long-term plans and type declarations alone do not establish feature completion. Check the linked source, plans, and implementation records for current implementation and verification status.
 
@@ -14,7 +14,7 @@ GameModule ─┘
 - Non-Emscripten builds also add `Editor`, `GameModule`, and `Client`. `BAMENGINE_WITH_EDITOR` is enabled by default.
 - The `Editor` target includes editor UI and asset tools.
 - `Engine` is defined as a shared library for native configurations such as Windows and as a static library for Emscripten.
-- `Editor` and `Client` are Engine consumers. `GameModule` also links to `BamEngine::Engine`. See the [Engine, Editor, and Client guidelines](../EngineEditorClientGuidelines.md) for the runtime/editor dependency boundary.
+- `Editor` and `Client` are Engine consumers. `GameModule` also links to `BamEngine`. See the [Engine, Editor, and Client guidelines](../EngineEditorClientGuidelines.md) for the runtime/editor dependency boundary.
 - The root C++ default is C++20, while some subtargets such as Archive declare a C++23 requirement. Do not describe every target as using one language standard.
 
 ## Entry points and lifecycle

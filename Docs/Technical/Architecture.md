@@ -1,4 +1,4 @@
-# 아키텍처 개요
+﻿# 아키텍처 개요
 
 이 문서는 현재 CMake 구성과 주요 실행 경로를 요약합니다. 장기 계획이나 타입 선언만으로 기능 완료를 판정하지 않습니다. 현재 구현과 검증 상태는 각 링크의 코드·계획·구현 기록을 함께 확인하세요.
 
@@ -14,7 +14,7 @@ GameModule ─┘
 - 비-Emscripten 빌드에서는 `Editor`, `GameModule`, `Client`도 추가합니다. `BAMENGINE_WITH_EDITOR`는 기본적으로 활성화됩니다.
 - `Editor` 타깃은 에디터 UI와 에셋 도구를 포함합니다.
 - `Engine`은 Windows 등 네이티브 구성에서 공유 라이브러리이며 Emscripten 구성에서는 정적 라이브러리로 정의됩니다.
-- `Editor`와 `Client`는 각각 엔진 소비자입니다. `GameModule`도 `BamEngine::Engine`에 링크됩니다. 런타임·에디터 의존 경계는 [엔진·에디터·클라이언트 지침](../EngineEditorClientGuidelines.md)을 따릅니다.
+- `Editor`와 `Client`는 각각 엔진 소비자입니다. `GameModule`도 `BamEngine`에 링크됩니다. 런타임·에디터 의존 경계는 [엔진·에디터·클라이언트 지침](../EngineEditorClientGuidelines.md)을 따릅니다.
 - 루트의 C++ 기본값은 C++20이며, Archive 등 일부 하위 타깃은 C++23 요구를 선언합니다. 모든 타깃을 한 언어 표준으로 설명하지 않습니다.
 
 ## 실행 진입점과 생명주기
