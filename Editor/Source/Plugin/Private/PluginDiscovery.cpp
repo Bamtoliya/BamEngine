@@ -32,7 +32,7 @@ namespace Editor
         {
             std::error_code error;
             if (std::filesystem::exists(path, error) || error)
-                EDITOR_LOG_WARN("Cannot read editor plugin development list: {}", Engine::WStrToStr(path.wstring()));
+                EDITOR_LOG_WARN("Cannot read editor plugin development list: {}", Engine::Unicode::WideToUtf8(path.wstring()));
             return entries;
         }
 
@@ -109,7 +109,7 @@ namespace Editor
 
         if (!file.eof())
         {
-            EDITOR_LOG_WARN("Incomplete editor plugin development list: {}", Engine::WStrToStr(path.wstring()));
+            EDITOR_LOG_WARN("Incomplete editor plugin development list: {}", Engine::Unicode::WideToUtf8(path.wstring()));
             return {};
         }
 

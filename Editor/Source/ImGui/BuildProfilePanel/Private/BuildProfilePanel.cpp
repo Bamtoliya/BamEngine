@@ -64,8 +64,8 @@ std::string BuildProfilePanel::GetSceneUriAt(std::size_t index) const
         std::error_code error;
         const auto relative = std::filesystem::relative(m_StartupScene, root, error);
         if (!error && !relative.empty())
-            return "Project://" + Engine::WStrToStr(relative.generic_wstring());
-        return Engine::WStrToStr(m_StartupScene.generic_wstring());
+            return "Project://" + Engine::Unicode::WideToUtf8(relative.generic_wstring());
+        return Engine::Unicode::WideToUtf8(m_StartupScene.generic_wstring());
     }
 
     const std::size_t addIndex = index - 1;
@@ -79,7 +79,7 @@ void BuildProfilePanel::AddScene(const std::filesystem::path& path)
     const auto relative = std::filesystem::relative(path, root, error);
 
     if (error || relative.empty() || relative.is_absolute() || *relative.begin() == L".." ||
-        !Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring())).ends_with(".bamscene.json") ||
+        !Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring())).ends_with(".bamscene.json") ||
         !std::filesystem::is_regular_file(path, error))
     {
         NotificationManager::Get().AddNotification(
@@ -87,7 +87,7 @@ void BuildProfilePanel::AddScene(const std::filesystem::path& path)
         return;
     }
 
-    const auto uri = "Project://" + Engine::WStrToStr(relative.generic_wstring());
+    const auto uri = "Project://" + Engine::Unicode::WideToUtf8(relative.generic_wstring());
 
     if (!m_StartupScene.empty())
     {
@@ -115,7 +115,7 @@ void BuildProfilePanel::SelectStartupScene(const std::filesystem::path& path)
     const auto relative = std::filesystem::relative(path, root, error);
 
     if (error || relative.empty() || relative.is_absolute() || *relative.begin() == L".." ||
-        !Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring())).ends_with(".bamscene.json") ||
+        !Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring())).ends_with(".bamscene.json") ||
         !std::filesystem::is_regular_file(path, error))
     {
         NotificationManager::Get().AddNotification(
@@ -123,7 +123,7 @@ void BuildProfilePanel::SelectStartupScene(const std::filesystem::path& path)
         return;
     }
 
-    const auto uri = "Project://" + Engine::WStrToStr(relative.generic_wstring());
+    const auto uri = "Project://" + Engine::Unicode::WideToUtf8(relative.generic_wstring());
     const auto it = std::ranges::find(m_AdditionalScenes, uri);
     if (it != m_AdditionalScenes.end())
         m_AdditionalScenes.erase(it);
@@ -136,7 +136,7 @@ void BuildProfilePanel::SelectStartupScene(const std::filesystem::path& path)
             const auto oldRel = std::filesystem::relative(m_StartupScene, root, ec);
             if (!ec && !oldRel.empty())
             {
-                const auto oldUri = "Project://" + Engine::WStrToStr(oldRel.generic_wstring());
+                const auto oldUri = "Project://" + Engine::Unicode::WideToUtf8(oldRel.generic_wstring());
                 if (std::ranges::find(m_AdditionalScenes, oldUri) == m_AdditionalScenes.end())
                     m_AdditionalScenes.insert(m_AdditionalScenes.begin(), oldUri);
             }
@@ -161,8 +161,8 @@ bool BuildProfilePanel::MoveSceneUp(std::size_t index)
         std::error_code error;
         const auto oldStartupRel = std::filesystem::relative(m_StartupScene, root, error);
         const auto oldStartupUri = (!error && !oldStartupRel.empty())
-            ? ("Project://" + Engine::WStrToStr(oldStartupRel.generic_wstring()))
-            : ("Project://" + Engine::WStrToStr(m_StartupScene.filename().generic_wstring()));
+            ? ("Project://" + Engine::Unicode::WideToUtf8(oldStartupRel.generic_wstring()))
+            : ("Project://" + Engine::Unicode::WideToUtf8(m_StartupScene.filename().generic_wstring()));
 
         m_StartupScene = Engine::PlatformPath::ResolveUri(nextStartupUri);
         m_AdditionalScenes[0] = oldStartupUri;
@@ -192,8 +192,8 @@ bool BuildProfilePanel::MoveSceneDown(std::size_t index)
         std::error_code error;
         const auto oldStartupRel = std::filesystem::relative(m_StartupScene, root, error);
         const auto oldStartupUri = (!error && !oldStartupRel.empty())
-            ? ("Project://" + Engine::WStrToStr(oldStartupRel.generic_wstring()))
-            : ("Project://" + Engine::WStrToStr(m_StartupScene.filename().generic_wstring()));
+            ? ("Project://" + Engine::Unicode::WideToUtf8(oldStartupRel.generic_wstring()))
+            : ("Project://" + Engine::Unicode::WideToUtf8(m_StartupScene.filename().generic_wstring()));
 
         m_StartupScene = Engine::PlatformPath::ResolveUri(nextStartupUri);
         m_AdditionalScenes[0] = oldStartupUri;
@@ -290,7 +290,7 @@ void BuildProfilePanel::AddAssetsFromFolder(const std::filesystem::path& folderP
         if (error || relFile.empty() || relFile.is_absolute() || *relFile.begin() == L"..")
             continue;
 
-        const auto uri = "Project://" + Engine::WStrToStr(relFile.generic_wstring());
+        const auto uri = "Project://" + Engine::Unicode::WideToUtf8(relFile.generic_wstring());
         if (std::ranges::find(m_AdditionalAssets, uri) == m_AdditionalAssets.end())
         {
             m_AdditionalAssets.push_back(uri);
@@ -430,7 +430,7 @@ void BuildProfilePanel::DrawHeaderBar()
         {
             const auto result = ShellExecuteW(nullptr, L"open", exportedDirectory.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32)
-                EDITOR_LOG_WARN("Could not open exported folder: {}", Engine::WStrToStr(exportedDirectory.wstring()));
+                EDITOR_LOG_WARN("Could not open exported folder: {}", Engine::Unicode::WideToUtf8(exportedDirectory.wstring()));
         }
     }
 
@@ -478,10 +478,10 @@ void BuildProfilePanel::DrawHeaderBar()
             ImGui::TextDisabled("%s", LOCAL_CSTR("EditorCommon.None"));
         else
         {
-            const auto sceneName = Engine::WStrToStr(m_StartupScene.filename().wstring());
+            const auto sceneName = Engine::Unicode::WideToUtf8(m_StartupScene.filename().wstring());
             ImGui::TextUnformatted(sceneName.c_str());
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                ImGui::SetTooltip("%s", Engine::WStrToStr(m_StartupScene.wstring()).c_str());
+                ImGui::SetTooltip("%s", Engine::Unicode::WideToUtf8(m_StartupScene.wstring()).c_str());
         }
 
         ImGui::TableSetColumnIndex(2);
@@ -489,10 +489,10 @@ void BuildProfilePanel::DrawHeaderBar()
             ImGui::TextDisabled("%s", LOCAL_CSTR("EditorCommon.None"));
         else
         {
-            const auto dirName = Engine::WStrToStr(m_OutputDirectory.filename().wstring());
-            ImGui::TextUnformatted(dirName.empty() ? Engine::WStrToStr(m_OutputDirectory.wstring()).c_str() : dirName.c_str());
+            const auto dirName = Engine::Unicode::WideToUtf8(m_OutputDirectory.filename().wstring());
+            ImGui::TextUnformatted(dirName.empty() ? Engine::Unicode::WideToUtf8(m_OutputDirectory.wstring()).c_str() : dirName.c_str());
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                ImGui::SetTooltip("%s", Engine::WStrToStr(m_OutputDirectory.wstring()).c_str());
+                ImGui::SetTooltip("%s", Engine::Unicode::WideToUtf8(m_OutputDirectory.wstring()).c_str());
         }
 
         ImGui::TableSetColumnIndex(3);
@@ -506,7 +506,7 @@ void BuildProfilePanel::DrawHeaderBar()
             {
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                 {
-                    const auto fullExe = Engine::WStrToStr(m_OutputDirectory.generic_wstring()) + "/" +
+                    const auto fullExe = Engine::Unicode::WideToUtf8(m_OutputDirectory.generic_wstring()) + "/" +
                         m_PackageDirectoryName + "/" + m_ProgramName + ".exe";
                     ImGui::SetTooltip("%s", fullExe.c_str());
                 }
@@ -694,7 +694,7 @@ void BuildProfilePanel::DrawBuildLogCategory()
         {
             const auto result = ShellExecuteW(nullptr, L"open", exportedDirectory.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             if (reinterpret_cast<INT_PTR>(result) <= 32)
-                EDITOR_LOG_WARN("Could not open exported folder: {}", Engine::WStrToStr(exportedDirectory.wstring()));
+                EDITOR_LOG_WARN("Could not open exported folder: {}", Engine::Unicode::WideToUtf8(exportedDirectory.wstring()));
         }
     }
 
@@ -759,7 +759,7 @@ void BuildProfilePanel::DrawScenesInBuild()
         std::wstring selectedPath;
         const auto scenesDirectory = Engine::PlatformPath::GetProjectAssetRoot() / "Scenes";
         const vector<FileDialogFilter> filters = {
-            { Engine::StrToWStr(LOCAL("BuildProfile.SceneFiles")), L"*.bamscene.json" }
+            { Engine::Unicode::Utf8ToWide(LOCAL("BuildProfile.SceneFiles")), L"*.bamscene.json" }
         };
 
         if (FileDialogs::OpenFileDialog(selectedPath, filters, scenesDirectory.wstring(), "BuildProfile.AddScene"))
@@ -874,7 +874,7 @@ void BuildProfilePanel::DrawPackagingOptions()
         if (m_OutputDirectory.empty())
             ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.None"));
         else
-            ImGui::TextWrapped("%s", Engine::WStrToStr(m_OutputDirectory.wstring()).c_str());
+            ImGui::TextWrapped("%s", Engine::Unicode::WideToUtf8(m_OutputDirectory.wstring()).c_str());
 
         EditorUI::PropertyRow("BuildProfile.ProgramName");
         ImGui::BeginDisabled(running);
@@ -897,7 +897,7 @@ void BuildProfilePanel::DrawPackagingOptions()
             ImGui::TextUnformatted(LOCAL_CSTR("EditorCommon.None"));
         else
         {
-            const auto output = Engine::WStrToStr(m_OutputDirectory.generic_wstring()) + "/" +
+            const auto output = Engine::Unicode::WideToUtf8(m_OutputDirectory.generic_wstring()) + "/" +
                 m_PackageDirectoryName + "/" + m_ProgramName + ".exe";
             ImGui::TextWrapped("%s", output.c_str());
         }
@@ -922,7 +922,7 @@ void BuildProfilePanel::DrawAdditionalAssets()
         using Path = Engine::PlatformPath;
         const auto& assetRoot = Path::GetProjectAssetRoot();
         const vector<FileDialogFilter> filters = {
-            { Engine::StrToWStr(LOCAL("BuildProfile.AllFiles")), L"*.*" }
+            { Engine::Unicode::Utf8ToWide(LOCAL("BuildProfile.AllFiles")), L"*.*" }
         };
         std::wstring selected;
         if (FileDialogs::OpenFileDialog(selected, filters, assetRoot.wstring(), "BuildProfile.AddAsset"))
@@ -933,7 +933,7 @@ void BuildProfilePanel::DrawAdditionalAssets()
                 std::filesystem::is_regular_file(selected, error);
             if (valid)
             {
-                const auto uri = "Project://" + Engine::WStrToStr(relative.generic_wstring());
+                const auto uri = "Project://" + Engine::Unicode::WideToUtf8(relative.generic_wstring());
                 if (std::ranges::find(m_AdditionalAssets, uri) == m_AdditionalAssets.end())
                 {
                     m_AdditionalAssets.push_back(uri);
@@ -1069,7 +1069,7 @@ void BuildProfilePanel::DrawSceneReferenceCheck()
             reasonKey = "BuildProfile.ReferenceOutsideRoots";
 
         ImGui::BulletText("%s", LOCAL_CSTR(reasonKey));
-        ImGui::TextWrapped("%s", Engine::WStrToStr(issue.SourceFile.wstring()).c_str());
+        ImGui::TextWrapped("%s", Engine::Unicode::WideToUtf8(issue.SourceFile.wstring()).c_str());
         if (!issue.TargetReference.empty())
             ImGui::TextWrapped("  -> %s", issue.TargetReference.c_str());
     }
@@ -1166,7 +1166,7 @@ void BuildProfilePanel::DrawReplacePackageDialog()
     {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 34.f * ImGui::GetFontSize());
         ImGui::TextWrapped("%s", LOCAL_CSTR("BuildProfile.ReplacePackageMessage"));
-        const auto path = Engine::WStrToStr(m_PendingReplacement->Destination.Directory.wstring());
+        const auto path = Engine::Unicode::WideToUtf8(m_PendingReplacement->Destination.Directory.wstring());
         ImGui::TextWrapped("%s", path.c_str());
         ImGui::PopTextWrapPos();
         ImGui::Separator();

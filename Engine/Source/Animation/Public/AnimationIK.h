@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Engine_Includes.h"
 #include "ComponentAnnotations.h"
@@ -338,7 +338,7 @@ namespace Engine
 			if (!chain.enabled)
 				continue;
 
-			const std::wstring wEnd(chain.endBoneName.begin(), chain.endBoneName.end());
+			const std::wstring wEnd{ Unicode::Utf8ToWide(chain.endBoneName) };
 			const uint32 endBoneIdx = skeleton.GetBoneIndex(wEnd);
 			if (endBoneIdx >= bones.size())
 				continue;
@@ -385,7 +385,7 @@ namespace Engine
 		uint32 pelvisIdx = UINT32_MAX;
 		if (!ikComp.pelvisBoneName.empty())
 		{
-			const std::wstring wPelvis(ikComp.pelvisBoneName.begin(), ikComp.pelvisBoneName.end());
+			const std::wstring wPelvis{ Unicode::Utf8ToWide(ikComp.pelvisBoneName) };
 			pelvisIdx = skeleton.GetBoneIndex(wPelvis);
 		}
 		if (pelvisIdx >= localPose.size())
@@ -437,7 +437,7 @@ namespace Engine
 			if (!chain.enabled)
 				continue;
 
-			const std::wstring wEnd(chain.endBoneName.begin(), chain.endBoneName.end());
+			const std::wstring wEnd{ Unicode::Utf8ToWide(chain.endBoneName) };
 			const uint32 endBoneIdx = skeleton.GetBoneIndex(wEnd);
 			if (endBoneIdx >= bones.size())
 				continue;
@@ -484,7 +484,7 @@ namespace Engine
 		uint32 pelvisIdx = UINT32_MAX;
 		if (!ikComp.pelvisBoneName.empty())
 		{
-			const std::wstring wPelvis(ikComp.pelvisBoneName.begin(), ikComp.pelvisBoneName.end());
+			const std::wstring wPelvis{ Unicode::Utf8ToWide(ikComp.pelvisBoneName) };
 			pelvisIdx = skeleton.GetBoneIndex(wPelvis);
 		}
 		if (pelvisIdx >= localPose.size())
@@ -531,9 +531,9 @@ namespace Engine
 		{
 			if (!chain.enabled || chain.weight <= 0.0f) continue;
 
-			const std::wstring wRoot(chain.rootBoneName.begin(), chain.rootBoneName.end());
-			const std::wstring wMid(chain.midBoneName.begin(), chain.midBoneName.end());
-			const std::wstring wEnd(chain.endBoneName.begin(), chain.endBoneName.end());
+			const std::wstring wRoot{ Unicode::Utf8ToWide(chain.rootBoneName) };
+			const std::wstring wMid{ Unicode::Utf8ToWide(chain.midBoneName) };
+			const std::wstring wEnd{ Unicode::Utf8ToWide(chain.endBoneName) };
 
 			const uint32 rootIdx = skeleton.GetBoneIndex(wRoot);
 			const uint32 midIdx = skeleton.GetBoneIndex(wMid);
@@ -589,7 +589,7 @@ namespace Engine
 		{
 			if (!lookAt.enabled || lookAt.weight <= 0.0f) continue;
 
-			const std::wstring wBone(lookAt.boneName.begin(), lookAt.boneName.end());
+			const std::wstring wBone{ Unicode::Utf8ToWide(lookAt.boneName) };
 			const uint32 boneIdx = skeleton.GetBoneIndex(wBone);
 			if (boneIdx >= bones.size()) continue;
 

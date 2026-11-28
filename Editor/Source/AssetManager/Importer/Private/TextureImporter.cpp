@@ -101,9 +101,10 @@ EResult TextureImporter::Import(const filesystem::path& sourcePath, const filesy
 
 	// 4. CPU 데이터 전용 임시 Texture 객체 생성 후 Serialize로 .bamtex 저장
 	const auto destroyTexture = [](Engine::Texture* value)
-	{
-		if (value) ResourceManager::Get().DestroyResource(value);
-	};
+		{
+			if (value)
+				Engine::ResourceManager::DestroyUnregisteredResource(value);
+		};
 	std::unique_ptr<Engine::Texture, decltype(destroyTexture)> texture(
 		Engine::Texture::Create(texHeader, rawData, bamtexPath.wstring()), destroyTexture);
 	if (!texture) return EResult::Fail;

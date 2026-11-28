@@ -557,7 +557,7 @@ bool AnimatorStateMachine::SaveToFile(const std::string& filePath) const
 	if (!saveRes)
 	{
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] SaveToFile failed: code={}, field={}, path={}",
-			static_cast<int>(saveRes.Code), saveRes.Field, WStrToStr(resolvedPath.wstring()));
+			static_cast<int>(saveRes.Code), saveRes.Field, Engine::Unicode::WideToUtf8(resolvedPath.wstring()));
 		return false;
 	}
 	return true;
@@ -584,7 +584,7 @@ bool AnimatorStateMachine::LoadFromFile(const std::string& filePath)
 	if (!loadRes)
 	{
 		BAM_LOG(Error, "Engine", "Asset", "[Animator] LoadFromFile failed: code={}, field={}, reference='{}', resolved='{}'",
-			static_cast<int>(loadRes.Code), loadRes.Field, filePath, WStrToStr(resolvedPath.wstring()));
+			static_cast<int>(loadRes.Code), loadRes.Field, filePath, Engine::Unicode::WideToUtf8(resolvedPath.wstring()));
 		return false;
 	}
 	const auto fileReady = Clock::now();

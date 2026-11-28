@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Base.h"
 #include "Handle.h"
@@ -62,6 +62,8 @@ public:
 	bool Cancel(RequestId id);
 	[[nodiscard]] size_t GetPendingCount() const;
 
+	bool CancelAllAndWaitIdle(std::chrono::milliseconds timeout);
+
 private:
 	void WorkerLoop();
 
@@ -75,6 +77,10 @@ private:
 	std::unordered_map<RequestId, std::shared_ptr<AsyncLoadRequest>> m_Requests;
 	std::deque<std::shared_ptr<AsyncLoadRequest>> m_PendingQueue;
 	std::deque<std::shared_ptr<AsyncLoadRequest>> m_ReadyQueue;
+
+	bool m_ReadInProgress = false;
+
+	const std::thread::id m_OwnerThread = std::this_thread::get_id();
 };
 
 END

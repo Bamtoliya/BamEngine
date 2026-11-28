@@ -57,7 +57,7 @@ if(EMSCRIPTEN)
 else()
     add_library(Engine SHARED ${ENGINE_HEADERS} ${ENGINE_SOURCES})
 endif()
-add_library(BamEngine::Engine ALIAS Engine)
+add_library(BamEngine ALIAS Engine)
 
 # ==============================================================================
 # 4. Target Properties & Compile Options (타겟 속성 및 컴파일 플래그)

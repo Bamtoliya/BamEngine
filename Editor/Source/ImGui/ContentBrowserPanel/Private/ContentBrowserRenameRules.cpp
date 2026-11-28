@@ -1,5 +1,6 @@
-#include "ContentBrowserRename.h"
+﻿#include "ContentBrowserRename.h"
 #include "Functions.h"
+#include "Unicode.h"
 #include <Windows.h>
 
 namespace Editor::ContentBrowser
@@ -26,7 +27,7 @@ namespace Editor::ContentBrowser
     {
         const auto filename = path.filename().wstring();
         const auto extension = RenameExtension(path, directory);
-        return Engine::WStrToStr(filename.substr(0, filename.size() - extension.size()));
+        return Engine::Unicode::WideToUtf8(filename.substr(0, filename.size() - extension.size()));
     }
 
     bool TryBuildRenamePath(const std::filesystem::path& path, bool directory, std::string_view name,

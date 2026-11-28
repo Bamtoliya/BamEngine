@@ -309,7 +309,7 @@ void GraphPanel::DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar)
 	{
 		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(m_DebugEntity);
 		if (nameComp && !nameComp->name.empty())
-			previewName = LOCAL_FMT("GraphPanel.DebugNamedEntity", WStrToStr(nameComp->name), entt::to_integral(m_DebugEntity));
+			previewName = LOCAL_FMT("GraphPanel.DebugNamedEntity", Engine::Unicode::WideToUtf8(nameComp->name), entt::to_integral(m_DebugEntity));
 		else
 			previewName = LOCAL_FMT("GraphPanel.DebugEntity", entt::to_integral(m_DebugEntity));
 	}
@@ -335,11 +335,11 @@ void GraphPanel::DrawDebugToolbar(EditorUI::ToolbarLayout& toolbar)
 				const auto* nameComp = reg.try_get<Engine::NameComponent>(entity);
 				std::string itemLabel;
 				if (nameComp && !nameComp->name.empty())
-					itemLabel = fmt::format("{} (#{})", WStrToStr(nameComp->name), entt::to_integral(entity));
+					itemLabel = fmt::format("{} (#{})", Engine::Unicode::WideToUtf8(nameComp->name), entt::to_integral(entity));
 				else
 					itemLabel = LOCAL_FMT("GraphPanel.EntityLabel", entt::to_integral(entity));
 				if (!binding.graphFile.empty())
-					itemLabel += fmt::format(" [{}]", WStrToStr(std::filesystem::path(binding.graphFile).filename().wstring()));
+					itemLabel += fmt::format(" [{}]", Engine::Unicode::WideToUtf8(std::filesystem::path(binding.graphFile).filename().wstring()));
 				const bool selected = (m_DebugEntity == entity);
 				ImGui::PushID(static_cast<int>(entt::to_integral(entity)));
 				itemLabel += "###DebugEntityItem";

@@ -15,10 +15,10 @@ EResult DirectX12Shader::Initialize(const DESC& desc)
 		const EResult readRes = PakMountManager::Get().ReadBytesWithFallback(desc.filePath, m_ShaderBytecode);
 		if (readRes != EResult::Success)
 		{
-			fmt::print(stderr, "Shader open failed: {}\n", WStrToStr(desc.filePath));
+			fmt::print(stderr, "Shader open failed: {}\n", Engine::Unicode::WideToUtf8(desc.filePath));
 			return readRes;
 		}
-		fmt::print(stderr, "DX12 shader load: {}, size={}\n", WStrToStr(desc.filePath), m_ShaderBytecode.size());
+		fmt::print(stderr, "DX12 shader load: {}, size={}\n", Engine::Unicode::WideToUtf8(desc.filePath), m_ShaderBytecode.size());
 	}
 	else
 	{

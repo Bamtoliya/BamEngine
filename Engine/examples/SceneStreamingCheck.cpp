@@ -1,10 +1,11 @@
-#include "Scene.h"
+﻿#include "Scene.h"
 #include "SceneManager.h"
 #include "ScenePersistenceComponent.h"
 #include "AsyncResourceLoader.h"
 #include "ResourceManager.h"
 #include "ReflectionRegistry.h"
 #include "WorldComponents.h"
+#include "Mesh.h"
 #include <archive/JsonArchive.h>
 
 #include <iostream>
@@ -284,80 +285,262 @@ namespace
 	bool Test_AsyncResourceLoader()
 	{
 		std::cout << "\n=== [Test 4] AsyncResourceLoader State Transitions ===" << std::endl;
+
 		AsyncResourceLoader loader;
 
-		const std::filesystem::path dummyDir = std::filesystem::temp_directory_path() / "BamEngine_AsyncCheck";
+		const auto dummyDir = std::filesystem::temp_directory_path() / "BamEngine_AsyncCheck";
+
 		std::error_code ec;
 		std::filesystem::create_directories(dummyDir, ec);
 
-		const std::filesystem::path validFile = dummyDir / "valid_test.dat";
-		const std::filesystem::path cancelFile = dummyDir / "cancel_test.dat";
+		const auto validFile = dummyDir / "valid_test.bammesh.json";
+		const auto cancelFile = dummyDir / "cancel_test.dat";
+		const auto unsupportedFile = dummyDir / "unsupported.dat";
+
+		auto& manager = ResourceManager::Get();
+
+		// ---------------------------------------------------------
+		// 0. 테스트 파일 준비
+		// ---------------------------------------------------------
 
 		{
-			std::ofstream out(validFile, std::ios::binary);
-			const std::string data = "BAM_ENGINE_ASYNC_DATA_1234567890";
-			out.write(data.data(), static_cast<std::streamsize>(data.size()));
+			auto* mesh = Mesh::CreateEmpty();
+
+			if (!mesh)
+				return false;
+
+			vec3 positions[] = {
+				vec3(0.0f, 0.0f, 0.0f),
+				vec3(1.0f, 0.0f, 0.0f),
+				vec3(0.0f, 1.0f, 0.0f)
+			};
+
+			uint32 indices[] = { 0, 1, 2 };
+
+			const bool created =
+				mesh->SetStreamBuffer(EMeshStream::Position, positions, 3, sizeof(vec3)) == EResult::Success &&
+				mesh->SetIndexBuffer(indices, 3, sizeof(uint32)) == EResult::Success;
+
+			const bool saved = created &&
+				manager.SaveToJsonFile(mesh, validFile.wstring()) == EResult::Success;
+
+			ResourceManager::DestroyUnregisteredResource(mesh);
+
+			if (!Check(saved, "Valid mesh fixture created"))
+				return false;
 		}
+
 		{
 			std::ofstream out(cancelFile, std::ios::binary);
-			const std::string data = "BAM_ENGINE_CANCEL_DATA";
-			out.write(data.data(), static_cast<std::streamsize>(data.size()));
+			out << "BAM_ENGINE_CANCEL_DATA";
 		}
 
-		// 1. Successful load transition: Pending/ReadingDisk -> ReadyToFinalize -> StepMainThread -> Completed
+		{
+			std::ofstream out(unsupportedFile, std::ios::binary);
+			out << "NOT_A_RESOURCE";
+		}
+
+		// ---------------------------------------------------------
+		// 1. 정상 리소스 로딩
+		// ---------------------------------------------------------
+
 		const auto reqSuccess = loader.RequestLoad(validFile);
-		static_cast<void>(Check(reqSuccess > 0, "RequestLoad returned valid RequestId"));
+
+		if (!Check(reqSuccess > 0, "RequestLoad returned valid RequestId"))
+			return false;
 
 		for (int i = 0; i < 100; ++i)
 		{
 			const auto state = loader.GetState(reqSuccess);
-			if (state == EAsyncLoadState::ReadyToFinalize || state == EAsyncLoadState::Completed)
+
+			if (state == EAsyncLoadState::ReadyToFinalize ||
+				state == EAsyncLoadState::Failed)
+			{
 				break;
+			}
+
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
-		const auto stateBeforeFinalize = loader.GetState(reqSuccess);
-		static_cast<void>(Check(stateBeforeFinalize == EAsyncLoadState::ReadyToFinalize || stateBeforeFinalize == EAsyncLoadState::Completed,
-			"Worker thread transitioned request to ReadyToFinalize"));
+
+		if (!Check(loader.GetState(reqSuccess) == EAsyncLoadState::ReadyToFinalize,
+			"Worker transitioned request to ReadyToFinalize"))
+		{
+			return false;
+		}
 
 		loader.StepMainThread(10.0);
-		const auto stateAfterFinalize = loader.GetState(reqSuccess);
-		if (!Check(stateAfterFinalize == EAsyncLoadState::Completed, "Request transitioned to Completed after StepMainThread"))
-			return false;
-		const Handle h = loader.GetHandle(reqSuccess);
-		if (!Check(h.IsValid(), "GetHandle returned valid handle on Completed request"))
-			return false;
 
-		// 2. Failed load transition: Non-existent file -> Failed
-		const auto reqFail = loader.RequestLoad(dummyDir / "non_existent_file_98765.missing");
+		if (!Check(loader.GetState(reqSuccess) == EAsyncLoadState::Completed,
+			"Request transitioned to Completed"))
+		{
+			return false;
+		}
+
+		const Handle loadedRaw = loader.GetHandle(reqSuccess);
+
+		if (!Check(manager.IsValid(loadedRaw),
+			"Completed request must reference a registered resource"))
+		{
+			return false;
+		}
+
+		ResourceHandle<Mesh> loaded(loadedRaw);
+
+		if (!Check(loaded.IsValid(),
+			"Completed request must resolve to a Mesh"))
+		{
+			return false;
+		}
+
+		if (!Check(loaded->GetVertexCount() == 3 &&
+			loaded->GetIndexCount() == 3,
+			"Loaded mesh contents must be valid"))
+		{
+			return false;
+		}
+
+		// ---------------------------------------------------------
+		// 2. 존재하지 않는 파일
+		// ---------------------------------------------------------
+
+		const auto reqFail = loader.RequestLoad(
+			dummyDir / "non_existent_file_98765.missing");
+
 		for (int i = 0; i < 100; ++i)
 		{
-			const auto state = loader.GetState(reqFail);
-			if (state == EAsyncLoadState::Failed)
+			if (loader.GetState(reqFail) == EAsyncLoadState::Failed)
 				break;
+
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
-		if (!Check(loader.GetState(reqFail) == EAsyncLoadState::Failed, "Non-existent file request transitioned to Failed"))
-			return false;
-		if (!Check(!loader.GetHandle(reqFail).IsValid(), "Failed request has invalid handle"))
-			return false;
 
-		// 3. Cancel transition: Cancel in-flight request -> Cancelled
+		if (!Check(loader.GetState(reqFail) == EAsyncLoadState::Failed,
+			"Non-existent file request transitioned to Failed"))
+		{
+			return false;
+		}
+
+		if (!Check(!loader.GetHandle(reqFail).IsValid(),
+			"Failed request has invalid handle"))
+		{
+			return false;
+		}
+
+		// ---------------------------------------------------------
+		// 3. 로딩 취소
+		// ---------------------------------------------------------
+
 		const auto reqCancel = loader.RequestLoad(cancelFile);
-		const bool cancelled = loader.Cancel(reqCancel);
-		static_cast<void>(Check(cancelled, "Cancel() returned true for in-flight request"));
-		static_cast<void>(Check(loader.GetState(reqCancel) == EAsyncLoadState::Cancelled, "State immediately reflects Cancelled"));
+
+		if (!Check(loader.Cancel(reqCancel),
+			"Cancel returned true"))
+		{
+			return false;
+		}
+
+		if (!Check(loader.GetState(reqCancel) == EAsyncLoadState::Cancelled,
+			"Request state is Cancelled"))
+		{
+			return false;
+		}
 
 		loader.StepMainThread(10.0);
-		static_cast<void>(Check(loader.GetState(reqCancel) == EAsyncLoadState::Cancelled,
-			"Cancelled request remains Cancelled after StepMainThread"));
 
-		// 4. Pending count check
-		const size_t pending = loader.GetPendingCount();
-		static_cast<void>(Check(pending == 0, "GetPendingCount() returns 0 when all requests reached terminal states"));
+		if (!Check(loader.GetState(reqCancel) == EAsyncLoadState::Cancelled,
+			"Cancelled request must remain Cancelled"))
+		{
+			return false;
+		}
 
-		// Clean up temporary files
-		std::filesystem::remove_all(dummyDir, ec);
+		if (!Check(!loader.GetHandle(reqCancel).IsValid(),
+			"Cancelled request must not return a handle"))
+		{
+			return false;
+		}
+
+		// ---------------------------------------------------------
+		// 4. 읽을 수 있지만 지원하지 않는 리소스
+		// ---------------------------------------------------------
+
+		const auto reqUnsupported = loader.RequestLoad(unsupportedFile);
+
+		for (int i = 0; i < 100; ++i)
+		{
+			const auto state = loader.GetState(reqUnsupported);
+
+			if (state == EAsyncLoadState::ReadyToFinalize ||
+				state == EAsyncLoadState::Failed)
+			{
+				break;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+
+		if (!Check(loader.GetState(reqUnsupported) == EAsyncLoadState::ReadyToFinalize,
+			"Unsupported file can be read by worker"))
+		{
+			return false;
+		}
+
+		loader.StepMainThread(10.0);
+
+		if (!Check(loader.GetState(reqUnsupported) == EAsyncLoadState::Failed,
+			"Unsupported file must fail resource finalization"))
+		{
+			return false;
+		}
+
+		if (!Check(!loader.GetHandle(reqUnsupported).IsValid(),
+			"Unsupported file must not produce a fabricated handle"))
+		{
+			return false;
+		}
+
+		// ---------------------------------------------------------
+		// 5. 대기 작업 취소 및 실제 Worker 종료 확인
+		// ---------------------------------------------------------
+
+		const auto reqPending = loader.RequestLoad(cancelFile);
+
+		if (!Check(reqPending > 0, "Pending request created"))
+			return false;
+
+		if (!Check(loader.CancelAllAndWaitIdle(std::chrono::milliseconds(1000)),
+			"All background reads must become idle"))
+		{
+			return false;
+		}
+
+		loader.StepMainThread(10.0);
+
+		if (!Check(loader.GetState(reqPending) == EAsyncLoadState::Cancelled,
+			"Pending request must be cancelled"))
+		{
+			return false;
+		}
+
+		if (!Check(loader.GetPendingCount() == 0,
+			"All requests reached terminal states"))
+		{
+			return false;
+		}
+
+		// ---------------------------------------------------------
+		// 6. 테스트 정리
+		// ---------------------------------------------------------
+
 		loader.Shutdown();
+
+		loaded.Reset();
+
+		if (!Check(manager.DestroyResource(loadedRaw) == EResult::Success,
+			"Registered test mesh removed"))
+		{
+			return false;
+		}
+
+		std::filesystem::remove_all(dummyDir, ec);
 
 		return true;
 	}

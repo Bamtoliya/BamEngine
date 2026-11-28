@@ -1,4 +1,4 @@
-#include "PlatformPath.h"
+﻿#include "PlatformPath.h"
 #include "Functions.h"
 #include <SDL3/SDL_filesystem.h>
 #if defined(_WIN32)
@@ -570,7 +570,10 @@ namespace Engine
 
         if (pluginIdW.empty()) return {};
 
-        std::string pluginId(pluginIdW.begin(), pluginIdW.end());
+        std::string pluginId;
+
+        if (!Unicode::TryWideToUtf8(pluginIdW, pluginId))
+            return {};
         std::filesystem::path contentRoot;
         {
             const std::lock_guard lock(s_PluginMountMutex);
@@ -600,7 +603,10 @@ namespace Engine
     std::filesystem::path PlatformPath::ResolvePluginUri(std::string_view uri)
     {
         if (!IsPluginUri(uri)) return {};
-        std::wstring wstr(uri.begin(), uri.end());
+        std::wstring wstr;
+
+        if (!Unicode::TryUtf8ToWide(uri, wstr))
+            return {};
         return ResolvePluginUri(std::wstring_view(wstr));
     }
 
@@ -681,7 +687,7 @@ namespace Engine
 
         if (aliasW.empty()) return {};
 
-        const std::string alias = WStrToStr(std::wstring(aliasW));
+        const std::string alias = Engine::Unicode::WideToUtf8(std::wstring(aliasW));
         std::filesystem::path mountRoot;
         {
             const std::lock_guard lock(s_ContentMountMutex);
@@ -742,7 +748,7 @@ namespace Engine
     bool PlatformPath::IsMountReadOnly(std::wstring_view nameOrUri)
     {
         if (nameOrUri.empty()) return false;
-        const std::string utf8 = WStrToStr(std::wstring(nameOrUri));
+        const std::string utf8 = Engine::Unicode::WideToUtf8(std::wstring(nameOrUri));
         return IsMountReadOnly(std::string_view(utf8));
     }
 
@@ -1165,7 +1171,7 @@ namespace Engine
         const auto physical = Normalize(ResolveUri(Utf8ToPath(path)));
         const auto mapped = RemapFilePath(physical, changes);
         if (physical == mapped) return false;
-        updates.push_back({ &path, WStrToStr(asUri || IsVirtualUri(path) ? ToVirtualUri(mapped) : mapped.wstring()) });
+        updates.push_back({ &path, Engine::Unicode::WideToUtf8(asUri || IsVirtualUri(path) ? ToVirtualUri(mapped) : mapped.wstring()) });
         return true;
     }
 

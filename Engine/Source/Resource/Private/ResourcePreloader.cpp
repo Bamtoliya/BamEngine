@@ -277,7 +277,7 @@ namespace Engine
                 }
                 catch (const std::exception& error)
                 {
-                    ENGINE_LOG_WARN("Resource preload failed: key=\"{}\", error={}", WStrToStr(request.Reference.AssetKey), error.what());
+                    ENGINE_LOG_WARN("Resource preload failed: key=\"{}\", error={}", Engine::Unicode::WideToUtf8(request.Reference.AssetKey), error.what());
                 }
                 const f64 elapsed = std::chrono::duration<f64, std::milli>(std::chrono::steady_clock::now() - begin).count();
 
@@ -514,7 +514,7 @@ namespace Engine
     {
         if (!ResourceManager::IsCreated() || !ResourceManager::Get().IsOwnerThread())
         {
-            ENGINE_LOG_WARN("Pending resource was used outside the main thread: key=\"{}\"", WStrToStr(resource.GetKey()));
+            ENGINE_LOG_WARN("Pending resource was used outside the main thread: key=\"{}\"", Engine::Unicode::WideToUtf8(resource.GetKey()));
             return EResult::Fail;
         }
 
@@ -526,7 +526,7 @@ namespace Engine
         }
         catch (const std::exception& error)
         {
-            ENGINE_LOG_WARN("Resource detail load failed: key=\"{}\", error={}", WStrToStr(resource.GetKey()), error.what());
+            ENGINE_LOG_WARN("Resource detail load failed: key=\"{}\", error={}", Engine::Unicode::WideToUtf8(resource.GetKey()), error.what());
         }
         const EResult result = resource.Fulfill(prepared);
         DiscardPreparedResource(prepared);

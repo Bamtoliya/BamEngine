@@ -35,7 +35,7 @@ void PostProcessChain::DrawImGuiMenu()
 
 			// 에디터 레벨에서 로캘 번역 처리
 			const string& key = effect->GetDisplayNameKey();
-			const string effectName = key.empty() ? WStrToStr(effect->GetName()) : LOCAL_LABEL(key);
+			const string effectName = key.empty() ? Engine::Unicode::WideToUtf8(effect->GetName()) : LOCAL_LABEL(key);
 
 			if (ImGui::MenuItem(effectName.c_str(), nullptr, &enabled))
 			{

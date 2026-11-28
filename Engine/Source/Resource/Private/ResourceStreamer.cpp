@@ -227,7 +227,7 @@ namespace Engine
                 }
                 catch (const std::exception& error)
                 {
-                    ENGINE_LOG_WARN("Resource streaming failed: key=\"{}\", error={}", WStrToStr(job.Key), error.what());
+                    ENGINE_LOG_WARN("Resource streaming failed: key=\"{}\", error={}", Engine::Unicode::WideToUtf8(job.Key), error.what());
                 }
 
                 lock.lock();
@@ -279,7 +279,7 @@ namespace Engine
                 {
                     // 지금 보이는 상태를 유지하고 다시 시도하지 않는다.
                     ++Values.FailedCount;
-                    ENGINE_LOG_ERROR("Resource streaming could not load: key=\"{}\", path=\"{}\"", WStrToStr(entry.Key), WStrToStr(entry.Path.wstring()));
+                    ENGINE_LOG_ERROR("Resource streaming could not load: key=\"{}\", path=\"{}\"", Engine::Unicode::WideToUtf8(entry.Key), Engine::Unicode::WideToUtf8(entry.Path.wstring()));
                     Remove(result.Slot, true);
                 }
             }

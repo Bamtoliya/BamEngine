@@ -1,4 +1,4 @@
-#include "DepthOfFieldEffect.h"
+﻿#include "DepthOfFieldEffect.h"
 #include "PostProcessPipeline.h"
 #include "PostProcessOrder.h"
 #include "ResourceManager.h"
@@ -59,7 +59,7 @@ namespace
 		Shader* shader = handle.Get();
 		if (!shader || !shader->GetRHIShader())
 		{
-			ENGINE_LOG_ERROR("Shader is not available: {}", WStrToStr(file));
+			ENGINE_LOG_ERROR("Shader is not available: {}", Engine::Unicode::WideToUtf8(file));
 			return nullptr;
 		}
 		return shader;

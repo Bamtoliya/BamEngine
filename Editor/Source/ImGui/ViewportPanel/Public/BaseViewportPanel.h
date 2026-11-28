@@ -72,7 +72,7 @@ public:
 
 #pragma region Get & Set
 public:
-	string GetDisplayName() const override { return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", WStrToStr(m_SelectedRTName)) : IImGui::GetDisplayName(); };
+	string GetDisplayName() const override { return m_IsRenderTargetViewer ? LOCAL_FMT("Viewport.ViewerTitle", Engine::Unicode::WideToUtf8(m_SelectedRTName)) : IImGui::GetDisplayName(); };
 	virtual EShortcutContext GetShortcutContext() const override { return EShortcutContext::Viewport; }
 	virtual PostProcessChain* GetPostProcessChain() { return nullptr; }
 	virtual const PostProcessChain* GetPostProcessChain() const { return nullptr; }

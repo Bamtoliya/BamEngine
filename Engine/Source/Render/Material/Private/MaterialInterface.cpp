@@ -126,7 +126,7 @@ EResult MaterialInterface::OnPostLoad()
         auto shaderKeyLower = [](const ResourceHandle<Shader>& handle) -> string
         {
             if (auto* s = handle.Get())
-                return Engine::ToLowerStr(Engine::WStrToStr(s->GetKey()));
+                return Engine::ToLowerStr(Engine::Unicode::WideToUtf8(s->GetKey()));
             return {};
         };
 

@@ -8,19 +8,29 @@
 #include <locale>
 #include <stdexcept>
 #include <initializer_list>
+#include <source_location>
 
 namespace
 {
 	using namespace Engine;
 
-	void Expect(bool condition, const char* message)
+	void Expect(bool condition, const char* message,
+		const std::source_location& location = std::source_location::current())
 	{
-		if (!condition) throw std::runtime_error(message);
+		std::cerr << "[EXPECT] Line " << location.line()
+			<< ": " << message << std::endl;
+
+		if (!condition)
+			throw std::runtime_error(message);
 	}
 
-	void Accept(const GraphDiagnostic& result)
+	void Accept(const GraphDiagnostic& result,
+		const std::source_location& location = std::source_location::current())
 	{
-		if (!result.Succeeded()) throw std::runtime_error(result.Message);
+		std::cerr << "[ACCEPT] Line " << location.line() << std::endl;
+
+		if (!result.Succeeded())
+			throw std::runtime_error(result.Message);
 	}
 
 	GraphNodeId Add(Graph& graph, const GraphRegistry& registry, const char* type)
@@ -332,7 +342,11 @@ int main()
 			TestMaterial() : MaterialInterface() {}
 		};
 
+		std::cerr << "[RUN] TestMaterial construction" << std::endl;
+
 		TestMaterial testMat;
+
+		std::cerr << "[PASS] TestMaterial construction" << std::endl;
 		Expect(testMat.GetPrimaryPassType() == ERenderPassType::Geometry, "Default PrimaryPassType must be Geometry.");
 		testMat.SetPrimaryPassType(ERenderPassType::ForwardTransparent);
 		Expect(testMat.GetPrimaryPassType() == ERenderPassType::ForwardTransparent, "SetPrimaryPassType failed.");
@@ -344,7 +358,12 @@ int main()
 		testMat.SetFloat3("TintRgb", vec3(0.1f, 0.2f, 0.3f));
 
 		vector<uint8> blob;
+
+		std::cerr << "[RUN] BuildConstantBufferBlob" << std::endl;
+
 		testMat.BuildConstantBufferBlob(blob);
+
+		std::cerr << "[PASS] BuildConstantBufferBlob" << std::endl;
 		Expect(blob.size() == 80, "Constant buffer blob size must match dynamic layout (80 bytes).");
 
 		float readDissolve = 0.0f;

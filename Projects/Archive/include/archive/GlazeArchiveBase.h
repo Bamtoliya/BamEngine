@@ -36,8 +36,8 @@ namespace archive
         ArchiveResult ReadArrayElementValues(std::string_view key,
             const ArrayElementCallback& readElement) const override;
 
-        virtual ArchiveResult EncodeDocument(std::string& document) const = 0;
-        virtual ArchiveResult DecodeDocument(std::string_view document) = 0;
+        virtual ArchiveResult EncodeDocument(std::string& document) const override = 0;
+        virtual ArchiveResult DecodeDocument(std::string_view document) override = 0;
         ArchiveResult WriteValue(std::string_view key, const ArchiveScalarValue& value) override;
         ArchiveResult WriteArrayValues(std::string_view key, ArchiveScalarType elementType, const std::vector<ArchiveScalarValue>& values) override;
         ArchiveResult WriteMapValues(std::string_view key, ArchiveScalarType keyType, ArchiveScalarType valueType, const std::vector<ArchiveScalarMapEntry>& entries) override;

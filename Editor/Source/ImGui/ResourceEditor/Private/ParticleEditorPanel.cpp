@@ -61,7 +61,7 @@ namespace
 
 	bool IsParticleEffectFile(const std::filesystem::path& path)
 	{
-		const auto name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const auto name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".bameffect") || name.ends_with(".bameffect.json") ||
 				name.ends_with(".effect") || name.ends_with(".effect.json");
 	}
@@ -141,7 +141,10 @@ void ParticleEditorPanel::ReleaseResourceDocument()
 	const auto handle = m_EffectHandle.GetRawHandle();
 	m_EffectHandle.Reset();
 	SetupPreview();
-	if (std::exchange(m_OwnsTemporaryEffect, false)) Engine::ResourceManager::Get().ReleaseResource(handle);
+	if (std::exchange(m_OwnsTemporaryEffect, false) && Engine::ResourceManager::IsCreated())
+	{
+		Engine::ResourceManager::Get().ReleaseManagerReference(handle);
+	}
 	RestartSimulation();
 	m_Timeline.Drag.reset();
 	m_Timeline.Fit();
@@ -243,7 +246,7 @@ void ParticleEditorPanel::NewEffect()
 void ParticleEditorPanel::OpenEffect()
 {
 	std::wstring openPath;
-	if (FileDialogs::OpenFileDialog(openPath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json;*.bameffect" } }, L"", EFileDialogContext::ParticleOpen))
+	if (FileDialogs::OpenFileDialog(openPath, { { Engine::Unicode::Utf8ToWide(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json;*.bameffect" } }, L"", EFileDialogContext::ParticleOpen))
 	{
 		SetTargetResource(std::filesystem::path(openPath));
 	}
@@ -252,7 +255,7 @@ void ParticleEditorPanel::OpenEffect()
 void ParticleEditorPanel::SaveEffectAs()
 {
 	std::wstring savePath;
-	if (FileDialogs::SaveFileDialog(savePath, { { StrToWStr(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json" } }, L"NewEffect.bameffect.json", L"bameffect.json", EFileDialogContext::ParticleSave))
+	if (FileDialogs::SaveFileDialog(savePath, { { Engine::Unicode::Utf8ToWide(LOCAL("ParticleEditor.FileDialogFilter")), L"*.bameffect.json" } }, L"NewEffect.bameffect.json", L"bameffect.json", EFileDialogContext::ParticleSave))
 	{
 		SaveEffectTo(std::filesystem::path(savePath));
 	}

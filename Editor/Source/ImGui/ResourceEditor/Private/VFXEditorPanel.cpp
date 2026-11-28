@@ -177,7 +177,7 @@ VFXEditorPanel::~VFXEditorPanel()
 bool VFXEditorPanel::IsSupported(const std::filesystem::path& assetPath) const
 {
 	const std::string ext = assetPath.extension().string();
-	const std::string name = WStrToStr(assetPath.filename().wstring());
+	const std::string name = Engine::Unicode::WideToUtf8(assetPath.filename().wstring());
 	return (ext == ".bamvfx" || ext == ".vfx" || name.ends_with(".bamvfx.json") || name.ends_with(".vfx.json"));
 }
 
@@ -269,7 +269,7 @@ bool VFXEditorPanel::StepAsyncOpen(float maxTimeSeconds)
 		if (!candidate.Get())
 		{
 			NotificationManager::Get().AddNotification(GetDisplayName(),
-				LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
 			m_AsyncPendingEffect.Reset();
 			m_AsyncTargetPath.clear();
 			m_AsyncProgress = 0.0f;
@@ -310,7 +310,7 @@ bool VFXEditorPanel::StepAsyncOpen(float maxTimeSeconds)
 		const double totalMs = Milliseconds(previewEnd - m_AsyncStartTime).count();
 
 		EDITOR_LOG_INFO("[ResourceOpenTiming] VFX {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms (async)",
-			WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
+			Engine::Unicode::WideToUtf8(targetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
 
 		m_AsyncProgress = 1.0f;
 		m_AsyncStage = EAsyncStage::None;
@@ -377,7 +377,10 @@ void VFXEditorPanel::ReleaseResourceDocument()
 	m_CurrentTime = 0.0f;
 	const auto handle = m_EffectHandle.GetRawHandle();
 	m_EffectHandle.Reset();
-	if (std::exchange(m_OwnsTemporaryEffect, false)) Engine::ResourceManager::Get().ReleaseResource(handle);
+	if (std::exchange(m_OwnsTemporaryEffect, false) && Engine::ResourceManager::IsCreated())
+	{
+		Engine::ResourceManager::Get().ReleaseManagerReference(handle);
+	}
 	m_Timeline.Drag.reset();
 	m_Timeline.Fit();
 	m_TimelineSeek.reset();

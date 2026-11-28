@@ -16,7 +16,7 @@ EResult BaseViewportPanel::OnInitialize(void* arg)
 	CAST_DESC
 	m_Name = desc->Name;
 	m_DisplayNameKey = desc->DisplayNameKey;
-	m_WindowID = WStrToStr(m_Name);
+	m_WindowID = Engine::Unicode::WideToUtf8(m_Name);
 	m_ChannelFilter.Initialize(m_Name);
 	m_SelectedRTName = desc->InitialRenderTargetName;
 	return EResult::Success;
@@ -257,7 +257,7 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 
 		for (const auto& name : allNames)
 		{
-			const string label = WStrToStr(name);
+			const string label = Engine::Unicode::WideToUtf8(name);
 			if (!filter.empty() && Engine::ToLowerStr(label).find(filter) == string::npos)
 				continue;
 
@@ -274,10 +274,10 @@ void BaseViewportPanel::DrawRenderTargetMenu()
 }
 void BaseViewportPanel::DrawRTItemContextMenu(const wstring& rtName)
 {
-	string popupID = "##RTCtx_" + WStrToStr(rtName);
+	string popupID = "##RTCtx_" + Engine::Unicode::WideToUtf8(rtName);
 	if (ImGui::BeginPopupContextItem(popupID.c_str()))
 	{
-		const string label = LOCAL_FMT("Viewport.OpenInViewport", WStrToStr(rtName));
+		const string label = LOCAL_FMT("Viewport.OpenInViewport", Engine::Unicode::WideToUtf8(rtName));
 		if (ImGui::MenuItem(label.c_str()))
 		{
 			// 중복 이름 방지: 이미 같은 이름 패널이 있으면 번호 붙임
@@ -348,7 +348,7 @@ EResult BaseViewportPanel::CalculateRenderResolution(uint32 panelWidth, uint32 p
 		m_RenderTargetsValid = restored == EResult::Success;
 
 		EDITOR_LOG_ERROR("Viewport resize failed: name={}, requested={}x{}, restored={}",
-			WStrToStr(m_Name), newWidth, newHeight, m_RenderTargetsValid);
+			Engine::Unicode::WideToUtf8(m_Name), newWidth, newHeight, m_RenderTargetsValid);
 
 		return m_LastResolutionUpdateResult = result;
 	}
@@ -459,7 +459,7 @@ void BaseViewportPanel::DrawResolutionMenu()
 	ImGui::EndMenu();
 
 	if (changed && !TrySetResolutionState(state))
-		EDITOR_LOG_WARN("Viewport resolution change was rejected: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Viewport resolution change was rejected: {}", Engine::Unicode::WideToUtf8(m_Name));
 }
 #pragma endregion
 
@@ -521,7 +521,7 @@ bool BaseViewportPanel::TrySetResolutionState(const ViewportWorkspace& state)
 		customWidth = state.PresetWidth;
 		customHeight = state.PresetHeight;
 
-		EDITOR_LOG_WARN("Viewport preset is unavailable; using custom resolution: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Viewport preset is unavailable; using custom resolution: {}", Engine::Unicode::WideToUtf8(m_Name));
 	}
 
 	m_ResolutionMode = mode;
@@ -553,7 +553,7 @@ ViewportWorkspace BaseViewportPanel::CaptureResolutionState() const
 void BaseViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 {
 	if (!TrySetResolutionState(state))
-		EDITOR_LOG_WARN("Invalid viewport resolution state: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Invalid viewport resolution state: {}", Engine::Unicode::WideToUtf8(m_Name));
 }
 
 ViewportWorkspace BaseViewportPanel::CaptureViewportState() const

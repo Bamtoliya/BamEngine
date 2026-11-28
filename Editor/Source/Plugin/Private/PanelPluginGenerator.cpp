@@ -1,4 +1,4 @@
-#include "PanelPluginGenerator.h"
+﻿#include "PanelPluginGenerator.h"
 #include "EditorPanelPluginApi.h"
 #include "PluginDiscovery.h"
 #include "Editor_Macros.h"
@@ -79,7 +79,7 @@ namespace Editor
                 FILE_ATTRIBUTE_NORMAL, nullptr);
             if (file == INVALID_HANDLE_VALUE)
             {
-                EDITOR_LOG_ERROR("Could not create plugin file {}: Win32 error {}", Engine::WStrToStr(path.wstring()),
+                EDITOR_LOG_ERROR("Could not create plugin file {}: Win32 error {}", Engine::Unicode::WideToUtf8(path.wstring()),
                     GetLastError());
                 return false;
             }
@@ -92,7 +92,7 @@ namespace Editor
             const bool closed = CloseHandle(file) != 0;
             const DWORD closeError = closed ? ERROR_SUCCESS : GetLastError();
             if (!success || !closed)
-                EDITOR_LOG_ERROR("Could not write plugin file {}: Win32 error {}", Engine::WStrToStr(path.wstring()),
+                EDITOR_LOG_ERROR("Could not write plugin file {}: Win32 error {}", Engine::Unicode::WideToUtf8(path.wstring()),
                     closed ? writeError : closeError);
             return success && closed;
 #else
@@ -194,13 +194,13 @@ namespace Editor
         std::filesystem::create_directories(plugins, error);
         if (error)
         {
-            EDITOR_LOG_ERROR("Could not create plugin root {}: {}", Engine::WStrToStr(plugins.wstring()), error.message());
+            EDITOR_LOG_ERROR("Could not create plugin root {}: {}", Engine::Unicode::WideToUtf8(plugins.wstring()), error.message());
             return EPanelPluginCreateResult::FileSystemError;
         }
         const auto resolvedPlugins = std::filesystem::canonical(plugins, error);
         if (error || !std::filesystem::equivalent(resolvedPlugins.parent_path(), root, error) || error)
         {
-            EDITOR_LOG_ERROR("Plugin root is inaccessible or outside the project: {}", Engine::WStrToStr(plugins.wstring()));
+            EDITOR_LOG_ERROR("Plugin root is inaccessible or outside the project: {}", Engine::Unicode::WideToUtf8(plugins.wstring()));
             return EPanelPluginCreateResult::FileSystemError;
         }
 
@@ -208,7 +208,7 @@ namespace Editor
         if (!std::filesystem::create_directory(directory, error))
         {
             if (error)
-                EDITOR_LOG_ERROR("Could not create plugin directory {}: {}", Engine::WStrToStr(directory.wstring()), error.message());
+                EDITOR_LOG_ERROR("Could not create plugin directory {}: {}", Engine::Unicode::WideToUtf8(directory.wstring()), error.message());
             return error ? EPanelPluginCreateResult::FileSystemError : EPanelPluginCreateResult::DirectoryExists;
         }
 

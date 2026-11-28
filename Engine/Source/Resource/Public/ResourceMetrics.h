@@ -17,6 +17,11 @@ namespace Engine
         uint64 TotalSlots = 0;
         uint64 FreeSlots = 0;
 
+        uint64 ManagerOnlyResources = 0;
+        uint64 ReferencedResources = 0;
+        uint64 CacheEvictableResources = 0;
+        uint64 DeferredDeleteCount = 0;
+
         std::array<uint64, TypeCount> CountsByType{};
     };
 }

@@ -1,4 +1,4 @@
-#include "TerrainDataFile.h"
+﻿#include "TerrainDataFile.h"
 #include "TerrainComponent.h"
 #include "TerrainUtility.h"
 #include "IDComponent.h"
@@ -192,7 +192,7 @@ bool TerrainDataFile::SaveSceneTerrains(entt::registry& registry, const std::fil
 		{
 			const auto* id = registry.try_get<IDComponent>(entity);
 			const uint64 entityId = id && id->id != 0 ? id->id : static_cast<uint64>(entt::to_integral(entity));
-			dataPath = WStrToStr(PlatformPath::ToVirtualUri(MakeDefaultPath(scenePath, entityId)));
+			dataPath = Engine::Unicode::WideToUtf8(PlatformPath::ToVirtualUri(MakeDefaultPath(scenePath, entityId)));
 		}
 
 		if (!Write(ResolveDataPath(dataPath), ContentOf(terrain)))
@@ -223,7 +223,7 @@ void TerrainDataFile::LoadIfChanged(TerrainComponent& terrain)
 			terrain.IsDataDirty = true;
 			return;
 		}
-		BAM_LOG(Warn, "Engine", "Terrain", "Recovered terrain data could not be read; using the saved data file: {}", WStrToStr(recoveryPath.wstring()));
+		BAM_LOG(Warn, "Engine", "Terrain", "Recovered terrain data could not be read; using the saved data file: {}", Engine::Unicode::WideToUtf8(recoveryPath.wstring()));
 		terrain.LoadedDataPath.clear(); // 아래에서 원본 파일을 읽는다
 	}
 
@@ -289,11 +289,11 @@ TerrainDataFile::ScopedRecoveryCopies::ScopedRecoveryCopies(entt::registry& regi
 		const auto path = directory / (prefix + L"_Terrain_" + idText + L".bamterrain");
 		if (!Write(path, ContentOf(terrain)))
 		{
-			BAM_LOG(Error, "Engine", "Terrain", "Recovery terrain copy failed: {}", WStrToStr(path.wstring()));
+			BAM_LOG(Error, "Engine", "Terrain", "Recovery terrain copy failed: {}", Engine::Unicode::WideToUtf8(path.wstring()));
 			m_Succeeded = false;
 			continue;
 		}
-		terrain.RecoveryDataPath = WStrToStr(path.wstring());
+		terrain.RecoveryDataPath = Engine::Unicode::WideToUtf8(path.wstring());
 		m_Entities.push_back(entity);
 	}
 }

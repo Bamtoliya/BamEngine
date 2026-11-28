@@ -24,7 +24,7 @@ std::optional<EditorDocumentSaveResult> EditorDocumentController::ProcessPending
             std::wstring selected;
 
             if (!FileDialogs::SaveFileDialog(selected,
-                { { StrToWStr(LOCAL(info.FilterKey)), info.Pattern } },
+                { { Engine::Unicode::Utf8ToWide(LOCAL(info.FilterKey)), info.Pattern } },
                 defaultName, info.DefaultExtension, info.Context))
             {
                 return EditorDocumentSaveResult{ request.Id, EDocumentSaveStatus::NotSelected };

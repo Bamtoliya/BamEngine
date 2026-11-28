@@ -102,6 +102,22 @@ public:
 	virtual void SetPixelShaderHandle(const ResourceHandle<Shader>& shader) override;
 #pragma endregion
 
+#pragma region Dependencies
+public:
+	bool CollectResourceDependencies(vector<Handle>& out) const override
+	{
+		MaterialInterface::CollectResourceDependencies(out);
+
+		const Handle base = m_BaseMaterialHandle.GetRawHandle();
+
+		if (base.IsValid())
+			out.push_back(base);
+
+		return true;
+	}
+#pragma endregion
+
+
 #pragma region Variable
 private:
 	PROPERTY()

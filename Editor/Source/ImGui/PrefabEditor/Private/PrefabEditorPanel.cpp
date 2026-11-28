@@ -35,7 +35,7 @@ bool PrefabEditorPanel::IsSupported(const std::filesystem::path& assetPath) cons
     if (ext == ".bamprefab" || ext == ".prefab") return true;
     if (ext != ".json") return false;
 
-    std::string filename = WStrToStr(assetPath.filename().wstring());
+    std::string filename = Engine::Unicode::WideToUtf8(assetPath.filename().wstring());
     for (char& c : filename) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     return filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json");
 }
@@ -61,7 +61,7 @@ void PrefabEditorPanel::LoadPrefab(const std::filesystem::path& path)
     if (!scene || !ar.LoadFromFile(path) || !scene->InstantiatePrefabArchive(ar, root, nullptr) || !root)
     {
         NotificationManager::Get().AddNotification(GetDisplayName(),
-            LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+            LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Error);
         return;
     }
 
@@ -190,7 +190,7 @@ void PrefabEditorPanel::DrawCustomToolbar()
         {
             std::wstring outPath;
             std::vector<FileDialogFilter> filters = {
-                { StrToWStr(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" }
+                { Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" }
             };
             if (FileDialogs::SaveFileDialog(outPath, filters, m_TargetResourcePath.filename().wstring(), L"bamprefab.json"))
                 SavePrefab(std::filesystem::path(outPath));
@@ -266,11 +266,11 @@ void PrefabEditorPanel::DrawPrefabInspector()
     if (auto* nameComp = registry.try_get<Engine::NameComponent>(m_SelectedEntity))
     {
         char nameBuf[128] = "";
-        std::string curName = WStrToStr(nameComp->name);
+        std::string curName = Engine::Unicode::WideToUtf8(nameComp->name);
         strncpy_s(nameBuf, curName.c_str(), sizeof(nameBuf));
         if (ImGui::InputText(LOCAL_CSTR("PROP_NAME"), nameBuf, sizeof(nameBuf)))
         {
-            nameComp->name = StrToWStr(nameBuf);
+            nameComp->name = Engine::Unicode::Utf8ToWide(nameBuf);
             m_History.MarkEdited();
         }
     }

@@ -1,4 +1,4 @@
-#include "AutoExposureEffect.h"
+﻿#include "AutoExposureEffect.h"
 #include "AutoExposure.h"
 #include "PipelineManager.h"
 #include "PlatformPath.h"
@@ -60,7 +60,7 @@ namespace
 		Shader* shader = handle.Get();
 		if (!shader || !shader->GetRHIShader())
 		{
-			ENGINE_LOG_ERROR("Auto exposure shader is not available: {}", WStrToStr(file));
+			ENGINE_LOG_ERROR("Auto exposure shader is not available: {}", Engine::Unicode::WideToUtf8(file));
 			return nullptr;
 		}
 		return shader;

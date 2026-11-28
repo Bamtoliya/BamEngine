@@ -1,4 +1,4 @@
-#include "StartupProjectHub.h"
+﻿#include "StartupProjectHub.h"
 #include "EditorSettingsService.h"
 #include "ProjectSessionManager.h"
 #include "FileDialogs.h"
@@ -106,7 +106,7 @@ StartupProjectHubResult StartupProjectHub::Run()
 	std::error_code fontEc;
 	if (std::filesystem::exists(koreanFontPath, fontEc))
 	{
-		io.Fonts->AddFontFromFileTTF(Engine::WStrToStr(koreanFontPath.wstring()).c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
+		io.Fonts->AddFontFromFileTTF(Engine::Unicode::WideToUtf8(koreanFontPath.wstring()).c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
 	}
 
 	StartupProjectHubDetail::ApplyHubDarkStyle();
@@ -122,7 +122,7 @@ StartupProjectHubResult StartupProjectHub::Run()
 
 	const auto defaultParent = Engine::PlatformPath::GetProjectRoot().parent_path();
 	if (!defaultParent.empty())
-		StartupProjectHubDetail::CopyUtf8ToBuffer(Engine::WStrToStr(defaultParent.wstring()), targetFolderBuffer, sizeof(targetFolderBuffer));
+		StartupProjectHubDetail::CopyUtf8ToBuffer(Engine::Unicode::WideToUtf8(defaultParent.wstring()), targetFolderBuffer, sizeof(targetFolderBuffer));
 
 	bool running = true;
 	while (running)
@@ -202,8 +202,8 @@ StartupProjectHubResult StartupProjectHub::Run()
 						for (const auto& entry : recentProjects)
 						{
 							const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-								? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-								: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+								? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+								: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot));
 							std::error_code ec;
 							if (!std::filesystem::exists(entryTarget, ec))
 								missingTargets.push_back(entryTarget);
@@ -234,8 +234,8 @@ StartupProjectHubResult StartupProjectHub::Run()
 							{
 								const auto& entry = currentList[i];
 								const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-									? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-									: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+									? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+									: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot));
 								std::error_code existsEc;
 								const bool exists = std::filesystem::exists(entryTarget, existsEc);
 
@@ -304,8 +304,8 @@ StartupProjectHubResult StartupProjectHub::Run()
 						if (ImGui::Button("찾아보기...", ImVec2(browseW, 0.0f)))
 						{
 							std::wstring selectedFolder;
-							if (FileDialogs::OpenFolderDialog(selectedFolder, Engine::StrToWStr(targetFolderBuffer), "Target Folder") && !selectedFolder.empty())
-								StartupProjectHubDetail::CopyUtf8ToBuffer(Engine::WStrToStr(selectedFolder), targetFolderBuffer, sizeof(targetFolderBuffer));
+							if (FileDialogs::OpenFolderDialog(selectedFolder, Engine::Unicode::Utf8ToWide(targetFolderBuffer), "Target Folder") && !selectedFolder.empty())
+								StartupProjectHubDetail::CopyUtf8ToBuffer(Engine::Unicode::WideToUtf8(selectedFolder), targetFolderBuffer, sizeof(targetFolderBuffer));
 						}
 
 						ImGui::Spacing();
@@ -360,7 +360,7 @@ StartupProjectHubResult StartupProjectHub::Run()
 					}
 					else
 					{
-						const std::filesystem::path targetDir = std::filesystem::path(Engine::StrToWStr(targetFolderUtf8)) / Engine::StrToWStr(projectName);
+						const std::filesystem::path targetDir = std::filesystem::path(Engine::Unicode::Utf8ToWide(targetFolderUtf8)) / Engine::Unicode::Utf8ToWide(projectName);
 						Engine::EProjectTemplate projectTemplate = Engine::EProjectTemplate::Empty;
 						if (selectedTemplateIndex == 1) projectTemplate = Engine::EProjectTemplate::Default3D;
 						else if (selectedTemplateIndex == 2) projectTemplate = Engine::EProjectTemplate::Default2D;

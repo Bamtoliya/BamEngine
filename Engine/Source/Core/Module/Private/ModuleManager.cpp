@@ -25,7 +25,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
 #else
     if (m_Modules.find(moduleName) != m_Modules.end())
     {
-        BAM_LOG(Warn, "Engine","ModuleManager", "Module already loaded: {}", WStrToStr(moduleName));
+        BAM_LOG(Warn, "Engine","ModuleManager", "Module already loaded: {}", Engine::Unicode::WideToUtf8(moduleName));
         return EResult::AlreadyInitialized;
     }
 
@@ -44,6 +44,23 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
         return EResult::Fail;
     }
 
+    const auto getCompatibility = reinterpret_cast<GetRuntimeModuleCompatibilityFunc>(
+        GetProcAddress(hModule, "BamGetRuntimeModuleCompatibility"));
+
+    const char* compatibility = getCompatibility ? getCompatibility() : nullptr;
+
+    if (!compatibility || std::string_view(compatibility) != RuntimeModuleCompatibility)
+    {
+        BAM_LOG(Error, "Engine", "ModuleManager",
+            "Module ABI mismatch. Expected: {}, Actual: {}, Path: {}",
+            RuntimeModuleCompatibility,
+            compatibility ? compatibility : "(missing)",
+            dllPath.string());
+
+        FreeLibrary(hModule);
+
+        return EResult::Fail;
+    }
     auto createFunc = reinterpret_cast<CreateModuleFunc>(GetProcAddress(hModule, "CreateModule"));
     auto destroyFunc = reinterpret_cast<DestroyModuleFunc>(GetProcAddress(hModule, "DestroyModule"));
 
@@ -74,7 +91,7 @@ EResult ModuleManager::LoadModule(const std::wstring& moduleName, const std::fil
 
     m_Modules.emplace(moduleName, std::move(info));
     BAM_LOG(Info, "Engine","ModuleManager", "Module loaded: {} (from {})",
-        WStrToStr(moduleName), dllPath.string());
+        Engine::Unicode::WideToUtf8(moduleName), dllPath.string());
 
     return EResult::Success;
 #endif
@@ -104,7 +121,7 @@ EResult ModuleManager::UnloadModule(const std::wstring& moduleName)
     }
 #endif
 
-    BAM_LOG(Info, "Engine","ModuleManager", "Module unloaded: {}", WStrToStr(moduleName));
+    BAM_LOG(Info, "Engine","ModuleManager", "Module unloaded: {}", Engine::Unicode::WideToUtf8(moduleName));
     m_Modules.erase(it);
 
     return EResult::Success;
@@ -121,7 +138,7 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
     if (it == m_Modules.end())
         return EResult::Fail;
 
-    BAM_LOG(Info, "Engine","ModuleManager", "Reloading module: {}", WStrToStr(moduleName));
+    BAM_LOG(Info, "Engine","ModuleManager", "Reloading module: {}", Engine::Unicode::WideToUtf8(moduleName));
 
     // 1. 핫리로드 전처리 훅
     if (it->second.Instance)
@@ -143,7 +160,7 @@ EResult ModuleManager::ReloadModule(const std::wstring& moduleName, const std::f
     if (newIt != m_Modules.end() && newIt->second.Instance)
         newIt->second.Instance->OnPostHotReload();
                 
-    BAM_LOG(Info, "Engine","ModuleManager", "Module reload completed: {}", WStrToStr(moduleName));
+    BAM_LOG(Info, "Engine","ModuleManager", "Module reload completed: {}", Engine::Unicode::WideToUtf8(moduleName));
     return EResult::Success;
 #endif
 }

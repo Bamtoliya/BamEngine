@@ -53,13 +53,13 @@ namespace
 {
 	bool IsNotifyAudioFile(const std::filesystem::path& path)
 	{
-		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".wav") || name.ends_with(".mp3") || name.ends_with(".ogg");
 	}
 
 	bool IsNotifyVFXFile(const std::filesystem::path& path)
 	{
-		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".bamvfx") || name.ends_with(".bamvfx.json");
 	}
 
@@ -73,7 +73,7 @@ namespace
 		std::error_code error;
 		const bool exists = std::filesystem::exists(physicalPath, error) && !error;
 		const auto virtualUri = Engine::PlatformPath::ToVirtualUri(exists ? physicalPath : inputPath);
-		return Engine::PlatformPath::IsVirtualUri(virtualUri) ? Engine::WStrToStr(virtualUri) : path;
+		return Engine::PlatformPath::IsVirtualUri(virtualUri) ? Engine::Unicode::WideToUtf8(virtualUri) : path;
 	}
 
 	const Editor::AssetPathPickerDesc NotifySoundPicker{ { ICON_FA_MUSIC, ImVec4(0.45f, 0.80f, 0.95f, 1.0f), "AUDIO" }, IsNotifyAudioFile };
@@ -271,7 +271,7 @@ void AnimationTimelinePanel::ApplyDocumentSnapshot(const DocumentSnapshot& snaps
 	{
 		Engine::ResourceHandle<Engine::Model> model;
 		if (!snapshot.ModelPath.empty())
-			model = Engine::ResourceHandle<Engine::Model>(Engine::ResourceManager::Get().LoadFile(Engine::StrToWStr(snapshot.ModelPath)));
+			model = Engine::ResourceHandle<Engine::Model>(Engine::ResourceManager::Get().LoadFile(Engine::Unicode::Utf8ToWide(snapshot.ModelPath)));
 		SetTargetModel(model);
 	}
 	m_ModelAssetPath = snapshot.ModelPath;
@@ -458,7 +458,7 @@ void AnimationTimelinePanel::SetTargetModel(const Engine::ResourceHandle<Engine:
 {
 	m_TargetModel = model;
 	auto* target = m_TargetModel.Get();
-	m_ModelAssetPath = target ? NormalizeModelAssetPath(Engine::WStrToStr(target->GetPath())) : std::string{};
+	m_ModelAssetPath = target ? NormalizeModelAssetPath(Engine::Unicode::WideToUtf8(target->GetPath())) : std::string{};
 	ClearPreviewVFX();
 	SetupPreviewModel();
 
@@ -493,7 +493,7 @@ void AnimationTimelinePanel::SelectClip(int index)
 	}
 
 	m_SelectedClipIndex = index;
-	m_CurrentClipName = Engine::WStrToStr(clip->GetName());
+	m_CurrentClipName = Engine::Unicode::WideToUtf8(clip->GetName());
 	const f64 tps = clip->GetTicksPerSecond() > 0.0 ? clip->GetTicksPerSecond() : 25.0;
 	m_Duration = std::max(0.1f, clip->GetDuration() > 0.0 ? static_cast<f32>(clip->GetDuration() / tps) : 1.0f);
 }
@@ -561,7 +561,7 @@ int AnimationTimelinePanel::FindClipIndex(const std::string& clipName) const
 	const auto anims = model->GetAnimations();
 	for (int i = 0; i < static_cast<int>(anims.size()); ++i)
 	{
-		if (anims[i].IsValid() && Engine::WStrToStr(anims[i]->GetName()) == clipName) return i;
+		if (anims[i].IsValid() && Engine::Unicode::WideToUtf8(anims[i]->GetName()) == clipName) return i;
 	}
 	return -1;
 }
@@ -605,7 +605,7 @@ void AnimationTimelinePanel::NotifySaveWarnings() const
 			if (!notify.SocketBoneName.empty())
 			{
 				++socketNotifies;
-				if (skeleton && !skeleton->GetBoneMap().contains(Engine::StrToWStr(notify.SocketBoneName)))
+				if (skeleton && !skeleton->GetBoneMap().contains(Engine::Unicode::Utf8ToWide(notify.SocketBoneName)))
 					++missingSockets;
 			}
 			if (!std::isfinite(notify.TriggerTime) || notify.TriggerTime < 0.0f || notify.TriggerTime > markerLimit ||
@@ -747,7 +747,7 @@ bool AnimationTimelinePanel::SaveToFile(const std::string& filePath)
 	asset->GetCameraSplineTracks() = m_CameraSplineTracks;
 
 	const bool success = asset->SaveToFile(filePath);
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 
 	if (success)
 	{
@@ -767,7 +767,7 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 
 	if (!asset->LoadFromFile(filePath))
 	{
-		Engine::ResourceManager::Get().DestroyResource(asset);
+		Engine::ResourceManager::DestroyUnregisteredResource(asset);
 		return false;
 	}
 
@@ -793,7 +793,7 @@ bool AnimationTimelinePanel::LoadFromFile(const std::string& filePath)
 	m_CameraCutTracks = asset->GetCameraCutTracks();
 	m_CameraSplineTracks = asset->GetCameraSplineTracks();
 
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 	m_CurrentAssetPath = filePath;
 	m_TargetResourcePath = Engine::Utf8ToPath(filePath);
 	m_Selection = {};
@@ -827,7 +827,7 @@ void AnimationTimelinePanel::RequestPreviewPlayback(const std::filesystem::path&
 
 	RunWithDiscardConfirmation([this, assetPath]
 		{
-			const std::string path = Engine::WStrToStr(assetPath.wstring());
+			const std::string path = Engine::Unicode::WideToUtf8(assetPath.wstring());
 			if (!LoadFromFile(path))
 			{
 				NotificationManager::Get().AddNotification(LOCAL("Timeline.Title"),
@@ -885,7 +885,7 @@ TimelineSocketTransform AnimationTimelinePanel::GetSocketWorldTransform(const st
 		return result;
 	}
 
-	const std::wstring boneNameW = Engine::StrToWStr(boneName);
+	const std::wstring boneNameW = Engine::Unicode::Utf8ToWide(boneName);
 	const auto& boneMap = skeleton->GetBoneMap();
 	const auto& bones = skeleton->GetBones();
 	auto it = boneMap.find(boneNameW);
@@ -923,7 +923,7 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify,
 	if (notify.Type == Engine::EAnimNotifyType::Sound && !notify.SoundPath.empty())
 	{
 		auto& rm = Engine::ResourceManager::Get();
-		auto handle = rm.LoadFile(Engine::StrToWStr(notify.SoundPath));
+		auto handle = rm.LoadFile(Engine::Unicode::Utf8ToWide(notify.SoundPath));
 		if (auto* clip = dynamic_cast<Engine::AudioClip*>(rm.GetResource(handle)))
 		{
 			if (clip->GetFMODSound()) Engine::AudioManager::Get().PlayOneShot(clip->GetFMODSound(), notify.SoundVolume);
@@ -934,7 +934,7 @@ void AnimationTimelinePanel::TriggerNotify(const Engine::AnimNotifyData& notify,
 		if (auto* scene = m_PreviewWidget.GetScene())
 		{
 			auto& rm = Engine::ResourceManager::Get();
-			auto handle = rm.LoadFile(Engine::StrToWStr(notify.VFXPath));
+			auto handle = rm.LoadFile(Engine::Unicode::Utf8ToWide(notify.VFXPath));
 			if (handle.IsValid())
 			{
 				auto& reg = scene->GetRegistry();
@@ -1179,7 +1179,7 @@ void AnimationTimelinePanel::RebuildBoneCache(const Engine::Skeleton* skeleton)
 	m_BoneNamesLower.reserve(bones.size());
 	for (Engine::int32 i = 0; i < count; ++i)
 	{
-		m_BoneNames.push_back(Engine::WStrToStr(bones[i].Name));
+		m_BoneNames.push_back(Engine::Unicode::WideToUtf8(bones[i].Name));
 		m_BoneNamesLower.push_back(Engine::ToLowerStr(m_BoneNames.back()));
 		const Engine::int32 parent = bones[i].ParentIndex;
 		if (parent >= 0 && parent < count && parent != i) m_BoneChildren[parent].push_back(static_cast<uint32>(i));
@@ -1361,12 +1361,12 @@ void AnimationTimelinePanel::OpenTimelineFile()
 {
 	std::wstring selectedPath;
 	std::vector<FileDialogFilter> filters = {
-		{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" },
-		{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" },
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AllFiles")), L"*.*" }
 	};
 	if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::TimelineOpen))
 	{
-		(void)LoadFromFile(Engine::WStrToStr(selectedPath));
+		(void)LoadFromFile(Engine::Unicode::WideToUtf8(selectedPath));
 	}
 }
 
@@ -1380,15 +1380,15 @@ void AnimationTimelinePanel::SaveTimelineFileAs()
 {
 	std::wstring savePath;
 	std::vector<FileDialogFilter> filters = {
-		{ Engine::StrToWStr(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" }
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.ActionTimelineFiles")), L"*.bamtimeline.json;*.actiontimeline.json" }
 	};
 	// 열린 문서가 있으면 그 파일 이름을, 없으면 클립 이름을 기본값으로 쓴다.
 	const std::string baseName = m_CurrentClipName.empty() ? std::string("NewTimeline") : m_CurrentClipName;
 	const std::wstring defaultName = m_CurrentAssetPath.empty()
-		? Engine::StrToWStr(baseName) + L".bamtimeline.json"
+		? Engine::Unicode::Utf8ToWide(baseName) + L".bamtimeline.json"
 		: Engine::Utf8ToPath(m_CurrentAssetPath).filename().wstring();
 	if (FileDialogs::SaveFileDialog(savePath, filters, defaultName, L"bamtimeline.json", EFileDialogContext::TimelineSave))
-		(void)SaveToFile(Engine::WStrToStr(savePath));
+		(void)SaveToFile(Engine::Unicode::WideToUtf8(savePath));
 }
 
 void AnimationTimelinePanel::DrawCustomQuickAccess()
@@ -1409,8 +1409,8 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 	{
 		std::wstring selectedPath;
 		std::vector<FileDialogFilter> filters = {
-			{ Engine::StrToWStr(LOCAL("FileDialog.ModelFiles")), L"*.bammodel;*.glb;*.gltf" },
-			{ Engine::StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
+			{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.ModelFiles")), L"*.bammodel;*.glb;*.gltf" },
+			{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AllFiles")), L"*.*" }
 		};
 		if (FileDialogs::OpenFileDialog(selectedPath, filters, L"Resources/Model"))
 			(void)TrySetTargetModelFromPath(selectedPath);
@@ -1431,7 +1431,7 @@ void AnimationTimelinePanel::DrawCustomQuickAccess()
 					auto* clip = anims[i].Get();
 					if (!clip) continue;
 
-					const std::string clipNameStr = Engine::WStrToStr(clip->GetName());
+					const std::string clipNameStr = Engine::Unicode::WideToUtf8(clip->GetName());
 					const bool isSelected = (i == m_SelectedClipIndex);
 					if (ImGui::Selectable(clipNameStr.c_str(), isSelected) && !isSelected)
 					{
@@ -2367,12 +2367,12 @@ void AnimationTimelinePanel::DrawNotifyTrackRow(ImDrawList* drawList, int trackI
 				ImGui::TextUnformatted(LOCAL_FMT("Timeline.MarkerDuration", notify.Duration).c_str());
 			if (notify.Type == Engine::EAnimNotifyType::Sound && !notify.SoundPath.empty())
 			{
-				ImGui::TextDisabled(LOCAL_CSTR("Timeline.Sound"), Engine::WStrToStr(std::filesystem::path(Engine::StrToWStr(notify.SoundPath)).filename().wstring()).c_str());
+				ImGui::TextDisabled(LOCAL_CSTR("Timeline.Sound"), Engine::Unicode::WideToUtf8(std::filesystem::path(Engine::Unicode::Utf8ToWide(notify.SoundPath)).filename().wstring()).c_str());
 			}
 			else if (notify.Type == Engine::EAnimNotifyType::SpawnCompositeVFX && !notify.VFXPath.empty())
 			{
-				const auto vfxPath = std::filesystem::path(Engine::StrToWStr(notify.VFXPath));
-				const auto vfxName = Engine::WStrToStr(vfxPath.filename().wstring());
+				const auto vfxPath = std::filesystem::path(Engine::Unicode::Utf8ToWide(notify.VFXPath));
+				const auto vfxName = Engine::Unicode::WideToUtf8(vfxPath.filename().wstring());
 				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.7f, 1.0f), "%s", LOCAL_FMT("Timeline.VFXFile", vfxName).c_str());
 			}
 			ImGui::EndTooltip();

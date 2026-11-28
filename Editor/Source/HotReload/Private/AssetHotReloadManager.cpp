@@ -254,7 +254,7 @@ EResult AssetHotReloadManager::Initialize(void* arg)
 				return;
 		}
 
-		const auto watchPath = Engine::WStrToStr(norm.wstring());
+		const auto watchPath = Engine::Unicode::WideToUtf8(norm.wstring());
 		const efsw::WatchID watchId = watcher->addWatch(watchPath, listener.get(), true);
 		if (watchId <= 0)
 		{
@@ -367,7 +367,7 @@ void AssetHotReloadManager::ImportProjectLocalization(const std::filesystem::pat
 {
 	const auto directory = ProjectLocalizationDirectory();
 	const auto destination = directory / source.filename();
-	const auto sourceName = Engine::WStrToStr(source.filename().wstring());
+	const auto sourceName = Engine::Unicode::WideToUtf8(source.filename().wstring());
 	std::error_code ec;
 	if (directory.empty() || !IsLocalizationFile(source) || !std::filesystem::is_regular_file(source, ec))
 	{
@@ -427,7 +427,7 @@ void AssetHotReloadManager::ProcessModifiedTexture(const std::filesystem::path& 
 		RequestThumbnailRefresh(texturePath, texture);
 
 		NotificationManager::Get().AddNotification(LOCAL("Notification.TextureHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(texturePath.filename().wstring())),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(texturePath.filename().wstring())),
 			ELogLevel::Info, 3.0f);
 	}
 
@@ -459,7 +459,7 @@ void AssetHotReloadManager::ProcessModifiedMaterial(const std::filesystem::path&
 				RequestThumbnailRefresh(materialPath, material);
 
 				NotificationManager::Get().AddNotification(LOCAL("Notification.MaterialHotReloaded"),
-					LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(materialPath.filename().wstring())),
+					LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(materialPath.filename().wstring())),
 					ELogLevel::Info, 3.0f);
 			}
 		};
@@ -484,7 +484,7 @@ void AssetHotReloadManager::ProcessModifiedTimeline(const std::filesystem::path&
 			continue;
 
 		NotificationManager::Get().AddNotification(LOCAL("Notification.TimelineHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(timelinePath.filename().wstring())),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(timelinePath.filename().wstring())),
 			ELogLevel::Info, 3.0f);
 	}
 }
@@ -502,7 +502,7 @@ void AssetHotReloadManager::ProcessModifiedTerrainLayer(const std::filesystem::p
 			continue;
 
 		NotificationManager::Get().AddNotification(LOCAL("Notification.TerrainLayerHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(layerPath.filename().wstring())),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(layerPath.filename().wstring())),
 			ELogLevel::Info, 3.0f);
 	}
 }
@@ -555,9 +555,9 @@ void AssetHotReloadManager::ProcessModifiedLocalization(const std::filesystem::p
 	if (IsSuccess(Engine::LocalizationManager::Get().ReloadData()))
 	{
 		EDITOR_LOG_INFO("[HotReload] Localization reloaded: {}",
-			Engine::WStrToStr(locPath.filename().wstring()));
+			Engine::Unicode::WideToUtf8(locPath.filename().wstring()));
 		NotificationManager::Get().AddNotification(LOCAL("Notification.LocalizationReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(locPath.filename().wstring())),
+			LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(locPath.filename().wstring())),
 			ELogLevel::Info, 3.0f);
 	}
 }
@@ -598,7 +598,7 @@ void AssetHotReloadManager::ProcessModifiedMesh(const std::filesystem::path& mes
 
 		RequestThumbnailRefresh(meshPath, mesh);
 		NotificationManager::Get().AddNotification(LOCAL("Notification.MeshHotReloaded"),
-			LOCAL_FMT("Notification.ReloadedFile", Engine::WStrToStr(meshPath.filename().wstring())), ELogLevel::Info, 3.0f);
+			LOCAL_FMT("Notification.ReloadedFile", Engine::Unicode::WideToUtf8(meshPath.filename().wstring())), ELogLevel::Info, 3.0f);
 	}
 
 	if (!matched)

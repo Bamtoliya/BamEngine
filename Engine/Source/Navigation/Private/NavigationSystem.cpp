@@ -1,4 +1,4 @@
-#include "NavigationSystem.h"
+﻿#include "NavigationSystem.h"
 #include "NavAgentComponent.h"
 #include "AIPerceptionComponent.h"
 #include "NavGrid.h"
@@ -341,7 +341,7 @@ void NavigationSystem::ProcessRegistry(entt::registry& world, f32 dt, const Scen
 		bool bestHasLOS = false;
 		f32 closestDistSq = std::numeric_limits<f32>::max();
 
-		const std::wstring targetTagW = StrToWStr(perception.targetTag);
+		const std::wstring targetTagW = Engine::Unicode::Utf8ToWide(perception.targetTag);
 
 		auto candidateView = world.view<TransformComponent>();
 		for (auto candEntity : candidateView)

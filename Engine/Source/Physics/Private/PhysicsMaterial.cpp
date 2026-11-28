@@ -1,4 +1,4 @@
-#include "PhysicsMaterial.h"
+﻿#include "PhysicsMaterial.h"
 #include "PlatformPath.h"
 #include "Functions.h"
 #include <archive/JsonArchive.h>
@@ -86,7 +86,7 @@ bool PhysicsMaterial::LoadFromFile(const std::filesystem::path& path)
 
 bool PhysicsMaterial::IsPhysicsMaterialFile(const std::filesystem::path& path)
 {
-	const std::string name = ToLowerStr(WStrToStr(path.filename().wstring()));
+	const std::string name = ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 	return name.ends_with(".bamphysmat.json") || name.ends_with(".bamphysmat");
 }
 

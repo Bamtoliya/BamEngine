@@ -99,6 +99,13 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 	result = archive_reflection::detail::VisitProperties(*type, view, &reflection.GetRegistry(),
 		[&](const reflection::PropertyInfo& property, const reflection::ObjectView& owner) -> archive::ArchiveResult
 		{
+			// 등록된 리소스의 식별자는 파일 내용으로 변경하지 않는다.
+			if (IsManagerOwned() &&
+				(property.Name == "m_Key" || property.Name == "m_Path"))
+			{
+				return {};
+			}
+
 			bool hasField = false;
 			auto fieldCheck = ar.HasField(property.Name, hasField);
 			if (!fieldCheck)
@@ -112,10 +119,14 @@ archive::ArchiveResult Resource::ReadArchive(const archive::IArchive& ar)
 		return result;
 
 	m_ResourceType = savedType;
-	if (!m_Key.empty())
-		m_Key = NormalizePath(m_Key);
-	if (!m_Path.empty())
-		m_Path = NormalizePath(m_Path);
+	if (!IsManagerOwned())
+	{
+		if (!m_Key.empty())
+			m_Key = NormalizePath(m_Key);
+
+		if (!m_Path.empty())
+			m_Path = NormalizePath(m_Path);
+	}
 	if (OnPostLoad() != EResult::Success)
 		return { archive::ArchiveErrorCode::InvalidValue, "Resource.OnPostLoad" };
 	return {};
@@ -150,11 +161,11 @@ EResult Resource::Reload(const std::filesystem::path& filePath)
 			{
 				stage = "deserialize resource";
 				result = ReadArchive(ar);
-				m_Key = identityKey;
+				ApplyKey(identityKey);
 				m_Path = identityPath;
 			}
 
-			const auto path = WStrToStr(targetPath.wstring());
+			const auto path = Engine::Unicode::WideToUtf8(targetPath.wstring());
 			if (!result)
 			{
 				ENGINE_LOG_ERROR("[Resource Hot Reload] Failed: stage={}, path={}, code={}, field={}",
@@ -193,7 +204,7 @@ EResult Resource::Fulfill(Resource* prepared)
 	if (!IsSuccess(result))
 	{
 		m_Residency = EResidency::Unavailable;
-		ENGINE_LOG_ERROR("Resource detail load failed: key=\"{}\", path=\"{}\"", WStrToStr(m_Key), WStrToStr(m_Path));
+		ENGINE_LOG_ERROR("Resource detail load failed: key=\"{}\", path=\"{}\"", Engine::Unicode::WideToUtf8(m_Key), Engine::Unicode::WideToUtf8(m_Path));
 		return result;
 	}
 

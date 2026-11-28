@@ -182,8 +182,11 @@ archive::ArchiveResult Model::ReadArchive(const archive::IArchive& ar)
 	if (!result)
 		return result;
 
-	m_Key = std::move(candidate.m_Key);
-	m_Path = std::move(candidate.m_Path);
+	if (!IsManagerOwned())
+	{
+		m_Key = std::move(candidate.m_Key);
+		m_Path = std::move(candidate.m_Path);
+	}
 	m_Nodes = std::move(candidate.m_Nodes);
 	m_Meshes = std::move(candidate.m_Meshes);
 	m_Materials = std::move(candidate.m_Materials);

@@ -1,4 +1,4 @@
-#include "AnimationSystem.h"
+﻿#include "AnimationSystem.h"
 #include "ComponentEnable.h"
 #include "AnimatorComponent.h"
 #include "SkinnedMeshRendererComponent.h"
@@ -157,7 +157,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 					int32 rootBoneIdx = 0;
 					if (!animator.rootMotionBoneName.empty())
 					{
-						std::wstring wname(animator.rootMotionBoneName.begin(), animator.rootMotionBoneName.end());
+						std::wstring wname = Engine::Unicode::Utf8ToWide(animator.rootMotionBoneName);
 						uint32 idx = skeleton->GetBoneIndex(wname);
 						if (idx != UINT32_MAX) rootBoneIdx = static_cast<int32>(idx);
 					}
@@ -190,7 +190,7 @@ void AnimationSystem::OnUpdate(entt::registry& registry, const vector<Scene*>& a
 				int32 rootBoneIdx = 0;
 				if (!animator.rootMotionBoneName.empty())
 				{
-					std::wstring wname(animator.rootMotionBoneName.begin(), animator.rootMotionBoneName.end());
+					std::wstring wname(Engine::Unicode::Utf8ToWide(animator.rootMotionBoneName));
 					uint32 idx = skeleton->GetBoneIndex(wname);
 					if (idx != UINT32_MAX) rootBoneIdx = static_cast<int32>(idx);
 				}

@@ -1,4 +1,4 @@
-#include "TerrainLayerAsset.h"
+﻿#include "TerrainLayerAsset.h"
 #include "PlatformPath.h"
 #include "Functions.h"
 #include <archive/JsonArchive.h>
@@ -78,12 +78,12 @@ std::string TerrainLayerAsset::GetDisplayName() const
 			break;
 		}
 	}
-	return WStrToStr(name);
+	return Engine::Unicode::WideToUtf8(name);
 }
 
 bool TerrainLayerAsset::IsTerrainLayerFile(const std::filesystem::path& path)
 {
-	const std::string name = ToLowerStr(WStrToStr(path.filename().wstring()));
+	const std::string name = ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 	return name.ends_with(".bamterrainlayer.json") || name.ends_with(".bamterrainlayer");
 }
 

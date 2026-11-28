@@ -136,6 +136,7 @@ using Microsoft::WRL::ComPtr;
 #include "Types.h"
 #include "Result.h"
 #include "Macro.h"
+#include "Unicode.h"
 #include "Functions.h"
 #include "Delegate.h"
 #include "EnumBit.h"

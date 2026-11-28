@@ -69,7 +69,7 @@ EResult HotReloadManager::Initialize(void*)
                     return nullptr;
 
                 auto* builder = ModuleBuildManager::Create(
-                    projectRoot, buildDir, source, std::wstring(target.begin(), target.end()));
+                    projectRoot, buildDir, source, Unicode::Utf8ToWide(target));
                 if (builder)
                     m_PluginBuilders.emplace(target, builder);
 
@@ -176,7 +176,7 @@ EResult HotReloadManager::RebindForProject(const std::filesystem::path& projectR
     std::error_code ec;
     if (const auto runtimeMod = descriptor.ResolvePrimaryRuntimeModule(normProjectRoot))
     {
-        const std::wstring targetW = Engine::StrToWStr(runtimeMod->Name);
+        const std::wstring targetW = Engine::Unicode::Utf8ToWide(runtimeMod->Name);
         if (m_ModuleBuilder)
         {
             m_ModuleBuilder->SetTriggersGameModuleReload(true);
@@ -195,7 +195,7 @@ EResult HotReloadManager::RebindForProject(const std::filesystem::path& projectR
             }
             m_ModuleReloader->PrepareWatchForUnbuiltModule(runtimeMod->BinaryPath);
             EDITOR_LOG_INFO("[HotReload] Project module '{}' DLL not built yet; watching: {}",
-                runtimeMod->Name, Engine::WStrToStr(runtimeMod->BinaryPath.wstring()));
+                runtimeMod->Name, Engine::Unicode::WideToUtf8(runtimeMod->BinaryPath.wstring()));
         }
         return EResult::Success;
     }

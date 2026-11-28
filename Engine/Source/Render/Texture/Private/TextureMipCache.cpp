@@ -76,7 +76,7 @@ namespace Engine
         // 머리글과 키를 확인하고 픽셀 바로 앞에 둔다.
         static std::optional<TextureMipLayout> OpenMipCache(const std::wstring& key, const std::filesystem::path& source, std::ifstream& file)
         {
-            const std::string keyText = WStrToStr(key);
+            const std::string keyText = Engine::Unicode::WideToUtf8(key);
             uint64 size = 0;
             int64 time = 0;
             if (!ReadMipCacheSourceStamp(source, size, time)) return std::nullopt;
@@ -146,7 +146,7 @@ namespace Engine
         const auto layout = GetMipLayout(sourceHeader, pixels);
         if (!layout) return false;
 
-        const std::string keyText = WStrToStr(key);
+        const std::string keyText = Engine::Unicode::WideToUtf8(key);
         MipCacheFileHeader header;
         if (!ReadMipCacheSourceStamp(source, header.SourceSize, header.SourceTime)) return false;
         header.Width = layout->Width;

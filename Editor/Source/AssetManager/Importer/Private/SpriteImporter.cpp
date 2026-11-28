@@ -26,7 +26,7 @@ EResult SpriteImporter::Import(const filesystem::path& sourcePath, const filesys
 	if (!sprite) return EResult::Fail;
 
 	EResult result = ResourceManager::Get().SaveToBinaryFile(sprite, outputPath.wstring());
-	ResourceManager::Get().DestroyResource(sprite); // 저장 후 임시 Sprite 객체 해제
+	ResourceManager::DestroyUnregisteredResource(sprite); // 저장 후 임시 Sprite 객체 해제
 
 	return result;
 }

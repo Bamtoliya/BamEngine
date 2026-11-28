@@ -41,7 +41,7 @@ namespace
         // Preview a reusable UI subtree at the default canvas size. Only the original root's
         // subtree is written by SavePrefab(), so this canvas remains local to the edit scene.
         const auto canvas = scene.CreateEntity().GetEntityHandle();
-        world.emplace<Engine::NameComponent>(canvas, Engine::StrToWStr(LOCAL("Viewport.PrefabPreviewCanvas")));
+        world.emplace<Engine::NameComponent>(canvas, Engine::Unicode::Utf8ToWide(LOCAL("Viewport.PrefabPreviewCanvas")));
         world.emplace<Engine::FlagComponent>(canvas);
         world.emplace<Engine::CanvasComponent>(canvas);
         world.emplace<Engine::HierarchyComponent>(canvas).children.push_back(rootHandle);
@@ -143,7 +143,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
         m_SavedMainScene = nullptr;
         Safe_Release(m_PrefabScene);
         m_PrefabScene = nullptr;
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiateFailed", WStrToStr(prefabPath.stem().wstring())), ELogLevel::Error, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiateFailed", Engine::Unicode::WideToUtf8(prefabPath.stem().wstring())), ELogLevel::Error, 3.0f);
         return false;
     }
 
@@ -188,7 +188,7 @@ bool PrefabModeManager::EnterPrefabMode(const std::filesystem::path& pathOrUri)
         if (auto* view = ImGuiManager::Get().GetImGuiPanel(L"UI View"))
             view->Focus();
 
-    NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.EnterPrefabMode", WStrToStr(prefabPath.stem().wstring())), ELogLevel::Info, 3.0f);
+    NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.EnterPrefabMode", Engine::Unicode::WideToUtf8(prefabPath.stem().wstring())), ELogLevel::Info, 3.0f);
     return true;
 }
 
@@ -221,12 +221,12 @@ bool PrefabModeManager::SavePrefab()
             history.MarkSaved();
 
         m_HasUnsavedChanges = false;
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", WStrToStr(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Info, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", Engine::Unicode::WideToUtf8(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Info, 3.0f);
         return true;
     }
     else
     {
-        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", WStrToStr(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Error, 3.0f);
+        NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", Engine::Unicode::WideToUtf8(m_CurrentPrefabPath.filename().wstring())), ELogLevel::Error, 3.0f);
         return false;
     }
 }
@@ -295,7 +295,7 @@ bool PrefabModeManager::ApplyPrefabInstance(Engine::Scene& scene, entt::entity r
     {
         NotificationManager::Get().AddNotification(
             LOCAL("ResourceType.Prefab"),
-            LOCAL_FMT("Notification.PrefabSaveFailed", Engine::WStrToStr(targetPath.filename().wstring())),
+            LOCAL_FMT("Notification.PrefabSaveFailed", Engine::Unicode::WideToUtf8(targetPath.filename().wstring())),
             ELogLevel::Error, 4.0f);
         return false;
     }
@@ -353,7 +353,7 @@ bool PrefabModeManager::ApplyPrefabInstance(Engine::Scene& scene, entt::entity r
         (void)liveTransform->SynchronizeRotation();
     }
 
-    const std::string prefabFileName = Engine::WStrToStr(targetPath.filename().wstring());
+    const std::string prefabFileName = Engine::Unicode::WideToUtf8(targetPath.filename().wstring());
     if (result)
     {
         if (AssetCache::IsCreated())

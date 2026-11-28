@@ -19,7 +19,7 @@ namespace Editor
 		std::string ToAssetReference(const std::filesystem::path& path)
 		{
 			const std::wstring uri = Engine::PlatformPath::ToVirtualUri(path);
-			return Engine::PlatformPath::IsVirtualUri(uri) ? Engine::WStrToStr(uri) : std::string{};
+			return Engine::PlatformPath::IsVirtualUri(uri) ? Engine::Unicode::WideToUtf8(uri) : std::string{};
 		}
 
 		void CollectEntries(const AssetPathPickerDesc& desc, const Detail::PickerAssetCatalog& catalog,
@@ -112,7 +112,7 @@ namespace Editor
 					selected = ToAssetReference(*dropped);
 					if (selected.empty())
 					{
-						NotificationManager::Get().AddNotification(Engine::WStrToStr(std::filesystem::path(*dropped).filename().wstring()), LocalizeInspectorText("ResourcePicker.OutsideRoots"), ELogLevel::Warn);
+						NotificationManager::Get().AddNotification(Engine::Unicode::WideToUtf8(std::filesystem::path(*dropped).filename().wstring()), LocalizeInspectorText("ResourcePicker.OutsideRoots"), ELogLevel::Warn);
 						failed = true;
 					}
 					else

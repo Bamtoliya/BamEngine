@@ -1,4 +1,4 @@
-#include "PluginResourceEditor.h"
+﻿#include "PluginResourceEditor.h"
 #include "HotReloadManager.h"
 #include "ImGuiManager.h"
 #include "ModuleBuildManager.h"
@@ -60,7 +60,7 @@ void PluginResourceEditor::Reload()
 
 	m_ReloadFailed = true;
 	PluginModule candidate;
-	const std::wstring dllName = std::wstring(m_Target.begin(), m_Target.end()) + L".dll";
+	const std::wstring dllName{Unicode::Utf8ToWide(m_Target) + L".dll"};
 	if (!candidate.Open(dllName.c_str()))
 		return;
 
@@ -165,8 +165,8 @@ void PluginResourceEditor::Save()
 	const auto path = m_TargetResourcePath.wstring();
 	const bool saved = m_Api->Save(m_Session, path.c_str());
 	NotificationManager::Get().AddNotification(GetDisplayName(),
-		saved ? LOCAL_FMT("Notification.Saved", WStrToStr(m_TargetResourcePath.filename().wstring()))
-			: LOCAL_FMT("Notification.SaveFailed", WStrToStr(m_TargetResourcePath.filename().wstring())),
+		saved ? LOCAL_FMT("Notification.Saved", Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()))
+			: LOCAL_FMT("Notification.SaveFailed", Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring())),
 		saved ? ELogLevel::Info : ELogLevel::Error);
 }
 
@@ -207,7 +207,7 @@ void PluginResourceEditor::SetTargetResource(const std::filesystem::path& path)
 		ResourceEditorInterface::SetTargetResource(path);
 	else
 		NotificationManager::Get().AddNotification(GetDisplayName(),
-			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(path.filename().wstring())), ELogLevel::Error);
+			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Error);
 }
 
 bool PluginResourceEditor::RestoreSavedResource()

@@ -29,7 +29,7 @@ void TilePalettePanel::AddAssetToPalette(const std::filesystem::path& assetPath)
 	auto& rm = Engine::ResourceManager::Get();
 	const std::wstring normPath = Engine::NormalizePath(assetPath.wstring());
 	const std::wstring ext = assetPath.extension().wstring();
-	const std::string lowerExt = Engine::ToLowerStr(Engine::WStrToStr(ext));
+	const std::string lowerExt = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(ext));
 	const std::string filename = Engine::ToLowerStr(assetPath.filename().string());
 
 	int addedCount = 0;
@@ -147,7 +147,7 @@ void TilePalettePanel::Draw()
 {
 	if (!m_Open) return;
 
-	std::string title = LOCAL("TilePalette.Title") + "###" + WStrToStr(m_Name);
+	std::string title = LOCAL("TilePalette.Title") + "###" + Engine::Unicode::WideToUtf8(m_Name);
 	ImGui::SetNextWindowSize(ImVec2(340.0f, 420.0f), ImGuiCond_FirstUseEver);
 
 	if (BeginPanelWindow(title.c_str(), m_Open))
@@ -357,13 +357,13 @@ void TilePalettePanel::DrawAutotileRules()
 	const auto index = static_cast<std::size_t>(m_AutotileMask);
 	const auto current = index < rules.size() ? rules[index] : ResourceHandle<Engine::Sprite>{};
 	if (const auto* sprite = current.Get())
-		ImGui::TextUnformatted(Engine::WStrToStr(sprite->GetKey()).c_str());
+		ImGui::TextUnformatted(Engine::Unicode::WideToUtf8(sprite->GetKey()).c_str());
 	else
 		ImGui::TextUnformatted(LOCAL_CSTR("TilePalette.AutotileUnassigned"));
 
 	auto& history = Application::Get().GetEditHistory();
 	const auto* selected = m_SelectedSprite.Get();
-	const auto path = selected ? Engine::ToLowerStr(Engine::WStrToStr(selected->GetPath())) : std::string{};
+	const auto path = selected ? Engine::ToLowerStr(Engine::Unicode::WideToUtf8(selected->GetPath())) : std::string{};
 	const bool savedSprite = path.ends_with(".bamsprite") || path.ends_with(".bamsprite.json") ||
 		path.ends_with(".bamsprite.beve");
 	const bool canAssign = savedSprite && current != m_SelectedSprite &&

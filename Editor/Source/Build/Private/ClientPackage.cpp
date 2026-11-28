@@ -66,7 +66,12 @@ namespace
         {
             outProjectFileToStage = projectFile;
             std::error_code ec;
-            for (const auto& mod : desc.ResolveModules(projectRoot))
+            const auto engineRoot = Engine::PlatformPath::GetEngineRoot();
+
+            const bool isEngineRootProject = !engineRoot.empty() &&
+                Path::Normalize(projectRoot) == Path::Normalize(engineRoot);
+
+            for (const auto& mod : desc.ResolveModules(projectRoot, { Engine::EProjectModuleRole::Client, false }))
             {
                 std::string lowerType = mod.Type;
                 std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
@@ -75,8 +80,9 @@ namespace
                     continue;
 
                 const fs::path dllName = Engine::Utf8ToPath(mod.Name).wstring() + L".dll";
-                const fs::path sourceDll = fs::is_regular_file(mod.BinaryPath, ec)
-                    ? mod.BinaryPath : (binDirectory / dllName);
+                const fs::path sourceDll = isEngineRootProject
+                    ? (binDirectory / dllName)
+                    : mod.BinaryPath;
                 binaries.emplace_back(sourceDll, dllName);
             }
         }
@@ -90,7 +96,7 @@ namespace
 
     std::string DisplayPath(const fs::path& path)
     {
-        return Engine::WStrToStr(path.generic_wstring());
+        return Engine::Unicode::WideToUtf8(path.generic_wstring());
     }
 
     bool IsWithin(const fs::path& path, const fs::path& root)
@@ -246,7 +252,7 @@ namespace
         if (slash == std::wstring_view::npos || slash == 0 || slash + 1 >= afterScheme.size())
             return std::nullopt;
 
-        const std::string mountName = Engine::WStrToStr(std::wstring(afterScheme.substr(0, slash)));
+        const std::string mountName = Engine::Unicode::WideToUtf8(std::wstring(afterScheme.substr(0, slash)));
         const fs::path relPath(afterScheme.substr(slash + 1));
         return MountedPackagePath{ mountName, relPath, Engine::Utf8ToPath(mountName) / relPath };
     }

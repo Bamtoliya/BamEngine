@@ -29,13 +29,16 @@ namespace
         auto* texture = rhi ? create(rhi, key) : nullptr;
         if (!texture)
         {
-            ENGINE_LOG_ERROR("Cloud texture could not be created: {}", Engine::WStrToStr(key));
+            ENGINE_LOG_ERROR("Cloud texture could not be created: {}", Engine::Unicode::WideToUtf8(key));
             return {};
         }
 
         // 다음 실행에서 다시 만들지 않도록 저장한다.
         handle = resources.AddResource<Engine::Texture>(key, texture);
-        resources.SaveToBinaryFile(texture, key);
+
+        if (handle.IsValid())
+            resources.SaveToBinaryFile(handle.Get(), key);
+
         return handle;
     }
 }

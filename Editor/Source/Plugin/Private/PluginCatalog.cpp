@@ -113,7 +113,7 @@ namespace Editor
                 entry.ManifestResult = EPluginManifestResult::ReadFailed;
             if (entry.ManifestResult != EPluginManifestResult::Success)
             {
-                entry.DisplayName = Engine::WStrToStr(location.Directory.filename().wstring());
+                entry.DisplayName = Engine::Unicode::WideToUtf8(location.Directory.filename().wstring());
                 entry.Status = CatalogStatus::InvalidManifest;
                 return entry;
             }

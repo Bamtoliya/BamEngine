@@ -1,4 +1,4 @@
-#include "ProjectDescriptor.h"
+﻿#include "ProjectDescriptor.h"
 #include "Functions.h"
 #include <glaze/glaze.hpp>
 #include <algorithm>
@@ -116,14 +116,14 @@ namespace Engine
             std::ofstream ofs(filePath, std::ios::binary | std::ios::trunc);
             if (!ofs.is_open())
             {
-                SetError(outError, "Failed to open file for writing: " + WStrToStr(filePath.wstring()));
+                SetError(outError, "Failed to open file for writing: " + Engine::Unicode::WideToUtf8(filePath.wstring()));
                 return false;
             }
 
             ofs.write(content.data(), static_cast<std::streamsize>(content.size()));
             if (!ofs.good())
             {
-                SetError(outError, "Failed to write file: " + WStrToStr(filePath.wstring()));
+                SetError(outError, "Failed to write file: " + Engine::Unicode::WideToUtf8(filePath.wstring()));
                 return false;
             }
             return true;
@@ -161,49 +161,97 @@ namespace Engine
         return result;
     }
 
-    std::vector<ResolvedProjectModule> ProjectDescriptor::ResolveModules(const std::filesystem::path& projectRoot) const
+    std::vector<ResolvedProjectModule> ProjectDescriptor::ResolveModules(
+        const std::filesystem::path& projectRoot) const
+    {
+        ProjectModuleBuildVariant variant{};
+
+#if BAM_SHIPPING
+        variant.Role = EProjectModuleRole::Shipping;
+#elif BAM_EDITOR
+        variant.Role = EProjectModuleRole::Editor;
+#else
+        variant.Role = EProjectModuleRole::Client;
+#endif
+
+#ifdef _DEBUG
+        variant.Debug = true;
+#endif
+
+        return ResolveModules(projectRoot, variant);
+    }
+
+    std::vector<ResolvedProjectModule> ProjectDescriptor::ResolveModules(
+        const std::filesystem::path& projectRoot, ProjectModuleBuildVariant variant) const
     {
         std::vector<ResolvedProjectModule> result;
+
         if (projectRoot.empty() || Modules.empty())
             return result;
 
-        const std::filesystem::path normRoot = PlatformPath::Normalize(projectRoot);
-        const std::filesystem::path cmakeSourceRoot = PlatformPath::Normalize(normRoot / "Source");
-        const std::filesystem::path binariesDir = PlatformPath::Normalize(normRoot / "Binaries" / "Win64");
+        const char* roleName = nullptr;
 
-#ifdef _DEBUG
-        constexpr const char* kConfigPreset = "x64-debug";
-#else
-        constexpr const char* kConfigPreset = "x64-release";
-#endif
+        switch (variant.Role)
+        {
+        case EProjectModuleRole::Editor:
+            roleName = "Editor";
+            break;
+
+        case EProjectModuleRole::Client:
+            roleName = "Client";
+            break;
+
+        case EProjectModuleRole::Shipping:
+            roleName = "Shipping";
+            break;
+
+        default:
+            return result;
+        }
+
+        const char* configName = variant.Debug ? "Debug" : "Release";
+
+        const auto normRoot = PlatformPath::Normalize(projectRoot);
+        const auto cmakeSourceRoot = PlatformPath::Normalize(normRoot / "Source");
+
+        const auto binariesDir = PlatformPath::Normalize(
+            normRoot / "Binaries" / "Win64" / roleName / configName);
+
+        const auto buildDir = PlatformPath::Normalize(
+            normRoot / "Build" / roleName / configName);
 
         std::error_code ec;
-        std::filesystem::path buildDir;
-        if (std::filesystem::is_regular_file(normRoot / "Build" / "CMakeCache.txt", ec))
-            buildDir = PlatformPath::Normalize(normRoot / "Build");
-        else if (std::filesystem::is_regular_file(normRoot / "out" / "build" / kConfigPreset / "CMakeCache.txt", ec))
-            buildDir = PlatformPath::Normalize(normRoot / "out" / "build" / kConfigPreset);
-        else
-            buildDir = PlatformPath::Normalize(normRoot / "Build" / kConfigPreset);
 
         result.reserve(Modules.size());
+
         for (const auto& entry : Modules)
         {
-            if (entry.Name.empty()) continue;
+            if (entry.Name.empty())
+                continue;
 
             ResolvedProjectModule resolved;
+
             resolved.Name = entry.Name;
             resolved.Type = entry.Type.empty() ? std::string("Runtime") : entry.Type;
             resolved.CMakeSourceRoot = cmakeSourceRoot;
             resolved.BuildDirectory = buildDir;
 
-            const std::filesystem::path moduleSubDir = PlatformPath::Normalize(cmakeSourceRoot / Utf8ToPath(entry.Name));
-            if (std::filesystem::is_directory(moduleSubDir, ec) || !std::filesystem::is_directory(cmakeSourceRoot, ec))
-                resolved.SourceDirectory = moduleSubDir;
-            else
-                resolved.SourceDirectory = cmakeSourceRoot;
+            const auto moduleSubDir = PlatformPath::Normalize(
+                cmakeSourceRoot / Utf8ToPath(entry.Name));
 
-            resolved.BinaryPath = PlatformPath::Normalize(binariesDir / (Utf8ToPath(entry.Name).wstring() + L".dll"));
+            if (std::filesystem::is_directory(moduleSubDir, ec) ||
+                !std::filesystem::is_directory(cmakeSourceRoot, ec))
+            {
+                resolved.SourceDirectory = moduleSubDir;
+            }
+            else
+            {
+                resolved.SourceDirectory = cmakeSourceRoot;
+            }
+
+            resolved.BinaryPath = PlatformPath::Normalize(
+                binariesDir / (Utf8ToPath(entry.Name).wstring() + L".dll"));
+
             result.push_back(std::move(resolved));
         }
 
@@ -266,7 +314,7 @@ namespace Engine
 
         ProjectDescriptor loaded;
         loaded.SchemaVersion = dto.SchemaVersion;
-        loaded.ProjectName = dto.ProjectName.empty() ? WStrToStr(filePath.stem().wstring()) : std::move(dto.ProjectName);
+        loaded.ProjectName = dto.ProjectName.empty() ? Engine::Unicode::WideToUtf8(filePath.stem().wstring()) : std::move(dto.ProjectName);
         loaded.EngineVersion = dto.EngineVersion.empty() ? std::string(BAMEGINE_VERSION) : std::move(dto.EngineVersion);
         loaded.AssetDirectory = dto.AssetDirectory.empty() ? std::string("Assets") : std::move(dto.AssetDirectory);
 

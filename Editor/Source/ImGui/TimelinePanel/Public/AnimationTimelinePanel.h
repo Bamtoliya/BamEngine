@@ -62,12 +62,12 @@ public:
 	virtual bool IsSupported(const std::filesystem::path& assetPath) const override
 	{
 		const std::string ext = assetPath.extension().string();
-		const std::string name = WStrToStr(assetPath.filename().wstring());
+		const std::string name = Engine::Unicode::WideToUtf8(assetPath.filename().wstring());
 		return (ext == ".bamtimeline" || ext == ".actiontimeline" || name.ends_with(".bamtimeline.json") || name.ends_with(".actiontimeline.json"));
 	}
 	virtual void SetTargetResource(const std::filesystem::path& assetPath) override
 	{
-		LoadFromFile(WStrToStr(assetPath.wstring()));
+		LoadFromFile(Engine::Unicode::WideToUtf8(assetPath.wstring()));
 	}
 	void SetTargetModel(const Engine::ResourceHandle<Engine::Model>& model);
 	void SyncFromSelectedEntity();

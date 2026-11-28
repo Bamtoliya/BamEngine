@@ -1097,7 +1097,7 @@ namespace
         staticRenderer = {};
         skinnedRenderer = {};
         collider = {};
-        rm.Free();
+        rm.ClearResources();
 
         {
             const std::wstring meshKey = L"test-mesh.bammesh.json";
@@ -2553,6 +2553,7 @@ namespace
 int main()
 {
     RegistryScope scope;
+
     if (Engine::ReflectionRegistry::Create() == nullptr ||
         Engine::ResourceManager::Create() == nullptr ||
         Engine::SceneManager::Create() == nullptr)
@@ -2560,19 +2561,54 @@ int main()
         Fail("Registry, resource manager, or scene manager initialization failed.");
         return 1;
     }
-    if (!CheckFileRoundTrip<archive::JsonArchive>(L"round-trip.json") ||
-        !CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve") ||
-        !CheckModernComponentsRoundTrip<archive::JsonArchive>(L"round-trip-modern.json") ||
-        !CheckModernComponentsRoundTrip<archive::BeveArchive>(L"round-trip-modern.beve") ||
-        !CheckManagerAndWriteFailure() || !CheckLegacySkyCloudMigration() || !CheckEmptyScene() || !CheckHierarchyDepthAndIds() ||
-        !CheckResourceRuntimeVersion() || !CheckShaderBinaryPaths() || !CheckMeshArchiveValidation() ||
-        !CheckResourceReferenceReading() || !CheckRejectedResourceReferenceDocuments() ||
-        !CheckResourcesAndHandlesRoundTrip() || !CheckLinkedModelPartMeshOverrideAndReimportRoundTrip() ||
-        !CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects() || !CheckPrefabRoundTrip() ||
-        !CheckEntityReferenceSerializationAndPrefabIndependence() ||
-        !CheckExternalEntityReferenceCount() || !CheckDisabledPickingSource() ||
-        !CheckMissingResourceStrictAndLenientRecovery())
-        return 1;
-    std::cout << "Scene file, persistent ID, hierarchy, resource handle, resource archive, and prefab checks passed.\n";
+
+    const auto run = [](const char* name, auto&& check) -> bool
+        {
+            std::cerr << "[RUN] " << name << std::endl;
+
+            const bool result = check();
+
+            std::cerr << (result ? "[PASS] " : "[FAIL] ")
+                << name << std::endl;
+
+            return result;
+        };
+
+    if (!run("JsonRoundTrip", [] {
+        return CheckFileRoundTrip<archive::JsonArchive>(L"round-trip.json");
+        })) return 1;
+
+    if (!run("BeveRoundTrip", [] {
+        return CheckFileRoundTrip<archive::BeveArchive>(L"round-trip.beve");
+        })) return 1;
+
+    if (!run("ModernJsonRoundTrip", [] {
+        return CheckModernComponentsRoundTrip<archive::JsonArchive>(L"round-trip-modern.json");
+        })) return 1;
+
+    if (!run("ModernBeveRoundTrip", [] {
+        return CheckModernComponentsRoundTrip<archive::BeveArchive>(L"round-trip-modern.beve");
+        })) return 1;
+
+    if (!run("CheckManagerAndWriteFailure", CheckManagerAndWriteFailure)) return 1;
+    if (!run("CheckLegacySkyCloudMigration", CheckLegacySkyCloudMigration)) return 1;
+    if (!run("CheckEmptyScene", CheckEmptyScene)) return 1;
+    if (!run("CheckHierarchyDepthAndIds", CheckHierarchyDepthAndIds)) return 1;
+    if (!run("CheckResourceRuntimeVersion", CheckResourceRuntimeVersion)) return 1;
+    if (!run("CheckShaderBinaryPaths", CheckShaderBinaryPaths)) return 1;
+    if (!run("CheckMeshArchiveValidation", CheckMeshArchiveValidation)) return 1;
+    if (!run("CheckResourceReferenceReading", CheckResourceReferenceReading)) return 1;
+    if (!run("CheckRejectedResourceReferenceDocuments", CheckRejectedResourceReferenceDocuments)) return 1;
+    if (!run("CheckResourcesAndHandlesRoundTrip", CheckResourcesAndHandlesRoundTrip)) return 1;
+    if (!run("CheckLinkedModelPartMeshOverrideAndReimportRoundTrip", CheckLinkedModelPartMeshOverrideAndReimportRoundTrip)) return 1;
+    if (!run("CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects", CheckSkinnedMeshRuntimeEquipmentAndTemporaryEffects)) return 1;
+    if (!run("CheckPrefabRoundTrip", CheckPrefabRoundTrip)) return 1;
+    if (!run("CheckEntityReferenceSerializationAndPrefabIndependence", CheckEntityReferenceSerializationAndPrefabIndependence)) return 1;
+    if (!run("CheckExternalEntityReferenceCount", CheckExternalEntityReferenceCount)) return 1;
+    if (!run("CheckDisabledPickingSource", CheckDisabledPickingSource)) return 1;
+    if (!run("CheckMissingResourceStrictAndLenientRecovery", CheckMissingResourceStrictAndLenientRecovery)) return 1;
+
+    std::cout << "All SceneArchiveCheck tests passed." << std::endl;
+
     return 0;
 }

@@ -185,10 +185,10 @@ void ToolBar::DrawFileMenu()
 				{
 					const auto& entry = recentProjects[i];
 					const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-						? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-						: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+						? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+						: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot));
 					const auto entryRoot = Engine::PlatformPath::Normalize(!entry.ProjectRoot.empty()
-						? std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot))
+						? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot))
 						: entryTarget.parent_path());
 					const bool isActive = !activeRoot.empty() && Engine::PlatformPath::IsSamePath(activeRoot, entryRoot);
 					const std::string displayName = entry.ProjectName.empty() ? entry.ProjectRoot : entry.ProjectName;
@@ -260,7 +260,7 @@ void ToolBar::ImportAsset()
 {
 	wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath, {
-	{ StrToWStr(LOCAL("FileDialog.AssetFiles")), L"*.*" }
+	{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AssetFiles")), L"*.*" }
 		}, L"", EFileDialogContext::ResourceImport))
 		return;
 
@@ -301,7 +301,7 @@ void ToolBar::LoadResourceFile()
 {
 	wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath, {
-	{ StrToWStr(LOCAL("FileDialog.ResourceFiles")), L"*.bam*;*.json;*.beve" }
+	{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.ResourceFiles")), L"*.bam*;*.json;*.beve" }
 		}, L"", EFileDialogContext::ResourceOpen))
 		return;
 
@@ -310,15 +310,15 @@ void ToolBar::LoadResourceFile()
 
 	if (!manager.IsValid(handle))
 	{
-		BAM_LOG(Error, "Editor", "Asset", "Toolbar resource load failed: path={}", WStrToStr(filePath));
+		BAM_LOG(Error, "Editor", "Asset", "Toolbar resource load failed: path={}", Engine::Unicode::WideToUtf8(filePath));
 		NotificationManager::Get().AddNotification(LOCAL("Notification.LoadResourceFailed"),
-			LOCAL_FMT("Notification.ResourceLoadFailed", WStrToStr(filePath)), ELogLevel::Error, 3.0f);
+			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(filePath)), ELogLevel::Error, 3.0f);
 		return;
 	}
 
-	BAM_LOG(Info, "Editor", "Asset", "Toolbar resource loaded: path={}", WStrToStr(filePath));
+	BAM_LOG(Info, "Editor", "Asset", "Toolbar resource loaded: path={}", Engine::Unicode::WideToUtf8(filePath));
 	NotificationManager::Get().AddNotification(LOCAL("Notification.LoadResourceSucceeded"),
-		LOCAL_FMT("Notification.ResourceLoadSucceeded", WStrToStr(filePath)), ELogLevel::Info, 3.0f);
+		LOCAL_FMT("Notification.ResourceLoadSucceeded", Engine::Unicode::WideToUtf8(filePath)), ELogLevel::Info, 3.0f);
 }
 #pragma endregion
 
@@ -427,7 +427,7 @@ void ToolBar::LoadScene()
 
 	std::wstring filePath;
 	if (!FileDialogs::OpenFileDialog(filePath,
-		{ { StrToWStr(LOCAL("FileDialog.SceneFiles")), L"*.bamscene.json;*.json" } },
+		{ { Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.SceneFiles")), L"*.bamscene.json;*.json" } },
 		L"", EFileDialogContext::SceneOpen))
 	{
 		return;
@@ -538,7 +538,7 @@ void ToolBar::DrawNewViewportPopup()
 		const int action = EditorUI::DialogButtonBar("CreateViewportActions", actions, IM_ARRAYSIZE(actions));
 		if (action == 1)
 		{
-			m_newViewportDesc.Name = StrToWStr(m_NewViewportNameBuf);
+			m_newViewportDesc.Name = Engine::Unicode::Utf8ToWide(m_NewViewportNameBuf);
 			auto* panel = new BaseViewportPanel();
 			if (const EResult result = panel->Initialize(&m_newViewportDesc); result == EResult::Success)
 				ImGui::CloseCurrentPopup();

@@ -345,7 +345,7 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	const auto targetPath = ResolveGraphPath(path);
 	if (targetPath.empty())
 	{
-		BAM_LOG(Error, "GraphSystem", "Load", "Graph file not found: '{}'", WStrToStr(path));
+		BAM_LOG(Error, "GraphSystem", "Load", "Graph file not found: '{}'", Engine::Unicode::WideToUtf8(path));
 		return nullptr;
 	}
 	const auto key = targetPath.wstring();
@@ -376,12 +376,12 @@ const Graph* GraphSystem::GetOrLoadGraph(const std::wstring& path, std::wstring*
 	if (!result.Succeeded())
 	{
 		BAM_LOG(Error, "GraphSystem", "Load", "Failed to load graph JSON '{}': Stage {}, Error {}",
-			WStrToStr(key), static_cast<int>(result.Stage), result.GraphError.Message);
+			Engine::Unicode::WideToUtf8(key), static_cast<int>(result.Stage), result.GraphError.Message);
 		return nullptr;
 	}
 	auto [insertedIt, success] = m_GraphCache.emplace(key, std::move(candidate));
 	BAM_LOG(Info, "GraphSystem", "Load", "Successfully loaded graph: '{}' (resolve={:.2f} ms, load={:.2f} ms)",
-		WStrToStr(key), Milliseconds(resolveEnd - resolveStart).count(), Milliseconds(Clock::now() - loadStart).count());
+		Engine::Unicode::WideToUtf8(key), Milliseconds(resolveEnd - resolveStart).count(), Milliseconds(Clock::now() - loadStart).count());
 	return success ? &insertedIt->second.Data : nullptr;
 }
 
@@ -473,7 +473,7 @@ void GraphSystem::OnUpdate(entt::registry& globalRegistry, const vector<Scene*>&
 				if (executorMs >= 10.0)
 				{
 					BAM_LOG(Info, "GraphSystem", "Load", "Initialized graph executor: '{}' ({:.2f} ms)",
-						WStrToStr(newState.sourcePath), executorMs);
+						Engine::Unicode::WideToUtf8(newState.sourcePath), executorMs);
 				}
 				runtime = &world.emplace_or_replace<GraphRuntimeState>(entity, std::move(newState));
 			}

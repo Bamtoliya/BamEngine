@@ -1,4 +1,4 @@
-#include "AssetReferenceValidator.h"
+﻿#include "AssetReferenceValidator.h"
 #include "AssetReferenceTimings.h"
 #include "ContentBrowserRename.h"
 #include "PlatformPath.h"
@@ -59,7 +59,7 @@ namespace
         const auto issues = Editor::AssetReferenceValidator::ValidateBuildScene(scene);
         for (const auto& issue : issues)
             std::cerr << "Reference issue: type=" << static_cast<int>(issue.IssueType)
-                << ", source=" << Engine::WStrToStr(issue.SourceFile.wstring())
+                << ", source=" << Engine::Unicode::WideToUtf8(issue.SourceFile.wstring())
                 << ", target=" << issue.TargetReference << '\n';
         return issues.empty();
     }
@@ -176,7 +176,7 @@ namespace
         const auto outside = assets.parent_path() / "OutsideReferenceRepair.json";
         std::filesystem::path suggestion;
         return WriteFixture(outside, "{}") &&
-            !AssetReferenceValidator::TryResolveFallbackPath(Engine::WStrToStr(outside.wstring()), suggestion);
+            !AssetReferenceValidator::TryResolveFallbackPath(Engine::Unicode::WideToUtf8(outside.wstring()), suggestion);
     }
 
     class RelocationProbe final : public Engine::Resource
@@ -347,7 +347,7 @@ namespace
         const auto vfx = folder / L"Impact.bamvfx";
         fs::create_directory(folder);
         fs::create_directory(recovery);
-        const auto uri = [](const fs::path& path) { return Engine::WStrToStr(Path::ToVirtualUri(path)); };
+        const auto uri = [](const fs::path& path) { return Engine::Unicode::WideToUtf8(Path::ToVirtualUri(path)); };
         // 실패 단계를 남겨 실행 결과만으로 원인을 구분한다.
         const auto fail = [](const char* step) { std::cerr << "  timeline relocation: " << step << '\n'; return false; };
 
@@ -851,15 +851,15 @@ int RunAssetReferenceChecks()
     const auto raw = live.GetRawHandle();
     const std::vector<Engine::FilePathChange> renamePaths{ { material, renamedMaterial } };
     auto editorPath = material;
-    auto editorUtf8 = Engine::WStrToStr(material.wstring());
-    auto controllerUri = Engine::WStrToStr(oldKey);
+    auto editorUtf8 = Engine::Unicode::WideToUtf8(material.wstring());
+    auto controllerUri = Engine::Unicode::WideToUtf8(oldKey);
     bool applied = false;
     Editor::AssetPathRelocation editorChanges(renamePaths, { scene });
     editorChanges.Add(editorPath);
     editorChanges.AddUtf8(editorUtf8);
     editorChanges.AddUtf8(controllerUri, true);
     editorChanges.AfterCommit([&]() { applied = true; });
-    if (editorPath != material || controllerUri != Engine::WStrToStr(oldKey) || applied ||
+    if (editorPath != material || controllerUri != Engine::Unicode::WideToUtf8(oldKey) || applied ||
         !editorChanges.Rewrites(scene) || editorChanges.Affects(materials / L"Other.bammat.json"))
         return 41;
 
@@ -898,8 +898,8 @@ int RunAssetReferenceChecks()
         return 38;
     editorChanges.Apply();
     if (!applied || editorPath != Engine::PlatformPath::Normalize(renamedMaterial) ||
-        editorUtf8 != Engine::WStrToStr(Engine::PlatformPath::Normalize(renamedMaterial).wstring()) ||
-        controllerUri != Engine::WStrToStr(newKey))
+        editorUtf8 != Engine::Unicode::WideToUtf8(Engine::PlatformPath::Normalize(renamedMaterial).wstring()) ||
+        controllerUri != Engine::Unicode::WideToUtf8(newKey))
         return 44;
     if (!manager.RelocateFileResources({ { renamedMaterial, material } },
         [&]() { fs::rename(renamedMaterial, material); return true; }) || manager.FindHandleByKey(oldKey) != raw)

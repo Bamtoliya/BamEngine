@@ -645,7 +645,7 @@ void EditorSettingsService::CompleteViewportResolutionChange()
             if (!restored)
             {
                 BAM_LOG(Error, "Editor", "Config",
-                    "Viewport resolution settings could not be restored: {}", WStrToStr(request.Name));
+                    "Viewport resolution settings could not be restored: {}", Engine::Unicode::WideToUtf8(request.Name));
             }
         }
     }

@@ -110,7 +110,7 @@ void ModuleHotReloadManager::StartWatching(const std::filesystem::path& dllPath)
 
     m_FileWatcher = new efsw::FileWatcher();
     m_FileListener = new ModuleHotReloadFileListener(this, m_WatchedFileName);
-    const auto watchStr = Engine::WStrToStr(watchDir.wstring());
+    const auto watchStr = Engine::Unicode::WideToUtf8(watchDir.wstring());
     m_WatchID = m_FileWatcher->addWatch(watchStr, m_FileListener, false);
     m_FileWatcher->watch();
 
@@ -202,6 +202,27 @@ EResult ModuleHotReloadManager::LoadModule(const std::filesystem::path& dllPath)
         return EResult::Fail;
     }
 
+    const auto getCompatibility = reinterpret_cast<GetRuntimeModuleCompatibilityFunc>(
+        GetProcAddress(m_ModuleHandle, "BamGetRuntimeModuleCompatibility"));
+
+    const char* compatibility = getCompatibility ? getCompatibility() : nullptr;
+
+    if (!compatibility ||
+        std::string_view(compatibility) != Engine::RuntimeModuleCompatibility)
+    {
+        EDITOR_LOG_ERROR(
+            "[HotReload] Module ABI mismatch. Expected: {}, Actual: {}, Path: {}",
+            Engine::RuntimeModuleCompatibility,
+            compatibility ? compatibility : "(missing)",
+            m_CurrentShadowDllPath.string());
+
+        FreeLibrary(m_ModuleHandle);
+
+        m_ModuleHandle = nullptr;
+        m_DestroyFunc = nullptr;
+
+        return EResult::Fail;
+    }
     auto createFunc = reinterpret_cast<CreateModuleFunc>(GetProcAddress(m_ModuleHandle, "CreateModule"));
     m_DestroyFunc = reinterpret_cast<DestroyModuleFunc>(GetProcAddress(m_ModuleHandle, "DestroyModule"));
 

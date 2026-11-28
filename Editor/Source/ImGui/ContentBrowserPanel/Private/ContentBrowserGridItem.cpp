@@ -60,7 +60,7 @@ ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVis
 {
 	AssetVisualDesc desc;
 	desc.Icon = ICON_FA_FILE;
-		const std::string rawFilename = Engine::WStrToStr(path.filename().wstring());
+		const std::string rawFilename = Engine::Unicode::WideToUtf8(path.filename().wstring());
 		if (isDirectory)
 		{
 			desc.Icon = ICON_FA_FOLDER;
@@ -177,8 +177,8 @@ ContentBrowserGridItem::AssetVisualDesc ContentBrowserGridItem::DescribeAssetVis
 			}
 		}
 		// 단일 확장자 분류
-		std::string ext = ToLowerAscii(Engine::WStrToStr(path.extension().wstring()));
-		desc.CleanName = Engine::WStrToStr(path.stem().wstring());
+		std::string ext = ToLowerAscii(Engine::Unicode::WideToUtf8(path.extension().wstring()));
+		desc.CleanName = Engine::Unicode::WideToUtf8(path.stem().wstring());
 		if (!ext.empty() && ext[0] == '.')
 		{
 			desc.BadgeText = ext.substr(1);
@@ -404,7 +404,7 @@ bool ContentBrowserGridItem::Draw(ContentBrowserPanel& browser, const std::files
 
 	if (ctx.Splitter) ctx.Splitter->SetCurrentChannel(drawList, 0);
 
-	ImGui::PushID(ctx.ImGuiId ? ctx.ImGuiId : Engine::WStrToStr(path.wstring()).c_str());
+	ImGui::PushID(ctx.ImGuiId ? ctx.ImGuiId : Engine::Unicode::WideToUtf8(path.wstring()).c_str());
 	// 타일 사이에 박스 선택을 시작할 여백을 남긴다.
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	ImGui::BeginDisabled(renaming);
@@ -502,7 +502,7 @@ void ContentBrowserGridItem::DrawThumbnail(const std::filesystem::directory_entr
 		ImVec2 imgMax(cursorPos.x + thumbnailSize, cursorPos.y + thumbnailSize);
 
 		const auto& path = directoryEntry.path();
-		const std::string lowerFilename = ToLowerAscii(Engine::WStrToStr(path.filename().wstring()));
+		const std::string lowerFilename = ToLowerAscii(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		if (lowerFilename.ends_with(".bamsprite") || lowerFilename.ends_with(".bamsprite.json"))
 		{
 			auto& rm = Engine::ResourceManager::Get();
@@ -675,9 +675,9 @@ void ContentBrowserGridItem::ContextMenu(ContentBrowserPanel& browser, ImGuiSele
 				}
 				std::filesystem::create_directories(targetDir, copyEc);
 
-				std::string rawFilename = Engine::WStrToStr(path.filename().wstring());
-				std::string stem = Engine::WStrToStr(path.stem().wstring());
-				std::string ext = Engine::WStrToStr(path.extension().wstring());
+				std::string rawFilename = Engine::Unicode::WideToUtf8(path.filename().wstring());
+				std::string stem = Engine::Unicode::WideToUtf8(path.stem().wstring());
+				std::string ext = Engine::Unicode::WideToUtf8(path.extension().wstring());
 				if (ToLowerAscii(rawFilename).ends_with(".bammat.json"))
 				{
 					stem = rawFilename.substr(0, rawFilename.size() - 12);
@@ -794,7 +794,7 @@ void ContentBrowserGridItem::ToolTip(const std::filesystem::directory_entry& dir
 	if (ImGui::IsItemHovered())
 	{
 		std::filesystem::path path = directoryEntry.path();
-		std::string filenameString = Engine::WStrToStr(path.filename().wstring());
+		std::string filenameString = Engine::Unicode::WideToUtf8(path.filename().wstring());
 		AssetVisualDesc fallbackVisual;
 		const AssetVisualDesc& visual = ctx.Visual ? *ctx.Visual
 			: (fallbackVisual = DescribeAssetVisual(path, directoryEntry.is_directory()));
@@ -868,7 +868,7 @@ bool ContentBrowserGridItem::DrawDragSource(ContentBrowserPanel& browser, ImGuiS
 	if (multiple)
 		ImGui::TextUnformatted(LOCAL_FMT("ContentBrowser.DragAssetCount", browser.m_DragAssetCount).c_str());
 	else
-		ImGui::TextUnformatted(Engine::WStrToStr(path.filename().wstring()).c_str());
+		ImGui::TextUnformatted(Engine::Unicode::WideToUtf8(path.filename().wstring()).c_str());
 	ImGui::EndDragDropSource();
 	return true;
 }
@@ -1220,7 +1220,7 @@ void ContentBrowserGridItem::ContextMenu_Model(ContentBrowserPanel& browser, con
 		if (source.empty() || source.stem() != modelStem || !std::filesystem::is_regular_file(source, ec))
 		{
 			NotificationManager::Get().AddNotification(LOCAL("Notification.ReimportFailed"),
-				LOCAL_FMT("Notification.ReimportFailedFile", Engine::WStrToStr(path.filename().wstring())),
+				LOCAL_FMT("Notification.ReimportFailedFile", Engine::Unicode::WideToUtf8(path.filename().wstring())),
 				ELogLevel::Warn, 3.0f);
 			return;
 		}

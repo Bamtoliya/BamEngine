@@ -824,7 +824,7 @@ void PreviewViewportWidget::DrawRenderTargetPopup()
 			continue;
 
 		const auto shortName = name.starts_with(prefix) ? name.substr(prefix.size()) : name;
-		const auto label = Engine::WStrToStr(shortName);
+		const auto label = Engine::Unicode::WideToUtf8(shortName);
 
 		ImGui::PushID(label.c_str());
 		if (ImGui::Selectable(label.c_str(), m_SelectedRTName == name, ImGuiSelectableFlags_NoAutoClosePopups))
@@ -968,7 +968,7 @@ void PreviewViewportWidget::DrawBoneOverlay()
 
 			if (m_ShowBoneNames)
 			{
-				const std::string name = Engine::WStrToStr(bones[i].Name);
+				const std::string name = Engine::Unicode::WideToUtf8(bones[i].Name);
 				const ImVec2 textPos(screenPos.x + 5.0f, screenPos.y - ImGui::GetFontSize() - 2.0f);
 				drawList->AddText(ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), IM_COL32(0, 0, 0, 200), name.c_str());
 				drawList->AddText(textPos, IM_COL32(255, 255, 255, 230), name.c_str());

@@ -1285,7 +1285,7 @@ Engine::Shader* Engine::DeferredSceneRenderer::GetOwnedShader(const wchar_t* sha
 	Engine::Shader* shader = handle.Get();
 	if (!shader || !shader->GetRHIShader())
 	{
-		ENGINE_LOG_ERROR("Shader is not available: {}", WStrToStr(shaderFile));
+		ENGINE_LOG_ERROR("Shader is not available: {}", Engine::Unicode::WideToUtf8(shaderFile));
 		shaderMissing = true;
 		return nullptr;
 	}

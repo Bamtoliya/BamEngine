@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
 
@@ -75,7 +75,7 @@ template<typename T>
 bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isSelected, function<void()> onDragDrop, function<void()> onContextMenu)
 {
 	void* targetId = (void*)GetNodeID(target);
-	string name = WStrToStr(target->GetName());
+	string name = Engine::Unicode::WideToUtf8(target->GetName());
 
 	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, ImGui::GetStyle().FramePadding.y));
 	ImGui::AlignTextToFramePadding();
@@ -90,7 +90,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 
 		if (ImGui::InputText("##Rename", m_RenameBuffer, sizeof(m_RenameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
 		{
-			target->SetName(StrToWStr(m_RenameBuffer));
+			target->SetName(Engine::Unicode::Utf8ToWide(m_RenameBuffer));
 			m_RenamingId = nullptr;
 		}
 		else if (KEY_DOWN(EKeyCode::Escape))
@@ -99,7 +99,7 @@ bool HierarchyPanel::DrawRenameBox(T* target, ImGuiTreeNodeFlags flags, bool isS
 		}
 		else if (ImGui::IsItemDeactivated())
 		{
-			target->SetName(StrToWStr(m_RenameBuffer));
+			target->SetName(Engine::Unicode::Utf8ToWide(m_RenameBuffer));
 			m_RenamingId = nullptr;
 		}
 		ImGui::PopStyleVar();
@@ -228,7 +228,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 	// 1. 씬의 ID와 이름 가져오기
 	// (아까 만든 GetNodeID 오버로딩 함수 사용, 혹은 (void*)scene 직접 캐스팅)
 	void* sceneId = (void*)GetNodeID(scene);
-	string sceneName = WStrToStr(scene->GetName());
+	string sceneName = Engine::Unicode::WideToUtf8(scene->GetName());
 
 	ImGui::Separator();
 
@@ -258,7 +258,7 @@ void HierarchyPanel::DrawSceneTitle(Scene* scene)
 		}
 		else if (accepted || ImGui::IsItemDeactivated())
 		{
-			const auto name = StrToWStr(m_RenameBuffer);
+			const auto name = Engine::Unicode::Utf8ToWide(m_RenameBuffer);
 			if (scene->GetName() != name && Application::Get().GetEditHistory().Enabled())
 			{
 				SceneEditScope edit(Application::Get().GetEditHistory(), *scene, "History.Command.RenameScene");
@@ -576,8 +576,8 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 			std::wstring defaultName = (nameComp && !nameComp->name.empty()) ? nameComp->name : L"NewPrefab";
 			std::wstring outPath;
 			std::vector<FileDialogFilter> filters = {
-				{ StrToWStr(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" },
-				{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
+				{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.PrefabFiles")), L"*.bamprefab.json" },
+				{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.JsonFiles")), L"*.json" }
 			};
 			if (FileDialogs::SaveFileDialog(outPath, filters, defaultName + L".bamprefab.json", L"bamprefab.json", EFileDialogContext::PrefabSave))
 			{
@@ -585,11 +585,11 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 				const Engine::EResult res = SceneManager::Get().SavePrefab(ar, outPath, *entity);
 				if (res == Engine::EResult::Success)
 				{
-					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", WStrToStr(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Info, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaved", Engine::Unicode::WideToUtf8(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Info, 3.0f);
 				}
 				else
 				{
-					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", WStrToStr(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Error, 3.0f);
+					NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabSaveFailed", Engine::Unicode::WideToUtf8(std::filesystem::path(outPath).filename().wstring())), ELogLevel::Error, 3.0f);
 				}
 			}
 		}
@@ -690,7 +690,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		{
 			if (before) history.Record(std::move(before), SceneEditSnapshot::Capture(*scene), "History.Command.InstantiatePrefab");
 			SelectionManager::Get().SetSelectedEntity(spawned);
-			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", WStrToStr(std::filesystem::path(action.DropPrefabFile).stem().wstring())), ELogLevel::Info, 3.0f);
+			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"), LOCAL_FMT("Notification.PrefabInstantiated", Engine::Unicode::WideToUtf8(std::filesystem::path(action.DropPrefabFile).stem().wstring())), ELogLevel::Info, 3.0f);
 			m_RevealEntity = spawned->GetEntityHandle();
 			m_HierarchyMessage.clear();
 		}
@@ -698,7 +698,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 		{
 			NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"),
 				LOCAL_FMT("Notification.PrefabInstantiateFailed",
-					WStrToStr(std::filesystem::path(action.DropPrefabFile).filename().wstring())),
+					Engine::Unicode::WideToUtf8(std::filesystem::path(action.DropPrefabFile).filename().wstring())),
 				ELogLevel::Error, 3.0f);
 		}
 	}
@@ -790,7 +790,7 @@ void HierarchyPanel::DrawEntityHierarchy(Scene* scene)
 	if (action.StartRename != entt::null)
 	{
 		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(action.StartRename);
-		std::string currentName = nameComp ? Engine::WStrToStr(nameComp->name) : "Entity";
+		std::string currentName = nameComp ? Engine::Unicode::WideToUtf8(nameComp->name) : "Entity";
 		m_EntityTree.StartRename(action.StartRename, currentName);
 	}
 	if (action.RenameEntity != entt::null && !action.NewName.empty())
@@ -899,7 +899,7 @@ void HierarchyPanel::TriggerSelectedEntityRename()
 		Focus(); // 계층 패널을 전면화하고 포커스를 획득하여 인라인 InputText 활성화 보장
 		const auto handle = primary->GetEntityHandle();
 		const auto* nameComp = scene->GetRegistry().try_get<Engine::NameComponent>(handle);
-		std::string currentName = nameComp ? Engine::WStrToStr(nameComp->name) : "Entity";
+		std::string currentName = nameComp ? Engine::Unicode::WideToUtf8(nameComp->name) : "Entity";
 		m_EntityTree.StartRename(handle, currentName);
 	}
 }

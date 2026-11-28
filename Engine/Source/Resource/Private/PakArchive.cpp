@@ -1,4 +1,4 @@
-#include "PakArchive.h"
+﻿#include "PakArchive.h"
 #include "PlatformPath.h"
 #include "Functions.h"
 
@@ -950,7 +950,7 @@ std::string PakMountManager::ToPakUri(const std::filesystem::path& pathOrUri)
     if (!virtualUri.empty() && PlatformPath::IsVirtualUri(virtualUri))
     {
         std::string normalized;
-        if (NormalizePakUri(WStrToStr(virtualUri), normalized))
+        if (NormalizePakUri(Engine::Unicode::WideToUtf8(virtualUri), normalized))
             return normalized;
     }
 
@@ -965,7 +965,7 @@ std::string PakMountManager::ToPakUri(const std::filesystem::path& pathOrUri)
     if (rel.empty() || rel.is_absolute())
         return {};
 
-    std::string relStr = WStrToStr(rel.generic_wstring());
+    std::string relStr = Engine::Unicode::WideToUtf8(rel.generic_wstring());
     while (relStr.starts_with("./"))
         relStr.erase(0, 2);
     while (!relStr.empty() && relStr.front() == '/')

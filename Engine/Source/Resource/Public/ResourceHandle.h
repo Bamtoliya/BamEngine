@@ -8,7 +8,12 @@ class Resource;
 
 namespace ResourceHandleAccess
 {
-	ENGINE_API void AddRef(const Handle& handle);
+	using TypeValidator = bool(*)(const Resource*) noexcept;
+
+	ENGINE_API bool TryAddRef(const Handle& handle, TypeValidator validator);
+
+	ENGINE_API bool AddRef(const Handle& handle);
+
 	ENGINE_API void Release(const Handle& handle);
 	ENGINE_API bool IsValid(const Handle& handle);
 	ENGINE_API Resource* Resolve(const Handle& handle);

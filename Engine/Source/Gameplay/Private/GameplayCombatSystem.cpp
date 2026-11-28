@@ -1,4 +1,4 @@
-#include "GameplayCombatSystem.h"
+﻿#include "GameplayCombatSystem.h"
 #include "ComponentEnable.h"
 #include "HitboxComponent.h"
 #include "HealthComponent.h"
@@ -284,7 +284,7 @@ void GameplayCombatSystem::ProcessRegistryCombat(entt::registry& world, f32 dt, 
 				{
 					if (const auto* targetTag = world.try_get<TagComponent>(targetEntity))
 					{
-						if (targetTag->tags.contains(StrToWStr(hitbox.teamTag)))
+						if (targetTag->tags.contains(Engine::Unicode::Utf8ToWide(hitbox.teamTag)))
 							friendly = true;
 					}
 				}
@@ -365,7 +365,7 @@ entt::entity GameplayCombatSystem::FindNearestInteractable(const Scene& scene, c
 			{
 				if (const auto* tagComp = world.try_get<TagComponent>(entity))
 				{
-					tagMatched = tagComp->tags.contains(StrToWStr(std::string(requiredTag)));
+					tagMatched = tagComp->tags.contains(Engine::Unicode::Utf8ToWide(std::string(requiredTag)));
 				}
 			}
 			if (!tagMatched)

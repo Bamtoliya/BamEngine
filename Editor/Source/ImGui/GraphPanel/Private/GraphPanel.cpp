@@ -344,7 +344,7 @@ bool GraphPanel::SaveDocument(bool saveAs)
 
 		std::wstring selectedPath;
 		const std::vector<FileDialogFilter> filters{
-			{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
+			{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
 		};
 
 		if (!FileDialogs::SaveFileDialog(selectedPath, filters, defaultName, L"bamgraph.json", EFileDialogContext::GraphSave))
@@ -394,7 +394,7 @@ bool GraphPanel::FocusRetainedResource(const std::filesystem::path& path)
 bool GraphPanel::IsSupported(const std::filesystem::path& assetPath) const
 {
 	const auto ext = assetPath.extension().wstring();
-	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	const std::string lower = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.filename().wstring()));
 	return ext == L".bamgraph" || ext == L".graph" ||
 		lower.ends_with(".bamgraph.json") || lower.ends_with(".graph.json");
 }
@@ -410,7 +410,7 @@ void GraphPanel::ReportLoadFailure(const std::filesystem::path& path, const Engi
 	// 어느 단계(읽기·역직렬화·검증)에서 무엇 때문에 실패했는지 알려야 사용자가 원인을 알 수 있다.
 	const std::string detail = !result.ArchiveError.Field.empty() ? result.ArchiveError.Field : result.GraphError.Message;
 	NotificationManager::Get().AddNotification(LOCAL("GraphPanel.Title"),
-		LOCAL_FMT("GraphPanel.LoadFailed", WStrToStr(path.filename().wstring()), static_cast<int>(result.Stage), detail), ELogLevel::Warn);
+		LOCAL_FMT("GraphPanel.LoadFailed", Engine::Unicode::WideToUtf8(path.filename().wstring()), static_cast<int>(result.Stage), detail), ELogLevel::Warn);
 }
 
 bool GraphPanel::LoadDocument(const std::filesystem::path& path)
@@ -559,7 +559,7 @@ void GraphPanel::OpenDocument()
 {
 	std::wstring selectedPath;
 	const std::vector<FileDialogFilter> filters{
-		{ StrToWStr(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.GraphFiles")), L"*.bamgraph.json;*.json" }
 	};
 
 	if (!FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::GraphOpen))
@@ -628,13 +628,13 @@ void GraphPanel::DrawFileToolbar(EditorUI::ToolbarLayout& toolbar)
 	const auto& document = GetDocument();
 	const std::string filenameText = document.FilePath.empty()
 		? LOCAL("GraphPanel.NoFile")
-		: WStrToStr(document.FilePath.filename().wstring());
+		: Engine::Unicode::WideToUtf8(document.FilePath.filename().wstring());
 	toolbar.Text(("[" + filenameText + "]").c_str());
 	if (ImGui::IsItemHovered())
 	{
 		const std::string fullPathText = document.FilePath.empty()
 			? LOCAL("GraphPanel.NoFile")
-			: LOCAL_FMT("GraphPanel.FilePath", WStrToStr(document.FilePath.wstring()));
+			: LOCAL_FMT("GraphPanel.FilePath", Engine::Unicode::WideToUtf8(document.FilePath.wstring()));
 		ImGui::SetTooltip("%s", fullPathText.c_str());
 	}
 }

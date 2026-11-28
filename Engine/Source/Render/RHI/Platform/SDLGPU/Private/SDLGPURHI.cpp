@@ -303,7 +303,7 @@ RHITexture* SDLGPURHI::CreateTextureFromFile(const char* filename)
 
 RHITexture* SDLGPURHI::CreateTextureFromFile(const wchar* filename)
 {
-	return CreateTextureFromFile(WStrToStr(filename).c_str());
+	return CreateTextureFromFile(Engine::Unicode::WideToUtf8(filename).c_str());
 }
 
 RHITexture* SDLGPURHI::CreateTexture(const RHITextureDesc& desc)

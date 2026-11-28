@@ -46,7 +46,7 @@ namespace
         const auto absolutePath = Engine::PlatformPath::IsVirtualUri(path.wstring())
             ? Engine::PlatformPath::ResolveUri(path)
             : Engine::PlatformPath::ResolveProjectRelative(path);
-        return Engine::WStrToStr(absolutePath.generic_wstring());
+        return Engine::Unicode::WideToUtf8(absolutePath.generic_wstring());
     }
 
     std::string ThumbnailResourceKey(const Engine::Resource* resource)
@@ -436,11 +436,11 @@ AssetCache::ThumbnailView AssetCache::GetThumbnailView(const std::string& cacheK
     if (FindCachedOrLoading(key, cachedView))
         return cachedView;
 
-    std::string filename = Engine::WStrToStr(assetPath.filename().wstring());
+    std::string filename = Engine::Unicode::WideToUtf8(assetPath.filename().wstring());
     for (char& ch : filename)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
-    std::string ext = Engine::WStrToStr(assetPath.extension().wstring());
+    std::string ext = Engine::Unicode::WideToUtf8(assetPath.extension().wstring());
     for (char& ch : ext)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
@@ -702,13 +702,13 @@ std::filesystem::path AssetCache::CalculateDiskCachePath(const std::filesystem::
     const auto relPath = Engine::PlatformPath::ToProjectRelative(fullPath);
     const auto timePoint = lastWrite.time_since_epoch().count();
 
-    auto filename = Engine::WStrToStr(fullPath.filename().wstring());
+    auto filename = Engine::Unicode::WideToUtf8(fullPath.filename().wstring());
     for (char& ch : filename)
         ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
     const char* cacheVersion = IsPrefabThumbnail(filename) ? "_v3" : "_v2";
 
     // 고유 캐시 키 문자열: 상대경로 + 파일크기 + 수정시각 + 포맷버전
-    const std::string seed = Engine::WStrToStr(relPath.generic_wstring()) + "_" +
+    const std::string seed = Engine::Unicode::WideToUtf8(relPath.generic_wstring()) + "_" +
         std::to_string(fileSize) + "_" + std::to_string(timePoint) + cacheVersion;
 
     // 64비트 FNV-1a 해시 생성
@@ -1368,11 +1368,11 @@ void AssetCache::ProcessPending3DThumbnail()
             continue;
 
         const filesystem::path path = Engine::Utf8ToPath(key);
-        std::string ext = Engine::WStrToStr(path.extension().wstring());
+        std::string ext = Engine::Unicode::WideToUtf8(path.extension().wstring());
         for (char& c : ext)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-        std::string filename = Engine::WStrToStr(path.filename().wstring());
+        std::string filename = Engine::Unicode::WideToUtf8(path.filename().wstring());
         for (char& c : filename)
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 

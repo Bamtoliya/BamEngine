@@ -1,4 +1,4 @@
-set(ENGINE_REFLECTION_HEADERS)
+﻿set(ENGINE_REFLECTION_HEADERS)
 
 # Recheck existing headers when annotations are added or removed.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ENGINE_HEADERS})
@@ -26,6 +26,7 @@ if(WIN32)
     list(APPEND _engine_parser_options
         -DWIN32
         -D_WINDOWS
+        -D_CRT_SECURE_NO_WARNINGS
         -fms-extensions
         "$<$<CONFIG:Debug>:-D_DEBUG>"
     )

@@ -1,4 +1,4 @@
-#include "PostProcessPanel.h"
+﻿#include "PostProcessPanel.h"
 #include "EditorUI.h"
 #include "ImGuiManager.h"
 #include "BaseViewportPanel.h"
@@ -21,7 +21,7 @@ namespace
 	{
 		if (!effect) return "";
 		const string& key = effect->GetDisplayNameKey();
-		return key.empty() ? WStrToStr(effect->GetName()) : LOCAL(key);
+		return key.empty() ? Engine::Unicode::WideToUtf8(effect->GetName()) : LOCAL(key);
 	}
 
 	entt::entity FindActivePostProcessEntity(Engine::Scene& scene)
@@ -574,7 +574,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 
 			if (ImGui::Selectable(presetName.c_str(), isSelected))
 			{
-				const auto fullPath = StrToWStr(presetDir + "/" + presetName + ".json");
+				const auto fullPath = Engine::Unicode::Utf8ToWide(presetDir + "/" + presetName + ".json");
 
 				if (chain->GetPipeline().LoadFromFile(fullPath))
 				{
@@ -619,7 +619,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 	const string resetPipelineLabel = string(ICON_FA_ROTATE_LEFT " ") + LOCAL_LABEL("PostProcess.ResetPipeline");
 	if (ImGui::Button(resetPipelineLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0.f)))
 	{
-		const std::wstring defaultPath = StrToWStr(presetDir + "/Default.json");
+		const std::wstring defaultPath = Engine::Unicode::Utf8ToWide(presetDir + "/Default.json");
 		std::error_code error;
 		const bool hasDefault = std::filesystem::exists(defaultPath, error);
 		bool reset = !error;
@@ -669,7 +669,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 		const int action = EditorUI::DialogButtonBar("SavePresetActions", actions, IM_ARRAYSIZE(actions));
 		if (action == 1)
 		{
-			const auto fullPath = StrToWStr(presetDir + "/" + presetName + ".json");
+			const auto fullPath = Engine::Unicode::Utf8ToWide(presetDir + "/" + presetName + ".json");
 
 			std::error_code error;
 			std::filesystem::create_directories(std::filesystem::path(presetDir), error);
@@ -721,7 +721,7 @@ void PostProcessPanel::DrawPresetToolbar(PostProcessChain* chain)
 			const int action = EditorUI::DialogButtonBar("DeletePresetActions", actions, IM_ARRAYSIZE(actions));
 			if (action == 1)
 			{
-				const std::filesystem::path delPath = StrToWStr(presetDir + "/" + presetToDelete + ".json");
+				const std::filesystem::path delPath = Engine::Unicode::Utf8ToWide(presetDir + "/" + presetToDelete + ".json");
 				std::error_code error;
 				std::filesystem::remove(delPath, error);
 

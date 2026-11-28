@@ -277,7 +277,7 @@ void PluginManagerPanel::Draw()
 				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.ProjectDirectoryUnavailable"));
 			else
 				ImGui::TextUnformatted(LOCAL_FMT("PluginManager.AddPackageHelp",
-					WStrToStr(pluginDirectory.wstring())).c_str());
+					Engine::Unicode::WideToUtf8(pluginDirectory.wstring())).c_str());
 			if (*PluginSdkCompatibility)
 				ImGui::TextUnformatted(LOCAL_FMT("PluginManager.SdkCompatibility", PluginSdkCompatibility).c_str());
 			else
@@ -345,7 +345,7 @@ void PluginManagerPanel::DrawCreatePluginDialog()
 	const auto pluginDirectory = host.GetProjectPluginDirectory();
 	if (!pluginDirectory.empty())
 	{
-		const auto destination = WStrToStr(pluginDirectory.wstring()) + "\\UserPanel_" + m_NewPluginId;
+		const auto destination = Engine::Unicode::WideToUtf8(pluginDirectory.wstring()) + "\\UserPanel_" + m_NewPluginId;
 		ImGui::TextWrapped("%s", LOCAL_FMT("PluginManager.CreatePanelDirectory", destination).c_str());
 	}
 	else
@@ -354,7 +354,7 @@ void PluginManagerPanel::DrawCreatePluginDialog()
 		ImGui::TextWrapped("%s", LOCAL_CSTR(m_CreateErrorKey));
 	if (!m_PartialPluginDirectory.empty())
 		ImGui::TextWrapped("%s", LOCAL_FMT("PluginManager.CreatePanelPartial",
-			WStrToStr(m_PartialPluginDirectory.wstring())).c_str());
+			Engine::Unicode::WideToUtf8(m_PartialPluginDirectory.wstring())).c_str());
 
 	const EditorUI::DialogAction actions[] = {{"EditorCommon.Cancel"}, {"PluginManager.CreatePanelAction"}};
 	const int action = EditorUI::DialogButtonBar("CreatePanelActions", actions, IM_ARRAYSIZE(actions));
@@ -666,7 +666,7 @@ void PluginManagerPanel::DrawHeaderToolbar(const PluginModuleItem& item)
 			if (reinterpret_cast<INT_PTR>(result) <= 32)
 			{
 				NotificationManager::Get().AddNotification(LOCAL("EditorCommon.ShowInExplorer"),
-					LOCAL_FMT("PluginManager.OpenFolderFailed", WStrToStr(entry.PackageDirectory.wstring())), ELogLevel::Warn);
+					LOCAL_FMT("PluginManager.OpenFolderFailed", Engine::Unicode::WideToUtf8(entry.PackageDirectory.wstring())), ELogLevel::Warn);
 			}
 		}
 #endif
@@ -953,18 +953,18 @@ void PluginManagerPanel::DrawMetadataTable(const PluginModuleItem& item)
 			if (!entry.PackageDirectory.empty())
 			{
 				EditorUI::PropertyRow("PluginManager.PropPackageDirectory");
-				const auto packageDirectory = WStrToStr(entry.PackageDirectory.wstring());
+				const auto packageDirectory = Engine::Unicode::WideToUtf8(entry.PackageDirectory.wstring());
 				ImGui::TextWrapped("%s", packageDirectory.c_str());
 			}
 			if (entry.Development)
 			{
 				EditorUI::PropertyRow("PluginManager.PropSourceDir");
-				const auto source = WStrToStr(entry.Development->SourceDirectory.wstring());
+				const auto source = Engine::Unicode::WideToUtf8(entry.Development->SourceDirectory.wstring());
 				ImGui::TextUnformatted(source.c_str());
 			}
 
 			EditorUI::PropertyRow("PluginManager.PropOriginalDll");
-			const auto binary = WStrToStr(entry.BinaryPath.wstring());
+			const auto binary = Engine::Unicode::WideToUtf8(entry.BinaryPath.wstring());
 			ImGui::TextUnformatted(binary.empty() ? "-" : binary.c_str());
 
 			if (Engine::PlatformPath::HasPluginMount(entry.Id))
@@ -1028,7 +1028,7 @@ void PluginManagerPanel::DrawMetadataTable(const PluginModuleItem& item)
 				ImGui::TableSetColumnIndex(0);
 				ImGui::TextUnformatted(LOCAL_CSTR("PluginManager.PropSourceDir"));
 				ImGui::TableSetColumnIndex(1);
-				const auto path = WStrToStr(builder->GetSourceDirectory().wstring());
+				const auto path = Engine::Unicode::WideToUtf8(builder->GetSourceDirectory().wstring());
 				ImGui::TextUnformatted(path.c_str());
 			}
 		}
@@ -1072,7 +1072,7 @@ void PluginManagerPanel::DrawProvidedFeatures(const PluginModuleItem& item)
 
 		for (const auto& panel : panels)
 		{
-			const auto label = LOCAL(panel.TitleKey) + "###" + WStrToStr(panel.Id);
+			const auto label = LOCAL(panel.TitleKey) + "###" + Engine::Unicode::WideToUtf8(panel.Id);
 			if (ImGui::Selectable(label.c_str()))
 				host.FocusPanel(index, panel.Id, gui);
 		}

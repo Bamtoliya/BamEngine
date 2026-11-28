@@ -221,7 +221,7 @@ string AnimatorGraphPanel::BuildResourceWindowTitle() const
 {
 	const auto caption = std::string(ICON_FA_DIAGRAM_PROJECT " ") + GetDisplayName();
 	if (m_CurrentFilePath.empty()) return caption + "###AnimatorGraphPanel";
-	return caption + " - " + WStrToStr(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring()) + "###AnimatorGraphPanel";
+	return caption + " - " + Engine::Unicode::WideToUtf8(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring()) + "###AnimatorGraphPanel";
 }
 
 void AnimatorGraphPanel::OnResourceWindowVisibility(bool visible)
@@ -343,9 +343,11 @@ void AnimatorGraphPanel::DrawCustomContent()
 		ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
 		ImGui::SliderFloat(LOCAL_LABEL("AnimatorGraph.Weight").c_str(), &layer.weight, 0.0f, 1.0f, "%.2f");
 
-		std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
+		std::string rootBoneStr = Engine::Unicode::WideToUtf8(layer.mask.rootBoneName);
 		if (ImGui::InputText(LOCAL_LABEL("AnimatorGraph.MaskRootBone").c_str(), &rootBoneStr))
-			layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
+		{
+			layer.mask.rootBoneName = Engine::Unicode::Utf8ToWide(rootBoneStr);
+		}
 		ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.RecursiveChildren").c_str(), &layer.mask.includeChildren);
 
 		auto clip = layer.clip;
@@ -594,7 +596,7 @@ void AnimatorGraphPanel::DrawCustomQuickAccess()
 	DrawHistoryButtons(toolbar, "Animator");
 
 	const std::string fileName = m_CurrentFilePath.empty()
-		? LOCAL("AnimatorGraph.Unsaved") : WStrToStr(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring());
+		? LOCAL("AnimatorGraph.Unsaved") : Engine::Unicode::WideToUtf8(Engine::Utf8ToPath(m_CurrentFilePath).filename().wstring());
 	const std::string status = "[" + fileName + (HasUnsavedResourceChanges() ? " *]" : "]");
 	toolbar.Text(status.c_str());
 
@@ -621,7 +623,7 @@ void AnimatorGraphPanel::DrawCustomQuickAccess()
 bool AnimatorGraphPanel::IsSupported(const std::filesystem::path& assetPath) const
 {
 	const auto ext = assetPath.extension().wstring();
-	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	const std::string lower = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.filename().wstring()));
 	return ext == L".bamanimator" || ext == L".animator" ||
 		lower.ends_with(".bamanimator.json") || lower.ends_with(".animator.json");
 }
@@ -640,7 +642,7 @@ bool AnimatorGraphPanel::PrepareAssetPathRelocation(AssetPathRelocation& relocat
 
 bool AnimatorGraphPanel::LoadFromFile(const std::filesystem::path& path)
 {
-	const std::string targetPath = WStrToStr(path.wstring());
+	const std::string targetPath = Engine::Unicode::WideToUtf8(path.wstring());
 	auto tempStateMachine = std::make_shared<Engine::AnimatorStateMachine>();
 	if (!tempStateMachine->LoadFromFile(targetPath))
 	{
@@ -666,8 +668,8 @@ bool AnimatorGraphPanel::OpenDocument()
 {
 	std::wstring selectedPath;
 	const std::vector<FileDialogFilter> filters{
-		{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" },
-		{ StrToWStr(LOCAL("FileDialog.JsonFiles")), L"*.json" }
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" },
+		{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.JsonFiles")), L"*.json" }
 	};
 	if (!FileDialogs::OpenFileDialog(selectedPath, filters)) return false;
 
@@ -681,10 +683,10 @@ bool AnimatorGraphPanel::SaveDocument(bool saveAs)
 	{
 		std::wstring selectedPath;
 		const std::vector<FileDialogFilter> filters{
-			{ StrToWStr(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" }
+			{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AnimatorFiles")), L"*.bamanimator.json;*.animator.json;*.bamanimator;*.animator" }
 		};
 		if (!FileDialogs::SaveFileDialog(selectedPath, filters, L"NewController.bamanimator.json", L"bamanimator.json")) return false;
-		targetPath = WStrToStr(selectedPath);
+		targetPath = Engine::Unicode::WideToUtf8(selectedPath);
 	}
 
 	if (targetPath.empty() || !m_StateMachine || !CommitDocumentEdit()) return false;
@@ -972,10 +974,10 @@ void AnimatorGraphPanel::DrawLayersTab()
 			ImGui::InputText(LOCAL_CSTR("EditorCommon.Name"), &layer.name);
 			ImGui::SliderFloat(LOCAL_LABEL("AnimatorGraph.Weight").c_str(), &layer.weight, 0.0f, 1.0f, "%.2f");
 
-			std::string rootBoneStr(layer.mask.rootBoneName.begin(), layer.mask.rootBoneName.end());
+			std::string rootBoneStr = Engine::Unicode::WideToUtf8(layer.mask.rootBoneName);
 			if (ImGui::InputText(LOCAL_LABEL("AnimatorGraph.MaskRootBone").c_str(), &rootBoneStr))
 			{
-				layer.mask.rootBoneName = std::wstring(rootBoneStr.begin(), rootBoneStr.end());
+				layer.mask.rootBoneName = Engine::Unicode::Utf8ToWide(rootBoneStr);
 			}
 			ImGui::Checkbox(LOCAL_LABEL("AnimatorGraph.RecursiveChildren").c_str(), &layer.mask.includeChildren);
 			if (!layer.mask.boneWeights.empty())
@@ -2978,7 +2980,7 @@ void AnimatorGraphPanel::DrawBlend2DFreeformEditor(Engine::AnimState& state)
 		{
 			const auto& hs = tree.samples[hoveredSampleIndex];
 			const std::string clipName = (hs.clip.IsValid() && hs.clip.Get())
-				? Engine::WStrToStr(std::filesystem::path(hs.clip->GetPath()).filename().wstring())
+				? Engine::Unicode::WideToUtf8(std::filesystem::path(hs.clip->GetPath()).filename().wstring())
 				: LOCAL("AnimatorGraph.NoMotion");
 			ImGui::SetTooltip("#%d %s (%.2f, %.2f)", hoveredSampleIndex, clipName.c_str(), hs.x, hs.y);
 		}

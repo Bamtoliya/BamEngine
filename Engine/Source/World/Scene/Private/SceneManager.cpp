@@ -132,7 +132,7 @@ EResult SceneManager::SavePrefab(archive::IArchive& ar, const wstring& filePath,
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Prefab save failed: code={}, field={}, path={}",
-			static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int32>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return EResult::Fail;
 	}
 
@@ -155,7 +155,7 @@ EResult SceneManager::InstantiatePrefab(archive::IArchive& ar, const wstring& fi
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("Prefab load failed: code={}, field={}, path={}",
-			static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int32>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return EResult::Fail;
 	}
 
@@ -281,7 +281,7 @@ EResult SceneManager::LoadSceneAdditive(const std::filesystem::path& scenePath, 
 		return EResult::Fail;
 	}
 
-	subScene->SetName(StrToWStr(subSceneName));
+	subScene->SetName(Engine::Unicode::Utf8ToWide(subSceneName));
 	const EResult regRes = RegisterAdditiveScene(subSceneName, subScene);
 	Safe_Release(subScene);
 
@@ -531,7 +531,7 @@ EResult SceneManager::SaveScene(archive::IArchive& ar, const wstring& filePath)
 		result = ar.SaveToFile(targetPath);
 	if (!result)
 	{
-		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+		ENGINE_LOG_ERROR("Scene save failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return EResult::Fail;
 	}
 	return EResult::Success;
@@ -566,13 +566,13 @@ EResult SceneManager::LoadScene(archive::IArchive& ar, const wstring& filePath)
 	const auto openStart = Clock::now();
 	if (!result)
 	{
-		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, WStrToStr(filePath));
+		ENGINE_LOG_ERROR("Scene load failed: code={}, field={}, path={}", static_cast<int32>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return EResult::Fail;
 	}
 	const EResult openResult = OpenScene(candidate);
 	Safe_Release(candidate);
 	ENGINE_LOG_INFO("Scene load timing: {} | archive {:.0f} ms, resources and entities {:.0f} ms, open {:.0f} ms",
-		WStrToStr(targetPath.filename().wstring()), elapsedMs(readStart, createStart), elapsedMs(createStart, openStart),
+		Engine::Unicode::WideToUtf8(targetPath.filename().wstring()), elapsedMs(readStart, createStart), elapsedMs(createStart, openStart),
 		elapsedMs(openStart, Clock::now()));
 	return openResult;
 }

@@ -91,7 +91,7 @@ Engine::EResult Client::ClientGameRuntime::Initialize(const Engine::RendererDesc
                 if (entry.is_directory(mountEc) && !mountEc)
                 {
                     Engine::ContentMountDesc mountDesc{};
-                    mountDesc.Name = Engine::WStrToStr(entry.path().filename().wstring());
+                    mountDesc.Name = Engine::Unicode::WideToUtf8(entry.path().filename().wstring());
                     mountDesc.RootPath = entry.path();
                     mountDesc.ReadOnly = true;
                     mountDesc.ShowUnderAssets = false;

@@ -179,7 +179,7 @@ void ShaderHotReloadManager::OnWatchPathAdded(const std::filesystem::path& resol
 {
 	if (!m_FileWatcher || !m_FileListener) return;
 
-	const auto watchStr = Engine::WStrToStr(resolvedPath.wstring());
+	const auto watchStr = Engine::Unicode::WideToUtf8(resolvedPath.wstring());
 	const efsw::WatchID watchId = m_FileWatcher->addWatch(watchStr, m_FileListener, true);
 	if (watchId > 0)
 	{
@@ -354,12 +354,12 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 			{
 				reloadedAny = true;
 				EDITOR_LOG_INFO("[Shader Hot Reload] Hot-swapped: {} (Key: {}, {} bytes)",
-					hlslPath.filename().string(), Engine::WStrToStr(shader->GetKey()), result.Bytecode.size());
+					hlslPath.filename().string(), Engine::Unicode::WideToUtf8(shader->GetKey()), result.Bytecode.size());
 			}
 			else
 			{
 				EDITOR_LOG_ERROR("[Shader Hot Reload] Failed to update bytecode for shader '{}'",
-					Engine::WStrToStr(shader->GetKey()));
+					Engine::Unicode::WideToUtf8(shader->GetKey()));
 			}
 		}
 	}
@@ -404,7 +404,7 @@ void ShaderHotReloadManager::ProcessModifiedFile(const std::filesystem::path& hl
 		if (newHandle.IsValid())
 		{
 			EDITOR_LOG_INFO("[Shader Hot Reload] Compiled and registered new shader: {} (Key: {}, {} bytes)",
-				hlslPath.filename().string(), Engine::WStrToStr(desc.Key), result.Bytecode.size());
+				hlslPath.filename().string(), Engine::Unicode::WideToUtf8(desc.Key), result.Bytecode.size());
 			NotificationManager::Get().AddNotification(
 				LOCAL("Notification.ShaderHotReloaded"),
 				LOCAL_FMT("Notification.ReloadedFile", hlslPath.filename().string()),

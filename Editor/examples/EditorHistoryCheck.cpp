@@ -769,7 +769,7 @@ namespace
         const auto timelinePath = directory / L"이전.bamtimeline.json";
         const auto movedTimelinePath = directory / L"이동.bamtimeline.json";
         auto& timelineComponent = document.GetScene()->GetRegistry().emplace<Engine::ActionTimelineComponent>(animatedHandle);
-        timelineComponent.timelinePath = Engine::WStrToStr(timelinePath.wstring());
+        timelineComponent.timelinePath = Engine::Unicode::WideToUtf8(timelinePath.wstring());
         timelineComponent.loadedTimelinePath = timelineComponent.timelinePath;
         timelineComponent.currentTime = 0.5f;
         const auto prefabPath = directory / L"이전.bamprefab.json";
@@ -785,7 +785,7 @@ namespace
             std::ofstream file(graphPath, std::ios::trunc);
             Check(bool(file), "graph path fixture creation");
         }
-        animator.controllerPath = Engine::WStrToStr(controller.wstring());
+        animator.controllerPath = Engine::Unicode::WideToUtf8(controller.wstring());
         animator.loadedControllerPath = animator.controllerPath;
         animator.stateMachineAsset = std::make_shared<Engine::AnimatorStateMachine>();
         const auto stateMachine = animator.stateMachineAsset;
@@ -798,20 +798,20 @@ namespace
         Editor::AssetPathRelocation controllerMove({ { controller, renamedController }, { timelinePath, movedTimelinePath },
             { prefabPath, movedPrefabPath }, { graphPath, movedGraphPath } }, { document.GetPath() });
         Check(document.PrepareAssetPathRelocation(controllerMove), "loaded controller relocation rejected");
-        Check(animator.controllerPath == Engine::WStrToStr(controller.wstring()), "controller changed during preparation");
-        Check(timelineComponent.timelinePath == Engine::WStrToStr(timelinePath.wstring()), "timeline changed during preparation");
+        Check(animator.controllerPath == Engine::Unicode::WideToUtf8(controller.wstring()), "controller changed during preparation");
+        Check(timelineComponent.timelinePath == Engine::Unicode::WideToUtf8(timelinePath.wstring()), "timeline changed during preparation");
         std::filesystem::rename(graphPath, movedGraphPath);
         controllerMove.Apply();
-        Check(animator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)) &&
+        Check(animator.controllerPath == Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(renamedController)) &&
             animator.loadedControllerPath == animator.controllerPath && animator.stateMachineAsset == stateMachine &&
             animator.currentTime == 0.75f, "controller relocation reloaded playback or retained old paths");
-        const auto movedTimelineUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(movedTimelinePath));
+        const auto movedTimelineUri = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(movedTimelinePath));
         Check(timelineComponent.timelinePath == movedTimelineUri && timelineComponent.loadedTimelinePath == movedTimelineUri &&
             timelineComponent.currentTime == 0.5f, "timeline relocation changed playback or retained an old path");
         Check(history.Undo(), "controller relocation lost scene undo");
         const auto& restoredAnimator = document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(
             animatedHandle);
-        Check(restoredAnimator.controllerPath == Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(renamedController)),
+        Check(restoredAnimator.controllerPath == Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(renamedController)),
             "scene undo restored a stale controller path");
         Check(document.GetScene()->GetRegistry().get<Engine::ActionTimelineComponent>(animatedHandle).timelinePath ==
             movedTimelineUri, "scene undo restored a stale timeline path");
@@ -827,22 +827,22 @@ namespace
         controllerReverse.Apply();
         Check(history.Redo(), "controller relocation lost scene redo");
         Check(document.GetScene()->GetRegistry().get<Engine::AnimatorComponent>(animatedHandle).controllerPath ==
-            Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(controller)), "scene redo restored a stale controller path");
+            Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(controller)), "scene redo restored a stale controller path");
         Check(world.get<Engine::PrefabInstanceComponent>(animatedHandle).prefabAssetPath ==
             Engine::PlatformPath::ToVirtualUri(prefabPath) && world.get<Engine::GraphBindingComponent>(animatedHandle).graphFile ==
             Engine::PlatformPath::ToVirtualUri(graphPath), "scene redo restored a stale prefab or graph path");
 
         const auto unicodeController = directory / L"컨트롤러 이동.bamanimator.json";
         const auto unicodeTimeline = directory / L"타임라인 이동.bamtimeline.json";
-        Check(stateMachine->SaveToFile(Engine::WStrToStr(unicodeController.wstring())) &&
+        Check(stateMachine->SaveToFile(Engine::Unicode::WideToUtf8(unicodeController.wstring())) &&
             std::filesystem::is_regular_file(unicodeController), "UTF-8 controller save path");
         Engine::AnimatorStateMachine reloadedController;
-        Check(reloadedController.LoadFromFile(Engine::WStrToStr(unicodeController.wstring())), "UTF-8 controller load path");
+        Check(reloadedController.LoadFromFile(Engine::Unicode::WideToUtf8(unicodeController.wstring())), "UTF-8 controller load path");
         std::unique_ptr<Engine::Resource> timeline(Engine::ActionTimelineAsset::CreateEmpty());
         auto& timelineAsset = *static_cast<Engine::ActionTimelineAsset*>(timeline.get());
-        Check(timelineAsset.SaveToFile(Engine::WStrToStr(unicodeTimeline.wstring())) &&
+        Check(timelineAsset.SaveToFile(Engine::Unicode::WideToUtf8(unicodeTimeline.wstring())) &&
             std::filesystem::is_regular_file(unicodeTimeline), "UTF-8 timeline save path");
-        Check(timelineAsset.LoadFromFile(Engine::WStrToStr(unicodeTimeline.wstring())), "UTF-8 timeline load path");
+        Check(timelineAsset.LoadFromFile(Engine::Unicode::WideToUtf8(unicodeTimeline.wstring())), "UTF-8 timeline load path");
     }
     void DocumentActionProtection()
     {

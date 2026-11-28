@@ -81,7 +81,7 @@ EResult Application::Initialize(void* arg)
                 Engine::PlatformPath::SetProjectRoot(selectedRoot);
                 if (EditorSettingsService::IsCreated())
                 {
-                    const std::string projName = Engine::WStrToStr(selectedRoot.filename().wstring());
+                    const std::string projName = Engine::Unicode::WideToUtf8(selectedRoot.filename().wstring());
                     EditorSettingsService::Get().RecordRecentProject(projName, hubResult.SelectedProjectFileOrRoot);
                 }
             }

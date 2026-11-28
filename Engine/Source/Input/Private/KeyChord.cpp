@@ -28,7 +28,7 @@ std::string KeyChord::ToString() const
     if (HasShift()) result += "Shift+";
     if (HasAlt())   result += "Alt+";
 
-    result += Engine::EngineKeyCodeToString(Key);
+    result += EngineKeyCodeToString(Key);
     return result;
 }
 

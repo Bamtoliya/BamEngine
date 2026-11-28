@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "ResourceManager.h"
 #include "Resources.h"
 #include "PhysicsMaterial.h"
@@ -6,6 +6,9 @@
 
 namespace
 {
+	// ResourceManager 재생성 시에도 초기화하지 않는다.
+	uint64 g_NextResourceGeneration = 1;
+
 	std::filesystem::path ResolveResourceLoadPath(const std::filesystem::path& filePath)
 	{
 		return Engine::PlatformPath::ResolveUri(filePath);
@@ -104,27 +107,41 @@ namespace
 	}
 }
 
-void Engine::ResourceHandleAccess::AddRef(const Engine::Handle& handle)
+bool Engine::ResourceHandleAccess::TryAddRef(const Engine::Handle& handle, TypeValidator validator)
 {
-	Engine::ResourceManager::Get().AddRefResource(handle);
+	if (!Engine::ResourceManager::IsCreated())
+		return false;
+
+	return Engine::ResourceManager::Get().TryAddRefResource(handle, validator);
+}
+
+bool Engine::ResourceHandleAccess::AddRef(const Engine::Handle& handle)
+{
+	if (!Engine::ResourceManager::IsCreated())
+		return false;
+
+	return Engine::ResourceManager::Get().AddRefResource(handle);
 }
 
 void Engine::ResourceHandleAccess::Release(const Engine::Handle& handle)
 {
 	if (Engine::ResourceManager::IsCreated())
-	{
 		Engine::ResourceManager::Get().ReleaseResource(handle);
-	}
 }
 
 bool Engine::ResourceHandleAccess::IsValid(const Engine::Handle& handle)
 {
+	if (!Engine::ResourceManager::IsCreated())
+		return false;
+
 	return Engine::ResourceManager::Get().IsValid(handle);
 }
 
-Engine::Resource* Engine::ResourceHandleAccess::Resolve(
-	const Engine::Handle& handle)
+Engine::Resource* Engine::ResourceHandleAccess::Resolve(const Engine::Handle& handle)
 {
+	if (!Engine::ResourceManager::IsCreated())
+		return nullptr;
+
 	return Engine::ResourceManager::Get().GetResource(handle);
 }
 
@@ -142,18 +159,7 @@ EResult ResourceManager::Initialize(void* arg)
 
 void ResourceManager::Free()
 {
-	for (auto& slot : m_Resources)
-	{
-		if (slot.Instance)
-		{
-			slot.Instance->Free();
-			delete slot.Instance;
-			slot.Instance = nullptr;
-		}
-	}
-	m_Resources.clear();
-	m_FreeSlots.clear();
-	m_HashToHandle.clear();
+	ReleaseAllResources(true);
 }
 
 #pragma endregion
@@ -179,6 +185,9 @@ EResult ResourceManager::ImportFolder(const wstring& folderPath)
 }
 Handle ResourceManager::LoadFile(const wstring& filePath)
 {
+	if (!IsOwnerThread() || IsShuttingDown())
+		return {};
+
 	namespace fs = std::filesystem;
 
 	Handle existing = FindHandleByKey(filePath);
@@ -201,7 +210,7 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 
 	if (!PakMountManager::Get().ExistsOrOnDisk(relativePath.empty() ? absolutePath : fs::path(relativePath)))
 	{
-		ENGINE_LOG_ERROR("Resource load failed: stage=file not found, key=\"{}\", path=\"{}\"", WStrToStr(relativePath), WStrToStr(absolutePath.wstring()));
+		ENGINE_LOG_ERROR("Resource load failed: stage=file not found, key=\"{}\", path=\"{}\"", Engine::Unicode::WideToUtf8(relativePath), Engine::Unicode::WideToUtf8(absolutePath.wstring()));
 		return {};
 	}
 
@@ -233,12 +242,12 @@ Handle ResourceManager::LoadFile(const wstring& filePath)
 		return iter->second(relativePath, absolutePath.wstring());
 
 	ENGINE_LOG_ERROR("Resource load failed: stage=loader not registered, key=\"{}\", path=\"{}\", extension=\"{}\"",
-		WStrToStr(relativePath), WStrToStr(absolutePath.wstring()), WStrToStr(logicalExtension));
+		Engine::Unicode::WideToUtf8(relativePath), Engine::Unicode::WideToUtf8(absolutePath.wstring()), Engine::Unicode::WideToUtf8(logicalExtension));
 	return {};
 }
 Handle ResourceManager::LoadFile(const string& filePath)
 {
-	return LoadFile(StrToWStr(filePath));
+	return LoadFile(Engine::Unicode::Utf8ToWide(filePath));
 }
 void ResourceManager::RegisterExplicitLoader()
 {
@@ -313,22 +322,39 @@ void ResourceManager::RegisterExplicitLoader()
 }
 Handle ResourceManager::RegisterPreparedResource(Resource* resource)
 {
-	if (!resource) return {};
+	if (!resource || !IsOwnerThread())
+		return {};
 
-	const uint64 hash = RunTimeHash(NormalizePath(resource->GetKey()));
-	const Handle existing = FindHandle(hash);
-	if (existing.IsValid() || resource->UploadToGPU() != EResult::Success)
+	const wstring key = NormalizePath(resource->GetKey());
+
+	RegistrationDecision decision;
+
+	{
+		unique_lock lock(m_PoolMutex);
+		decision = CheckRegistrationLocked(key, resource);
+	}
+
+	if (decision.Action != ERegistrationAction::Insert)
+		return CompleteRegistrationDecision(resource, key, decision);
+
+	// 실제 GPU 업로드는 매니저 잠금 밖에서 수행한다.
+	if (resource->UploadToGPU() != EResult::Success)
 	{
 		resource->Free();
 		delete resource;
-		return existing;
+
+		return {};
 	}
-	return AddResourceInternal(hash, resource);
+
+	// 업로드 중 다른 신규 객체가 같은 키로 등록될 수 있으므로
+	// 내부 등록 단계에서 다시 검사한다.
+	return AddResourceInternal(key, resource);
 }
 
 EResult ResourceManager::DestroyResource(const Handle& handle)
 {
-	if (!handle.IsValid()) return EResult::InvalidArgument;
+	if (!handle.IsValid() || !IsOwnerThread())
+		return EResult::InvalidArgument;
 
 	Resource* toDelete = nullptr;
 	{
@@ -362,38 +388,78 @@ vector<Handle> ResourceManager::GetResourceHandles(uint64 typeHash)
 }
 EResult ResourceManager::DestroyResource(Resource* resource)
 {
-	if (!resource) return EResult::InvalidArgument;
+	if (!resource || !IsOwnerThread())
+		return EResult::InvalidArgument;
 
 	Resource* toDelete = nullptr;
+
 	{
 		unique_lock lock(m_PoolMutex);
 
-		for (uint32 i = 0; i < m_Resources.size(); ++i)
-		{
-			if (m_Resources[i].IsActive && m_Resources[i].Instance == resource)
-			{
-				toDelete = FreeSlotInternal(i);
-				break;
-			}
-		}
+		if (m_IsShuttingDown)
+			return EResult::Fail;
+
+		const auto it = m_PointerToHandle.find(resource);
+
+		if (it == m_PointerToHandle.end())
+			return EResult::Fail;
+
+		toDelete = FreeSlotInternal(it->second.GetIndex());
 	}
 
-	if (toDelete)
+	if (!toDelete)
+		return EResult::Fail;
+
+	toDelete->Free();
+	delete toDelete;
+
+	return EResult::Success;
+}
+EResult ResourceManager::DestroyUnregisteredResource(Resource* resource)
+{
+	if (!resource)
+		return EResult::InvalidArgument;
+
+	if (resource->IsManagerOwned())
+		return EResult::Fail;
+
+	// Free() 중 재등록 및 재귀적인 삭제를 방지한다.
+	resource->m_ManagerOwnership.Owned = true;
+
+	resource->Free();
+	delete resource;
+
+	return EResult::Success;
+}
+uint32 ResourceManager::FlushDeferredDeletes()
+{
+	if (!IsOwnerThread())
+		return 0;
+
+	vector<Resource*> pending;
+
 	{
-		toDelete->Free();
-		delete toDelete;
+		unique_lock lock(m_PoolMutex);
+
+		pending.swap(m_DeferredDeletes);
 	}
-	else
+
+	for (Resource* resource : pending)
 	{
-		// 풀에 없으면 강제 삭제
+		if (!resource)
+			continue;
+
 		resource->Free();
 		delete resource;
 	}
 
-	return EResult::Success;
+	return static_cast<uint32>(pending.size());
 }
 uint32 ResourceManager::UnloadProjectScopedResources()
 {
+	if (!IsOwnerThread())
+		return 0;
+
 	vector<Resource*> toDelete;
 	{
 		unique_lock lock(m_PoolMutex);
@@ -424,6 +490,10 @@ uint32 ResourceManager::UnloadProjectScopedResources()
 	ENGINE_LOG_INFO("[ResourceManager] Unloaded {} project/mount-scoped resources.", unloadedCount);
 	return unloadedCount;
 }
+void ResourceManager::ClearResources()
+{
+	ReleaseAllResources(false);
+}
 #if BAM_EDITOR
 vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
 {
@@ -450,6 +520,21 @@ vector<ResourceDebugInfo> ResourceManager::GetDebugSnapshot()
 		info.Key = slot.Instance->GetKey();
 		info.Path = slot.Instance->GetPath();
 
+		info.HasManagerReference = slot.HasManagerReference;
+		info.CacheEvictable = slot.CacheEvictable;
+
+		const uint32 managerRefCount = slot.HasManagerReference ? 1u : 0u;
+
+		info.ExternalRefCount = slot.RefCount >= managerRefCount
+			? slot.RefCount - managerRefCount
+			: 0u;
+
+		if (info.ExternalRefCount == 0 && slot.HasManagerReference)
+		{
+			info.IdleSeconds = std::chrono::duration<f64>(
+				std::chrono::steady_clock::now() - slot.IdleSince).count();
+		}
+
 		result.push_back(std::move(info));
 	}
 
@@ -465,6 +550,9 @@ ResourceMetrics ResourceManager::GetMetrics()
 
 	std::shared_lock lock(m_PoolMutex);
 
+	metrics.DeferredDeleteCount =
+		static_cast<uint64>(m_DeferredDeletes.size());
+
 	metrics.TotalSlots =
 		static_cast<uint64>(m_Resources.size());
 
@@ -477,6 +565,19 @@ ResourceMetrics ResourceManager::GetMetrics()
 			continue;
 
 		++metrics.ActiveResources;
+
+		const uint32 managerRefCount = slot.HasManagerReference ? 1u : 0u;
+
+		if (slot.RefCount > managerRefCount)
+			++metrics.ReferencedResources;
+
+		if (slot.HasManagerReference && slot.RefCount == 1)
+		{
+			++metrics.ManagerOnlyResources;
+
+			if (slot.CacheEvictable)
+				++metrics.CacheEvictableResources;
+		}
 
 		const auto typeIndex = static_cast<std::size_t>(
 			slot.Instance->m_ResourceType);
@@ -496,44 +597,125 @@ ResourceMetrics ResourceManager::GetMetrics()
 }
 #pragma endregion
 
-#pragma region Handle Management
-void ResourceManager::AddRefResource(const Handle& handle)
+#pragma region Dependencies
+ResourceDependencySnapshot ResourceManager::GetDependencySnapshot()
 {
-	if (!handle.IsValid()) return;
+	ResourceDependencySnapshot snapshot;
+
+	if (!IsOwnerThread())
+		return snapshot;
+
+	vector<Handle> handles;
+
+	{
+		shared_lock lock(m_PoolMutex);
+
+		if (m_IsShuttingDown)
+			return snapshot;
+
+		handles.reserve(m_Resources.size());
+
+		for (size_t i = 0; i < m_Resources.size(); ++i)
+		{
+			const auto& slot = m_Resources[i];
+
+			if (!slot.IsActive || !slot.Instance)
+				continue;
+
+			handles.emplace_back(
+				static_cast<uint32>(i), slot.Generation);
+		}
+	}
+
+	snapshot.Nodes.reserve(handles.size());
+
+	for (const Handle& handle : handles)
+	{
+		const Resource* resource = GetResource(handle);
+
+		if (!resource)
+			continue;
+
+		ResourceDependencyNode node;
+
+		node.Id = handle;
+		node.Key = resource->GetKey();
+
+		node.TrackingSupported =
+			resource->CollectResourceDependencies(node.Dependencies);
+
+		// 동일 Texture가 여러 슬롯에서 사용되는 경우에도
+		// 하나의 의존성 관계로 표현한다.
+		std::sort(node.Dependencies.begin(), node.Dependencies.end());
+
+		node.Dependencies.erase(
+			std::unique(node.Dependencies.begin(), node.Dependencies.end()),
+			node.Dependencies.end());
+
+		snapshot.Nodes.push_back(std::move(node));
+	}
+
+	return snapshot;
+}
+#pragma endregion
+
+
+#pragma region Handle Management
+bool ResourceManager::TryAddRefResource(const Handle& handle, ResourceHandleAccess::TypeValidator validator)
+{
+	if (!handle.IsValid() || !validator)
+		return false;
 
 	unique_lock lock(m_PoolMutex);
 
-	uint32 index = handle.GetIndex();
-	if (index < m_Resources.size() && m_Resources[index].Generation == handle.GetGeneration())
+	if (m_IsShuttingDown)
+		return false;
+
+	const uint32 index = handle.GetIndex();
+
+	if (index >= m_Resources.size())
+		return false;
+
+	auto& slot = m_Resources[index];
+
+	if (!slot.IsActive ||
+		slot.Generation != handle.GetGeneration() ||
+		!slot.Instance)
 	{
-		m_Resources[index].RefCount++;
+		return false;
 	}
+
+	if (slot.RefCount == 0 ||
+		slot.RefCount == (std::numeric_limits<uint32>::max)())
+	{
+		return false;
+	}
+
+	if (!validator(slot.Instance))
+		return false;
+
+	++slot.RefCount;
+
+	return true;
+}
+bool ResourceManager::AddRefResource(const Handle& handle)
+{
+	return TryAddRefResource(handle,
+		[](const Resource*) noexcept
+		{
+			return true;
+		});
 }
 
 void ResourceManager::ReleaseResource(const Handle& handle)
 {
-	if (!handle.IsValid()) return;
-
-	Resource* toDelete = nullptr;
-	{
-		unique_lock lock(m_PoolMutex);
-
-		uint32 index = handle.GetIndex();
-
-		if (index < m_Resources.size() && m_Resources[index].Generation == handle.GetGeneration())
-		{
-			if (--m_Resources[index].RefCount <= 0)
-			{
-				toDelete = FreeSlotInternal(index);
-			}
-		}
-	}
-
-	if (toDelete)
-	{
-		toDelete->Free();
-		delete toDelete;
-	}
+	ReleaseReference(handle, false);
+}
+bool ResourceManager::ReleaseManagerReference(const Handle& handle)
+{
+	if (!IsOwnerThread())
+		return false;
+	return ReleaseReference(handle, true);
 }
 
 bool ResourceManager::IsValid(const Handle& handle)
@@ -546,19 +728,31 @@ bool ResourceManager::IsValid(const Handle& handle)
 
 Resource* ResourceManager::GetResource(const Handle& handle)
 {
-	if (!handle.IsValid()) return nullptr;
+	if (!handle.IsValid() || !IsOwnerThread())
+		return nullptr;
+
 	shared_lock lock(m_PoolMutex);
-	uint32 index = handle.GetIndex();
-	if (index < m_Resources.size() && m_Resources[index].Generation == handle.GetGeneration())
+
+	const uint32 index = handle.GetIndex();
+
+	if (index >= m_Resources.size())
+		return nullptr;
+
+	const auto& slot = m_Resources[index];
+
+	if (!slot.IsActive ||
+		slot.Generation != handle.GetGeneration() ||
+		!slot.Instance ||
+		slot.RefCount == 0)
 	{
-		return m_Resources[index].Instance;
+		return nullptr;
 	}
-	return nullptr;
+
+	return slot.Instance;
 }
 Handle ResourceManager::FindHandleByKey(const wstring& key)
 {
-	uint64 hash = RunTimeHash(NormalizePath(key));
-	return FindHandle(hash);
+	return FindHandle(NormalizePath(key));
 }
 wstring ResourceManager::ResolveFileKey(const std::filesystem::path& filePath)
 {
@@ -589,56 +783,521 @@ Handle ResourceManager::FindHandleByFilePath(const std::filesystem::path& filePa
 	}
 	return {};
 }
+bool ResourceManager::RenameResourceKey(const Handle& handle, const wstring& newKey)
+{
+	if (!handle.IsValid() || !IsOwnerThread())
+		return false;
+
+	wstring normalizedKey = NormalizePath(newKey);
+
+	if (normalizedKey.empty())
+		return false;
+
+	wstring registeredKey = normalizedKey;
+
+	unique_lock lock(m_PoolMutex);
+
+	if (m_IsShuttingDown)
+		return false;
+
+	const uint32 index = handle.GetIndex();
+
+	if (index >= m_Resources.size())
+		return false;
+
+	auto& slot = m_Resources[index];
+
+	if (!slot.IsActive ||
+		slot.Generation != handle.GetGeneration() ||
+		!slot.Instance)
+	{
+		return false;
+	}
+
+	if (slot.RegisteredKey == normalizedKey)
+		return true;
+
+	if (m_KeyToHandle.contains(normalizedKey))
+		return false;
+
+	// 신규 인덱스 등록을 먼저 완료한다.
+	const auto [it, inserted] =
+		m_KeyToHandle.emplace(normalizedKey, handle);
+
+	if (!inserted)
+		return false;
+
+	// 기존 인덱스 제거 및 식별자 변경
+	m_KeyToHandle.erase(slot.RegisteredKey);
+
+	slot.RegisteredKey.swap(registeredKey);
+	slot.Instance->ApplyKey(std::move(normalizedKey));
+
+	return true;
+}
 #pragma endregion
 
 #pragma region Resource Slot Management
-Handle ResourceManager::FindHandle(uint64 hash)
+bool ResourceManager::IsShuttingDown()
 {
 	shared_lock lock(m_PoolMutex);
-	auto iter = m_HashToHandle.find(hash);
-	if (iter != m_HashToHandle.end())
+	return m_IsShuttingDown;
+}
+void ResourceManager::ReleaseAllResources(bool shutdown)
+{
+	if (!IsOwnerThread())
+		return;
+
+	vector<ResourceSlot> retiredResources;
+	vector<Resource*> deferredResources;
+
 	{
-		return iter->second;
+		unique_lock lock(m_PoolMutex);
+
+		if (m_IsShuttingDown)
+			return;
+
+		m_IsShuttingDown = true;
+
+		retiredResources.swap(m_Resources);
+		deferredResources.swap(m_DeferredDeletes);
+
+		m_FreeSlots.clear();
+		m_KeyToHandle.clear();
+		m_PointerToHandle.clear();
+		m_TypeToHandles.clear();
+
+		if (shutdown)
+			m_LoaderRegistry.clear();
 	}
-	return Handle();
-	// lock은 스코프 종료 시 RAII로 자동 해제
+
+	for (Resource* resource : deferredResources)
+	{
+		if (!resource)
+			continue;
+
+		resource->Free();
+		delete resource;
+	}
+
+	for (auto& slot : retiredResources)
+	{
+		if (!slot.Instance)
+			continue;
+
+		Resource* resource = slot.Instance;
+		slot.Instance = nullptr;
+
+		resource->Free();
+		delete resource;
+	}
+
+	if (!shutdown)
+	{
+		unique_lock lock(m_PoolMutex);
+		m_IsShuttingDown = false;
+	}
 }
 
-Handle ResourceManager::AddResourceInternal(uint64 hash, Resource* resource)
+bool ResourceManager::SetCacheEvictable(const Handle& handle, bool evictable)
 {
-	unique_lock lock(m_PoolMutex);
-	// Check for existing resource
-	auto iter = m_HashToHandle.find(hash);
-	if (iter != m_HashToHandle.end())
-	{
-		Handle existingHandle = iter->second;
-		lock.unlock(); // 데드락 방지: delete 전에 락 해제
+	if (!IsOwnerThread() || !handle.IsValid())
+		return false;
 
-		if (resource)
-		{
-			// If resource already exists, free the new one to prevent leaks
-			resource->Free();
-			delete resource;
-		}
-		return existingHandle; // Return existing handle
+	unique_lock lock(m_PoolMutex);
+
+	if (m_IsShuttingDown)
+		return false;
+
+	const uint32 index = handle.GetIndex();
+
+	if (index >= m_Resources.size())
+		return false;
+
+	auto& slot = m_Resources[index];
+
+	if (!slot.IsActive ||
+		slot.Generation != handle.GetGeneration() ||
+		!slot.Instance ||
+		!slot.HasManagerReference)
+	{
+		return false;
 	}
 
-	Handle handle = AllocateSlot(resource);
-	m_HashToHandle[hash] = handle; // Map hash to handle
+	if (slot.CacheEvictable != evictable)
+	{
+		slot.CacheEvictable = evictable;
+		slot.IdleSince = std::chrono::steady_clock::now();
+	}
 
-	uint64 typeHash = resource->GetTypeID();
-	m_TypeToHandles[typeHash].push_back(handle);
+	return true;
+}
+
+uint32 ResourceManager::CollectUnusedResources(
+	uint32 maxCount, std::chrono::milliseconds minIdle)
+{
+	if (!IsOwnerThread() || maxCount == 0 || m_IsCollectingCache)
+		return 0;
+
+	if (minIdle < std::chrono::milliseconds::zero())
+		minIdle = std::chrono::milliseconds::zero();
+
+	m_IsCollectingCache = true;
+
+	struct CollectionGuard
+	{
+		bool& Collecting;
+
+		~CollectionGuard()
+		{
+			Collecting = false;
+		}
+	} guard{ m_IsCollectingCache };
+
+	using Clock = std::chrono::steady_clock;
+
+	struct Candidate
+	{
+		Handle Id;
+		Clock::time_point IdleSince;
+	};
+
+	const auto now = Clock::now();
+
+	vector<Candidate> candidates;
+
+	const auto canEvict = [&](const ResourceSlot& slot)
+		{
+			return slot.IsActive &&
+				slot.Instance &&
+				slot.HasManagerReference &&
+				slot.RefCount == 1 &&
+				slot.CacheEvictable &&
+				slot.Instance->GetStreamSlot() == 0 &&
+				now - slot.IdleSince >= minIdle;
+		};
+
+	{
+		shared_lock lock(m_PoolMutex);
+
+		if (m_IsShuttingDown)
+			return 0;
+
+		for (size_t i = 0; i < m_Resources.size(); ++i)
+		{
+			const auto& slot = m_Resources[i];
+
+			if (!canEvict(slot))
+				continue;
+
+			candidates.push_back({
+				Handle(static_cast<uint32>(i), slot.Generation),
+				slot.IdleSince
+				});
+		}
+	}
+
+	std::sort(candidates.begin(), candidates.end(),
+		[](const Candidate& lhs, const Candidate& rhs)
+		{
+			if (lhs.IdleSince != rhs.IdleSince)
+				return lhs.IdleSince < rhs.IdleSince;
+
+			return lhs.Id < rhs.Id;
+		});
+
+	uint32 collected = 0;
+
+	for (const auto& candidate : candidates)
+	{
+		if (collected >= maxCount)
+			break;
+
+		Resource* toDelete = nullptr;
+
+		{
+			unique_lock lock(m_PoolMutex);
+
+			if (m_IsShuttingDown)
+				break;
+
+			const uint32 index = candidate.Id.GetIndex();
+
+			if (index >= m_Resources.size())
+				continue;
+
+			const auto& slot = m_Resources[index];
+
+			// 후보 수집 이후 참조 상태가 변경되었을 수 있다.
+			if (slot.Generation != candidate.Id.GetGeneration() ||
+				slot.IdleSince != candidate.IdleSince ||
+				!canEvict(slot))
+			{
+				continue;
+			}
+
+			toDelete = FreeSlotInternal(index);
+		}
+
+		if (toDelete)
+		{
+			toDelete->Free();
+			delete toDelete;
+
+			++collected;
+		}
+	}
+
+	return collected;
+}
+
+ResourceManager::RegistrationDecision ResourceManager::CheckRegistrationLocked(const wstring& key, Resource* resource)
+{
+	using Action = ERegistrationAction;
+
+	if (auto it = m_PointerToHandle.find(resource);
+		it != m_PointerToHandle.end())
+	{
+		const Handle handle = it->second;
+		const auto& slot = m_Resources[handle.GetIndex()];
+
+		if (!m_IsShuttingDown && slot.RegisteredKey == key)
+			return { Action::ReturnExisting, handle };
+
+		return { Action::RejectOwned, {} };
+	}
+
+	// 이미 등록됐거나 삭제 대기 중인 객체는
+	// 신규 객체로 취급해서는 안 된다.
+	if (resource->IsManagerOwned())
+		return { Action::RejectOwned, {} };
+
+	if (m_IsShuttingDown || key.empty())
+		return { Action::RejectNew, {} };
+
+	if (auto it = m_KeyToHandle.find(key);
+		it != m_KeyToHandle.end())
+	{
+		const Handle existing = it->second;
+		const auto* instance = m_Resources[existing.GetIndex()].Instance;
+
+		if (instance && typeid(*instance) == typeid(*resource))
+			return { Action::DiscardDuplicate, existing };
+
+		return { Action::RejectNew, {} };
+	}
+
+	return { Action::Insert, {} };
+}
+
+Handle ResourceManager::CompleteRegistrationDecision(
+	Resource* resource,
+	const wstring& key,
+	const RegistrationDecision& decision)
+{
+	using Action = ERegistrationAction;
+
+	switch (decision.Action)
+	{
+	case Action::ReturnExisting:
+		return decision.Existing;
+
+	case Action::DiscardDuplicate:
+		DestroyUnregisteredResource(resource);
+		return decision.Existing;
+
+	case Action::RejectNew:
+		ENGINE_LOG_ERROR(
+			"Resource registration rejected: key={}",
+			Engine::Unicode::WideToUtf8(key));
+
+		DestroyUnregisteredResource(resource);
+		return {};
+
+	case Action::RejectOwned:
+		ENGINE_LOG_ERROR(
+			"Resource already owned or being destroyed: key={}",
+			Engine::Unicode::WideToUtf8(key));
+
+		// 이미 매니저 소유인 객체는 삭제하지 않는다.
+		return {};
+
+	default:
+		return {};
+	}
+}
+
+Handle ResourceManager::FindHandle(const wstring& normalizedKey)
+{
+	shared_lock lock(m_PoolMutex);
+
+	const auto it = m_KeyToHandle.find(normalizedKey);
+
+	return it != m_KeyToHandle.end()
+		? it->second : Handle{};
+}
+
+Handle ResourceManager::FindHandleByResource(Resource* resource)
+{
+	if (!resource)
+		return {};
+
+	shared_lock lock(m_PoolMutex);
+
+	const auto it = m_PointerToHandle.find(resource);
+
+	return it != m_PointerToHandle.end()
+		? it->second : Handle{};
+}
+
+
+Handle ResourceManager::AddResourceInternal(wstring key, Resource* resource, bool assignDefaultPath)
+{
+	if (!resource || !IsOwnerThread())
+		return {};
+
+	key = NormalizePath(std::move(key));
+
+	unique_lock lock(m_PoolMutex);
+
+	const auto decision = CheckRegistrationLocked(key, resource);
+
+	if (decision.Action != ERegistrationAction::Insert)
+	{
+		lock.unlock();
+
+		return CompleteRegistrationDecision(resource, key, decision);
+	}
+
+	// 신규 객체로 확정된 이후에만 식별자를 변경한다.
+	resource->ApplyKey(key);
+
+	if (assignDefaultPath && resource->GetPath().empty())
+		resource->SetPath(key);
+
+	const Handle handle = AllocateSlot(resource);
+
+	if (!handle.IsValid())
+	{
+		lock.unlock();
+
+		ENGINE_LOG_ERROR("Resource slot allocation failed.");
+
+		resource->Free();
+		delete resource;
+
+		return {};
+	}
+
+	auto& slot = m_Resources[handle.GetIndex()];
+
+	slot.RegisteredKey = key;
+
+	m_KeyToHandle.emplace(key, handle);
+	m_PointerToHandle.emplace(resource, handle);
+	m_TypeToHandles[resource->GetTypeID()].push_back(handle);
+
+	resource->m_ManagerOwnership.Owned = true;
+
 	return handle;
+}
+
+bool ResourceManager::ReleaseReference(const Handle& handle, bool managerReference)
+{
+	if (!handle.IsValid())
+		return false;
+
+	Resource* toDelete = nullptr;
+
+	{
+		unique_lock lock(m_PoolMutex);
+
+		if (m_IsShuttingDown)
+			return false;
+
+		const uint32 index = handle.GetIndex();
+
+		if (index >= m_Resources.size())
+			return false;
+
+		auto& slot = m_Resources[index];
+
+		if (!slot.IsActive ||
+			slot.Generation != handle.GetGeneration() ||
+			!slot.Instance ||
+			slot.RefCount == 0)
+		{
+			return false;
+		}
+
+		if (managerReference)
+		{
+			// 매니저의 기본 참조는 한 번만 제거할 수 있다.
+			if (!slot.HasManagerReference)
+				return false;
+
+			slot.HasManagerReference = false;
+		}
+		else
+		{
+			// 매니저가 보유한 기본 참조는
+			// 일반적인 핸들 해제로 제거할 수 없다.
+			const uint32 minimumRefCount =
+				slot.HasManagerReference ? 1u : 0u;
+
+			if (slot.RefCount <= minimumRefCount)
+				return false;
+		}
+
+		--slot.RefCount;
+
+		if (slot.HasManagerReference && slot.RefCount == 1)
+			slot.IdleSince = std::chrono::steady_clock::now();
+
+		if (slot.RefCount == 0)
+		{
+			if (IsOwnerThread())
+			{
+				toDelete = FreeSlotInternal(index);
+			}
+			else
+			{
+				m_DeferredDeletes.push_back(slot.Instance);
+
+				// 객체 삭제는 지연되지만 핸들은 즉시 무효화한다.
+				FreeSlotInternal(index);
+			}
+		}
+	}
+
+	// 다른 ResourceHandle이 해제될 수 있으므로
+	// 실제 리소스 삭제는 잠금 밖에서 수행한다.
+	if (toDelete)
+	{
+		toDelete->Free();
+		delete toDelete;
+	}
+
+	return true;
 }
 
 Handle ResourceManager::AllocateSlot(Resource* resource)
 {
+	constexpr uint64 maxGeneration = (std::numeric_limits<uint32>::max)();
+
+	// Generation 재사용 및 순환 방지
+	if (g_NextResourceGeneration >= maxGeneration)
+		return {};
+
 	uint32 index;
 
 	if (m_FreeSlots.empty())
 	{
+		if (m_Resources.size() >= maxGeneration)
+			return {};
+
 		index = static_cast<uint32>(m_Resources.size());
-		m_Resources.push_back(ResourceSlot());
+		m_Resources.emplace_back();
 	}
 	else
 	{
@@ -646,48 +1305,72 @@ Handle ResourceManager::AllocateSlot(Resource* resource)
 		m_FreeSlots.pop_back();
 	}
 
-	m_Resources[index].Instance = resource;
-	m_Resources[index].RefCount = 1;
-	m_Resources[index].IsActive = true;
-	return Handle(index, m_Resources[index].Generation);
+	auto& slot = m_Resources[index];
+
+	slot.Instance = resource;
+	slot.Generation = static_cast<uint32>(g_NextResourceGeneration++);
+	slot.RefCount = 1;
+	slot.IsActive = true;
+	slot.HasManagerReference = true;
+	slot.CacheEvictable = false;
+	slot.IdleSince = std::chrono::steady_clock::now();
+
+	return Handle(index, slot.Generation);
 }
 
 Resource* ResourceManager::FreeSlotInternal(uint32 slotIndex)
 {
-	if (slotIndex >= m_Resources.size() || !m_Resources[slotIndex].IsActive)
-	{
+	if (slotIndex >= m_Resources.size())
 		return nullptr;
-	}
 
-	Resource* resource = m_Resources[slotIndex].Instance;
-	if(resource)
+	auto& slot = m_Resources[slotIndex];
+
+	if (!slot.IsActive)
+		return nullptr;
+
+	Resource* resource = slot.Instance;
+
+	const Handle targetHandle(slotIndex, slot.Generation);
+
+	if (resource)
 	{
-		uint64 hash = RunTimeHash(NormalizePath(resource->GetKey()));
-		m_HashToHandle.erase(hash);
+		// 객체의 현재 Key가 아닌 등록 당시의 Key 사용
+		m_KeyToHandle.erase(slot.RegisteredKey);
+		m_PointerToHandle.erase(resource);
 
-		uint64 typeHash = resource->GetTypeID();
-		auto& handles = m_TypeToHandles[typeHash];
-		Handle targetHandle(slotIndex, m_Resources[slotIndex].Generation);
+		const uint64 typeHash = resource->GetTypeID();
 
-		auto it = std::find(handles.begin(), handles.end(), targetHandle);
-		if (it != handles.end())
+		auto typeIt = m_TypeToHandles.find(typeHash);
+
+		if (typeIt != m_TypeToHandles.end())
 		{
-			*it = handles.back();
-			handles.pop_back();
-		}
+			auto& handles = typeIt->second;
 
-		// 데드락 방지를 위해 리소스 삭제는 락이 풀린 이후 호출자가 담당합니다.
-		// resource->Free();
-		// delete resource;
+			auto it = std::find(
+				handles.begin(), handles.end(), targetHandle);
+
+			if (it != handles.end())
+			{
+				*it = handles.back();
+				handles.pop_back();
+			}
+
+			if (handles.empty())
+				m_TypeToHandles.erase(typeIt);
+		}
 	}
 
-	m_Resources[slotIndex].Instance = nullptr;
-	m_Resources[slotIndex].RefCount = 0;
-	m_Resources[slotIndex].IsActive = false;
-	m_Resources[slotIndex].Generation++; // Invalidate old handles
+	slot.Instance = nullptr;
+	slot.Generation = 0;
+	slot.RefCount = 0;
+	slot.IsActive = false;
+	slot.HasManagerReference = false;
+	slot.RegisteredKey.clear();
+	slot.CacheEvictable = false;
+	slot.IdleSince = {};
 
-	m_FreeSlots.push_back(slotIndex); // Add to free list
-	
+	m_FreeSlots.push_back(slotIndex);
+
 	return resource;
 }
 #pragma endregion
@@ -699,7 +1382,7 @@ EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& fileP
 		return EResult::InvalidArgument;
 	if (PlatformPath::IsReadOnlyTarget(filePath))
 	{
-		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", WStrToStr(filePath));
+		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", Engine::Unicode::WideToUtf8(filePath));
 		return EResult::AccessDenied;
 	}
 	std::filesystem::path targetPath = PlatformPath::ResolveUri(filePath);
@@ -715,7 +1398,7 @@ EResult ResourceManager::SaveToJsonFile(Resource* resource, const wstring& fileP
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("JSON resource save failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return result.Code == archive::ArchiveErrorCode::UnsupportedType
 			? EResult::NotImplemented : EResult::Fail;
 	}
@@ -727,7 +1410,7 @@ EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& fileP
 		return EResult::InvalidArgument;
 	if (PlatformPath::IsReadOnlyTarget(filePath))
 	{
-		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", WStrToStr(filePath));
+		ENGINE_LOG_ERROR("Resource save failed: target is read-only (Engine:// or system directory), path=\"{}\"", Engine::Unicode::WideToUtf8(filePath));
 		return EResult::AccessDenied;
 	}
 	std::filesystem::path targetPath = PlatformPath::ResolveUri(filePath);
@@ -743,7 +1426,7 @@ EResult ResourceManager::SaveToBeveFile(Resource* resource, const wstring& fileP
 	if (!result)
 	{
 		ENGINE_LOG_ERROR("BEVE resource save failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(filePath));
+			static_cast<int>(result.Code), result.Field, Engine::Unicode::WideToUtf8(filePath));
 		return result.Code == archive::ArchiveErrorCode::UnsupportedType
 			? EResult::NotImplemented : EResult::Fail;
 	}
@@ -806,7 +1489,7 @@ Handle ResourceManager::LoadFromBeveFile(const wstring& filePath)
 
 Handle ResourceManager::LoadFromBinaryFile(const wstring& filePath)
 {
-	ENGINE_LOG_WARN("Legacy binary resource loading is unavailable: {}", WStrToStr(filePath));
+	ENGINE_LOG_WARN("Legacy binary resource loading is unavailable: {}", Engine::Unicode::WideToUtf8(filePath));
 	return {};
 }
 #pragma endregion

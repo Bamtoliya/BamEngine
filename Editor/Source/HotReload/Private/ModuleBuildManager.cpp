@@ -87,7 +87,7 @@ namespace
 
         const std::string toolsVersion = compiler.substr(versionBegin, versionEnd - versionBegin);
         return L"call \"" + devCmd.wstring() + L"\" -arch=" + targetArch + L" -host_arch=" + hostArch +
-            L" -vcvars_ver=" + StrToWStr(toolsVersion) + L" -no_logo";
+            L" -vcvars_ver=" + Engine::Unicode::Utf8ToWide(toolsVersion) + L" -no_logo";
     }
 }
 
@@ -165,7 +165,7 @@ void ModuleBuildManager::Reconfigure(const std::filesystem::path& projectRoot, c
     }
     else if (!m_SourceDir.empty())
     {
-        EDITOR_LOG_WARN("[ModuleBuildManager] Source directory not found: {}", WStrToStr(m_SourceDir.wstring()));
+        EDITOR_LOG_WARN("[ModuleBuildManager] Source directory not found: {}", Engine::Unicode::WideToUtf8(m_SourceDir.wstring()));
     }
 }
 
@@ -210,10 +210,10 @@ void ModuleBuildManager::StartWatching(const std::filesystem::path& sourceDir)
     if (m_WatchID > 0)
     {
         m_FileWatcher->watch();
-        EDITOR_LOG_INFO("[ModuleBuildManager] Watching {}", WStrToStr(sourceDir.wstring()));
+        EDITOR_LOG_INFO("[ModuleBuildManager] Watching {}", Engine::Unicode::WideToUtf8(sourceDir.wstring()));
     }
     else
-        EDITOR_LOG_WARN("[ModuleBuildManager] Watch failed: {}", WStrToStr(sourceDir.wstring()));
+        EDITOR_LOG_WARN("[ModuleBuildManager] Watch failed: {}", Engine::Unicode::WideToUtf8(sourceDir.wstring()));
 }
 
 void ModuleBuildManager::StopWatching()
@@ -244,9 +244,9 @@ void ModuleBuildManager::Update()
         if (m_LastBuildSuccess)
         {
             m_Status = EModuleBuildStatus::Succeeded;
-            EDITOR_LOG_INFO("[ModuleBuildManager] {} build succeeded", WStrToStr(m_TargetName));
+            EDITOR_LOG_INFO("[ModuleBuildManager] {} build succeeded", Engine::Unicode::WideToUtf8(m_TargetName));
             NotificationManager::Get().AddNotification(
-                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildSucceeded", WStrToStr(m_TargetName)), ELogLevel::Info, 3.0f);
+                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildSucceeded", Engine::Unicode::WideToUtf8(m_TargetName)), ELogLevel::Info, 3.0f);
 
             // 빌드가 완전히 끝났으므로 안전하게 모듈 핫로드 실행
             if (m_TriggersGameModuleReload)
@@ -255,9 +255,9 @@ void ModuleBuildManager::Update()
         else
         {
             m_Status = EModuleBuildStatus::Failed;
-            EDITOR_LOG_ERROR("[ModuleBuildManager] {} build failed:\n{}", WStrToStr(m_TargetName), m_LastBuildOutput);
+            EDITOR_LOG_ERROR("[ModuleBuildManager] {} build failed:\n{}", Engine::Unicode::WideToUtf8(m_TargetName), m_LastBuildOutput);
             NotificationManager::Get().AddNotification(
-                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildFailed", WStrToStr(m_TargetName)), ELogLevel::Error, 5.0f);
+                LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.NamedModuleBuildFailed", Engine::Unicode::WideToUtf8(m_TargetName)), ELogLevel::Error, 5.0f);
         }
 
         if (m_OnBuildCompleted) m_OnBuildCompleted(m_LastBuildSuccess, m_LastBuildOutput);
@@ -281,9 +281,9 @@ bool ModuleBuildManager::RequestBuild()
     if (m_BuildThread.joinable()) m_BuildThread.join();
 
     m_Status = EModuleBuildStatus::Compiling;
-    EDITOR_LOG_INFO("[ModuleBuildManager] Starting background build for {}", WStrToStr(m_TargetName));
+    EDITOR_LOG_INFO("[ModuleBuildManager] Starting background build for {}", Engine::Unicode::WideToUtf8(m_TargetName));
     NotificationManager::Get().AddNotification(
-        LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.CompilingNamedModule", WStrToStr(m_TargetName)), ELogLevel::Info, 2.0f);
+        LOCAL("ToolBar.ModuleCompile"), LOCAL_FMT("Notification.CompilingNamedModule", Engine::Unicode::WideToUtf8(m_TargetName)), ELogLevel::Info, 2.0f);
 
     m_BuildThread = std::thread(&ModuleBuildManager::ExecuteBuildAsync, this);
     return true;
@@ -374,23 +374,70 @@ void ModuleBuildManager::ExecuteBuildAsync()
 
     std::string capturedOutput;
     std::error_code cacheEc;
-    if (!std::filesystem::is_regular_file(m_BuildDir / "CMakeCache.txt", cacheEc) &&
-        !m_CMakeSourceDir.empty() && std::filesystem::is_regular_file(m_CMakeSourceDir / "CMakeLists.txt", cacheEc))
+
+    const bool externalProject = !m_CMakeSourceDir.empty();
+
+    if (externalProject)
     {
+        if (!std::filesystem::is_regular_file(m_CMakeSourceDir / "CMakeLists.txt", cacheEc))
+        {
+            m_PendingBuildOutput = "External project CMakeLists.txt was not found.";
+            m_PendingBuildSuccess = false;
+            m_HasNewResult = true;
+            return;
+        }
+
         std::wstring cfgCmd = L"\"";
         cfgCmd += BAM_EDITOR_CMAKE_COMMAND;
-        cfgCmd += L"\" -S \"" + m_CMakeSourceDir.wstring() + L"\" -B \"" + m_BuildDir.wstring() + L"\"";
+
+        cfgCmd += L"\" -S \"" + m_CMakeSourceDir.wstring() +
+            L"\" -B \"" + m_BuildDir.wstring() + L"\"";
+        cfgCmd += L" -G \"Visual Studio 18 2026\" -A x64";
+
+        cfgCmd += L" -DCMAKE_BUILD_TYPE=";
+        cfgCmd += config;
+
+        cfgCmd += L" -DCMAKE_CONFIGURATION_TYPES=";
+        cfgCmd += config;
+
         const auto engineRoot = Engine::PlatformPath::GetEngineRoot();
+
         if (!engineRoot.empty())
             cfgCmd += L" -DBAMENGINE_ROOT=\"" + engineRoot.wstring() + L"\"";
+
         const auto exeDir = Engine::PlatformPath::GetExecutableDirectory();
-        if (std::filesystem::is_regular_file(exeDir.parent_path().parent_path() / "CMakeCache.txt", cacheEc))
-            cfgCmd += L" -DBAMENGINE_BUILD_DIR=\"" + exeDir.parent_path().parent_path().wstring() + L"\"";
-        else if (std::filesystem::is_regular_file(exeDir.parent_path() / "CMakeCache.txt", cacheEc))
-            cfgCmd += L" -DBAMENGINE_BUILD_DIR=\"" + exeDir.parent_path().wstring() + L"\"";
+
+        std::filesystem::path engineBuildDir;
+
+        // Ninja: Build/bin/Editor.exe
+        if (std::filesystem::is_regular_file(
+            exeDir.parent_path() / "CMakeCache.txt", cacheEc))
+        {
+            engineBuildDir = exeDir.parent_path();
+        }
+        // Visual Studio: Build/bin/Debug/Editor.exe
+        else if (std::filesystem::is_regular_file(
+            exeDir.parent_path().parent_path() / "CMakeCache.txt", cacheEc))
+        {
+            engineBuildDir = exeDir.parent_path().parent_path();
+        }
+
+        if (engineBuildDir.empty())
+        {
+            m_PendingBuildOutput =
+                "Could not locate the engine build directory of the running editor.";
+
+            m_PendingBuildSuccess = false;
+            m_HasNewResult = true;
+            return;
+        }
+
+        cfgCmd += L" -DBAMENGINE_BUILD_DIR=\"" + engineBuildDir.wstring() + L"\"";
 
         DWORD cfgExitCode = 1;
-        if (!runCommand(BAM_EDITOR_CMAKE_COMMAND, cfgCmd, capturedOutput, cfgExitCode) || cfgExitCode != 0)
+
+        if (!runCommand(BAM_EDITOR_CMAKE_COMMAND, cfgCmd, capturedOutput, cfgExitCode) ||
+            cfgExitCode != 0)
         {
             m_PendingBuildOutput = std::move(capturedOutput);
             m_PendingBuildSuccess = false;
@@ -404,26 +451,29 @@ void ModuleBuildManager::ExecuteBuildAsync()
     cmd += BAM_EDITOR_CMAKE_COMMAND;
     cmd += L"\" --build \"" + m_BuildDir.wstring() + L"\" --target " + m_TargetName + L" --config " + config;
 
-#if defined(BAM_EDITOR_MSBUILD)
-    // The loaded host already has the dependencies for a plugin-only build.
-    cmd += L" -- /p:BuildProjectReferences=false /m";
-#else
-    // VS에서 실행한 에디터에는 MSVC 환경 변수가 없다. 빌드 트리와 같은 도구 집합의 개발자 환경을 먼저 적용한다.
-    if (!HasMsvcEnvironment())
+    if (!externalProject)
     {
-        const std::wstring devEnv = FindDevEnvironmentCommand(m_BuildDir);
-        if (devEnv.empty())
+#if defined(BAM_EDITOR_MSBUILD)
+        // The loaded host already has the dependencies for a plugin-only build.
+        cmd += L" -- /p:BuildProjectReferences=false /m";
+#else
+        // VS에서 실행한 에디터에는 MSVC 환경 변수가 없다. 빌드 트리와 같은 도구 집합의 개발자 환경을 먼저 적용한다.
+        if (!HasMsvcEnvironment())
         {
-            m_PendingBuildOutput = "MSVC environment (INCLUDE) is missing and the configured compiler or VsDevCmd.bat could not be found in the build tree. "
-                "Start the editor from a Developer PowerShell or build the module in Visual Studio.";
-            m_PendingBuildSuccess = false;
-            m_HasNewResult = true;
-            return;
+            const std::wstring devEnv = FindDevEnvironmentCommand(m_BuildDir);
+            if (devEnv.empty())
+            {
+                m_PendingBuildOutput = "MSVC environment (INCLUDE) is missing and the configured compiler or VsDevCmd.bat could not be found in the build tree. "
+                    "Start the editor from a Developer PowerShell or build the module in Visual Studio.";
+                m_PendingBuildSuccess = false;
+                m_HasNewResult = true;
+                return;
+            }
+            application = GetCommandProcessorPath();
+            cmd = L"\"" + application + L"\" /d /s /c \"" + devEnv + L" && " + cmd + L"\"";
         }
-        application = GetCommandProcessorPath();
-        cmd = L"\"" + application + L"\" /d /s /c \"" + devEnv + L" && " + cmd + L"\"";
-    }
 #endif
+    }
 
     DWORD buildExitCode = 1;
     const bool launched = runCommand(application, cmd, capturedOutput, buildExitCode);

@@ -1,6 +1,8 @@
 ﻿#include "ClientBuildJob.h"
 #include "ClientPackage.h"
 #include "Functions.h"
+#include "PlatformPath.h"
+#include "ProjectDescriptor.h"
 
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_iostream.h>
@@ -39,7 +41,7 @@ namespace
                     const int length = MultiByteToWideChar(CP_OEMCP, 0, line.data(), size, nullptr, 0);
                     std::wstring decoded(length, L'\0');
                     if (length > 0 && MultiByteToWideChar(CP_OEMCP, 0, line.data(), size, decoded.data(), length) > 0)
-                        output += Engine::WStrToStr(decoded);
+                        output += Engine::Unicode::WideToUtf8(decoded);
                     else
                         output += "\xEF\xBF\xBD";
                 }
@@ -241,8 +243,7 @@ namespace Editor
         m_IsFinished.store(false, std::memory_order_relaxed);
     }
 
-    ClientBuildJob::Result ClientBuildJob::Build(const std::filesystem::path& projectRoot,
-        const std::optional<ClientPackageRequest>& package, const ClientPackageInput& input, OutputCallback onOutput)
+    ClientBuildJob::Result ClientBuildJob::Build(const std::filesystem::path& projectRoot, const std::optional<ClientPackageRequest>& package, const ClientPackageInput& input, OutputCallback onOutput)
     {
         struct SdlTlsCleanup
         {
@@ -250,13 +251,35 @@ namespace Editor
         };
         const SdlTlsCleanup tlsCleanup{};
 
-        const auto cmake = Engine::WStrToStr(BAM_EDITOR_CMAKE_COMMAND);
-        const auto workingDirectory = Engine::WStrToStr(projectRoot.wstring());
-        constexpr auto buildDirectory = "out/build/x64-client-release";
-        const char* configureArgs[] = { cmake.c_str(), "--preset", "x64-release", "-B", buildDirectory,
-            "-A", "x64", "-DBAMENGINE_WITH_EDITOR=OFF", nullptr };
-
         Result result;
+
+        const auto engineRoot = Engine::PlatformPath::GetEngineRoot();
+
+        if (engineRoot.empty())
+        {
+            result.ErrorMessage = "Engine root is unavailable.";
+            return result;
+        }
+
+        const auto cmake = Engine::Unicode::WideToUtf8(BAM_EDITOR_CMAKE_COMMAND);
+
+        const auto workingDirectory = Engine::Unicode::WideToUtf8(engineRoot.wstring());
+
+        const auto engineBuildPath = engineRoot / "out" / "build" / "x64-client-release";
+
+        const auto buildDirectory = Engine::Unicode::WideToUtf8(engineBuildPath.wstring());
+
+        const char* configureArgs[] =
+        {
+            cmake.c_str(),
+            "--preset", "x64-release",
+            "-B", buildDirectory.c_str(),
+            "-A", "x64",
+            "-DBAMENGINE_WITH_EDITOR=OFF",
+            "-DBAMENGINE_SHIPPING=OFF",
+            nullptr
+        };
+
         if (package)
         {
             try
@@ -280,13 +303,13 @@ namespace Editor
         if (!RunCMake(configureArgs, workingDirectory, onOutput))
             return result;
 
-        const char* buildArgs[] = { cmake.c_str(), "--build", buildDirectory, "--config", "Release",
+        const char* buildArgs[] = { cmake.c_str(), "--build", buildDirectory.c_str(), "--config", "Release",
             "--target", "Client", "GameModule", "--parallel", nullptr };
         if (onOutput) onOutput("\n[CMake build]\n");
         if (!RunCMake(buildArgs, workingDirectory, onOutput))
             return result;
 
-        const auto binDirectory = projectRoot / buildDirectory / "bin" / "Release";
+        const auto binDirectory = engineBuildPath / "bin" / "Release";
         for (const wchar_t* fileName : { L"Client.exe", L"Engine.dll", L"GameModule.dll" })
         {
             const auto filePath = binDirectory / fileName;
@@ -296,7 +319,7 @@ namespace Editor
                 if (onOutput)
                 {
                     onOutput("\nExpected build output is unavailable: ");
-                    onOutput(Engine::WStrToStr(filePath.wstring()) + "\n");
+                    onOutput(Engine::Unicode::WideToUtf8(filePath.wstring()) + "\n");
                 }
                 return result;
             }
@@ -305,7 +328,103 @@ namespace Editor
         if (onOutput)
         {
             onOutput("\nBuild output: ");
-            onOutput(Engine::WStrToStr(binDirectory.wstring()) + "\n");
+            onOutput(Engine::Unicode::WideToUtf8(binDirectory.wstring()) + "\n");
+        }
+
+        const auto normalizedProjectRoot = Engine::PlatformPath::Normalize(projectRoot);
+        const auto normalizedEngineRoot = Engine::PlatformPath::Normalize(engineRoot);
+
+        if (normalizedProjectRoot != normalizedEngineRoot)
+        {
+            const auto projectFile = Engine::ProjectDescriptor::FindProjectFile(projectRoot);
+
+            Engine::ProjectDescriptor descriptor;
+
+            if (!projectFile.empty())
+            {
+                if (!Engine::ProjectDescriptor::LoadFromFile(projectFile, descriptor))
+                {
+                    result.ErrorMessage = "Could not load the project descriptor.";
+                    return result;
+                }
+            }
+
+            const auto modules = descriptor.ResolveModules(projectRoot,
+                { Engine::EProjectModuleRole::Client, false });
+
+            bool configured = false;
+
+            for (const auto& module : modules)
+            {
+                std::string lowerType = module.Type;
+
+                std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+                if (!lowerType.empty() && lowerType != "runtime")
+                    continue;
+
+                const auto sourceDir = Engine::Unicode::WideToUtf8(module.CMakeSourceRoot.wstring());
+                const auto moduleBuildDir = Engine::Unicode::WideToUtf8(module.BuildDirectory.wstring());
+
+                const auto engineRootArg = "-DBAMENGINE_ROOT=" + workingDirectory;
+                const auto engineBuildArg = "-DBAMENGINE_BUILD_DIR=" + buildDirectory;
+
+                if (!configured)
+                {
+                    const char* moduleConfigureArgs[] =
+                    {
+                        cmake.c_str(),
+                        "-S", sourceDir.c_str(),
+                        "-B", moduleBuildDir.c_str(),
+                        "-G", "Visual Studio 18 2026",
+                        "-A", "x64",
+                        "-DCMAKE_BUILD_TYPE=Release",
+                        "-DCMAKE_CONFIGURATION_TYPES=Release",
+                        engineRootArg.c_str(),
+                        engineBuildArg.c_str(),
+                        nullptr
+                    };
+
+                    if (onOutput)
+                        onOutput("\n[Project module configure]\n");
+
+                    if (!RunCMake(moduleConfigureArgs, workingDirectory, onOutput))
+                    {
+                        result.ErrorMessage = "External project module configuration failed.";
+                        return result;
+                    }
+
+                    configured = true;
+                }
+
+                const char* moduleBuildArgs[] =
+                {
+                    cmake.c_str(),
+                    "--build", moduleBuildDir.c_str(),
+                    "--config", "Release",
+                    "--target", module.Name.c_str(),
+                    "--parallel",
+                    nullptr
+                };
+
+                if (onOutput)
+                    onOutput("\n[Project module build] " + module.Name + "\n");
+
+                if (!RunCMake(moduleBuildArgs, workingDirectory, onOutput))
+                {
+                    result.ErrorMessage = "Project module build failed: " + module.Name;
+                    return result;
+                }
+
+                std::error_code ec;
+
+                if (!std::filesystem::is_regular_file(module.BinaryPath, ec))
+                {
+                    result.ErrorMessage = "Expected project module is missing: " + module.Name;
+                    return result;
+                }
+            }
         }
 
         if (package)

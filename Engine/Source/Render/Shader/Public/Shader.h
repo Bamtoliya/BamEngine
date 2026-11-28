@@ -78,11 +78,6 @@ public:
 
 #pragma region Getter
 public:
-	void SetKey(const wstring& key)
-	{
-		Resource::SetKey(key);
-		UpdateKeyFlags();
-	}
 	bool IsGBufferVS() const { return m_IsGBufferVS; }
 	bool IsGBufferPS() const { return m_IsGBufferPS; }
 	bool IsDefaultPS() const { return m_IsDefaultPS; }
@@ -131,13 +126,17 @@ public:
 	const ShaderResourceBindingInfo* FindResource(const string& name) const;
 	RHIShaderDesc BuildRHIShaderDesc() const;
 protected:
+	void OnKeyChanged() noexcept override
+	{
+		UpdateKeyFlags();
+	}
 	EResult OnPostLoad() override;
 #pragma endregion
 
 #pragma region MyRegion
 private:
 	void ResolveLegacyBinaryPaths();
-	void UpdateKeyFlags();
+	void UpdateKeyFlags() noexcept;
 #pragma endregion
 
 

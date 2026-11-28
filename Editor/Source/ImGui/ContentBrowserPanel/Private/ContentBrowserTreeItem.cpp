@@ -32,7 +32,7 @@ bool ContentBrowserTreeItem::DrawNode(ContentBrowserPanel& browser, const std::f
 		baseFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 	}
 
-	std::string filename = Engine::WStrToStr(path.filename().wstring());
+	std::string filename = Engine::Unicode::WideToUtf8(path.filename().wstring());
 	std::string icon = (isSelected && hasChildDirectory) ? ICON_FA_FOLDER_OPEN : ICON_FA_FOLDER;
 	if (path == rootPath)
 	{

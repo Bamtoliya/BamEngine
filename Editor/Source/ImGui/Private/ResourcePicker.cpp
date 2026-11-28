@@ -60,7 +60,7 @@ namespace Editor::Detail
 			AssetFileActions::RevealInContentBrowser(effectivePath);
 
 		if (ImGui::MenuItem(LOCAL_LABEL("EditorCommon.CopyPath").c_str()))
-			ImGui::SetClipboardText(Engine::WStrToStr(effectivePath.wstring()).c_str());
+			ImGui::SetClipboardText(Engine::Unicode::WideToUtf8(effectivePath.wstring()).c_str());
 
 		ImGui::EndPopup();
 		return openRequested;

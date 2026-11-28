@@ -224,7 +224,7 @@ namespace Engine::GraphActor
 		Scene* scene = GraphSystem::GetCurrentScene();
 		if (!scene || prefabPath.empty()) return -1;
 
-		const std::wstring wPath = StrToWStr(prefabPath);
+		const std::wstring wPath = Engine::Unicode::Utf8ToWide(prefabPath);
 		const auto physical = PlatformPath::ResolveUri(wPath);
 		archive::JsonArchive ar;
 		auto result = ar.LoadFromFile(physical);

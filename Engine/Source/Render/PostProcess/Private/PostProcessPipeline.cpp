@@ -486,7 +486,7 @@ archive::ArchiveResult PostProcessPipeline::WriteArchive(archive::IArchive& ar) 
 			if (!effect) return {};
 
 			// 1. 효과 식별 정보 저장 (효과명, 활성화 여부)
-			const auto nameRes = temporary.Write("Name", WStrToStr(effect->GetName()));
+			const auto nameRes = temporary.Write("Name", Engine::Unicode::WideToUtf8(effect->GetName()));
 			if (!nameRes) return nameRes;
 
 			const auto activeRes = temporary.Write("Enabled", effect->IsEnabled());
@@ -577,7 +577,7 @@ archive::ArchiveResult PostProcessPipeline::ReadArchive(const archive::IArchive&
 
 			for (auto* effect : m_Effects)
 			{
-				if (effect && WStrToStr(effect->GetName()) == effectName)
+				if (effect && Engine::Unicode::WideToUtf8(effect->GetName()) == effectName)
 				{
 					matched = effect;
 					break;

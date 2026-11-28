@@ -127,7 +127,7 @@ string LocalizationManager::GetText(std::string_view key, std::string_view fallb
 
 string LocalizationManager::GetText(const wstring& key) const
 {
-	return GetText(WStrToStr(key));
+	return GetText(Engine::Unicode::WideToUtf8(key));
 }
 
 LocalizedText LocalizationManager::GetTextForDisplay(std::string_view key) const
@@ -137,7 +137,7 @@ LocalizedText LocalizationManager::GetTextForDisplay(std::string_view key) const
 
 LocalizedText LocalizationManager::GetTextForDisplay(const wstring& key) const
 {
-	return GetTextForDisplay(WStrToStr(key));
+	return GetTextForDisplay(Engine::Unicode::WideToUtf8(key));
 }
 
 EResult LocalizationManager::AddText(ELocalizationLanguage lang, const string& key, const string& text)

@@ -139,7 +139,7 @@ void TerrainEditor::Draw()
 		if (terrainComp)
 		{
 			const auto* nameComp = registry.try_get<Engine::NameComponent>(m_TargetEntity->GetEntityHandle());
-			std::string nameStr = nameComp ? WStrToStr(nameComp->name) : LOCAL("TerrainEditor.DefaultName");
+			std::string nameStr = nameComp ? Engine::Unicode::WideToUtf8(nameComp->name) : LOCAL("TerrainEditor.DefaultName");
 			ImGui::PushTextWrapPos(0.0f);
 			ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "%s", LOCAL_FMT("TerrainEditor.Target", nameStr).c_str());
 			ImGui::PopTextWrapPos();
@@ -241,8 +241,8 @@ void TerrainEditor::Draw()
 		{
 			std::wstring openPath;
 			const std::vector<FileDialogFilter> filters = {
-				{ StrToWStr(LOCAL("TerrainEditor.HeightmapFiles")), L"*.png;*.raw;*.r16;*.jpg;*.jpeg;*.bmp;*.tga" },
-				{ StrToWStr(LOCAL("FileDialog.AllFiles")), L"*.*" }
+				{ Engine::Unicode::Utf8ToWide(LOCAL("TerrainEditor.HeightmapFiles")), L"*.png;*.raw;*.r16;*.jpg;*.jpeg;*.bmp;*.tga" },
+				{ Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AllFiles")), L"*.*" }
 			};
 			if (FileDialogs::OpenFileDialog(openPath, filters, L"", EFileDialogContext::HeightmapOpen))
 			{
@@ -250,7 +250,7 @@ void TerrainEditor::Draw()
 					[&] { return Engine::TerrainUtility::LoadHeightmapFromFile(*terrainComp, openPath); });
 				if (!imported)
 					NotificationManager::Get().AddNotification(LOCAL("TerrainEditor.HeightmapFile"),
-						LOCAL_FMT("TerrainEditor.ImportFailed", WStrToStr(std::filesystem::path(openPath).filename().wstring())), ELogLevel::Warn);
+						LOCAL_FMT("TerrainEditor.ImportFailed", Engine::Unicode::WideToUtf8(std::filesystem::path(openPath).filename().wstring())), ELogLevel::Warn);
 			}
 		}
 
@@ -259,12 +259,12 @@ void TerrainEditor::Draw()
 		{
 			std::wstring savePath;
 			const std::vector<FileDialogFilter> filters = {
-				{ StrToWStr(LOCAL("TerrainEditor.Png16Files")), L"*.png" },
-				{ StrToWStr(LOCAL("TerrainEditor.RawFiles")), L"*.raw;*.r16" }
+				{ Engine::Unicode::Utf8ToWide(LOCAL("TerrainEditor.Png16Files")), L"*.png" },
+				{ Engine::Unicode::Utf8ToWide(LOCAL("TerrainEditor.RawFiles")), L"*.raw;*.r16" }
 			};
 			if (FileDialogs::SaveFileDialog(savePath, filters, L"Terrain_Heightmap", L"png", EFileDialogContext::HeightmapSave))
 			{
-				const auto fileName = WStrToStr(std::filesystem::path(savePath).filename().wstring());
+				const auto fileName = Engine::Unicode::WideToUtf8(std::filesystem::path(savePath).filename().wstring());
 				if (Engine::TerrainUtility::SaveHeightmapToFile(*terrainComp, savePath))
 					NotificationManager::Get().AddNotification(LOCAL("TerrainEditor.HeightmapFile"),
 						LOCAL_FMT("TerrainEditor.ExportDone", fileName), ELogLevel::Info, 3.0f);

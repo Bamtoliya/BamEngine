@@ -1,4 +1,4 @@
-#include "RaytracingSceneManager.h"
+﻿#include "RaytracingSceneManager.h"
 #include "RHI.h"
 #include "RHIBuffer.h"
 #include "RHITexture.h"
@@ -569,7 +569,7 @@ RaytracingSceneManager::EBottomLevelState RaytracingSceneManager::GetOrBuildBott
 	if (!bottomLevel)
 	{
 		ENGINE_LOG_WARN("Failed to build a BLAS for mesh '{}' ({} vertices, {} indices). It stays in shadow maps.",
-			WStrToStr(mesh.GetKey()), key.VertexCount, key.IndexCount);
+			Engine::Unicode::WideToUtf8(mesh.GetKey()), key.VertexCount, key.IndexCount);
 	}
 	else
 	{
@@ -943,7 +943,7 @@ void RaytracingSceneManager::UpdateSkinnedBottomLevel(SkinnedEntry& entry, const
 		entry.BuildFailed = true;
 		entry.State = ESkinnedState::Failed;
 		ENGINE_LOG_WARN("Failed to build a skinned BLAS for mesh '{}' ({} vertices, {} indices). It stays in shadow maps.",
-			WStrToStr(mesh.GetKey()), geometry.vertexCount, geometry.indexCount);
+			Engine::Unicode::WideToUtf8(mesh.GetKey()), geometry.vertexCount, geometry.indexCount);
 		return;
 	}
 	// 처음 빌드만 센다. 주기적 재빌드가 통계 로그를 반복하지 않게 한다.
@@ -988,7 +988,7 @@ RHIPipeline* RaytracingSceneManager::GetSkinningPipeline()
 	if (!shader || !shader->GetRHIShader())
 	{
 		ENGINE_LOG_ERROR("Shader is not available: {}. Skinned meshes stay in shadow maps and out of raytraced reflections.",
-			WStrToStr(SkinningShaderFile));
+			Engine::Unicode::WideToUtf8(SkinningShaderFile));
 		m_SkinningShaderMissing = true;
 		return nullptr;
 	}

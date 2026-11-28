@@ -6,6 +6,39 @@
 
 BEGIN(Engine)
 
+#define BAM_RUNTIME_ABI_STRING_IMPL(x) #x
+#define BAM_RUNTIME_ABI_STRING(x) BAM_RUNTIME_ABI_STRING_IMPL(x)
+
+#define BAM_RUNTIME_MODULE_ABI_REVISION 1
+
+#if defined(_WIN64) && defined(_MSC_VER)
+
+#ifdef _DEBUG
+#define BAM_RUNTIME_ABI_CONFIG "debug"
+#else
+#define BAM_RUNTIME_ABI_CONFIG "release"
+#endif
+
+inline constexpr char RuntimeModuleCompatibility[] =
+"bam-runtime-v" BAM_RUNTIME_ABI_STRING(BAM_RUNTIME_MODULE_ABI_REVISION)
+"-win64"
+"-msvc-" BAM_RUNTIME_ABI_STRING(_MSC_FULL_VER)
+"-" BAM_RUNTIME_ABI_CONFIG
+"-editor-" BAM_RUNTIME_ABI_STRING(BAM_EDITOR)
+"-shipping-" BAM_RUNTIME_ABI_STRING(BAM_SHIPPING)
+"-iterator-" BAM_RUNTIME_ABI_STRING(_ITERATOR_DEBUG_LEVEL);
+
+#undef BAM_RUNTIME_ABI_CONFIG
+
+#else
+
+inline constexpr char RuntimeModuleCompatibility[] = "unsupported";
+
+#endif
+
+#undef BAM_RUNTIME_ABI_STRING
+#undef BAM_RUNTIME_ABI_STRING_IMPL
+
 class ENGINE_API IModule : public Base
 {
 public:
@@ -30,11 +63,22 @@ END
 extern "C" {
     typedef Engine::IModule* (*CreateModuleFunc)();
     typedef void (*DestroyModuleFunc)(Engine::IModule*);
+    typedef const char* (*GetRuntimeModuleCompatibilityFunc)() noexcept;
 }
 
 // 모듈 DLL 프로젝트에서 진입점을 쉽게 선언하기 위한 편의 매크로
 #define IMPLEMENT_MODULE(ModuleClass) \
     extern "C" { \
-        __declspec(dllexport) Engine::IModule* CreateModule() { return new ModuleClass(); } \
-        __declspec(dllexport) void DestroyModule(Engine::IModule* module) { delete module; } \
+        __declspec(dllexport) const char* BamGetRuntimeModuleCompatibility() noexcept \
+        { \
+            return Engine::RuntimeModuleCompatibility; \
+        } \
+        __declspec(dllexport) Engine::IModule* CreateModule() \
+        { \
+            return new ModuleClass(); \
+        } \
+        __declspec(dllexport) void DestroyModule(Engine::IModule* module) \
+        { \
+            delete module; \
+        } \
     }

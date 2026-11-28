@@ -140,15 +140,31 @@ void Shader::ResolveLegacyBinaryPaths()
 	}
 }
 
-void Shader::UpdateKeyFlags()
+void Shader::UpdateKeyFlags() noexcept
 {
-	const wstring lowerKey = ToLowerWStr(m_Key);
-	m_IsSkinningShader = (lowerKey.find(L"skinning") != wstring::npos);
-	m_IsGBufferVS = m_IsSkinningShader || (lowerKey.find(L"gbuffer") != wstring::npos);
-	m_IsGBufferPS = (lowerKey.find(L"gbuffer") != wstring::npos ||
-	                 lowerKey.find(L"graphmaterial") != wstring::npos ||
-	                 lowerKey.find(L"livepixelshader") != wstring::npos ||
-	                 lowerKey.find(L"materialoutput") != wstring::npos);
-	m_IsDefaultPS = (lowerKey.find(L"defaultps") != wstring::npos);
+	const std::wstring_view key = m_Key;
+
+	const auto contains = [&](std::wstring_view token)
+		{
+			return std::search(
+				key.begin(), key.end(),
+				token.begin(), token.end(),
+				[](wchar_t lhs, wchar_t rhs)
+				{
+					return std::towlower(lhs) == std::towlower(rhs);
+				}) != key.end();
+		};
+
+	m_IsSkinningShader = contains(L"skinning");
+
+	m_IsGBufferVS = m_IsSkinningShader ||
+		contains(L"gbuffer");
+
+	m_IsGBufferPS = contains(L"gbuffer") ||
+		contains(L"graphmaterial") ||
+		contains(L"livepixelshader") ||
+		contains(L"materialoutput");
+
+	m_IsDefaultPS = contains(L"defaultps");
 }
 #pragma endregion

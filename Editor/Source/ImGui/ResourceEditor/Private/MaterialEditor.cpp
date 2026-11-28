@@ -72,7 +72,7 @@ bool LocalizedCombo(const char* label, int* selected, const char* const (&keys)[
 
 bool IsShaderGraphFile(const std::filesystem::path& path)
 {
-	return Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring())).ends_with(".bamgraph.json");
+	return Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring())).ends_with(".bamgraph.json");
 }
 
 // 셰이더 그래프 연결 피커. 그래프 패널·콘텐츠 브라우저의 그래프 표시와 같은 아이콘을 쓴다.
@@ -103,7 +103,7 @@ MaterialEditor::~MaterialEditor()
 
 bool MaterialEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	const std::string name = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.filename().wstring()));
 	return name.ends_with(".bammat.json") || name.ends_with(".bammatinst.json") ||
 		name.ends_with(".bammat") || name.ends_with(".bammatinst") ||
 		name.ends_with(".mat");
@@ -217,7 +217,7 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 		if (!candidate.Get())
 		{
 			NotificationManager::Get().AddNotification(GetDisplayName(),
-				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
 			m_AsyncPendingMaterial.Reset();
 			m_AsyncPendingMissingResources.clear();
 			m_AsyncTargetPath.clear();
@@ -258,7 +258,7 @@ bool MaterialEditor::StepAsyncOpen(float maxTimeSeconds)
 		const double totalMs = Milliseconds(graphEnd - m_AsyncStartTime).count();
 
 		EDITOR_LOG_INFO("[ResourceOpenTiming] Material {}: resource={:.2f}ms, graph={:.2f}ms, total={:.2f}ms (async)",
-			WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, graphMs, totalMs);
+			Engine::Unicode::WideToUtf8(targetPath.wstring()), m_AsyncLoadDurationMs, graphMs, totalMs);
 
 		m_AsyncProgress = 1.0f;
 		m_AsyncStage = EAsyncStage::None;

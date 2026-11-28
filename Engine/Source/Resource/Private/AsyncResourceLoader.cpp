@@ -1,12 +1,10 @@
-#include "AsyncResourceLoader.h"
+﻿#include "AsyncResourceLoader.h"
 #include "ResourceManager.h"
 #include "PlatformPath.h"
 #include "PakArchive.h"
 #include "Logger.h"
 
 #include <algorithm>
-
-BEGIN(Engine)
 
 IMPLEMENT_SINGLETON(AsyncResourceLoader)
 
@@ -59,6 +57,9 @@ void AsyncResourceLoader::Shutdown()
 
 AsyncResourceLoader::RequestId AsyncResourceLoader::RequestLoad(const std::filesystem::path& filePath)
 {
+	if (std::this_thread::get_id() != m_OwnerThread)
+		return 0;
+
 	const RequestId id = ++m_NextRequestId;
 	auto req = std::make_shared<AsyncLoadRequest>();
 	req->id = id;
@@ -67,6 +68,8 @@ AsyncResourceLoader::RequestId AsyncResourceLoader::RequestLoad(const std::files
 
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex);
+		if (m_Stop)
+			return 0;
 		m_Requests[id] = req;
 		m_PendingQueue.push_back(req);
 	}
@@ -79,67 +82,99 @@ void AsyncResourceLoader::WorkerLoop()
 	while (true)
 	{
 		std::shared_ptr<AsyncLoadRequest> req;
+
 		{
 			std::unique_lock<std::mutex> lock(m_Mutex);
-			m_Cv.wait(lock, [this]() { return m_Stop || !m_PendingQueue.empty(); });
+
+			m_Cv.wait(lock, [this]()
+				{
+					return m_Stop || !m_PendingQueue.empty();
+				});
+
 			if (m_Stop && m_PendingQueue.empty())
 				break;
-			if (!m_PendingQueue.empty())
+
+			req = m_PendingQueue.front();
+			m_PendingQueue.pop_front();
+
+			if (!req || req->state.load() == EAsyncLoadState::Cancelled)
+				continue;
+
+			req->state.store(EAsyncLoadState::ReadingDisk);
+			m_ReadInProgress = true;
+		}
+
+		bool succeeded = false;
+
+		try
+		{
+			auto resolvedPath = req->filePath;
+
+			if (!PlatformPath::IsVirtualUri(resolvedPath.wstring()) &&
+				resolvedPath.is_relative())
 			{
-				req = m_PendingQueue.front();
-				m_PendingQueue.pop_front();
+				resolvedPath = PlatformPath::ResolveProjectRelative(resolvedPath);
+			}
+
+			if (!PakMountManager::Get().ExistsOrOnDisk(resolvedPath))
+			{
+				req->errorMessage = "File not found or is directory";
+			}
+			else
+			{
+				succeeded = PakMountManager::Get().ReadBytesWithFallback(
+					resolvedPath, req->preloadedBytes) == EResult::Success;
+
+				if (!succeeded)
+					req->errorMessage = "Failed to open file";
 			}
 		}
-
-		if (!req)
-			continue;
-
-		if (req->state.load() == EAsyncLoadState::Cancelled)
-			continue;
-
-		req->state.store(EAsyncLoadState::ReadingDisk);
-
-		std::filesystem::path resolvedPath = req->filePath;
-		if (!PlatformPath::IsVirtualUri(resolvedPath.wstring()) && resolvedPath.is_relative())
-			resolvedPath = PlatformPath::ResolveProjectRelative(resolvedPath);
-
-		if (!PakMountManager::Get().ExistsOrOnDisk(resolvedPath))
+		catch (const std::exception& error)
 		{
-			req->errorMessage = "File not found or is directory";
-			req->state.store(EAsyncLoadState::Failed);
-			continue;
+			req->errorMessage = error.what();
 		}
 
-		if (PakMountManager::Get().ReadBytesWithFallback(resolvedPath, req->preloadedBytes) != EResult::Success)
-		{
-			req->errorMessage = "Failed to open file";
-			req->state.store(EAsyncLoadState::Failed);
-			continue;
-		}
-
-		if (req->state.load() == EAsyncLoadState::Cancelled)
-			continue;
-
-		req->state.store(EAsyncLoadState::ReadyToFinalize);
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
-			m_ReadyQueue.push_back(req);
+
+			if (req->state.load() != EAsyncLoadState::Cancelled)
+			{
+				if (succeeded)
+				{
+					m_ReadyQueue.push_back(req);
+					req->state.store(EAsyncLoadState::ReadyToFinalize);
+				}
+				else
+				{
+					req->state.store(EAsyncLoadState::Failed);
+				}
+			}
+
+			m_ReadInProgress = false;
 		}
+
+		m_Cv.notify_all();
 	}
 }
 
 void AsyncResourceLoader::StepMainThread(f64 budgetMs)
 {
+	if (std::this_thread::get_id() != m_OwnerThread)
+		return;
+
 	using Clock = std::chrono::steady_clock;
 	const auto startTime = Clock::now();
 
 	while (true)
 	{
 		std::shared_ptr<AsyncLoadRequest> req;
+
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex);
+
 			if (m_ReadyQueue.empty())
 				break;
+
 			req = m_ReadyQueue.front();
 			m_ReadyQueue.pop_front();
 		}
@@ -150,38 +185,37 @@ void AsyncResourceLoader::StepMainThread(f64 budgetMs)
 		if (req->state.load() == EAsyncLoadState::Cancelled)
 			continue;
 
+		Handle resultHandle;
+
 		if (ResourceManager::IsCreated())
 		{
-			Handle h = ResourceManager::Get().LoadFile(req->filePath.wstring());
-			if (h.IsValid())
+			auto& manager = ResourceManager::Get();
+
+			if (manager.IsOwnerThread())
 			{
-				req->resultHandle = h;
-				req->state.store(EAsyncLoadState::Completed);
-			}
-			else if (!req->preloadedBytes.empty())
-			{
-				req->resultHandle = Handle(static_cast<uint32>(req->id), 1);
-				req->state.store(EAsyncLoadState::Completed);
-			}
-			else
-			{
-				req->state.store(EAsyncLoadState::Failed);
-			}
-		}
-		else
-		{
-			if (!req->preloadedBytes.empty() || PakMountManager::Get().ExistsOrOnDisk(req->filePath))
-			{
-				req->resultHandle = Handle(static_cast<uint32>(req->id), 1);
-				req->state.store(EAsyncLoadState::Completed);
-			}
-			else
-			{
-				req->state.store(EAsyncLoadState::Failed);
+				const Handle loaded = manager.LoadFile(req->filePath.wstring());
+
+				if (manager.IsValid(loaded))
+					resultHandle = loaded;
 			}
 		}
 
-		const auto elapsed = std::chrono::duration<f64, std::milli>(Clock::now() - startTime).count();
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
+
+			if (req->state.load() != EAsyncLoadState::Cancelled)
+			{
+				req->resultHandle = resultHandle;
+
+				req->state.store(resultHandle.IsValid()
+					? EAsyncLoadState::Completed
+					: EAsyncLoadState::Failed);
+			}
+		}
+
+		const auto elapsed = std::chrono::duration<f64, std::milli>(
+			Clock::now() - startTime).count();
+
 		if (elapsed >= budgetMs)
 			break;
 	}
@@ -200,11 +234,16 @@ EAsyncLoadState AsyncResourceLoader::GetState(RequestId id) const
 Handle AsyncResourceLoader::GetHandle(RequestId id) const
 {
 	std::lock_guard<std::mutex> lock(m_Mutex);
-	auto it = m_Requests.find(id);
-	if (it != m_Requests.end())
-		return it->second->resultHandle;
 
-	return Handle{};
+	const auto it = m_Requests.find(id);
+
+	if (it == m_Requests.end())
+		return {};
+
+	if (it->second->state.load() != EAsyncLoadState::Completed)
+		return {};
+
+	return it->second->resultHandle;
 }
 
 bool AsyncResourceLoader::Cancel(RequestId id)
@@ -236,4 +275,30 @@ size_t AsyncResourceLoader::GetPendingCount() const
 	return count;
 }
 
-END
+bool AsyncResourceLoader::CancelAllAndWaitIdle(std::chrono::milliseconds timeout)
+{
+	if (std::this_thread::get_id() != m_OwnerThread)
+		return false;
+
+	std::unique_lock<std::mutex> lock(m_Mutex);
+
+	for (auto& [id, req] : m_Requests)
+	{
+		const auto state = req->state.load();
+
+		if (state == EAsyncLoadState::Pending ||
+			state == EAsyncLoadState::ReadingDisk ||
+			state == EAsyncLoadState::ReadyToFinalize)
+		{
+			req->state.store(EAsyncLoadState::Cancelled);
+		}
+	}
+
+	m_PendingQueue.clear();
+	m_ReadyQueue.clear();
+
+	return m_Cv.wait_for(lock, timeout, [this]()
+		{
+			return !m_ReadInProgress;
+		});
+}

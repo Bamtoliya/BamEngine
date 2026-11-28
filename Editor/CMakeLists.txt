@@ -99,7 +99,7 @@ target_include_directories(Editor
 
 target_link_libraries(Editor
     PRIVATE
-        BamEngine::Engine
+        BamEngine
         BamTools::ModelConverter
         TextureConverter
         imgui::imgui

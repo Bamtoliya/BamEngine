@@ -1,9 +1,12 @@
-#pragma once
+﻿#pragma once
 
 template<typename T, typename... Args>
 ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 {
 	static_assert(std::is_base_of_v<Resource, T>, "T must be derived from Resource");
+
+	if (!IsOwnerThread() || IsShuttingDown())
+		return {};
 
 	using FirstArg = std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>;
 
@@ -13,7 +16,7 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	auto fail = [&](const char* stage) -> ResourceHandle<T>
 		{
 			ENGINE_LOG_ERROR("Resource load failed: stage={}, key=\"{}\", path=\"{}\"",
-				stage, WStrToStr(keyStr), WStrToStr(pathStr));
+				stage, Engine::Unicode::WideToUtf8(keyStr), Engine::Unicode::WideToUtf8(pathStr));
 			return {};
 		};
 
@@ -33,10 +36,20 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 		keyStr = NormalizePath(pathStr);
 	}
 
-	uint64 hash = RunTimeHash(keyStr);
-	Handle handle = FindHandle(hash);
+	if (keyStr.empty())
+		return fail("empty resource key");
+
+	Handle handle = FindHandle(keyStr);
+
 	if (handle.IsValid())
-		return ResourceHandle<T>(handle);
+	{
+		ResourceHandle<T> cached(handle);
+
+		if (!cached.IsValid())
+			return fail("cached resource type or acquisition failure");
+
+		return cached;
+	}
 
 	std::filesystem::path fsPath = PlatformPath::ResolveUri(pathStr);
 	wstring extension = fsPath.extension().wstring();
@@ -62,10 +75,9 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 				return fail("archive resource deserialization");
 			}
 
-			resource->SetKey(keyStr);
 			resource->SetPath(pathStr);
 
-			const Handle resourceHandle = AddResourceInternal(hash, resource);
+			const Handle resourceHandle = AddResourceInternal(keyStr, resource);
 			return ResourceHandle<T>(resourceHandle);
 		};
 
@@ -104,30 +116,28 @@ ResourceHandle<T> ResourceManager::LoadResource(Args&&... args)
 	if (!resource)
 		return fail("source resource creation");
 
-	handle = AddResourceInternal(hash, resource);
+	handle = AddResourceInternal(keyStr, resource);
+
 	return ResourceHandle<T>(handle);
 }
 
-template <typename T>
+template<typename T>
 ResourceHandle<T> ResourceManager::AddResource(const wstring_view& key, T* resource)
 {
-	static_assert(is_base_of_v<Resource, T>, "T must be derived from Resource");
-	if (!resource) return ResourceHandle<T>();
+	static_assert(std::is_base_of_v<Resource, T>,
+		"T must be derived from Resource");
 
-	const wstring normalizedKey = NormalizePath(wstring(key));
-	uint64 hash = RunTimeHash(normalizedKey);
-	resource->SetKey(normalizedKey);
-	if (resource->GetPath().empty())
-		resource->SetPath(normalizedKey);
+	if (!resource)
+		return {};
 
-	return ResourceHandle<T>(AddResourceInternal(hash, resource));
+	return ResourceHandle<T>(
+		AddResourceInternal(NormalizePath(wstring(key)), resource, true));
 }
 
-template <typename T>
+template<typename T>
 ResourceHandle<T> ResourceManager::GetResourceHandle(const wstring& key)
 {
-	uint64 hash = RunTimeHash(NormalizePath(key));
-	return ResourceHandle<T>(FindHandle(hash));
+	return ResourceHandle<T>(FindHandleByKey(key));
 }
 
 template<typename T>

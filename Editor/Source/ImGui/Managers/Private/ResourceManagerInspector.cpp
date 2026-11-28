@@ -38,8 +38,8 @@ void ResourceManagerInspector::Refresh()
         row.RefCount = info.RefCount;
 
         row.Type = GetTypeName(info.Type);
-        row.Key = Engine::WStrToStr(info.Key);
-        row.Path = Engine::WStrToStr(info.Path);
+        row.Key = Engine::Unicode::WideToUtf8(info.Key);
+        row.Path = Engine::Unicode::WideToUtf8(info.Path);
 
         row.SearchText =
             row.Type + " " + row.Key + " " + row.Path;

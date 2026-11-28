@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Editor_Includes.h"
 #include "ProjectDescriptor.h"
@@ -84,7 +84,7 @@ public:
 
 private:
     bool HasUnsavedEditorChanges() const;
-    void QuiesceBackgroundWork();
+    bool QuiesceBackgroundWork();
     void ClearEditorStateAndPanels();
     void UnloadSceneAndProjectResources();
     void WaitForGPUIdle();

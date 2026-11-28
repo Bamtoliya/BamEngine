@@ -272,44 +272,67 @@ private:
             projectFile = Engine::ProjectDescriptor::FindProjectFile(exeDir);
 
         Engine::ProjectDescriptor desc;
-        if (!projectFile.empty() && Engine::ProjectDescriptor::LoadFromFile(projectFile, desc) && !desc.Modules.empty())
+
+        if (!projectFile.empty() &&
+            Engine::ProjectDescriptor::LoadFromFile(projectFile, desc) &&
+            !desc.Modules.empty())
         {
+            const bool packaged = std::filesystem::is_regular_file(
+                m_ProjectRoot / ".bam-client-package", ec);
+
+            ec.clear();
+
+            const auto engineRoot = Engine::PlatformPath::GetEngineRoot();
+
+            const bool isEngineRootProject = !engineRoot.empty() &&
+                Engine::PlatformPath::Normalize(m_ProjectRoot) ==
+                Engine::PlatformPath::Normalize(engineRoot);
+
             for (const auto& mod : desc.ResolveModules(m_ProjectRoot))
             {
                 std::string lowerType = mod.Type;
+
                 std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(),
                     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
                 if (!lowerType.empty() && lowerType != "runtime")
                     continue;
 
-                const std::wstring modNameW = Engine::StrToWStr(mod.Name);
+                const std::wstring modNameW = Engine::Unicode::Utf8ToWide(mod.Name);
                 const std::filesystem::path dllName = modNameW + L".dll";
-                std::filesystem::path modulePath;
-                for (const auto& candidate : { exeDir / dllName, mod.BinaryPath, m_ProjectRoot / dllName })
-                {
-                    if (!candidate.empty() && std::filesystem::exists(candidate, ec) && !ec)
-                    {
-                        modulePath = candidate;
-                        break;
-                    }
-                    ec.clear();
-                }
 
-                if (modulePath.empty())
+                const std::filesystem::path modulePath =
+                    (packaged || isEngineRootProject)
+                    ? (exeDir / dllName)
+                    : mod.BinaryPath;
+
+                ec.clear();
+
+                if (!std::filesystem::is_regular_file(modulePath, ec))
                 {
-                    BAM_LOG(Warn, "Client", "Module", "Project module '{}' DLL not found (optional); continuing.", mod.Name);
-                    continue;
+                    BAM_LOG(Error, "Client", "Module",
+                        "Required project module '{}' was not found: {}",
+                        mod.Name, modulePath.string());
+
+                    return Engine::EResult::FileNotFound;
                 }
 
                 const Engine::EResult result = Engine::ModuleManager::Get().LoadModule(modNameW, modulePath);
+
                 if (Engine::IsFailure(result))
                 {
-                    BAM_LOG(Error, "Client", "Module", "Failed to load project module '{}' from {}: {}",
+                    BAM_LOG(Error, "Client", "Module",
+                        "Failed to load project module '{}' from {}: {}",
                         mod.Name, modulePath.string(), Engine::ResultToString(result));
+
                     return result;
                 }
-                BAM_LOG(Info, "Client", "Module", "Loaded project module '{}' from {}", mod.Name, modulePath.string());
+
+                BAM_LOG(Info, "Client", "Module",
+                    "Loaded project module '{}' from {}",
+                    mod.Name, modulePath.string());
             }
+
             return Engine::EResult::Success;
         }
 

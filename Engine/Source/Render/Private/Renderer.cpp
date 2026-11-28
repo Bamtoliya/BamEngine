@@ -1805,13 +1805,13 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 	if (vs->GetShaderType() != EShaderType::Vertex || ps->GetShaderType() != EShaderType::Fragment)
 	{
 		static std::unordered_set<std::string> s_LoggedTypeMismatches;
-		const std::string errKey = fmt::format("{}_{}", vs ? WStrToStr(vs->GetKey()) : "null", ps ? WStrToStr(ps->GetKey()) : "null");
+		const std::string errKey = fmt::format("{}_{}", vs ? Engine::Unicode::WideToUtf8(vs->GetKey()) : "null", ps ? Engine::Unicode::WideToUtf8(ps->GetKey()) : "null");
 		if (s_LoggedTypeMismatches.insert(errKey).second)
 		{
 			BAM_LOG(Error, "Renderer", "PrepareMeshPipelineDesc",
 				"Shader stage type mismatch! VS '{}' (type={}) must be Vertex, PS '{}' (type={}) must be Fragment. Skipping pipeline creation.",
-				vs ? WStrToStr(vs->GetKey()) : "null", static_cast<int>(vs ? vs->GetShaderType() : EShaderType::Unknown),
-				ps ? WStrToStr(ps->GetKey()) : "null", static_cast<int>(ps ? ps->GetShaderType() : EShaderType::Unknown));
+				vs ? Engine::Unicode::WideToUtf8(vs->GetKey()) : "null", static_cast<int>(vs ? vs->GetShaderType() : EShaderType::Unknown),
+				ps ? Engine::Unicode::WideToUtf8(ps->GetKey()) : "null", static_cast<int>(ps ? ps->GetShaderType() : EShaderType::Unknown));
 		}
 		return EResult::InvalidArgument;
 	}
@@ -1829,13 +1829,13 @@ EResult Renderer::PrepareMeshPipelineDesc(Mesh* mesh, MaterialInterface* materia
 		if (fallbackVS && fallbackVS->GetRHIShader())
 		{
 			static std::unordered_set<std::string> s_LoggedFixes;
-			const std::string vsKeyStr = ToLowerStr(WStrToStr(vs->GetKey()));
-			const std::string psKeyStr = ToLowerStr(WStrToStr(ps->GetKey()));
+			const std::string vsKeyStr = ToLowerStr(Engine::Unicode::WideToUtf8(vs->GetKey()));
+			const std::string psKeyStr = ToLowerStr(Engine::Unicode::WideToUtf8(ps->GetKey()));
 			if (s_LoggedFixes.insert(vsKeyStr + "->" + psKeyStr).second)
 			{
 				BAM_LOG(Warn, "Renderer", "PrepareMeshPipelineDesc",
 					"Incompatible shader pair: VS '{}' lacks required outputs for GBuffer PS '{}'. Automatically substituting with GBufferVS.",
-					WStrToStr(vs->GetKey()), WStrToStr(ps->GetKey()));
+					Engine::Unicode::WideToUtf8(vs->GetKey()), Engine::Unicode::WideToUtf8(ps->GetKey()));
 			}
 			vs = fallbackVS;
 		}
@@ -1910,7 +1910,7 @@ EResult Renderer::BindMeshPipeline(Mesh* mesh, MaterialInterface* material, ERen
 	if (result != EResult::Success)
 	{
 		static std::unordered_set<std::string> s_LoggedInvalidMaterials;
-		const std::string matKey = material ? WStrToStr(material->GetKey()) : "null";
+		const std::string matKey = material ? Engine::Unicode::WideToUtf8(material->GetKey()) : "null";
 		if (s_LoggedInvalidMaterials.insert(matKey).second)
 		{
 			BAM_LOG(Warn, "Renderer", "BindMeshPipeline", "Failed to prepare pipeline for material: '{}' (Missing VS/PS). Skipping draw call.", matKey);

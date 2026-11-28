@@ -223,7 +223,7 @@ EResult SceneViewportPanel::OnInitialize(void* arg)
 	m_Grid.Initialize(m_Name);
 	m_DebugRenderer.Initialize(m_Name);
 	if (!m_PostProcessChain.GetPipeline().SaveToString(m_DefaultPostProcessSettings))
-		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", WStrToStr(m_Name));
+		EDITOR_LOG_ERROR("Default post-process settings could not be captured: {}", Engine::Unicode::WideToUtf8(m_Name));
 	m_SelectedRTName = m_LightingColorName;
 	return EResult::Success;
 }
@@ -616,7 +616,7 @@ static void PlaceDroppedAssets(const ImGuiPayload& payload, bool multiple)
 	for (const auto& path : paths)
 	{
 		const std::filesystem::path file(path);
-		const auto filename = Engine::ToLowerStr(Engine::WStrToStr(file.filename().wstring()));
+		const auto filename = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(file.filename().wstring()));
 		const bool isModel = filename.ends_with(".bammodel") || filename.ends_with(".bammodel.json");
 		const bool isPrefab = !isModel && (filename.ends_with(".bamprefab") || filename.ends_with(".prefab") ||
 			(multiple ? filename.ends_with(".bamprefab.json") || filename.ends_with(".prefab.json") : filename.ends_with(".json")));
@@ -639,7 +639,7 @@ static void PlaceDroppedAssets(const ImGuiPayload& payload, bool multiple)
 		if (!root)
 		{
 			if (multiple)
-				EDITOR_LOG_WARN("Failed to place dropped asset: {}", Engine::WStrToStr(path));
+				EDITOR_LOG_WARN("Failed to place dropped asset: {}", Engine::Unicode::WideToUtf8(path));
 			continue;
 		}
 
@@ -649,7 +649,7 @@ static void PlaceDroppedAssets(const ImGuiPayload& payload, bool multiple)
 			historyLabel = isModel ? "History.Command.CreateEntity" : "History.Command.InstantiatePrefab";
 			if (isPrefab)
 				NotificationManager::Get().AddNotification(LOCAL("ResourceType.Prefab"),
-					LOCAL_FMT("Notification.PrefabInstantiated", Engine::WStrToStr(file.stem().wstring())), ELogLevel::Info, 3.0f);
+					LOCAL_FMT("Notification.PrefabInstantiated", Engine::Unicode::WideToUtf8(file.stem().wstring())), ELogLevel::Info, 3.0f);
 		}
 	}
 
@@ -762,7 +762,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 			wstring shortW = m_OwnedRTNames[i];
 			if (shortW.find(prefix) == 0)
 				shortW = shortW.substr(prefix.size());
-			shortLabels.push_back(WStrToStr(shortW));
+			shortLabels.push_back(Engine::Unicode::WideToUtf8(shortW));
 			if (m_OwnedRTNames[i] == m_SelectedRTName)
 				currentIdx = i;
 		}
@@ -792,7 +792,7 @@ void SceneViewportPanel::DrawSceneRenderTargetMenu()
 			auto allNames = RenderTargetManager::Get().GetAllRenderTargetNames();
 			for (const auto& name : allNames)
 			{
-				string label = WStrToStr(name);
+				string label = Engine::Unicode::WideToUtf8(name);
 				bool selected = !m_ShowFinalComposed && (name == m_SelectedRTName);
 				if (ImGui::MenuItem(label.c_str(), nullptr, selected))
 				{
@@ -907,7 +907,7 @@ void SceneViewportPanel::DrawRenderPassMenu()
 		auto& rpMgr = RenderPassManager::Get();
 		for (auto& pass : m_PassOptions)
 		{
-			string label = WStrToStr(pass.Name);
+			string label = Engine::Unicode::WideToUtf8(pass.Name);
 			if (ImGui::MenuItem(label.c_str(), nullptr, &pass.Enabled))
 			{
 				if (auto* renderPass = rpMgr.GetRenderPassByID(pass.PassID))
@@ -1604,7 +1604,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 	m_LastPostProcessSettings = source.PipelineSettings;
 
 	EDITOR_LOG_INFO("Post-process source: scene={}, preset={}, inlineBytes={}",
-		WStrToStr(scene.GetName()), source.PresetName, source.PipelineSettings.size());
+		Engine::Unicode::WideToUtf8(scene.GetName()), source.PresetName, source.PipelineSettings.size());
 
 	const auto notifyFailure = [this, restoreRequested]
 		{
@@ -1624,7 +1624,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 	if (m_DefaultPostProcessSettings.empty() ||
 		(hadUsableState && !pipeline.SaveToString(previousSettings)))
 	{
-		EDITOR_LOG_ERROR("Post-process settings backup is unavailable: {}", WStrToStr(m_Name));
+		EDITOR_LOG_ERROR("Post-process settings backup is unavailable: {}", Engine::Unicode::WideToUtf8(m_Name));
 		notifyFailure();
 		return m_PostProcessStateUsable;
 	}
@@ -1637,7 +1637,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 	}
 	else if (applied && !source.PresetName.empty())
 	{
-		const auto path = StrToWStr("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json");
+		const auto path = Engine::Unicode::Utf8ToWide("Resources/Config/PostProcess/Presets/" + source.PresetName + ".json");
 		applied = pipeline.LoadFromFile(path);
 	}
 
@@ -1663,7 +1663,7 @@ bool SceneViewportPanel::SyncPostProcess(Scene& scene, entt::entity entity, cons
 	m_PostProcessStateUsable = hadUsableState && pipeline.LoadFromString(previousSettings);
 
 	EDITOR_LOG_ERROR("Post-process apply failed: viewport={}, preset={}, restored={}",
-		WStrToStr(m_Name), source.PresetName, m_PostProcessStateUsable);
+		Engine::Unicode::WideToUtf8(m_Name), source.PresetName, m_PostProcessStateUsable);
 
 	notifyFailure();
 	return m_PostProcessStateUsable;
@@ -3319,7 +3319,7 @@ void SceneViewportPanel::ProcessHDRCapture(Engine::Scene* activeScene)
 
 		std::vector<float> equirectRGB;
 		const std::filesystem::path outPath(m_HDRCapture.OutputPath);
-		const std::string displayPath = WStrToStr(outPath.filename().wstring());
+		const std::string displayPath = Engine::Unicode::WideToUtf8(outPath.filename().wstring());
 		const bool saved = Engine::IBLManager::ConvertCubemapFacesToEquirectangular(
 			facePtrs, HDRCaptureState::FaceSize, HDRCaptureState::EquirectWidth, HDRCaptureState::EquirectHeight, equirectRGB) &&
 			Engine::IBLManager::SaveEquirectangularHDR(outPath, equirectRGB.data(), HDRCaptureState::EquirectWidth, HDRCaptureState::EquirectHeight);

@@ -197,7 +197,7 @@ Entity& EntityFactory::CreateUIPreset(Scene* scene, Entity& parent, UIElementPre
 	case UIElementPreset::ScrollView:
 		{
 			world.emplace<UIScrollComponent>(handle);
-			const auto contentHandle = CreateUIElement(*scene, entity, StrToWStr(LOCAL("Viewport.ScrollContent")),
+			const auto contentHandle = CreateUIElement(*scene, entity, Engine::Unicode::Utf8ToWide(LOCAL("Viewport.ScrollContent")),
 				{ 0.0f, 480.0f }).GetEntityHandle();
 			auto& rect = world.get<RectTransformComponent>(contentHandle);
 			rect.anchorMin = { 0.0f, 0.0f };
@@ -299,8 +299,8 @@ Entity& EntityFactory::CreatePrimitiveEntity(Scene* scene, const wstring& name, 
 	if (!meshHandle || !materialHandle)
 	{
 		EDITOR_LOG_ERROR("Failed to create primitive entity: Missing resources. Mesh: {} ('{}'), Material: {} ('{}')",
-			meshHandle ? "OK" : "Missing", WStrToStr(meshKey),
-			materialHandle ? "OK" : "Missing", WStrToStr(effectiveMaterialKey));
+			meshHandle ? "OK" : "Missing", Engine::Unicode::WideToUtf8(meshKey),
+			materialHandle ? "OK" : "Missing", Engine::Unicode::WideToUtf8(effectiveMaterialKey));
 		return entity;
 	}
 
@@ -387,7 +387,7 @@ Entity& EntityFactory::CreateLightEntity(Scene* scene, const wstring& name, cons
 	}
 	else
 	{
-		EDITOR_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", WStrToStr(lightType));
+		EDITOR_LOG_WARN("Unknown light type: {}. Defaulting to Point light.", Engine::Unicode::WideToUtf8(lightType));
 		scene->GetComponent<LightComponent>(entity).LightType = ELightType::Point;
 	}
 	return entity;

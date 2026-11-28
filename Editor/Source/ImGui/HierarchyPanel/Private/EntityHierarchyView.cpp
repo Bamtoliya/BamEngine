@@ -212,7 +212,7 @@ const std::string& Editor::GetEntityHierarchyName(Engine::Scene& scene, entt::en
     }
     else if (changed)
     {
-        entry.Name = Engine::WStrToStr(name->name);
+        entry.Name = Engine::Unicode::WideToUtf8(name->name);
         entry.FallbackFormat.clear();
     }
 
@@ -517,7 +517,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 return;
             }
 
-            std::string extension = Engine::WStrToStr(std::filesystem::path(*decoded).extension().wstring());
+            std::string extension = Engine::Unicode::WideToUtf8(std::filesystem::path(*decoded).extension().wstring());
             for (char& ch : extension) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
             if (extension != ".json" && extension != ".bamprefab" && extension != ".prefab")
@@ -615,7 +615,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                     ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll))
                 {
                     action.RenameEntity = entity;
-                    action.NewName = Engine::StrToWStr(m_RenameBuffer);
+                    action.NewName = Engine::Unicode::Utf8ToWide(m_RenameBuffer);
                     m_RenamingEntity = entt::null;
                 }
                 else if (Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape))
@@ -625,7 +625,7 @@ Editor::EntityHierarchyAction Editor::EntityHierarchyView::Draw(Engine::Scene& s
                 else if (ImGui::IsItemDeactivated() && !Engine::InputManager::Get().IsKeyButtonDown(Engine::EKeyCode::Escape))
                 {
                     action.RenameEntity = entity;
-                    action.NewName = Engine::StrToWStr(m_RenameBuffer);
+                    action.NewName = Engine::Unicode::Utf8ToWide(m_RenameBuffer);
                     m_RenamingEntity = entt::null;
                 }
             }

@@ -21,6 +21,7 @@
 #include "Logger.h"
 #include <archive/JsonArchive.h>
 #include <SDL3/SDL.h>
+#include "ResourcePreloader.h"
 
 #ifdef _WIN32
 #include "DirectX12RHI.h"
@@ -208,8 +209,7 @@ ProjectSwitchResult ProjectSessionManager::CreateProject(const std::filesystem::
     return SwitchProject(createdProjectFile, options);
 }
 
-ProjectSwitchResult ProjectSessionManager::SwitchProject(const std::filesystem::path& bamProjectOrRoot,
-    const ProjectSwitchOptions& options)
+ProjectSwitchResult ProjectSessionManager::SwitchProject(const std::filesystem::path& bamProjectOrRoot, const ProjectSwitchOptions& options)
 {
     ProjectSwitchResult result;
     if (m_IsSwitching)
@@ -322,7 +322,14 @@ ProjectSwitchResult ProjectSessionManager::SwitchProject(const std::filesystem::
     // -------------------------------------------------------------------------
     // Step 2: Quiesce background queues & recovery session
     // -------------------------------------------------------------------------
-    QuiesceBackgroundWork();
+    if (!QuiesceBackgroundWork())
+    {
+        result.ErrorMessage =
+            "Background resource operations are still active. "
+            "Project switching was aborted.";
+
+        return result;
+    }
 
     // -------------------------------------------------------------------------
     // Step 3: Clear editor state, history, selection, clipboard, and caches
@@ -426,7 +433,7 @@ bool ProjectSessionManager::HasUnsavedEditorChanges() const
     return false;
 }
 
-void ProjectSessionManager::QuiesceBackgroundWork()
+bool ProjectSessionManager::QuiesceBackgroundWork()
 {
     if (ImGuiManager::IsCreated())
     {
@@ -444,24 +451,32 @@ void ProjectSessionManager::QuiesceBackgroundWork()
     if (Engine::AsyncResourceLoader::IsCreated())
     {
         auto& loader = Engine::AsyncResourceLoader::Get();
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
-        while (loader.GetPendingCount() > 0 && std::chrono::steady_clock::now() < deadline)
-        {
-            loader.StepMainThread(16.0);
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        }
+
+        if (!loader.CancelAllAndWaitIdle(std::chrono::milliseconds(200)))
+            return false;
     }
 
     if (Engine::ResourceStreamer::IsCreated())
     {
         auto& streamer = Engine::ResourceStreamer::Get();
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
-        while (streamer.IsBusy() && std::chrono::steady_clock::now() < deadline)
+
+        const auto deadline = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(200);
+
+        while (streamer.IsBusy() &&
+            std::chrono::steady_clock::now() < deadline)
         {
             streamer.Update(16.0);
+
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+
+        if (streamer.IsBusy())
+            return false;
     }
+
+    if (Engine::ResourcePreloader::IsAnyActive())
+        return false;
 
     // Cleanly close current project's recovery session lock and stop module watchers/builds before switching project root.
     if (HotReloadManager::IsCreated())
@@ -472,6 +487,8 @@ void ProjectSessionManager::QuiesceBackgroundWork()
     {
         RecoveryManager::Get().OnShutdown();
     }
+
+    return true;
 }
 
 void ProjectSessionManager::ClearEditorStateAndPanels()
@@ -527,7 +544,13 @@ void ProjectSessionManager::UnloadSceneAndProjectResources()
 
     if (Engine::ResourceManager::IsCreated())
     {
-        Engine::ResourceManager::Get().UnloadProjectScopedResources();
+        auto& resources = Engine::ResourceManager::Get();
+
+        resources.FlushDeferredDeletes();
+
+        resources.UnloadProjectScopedResources();
+
+        resources.FlushDeferredDeletes();
     }
 
     // Unload active project's C++ module DLL only after scene unload and GPU idle to avoid dangling pointers.

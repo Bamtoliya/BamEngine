@@ -7,6 +7,8 @@
 #include <reflection/ObjectView.h>
 #include "ResourceBinaryHeader.h"
 #include "PlatformPath.h"
+#include "Handle.h"
+#include <vector>
 
 #define DECLARE_RESOURCE(ClassType) \
 public: \
@@ -55,7 +57,6 @@ public:
 	virtual void Free() BAM_PURE;
 #pragma	endregion
 
-
 #pragma region Bind
 	virtual EResult Bind(uint32 slot) { return EResult::NotImplemented; }
 #pragma endregion
@@ -69,7 +70,35 @@ public:
 #pragma region Key Management
 public:
 	const wstring& GetKey() const { return m_Key; }
-	void SetKey(const wstring& key) { m_Key = key; }
+
+	bool IsManagerOwned() const noexcept
+	{
+		return m_ManagerOwnership.Owned;
+	}
+
+	bool SetKey(const wstring& key)
+	{
+		wstring normalized = NormalizePath(key);
+
+		if (m_Key == normalized)
+			return true;
+
+		if (IsManagerOwned())
+			return false;
+
+		ApplyKey(std::move(normalized));
+		return true;
+	}
+
+protected:
+	virtual void OnKeyChanged() noexcept {}
+
+private:
+	void ApplyKey(wstring key) noexcept
+	{
+		m_Key.swap(key);
+		OnKeyChanged();
+	}
 #pragma endregion
 
 #pragma region Path Management
@@ -145,6 +174,36 @@ protected:
 	virtual EResult OnPostLoad() { return EResult::Success; }
 #pragma endregion
 
+#pragma region Ownership
+private:
+	struct ManagerOwnership
+	{
+		bool Owned = false;
+
+		ManagerOwnership() = default;
+
+		// 복제된 리소스는 등록되지 않은 신규 객체다.
+		ManagerOwnership(const ManagerOwnership&) noexcept {}
+
+		ManagerOwnership& operator=(const ManagerOwnership&) noexcept
+		{
+			return *this;
+		}
+	};
+#pragma endregion
+
+#pragma region Dependencies
+public:
+	// 등록된 ResourceHandle 의존성을 수집한다.
+	// true: 해당 클래스에서 추적 대상으로 정의한 의존성 수집을 지원한다.
+	// false: 아직 의존성 수집이 구현되지 않았다.
+	virtual bool CollectResourceDependencies(std::vector<Handle>& out) const
+	{
+		return false;
+	}
+#pragma endregion
+
+
 #pragma region Member Variables
 protected:
 	PROPERTY(READONLY, TRANSIENT)
@@ -158,6 +217,8 @@ protected:
 
 	PROPERTY(READONLY)
 	wstring m_Path = {};
+
+	ManagerOwnership m_ManagerOwnership;
 #pragma endregion
 };
 END

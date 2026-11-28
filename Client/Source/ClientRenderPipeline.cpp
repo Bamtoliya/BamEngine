@@ -70,7 +70,7 @@ EResult Client::ClientRenderPipeline::Initialize(const std::string& profileUri, 
         desc.shaderType = shader.Type;
         const auto handle = resources.LoadResource<Shader>(&desc);
         if (!handle.Get() || !handle->GetRHIShader() || handle->GetRHIShader()->GetRawShaderBytecode().empty())
-            return fail(WStrToStr(desc.Key), "Could not register the required shader: " + WStrToStr(desc.Path));
+            return fail(Engine::Unicode::WideToUtf8(desc.Key), "Could not register the required shader: " + Engine::Unicode::WideToUtf8(desc.Path));
     }
 
     m_UseInternalResolution = profile.InternalWidth > 0 && profile.InternalHeight > 0;

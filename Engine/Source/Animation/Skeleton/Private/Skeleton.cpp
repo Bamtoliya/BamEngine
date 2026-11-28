@@ -102,7 +102,7 @@ uint64 Engine::Skeleton::ComputeSkinBindingSignature(std::span<const Bone> bones
 	addNumber(bones.size());
 	for (const auto& bone : bones)
 	{
-		const auto name = Engine::WStrToStr(bone.Name);
+		const auto name = Engine::Unicode::WideToUtf8(bone.Name);
 		addNumber(name.size());
 		for (unsigned char byte : name)
 			addByte(byte);

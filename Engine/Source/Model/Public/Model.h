@@ -138,6 +138,38 @@ public:
 	[[nodiscard]] archive::ArchiveResult ReadArchive(const archive::IArchive& ar) override;
 #pragma endregion
 
+#pragma region Dependencies
+public:
+	bool CollectResourceDependencies(vector<Handle>& out) const override
+	{
+		const auto append = [&](const auto& handle)
+			{
+				if (handle.GetRawHandle().IsValid())
+					out.push_back(handle.GetRawHandle());
+			};
+
+		for (const auto& mesh : m_Meshes)
+			append(mesh);
+
+		for (const auto& material : m_Materials)
+			append(material);
+
+		append(m_Skeleton);
+
+		for (const auto& animation : m_Animations)
+			append(animation);
+
+		for (const auto& lod : m_MeshLODs)
+		{
+			append(lod.LOD1Mesh);
+			append(lod.LOD2Mesh);
+		}
+
+		return true;
+	}
+#pragma endregion
+
+
 #pragma region Member Variable
 private:
 	PROPERTY()

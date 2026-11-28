@@ -484,7 +484,7 @@ namespace
                 continue;
             }
             ENGINE_LOG_WARN("{} resource preload deferred: key=\"{}\", path=\"{}\"", kind,
-                Engine::WStrToStr(reference.AssetKey), Engine::WStrToStr(reference.AssetPath));
+                Engine::Unicode::WideToUtf8(reference.AssetKey), Engine::Unicode::WideToUtf8(reference.AssetPath));
         }
     }
 }

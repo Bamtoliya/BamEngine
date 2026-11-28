@@ -34,7 +34,7 @@ namespace Editor
             if (panelId == L"Network Profiler")
                 return "UI_NETWORK_PROFILER_PANEL";
 
-            return Engine::WStrToStr(panelId);
+            return Engine::Unicode::WideToUtf8(panelId);
         }
 
         std::filesystem::path ResolvePluginContentDirectory(const PluginCatalogEntry& catalog)
@@ -347,7 +347,7 @@ namespace Editor
         {
             if (gui.FindRegisteredPanel(panel.Id))
             {
-                EDITOR_LOG_ERROR("Plugin {} conflicts with panel {}", catalog.Id, Engine::WStrToStr(panel.Id));
+                EDITOR_LOG_ERROR("Plugin {} conflicts with panel {}", catalog.Id, Engine::Unicode::WideToUtf8(panel.Id));
                 return false;
             }
         }
@@ -364,7 +364,7 @@ namespace Editor
                 for (auto* previous : registered)
                     QueuePanelRemoval(gui, previous);
 
-                EDITOR_LOG_ERROR("Plugin {} failed to register panel {}", catalog.Id, Engine::WStrToStr(definition.Id));
+                EDITOR_LOG_ERROR("Plugin {} failed to register panel {}", catalog.Id, Engine::Unicode::WideToUtf8(definition.Id));
                 return false;
             }
 
@@ -448,8 +448,8 @@ namespace Editor
             return false;
 
         PluginApproval approval{
-            Engine::WStrToStr(m_ProjectRoot.wstring()), catalog.Id, catalog.Version,
-            Engine::WStrToStr(catalog.PackageDirectory.wstring()), Engine::WStrToStr(catalog.BinaryPath.wstring()),
+            Engine::Unicode::WideToUtf8(m_ProjectRoot.wstring()), catalog.Id, catalog.Version,
+            Engine::Unicode::WideToUtf8(catalog.PackageDirectory.wstring()), Engine::Unicode::WideToUtf8(catalog.BinaryPath.wstring()),
             candidate.GetPreparedFingerprint()
         };
         if (approval.sha256.empty() || (confirmed && *confirmed != approval))

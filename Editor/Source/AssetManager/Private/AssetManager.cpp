@@ -291,7 +291,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 			if (result != EResult::Success)
 			{
 				BAM_LOG(Error, "Editor", "Asset", "Model import request failed: source={}, result={}",
-					Engine::WStrToStr(sourcePath.wstring()), ResultToString(result));
+					Engine::Unicode::WideToUtf8(sourcePath.wstring()), ResultToString(result));
 				pending.Future = readyFuture(result);
 			}
 			else
@@ -301,7 +301,7 @@ void AssetManager::ImportAsync(const filesystem::path& sourcePath, const filesys
 						if (prepareResult != EResult::Success)
 						{
 							BAM_LOG(Error, "Editor", "Asset", "Model preparation failed: source={}, code={}, error={}",
-								Engine::WStrToStr(task->GetRequest().SourcePath.wstring()),
+								Engine::Unicode::WideToUtf8(task->GetRequest().SourcePath.wstring()),
 								static_cast<int>(task->GetErrorCode()), task->GetErrorMessage());
 							return prepareResult;
 						}

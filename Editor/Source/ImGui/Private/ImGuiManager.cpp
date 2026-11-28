@@ -125,13 +125,13 @@ struct SceneLoadState
 			if (const auto embedded = path.stem().extension(); !embedded.empty())
 				extension = embedded;
 		}
-		auto& timing = ResourceTimings[extension.empty() ? std::string("(none)") : Engine::ToLowerStr(Engine::WStrToStr(extension.wstring()))];
+		auto& timing = ResourceTimings[extension.empty() ? std::string("(none)") : Engine::ToLowerStr(Engine::Unicode::WideToUtf8(extension.wstring()))];
 		++timing.Count;
 		timing.Milliseconds += milliseconds;
 		ResourceMilliseconds += milliseconds;
 
 		constexpr size_t SlowestCount = 5;
-		SlowestResources.emplace_back(milliseconds, Engine::WStrToStr(path.wstring()));
+		SlowestResources.emplace_back(milliseconds, Engine::Unicode::WideToUtf8(path.wstring()));
 		std::sort(SlowestResources.begin(), SlowestResources.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
 		if (SlowestResources.size() > SlowestCount)
 			SlowestResources.resize(SlowestCount);
@@ -536,7 +536,7 @@ void ImGuiManager::Draw()
 					application.RememberEditedScene(document->GetPath());
 
 				const auto name = document && !document->GetPath().empty()
-					? WStrToStr(document->GetPath().wstring()) : LOCAL("EditorDocument.Untitled");
+					? Engine::Unicode::WideToUtf8(document->GetPath().wstring()) : LOCAL("EditorDocument.Untitled");
 
 				NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
 					LOCAL_FMT("EditorDocument.Saved", name), ELogLevel::Info);
@@ -607,7 +607,7 @@ namespace
 		if (result == EResult::Success)
 			return true;
 
-		EDITOR_LOG_ERROR("Panel initialization failed: panel={}, result={}", WStrToStr(panel->GetName()),
+		EDITOR_LOG_ERROR("Panel initialization failed: panel={}, result={}", Engine::Unicode::WideToUtf8(panel->GetName()),
 			ResultToString(result));
 		Safe_Release(panel);
 		return false;
@@ -764,8 +764,8 @@ std::filesystem::path ImGuiManager::ResolveResourceEditorTarget(const std::files
 			return candJson;
 
 		// 메쉬(.bammesh / .bammesh.json)인 경우: 같은 디렉터리의 부모 .bammodel 탐색
-		const auto extStr = Engine::ToLowerStr(Engine::WStrToStr(base.extension().wstring()));
-		const auto filenameStr = Engine::ToLowerStr(Engine::WStrToStr(base.filename().wstring()));
+		const auto extStr = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(base.extension().wstring()));
+		const auto filenameStr = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(base.filename().wstring()));
 		if (extStr == ".bammesh" || filenameStr.ends_with(".bammesh.json"))
 		{
 			auto stem = base.stem().wstring();
@@ -873,7 +873,7 @@ void ImGuiManager::OpenPendingResourceEditor()
 				const auto elapsed = std::chrono::duration<double, std::milli>(
 					std::chrono::steady_clock::now() - started).count();
 				EDITOR_LOG_INFO("[ResourceOpenTiming] Editor {}: path={}, attempt={:.2f}ms",
-					WStrToStr(editor->GetName()), WStrToStr(path.wstring()), elapsed);
+					Engine::Unicode::WideToUtf8(editor->GetName()), Engine::Unicode::WideToUtf8(path.wstring()), elapsed);
 			}
 		};
 		if (editor->HasUnsavedResourceChanges())
@@ -1596,7 +1596,7 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 	auto state = std::make_unique<SceneLoadState>();
 	state->RequestedPath = path;
 	state->ResolvedPath = std::move(resolvedPath);
-	state->DisplayName = WStrToStr(path.filename().wstring());
+	state->DisplayName = Engine::Unicode::WideToUtf8(path.filename().wstring());
 	state->StartTime = std::chrono::steady_clock::now();
 	state->Archive = std::make_unique<archive::JsonArchive>();
 
@@ -1622,7 +1622,7 @@ bool ImGuiManager::BeginSceneLoad(const std::filesystem::path& path)
 					const auto isModel = [](const Engine::ResourceReference& reference)
 						{
 							const auto& path = reference.AssetPath.empty() ? reference.AssetKey : reference.AssetPath;
-							return Engine::ToLowerStr(Engine::WStrToStr(path)).find(".bammodel") != std::string::npos;
+							return Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path)).find(".bammodel") != std::string::npos;
 						};
 					std::stable_partition(rawState->Resources.begin(), rawState->Resources.end(),
 						[&isModel](const Engine::ResourceReference& reference) { return !isModel(reference); });
@@ -1817,7 +1817,7 @@ void ImGuiManager::UpdateSceneLoad()
 		else
 		{
 			NotificationManager::Get().AddNotification(LOCAL("EditorDocument.Title"),
-				LOCAL_FMT("EditorDocument.SceneOpened", WStrToStr(state.RequestedPath.wstring())), ELogLevel::Info);
+				LOCAL_FMT("EditorDocument.SceneOpened", Engine::Unicode::WideToUtf8(state.RequestedPath.wstring())), ELogLevel::Info);
 		}
 		m_SceneLoadState.reset();
 	}
@@ -2089,7 +2089,7 @@ void ImGuiManager::DrawMissingResourceRecoveryModal()
 			ImGui::AlignTextToFramePadding();
 			const std::string entityLabel = entry.EntityName.empty()
 				? fmt::format("#{}", entry.EntityPersistentId)
-				: fmt::format("{} (#{})", WStrToStr(entry.EntityName), entry.EntityPersistentId);
+				: fmt::format("{} (#{})", Engine::Unicode::WideToUtf8(entry.EntityName), entry.EntityPersistentId);
 			ImGui::TextUnformatted(entityLabel.c_str());
 
 			// 2. Component
@@ -2108,7 +2108,7 @@ void ImGuiManager::DrawMissingResourceRecoveryModal()
 
 			// 4. Missing Path
 			ImGui::TableNextColumn();
-			const std::string missingPath = WStrToStr(entry.AssetPath.empty() ? entry.AssetKey : entry.AssetPath);
+			const std::string missingPath = Engine::Unicode::WideToUtf8(entry.AssetPath.empty() ? entry.AssetKey : entry.AssetPath);
 			ImGui::PushStyleColor(ImGuiCol_Text, item.Resolved
 				? ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled)
 				: ImVec4(0.96f, 0.62f, 0.32f, 1.0f));
@@ -2298,7 +2298,7 @@ namespace
 
 		for (const auto& change : relocation.Changes())
 		{
-			const std::string virtualUri = WStrToStr(Engine::PlatformPath::ToVirtualUri(change.Before));
+			const std::string virtualUri = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(change.Before));
 			if (ContainsCaseInsensitive(json, virtualUri))
 				return true;
 			const std::string genericPath = change.Before.lexically_normal().generic_string();
@@ -2320,7 +2320,7 @@ bool ImGuiManager::PrepareAssetFileChanges(AssetPathRelocation& relocation, Asse
 	const auto documentName = [](const IEditorDocument& document)
 	{
 		const auto& path = document.GetPath();
-		return path.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(path.filename().wstring());
+		return path.empty() ? LOCAL("EditorDocument.Untitled") : Engine::Unicode::WideToUtf8(path.filename().wstring());
 	};
 
 	if (!PIEManager::Get().IsEditing())
@@ -2421,7 +2421,7 @@ void ImGuiManager::DrawResourceQuitConfirmation()
 		for (auto* editor : editors)
 		{
 			const auto& target = editor->GetTargetResource();
-			const auto targetName = target.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(target.filename().wstring());
+			const auto targetName = target.empty() ? LOCAL("EditorDocument.Untitled") : Engine::Unicode::WideToUtf8(target.filename().wstring());
 
 			ImGui::PushID(editor);
 			ImGui::TableNextRow();
@@ -2431,7 +2431,7 @@ void ImGuiManager::DrawResourceQuitConfirmation()
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(targetName.c_str());
 			if (!target.empty() && ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", WStrToStr(target.wstring()).c_str());
+				ImGui::SetTooltip("%s", Engine::Unicode::WideToUtf8(target.wstring()).c_str());
 			ImGui::TableNextColumn();
 			if (ImGui::SmallButton(LOCAL_CSTR("ResourceEditor.QuitShowEditor")))
 				showTarget = editor;
@@ -2513,7 +2513,7 @@ void ImGuiManager::DrawDocumentConfirmation()
 	}
 
 	const auto name = document->GetPath().empty()
-		? LOCAL("EditorDocument.Untitled") : WStrToStr(document->GetPath().wstring());
+		? LOCAL("EditorDocument.Untitled") : Engine::Unicode::WideToUtf8(document->GetPath().wstring());
 
 	ImGui::TextUnformatted(LOCAL_FMT("EditorDocument.UnsavedMessage", name).c_str());
 	ImGui::Spacing();

@@ -41,7 +41,7 @@ protected:
     bool PrepareTargetPathRelocation(AssetPathRelocation& relocation);
     virtual ImVec2 GetInitialResourceWindowSize() const { return {}; }
     virtual ImGuiWindowFlags GetResourceWindowFlags() const { return ImGuiWindowFlags_None; }
-    virtual string GetResourceWindowId() const { return WStrToStr(GetName()); }
+    virtual string GetResourceWindowId() const { return Engine::Unicode::WideToUtf8(GetName()); }
     virtual string BuildResourceWindowTitle() const;
     virtual void DrawCustomToolbar();
     virtual void DrawCustomQuickAccess() {}

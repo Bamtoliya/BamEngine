@@ -460,7 +460,7 @@ bool ThumbnailRenderer::SubmitPrefab(const std::filesystem::path& prefabPath)
 
 	RefreshStudioLights();
 
-	std::string ext = Engine::WStrToStr(prefabPath.extension().wstring());
+	std::string ext = Engine::Unicode::WideToUtf8(prefabPath.extension().wstring());
 	for (char& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
 	std::unique_ptr<archive::IArchive> ar;

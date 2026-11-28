@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Texture.h"
 #include "ResourceHandle.h"
@@ -70,6 +70,20 @@ public:
 	const ResourceHandle<Texture>& GetTextureHandle() const { return m_Texture; }
 	EResult SetTexture(ResourceHandle<Texture> texture);
 #pragma endregion
+
+#pragma region Dependencies
+public:
+	bool CollectResourceDependencies(vector<Handle>& out) const override
+	{
+		const Handle texture = m_Texture.GetRawHandle();
+
+		if (texture.IsValid())
+			out.push_back(texture);
+
+		return true;
+	}
+#pragma endregion
+
 
 #pragma region Member Variable
 private:

@@ -41,7 +41,7 @@ namespace
 
 	bool IsSpriteAsset(const std::filesystem::path& path)
 	{
-		const auto name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const auto name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".bamsprite") || name.ends_with(".bamsprite.json");
 	}
 
@@ -65,7 +65,7 @@ namespace
 				auto* sprite = spriteHandle.Get();
 				outTexture = sprite->GetTextureHandle();
 				SpriteSliceInfo info;
-				info.name = Engine::WStrToStr(path.stem().wstring());
+				info.name = Engine::Unicode::WideToUtf8(path.stem().wstring());
 				if (Engine::ToLowerStr(info.name).ends_with(".bamsprite"))
 					info.name = info.name.substr(0, info.name.size() - 10);
 				info.region = sprite->GetRegion();
@@ -93,7 +93,7 @@ namespace
 			return;
 
 		auto& rm = Engine::ResourceManager::Get();
-		const std::string filename = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string filename = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		auto* texture = textureHandle.Get();
 		auto* rhiTexture = texture->GetRHITexture();
 		const float texW = rhiTexture ? static_cast<float>(rhiTexture->GetWidth()) : 0.0f;
@@ -101,7 +101,7 @@ namespace
 
 		std::filesystem::path parentDir = path.parent_path();
 		const auto stem = filename.ends_with(".bamtex.json") ? path.stem().stem() : path.stem();
-		const std::string stemName = Engine::WStrToStr(stem.wstring());
+		const std::string stemName = Engine::Unicode::WideToUtf8(stem.wstring());
 
 		std::error_code ec;
 		if (std::filesystem::exists(parentDir, ec))
@@ -109,7 +109,7 @@ namespace
 			for (const auto& entry : std::filesystem::directory_iterator(parentDir, ec))
 			{
 				if (!entry.is_regular_file()) continue;
-				const auto entryName = Engine::WStrToStr(entry.path().filename().wstring());
+				const auto entryName = Engine::Unicode::WideToUtf8(entry.path().filename().wstring());
 				if (entryName.starts_with(stemName) &&
 					(entryName.ends_with(".bamsprite.json") || entry.path().extension() == ".bamsprite"))
 				{
@@ -130,7 +130,7 @@ namespace
 								Engine::PlatformPath::ResolveUri(path), compareError))
 							continue;
 						SpriteSliceInfo slice;
-						slice.name = Engine::WStrToStr(entry.path().stem().wstring());
+						slice.name = Engine::Unicode::WideToUtf8(entry.path().stem().wstring());
 						if (Engine::ToLowerStr(slice.name).ends_with(".bamsprite"))
 							slice.name = slice.name.substr(0, slice.name.size() - 10);
 						slice.region = sp->GetRegion();
@@ -146,7 +146,7 @@ namespace
 		if (slices.empty() && texW > 0.0f && texH > 0.0f)
 		{
 			SpriteSliceInfo defaultSlice;
-			defaultSlice.name = Engine::WStrToStr(path.stem().wstring()) + "_0";
+			defaultSlice.name = Engine::Unicode::WideToUtf8(path.stem().wstring()) + "_0";
 			defaultSlice.region = { 0.0f, 0.0f, texW, texH };
 			defaultSlice.pivot = { 0.5f, 0.5f };
 			defaultSlice.border = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -169,8 +169,8 @@ SpriteEditor::~SpriteEditor()
 
 bool SpriteEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring()));
-	const std::string lower = Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring()));
+	const auto ext = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.extension().wstring()));
+	const std::string lower = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.filename().wstring()));
 	return ext == ".bamsprite" || lower.ends_with(".bamsprite.json") ||
 		ext == ".bamtex" || lower.ends_with(".bamtex.json") ||
 		ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
@@ -213,7 +213,7 @@ void SpriteEditor::OpenInSpriteMode(const std::filesystem::path& path)
 void SpriteEditor::OpenTextureDialog()
 {
 	std::wstring selectedPath;
-	const std::vector<FileDialogFilter> filters{ { StrToWStr(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } };
+	const std::vector<FileDialogFilter> filters{ { Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.ImageFiles")), L"*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.dds;*.bamsprite;*.bamtex" } };
 	if (FileDialogs::OpenFileDialog(selectedPath, filters, L"", EFileDialogContext::SpriteOpen))
 	{
 		const std::filesystem::path targetPath(selectedPath);
@@ -260,7 +260,7 @@ void SpriteEditor::SetTargetResource(const std::filesystem::path& path)
 	if (!textureHandle.IsValid() || !textureHandle.Get() || !textureHandle.Get()->GetRHITexture())
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(),
-			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Error);
+			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Error);
 		return;
 	}
 
@@ -345,7 +345,7 @@ bool SpriteEditor::StepAsyncOpen(float maxTimeSeconds)
 		if (!textureHandle.IsValid() || !textureHandle.Get() || !textureHandle.Get()->GetRHITexture())
 		{
 			NotificationManager::Get().AddNotification(GetDisplayName(),
-				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
 			m_AsyncPendingTexture.Reset();
 			m_AsyncPendingSlices.clear();
 			m_AsyncTargetPath.clear();
@@ -394,7 +394,7 @@ bool SpriteEditor::StepAsyncOpen(float maxTimeSeconds)
 		const double totalMs = Milliseconds(scanEnd - m_AsyncStartTime).count();
 
 		EDITOR_LOG_INFO("[ResourceOpenTiming] Sprite {}: resource={:.2f}ms, slices={:.2f}ms, total={:.2f}ms (async)",
-			Engine::WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, scanMs, totalMs);
+			Engine::Unicode::WideToUtf8(targetPath.wstring()), m_AsyncLoadDurationMs, scanMs, totalMs);
 
 		m_AsyncProgress = 1.0f;
 		m_AsyncStage = EAsyncStage::None;
@@ -558,7 +558,7 @@ void SpriteEditor::DrawCustomQuickAccess()
 	EditorUI::IconButtonOptions copyOptions;
 	copyOptions.Enabled = !m_TargetResourcePath.empty();
 	if (toolbar.Icon("CopyResourcePath", ICON_FA_COPY, "EditorCommon.CopyPath", copyOptions))
-		ImGui::SetClipboardText(Engine::WStrToStr(m_TargetResourcePath.wstring()).c_str());
+		ImGui::SetClipboardText(Engine::Unicode::WideToUtf8(m_TargetResourcePath.wstring()).c_str());
 	DrawSaveButton(toolbar);
 	DrawHistoryButtons(toolbar, "SpriteEditor");
 
@@ -1123,7 +1123,7 @@ void SpriteEditor::ExecuteSlice(const SpriteSliceParameters& params)
 	const int texH = static_cast<int>(rhiTexture->GetHeight());
 	if (texW <= 0 || texH <= 0) return;
 
-	std::string baseName = Engine::WStrToStr(m_TargetResourcePath.stem().wstring());
+	std::string baseName = Engine::Unicode::WideToUtf8(m_TargetResourcePath.stem().wstring());
 	if (Engine::ToLowerStr(baseName).ends_with(".bamsprite"))
 		baseName = baseName.substr(0, baseName.size() - 10);
 
@@ -1162,7 +1162,7 @@ void SpriteEditor::ApplySlices()
 	if (SaveSlices())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.SpriteTitle"),
-			LOCAL_FMT("Notification.Saved", Engine::WStrToStr(m_TargetResourcePath.filename().wstring())), ELogLevel::Info);
+			LOCAL_FMT("Notification.Saved", Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring())), ELogLevel::Info);
 	}
 }
 
@@ -1171,12 +1171,12 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 	if (!CommitDocumentEdit()) return std::nullopt;
 	if (m_Slices.empty() || !m_TextureHandle.IsValid())
 	{
-		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
+		NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()));
 		return std::nullopt;
 	}
 	if (Engine::PlatformPath::IsReadOnlyTarget(m_TargetResourcePath))
 	{
-		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
+		NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()));
 		return std::nullopt;
 	}
 
@@ -1224,7 +1224,7 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 		}
 		if (Engine::PlatformPath::IsReadOnlyTarget(outPath))
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 			return std::nullopt;
 		}
 		if (std::filesystem::exists(outPath, error))
@@ -1239,18 +1239,18 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 				!std::filesystem::equivalent(Engine::PlatformPath::ResolveUri(referenced->GetPath()),
 					Engine::PlatformPath::ResolveUri(target->GetPath()), error) || error)
 			{
-				NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+				NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 				return std::nullopt;
 			}
 		}
 		if (error)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 			return std::nullopt;
 		}
 		if (!uniquePaths.insert(Engine::ToLowerWStr(outPath.lexically_normal().wstring())).second)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 			return std::nullopt;
 		}
 		outputPaths.push_back(outPath);
@@ -1275,7 +1275,7 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 		auto* sprite = Engine::Sprite::Create(&desc);
 		if (!sprite)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 			return std::nullopt;
 		}
 
@@ -1283,7 +1283,7 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 		rm.DestroyResource(sprite);
 		if (result != Engine::EResult::Success)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 			return std::nullopt;
 		}
 		// 이미 메모리에 로드된 Sprite 인스턴스가 있으면 잘린 영역(Region)/피벗/보더를 즉시 실시간 갱신
@@ -1317,7 +1317,7 @@ std::optional<std::vector<ResourceHandle<Engine::Sprite>>> SpriteEditor::SaveSli
 			handle = rm.LoadFile(desc.Path);
 			if (!dynamic_cast<Engine::Sprite*>(rm.GetResource(handle)))
 			{
-				NotifySpriteSaveFailure(Engine::WStrToStr(outPath.filename().wstring()));
+				NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(outPath.filename().wstring()));
 				return std::nullopt;
 			}
 		}
@@ -1333,7 +1333,7 @@ bool SpriteEditor::GenerateAnimation(const SpriteAutoAnimParameters& params)
 {
 	if (m_Slices.empty() || !m_TextureHandle.IsValid())
 	{
-		NotifySpriteSaveFailure(Engine::WStrToStr(m_TargetResourcePath.filename().wstring()));
+		NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()));
 		return false;
 	}
 
@@ -1382,7 +1382,7 @@ bool SpriteEditor::GenerateAnimation(const SpriteAutoAnimParameters& params)
 			return m_Slices[a.sliceIndices.front()].region.top < m_Slices[b.sliceIndices.front()].region.top;
 		});
 
-		const auto baseName = Engine::WStrToStr(m_TargetResourcePath.stem().wstring());
+		const auto baseName = Engine::Unicode::WideToUtf8(m_TargetResourcePath.stem().wstring());
 		for (size_t r = 0; r < clips.size(); ++r)
 		{
 			auto& clip = clips[r];
@@ -1408,7 +1408,7 @@ bool SpriteEditor::GenerateAnimation(const SpriteAutoAnimParameters& params)
 		if (Engine::PlatformPath::IsReadOnlyTarget(clip.path) ||
 			!uniquePaths.insert(Engine::ToLowerWStr(clip.path.wstring())).second)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(clip.path.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(clip.path.filename().wstring()));
 			return false;
 		}
 	}
@@ -1423,7 +1423,7 @@ bool SpriteEditor::GenerateAnimation(const SpriteAutoAnimParameters& params)
 		auto* anim = Engine::SpriteAnimation::Create();
 		if (!anim)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(clip.path.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(clip.path.filename().wstring()));
 			return false;
 		}
 
@@ -1436,7 +1436,7 @@ bool SpriteEditor::GenerateAnimation(const SpriteAutoAnimParameters& params)
 		rm.DestroyResource(anim);
 		if (!saved)
 		{
-			NotifySpriteSaveFailure(Engine::WStrToStr(clip.path.filename().wstring()));
+			NotifySpriteSaveFailure(Engine::Unicode::WideToUtf8(clip.path.filename().wstring()));
 			return false;
 		}
 	}

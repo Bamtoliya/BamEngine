@@ -87,7 +87,7 @@ void WorkspaceSettingsWidget::Draw(EditorSettingsService& settings)
                     for (auto current = states.begin(); current != states.end(); ++current)
                     {
                         const bool isSelected = (current->Name == m_SelectedViewportName);
-                        const auto label = current->DisplayName + "###ResolutionTarget." + WStrToStr(current->Name);
+                        const auto label = current->DisplayName + "###ResolutionTarget." + Engine::Unicode::WideToUtf8(current->Name);
                         if (ImGui::Selectable(label.c_str(), isSelected))
                         {
                             m_SelectedViewportName = current->Name;

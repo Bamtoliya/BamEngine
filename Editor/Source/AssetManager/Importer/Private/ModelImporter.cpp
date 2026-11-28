@@ -48,7 +48,7 @@ namespace Editor
 				if (ec)
 				{
 					BAM_LOG(Error, "Editor", "Asset", "Cannot resolve import output: path={}, error={}",
-						WStrToStr(absolutePath.wstring()), ec.message());
+						Engine::Unicode::WideToUtf8(absolutePath.wstring()), ec.message());
 					return EResult::Fail;
 				}
 
@@ -59,7 +59,7 @@ namespace Editor
 				std::lock_guard lock(s_Mutex);
 				if (!s_ActiveDirectories.insert(key).second)
 				{
-					BAM_LOG(Error, "Editor", "Asset", "Another model import is using output directory: {}", WStrToStr(key));
+					BAM_LOG(Error, "Editor", "Asset", "Another model import is using output directory: {}", Engine::Unicode::WideToUtf8(key));
 					return EResult::AlreadyInitialized;
 				}
 
@@ -258,7 +258,7 @@ namespace
 					continue;
 
 				auto& key = node.MeshAttachmentKeys[j];
-				key = StrToWStr(data.Meshes[meshIndex].Name);
+				key = Engine::Unicode::Utf8ToWide(data.Meshes[meshIndex].Name);
 				if (!key.empty())
 					++meshNameCounts[key];
 			}
@@ -300,14 +300,14 @@ namespace
 	{
 		if (!overwrite && manager.IsValid(manager.FindHandleByKey(key)))
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Import output resource already registered: {}", WStrToStr(key));
+			BAM_LOG(Error, "Editor", "Asset", "Import output resource already registered: {}", Engine::Unicode::WideToUtf8(key));
 			return EResult::AlreadyInitialized;
 		}
 		if (!saveToFile)
 			return EResult::Success;
 		if (Engine::PlatformPath::IsReadOnlyTarget(key))
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Import output target is read-only: {}", WStrToStr(key));
+			BAM_LOG(Error, "Editor", "Asset", "Import output target is read-only: {}", Engine::Unicode::WideToUtf8(key));
 			return EResult::AccessDenied;
 		}
 		std::error_code ec;
@@ -316,17 +316,17 @@ namespace
 		if (ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to inspect import output: path={}, error={}",
-				WStrToStr(key), ec.message());
+				Engine::Unicode::WideToUtf8(key), ec.message());
 			return EResult::Fail;
 		}
 		if (!overwrite && exists)
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Import output already exists: {}", WStrToStr(key));
+			BAM_LOG(Error, "Editor", "Asset", "Import output already exists: {}", Engine::Unicode::WideToUtf8(key));
 			return EResult::AlreadyInitialized;
 		}
 		if (exists && !filesystem::is_regular_file(targetPath, ec))
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Import output is not a regular file: {}", WStrToStr(targetPath.wstring()));
+			BAM_LOG(Error, "Editor", "Asset", "Import output is not a regular file: {}", Engine::Unicode::WideToUtf8(targetPath.wstring()));
 			return EResult::Fail;
 		}
 		return EResult::Success;
@@ -428,7 +428,7 @@ namespace
 		progressScope.BaseProgress = kModelPhaseEnd + sliceSpan * static_cast<float>(index);
 		progressScope.ProgressSpan = sliceSpan;
 		progressScope.DisplayName = (state.ModelDisplayName.empty()
-			? WStrToStr(request.SourcePath.filename().wstring()) : state.ModelDisplayName)
+			? Engine::Unicode::WideToUtf8(request.SourcePath.filename().wstring()) : state.ModelDisplayName)
 			+ " (" + std::to_string(index + 1) + "/" + std::to_string(total) + ")";
 
 		auto promise = std::make_shared<std::promise<EResult>>();
@@ -448,7 +448,7 @@ namespace
 						importResult = ImportTextureFallback(sourcePath, outputDir, options);
 					else if (result == AssetWorkerHost::TextureImportResult::Cancelled)
 						BAM_LOG(Info, "Editor", "Asset", "Model texture worker import cancelled: {}",
-							WStrToStr(sourcePath.wstring()));
+							Engine::Unicode::WideToUtf8(sourcePath.wstring()));
 					promise->set_value(importResult);
 				}
 				catch (...)
@@ -494,7 +494,7 @@ namespace
 		if (HasFlag(settings.ImportOptions, EModelImportOption::Animations))
 		{
 			for (uint32 animIdx = 0; animIdx < static_cast<uint32>(data.Animations.size()); ++animIdx)
-				MakeUniqueStem(sourceStem, StrToWStr(data.Animations[animIdx].Name), L"Anim", animIdx, nameCounts);
+				MakeUniqueStem(sourceStem, Engine::Unicode::Utf8ToWide(data.Animations[animIdx].Name), L"Anim", animIdx, nameCounts);
 		}
 
 		const auto materialDir = state.ModelDesc.UseMaterialSubfolder ? outputDir / L"Materials" : outputDir;
@@ -506,7 +506,7 @@ namespace
 		for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
 		{
 			const auto& srcMat = data.Materials[matIdx];
-			const wstring matStem = MakeUniqueStem(sourceStem, StrToWStr(srcMat.Name), L"Mat",
+			const wstring matStem = MakeUniqueStem(sourceStem, Engine::Unicode::Utf8ToWide(srcMat.Name), L"Mat",
 				static_cast<uint32>(matIdx), nameCounts);
 			const wstring matKey = NormalizePath((materialDir / (matStem + L".bammatinst")).wstring());
 			if (const EResult result = ValidateImportOutput(manager, matKey, settings.SaveToFile, settings.Overwrite);
@@ -525,7 +525,7 @@ namespace
 					hasExistingMaterial = filesystem::exists(Engine::PlatformPath::ResolveUri(matKey), ec);
 					if (ec)
 					{
-						BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", WStrToStr(matKey), ec.message());
+						BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", Engine::Unicode::WideToUtf8(matKey), ec.message());
 						return EResult::Fail;
 					}
 				}
@@ -559,7 +559,7 @@ namespace
 					if (saveResult != EResult::Success)
 					{
 						BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
-							WStrToStr(sourcePath.wstring()), ResultToString(saveResult));
+							Engine::Unicode::WideToUtf8(sourcePath.wstring()), ResultToString(saveResult));
 						return saveResult;
 					}
 					state.EmbeddedTextureFilesWritten[sourcePath.wstring()] = shouldWrite;
@@ -582,7 +582,7 @@ namespace
 				if (ec)
 				{
 					BAM_LOG(Error, "Editor", "Asset", "Failed to inspect baked texture: path={}, error={}",
-						WStrToStr(bamtexPath.wstring()), ec.message());
+						Engine::Unicode::WideToUtf8(bamtexPath.wstring()), ec.message());
 					return EResult::Fail;
 				}
 				if (bakedExists && !settings.Overwrite)
@@ -592,7 +592,7 @@ namespace
 				if (ec)
 				{
 					BAM_LOG(Error, "Editor", "Asset", "Failed to create texture output directory: path={}, error={}",
-						WStrToStr(resolvedTextureDir.wstring()), ec.message());
+						Engine::Unicode::WideToUtf8(resolvedTextureDir.wstring()), ec.message());
 					return EResult::Fail;
 				}
 
@@ -633,12 +633,12 @@ namespace
 		catch (const std::exception& exception)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Model texture bake failed: path={}, error={}",
-				WStrToStr(bake.BamtexPath.wstring()), exception.what());
+				Engine::Unicode::WideToUtf8(bake.BamtexPath.wstring()), exception.what());
 		}
 		catch (...)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Model texture bake failed: path={}",
-				WStrToStr(bake.BamtexPath.wstring()));
+				Engine::Unicode::WideToUtf8(bake.BamtexPath.wstring()));
 		}
 
 		const bool succeeded = result == EResult::Success;
@@ -646,7 +646,7 @@ namespace
 		if (!succeeded)
 		{
 			BAM_LOG(Warn, "Editor", "Asset", "Model texture bake failed; using source texture: {}",
-				WStrToStr(bake.BamtexPath.wstring()));
+				Engine::Unicode::WideToUtf8(bake.BamtexPath.wstring()));
 		}
 
 		state.ActiveTextureBake.reset();
@@ -718,9 +718,9 @@ namespace
 
 			if (ec)
 			{
-				const auto backupPath = saved.Backup ? WStrToStr(saved.Backup->File.wstring()) : std::string{};
+				const auto backupPath = saved.Backup ? Engine::Unicode::WideToUtf8(saved.Backup->File.wstring()) : std::string{};
 				BAM_LOG(Error, "Editor", "Asset", "Mesh rollback failed: path={}, backup={}, error={}",
-					WStrToStr(saved.PublishedPath.wstring()), backupPath, ec.message());
+					Engine::Unicode::WideToUtf8(saved.PublishedPath.wstring()), backupPath, ec.message());
 			}
 			else if (HotReloadManager::IsCreated())
 			{
@@ -746,7 +746,7 @@ namespace
 			if (!result)
 			{
 				BAM_LOG(Error, "Editor", "Asset", "Mesh memory rollback failed: key={}, code={}, field={}",
-					WStrToStr(mesh->GetKey()), static_cast<int>(result.Code), result.Field);
+					Engine::Unicode::WideToUtf8(mesh->GetKey()), static_cast<int>(result.Code), result.Field);
 				continue;
 			}
 
@@ -770,7 +770,7 @@ namespace
 		if (!result)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "In-memory reimport failed: key={}, code={}, field={}",
-				WStrToStr(imported.GetKey()), static_cast<int>(result.Code), result.Field);
+				Engine::Unicode::WideToUtf8(imported.GetKey()), static_cast<int>(result.Code), result.Field);
 			return EResult::Fail;
 		}
 
@@ -788,7 +788,7 @@ namespace
 		if (!filesystem::is_regular_file(resolvedSource, ec) || ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Source model file not found for copy: {}",
-				WStrToStr(resolvedSource.wstring()));
+				Engine::Unicode::WideToUtf8(resolvedSource.wstring()));
 			return EResult::Fail;
 		}
 
@@ -801,7 +801,7 @@ namespace
 		else if (ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to inspect source copy destination: path={}, error={}",
-				WStrToStr(destPath.wstring()), ec.message());
+				Engine::Unicode::WideToUtf8(destPath.wstring()), ec.message());
 			return EResult::Fail;
 		}
 
@@ -809,7 +809,7 @@ namespace
 		if (ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to create Source directory: path={}, error={}",
-				WStrToStr(destPath.parent_path().wstring()), ec.message());
+				Engine::Unicode::WideToUtf8(destPath.parent_path().wstring()), ec.message());
 			return EResult::Fail;
 		}
 
@@ -817,7 +817,7 @@ namespace
 		if (ec)
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to copy source model to Source/: src={}, dst={}, error={}",
-				WStrToStr(resolvedSource.wstring()), WStrToStr(destPath.wstring()), ec.message());
+				Engine::Unicode::WideToUtf8(resolvedSource.wstring()), Engine::Unicode::WideToUtf8(destPath.wstring()), ec.message());
 			return EResult::Fail;
 		}
 
@@ -890,7 +890,7 @@ namespace
 				if (!snapshotResult)
 				{
 					BAM_LOG(Error, "Editor", "Asset", "Failed to snapshot mesh: key={}, code={}, field={}",
-						WStrToStr(mesh.Key), static_cast<int>(snapshotResult.Code), snapshotResult.Field);
+						Engine::Unicode::WideToUtf8(mesh.Key), static_cast<int>(snapshotResult.Code), snapshotResult.Field);
 					return EResult::Fail;
 				}
 
@@ -951,7 +951,7 @@ namespace
 			SkeletonOwner skeleton(Skeleton::Create(&skelDesc));
 			if (!skeleton)
 			{
-				BAM_LOG(Error, "Editor", "Asset", "Skeleton creation failed: {}", WStrToStr(skelKey));
+				BAM_LOG(Error, "Editor", "Asset", "Skeleton creation failed: {}", Engine::Unicode::WideToUtf8(skelKey));
 				return EResult::Fail;
 			}
 
@@ -992,7 +992,7 @@ namespace
 			for (uint32 animIdx = 0; animIdx < static_cast<uint32>(data.Animations.size()); ++animIdx)
 			{
 				const auto& srcAnim = data.Animations[animIdx];
-				const wstring rawAnimName = StrToWStr(srcAnim.Name);
+				const wstring rawAnimName = Engine::Unicode::Utf8ToWide(srcAnim.Name);
 				const wstring animStem = MakeUniqueStem(sourceStem, rawAnimName, L"Anim", animIdx, state.NameCounts);
 				const wstring animKey = NormalizePath((animationDir / (animStem + L".bamanim")).wstring());
 
@@ -1013,7 +1013,7 @@ namespace
 				for (const auto& srcTrack : srcAnim.Tracks)
 				{
 					AnimationTrack track;
-					track.TargetBoneName = StrToWStr(srcTrack.BoneName);
+					track.TargetBoneName = Engine::Unicode::Utf8ToWide(srcTrack.BoneName);
 
 					track.PositionKeyframes.reserve(srcTrack.PositionKeys.size());
 					for (const auto& pk : srcTrack.PositionKeys)
@@ -1048,7 +1048,7 @@ namespace
 				AnimationOwner animation(Animation::Create(&animDesc));
 				if (!animation)
 				{
-					BAM_LOG(Error, "Editor", "Asset", "Animation creation failed: {}", WStrToStr(animKey));
+					BAM_LOG(Error, "Editor", "Asset", "Animation creation failed: {}", Engine::Unicode::WideToUtf8(animKey));
 					return EResult::Fail;
 				}
 
@@ -1155,7 +1155,7 @@ namespace
 							if (result != EResult::Success)
 							{
 								BAM_LOG(Error, "Editor", "Asset", "Embedded texture save failed: path={}, result={}",
-									WStrToStr(texFilePath.wstring()), ResultToString(result));
+									Engine::Unicode::WideToUtf8(texFilePath.wstring()), ResultToString(result));
 								return result;
 							}
 							wroteEmbeddedFile = shouldWrite;
@@ -1186,7 +1186,7 @@ namespace
 							if (checkEc)
 							{
 								BAM_LOG(Error, "Editor", "Asset", "Failed to inspect baked texture: path={}, error={}",
-									WStrToStr(bakedBamtexPath.wstring()), checkEc.message());
+									Engine::Unicode::WideToUtf8(bakedBamtexPath.wstring()), checkEc.message());
 								return EResult::Fail;
 							}
 							const bool needBake = !bakedExists || settings.Overwrite;
@@ -1197,7 +1197,7 @@ namespace
 								if (result == state.TextureBakeResults.end())
 								{
 									BAM_LOG(Error, "Editor", "Asset", "Missing model texture bake result: {}",
-										WStrToStr(bakedBamtexPath.wstring()));
+										Engine::Unicode::WideToUtf8(bakedBamtexPath.wstring()));
 									return EResult::Fail;
 								}
 								if (result->second)
@@ -1205,7 +1205,7 @@ namespace
 									if (!filesystem::exists(bakedBamtexPath, checkEc) || checkEc)
 									{
 										BAM_LOG(Error, "Editor", "Asset", "Baked texture output is missing: path={}, error={}",
-											WStrToStr(bakedBamtexPath.wstring()), checkEc.message());
+											Engine::Unicode::WideToUtf8(bakedBamtexPath.wstring()), checkEc.message());
 										return EResult::Fail;
 									}
 
@@ -1236,7 +1236,7 @@ namespace
 						if (result != EResult::Success)
 						{
 							BAM_LOG(Error, "Editor", "Asset", "Embedded texture reload failed: path={}, result={}",
-								WStrToStr(texFilePath.wstring()), ResultToString(result));
+								Engine::Unicode::WideToUtf8(texFilePath.wstring()), ResultToString(result));
 							return result;
 						}
 					}
@@ -1252,7 +1252,7 @@ namespace
 			for (size_t matIdx = 0; matIdx < data.Materials.size(); ++matIdx)
 			{
 				const auto& srcMat = data.Materials[matIdx];
-				const wstring rawMatName = StrToWStr(srcMat.Name);
+				const wstring rawMatName = Engine::Unicode::Utf8ToWide(srcMat.Name);
 				const wstring matStem = MakeUniqueStem(sourceStem, rawMatName, L"Mat", static_cast<uint32>(matIdx), state.NameCounts);
 				const wstring matKey = NormalizePath((materialDir / (matStem + L".bammatinst")).wstring());
 
@@ -1273,7 +1273,7 @@ namespace
 						hasExistingMaterial = filesystem::exists(path, ec);
 						if (ec)
 						{
-							BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", WStrToStr(matKey), ec.message());
+							BAM_LOG(Error, "Editor", "Asset", "Failed to inspect material: {}, {}", Engine::Unicode::WideToUtf8(matKey), ec.message());
 							return EResult::Fail;
 						}
 
@@ -1285,7 +1285,7 @@ namespace
 					{
 						if (!dynamic_cast<MaterialInstance*>(manager.GetResource(existingMatHandle)))
 						{
-							BAM_LOG(Error, "Editor", "Asset", "Failed to reuse existing material: {}", WStrToStr(matKey));
+							BAM_LOG(Error, "Editor", "Asset", "Failed to reuse existing material: {}", Engine::Unicode::WideToUtf8(matKey));
 							return EResult::Fail;
 						}
 
@@ -1304,7 +1304,7 @@ namespace
 				MaterialInstanceOwner matInst(MaterialInstance::Create(&matDesc));
 				if (!matInst)
 				{
-					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance creation failed: {}", WStrToStr(matKey));
+					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance creation failed: {}", Engine::Unicode::WideToUtf8(matKey));
 					return EResult::Fail;
 				}
 
@@ -1326,7 +1326,7 @@ namespace
 					const EResult saveResult = manager.SaveToBinaryFile(matInst.get(), matKey);
 					if (saveResult != EResult::Success)
 					{
-						BAM_LOG(Error, "Editor", "Asset", "MaterialInstance save failed: path={}, result={}", WStrToStr(matKey), static_cast<int>(saveResult));
+						BAM_LOG(Error, "Editor", "Asset", "MaterialInstance save failed: path={}, result={}", Engine::Unicode::WideToUtf8(matKey), static_cast<int>(saveResult));
 						return saveResult;
 					}
 				}
@@ -1346,7 +1346,7 @@ namespace
 				auto matHandle = manager.AddResource<MaterialInstance>(matKey, matInst.release());
 				if (!matHandle.IsValid() || matHandle.Get() != instPtr)
 				{
-					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance registration failed: {}", WStrToStr(matKey));
+					BAM_LOG(Error, "Editor", "Asset", "MaterialInstance registration failed: {}", Engine::Unicode::WideToUtf8(matKey));
 					return EResult::Fail;
 				}
 
@@ -1368,7 +1368,7 @@ namespace
 		ModelOwner model(Model::Create(&modelDesc));
 		if (!model)
 		{
-			BAM_LOG(Error, "Editor", "Asset", "Model creation failed: {}", WStrToStr(modelKey));
+			BAM_LOG(Error, "Editor", "Asset", "Model creation failed: {}", Engine::Unicode::WideToUtf8(modelKey));
 			return EResult::Fail;
 		}
 
@@ -1416,7 +1416,7 @@ namespace
 
 		BAM_LOG(Info, "Editor", "Asset", "Model import finished: meshes={}, nodes={}, has_skeleton={}, animations={}, key={}",
 			modelDesc.Meshes.size(), modelDesc.Nodes.size(), modelDesc.Skeleton.IsValid(),
-			modelDesc.Animations.size(), WStrToStr(modelKey));
+			modelDesc.Animations.size(), Engine::Unicode::WideToUtf8(modelKey));
 
 		return EResult::Success;
 	}
@@ -1427,7 +1427,7 @@ namespace
 			return EResult::Success;
 
 		BAM_LOG(Error, "Editor", "Asset", "Model mesh save failed: code={}, field={}, path={}",
-			static_cast<int>(result.Code), result.Field, WStrToStr(path));
+			static_cast<int>(result.Code), result.Field, Engine::Unicode::WideToUtf8(path));
 
 		return result.Code == archive::ArchiveErrorCode::UnsupportedType ?
 			EResult::NotImplemented : EResult::Fail;
@@ -1609,7 +1609,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			task.m_FinalizeState = std::make_shared<ModelFinalizeState>();
 			auto& state = *task.m_FinalizeState;
 			state.Settings = request.Settings;
-			state.ModelDisplayName = WStrToStr(data.SourcePath.filename().wstring());
+			state.ModelDisplayName = Engine::Unicode::WideToUtf8(data.SourcePath.filename().wstring());
 
 			// Phase 6: 하이브리드 모델 에셋 서브폴더 레이아웃 계산
 			state.Layout = Engine::ModelSubfolderHelper::ResolveLayout(
@@ -1692,7 +1692,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				const auto* existingModel = dynamic_cast<Model*>(manager.GetResource(modelHandle));
 				if (!existingModel)
 				{
-					BAM_LOG(Error, "Editor", "Asset", "Failed to read existing model layout: {}", WStrToStr(desc.Key));
+					BAM_LOG(Error, "Editor", "Asset", "Failed to read existing model layout: {}", Engine::Unicode::WideToUtf8(desc.Key));
 					return finish(EResult::Fail);
 				}
 
@@ -1718,7 +1718,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 
 				if (!dynamic_cast<Material*>(manager.GetResource(handle)))
 				{
-					BAM_LOG(Error, "Editor", "Asset", "Required base material unavailable: {}", WStrToStr(baseMatPath));
+					BAM_LOG(Error, "Editor", "Asset", "Required base material unavailable: {}", Engine::Unicode::WideToUtf8(baseMatPath));
 					return finish(EResult::Fail);
 				}
 
@@ -1737,7 +1737,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			for (const auto& source : data.Nodes)
 			{
 				ModelNode node;
-				node.Name = StrToWStr(source.Name);
+				node.Name = Engine::Unicode::Utf8ToWide(source.Name);
 				node.ParentIndex = source.ParentIndex;
 				node.MeshIndices.assign(source.MeshIndices.begin(), source.MeshIndices.end());
 				node.LocalTransform = ArrayToGlmMat4(source.LocalTransform);
@@ -1752,7 +1752,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 				for (const auto& srcBone : data.Bones)
 				{
 					Bone bone;
-					bone.Name = StrToWStr(srcBone.Name);
+					bone.Name = Engine::Unicode::Utf8ToWide(srcBone.Name);
 					bone.ParentIndex = srcBone.ParentIndex;
 					bone.OffsetMatrix = ArrayToGlmMat4(srcBone.OffsetMatrix);
 					bone.LocalTransform = ArrayToGlmMat4(srcBone.LocalTransform);
@@ -1793,7 +1793,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			}
 
 			const wstring stem = MakeUniqueStem(data.SourcePath.stem().wstring(),
-				StrToWStr(source.Name), L"Mesh", static_cast<uint32>(state->NextMesh), state->NameCounts);
+				Engine::Unicode::Utf8ToWide(source.Name), L"Mesh", static_cast<uint32>(state->NextMesh), state->NameCounts);
 			const wstring key = NormalizePath((state->MeshDirectory / (stem + L".bammesh")).wstring());
 
 			if (const EResult result = ValidateImportOutput(manager, key, state->Settings.SaveToFile, state->Settings.Overwrite);
@@ -1835,7 +1835,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 
 			BAM_LOG(Info, "Editor", "Asset",
 				"Model mesh create timing: key={}, vertices={}, indices={}, skinned={}, input_bytes={}, create_ms={:.3f}, success={}",
-				WStrToStr(key), vertexCount, indexCount, hasSkinWeights, vertexBytes + indexBytes, createMs, static_cast<bool>(mesh));
+				Engine::Unicode::WideToUtf8(key), vertexCount, indexCount, hasSkinWeights, vertexBytes + indexBytes, createMs, static_cast<bool>(mesh));
 
 			if (!mesh)
 				return finish(EResult::Fail);
@@ -1980,7 +1980,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (!BackupMeshOutput(saved, ec))
 			{
 				BAM_LOG(Error, "Editor", "Asset", "Failed to back up mesh: path={}, error={}",
-					WStrToStr(meshPath.wstring()), ec.message());
+					Engine::Unicode::WideToUtf8(meshPath.wstring()), ec.message());
 				return finish(EResult::Fail);
 			}
 			filesystem::rename(saved.File->Path, meshPath, ec);
@@ -1988,7 +1988,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			if (ec)
 			{
 				BAM_LOG(Error, "Editor", "Asset",
-					"Failed to publish imported mesh: path={}, error={}", WStrToStr(mesh.Key), ec.message());
+					"Failed to publish imported mesh: path={}, error={}", Engine::Unicode::WideToUtf8(mesh.Key), ec.message());
 				return finish(EResult::Fail);
 			}
 
@@ -2004,7 +2004,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 			BAM_LOG(Info, "Editor", "Asset",
 				"Model mesh save timing: path={}, bytes={}, snapshot_ms={:.3f}, worker_ms={:.3f}, "
 				"write_ms={:.3f}, release_ms={:.3f}, publish_ms={:.3f}",
-				WStrToStr(mesh.Key), saved.ByteCount, saved.SnapshotMs, saved.WorkerMs,
+				Engine::Unicode::WideToUtf8(mesh.Key), saved.ByteCount, saved.SnapshotMs, saved.WorkerMs,
 				saved.WriteMs, saved.ReleaseMs, publishMs);
 
 			return std::nullopt;
@@ -2031,7 +2031,7 @@ std::optional<EResult> ModelImporter::FinalizeOneStep(ModelImportTask& task)
 
 		BAM_LOG(Info, "Editor", "Asset",
 			"Model commit timing: key={}, meshes={}, nodes={}, commit_ms={:.3f}, result={}",
-			WStrToStr(state->ModelDesc.Key), state->Meshes.size(), state->ModelDesc.Nodes.size(),
+			Engine::Unicode::WideToUtf8(state->ModelDesc.Key), state->Meshes.size(), state->ModelDesc.Nodes.size(),
 			commitMs, static_cast<int>(commitResult));
 
 		return finish(commitResult);
@@ -2160,7 +2160,7 @@ EResult ModelImporter::CreateJob(const filesystem::path& sourcePath, const files
 	{
 		BAM_LOG(Error, "Editor", "Asset",
 			"Model import blocked: destination directory is read-only ({}). Import to Project Assets/ instead.",
-			Engine::WStrToStr(outputDirectory.wstring()));
+			Engine::Unicode::WideToUtf8(outputDirectory.wstring()));
 		return EResult::AccessDenied;
 	}
 

@@ -1,4 +1,4 @@
-#include "TextureEditor.h"
+﻿#include "TextureEditor.h"
 #include "AsyncResourceOpenService.h"
 #include "SpriteEditor.h"
 #include "ResourceEditorPath.h"
@@ -23,7 +23,7 @@ namespace
 {
 	bool IsTextureEditorConversionSource(const std::filesystem::path& path)
 	{
-		const auto ext = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+		const auto ext = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.extension().wstring()));
 		return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga";
 	}
 
@@ -58,7 +58,7 @@ namespace
 		if (!MoveFileExW(staged.Path.c_str(), outputPath.c_str(), MOVEFILE_WRITE_THROUGH))
 		{
 			BAM_LOG(Error, "Editor", "Asset", "Failed to create converted sprite: {}, error={}",
-				Engine::WStrToStr(outputPath.wstring()), GetLastError());
+				Engine::Unicode::WideToUtf8(outputPath.wstring()), GetLastError());
 			return false;
 		}
 		if (AssetCache::IsCreated()) AssetCache::Get().RequestInvalidate(outputPath);
@@ -68,10 +68,10 @@ namespace
 
 bool TextureEditor::IsSupported(const std::filesystem::path& path) const
 {
-	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+	const auto ext = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.extension().wstring()));
 	return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga" ||
 		ext == ".dds" || ext == ".hdr" || ext == ".bamtex" ||
-		Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring())).ends_with(".bamtex.json");
+		Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring())).ends_with(".bamtex.json");
 }
 
 bool TextureEditor::IsConversionOutput(const std::filesystem::path& path) const
@@ -143,7 +143,7 @@ void TextureEditor::SetTargetResource(const std::filesystem::path& path)
 	if (!handle.IsValid() || !handle.Get() || !handle.Get()->GetRHITexture())
 	{
 		NotificationManager::Get().AddNotification(GetDisplayName(),
-			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Error);
+			LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Error);
 		return;
 	}
 	ApplyLoadedTexture(path, std::move(handle));
@@ -198,7 +198,7 @@ bool TextureEditor::StepAsyncOpen(float maxTimeSeconds)
 		if (!handle.IsValid() || !handle.Get() || !handle.Get()->GetRHITexture())
 		{
 			NotificationManager::Get().AddNotification(GetDisplayName(),
-				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::WStrToStr(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
+				LOCAL_FMT("Notification.ResourceLoadFailed", Engine::Unicode::WideToUtf8(m_AsyncTargetPath.filename().wstring())), ELogLevel::Error);
 			m_AsyncPendingTexture.Reset();
 			m_AsyncTargetPath.clear();
 			m_AsyncProgress = 0.0f;
@@ -223,7 +223,7 @@ bool TextureEditor::StepAsyncOpen(float maxTimeSeconds)
 		const double totalMs = Milliseconds(Clock::now() - m_AsyncStartTime).count();
 
 		EDITOR_LOG_INFO("[ResourceOpenTiming] Texture {}: resource={:.2f}ms, total={:.2f}ms (async)",
-			Engine::WStrToStr(targetPath.wstring()), m_AsyncLoadDurationMs, totalMs);
+			Engine::Unicode::WideToUtf8(targetPath.wstring()), m_AsyncLoadDurationMs, totalMs);
 
 		m_AsyncProgress = 1.0f;
 		m_AsyncStage = EAsyncStage::None;
@@ -254,7 +254,7 @@ void TextureEditor::DrawCustomQuickAccess()
 	EditorUI::IconButtonOptions copyOptions;
 	copyOptions.Enabled = !m_TargetResourcePath.empty() && !IsAsyncLoading();
 	if (toolbar.Icon("CopyResourcePath", ICON_FA_COPY, "EditorCommon.CopyPath", copyOptions))
-		ImGui::SetClipboardText(Engine::WStrToStr(m_TargetResourcePath.wstring()).c_str());
+		ImGui::SetClipboardText(Engine::Unicode::WideToUtf8(m_TargetResourcePath.wstring()).c_str());
 	ImGui::BeginDisabled(IsAsyncLoading() || !m_TextureHandle.Get() || IsConversionOutput(m_TargetResourcePath));
 	if (toolbar.Button("TextureEditor.OpenSpriteEditor", ICON_FA_CROP_SIMPLE, "TextureEditor.OpenSpriteEditor"))
 	{
@@ -310,7 +310,7 @@ void TextureEditor::DrawCustomContent()
 	if (EditorUI::BeginPropertyTable("TextureInformation", EditorUI::InspectorPropertyTableStyle()))
 	{
 		EditorUI::PropertyRow("EditorCommon.Path");
-		const auto pathText = Engine::WStrToStr(m_TargetResourcePath.wstring());
+		const auto pathText = Engine::Unicode::WideToUtf8(m_TargetResourcePath.wstring());
 		const bool clipped = ImGui::CalcTextSize(pathText.c_str()).x > ImGui::GetContentRegionAvail().x;
 		ImGui::TextUnformatted(pathText.c_str());
 		if (clipped && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", pathText.c_str());
@@ -388,7 +388,7 @@ void TextureEditor::DrawTextureConversion()
 		EditorUI::EndPropertyTable();
 	}
 	if (m_AutoCreateSprite) ImGui::TextWrapped("%s", LOCAL_CSTR("TextureEditor.SpriteNoOverwrite"));
-	if (Engine::ToLowerStr(Engine::WStrToStr(m_TargetResourcePath.extension().wstring())) == ".tga")
+	if (Engine::ToLowerStr(Engine::Unicode::WideToUtf8(m_TargetResourcePath.extension().wstring())) == ".tga")
 		ImGui::TextWrapped("%s", LOCAL_CSTR("TextureEditor.TgaCodecRequired"));
 	if (ImGui::Button(LOCAL_LABEL("TextureEditor.Convert").c_str()))
 	{
@@ -416,13 +416,13 @@ void TextureEditor::DrawTextureConversionConfirmation()
 		bamtex.replace_extension(".bamtex");
 		dds.replace_extension(".dds");
 		ImGui::TextWrapped("%s", LOCAL_CSTR("TextureEditor.ConversionConfirmMessage"));
-		ImGui::TextUnformatted(Engine::WStrToStr(bamtex.wstring()).c_str());
-		ImGui::TextUnformatted(Engine::WStrToStr(dds.wstring()).c_str());
+		ImGui::TextUnformatted(Engine::Unicode::WideToUtf8(bamtex.wstring()).c_str());
+		ImGui::TextUnformatted(Engine::Unicode::WideToUtf8(dds.wstring()).c_str());
 		if (m_AutoCreateSprite)
 		{
 			auto sprite = m_PendingSource;
 			sprite.replace_extension(".bamsprite");
-			ImGui::TextUnformatted(Engine::WStrToStr(sprite.wstring()).c_str());
+			ImGui::TextUnformatted(Engine::Unicode::WideToUtf8(sprite.wstring()).c_str());
 			ImGui::TextWrapped("%s", LOCAL_CSTR("TextureEditor.SpriteNoOverwrite"));
 		}
 		const EditorUI::DialogAction actions[] = { { "EditorCommon.Cancel" }, { "TextureEditor.Convert", true, true } };
@@ -503,7 +503,7 @@ void TextureEditor::StartTextureConversion()
 				if (output && !IsSuccess(texture->Reload(*output)))
 				{
 					reloadFailed = true;
-					BAM_LOG(Error, "Editor", "Asset", "Failed to reload converted texture: {}", Engine::WStrToStr(output->wstring()));
+					BAM_LOG(Error, "Editor", "Asset", "Failed to reload converted texture: {}", Engine::Unicode::WideToUtf8(output->wstring()));
 				}
 			}
 		}
@@ -512,8 +512,8 @@ void TextureEditor::StartTextureConversion()
 		if (NotificationManager::IsCreated())
 		{
 			NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.TextureTitle"),
-				result == EResult::Success ? LOCAL_FMT("TextureEditor.ConversionSucceeded", Engine::WStrToStr(source.filename().wstring()))
-					: LOCAL_FMT("TextureEditor.ConversionFailed", Engine::WStrToStr(source.filename().wstring())),
+				result == EResult::Success ? LOCAL_FMT("TextureEditor.ConversionSucceeded", Engine::Unicode::WideToUtf8(source.filename().wstring()))
+					: LOCAL_FMT("TextureEditor.ConversionFailed", Engine::Unicode::WideToUtf8(source.filename().wstring())),
 				result == EResult::Success ? ELogLevel::Info : ELogLevel::Error);
 			if (reloadFailed) NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.TextureTitle"),
 				LOCAL("TextureEditor.ConversionReloadFailed"), ELogLevel::Warn);
@@ -521,7 +521,7 @@ void TextureEditor::StartTextureConversion()
 				LOCAL("TextureEditor.SpriteGenerationFailed"), ELogLevel::Error);
 			else if (result == EResult::Success && createSprite)
 				NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.TextureTitle"),
-					LOCAL_FMT("TextureEditor.SpriteGenerationSucceeded", Engine::WStrToStr(sprite.filename().wstring())), ELogLevel::Info);
+					LOCAL_FMT("TextureEditor.SpriteGenerationSucceeded", Engine::Unicode::WideToUtf8(sprite.filename().wstring())), ELogLevel::Info);
 		}
 	});
 }

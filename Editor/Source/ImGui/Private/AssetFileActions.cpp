@@ -61,7 +61,7 @@ namespace Editor::AssetFileActions
         if (!std::filesystem::is_regular_file(path, error))
         {
             NotificationManager::Get().AddNotification(LOCAL("EditorCommon.Open"),
-                LOCAL_FMT("Notification.OpenAssetMissing", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Warn);
+                LOCAL_FMT("Notification.OpenAssetMissing", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Warn);
             return;
         }
 
@@ -84,7 +84,7 @@ namespace Editor::AssetFileActions
         if (reinterpret_cast<INT_PTR>(result) <= 32)
         {
             NotificationManager::Get().AddNotification(LOCAL("EditorCommon.Open"),
-                LOCAL_FMT("Notification.OpenExternalFailed", Engine::WStrToStr(path.filename().wstring())), ELogLevel::Warn);
+                LOCAL_FMT("Notification.OpenExternalFailed", Engine::Unicode::WideToUtf8(path.filename().wstring())), ELogLevel::Warn);
         }
     }
 

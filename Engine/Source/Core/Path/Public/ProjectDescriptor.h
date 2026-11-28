@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 #include <filesystem>
@@ -22,6 +22,19 @@ namespace Engine
     {
         std::string Name;
         std::string Type = "Runtime";
+    };
+
+    enum class EProjectModuleRole : uint8_t
+    {
+        Editor,
+        Client,
+        Shipping
+    };
+
+    struct ProjectModuleBuildVariant
+    {
+        EProjectModuleRole Role = EProjectModuleRole::Client;
+        bool Debug = false;
     };
 
     struct ResolvedProjectModule
@@ -60,6 +73,7 @@ namespace Engine
 
         // Modules의 소스/빌드/바이너리 물리 경로를 프로젝트 루트 기준으로 해석
         ENGINE_API std::vector<ResolvedProjectModule> ResolveModules(const std::filesystem::path& projectRoot) const;
+        ENGINE_API std::vector<ResolvedProjectModule> ResolveModules(const std::filesystem::path& projectRoot, ProjectModuleBuildVariant variant) const;
         ENGINE_API std::optional<ResolvedProjectModule> ResolvePrimaryRuntimeModule(const std::filesystem::path& projectRoot) const;
 
         // .bamproject JSON 로드 / 저장 (Glaze 기반)

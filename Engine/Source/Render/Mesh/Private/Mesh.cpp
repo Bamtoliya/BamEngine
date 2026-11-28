@@ -546,8 +546,11 @@ archive::ArchiveResult Mesh::ReadArchive(const archive::IArchive& ar)
 	using std::swap;
 	swap(m_Version, candidate.m_Version);
 	swap(m_ResourceType, candidate.m_ResourceType);
-	swap(m_Key, candidate.m_Key);
-	swap(m_Path, candidate.m_Path);
+	if (!IsManagerOwned())
+	{
+		swap(m_Key, candidate.m_Key);
+		swap(m_Path, candidate.m_Path);
+	}
 	SwapContents(candidate);
 	MarkResident();
 	return {};

@@ -94,7 +94,7 @@ namespace
 			return result;
 		}
 
-		const std::wstring boneNameW = StrToWStr(boneName);
+		const std::wstring boneNameW = Engine::Unicode::Utf8ToWide(boneName);
 		const auto& boneMap = skeleton->GetBoneMap();
 		const auto& bones = skeleton->GetBones();
 		auto it = boneMap.find(boneNameW);
@@ -148,7 +148,7 @@ namespace
 	ResourceHandle<Animation> ResolveTimelineClip(const entt::registry& world, entt::entity animatorEntity, const ActionTimelineAsset& asset)
 	{
 		if (asset.GetClipName().empty()) return {};
-		const std::wstring clipName = StrToWStr(asset.GetClipName());
+		const std::wstring clipName = Engine::Unicode::Utf8ToWide(asset.GetClipName());
 
 		auto clip = FindTargetModelClip(world, animatorEntity, clipName);
 		if (!clip.IsValid() && !asset.GetModelPath().empty())
@@ -162,7 +162,7 @@ namespace
 			{
 				BAM_LOG(Warn, "Engine", "ActionTimeline",
 					"Timeline '{}' resolves clip '{}' from an authoring model with a different skeleton binding signature.",
-					WStrToStr(asset.GetPath()), asset.GetClipName());
+					Engine::Unicode::WideToUtf8(asset.GetPath()), asset.GetClipName());
 			}
 			clip = FindClipByName(authoringModel.Get(), clipName);
 		}
@@ -182,7 +182,7 @@ namespace
 			for (const auto& notify : track.Notifies)
 			{
 				if (notify.SocketBoneName.empty()) continue;
-				if (skeleton && skeleton->GetBoneMap().contains(StrToWStr(notify.SocketBoneName))) continue;
+				if (skeleton && skeleton->GetBoneMap().contains(Engine::Unicode::Utf8ToWide(notify.SocketBoneName))) continue;
 				BAM_LOG(Warn, "Engine", "ActionTimeline", "Socket bone '{}' of notify '{}' was not found on the entity skeleton. The entity origin is used instead.", notify.SocketBoneName, notify.Name);
 			}
 		}
@@ -337,7 +337,7 @@ namespace
 	entt::entity FindEntityByName(const entt::registry& world, const std::string& utf8Name)
 	{
 		if (utf8Name.empty()) return entt::null;
-		const std::wstring targetW = StrToWStr(utf8Name);
+		const std::wstring targetW = Engine::Unicode::Utf8ToWide(utf8Name);
 		for (auto entity : world.view<const NameComponent>())
 		{
 			if (const auto* flag = world.try_get<FlagComponent>(entity);
@@ -352,7 +352,7 @@ namespace
 	entt::entity FindCameraEntityByName(const entt::registry& world, const std::string& utf8Name)
 	{
 		if (utf8Name.empty()) return entt::null;
-		const std::wstring targetW = StrToWStr(utf8Name);
+		const std::wstring targetW = Engine::Unicode::Utf8ToWide(utf8Name);
 		for (auto entity : world.view<const NameComponent, const CameraComponent>())
 		{
 			if (!IsComponentEnabled<CameraComponent>(world, entity)) continue;
@@ -1036,7 +1036,7 @@ void ActionTimelineSystem::PrepareSceneResources(const Scene& scene)
 		if (!asset->GetClipName().empty() && !asset->GetModelPath().empty())
 		{
 			const auto animator = FindAnimatorEntityInHierarchy(world, entity);
-			if (!FindTargetModelClip(world, animator, StrToWStr(asset->GetClipName())).IsValid())
+			if (!FindTargetModelClip(world, animator, Engine::Unicode::Utf8ToWide(asset->GetClipName())).IsValid())
 				prepare(asset->GetModelPath());
 		}
 
@@ -1271,7 +1271,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							const vec3 socketWorldPos = ComputeSocketWorldPos(world, entity, notify.SocketBoneName, notify.OffsetPosition);
 							if (auto effectHandle = GetOrCreateNotifyParticleEffect(notify); effectHandle.IsValid())
 							{
-								const std::wstring name = StrToWStr(notify.Name.empty() ? "Spawned_ParticleNotify" : (notify.Name + "_Particle"));
+								const std::wstring name = Engine::Unicode::Utf8ToWide(notify.Name.empty() ? "Spawned_ParticleNotify" : (notify.Name + "_Particle"));
 								SpawnTimelineVFXEntity(*scene, world, name,
 									SocketWorldTransform{ socketWorldPos, quat(1.0f, 0.0f, 0.0f, 0.0f) },
 									vec3(1.0f), effectHandle, 1.0f, false, true);
@@ -1285,7 +1285,7 @@ void ActionTimelineSystem::OnUpdate(entt::registry& registry, const vector<Scene
 							if (vfxHandle.IsValid())
 							{
 								const auto xform = ComputeSocketWorldTransform(world, entity, notify.SocketBoneName, notify.OffsetPosition, notify.OffsetRotation);
-								const std::wstring name = StrToWStr(notify.Name.empty() ? "Spawned_CompositeVFX" : (notify.Name + "_VFX"));
+								const std::wstring name = Engine::Unicode::Utf8ToWide(notify.Name.empty() ? "Spawned_CompositeVFX" : (notify.Name + "_VFX"));
 								const bool holdUntilRelease = notify.Duration > 0.0f;
 								const entt::entity vfxEntity = SpawnTimelineVFXEntity(*scene, world, name, xform, notify.VFXScale,
 									ResourceHandle<CompositeEffect>(vfxHandle), notify.VFXPlayRate, holdUntilRelease, notify.AutoDestroy);

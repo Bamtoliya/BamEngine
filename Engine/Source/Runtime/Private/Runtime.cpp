@@ -177,6 +177,9 @@ void Runtime::LateUpdate(f32 dt)
 }
 EResult Runtime::Render(f32 dt)
 {
+	if (m_ResourceManager)
+		m_ResourceManager->FlushDeferredDeletes();
+
 	auto& renderer = Renderer::Get();
 	auto& picking = PickingManager::Get();
 	auto* rhi = renderer.GetRHI();

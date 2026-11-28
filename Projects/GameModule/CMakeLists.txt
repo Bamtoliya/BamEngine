@@ -1,4 +1,4 @@
-# Projects/GameModule/CMakeLists.txt
+﻿# Projects/GameModule/CMakeLists.txt
 project(GameModule)
 
 set(GAME_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Source")
@@ -12,7 +12,7 @@ add_library(GameModule SHARED
 )
 
 target_link_libraries(GameModule PRIVATE
-    BamEngine::Engine
+    BamEngine
 )
 
 target_include_directories(GameModule PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Plugins/GameplayScore/Public")

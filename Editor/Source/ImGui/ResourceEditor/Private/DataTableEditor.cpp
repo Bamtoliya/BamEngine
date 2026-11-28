@@ -1,4 +1,4 @@
-#include "Editor_Includes.h"
+﻿#include "Editor_Includes.h"
 #include "DataTableEditor.h"
 #include "EditorUI.h"
 #include "Functions.h"
@@ -46,7 +46,7 @@ namespace DataTableEditorDetail
 
 bool DataTableEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
-	return Engine::ToLowerStr(Engine::WStrToStr(assetPath.extension().wstring())) == ".csv";
+	return Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.extension().wstring())) == ".csv";
 }
 
 void DataTableEditor::SetTargetResource(const std::filesystem::path& assetPath)
@@ -58,7 +58,7 @@ string DataTableEditor::BuildResourceWindowTitle() const
 {
 	auto title = GetDisplayName();
 	if (!m_TargetResourcePath.empty())
-		title += " - " + WStrToStr(m_TargetResourcePath.filename().wstring());
+		title += " - " + Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring());
 	if (HasUnsavedResourceChanges())
 		title += "*";
 	return title + "###" + GetResourceWindowId();
@@ -82,7 +82,7 @@ bool DataTableEditor::OpenFile(const std::filesystem::path& path)
 		m_LastError = std::move(error);
 		NotificationManager::Get().AddNotification(
 			GetDisplayName(),
-			WStrToStr(path.filename().wstring()) + ": " + m_LastError,
+			Engine::Unicode::WideToUtf8(path.filename().wstring()) + ": " + m_LastError,
 			ELogLevel::Warn);
 		return false;
 	}
@@ -105,7 +105,7 @@ bool DataTableEditor::SaveFile()
 		m_LastError = std::move(error);
 		NotificationManager::Get().AddNotification(
 			GetDisplayName(),
-			WStrToStr(m_TargetResourcePath.filename().wstring()) + ": " + m_LastError,
+			Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()) + ": " + m_LastError,
 			ELogLevel::Warn);
 		return false;
 	}
@@ -177,7 +177,7 @@ void DataTableEditor::DrawCustomQuickAccess()
 
 	if (!m_TargetResourcePath.empty())
 	{
-		std::string fileLabel = WStrToStr(m_TargetResourcePath.filename().wstring());
+		std::string fileLabel = Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring());
 		if (m_Dirty)
 		{
 			fileLabel += " *";

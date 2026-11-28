@@ -11,7 +11,7 @@ bool ShaderEditor::IsSupported(const std::filesystem::path& assetPath) const
 {
     const auto ext = assetPath.extension().wstring();
     return ext == L".bamshader" || ext == L".hlsl" || ext == L".glsl" || ext == L".cso" ||
-        Engine::ToLowerStr(Engine::WStrToStr(assetPath.filename().wstring())).ends_with(".bamshader.json");
+        Engine::ToLowerStr(Engine::Unicode::WideToUtf8(assetPath.filename().wstring())).ends_with(".bamshader.json");
 }
 
 void ShaderEditor::DrawCustomQuickAccess()

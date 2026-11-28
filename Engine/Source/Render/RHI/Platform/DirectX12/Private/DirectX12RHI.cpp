@@ -47,7 +47,7 @@ EResult DirectX12RHI::CreateDeviceOnHighPerformanceAdapter()
     if (m_Adapter && SUCCEEDED(m_Adapter->GetDesc1(&desc)))
     {
         m_Capabilities.AdapterName = desc.Description;
-        ENGINE_LOG_INFO("D3D12 device created on adapter: {} ({} MB dedicated VRAM)", WStrToStr(desc.Description), static_cast<uint64>(desc.DedicatedVideoMemory / (1024 * 1024)));
+        ENGINE_LOG_INFO("D3D12 device created on adapter: {} ({} MB dedicated VRAM)", Engine::Unicode::WideToUtf8(desc.Description), static_cast<uint64>(desc.DedicatedVideoMemory / (1024 * 1024)));
     }
     return EResult::Success;
 }

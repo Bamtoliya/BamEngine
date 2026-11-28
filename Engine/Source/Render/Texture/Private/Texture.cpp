@@ -776,7 +776,7 @@ EResult Texture::Reload(const std::filesystem::path& filePath)
 
 	targetPath = PlatformPath::ResolveUri(targetPath);
 
-	const auto path = Engine::WStrToStr(targetPath.wstring());
+	const auto path = Engine::Unicode::WideToUtf8(targetPath.wstring());
 
 	std::ifstream file(targetPath, std::ios::binary | std::ios::ate);
 	if (!file.is_open())

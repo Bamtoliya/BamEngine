@@ -99,7 +99,7 @@ namespace Editor
         {
             std::string navUri = m_Scene->GetNavGridPath();
             if (navUri.empty())
-                navUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(Engine::NavGrid::MakeDefaultPath(target)));
+                navUri = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(Engine::NavGrid::MakeDefaultPath(target)));
             if (!navGrid->SaveToFile(Engine::NavGrid::ResolveDataPath(navUri)))
                 return Engine::EResult::Fail;
             m_Scene->SetNavGridPath(navUri);
@@ -109,7 +109,7 @@ namespace Editor
         {
             std::string navMeshUri = m_Scene->GetNavMeshPath();
             if (navMeshUri.empty())
-                navMeshUri = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(Engine::NavMesh::MakeDefaultPath(target)));
+                navMeshUri = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(Engine::NavMesh::MakeDefaultPath(target)));
             if (!navMesh->SaveToFile(Engine::NavMesh::ResolveDataPath(navMeshUri)))
                 return Engine::EResult::Fail;
             m_Scene->SetNavMeshPath(navMeshUri);

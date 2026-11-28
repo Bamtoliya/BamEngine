@@ -45,7 +45,7 @@ namespace
         if (font->lfFaceName[0] == L'@') return 1;
         auto& fonts = *reinterpret_cast<std::vector<std::string>*>(context);
         std::string name;
-        if (archive::detail::WideToUtf8(font->lfFaceName, name) && !name.empty() &&
+        if (Engine::Unicode::TryWideToUtf8(font->lfFaceName, name) && !name.empty() &&
             name.size() <= Engine::UITextComponent::MaxFontFamilyBytes)
             fonts.push_back(std::move(name));
         return 1;
@@ -147,9 +147,9 @@ namespace
     bool DrawInspectorText(std::wstring& value, bool readOnly = false)
     {
         std::string text;
-        if (!archive::detail::WideToUtf8(value, text)) return false;
+        if (!Engine::Unicode::TryWideToUtf8(value, text)) return false;
         if (!DrawInspectorText(text, readOnly)) return false;
-        return archive::detail::Utf8ToWide(text, value);
+        return Engine::Unicode::TryUtf8ToWide(text, value);
     }
 
     bool DrawInspectorPath(std::filesystem::path& value, bool readOnly = false)
@@ -546,7 +546,7 @@ namespace
 		if (value != entt::null && world.valid(value))
 		{
 			if (const auto* nameComp = world.try_get<Engine::NameComponent>(value))
-				displayName = fmt::format("[Entity] {}", Engine::WStrToStr(nameComp->name));
+				displayName = fmt::format("[Entity] {}", Engine::Unicode::WideToUtf8(nameComp->name));
 			else
 				displayName = fmt::format("[Entity] ID: {}", entt::to_integral(value));
 		}
@@ -632,7 +632,7 @@ namespace
 				{
 					std::string name = fmt::format("Entity [{}]", entt::to_integral(entity));
 					if (const auto* nameComp = world.try_get<Engine::NameComponent>(entity))
-						name = Engine::WStrToStr(nameComp->name);
+						name = Engine::Unicode::WideToUtf8(nameComp->name);
 
 					if (searchBuffer[0] != '\0')
 					{
@@ -678,7 +678,7 @@ namespace
 	std::string FormatReflectionDrawerValue(const reflection::ValueView& value, const reflection::Registry* registry)
 	{
 		if (const auto* text = value.Get<std::string>()) return *text;
-		if (const auto* text = value.Get<std::wstring>()) return Engine::WStrToStr(*text);
+		if (const auto* text = value.Get<std::wstring>()) return Engine::Unicode::WideToUtf8(*text);
 		if (const auto* path = value.Get<std::filesystem::path>())
 		{
 			const auto u8 = path->u8string();
@@ -1762,7 +1762,7 @@ namespace Editor
 			if (type == typeid(std::wstring))
 			{
 				std::wstring wide;
-				if (text.empty() || !archive::detail::Utf8ToWide(text, wide)) return false;
+				if (text.empty() || !Engine::Unicode::TryUtf8ToWide(text, wide)) return false;
 				return fn(reflection::ValueView::From(wide));
 			}
 			if (type == typeid(std::filesystem::path))

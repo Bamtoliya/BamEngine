@@ -52,7 +52,7 @@ void ProjectHubModal::Open()
 	{
 		const auto defaultRoot = Engine::PlatformPath::GetProjectRoot().parent_path();
 		if (!defaultRoot.empty())
-			CopyUtf8ToBuffer(Engine::WStrToStr(defaultRoot.wstring()), m_TargetFolderBuffer, sizeof(m_TargetFolderBuffer));
+			CopyUtf8ToBuffer(Engine::Unicode::WideToUtf8(defaultRoot.wstring()), m_TargetFolderBuffer, sizeof(m_TargetFolderBuffer));
 	}
 }
 
@@ -186,8 +186,8 @@ void ProjectHubModal::RefreshRecentProjectStatus()
 	for (const auto& entry : recentProjects)
 	{
 		const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-			? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-			: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+			? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+			: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot));
 		std::error_code ec;
 		const bool exists = std::filesystem::exists(entryTarget, ec);
 		m_RecentProjectExists.push_back(exists);
@@ -233,8 +233,8 @@ void ProjectHubModal::DrawRecentProjectsSection()
 				{
 					const auto& entry = recentProjects[i];
 					missingTargets.push_back(!entry.ProjectFilePath.empty()
-						? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-						: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot)));
+						? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+						: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot)));
 				}
 			}
 			for (const auto& target : missingTargets)
@@ -259,10 +259,10 @@ void ProjectHubModal::DrawRecentProjectsSection()
 		{
 			const auto& entry = currentRecentProjects[i];
 			const std::filesystem::path entryTarget = !entry.ProjectFilePath.empty()
-				? std::filesystem::path(Engine::StrToWStr(entry.ProjectFilePath))
-				: std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot));
+				? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectFilePath))
+				: std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot));
 			const auto entryRoot = Engine::PlatformPath::Normalize(
-				!entry.ProjectRoot.empty() ? std::filesystem::path(Engine::StrToWStr(entry.ProjectRoot)) : entryTarget.parent_path());
+				!entry.ProjectRoot.empty() ? std::filesystem::path(Engine::Unicode::Utf8ToWide(entry.ProjectRoot)) : entryTarget.parent_path());
 			const bool isActive = !activeRoot.empty() && Engine::PlatformPath::IsSamePath(activeRoot, entryRoot);
 			const bool exists = (i < m_RecentProjectExists.size()) ? m_RecentProjectExists[i] : false;
 
@@ -336,9 +336,9 @@ void ProjectHubModal::DrawCreateProjectSection()
 		if (ImGui::Button(LOCAL_LABEL("ProjectHub.Browse").c_str(), ImVec2(browseWidth, 0.0f)))
 		{
 			std::wstring selectedFolder;
-			const std::wstring initialDir = Engine::StrToWStr(m_TargetFolderBuffer);
+			const std::wstring initialDir = Engine::Unicode::Utf8ToWide(m_TargetFolderBuffer);
 			if (FileDialogs::OpenFolderDialog(selectedFolder, initialDir, "ProjectHub.TargetFolder") && !selectedFolder.empty())
-				CopyUtf8ToBuffer(Engine::WStrToStr(selectedFolder), m_TargetFolderBuffer, sizeof(m_TargetFolderBuffer));
+				CopyUtf8ToBuffer(Engine::Unicode::WideToUtf8(selectedFolder), m_TargetFolderBuffer, sizeof(m_TargetFolderBuffer));
 		}
 
 		EditorUI::PropertyRow("ProjectHub.Template");
@@ -407,7 +407,7 @@ void ProjectHubModal::TryCreateProject()
 		return;
 	}
 
-	const std::filesystem::path targetDir = std::filesystem::path(Engine::StrToWStr(targetFolderUtf8)) / Engine::StrToWStr(projectName);
+	const std::filesystem::path targetDir = std::filesystem::path(Engine::Unicode::Utf8ToWide(targetFolderUtf8)) / Engine::Unicode::Utf8ToWide(projectName);
 	Engine::EProjectTemplate projectTemplate = Engine::EProjectTemplate::Empty;
 	if (m_SelectedTemplateIndex == 1)
 		projectTemplate = Engine::EProjectTemplate::Default3D;

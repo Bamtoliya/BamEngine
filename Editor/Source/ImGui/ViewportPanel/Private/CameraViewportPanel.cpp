@@ -292,7 +292,7 @@ void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 		!std::isfinite(state.OrthographicSize) || state.OrthographicSize <= 0.0f ||
 		!std::isfinite(state.CameraSpeed) || state.CameraSpeed < 1.0f)
 	{
-		EDITOR_LOG_WARN("Invalid editor camera state: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Invalid editor camera state: {}", Engine::Unicode::WideToUtf8(m_Name));
 		return;
 	}
 
@@ -306,7 +306,7 @@ void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 
 	if (!candidate.SetLocalPosition(position) || !candidate.SetEulerRotation(rotation))
 	{
-		EDITOR_LOG_WARN("Editor camera transform restore failed: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Editor camera transform restore failed: {}", Engine::Unicode::WideToUtf8(m_Name));
 		return;
 	}
 
@@ -333,7 +333,7 @@ void CameraViewportPanel::RestoreViewportState(const ViewportWorkspace& state)
 		m_CameraController->SyncControlRotationFromTransform();
 		m_CameraController->RefreshMatrices();
 
-		EDITOR_LOG_WARN("Editor camera matrices could not be restored: {}", WStrToStr(m_Name));
+		EDITOR_LOG_WARN("Editor camera matrices could not be restored: {}", Engine::Unicode::WideToUtf8(m_Name));
 	}
 }
 

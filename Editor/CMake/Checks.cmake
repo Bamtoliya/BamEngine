@@ -4,7 +4,7 @@
     Source/ImGui/ContentBrowserPanel/Private/ContentBrowserRenameRules.cpp)
 target_include_directories(AssetReferenceCheck PRIVATE "${EDITOR_SOURCE_DIR}/AssetManager/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/ContentBrowserPanel/Public")
-target_link_libraries(AssetReferenceCheck PRIVATE BamEngine::Engine)
+target_link_libraries(AssetReferenceCheck PRIVATE BamEngine)
 set_target_properties(AssetReferenceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 if(MSVC)
     target_compile_options(AssetReferenceCheck PRIVATE /utf-8)
@@ -18,7 +18,7 @@ if(WIN32)
         Source/Plugin/Private/PanelPluginGenerator.cpp Source/Plugin/Private/PluginDiscovery.cpp)
     target_include_directories(PanelPluginGeneratorCheck PRIVATE ${EDITOR_PUBLIC_INCLUDE_DIRS}
         "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
-    target_link_libraries(PanelPluginGeneratorCheck PRIVATE BamEngine::Engine)
+    target_link_libraries(PanelPluginGeneratorCheck PRIVATE BamEngine)
     target_precompile_headers(PanelPluginGeneratorCheck PRIVATE
         "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
     target_compile_definitions(PanelPluginGeneratorCheck PRIVATE NOMINMAX)
@@ -36,7 +36,7 @@ add_executable(TransformEditorCheck
 )
 
 target_include_directories(TransformEditorCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
-target_link_libraries(TransformEditorCheck PRIVATE BamEngine::Engine)
+target_link_libraries(TransformEditorCheck PRIVATE BamEngine)
 
 add_executable(TransformInheritanceCheck examples/TransformInheritanceCheck.cpp
     Source/AssetManager/Private/AssetPathRelocation.cpp
@@ -45,7 +45,7 @@ add_executable(TransformInheritanceCheck examples/TransformInheritanceCheck.cpp
 target_include_directories(TransformInheritanceCheck PRIVATE "${EDITOR_SOURCE_DIR}/Command/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public" ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
-target_link_libraries(TransformInheritanceCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(TransformInheritanceCheck PRIVATE BamEngine imgui::imgui)
 target_precompile_headers(TransformInheritanceCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(TransformInheritanceCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -64,33 +64,33 @@ target_include_directories(EditorHistoryCheck PRIVATE
     "${EDITOR_SOURCE_DIR}/Document/Public"
     "${EDITOR_SOURCE_DIR}/FileDialog/Public"
     "${EDITOR_SOURCE_DIR}/ImGui/InspectorPanel/Public")
-target_link_libraries(EditorHistoryCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(EditorHistoryCheck PRIVATE BamEngine imgui::imgui)
 target_precompile_headers(EditorHistoryCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(EditorHistoryCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(PickingMathCheck examples/PickingMathCheck.cpp)
 target_include_directories(PickingMathCheck PRIVATE "${EDITOR_SOURCE_DIR}/Selection/Public")
-target_link_libraries(PickingMathCheck PRIVATE BamEngine::Engine)
+target_link_libraries(PickingMathCheck PRIVATE BamEngine)
 set_target_properties(PickingMathCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(PickingBVHBenchmark examples/PickingBVHBenchmark.cpp)
-target_link_libraries(PickingBVHBenchmark PRIVATE BamEngine::Engine)
+target_link_libraries(PickingBVHBenchmark PRIVATE BamEngine)
 set_target_properties(PickingBVHBenchmark PROPERTIES UNITY_BUILD OFF FOLDER "Benchmarks")
 
 add_executable(CanvasViewCheck examples/CanvasViewCheck.cpp)
 target_include_directories(CanvasViewCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/ViewportPanel/Public")
-target_link_libraries(CanvasViewCheck PRIVATE BamEngine::Engine)
+target_link_libraries(CanvasViewCheck PRIVATE BamEngine)
 set_target_properties(CanvasViewCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(GraphPaletteCheck examples/GraphPaletteCheck.cpp)
 target_include_directories(GraphPaletteCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/GraphPanel/Public")
-target_link_libraries(GraphPaletteCheck PRIVATE BamEngine::Engine)
+target_link_libraries(GraphPaletteCheck PRIVATE BamEngine)
 set_target_properties(GraphPaletteCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(GraphMessageLocalizationCheck examples/GraphMessageLocalizationCheck.cpp)
 target_include_directories(GraphMessageLocalizationCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/GraphPanel/Public")
-target_link_libraries(GraphMessageLocalizationCheck PRIVATE BamEngine::Engine)
+target_link_libraries(GraphMessageLocalizationCheck PRIVATE BamEngine)
 add_dependencies(GraphMessageLocalizationCheck GenerateLocalization)
 set_target_properties(GraphMessageLocalizationCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
@@ -100,14 +100,14 @@ add_executable(ShortcutManagerCheck
 )
 target_include_directories(ShortcutManagerCheck PRIVATE ${EDITOR_PUBLIC_INCLUDE_DIRS}
     "${EDITOR_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/ThirdParty")
-target_link_libraries(ShortcutManagerCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(ShortcutManagerCheck PRIVATE BamEngine imgui::imgui)
 target_precompile_headers(ShortcutManagerCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(ShortcutManagerCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(MainMenuBarLayoutCheck examples/MainMenuBarLayoutCheck.cpp)
 target_include_directories(MainMenuBarLayoutCheck PRIVATE "${EDITOR_SOURCE_DIR}/ImGui/ToolBar/Public" "${EDITOR_SOURCE_DIR}")
-target_link_libraries(MainMenuBarLayoutCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(MainMenuBarLayoutCheck PRIVATE BamEngine imgui::imgui)
 set_target_properties(MainMenuBarLayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(HierarchyEditorCheck examples/HierarchyEditorCheck.cpp
@@ -120,7 +120,7 @@ target_include_directories(HierarchyEditorCheck PRIVATE
     "${EDITOR_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/ThirdParty"
 )
-target_link_libraries(HierarchyEditorCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(HierarchyEditorCheck PRIVATE BamEngine imgui::imgui)
 target_precompile_headers(HierarchyEditorCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(HierarchyEditorCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -133,7 +133,7 @@ target_include_directories(ReflectionInspectorCheck PRIVATE
     "${EDITOR_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/ThirdParty"
 )
-target_link_libraries(ReflectionInspectorCheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(ReflectionInspectorCheck PRIVATE BamEngine imgui::imgui)
 add_dependencies(ReflectionInspectorCheck GenerateLocalization)
 target_precompile_headers(ReflectionInspectorCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
@@ -178,7 +178,7 @@ target_include_directories(EditorSettingsCheck PRIVATE
     "${EDITOR_SOURCE_DIR}/Settings/Public"
 )
 
-target_link_libraries(EditorSettingsCheck PRIVATE BamEngine::Engine)
+target_link_libraries(EditorSettingsCheck PRIVATE BamEngine)
 set_target_properties(EditorSettingsCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 reflection_generate(
@@ -211,7 +211,7 @@ target_include_directories(SpriteSlicingCheck PRIVATE
     "${EDITOR_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/ThirdParty"
 )
-target_link_libraries(SpriteSlicingCheck PRIVATE BamEngine::Engine)
+target_link_libraries(SpriteSlicingCheck PRIVATE BamEngine)
 target_precompile_headers(SpriteSlicingCheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h")
 set_target_properties(SpriteSlicingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
@@ -236,7 +236,7 @@ target_include_directories(EditorUICheck PRIVATE
     "${EDITOR_SOURCE_DIR}"
     "${CMAKE_SOURCE_DIR}/ThirdParty"
 )
-target_link_libraries(EditorUICheck PRIVATE BamEngine::Engine imgui::imgui)
+target_link_libraries(EditorUICheck PRIVATE BamEngine imgui::imgui)
 add_dependencies(EditorUICheck GenerateLocalization)
 target_precompile_headers(EditorUICheck PRIVATE
     "${CMAKE_SOURCE_DIR}/Engine/Source/Core/Public/Engine_Includes.h"

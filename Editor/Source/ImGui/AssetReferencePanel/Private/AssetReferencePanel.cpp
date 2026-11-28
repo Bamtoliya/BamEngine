@@ -343,7 +343,7 @@ namespace Editor
         if (m_ReferenceSearch[0] == '\0')
             return;
 
-        const auto query = NormalizeReferenceSearch(Engine::StrToWStr(m_ReferenceSearch));
+        const auto query = NormalizeReferenceSearch(Engine::Unicode::Utf8ToWide(m_ReferenceSearch));
         CollectReferenceMatches(m_Users, query, m_MatchingUsers);
         CollectReferenceMatches(m_Dependencies, query, m_MatchingDependencies);
     }
@@ -382,7 +382,7 @@ namespace Editor
             return;
         }
 
-        const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_ReferenceTarget));
+        const auto target = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(m_ReferenceTarget));
         ImGui::TextWrapped("%s", target.c_str());
         if (!m_ReferenceTargetMissing)
         {
@@ -447,7 +447,7 @@ namespace Editor
             for (int index = clipper.DisplayStart; index < clipper.DisplayEnd; ++index)
             {
                 const auto& path = matches[index];
-                const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+                const auto display = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(path));
                 ImGui::PushID(static_cast<int>(std::filesystem::hash_value(path)));
                 if (ImGui::Selectable((display + "###ReferenceMatch").c_str()))
                     next = path;
@@ -505,7 +505,7 @@ namespace Editor
         const bool cycle = std::ranges::find(ancestors, path) != ancestors.end();
         const bool atDepthLimit = !cycle && children != links.end() && ancestors.size() >= maxDepth;
         const bool expandable = children != links.end() && !cycle && !atDepthLimit;
-        const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+        const auto display = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(path));
         const char* noteKey = cycle ? "AssetRef.ReferenceCycle" :
             atDepthLimit ? "AssetRef.ReferenceDepthLimit" : nullptr;
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
@@ -601,7 +601,7 @@ namespace Editor
             return;
 
         const auto& type = issueFilters[m_IssueFilterIndex].Type;
-        const auto query = NormalizeReferenceSearch(Engine::StrToWStr(m_SearchFilter));
+        const auto query = NormalizeReferenceSearch(Engine::Unicode::Utf8ToWide(m_SearchFilter));
         const auto matches = [&query](std::wstring text)
         {
             return NormalizeReferenceSearch(std::move(text)).find(query) != std::wstring::npos;
@@ -614,7 +614,7 @@ namespace Editor
                 continue;
 
             if (query.empty() || matches(issue.SourceFile.generic_wstring()) ||
-                matches(Engine::StrToWStr(issue.PropertyName)) || matches(Engine::StrToWStr(issue.TargetReference)))
+                matches(Engine::Unicode::Utf8ToWide(issue.PropertyName)) || matches(Engine::Unicode::Utf8ToWide(issue.TargetReference)))
                 m_VisibleIssueIndices.push_back(index);
         }
     }
@@ -719,7 +719,7 @@ namespace Editor
 
                 // Column 1: Source Asset
                 if (ImGui::TableSetColumnIndex(1))
-                    DrawIssueSourceActions(issue.SourceFile, Engine::WStrToStr(issue.SourceFile.generic_wstring()));
+                    DrawIssueSourceActions(issue.SourceFile, Engine::Unicode::WideToUtf8(issue.SourceFile.generic_wstring()));
 
                 // Column 2: Property
                 ImGui::TableSetColumnIndex(2);
@@ -732,7 +732,7 @@ namespace Editor
                 // Column 4: Suggested Fix
                 ImGui::TableSetColumnIndex(4);
                 if (!issue.SuggestedFix.empty())
-                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", Engine::WStrToStr(issue.SuggestedFix.wstring()).c_str());
+                    ImGui::TextColored(ImVec4(0.3f, 0.9f, 0.4f, 1.0f), "%s", Engine::Unicode::WideToUtf8(issue.SuggestedFix.wstring()).c_str());
                 else
                     ImGui::TextDisabled(LOCAL_CSTR("EditorCommon.None"));
 

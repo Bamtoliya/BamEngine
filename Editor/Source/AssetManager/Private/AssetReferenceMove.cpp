@@ -1,6 +1,7 @@
-#include "AssetReferenceValidator.h"
+﻿#include "AssetReferenceValidator.h"
 #include "PlatformPath.h"
 #include "Functions.h"
+#include "Unicode.h"
 #include "Logger.h"
 #include <Windows.h>
 #include <algorithm>
@@ -150,8 +151,7 @@ namespace Editor
 
             const auto result = ApplyMoveReferences(edits, true, batch);
             if (result == EAssetReferenceWriteResult::RollbackFailed)
-                BAM_LOG(Error, "Editor", "Asset", "Reference repair rollback failed. Backups: {}",
-                    Engine::WStrToStr(batch.wstring()));
+                BAM_LOG(Error, "Editor", "Asset", "Reference repair rollback failed. Backups: {}", Engine::Unicode::WideToUtf8(batch.wstring()));
             return result == EAssetReferenceWriteResult::Success;
         }
         catch (const std::exception& error)
@@ -203,8 +203,8 @@ namespace Editor
                 if (!SaveReferenceBackup(fs::path(prefix).concat(L"-before.json"), edit.BeforeText) ||
                     !SaveReferenceBackup(fs::path(prefix).concat(L"-after.json"), edit.AfterText))
                     return EAssetReferenceWriteResult::Failed;
-                manifest += std::to_string(index) + "\n" + Engine::WStrToStr(edit.BeforePath.wstring()) + "\n" +
-                    Engine::WStrToStr(edit.AfterPath.wstring()) + "\n";
+                manifest += std::to_string(index) + "\n" + Engine::Unicode::WideToUtf8(edit.BeforePath.wstring()) + "\n" +
+                    Engine::Unicode::WideToUtf8(edit.AfterPath.wstring()) + "\n";
             }
             if (!SaveReferenceBackup(recoveryDirectory / "paths.txt", manifest))
                 return EAssetReferenceWriteResult::Failed;

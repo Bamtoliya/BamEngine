@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "InspectorPanel.h"
 #include "EditorUI.h"
 #include "Application.h"
@@ -45,13 +45,13 @@ namespace
 {
 	bool IsAnimatorControllerFile(const std::filesystem::path& path)
 	{
-		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".animator") || name.ends_with(".animator.json") || name.ends_with(".bamanimator") || name.ends_with(".bamanimator.json");
 	}
 
 	bool IsActionTimelineFile(const std::filesystem::path& path)
 	{
-		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".bamtimeline.json") || name.ends_with(".actiontimeline.json") || name.ends_with(".bamtimeline") || name.ends_with(".actiontimeline");
 	}
 
@@ -59,7 +59,7 @@ namespace
 	// 피커가 목록의 파일마다 매 프레임 물어볼 수 있어 수정 시각 기준으로 결과를 보관한다. 읽지 못한 파일은 받지 않는다.
 	bool IsLogicGraphFile(const std::filesystem::path& path)
 	{
-		const std::string name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const std::string name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		if (!name.ends_with(".bamgraph.json") && !name.ends_with(".bamgraph")) return false;
 
 		struct CachedDomain { std::filesystem::file_time_type WriteTime; bool IsLogic = false; };
@@ -244,13 +244,13 @@ void InspectorPanel::DrawHeaderBar(Engine::Entity* currentEntity, std::size_t se
 		// 3. 엔티티 이름 입력 필드 (NameComponent)
 		if (auto* nameComp = world.try_get<Engine::NameComponent>(handle))
 		{
-			std::string nameStr = Engine::WStrToStr(nameComp->name);
+			std::string nameStr = Engine::Unicode::WideToUtf8(nameComp->name);
 			char nameBuf[128];
 			strncpy_s(nameBuf, nameStr.c_str(), sizeof(nameBuf));
 
 			ImGui::SetNextItemWidth(nameInputWidth);
 			if (ImGui::InputText("##EntityName", nameBuf, sizeof(nameBuf)))
-				nameComp->name = Engine::StrToWStr(nameBuf);
+				nameComp->name = Engine::Unicode::Utf8ToWide(nameBuf);
 			ImGui::SameLine();
 		}
 
@@ -327,7 +327,7 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 
 	const bool isRoot = (rootHandle == handle);
 	std::filesystem::path prefabPath(prefabComp->prefabAssetPath);
-	std::string prefabFileName = Engine::WStrToStr(prefabPath.filename().wstring());
+	std::string prefabFileName = Engine::Unicode::WideToUtf8(prefabPath.filename().wstring());
 	if (prefabFileName.empty()) prefabFileName = LOCAL("Prefab.MissingAsset");
 
 	ImGui::Spacing();
@@ -340,7 +340,7 @@ void InspectorPanel::DrawPrefabHeaderBar(Engine::Entity& entity)
 		ImGui::TextColored(ImVec4(0.35f, 0.78f, 1.0f, 0.75f), ICON_FA_CUBE " %s",
 			LOCAL_FMT("Prefab.ChildOf", prefabFileName).c_str());
 	if (ImGui::IsItemHovered())
-		ImGui::SetTooltip("%s", Engine::WStrToStr(prefabComp->prefabAssetPath).c_str());
+		ImGui::SetTooltip("%s", Engine::Unicode::WideToUtf8(prefabComp->prefabAssetPath).c_str());
 	EditorUI::ToolbarLayout toolbar;
 	if (toolbar.Button("OpenPrefab", ICON_FA_FOLDER_OPEN, "Prefab.Open"))
 		PrefabModeManager::Get().EnterPrefabMode(prefabComp->prefabAssetPath);
@@ -408,7 +408,7 @@ void InspectorPanel::ExecutePendingPrefabRevert()
 	if (!prefab || prefab->prefabAssetPath.empty()) return;
 
 	const std::wstring prefabPath = prefab->prefabAssetPath;
-	const std::string prefabName = Engine::WStrToStr(std::filesystem::path(prefabPath).filename().wstring());
+	const std::string prefabName = Engine::Unicode::WideToUtf8(std::filesystem::path(prefabPath).filename().wstring());
 	const auto title = LOCAL("ResourceType.Prefab");
 	const auto fail = [&]() { NotificationManager::Get().AddNotification(title, LOCAL_FMT("Notification.PrefabRevertFailed", prefabName), ELogLevel::Error, 4.0f); };
 
@@ -1604,9 +1604,9 @@ void InspectorPanel::DrawEntityProperties(Engine::Entity& entity)
 				auto& binding = world.get<Engine::GraphBindingComponent>(handle);
 				ImGui::Text("%s", LOCAL_CSTR("PROP_GRAPH_FILE"));
 				std::string pickedGraph;
-				if (Editor::DrawInspectorAssetPathPicker(Engine::WStrToStr(binding.graphFile), pickedGraph, LogicGraphPicker))
+				if (Editor::DrawInspectorAssetPathPicker(Engine::Unicode::WideToUtf8(binding.graphFile), pickedGraph, LogicGraphPicker))
 				{
-					binding.graphFile = Engine::StrToWStr(pickedGraph);
+					binding.graphFile = Engine::Unicode::Utf8ToWide(pickedGraph);
 					changed = true;
 				}
 			}

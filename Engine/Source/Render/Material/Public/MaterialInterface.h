@@ -407,6 +407,34 @@ protected:
 	int32 FindTextureBindingIndexBySlot(uint32 slot) const;
 #pragma endregion
 
+#pragma region Dependencies
+public:
+	bool CollectResourceDependencies(vector<Handle>& out) const override
+	{
+		const auto append = [&](const auto& handle)
+			{
+				if (handle.GetRawHandle().IsValid())
+					out.push_back(handle.GetRawHandle());
+			};
+
+		append(m_VertexShaderHandle);
+		append(m_PixelShaderHandle);
+
+		for (const auto& binding : m_TextureBindings)
+			append(binding.texture);
+
+		for (const auto& pass : m_PassShaders)
+		{
+			append(pass.vertexShader);
+			append(pass.pixelShader);
+		}
+
+		return true;
+	}
+#pragma endregion
+
+	
+
 
 #pragma region Variable
 protected:

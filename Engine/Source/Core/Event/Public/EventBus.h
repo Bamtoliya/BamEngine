@@ -2,24 +2,34 @@
 
 #include "Macro.h"
 #include "Delegate.h"
+
 #include <unordered_map>
 #include <typeindex>
+#include <type_traits>
 #include <memory>
 #include <utility>
+#include <limits>
 
 BEGIN(Engine)
+
 class EventBus
 {
 private:
     struct IEventStorage
     {
         virtual ~IEventStorage() = default;
+        virtual void DisconnectAll() = 0;
     };
 
     template<typename TEvent>
     struct EventStorage final : public IEventStorage
     {
         MulticastDelegate<const TEvent&> DelegateInstance;
+
+        void DisconnectAll() override
+        {
+            DelegateInstance.Clear();
+        }
     };
 
 public:
@@ -28,72 +38,89 @@ public:
 
     EventBus(const EventBus&) = delete;
     EventBus& operator=(const EventBus&) = delete;
+
     EventBus(EventBus&&) noexcept = default;
     EventBus& operator=(EventBus&&) noexcept = default;
 
-    // 특정 이벤트(TEvent)에 리스너 등록
+public:
     template<typename TEvent>
     DelegateHandle Subscribe(std::function<void(const TEvent&)> callback)
     {
-        return GetOrCreateStorage<TEvent>().DelegateInstance.Add(std::move(callback));
+        if (!callback)
+            return 0;
+
+        if (m_CurrentHandle == (std::numeric_limits<DelegateHandle>::max)())
+            return 0;
+
+        const auto storage = GetOrCreateStorage<TEvent>();
+
+        return storage->DelegateInstance.AddWithHandle(++m_CurrentHandle, std::move(callback));
     }
 
-    // 구독 해제
     template<typename TEvent>
     void Unsubscribe(DelegateHandle handle)
     {
-        const auto it = m_Storages.find(std::type_index(typeid(TEvent)));
-        if (it != m_Storages.end())
-        {
-            static_cast<EventStorage<TEvent>*>(it->second.get())->DelegateInstance.Remove(handle);
-        }
+        if (const auto storage = FindStorage<TEvent>())
+            storage->DelegateInstance.Remove(handle);
     }
 
-    // 이벤트 즉시 발행
     template<typename TEvent>
     void Publish(const TEvent& eventData) const
     {
-        const auto it = m_Storages.find(std::type_index(typeid(TEvent)));
-        if (it != m_Storages.end())
-        {
-            static_cast<const EventStorage<TEvent>*>(it->second.get())->DelegateInstance.Broadcast(eventData);
-        }
+        if (const auto storage = FindStorage<TEvent>())
+            storage->DelegateInstance.Broadcast(eventData);
     }
 
-    // 특정 이벤트의 모든 리스너 제거
     template<typename TEvent>
     void Clear()
     {
-        const auto it = m_Storages.find(std::type_index(typeid(TEvent)));
-        if (it != m_Storages.end())
-        {
-            static_cast<EventStorage<TEvent>*>(it->second.get())->DelegateInstance.Clear();
-        }
+        if (const auto storage = FindStorage<TEvent>())
+            storage->DelegateInstance.Clear();
     }
 
-    // 모든 이벤트의 리스너 및 저장소 전체 정리 (씬 전환/PIE 종료 시 활용)
     void Reset()
     {
-        m_Storages.clear();
+        decltype(m_Storages) retired;
+        retired.swap(m_Storages);
+
+        for (const auto& [type, storage] : retired)
+            storage->DisconnectAll();
     }
 
 private:
     template<typename TEvent>
-    EventStorage<TEvent>& GetOrCreateStorage()
+    std::shared_ptr<EventStorage<TEvent>> FindStorage() const
     {
-        const std::type_index typeIdx(typeid(TEvent));
-        auto it = m_Storages.find(typeIdx);
+        static_assert(std::is_same_v<TEvent, std::remove_cvref_t<TEvent>>,
+            "Event type must not contain const, volatile, or reference qualifiers.");
+
+        static_assert(std::is_object_v<TEvent>, "Event type must be an object type.");
+
+        const auto it = m_Storages.find(std::type_index(typeid(TEvent)));
+
         if (it == m_Storages.end())
-        {
-            auto storage = std::make_unique<EventStorage<TEvent>>();
-            auto* rawPtr = storage.get();
-            m_Storages.emplace(typeIdx, std::move(storage));
-            return *rawPtr;
-        }
-        return *static_cast<EventStorage<TEvent>*>(it->second.get());
+            return nullptr;
+
+        return std::static_pointer_cast<EventStorage<TEvent>>(it->second);
+    }
+
+    template<typename TEvent>
+    std::shared_ptr<EventStorage<TEvent>> GetOrCreateStorage()
+    {
+        if (auto storage = FindStorage<TEvent>())
+            return storage;
+
+        auto storage = std::make_shared<EventStorage<TEvent>>();
+
+        m_Storages.emplace(std::type_index(typeid(TEvent)), storage);
+
+        return storage;
     }
 
 private:
-    std::unordered_map<std::type_index, std::unique_ptr<IEventStorage>> m_Storages;
+    std::unordered_map<std::type_index, std::shared_ptr<IEventStorage>> m_Storages;
+
+    DelegateHandle m_CurrentHandle = 0;
 };
+
 END

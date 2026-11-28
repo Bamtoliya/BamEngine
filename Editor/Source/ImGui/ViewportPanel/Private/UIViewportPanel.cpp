@@ -410,17 +410,17 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
     if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddText").c_str(), nullptr, false, parent != nullptr) && parent)
     {
         const auto label = LOCAL("Viewport.NewTextLabel");
-        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, StrToWStr(label), label));
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextEntity(m_TargetScene, *parent, Engine::Unicode::Utf8ToWide(label), label));
     }
     if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddTextInput").c_str(), nullptr, false, parent != nullptr) && parent)
     {
         const auto label = LOCAL("Viewport.AddTextInput");
-        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextInputEntity(m_TargetScene, *parent, StrToWStr(label)));
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUITextInputEntity(m_TargetScene, *parent, Engine::Unicode::Utf8ToWide(label)));
     }
     if (ImGui::MenuItem(LOCAL_LABEL("Viewport.AddDropdown").c_str(), nullptr, false, parent != nullptr) && parent)
     {
         const auto label = LOCAL("Viewport.AddDropdown");
-        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIDropdownEntity(m_TargetScene, *parent, StrToWStr(label)));
+        SelectionManager::Get().SetSelectedEntity(&EntityFactory::CreateUIDropdownEntity(m_TargetScene, *parent, Engine::Unicode::Utf8ToWide(label)));
     }
     if (ImGui::BeginMenu(LOCAL_LABEL("Viewport.UIPresets").c_str(), parent != nullptr))
     {
@@ -445,7 +445,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
             if (ImGui::MenuItem(LOCAL_LABEL(entry.labelKey).c_str()) && parent)
             {
                 auto& element = EntityFactory::CreateUIPreset(m_TargetScene, *parent, entry.preset,
-                    StrToWStr(LOCAL(entry.labelKey)));
+                    Engine::Unicode::Utf8ToWide(LOCAL(entry.labelKey)));
                 SelectionManager::Get().SetSelectedEntity(&element);
             }
         }
@@ -460,7 +460,7 @@ void Editor::UIViewportPanel::DrawCanvasMenu()
         {
             const auto* name = scene->GetRegistry().try_get<NameComponent>(entity);
             const auto label =
-                WStrToStr(scene->GetName()) + "/" + (name ? WStrToStr(name->name) : LOCAL("Viewport.Canvas")) +
+                Engine::Unicode::WideToUtf8(scene->GetName()) + "/" + (name ? Engine::Unicode::WideToUtf8(name->name) : LOCAL("Viewport.Canvas")) +
                 "##" + std::to_string(reinterpret_cast<uintptr_t>(scene)) + ":" + std::to_string(id.id);
             if (ImGui::MenuItem(label.c_str(), nullptr, scene == m_TargetScene && entity == m_TargetCanvas))
                 SetTarget(scene, entity);

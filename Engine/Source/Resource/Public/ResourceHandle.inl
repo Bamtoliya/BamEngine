@@ -1,13 +1,25 @@
 ﻿#pragma once
+#include "Resource.h"
 #include "ResourceHandle.h"
 
 BEGIN(Engine)
 
 template<typename T>
 inline ResourceHandle<T>::ResourceHandle(Handle handle)
-	: m_Handle(handle)
 {
-	InternalAddRef();
+	static_assert(std::is_base_of_v<Resource, T>,
+		"T must be derived from Resource");
+
+	if (!handle.IsValid())
+		return;
+
+	const auto validator = [](const Resource* resource) noexcept
+		{
+			return dynamic_cast<const T*>(resource) != nullptr;
+		};
+
+	if (ResourceHandleAccess::TryAddRef(handle, validator))
+		m_Handle = handle;
 }
 
 template<typename T>
@@ -105,8 +117,11 @@ inline void ResourceHandle<T>::Reset()
 template<typename T>
 inline void ResourceHandle<T>::InternalAddRef()
 {
-	if (m_Handle.IsValid())
-		ResourceHandleAccess::AddRef(m_Handle);
+	if (!m_Handle.IsValid())
+		return;
+
+	if (!ResourceHandleAccess::AddRef(m_Handle))
+		m_Handle = Handle();
 }
 
 template<typename T>

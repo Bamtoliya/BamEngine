@@ -41,7 +41,7 @@ namespace
 {
 	bool IsImportedModelFile(const std::filesystem::path& path)
 	{
-		const auto name = Engine::ToLowerStr(Engine::WStrToStr(path.filename().wstring()));
+		const auto name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.filename().wstring()));
 		return name.ends_with(".bammodel") || name.ends_with(".bammodel.json");
 	}
 
@@ -302,7 +302,7 @@ void ModelEditor::DrawCustomQuickAccess()
 					? m_SelectedAnimIndex : 0;
 				auto* curClip = animations[validIdx].Get();
 				const std::string curName = curClip
-					? (!curClip->GetName().empty() ? WStrToStr(curClip->GetName()) : std::filesystem::path(curClip->GetKey()).stem().string())
+					? (!curClip->GetName().empty() ? Engine::Unicode::WideToUtf8(curClip->GetName()) : std::filesystem::path(curClip->GetKey()).stem().string())
 					: ("Clip #" + std::to_string(validIdx));
 
 				if (ImGui::BeginCombo("##ToolbarAnimCombo", curName.c_str(), ImGuiComboFlags_HeightRegular))
@@ -312,7 +312,7 @@ void ModelEditor::DrawCustomQuickAccess()
 						auto* clip = animations[i].Get();
 						if (!clip) continue;
 						const std::string name = !clip->GetName().empty()
-							? WStrToStr(clip->GetName()) : std::filesystem::path(clip->GetKey()).stem().string();
+							? Engine::Unicode::WideToUtf8(clip->GetName()) : std::filesystem::path(clip->GetKey()).stem().string();
 						const bool isSelected = (static_cast<int>(i) == m_SelectedAnimIndex);
 						if (ImGui::Selectable(name.c_str(), isSelected))
 						{
@@ -697,7 +697,7 @@ void ModelEditor::DrawAnimations(Engine::Model& model)
 			// 열 1: 클립 이름 (선택 시 해당 클립으로 변경 및 재생)
 			ImGui::TableSetColumnIndex(1);
 			const std::string name = !clip->GetName().empty()
-				? WStrToStr(clip->GetName())
+				? Engine::Unicode::WideToUtf8(clip->GetName())
 				: (!clip->GetKey().empty() ? std::filesystem::path(clip->GetKey()).stem().string() : ("Clip #" + std::to_string(i)));
 
 			if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns))
@@ -835,7 +835,7 @@ void ModelEditor::DrawCustomContent()
 				DrawLODInfo(*model);
 				ImGui::Spacing();
 
-				const auto modelKey = WStrToStr(model->GetKey());
+				const auto modelKey = Engine::Unicode::WideToUtf8(model->GetKey());
 				ImGui::PushID(modelKey.c_str());
 				DrawMaterialSlots(*model, canEdit);
 				ImGui::PopID();
@@ -952,7 +952,7 @@ void ModelEditor::SetTargetResource(const std::filesystem::path& assetPath)
 	SetupPreview();
 	const auto previewEnd = Clock::now();
 	EDITOR_LOG_INFO("[ResourceOpenTiming] Model {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms",
-		WStrToStr(assetPath.wstring()), Milliseconds(loadEnd - loadStart).count(),
+		Engine::Unicode::WideToUtf8(assetPath.wstring()), Milliseconds(loadEnd - loadStart).count(),
 		Milliseconds(previewEnd - previewStart).count(), Milliseconds(previewEnd - loadStart).count());
 }
 
@@ -1061,7 +1061,7 @@ bool ModelEditor::StepAsyncOpen(float maxTimeSeconds)
 		const double totalMs = Milliseconds(previewEnd - m_AsyncStartTime).count();
 
 		EDITOR_LOG_INFO("[ResourceOpenTiming] Model {}: resource={:.2f}ms, preview={:.2f}ms, total={:.2f}ms (async)",
-			WStrToStr(m_AsyncTargetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
+			Engine::Unicode::WideToUtf8(m_AsyncTargetPath.wstring()), m_AsyncLoadDurationMs, previewMs, totalMs);
 
 		m_AsyncProgress = 1.0f;
 		m_AsyncStage = EAsyncStage::None;
@@ -1098,7 +1098,7 @@ void ModelEditor::DrawAsyncLoadingOverlay()
 	}
 
 	const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 320.0f);
-	const std::string filename = !m_TargetResourcePath.empty() ? WStrToStr(m_TargetResourcePath.filename().wstring()) : "";
+	const std::string filename = !m_TargetResourcePath.empty() ? Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring()) : "";
 	const std::string pendingText = filename.empty()
 		? LOCAL("ModelImport.PreviewPending")
 		: LOCAL("ModelImport.PreviewPending") + " (" + filename + ")";
@@ -1174,7 +1174,7 @@ void ModelEditor::DrawMaterialSlots(Model& model, bool canEdit)
 	{
 		const std::string slotName = LOCAL_FMT("ModelEditor.MaterialSlot", i);
 		const std::string matName = materials[i].IsValid() && materials[i].Get()
-			? WStrToStr(materials[i].Get()->GetKey()) : "";
+			? Engine::Unicode::WideToUtf8(materials[i].Get()->GetKey()) : "";
 
 		// 슬롯 번호 또는 할당된 머티리얼 이름으로 필터링
 		if (!filterLower.empty())
@@ -1213,7 +1213,7 @@ void ModelEditor::SaveModel()
 
 	auto& manager = ResourceManager::Get();
 	const auto path = m_TargetResourcePath.wstring();
-	const bool isJson = Engine::ToLowerStr(Engine::WStrToStr(m_TargetResourcePath.extension().wstring())) == ".json";
+	const bool isJson = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(m_TargetResourcePath.extension().wstring())) == ".json";
 	const EResult result = isJson ? manager.SaveToJsonFile(model, path) : manager.SaveToBinaryFile(model, path);
 	if (result != EResult::Success)
 	{

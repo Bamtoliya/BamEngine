@@ -119,7 +119,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
             apiV2->DrawContextSize != sizeof(PanelDrawContextV2) ||
             apiV2->HostServicesSize != sizeof(PanelHostServicesV2) || apiV2->PanelCount == 0 || !apiV2->Panels)
         {
-            EDITOR_LOG_ERROR("Editor panel plugin has an incompatible V2 API: {}", WStrToStr(m_DllName));
+            EDITOR_LOG_ERROR("Editor panel plugin has an incompatible V2 API: {}", Engine::Unicode::WideToUtf8(m_DllName));
             return false;
         }
 
@@ -134,7 +134,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                     [&panel](const Panel& entry) { return entry.Id == panel.Id; }))
             {
                 EDITOR_LOG_ERROR("Editor panel plugin has an invalid or duplicate V2 panel: {}",
-                    WStrToStr(m_DllName));
+                    Engine::Unicode::WideToUtf8(m_DllName));
                 return false;
             }
 
@@ -146,7 +146,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                 std::any_of(nextPanels.begin(), nextPanels.end(),
                     [this](const Panel& panel) { return FindPanel(panel.Id) == nullptr; })))
         {
-            EDITOR_LOG_ERROR("Editor panel IDs changed; unload and load the plugin again: {}", WStrToStr(m_DllName));
+            EDITOR_LOG_ERROR("Editor panel IDs changed; unload and load the plugin again: {}", Engine::Unicode::WideToUtf8(m_DllName));
             return false;
         }
 
@@ -160,7 +160,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                 const auto stateSize = previous->ApiV2.GetStateSize(previous->Instance);
                 if (stateSize > MaxPanelStateSize || stateSize > std::numeric_limits<std::size_t>::max())
                 {
-                    EDITOR_LOG_ERROR("Editor panel plugin state is too large to reload: {}", WStrToStr(m_DllName));
+                    EDITOR_LOG_ERROR("Editor panel plugin state is too large to reload: {}", Engine::Unicode::WideToUtf8(m_DllName));
                     DestroyPanels(nextPanels);
                     return false;
                 }
@@ -169,7 +169,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                 if (!previous->ApiV2.CaptureState(previous->Instance, state.data(), stateSize))
                 {
                     EDITOR_LOG_ERROR("Editor panel plugin could not capture state for reload: {}",
-                        WStrToStr(m_DllName));
+                        Engine::Unicode::WideToUtf8(m_DllName));
                     DestroyPanels(nextPanels);
                     return false;
                 }
@@ -179,7 +179,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
             if (!panel.Instance)
             {
                 EDITOR_LOG_ERROR("Editor panel plugin could not create or restore a V2 panel: {}",
-                    WStrToStr(m_DllName));
+                    Engine::Unicode::WideToUtf8(m_DllName));
                 DestroyPanels(nextPanels);
                 return false;
             }
@@ -192,7 +192,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
         if (!apiV1 || apiV1->Size != sizeof(PluginApiV1) || apiV1->PanelSize != sizeof(PanelRegistrationV1) ||
             apiV1->DrawContextSize != sizeof(PanelDrawContextV1) || apiV1->PanelCount == 0 || !apiV1->Panels)
         {
-            EDITOR_LOG_ERROR("Editor panel plugin has an incompatible V1 or V2 API: {}", WStrToStr(m_DllName));
+            EDITOR_LOG_ERROR("Editor panel plugin has an incompatible V1 or V2 API: {}", Engine::Unicode::WideToUtf8(m_DllName));
             return false;
         }
 
@@ -205,7 +205,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                     [&panel](const Panel& entry) { return entry.Id == panel.Id; }))
             {
                 EDITOR_LOG_ERROR("Editor panel plugin has an invalid or duplicate V1 panel: {}",
-                    WStrToStr(m_DllName));
+                    Engine::Unicode::WideToUtf8(m_DllName));
                 return false;
             }
 
@@ -217,7 +217,7 @@ bool PluginPanelModule::Adopt(PluginModule& candidate)
                 std::any_of(nextPanels.begin(), nextPanels.end(),
                     [this](const Panel& panel) { return FindPanel(panel.Id) == nullptr; })))
         {
-            EDITOR_LOG_ERROR("Editor panel IDs changed; unload and load the plugin again: {}", WStrToStr(m_DllName));
+            EDITOR_LOG_ERROR("Editor panel IDs changed; unload and load the plugin again: {}", Engine::Unicode::WideToUtf8(m_DllName));
             return false;
         }
     }

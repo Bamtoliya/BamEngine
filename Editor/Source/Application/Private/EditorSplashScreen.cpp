@@ -26,7 +26,7 @@ void EditorSplashScreen::UpdateProgress(float progress, const std::string& statu
     progress = std::clamp(progress, 0.0f, 1.0f);
 
     // 엔진 공용 유틸리티 Engine::StrToWStr 활용
-    RenderFrame(progress, Engine::StrToWStr(statusText));
+    RenderFrame(progress, Engine::Unicode::Utf8ToWide(statusText));
 
     // OS 메시지 큐를 비워 윈도우 '응답 없음'을 방지하고 화면을 즉시 갱신
     SDL_PumpEvents();

@@ -75,7 +75,7 @@ string ResourceEditorInterface::BuildResourceWindowTitle() const
 {
     auto title = GetDisplayName();
     if (!m_TargetResourcePath.empty())
-        title += " - " + WStrToStr(m_TargetResourcePath.filename().wstring());
+        title += " - " + Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring());
     return title + "###" + GetResourceWindowId();
 }
 
@@ -169,7 +169,7 @@ void ResourceEditorInterface::DrawStandardAsyncLoadingOverlay(
 
     const float barWidth = std::clamp(avail.x * 0.65f, 140.0f, 320.0f);
     const auto& displayPath = !targetPath.empty() ? targetPath : m_TargetResourcePath;
-    const std::string filename = !displayPath.empty() ? WStrToStr(displayPath.filename().wstring()) : "";
+    const std::string filename = !displayPath.empty() ? Engine::Unicode::WideToUtf8(displayPath.filename().wstring()) : "";
     const std::string pendingText = filename.empty()
         ? LOCAL("ModelImport.PreviewPending")
         : LOCAL("ModelImport.PreviewPending") + " (" + filename + ")";
@@ -231,7 +231,7 @@ void ResourceEditorInterface::DrawCopyResourcePath()
     EditorUI::IconButtonOptions options;
     options.Enabled = !m_TargetResourcePath.empty();
     if (EditorUI::IconButton("CopyResourcePath", ICON_FA_COPY, "EditorCommon.CopyPath", options))
-        ImGui::SetClipboardText(WStrToStr(m_TargetResourcePath.wstring()).c_str());
+        ImGui::SetClipboardText(Engine::Unicode::WideToUtf8(m_TargetResourcePath.wstring()).c_str());
 }
 
 void ResourceEditorInterface::DrawHistoryMenuItems(std::string_view actionPrefix)
@@ -279,7 +279,7 @@ void ResourceEditorInterface::DrawDiscardConfirmation()
     if (!ImGui::IsPopupOpen(title.c_str())) ImGui::OpenPopup(title.c_str());
     if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
 
-    const auto targetName = m_TargetResourcePath.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(m_TargetResourcePath.filename().wstring());
+    const auto targetName = m_TargetResourcePath.empty() ? LOCAL("EditorDocument.Untitled") : Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring());
     ImGui::TextUnformatted(LOCAL_FMT("ResourceEditor.DiscardMessage", targetName).c_str());
     ImGui::Spacing();
 
@@ -309,7 +309,7 @@ void ResourceEditorInterface::NotifyMissingResources(
     const std::filesystem::path& assetPath, const std::vector<Engine::MissingResourceEntry>& entries) const
 {
     if (entries.empty()) return;
-    const auto fileName = assetPath.empty() ? LOCAL("EditorDocument.Untitled") : WStrToStr(assetPath.filename().wstring());
+    const auto fileName = assetPath.empty() ? LOCAL("EditorDocument.Untitled") : Engine::Unicode::WideToUtf8(assetPath.filename().wstring());
     NotificationManager::Get().AddNotification(GetDisplayName(),
         LOCAL_FMT("ResourceEditor.MissingResourcesNotification", fileName, entries.size()), ELogLevel::Warn);
 }
@@ -448,7 +448,7 @@ void ResourceEditorInterface::DrawMissingResourcesBanner(
         for (const auto& entry : entries)
         {
             const std::wstring& refText = !entry.AssetKey.empty() ? entry.AssetKey : entry.AssetPath;
-            const std::string refStr = WStrToStr(refText);
+            const std::string refStr = Engine::Unicode::WideToUtf8(refText);
             const std::string fullLine = !entry.PropertyName.empty()
                 ? (entry.PropertyName + " (" + entry.ExpectedResourceType + "): " + refStr)
                 : (entry.ExpectedResourceType + ": " + refStr);

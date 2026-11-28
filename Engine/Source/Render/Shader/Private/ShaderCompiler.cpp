@@ -196,8 +196,8 @@ ShaderCompileResult ShaderCompiler::Compile(
     const std::filesystem::path engineHlslDir = Engine::PlatformPath::ResolveUri(L"Engine://Shader/hlsl");
     if (!engineHlslDir.empty() && engineHlslDir != hlslPath.parent_path() && std::filesystem::exists(engineHlslDir, ec))
         cmd += L"-I \"" + engineHlslDir.wstring() + L"\" ";
-    cmd += L"-T " + std::wstring(profile.begin(), profile.end()) + L" ";
-    cmd += L"-E " + std::wstring(entryPoint.begin(), entryPoint.end()) + L" ";
+    cmd += L"-T " + Unicode::Utf8ToWide(profile) + L" ";
+    cmd += L"-E " + Unicode::Utf8ToWide(entryPoint) + L" ";
     cmd += L"-Fo \"" + outPath.wstring() + L"\" ";
     cmd += L"\"" + hlslPath.wstring() + L"\" 2>&1";
     const std::wstring fullCmd = L"\"" + cmd + L"\"";

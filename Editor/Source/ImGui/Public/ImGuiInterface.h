@@ -40,7 +40,7 @@ public:
 public:
 	const wstring& GetName() const { return m_Name; }
 	void SetName(const wstring& name) { m_Name = name; m_DisplayNameKey.clear(); }
-	virtual string GetDisplayName() const { return m_DisplayNameKey.empty() ? WStrToStr(m_Name) : LOCAL(m_DisplayNameKey); }
+	virtual string GetDisplayName() const { return m_DisplayNameKey.empty() ? Engine::Unicode::WideToUtf8(m_Name) : LOCAL(m_DisplayNameKey); }
 	virtual EPanelMenuCategory GetPanelMenuCategory() const { return EPanelMenuCategory::Other; }
 public:
 	virtual void CaptureState(EditorWorkspace& workspace) const;

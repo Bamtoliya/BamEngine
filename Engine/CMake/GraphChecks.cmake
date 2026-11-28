@@ -1,8 +1,8 @@
 ﻿add_executable(GraphFoundationCheck examples/GraphFoundationCheck.cpp)
-target_link_libraries(GraphFoundationCheck PRIVATE BamEngine::Engine)
+target_link_libraries(GraphFoundationCheck PRIVATE BamEngine)
 
 add_executable(GraphReflectionCheck examples/GraphReflectionCheck.cpp)
-target_link_libraries(GraphReflectionCheck PRIVATE BamEngine::Engine)
+target_link_libraries(GraphReflectionCheck PRIVATE BamEngine)
 reflection_generate(
     TARGET GraphReflectionCheck
     MODULE GraphReflectionCheck
@@ -14,7 +14,7 @@ reflection_generate(
 )
 
 add_executable(GraphExecutionCheck examples/GraphExecutionCheck.cpp)
-target_link_libraries(GraphExecutionCheck PRIVATE BamEngine::Engine)
+target_link_libraries(GraphExecutionCheck PRIVATE BamEngine)
 reflection_generate(
     TARGET GraphFoundationCheck
     MODULE GraphFoundationCheck
@@ -50,7 +50,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(ShaderGraphCheck examples/ShaderGraphCheck.cpp)
-target_link_libraries(ShaderGraphCheck PRIVATE BamEngine::Engine)
+target_link_libraries(ShaderGraphCheck PRIVATE BamEngine)
 
 if(MSVC)
     target_compile_options(ShaderGraphCheck PRIVATE /utf-8 /Zc:preprocessor)

@@ -463,7 +463,54 @@ int main()
         EXPECT_EQ(resolvedModules[0].Type, "Runtime");
         EXPECT_EQ(resolvedModules[0].CMakeSourceRoot, PlatformPath::Normalize(testProjDir / "Source"));
         EXPECT_EQ(resolvedModules[0].SourceDirectory, PlatformPath::Normalize(testProjDir / "Source" / "TestGameModule"));
-        EXPECT_EQ(resolvedModules[0].BinaryPath, PlatformPath::Normalize(testProjDir / "Binaries" / "Win64" / "TestGameModule.dll"));
+
+        const auto editorDebug = loadedDesc.ResolveModules(testProjDir,
+            { EProjectModuleRole::Editor, true });
+
+        const auto editorRelease = loadedDesc.ResolveModules(testProjDir,
+            { EProjectModuleRole::Editor, false });
+
+        const auto clientDebug = loadedDesc.ResolveModules(testProjDir,
+            { EProjectModuleRole::Client, true });
+
+        const auto clientRelease = loadedDesc.ResolveModules(testProjDir,
+            { EProjectModuleRole::Client, false });
+
+        const auto shippingRelease = loadedDesc.ResolveModules(testProjDir,
+            { EProjectModuleRole::Shipping, false });
+
+        EXPECT_TRUE(editorDebug.size() == 1u);
+        EXPECT_TRUE(editorRelease.size() == 1u);
+        EXPECT_TRUE(clientDebug.size() == 1u);
+        EXPECT_TRUE(clientRelease.size() == 1u);
+        EXPECT_TRUE(shippingRelease.size() == 1u);
+
+        const auto binaryRoot = testProjDir / "Binaries" / "Win64";
+
+        EXPECT_EQ(editorDebug[0].BinaryPath,
+            PlatformPath::Normalize(binaryRoot / "Editor" / "Debug" / "TestGameModule.dll"));
+
+        EXPECT_EQ(editorRelease[0].BinaryPath,
+            PlatformPath::Normalize(binaryRoot / "Editor" / "Release" / "TestGameModule.dll"));
+
+        EXPECT_EQ(clientDebug[0].BinaryPath,
+            PlatformPath::Normalize(binaryRoot / "Client" / "Debug" / "TestGameModule.dll"));
+
+        EXPECT_EQ(clientRelease[0].BinaryPath,
+            PlatformPath::Normalize(binaryRoot / "Client" / "Release" / "TestGameModule.dll"));
+
+        EXPECT_EQ(shippingRelease[0].BinaryPath,
+            PlatformPath::Normalize(binaryRoot / "Shipping" / "Release" / "TestGameModule.dll"));
+
+        EXPECT_EQ(editorDebug[0].BuildDirectory,
+            PlatformPath::Normalize(testProjDir / "Build" / "Editor" / "Debug"));
+
+        EXPECT_EQ(clientRelease[0].BuildDirectory,
+            PlatformPath::Normalize(testProjDir / "Build" / "Client" / "Release"));
+
+        EXPECT_TRUE(editorDebug[0].BinaryPath != editorRelease[0].BinaryPath);
+        EXPECT_TRUE(editorRelease[0].BinaryPath != clientRelease[0].BinaryPath);
+        EXPECT_TRUE(clientRelease[0].BinaryPath != shippingRelease[0].BinaryPath);
 
         const auto primaryRuntime = loadedDesc.ResolvePrimaryRuntimeModule(testProjDir);
         EXPECT_TRUE(primaryRuntime.has_value());

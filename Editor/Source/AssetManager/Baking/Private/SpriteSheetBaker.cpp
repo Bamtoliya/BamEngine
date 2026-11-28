@@ -1,4 +1,4 @@
-#include "SpriteSheetBaker.h"
+﻿#include "SpriteSheetBaker.h"
 #include "ThumbnailRenderer.h"
 #include "Renderer.h"
 #include "RHI.h"
@@ -425,7 +425,7 @@ bool SpriteSheetBaker::WriteSpriteSheetOutputs(
 	const auto threadId = std::hash<std::thread::id>{}(std::this_thread::get_id());
 	std::filesystem::path tmpPngPath = resolvedPng;
 	tmpPngPath += ".tmp_" + std::to_string(threadId);
-	const std::string tmpPngUtf8 = Engine::WStrToStr(tmpPngPath.wstring());
+	const std::string tmpPngUtf8 = Engine::Unicode::WideToUtf8(tmpPngPath.wstring());
 
 	const int stride = atlasWidth * 4;
 	if (stbi_write_png(tmpPngUtf8.c_str(), atlasWidth, atlasHeight, 4, atlasPixels.data(), stride) == 0)

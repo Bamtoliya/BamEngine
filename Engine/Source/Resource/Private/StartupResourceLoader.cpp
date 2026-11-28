@@ -189,7 +189,7 @@ namespace Engine::StartupResourceLoaderDetail
 		if (directory.filename() == L"spirv")
 			wgslPath = directory.parent_path() / L"wgsl" / wgslPath.filename();
 		wgslPath.replace_extension(L".wgsl");
-		return Engine::WStrToStr(wgslPath.generic_wstring());
+		return Engine::Unicode::WideToUtf8(wgslPath.generic_wstring());
 	}
 
 	std::string GetStartupShaderPath(const ShaderItemConfig& item, ERHIType rhiType)

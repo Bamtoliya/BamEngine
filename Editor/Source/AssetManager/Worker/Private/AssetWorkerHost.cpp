@@ -139,7 +139,7 @@ namespace
             return true;
         const DWORD error = GetLastError();
         BAM_LOG(Error, "Editor", "Asset", "Texture output move failed: from={}, to={}, error={}",
-            Engine::WStrToStr(from.wstring()), Engine::WStrToStr(to.wstring()), error);
+            Engine::Unicode::WideToUtf8(from.wstring()), Engine::Unicode::WideToUtf8(to.wstring()), error);
         return false;
     }
 
@@ -181,10 +181,10 @@ namespace
                 MoveTextureOutputFile(ddsBackupPath, finalDdsPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
             if (!restoredBamtex)
                 BAM_LOG(Error, "Editor", "Asset", "Failed to restore texture output: {}",
-                    Engine::WStrToStr(finalBamtexPath.wstring()));
+                    Engine::Unicode::WideToUtf8(finalBamtexPath.wstring()));
             if (!restoredDds)
                 BAM_LOG(Error, "Editor", "Asset", "Failed to restore texture output: {}",
-                    Engine::WStrToStr(finalDdsPath.wstring()));
+                    Engine::Unicode::WideToUtf8(finalDdsPath.wstring()));
             if (restoredBamtex && !bamtexBackupPath.empty()) DeleteFileW(bamtexBackupPath.c_str());
             if (restoredDds && !ddsBackupPath.empty()) DeleteFileW(ddsBackupPath.c_str());
             return false;
@@ -203,10 +203,10 @@ namespace
                 MoveTextureOutputFile(ddsBackupPath, finalDdsPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
             if (!restoredBamtex)
                 BAM_LOG(Error, "Editor", "Asset", "Failed to restore texture output: {}",
-                    Engine::WStrToStr(finalBamtexPath.wstring()));
+                    Engine::Unicode::WideToUtf8(finalBamtexPath.wstring()));
             if (!restoredDds)
                 BAM_LOG(Error, "Editor", "Asset", "Failed to restore texture output: {}",
-                    Engine::WStrToStr(finalDdsPath.wstring()));
+                    Engine::Unicode::WideToUtf8(finalDdsPath.wstring()));
             if (restoredBamtex && !bamtexBackupPath.empty()) DeleteFileW(bamtexBackupPath.c_str());
             if (restoredDds && !ddsBackupPath.empty()) DeleteFileW(ddsBackupPath.c_str());
             return false;
@@ -222,8 +222,8 @@ namespace
     {
         std::ostringstream stream;
         stream.imbue(std::locale::classic());
-        stream << "IMPORT_MODEL\t" << id << '\t' << Engine::WStrToStr(source.wstring())
-            << '\t' << Engine::WStrToStr(snapshot.wstring()) << '\t'
+        stream << "IMPORT_MODEL\t" << id << '\t' << Engine::Unicode::WideToUtf8(source.wstring())
+            << '\t' << Engine::Unicode::WideToUtf8(snapshot.wstring()) << '\t'
             << std::setprecision(std::numeric_limits<float>::max_digits10)
             << options.FlipUVs << ' ' << options.ConvertToLeftHanded << ' ' << options.UniformScale << ' '
             << options.FlipWindingOrder << ' ' << options.FlipPitch << ' ' << options.FlipHeading << ' '
@@ -239,11 +239,11 @@ namespace
         Engine::ETextureFormat targetFormat, ECompressFlags compressFlags, const TextureOutputFiles& outputs)
     {
         std::ostringstream stream;
-        stream << "IMPORT_TEXTURE\t" << id << '\t' << Engine::WStrToStr(sourcePath.wstring())
-            << '\t' << Engine::WStrToStr(finalBamtexPath.wstring())
-            << '\t' << Engine::WStrToStr(finalDdsPath.wstring())
-            << '\t' << Engine::WStrToStr(outputs.BamtexPath.wstring())
-            << '\t' << Engine::WStrToStr(outputs.DdsPath.wstring())
+        stream << "IMPORT_TEXTURE\t" << id << '\t' << Engine::Unicode::WideToUtf8(sourcePath.wstring())
+            << '\t' << Engine::Unicode::WideToUtf8(finalBamtexPath.wstring())
+            << '\t' << Engine::Unicode::WideToUtf8(finalDdsPath.wstring())
+            << '\t' << Engine::Unicode::WideToUtf8(outputs.BamtexPath.wstring())
+            << '\t' << Engine::Unicode::WideToUtf8(outputs.DdsPath.wstring())
             << '\t' << static_cast<uint32_t>(targetFormat)
             << '\t' << static_cast<uint32_t>(compressFlags) << '\n';
         return stream.str();
@@ -467,7 +467,7 @@ EResult AssetWorkerHost::Initialize(void* arg)
     {
         BAM_LOG(Warn, "Editor", "Asset",
             "BamAssetWorker.exe not found at {}; using in-process fallback.",
-            Engine::WStrToStr(m_WorkerExePath.wstring()));
+            Engine::Unicode::WideToUtf8(m_WorkerExePath.wstring()));
         m_Available = false;
         return EResult::Success;
     }
@@ -493,7 +493,7 @@ EResult AssetWorkerHost::Initialize(void* arg)
 
     m_Available = true;
     BAM_LOG(Info, "Editor", "Asset",
-        "AssetWorkerHost started ({} workers): {}", MAX_WORKERS, Engine::WStrToStr(m_WorkerExePath.wstring()));
+        "AssetWorkerHost started ({} workers): {}", MAX_WORKERS, Engine::Unicode::WideToUtf8(m_WorkerExePath.wstring()));
     return EResult::Success;
 }
 
@@ -684,7 +684,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
 
         const std::string command = BuildModelCommand(task.RequestId, task.SourcePath, snapshot.Path, task.Options);
         const std::string displayName = task.ProgressScope.DisplayName.empty()
-            ? Engine::WStrToStr(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
+            ? Engine::Unicode::WideToUtf8(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
         {
             std::lock_guard lock(m_ImportStatusMutex);
             m_ActiveImportStatus = {
@@ -748,7 +748,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         else
         {
             BAM_LOG(Error, "Editor", "Asset", "Model worker failed, disconnected, or timed out: {}",
-                Engine::WStrToStr(task.SourcePath.wstring()));
+                Engine::Unicode::WideToUtf8(task.SourcePath.wstring()));
             task.Complete(Result::Failed, {});
         }
     };
@@ -791,7 +791,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         const std::string command = BuildTextureCommand(task.RequestId, task.SourcePath,
             task.FinalBamtexPath, task.FinalDdsPath, task.TargetFormat, task.CompressFlags, outputs);
         const std::string displayName = task.ProgressScope.DisplayName.empty()
-            ? Engine::WStrToStr(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
+            ? Engine::Unicode::WideToUtf8(task.SourcePath.filename().wstring()) : task.ProgressScope.DisplayName;
         {
             std::lock_guard lock(m_ImportStatusMutex);
             m_ActiveImportStatus = {
@@ -854,7 +854,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
                     const auto now = Clock::now();
                     const auto stageMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastProgressAt).count();
                     BAM_LOG(Info, "Editor", "Asset", "Texture worker progress: source={}, stage={}, previous_stage_ms={}",
-                        Engine::WStrToStr(task.SourcePath.wstring()), value, stageMs);
+                        Engine::Unicode::WideToUtf8(task.SourcePath.wstring()), value, stageMs);
                     lastProgress = value;
                     lastProgressAt = now;
                     deadline = lastProgressAt + timeout;
@@ -893,7 +893,7 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
             task.Complete(Result::Cancelled);
         else
         {
-            const auto source = Engine::WStrToStr(task.SourcePath.wstring());
+            const auto source = Engine::Unicode::WideToUtf8(task.SourcePath.wstring());
             const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(finishedAt - startedAt).count();
             const auto stageMs = std::chrono::duration_cast<std::chrono::milliseconds>(finishedAt - lastProgressAt).count();
             if (!commandSent)
@@ -999,8 +999,8 @@ void AssetWorkerHost::WorkerThreadLoop(size_t workerIndex)
         bool gotResult = false;
         if (proc.IsAlive())
         {
-            const std::string srcUtf8 = SanitizeField(Engine::WStrToStr(thumbTask.SourcePath.wstring()));
-            const std::string dstUtf8 = SanitizeField(Engine::WStrToStr(thumbTask.OutputPngPath.wstring()));
+            const std::string srcUtf8 = SanitizeField(Engine::Unicode::WideToUtf8(thumbTask.SourcePath.wstring()));
+            const std::string dstUtf8 = SanitizeField(Engine::Unicode::WideToUtf8(thumbTask.OutputPngPath.wstring()));
             const std::string cmd = "THUMB\t" + std::to_string(thumbTask.RequestId) + "\t" + std::to_string(thumbTask.Resolution) +
                 "\t" + srcUtf8 + "\t" + dstUtf8 + "\n";
 

@@ -21,7 +21,7 @@ namespace
 		std::error_code error;
 		const bool exists = std::filesystem::exists(physicalPath, error) && !error;
 		const auto virtualUri = PlatformPath::ToVirtualUri(exists ? physicalPath : inputPath);
-		return PlatformPath::IsVirtualUri(virtualUri) ? WStrToStr(virtualUri) : path;
+		return PlatformPath::IsVirtualUri(virtualUri) ? Engine::Unicode::WideToUtf8(virtualUri) : path;
 	}
 }
 
@@ -33,7 +33,7 @@ EResult ActionTimelineAsset::Initialize(void* arg)
 		CAST_DESC;
 		if (!desc->Path.empty())
 		{
-			if (!LoadFromFile(WStrToStr(desc->Path)))
+			if (!LoadFromFile(Engine::Unicode::WideToUtf8(desc->Path)))
 			{
 				return EResult::Fail;
 			}
@@ -86,7 +86,7 @@ bool ActionTimelineAsset::PrepareFilePathRelocation(const vector<FilePathChange>
 bool ActionTimelineAsset::IsProjectJsonDocument(const std::filesystem::path& pathOrUri)
 {
 	const auto path = PlatformPath::ResolveUri(pathOrUri);
-	const auto extension = ToLowerStr(WStrToStr(path.extension().wstring()));
+	const auto extension = ToLowerStr(Engine::Unicode::WideToUtf8(path.extension().wstring()));
 	return PlatformPath::IsProjectUri(PlatformPath::ToVirtualUri(path)) &&
 		(extension == ".json" || extension == ".actiontimeline");
 }

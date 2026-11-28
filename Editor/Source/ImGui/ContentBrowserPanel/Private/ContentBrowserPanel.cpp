@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "InputManager.h"
 #include "EditorUI.h"
 #include "ContentBrowserPanel.h"
@@ -128,8 +128,8 @@ static bool PassesFilter(const filesystem::directory_entry& entry, uint32 filter
 {
 	if (filterMask == 0) return true; // 아무것도 선택하지 않거나 "All"인 경우 모두 표시
 	if (entry.is_directory()) return true; // 폴더는 무조건 표시
-	const auto filename = Engine::ToLowerStr(Engine::WStrToStr(entry.path().filename().wstring()));
-	const auto ext = Engine::ToLowerStr(Engine::WStrToStr(entry.path().extension().wstring()));
+	const auto filename = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(entry.path().filename().wstring()));
+	const auto ext = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(entry.path().extension().wstring()));
 	const bool isTexture = (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" ||
 		ext == ".bmp" || ext == ".dds" || ext == ".hdr" || ext == ".bamtex" || ext == ".bamsprite" ||
 		ext == ".bamspriteanim" || ext == ".spriteanim" ||
@@ -854,14 +854,14 @@ void ContentBrowserPanel::OpenMountAddModal(const filesystem::path& initialPath)
 
 	if (!initialPath.empty())
 	{
-		const std::string utf8Path = Engine::WStrToStr(initialPath.lexically_normal().wstring());
+		const std::string utf8Path = Engine::Unicode::WideToUtf8(initialPath.lexically_normal().wstring());
 		const size_t copyPathLen = std::min(utf8Path.size(), sizeof(m_MountPathBuffer) - 1);
 		memcpy(m_MountPathBuffer, utf8Path.data(), copyPathLen);
 		m_MountPathBuffer[copyPathLen] = '\0';
 
 		const auto fn = initialPath.filename().wstring();
 		const std::wstring folderName = fn.empty() ? initialPath.wstring() : fn;
-		const std::string utf8Name = Engine::WStrToStr(folderName);
+		const std::string utf8Name = Engine::Unicode::WideToUtf8(folderName);
 		const size_t copyNameLen = std::min(utf8Name.size(), sizeof(m_MountNameBuffer) - 1);
 		memcpy(m_MountNameBuffer, utf8Name.data(), copyNameLen);
 		m_MountNameBuffer[copyNameLen] = '\0';
@@ -907,15 +907,15 @@ void ContentBrowserPanel::DrawMountAddModal()
 		if (ImGui::Button("...##BrowseMountFolder", ImVec2(browseWidth, 0.0f)))
 		{
 			std::wstring selectedFolder;
-			if (FileDialogs::OpenFolderDialog(selectedFolder, Engine::StrToWStr(m_MountPathBuffer), "ContentBrowser.MountFolder") && !selectedFolder.empty())
+			if (FileDialogs::OpenFolderDialog(selectedFolder, Engine::Unicode::Utf8ToWide(m_MountPathBuffer), "ContentBrowser.MountFolder") && !selectedFolder.empty())
 			{
-				const std::string utf8 = Engine::WStrToStr(selectedFolder);
+				const std::string utf8 = Engine::Unicode::WideToUtf8(selectedFolder);
 				const size_t copyLen = std::min(utf8.size(), sizeof(m_MountPathBuffer) - 1);
 				memcpy(m_MountPathBuffer, utf8.data(), copyLen);
 				m_MountPathBuffer[copyLen] = '\0';
 				if (m_MountNameBuffer[0] == '\0')
 				{
-					const std::string folderName = Engine::WStrToStr(filesystem::path(selectedFolder).filename().wstring());
+					const std::string folderName = Engine::Unicode::WideToUtf8(filesystem::path(selectedFolder).filename().wstring());
 					const size_t nameLen = std::min(folderName.size(), sizeof(m_MountNameBuffer) - 1);
 					memcpy(m_MountNameBuffer, folderName.data(), nameLen);
 					m_MountNameBuffer[nameLen] = '\0';
@@ -963,7 +963,7 @@ void ContentBrowserPanel::DrawMountAddModal()
 			if (!ProjectSessionManager::IsCreated())
 				ProjectSessionManager::Create();
 			std::string error;
-			if (ProjectSessionManager::Get().AddContentMount(mountName, filesystem::path(Engine::StrToWStr(mountPathUtf8)),
+			if (ProjectSessionManager::Get().AddContentMount(mountName, filesystem::path(Engine::Unicode::Utf8ToWide(mountPathUtf8)),
 				m_MountReadOnly, m_MountShowUnderAssets, &error))
 			{
 				m_MountError.clear();
@@ -1043,12 +1043,12 @@ void ContentBrowserPanel::OpenSpriteSheetBakeModal(const filesystem::path& model
 	m_OpenSpriteSheetBakeModal = true;
 
 	filesystem::path modelStem = modelPath.stem();
-	const std::string lowerName = Engine::WStrToStr(modelPath.filename().wstring());
+	const std::string lowerName = Engine::Unicode::WideToUtf8(modelPath.filename().wstring());
 	if (lowerName.size() >= 14 && _stricmp(lowerName.c_str() + lowerName.size() - 14, ".bammodel.json") == 0)
 		modelStem.replace_extension();
 
 	const filesystem::path defaultPngPath = modelPath.parent_path() / (modelStem.wstring() + L"_Sheet.png");
-	const std::string defaultPngUtf8 = Engine::WStrToStr(defaultPngPath.wstring());
+	const std::string defaultPngUtf8 = Engine::Unicode::WideToUtf8(defaultPngPath.wstring());
 	const size_t copyLen = std::min(defaultPngUtf8.size(), sizeof(m_SpriteBakeOutputPngBuffer) - 1);
 	memcpy(m_SpriteBakeOutputPngBuffer, defaultPngUtf8.data(), copyLen);
 	m_SpriteBakeOutputPngBuffer[copyLen] = '\0';
@@ -1121,14 +1121,14 @@ void ContentBrowserPanel::DrawSpriteSheetBakeModal()
 		ImGui::SameLine();
 		if (ImGui::Button("...##BrowseSpriteBakeOutput", ImVec2(browseWidth, 0.0f)))
 		{
-			const filesystem::path currentOut = Engine::StrToWStr(m_SpriteBakeOutputPngBuffer);
+			const filesystem::path currentOut = Engine::Unicode::Utf8ToWide(m_SpriteBakeOutputPngBuffer);
 			std::wstring selectedPath;
 			const std::vector<FileDialogFilter> filters = { { L"PNG Image (*.png)", L"*.png" } };
 			if (FileDialogs::SaveFileDialog(selectedPath, filters,
 				currentOut.filename().wstring(), L"png",
 				currentOut.parent_path().wstring(), EFileDialogContext::General) && !selectedPath.empty())
 			{
-				const std::string utf8 = Engine::WStrToStr(selectedPath);
+				const std::string utf8 = Engine::Unicode::WideToUtf8(selectedPath);
 				const size_t copyLen = std::min(utf8.size(), sizeof(m_SpriteBakeOutputPngBuffer) - 1);
 				memcpy(m_SpriteBakeOutputPngBuffer, utf8.data(), copyLen);
 				m_SpriteBakeOutputPngBuffer[copyLen] = '\0';
@@ -1187,7 +1187,7 @@ void ContentBrowserPanel::DrawSpriteSheetBakeModal()
 				config.columns = m_SpriteBakeColumns;
 				config.padding = m_SpriteBakePadding;
 				config.pivot = m_SpriteBakePivot;
-				config.outputPngPath = filesystem::path(Engine::StrToWStr(outputPngUtf8));
+				config.outputPngPath = filesystem::path(Engine::Unicode::Utf8ToWide(outputPngUtf8));
 				config.outputSpriteMetaPath = config.outputPngPath;
 				config.outputSpriteMetaPath.replace_extension(L".bamsprite.json");
 
@@ -1220,7 +1220,7 @@ void ContentBrowserPanel::DrawSpriteSheetBakeModal()
 					NotificationManager::Get().AddNotification(
 						LOCAL("ContentBrowser.Title"),
 						LOCAL_FMT("ContentBrowser.BakeSpriteSheetSuccess",
-							Engine::WStrToStr(result.outputPngPath.filename().wstring()),
+							Engine::Unicode::WideToUtf8(result.outputPngPath.filename().wstring()),
 							result.atlasWidth, result.atlasHeight, result.totalFrames),
 						ELogLevel::Info, 4.0f);
 					RequestRefresh();
@@ -1482,7 +1482,7 @@ void ContentBrowserPanel::StartAddressBarEdit()
 {
 	m_AddressBarEditing = true;
 	m_AddressBarSetFocus = true;
-	const std::string utf8Path = Engine::WStrToStr(m_CurrentDirectory.lexically_normal().wstring());
+	const std::string utf8Path = Engine::Unicode::WideToUtf8(m_CurrentDirectory.lexically_normal().wstring());
 	const size_t copyLen = std::min(utf8Path.size(), sizeof(m_AddressBarInputBuffer) - 1);
 	memcpy(m_AddressBarInputBuffer, utf8Path.data(), copyLen);
 	m_AddressBarInputBuffer[copyLen] = '\0';
@@ -1509,7 +1509,7 @@ void ContentBrowserPanel::NavigateToAddress(const char* inputBuffer)
 	if (trimmed.empty())
 		return;
 
-	const std::wstring wideInput = Engine::StrToWStr(trimmed);
+	const std::wstring wideInput = Engine::Unicode::Utf8ToWide(trimmed);
 	filesystem::path targetPath;
 
 	if (Engine::PlatformPath::IsVirtualUri(wideInput))
@@ -1645,9 +1645,9 @@ void ContentBrowserPanel::AddressBar(float width)
 					cur = cur.parent_path();
 				}
 				effectiveRoot = cur.empty() ? m_CurrentDirectory.root_path() : cur;
-				rootDisplayName = Engine::WStrToStr(effectiveRoot.wstring());
+				rootDisplayName = Engine::Unicode::WideToUtf8(effectiveRoot.wstring());
 				if (rootDisplayName.empty())
-					rootDisplayName = Engine::WStrToStr(m_CurrentDirectory.root_name().wstring());
+					rootDisplayName = Engine::Unicode::WideToUtf8(m_CurrentDirectory.root_name().wstring());
 			}
 			else
 			{
@@ -1676,7 +1676,7 @@ void ContentBrowserPanel::AddressBar(float width)
 		else
 		{
 			const auto fn = nodes[i].filename().wstring();
-			name = Engine::WStrToStr(fn.empty() ? nodes[i].wstring() : fn);
+			name = Engine::Unicode::WideToUtf8(fn.empty() ? nodes[i].wstring() : fn);
 		}
 		name += "###AddressNode_" + std::to_string(static_cast<int>(i));
 
@@ -1938,7 +1938,7 @@ static void MoveContentBrowserEntry(const filesystem::path& source, const filesy
 				if (historyInvalid)
 					*historyInvalid = true;
 				EDITOR_LOG_ERROR("Case rename rollback failed. Original asset remains at {}",
-					Engine::WStrToStr(staging.wstring()));
+					Engine::Unicode::WideToUtf8(staging.wstring()));
 			}
 			throw filesystem::filesystem_error("Complete case rename", staging, target,
 				{ static_cast<int>(error), std::system_category() });
@@ -2034,7 +2034,7 @@ static BY_HANDLE_FILE_INFORMATION CopyContentBrowserEntry(const filesystem::path
 			std::error_code error;
 			filesystem::remove_all(staging, error);
 			if (error)
-				EDITOR_LOG_WARN("Copy staging cleanup failed: {}", Engine::WStrToStr(staging.wstring()));
+				EDITOR_LOG_WARN("Copy staging cleanup failed: {}", Engine::Unicode::WideToUtf8(staging.wstring()));
 		};
 
 	BY_HANDLE_FILE_INFORMATION identity{};
@@ -2317,12 +2317,12 @@ void ContentBrowserPanel::DrawFileMovePaths() const
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			const auto source = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].Before));
+			const auto source = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].Before));
 			ImGui::TextUnformatted(source.c_str());
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("%s", source.c_str());
 			ImGui::TableSetColumnIndex(1);
-			const auto target = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].After));
+			const auto target = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(m_PendingFileMove[index].After));
 			ImGui::TextUnformatted(target.c_str());
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("%s", target.c_str());
@@ -2394,7 +2394,7 @@ vector<filesystem::path> ContentBrowserPanel::TransferFiles(const vector<filesys
 		catch (const filesystem::filesystem_error& error)
 		{
 			failed.push_back(path);
-			EDITOR_LOG_WARN("Asset transfer failed for {}: {}", Engine::WStrToStr(source.wstring()),
+			EDITOR_LOG_WARN("Asset transfer failed for {}: {}", Engine::Unicode::WideToUtf8(source.wstring()),
 				error.code().message());
 		}
 	}
@@ -2567,7 +2567,7 @@ bool ContentBrowserPanel::ReplayAssetMove(const AssetMoveBatch& batch, bool forw
 		{
 			m_FileHistoryInvalid = true;
 			EDITOR_LOG_ERROR("Asset move rollback failed. Reference backups: {}",
-				Engine::WStrToStr(batch.RecoveryDirectory.wstring()));
+				Engine::Unicode::WideToUtf8(batch.RecoveryDirectory.wstring()));
 			return fail("ContentBrowser.FileHistoryRollbackFailed");
 		}
 		return fail("ContentBrowser.MoveReferenceChanged");
@@ -2976,7 +2976,7 @@ void ContentBrowserPanel::DrawFileReferenceImpact(const AssetReferenceImpact& im
 
 	const auto drawPath = [](const filesystem::path& path)
 	{
-		const auto display = Engine::WStrToStr(Engine::PlatformPath::ToVirtualUri(path));
+		const auto display = Engine::Unicode::WideToUtf8(Engine::PlatformPath::ToVirtualUri(path));
 		ImGui::TextUnformatted(display.c_str());
 		if (ImGui::IsItemHovered())
 			ImGui::SetTooltip("%s", display.c_str());
@@ -3071,7 +3071,7 @@ void ContentBrowserPanel::RebuildGridItems(const vector<filesystem::directory_en
 		item.IsDirectory = isDir;
 		item.IsReadOnly = isReadOnly;
 		item.CacheKey = isDir ? std::string{} : AssetCache::BuildCacheKey(path);
-		item.ImGuiIdStr = Engine::WStrToStr(path.wstring());
+		item.ImGuiIdStr = Engine::Unicode::WideToUtf8(path.wstring());
 		item.Visual = ContentBrowserGridItem::DescribeAssetVisual(path, isDir);
 
 		m_GridSelectionIndices.emplace(id, static_cast<int>(m_GridSelectionItems.size()));
@@ -3138,7 +3138,7 @@ void ContentBrowserPanel::DrawGrid(bool enterPressed)
 		std::wstring searchQuery;
 		try
 		{
-			searchQuery = Engine::StrToWStr(searchStr);
+			searchQuery = Engine::Unicode::Utf8ToWide(searchStr);
 		}
 		catch (const std::filesystem::filesystem_error&)
 		{
@@ -3363,7 +3363,7 @@ void ContentBrowserPanel::FileConfilictPopup()
 			auto& conflict = m_PendingConflicts.front();
 			
 			ImGui::Text("%s", localizationManager.GetText("ContentBrowser.FileConflictMessage").c_str());
-			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", Engine::WStrToStr(conflict.Dest.filename().wstring()).c_str());
+			ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "%s", Engine::Unicode::WideToUtf8(conflict.Dest.filename().wstring()).c_str());
 			ImGui::Separator();
 			if (m_PendingConflicts.size() > 1)
 			{
@@ -3699,7 +3699,7 @@ void ContentBrowserPanel::CreateEmptyScene(const filesystem::path& path)
 		file.close();
 		if (!file)
 		{
-			EDITOR_LOG_WARN("New asset write failed: {}", Engine::WStrToStr(outputPath.wstring()));
+			EDITOR_LOG_WARN("New asset write failed: {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 			return;
 		}
 		RequestRefresh();
@@ -3747,7 +3747,7 @@ void ContentBrowserPanel::CreateEmptyPrefab(const filesystem::path& path)
 		file.close();
 		if (!file)
 		{
-			EDITOR_LOG_WARN("New asset write failed: {}", Engine::WStrToStr(outputPath.wstring()));
+			EDITOR_LOG_WARN("New asset write failed: {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 			return;
 		}
 		RequestRefresh();
@@ -3788,7 +3788,7 @@ void ContentBrowserPanel::CreateEmptyGraph(const filesystem::path& path)
 		file.close();
 		if (!file)
 		{
-			EDITOR_LOG_WARN("New asset write failed: {}", Engine::WStrToStr(outputPath.wstring()));
+			EDITOR_LOG_WARN("New asset write failed: {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 			return;
 		}
 		RequestRefresh();
@@ -3814,11 +3814,11 @@ void ContentBrowserPanel::CreateEmptyTimeline(const filesystem::path& path)
 	// 길이 3초는 편집 범위다. 새 타임라인은 클립·트랙이 끝나는 시점에 끝나므로, 빈 공간 때문에 다음 재생이 늦어지지 않는다.
 	asset->SetDuration(3.0f);
 	asset->SetEndPolicy(Engine::ETimelineEndPolicy::LastTrackEnd);
-	const bool saved = asset->SaveToFile(Engine::WStrToStr(outputPath.wstring()));
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	const bool saved = asset->SaveToFile(Engine::Unicode::WideToUtf8(outputPath.wstring()));
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 	if (!saved)
 	{
-		EDITOR_LOG_WARN("Timeline creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		EDITOR_LOG_WARN("Timeline creation failed: could not write file {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 		return;
 	}
 	RequestRefresh();
@@ -3836,10 +3836,10 @@ void ContentBrowserPanel::CreateEmptyTerrainLayer(const filesystem::path& path)
 	if (!asset)
 		return;
 	const bool saved = asset->SaveToFile(outputPath);
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 	if (!saved)
 	{
-		EDITOR_LOG_WARN("Terrain layer creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		EDITOR_LOG_WARN("Terrain layer creation failed: could not write file {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 		return;
 	}
 	RequestRefresh();
@@ -3854,14 +3854,14 @@ void ContentBrowserPanel::CreateEmptyDataTable(const filesystem::path& path)
 	std::ofstream file(outputPath, std::ios::out | std::ios::binary | std::ios::trunc);
 	if (!file.is_open())
 	{
-		EDITOR_LOG_WARN("Data table creation failed: could not open file {}", Engine::WStrToStr(outputPath.wstring()));
+		EDITOR_LOG_WARN("Data table creation failed: could not open file {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 		return;
 	}
 	file << "Id,Name,Value\r\n";
 	file.close();
 	if (!file)
 	{
-		EDITOR_LOG_WARN("Data table creation failed: could not write file {}", Engine::WStrToStr(outputPath.wstring()));
+		EDITOR_LOG_WARN("Data table creation failed: could not write file {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 		return;
 	}
 	RequestRefresh();
@@ -3902,7 +3902,7 @@ void ContentBrowserPanel::CreateEmptyParticleEffect(const filesystem::path& path
 		file.close();
 		if (!file)
 		{
-			EDITOR_LOG_WARN("New asset write failed: {}", Engine::WStrToStr(outputPath.wstring()));
+			EDITOR_LOG_WARN("New asset write failed: {}", Engine::Unicode::WideToUtf8(outputPath.wstring()));
 			return;
 		}
 		RequestRefresh();
@@ -4031,8 +4031,8 @@ void ContentBrowserPanel::DrawPathCopyMenu(const vector<filesystem::path>& paths
 			uriText += '\n';
 		}
 
-		pathText += Engine::WStrToStr(absolutePath.make_preferred().wstring());
-		uriText += Engine::WStrToStr(uri);
+		pathText += Engine::Unicode::WideToUtf8(absolutePath.make_preferred().wstring());
+		uriText += Engine::Unicode::WideToUtf8(uri);
 	}
 
 	if (ImGui::MenuItem((ICON_FA_COPY " " + LOCAL_LABEL("EditorCommon.CopyPath")).c_str(),

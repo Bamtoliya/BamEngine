@@ -35,7 +35,7 @@
             "${source_dir}/Public"
             "${CMAKE_SOURCE_DIR}/ThirdParty"
         )
-        target_link_libraries(${target} PRIVATE BamEngine::Engine imgui::imgui)
+        target_link_libraries(${target} PRIVATE BamEngine imgui::imgui)
 
         if(MSVC)
             target_compile_options(${target} PRIVATE /Zc:preprocessor /utf-8 /bigobj)
@@ -53,7 +53,7 @@
             "${EDITOR_SOURCE_DIR}/ImGui/Public"
             "${CMAKE_SOURCE_DIR}/ThirdParty"
         )
-        target_link_libraries(${target} PRIVATE BamEngine::Engine imgui::imgui)
+        target_link_libraries(${target} PRIVATE BamEngine imgui::imgui)
 
         if(MSVC)
             target_compile_options(${target} PRIVATE /Zc:preprocessor /utf-8 /bigobj)

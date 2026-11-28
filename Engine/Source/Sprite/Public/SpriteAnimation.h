@@ -78,6 +78,21 @@ public:
 	bool SaveToFile(const std::wstring& filePath) const;
 	bool LoadFromFile(const std::wstring& filePath);
 
+#pragma region Dependencies
+bool CollectResourceDependencies(vector<Handle>& out) const override
+{
+	for (const auto& frame : m_Frames)
+	{
+		const Handle sprite = frame.sprite.GetRawHandle();
+
+		if (sprite.IsValid())
+			out.push_back(sprite);
+	}
+
+	return true;
+}
+#pragma endregion
+
 private:
 	PROPERTY(EDITABLE, DISPLAY_NAME("PROP_FPS"))
 		f32 m_FramesPerSecond = 12.0f;

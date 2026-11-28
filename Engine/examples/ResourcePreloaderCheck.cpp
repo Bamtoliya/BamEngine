@@ -144,10 +144,32 @@ int main()
     }
 
     // 같은 키를 다시 등록하면 기존 리소스를 유지하고 새 것을 버린다.
-    Material* duplicate = Material::CreateEmpty();
+    const Handle existing = manager.FindHandleByKey(MeshKey(3));
+
+    // 동일 타입 중복 등록
+    Mesh* duplicate = Mesh::CreateEmpty();
     duplicate->SetKey(MeshKey(3));
-    Expect(manager.RegisterPreparedResource(duplicate) == manager.FindHandleByKey(MeshKey(3)) &&
-        manager.GetResourceHandle<Mesh>(MeshKey(3))->GetMin().x == 3.0f, "registering a known key must keep the existing resource");
+
+    Expect(
+        manager.RegisterPreparedResource(duplicate) == existing,
+        "same type duplicate must return existing resource");
+
+    // 다른 타입 충돌
+    Material* conflict = Material::CreateEmpty();
+    conflict->SetKey(MeshKey(3));
+
+    Expect(
+        !manager.RegisterPreparedResource(conflict).IsValid(),
+        "different resource type must be rejected");
+
+    const auto preserved =
+        manager.GetResourceHandle<Mesh>(MeshKey(3));
+
+    Expect(
+        preserved.IsValid() &&
+        preserved.GetRawHandle() == existing &&
+        preserved->GetMin().x == 3.0f,
+        "type conflict must preserve the existing resource");
     Expect(!manager.RegisterPreparedResource(nullptr).IsValid(), "a missing resource must not be registered");
 
     // 다른 키로 등록된 같은 파일도 다시 읽지 않는다.
@@ -260,8 +282,7 @@ int main()
         rock->ReleaseContents();
         Expect(rock->IsPending() && rock->GetGeometryVersion() != geometryVersion && rock->GetUploadByteSize() == 0, "released meshes must drop their contents");
         Expect(rock->GetMin().x == 7.0f && manager.FindHandleByKey(L"Project://Rock.bammesh") == rockHandle, "released meshes must load again");
-        material->Free();
-		manager.DestroyResource(material);
+        ResourceManager::DestroyUnregisteredResource(material);
     }
     ResourceStreamer::Destroy();
     Expect(!ResourcePreloader::IsAnyActive() && find(L"Project://Rock_LOD1.bammesh")->GetStreamSlot() == 0, "a destroyed streamer must leave resources alone");

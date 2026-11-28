@@ -351,7 +351,7 @@ int CheckTerrainLayerAsset()
 	ResourceManager::Get().DestroyResource(loaded);
 	if (!sameSettings) return Fail("Terrain layer settings must round-trip through the asset file.");
 	if (!keptIdentity) return Fail("Loading a terrain layer must keep the key assigned by the loader.");
-	if (displayName != WStrToStr(L"암석")) return Fail("Terrain layer display name must be the file name without its suffix.");
+	if (displayName != Engine::Unicode::WideToUtf8(L"암석")) return Fail("Terrain layer display name must be the file name without its suffix.");
 
 	// 구형 .bamterrainlayer.json(PBR 필드 누락) 하위 호환: ALLOW_MISSING으로 기본값(Roughness=0.85, Metallic=0.0)을 유지한다.
 	const auto legacyPath = folder / L"legacy.bamterrainlayer.json";

@@ -1,4 +1,4 @@
-#include "FileDialogs.h"
+﻿#include "FileDialogs.h"
 #include "Editor_Macros.h"
 #include "Functions.h"
 #include "PlatformPath.h"
@@ -135,7 +135,7 @@ namespace
 
         if (!pickFolders)
         {
-            const wstring allFilesName = StrToWStr(LOCAL("FileDialog.AllFiles"));
+            const wstring allFilesName = Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.AllFiles"));
             vector<COMDLG_FILTERSPEC> specifications;
 
             if (filters.empty())

@@ -1,4 +1,4 @@
-project(BamAssetWorker LANGUAGES CXX)
+﻿project(BamAssetWorker LANGUAGES CXX)
 
 find_package(directxtex CONFIG REQUIRED)
 
@@ -19,7 +19,7 @@ target_include_directories(BamAssetWorker PRIVATE
 )
 
 target_link_libraries(BamAssetWorker PRIVATE
-    BamEngine::Engine
+    BamEngine
     BamTools::ModelConverter
     TextureConverter
     Microsoft::DirectXTex
@@ -40,7 +40,7 @@ if(BUILD_TESTING)
     add_executable(AssetWorkerSnapshotCheck ModelSnapshotCheck.cpp)
     target_link_libraries(AssetWorkerSnapshotCheck PRIVATE BamTools::ModelConverter)
     add_executable(AssetWorkerTextureOutputCheck TextureOutputCheck.cpp)
-    target_link_libraries(AssetWorkerTextureOutputCheck PRIVATE BamEngine::Engine TextureConverter Microsoft::DirectXTex)
+    target_link_libraries(AssetWorkerTextureOutputCheck PRIVATE BamEngine TextureConverter Microsoft::DirectXTex)
 
     add_test(NAME AssetWorkerModelCheck
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/ModelWorkerCheck.py"

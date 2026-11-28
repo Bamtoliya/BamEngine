@@ -1,4 +1,4 @@
-#define STB_IMAGE_IMPLEMENTATION
+﻿#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
@@ -99,12 +99,12 @@ namespace Tools::AssetWorker
 
         std::string PathExtLower(const std::filesystem::path& path)
         {
-            return ToLowerAscii(Engine::WStrToStr(path.extension().wstring()));
+            return ToLowerAscii(Engine::Unicode::WideToUtf8(path.extension().wstring()));
         }
 
         std::string PathNameLower(const std::filesystem::path& path)
         {
-            return ToLowerAscii(Engine::WStrToStr(path.filename().wstring()));
+            return ToLowerAscii(Engine::Unicode::WideToUtf8(path.filename().wstring()));
         }
 
         bool IsJsonArchivePath(const std::filesystem::path& path)

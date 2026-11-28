@@ -1,4 +1,4 @@
-#include "TerrainLayerEditor.h"
+﻿#include "TerrainLayerEditor.h"
 #include "EditorUI.h"
 #include "IconsFontAwesome7.h"
 #include "LocalizationManager.h"
@@ -20,7 +20,7 @@ void TerrainLayerEditor::SetTargetResource(const std::filesystem::path& assetPat
 	if (!LoadDocument())
 	{
 		NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.TerrainLayerTitle"),
-			LOCAL_FMT("TerrainLayerEditor.LoadFailed", Engine::WStrToStr(assetPath.filename().wstring())), ELogLevel::Warn);
+			LOCAL_FMT("TerrainLayerEditor.LoadFailed", Engine::Unicode::WideToUtf8(assetPath.filename().wstring())), ELogLevel::Warn);
 	}
 }
 
@@ -35,7 +35,7 @@ bool TerrainLayerEditor::LoadDocument()
 	if (!asset) return false;
 	const bool loaded = asset->LoadFromFile(m_TargetResourcePath);
 	if (loaded) m_Settings = asset->GetSettings();
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 	if (!loaded) return false;
 
 	m_History.Reset(m_Settings);
@@ -64,9 +64,9 @@ void TerrainLayerEditor::SaveResource()
 	const bool loaded = asset->LoadFromFile(m_TargetResourcePath);
 	asset->SetSettings(m_Settings);
 	const bool saved = loaded && asset->SaveToFile(m_TargetResourcePath);
-	Engine::ResourceManager::Get().DestroyResource(asset);
+	Engine::ResourceManager::DestroyUnregisteredResource(asset);
 
-	const auto fileName = Engine::WStrToStr(m_TargetResourcePath.filename().wstring());
+	const auto fileName = Engine::Unicode::WideToUtf8(m_TargetResourcePath.filename().wstring());
 	if (!saved)
 	{
 		NotificationManager::Get().AddNotification(LOCAL("ResourceEditor.TerrainLayerTitle"),

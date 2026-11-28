@@ -1,4 +1,4 @@
-#include "ResourcePanelPluginApi.h"
+﻿#include "ResourcePanelPluginApi.h"
 #include "Editor_Includes.h"
 #include "EditorUI.h"
 #include "ImGuiSplitter.h"
@@ -86,7 +86,7 @@ namespace
 
 	bool SupportsSpriteAnimation(const wchar_t* path)
 	{
-		const auto name = Engine::ToLowerStr(Engine::WStrToStr(std::filesystem::path(path).filename().wstring()));
+		const auto name = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(std::filesystem::path(path).filename().wstring()));
 		return name.ends_with(".spriteanim") || name.ends_with(".bamspriteanim") ||
 			name.ends_with(".spriteanim.json") || name.ends_with(".bamspriteanim.json");
 	}
@@ -138,7 +138,7 @@ namespace
 			if (!animation) return false;
 			if (!animation->LoadFromFile(normalized))
 			{
-				manager.DestroyResource(animation);
+				Engine::ResourceManager::DestroyUnregisteredResource(animation);
 				return false;
 			}
 			candidate = manager.AddResource<Engine::SpriteAnimation>(normalized, animation);

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Engine_Includes.h"
 #include "Animation.h"
@@ -159,7 +159,7 @@ namespace Engine
 		f32 currTime,
 		bool looped)
 	{
-		const std::wstring wname(rootBoneName.begin(), rootBoneName.end());
+		const std::wstring wname{ Unicode::Utf8ToWide(rootBoneName) };
 		RootMotionDelta result;
 		const auto* track = RootMotionInternal::FindTrackByName(clip, wname);
 		if (!track)

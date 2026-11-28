@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ResourceManager.h"
 #include <archive/ArchiveInterface.h>
@@ -376,7 +376,7 @@ namespace archive_resource
 
                         ENGINE_LOG_WARN("Missing resource loaded as empty handle: entity={} component={} property={} type={} key=\"{}\" path=\"{}\"",
                             recovery->CurrentEntityPersistentId, recovery->CurrentComponentType, key,
-                            detail::ExtractResourceTypeName<T>(), Engine::WStrToStr(assetKey), Engine::WStrToStr(assetPath));
+                            detail::ExtractResourceTypeName<T>(), Engine::Unicode::WideToUtf8(assetKey), Engine::Unicode::WideToUtf8(assetPath));
 
                         candidate.Reset();
                         isNull = true;

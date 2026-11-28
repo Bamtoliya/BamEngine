@@ -84,7 +84,7 @@ namespace Editor
 
         bool IsBeveReferenceDocumentPath(const std::filesystem::path& path)
         {
-            const auto extension = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+            const auto extension = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.extension().wstring()));
             return extension == ".bammatinst" || extension == ".bammat" || extension == ".bammodel" ||
                 extension == ".bamsprite" || extension == ".bamterrainlayer" ||
                 extension == ".bameffect" || extension == ".bamvfx" || extension == ".beve";
@@ -429,7 +429,7 @@ namespace Editor
                 if (issue.CanAutoFix && request != requests.end() && request->second->IssueType == issue.IssueType &&
                     request->second->SuggestedFix == issue.SuggestedFix)
                 {
-                    replacements.emplace(issue.TargetReference, Engine::WStrToStr(issue.SuggestedFix.wstring()));
+                    replacements.emplace(issue.TargetReference, Engine::Unicode::WideToUtf8(issue.SuggestedFix.wstring()));
                 }
             }
             if (replacements.empty())
@@ -633,7 +633,7 @@ namespace Editor
 
     bool AssetReferenceValidator::IsReferenceDocumentPath(const std::filesystem::path& path)
     {
-        const auto extension = Engine::ToLowerStr(Engine::WStrToStr(path.extension().wstring()));
+        const auto extension = Engine::ToLowerStr(Engine::Unicode::WideToUtf8(path.extension().wstring()));
         return extension == ".json" || extension == ".animator" || extension == ".bamanimator" ||
             extension == ".actiontimeline" || extension == ".bamgraph";
     }
@@ -1005,7 +1005,7 @@ namespace Editor
                     const auto target = remap(resolved);
                     if (target == resolved)
                         return;
-                    const auto uri = Engine::WStrToStr(Path::ToVirtualUri(target));
+                    const auto uri = Engine::Unicode::WideToUtf8(Path::ToVirtualUri(target));
                     fields.at(key) = uri;
                     if (kind == ReferenceKind::Handle)
                     {

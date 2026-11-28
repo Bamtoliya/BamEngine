@@ -1,4 +1,4 @@
-#include "UIRenderSystem.h"
+﻿#include "UIRenderSystem.h"
 #include "UILayout.h"
 #include "LocalizationManager.h"
 #include "RenderPass.h"
@@ -92,7 +92,8 @@ namespace
         auto& resources = Engine::ResourceManager::Get();
         auto texture = resources.AddResource(key, Engine::Texture::CreateFromRHITexture(uploaded));
         // Ownership is limited to the cache and in-flight draw commands.
-        if (texture.IsValid()) resources.ReleaseResource(texture.GetRawHandle());
+        if (texture.IsValid())
+            resources.ReleaseManagerReference(texture.GetRawHandle());
         return texture;
     }
 

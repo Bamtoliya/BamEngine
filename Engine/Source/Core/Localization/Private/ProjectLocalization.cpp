@@ -1,4 +1,4 @@
-#include "LocalizationManager.h"
+﻿#include "LocalizationManager.h"
 #include "PlatformPath.h"
 #include "Functions.h"
 
@@ -93,7 +93,7 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
     {
         if (value.empty()) return true;
         if (!key.empty() && projectData[language].try_emplace(key, value).second) return true;
-        BAM_LOG(Error, "Engine", "Localization", "Empty or duplicate project translation key '{}' in {}.", key, WStrToStr(path.wstring()));
+        BAM_LOG(Error, "Engine", "Localization", "Empty or duplicate project translation key '{}' in {}.", key, Engine::Unicode::WideToUtf8(path.wstring()));
         return false;
     };
     for (const auto& path : files)
@@ -101,14 +101,14 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
         std::ifstream file(path, std::ios::binary);
         if (!file)
         {
-            BAM_LOG(Error, "Engine", "Localization", "Could not read project localization file {}.", WStrToStr(path.wstring()));
+            BAM_LOG(Error, "Engine", "Localization", "Could not read project localization file {}.", Engine::Unicode::WideToUtf8(path.wstring()));
             return EResult::Fail;
         }
         std::ostringstream bytes;
         bytes << file.rdbuf();
         if (file.bad() || bytes.bad())
         {
-            BAM_LOG(Error, "Engine", "Localization", "Read failed for project localization file {}.", WStrToStr(path.wstring()));
+            BAM_LOG(Error, "Engine", "Localization", "Read failed for project localization file {}.", Engine::Unicode::WideToUtf8(path.wstring()));
             return EResult::Fail;
         }
         const auto content = bytes.str();
@@ -116,7 +116,7 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
         if (source.starts_with("\xEF\xBB\xBF")) source.remove_prefix(3);
         if (!glz::validate_utf8(source.data(), source.size()) || source.find('\0') != std::string_view::npos)
         {
-            BAM_LOG(Error, "Engine", "Localization", "Project localization file {} must contain UTF-8 text.", WStrToStr(path.wstring()));
+            BAM_LOG(Error, "Engine", "Localization", "Project localization file {} must contain UTF-8 text.", Engine::Unicode::WideToUtf8(path.wstring()));
             return EResult::Fail;
         }
 
@@ -126,7 +126,7 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
             const auto malformed = [&](std::size_t record)
             {
                 BAM_LOG(Error, "Engine", "Localization", "Malformed project localization CSV {} at record {}.",
-                    WStrToStr(path.wstring()), record);
+                    Engine::Unicode::WideToUtf8(path.wstring()), record);
                 return EResult::Fail;
             };
             if (!ReadProjectCsvRow(source, row) ||
@@ -150,7 +150,7 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
             const auto result = glz::read_json(catalog, source);
             if (result || catalog.empty())
             {
-                BAM_LOG(Error, "Engine", "Localization", "Malformed project localization JSON {}.", WStrToStr(path.wstring()));
+                BAM_LOG(Error, "Engine", "Localization", "Malformed project localization JSON {}.", Engine::Unicode::WideToUtf8(path.wstring()));
                 return EResult::Fail;
             }
             constexpr std::array<std::string_view, 2> languages{ "English", "Korean" };
@@ -159,7 +159,7 @@ Engine::EResult Engine::LocalizationManager::ReloadProjectData()
                 const auto language = std::ranges::find(languages, name);
                 if (language == languages.end())
                 {
-                    BAM_LOG(Error, "Engine", "Localization", "Unknown language '{}' in {}.", name, WStrToStr(path.wstring()));
+                    BAM_LOG(Error, "Engine", "Localization", "Unknown language '{}' in {}.", name, Engine::Unicode::WideToUtf8(path.wstring()));
                     return EResult::Fail;
                 }
                 for (const auto& [key, value] : entries)

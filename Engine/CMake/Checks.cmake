@@ -1,25 +1,25 @@
 ﻿add_executable(SceneReflectionCheck examples/SceneReflectionCheck.cpp)
-target_link_libraries(SceneReflectionCheck PRIVATE BamEngine::Engine)
+target_link_libraries(SceneReflectionCheck PRIVATE BamEngine)
 set_target_properties(SceneReflectionCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(SceneArchiveCheck examples/SceneArchiveCheck.cpp)
-target_link_libraries(SceneArchiveCheck PRIVATE BamEngine::Engine)
+target_link_libraries(SceneArchiveCheck PRIVATE BamEngine)
 set_target_properties(SceneArchiveCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(ActionTimelinePlaybackCheck examples/ActionTimelinePlaybackCheck.cpp)
-target_link_libraries(ActionTimelinePlaybackCheck PRIVATE BamEngine::Engine)
+target_link_libraries(ActionTimelinePlaybackCheck PRIVATE BamEngine)
 set_target_properties(ActionTimelinePlaybackCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(UILayoutCheck examples/UILayoutCheck.cpp)
-target_link_libraries(UILayoutCheck PRIVATE BamEngine::Engine)
+target_link_libraries(UILayoutCheck PRIVATE BamEngine)
 set_target_properties(UILayoutCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(UIInteractionCheck examples/UIInteractionCheck.cpp)
-target_link_libraries(UIInteractionCheck PRIVATE BamEngine::Engine)
+target_link_libraries(UIInteractionCheck PRIVATE BamEngine)
 set_target_properties(UIInteractionCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 add_executable(InputManagerCheck examples/InputManagerCheck.cpp)
-target_link_libraries(InputManagerCheck PRIVATE BamEngine::Engine)
+target_link_libraries(InputManagerCheck PRIVATE BamEngine)
 set_target_properties(InputManagerCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
@@ -70,9 +70,10 @@ foreach(check_target IN ITEMS
     DepthOfFieldCheck
     VFXBlendAndPassCheck
     GameplayCommonCheck
+    ResourceHandleCheck
 )
     add_executable(${check_target} examples/${check_target}.cpp)
-    target_link_libraries(${check_target} PRIVATE BamEngine::Engine)
+    target_link_libraries(${check_target} PRIVATE BamEngine)
     set_target_properties(${check_target} PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
     if(MSVC)
@@ -85,14 +86,14 @@ foreach(check_target IN ITEMS
 endforeach()
 
 add_executable(BlendTree2DCheck examples/BlendTree2DCheck.cpp)
-target_link_libraries(BlendTree2DCheck PRIVATE BamEngine::Engine)
+target_link_libraries(BlendTree2DCheck PRIVATE BamEngine)
 
 if(BUILD_TESTING)
     add_test(NAME BlendTree2DCheck COMMAND BlendTree2DCheck)
 endif()
 
 add_executable(VirtualPathCheck examples/VirtualPathCheck.cpp)
-target_link_libraries(VirtualPathCheck PRIVATE BamEngine::Engine)
+target_link_libraries(VirtualPathCheck PRIVATE BamEngine)
 set_target_properties(VirtualPathCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -104,7 +105,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(TextureMipmapCheck examples/TextureMipmapCheck.cpp)
-target_link_libraries(TextureMipmapCheck PRIVATE BamEngine::Engine)
+target_link_libraries(TextureMipmapCheck PRIVATE BamEngine)
 set_target_properties(TextureMipmapCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -116,7 +117,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(PixelPerfectCameraCheck examples/PixelPerfectCameraCheck.cpp)
-target_link_libraries(PixelPerfectCameraCheck PRIVATE BamEngine::Engine)
+target_link_libraries(PixelPerfectCameraCheck PRIVATE BamEngine)
 set_target_properties(PixelPerfectCameraCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -128,7 +129,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(TilemapCheck examples/TilemapCheck.cpp)
-target_link_libraries(TilemapCheck PRIVATE BamEngine::Engine)
+target_link_libraries(TilemapCheck PRIVATE BamEngine)
 set_target_properties(TilemapCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -140,7 +141,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(SpriteAtlasCheck examples/SpriteAtlasCheck.cpp)
-target_link_libraries(SpriteAtlasCheck PRIVATE BamEngine::Engine)
+target_link_libraries(SpriteAtlasCheck PRIVATE BamEngine)
 set_target_properties(SpriteAtlasCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -152,7 +153,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(RenderPipelineProfileCheck examples/RenderPipelineProfileCheck.cpp)
-target_link_libraries(RenderPipelineProfileCheck PRIVATE BamEngine::Engine)
+target_link_libraries(RenderPipelineProfileCheck PRIVATE BamEngine)
 set_target_properties(RenderPipelineProfileCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(BUILD_TESTING)
@@ -164,7 +165,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(MeshInstancingCheck examples/MeshInstancingCheck.cpp)
-target_link_libraries(MeshInstancingCheck PRIVATE BamEngine::Engine)
+target_link_libraries(MeshInstancingCheck PRIVATE BamEngine)
 set_target_properties(MeshInstancingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -176,7 +177,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(IBLShadingCheck examples/IBLShadingCheck.cpp)
-target_link_libraries(IBLShadingCheck PRIVATE BamEngine::Engine)
+target_link_libraries(IBLShadingCheck PRIVATE BamEngine)
 set_target_properties(IBLShadingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -188,7 +189,7 @@ if(BUILD_TESTING)
 endif()
 
 add_executable(TiledLightingCheck examples/TiledLightingCheck.cpp)
-target_link_libraries(TiledLightingCheck PRIVATE BamEngine::Engine)
+target_link_libraries(TiledLightingCheck PRIVATE BamEngine)
 set_target_properties(TiledLightingCheck PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
 if(MSVC)
@@ -210,7 +211,7 @@ foreach(sprint_c_check IN ITEMS
     RuntimeSettingsCheck
 )
     add_executable(${sprint_c_check} examples/${sprint_c_check}.cpp)
-    target_link_libraries(${sprint_c_check} PRIVATE BamEngine::Engine)
+    target_link_libraries(${sprint_c_check} PRIVATE BamEngine)
     set_target_properties(${sprint_c_check} PROPERTIES UNITY_BUILD OFF FOLDER "Checks")
 
     if(MSVC)
@@ -222,3 +223,22 @@ foreach(sprint_c_check IN ITEMS
     endif()
 endforeach()
 
+add_executable(EventBusCheck examples/EventBusCheck.cpp)
+
+target_include_directories(EventBusCheck PRIVATE
+    "${ENGINE_SOURCE_DIR}/Core/Event/Public"
+    "${ENGINE_SOURCE_DIR}/Core/Public"
+)
+
+set_target_properties(EventBusCheck PROPERTIES
+    UNITY_BUILD OFF
+    FOLDER "Checks"
+)
+
+if(MSVC)
+    target_compile_options(EventBusCheck PRIVATE /utf-8 /Zc:preprocessor)
+endif()
+
+if(BUILD_TESTING)
+    add_test(NAME EventBusCheck COMMAND EventBusCheck)
+endif()

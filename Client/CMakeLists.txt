@@ -22,7 +22,7 @@ if(WIN32)
 endif()
 
 target_link_libraries(Client PRIVATE
-    BamEngine::Engine
+    BamEngine
 )
 
 set_target_properties(Client PROPERTIES

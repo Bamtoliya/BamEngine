@@ -67,7 +67,7 @@ namespace Editor
 		{
 			BAM_LOG(Info, "Editor", "Asset",
 				"Redirected read-only model import destination from '{}' to '{}'",
-				Engine::WStrToStr(destDir.wstring()), Engine::WStrToStr(m_DestDir.wstring()));
+				Engine::Unicode::WideToUtf8(destDir.wstring()), Engine::Unicode::WideToUtf8(m_DestDir.wstring()));
 		}
 		m_Desc = {};
 		m_Desc.Overwrite = true;
@@ -260,7 +260,7 @@ namespace Editor
 		for (const auto& source : prepared->Nodes)
 		{
 			Engine::ModelNode node;
-			node.Name = Engine::StrToWStr(source.Name);
+			node.Name = Engine::Unicode::Utf8ToWide(source.Name);
 			node.ParentIndex = source.ParentIndex;
 			node.MeshIndices = source.MeshIndices;
 
@@ -364,7 +364,7 @@ namespace Editor
 			{
 				try
 				{
-					textureInfo.ResolvedPath = Engine::WStrToStr(texturePath.wstring());
+					textureInfo.ResolvedPath = Engine::Unicode::WideToUtf8(texturePath.wstring());
 					const auto rawHandle = manager.LoadFile(texturePath.wstring());
 					auto* texture = dynamic_cast<Engine::Texture*>(manager.GetResource(rawHandle));
 					if (texture && texture->GetRHITexture())
@@ -688,8 +688,8 @@ namespace Editor
 				[this] { DrawPreviewPane(); },
 				[this]
 				{
-					const std::string sourceName = Engine::WStrToStr(m_SourcePath.filename().wstring());
-					const std::string sourcePath = Engine::WStrToStr(m_SourcePath.wstring());
+					const std::string sourceName = Engine::Unicode::WideToUtf8(m_SourcePath.filename().wstring());
+					const std::string sourcePath = Engine::Unicode::WideToUtf8(m_SourcePath.wstring());
 
 					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 0.8f, 1.0f, 1.0f));
 					ImGui::TextWrapped(ICON_FA_CUBE " %s", sourceName.c_str());
@@ -811,7 +811,7 @@ namespace Editor
 							m_Desc.UseMeshSubfolder, m_Desc.UseMaterialSubfolder,
 							m_Desc.UseTextureSubfolder, m_Desc.UseAnimationSubfolder);
 
-						const std::string previewPath = Engine::WStrToStr(targetLayout.ModelFilePath.wstring());
+						const std::string previewPath = Engine::Unicode::WideToUtf8(targetLayout.ModelFilePath.wstring());
 						ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 						ImGui::TextWrapped("%s: %s", LOCAL_CSTR("ModelImport.DestinationPath"), previewPath.c_str());
 						ImGui::PopStyleColor();

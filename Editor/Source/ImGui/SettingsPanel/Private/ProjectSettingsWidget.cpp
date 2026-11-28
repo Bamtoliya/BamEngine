@@ -1,4 +1,4 @@
-#include "ProjectSettingsWidget.h"
+﻿#include "ProjectSettingsWidget.h"
 #include "EditorSettingsService.h"
 #include "FileDialogs.h"
 #include "Functions.h"
@@ -19,7 +19,7 @@ namespace
         if (!ImGui::CollapsingHeader(LOCAL_LABEL("Settings.ProjectLocale").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
             return;
 
-        const auto uri = Engine::WStrToStr(Engine::LocalizationManager::ProjectCatalogDirectory);
+        const auto uri = Engine::Unicode::WideToUtf8(Engine::LocalizationManager::ProjectCatalogDirectory);
         ImGui::TextWrapped("%s", LOCAL_FMT("Settings.ProjectLocaleHelp", uri).c_str());
         if (!Engine::LocalizationManager::IsCreated() || !Editor::HotReloadManager::IsCreated())
             return;
@@ -33,7 +33,7 @@ namespace
             for (const auto& file : files)
             {
                 ImGui::Bullet();
-                ImGui::TextWrapped("%s", Engine::WStrToStr(file.filename().wstring()).c_str());
+                ImGui::TextWrapped("%s", Engine::Unicode::WideToUtf8(file.filename().wstring()).c_str());
             }
         }
 
@@ -44,7 +44,7 @@ namespace
             std::wstring path;
             const auto catalogDirectory = Engine::PlatformPath::ResolveUri(Engine::LocalizationManager::ProjectCatalogDirectory);
             const vector<FileDialogFilter> filters = {
-                { Engine::StrToWStr(LOCAL("Settings.ProjectLocaleFiles")), L"*.csv;*.json" }
+                { Engine::Unicode::Utf8ToWide(LOCAL("Settings.ProjectLocaleFiles")), L"*.csv;*.json" }
             };
             if (FileDialogs::OpenFileDialog(path, filters, catalogDirectory.wstring(), "Settings.ProjectLocaleImport"))
                 reloader.RequestProjectLocalizationImport(std::filesystem::path(path));
@@ -169,7 +169,7 @@ void ProjectSettingsWidget::DrawMetadata(const EditorSettingsService& settings)
             {
                 std::error_code ec;
                 const auto relativePath = std::filesystem::relative(selectedPath, projectRoot, ec);
-                draft = ec ? Engine::WStrToStr(selectedPath) : relativePath.generic_string();
+                draft = ec ? Engine::Unicode::WideToUtf8(selectedPath) : relativePath.generic_string();
                 m_Dirty = true;
             };
 
@@ -207,7 +207,7 @@ void ProjectSettingsWidget::DrawMetadata(const EditorSettingsService& settings)
             std::wstring scenePath;
             const auto scenesDir = projectRoot / "Resources" / "Scenes";
             if (FileDialogs::OpenFileDialog(scenePath,
-                { { Engine::StrToWStr(LOCAL("FileDialog.EditorSceneFiles")), L"*.bamscene.json;*.json" } },
+                { { Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.EditorSceneFiles")), L"*.bamscene.json;*.json" } },
                 scenesDir.wstring()))
             {
                 assignSelectedPath(m_DraftStartupScenePath, scenePath);

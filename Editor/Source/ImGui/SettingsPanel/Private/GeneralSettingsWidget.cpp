@@ -132,9 +132,9 @@ void GeneralSettingsWidget::Draw()
             if (ImGui::Button(LOCAL_LABEL("Settings.FontBrowse").c_str()))
             {
                 std::wstring selectedPath;
-                if (FileDialogs::OpenFileDialog(selectedPath, { { Engine::StrToWStr(LOCAL("FileDialog.FontFiles")), L"*.ttf;*.otf" } }))
+                if (FileDialogs::OpenFileDialog(selectedPath, { { Engine::Unicode::Utf8ToWide(LOCAL("FileDialog.FontFiles")), L"*.ttf;*.otf" } }))
                 {
-                    m_DraftCustomFontPath = WStrToStr(selectedPath);
+                    m_DraftCustomFontPath = Engine::Unicode::WideToUtf8(selectedPath);
                     m_FontDirty = true;
                 }
             }

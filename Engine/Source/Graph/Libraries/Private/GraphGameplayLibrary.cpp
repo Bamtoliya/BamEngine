@@ -1,4 +1,4 @@
-#include "GraphGameplayLibrary.h"
+﻿#include "GraphGameplayLibrary.h"
 #include "AnimationIK.h"
 #include "AnimationSceneQuery.h"
 #include "ComponentEnable.h"
@@ -157,14 +157,15 @@ namespace Engine
 	bool GraphGameplayLibrary::WriteCheckpointSlot(Scene& scene, entt::entity entity, const std::string& slotName, const std::string& checkpointId)
 	{
 		if (slotName.empty()) return false;
+
 		SaveGameData data;
-		std::string sceneUri;
-		const std::wstring& wsName = scene.GetName();
-		sceneUri.assign(wsName.begin(), wsName.end());
+		const std::string sceneUri = Engine::Unicode::WideToUtf8(scene.GetName());
+
 		if (!SaveGameManager::CaptureCheckpointFromEntity(scene, entity, sceneUri, checkpointId, data))
 		{
 			return false;
 		}
+
 		return SaveGameManager::Get().WriteSlot(slotName, data);
 	}
 

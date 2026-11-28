@@ -421,7 +421,7 @@ namespace Editor
 		ImGui::PushID(&value);
 		auto& manager = Engine::ResourceManager::Get();
 		auto* current = manager.GetResource(value.GetRawHandle());
-		const auto label = current != nullptr ? Engine::WStrToStr(current->GetKey()) :
+		const auto label = current != nullptr ? Engine::Unicode::WideToUtf8(current->GetKey()) :
 			LocalizeInspectorText("ResourcePicker.None");
 
 		bool changed = false;
@@ -627,8 +627,8 @@ namespace Editor
 
 					const bool isEngine = isLoadedEntryEngineBuiltIn(entry.Key, entry.Path);
 					const std::filesystem::path p(normKey);
-					const std::string filename = Engine::WStrToStr(p.filename().wstring());
-					const std::string parentPath = Engine::WStrToStr(p.parent_path().generic_wstring());
+					const std::string filename = Engine::Unicode::WideToUtf8(p.filename().wstring());
+					const std::string parentPath = Engine::Unicode::WideToUtf8(p.parent_path().generic_wstring());
 					const std::string displaySubPath = isEngine ? (parentPath.empty() ? "[Engine]" : ("[Engine] " + parentPath)) : parentPath;
 
 					std::string lowerName = filename;
@@ -638,7 +638,7 @@ namespace Editor
 
 					s_CachedLoadedEntries.push_back({
 						filename, displaySubPath, std::move(lowerName), std::move(lowerSub),
-						absolutePath, normKey, "Mem_" + Engine::WStrToStr(normKey), isEngine, handle
+						absolutePath, normKey, "Mem_" + Engine::Unicode::WideToUtf8(normKey), isEngine, handle
 						});
 				}
 			}
@@ -665,14 +665,14 @@ namespace Editor
 						continue;
 
 					const bool isEngine = Engine::PlatformPath::IsReadOnlyTarget(file.Path);
-					const std::string parentPath = Engine::WStrToStr(file.Path.parent_path().generic_wstring());
+					const std::string parentPath = Engine::Unicode::WideToUtf8(file.Path.parent_path().generic_wstring());
 					const std::string subPath = isEngine ? (parentPath.empty() ? "[Engine]" : "[Engine] " + parentPath) : parentPath;
 					auto lowerSubPath = subPath;
 					for (char& ch : lowerSubPath)
 						ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
 
 					s_CachedDiskFiles.push_back({ file.Filename, subPath, file.LowerFilename, std::move(lowerSubPath),
-						file.Path, std::move(key), "Disk_" + Engine::WStrToStr(file.Path.wstring()), isEngine, {} });
+						file.Path, std::move(key), "Disk_" + Engine::Unicode::WideToUtf8(file.Path.wstring()), isEngine, {} });
 				}
 			}
 

@@ -81,7 +81,7 @@ namespace Editor
 		m_ShadowDll.make_preferred();
 		if (!std::filesystem::copy_file(sourceDll, m_ShadowDll, error))
 		{
-			EDITOR_LOG_ERROR("Editor plugin DLL copy failed ({}): {}", WStrToStr(sourceDll.wstring()), error.message());
+			EDITOR_LOG_ERROR("Editor plugin DLL copy failed ({}): {}", Engine::Unicode::WideToUtf8(sourceDll.wstring()), error.message());
 			Close();
 			return false;
 		}
@@ -92,7 +92,7 @@ namespace Editor
 			sourcePdb.replace_extension(L".pdb");
 			if (!std::filesystem::copy_file(sourcePdb, shadowDir / sourcePdb.filename(), error))
 			{
-				EDITOR_LOG_ERROR("Editor plugin PDB copy failed ({}): {}", WStrToStr(sourcePdb.wstring()), error.message());
+				EDITOR_LOG_ERROR("Editor plugin PDB copy failed ({}): {}", Engine::Unicode::WideToUtf8(sourcePdb.wstring()), error.message());
 				Close();
 				return false;
 			}

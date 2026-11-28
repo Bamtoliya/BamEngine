@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Types.h"
 #include <algorithm>
@@ -62,17 +62,6 @@ namespace Engine
 			T::Destroy();
 			Instance = nullptr;
 		}
-	}
-
-	inline wstring StrToWStr(const string& str)
-	{
-		return std::filesystem::path((const char8_t*)str.c_str()).wstring();
-	}
-
-	inline string WStrToStr(const wstring& wstr)
-	{
-		auto u8str = std::filesystem::path(wstr).u8string();
-		return string(u8str.begin(), u8str.end());
 	}
 
 	inline std::filesystem::path Utf8ToPath(std::string_view utf8Str)
@@ -159,4 +148,3 @@ inline void HashCombine(std::size_t& seed, std::size_t value)
 {
 	seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }
-
